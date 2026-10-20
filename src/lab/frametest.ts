@@ -141,8 +141,8 @@ function once(el: EventTarget, ev: string, timeout: number) {
   });
 }
 async function seekTime(t: number) {
-  const p = nextFrame(3000);
-  const s = once(v, "seeked", 3000);
+  const p = nextFrame(2000);
+  const s = once(v, "seeked", 2000);
   v.currentTime = t;
   const md = await p;
   await s;
@@ -160,6 +160,20 @@ function stepBy(d: number) {
   v.pause();
   const n = Math.min(TOTAL - 1, Math.max(0, current() + d));
   seekTo(n).then(updateReadout);
+}
+
+const status = (t: string) => { $("status").textContent = t; };
+window.addEventListener("error", (e) => status("Page error: " + e.message));
+
+// iPhones load nothing until a video has played once, so play briefly first.
+async function prepare(playing: Promise<void>): Promise<string | null> {
+  status("Loading the video…");
+  try { await playing; } catch (e) { return "The video wouldn't play on this device: " + (e as Error).message; }
+  const md = await nextFrame(8000);
+  v.pause();
+  if (!md && v.readyState < 2) return "The video didn't load on this device.";
+  await sleep(200);
+  return null;
 }
 
 // Work out where frame 0 sits on this stream's clock (HLS can start the clock late).
@@ -227,28 +241,40 @@ function randFrames(k: number, lo: number, hi: number) {
 }
 
 async function run() {
+  const playing = v.play(); // start inside the tap, before any await (iPhone rule)
   ($("run") as HTMLButtonElement).disabled = true;
   $("saved").textContent = "";
   ($("detail") as HTMLElement).hidden = true;
-  v.pause();
+  const prepError = await prepare(playing);
   const results: Record<string, R> = {};
   const misses: Record<string, unknown>[] = [];
   const totalSteps = 1 + 40 + 20 + 1 + 10 + TOTAL;
   let done = 0;
   const tickProg = () => setProg(++done / totalSteps);
 
-  const cal = await calibrate();
-  tickProg();
-  if (pixelsBlocked) {
-    $("verdict").textContent = "Fail: the browser won't let the page read this video's pixels (CORS)";
+  const stopEarly = async (why: string) => {
+    $("verdict").textContent = "Fail: " + why;
     $("verdict").className = "verdict fail";
-  }
+    status("");
+    ($("run") as HTMLButtonElement).disabled = false;
+    $("run").textContent = "Run again";
+    await save({ label: D.label, device: D.dev, browser: D.br, source, engine, pass: false, userAgent: navigator.userAgent,
+      results: { stoppedEarly: why, pixelsBlocked, exactFrameSupport: hasRVFC, readyState: v.readyState, videoSize: `${v.videoWidth}x${v.videoHeight}` }, misses: [] });
+  };
+  if (prepError) return stopEarly(prepError);
+  status("Finding frame 0 on this stream…");
+  let cal = await calibrate();
+  for (let i = 0; i < 3 && cal.calibratedOn == null && !pixelsBlocked; i++) { await sleep(400); cal = await calibrate(); }
+  tickProg();
+  if (pixelsBlocked) return stopEarly("the browser shows the video but won't let the page read its pixels (CORS)");
+  if (cal.calibratedOn == null) return stopEarly("the page couldn't read a frame after jumping (the picture never appeared)");
 
   // 1. Jumps
   renderRows(results, "jump");
   let land = 0, repOk = 0;
   const jumps = randFrames(40, 0, TOTAL);
-  for (const n of jumps) {
+  for (const [i, n] of jumps.entries()) {
+    status(`Jumping: ${i + 1} of 40`);
     const r = await seekTo(n);
     if (r.shown === n) land++;
     if (r.shown === r.rep) repOk++;
@@ -262,6 +288,7 @@ async function run() {
   let sOk = 0, n = 120 + Math.floor(Math.random() * 200);
   await seekTo(n);
   for (let i = 0; i < 20; i++) {
+    status(`Stepping: ${i + 1} of 20`);
     n += i < 10 ? 1 : -1;
     const r = await seekTo(n);
     if (r.shown === n && r.rep === n) sOk++; else misses.push({ test: "step", asked: n, shown: r.shown, reported: r.rep });
@@ -271,6 +298,7 @@ async function run() {
 
   // 3. Playback
   renderRows(results, "playback");
+  status("Playing for 8 seconds…");
   await seekTo(10);
   const pb = await new Promise<{ checked: number; bad: { shown: number | null; reported: number }[]; gaps: number; error?: string }>(async (resolve) => {
     if (!hasRVFC) return resolve({ checked: 0, bad: [], gaps: 0, error: "no frame callbacks" });
@@ -298,6 +326,7 @@ async function run() {
   renderRows(results, "pause");
   let pOk = 0, ctOk = 0;
   for (let i = 0; i < 10; i++) {
+    status(`Pausing: ${i + 1} of 10`);
     await seekTo(20 + Math.floor(Math.random() * 280));
     try { await v.play(); } catch { /* ignore */ }
     await sleep(400 + Math.random() * 1100);
@@ -317,6 +346,7 @@ async function run() {
   let fOk = 0;
   const missing: number[] = [];
   for (let k = 0; k < TOTAL; k++) {
+    if (k % 10 === 0) status(`Checking every frame: ${k} of ${TOTAL}`);
     const r = await seekTo(k);
     if (r.shown === k) fOk++; else { missing.push(k); if (missing.length <= 10) misses.push({ test: "allFrames", asked: k, shown: r.shown, reported: r.rep }); }
     tickProg();
@@ -325,6 +355,7 @@ async function run() {
 
   renderRows(results, null);
   setProg(1);
+  status("");
   const pass = Object.values(results).every((r) => r.pass) && !pixelsBlocked;
   $("verdict").textContent = pass ? "Pass: frames are exact on this device" : pixelsBlocked ? "Fail: pixels blocked (CORS)" : "Fail: see the details below";
   $("verdict").className = "verdict " + (pass ? "pass" : "fail");
