@@ -150,10 +150,24 @@ async function seekTime(t: number) {
   if (md) lastMedia = md.mediaTime;
   return { md, shown: decode() };
 }
+// Jump to frame n, then check which frame actually landed and nudge until it's right.
+// Some players (iPhone) land a frame late on a plain jump; the learned bias carries to later jumps.
+let seekBias = 0; // seconds added to every jump, learned from corrections
+let corrections = 0, firstTryLanded = 0, jumpsTotal = 0;
 async function seekTo(n: number) {
-  const { md, shown } = await seekTime(timeOf(n));
-  const rep = md ? frameOf(md.mediaTime) : frameOf(v.currentTime - FD / 2);
-  return { shown, rep, callback: !!md };
+  let t = timeOf(n) + seekBias;
+  let r = await seekTime(t);
+  let rep = r.md ? frameOf(r.md.mediaTime) : frameOf(v.currentTime - FD / 2);
+  jumpsTotal++;
+  if (rep === n) firstTryLanded++;
+  for (let attempt = 0; attempt < 3 && r.md && rep !== n; attempt++) {
+    corrections++;
+    t -= (rep - n) * FD * 0.6;
+    r = await seekTime(t);
+    rep = r.md ? frameOf(r.md.mediaTime) : frameOf(v.currentTime - FD / 2);
+    if (rep === n) seekBias = t - timeOf(n);
+  }
+  return { shown: r.shown, rep, callback: !!r.md };
 }
 const current = () => (lastMedia == null ? 0 : frameOf(lastMedia));
 function stepBy(d: number) {
@@ -246,6 +260,7 @@ async function run() {
   $("saved").textContent = "";
   ($("detail") as HTMLElement).hidden = true;
   const prepError = await prepare(playing);
+  seekBias = 0; corrections = 0; firstTryLanded = 0; jumpsTotal = 0;
   const results: Record<string, R> = {};
   const misses: Record<string, unknown>[] = [];
   const totalSteps = 1 + 40 + 20 + 1 + 10 + TOTAL;
@@ -369,7 +384,8 @@ async function run() {
 
   await save({
     label: D.label, device: D.dev, browser: D.br, source, engine, pass, userAgent: navigator.userAgent,
-    results: { ...results, calibration: cal, pixelsBlocked, exactFrameSupport: hasRVFC, videoSize: `${v.videoWidth}x${v.videoHeight}` },
+    results: { ...results, calibration: cal, pixelsBlocked, exactFrameSupport: hasRVFC, videoSize: `${v.videoWidth}x${v.videoHeight}`,
+      seeking: { jumps: jumpsTotal, firstTryLanded, corrections, learnedBiasFrames: Math.round((seekBias / FD) * 100) / 100 } },
     misses: misses.slice(0, 30),
   });
 }
