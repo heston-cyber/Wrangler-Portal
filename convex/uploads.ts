@@ -1,0 +1,94 @@
+// Uploading a new version: the browser sends the file straight to Bunny (resumable TUS upload);
+// the backend creates the Bunny video, signs the upload, then polls Bunny until it's converted.
+import { action, internalAction } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { v, ConvexError } from "convex/values";
+import { bunnyCall, bunnyEnv, getBunnyVideo } from "./bunny";
+import { fpsFromFloat } from "./lib/frames";
+import type { Id } from "./_generated/dataModel";
+
+async function sha256Hex(text: string) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+const MP4_HEIGHTS = [240, 360, 480, 720, 1080];
+const POLL_MS = 10_000;
+const MAX_POLLS = 720; // 2 hours
+
+export const startUpload = action({
+  args: { videoId: v.id("videos"), fileName: v.string(), fileSize: v.optional(v.number()) },
+  handler: async (ctx, a): Promise<{ versionId: Id<"versions">; number: number; libraryId: string; videoId: string; expire: number; signature: string; endpoint: string }> => {
+    await ctx.runQuery(internal.users.assertAllowed, {});
+    const { lib, key } = bunnyEnv();
+    const title = a.fileName.slice(0, 200);
+    const created = (await bunnyCall(`/library/${lib}/videos`, { method: "POST", body: JSON.stringify({ title }) })) as { guid?: string };
+    if (!created.guid) throw new ConvexError("Bunny didn't create the video.");
+    const { versionId, number }: { versionId: Id<"versions">; number: number } = await ctx.runMutation(internal.library.insertVersion, {
+      videoId: a.videoId, bunnyGuid: created.guid, fileName: a.fileName, fileSize: a.fileSize,
+    });
+    const expire = Math.floor(Date.now() / 1000) + 24 * 3600;
+    const signature = await sha256Hex(`${lib}${key}${expire}${created.guid}`);
+    return { versionId, number, libraryId: lib, videoId: created.guid, expire, signature, endpoint: "https://video.bunnycdn.com/tusupload" };
+  },
+});
+
+// Called by the browser when the upload finishes; also safe to call again.
+export const uploadFinished = action({
+  args: { versionId: v.id("versions") },
+  handler: async (ctx, { versionId }) => {
+    await ctx.runQuery(internal.users.assertAllowed, {});
+    await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { status: "processing", pollCount: 0 } });
+    await ctx.scheduler.runAfter(2000, internal.uploads.poll, { versionId });
+  },
+});
+
+export const uploadFailed = action({
+  args: { versionId: v.id("versions"), error: v.string() },
+  handler: async (ctx, { versionId, error }) => {
+    await ctx.runQuery(internal.users.assertAllowed, {});
+    await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { status: "failed", error: error.slice(0, 300) } });
+  },
+});
+
+// Ask Bunny how the conversion is going; reschedule until it's ready or failed.
+export const poll = internalAction({
+  args: { versionId: v.id("versions") },
+  handler: async (ctx, { versionId }): Promise<void> => {
+    const row = await ctx.runQuery(internal.library.getVersionInternal, { versionId });
+    if (!row || row.version.status === "ready" || row.version.status === "failed") return;
+    const count = (row.version.pollCount ?? 0) + 1;
+    let b;
+    try {
+      b = await getBunnyVideo(row.version.bunnyGuid);
+    } catch (e) {
+      if (count < MAX_POLLS) {
+        await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { pollCount: count } });
+        await ctx.scheduler.runAfter(POLL_MS, internal.uploads.poll, { versionId });
+      }
+      return;
+    }
+    const fps = fpsFromFloat(b.framerate);
+    const res = (b.availableResolutions || "").split(",").map((s) => parseInt(s, 10)).filter((n) => !isNaN(n));
+    const mp4Heights = b.hasMP4Fallback ? MP4_HEIGHTS.filter((h) => res.includes(h)) : [];
+    const patch: Record<string, unknown> = {
+      pollCount: count, encodeProgress: b.encodeProgress ?? 0, width: b.width || undefined, height: b.height || undefined,
+      lengthSeconds: b.length || undefined, fpsNum: b.framerate ? fps.num : undefined, fpsDen: b.framerate ? fps.den : undefined, mp4Heights,
+    };
+    const failed = b.status === 5 || b.status === 8;
+    const ready = (b.status === 3 || b.status === 4) && (b.encodeProgress ?? 0) >= 100;
+    if (failed) {
+      patch.status = "failed";
+      patch.error = "Bunny couldn't convert this file.";
+    } else if (ready) {
+      patch.status = "ready";
+      patch.readyAt = Date.now();
+    }
+    await ctx.runMutation(internal.library.patchVersion, { versionId, patch });
+    if (ready) {
+      await ctx.scheduler.runAfter(0, internal.slack.versionReady, { versionId });
+    } else if (!failed && count < MAX_POLLS) {
+      await ctx.scheduler.runAfter(POLL_MS, internal.uploads.poll, { versionId });
+    }
+  },
+});

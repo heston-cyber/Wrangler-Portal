@@ -1,0 +1,33 @@
+name: Convex setup
+
+# Creates login keys (once) and sets plain, non-secret settings.
+# The repo is public, so never pass secrets here: put those in the Convex dashboard.
+on:
+  workflow_dispatch:
+    inputs:
+      set:
+        description: "Plain settings, e.g. ALLOWED_EMAILS=a@b.com;SITE_URL=https://review.wranglerportal.com"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Set up
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+          SET: ${{ inputs.set }}
+        run: |
+          export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7C/|}"
+          export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7c/|}"
+          node scripts/setup-convex.mjs
