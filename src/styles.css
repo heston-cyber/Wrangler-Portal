@@ -1,0 +1,14 @@
+:root {
+  --bg: #131416; --panel: #1b1d20; --line: #2b2e33; --fg: #e9e7e2; --muted: #9b9a95; --accent: #ffd25a;
+  --display: "Barlow", "Helvetica Neue", Arial, sans-serif; --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+html, body { margin: 0; background: var(--bg); color: var(--fg); }
+body { font-family: var(--display); font-size: 16px; line-height: 1.5; padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 48px max(16px, env(safe-area-inset-left)); }
+.home { max-width: 720px; margin: 8vh auto 0; display: grid; gap: 10px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin: 0; }
+h1 { font-size: clamp(32px, 6vw, 52px); margin: 0; letter-spacing: -.01em; }
+.lede { color: var(--muted); margin: 0; max-width: 60ch; }
+.links { list-style: none; padding: 0; margin: 16px 0 0; display: grid; gap: 8px; }
+.links a { color: var(--fg); text-decoration: none; border: 1px solid var(--line); background: var(--panel); padding: 12px 14px; display: inline-block; border-radius: 4px; font-weight: 600; }
+.links a:hover, .links a:focus-visible { border-color: var(--accent); outline: none; }

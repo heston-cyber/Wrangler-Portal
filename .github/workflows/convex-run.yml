@@ -1,0 +1,34 @@
+name: Convex run
+
+# Runs one backend function by hand (used by Claude for Phase 0 checks).
+# The repo is public, so these logs are public: only run functions whose output is safe to show.
+on:
+  workflow_dispatch:
+    inputs:
+      fn:
+        description: "Function, e.g. bunny:listVideos"
+        required: true
+      args:
+        description: "JSON arguments"
+        required: false
+        default: "{}"
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Run
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+          FN: ${{ inputs.fn }}
+          ARGS: ${{ inputs.args }}
+        run: npx convex run "$FN" "$ARGS"
