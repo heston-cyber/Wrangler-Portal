@@ -28,6 +28,15 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Check the deploy key's shape (never prints it)
+        if: ${{ env.CONVEX_DEPLOY_KEY != '' }}
+        run: |
+          k="$CONVEX_DEPLOY_KEY"
+          echo "length: ${#k}"
+          case "$k" in prod:*) echo "starts with prod: yes";; *) echo "starts with prod: no";; esac
+          case "$k" in *"|"*) echo "contains |: yes";; *) echo "contains |: no";; esac
+          case "$k" in *[[:space:]]*) echo "contains spaces or line breaks: yes";; *) echo "contains spaces or line breaks: no";; esac
+          case "$k" in \"*|\'*) echo "starts with a quote: yes";; *) echo "starts with a quote: no";; esac
       - name: Deploy the backend, then build the site against it
         if: ${{ env.CONVEX_DEPLOY_KEY != '' }}
         run: npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name VITE_CONVEX_URL
