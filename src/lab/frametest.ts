@@ -5,6 +5,7 @@ import Hls from "hls.js";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../convex/_generated/api";
 import type { FunctionArgs } from "convex/server";
+import { BUNNY_CDN_HOST } from "../config";
 
 const FD = 1001 / 24000; // one frame at 23.976, in seconds
 const TOTAL = 480; // frames in the test clip
@@ -33,7 +34,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- source ----------
 const params = new URLSearchParams(location.search);
-const cdnHost = import.meta.env.VITE_BUNNY_CDN_HOST as string | undefined;
+const cdnHost = BUNNY_CDN_HOST;
 let source = (document.getElementById("clip") as HTMLSelectElement).value;
 let engine = "file";
 let hls: Hls | null = null;
