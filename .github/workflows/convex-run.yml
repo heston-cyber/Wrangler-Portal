@@ -31,4 +31,7 @@ jobs:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
           FN: ${{ inputs.fn }}
           ARGS: ${{ inputs.args }}
-        run: npx convex run "$FN" "$ARGS"
+        run: |
+          export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7C/|}"
+          export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7c/|}"
+          npx convex run "$FN" "$ARGS"
