@@ -22,6 +22,9 @@ import type * as lib_dropboxPath from "../lib/dropboxPath.js";
 import type * as lib_edl from "../lib/edl.js";
 import type * as lib_frames from "../lib/frames.js";
 import type * as lib_mp4 from "../lib/mp4.js";
+import type * as lib_mp4audio from "../lib/mp4audio.js";
+import type * as lib_peaks from "../lib/peaks.js";
+import type * as lib_waveformDecode from "../lib/waveformDecode.js";
 import type * as lib_transcript from "../lib/transcript.js";
 import type * as lib_voice from "../lib/voice.js";
 import type * as notes from "../notes.js";
@@ -34,6 +37,8 @@ import type * as transcripts from "../transcripts.js";
 import type * as stillsDb from "../stillsDb.js";
 import type * as uploads from "../uploads.js";
 import type * as users from "../users.js";
+import type * as waveform from "../waveform.js";
+import type * as waveforms from "../waveforms.js";
 
 import type {
   ApiFromModules,
@@ -56,6 +61,9 @@ declare const fullApi: ApiFromModules<{
   "lib/edl": typeof lib_edl;
   "lib/frames": typeof lib_frames;
   "lib/mp4": typeof lib_mp4;
+  "lib/mp4audio": typeof lib_mp4audio;
+  "lib/peaks": typeof lib_peaks;
+  "lib/waveformDecode": typeof lib_waveformDecode;
   "lib/transcript": typeof lib_transcript;
   "lib/voice": typeof lib_voice;
   notes: typeof notes;
@@ -68,6 +76,8 @@ declare const fullApi: ApiFromModules<{
   stillsDb: typeof stillsDb;
   uploads: typeof uploads;
   users: typeof users;
+  waveform: typeof waveform;
+  waveforms: typeof waveforms;
 }>;
 
 export declare const api: FilterApi<

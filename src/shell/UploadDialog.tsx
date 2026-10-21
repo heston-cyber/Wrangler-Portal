@@ -9,12 +9,13 @@ import { isVideoFile, startUpload } from "../lib/uploads";
 import { Modal } from "../ui/kit";
 import { projectLabel, sizeText } from "../lib/format";
 
-type Open = (o?: { file?: File; projectId?: string; newProject?: boolean }) => void;
+type Init = { file?: File; projectId?: string; newProject?: boolean; client?: string };
+type Open = (o?: Init) => void;
 const Ctx = createContext<{ openUpload: Open }>({ openUpload: () => {} });
 export const useUpload = () => useContext(Ctx);
 
 export function UploadProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<{ file?: File; projectId?: string; newProject?: boolean } | null>(null);
+  const [state, setState] = useState<Init | null>(null);
   return (
     <Ctx.Provider value={{ openUpload: (o) => setState(o ?? {}) }}>
       {children}
@@ -25,7 +26,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
 const titleFrom = (name: string) => name.replace(/\.[^.]+$/, "").replace(/[_]+/g, " ").replace(/\s+/g, " ").trim();
 
-function UploadDialog({ initial, onClose }: { initial: { file?: File; projectId?: string; newProject?: boolean }; onClose: () => void }) {
+function UploadDialog({ initial, onClose }: { initial: Init; onClose: () => void }) {
   const convex = useConvex();
   const overview = useQuery(api.library.overview);
   const createProject = useMutation(api.library.createProject);
@@ -34,7 +35,8 @@ function UploadDialog({ initial, onClose }: { initial: { file?: File; projectId?
   const [projectId, setProjectId] = useState<string>(initial.newProject ? "__new" : initial.projectId ?? "");
   const [newName, setNewName] = useState("");
   const [jobNumber, setJobNumber] = useState("");
-  const [client, setClient] = useState("");
+  const [client, setClient] = useState(initial.client ?? "");
+  const clientNames = [...new Set([...(overview?.clients ?? []), ...(overview?.projects ?? []).map((p) => p.client?.trim() ?? "").filter(Boolean)])].sort((a, b) => a.localeCompare(b));
   const [file, setFile] = useState<File | null>(initial.file ?? null);
   const [title, setTitle] = useState(initial.file ? titleFrom(initial.file.name) : "");
   const [over, setOver] = useState(false);
@@ -119,7 +121,8 @@ function UploadDialog({ initial, onClose }: { initial: { file?: File; projectId?
         {isNew && (
           <label className="field">
             <span className="label">Client (optional)</span>
-            <input className="input" value={client} onChange={(e) => setClient(e.target.value)} placeholder="Floor Trader" />
+            <input className="input" value={client} onChange={(e) => setClient(e.target.value)} placeholder="Floor Trader" list="wr-clients" />
+            <datalist id="wr-clients">{clientNames.map((c) => <option key={c} value={c} />)}</datalist>
           </label>
         )}
         {!projectOnly && (

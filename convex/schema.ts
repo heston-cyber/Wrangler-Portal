@@ -172,6 +172,24 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_version", ["versionId"]),
 
+  // Each version's sound as waveform peaks (0–255, `rate` per second), for the timeline. Made from Bunny's smallest MP4.
+  waveforms: defineTable({
+    versionId: v.id("versions"),
+    status: v.union(v.literal("pending"), v.literal("running"), v.literal("done"), v.literal("none"), v.literal("failed")),
+    rate: v.optional(v.number()),
+    seconds: v.optional(v.number()),
+    peaks: v.optional(v.bytes()),
+    error: v.optional(v.string()),
+    attempts: v.number(),
+    updatedAt: v.number(),
+  }).index("by_version", ["versionId"]),
+
+  // Clients made with "New client" before they have any projects. A client with projects is named on its projects.
+  clients: defineTable({
+    name: v.string(),
+    createdAt: v.number(),
+  }).index("by_name", ["name"]),
+
   // Stills kept in Convex storage until Bunny Storage is set up.
   stillFiles: defineTable({
     storageId: v.id("_storage"),

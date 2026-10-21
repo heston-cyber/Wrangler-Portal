@@ -43,6 +43,26 @@ let notes: any[] = [
   { _id: "n5", versionId: "ver1a", videoId: "v1", kind: "frame", inFrame: 12, text: "Open on the wide, not the close-up.", status: "done", authorName: "Heston", createdAt: now - 2 * day, replies: [] },
 ];
 
+let madeClients: string[] = ["Prairie Fitness"]; // made with "New client", no projects yet
+
+// Made-up waveform peaks (20 a second): a music bed with talking over it in places.
+const waves = new Map<string, ArrayBuffer>();
+function fakeWave(id: string, frames: number) {
+  if (waves.has(id)) return waves.get(id)!;
+  const n = Math.max(1, Math.round((frames * 1001) / 24000 * 20));
+  const out = new Uint8Array(n);
+  let seed = id.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+  const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+  for (let i = 0; i < n; i++) {
+    const t = i / 20, talk = Math.sin(t * 0.35) > 0.1;
+    const bed = 0.25 + 0.08 * Math.sin(t * 1.3) + 0.1 * rnd();
+    const v = talk ? Math.max(bed, Math.max(0, Math.sin(t * 13.5)) * (0.5 + 0.45 * rnd())) : bed;
+    out[i] = Math.round(255 * Math.min(1, v * Math.min(1, t / 2, (n / 20 - t) / 3)));
+  }
+  waves.set(id, out.buffer);
+  return out.buffer;
+}
+
 let ver = 0;
 const subs = new Set<() => void>();
 const bump = () => { ver++; subs.forEach((l) => l()); };
@@ -62,6 +82,7 @@ function overview() {
         latest: l && { number: l.number, status: l.status, bunnyGuid: l.bunnyGuid, encodeProgress: l.encodeProgress, frameCount: l.frameCount, fpsNum: l.fpsNum, fpsDen: l.fpsDen, startTimecode: l.startTimecode, width: l.width, height: l.height, transcript: l.number === 2 ? "running" : "done" },
       };
     }),
+    clients: [...madeClients].sort((a, b) => a.localeCompare(b)),
   };
 }
 function video(id: string) {
@@ -113,6 +134,12 @@ export const store = {
           { _id: "d3", path: "/loose render.mp4", status: "skipped", reason: "Put renders in a <Project>/<Video>/ folder inside Apps/Wrangler Review, e.g. 26201 Harbor Coffee Launch/Brand Film/.", at: Date.now() - 7_200_000, size: 1, videoId: null, versionNumber: null, linkGone: true },
         ] };
       case "transcripts:forVersion": return { status: "done", language: "eng", wordCount: 40, error: null, updatedAt: Date.now(), url: "./mock-transcript.json" };
+      case "waveforms:forVersion": {
+        const v = Object.values(versions).flat().find((x) => x._id === args.versionId);
+        if (!v || v.status !== "ready" || !v.frameCount) return { status: "pending", rate: null, seconds: null, peaks: null };
+        if (v.bunnyGuid === "g-barcode") return { status: "none", rate: null, seconds: null, peaks: null };
+        return { status: "done", rate: 20, seconds: (v.frameCount * 1001) / 24000, peaks: fakeWave(v._id, v.frameCount) };
+      }
       default: console.warn("mock query", name); return null;
     }
   },
@@ -133,6 +160,12 @@ export const store = {
     if (name === "notes:voiceUploadUrl") return "/mock-upload";
     if (name === "notes:discardVoice") { (window as any).__discarded = args.storageId; return; }
     if (name === "connector:revokeKey") { keys = keys.filter((k) => k._id !== args.keyId); bump(); return; }
+    if (name === "library:createClient") {
+      const n = String(args.name).trim();
+      if (madeClients.concat(projects.map((p) => p.client ?? "")).some((c) => c.toLowerCase() === n.toLowerCase())) throw new Error(`There's already a client called ${n}.`);
+      madeClients = [...madeClients, n]; bump(); return n;
+    }
+    if (name === "library:deleteClient") { madeClients = madeClients.filter((c) => c !== args.client); bump(); return { projects: 0, videos: 0 }; }
     bump();
   },
   async action(name: string, args: any): Promise<any> {

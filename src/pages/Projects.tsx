@@ -42,7 +42,9 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
 
   const NO_CLIENT = "No client";
   const clientOf = (p: { client: string | null } | undefined) => p?.client?.trim() || NO_CLIENT;
-  const clients = [...new Set((overview?.projects ?? []).map(clientOf))].sort((a, b) => (a === NO_CLIENT ? 1 : b === NO_CLIENT ? -1 : a.localeCompare(b)));
+  const made = new Set(overview?.clients ?? []); // clients made with "New client", shown even with no projects
+  const clients = [...new Set([...(overview?.projects ?? []).map(clientOf), ...made])].sort((a, b) => (a === NO_CLIENT ? 1 : b === NO_CLIENT ? -1 : a.localeCompare(b)));
+  const [newClient, setNewClient] = useState(false);
   const client = !projectId && clientPref && clients.includes(clientPref) ? clientPref : ""; // "" = all clients
   const pmap = new Map((overview?.projects ?? []).map((p) => [p._id as string, p]));
   const vids = (overview?.videos ?? []).filter((x) => (!projectId || x.projectId === projectId) && (!client || clientOf(pmap.get(x.projectId)) === client));
@@ -50,7 +52,7 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
   const sorter = (a: VideoItem, b: VideoItem) =>
     sort === "az" ? a.title.localeCompare(b.title) : sort === "created" ? b.createdAt - a.createdAt : b.updatedAt - a.updatedAt;
 
-  type Group = { key: string; title: React.ReactNode; meta?: string; items: VideoItem[]; project?: Overview["projects"][number]; clientHead?: { count: number } };
+  type Group = { key: string; title: React.ReactNode; meta?: string; items: VideoItem[]; project?: Overview["projects"][number]; clientHead?: { count: number }; emptyClient?: string };
   let groups: Group[] = [];
   const projectGroup = (p: Overview["projects"][number], withClient: boolean): Group => ({
     key: p._id, title: projectLabel(p), meta: withClient ? p.client ?? undefined : undefined, project: p, items: vids.filter((x) => x.projectId === p._id).sort(sorter),
@@ -59,9 +61,9 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
     // Client headers, each followed by its projects (newest activity first).
     for (const c of clients) {
       const ps = shownProjects.filter((p) => clientOf(p) === c);
-      if (!ps.length) continue;
+      if (!ps.length && !(made.has(c) && (!client || client === c))) continue;
       groups.push({ key: `client:${c}`, title: c, items: [], clientHead: { count: ps.length } });
-      if (!collapsedHas(`client:${c}`)) groups.push(...ps.map((p) => projectGroup(p, false)));
+      if (!collapsedHas(`client:${c}`)) groups.push(...(ps.length ? ps.map((p) => projectGroup(p, false)) : [{ key: `empty:${c}`, title: c, items: [], emptyClient: c }]));
     }
   } else if (group === "project") {
     groups = shownProjects.map((p) => projectGroup(p, true));
@@ -98,7 +100,8 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
           <Menu align="end" label="Add" trigger={(p) => <button {...p} className="btn primary sm"><Plus size={15} />Add</button>}>
             <MenuItem icon={<Upload size={16} />} onSelect={() => openUpload({ projectId })}>Upload a video</MenuItem>
             <MenuSep />
-            <MenuItem icon={<FolderPlus size={16} />} onSelect={() => openUpload({ newProject: true })}>New project</MenuItem>
+            <MenuItem icon={<FolderPlus size={16} />} onSelect={() => openUpload({ newProject: true, client: client && client !== NO_CLIENT ? client : undefined })}>New project</MenuItem>
+            {!projectId && <MenuItem icon={<Building2 size={16} />} onSelect={() => setNewClient(true)}>New client</MenuItem>}
           </Menu>
         </>
       }>
@@ -131,7 +134,7 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
 
         {overview === undefined ? <p className="caption" style={{ padding: "8px 24px" }}>Loading…</p>
           : projectId && !project ? <div className="empty">This project doesn't exist any more. <a className="btn" {...linkProps("/projects")}>All projects</a></div>
-          : vids.length === 0 && group !== "project" ? (
+          : vids.length === 0 && group !== "project" && group !== "client" ? (
             <div className="empty">
               <img src={asset("/brand/spark-cream.png")} alt="" />
               <span>{projectId ? "No videos in this project yet." : "No videos yet."} Drop a render anywhere on this page.</span>
@@ -143,7 +146,12 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
               <span>No projects yet.</span>
               <button className="btn primary" onClick={() => openUpload({ newProject: true })}><FolderPlus size={16} />New project</button>
             </div>
-          ) : groups.map((g) => g.clientHead ? (
+          ) : groups.map((g) => g.emptyClient ? (
+            <div className="cempty" key={g.key}>
+              <span className="caption">No projects for {g.emptyClient} yet.</span>
+              <button className="btn sm" onClick={() => openUpload({ newProject: true, client: g.emptyClient })}><FolderPlus size={14} />New project</button>
+            </div>
+          ) : g.clientHead ? (
             <div className="chead" key={g.key}>
               <button className="collapse" onClick={() => toggle(g.key)} aria-label={collapsed.has(g.key) ? "Expand" : "Collapse"}>{collapsed.has(g.key) ? <ChevronRight size={15} /> : <ChevronDown size={15} />}</button>
               <Building2 size={15} />
@@ -151,6 +159,7 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
               <span className="n">{g.clientHead.count} {g.clientHead.count === 1 ? "project" : "projects"}</span>
               {g.title !== NO_CLIENT && (
                 <span className="right">
+                  <button className="icon-btn" title={`New project for ${g.title}`} aria-label={`New project for ${g.title}`} onClick={() => openUpload({ newProject: true, client: String(g.title) })}><Plus size={15} /></button>
                   <Menu align="end" label="Client options" trigger={(p) => <button {...p} className="icon-btn" aria-label={`${g.title} options`}><Ellipsis size={15} /></button>}>
                     <MenuItem icon={<Trash2 size={16} />} danger onSelect={() => setDeletingClient(String(g.title))}>Delete client</MenuItem>
                   </Menu>
@@ -191,6 +200,7 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
         )}
       </div>
       {renaming && <RenameProject p={renaming} onClose={() => setRenaming(null)} />}
+      {newClient && <NewClient onClose={() => setNewClient(false)} onDone={() => { setNewClient(false); setGroup("client"); setClient(""); }} />}
       {deletingProject && (
         <DeleteProject p={deletingProject} vids={(overview?.videos ?? []).filter((x) => x.projectId === deletingProject._id)}
           onClose={() => setDeletingProject(null)} onDone={() => { const here = projectId === deletingProject._id; setDeletingProject(null); if (here) navigate("/projects"); }} />
@@ -285,7 +295,9 @@ function DeleteClient({ client, projects, vids, onClose, onDone }: { client: str
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
         </div>
         <p className="caption" style={{ margin: 0, lineHeight: 1.5 }}>
-          Its {plural(projects.length, "project")} ({projects.map((p) => projectLabel(p)).join(", ")}) and their {counts(theirs)} are deleted, with their drawings, recordings and transcripts. Files in Dropbox aren't touched.
+          {projects.length
+            ? <>Its {plural(projects.length, "project")} ({projects.map((p) => projectLabel(p)).join(", ")}) and their {counts(theirs)} are deleted, with their drawings, recordings and transcripts. Files in Dropbox aren't touched.</>
+            : <>It has no projects, so only the client is removed.</>}
         </p>
         <label className="field">
           <span className="label">Type <b style={{ color: "var(--text-primary)" }}>{client}</b> to confirm</span>
@@ -295,6 +307,38 @@ function DeleteClient({ client, projects, vids, onClose, onDone }: { client: str
         <div className="dfoot">
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
           <button type="submit" className="btn primary" disabled={!ok || busy}><Trash2 size={15} />{busy ? "Deleting…" : "Delete client"}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// "New client": just a name. It shows on the Projects page (grouped by client) with a + to add its first project.
+function NewClient({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const create = useMutation(api.library.createClient);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <Modal onClose={onClose} label="New client" width={460}>
+      <form style={{ display: "grid", gap: 18 }} onSubmit={async (e) => {
+        e.preventDefault();
+        if (!name.trim()) { setError("Give the client a name."); return; }
+        setBusy(true); setError(null);
+        try { await create({ name }); onDone(); } catch (err) { setError((err as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]); setBusy(false); }
+      }}>
+        <div className="dhead">
+          <div style={{ display: "grid", gap: 6 }}>
+            <span className="eyebrow">Client</span>
+            <h2 className="headline">New client. <span className="rest">Add its projects next.</span></h2>
+          </div>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
+        </div>
+        <label className="field"><span className="label">Client name</span><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Floor Trader" autoFocus /></label>
+        {error && <p className="error" role="alert">{error}</p>}
+        <div className="dfoot">
+          <button className="btn" type="button" onClick={onClose}>Cancel</button>
+          <button className="btn primary" type="submit" disabled={busy}><Building2 size={15} />{busy ? "Adding…" : "Add client"}</button>
         </div>
       </form>
     </Modal>

@@ -58,7 +58,26 @@ export const overview = query({
         updatedAt: Math.max(p.createdAt, ...videos.filter((x) => x.projectId === p._id).map((x) => x.updatedAt)),
       })),
       videos: vidsOut,
+      // Clients made with "New client" (they show even before they have projects).
+      clients: (await ctx.db.query("clients").collect()).map((c) => c.name).sort((a, b) => a.localeCompare(b)),
     };
+  },
+});
+
+// "New client": a client with no projects yet. A name already used by a client (made here or on a project) is refused.
+export const createClient = mutation({
+  args: { name: v.string() },
+  handler: async (ctx, a) => {
+    await requireMe(ctx);
+    const name = clean(a.name, 120);
+    if (!name) throw new ConvexError("Give the client a name.");
+    const key = name.toLowerCase();
+    if (name.toLowerCase() === "no client") throw new ConvexError("Pick another name.");
+    const made = (await ctx.db.query("clients").collect()).some((c) => c.name.toLowerCase() === key);
+    const onProjects = (await ctx.db.query("projects").collect()).some((p) => (p.client ?? "").trim().toLowerCase() === key);
+    if (made || onProjects) throw new ConvexError(`There's already a client called ${name}.`);
+    await ctx.db.insert("clients", { name, createdAt: Date.now() });
+    return name;
   },
 });
 
@@ -279,6 +298,7 @@ async function removeVersion(ctx: MutationCtx, ver: Doc<"versions">, why: string
     if (t.storageId) await ctx.storage.delete(t.storageId).catch(() => null);
     await ctx.db.delete(t._id);
   }
+  for (const w of await ctx.db.query("waveforms").withIndex("by_version", (q) => q.eq("versionId", ver._id)).collect()) await ctx.db.delete(w._id);
   for (const f of await ctx.db.query("dropFiles").withIndex("by_version", (q) => q.eq("versionId", ver._id)).collect()) {
     await ctx.db.patch(f._id, { versionId: undefined, reason: why });
   }
@@ -352,11 +372,13 @@ export const deleteClient = mutation({
     if (!c) throw new ConvexError("Which client?");
     if (typed.trim() !== c) throw new ConvexError(`Type ${c} exactly to delete it.`);
     const projects = (await ctx.db.query("projects").collect()).filter((p) => (p.client ?? "").trim().toLowerCase() === c.toLowerCase());
-    if (!projects.length) throw new ConvexError("No projects are filed under that client.");
+    const made = (await ctx.db.query("clients").collect()).filter((x) => x.name.toLowerCase() === c.toLowerCase());
+    if (!projects.length && !made.length) throw new ConvexError("There's no client by that name.");
+    for (const x of made) await ctx.db.delete(x._id);
     const stills = new Set<string>(), guids = new Set<string>();
     let videos = 0;
     for (const p of projects) videos += await removeProject(ctx, p._id, stills, guids);
-    await scheduleCleanup(ctx, stills, guids);
+    if (projects.length) await scheduleCleanup(ctx, stills, guids);
     return { projects: projects.length, videos };
   },
 });

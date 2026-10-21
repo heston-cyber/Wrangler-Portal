@@ -97,6 +97,9 @@ export const poll = internalAction({
       // Marked pending straight away so the site shows "Transcribing" from the moment the version is ready.
       if (process.env.ELEVENLABS_API_KEY) await ctx.runMutation(internal.transcripts.markPending, { versionId });
       await ctx.scheduler.runAfter(60_000, internal.transcribe.run, { versionId, attempt: 0 });
+      // Waveform for the timeline, from the same MP4 copy.
+      await ctx.runMutation(internal.waveforms.markPending, { versionId });
+      await ctx.scheduler.runAfter(45_000, internal.waveform.run, { versionId, attempt: 0 });
     } else if (!failed && count < MAX_POLLS) {
       await ctx.scheduler.runAfter(POLL_MS, internal.uploads.poll, { versionId });
     }

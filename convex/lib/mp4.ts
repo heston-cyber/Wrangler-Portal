@@ -58,8 +58,8 @@ export function frameCountFromMoov(moov: Uint8Array): number | null {
   return null;
 }
 
-// Walks top-level boxes with small range reads until it finds 'moov' (start or end of file).
-export async function mp4FrameCount(read: RangeRead, maxMoovBytes = 64_000_000): Promise<number | null> {
+// Walks top-level boxes with small range reads until it finds 'moov' (start or end of file) and returns that whole box.
+export async function readMoov(read: RangeRead, maxMoovBytes = 64_000_000): Promise<Uint8Array | null> {
   let o = 0;
   for (let i = 0; i < 64; i++) {
     const h = await read(o, o + 15);
@@ -70,13 +70,17 @@ export async function mp4FrameCount(read: RangeRead, maxMoovBytes = 64_000_000):
     if (t === "moov") {
       if (size < 8 || size > maxMoovBytes) return null;
       const moov = await read(o, o + size - 1);
-      if (moov.length < size) return null;
-      return frameCountFromMoov(moov);
+      return moov.length < size ? null : moov;
     }
     if (size < 8) return null; // size 0 = runs to end of file, nothing after it
     o += size;
   }
   return null;
+}
+
+export async function mp4FrameCount(read: RangeRead, maxMoovBytes = 64_000_000): Promise<number | null> {
+  const moov = await readMoov(read, maxMoovBytes);
+  return moov ? frameCountFromMoov(moov) : null;
 }
 
 // Range reads over HTTP (server or browser). Throws on HTTP errors.

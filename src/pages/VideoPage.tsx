@@ -10,14 +10,14 @@ import {
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import { frameTc, frameDuration, fpsValue, isValidTc, nominal, type Fps } from "../../convex/lib/frames";
+import { frameTc, frameDuration, fpsValue, isValidTc, nominal, tcToFrames, type Fps } from "../../convex/lib/frames";
 import { DEMO, asset, mediaUrl } from "../config";
 import { linkProps, navigate } from "../lib/router";
 import { isVideoFile, startUpload, useUploads } from "../lib/uploads";
 import { markersEdl } from "../lib/edl";
 import { clockText, projectLabel, statusChip, transcriptChip } from "../lib/format";
 import { useFrame, useFramePlayer, type FrameClock } from "../player/useFramePlayer";
-import { Scrubber } from "../player/Scrubber";
+import { Timeline, type Wave } from "../player/Timeline";
 import { COLORS, DrawingLayer, type Shape, type Tool } from "../player/Drawing";
 import { captureAndUpload } from "../player/stills";
 import { NotesList, defaultFilter, kindColor, type NoteFilter, type NoteRow } from "../notes/NotesPanel";
@@ -91,6 +91,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const narrow = useIsNarrow();
   const uploads = useUploads(data._id);
   const notes = useQuery(api.notes.forVersion, version ? { versionId: version._id } : "skip") as NoteRow[] | undefined;
+  const wave = useQuery(api.waveforms.forVersion, version ? { versionId: version._id } : "skip") as Wave | undefined;
   const createNote = useMutation(api.notes.create);
   const reportFrameCount = useMutation(api.library.reportFrameCount);
   const [toast, showToast] = useToast();
@@ -98,6 +99,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const fps: Fps = useMemo(() => ({ num: version?.fpsNum ?? 24000, den: version?.fpsDen ?? 1001 }), [version?.fpsNum, version?.fpsDen]);
   const startTc = version?.startTimecode ?? "01:00:00:00";
   const tc = useCallback((f: number) => frameTc(f, startTc, fps), [startTc, fps]);
+  const startFrames = useMemo(() => { try { return tcToFrames(startTc, nominal(fps)); } catch { return 0; } }, [startTc, fps]);
 
   // Source: Bunny's 1080p MP4 copy by default (full quality, exact frames); its stream as the fallback.
   const mp4H = version ? Math.max(0, ...version.mp4Heights.filter((h) => h <= 1080)) : 0;
@@ -386,9 +388,17 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const cycleTime = () => { const m: TimeMode = timeMode === "tc" ? "frames" : timeMode === "frames" ? "clock" : "tc"; setTimeMode(m); writePref("wr.timeMode", m); };
   const transportBar = (
     <div className="transport rect">
-      <div className="rrow">
-        <span className="rlabel">Timeline{version ? ` · v${version.number}` : ""} · {fpsValue(fps).toFixed(3)} fps</span>
+      <div className="rrow thead">
+        <button className="play" onClick={() => player.toggle()} disabled={!ready} aria-label={player.playing ? "Pause (Space)" : "Play (Space)"}>{player.playing ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}</button>
+        <button className="rbold jump" onClick={cycleTime} title="Switch between timecode, frames and minutes">
+          <AtFrame clock={player.clock}>{(f) => <>{timeMode === "frames" ? `Fr ${f}` : timeText(f)}</>}</AtFrame>
+        </button>
+        <span className="rtags">
+          <AtFrame clock={player.clock}>{(f) => <span className="rtag">{timeMode === "frames" ? tc(f) : `Fr ${f}`}</span>}</AtFrame>
+          <span className="rtag hide-xs">End {timeMode === "frames" ? endFrame : timeText(endFrame)}</span>
+        </span>
         <span className="right">
+          <span className="rlabel hide-sm">Timeline{version ? ` · v${version.number}` : ""} · {fpsValue(fps).toFixed(3)} fps</span>
           <Menu side="top" align="end" label="Playback speed" trigger={(p) => <button {...p} className="speedbtn" title="Playback speed">{rate}×</button>}>
             <MenuLabel>Speed</MenuLabel>
             {SPEEDS.map((s) => <MenuItem key={s} checked={rate === s} onSelect={() => setRate(s)}>{s}×</MenuItem>)}
@@ -405,20 +415,15 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           </Menu>
         </span>
       </div>
-      <div className="rrow">
-        <button className="play" onClick={() => player.toggle()} disabled={!ready} aria-label={player.playing ? "Pause (Space)" : "Play (Space)"}>{player.playing ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}</button>
-        <button className="rbold jump" onClick={cycleTime} title="Switch between timecode, frames and minutes">
-          <AtFrame clock={player.clock}>{(f) => <>{timeMode === "frames" ? `Fr ${f}` : timeText(f)}</>}</AtFrame>
-        </button>
-        <span className="rtags">
-          <AtFrame clock={player.clock}>{(f) => <span className="rtag">{timeMode === "frames" ? tc(f) : `Fr ${f}`}</span>}</AtFrame>
-          <span className="rtag hide-xs">End {timeMode === "frames" ? endFrame : timeText(endFrame)}</span>
-        </span>
-      </div>
       {ready ? (
-        <Scrubber
+        <Timeline
           clock={player.clock}
           frameCount={frameCount || 1}
+          nom={nominal(fps)}
+          startFrames={startFrames}
+          fps={fps}
+          wave={wave}
+          compact={narrow}
           notes={(notes ?? []).map((n) => ({ id: n._id, kind: n.kind, inFrame: n.inFrame, outFrame: n.outFrame, status: n.status, text: n.text }))}
           sel={sel}
           highlight={hl}
@@ -426,7 +431,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           onPick={pick}
           onSeek={(f) => { setFocusId(null); setHl(null); void player.seekToFrame(f); }}
           onSelect={(a, b) => { setWhole(false); setSel({ a, b }); }}
-          label={(f) => tc(f)}
+          label={tc}
         />
       ) : null}
     </div>
@@ -442,6 +447,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       }>
         <a {...linkProps("/")} aria-label="Home" style={{ display: "flex" }}><img className="logo" src={asset("/brand/wordmark-cream.png")} alt="Wrangler Productions" /></a>
         <Sep />
+        <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps("/projects")}>Projects</a><Sep /></span>
         {data.project && <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps(`/projects/${data.project._id}`)}>{projectLabel(data.project)}</a><Sep /></span>}
         <span className="here">{data.title}</span>
         {version && <button className="chip" onClick={() => setPanel("versions")} title="Versions">v{version.number}{data.versions.length > 1 ? ` of ${data.versions.length}` : ""}</button>}
