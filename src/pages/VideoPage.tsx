@@ -5,7 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { BrandImg } from "../ui/BrandImg";
 import { useConvex, useMutation, useQuery } from "convex/react";
 import {
-  ArrowUp, Brush, Check, Circle, Download, Ellipsis, Eye, Keyboard, Maximize, MoveUpRight, PanelRight, Pause, Pencil, Play,
+  ArrowUp, Brush, Check, Circle, Download, Ellipsis, Eye, Keyboard, Maximize, Minimize, MoveUpRight, PanelRight, Pause, Pencil, Play,
   Crosshair, Film, Mic, Plus, SlidersHorizontal, Square, Timer, Undo2, Upload, Volume2, VolumeX, X,
 } from "lucide-react";
 import type { FunctionReturnType } from "convex/server";
@@ -16,6 +16,7 @@ import { DEMO, mediaUrl } from "../config";
 import { linkProps, navigate } from "../lib/router";
 import { isVideoFile, startUpload, useUploads } from "../lib/uploads";
 import { markersEdl } from "../lib/edl";
+import { enterPageFullscreen, enterVideoFullscreen, exitPageFullscreen, fullscreenElement, fullscreenMode, onFullscreenChange } from "../lib/fullscreen";
 import { clockText, projectLabel, statusChip, transcriptChip } from "../lib/format";
 import { useFrame, useFramePlayer, type FrameClock } from "../player/useFramePlayer";
 import { Timeline, type Wave } from "../player/Timeline";
@@ -142,6 +143,11 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const [rate, setRate] = useState(1);
   const [muted, setMuted] = useState(false);
   const [showDrawings, setShowDrawings] = useState(true);
+  // The page is full screen (not set on iPhones, where Apple's player takes over instead).
+  const [fs, setFs] = useState(() => fullscreenElement() === document.documentElement);
+  useEffect(() => onFullscreenChange(() => setFs(fullscreenElement() === document.documentElement)), []);
+  // Leaving the video page while full screen: come back out.
+  useEffect(() => () => { if (fullscreenElement()) void exitPageFullscreen().catch(() => {}); }, []);
   const [focusId, setFocusId] = useState<string | null>(noteId);
   const [focusTick, setFocusTick] = useState(0);
   const [dialog, setDialog] = useState<null | "rename" | "starttc" | "keys">(null);
@@ -181,7 +187,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     [notes],
   );
   const aspect = version?.width && version?.height ? version.width / version.height : 16 / 9;
-  const [wrapRef, box] = useFit(aspect, narrow);
+  const [wrapRef, box] = useFit(aspect, narrow && !fs);
 
   useEffect(() => { const v = player.videoRef.current; if (v) v.playbackRate = rate; }, [rate, player.videoRef, src]);
   useEffect(() => { const v = player.videoRef.current; if (v) v.muted = muted; }, [muted, player.videoRef, src]);
@@ -378,11 +384,17 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  // Full screen: the page shows just the picture and the play bar (computers, iPads, Android);
+  // on iPhones, Apple's own player, the only full screen Safari allows there (see lib/fullscreen).
   function toggleFullscreen() {
-    const el = rootRef.current;
-    if (!el) return;
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else void el.requestFullscreen?.().catch(() => {});
+    if (fullscreenElement()) { void exitPageFullscreen().catch(() => {}); return; }
+    const v = player.videoRef.current;
+    const mode = fullscreenMode(v);
+    if (mode === "page") { void enterPageFullscreen().catch(() => showToast("Full screen didn't open.")); return; }
+    if (mode === "video" && v && ready) {
+      try { if (enterVideoFullscreen(v)) return; } catch { /* not loaded far enough yet */ }
+    }
+    showToast(!ready ? "Full screen works once the video has loaded." : mode === "none" ? "Full screen isn't available in this browser." : "Full screen didn't open. Try again in a moment.");
   }
 
   function downloadEdl() {
@@ -423,13 +435,18 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       <MenuItem checked={quality === "stream"} onSelect={() => setQuality("stream")}>Stream (adapts to connection)</MenuItem>
       <MenuSep />
       <MenuItem checked={showDrawings} onSelect={() => setShowDrawings(!showDrawings)}>Show note drawings</MenuItem>
-      <MenuItem icon={<Maximize size={16} />} kbd="F" onSelect={toggleFullscreen}>Full screen</MenuItem>
+      <MenuItem icon={fs ? <Minimize size={16} /> : <Maximize size={16} />} kbd="F" onSelect={toggleFullscreen}>{fs ? "Exit full screen" : "Full screen"}</MenuItem>
       <MenuItem icon={<Keyboard size={16} />} kbd="?" onSelect={() => setDialog("keys")}>Keyboard shortcuts</MenuItem>
     </Menu>
   );
+  const fsButton = (
+    <button className="icon-btn fsbtn" onClick={toggleFullscreen} disabled={!ready} aria-label={fs ? "Exit full screen (F)" : "Full screen (F)"} title={fs ? "Exit full screen (F)" : "Full screen (F)"}>
+      {fs ? <Minimize size={16} /> : <Maximize size={16} />}
+    </button>
+  );
   const transportBar = (
     <div className="transport rect">
-      {!narrow && <div className="rrow thead">
+      {(!narrow || fs) && <div className="rrow thead">
         {playButton}
         <button className="rbold jump" onClick={cycleTime} title="Switch between timecode, frames and minutes">
           <AtFrame clock={player.clock}>{(f) => <>{timeMode === "frames" ? `Fr ${f}` : timeText(f)}</>}</AtFrame>
@@ -443,6 +460,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           {speedMenu}
           <button className="icon-btn" onClick={() => setMuted(!muted)} aria-label={muted ? "Unmute" : "Mute"} title={muted ? "Unmute" : "Mute"}>{muted ? <VolumeX size={16} /> : <Volume2 size={16} />}</button>
           {viewMenu}
+          {fsButton}
         </span>
       </div>}
       {ready ? (
@@ -469,7 +487,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   );
 
   return (
-    <div className="review" ref={rootRef}>
+    <div className={`review${fs ? " fs" : ""}`} ref={rootRef}>
       <TopBar right={
         <>
           <button className="btn sm hide-sm" onClick={downloadEdl} disabled={!notes?.length} title="Download the notes as Resolve markers (EDL)"><Download size={15} />Resolve markers</button>
@@ -500,7 +518,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
         <div className="stagecol">
           {/* On phones, the picture and the play bar stay pinned at the top while the rest scrolls. */}
           <div className="pinned">
-          <div className="stagewrap" ref={wrapRef} style={narrow ? { height: box.h || undefined } : undefined}>
+          <div className="stagewrap" ref={wrapRef} style={narrow && !fs ? { height: box.h || undefined } : undefined}>
             <div className="stage" style={{ width: box.w || undefined, height: box.h || undefined, aspectRatio: box.w ? undefined : `${aspect}` }}>
               <video ref={player.videoRef} playsInline preload="auto" onClick={() => !drawing && player.toggle()} />
               {player.proxyUrl && <video ref={player.proxyRef} className={`proxy${player.proxyOn ? " on" : ""}`} src={player.proxyUrl} muted playsInline preload="auto" onLoadedData={player.onProxyLoaded} aria-hidden />}
@@ -580,7 +598,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                       <span className="rtag">{whole ? "Whole video" : sel ? `${sel.b - sel.a + 1} frames` : "1 frame"}</span>
                       {shapes.length > 0 && <span className="rtag">Drawing</span>}
                     </span>
-                    <span className="right">{speedMenu}{viewMenu}</span>
+                    <span className="right">{speedMenu}{viewMenu}{fsButton}</span>
                   </div>
                 ) : (
                   <div className="rrow">

@@ -784,3 +784,28 @@ button.tcpill:hover, .composer .target:hover { background: var(--surface-inset);
 .segbtn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--text-secondary); font-size: 13px; }
 .segbtn:hover { color: var(--text-primary); }
 .segbtn.on { background: var(--surface-block); color: var(--text-primary); box-shadow: 0 1px 3px rgba(0, 0, 0, .18), inset 0 0 0 1px var(--border-hairline); }
+
+/* ---------- Full screen (Oct 21): just the picture and the play bar. Turning the phone or tablet re-fits the picture.
+   iPhones don't get this: Safari only lets a bare video go full screen there, so the button opens Apple's player. ---------- */
+.review.fs { height: 100vh; height: 100dvh; background: var(--surface-band); }
+.review.fs .topbar, .review.fs .side, .review.fs .composer-zone { display: none !important; }
+.review.fs .rbody { flex: 1; min-height: 0; display: flex; }
+.review.fs .stagecol { display: flex; flex: 1; min-width: 0; min-height: 0; flex-direction: column; padding: 10px 10px 0; }
+.review.fs .pinned { display: flex; flex-direction: column; flex: 1; min-height: 0; position: static; padding: 0 0 10px; background: none; }
+.review.fs .stagewrap { flex: 1; min-height: 0; }
+/* Full screen on a short screen (a phone turned sideways): a slimmer play bar so the picture gets the room. */
+@media (max-height: 500px) {
+  .review.fs .stagecol { padding: 6px 8px 0; }
+  .review.fs .pinned { padding-bottom: 6px; }
+  .review.fs .transport.rect { margin: 6px 8px 6px; padding: 6px 12px 8px; gap: 6px; border-radius: 16px; }
+  .review.fs .transport .thead { flex-wrap: nowrap; gap: 8px; }
+  .review.fs .transport .rbold { font-size: 18px; }
+  .review.fs .transport .play { width: 30px; height: 30px; }
+  .review.fs .transport .rlabel { display: none; }
+  .review.fs .tl-notes { height: 14px; margin-bottom: 4px; border-radius: 7px; }
+  .review.fs .tl-notes .tl-mark { top: 2px; height: 10px; }
+  .review.fs .tl-ruler { height: 18px; }
+  .review.fs .tl-label { font-size: 9.5px; top: 0; }
+  .review.fs .tl-wave { height: 28px; margin-top: 3px; border-radius: 8px; }
+  .review.fs .tl-wave .bars { inset: 3px 2px; }
+}
