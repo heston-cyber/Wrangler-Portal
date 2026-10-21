@@ -1,5 +1,6 @@
 // The timeline under the picture (Option C, Oct 21): a notes bar, a timecode ruler, and the cut's waveform.
 // Click or drag the ruler or waveform to move the playhead; Shift-drag to mark a range.
+// While dragging, the playhead follows the finger at once and the picture catches up (onScrub); letting go lands exactly (onSeek).
 // Notes sit on their own bar on top in Resolve's colours (blue frame, yellow range); tapping it picks the nearest note.
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, type FrameClock } from "./useFramePlayer";
@@ -51,7 +52,7 @@ const Bars = memo(function Bars({ heights }: { heights: number[] }) {
   return <>{heights.map((h, i) => <i key={i} style={{ height: `${Math.max(8, Math.round(h * 100))}%` }} />)}</>;
 });
 
-export function Timeline({ clock, frameCount, nom, startFrames, notes, sel, highlight, activeId, onSeek, onSelect, onPick, label, wave, fps, compact }: {
+export function Timeline({ clock, frameCount, nom, startFrames, notes, sel, highlight, activeId, onSeek, onScrub, onSelect, onPick, label, wave, fps, compact }: {
   clock: FrameClock;
   frameCount: number;
   nom: number; // nominal frames per second (24 for 23.976)
@@ -60,7 +61,8 @@ export function Timeline({ clock, frameCount, nom, startFrames, notes, sel, high
   sel: { a: number; b: number } | null;
   highlight?: { a: number; b: number } | null;
   activeId?: string | null;
-  onSeek: (f: number) => void;
+  onSeek: (f: number) => void; // exact jump, when the finger or mouse lets go
+  onScrub: (f: number, first: boolean) => void; // quick follow while dragging
   onPick: (id: string) => void;
   onSelect: (a: number, b: number) => void;
   label: (f: number) => string;
@@ -70,7 +72,7 @@ export function Timeline({ clock, frameCount, nom, startFrames, notes, sel, high
 }) {
   const n = Math.max(1, frameCount);
   const [ref, width] = useWidth<HTMLDivElement>();
-  const [drag, setDrag] = useState<{ start: number; range: boolean } | null>(null);
+  const [drag, setDrag] = useState<{ start: number; range: boolean; f: number } | null>(null);
   const [hover, setHover] = useState<number | null>(null);
   const pct = (f: number) => `${(100 * f) / n}%`;
   const at = (clientX: number) => {
@@ -125,7 +127,7 @@ export function Timeline({ clock, frameCount, nom, startFrames, notes, sel, high
           <div key={x.id} className={`tl-mark${x.status === "done" ? " done" : ""}${x.id === activeId ? " active" : ""}`} role="button" aria-label={`Note at ${label(x.inFrame!)}`}
             title={`${label(x.inFrame!)}${x.text ? ` · ${x.text.slice(0, 80)}` : ""}`} style={{ left: pct(x.inFrame! + 0.5) }} />
         ))}
-        <Head clock={clock} n={n} className="tl-notehead" />
+        <Head clock={clock} n={n} at={drag?.f} className="tl-notehead" />
       </div>
 
       <div
@@ -139,18 +141,21 @@ export function Timeline({ clock, frameCount, nom, startFrames, notes, sel, high
         onPointerDown={(e) => {
           (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
           const f = at(e.clientX);
-          setDrag({ start: f, range: e.shiftKey });
+          setDrag({ start: f, range: e.shiftKey, f });
+          setHover(f);
           if (e.shiftKey) onSelect(f, f);
-          onSeek(f);
+          onScrub(f, true);
         }}
         onPointerMove={(e) => {
           const f = at(e.clientX);
-          if (e.pointerType === "mouse" || drag) setHover(f);
-          if (!drag) return;
+          if (e.pointerType === "mouse" || drag) { if (f !== hover) setHover(f); }
+          if (!drag || f === drag.f) return;
+          setDrag({ ...drag, f });
           if (drag.range) onSelect(Math.min(drag.start, f), Math.max(drag.start, f));
-          onSeek(f);
+          onScrub(f, false);
         }}
-        onPointerUp={(e) => { setDrag(null); if (e.pointerType !== "mouse") setHover(null); }}
+        onPointerUp={(e) => { if (drag) onSeek(drag.f); setDrag(null); if (e.pointerType !== "mouse") setHover(null); }}
+        onPointerCancel={() => { if (drag) onSeek(drag.f); setDrag(null); setHover(null); }}
         onPointerLeave={() => { if (!drag) setHover(null); }}
       >
         <div className="tl-ruler">
@@ -162,7 +167,7 @@ export function Timeline({ clock, frameCount, nom, startFrames, notes, sel, high
           {heights.length > 0 ? (
             <>
               <div className="bars"><Bars heights={heights} /></div>
-              <Played clock={clock} n={n}><div className="bars played"><Bars heights={heights} /></div></Played>
+              <Played clock={clock} n={n} at={drag?.f}><div className="bars played"><Bars heights={heights} /></div></Played>
             </>
           ) : (
             <><span className="flat" />{waveNote && <span className="wnote">{waveNote}</span>}</>
@@ -171,18 +176,21 @@ export function Timeline({ clock, frameCount, nom, startFrames, notes, sel, high
           {sel && <div className="tl-sel" style={{ left: pct(sel.a), width: `max(3px, ${pct(sel.b - sel.a + 1)})` }} />}
         </div>
         {hover !== null && <><div className="tl-hover" style={{ left: pct(hover + 0.5) }} /><div className="tl-tip" style={{ left: `clamp(40px, ${pct(hover + 0.5)}, calc(100% - 40px))` }}>{label(hover)}</div></>}
-        <Head clock={clock} n={n} className="tl-head" />
+        <Head clock={clock} n={n} at={drag?.f} className="tl-head" />
       </div>
     </div>
   );
 }
 
 // Per-frame pieces re-render alone, not the whole timeline.
-function Head({ clock, n, className }: { clock: FrameClock; n: number; className: string }) {
-  const f = useFrame(clock);
+// `at` (while dragging) shows where the finger is, ahead of the picture.
+function Head({ clock, n, className, at }: { clock: FrameClock; n: number; className: string; at?: number }) {
+  const live = useFrame(clock);
+  const f = at ?? live;
   return <div className={className} style={{ left: `${(100 * (f + 0.5)) / n}%` }} />;
 }
-function Played({ clock, n, children }: { clock: FrameClock; n: number; children: React.ReactNode }) {
-  const f = useFrame(clock);
+function Played({ clock, n, children, at }: { clock: FrameClock; n: number; children: React.ReactNode; at?: number }) {
+  const live = useFrame(clock);
+  const f = at ?? live;
   return <div className="tl-played" style={{ clipPath: `inset(0 ${100 - (100 * (f + 0.5)) / n}% 0 0)` }}>{children}</div>;
 }

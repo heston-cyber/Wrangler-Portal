@@ -148,6 +148,35 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
     return seekChain.current;
   }
 
+  // Dragging the playhead: one quick seek at a time, always to the newest spot, skipping the ones in between.
+  // (Queuing a frame-exact jump for every finger move made phones fall seconds behind.) Letting go does one exact jump.
+  const scrubTarget = useRef<number | null>(null);
+  const scrubRun = useRef<Promise<void> | null>(null);
+  function scrubTo(n: number) {
+    const max = (frameCount ?? Infinity) - 1;
+    scrubTarget.current = Math.max(0, Math.min(n, max));
+    if (scrubRun.current) return;
+    scrubRun.current = (async () => {
+      await seekChain.current.catch(() => 0);
+      while (scrubTarget.current !== null) {
+        const target = scrubTarget.current;
+        scrubTarget.current = null;
+        const v = videoRef.current;
+        if (!v) break;
+        if (!v.paused) v.pause();
+        const p = nextFrame(400);
+        v.currentTime = Math.max(0, (target + 0.5) * FD + bias.current);
+        const md = await p;
+        if (md) { lastMedia.current = md.mediaTime; clock.set(frameOf(md.mediaTime)); }
+      }
+    })().finally(() => { scrubRun.current = null; });
+  }
+  async function endScrub(n: number) {
+    scrubTarget.current = null;
+    if (scrubRun.current) await scrubRun.current;
+    return seekToFrame(n);
+  }
+
   const api = {
     videoRef,
     clock,
@@ -158,6 +187,8 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
     playing,
     error,
     seekToFrame,
+    scrubTo,
+    endScrub,
     step: (d: number) => seekToFrame((pending.current?.target ?? clock.get()) + d),
     play: () => videoRef.current?.play().catch(() => {}),
     pause: () => videoRef.current?.pause(),

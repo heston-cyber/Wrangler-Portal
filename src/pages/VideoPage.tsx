@@ -451,7 +451,8 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           highlight={hl}
           activeId={focusId}
           onPick={pick}
-          onSeek={(f) => { setFocusId(null); setHl(null); void player.seekToFrame(f); }}
+          onScrub={(f, first) => { if (first) { setFocusId(null); setHl(null); } player.scrubTo(f); }}
+          onSeek={(f) => { void player.endScrub(f); }}
           onSelect={(a, b) => { setWhole(false); setSel({ a, b }); }}
           label={tc}
         />
