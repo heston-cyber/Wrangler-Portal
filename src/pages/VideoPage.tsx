@@ -98,6 +98,8 @@ function readPref<T extends string>(key: string, fallback: T): T {
   try { return (localStorage.getItem(key) as T) || fallback; } catch { return fallback; }
 }
 function writePref(key: string, v: string) { try { localStorage.setItem(key, v); } catch { /* private mode */ } }
+const readFlag = (key: string) => !!key && readPref<string>(key, "") === "1";
+const writeFlag = (key: string) => { if (key) writePref(key, "1"); };
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
 
@@ -118,7 +120,9 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
 
   // Source: Bunny's 1080p MP4 copy by default (full quality, exact frames); its stream as the fallback.
   const mp4H = version ? Math.max(0, ...version.mp4Heights.filter((h) => h <= 1080)) : 0;
-  const [quality, setQuality] = useState<"file" | "stream">(mp4H ? "file" : "stream");
+  // A version whose 1080p file failed before opens on the stream (remembered per browser; see the fallback below).
+  const streamOnlyKey = version ? `wr.streamOnly.${version.bunnyGuid}` : "";
+  const [quality, setQuality] = useState<"file" | "stream">(() => (mp4H && !readFlag(streamOnlyKey) ? "file" : "stream"));
   const ready = version?.status === "ready";
   const src = !version || !ready ? null : quality === "file" && mp4H ? mediaUrl(version.bunnyGuid, `play_${mp4H}p.mp4`) : mediaUrl(version.bunnyGuid, "playlist.m3u8");
   // Scrub copy: the best MP4 copy up to 720p that fits (80 MB on computers, 30 MB on phones), downloaded once the video is ready.
@@ -130,6 +134,26 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   }, [version, ready, narrow]);
   const player = useFramePlayer(src, fps, version?.frameCountExact ? version.frameCount : null, scrubCopies);
   const frameCount = player.frameCount ?? version?.frameCount ?? 0;
+
+  // If the 1080p file fails, switch to the stream at the same frame and carry on.
+  // Found Oct 21: Chrome 155 couldn't decode some audio packets in Bunny's 1080p MP4 of a 2048×858 upload
+  // (13.5 s, 19.9 s…), every time, while the stream of the same version played straight through.
+  const resumeAt = useRef<number | null>(null);
+  useEffect(() => {
+    if (!player.errorCode || quality !== "file" || !version) return;
+    resumeAt.current = player.clock.get();
+    writeFlag(streamOnlyKey);
+    setQuality("stream");
+    showToast("The 1080p file hit a playback error here, so this version switched to the stream. Same picture, same frames.");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [player.errorCode]);
+  useEffect(() => {
+    if (!player.ready || resumeAt.current === null) return;
+    const f = resumeAt.current;
+    resumeAt.current = null;
+    void player.seekToFrame(f);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [player.ready]);
 
   useEffect(() => {
     const est = player.estimatedFrameCount;
