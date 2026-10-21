@@ -70,7 +70,7 @@ function NoteCard({ n, here, focused, focusTick, tc, onJump, onCopied }: { n: No
     const el = ref.current;
     if (!el) return;
     // Phones pin the player at the top: scroll the page so the note lands just below it.
-    const pinned = document.querySelector(".stagecol");
+    const pinned = document.querySelector(".pinned");
     const scroller = el.closest(".main") as HTMLElement | null;
     if (pinned && scroller && getComputedStyle(pinned).position === "sticky") {
       const top = pinned.getBoundingClientRect().bottom + 8;

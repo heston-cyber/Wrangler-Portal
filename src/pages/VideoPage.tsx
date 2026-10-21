@@ -370,6 +370,8 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
 
       <div className="rbody">
         <div className="stagecol">
+          {/* On phones, the picture and the play bar stay pinned at the top while the rest scrolls. */}
+          <div className="pinned">
           <div className="stagewrap" ref={wrapRef} style={narrow ? { height: box.h || undefined } : undefined}>
             <div className="stage" style={{ width: box.w || undefined, height: box.h || undefined, aspectRatio: box.w ? undefined : `${aspect}` }}>
               <video ref={player.videoRef} playsInline preload="auto" onClick={() => !drawing && player.toggle()} />
@@ -395,6 +397,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
             </div>
           </div>
           {narrow && transportBar}
+          </div>
 
           {ready && (
             <div className="composer-zone">
