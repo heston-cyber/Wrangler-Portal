@@ -518,3 +518,55 @@ export const shareLinkCount = internalAction({
     return { connected: true, sharedLinks: n };
   },
 });
+
+// Live check of the Bunny half of an import, without Dropbox: Bunny fetches an existing version's small MP4
+// (with the site as referer), we find the new video by its one-off title, then delete it. Returns steps only.
+export const bunnyFetchCheck = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const { lib } = bunnyEnv();
+    const src: { guid: string; height: number } | null = await ctx.runQuery(internal.dropbox.anyReadyMp4, {});
+    if (!src) return { ok: false, step: "no ready version with an MP4 copy" };
+    const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
+    const url = `https://${process.env.BUNNY_STREAM_CDN || "vz-3ba0610b-f90.b-cdn.net"}/${src.guid}/play_${src.height}p.mp4`;
+    const tag = `wr-fetch-check-${randomToken(6)}`;
+    const steps: string[] = [];
+    let guid: string | null = null;
+    try {
+      const r = await bunnyCall(`/library/${lib}/videos/fetch`, { method: "POST", body: JSON.stringify({ url, title: tag, headers: { Referer: site } }) });
+      steps.push(`fetch accepted: ${JSON.stringify(r).slice(0, 80)}`);
+      for (let i = 0; i < 20 && !guid; i++) {
+        await new Promise((res) => setTimeout(res, i === 0 ? 1500 : 3000));
+        const found = (await bunnyCall(`/library/${lib}/videos?page=1&itemsPerPage=10&search=${encodeURIComponent(tag)}`)) as { items?: Array<{ guid: string; title: string }> };
+        guid = found.items?.find((x) => x.title === tag)?.guid ?? null;
+      }
+      steps.push(guid ? "found the new video by its title" : "never found the new video");
+      if (guid) {
+        let status = -1;
+        for (let i = 0; i < 20 && status < 1; i++) {
+          await new Promise((res) => setTimeout(res, 3000));
+          status = ((await bunnyCall(`/library/${lib}/videos/${guid}`)) as { status: number }).status;
+        }
+        steps.push(`status after fetch: ${status}`);
+        await bunnyCall(`/library/${lib}/videos/${guid}`, { method: "POST", body: JSON.stringify({ title: "fetch check (renamed)" }) });
+        steps.push("renamed");
+      }
+      return { ok: Boolean(guid), steps };
+    } catch (e) {
+      steps.push(`error: ${errText(e)}`);
+      return { ok: false, steps };
+    } finally {
+      if (guid) { await bunnyCall(`/library/${lib}/videos/${guid}`, { method: "DELETE" }).catch(() => null); steps.push("deleted the test video"); }
+    }
+  },
+});
+
+export const anyReadyMp4 = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    for (const ver of await ctx.db.query("versions").order("desc").collect()) {
+      if (ver.status === "ready" && ver.mp4Heights?.length) return { guid: ver.bunnyGuid, height: Math.min(...ver.mp4Heights) };
+    }
+    return null;
+  },
+});

@@ -66,7 +66,7 @@ export const run = internalAction({
       const msg = ((e as Error).message || String(e)).slice(0, 300);
       await ctx.runMutation(internal.transcripts.fail, { versionId, error: msg });
       // Network blips and ElevenLabs hiccups get two more tries, 5 minutes apart. Key or permission problems don't.
-      if (tries < 3 && !/ 40[13]:/.test(msg)) await ctx.scheduler.runAfter(5 * 60_000, internal.transcribe.run, { versionId, attempt: attempt + 1 });
+      if (tries < 3 && !/ 40[13]:|invalid_api_key|authentication_error|missing_permissions/.test(msg)) await ctx.scheduler.runAfter(5 * 60_000, internal.transcribe.run, { versionId, attempt: attempt + 1 });
       return { result: `failed: ${msg}` };
     }
   },
