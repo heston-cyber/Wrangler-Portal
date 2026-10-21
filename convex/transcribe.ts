@@ -1,7 +1,7 @@
 "use node";
 // Transcribes a version with ElevenLabs Scribe. Runs in Node (512 MB) because it downloads Bunny's smallest MP4
 // copy of the cut and sends it on. Words come back in seconds and are pinned to frames of the version.
-import { internalAction } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { buildTranscript } from "./lib/transcript";
@@ -68,6 +68,65 @@ export const run = internalAction({
       // Network blips and ElevenLabs hiccups get two more tries, 5 minutes apart. Key or permission problems don't.
       if (tries < 3 && !/ 40[13]:|invalid_api_key|authentication_error|missing_permissions/.test(msg)) await ctx.scheduler.runAfter(5 * 60_000, internal.transcribe.run, { versionId, attempt: attempt + 1 });
       return { result: `failed: ${msg}` };
+    }
+  },
+});
+
+// Voice notes: transcribe a recording the browser just uploaded. Returns words with seconds; the page pins them to frames.
+export const voiceWords = action({
+  args: { storageId: v.id("_storage"), mime: v.string() },
+  handler: async (ctx, { storageId, mime }): Promise<{ language: string | null; words: Array<{ text: string; start: number; end: number; type?: string }> }> => {
+    await ctx.runQuery(internal.users.assertAllowed, {});
+    const key = process.env.ELEVENLABS_API_KEY;
+    if (!key) throw new Error("Transcription isn't set up (no ElevenLabs key).");
+    const blob = await ctx.storage.get(storageId);
+    if (!blob) throw new Error("The recording didn't upload.");
+    return await sttWords(key, blob, mime);
+  },
+});
+
+async function sttWords(key: string, blob: Blob, mime: string): Promise<{ language: string | null; words: Array<{ text: string; start: number; end: number }> }> {
+    if (blob.size > 100_000_000) throw new Error("That recording is too long.");
+    const ext = /mp4|m4a|aac/.test(mime) ? "m4a" : /ogg/.test(mime) ? "ogg" : "webm";
+    let lastErr = "";
+    for (const m of MODELS) {
+      const form = new FormData();
+      form.append("model_id", m);
+      form.append("file", new Blob([await blob.arrayBuffer()], { type: mime.split(";")[0] }), `note.${ext}`);
+      form.append("timestamps_granularity", "word");
+      form.append("tag_audio_events", "false");
+      const res = await fetch("https://api.elevenlabs.io/v1/speech-to-text", { method: "POST", headers: { "xi-api-key": key }, body: form });
+      const text = await res.text();
+      if (res.ok) {
+        const j = JSON.parse(text);
+        return { language: j.language_code ?? null, words: (j.words ?? []).filter((w: { type?: string }) => !w.type || w.type === "word").map((w: { text: string; start: number; end: number }) => ({ text: w.text, start: w.start, end: w.end })) };
+      }
+      lastErr = `ElevenLabs ${res.status}: ${text.slice(0, 160)}`;
+      if (!(res.status === 400 || res.status === 422) || !/model/i.test(text)) break;
+    }
+    throw new Error(lastErr || "Transcription didn't work.");
+}
+
+// Live check for CI: runs the voice-note path (storage → ElevenLabs → words) on the newest ready version's smallest
+// MP4, then deletes the temporary file. Returns counts and timing only.
+export const voiceSelfTest = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ ok: boolean; step?: string; words?: number; language?: string | null; seconds?: number; firstWordStarts?: number | null }> => {
+    const key = process.env.ELEVENLABS_API_KEY;
+    if (!key) return { ok: false, step: "no key" };
+    const src: { guid: string; height: number } | null = await ctx.runQuery(internal.dropbox.anyReadyMp4, {});
+    if (!src) return { ok: false, step: "no ready version" };
+    const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
+    const media: Response = await fetch(`https://${streamCdn()}/${src.guid}/play_${src.height}p.mp4`, { headers: { Referer: site, Origin: new URL(site).origin } });
+    if (!media.ok) return { ok: false, step: `media ${media.status}` };
+    const storageId = await ctx.storage.store(new Blob([await media.arrayBuffer()], { type: "audio/mp4" }));
+    try {
+      const t = Date.now();
+      const blob = (await ctx.storage.get(storageId))!;
+      const r = await sttWords(key, blob, "audio/mp4");
+      return { ok: r.words.length > 0, words: r.words.length, language: r.language, seconds: Math.round((Date.now() - t) / 100) / 10, firstWordStarts: r.words[0]?.start ?? null };
+    } finally {
+      await ctx.storage.delete(storageId);
     }
   },
 });

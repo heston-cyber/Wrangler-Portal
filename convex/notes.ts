@@ -4,6 +4,15 @@ import { v, ConvexError } from "convex/values";
 import { requireMe } from "./lib/access";
 
 const kind = v.union(v.literal("frame"), v.literal("range"), v.literal("general"));
+const voiceArg = v.object({
+  storageId: v.id("_storage"),
+  mime: v.string(),
+  durationMs: v.number(),
+  language: v.optional(v.string()),
+  played: v.boolean(),
+  words: v.array(v.object({ t: v.string(), f: v.number(), s: v.number(), e: v.number() })),
+  pointers: v.array(v.object({ word: v.string(), i: v.number(), f: v.number(), s: v.number(), still: v.optional(v.string()) })),
+});
 const MAX_TEXT = 5000;
 const NOTIFY_DELAY_MS = 90_000; // gather notes for 90 s, then one Slack message
 
@@ -15,7 +24,8 @@ export const forVersion = query({
     const out = [];
     for (const n of notes) {
       const replies = await ctx.db.query("replies").withIndex("by_note", (q) => q.eq("noteId", n._id)).collect();
-      out.push({ ...n, replies: replies.sort((a, b) => a.createdAt - b.createdAt) });
+      const voiceUrl = n.voice ? await ctx.storage.getUrl(n.voice.storageId) : null;
+      out.push({ ...n, voiceUrl, replies: replies.sort((a, b) => a.createdAt - b.createdAt) });
     }
     // General notes first, then by frame.
     return out.sort((a, b) => (a.inFrame ?? -1) - (b.inFrame ?? -1) || a.createdAt - b.createdAt);
@@ -43,6 +53,7 @@ export const create = mutation({
     still: v.optional(v.string()),
     stillIn: v.optional(v.string()),
     stillOut: v.optional(v.string()),
+    voice: v.optional(voiceArg),
   },
   handler: async (ctx, a) => {
     const me = await requireMe(ctx);
@@ -50,7 +61,11 @@ export const create = mutation({
     if (!ver) throw new ConvexError("That version no longer exists.");
     checkFrames(a.kind, a.inFrame, a.outFrame);
     const text = a.text.trim().slice(0, MAX_TEXT);
-    if (!text && !a.drawing) throw new ConvexError("Write a note or draw something first.");
+    if (!text && !a.drawing && !a.voice) throw new ConvexError("Write a note or draw something first.");
+    if (a.voice) {
+      if (a.voice.words.length > 20_000 || a.voice.pointers.length > 20) throw new ConvexError("That voice note is too long.");
+      if (!(await ctx.db.system.get(a.voice.storageId))) throw new ConvexError("The recording didn't upload. Try again.");
+    }
     if (a.drawing && JSON.stringify(a.drawing).length > 200_000) throw new ConvexError("That drawing is too big.");
     const now = Date.now();
     const id = await ctx.db.insert("notes", {
@@ -65,6 +80,7 @@ export const create = mutation({
       still: a.still,
       stillIn: a.stillIn,
       stillOut: a.stillOut,
+      voice: a.voice,
       status: "open",
       authorName: me.name,
       authorId: me.userId,
@@ -99,6 +115,8 @@ export const remove = mutation({
     await requireMe(ctx);
     const replies = await ctx.db.query("replies").withIndex("by_note", (q) => q.eq("noteId", noteId)).collect();
     for (const r of replies) await ctx.db.delete(r._id);
+    const n = await ctx.db.get(noteId);
+    if (n?.voice) await ctx.storage.delete(n.voice.storageId).catch(() => null);
     await ctx.db.delete(noteId);
   },
 });
@@ -129,5 +147,24 @@ export const markNotified = internalMutation({
   handler: async (ctx, { noteIds }) => {
     const now = Date.now();
     for (const id of noteIds) if (await ctx.db.get(id)) await ctx.db.patch(id, { notifiedAt: now });
+  },
+});
+
+// Voice notes: where the browser sends the recording (private Convex storage).
+export const voiceUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireMe(ctx);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+// A recorded draft you threw away: remove the recording (only if no note uses it).
+export const discardVoice = mutation({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, { storageId }) => {
+    await requireMe(ctx);
+    const used = (await ctx.db.query("notes").collect()).some((n) => n.voice?.storageId === storageId);
+    if (!used) await ctx.storage.delete(storageId).catch(() => null);
   },
 });

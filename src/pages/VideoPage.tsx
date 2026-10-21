@@ -5,7 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useConvex, useMutation, useQuery } from "convex/react";
 import {
   ArrowUp, Brush, Check, Circle, Download, Ellipsis, Eye, Keyboard, Maximize, MoveUpRight, PanelRight, Pause, Pencil, Play,
-  Plus, SlidersHorizontal, Square, Timer, Undo2, Upload, Volume2, VolumeX, X,
+  Mic, Plus, SlidersHorizontal, Square, Timer, Undo2, Upload, Volume2, VolumeX, X,
 } from "lucide-react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
@@ -23,6 +23,9 @@ import { captureAndUpload } from "../player/stills";
 import { NotesList, defaultFilter, kindColor, type NoteFilter, type NoteRow } from "../notes/NotesPanel";
 import { VersionsList } from "../notes/VersionsPanel";
 import { TranscriptList } from "../notes/TranscriptPanel";
+import { canRecord, useVoiceRecorder } from "../voice/useVoiceRecorder";
+import { mapWords, playedRange, pointersFrom, transcriptText, type Pointer, type VoiceWord } from "../../convex/lib/voice";
+import { secondsText } from "../notes/NotesPanel";
 import { Sep, TopBar } from "../shell/Shell";
 import { Menu, MenuItem, MenuLabel, MenuSep, Modal, Spinner, useIsNarrow, useToast } from "../ui/kit";
 
@@ -135,6 +138,17 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const [posting, setPosting] = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);
 
+  // Voice notes (Phase 3)
+  const voice = useVoiceRecorder(player.clock);
+  type VoiceDraft = { storageId: Id<"_storage">; mime: string; durationMs: number; language?: string; played: boolean; words: VoiceWord[]; pointers: Pointer[]; audioUrl: string };
+  const [voiceDraft, setVoiceDraft] = useState<VoiceDraft | null>(null);
+  const [voiceBusy, setVoiceBusy] = useState<string | null>(null);
+  const shapeTimes = useRef<number[]>([]); // ms into the recording each shape was finished; -1 = before recording
+  const recStart = useRef<number | null>(null);
+  const mutedBefore = useRef(false);
+  const uploadUrl = useMutation(api.notes.voiceUploadUrl);
+  const discardVoice = useMutation(api.notes.discardVoice);
+
   const savedDrawings = useMemo(
     () => (notes ?? [])
       .filter((n) => n.drawing && Array.isArray((n.drawing as { shapes?: unknown }).shapes) && (n.drawFrame ?? n.inFrame) !== undefined)
@@ -182,14 +196,76 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const onShapes = (s: Shape[]) => {
     if (shapes.length === 0 && s.length > 0) setDrawFrame(player.clock.get());
     if (s.length === 0) setDrawFrame(null);
+    const t = recStart.current !== null ? Math.round(performance.now() - recStart.current) : -1;
+    shapeTimes.current = s.map((_, i) => (i < shapeTimes.current.length ? shapeTimes.current[i] : t));
     setShapes(s);
   };
+
+  // Voice: start recording (the video is muted while you talk), then on stop: upload, transcribe, pin words to
+  // frames, grab a still for each pointing word with what was drawn by then, and leave a draft to check and post.
+  async function startVoice() {
+    if (!version || !ready || voice.state !== "idle" || voiceBusy) return;
+    mutedBefore.current = muted;
+    setMuted(true);
+    shapeTimes.current = shapeTimes.current.map(() => -1);
+    if (await voice.start()) recStart.current = voice.startedAt() ?? performance.now();
+    else setMuted(mutedBefore.current);
+  }
+  async function stopVoice() {
+    const rec = await voice.stop();
+    recStart.current = null;
+    setMuted(mutedBefore.current);
+    if (!rec || !version) return;
+    if (rec.durationMs < 600) { showToast("That was too short to keep."); return; }
+    const v = player.videoRef.current!;
+    try {
+      player.pause();
+      setVoiceBusy("Uploading");
+      const url = await uploadUrl({});
+      const up = await fetch(url, { method: "POST", headers: { "Content-Type": rec.mime.split(";")[0] }, body: rec.blob });
+      if (!up.ok) throw new Error("The recording didn't upload.");
+      const { storageId } = (await up.json()) as { storageId: Id<"_storage"> };
+      setVoiceBusy("Transcribing");
+      const res = await convex.action(api.transcribe.voiceWords, { storageId, mime: rec.mime });
+      const words = mapWords(res.words, rec.frames);
+      const pointers = pointersFrom(words);
+      const range = playedRange(rec.frames);
+      if (pointers.length) {
+        setVoiceBusy("Saving stills");
+        for (const p of pointers) {
+          try {
+            await player.seekToFrame(p.f);
+            const drawn = shapes.filter((_, i) => (shapeTimes.current[i] ?? -1) <= p.s);
+            p.still = await captureAndUpload(convex, v, drawn);
+          } catch { /* a missing still isn't fatal */ }
+        }
+      }
+      await player.seekToFrame(range ? range.a : rec.frames[0][1]);
+      if (range && !sel && !whole) setSel(range);
+      const said = transcriptText(words);
+      setText((t) => (t.trim() ? `${t.trim()} ${said}` : said));
+      setVoiceDraft({ storageId, mime: rec.mime, durationMs: rec.durationMs, language: res.language ?? undefined, played: !!range, words, pointers, audioUrl: URL.createObjectURL(rec.blob) });
+      if (!words.length) showToast("No words came through. You can still post the recording.");
+    } catch (e) {
+      showToast("Voice note didn't work: " + ((e as Error).message || "").replace(/^.*(ConvexError|Uncaught Error): /, "").split("\n")[0]);
+    } finally {
+      setVoiceBusy(null);
+    }
+  }
+  async function dropVoiceDraft() {
+    if (!voiceDraft) return;
+    const d = voiceDraft;
+    setVoiceDraft(null);
+    URL.revokeObjectURL(d.audioUrl);
+    setText("");
+    await discardVoice({ storageId: d.storageId }).catch(() => null);
+  }
   const setIn = () => { const f = player.clock.get(); setWhole(false); setSel((s) => ({ a: f, b: s && s.b >= f ? s.b : f })); };
   const setOut = () => { const f = player.clock.get(); setWhole(false); setSel((s) => ({ a: s && s.a <= f ? s.a : f, b: f })); };
 
   async function post() {
     if (!version || posting || !ready) return;
-    if (!text.trim() && shapes.length === 0) { textRef.current?.focus(); return; }
+    if (!text.trim() && shapes.length === 0 && !voiceDraft) { textRef.current?.focus(); return; }
     setPosting(true);
     const v = player.videoRef.current!;
     try {
@@ -222,9 +298,15 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
         versionId: version._id, kind, inFrame, outFrame,
         drawFrame: shapes.length && drawFrame !== null ? drawFrame : undefined,
         text, drawing: shapes.length ? { shapes } : undefined, still, stillIn, stillOut,
+        voice: voiceDraft ? {
+          storageId: voiceDraft.storageId, mime: voiceDraft.mime, durationMs: voiceDraft.durationMs, language: voiceDraft.language,
+          played: voiceDraft.played, words: voiceDraft.words, pointers: voiceDraft.pointers,
+        } : undefined,
       });
       await player.seekToFrame(kind === "range" ? inFrame! : here);
       setText(""); setShapes([]); setDrawFrame(null); setDrawing(false); setSel(null); setWhole(false);
+      if (voiceDraft) URL.revokeObjectURL(voiceDraft.audioUrl);
+      setVoiceDraft(null); shapeTimes.current = [];
       setFocusId(id); setPanel((p) => p ?? "notes");
       showToast(stillProblem ? "Note added, but the still couldn't be saved." : "Note added");
     } catch (e) {
@@ -424,7 +506,13 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                     New note{whole ? "" : sel ? " · Range" : " · Frame"}
                   </span>
                   <span className="right">
-                    <button className={`icon-btn tool${drawing ? " on" : ""}`} onClick={() => { player.pause(); setDrawing(!drawing); }} aria-label="Draw (D)" title="Draw (D)"><Pencil size={17} /></button>
+                    {canRecord() && (
+                      <button className={`icon-btn tool${voice.recording ? " on rec" : ""}`} disabled={!!voiceBusy || voice.state === "starting" || voice.state === "stopping" || (!!voiceDraft && !voice.recording)}
+                        onClick={() => void (voice.recording ? stopVoice() : startVoice())} aria-label={voice.recording ? "Stop recording" : "Record a voice note"} title={voice.recording ? "Stop recording" : voiceDraft ? "Post or discard this voice note first" : "Record a voice note"}>
+                        {voice.recording ? <Square size={15} /> : <Mic size={17} />}
+                      </button>
+                    )}
+                    <button className={`icon-btn tool${drawing ? " on" : ""}`} onClick={() => { if (!voice.recording) player.pause(); setDrawing(!drawing); }} aria-label="Draw (D)" title="Draw (D)"><Pencil size={17} /></button>
                   </span>
                 </div>
                 <div className="rrow">
@@ -445,11 +533,43 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                     {shapes.length > 0 && <span className="rtag">Drawing</span>}
                   </span>
                 </div>
+                {voice.error && <p className="error" style={{ margin: 0, fontSize: 13 }}>{voice.error}</p>}
+                {(voice.recording || voice.state === "starting") && (
+                  <div className="vrec" role="status">
+                    <span className="recdot" />
+                    <b>{voice.state === "starting" ? "Starting…" : `Recording ${secondsText(voice.elapsed)}`}</b>
+                    <span className="meter"><i style={{ width: `${Math.round(voice.level * 100)}%` }} /></span>
+                    <span className="secondary hide-sm">Video muted · play, pause or draw as you talk</span>
+                    <button className="btn sm" onClick={() => void stopVoice()} disabled={voice.state !== "recording"}><Square size={13} />Stop</button>
+                  </div>
+                )}
+                {voiceBusy && <div className="vrec" role="status"><Spinner size={14} /><b>{voiceBusy}…</b></div>}
+                {voiceDraft && !voiceBusy && (
+                  <div className="vdraft">
+                    <div className="rrow">
+                      <span className="rtag"><Mic size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Voice · {secondsText(voiceDraft.durationMs)}</span>
+                      {voiceDraft.played && <span className="rtag">Played while talking</span>}
+                      <span className="right"><button className="icon-btn" onClick={() => void dropVoiceDraft()} aria-label="Discard voice note" title="Discard voice note"><X size={15} /></button></span>
+                    </div>
+                    <audio src={voiceDraft.audioUrl} controls preload="metadata" />
+                    {voiceDraft.pointers.length > 0 && (
+                      <div className="pointers">
+                        {voiceDraft.pointers.map((p) => (
+                          <button key={`${p.i}-${p.f}`} className="pointer" onClick={() => void player.seekToFrame(p.f)} title={`Jump to ${tc(p.f)}`}>
+                            {p.still ? <img src={p.still} alt={`Frame when you said “${p.word}”`} /> : <span className="noimg" />}
+                            <span className="pl">“{p.word}” · {tc(p.f)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <span className="caption" style={{ fontSize: 12 }}>Check the words below, fix anything, then post.</span>
+                  </div>
+                )}
                 <div className="cinput">
                   <textarea ref={textRef} rows={1} value={text} onChange={(e) => setText(e.target.value)} onFocus={() => player.pause()}
                     placeholder={drawing ? "Add words to your drawing…" : "Leave a note…"} aria-label="Note"
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void post(); } }} />
-                  <button className="send" onClick={() => void post()} disabled={posting || (!text.trim() && !shapes.length)} aria-label="Add note" title="Add note (Enter)"><ArrowUp size={18} /></button>
+                  <button className="send" onClick={() => void post()} disabled={posting || voice.recording || !!voiceBusy || (!text.trim() && !shapes.length && !voiceDraft)} aria-label="Add note" title="Add note (Enter)"><ArrowUp size={18} /></button>
                 </div>
               </div>
             </div>
@@ -488,7 +608,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
             </div>
             <div className="sbody">
               {panel === "notes"
-                ? <NotesList notes={version ? notes : []} clock={player.clock} tc={tc} filter={filter} onJump={jump} focusId={focusId} focusTick={focusTick} onCopied={showToast} />
+                ? <NotesList notes={version ? notes : []} clock={player.clock} tc={tc} filter={filter} onJump={jump} focusId={focusId} focusTick={focusTick} onCopied={showToast} onSeekFrame={(f) => void player.seekToFrame(f)} />
                 : panel === "versions"
                   ? <VersionsList videoId={data._id} versions={data.versions} current={version?.number ?? null} uploads={uploads} />
                   : version ? <TranscriptList versionId={version._id} clock={player.clock} tc={tc} onSeek={(f) => void player.seekToFrame(f)} /> : null}

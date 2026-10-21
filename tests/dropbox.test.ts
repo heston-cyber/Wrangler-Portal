@@ -373,3 +373,41 @@ describe("deleting a version", () => {
     void v1;
   });
 });
+
+describe("voice notes", () => {
+  test("a voice note keeps its recording, words and pointing stills; deleting it removes the recording", async () => {
+    const { t, me } = await setup();
+    const projectId = await me.mutation(api.library.createProject, { name: "P" });
+    const videoId = await me.mutation(api.library.createVideo, { projectId, title: "V" });
+    const { versionId } = await t.mutation(internal.library.insertVersion, { videoId, bunnyGuid: "g", fileName: "a.mp4" });
+    await t.run(async (ctx) => { await ctx.db.patch(versionId, { status: "ready", fpsNum: 24000, fpsDen: 1001, frameCount: 3149 }); });
+    const storageId = await t.run((ctx) => ctx.storage.store(new Blob(["fake audio"], { type: "audio/webm" })));
+    const voice = {
+      storageId, mime: "audio/webm;codecs=opus", durationMs: 4200, language: "eng", played: true,
+      words: [{ t: "Make", f: 400, s: 10, e: 200 }, { t: "this", f: 401, s: 210, e: 400 }, { t: "brighter.", f: 450, s: 2100, e: 2600 }],
+      pointers: [{ word: "this", i: 1, f: 401, s: 210, still: "https://cdn.example/stills/p.jpg" }],
+    };
+    const noteId = await me.mutation(api.notes.create, { versionId, kind: "range", inFrame: 400, outFrame: 450, text: "Make this brighter.", voice });
+    const [n] = await me.query(api.notes.forVersion, { versionId });
+    expect(n.voice?.words.map((w: { t: string }) => w.t)).toEqual(["Make", "this", "brighter."]);
+    expect(n.voiceUrl).toBeTypeOf("string");
+    // Voice alone is enough to post.
+    const s2 = await t.run((ctx) => ctx.storage.store(new Blob(["x"])));
+    await me.mutation(api.notes.create, { versionId, kind: "frame", inFrame: 10, text: "", voice: { ...voice, storageId: s2, pointers: [] } });
+    // The connector sees the transcript and the pointing word with its timecode and still.
+    const { key } = await me.action(api.connector.createKey, {});
+    const r = await t.fetch("/mcp", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_notes", arguments: { video: "V" } } }) });
+    const notes = (await r.json()).result.structuredContent.notes;
+    const vn = notes.find((x: { note_id: string }) => x.note_id === noteId);
+    expect(vn.voice).toMatchObject({ seconds: 4.2, played_while_talking: true, said: "Make this brighter.", pointing_words: [{ word: "this", frame: 401, timecode: "01:00:16:17", has_still: true }] });
+    expect(vn.has_images).toBe(true);
+    // Deleting the note deletes the recording; a discarded draft's recording goes too (but not one a note uses).
+    await me.mutation(api.notes.remove, { noteId });
+    expect(await t.run((ctx) => ctx.db.system.get(storageId))).toBeNull();
+    await me.mutation(api.notes.discardVoice, { storageId: s2 });
+    expect(await t.run((ctx) => ctx.db.system.get(s2))).not.toBeNull();
+    const s3 = await t.run((ctx) => ctx.storage.store(new Blob(["y"])));
+    await me.mutation(api.notes.discardVoice, { storageId: s3 });
+    expect(await t.run((ctx) => ctx.db.system.get(s3))).toBeNull();
+  });
+});

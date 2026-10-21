@@ -135,10 +135,11 @@ async function callTool(ctx: ActionCtx, name: string, args: Json): Promise<ToolR
         const shots: Array<[string, string | null]> = r.type === "range"
           ? [["Frame with the drawing", r.drawing_timecode && r.still !== r.stillIn ? r.still : null], ["First frame of the range", r.stillIn], ["Last frame of the range", r.stillOut]]
           : [[r.drawing_timecode ? `Frame ${r.drawing_timecode} with the drawing` : "The frame", r.still]];
+        for (const p of r.pointers ?? []) shots.push([`“${p.word}” at ${p.timecode} (pointing word in the voice note)`, p.still]);
         content.push(text(head));
         let any = false;
         for (const [label, url] of shots) {
-          if (!url || images >= 12) continue;
+          if (!url || images >= 16) continue;
           const img = await fetchImage(url);
           if (img) { content.push(text(label + ":"), img); images++; any = true; }
         }

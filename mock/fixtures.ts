@@ -101,7 +101,7 @@ export const store = {
       case "users:me": return { id: "u1", email: "heston@wranglerproductions.com", name: "Heston", allowed: true };
       case "library:overview": return overview();
       case "library:video": return video(args.videoId);
-      case "notes:forVersion": return notes.filter((n) => n.versionId === args.versionId);
+      case "notes:forVersion": return notes.filter((n) => n.versionId === args.versionId).map((n) => (n.voice ? { ...n, voiceUrl: "/mock-audio.webm" } : n));
       case "activity:feed": return feed().slice(0, args.limit ?? 60);
       case "connector:listKeys": return keys;
       case "dropbox:status": return { configured: true, transcripts: true, connected: true, email: "heston@wranglerproductions.com", name: "Heston Hill", connectedAt: Date.now() - 86_400_000, lastSyncAt: Date.now() - 40_000, lastError: null,
@@ -128,11 +128,20 @@ export const store = {
     if (name === "notes:editText") { notes = notes.map((n) => n._id === args.noteId ? { ...n, text: args.text } : n); bump(); return; }
     if (name === "library:markOpened") { const v = videos.find((x) => x._id === args.videoId); if (v) v.lastOpenedAt = Date.now(); bump(); return; }
     if (name === "library:reportFrameCount") return;
+    if (name === "notes:voiceUploadUrl") return "/mock-upload";
+    if (name === "notes:discardVoice") { (window as any).__discarded = args.storageId; return; }
     if (name === "connector:revokeKey") { keys = keys.filter((k) => k._id !== args.keyId); bump(); return; }
     bump();
   },
   async action(name: string, args: any): Promise<any> {
     if (name === "stills:upload") return `data:${args.contentType};base64,${args.dataBase64}`;
+    if (name === "transcribe:voiceWords") {
+      (window as any).__voiceMime = args.mime;
+      return { language: "eng", words: [
+        { text: "Make", start: 0.1, end: 0.3 }, { text: "this", start: 0.35, end: 0.6 }, { text: "brighter,", start: 0.65, end: 1.0 },
+        { text: "and", start: 1.1, end: 1.2 }, { text: "trim", start: 1.25, end: 1.45 }, { text: "here.", start: 1.6, end: 1.9 },
+      ] };
+    }
     if (name === "connector:createKey") {
       const key = "wr_" + "MockKeyForScreenshotsOnly0123456789abcdefgh";
       keys = [{ _id: "k" + Date.now(), prefix: key.slice(0, 10), label: "Claude", createdAt: Date.now(), lastUsedAt: null }, ...keys]; bump();

@@ -1,14 +1,14 @@
 // The Notes tab of the review page's side panel.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useMutation } from "convex/react";
-import { Check, Copy, Ellipsis, Pencil, Reply, Trash2 } from "lucide-react";
+import { Check, Copy, Ellipsis, Mic, Pencil, Reply, Trash2 } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import type { Doc } from "../../convex/_generated/dataModel";
 import type { FrameClock } from "../player/useFramePlayer";
 import { Menu, MenuItem, MenuSep } from "../ui/kit";
 import { ago } from "../lib/format";
 
-export type NoteRow = Doc<"notes"> & { replies: Doc<"replies">[] };
+export type NoteRow = Doc<"notes"> & { replies: Doc<"replies">[]; voiceUrl?: string | null };
 export type NoteFilter = { status: "open" | "done" | "all"; kinds: { frame: boolean; range: boolean; general: boolean }; sort: "timecode" | "newest" };
 export const defaultFilter: NoteFilter = { status: "all", kinds: { frame: true, range: true, general: true }, sort: "timecode" };
 
@@ -24,7 +24,7 @@ function useHereIds(clock: FrameClock, notes: NoteRow[]) {
   return useSyncExternalStore(clock.subscribe, key);
 }
 
-export function NotesList({ notes, clock, tc, filter, onJump, focusId, focusTick, onCopied }: {
+export function NotesList({ notes, clock, tc, filter, onJump, focusId, focusTick, onCopied, onSeekFrame }: {
   notes: NoteRow[] | undefined;
   clock: FrameClock;
   tc: (f: number) => string;
@@ -33,6 +33,7 @@ export function NotesList({ notes, clock, tc, filter, onJump, focusId, focusTick
   focusId: string | null;
   focusTick: number;
   onCopied: (what: string) => void;
+  onSeekFrame?: (frame: number) => void;
 }) {
   const list = notes ?? [];
   const here = useHereIds(clock, list);
@@ -50,10 +51,10 @@ export function NotesList({ notes, clock, tc, filter, onJump, focusId, focusTick
       </div>
     );
   }
-  return <>{shown.map((n) => <NoteCard key={n._id} n={n} here={hereSet.has(n._id)} focused={focusId === n._id} focusTick={focusTick} tc={tc} onJump={onJump} onCopied={onCopied} />)}</>;
+  return <>{shown.map((n) => <NoteCard key={n._id} n={n} here={hereSet.has(n._id)} focused={focusId === n._id} focusTick={focusTick} tc={tc} onJump={onJump} onCopied={onCopied} onSeekFrame={onSeekFrame} />)}</>;
 }
 
-function NoteCard({ n, here, focused, focusTick, tc, onJump, onCopied }: { n: NoteRow; here: boolean; focused: boolean; focusTick: number; tc: (f: number) => string; onJump: (n: NoteRow) => void; onCopied: (what: string) => void }) {
+function NoteCard({ n, here, focused, focusTick, tc, onJump, onCopied, onSeekFrame }: { n: NoteRow; here: boolean; focused: boolean; focusTick: number; tc: (f: number) => string; onJump: (n: NoteRow) => void; onCopied: (what: string) => void; onSeekFrame?: (frame: number) => void }) {
   const setStatus = useMutation(api.notes.setStatus);
   const reply = useMutation(api.notes.reply);
   const remove = useMutation(api.notes.remove);
@@ -105,6 +106,7 @@ function NoteCard({ n, here, focused, focusTick, tc, onJump, onCopied }: { n: No
         {n.kind === "frame" && <span className="rtag">1 frame</span>}
         {n.kind === "range" && <span className="rtag">{len} frames</span>}
         {n.drawing ? <span className="rtag">Drawing</span> : null}
+        {n.voice ? <span className="rtag"><Mic size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Voice · {secondsText(n.voice.durationMs)}</span> : null}
         {n.replies.length > 0 && <span className="rtag">{n.replies.length} {n.replies.length === 1 ? "reply" : "replies"}</span>}
         {n.status === "done" && <span className="rtag">Done</span>}
       </div>
@@ -119,6 +121,22 @@ function NoteCard({ n, here, focused, focusTick, tc, onJump, onCopied }: { n: No
           </div>
         </div>
       ) : n.text ? <div className="ntext">{n.text}</div> : null}
+
+      {n.voice && (
+        <div className="nvoice">
+          {n.voiceUrl && <audio src={n.voiceUrl} controls preload="none" />}
+          {n.voice.pointers.length > 0 && (
+            <div className="pointers">
+              {n.voice.pointers.map((p) => (
+                <button key={`${p.i}-${p.f}`} className="pointer" onClick={() => onSeekFrame?.(p.f)} title={`Jump to ${tc(p.f)}`}>
+                  {p.still ? <img src={p.still} alt={`Frame when you said “${p.word}”`} loading="lazy" /> : <span className="noimg" />}
+                  <span className="pl">“{p.word}” · {tc(p.f)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {(n.still || n.stillIn || n.stillOut) && (
         <div className="nstill">
@@ -171,3 +189,5 @@ function NoteCard({ n, here, focused, focusTick, tc, onJump, onCopied }: { n: No
     </article>
   );
 }
+
+export const secondsText = (ms: number) => { const t = Math.round(ms / 1000); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };

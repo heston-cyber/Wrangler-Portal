@@ -61,6 +61,17 @@ export default defineSchema({
     still: v.optional(v.string()), // URL: frame (with drawing if any)
     stillIn: v.optional(v.string()), // URL: first frame of a range
     stillOut: v.optional(v.string()), // URL: last frame of a range
+    // Voice notes (Phase 3): the recording (private storage), each word pinned to the frame on screen when it was
+    // said, and the pointing words ("this", "here"...) with a still of their frame.
+    voice: v.optional(v.object({
+      storageId: v.id("_storage"),
+      mime: v.string(),
+      durationMs: v.number(),
+      language: v.optional(v.string()),
+      played: v.boolean(), // the video was playing while you talked
+      words: v.array(v.object({ t: v.string(), f: v.number(), s: v.number(), e: v.number() })),
+      pointers: v.array(v.object({ word: v.string(), i: v.number(), f: v.number(), s: v.number(), still: v.optional(v.string()) })),
+    })),
     status: v.union(v.literal("open"), v.literal("done")),
     authorName: v.string(),
     authorId: v.optional(v.id("users")),

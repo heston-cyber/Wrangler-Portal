@@ -23,6 +23,7 @@ import type * as lib_edl from "../lib/edl.js";
 import type * as lib_frames from "../lib/frames.js";
 import type * as lib_mp4 from "../lib/mp4.js";
 import type * as lib_transcript from "../lib/transcript.js";
+import type * as lib_voice from "../lib/voice.js";
 import type * as notes from "../notes.js";
 import type * as phase0 from "../phase0.js";
 import type * as slack from "../slack.js";
@@ -56,6 +57,7 @@ declare const fullApi: ApiFromModules<{
   "lib/frames": typeof lib_frames;
   "lib/mp4": typeof lib_mp4;
   "lib/transcript": typeof lib_transcript;
+  "lib/voice": typeof lib_voice;
   notes: typeof notes;
   phase0: typeof phase0;
   slack: typeof slack;

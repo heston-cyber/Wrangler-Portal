@@ -275,13 +275,14 @@ export const deleteVersion = mutation({
     const notes = await ctx.db.query("notes").withIndex("by_version", (q) => q.eq("versionId", versionId)).collect();
     const stills = new Set<string>();
     for (const n of notes) {
-      for (const u of [n.still, n.stillIn, n.stillOut]) if (u) stills.add(u);
+      for (const u of [n.still, n.stillIn, n.stillOut, ...(n.voice?.pointers ?? []).map((p) => p.still)]) if (u) stills.add(u);
+      if (n.voice) await ctx.storage.delete(n.voice.storageId).catch(() => null);
       for (const r of await ctx.db.query("replies").withIndex("by_note", (q) => q.eq("noteId", n._id)).collect()) await ctx.db.delete(r._id);
       await ctx.db.delete(n._id);
     }
     // Stills another note still shows (e.g. copied test notes) are kept.
     if (stills.size) {
-      for (const other of await ctx.db.query("notes").collect()) for (const u of [other.still, other.stillIn, other.stillOut]) if (u) stills.delete(u);
+      for (const other of await ctx.db.query("notes").collect()) for (const u of [other.still, other.stillIn, other.stillOut, ...(other.voice?.pointers ?? []).map((p) => p.still)]) if (u) stills.delete(u);
     }
     for (const t of await ctx.db.query("transcripts").withIndex("by_version", (q) => q.eq("versionId", versionId)).collect()) {
       if (t.storageId) await ctx.storage.delete(t.storageId);

@@ -237,7 +237,14 @@ export const notesFor = internalQuery({
         author: n.authorName,
         created: iso(n.createdAt),
         drawing: n.drawing ? { on_frame: n.drawFrame ?? n.inFrame ?? null, on_timecode: (n.drawFrame ?? n.inFrame) !== undefined ? frameTc((n.drawFrame ?? n.inFrame)!, ver.startTimecode, fps) : null, shapes: describeDrawing(n.drawing) } : null,
-        has_images: Boolean(n.still || n.stillIn || n.stillOut),
+        has_images: Boolean(n.still || n.stillIn || n.stillOut || n.voice?.pointers.some((p) => p.still)),
+        voice: n.voice ? {
+          seconds: Math.round(n.voice.durationMs / 100) / 10,
+          played_while_talking: n.voice.played,
+          said: n.voice.words.map((w) => w.t).join(" "),
+          pointing_words: n.voice.pointers.map((p) => ({ word: p.word, frame: p.f, timecode: frameTc(p.f, ver.startTimecode, fps), has_still: Boolean(p.still) })),
+          note: "text is what Heston posted (he may have edited the transcript); said is the raw transcript. Each pointing word is pinned to the frame on screen when he said it.",
+        } : null,
         replies: replies.map((r) => ({ author: r.authorName, text: r.text, created: iso(r.createdAt) })),
         link: `${site()}/v/${found.video._id}?version=${ver.number}&note=${n._id}`,
       });
@@ -270,6 +277,7 @@ export const notesForImages = internalQuery({
         in_timecode: tc(n.inFrame), out_timecode: n.kind === "range" ? tc(n.outFrame) : null,
         drawing_timecode: n.drawing ? tc(n.drawFrame ?? n.inFrame) : null,
         still: n.still ?? null, stillIn: n.kind === "range" ? n.stillIn ?? null : null, stillOut: n.kind === "range" ? n.stillOut ?? null : null,
+        pointers: (n.voice?.pointers ?? []).filter((p) => p.still).map((p) => ({ word: p.word, timecode: tc(p.f), still: p.still! })),
       });
     }
     return out;
