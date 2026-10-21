@@ -386,10 +386,29 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   // The timeline box (Altar II card pattern: red label, bold value, grey detail boxes).
   // Along the bottom on desktop (like Flask); right under the picture on phones.
   const cycleTime = () => { const m: TimeMode = timeMode === "tc" ? "frames" : timeMode === "frames" ? "clock" : "tc"; setTimeMode(m); writePref("wr.timeMode", m); };
+  const shownTime = (f: number) => (timeMode === "frames" ? `Fr ${f}` : timeText(f));
+  const playButton = <button className="play" onClick={() => player.toggle()} disabled={!ready} aria-label={player.playing ? "Pause (Space)" : "Play (Space)"}>{player.playing ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}</button>;
+  const speedMenu = (
+    <Menu side="top" align="end" label="Playback speed" trigger={(p) => <button {...p} className="speedbtn" title="Playback speed">{rate}×</button>}>
+      <MenuLabel>Speed</MenuLabel>
+      {SPEEDS.map((s) => <MenuItem key={s} checked={rate === s} onSelect={() => setRate(s)}>{s}×</MenuItem>)}
+    </Menu>
+  );
+  const viewMenu = (
+    <Menu side="top" align="end" label="View options" trigger={(p) => <button {...p} className="icon-btn" aria-label="View options" title="View options"><Eye size={16} /></button>}>
+      <MenuLabel>Picture</MenuLabel>
+      {mp4H > 0 && <MenuItem checked={quality === "file"} onSelect={() => setQuality("file")}>{mp4H}p file (exact frames)</MenuItem>}
+      <MenuItem checked={quality === "stream"} onSelect={() => setQuality("stream")}>Stream (adapts to connection)</MenuItem>
+      <MenuSep />
+      <MenuItem checked={showDrawings} onSelect={() => setShowDrawings(!showDrawings)}>Show note drawings</MenuItem>
+      <MenuItem icon={<Maximize size={16} />} kbd="F" onSelect={toggleFullscreen}>Full screen</MenuItem>
+      <MenuItem icon={<Keyboard size={16} />} kbd="?" onSelect={() => setDialog("keys")}>Keyboard shortcuts</MenuItem>
+    </Menu>
+  );
   const transportBar = (
     <div className="transport rect">
-      <div className="rrow thead">
-        <button className="play" onClick={() => player.toggle()} disabled={!ready} aria-label={player.playing ? "Pause (Space)" : "Play (Space)"}>{player.playing ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}</button>
+      {!narrow && <div className="rrow thead">
+        {playButton}
         <button className="rbold jump" onClick={cycleTime} title="Switch between timecode, frames and minutes">
           <AtFrame clock={player.clock}>{(f) => <>{timeMode === "frames" ? `Fr ${f}` : timeText(f)}</>}</AtFrame>
         </button>
@@ -399,22 +418,11 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
         </span>
         <span className="right">
           <span className="rlabel hide-sm">Timeline{version ? ` · v${version.number}` : ""} · {fpsValue(fps).toFixed(3)} fps</span>
-          <Menu side="top" align="end" label="Playback speed" trigger={(p) => <button {...p} className="speedbtn" title="Playback speed">{rate}×</button>}>
-            <MenuLabel>Speed</MenuLabel>
-            {SPEEDS.map((s) => <MenuItem key={s} checked={rate === s} onSelect={() => setRate(s)}>{s}×</MenuItem>)}
-          </Menu>
-          <button className="icon-btn hide-sm" onClick={() => setMuted(!muted)} aria-label={muted ? "Unmute" : "Mute"} title={muted ? "Unmute" : "Mute"}>{muted ? <VolumeX size={16} /> : <Volume2 size={16} />}</button>
-          <Menu side="top" align="end" label="View options" trigger={(p) => <button {...p} className="icon-btn" aria-label="View options" title="View options"><Eye size={16} /></button>}>
-            <MenuLabel>Picture</MenuLabel>
-            {mp4H > 0 && <MenuItem checked={quality === "file"} onSelect={() => setQuality("file")}>{mp4H}p file (exact frames)</MenuItem>}
-            <MenuItem checked={quality === "stream"} onSelect={() => setQuality("stream")}>Stream (adapts to connection)</MenuItem>
-            <MenuSep />
-            <MenuItem checked={showDrawings} onSelect={() => setShowDrawings(!showDrawings)}>Show note drawings</MenuItem>
-            <MenuItem icon={<Maximize size={16} />} kbd="F" onSelect={toggleFullscreen}>Full screen</MenuItem>
-            <MenuItem icon={<Keyboard size={16} />} kbd="?" onSelect={() => setDialog("keys")}>Keyboard shortcuts</MenuItem>
-          </Menu>
+          {speedMenu}
+          <button className="icon-btn" onClick={() => setMuted(!muted)} aria-label={muted ? "Unmute" : "Mute"} title={muted ? "Unmute" : "Mute"}>{muted ? <VolumeX size={16} /> : <Volume2 size={16} />}</button>
+          {viewMenu}
         </span>
-      </div>
+      </div>}
       {ready ? (
         <Timeline
           clock={player.clock}
@@ -532,15 +540,29 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                     <button className={`icon-btn tool${drawing ? " on" : ""}`} onClick={() => { if (!voice.recording) player.pause(); setDrawing(!drawing); }} aria-label="Draw (D)" title="Draw (D)"><Pencil size={17} /></button>
                   </span>
                 </div>
-                <div className="rrow">
-                  <span className="rbold" title="What this note is on">
-                    {whole ? "Whole video" : sel ? <>{tc(sel.a)}<span className="out">→ {tc(sel.b)}</span></> : <AtFrame clock={player.clock}>{(f) => tc(shapes.length && drawFrame !== null ? drawFrame : f)}</AtFrame>}
-                  </span>
-                  <span className="rtags">
-                    {!whole && <span className="rtag">{sel ? `${sel.b - sel.a + 1} frames` : "1 frame"}</span>}
-                    {shapes.length > 0 && <span className="rtag">Drawing</span>}
-                  </span>
-                </div>
+                {narrow ? (
+                  <div className="rrow ctime">
+                    {playButton}
+                    <button className="rbold jump" onClick={cycleTime} title="Tap to switch between timecode, frames and minutes">
+                      {sel ? <>{shownTime(sel.a)}<span className="out">→ {shownTime(sel.b)}</span></> : <AtFrame clock={player.clock}>{(f) => shownTime(shapes.length && drawFrame !== null ? drawFrame : f)}</AtFrame>}
+                    </button>
+                    <span className="rtags">
+                      <span className="rtag">{whole ? "Whole video" : sel ? `${sel.b - sel.a + 1} frames` : "1 frame"}</span>
+                      {shapes.length > 0 && <span className="rtag">Drawing</span>}
+                    </span>
+                    <span className="right">{speedMenu}{viewMenu}</span>
+                  </div>
+                ) : (
+                  <div className="rrow">
+                    <span className="rbold" title="What this note is on">
+                      {whole ? "Whole video" : sel ? <>{tc(sel.a)}<span className="out">→ {tc(sel.b)}</span></> : <AtFrame clock={player.clock}>{(f) => tc(shapes.length && drawFrame !== null ? drawFrame : f)}</AtFrame>}
+                    </span>
+                    <span className="rtags">
+                      {!whole && <span className="rtag">{sel ? `${sel.b - sel.a + 1} frames` : "1 frame"}</span>}
+                      {shapes.length > 0 && <span className="rtag">Drawing</span>}
+                    </span>
+                  </div>
+                )}
                 {voice.error && <p className="error" style={{ margin: 0, fontSize: 13 }}>{voice.error}</p>}
                 {(voice.recording || voice.state === "starting") && (
                   <div className="vrec" role="status">

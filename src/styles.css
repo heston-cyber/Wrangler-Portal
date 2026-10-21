@@ -413,8 +413,8 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 
 /* transport */
 .transport { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 6px 10px 8px; border-top: 1px solid var(--border-hairline); }
-.transport .play { width: 32px; height: 32px; border-radius: 50%; border: 0; display: grid; place-items: center; background: var(--fill-chip); color: var(--wp-cream); flex: 0 0 auto; }
-.transport .play:hover { background: var(--fill-chip-hover); }
+.transport .play, .composer .play { width: 32px; height: 32px; border-radius: 50%; border: 0; display: grid; place-items: center; background: var(--fill-chip); color: var(--wp-cream); flex: 0 0 auto; }
+.transport .play:hover, .composer .play:hover { background: var(--fill-chip-hover); }
 .timebtn { border: 0; background: transparent; color: var(--text-primary); font-size: 12.5px; font-variant-numeric: tabular-nums; padding: 6px 8px; border-radius: 8px; white-space: nowrap; display: inline-flex; gap: 4px; align-items: center; }
 .timebtn:hover { background: var(--fill-chip); }
 .timebtn .of { color: var(--text-secondary); }
@@ -545,7 +545,7 @@ button.tcpill:hover { background: var(--fill-chip-hover); }
 .composer .send:disabled .lucide { color: var(--text-secondary); }
 .icon-btn:disabled .lucide { color: var(--text-secondary); }
 /* video controls */
-.transport .play { color: var(--accent); }
+.transport .play, .composer .play { color: var(--accent); }
 .timebtn, .timebtn .of { color: var(--accent); }
 .timebtn .of { opacity: .6; }
 .speedbtn { color: var(--accent); }
@@ -632,6 +632,13 @@ button.tcpill:hover, .composer .target:hover { background: var(--wp-black); box-
   .transport .thead { flex-wrap: nowrap; gap: 8px; }
   .transport .thead .right { gap: 0; }
   .transport .rlabel, .transport .rtag.hide-xs { display: none; }
+  /* phones: the timeline card is just the timeline; play, the time and speed/view sit in the note box */
+  .transport.rect { padding: 10px 10px 10px; }
+  .composer .ctime { flex-wrap: nowrap; gap: 8px; }
+  .composer .ctime .rbold { font-size: 18px; white-space: nowrap; }
+  .composer .ctime .rbold .out { font-size: 13px; margin-top: 2px; }
+  .composer .ctime .right { gap: 0; }
+  .composer .ctime .play { width: 30px; height: 30px; }
   .transport .rbold { font-size: 18px; }
   .transport .play { width: 30px; height: 30px; }
   /* note box scrolls with the page */
