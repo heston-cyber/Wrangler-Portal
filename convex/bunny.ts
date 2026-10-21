@@ -63,3 +63,12 @@ export const getVideo = internalAction({
   args: { guid: v.string() },
   handler: async (_ctx, { guid }) => summarize(await getBunnyVideo(guid)),
 });
+
+// Which services are connected (names only, never values). Safe to run from the public CI log.
+export const configStatus = internalAction({
+  args: {},
+  handler: async () => {
+    const names = ["BUNNY_STREAM_LIBRARY_ID", "BUNNY_STREAM_API_KEY", "BUNNY_STORAGE_PASSWORD", "BUNNY_STORAGE_HOST", "BUNNY_STORAGE_ZONE", "BUNNY_STILLS_CDN", "SLACK_WEBHOOK_URL", "ALLOWED_EMAILS", "SITE_URL", "JWT_PRIVATE_KEY", "JWKS"];
+    return Object.fromEntries(names.map((n) => [n, Boolean(process.env[n])]));
+  },
+});

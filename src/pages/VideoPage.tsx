@@ -69,6 +69,13 @@ function VideoView({ data, version }: { data: VideoData; version: Version | null
   const [posting, setPosting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
+  const [showDrawings, setShowDrawings] = useState(true);
+  const savedDrawings = useMemo(
+    () => (notes ?? [])
+      .filter((n) => n.drawing && Array.isArray((n.drawing as { shapes?: unknown }).shapes) && (n.drawFrame ?? n.inFrame) !== undefined)
+      .map((n) => ({ frame: (n.drawFrame ?? n.inFrame) as number, shapes: (n.drawing as { shapes: Shape[] }).shapes })),
+    [notes],
+  );
 
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); }, [toast]);
 
@@ -200,7 +207,14 @@ function VideoView({ data, version }: { data: VideoData; version: Version | null
               <video ref={player.videoRef} playsInline preload="auto" onClick={() => !drawing && player.toggle()} />
               <AtFrame clock={player.clock}>{(frame) => {
                 const elsewhere = shapes.length > 0 && drawFrame !== null && drawFrame !== frame;
-                return <DrawingLayer shapes={elsewhere ? [] : shapes} onChange={onShapes} active={drawing && !elsewhere} tool={tool} color={color} aspect={aspect} />;
+                // Saved drawings show on their own frame (read-only), under anything being drawn now.
+                const saved = showDrawings ? savedDrawings.filter((d) => d.frame === frame).flatMap((d) => d.shapes) : [];
+                return (
+                  <>
+                    {saved.length > 0 && <DrawingLayer shapes={saved} onChange={() => {}} active={false} tool={tool} color={color} aspect={aspect} />}
+                    <DrawingLayer shapes={elsewhere ? [] : shapes} onChange={onShapes} active={drawing && !elsewhere} tool={tool} color={color} aspect={aspect} />
+                  </>
+                );
               }}</AtFrame>
               {!version && <div className="stage-msg">No versions yet. Upload one with <b>&nbsp;New version</b>.</div>}
               {version && !ready && <div className="stage-msg">{version.status === "failed" ? `This version failed: ${version.error ?? "unknown error"}` : `v${version.number} · ${chipText(version.status, version.encodeProgress)}. It appears here when Bunny is done.`}</div>}
@@ -223,6 +237,7 @@ function VideoView({ data, version }: { data: VideoData; version: Version | null
                 <button className="btn small" onClick={() => void player.step(-1)} aria-label="Back one frame">◀ 1</button>
                 <button className="btn small" onClick={() => player.toggle()} style={{ minWidth: 70 }}>{player.playing ? "Pause" : "Play"}</button>
                 <button className="btn small" onClick={() => void player.step(1)} aria-label="Forward one frame">1 ▶</button>
+                <button className={`btn small${showDrawings ? " on" : ""}`} onClick={() => setShowDrawings(!showDrawings)} title="Show the drawings saved with notes on their frames">Note drawings</button>
                 <select className="input" style={{ width: "auto", padding: "5px 8px" }} aria-label="Quality" value={quality} onChange={(e) => setQuality(e.target.value as "file" | "stream")}>
                   {mp4H > 0 && <option value="file">{mp4H}p file</option>}
                   <option value="stream">Stream (auto)</option>
