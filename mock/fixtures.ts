@@ -1,4 +1,6 @@
-// Sample data for the screenshot harness. Mutations change it so the pages react like the real thing.
+// Sample data for the screenshot harness and the demo artifact. Mutations change it so the pages react like the real thing.
+// Every client, project and note here is made up.
+import { mediaUrl } from "../src/config";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const now = Date.now();
 const min = 60_000, hr = 3_600_000, day = 86_400_000;
@@ -11,31 +13,31 @@ const mk = (o: any): Ver => ({
 });
 
 const projects = [
-  { _id: "p1", name: "SSM26", jobNumber: "26122", client: null, createdAt: now - 20 * day },
-  { _id: "p2", name: "Floor Trader Backrooms", jobNumber: "26127", client: "Floor Trader", createdAt: now - 9 * day },
+  { _id: "p1", name: "Harbor Coffee Launch", jobNumber: "26201", client: "Harbor Coffee", createdAt: now - 20 * day },
+  { _id: "p2", name: "Northline Fall Campaign", jobNumber: "26205", client: "Northline Outfitters", createdAt: now - 9 * day },
   { _id: "p3", name: "Wrangler Reel 2026", jobNumber: null, client: null, createdAt: now - 40 * day },
 ];
 const videos: any[] = [
-  { _id: "v1", projectId: "p1", title: "Spirit Intro", createdAt: now - 3 * day, updatedAt: now - 12 * min, lastOpenedAt: now - 3 * min },
-  { _id: "v2", projectId: "p1", title: "Spirit Days Recap", createdAt: now - 2 * day, updatedAt: now - 10 * hr, lastOpenedAt: now - 10 * hr },
-  { _id: "v3", projectId: "p2", title: "Backrooms Teaser", createdAt: now - 20 * min, updatedAt: now - 20 * min, lastOpenedAt: null },
+  { _id: "v1", projectId: "p1", title: "Brand Film", createdAt: now - 3 * day, updatedAt: now - 12 * min, lastOpenedAt: now - 3 * min },
+  { _id: "v2", projectId: "p1", title: "Opening Weekend Recap", createdAt: now - 2 * day, updatedAt: now - 10 * hr, lastOpenedAt: now - 10 * hr },
+  { _id: "v3", projectId: "p2", title: "Fall Teaser", createdAt: now - 20 * min, updatedAt: now - 20 * min, lastOpenedAt: null },
   { _id: "v4", projectId: "p3", title: "Barcode frame test", createdAt: now - 6 * day, updatedAt: now - 6 * day, lastOpenedAt: now - 5 * day },
   { _id: "v5", projectId: "p3", title: "Reel cutdown 9x16", createdAt: now - 12 * day, updatedAt: now - 12 * day, lastOpenedAt: null },
 ];
 const versions: Record<string, Ver[]> = {
   v1: [
-    mk({ _id: "ver1a", number: 1, bunnyGuid: "g-river", fileName: "26122_SpiritIntro_v1.mov", frameCount: 3149, createdAt: now - 3 * day, description: null }),
-    mk({ _id: "ver1b", number: 2, bunnyGuid: "g-river", fileName: "26122_SpiritIntro_v2_Final.mov", frameCount: 3149, createdAt: now - 12 * min, description: "Tighter open, new music bed, fixed the lower third." }),
+    mk({ _id: "ver1a", number: 1, bunnyGuid: "g-river", fileName: "26201_BrandFilm_v1.mov", frameCount: 3149, createdAt: now - 3 * day, description: null }),
+    mk({ _id: "ver1b", number: 2, bunnyGuid: "g-river", fileName: "26201_BrandFilm_v2_Final.mov", frameCount: 3149, createdAt: now - 12 * min, description: "Tighter open, new music bed, fixed the lower third." }),
   ],
-  v2: [mk({ _id: "ver2a", number: 1, bunnyGuid: "g-fire", fileName: "26122_Recap_v1.mp4", frameCount: 2280, createdAt: now - 10 * hr })],
-  v3: [mk({ _id: "ver3a", number: 1, bunnyGuid: "g-int", fileName: "Backrooms_Teaser_v1.mov", frameCount: null, status: "processing", encodeProgress: 45, createdAt: now - 20 * min })],
+  v2: [mk({ _id: "ver2a", number: 1, bunnyGuid: "g-fire", fileName: "26201_OpeningWeekend_v1.mp4", frameCount: 2280, createdAt: now - 10 * hr })],
+  v3: [mk({ _id: "ver3a", number: 1, bunnyGuid: "g-int", fileName: "26205_FallTeaser_v1.mov", frameCount: null, status: "processing", encodeProgress: 45, createdAt: now - 20 * min })],
   v4: [mk({ _id: "ver4a", number: 1, bunnyGuid: "g-barcode", fileName: "frametest_23976_h264.mp4", frameCount: 480, createdAt: now - 6 * day, fileSize: 6_000_000 })],
   v5: [mk({ _id: "ver5a", number: 1, bunnyGuid: "g-int", fileName: "Reel_9x16.mp4", frameCount: 1440, createdAt: now - 12 * day, width: 1080, height: 1920 })],
 };
 const drawing = { shapes: [{ t: "ellipse", x1: 0.56, y1: 0.18, x2: 0.8, y2: 0.52, c: "#ff3b30", w: 0.006 }, { t: "arrow", x1: 0.34, y1: 0.7, x2: 0.54, y2: 0.45, c: "#ff3b30", w: 0.006 }] };
 let notes: any[] = [
   { _id: "n1", versionId: "ver1b", videoId: "v1", kind: "general", text: "Music bed is a touch loud under the VO the whole way. Pull it 3 dB.", status: "open", authorName: "Heston", createdAt: now - 9 * min, replies: [] },
-  { _id: "n2", versionId: "ver1b", videoId: "v1", kind: "frame", inFrame: 400, drawFrame: 400, drawing, text: "Light in the top right pulls the eye. Can we knock it down in the grade?", status: "open", authorName: "Heston", createdAt: now - 8 * min, replies: [], still: "https://vz-3ba0610b-f90.b-cdn.net/g-river/thumbnail.jpg" },
+  { _id: "n2", versionId: "ver1b", videoId: "v1", kind: "frame", inFrame: 400, drawFrame: 400, drawing, text: "Light in the top right pulls the eye. Can we knock it down in the grade?", status: "open", authorName: "Heston", createdAt: now - 8 * min, replies: [], still: mediaUrl("g-river", "thumbnail.jpg") },
   { _id: "n3", versionId: "ver1b", videoId: "v1", kind: "range", inFrame: 626, outFrame: 932, text: "This section drags. Lose about a second and a half, keep the river shot.", status: "open", authorName: "Heston", createdAt: now - 7 * min, replies: [{ _id: "r1", noteId: "n3", text: "Trimmed in v3, trying it at 1:00:39.", authorName: "Heston", createdAt: now - 2 * min }] },
   { _id: "n4", versionId: "ver1b", videoId: "v1", kind: "frame", inFrame: 1712, text: "Lower third typo: Saturday.", status: "done", authorName: "Heston", createdAt: now - 6 * min, doneAt: now - 1 * min, replies: [] },
   { _id: "n5", versionId: "ver1a", videoId: "v1", kind: "frame", inFrame: 12, text: "Open on the wide, not the close-up.", status: "done", authorName: "Heston", createdAt: now - 2 * day, replies: [] },
@@ -101,16 +103,16 @@ export const store = {
       case "users:me": return { id: "u1", email: "heston@wranglerproductions.com", name: "Heston", allowed: true };
       case "library:overview": return overview();
       case "library:video": return video(args.videoId);
-      case "notes:forVersion": return notes.filter((n) => n.versionId === args.versionId).map((n) => (n.voice ? { ...n, voiceUrl: "/mock-audio.webm" } : n));
+      case "notes:forVersion": return notes.filter((n) => n.versionId === args.versionId).map((n) => (n.voice ? { ...n, voiceUrl: null } : n));
       case "activity:feed": return feed().slice(0, args.limit ?? 60);
       case "connector:listKeys": return keys;
       case "dropbox:status": return { configured: true, transcripts: true, connected: true, email: "heston@wranglerproductions.com", name: "Heston Hill", connectedAt: Date.now() - 86_400_000, lastSyncAt: Date.now() - 40_000, lastError: null,
         recent: [
-          { _id: "d1", path: "/26122 Spirit Days/Spirit Intro/SpiritIntro_v5.mov", status: "waiting", reason: "Waiting for the file to finish.", at: Date.now() - 30_000, size: 1, videoId: null, versionNumber: null, linkGone: true },
-          { _id: "d2", path: "/26122 Spirit Days/Spirit Intro/SpiritIntro_v4.mp4", status: "imported", reason: null, at: Date.now() - 3_600_000, size: 1, videoId: videos[0]?._id ?? null, versionNumber: 2, linkGone: true },
-          { _id: "d3", path: "/loose render.mp4", status: "skipped", reason: "Put renders in a <Project>/<Video>/ folder inside Apps/Wrangler Review, e.g. 26122 Spirit Days/Spirit Intro/.", at: Date.now() - 7_200_000, size: 1, videoId: null, versionNumber: null, linkGone: true },
+          { _id: "d1", path: "/Harbor Coffee/26201 Harbor Coffee Launch/Brand Film/26201_BrandFilm_v3.mov", status: "waiting", reason: "Waiting for the file to finish.", at: Date.now() - 30_000, size: 1, videoId: null, versionNumber: null, linkGone: true },
+          { _id: "d2", path: "/Harbor Coffee/26201 Harbor Coffee Launch/Brand Film/26201_BrandFilm_v2_Final.mov", status: "imported", reason: null, at: Date.now() - 3_600_000, size: 1, videoId: videos[0]?._id ?? null, versionNumber: 2, linkGone: true },
+          { _id: "d3", path: "/loose render.mp4", status: "skipped", reason: "Put renders in a <Project>/<Video>/ folder inside Apps/Wrangler Review, e.g. 26201 Harbor Coffee Launch/Brand Film/.", at: Date.now() - 7_200_000, size: 1, videoId: null, versionNumber: null, linkGone: true },
         ] };
-      case "transcripts:forVersion": return { status: "done", language: "eng", wordCount: 40, error: null, updatedAt: Date.now(), url: "/mock-transcript.json" };
+      case "transcripts:forVersion": return { status: "done", language: "eng", wordCount: 40, error: null, updatedAt: Date.now(), url: "./mock-transcript.json" };
       default: console.warn("mock query", name); return null;
     }
   },
@@ -135,6 +137,8 @@ export const store = {
   },
   async action(name: string, args: any): Promise<any> {
     if (name === "stills:upload") return `data:${args.contentType};base64,${args.dataBase64}`;
+    if (name === "uploads:startUpload") throw new Error("Uploads are off in this demo.");
+    if (name === "dropbox:authUrl") throw new Error("Connecting Dropbox is off in this demo.");
     if (name === "transcribe:voiceWords") {
       (window as any).__voiceMime = args.mime;
       return { language: "eng", words: [

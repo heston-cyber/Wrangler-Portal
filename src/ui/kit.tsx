@@ -2,7 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Film, LoaderCircle } from "lucide-react";
-import { BUNNY_CDN_HOST } from "../config";
+import { mediaUrl } from "../config";
 
 // ---------- Menu: a button that opens a popover list ----------
 type MenuCtx = { close: () => void };
@@ -104,7 +104,7 @@ export function Avatar({ name, size }: { name: string | null | undefined; size?:
 export function Thumb({ guid, className = "thumb", alt = "" }: { guid: string | null | undefined; className?: string; alt?: string }) {
   const [bad, setBad] = useState(false);
   if (!guid || bad) return <span className={`${className} ph`} aria-hidden><Film size={14} /></span>;
-  return <img className={className} src={`https://${BUNNY_CDN_HOST}/${guid}/thumbnail.jpg`} alt={alt} loading="lazy" onError={() => setBad(true)} />;
+  return <img className={className} src={mediaUrl(guid, "thumbnail.jpg")} alt={alt} loading="lazy" onError={() => setBad(true)} />;
 }
 
 // ---------- Toast ----------

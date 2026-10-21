@@ -11,7 +11,7 @@ import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { frameTc, frameDuration, fpsValue, isValidTc, nominal, type Fps } from "../../convex/lib/frames";
-import { BUNNY_CDN_HOST } from "../config";
+import { DEMO, asset, mediaUrl } from "../config";
 import { linkProps, navigate } from "../lib/router";
 import { isVideoFile, startUpload, useUploads } from "../lib/uploads";
 import { markersEdl } from "../lib/edl";
@@ -103,7 +103,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const mp4H = version ? Math.max(0, ...version.mp4Heights.filter((h) => h <= 1080)) : 0;
   const [quality, setQuality] = useState<"file" | "stream">(mp4H ? "file" : "stream");
   const ready = version?.status === "ready";
-  const src = !version || !ready ? null : quality === "file" && mp4H ? `https://${BUNNY_CDN_HOST}/${version.bunnyGuid}/play_${mp4H}p.mp4` : `https://${BUNNY_CDN_HOST}/${version.bunnyGuid}/playlist.m3u8`;
+  const src = !version || !ready ? null : quality === "file" && mp4H ? mediaUrl(version.bunnyGuid, `play_${mp4H}p.mp4`) : mediaUrl(version.bunnyGuid, "playlist.m3u8");
   const player = useFramePlayer(src, fps, version?.frameCountExact ? version.frameCount : null);
   const frameCount = player.frameCount ?? version?.frameCount ?? 0;
 
@@ -440,7 +440,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           <button className={`icon-btn md${panel ? " on" : ""}`} onClick={() => setPanelPref(panel ? null : "notes")} aria-label={panel ? "Hide panel" : "Show panel"} title={panel ? "Hide panel" : "Show panel"}><PanelRight size={16} /></button>
         </>
       }>
-        <a {...linkProps("/")} aria-label="Home" style={{ display: "flex" }}><img className="logo" src="/brand/wordmark-cream.png" alt="Wrangler Productions" /></a>
+        <a {...linkProps("/")} aria-label="Home" style={{ display: "flex" }}><img className="logo" src={asset("/brand/wordmark-cream.png")} alt="Wrangler Productions" /></a>
         <Sep />
         {data.project && <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps(`/projects/${data.project._id}`)}>{projectLabel(data.project)}</a><Sep /></span>}
         <span className="here">{data.title}</span>
@@ -517,7 +517,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                     <button className={`icon-btn tool${sel ? " on" : ""}`} onClick={setOut} aria-label="Range: end here (O)" title="Range: end here (O)"><ArrowRightToLine size={17} /></button>
                     <button className={`icon-btn tool${whole ? " on" : ""}`} onClick={() => { setWhole(!whole); setSel(null); }} aria-label="Whole video" title="Whole video"><Film size={17} /></button>
                     <span className="tsep" aria-hidden />
-                    {canRecord() && (
+                    {canRecord() && !DEMO && (
                       <button className={`icon-btn tool${voice.recording ? " on rec" : ""}`} disabled={!!voiceBusy || voice.state === "starting" || voice.state === "stopping" || (!!voiceDraft && !voice.recording)}
                         onClick={() => void (voice.recording ? stopVoice() : startVoice())} aria-label={voice.recording ? "Stop recording" : "Record a voice note"} title={voice.recording ? "Stop recording" : voiceDraft ? "Post or discard this voice note first" : "Record a voice note"}>
                         {voice.recording ? <Square size={15} /> : <Mic size={17} />}

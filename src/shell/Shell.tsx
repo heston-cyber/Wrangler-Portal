@@ -1,6 +1,7 @@
 // The app frame, laid out like Flask: a left sidebar, and an inset main panel with a breadcrumb bar.
 // The review page hides the sidebar and opens it over the page instead.
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { asset } from "../config";
 import { useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { Activity, ChevronDown, Clapperboard, House, LogOut, Menu as MenuIcon, Search, Settings, X } from "lucide-react";
@@ -50,7 +51,7 @@ function Sidebar({ me, className, onClose, onSearch }: { me: { name: string | nu
   return (
     <nav className={`sidebar ${className}`} aria-label="Main">
       <div className="brandrow">
-        <a {...linkProps("/")} aria-label="Wrangler Review home"><img src="/brand/wordmark-cream.png" alt="Wrangler Productions" /></a>
+        <a {...linkProps("/")} aria-label="Wrangler Review home"><img src={asset("/brand/wordmark-cream.png")} alt="Wrangler Productions" /></a>
         <span style={{ display: "flex", gap: 2 }}>
           <button className="icon-btn" onClick={onSearch} aria-label="Search (⌘K)" title="Search (⌘K)"><Search size={16} /></button>
           {className.includes("open") && <button className="icon-btn" onClick={onClose} aria-label="Close menu"><X size={16} /></button>}
