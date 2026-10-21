@@ -152,7 +152,7 @@ function SearchPalette({ onClose }: { onClose: () => void }) {
           {rows.length === 0 && <p className="caption" style={{ padding: "8px 10px" }}>{overview === undefined ? "Loading…" : "Nothing matches."}</p>}
           {rows.map((r, n) => (<span key={r.key} style={{ display: "contents" }}>
             {tab === "all" && r.kind === "project" && rows[n - 1]?.kind !== "project" && <div className="mlabel" style={{ marginTop: 6 }}>Projects</div>}
-            <button className="mitem" style={{ background: n === i ? "var(--fill-chip)" : undefined }} onMouseEnter={() => setI(n)} onClick={() => go(r)}>
+            <button className="mitem" style={{ background: n === i ? "var(--surface-block-hover)" : undefined }} onMouseEnter={() => setI(n)} onClick={() => go(r)}>
               {r.kind === "video" ? <Thumb guid={r.guid} className="thumb" /> : <span className="thumb ph" style={{ display: "grid" }}><Clapperboard size={14} /></span>}
               <span style={{ display: "grid", minWidth: 0 }}>
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title}</span>

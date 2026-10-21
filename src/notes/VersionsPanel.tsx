@@ -65,7 +65,7 @@ function VersionItem({ videoId, v, current }: { videoId: string; v: Version; cur
         <div className="vf">
           {v.status === "failed" && v.error && <span className="error" style={{ fontSize: 12 }}>{v.error}</span>}
           <span className="right">
-            {current ? <span className="secondary" style={{ fontSize: 12.5 }}>Viewing</span>
+            {current ? <span className="viewing">Viewing</span>
               : <button className="btn sm" onClick={open}><ArrowUpRight size={14} />View</button>}
           </span>
         </div>
