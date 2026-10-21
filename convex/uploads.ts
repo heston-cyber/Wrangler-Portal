@@ -86,9 +86,15 @@ export const poll = internalAction({
       patch.readyAt = Date.now();
     }
     await ctx.runMutation(internal.library.patchVersion, { versionId, patch });
+    // Came from the Dropbox drop folder: once Bunny has the file (anything past "created"), delete the share link.
+    if (row.version.dropboxPath && b.status !== 0 && (ready || failed || count % 3 === 1)) {
+      await ctx.scheduler.runAfter(0, internal.dropbox.revokeForVersion, { versionId });
+    }
     if (ready) {
       await ctx.scheduler.runAfter(0, internal.uploads.countFrames, { versionId, attempt: 0 });
       await ctx.scheduler.runAfter(0, internal.slack.versionReady, { versionId });
+      // Transcribe after the frame count has had a moment, so words can be clamped to the last frame.
+      await ctx.scheduler.runAfter(60_000, internal.transcribe.run, { versionId, attempt: 0 });
     } else if (!failed && count < MAX_POLLS) {
       await ctx.scheduler.runAfter(POLL_MS, internal.uploads.poll, { versionId });
     }

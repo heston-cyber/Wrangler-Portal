@@ -1,4 +1,4 @@
-// Settings: your profile, and the Claude connector (keys + setup). Labels and members come with later phases.
+// Settings: your profile, the Dropbox drop folder, and the Claude connector (keys + setup). Labels and members come with later phases.
 import { useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
@@ -8,6 +8,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { TopBar } from "../shell/Shell";
 import { Avatar, Modal, useToast } from "../ui/kit";
 import { ago } from "../lib/format";
+import { DropboxSettings } from "./DropboxSettings";
 
 // The connector lives on the Convex site host: <deployment>.convex.site/mcp
 const CONVEX = (import.meta.env.VITE_CONVEX_URL as string | undefined) || "https://handsome-hummingbird-11.convex.cloud";
@@ -44,6 +45,8 @@ export default function Settings({ me }: { me: { name: string | null; email: str
             <div className="prow"><span className="pl">Email</span><span className="pr secondary">{me.email}</span></div>
             <div className="prow"><span className="pl">Picture</span><span className="pr"><Avatar name={name || me.email} size="lg" /></span></div>
           </div>
+
+          <DropboxSettings show={show} />
 
           <Connector show={show} />
 

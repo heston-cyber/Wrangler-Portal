@@ -47,7 +47,7 @@ function VersionItem({ videoId, v, current }: { videoId: string; v: Version; cur
         {v.noteCount > 0 ? <span className="rtag">{v.openCount ? `${v.openCount} open` : "All done"} · {v.noteCount} {v.noteCount === 1 ? "note" : "notes"}</span> : <span className="rtag">No notes</span>}
         {v.fileSize ? <span className="rtag">{sizeText(v.fileSize)}</span> : null}
       </div>
-      <div className="file"><Film size={14} /><span>{v.fileName}</span></div>
+      <div className="file" title={v.dropboxPath ?? v.fileName}><Film size={14} /><span>{v.dropboxPath ? `Dropbox › ${v.dropboxPath.split("/").filter(Boolean).join(" › ")}` : v.fileName}</span></div>
       {editing ? (
         <textarea className="input" style={{ minHeight: 64, fontSize: 13 }} value={draft} autoFocus onChange={(e) => setDraft(e.target.value)}
           onBlur={() => void commit()}

@@ -6,6 +6,8 @@ import { httpAction, internalAction } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { sha256Hex } from "./connector";
+import { frameTc, isValidTc, nominal, tcToFrames } from "./lib/frames";
+import type { TranscriptFile } from "./lib/transcript";
 
 const MODERN = ["2026-07-28"];
 const LEGACY = ["2025-11-25", "2025-06-18", "2025-03-26"];
@@ -14,6 +16,7 @@ const SERVER_INFO = { name: "wrangler-review", title: "Wrangler Review", version
 
 const INSTRUCTIONS = `Wrangler Review is Heston's video review site (Wrangler Productions). Notes are pinned to exact frames of a rendered version: frame 0 is the render's first frame; out_frame is inclusive. Timecodes use the version's start timecode (usually 01:00:00:00).
 Typical flow when Heston says he left notes or revisions: find_videos (if you don't have the video) → get_notes (open notes on the latest version) → get_note_images for notes with drawings or when you need to see the frame → do the work → reply_to_note to say what you changed → mark_notes done.
+get_transcript gives what's said in the cut, pinned to frames; use it to find a line by its words or to read around a note.
 To put notes into DaVinci Resolve as markers, use get_resolve_markers and follow its placement rules: confirm the timeline's frame rate, start timecode and length match the render before placing anything; if they don't, stop and tell Heston.`;
 
 type Json = Record<string, unknown>;
@@ -50,6 +53,19 @@ const TOOLS = [
     name: "get_resolve_markers", title: "Get Resolve markers",
     description: "Gets the notes of a version as DaVinci Resolve timeline markers: frame (from the render's first frame), timecode, duration in frames, colour (Blue = frame, Yellow = range, Green = whole video), name, note text and custom_data (the note id). Also returns the render's frame rate, start timecode and frame count, placement rules to follow, and an EDL of the same markers for File › Import › Timeline Markers from EDL. Defaults to open notes.",
     inputSchema: { type: "object", properties: videoArgs, additionalProperties: false },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  {
+    name: "get_transcript", title: "Get transcript",
+    description: "Gets what's said in a version, transcribed word by word and pinned to frames: lines with speaker, in/out frames and timecodes. Pass from_timecode/to_timecode (or from_frame/to_frame) to get just part of the cut, and include_words for each word's own frames. Use it to find a line by its words, or to see what's said around a note.",
+    inputSchema: { type: "object", properties: {
+      video_id: videoArgs.video_id, video: videoArgs.video, version: videoArgs.version,
+      from_timecode: { type: "string", description: "Start of the part you want, e.g. 01:00:16:00." },
+      to_timecode: { type: "string", description: "End of the part you want (inclusive)." },
+      from_frame: { type: "integer", minimum: 0, description: "Start frame (from the render's first frame), instead of a timecode." },
+      to_frame: { type: "integer", minimum: 0, description: "End frame (inclusive), instead of a timecode." },
+      include_words: { type: "boolean", description: "Also return every word with its own frames (for exact cuts). Needs a range of 2 minutes or less." },
+    }, additionalProperties: false },
     annotations: { readOnlyHint: true, openWorldHint: false },
   },
   {
@@ -129,6 +145,41 @@ async function callTool(ctx: ActionCtx, name: string, args: Json): Promise<ToolR
         if (!any) content.push(text("(No saved image for this note.)"));
       }
       return { content };
+    }
+    if (name === "get_transcript") {
+      const res = await ctx.runQuery(internal.transcripts.forTool, { videoId: str(args.video_id), video: str(args.video), version: int(args.version) });
+      if ("error" in res) return fail(res.error as string, "candidates" in res && res.candidates ? { candidates: res.candidates } : undefined);
+      const t = res.transcript;
+      if (!t || t.status !== "done" || !t.storageId) {
+        const why = !t ? "This version hasn't been transcribed." : t.status === "failed" ? `Transcribing failed: ${t.error ?? "unknown error"}` : "The transcript is still being made. Try again in a few minutes.";
+        return ok({ video: res.video, version: res.version, transcript_status: t?.status ?? "none", note: why });
+      }
+      const blob = await ctx.storage.get(t.storageId);
+      if (!blob) return fail("The transcript file is missing.");
+      const file = JSON.parse(await blob.text()) as TranscriptFile;
+      const nom = nominal(res.fps), start = tcToFrames(res.startTimecode, nom);
+      const tcArg = (x: unknown) => (typeof x === "string" && isValidTc(x.trim()) ? tcToFrames(x.trim(), nom) - start : undefined);
+      const intArg = (x: unknown) => (typeof x === "number" && Number.isInteger(x) && x >= 0 ? x : undefined);
+      const from = tcArg(args.from_timecode) ?? intArg(args.from_frame) ?? 0;
+      const to = tcArg(args.to_timecode) ?? intArg(args.to_frame) ?? Number.MAX_SAFE_INTEGER;
+      if (to < from) return fail("The end of the range is before its start.");
+      const tc = (f: number) => frameTc(f, res.startTimecode, res.fps);
+      const who = (i: number) => `Speaker ${i + 1}`;
+      const segments = file.segments.filter((sg) => sg.out >= from && sg.in <= to)
+        .map((sg) => ({ speaker: who(sg.speaker), in_frame: sg.in, out_frame: sg.out, in_timecode: tc(sg.in), out_timecode: tc(sg.out), text: sg.text }));
+      const ranged = from > 0 || to < Number.MAX_SAFE_INTEGER;
+      const wantWords = args.include_words === true;
+      const wordsAllowed = ranged && to - from <= Math.round((120 * res.fps.num) / res.fps.den);
+      const words = wantWords && wordsAllowed
+        ? file.words.filter((w) => w[2] >= from && w[1] <= to).map(([text, a, b, sp]) => ({ text, in_frame: a, out_frame: b, in_timecode: tc(a), speaker: who(sp) }))
+        : undefined;
+      return ok({
+        video: res.video, version: res.version, language: file.language, speakers: file.speakers.length,
+        range: ranged ? { from_frame: from, to_frame: to === Number.MAX_SAFE_INTEGER ? null : to, from_timecode: tc(from), to_timecode: to === Number.MAX_SAFE_INTEGER ? null : tc(to) } : "whole version",
+        frames_note: "Frames count from 0 at the render's first frame; out frames are inclusive. Word timing is from speech recognition, so treat edges as ±1–2 frames.",
+        segments,
+        ...(words ? { words } : wantWords ? { words_note: "Words are returned for a range of 2 minutes or less. Pass from_/to_ timecodes." } : {}),
+      });
     }
     if (name === "reply_to_note") {
       const noteId = str(args.note_id), t = str(args.text);

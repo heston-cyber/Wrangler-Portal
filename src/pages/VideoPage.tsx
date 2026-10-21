@@ -22,6 +22,7 @@ import { COLORS, DrawingLayer, type Shape, type Tool } from "../player/Drawing";
 import { captureAndUpload } from "../player/stills";
 import { NotesList, defaultFilter, kindColor, type NoteFilter, type NoteRow } from "../notes/NotesPanel";
 import { VersionsList } from "../notes/VersionsPanel";
+import { TranscriptList } from "../notes/TranscriptPanel";
 import { Sep, TopBar } from "../shell/Shell";
 import { Menu, MenuItem, MenuLabel, MenuSep, Modal, useIsNarrow, useToast } from "../ui/kit";
 
@@ -109,7 +110,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   }, [player.estimatedFrameCount, version, reportFrameCount]);
 
   // Panel, transport and view state
-  const [panel, setPanel] = useState<"notes" | "versions" | null>(() => (window.innerWidth <= 820 ? "notes" : readPref<string>("wr.panel", "notes") === "none" ? null : "notes"));
+  const [panel, setPanel] = useState<"notes" | "versions" | "transcript" | null>(() => (window.innerWidth <= 820 ? "notes" : readPref<string>("wr.panel", "notes") === "none" ? null : "notes"));
   const [filter, setFilter] = useState<NoteFilter>(defaultFilter);
   const [timeMode, setTimeMode] = useState<TimeMode>(() => readPref<TimeMode>("wr.timeMode", "tc"));
   const [rate, setRate] = useState(1);
@@ -285,7 +286,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   }
 
   const newVersion = () => fileRef.current?.click();
-  const setPanelPref = (p: "notes" | "versions" | null) => { setPanel(p); writePref("wr.panel", p ? "notes" : "none"); };
+  const setPanelPref = (p: "notes" | "versions" | "transcript" | null) => { setPanel(p); writePref("wr.panel", p ? "notes" : "none"); };
   const endFrame = Math.max(0, frameCount - 1);
   const timeText = (f: number) => timeMode === "frames" ? `${f}` : timeMode === "clock" ? clockText(f * frameDuration(fps)) : tc(f);
   const openCount = (notes ?? []).filter((n) => n.status === "open").length;
@@ -459,6 +460,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
               <div className="tabs" role="tablist">
                 <button role="tab" className="tab" aria-selected={panel === "notes"} onClick={() => setPanel("notes")}>Notes <span className="count">{openCount || ""}</span></button>
                 <button role="tab" className="tab" aria-selected={panel === "versions"} onClick={() => setPanel("versions")}>Versions <span className="count">{data.versions.length || ""}</span></button>
+                <button role="tab" className="tab" aria-selected={panel === "transcript"} onClick={() => setPanel("transcript")}>Transcript</button>
               </div>
               <span className="right">
                 {panel === "notes" ? (
@@ -477,15 +479,17 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                     <MenuItem keepOpen checked={filter.sort === "newest"} onSelect={() => setFilter({ ...filter, sort: "newest" })}>Newest first</MenuItem>
                     {filter !== defaultFilter && <><MenuSep /><MenuItem onSelect={() => setFilter(defaultFilter)}>Reset</MenuItem></>}
                   </Menu>
-                ) : (
+                ) : panel === "versions" ? (
                   <button className="icon-btn" onClick={newVersion} aria-label="Upload a new version" title="Upload a new version"><Plus size={16} /></button>
-                )}
+                ) : null}
               </span>
             </div>
             <div className="sbody">
               {panel === "notes"
                 ? <NotesList notes={version ? notes : []} clock={player.clock} tc={tc} filter={filter} onJump={jump} focusId={focusId} focusTick={focusTick} onCopied={showToast} />
-                : <VersionsList videoId={data._id} versions={data.versions} current={version?.number ?? null} uploads={uploads} />}
+                : panel === "versions"
+                  ? <VersionsList videoId={data._id} versions={data.versions} current={version?.number ?? null} uploads={uploads} />
+                  : version ? <TranscriptList versionId={version._id} clock={player.clock} tc={tc} onSeek={(f) => void player.seekToFrame(f)} /> : null}
             </div>
           </aside>
         )}

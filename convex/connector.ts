@@ -120,7 +120,7 @@ function describeDrawing(drawing: unknown) {
 type Found = { video: Doc<"videos">; project: Doc<"projects"> | null } | { error: string; candidates?: Array<{ video_id: string; title: string; project: string | null }> };
 
 // A video by id, or by words from its title / project / job number.
-async function findVideo(ctx: QueryCtx, videoId?: string, words?: string): Promise<Found> {
+export async function findVideo(ctx: QueryCtx, videoId?: string, words?: string): Promise<Found> {
   if (videoId) {
     const id = ctx.db.normalizeId("videos", videoId);
     const vid = id ? await ctx.db.get(id) : null;
@@ -146,7 +146,7 @@ async function findVideo(ctx: QueryCtx, videoId?: string, words?: string): Promi
   return { video: scored[0].vid, project: scored[0].p ?? null };
 }
 
-async function pickVersion(ctx: QueryCtx, videoId: Id<"videos">, number?: number) {
+export async function pickVersion(ctx: QueryCtx, videoId: Id<"videos">, number?: number) {
   const versions = (await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", videoId)).collect()).sort((a, b) => a.number - b.number);
   if (!versions.length) return { error: "This video has no versions yet." } as const;
   const ver = number ? versions.find((x) => x.number === number) : versions[versions.length - 1];
@@ -154,7 +154,7 @@ async function pickVersion(ctx: QueryCtx, videoId: Id<"videos">, number?: number
   return { ver, versions } as const;
 }
 
-function versionInfo(ver: Doc<"versions">) {
+export function versionInfo(ver: Doc<"versions">) {
   const fps = fpsOf(ver);
   const count = ver.frameCount ?? null;
   return {

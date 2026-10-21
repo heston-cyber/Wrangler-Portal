@@ -104,6 +104,13 @@ export const store = {
       case "notes:forVersion": return notes.filter((n) => n.versionId === args.versionId);
       case "activity:feed": return feed().slice(0, args.limit ?? 60);
       case "connector:listKeys": return keys;
+      case "dropbox:status": return { configured: true, transcripts: true, connected: true, email: "heston@wranglerproductions.com", name: "Heston Hill", connectedAt: Date.now() - 86_400_000, lastSyncAt: Date.now() - 40_000, lastError: null,
+        recent: [
+          { _id: "d1", path: "/26122 Spirit Days/Spirit Intro/SpiritIntro_v5.mov", status: "waiting", reason: "Waiting for the file to finish.", at: Date.now() - 30_000, size: 1, videoId: null, versionNumber: null, linkGone: true },
+          { _id: "d2", path: "/26122 Spirit Days/Spirit Intro/SpiritIntro_v4.mp4", status: "imported", reason: null, at: Date.now() - 3_600_000, size: 1, videoId: videos[0]?._id ?? null, versionNumber: 2, linkGone: true },
+          { _id: "d3", path: "/loose render.mp4", status: "skipped", reason: "Put renders in a <Project>/<Video>/ folder inside Apps/Wrangler Review, e.g. 26122 Spirit Days/Spirit Intro/.", at: Date.now() - 7_200_000, size: 1, videoId: null, versionNumber: null, linkGone: true },
+        ] };
+      case "transcripts:forVersion": return { status: "done", language: "eng", wordCount: 40, error: null, updatedAt: Date.now(), url: "/mock-transcript.json" };
       default: console.warn("mock query", name); return null;
     }
   },

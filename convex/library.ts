@@ -167,6 +167,7 @@ export function publicVersion(x: Doc<"versions">) {
     description: x.description ?? null,
     uploaderName: x.uploaderName ?? null,
     fileSize: x.fileSize ?? null,
+    dropboxPath: x.dropboxPath ?? null,
     createdAt: x.createdAt,
   };
 }

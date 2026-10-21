@@ -93,3 +93,24 @@ export function httpRangeReader(url: string, referer?: string): RangeRead {
     return res.status === 200 ? buf.slice(start, end + 1) : buf;
   };
 }
+
+// Is the file complete enough to import? Every top-level box must be there in full, ending exactly at the end of
+// the file, and one of them must be the index ('moov'). A render that's still being written, or still uploading,
+// fails this: its last box runs past the end of what's there, or there's no moov yet (Resolve writes it last).
+export async function mp4HasIndex(read: RangeRead, fileSize?: number): Promise<boolean> {
+  let o = 0, moov = false;
+  for (let i = 0; i < 256; i++) {
+    if (fileSize !== undefined && o === fileSize) return moov;
+    const h = await read(o, o + 15);
+    if (h.length === 0) return moov && fileSize === undefined;
+    if (h.length < 8) return false;
+    let size = u32(h, 0);
+    if (size === 1) size = u64(h, 8);
+    if (size < 8) return false; // 0 means "runs to the end": the writer never went back to fill it in
+    const last = await read(o + size - 1, o + size - 1);
+    if (last.length !== 1) return false;
+    if (type(h, 4) === "moov") moov = true;
+    o += size;
+  }
+  return false;
+}

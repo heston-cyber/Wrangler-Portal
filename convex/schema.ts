@@ -42,6 +42,7 @@ export default defineSchema({
     error: v.optional(v.string()),
     description: v.optional(v.string()), // what changed in this version
     uploaderName: v.optional(v.string()),
+    dropboxPath: v.optional(v.string()), // where the original lives, when it came from the Dropbox drop folder
     createdAt: v.number(),
     readyAt: v.optional(v.number()),
   })
@@ -97,6 +98,68 @@ export default defineSchema({
     lastUsedAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()),
   }).index("by_hash", ["hash"]),
+
+  // The connected Dropbox account (one row). Tokens never leave the backend.
+  dropbox: defineTable({
+    accountId: v.string(),
+    email: v.optional(v.string()),
+    name: v.optional(v.string()),
+    refreshToken: v.string(),
+    accessToken: v.optional(v.string()),
+    accessExpiresAt: v.optional(v.number()),
+    cursor: v.optional(v.string()),
+    connectedAt: v.number(),
+    lastSyncAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+  }),
+
+  // One-time "state" values for the Connect Dropbox sign-in.
+  oauthStates: defineTable({
+    state: v.string(),
+    userId: v.string(),
+    createdAt: v.number(),
+  }).index("by_state", ["state"]),
+
+  // Every file seen in the drop folder, by path. A new revision of the same path is a new render.
+  dropFiles: defineTable({
+    pathLower: v.string(),
+    pathDisplay: v.string(),
+    rev: v.string(),
+    size: v.number(),
+    status: v.union(
+      v.literal("waiting"),   // seen; waiting for it to finish uploading and stop changing
+      v.literal("importing"), // being handed to Bunny
+      v.literal("imported"),  // a version was made
+      v.literal("skipped"),   // not a video, or not in <Project>/<Video>/
+      v.literal("failed"),
+      v.literal("existing"),  // was already there when Dropbox was connected
+    ),
+    reason: v.optional(v.string()),
+    firstSeenAt: v.number(),
+    lastChangeAt: v.number(),
+    checks: v.number(),
+    versionId: v.optional(v.id("versions")),
+    shareUrl: v.optional(v.string()),
+    linkRevokedAt: v.optional(v.number()),
+    importedAt: v.optional(v.number()),
+  })
+    .index("by_path", ["pathLower"])
+    .index("by_status", ["status"])
+    .index("by_version", ["versionId"]),
+
+  // What's said in each version, word by word, pinned to frames. The words themselves live in a JSON file in Convex storage.
+  transcripts: defineTable({
+    versionId: v.id("versions"),
+    status: v.union(v.literal("pending"), v.literal("running"), v.literal("done"), v.literal("failed")),
+    storageId: v.optional(v.id("_storage")),
+    language: v.optional(v.string()),
+    wordCount: v.optional(v.number()),
+    segmentCount: v.optional(v.number()),
+    model: v.optional(v.string()),
+    error: v.optional(v.string()),
+    attempts: v.number(),
+    updatedAt: v.number(),
+  }).index("by_version", ["versionId"]),
 
   // Stills kept in Convex storage until Bunny Storage is set up.
   stillFiles: defineTable({

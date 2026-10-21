@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
 import { auth } from "./auth";
 import { mcpOther, mcpPost } from "./mcp";
+import { callback as dropboxCallback, webhookNotify, webhookVerify } from "./dropbox";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);
@@ -13,5 +14,10 @@ http.route({ path: "/mcp", method: "DELETE", handler: mcpOther });
 http.route({ pathPrefix: "/mcp/", method: "POST", handler: mcpPost });
 http.route({ pathPrefix: "/mcp/", method: "GET", handler: mcpOther });
 http.route({ pathPrefix: "/mcp/", method: "DELETE", handler: mcpOther });
+
+// Dropbox: the Connect Dropbox return address, and the webhook (GET = one-time check, POST = "something changed").
+http.route({ path: "/dropbox/callback", method: "GET", handler: dropboxCallback });
+http.route({ path: "/dropbox/webhook", method: "GET", handler: webhookVerify });
+http.route({ path: "/dropbox/webhook", method: "POST", handler: webhookNotify });
 
 export default http;
