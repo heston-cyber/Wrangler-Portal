@@ -232,7 +232,7 @@ export const notesFor = internalQuery({
         out_frame: isRange ? n.outFrame ?? null : n.kind === "frame" ? n.inFrame ?? null : null,
         length_frames: isRange ? (n.outFrame! - n.inFrame! + 1) : n.kind === "frame" ? 1 : null,
         in_timecode: n.kind === "general" ? null : frameTc(n.inFrame!, ver.startTimecode, fps),
-        out_timecode: isRange ? frameTc(n.outFrame!, ver.startTimecode, fps) : null,
+        out_timecode: isRange ? frameTc(n.outFrame!, ver.startTimecode, fps) : n.kind === "frame" ? frameTc(n.inFrame!, ver.startTimecode, fps) : null,
         text: n.text,
         author: n.authorName,
         created: iso(n.createdAt),
@@ -290,18 +290,34 @@ export const markersFor = internalQuery({
       .filter((n) => status === "all" || n.status === status)
       .sort((x, y) => (x.inFrame ?? -1) - (y.inFrame ?? -1));
     const color = { frame: "Blue", range: "Yellow", general: "Green" } as const;
-    const markers = notes.map((n) => {
+    const kindLabel = { frame: "Frame", range: "Range", general: "Whole video" } as const;
+    const one = notes.map((n) => {
       const frame = n.kind === "general" ? 0 : n.inFrame ?? 0;
       const label = (n.text || "(drawing only)").replace(/\s+/g, " ").trim();
+      const duration = n.kind === "range" ? n.outFrame! - n.inFrame! + 1 : 1;
       return {
-        note_id: n._id,
+        note_id: n._id as string, kind: n.kind, frame, duration, label,
+        line: `${kindLabel[n.kind]}${n.kind === "range" ? ` ${duration}f → ${frameTc(n.outFrame!, ver.startTimecode, fps)}` : ""}: ${label}${n.drawing ? " [has drawing: see get_note_images]" : ""} (${n.authorName})`,
+      };
+    });
+    // Resolve keeps one marker per frame, so notes that start on the same frame share a marker:
+    // the longest duration wins, the colour follows the most specific note (range > frame > whole video),
+    // and custom_data lists every note id, comma-separated.
+    const rank = { range: 3, frame: 2, general: 1 } as const;
+    const byFrame = new Map<number, typeof one>();
+    for (const m of one) byFrame.set(m.frame, [...(byFrame.get(m.frame) ?? []), m]);
+    const markers = [...byFrame.entries()].sort((a, b) => a[0] - b[0]).map(([frame, group]) => {
+      const lead = [...group].sort((a, b) => rank[b.kind] - rank[a.kind] || b.duration - a.duration)[0];
+      const many = group.length > 1;
+      return {
+        note_ids: group.map((m) => m.note_id),
         frame,
         timecode: frameTc(frame, ver.startTimecode, fps),
-        duration_frames: n.kind === "range" ? n.outFrame! - n.inFrame! + 1 : 1,
-        color: color[n.kind],
-        name: `${n.kind === "general" ? "Whole video" : n.kind === "range" ? "Range" : "Frame"}: ${label.slice(0, 60)}`,
-        note: `${label}${n.drawing ? " [has drawing: see get_note_images]" : ""} (${n.authorName})`,
-        custom_data: n._id,
+        duration_frames: Math.max(...group.map((m) => m.duration)),
+        color: color[lead.kind],
+        name: many ? `${group.length} notes: ${group.map((m) => m.label).join(" | ")}`.slice(0, 80) : `${kindLabel[lead.kind]}: ${lead.label.slice(0, 60)}`,
+        note: many ? group.map((m) => `• ${m.line}`).join("\n") : lead.line.replace(/^[^:]+: /, ""),
+        custom_data: group.map((m) => m.note_id).join(","),
       };
     });
     return {
@@ -310,7 +326,7 @@ export const markersFor = internalQuery({
       placement: [
         "frame is counted from the render's first frame (frame 0). In DaVinci Resolve, timeline.AddMarker(frameId, color, name, note, duration, customData) takes frameId relative to the timeline's start, so a render of the whole timeline maps 1:1.",
         "Before placing anything, check the timeline matches this render: same frame rate, the timeline's start timecode equals render.start_timecode, and its length equals render.frame_count. If any differ, don't place markers. Tell Heston what differs and ask how to proceed.",
-        "Use custom_data (the note id) so markers can be matched back to notes later. Whole-video notes go at frame 0 in Green.",
+        "Use custom_data so markers can be matched back to notes later: it holds the note id, or several ids separated by commas. Resolve keeps only one marker per frame, so notes that start on the same frame are already merged into one marker here (note_ids lists them). Place exactly one marker per entry. Whole-video notes go at frame 0 in Green, merged with anything else on frame 0.",
       ],
       markers,
       edl: markersEdl(`${found.video.title} v${ver.number}`, notes.map((n) => ({ kind: n.kind, inFrame: n.inFrame, outFrame: n.outFrame, text: n.text, status: n.status, authorName: n.authorName })), ver.startTimecode, fps),

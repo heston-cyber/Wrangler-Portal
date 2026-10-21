@@ -140,7 +140,7 @@ describe("tools", () => {
     expect(sc.version).toMatchObject({ number: 1, frame_rate: 23.976, frame_rate_exact: "24000/1001", start_timecode: "01:00:00:00", frame_count: 3149, frame_count_exact: true, last_frame_timecode: "01:02:11:04" });
     expect(sc.notes.map((n: Record<string, unknown>) => [n.type, n.in_frame, n.out_frame, n.length_frames, n.in_timecode, n.out_timecode])).toEqual([
       ["whole_video", null, null, null, null, null],
-      ["frame", 400, 400, 1, "01:00:16:16", null],
+      ["frame", 400, 400, 1, "01:00:16:16", "01:00:16:16"],
       ["range", 1000, 1047, 48, "01:00:41:16", "01:00:43:15"],
     ]);
     expect(sc.notes[1].link).toMatch(/\/v\/.+\?version=1&note=/);
@@ -170,11 +170,28 @@ describe("tools", () => {
       [400, "01:00:16:16", 1, "Blue"],
       [1000, "01:00:41:16", 48, "Yellow"],
     ]);
-    expect(sc.markers[1].custom_data).toBe(sc.markers[1].note_id);
+    expect(sc.markers[1].custom_data).toBe(sc.markers[1].note_ids.join(","));
     expect(sc.render.frame_count).toBe(3149);
     expect(sc.placement.join(" ")).toMatch(/start timecode/);
     expect(sc.edl).toMatch(/ResolveColorBlue/);
     expect(sc.edl).toMatch(/\|D:48/);
+  });
+
+  test("notes that start on the same frame share one marker (Resolve allows one per frame)", async () => {
+    const { t, me, key, versionId } = await setup();
+    await me.mutation(api.notes.create, { versionId, kind: "range", inFrame: 400, outFrame: 423, text: "Hold this a second" });
+    await me.mutation(api.notes.create, { versionId, kind: "frame", inFrame: 0, text: "First frame" });
+    const m = await call(t, key, "get_resolve_markers", { video: "spirit intro" });
+    const sc = m.j.result.structuredContent;
+    expect(sc.markers.map((x: Record<string, unknown>) => [x.frame, x.duration_frames, x.color, (x.note_ids as string[]).length])).toEqual([
+      [0, 1, "Blue", 2],
+      [400, 24, "Yellow", 2],
+      [1000, 48, "Yellow", 1],
+    ]);
+    expect(new Set(sc.markers.map((x: { frame: number }) => x.frame)).size).toBe(sc.markers.length);
+    expect(sc.markers[1].custom_data.split(",")).toHaveLength(2);
+    expect(sc.markers[1].name).toMatch(/^2 notes: /);
+    expect(sc.markers[1].note).toMatch(/Range 24f → 01:00:17:15: Hold this a second/);
   });
 
   test("reply_to_note and mark_notes write back to the site", async () => {

@@ -13,4 +13,14 @@ describe("markersEdl", () => {
     expect(edl).toContain("002  001      V     C        01:00:12:12 01:00:12:13");
     expect(edl).toContain(" |C:ResolveColorYellow |M:Tighten this |D:60");
   });
+
+  it("puts notes that start on the same frame into one marker", () => {
+    const edl = markersEdl("T", [
+      { kind: "general", text: "Louder", status: "open", authorName: "H" },
+      { kind: "frame", inFrame: 0, text: "Slate", status: "open", authorName: "H" },
+      { kind: "range", inFrame: 0, outFrame: 23, text: "Fade up", status: "open", authorName: "H" },
+    ], "01:00:00:00", { num: 24000, den: 1001 });
+    expect(edl.match(/^\d{3} /gm)).toHaveLength(1);
+    expect(edl).toContain(" |C:ResolveColorYellow |M:Whole video: Louder / Slate / Fade up |D:24");
+  });
 });
