@@ -120,7 +120,13 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const [quality, setQuality] = useState<"file" | "stream">(mp4H ? "file" : "stream");
   const ready = version?.status === "ready";
   const src = !version || !ready ? null : quality === "file" && mp4H ? mediaUrl(version.bunnyGuid, `play_${mp4H}p.mp4`) : mediaUrl(version.bunnyGuid, "playlist.m3u8");
-  const player = useFramePlayer(src, fps, version?.frameCountExact ? version.frameCount : null);
+  // Scrub copy: the best MP4 copy up to 720p that fits (48 MB on computers, 16 MB on phones), downloaded once the video is ready.
+  const scrubCopies = useMemo(() => {
+    if (!version || !ready) return undefined;
+    const hs = [...version.mp4Heights].filter((h) => h <= 720).sort((a, b) => b - a);
+    return { urls: hs.map((h) => mediaUrl(version.bunnyGuid, `play_${h}p.mp4`)), maxBytes: (narrow ? 16 : 48) * 1_000_000 };
+  }, [version, ready, narrow]);
+  const player = useFramePlayer(src, fps, version?.frameCountExact ? version.frameCount : null, scrubCopies);
   const frameCount = player.frameCount ?? version?.frameCount ?? 0;
 
   useEffect(() => {
@@ -495,6 +501,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           <div className="stagewrap" ref={wrapRef} style={narrow ? { height: box.h || undefined } : undefined}>
             <div className="stage" style={{ width: box.w || undefined, height: box.h || undefined, aspectRatio: box.w ? undefined : `${aspect}` }}>
               <video ref={player.videoRef} playsInline preload="auto" onClick={() => !drawing && player.toggle()} />
+              {player.proxyUrl && <video ref={player.proxyRef} className={`proxy${player.proxyOn ? " on" : ""}`} src={player.proxyUrl} muted playsInline preload="auto" onLoadedData={player.onProxyLoaded} aria-hidden />}
               <AtFrame clock={player.clock}>{(frame) => {
                 const elsewhere = shapes.length > 0 && drawFrame !== null && drawFrame !== frame;
                 const saved = showDrawings ? savedDrawings.filter((d) => d.frame === frame).flatMap((d) => d.shapes) : [];

@@ -28,7 +28,10 @@ export type Player = ReturnType<typeof useFramePlayer>;
 
 // exactFrameCount: counted from the file by the backend. Without it, the player estimates from the
 // video's length, which can be one high when audio runs past the last picture.
-export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: number | null) {
+// scrub: smaller MP4 copies (best first) and a size limit. Once the video is ready, the best copy under the limit is
+// downloaded whole and shown while dragging the playhead: jumps in a downloaded file take one screen frame (~17 ms),
+// where jumps into parts of the full file not loaded yet wait 300–500 ms on the network.
+export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: number | null, scrub?: { urls: string[]; maxBytes: number }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const clock = useMemo(makeClock, []);
   const [playing, setPlaying] = useState(false);
@@ -41,6 +44,33 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
   const FD = frameDuration(fps);
   const frameOf = (t: number) => Math.max(0, Math.round(t / FD));
   const hasRVFC = typeof HTMLVideoElement !== "undefined" && "requestVideoFrameCallback" in HTMLVideoElement.prototype;
+
+  // The scrub copy: downloaded in the background, shown over the picture only while dragging.
+  const proxyRef = useRef<HTMLVideoElement | null>(null);
+  const proxyReady = useRef(false);
+  const [proxyUrl, setProxyUrl] = useState<string | null>(null);
+  const [proxyOn, setProxyOn] = useState(false);
+  const scrubKey = scrub ? `${scrub.urls.join(",")}|${scrub.maxBytes}` : "";
+  useEffect(() => {
+    if (!ready || !scrub || !scrub.urls.length) return;
+    const ac = new AbortController();
+    let made: string | null = null;
+    const timer = setTimeout(async () => {
+      for (const url of scrub.urls) {
+        try {
+          const head = await fetch(url, { method: "HEAD", signal: ac.signal });
+          const len = Number(head.headers.get("content-length") || 0);
+          if (!head.ok || !len || len > scrub.maxBytes) continue;
+          const blob = await (await fetch(url, { signal: ac.signal })).blob();
+          made = URL.createObjectURL(blob);
+          setProxyUrl(made);
+          return;
+        } catch { if (ac.signal.aborted) return; }
+      }
+    }, 1000);
+    return () => { clearTimeout(timer); ac.abort(); if (made) URL.revokeObjectURL(made); proxyReady.current = false; setProxyUrl(null); setProxyOn(false); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, scrubKey]);
 
   // Attach the source.
   useEffect(() => {
@@ -99,8 +129,8 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src, FD]);
 
-  function nextFrame(timeout: number): Promise<VideoFrameCallbackMetadata | null> {
-    const v = videoRef.current!;
+  function nextFrame(timeout: number, el?: HTMLVideoElement): Promise<VideoFrameCallbackMetadata | null> {
+    const v = el ?? videoRef.current!;
     return new Promise((res) => {
       let done = false;
       const t = setTimeout(() => { if (!done) { done = true; res(null); } }, timeout);
@@ -150,31 +180,39 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
 
   // Dragging the playhead: one quick seek at a time, always to the newest spot, skipping the ones in between.
   // (Queuing a frame-exact jump for every finger move made phones fall seconds behind.) Letting go does one exact jump.
+  // With the scrub copy ready, the drag moves the copy (shown over the picture) and the full file stays put until letting go.
   const scrubTarget = useRef<number | null>(null);
   const scrubRun = useRef<Promise<void> | null>(null);
   function scrubTo(n: number) {
     const max = (frameCount ?? Infinity) - 1;
     scrubTarget.current = Math.max(0, Math.min(n, max));
     if (scrubRun.current) return;
+    const px = proxyReady.current ? proxyRef.current : null;
+    if (px) setProxyOn(true);
     scrubRun.current = (async () => {
       await seekChain.current.catch(() => 0);
+      const main = videoRef.current;
+      if (main && !main.paused) main.pause();
       while (scrubTarget.current !== null) {
         const target = scrubTarget.current;
         scrubTarget.current = null;
-        const v = videoRef.current;
-        if (!v) break;
-        if (!v.paused) v.pause();
-        const p = nextFrame(400);
-        v.currentTime = Math.max(0, (target + 0.5) * FD + bias.current);
+        const el = px ?? videoRef.current;
+        if (!el) break;
+        const p = nextFrame(400, el);
+        el.currentTime = Math.max(0, (target + 0.5) * FD + (px ? 0 : bias.current));
         const md = await p;
-        if (md) { lastMedia.current = md.mediaTime; clock.set(frameOf(md.mediaTime)); }
+        if (md) {
+          clock.set(frameOf(md.mediaTime));
+          // The full file isn't on this frame yet, so the exact jump on letting go must not skip itself.
+          lastMedia.current = px ? null : md.mediaTime;
+        }
       }
     })().finally(() => { scrubRun.current = null; });
   }
   async function endScrub(n: number) {
     scrubTarget.current = null;
     if (scrubRun.current) await scrubRun.current;
-    return seekToFrame(n);
+    try { return await seekToFrame(n); } finally { setProxyOn(false); }
   }
 
   const api = {
@@ -189,10 +227,14 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
     seekToFrame,
     scrubTo,
     endScrub,
+    proxyRef,
+    proxyUrl,
+    proxyOn,
+    onProxyLoaded: () => { proxyReady.current = true; },
     step: (d: number) => seekToFrame((pending.current?.target ?? clock.get()) + d),
-    play: () => videoRef.current?.play().catch(() => {}),
+    play: () => { setProxyOn(false); return videoRef.current?.play().catch(() => {}); },
     pause: () => videoRef.current?.pause(),
-    toggle: () => { const v = videoRef.current; if (!v) return; if (v.paused) v.play().catch(() => {}); else v.pause(); },
+    toggle: () => { const v = videoRef.current; if (!v) return; setProxyOn(false); if (v.paused) v.play().catch(() => {}); else v.pause(); },
     // After pausing, wait for the paused frame to settle so a note gets the frame you're looking at.
     settle: async () => { const v = videoRef.current; if (v && !v.paused) { v.pause(); await new Promise((r) => setTimeout(r, 150)); } return clock.get(); },
   };
