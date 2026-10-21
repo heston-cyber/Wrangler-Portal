@@ -571,3 +571,43 @@ export const anyReadyMp4 = internalQuery({
     return null;
   },
 });
+
+// For the CI check (public logs): what the drop folder has seen, without names or paths.
+export const debugSummary = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const conn = await ctx.db.query("dropbox").first();
+    const now = Date.now();
+    const files = (await ctx.db.query("dropFiles").collect()).map((f) => ({
+      depth: f.pathDisplay.split("/").filter(Boolean).length,
+      ext: (f.pathDisplay.split(".").pop() ?? "").toLowerCase(),
+      sizeMB: Math.round(f.size / 1e5) / 10,
+      status: f.status, checks: f.checks, reason: f.reason ?? null,
+      seenMinAgo: Math.round((now - f.firstSeenAt) / 60000), changedMinAgo: Math.round((now - f.lastChangeAt) / 60000),
+      hasVersion: Boolean(f.versionId), linkOpen: Boolean(f.shareUrl && !f.linkRevokedAt),
+    }));
+    return {
+      connected: Boolean(conn), connectedMinAgo: conn ? Math.round((now - conn.connectedAt) / 60000) : null,
+      lastSyncSecAgo: conn?.lastSyncAt ? Math.round((now - conn.lastSyncAt) / 1000) : null, lastError: conn?.lastError ?? null,
+      hasCursor: Boolean(conn?.cursor), files,
+    };
+  },
+});
+
+// For the CI check: list the drop folder's top two levels as Dropbox sees it (depth and counts only, no names).
+export const folderShape = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const conn = await ctx.runQuery(internal.dropbox.getConnection, {});
+    if (!conn) return { connected: false };
+    let r = await dbx(ctx, "/files/list_folder", { path: "", recursive: true, include_deleted: false });
+    const entries: Array<{ tag: string; depth: number; ext: string | null; sizeMB: number | null }> = [];
+    for (;;) {
+      for (const e of r.entries ?? []) entries.push({ tag: e[".tag"], depth: (e.path_display as string).split("/").filter(Boolean).length, ext: e[".tag"] === "file" ? (e.name.split(".").pop() ?? "").toLowerCase() : null, sizeMB: e.size ? Math.round(e.size / 1e5) / 10 : null });
+      if (!r.has_more) break;
+      r = await dbx(ctx, "/files/list_folder/continue", { cursor: r.cursor });
+    }
+    const acct = await dbx(ctx, "/users/get_current_account", null).catch(() => null);
+    return { connected: true, accountType: acct?.account_type?.[".tag"] ?? null, team: Boolean(acct?.team), rootIsTeamSpace: acct?.root_info?.[".tag"] ?? null, entries };
+  },
+});
