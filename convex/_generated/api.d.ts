@@ -11,9 +11,12 @@
 import type * as activity from "../activity.js";
 import type * as auth from "../auth.js";
 import type * as bunny from "../bunny.js";
+import type * as connector from "../connector.js";
 import type * as http from "../http.js";
 import type * as library from "../library.js";
+import type * as mcp from "../mcp.js";
 import type * as lib_access from "../lib/access.js";
+import type * as lib_edl from "../lib/edl.js";
 import type * as lib_frames from "../lib/frames.js";
 import type * as lib_mp4 from "../lib/mp4.js";
 import type * as notes from "../notes.js";
@@ -34,9 +37,12 @@ declare const fullApi: ApiFromModules<{
   activity: typeof activity;
   auth: typeof auth;
   bunny: typeof bunny;
+  connector: typeof connector;
   http: typeof http;
   library: typeof library;
+  mcp: typeof mcp;
   "lib/access": typeof lib_access;
+  "lib/edl": typeof lib_edl;
   "lib/frames": typeof lib_frames;
   "lib/mp4": typeof lib_mp4;
   notes: typeof notes;

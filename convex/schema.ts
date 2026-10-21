@@ -88,6 +88,16 @@ export default defineSchema({
     .index("by_user", ["userId", "openedAt"])
     .index("by_user_video", ["userId", "videoId"]),
 
+  // Keys for the Claude connector. Only a SHA-256 hash is stored; the key itself is shown once.
+  connectorKeys: defineTable({
+    hash: v.string(),
+    prefix: v.string(), // first characters, to tell keys apart in Settings
+    label: v.string(),
+    createdAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+  }).index("by_hash", ["hash"]),
+
   // Stills kept in Convex storage until Bunny Storage is set up.
   stillFiles: defineTable({
     storageId: v.id("_storage"),

@@ -27,6 +27,11 @@ export function useMutation(ref: any) {
   const name = getFunctionName(ref);
   return useMemo(() => async (args: unknown) => store.mutation(name, args ?? {}), [name]);
 }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function useAction(ref: any) {
+  const name = getFunctionName(ref);
+  return useMemo(() => async (args: unknown) => store.action(name, args ?? {}), [name]);
+}
 const client = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     action: async (ref: any, args: unknown) => store.action(getFunctionName(ref), args ?? {}),

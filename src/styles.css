@@ -643,3 +643,16 @@ button.tcpill:hover, .composer .target:hover { background: var(--wp-black); box-
   .vcard.rect { padding: 12px 14px; gap: 8px; border-radius: 18px; }
   .vcard .rbold { font-size: 19px; }
 }
+
+/* ---------- Settings › Claude connector ---------- */
+.prow code.addr { font-size: 12.5px; line-height: 1.4; color: var(--text-primary); background: var(--surface-base); padding: 7px 10px; border-radius: 10px; word-break: break-all; min-width: 0; max-width: 380px; user-select: all; }
+.prow.keyrow > .lucide { flex: none; }
+.prow.keyrow code { font-size: 12.5px; color: var(--text-secondary); }
+.setup .steps { margin: 0; padding: 2px 20px 18px 38px; display: grid; gap: 10px; font-size: 13.5px; line-height: 1.5; border-top: 1px solid var(--border-hairline); padding-top: 14px; }
+.setup .steps li::marker { color: var(--text-accent); font-weight: 600; }
+.setup .steps code { font-size: 12.5px; background: var(--surface-base); padding: 1px 6px; border-radius: 6px; }
+.keyline .rlabel { white-space: normal; line-height: 1.35; }
+.keyline { background: var(--surface-base); box-shadow: none; padding: 12px 14px; border-radius: 16px; display: grid; gap: 8px; }
+.keyline .kv { display: flex; gap: 8px; align-items: center; }
+.keyline code { flex: 1; min-width: 0; font-size: 13px; line-height: 1.4; word-break: break-all; user-select: all; color: var(--text-primary); cursor: text; }
+@media (max-width: 560px) { .prow code.addr { max-width: none; flex: 1; } }
