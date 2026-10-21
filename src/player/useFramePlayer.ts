@@ -39,9 +39,12 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
   const frameCount = exactFrameCount ?? estimatedFrameCount;
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // The browser's MediaError code (2 network, 3 decode, 4 not supported), so the page can switch copies.
+  // The browser's MediaError code (2 network, 3 decode, 4 not supported), so the page can switch copies,
+  // plus what the browser said, where it happened, and whether it was playing (to carry on after switching).
   const [errorCode, setErrorCode] = useState(0);
+  const errorDetail = useRef<{ msg: string; t: number; playing: boolean } | null>(null);
   const bias = useRef(0);
+  const playingNow = useRef(false);
   const lastMedia = useRef<number | null>(null);
   const FD = frameDuration(fps);
   const frameOf = (t: number) => Math.max(0, Math.round(t / FD));
@@ -81,6 +84,7 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
     setReady(false);
     setError(null);
     setErrorCode(0);
+    playingNow.current = false;
     lastMedia.current = null;
     clock.set(0);
     let hls: Hls | null = null;
@@ -99,9 +103,13 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
       setReady(true);
       if (isFinite(v.duration) && v.duration > 0) setEstimatedFrameCount(Math.round(v.duration / FD));
     };
-    const onErr = () => { setError("The video couldn't load. Try the other quality, or refresh."); setErrorCode(v.error?.code || 2); };
-    const onPlay = () => setPlaying(true);
-    const onPause = () => setPlaying(false);
+    const onErr = () => {
+      errorDetail.current = { msg: v.error?.message || "", t: v.currentTime, playing: playingNow.current };
+      setError("The video couldn't load. Try the other quality, or refresh.");
+      setErrorCode(v.error?.code || 2);
+    };
+    const onPlay = () => { playingNow.current = true; setPlaying(true); };
+    const onPause = () => { playingNow.current = false; setPlaying(false); };
     v.addEventListener("loadedmetadata", onMeta);
     v.addEventListener("error", onErr);
     v.addEventListener("play", onPlay);
@@ -163,13 +171,18 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
     if (clock.get() === target && lastMedia.current !== null) return target;
     let t = (target + 0.5) * FD + bias.current;
     let landed = await seekTime(t);
+    const path = [landed];
     for (let i = 0; i < 3 && landed !== target; i++) {
       t -= (landed - target) * FD * 0.6;
       landed = await seekTime(t);
+      path.push(landed);
       if (landed === target) bias.current = t - (target + 0.5) * FD;
     }
+    // Jumps that needed correcting (the picture visibly steps between frames) are reported, for diagnosing devices remotely.
+    if (path.length > 1) seekReports.current.push({ target, path, bias: Math.round(bias.current * 1e4) / 1e4, at: Date.now() });
     return landed;
   }
+  const seekReports = useRef<Array<{ target: number; path: number[]; bias: number; at: number }>>([]);
   // Jumps run one after another so fast key repeats don't fight.
   function seekToFrame(n: number) {
     const max = (frameCount ?? Infinity) - 1;
@@ -228,6 +241,8 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
     playing,
     error,
     errorCode,
+    errorDetail,
+    seekReports,
     seekToFrame,
     scrubTo,
     endScrub,

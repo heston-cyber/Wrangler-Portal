@@ -49,6 +49,8 @@ export default defineSchema({
     // to see how much sooner the 1080p copy is usable than "ready". s = Bunny status, p = progress %,
     // res = the copies Bunny lists, mp4 = the MP4 copies that actually answer on the CDN.
     stages: v.optional(v.array(v.object({ t: v.number(), s: v.number(), p: v.number(), res: v.string(), mp4: v.array(v.number()) }))),
+    // Oct 21: the 1080p file failed to play on some device, so every device opens this version on the stream.
+    streamOnly: v.optional(v.boolean()),
   })
     .index("by_video", ["videoId", "number"])
     .index("by_guid", ["bunnyGuid"]),
@@ -193,6 +195,18 @@ export default defineSchema({
     name: v.string(),
     createdAt: v.number(),
   }).index("by_name", ["name"]),
+
+  // Playback problems the browser reported (Oct 21), so they can be diagnosed on devices Claude can't reach.
+  playerLogs: defineTable({
+    versionId: v.id("versions"),
+    at: v.number(),
+    kind: v.string(), // error, fallback, stall
+    code: v.optional(v.number()),
+    msg: v.optional(v.string()),
+    t: v.optional(v.number()), // seconds into the video
+    src: v.optional(v.string()), // file or stream
+    ua: v.optional(v.string()),
+  }).index("by_at", ["at"]),
 
   // Stills kept in Convex storage until Bunny Storage is set up.
   stillFiles: defineTable({

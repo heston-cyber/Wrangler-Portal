@@ -29,6 +29,7 @@ import type * as lib_transcript from "../lib/transcript.js";
 import type * as lib_voice from "../lib/voice.js";
 import type * as notes from "../notes.js";
 import type * as phase0 from "../phase0.js";
+import type * as player from "../player.js";
 import type * as slack from "../slack.js";
 import type * as stills from "../stills.js";
 import type * as testdata from "../testdata.js";
@@ -68,6 +69,7 @@ declare const fullApi: ApiFromModules<{
   "lib/voice": typeof lib_voice;
   notes: typeof notes;
   phase0: typeof phase0;
+  player: typeof player;
   slack: typeof slack;
   stills: typeof stills;
   testdata: typeof testdata;

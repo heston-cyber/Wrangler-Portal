@@ -122,7 +122,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const mp4H = version ? Math.max(0, ...version.mp4Heights.filter((h) => h <= 1080)) : 0;
   // A version whose 1080p file failed before opens on the stream (remembered per browser; see the fallback below).
   const streamOnlyKey = version ? `wr.streamOnly.${version.bunnyGuid}` : "";
-  const [quality, setQuality] = useState<"file" | "stream">(() => (mp4H && !readFlag(streamOnlyKey) ? "file" : "stream"));
+  const [quality, setQuality] = useState<"file" | "stream">(() => (mp4H && !version?.streamOnly && !readFlag(streamOnlyKey) ? "file" : "stream"));
   const ready = version?.status === "ready";
   const src = !version || !ready ? null : quality === "file" && mp4H ? mediaUrl(version.bunnyGuid, `play_${mp4H}p.mp4`) : mediaUrl(version.bunnyGuid, "playlist.m3u8");
   // Scrub copy: the best MP4 copy up to 720p that fits (80 MB on computers, 30 MB on phones), downloaded once the video is ready.
@@ -138,22 +138,58 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   // If the 1080p file fails, switch to the stream at the same frame and carry on.
   // Found Oct 21: Chrome 155 couldn't decode some audio packets in Bunny's 1080p MP4 of a 2048×858 upload
   // (13.5 s, 19.9 s…), every time, while the stream of the same version played straight through.
-  const resumeAt = useRef<number | null>(null);
+  // The switch is saved on the version too, so every device (phone, other computers) opens it on the stream from then on.
+  // Playback problems are logged (owner-only) so ones on devices Claude can't reach can still be diagnosed.
+  const logPlayback = useMutation(api.player.log);
+  const markFileFailed = useMutation(api.player.fileFailed);
+  const resumeAt = useRef<{ f: number; play: boolean } | null>(null);
   useEffect(() => {
-    if (!player.errorCode || quality !== "file" || !version) return;
-    resumeAt.current = player.clock.get();
+    if (!player.errorCode || !version) return;
+    const d = player.errorDetail.current;
+    void logPlayback({ versionId: version._id, kind: "error", code: player.errorCode, msg: d?.msg, t: d?.t, src: quality, ua: navigator.userAgent }).catch(() => {});
+    if (quality !== "file") return;
+    resumeAt.current = { f: player.clock.get(), play: !!d?.playing };
     writeFlag(streamOnlyKey);
+    void markFileFailed({ versionId: version._id }).catch(() => {});
+    void logPlayback({ versionId: version._id, kind: "fallback", t: d?.t, src: "stream", ua: navigator.userAgent }).catch(() => {});
     setQuality("stream");
-    showToast("The 1080p file hit a playback error here, so this version switched to the stream. Same picture, same frames.");
+    showToast("The 1080p file hit a playback error here, so this version switched to the stream. Same frames.");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player.errorCode]);
   useEffect(() => {
     if (!player.ready || resumeAt.current === null) return;
-    const f = resumeAt.current;
+    const { f, play } = resumeAt.current;
     resumeAt.current = null;
-    void player.seekToFrame(f);
+    void player.seekToFrame(f).then(() => { if (play) void player.play(); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player.ready]);
+  // Jumps that needed correcting get logged every few seconds (at most 5 per batch).
+  useEffect(() => {
+    if (!version) return;
+    const id = setInterval(() => {
+      const r = player.seekReports.current.splice(0);
+      if (!r.length) return;
+      void logPlayback({ versionId: version._id, kind: "seek", msg: JSON.stringify(r.slice(-5)).slice(0, 300), src: quality, ua: navigator.userAgent }).catch(() => {});
+    }, 5000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version?._id, quality]);
+  // Long stalls while playing (over 4 s of "waiting") get logged too.
+  useEffect(() => {
+    const v = player.videoRef.current;
+    if (!v || !version) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
+    const onWaiting = () => {
+      clear();
+      if (v.paused) return;
+      timer = setTimeout(() => { void logPlayback({ versionId: version._id, kind: "stall", t: v.currentTime, src: quality, ua: navigator.userAgent }).catch(() => {}); }, 4000);
+    };
+    v.addEventListener("waiting", onWaiting);
+    ["playing", "pause", "seeked", "emptied"].forEach((e) => v.addEventListener(e, clear));
+    return () => { clear(); v.removeEventListener("waiting", onWaiting); ["playing", "pause", "seeked", "emptied"].forEach((e) => v.removeEventListener(e, clear)); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version?._id, quality]);
 
   useEffect(() => {
     const est = player.estimatedFrameCount;
