@@ -712,3 +712,4 @@ button.tcpill:hover, .composer .target:hover { background: var(--wp-black); box-
 /* Note box tools: note type (frame / range in / range out / whole video) | voice | draw */
 .composer .rrow .right .tsep { width: 1px; height: 20px; background: var(--border-hairline); margin: 0 4px; flex: none; }
 @media (max-width: 420px) { .composer .rrow .right .icon-btn.tool { width: 32px; height: 32px; } .composer .rrow .right { gap: 0; } }
+.chead .right { margin-left: auto; }

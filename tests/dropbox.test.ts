@@ -411,3 +411,34 @@ describe("voice notes", () => {
     expect(await t.run((ctx) => ctx.db.system.get(s3))).toBeNull();
   });
 });
+
+describe("deleting projects and clients", () => {
+  test("a project goes with all its videos, versions and notes; a client needs its name typed and takes all its projects", async () => {
+    const { t, me } = await setup();
+    const mk = async (name: string, client?: string) => {
+      const projectId = await me.mutation(api.library.createProject, { name, client });
+      const videoId = await me.mutation(api.library.createVideo, { projectId, title: name + " cut" });
+      const { versionId } = await t.mutation(internal.library.insertVersion, { videoId, bunnyGuid: "g-" + name, fileName: "a.mp4" });
+      await me.mutation(api.notes.create, { versionId, kind: "frame", inFrame: 1, text: "n", still: `https://cdn.example/stills/${name}.jpg` });
+      await me.mutation(api.library.markOpened, { videoId });
+      return projectId;
+    };
+    const a = await mk("Alpha", "ICG");
+    await mk("Beta", "ICG");
+    await mk("Gamma", "Floor Trader");
+    const keep = await mk("Delta");
+    expect(await me.mutation(api.library.deleteProject, { projectId: keep })).toEqual({ videos: 1 });
+    await expect(me.mutation(api.library.deleteClient, { client: "ICG", typed: "icg" })).rejects.toThrow(/Type ICG exactly/);
+    expect(await me.mutation(api.library.deleteClient, { client: "ICG", typed: "ICG" })).toEqual({ projects: 2, videos: 2 });
+    const left = await t.run(async (ctx) => ({
+      projects: (await ctx.db.query("projects").collect()).map((p) => p.name),
+      videos: (await ctx.db.query("videos").collect()).length,
+      versions: (await ctx.db.query("versions").collect()).length,
+      notes: (await ctx.db.query("notes").collect()).length,
+      opens: (await ctx.db.query("opens").collect()).length,
+      cleanupGuids: (await ctx.db.system.query("_scheduled_functions").collect()).filter((s) => s.name.includes("cleanup")).map((s) => (s.args[0] as { bunnyGuid: string | null }).bunnyGuid).filter(Boolean).sort(),
+    }));
+    expect(left).toEqual({ projects: ["Gamma"], videos: 1, versions: 1, notes: 1, opens: 1, cleanupGuids: ["g-Alpha", "g-Beta", "g-Delta"] });
+    expect(await t.run((ctx) => ctx.db.get(a))).toBeNull();
+  });
+});

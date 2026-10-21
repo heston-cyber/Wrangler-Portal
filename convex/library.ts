@@ -1,5 +1,6 @@
 // Projects, videos and versions: what the home page and the video page read.
 import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import { requireMe } from "./lib/access";
@@ -263,38 +264,99 @@ export const versionsNeedingCount = internalQuery({
   },
 });
 
-// Deletes a version from the site: its notes, replies, drawings' stills and transcript go with it.
-// The other versions keep their numbers. Bunny's copy is removed unless another version still uses it (test copies
-// can share one), and the original in Dropbox is never touched.
+// Deleting things on the site. Nothing here ever touches Dropbox: originals stay where they are.
+// Removes a version's notes, replies, recordings, transcript and links to Dropbox rows; returns what to clean up
+// outside the database (its Bunny video and still images), which happens after the last delete in the batch.
+async function removeVersion(ctx: MutationCtx, ver: Doc<"versions">, why: string, stills: Set<string>, guids: Set<string>) {
+  const notes = await ctx.db.query("notes").withIndex("by_version", (q) => q.eq("versionId", ver._id)).collect();
+  for (const n of notes) {
+    for (const u of [n.still, n.stillIn, n.stillOut, ...(n.voice?.pointers ?? []).map((p) => p.still)]) if (u) stills.add(u);
+    if (n.voice) await ctx.storage.delete(n.voice.storageId).catch(() => null);
+    for (const r of await ctx.db.query("replies").withIndex("by_note", (q) => q.eq("noteId", n._id)).collect()) await ctx.db.delete(r._id);
+    await ctx.db.delete(n._id);
+  }
+  for (const t of await ctx.db.query("transcripts").withIndex("by_version", (q) => q.eq("versionId", ver._id)).collect()) {
+    if (t.storageId) await ctx.storage.delete(t.storageId).catch(() => null);
+    await ctx.db.delete(t._id);
+  }
+  for (const f of await ctx.db.query("dropFiles").withIndex("by_version", (q) => q.eq("versionId", ver._id)).collect()) {
+    await ctx.db.patch(f._id, { versionId: undefined, reason: why });
+  }
+  guids.add(ver.bunnyGuid);
+  await ctx.db.delete(ver._id);
+}
+
+// After deleting: keep any Bunny video or still that something left on the site still uses (test copies can share).
+async function scheduleCleanup(ctx: MutationCtx, stills: Set<string>, guids: Set<string>) {
+  if (stills.size) {
+    for (const other of await ctx.db.query("notes").collect()) {
+      for (const u of [other.still, other.stillIn, other.stillOut, ...(other.voice?.pointers ?? []).map((p) => p.still)]) if (u) stills.delete(u);
+    }
+  }
+  const gone: string[] = [];
+  for (const g of guids) if (!(await ctx.db.query("versions").withIndex("by_guid", (q) => q.eq("bunnyGuid", g)).first())) gone.push(g);
+  for (let i = 0; i < Math.max(gone.length, 1); i++) {
+    await ctx.scheduler.runAfter(i * 500, internal.stills.cleanup, { bunnyGuid: gone[i] ?? null, stillUrls: i === 0 ? [...stills] : [] });
+  }
+}
+
+async function removeVideo(ctx: MutationCtx, videoId: Id<"videos">, stills: Set<string>, guids: Set<string>) {
+  for (const ver of await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", videoId)).collect()) {
+    await removeVersion(ctx, ver, "Its video was deleted on the site.", stills, guids);
+  }
+  for (const o of await ctx.db.query("opens").collect()) if (o.videoId === videoId) await ctx.db.delete(o._id);
+  await ctx.db.delete(videoId);
+}
+
+async function removeProject(ctx: MutationCtx, projectId: Id<"projects">, stills: Set<string>, guids: Set<string>) {
+  const videos = await ctx.db.query("videos").withIndex("by_project", (q) => q.eq("projectId", projectId)).collect();
+  for (const vid of videos) await removeVideo(ctx, vid._id, stills, guids);
+  await ctx.db.delete(projectId);
+  return videos.length;
+}
+
+// One version. The other versions keep their numbers.
 export const deleteVersion = mutation({
   args: { versionId: v.id("versions") },
   handler: async (ctx, { versionId }) => {
     await requireMe(ctx);
     const ver = await ctx.db.get(versionId);
     if (!ver) throw new ConvexError("That version no longer exists.");
-    const notes = await ctx.db.query("notes").withIndex("by_version", (q) => q.eq("versionId", versionId)).collect();
-    const stills = new Set<string>();
-    for (const n of notes) {
-      for (const u of [n.still, n.stillIn, n.stillOut, ...(n.voice?.pointers ?? []).map((p) => p.still)]) if (u) stills.add(u);
-      if (n.voice) await ctx.storage.delete(n.voice.storageId).catch(() => null);
-      for (const r of await ctx.db.query("replies").withIndex("by_note", (q) => q.eq("noteId", n._id)).collect()) await ctx.db.delete(r._id);
-      await ctx.db.delete(n._id);
-    }
-    // Stills another note still shows (e.g. copied test notes) are kept.
-    if (stills.size) {
-      for (const other of await ctx.db.query("notes").collect()) for (const u of [other.still, other.stillIn, other.stillOut, ...(other.voice?.pointers ?? []).map((p) => p.still)]) if (u) stills.delete(u);
-    }
-    for (const t of await ctx.db.query("transcripts").withIndex("by_version", (q) => q.eq("versionId", versionId)).collect()) {
-      if (t.storageId) await ctx.storage.delete(t.storageId);
-      await ctx.db.delete(t._id);
-    }
-    for (const f of await ctx.db.query("dropFiles").withIndex("by_version", (q) => q.eq("versionId", versionId)).collect()) {
-      await ctx.db.patch(f._id, { versionId: undefined, reason: `Its version (v${ver.number}) was deleted on the site.` });
-    }
-    const sharedGuid = (await ctx.db.query("versions").withIndex("by_guid", (q) => q.eq("bunnyGuid", ver.bunnyGuid)).collect()).some((x) => x._id !== versionId);
-    await ctx.db.delete(versionId);
+    const stills = new Set<string>(), guids = new Set<string>();
+    await removeVersion(ctx, ver, `Its version (v${ver.number}) was deleted on the site.`, stills, guids);
     await ctx.db.patch(ver.videoId, { updatedAt: Date.now() });
-    await ctx.scheduler.runAfter(0, internal.stills.cleanup, { bunnyGuid: sharedGuid ? null : ver.bunnyGuid, stillUrls: [...stills] });
+    await scheduleCleanup(ctx, stills, guids);
     return { deleted: ver.number };
+  },
+});
+
+// A whole project: every video in it, with all their versions.
+export const deleteProject = mutation({
+  args: { projectId: v.id("projects") },
+  handler: async (ctx, { projectId }) => {
+    await requireMe(ctx);
+    if (!(await ctx.db.get(projectId))) throw new ConvexError("That project no longer exists.");
+    const stills = new Set<string>(), guids = new Set<string>();
+    const videos = await removeProject(ctx, projectId, stills, guids);
+    await scheduleCleanup(ctx, stills, guids);
+    return { videos };
+  },
+});
+
+// A client: every project filed under it. The page asks for the client's name to be typed first; so does this.
+export const deleteClient = mutation({
+  args: { client: v.string(), typed: v.string() },
+  handler: async (ctx, { client, typed }) => {
+    await requireMe(ctx);
+    const c = client.trim();
+    if (!c) throw new ConvexError("Which client?");
+    if (typed.trim() !== c) throw new ConvexError(`Type ${c} exactly to delete it.`);
+    const projects = (await ctx.db.query("projects").collect()).filter((p) => (p.client ?? "").trim().toLowerCase() === c.toLowerCase());
+    if (!projects.length) throw new ConvexError("No projects are filed under that client.");
+    const stills = new Set<string>(), guids = new Set<string>();
+    let videos = 0;
+    for (const p of projects) videos += await removeProject(ctx, p._id, stills, guids);
+    await scheduleCleanup(ctx, stills, guids);
+    return { projects: projects.length, videos };
   },
 });

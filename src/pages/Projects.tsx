@@ -2,12 +2,12 @@
 // /projects shows everything; /projects/:id shows one project.
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { Building2, ChevronDown, ChevronRight, Clapperboard, Ellipsis, FolderPlus, LayoutGrid, List, Pencil, Plus, SlidersHorizontal, Upload, X } from "lucide-react";
+import { Building2, ChevronDown, ChevronRight, Clapperboard, Ellipsis, FolderPlus, LayoutGrid, List, Pencil, Plus, SlidersHorizontal, Trash2, Upload, X } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { Sep, TopBar } from "../shell/Shell";
 import { useUpload } from "../shell/UploadDialog";
-import { linkProps } from "../lib/router";
+import { linkProps, navigate } from "../lib/router";
 import { isVideoFile } from "../lib/uploads";
 import { Menu, MenuItem, MenuLabel, MenuSep, Modal } from "../ui/kit";
 import { dayBucket, projectLabel } from "../lib/format";
@@ -33,6 +33,8 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [renaming, setRenaming] = useState<Overview["projects"][number] | null>(null);
   const collapsedHas = (k: string) => collapsed.has(k);
+  const [deletingProject, setDeletingProject] = useState<Overview["projects"][number] | null>(null);
+  const [deletingClient, setDeletingClient] = useState<string | null>(null);
   const [clientPref, setClient] = usePref<string>("wr.client", "");
   const project = projectId ? overview?.projects.find((p) => p._id === projectId) : undefined;
   const group: GroupBy = projectId && (groupPref === "project" || groupPref === "client") ? "activity" : groupPref;
@@ -146,6 +148,13 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
               <Building2 size={15} />
               <span className="ctitle">{g.title}</span>
               <span className="n">{g.clientHead.count} {g.clientHead.count === 1 ? "project" : "projects"}</span>
+              {g.title !== NO_CLIENT && (
+                <span className="right">
+                  <Menu align="end" label="Client options" trigger={(p) => <button {...p} className="icon-btn" aria-label={`${g.title} options`}><Ellipsis size={15} /></button>}>
+                    <MenuItem icon={<Trash2 size={16} />} danger onSelect={() => setDeletingClient(String(g.title))}>Delete client</MenuItem>
+                  </Menu>
+                </span>
+              )}
             </div>
           ) : (
             <section className={`group${group === "client" ? " nested" : ""}`} key={g.key}>
@@ -160,6 +169,8 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
                     <Menu align="end" label="Project options" trigger={(p) => <button {...p} className="icon-btn" aria-label="Project options"><Ellipsis size={15} /></button>}>
                       <MenuItem icon={<Pencil size={16} />} onSelect={() => setRenaming(g.project!)}>Rename or set client</MenuItem>
                       <MenuItem icon={<Upload size={16} />} onSelect={() => openUpload({ projectId: g.project!._id })}>Upload a video</MenuItem>
+                      <MenuSep />
+                      <MenuItem icon={<Trash2 size={16} />} danger onSelect={() => setDeletingProject(g.project!)}>Delete project</MenuItem>
                     </Menu>
                   </span>
                 )}
@@ -173,11 +184,20 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
           ))}
         {projectId && project && (
           <div style={{ display: "flex", gap: 8, padding: "6px 24px 24px" }}>
-            <button className="btn sm" onClick={() => setRenaming(project)}><Pencil size={14} />Rename project</button>
+            <button className="btn sm" onClick={() => setRenaming(project)}><Pencil size={14} />Rename or set client</button>
+            <button className="btn sm" onClick={() => setDeletingProject(project)}><Trash2 size={14} />Delete project</button>
           </div>
         )}
       </div>
       {renaming && <RenameProject p={renaming} onClose={() => setRenaming(null)} />}
+      {deletingProject && (
+        <DeleteProject p={deletingProject} vids={(overview?.videos ?? []).filter((x) => x.projectId === deletingProject._id)}
+          onClose={() => setDeletingProject(null)} onDone={() => { const here = projectId === deletingProject._id; setDeletingProject(null); if (here) navigate("/projects"); }} />
+      )}
+      {deletingClient && (
+        <DeleteClient client={deletingClient} projects={(overview?.projects ?? []).filter((p) => clientOf(p) === deletingClient)} vids={overview?.videos ?? []}
+          onClose={() => setDeletingClient(null)} onDone={() => { setDeletingClient(null); setClient(""); }} />
+      )}
     </>
   );
 }
@@ -206,6 +226,75 @@ function RenameProject({ p, onClose }: { p: Overview["projects"][number]; onClos
         <label className="field"><span className="label">Client</span><input className="input" value={client} onChange={(e) => setClient(e.target.value)} placeholder="ICG" /></label>
         {error && <p className="error">{error}</p>}
         <div className="dfoot"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary" type="submit">Save</button></div>
+      </form>
+    </Modal>
+  );
+}
+
+const plural = (n: number, one: string, many = one + "s") => `${n} ${n === 1 ? one : many}`;
+function counts(vids: VideoItem[]) {
+  const versions = vids.reduce((a, x) => a + x.versionCount, 0), notes = vids.reduce((a, x) => a + x.noteCount, 0);
+  return `${plural(vids.length, "video")}, ${plural(versions, "version")} and ${plural(notes, "note")}`;
+}
+
+function DeleteProject({ p, vids, onClose, onDone }: { p: Overview["projects"][number]; vids: VideoItem[]; onClose: () => void; onDone: () => void }) {
+  const del = useMutation(api.library.deleteProject);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <Modal onClose={onClose} label="Delete project" width={500}>
+      <div style={{ display: "grid", gap: 18 }}>
+        <div className="dhead">
+          <h2 className="headline">Delete {projectLabel(p)}? <span className="rest">This can't be undone.</span></h2>
+          <button className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
+        </div>
+        <p className="caption" style={{ margin: 0, lineHeight: 1.5 }}>Its {counts(vids)} are deleted, with their drawings, recordings and transcripts. Files in Dropbox aren't touched.</p>
+        {error && <p className="error">{error}</p>}
+        <div className="dfoot">
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn primary" disabled={busy} onClick={async () => {
+            setBusy(true);
+            try { await del({ projectId: p._id }); onDone(); } catch (e) { setError((e as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]); setBusy(false); }
+          }}><Trash2 size={15} />{busy ? "Deleting…" : "Delete project"}</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// Deleting a client takes every project filed under it, so its name has to be typed first.
+function DeleteClient({ client, projects, vids, onClose, onDone }: { client: string; projects: Overview["projects"]; vids: VideoItem[]; onClose: () => void; onDone: () => void }) {
+  const del = useMutation(api.library.deleteClient);
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const ids = new Set(projects.map((p) => p._id as string));
+  const theirs = vids.filter((x) => ids.has(x.projectId));
+  const ok = typed.trim() === client.trim();
+  return (
+    <Modal onClose={onClose} label="Delete client" width={520}>
+      <form style={{ display: "grid", gap: 18 }} onSubmit={async (e) => {
+        e.preventDefault();
+        if (!ok || busy) return;
+        setBusy(true);
+        try { await del({ client, typed }); onDone(); } catch (err) { setError((err as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]); setBusy(false); }
+      }}>
+        <div className="dhead">
+          <h2 className="headline">Delete {client}? <span className="rest">This can't be undone.</span></h2>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
+        </div>
+        <p className="caption" style={{ margin: 0, lineHeight: 1.5 }}>
+          Its {plural(projects.length, "project")} ({projects.map((p) => projectLabel(p)).join(", ")}) and their {counts(theirs)} are deleted, with their drawings, recordings and transcripts. Files in Dropbox aren't touched.
+        </p>
+        <label className="field">
+          <span className="label">Type <b style={{ color: "var(--text-primary)" }}>{client}</b> to confirm</span>
+          <input className="input" value={typed} onChange={(e) => setTyped(e.target.value)} autoFocus autoComplete="off" spellCheck={false} aria-label={`Type ${client} to confirm`} />
+        </label>
+        {error && <p className="error">{error}</p>}
+        <div className="dfoot">
+          <button type="button" className="btn" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn primary" disabled={!ok || busy}><Trash2 size={15} />{busy ? "Deleting…" : "Delete client"}</button>
+        </div>
       </form>
     </Modal>
   );
