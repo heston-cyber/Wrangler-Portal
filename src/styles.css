@@ -39,6 +39,10 @@
   /* marker colours, same as Resolve's */
   --mk-frame: #4ba3ff; --mk-range: #f2c94c; --mk-video: #5fd38a;
   --wave-bg: #121212;
+  --surface-inset: var(--wp-black); /* fields and timecode pills sunk into a block */
+  --on-accent: var(--wp-black);     /* text and icons on a red fill */
+  --border-faint: rgba(244, 241, 233, .07);
+  --text-faint: var(--wp-grey-600);
   /* type */
   --font-title: "Industry Trial", "Saira", Helvetica, Arial, sans-serif;
   --font-ui: "Saira", Helvetica, Arial, sans-serif;
@@ -57,6 +61,39 @@
   color-scheme: dark;
 }
 
+:root[data-theme="light"] {
+  /* Light (Settings): warm paper ground, white blocks, ink type; the same red, a shade deeper so small red text reads */
+  --surface-base: #f2efe7;
+  --surface-band: #f2efe7;
+  --surface-float: #ffffff;
+  --surface-block: #ffffff;
+  --surface-block-hover: #f7f5ef;
+  --surface-raised: #ebe7dd;
+  --surface-media: #e4e0d6;
+  --surface-inset: #f2efe7;
+  --text-primary: #141313;
+  --text-secondary: #6b6862;
+  --text-muted: #55524d;
+  --text-faint: #9a968e;
+  --text-accent: #d60000;
+  --accent: #d60000;
+  --accent-hover: #b80000;
+  --accent-tint: rgba(214, 0, 0, .09);
+  --accent-ring: rgba(214, 0, 0, .55);
+  --on-accent: #ffffff;
+  --border-hairline: rgba(20, 19, 19, .10);
+  --border-strong: rgba(20, 19, 19, .22);
+  --border-faint: rgba(20, 19, 19, .07);
+  --fill-glass: rgba(255, 255, 255, .72);
+  --fill-glass-strong: rgba(255, 255, 255, .92);
+  --fill-chip: rgba(20, 19, 19, .06);
+  --fill-chip-hover: rgba(20, 19, 19, .11);
+  --mk-frame: #2f8cf0; --mk-range: #e2ad1c; --mk-video: #2fb466;
+  --wave-bg: #f2efe7;
+  --shadow-float: 0 12px 40px rgba(20, 19, 19, .14), 0 0 0 1px rgba(20, 19, 19, .08);
+  color-scheme: light;
+}
+
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
 html { -webkit-text-size-adjust: 100%; }
@@ -70,7 +107,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 [hidden] { display: none !important; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-::selection { background: var(--wp-red-500); color: var(--wp-black); }
+::selection { background: var(--accent); color: var(--on-accent); }
 img { display: block; }
 
 .tnum, .mono { font-variant-numeric: tabular-nums; }
@@ -96,17 +133,17 @@ img { display: block; }
 .btn:hover { background: var(--fill-chip-hover); }
 .btn:active:not(:disabled) { transform: scale(.97); }
 .btn:disabled { opacity: .4; cursor: not-allowed; }
-.btn.primary { background: var(--wp-red-500); color: var(--wp-black); }
+.btn.primary { background: var(--accent); color: var(--on-accent); }
 .btn.primary:hover { background: var(--wp-red-400); }
 .btn.cream { background: var(--wp-cream); color: var(--wp-black); }
 .btn.cream:hover { background: var(--wp-white); }
 .btn.ghost { background: transparent; color: var(--text-secondary); padding: 0 10px; }
 .btn.ghost:hover { color: var(--text-primary); background: var(--fill-chip); }
-.btn.danger { background: rgba(255, 0, 0, .14); color: var(--wp-red-400); }
-.btn.danger:hover { background: rgba(255, 0, 0, .24); }
+.btn.danger { background: var(--accent-tint); color: var(--text-accent); }
+.btn.danger:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .btn.sm { height: var(--control-sm); padding: 0 12px; font-size: 13px; }
 .btn.lg { height: var(--control-lg); padding: 0 26px; font-size: 15px; }
-.btn.on { background: var(--accent); color: var(--wp-black); }
+.btn.on { background: var(--accent); color: var(--on-accent); }
 .btn svg { flex: 0 0 auto; }
 
 .icon-btn {
@@ -140,9 +177,9 @@ img { display: block; }
 }
 .chip.fill { box-shadow: none; background: var(--fill-chip); }
 .chip.dur { box-shadow: none; background: var(--fill-chip); color: var(--text-muted); }
-.chip.red { box-shadow: none; background: var(--wp-red-500); color: var(--wp-black); font-weight: 600; }
+.chip.red { box-shadow: none; background: var(--accent); color: var(--on-accent); font-weight: 600; }
 .chip.warn { box-shadow: none; background: var(--accent-tint); color: var(--accent); }
-.chip.fail { box-shadow: none; background: rgba(255, 0, 0, .16); color: var(--wp-red-400); }
+.chip.fail { box-shadow: none; background: var(--accent-tint); color: var(--text-accent); }
 button.chip { border: 0; cursor: pointer; }
 button.chip:hover { color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 
@@ -153,7 +190,7 @@ button.chip:hover { color: var(--accent); box-shadow: inset 0 0 0 1px var(--acce
   background: var(--surface-raised); color: var(--text-primary); box-shadow: inset 0 0 0 1.5px transparent;
   transition: box-shadow var(--dur-fast) var(--ease-out);
 }
-.input::placeholder { color: var(--wp-grey-600); }
+.input::placeholder { color: var(--text-faint); }
 .input:focus { outline: none; box-shadow: inset 0 0 0 1.5px var(--accent); }
 textarea.input { height: auto; min-height: 88px; padding: 12px 14px; resize: vertical; }
 select.input { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--text-secondary) 50%), linear-gradient(135deg, var(--text-secondary) 50%, transparent 50%); background-position: calc(100% - 20px) 50%, calc(100% - 15px) 50%; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 36px; }
@@ -162,13 +199,13 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 .check { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-size: var(--fs-caption); }
 .check input { position: absolute; opacity: 0; width: 0; height: 0; }
 .check .box { width: 18px; height: 18px; border-radius: 6px; display: grid; place-items: center; background: var(--surface-raised); box-shadow: inset 0 0 0 1.5px var(--border-strong); }
-.check input:checked + .box { background: var(--accent); box-shadow: none; color: var(--wp-black); }
+.check input:checked + .box { background: var(--accent); box-shadow: none; color: var(--on-accent); }
 .check input:focus-visible + .box { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* avatars: initial on ink */
 .avatar {
   width: 22px; height: 22px; flex: 0 0 22px; border-radius: 50%; display: grid; place-items: center;
-  background: var(--wp-ink-700); color: var(--wp-cream); font-family: var(--font-title); font-weight: 700; font-size: 11px;
+  background: var(--surface-media); color: var(--text-primary); font-family: var(--font-title); font-weight: 700; font-size: 11px;
 }
 .avatar.lg { width: 30px; height: 30px; flex-basis: 30px; font-size: 13px; }
 
@@ -252,7 +289,7 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 .crumbs a, .crumbs span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .crumbs a { color: var(--text-secondary); }
 .crumbs a:hover { color: var(--text-primary); }
-.crumbs .sep { color: var(--wp-grey-600); flex: 0 0 auto; }
+.crumbs .sep { color: var(--text-faint); flex: 0 0 auto; }
 .crumbs .here { color: var(--text-primary); }
 .crumbs img.logo { height: 20px; width: auto; }
 .topbar .right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
@@ -262,7 +299,7 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 /* phone: sidebar becomes a drawer */
 @media (max-width: 820px) {
   .app { display: block; }
-  .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 80; background: var(--wp-black); box-shadow: var(--shadow-float); transform: translateX(-102%); transition: transform var(--dur-base) var(--ease-out); }
+  .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 80; background: var(--surface-band); box-shadow: var(--shadow-float); transform: translateX(-102%); transition: transform var(--dur-base) var(--ease-out); }
   .sidebar.open { transform: none; }
   .main { height: 100%; margin: 0; border-radius: 0; box-shadow: none; }
   .mobile-only { display: inline-grid !important; }
@@ -270,7 +307,7 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 }
 
 /* overlay sidebar on the review page */
-.sidebar.overlay { position: fixed; inset: 0 auto 0 0; z-index: 80; background: var(--wp-black); box-shadow: var(--shadow-float); }
+.sidebar.overlay { position: fixed; inset: 0 auto 0 0; z-index: 80; background: var(--surface-band); box-shadow: var(--shadow-float); }
 
 /* ---------- lists (Home, Projects) ---------- */
 .toolbar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; flex-wrap: wrap; }
@@ -300,7 +337,7 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 .vrow .open.has { color: var(--text-primary); }
 .vrow .open.has::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-right: 6px; vertical-align: 1px; }
 .thumb { width: 52px; aspect-ratio: 16 / 9; border-radius: 6px; object-fit: cover; background: var(--surface-media); }
-.thumb.ph { display: grid; place-items: center; color: var(--wp-grey-600); }
+.thumb.ph { display: grid; place-items: center; color: var(--text-faint); }
 @media (max-width: 720px) {
   .vrow { grid-template-columns: 52px minmax(0, 1fr) auto; padding-left: 10px; }
   .vrow .meta, .vrow .dur { display: none; }
@@ -392,14 +429,14 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
   padding: 7px 6px; height: 34px; max-height: 160px; line-height: 20px; font-size: 14px;
 }
 .composer textarea:focus { outline: none; }
-.composer textarea::placeholder { color: var(--wp-grey-500); }
+.composer textarea::placeholder { color: var(--text-secondary); }
 .composer .target {
   flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border: 0; border-radius: 14px;
   background: var(--fill-chip); color: var(--text-primary); font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .composer .target:hover { background: var(--fill-chip-hover); }
 .composer .target .dot { width: 8px; height: 8px; border-radius: 50%; }
-.composer .send { width: 34px; height: 34px; border-radius: 50%; border: 0; display: grid; place-items: center; background: var(--wp-red-500); color: var(--wp-black); flex: 0 0 auto; transition: background var(--dur-fast); }
+.composer .send { width: 34px; height: 34px; border-radius: 50%; border: 0; display: grid; place-items: center; background: var(--accent); color: var(--on-accent); flex: 0 0 auto; transition: background var(--dur-fast); }
 .composer .send:hover { background: var(--wp-red-400); }
 .composer .send:disabled { background: var(--fill-chip); color: var(--text-secondary); cursor: not-allowed; }
 .composer .tool { width: 34px; height: 34px; border-radius: 12px; }
@@ -408,12 +445,12 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
   background: var(--fill-glass); backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass); box-shadow: var(--shadow-float);
 }
 .drawbar .sw { width: 22px; height: 22px; border-radius: 50%; border: 0; box-shadow: inset 0 0 0 2px rgba(0, 0, 0, .35); margin: 0 2px; }
-.drawbar .sw.on { box-shadow: 0 0 0 2px var(--wp-black), 0 0 0 4px var(--accent); }
+.drawbar .sw.on { box-shadow: 0 0 0 2px var(--surface-float), 0 0 0 4px var(--accent); }
 .drawbar .vr { width: 1px; height: 20px; background: var(--border-strong); margin: 0 4px; }
 
 /* transport */
 .transport { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 6px 10px 8px; border-top: 1px solid var(--border-hairline); }
-.transport .play, .composer .play { width: 32px; height: 32px; border-radius: 50%; border: 0; display: grid; place-items: center; background: var(--fill-chip); color: var(--wp-cream); flex: 0 0 auto; }
+.transport .play, .composer .play { width: 32px; height: 32px; border-radius: 50%; border: 0; display: grid; place-items: center; background: var(--fill-chip); color: var(--text-primary); flex: 0 0 auto; }
 .transport .play:hover, .composer .play:hover { background: var(--fill-chip-hover); }
 .timebtn { border: 0; background: transparent; color: var(--text-primary); font-size: 12.5px; font-variant-numeric: tabular-nums; padding: 6px 8px; border-radius: 8px; white-space: nowrap; display: inline-flex; gap: 4px; align-items: center; }
 .timebtn:hover { background: var(--fill-chip); }
@@ -483,7 +520,7 @@ button.tcpill:hover { background: var(--fill-chip-hover); }
 .nfoot .right { margin-left: auto; display: flex; gap: 2px; align-items: center; }
 .donepill { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: var(--radius-pill); border: 0; font-size: 12.5px; background: transparent; color: var(--text-secondary); box-shadow: inset 0 0 0 1px var(--border-strong); }
 .donepill:hover { color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-.donepill.is { background: var(--accent); color: var(--wp-black); box-shadow: none; }
+.donepill.is { background: var(--accent); color: var(--on-accent); box-shadow: none; }
 .reply { padding: 8px 0 0 10px; border-left: 2px solid var(--border-hairline); display: grid; gap: 2px; font-size: 13px; }
 .reply .rh { font-size: 12px; color: var(--text-secondary); }
 .edit { display: grid; gap: 8px; }
@@ -504,7 +541,7 @@ button.tcpill:hover { background: var(--fill-chip-hover); }
 .vcard .file { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px; background: var(--fill-chip); font-size: 12.5px; min-width: 0; }
 .vcard .file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vcard .desc { color: var(--text-muted); white-space: pre-wrap; cursor: text; border-radius: 8px; padding: 2px 0; }
-.vcard .desc.ph { color: var(--wp-grey-600); }
+.vcard .desc.ph { color: var(--text-faint); }
 .vcard .vf { display: flex; align-items: center; gap: 8px; }
 .vcard .vf .right { margin-left: auto; }
 
@@ -554,11 +591,11 @@ button.tcpill:hover { background: var(--fill-chip-hover); }
 /* timecodes */
 .composer .target, .tcpill { color: var(--accent); }
 /* red timecodes sit on black pills so they stay readable */
-.tcpill, .composer .target { background: var(--wp-black); box-shadow: inset 0 0 0 1px rgba(255, 0, 0, .28); }
-button.tcpill:hover, .composer .target:hover { background: var(--wp-black); box-shadow: inset 0 0 0 1px var(--accent); }
+.tcpill, .composer .target { background: var(--surface-inset); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent); }
+button.tcpill:hover, .composer .target:hover { background: var(--surface-inset); box-shadow: inset 0 0 0 1px var(--accent); }
 
 /* ---------- Altar II card pattern (Heston, Oct 20): red label, bold value, grey outlined detail boxes ---------- */
-.rect { background: var(--surface-block); border-radius: 22px; box-shadow: inset 0 0 0 1px rgba(244, 241, 233, .07); }
+.rect { background: var(--surface-block); border-radius: 22px; box-shadow: inset 0 0 0 1px var(--border-faint); }
 .rrow { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
 .rrow > .right { margin-left: auto; display: flex; gap: 2px; align-items: center; }
 .rlabel {
@@ -577,13 +614,13 @@ button.tcpill:hover, .composer .target:hover { background: var(--wp-black); box-
 .rtags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .rtag {
   display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 6px;
-  box-shadow: inset 0 0 0 1px rgba(244, 241, 233, .22); color: var(--text-secondary);
+  box-shadow: inset 0 0 0 1px var(--border-strong); color: var(--text-secondary);
   font-family: var(--font-title); font-weight: 500; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 
 /* note cards */
-.note { border-radius: 22px; padding: 16px 18px 12px; gap: 10px; box-shadow: inset 0 0 0 1px rgba(244, 241, 233, .07); }
+.note { border-radius: 22px; padding: 16px 18px 12px; gap: 10px; box-shadow: inset 0 0 0 1px var(--border-faint); }
 .note.here { box-shadow: inset 0 0 0 1px var(--border-strong); }
 .note.focus { box-shadow: inset 0 0 0 1.5px var(--text-primary); }
 .note .ntext { font-size: 14px; }
@@ -591,10 +628,10 @@ button.tcpill:hover, .composer .target:hover { background: var(--wp-black); box-
 /* note box */
 .composer.rect {
   width: min(680px, 100%); display: grid; gap: 10px; align-items: stretch; padding: 14px 16px 12px;
-  background: var(--surface-block); backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: inset 0 0 0 1px rgba(244, 241, 233, .07); border-radius: 22px;
+  background: var(--surface-block); backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: inset 0 0 0 1px var(--border-faint); border-radius: 22px;
 }
 .composer .rbold { font-size: 24px; }
-.composer .cinput { display: flex; align-items: flex-end; gap: 6px; padding: 4px 4px 4px 12px; border-radius: 14px; background: var(--wp-black); box-shadow: inset 0 0 0 1px rgba(244, 241, 233, .1); }
+.composer .cinput { display: flex; align-items: flex-end; gap: 6px; padding: 4px 4px 4px 12px; border-radius: 14px; background: var(--surface-inset); box-shadow: inset 0 0 0 1px var(--border-hairline); }
 .composer .cinput:focus-within { box-shadow: inset 0 0 0 1.5px var(--accent); }
 
 /* timeline box */
@@ -732,3 +769,13 @@ button.tcpill:hover, .composer .target:hover { background: var(--wp-black); box-
 .composer .rrow .right .tsep { width: 1px; height: 20px; background: var(--border-hairline); margin: 0 4px; flex: none; }
 @media (max-width: 420px) { .composer .rrow .right .icon-btn.tool { width: 32px; height: 32px; } .composer .rrow .right { gap: 0; } }
 .chead .right { margin-left: auto; }
+
+/* The wordmark is one solid colour: white on dark, black on light. */
+.brand-mono { filter: brightness(0) invert(1); }
+:root[data-theme="light"] .brand-mono { filter: brightness(0); }
+
+/* Segmented choice (Settings → Appearance) */
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--radius-pill); background: var(--fill-chip); }
+.segbtn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--text-secondary); font-size: 13px; }
+.segbtn:hover { color: var(--text-primary); }
+.segbtn.on { background: var(--surface-block); color: var(--text-primary); box-shadow: 0 1px 3px rgba(0, 0, 0, .18), inset 0 0 0 1px var(--border-hairline); }

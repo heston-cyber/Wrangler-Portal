@@ -8,6 +8,9 @@ import "@fontsource/saira/latin-500.css";
 import "@fontsource/saira/latin-600.css";
 import "@fontsource/saira/latin-700.css";
 import "./styles.css";
+import { applyTheme } from "./lib/theme";
+
+applyTheme();
 
 const url = import.meta.env.VITE_CONVEX_URL as string | undefined;
 const convex = new ConvexReactClient(url || "https://handsome-hummingbird-11.convex.cloud");

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { asset } from "../config";
+import { BrandImg } from "../ui/BrandImg";
 import { useAuthActions } from "@convex-dev/auth/react";
 
 export default function SignIn() {
@@ -29,9 +29,9 @@ export default function SignIn() {
 
   return (
     <div className="signin">
-      <img className="watermark" src={asset("/brand/spark-watermark.png")} alt="" aria-hidden />
+      <BrandImg name="watermark" className="watermark" hidden />
       <form onSubmit={onSubmit}>
-        <img className="logo" src={asset("/brand/wordmark-cream.png")} alt="Wrangler Productions" />
+        <BrandImg name="wordmark" className="logo" alt="Wrangler Productions" />
         <span className="eyebrow">Wrangler Review</span>
         <h1 className="title" style={{ marginBottom: 6 }}>{flow === "signIn" ? "Sign in." : "Set a password."}</h1>
         <label className="field">

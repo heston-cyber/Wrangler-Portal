@@ -2,7 +2,8 @@
 import { useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { Copy, KeyRound, Plus, Settings as SettingsIcon, X } from "lucide-react";
+import { Copy, KeyRound, Monitor, Moon, Plus, Settings as SettingsIcon, Sun, X } from "lucide-react";
+import { useTheme, type ThemePref } from "../lib/theme";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { TopBar } from "../shell/Shell";
@@ -13,6 +14,30 @@ import { DropboxSettings } from "./DropboxSettings";
 // The connector lives on the Convex site host: <deployment>.convex.site/mcp
 const CONVEX = (import.meta.env.VITE_CONVEX_URL as string | undefined) || "https://handsome-hummingbird-11.convex.cloud";
 export const MCP_URL = CONVEX.replace(/\.convex\.cloud\/?$/, ".convex.site") + "/mcp";
+
+// Light / Dark / System, kept per browser (this device only).
+function Appearance() {
+  const { pref, setPref } = useTheme();
+  const opts: Array<{ v: ThemePref; label: string; icon: React.ReactNode }> = [
+    { v: "light", label: "Light", icon: <Sun size={15} /> },
+    { v: "dark", label: "Dark", icon: <Moon size={15} /> },
+    { v: "system", label: "System", icon: <Monitor size={15} /> },
+  ];
+  return (
+    <div className="panel">
+      <div className="prow">
+        <span className="pl">Appearance <span className="secondary" style={{ display: "block", fontSize: 12.5 }}>System follows this device's light or dark setting.</span></span>
+        <span className="pr">
+          <span className="seg" role="radiogroup" aria-label="Appearance">
+            {opts.map((o) => (
+              <button key={o.v} role="radio" aria-checked={pref === o.v} className={`segbtn${pref === o.v ? " on" : ""}`} onClick={() => setPref(o.v)}>{o.icon}{o.label}</button>
+            ))}
+          </span>
+        </span>
+      </div>
+    </div>
+  );
+}
 
 async function copy(text: string, show: (m: string) => void, what = "Copied") {
   try { await navigator.clipboard.writeText(text); show(what); }
@@ -45,6 +70,8 @@ export default function Settings({ me }: { me: { name: string | null; email: str
             <div className="prow"><span className="pl">Email</span><span className="pr secondary">{me.email}</span></div>
             <div className="prow"><span className="pl">Picture</span><span className="pr"><Avatar name={name || me.email} size="lg" /></span></div>
           </div>
+
+          <Appearance />
 
           <DropboxSettings show={show} />
 

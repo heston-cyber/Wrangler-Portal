@@ -1,6 +1,6 @@
 // Activity: uploads, new versions and notes, newest first. Notes from one sitting sit in one row of cards.
 import { useState } from "react";
-import { asset } from "../config";
+import { BrandImg } from "../ui/BrandImg";
 import { useQuery } from "convex/react";
 import { Activity, ArrowUpRight, SlidersHorizontal } from "lucide-react";
 import { api } from "../../convex/_generated/api";
@@ -38,7 +38,7 @@ export default function ActivityPage() {
           </div>
         </div>
         {feed === undefined ? <p className="caption" style={{ padding: "8px 24px" }}>Loading…</p>
-          : rows.length === 0 ? <div className="empty"><img src={asset("/brand/spark-cream.png")} alt="" /><span>Nothing here yet.</span></div>
+          : rows.length === 0 ? <div className="empty"><BrandImg name="spark" /><span>Nothing here yet.</span></div>
           : (
             <div className="feed">
               {rows.map((e, i) => {

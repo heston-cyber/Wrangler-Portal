@@ -1,6 +1,6 @@
 // Home: drop a render anywhere on the page to upload it; recent videos and activity underneath.
 import { useState } from "react";
-import { asset } from "../config";
+import { BrandImg } from "../ui/BrandImg";
 import { useQuery } from "convex/react";
 import { Plus, Search } from "lucide-react";
 import { api } from "../../convex/_generated/api";
@@ -34,7 +34,7 @@ export default function Home() {
         onDragLeave={(e) => { if (e.currentTarget === e.target) setOver(false); }}
         onDrop={(e) => { e.preventDefault(); setOver(false); const f = e.dataTransfer.files[0]; if (f && isVideoFile(f)) openUpload({ file: f }); }}>
         <div className="home">
-          <img className="watermark" src={asset("/brand/spark-watermark.png")} alt="" aria-hidden />
+          <BrandImg name="watermark" className="watermark" hidden />
           <div className={`hero${over ? " over" : ""}`}>
             <div className="stack">
               <span className="eyebrow">Review</span>

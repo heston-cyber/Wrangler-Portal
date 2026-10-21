@@ -1,6 +1,6 @@
 // The Notes tab of the review page's side panel.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { asset } from "../config";
+import { BrandImg } from "../ui/BrandImg";
 import { useMutation } from "convex/react";
 import { Check, Copy, Ellipsis, Mic, Pencil, Reply, Trash2 } from "lucide-react";
 import { api } from "../../convex/_generated/api";
@@ -47,7 +47,7 @@ export function NotesList({ notes, clock, tc, filter, onJump, focusId, focusTick
   if (shown.length === 0) {
     return (
       <div className="empty" style={{ padding: "40px 16px" }}>
-        <img src={asset("/brand/spark-cream.png")} alt="" />
+        <BrandImg name="spark" />
         <span>{list.length === 0 ? <>No notes yet. <br />Pause on a frame and write below, press D to draw, or I and O to mark a range.</> : "No notes match this filter."}</span>
       </div>
     );

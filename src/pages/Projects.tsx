@@ -1,7 +1,7 @@
 // Projects (Flask's Assets page): every video, grouped and sorted, as a list or a grid.
 // /projects shows everything; /projects/:id shows one project.
 import { useState } from "react";
-import { asset } from "../config";
+import { BrandImg } from "../ui/BrandImg";
 import { useMutation, useQuery } from "convex/react";
 import { Building2, ChevronDown, ChevronRight, Clapperboard, Ellipsis, FolderPlus, LayoutGrid, List, Pencil, Plus, SlidersHorizontal, Trash2, Upload, X } from "lucide-react";
 import { api } from "../../convex/_generated/api";
@@ -136,13 +136,13 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
           : projectId && !project ? <div className="empty">This project doesn't exist any more. <a className="btn" {...linkProps("/projects")}>All projects</a></div>
           : vids.length === 0 && group !== "project" && group !== "client" ? (
             <div className="empty">
-              <img src={asset("/brand/spark-cream.png")} alt="" />
+              <BrandImg name="spark" />
               <span>{projectId ? "No videos in this project yet." : "No videos yet."} Drop a render anywhere on this page.</span>
               <button className="btn primary" onClick={() => openUpload({ projectId })}><Upload size={16} />Upload</button>
             </div>
           ) : groups.length === 0 ? (
             <div className="empty">
-              <img src={asset("/brand/spark-cream.png")} alt="" />
+              <BrandImg name="spark" />
               <span>No projects yet.</span>
               <button className="btn primary" onClick={() => openUpload({ newProject: true })}><FolderPlus size={16} />New project</button>
             </div>

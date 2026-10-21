@@ -2,6 +2,7 @@
 // a Notes / Versions panel on the right, and the transport along the bottom.
 // Frame-exact: every note is stored as integer frames from frame 0 of its version.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { BrandImg } from "../ui/BrandImg";
 import { useConvex, useMutation, useQuery } from "convex/react";
 import {
   ArrowUp, Brush, Check, Circle, Download, Ellipsis, Eye, Keyboard, Maximize, MoveUpRight, PanelRight, Pause, Pencil, Play,
@@ -11,7 +12,7 @@ import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { frameTc, frameDuration, fpsValue, isValidTc, nominal, tcToFrames, type Fps } from "../../convex/lib/frames";
-import { DEMO, asset, mediaUrl } from "../config";
+import { DEMO, mediaUrl } from "../config";
 import { linkProps, navigate } from "../lib/router";
 import { isVideoFile, startUpload, useUploads } from "../lib/uploads";
 import { markersEdl } from "../lib/edl";
@@ -56,9 +57,9 @@ function InOutIcon({ side, size = 17 }: { side: "in" | "out"; size?: number }) {
   return (
     <svg className="lucide" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <g transform={side === "out" ? "translate(24 0) scale(-1 1)" : undefined}>
-        <path d="M9 4H5v16h4" />
-        <path d="M12 8l4 4-4 4" />
-        <path d="M16 12H9" />
+        <path d="M8 3H4v18h4" />
+        <path d="M13 7l5 5-5 5" />
+        <path d="M18 12H8" />
       </g>
     </svg>
   );
@@ -466,7 +467,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           <button className={`icon-btn md${panel ? " on" : ""}`} onClick={() => setPanelPref(panel ? null : "notes")} aria-label={panel ? "Hide panel" : "Show panel"} title={panel ? "Hide panel" : "Show panel"}><PanelRight size={16} /></button>
         </>
       }>
-        <a {...linkProps("/")} aria-label="Home" style={{ display: "flex" }}><img className="logo" src={asset("/brand/wordmark-cream.png")} alt="Wrangler Productions" /></a>
+        <a {...linkProps("/")} aria-label="Home" style={{ display: "flex" }}><BrandImg name="wordmark" className="logo" alt="Wrangler Productions" /></a>
         <Sep />
         <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps("/projects")}>Projects</a><Sep /></span>
         {data.project && <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps(`/projects/${data.project._id}`)}>{projectLabel(data.project)}</a><Sep /></span>}
