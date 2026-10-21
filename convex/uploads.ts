@@ -1,6 +1,6 @@
 // Uploading a new version: the browser sends the file straight to Bunny (resumable TUS upload);
 // the backend creates the Bunny video, signs the upload, then polls Bunny until it's converted.
-import { action, internalAction } from "./_generated/server";
+import { action, internalAction, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
 import { bunnyCall, bunnyEnv, getBunnyVideo } from "./bunny";
@@ -49,6 +49,28 @@ export const uploadFailed = action({
   handler: async (ctx, { versionId, error }) => {
     await ctx.runQuery(internal.users.assertAllowed, {});
     await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { status: "failed", error: error.slice(0, 300) } });
+  },
+});
+
+// For the CI check (public logs): how long converting took per version, with sizes and no names.
+// Converting time is estimated from the number of 10-second checks between "upload finished" and "ready".
+export const timings = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const vs = await ctx.db.query("versions").collect();
+    return vs.filter((x) => x.status === "ready").map((x) => ({
+      n: x.number,
+      src: x.dropboxPath ? "dropbox" : "browser",
+      ext: (x.fileName.split(".").pop() ?? "").toLowerCase().slice(0, 5),
+      sizeMB: x.fileSize ? Math.round(x.fileSize / 1e6) : null,
+      lenSec: x.lengthSeconds ? Math.round(x.lengthSeconds) : null,
+      res: x.width && x.height ? `${x.width}x${x.height}` : null,
+      fps: x.fpsNum && x.fpsDen ? +(x.fpsNum / x.fpsDen).toFixed(3) : null,
+      checks: x.pollCount ?? null,
+      convertMin: x.pollCount ? +((x.pollCount * 10.5) / 60).toFixed(1) : null,
+      totalMin: x.readyAt ? +((x.readyAt - x.createdAt) / 60000).toFixed(1) : null,
+      day: x.readyAt ? new Date(x.readyAt).toISOString().slice(5, 16) : null,
+    }));
   },
 });
 
