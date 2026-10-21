@@ -119,7 +119,7 @@ export function Timeline({ clock, frameCount, nom, startFrames, notes, sel, high
         {ranges.map((x) => (
           <div key={x.id} className={`tl-range${x.status === "done" ? " done" : ""}${x.id === activeId ? " active" : ""}`} role="button" aria-label={`Range note ${label(x.inFrame!)} to ${label(x.outFrame!)}`}
             title={`${label(x.inFrame!)} → ${label(x.outFrame!)}${x.text ? ` · ${x.text.slice(0, 80)}` : ""}`}
-            style={{ left: pct(x.inFrame!), width: `max(6px, ${pct(x.outFrame! - x.inFrame! + 1)})`, top: oneLane ? 5 : 1 + 4 * (lanes.get(x.id) ?? 0), height: oneLane ? 4 : 3 }} />
+            style={{ left: pct(x.inFrame!), width: `max(8px, ${pct(x.outFrame! - x.inFrame! + 1)})`, top: oneLane ? 7 : 3 + 6 * (lanes.get(x.id) ?? 0), height: oneLane ? 8 : 5 }} />
         ))}
         {notes.filter((x) => x.kind === "frame" && x.inFrame !== undefined).map((x) => (
           <div key={x.id} className={`tl-mark${x.status === "done" ? " done" : ""}${x.id === activeId ? " active" : ""}`} role="button" aria-label={`Note at ${label(x.inFrame!)}`}
