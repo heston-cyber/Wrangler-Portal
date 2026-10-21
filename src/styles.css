@@ -420,15 +420,17 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 .speedbtn { border: 0; background: transparent; color: var(--text-secondary); font-size: 12.5px; padding: 6px 8px; border-radius: 8px; font-variant-numeric: tabular-nums; }
 .speedbtn:hover { color: var(--text-primary); background: var(--fill-chip); }
 
-.scrub { flex: 1; min-width: 80px; position: relative; height: 44px; cursor: pointer; touch-action: none; }
+/* Bar zone on top (scrubs), a clear gap, then the note-mark row (picks notes, never moves the playhead). */
+.scrub { flex: 1; min-width: 80px; position: relative; height: 62px; cursor: pointer; touch-action: none; }
+.scrub .lane { position: absolute; left: -10px; right: -10px; top: 28px; bottom: 0; cursor: default; }
 .scrub .track { position: absolute; left: 0; right: 0; top: 14px; height: 4px; border-radius: 4px; background: var(--fill-chip-hover); }
 .scrub .fillbar { position: absolute; left: 0; top: 14px; height: 4px; border-radius: 4px; background: var(--accent); }
 .scrub .knob { position: absolute; top: 10px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--accent); box-shadow: 0 1px 4px rgba(0, 0, 0, .6); }
 .scrub .sel { position: absolute; top: 9px; height: 14px; border-radius: 4px; background: var(--accent-tint); box-shadow: inset 0 0 0 1px var(--accent-ring); }
 .scrub .hl { position: absolute; top: 9px; height: 14px; border-radius: 4px; background: rgba(242, 201, 76, .14); box-shadow: inset 0 0 0 1px rgba(242, 201, 76, .55); }
 /* note marks: a larger invisible tap area around each visible mark */
-.scrub .mkhit { position: absolute; top: 18px; width: 18px; height: 18px; margin-left: -9px; display: grid; place-items: center; cursor: pointer; z-index: 2; }
-.scrub .mk { display: block; width: 6px; height: 6px; border-radius: 50%; transition: transform var(--dur-fast) var(--ease-out); }
+.scrub .mkhit { position: absolute; top: 30px; width: 24px; height: 22px; margin-left: -12px; display: grid; place-items: center; cursor: pointer; z-index: 2; }
+.scrub .mk { display: block; width: 7px; height: 7px; border-radius: 50%; transition: transform var(--dur-fast) var(--ease-out); }
 .scrub .mkhit:hover .mk { transform: scale(1.5); }
 .scrub .mkhit.active .mk { transform: scale(1.6); box-shadow: 0 0 0 2px var(--wp-black), 0 0 0 3.5px var(--accent); }
 .scrub .rhit { position: absolute; height: 11px; display: flex; align-items: center; cursor: pointer; z-index: 1; }
@@ -436,7 +438,7 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 .scrub .rhit:hover .rbar { height: 5px; }
 .scrub .rhit.active .rbar { height: 5px; box-shadow: 0 0 0 1.5px var(--wp-black), 0 0 0 3px var(--accent); }
 .scrub .mk.done, .scrub .rbar.done { opacity: .35; }
-.scrub .hover { position: absolute; bottom: 34px; transform: translateX(-50%); padding: 3px 8px; border-radius: 8px; background: var(--fill-glass-strong); font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; box-shadow: var(--shadow-float); }
+.scrub .hover { position: absolute; top: -22px; transform: translateX(-50%); padding: 3px 8px; border-radius: 8px; background: var(--fill-glass-strong); font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; box-shadow: var(--shadow-float); }
 
 /* side panel */
 .side { width: 360px; flex: 0 0 360px; display: flex; flex-direction: column; min-height: 0; padding: 10px 10px 0 4px; }

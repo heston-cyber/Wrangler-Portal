@@ -27,6 +27,21 @@ export function Scrubber({ clock, frameCount, notes, sel, highlight, activeId, o
     const r = ref.current!.getBoundingClientRect();
     return Math.max(0, Math.min(n - 1, Math.floor(((clientX - r.left) / r.width) * n)));
   };
+  const LANE_TOP = 28; // px: below this, taps pick the nearest note mark instead of moving the playhead
+  // Picks the note whose mark is nearest the tap (within 24px), for fingers that land a little off.
+  const pickNear = (clientX: number) => {
+    const r = ref.current!.getBoundingClientRect();
+    const x = clientX - r.left;
+    const px = (f: number) => (f / n) * r.width;
+    let best: { id: string; d: number } | null = null;
+    for (const m of notes) {
+      if (m.inFrame === undefined || m.kind === "general") continue;
+      const a = px(m.inFrame), b = m.kind === "range" && m.outFrame !== undefined ? px(m.outFrame + 1) : px(m.inFrame + 0.5);
+      const d = m.kind === "range" ? (x < a ? a - x : x > b ? x - b : 0) : Math.abs(x - b);
+      if (!best || d < best.d) best = { id: m.id, d };
+    }
+    if (best && best.d <= 24) onPick(best.id);
+  };
   // Overlapping ranges get their own lanes so none hides another.
   const ranges = notes.filter((x) => x.kind === "range" && x.inFrame !== undefined && x.outFrame !== undefined).sort((a, b) => a.inFrame! - b.inFrame!);
   const laneEnds: number[] = [];
@@ -49,6 +64,8 @@ export function Scrubber({ clock, frameCount, notes, sel, highlight, activeId, o
       aria-valuetext={label(frame)}
       tabIndex={-1}
       onPointerDown={(e) => {
+        const top = ref.current!.getBoundingClientRect().top;
+        if (e.clientY - top > LANE_TOP) { e.preventDefault(); pickNear(e.clientX); return; }
         (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
         const f = at(e.clientX);
         setDrag({ start: f, range: e.shiftKey });
@@ -57,6 +74,7 @@ export function Scrubber({ clock, frameCount, notes, sel, highlight, activeId, o
       }}
       onPointerMove={(e) => {
         const f = at(e.clientX);
+        if (!drag && e.clientY - ref.current!.getBoundingClientRect().top > LANE_TOP) { setHover(null); return; }
         setHover(f);
         if (!drag) return;
         if (drag.range) onSelect(Math.min(drag.start, f), Math.max(drag.start, f));
@@ -65,6 +83,7 @@ export function Scrubber({ clock, frameCount, notes, sel, highlight, activeId, o
       onPointerUp={(e) => { setDrag(null); if (e.pointerType !== "mouse") setHover(null); }}
       onPointerLeave={() => { if (!drag) setHover(null); }}
     >
+      <div className="lane" aria-hidden />
       <div className="track" />
       <div className="fillbar" style={{ width: pct(frame + 0.5) }} />
       {highlight && <div className="hl" style={{ left: pct(highlight.a), width: `max(3px, ${pct(highlight.b - highlight.a + 1)})` }} />}
@@ -72,7 +91,7 @@ export function Scrubber({ clock, frameCount, notes, sel, highlight, activeId, o
       {ranges.map((x) => (
         <div key={x.id} className={`rhit${x.id === activeId ? " active" : ""}`} role="button" aria-label={`Range note ${label(x.inFrame!)} to ${label(x.outFrame!)}`}
           title={`${label(x.inFrame!)} → ${label(x.outFrame!)}${x.text ? ` · ${x.text.slice(0, 80)}` : ""}`}
-          style={{ left: pct(x.inFrame!), width: `max(8px, ${pct(x.outFrame! - x.inFrame! + 1)})`, top: 28 + 4 * (lanes.get(x.id) ?? 0) }}
+          style={{ left: pct(x.inFrame!), width: `max(8px, ${pct(x.outFrame! - x.inFrame! + 1)})`, top: 50 + 4 * (lanes.get(x.id) ?? 0) }}
           onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onPick(x.id); }}>
           <i className={`rbar${x.status === "done" ? " done" : ""}`} style={{ background: "var(--mk-range)" }} />
         </div>
