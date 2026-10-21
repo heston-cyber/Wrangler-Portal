@@ -58,7 +58,10 @@ export const timings = internalQuery({
   args: {},
   handler: async (ctx) => {
     const vs = await ctx.db.query("versions").collect();
+    const tr = new Map((await ctx.db.query("transcripts").collect()).map((t) => [t.versionId, t]));
     return vs.filter((x) => x.status === "ready").map((x) => ({
+      // Seconds from ready to the transcript finishing (only meaningful for a first, untouched run).
+      transcriptSec: tr.get(x._id)?.status === "done" && x.readyAt ? Math.round((tr.get(x._id)!.updatedAt - x.readyAt) / 1000) : null,
       n: x.number,
       src: x.dropboxPath ? "dropbox" : "browser",
       ext: (x.fileName.split(".").pop() ?? "").toLowerCase().slice(0, 5),
