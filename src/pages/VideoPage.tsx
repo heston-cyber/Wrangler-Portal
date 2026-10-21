@@ -406,7 +406,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     a.download = `${data.title.replace(/[^\w\- ]+/g, "").trim() || "markers"}_v${version.number}_markers.edl`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-    showToast("Markers downloaded. In Resolve: Timeline › Import › Timeline Markers from EDL");
+    showToast("Markers downloaded. In Resolve: right-click the timeline in the Media Pool › Timelines › Import › Timeline Markers from EDL");
   }
 
   const newVersion = () => fileRef.current?.click();

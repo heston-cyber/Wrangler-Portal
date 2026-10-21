@@ -51,7 +51,7 @@ const TOOLS = [
   },
   {
     name: "get_resolve_markers", title: "Get Resolve markers",
-    description: "Gets the notes of a version as DaVinci Resolve timeline markers: frame (from the render's first frame), timecode, duration in frames, colour (Blue = frame, Yellow = range, Green = whole video), name, note text and custom_data (the note id). Also returns the render's frame rate, start timecode and frame count, placement rules to follow, and an EDL of the same markers for File › Import › Timeline Markers from EDL. Defaults to open notes.",
+    description: "Gets the notes of a version as DaVinci Resolve timeline markers: frame (from the render's first frame), timecode, duration in frames, colour (Blue = frame, Yellow = range, Green = whole video), name, note text and custom_data (the note id). Also returns the render's frame rate, start timecode and frame count, placement rules to follow, and an EDL of the same markers (in Resolve: right-click the timeline in the Media Pool › Timelines › Import › Timeline Markers from EDL). Defaults to open notes.",
     inputSchema: { type: "object", properties: videoArgs, additionalProperties: false },
     annotations: { readOnlyHint: true, openWorldHint: false },
   },
