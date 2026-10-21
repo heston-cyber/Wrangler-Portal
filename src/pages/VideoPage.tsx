@@ -5,7 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useConvex, useMutation, useQuery } from "convex/react";
 import {
   ArrowUp, Brush, Check, Circle, Download, Ellipsis, Eye, Keyboard, Maximize, MoveUpRight, PanelRight, Pause, Pencil, Play,
-  Mic, Plus, SlidersHorizontal, Square, Timer, Undo2, Upload, Volume2, VolumeX, X,
+  ArrowRightFromLine, ArrowRightToLine, Crosshair, Film, Mic, Plus, SlidersHorizontal, Square, Timer, Undo2, Upload, Volume2, VolumeX, X,
 } from "lucide-react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
@@ -136,6 +136,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const [drawFrame, setDrawFrame] = useState<number | null>(null);
   const [text, setText] = useState("");
   const [posting, setPosting] = useState(false);
+  const playAfterPost = useRef(false); // space pressed while a note was still saving
   const textRef = useRef<HTMLTextAreaElement>(null);
 
   // Voice notes (Phase 3)
@@ -266,6 +267,9 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   async function post() {
     if (!version || posting || !ready) return;
     if (!text.trim() && shapes.length === 0 && !voiceDraft) { textRef.current?.focus(); return; }
+    // Let go of the note box straight away, so Space plays the video instead of typing a space.
+    textRef.current?.blur();
+    playAfterPost.current = false;
     setPosting(true);
     const v = player.videoRef.current!;
     try {
@@ -309,6 +313,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       setVoiceDraft(null); shapeTimes.current = [];
       setFocusId(id); setPanel((p) => p ?? "notes");
       showToast(stillProblem ? "Note added, but the still couldn't be saved." : "Note added");
+      if (playAfterPost.current) player.play();
     } catch (e) {
       showToast("Couldn't add the note: " + ((e as Error).message || "").replace(/^.*ConvexError: /, "").split("\n")[0]);
     } finally {
@@ -328,7 +333,8 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const n = nominal(fps);
       const k = e.key.toLowerCase();
-      if (k === " " || k === "k") { e.preventDefault(); player.toggle(); }
+      if ((k === " " || k === "k") && posting) { e.preventDefault(); playAfterPost.current = !playAfterPost.current; }
+      else if (k === " " || k === "k") { e.preventDefault(); player.toggle(); }
       else if (e.key === "ArrowLeft") { e.preventDefault(); void player.step(e.shiftKey ? -n : -1); }
       else if (e.key === "ArrowRight") { e.preventDefault(); void player.step(e.shiftKey ? n : 1); }
       else if (k === "j") { e.preventDefault(); void player.step(-n); }
@@ -506,6 +512,11 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                     New note{whole ? "" : sel ? " · Range" : " · Frame"}
                   </span>
                   <span className="right">
+                    <button className={`icon-btn tool${!whole && !sel ? " on" : ""}`} onClick={() => { setWhole(false); setSel(null); }} aria-label="This frame" title="This frame"><Crosshair size={17} /></button>
+                    <button className={`icon-btn tool${sel ? " on" : ""}`} onClick={setIn} aria-label="Range: start here (I)" title="Range: start here (I)"><ArrowRightFromLine size={17} /></button>
+                    <button className={`icon-btn tool${sel ? " on" : ""}`} onClick={setOut} aria-label="Range: end here (O)" title="Range: end here (O)"><ArrowRightToLine size={17} /></button>
+                    <button className={`icon-btn tool${whole ? " on" : ""}`} onClick={() => { setWhole(!whole); setSel(null); }} aria-label="Whole video" title="Whole video"><Film size={17} /></button>
+                    <span className="tsep" aria-hidden />
                     {canRecord() && (
                       <button className={`icon-btn tool${voice.recording ? " on rec" : ""}`} disabled={!!voiceBusy || voice.state === "starting" || voice.state === "stopping" || (!!voiceDraft && !voice.recording)}
                         onClick={() => void (voice.recording ? stopVoice() : startVoice())} aria-label={voice.recording ? "Stop recording" : "Record a voice note"} title={voice.recording ? "Stop recording" : voiceDraft ? "Post or discard this voice note first" : "Record a voice note"}>
@@ -516,18 +527,9 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                   </span>
                 </div>
                 <div className="rrow">
-                  <Menu side="top" label="Note on" trigger={(p) => (
-                    <button {...p} className="rbold jump" title="What this note is on: frame, range or whole video">
-                      {whole ? "Whole video" : sel ? <>{tc(sel.a)}<span className="out">→ {tc(sel.b)}</span></> : <AtFrame clock={player.clock}>{(f) => tc(shapes.length && drawFrame !== null ? drawFrame : f)}</AtFrame>}
-                    </button>
-                  )}>
-                    <MenuLabel>Note on</MenuLabel>
-                    <MenuItem checked={!whole && !sel} onSelect={() => { setWhole(false); setSel(null); }}>This frame</MenuItem>
-                    <MenuItem kbd="I" onSelect={setIn}>Range: start here</MenuItem>
-                    <MenuItem kbd="O" onSelect={setOut}>Range: end here</MenuItem>
-                    {sel && <MenuItem kbd="X" onSelect={() => setSel(null)}>Clear range</MenuItem>}
-                    <MenuItem checked={whole} onSelect={() => { setWhole(!whole); setSel(null); }}>Whole video</MenuItem>
-                  </Menu>
+                  <span className="rbold" title="What this note is on">
+                    {whole ? "Whole video" : sel ? <>{tc(sel.a)}<span className="out">→ {tc(sel.b)}</span></> : <AtFrame clock={player.clock}>{(f) => tc(shapes.length && drawFrame !== null ? drawFrame : f)}</AtFrame>}
+                  </span>
                   <span className="rtags">
                     {!whole && <span className="rtag">{sel ? `${sel.b - sel.a + 1} frames` : "1 frame"}</span>}
                     {shapes.length > 0 && <span className="rtag">Drawing</span>}
