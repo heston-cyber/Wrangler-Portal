@@ -381,13 +381,13 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 .drawhint { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); z-index: 3; }
 
 /* floating note box */
-.composer-zone { flex: 0 0 auto; display: grid; justify-items: center; gap: 8px; padding: 12px 0 12px; position: relative; z-index: 5; }
+.composer-zone { flex: 0 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 8px; padding: 12px 0 12px; position: relative; z-index: 5; }
 .composer {
   width: min(680px, 100%); display: flex; align-items: flex-end; gap: 6px; padding: 6px; border-radius: 22px;
   background: var(--fill-glass); backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass); box-shadow: var(--shadow-float);
 }
 .composer textarea {
-  flex: 1; min-width: 0; border: 0; background: transparent; resize: none; color: var(--text-primary);
+  flex: 1; min-width: 0; width: 0; border: 0; background: transparent; resize: none; color: var(--text-primary);
   padding: 7px 6px; height: 34px; max-height: 160px; line-height: 20px; font-size: 14px;
 }
 .composer textarea:focus { outline: none; }
@@ -495,7 +495,8 @@ button.tcpill:hover { background: var(--fill-chip-hover); }
   .stagewrap { flex: none; }
   .side { width: auto; flex: none; padding: 8px; }
   .side .sbody { overflow: visible; }
-  .transport { flex-wrap: wrap; position: sticky; bottom: 0; z-index: 20; background: var(--surface-band); padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+  .transport { flex-wrap: wrap; border-top: 0; padding: 4px 0 0; row-gap: 0; }
+  .transport .scrub { margin: 0 7px; }
   .transport .scrub { order: -1; flex-basis: 100%; }
   .hide-sm { display: none !important; }
 }
@@ -509,9 +510,4 @@ button.tcpill:hover { background: var(--fill-chip-hover); }
 /* Phones: 16px text in every field, or iPhone Safari zooms the page when you tap into it. */
 @media (max-width: 820px), (pointer: coarse) {
   input, textarea, select, .input, .composer textarea, .edit textarea.input { font-size: 16px !important; }
-}
-/* Phones: while you're typing a note, the play bar stops pinning itself over the note box. */
-@media (max-width: 820px) {
-  .review:has(.composer textarea:focus) .transport,
-  .review:has(.side textarea:focus) .transport { position: static; }
 }

@@ -280,6 +280,41 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const openCount = (notes ?? []).filter((n) => n.status === "open").length;
   const st = version ? statusChip(version.status, version.encodeProgress) : null;
 
+  // The play bar: along the bottom on desktop (like Flask); right under the picture on phones.
+  const transportBar = (
+        <div className="transport">
+          <button className="play" onClick={() => player.toggle()} disabled={!ready} aria-label={player.playing ? "Pause (Space)" : "Play (Space)"}>{player.playing ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}</button>
+          <button className="timebtn" onClick={() => { const m: TimeMode = timeMode === "tc" ? "frames" : timeMode === "frames" ? "clock" : "tc"; setTimeMode(m); writePref("wr.timeMode", m); }}
+            title="Switch between timecode, frames and minutes">
+            <AtFrame clock={player.clock}>{(f) => <>{timeMode === "frames" && <span className="of">fr</span>}{timeText(f)}<span className="of">/ {timeText(endFrame)}</span></>}</AtFrame>
+          </button>
+          {ready ? <Scrubber
+            clock={player.clock}
+            frameCount={frameCount || 1}
+            notes={(notes ?? []).map((n) => ({ id: n._id, kind: n.kind, inFrame: n.inFrame, outFrame: n.outFrame, status: n.status }))}
+            sel={sel}
+            highlight={hl}
+            onSeek={(f) => void player.seekToFrame(f)}
+            onSelect={(a, b) => { setWhole(false); setSel({ a, b }); }}
+            label={(f) => tc(f)}
+          /> : <div style={{ flex: 1 }} />}
+          <Menu side="top" align="end" label="Playback speed" trigger={(p) => <button {...p} className="speedbtn" title="Playback speed">{rate}×</button>}>
+            <MenuLabel>Speed</MenuLabel>
+            {SPEEDS.map((s) => <MenuItem key={s} checked={rate === s} onSelect={() => setRate(s)}>{s}×</MenuItem>)}
+          </Menu>
+          <button className="icon-btn hide-sm" onClick={() => setMuted(!muted)} aria-label={muted ? "Unmute" : "Mute"} title={muted ? "Unmute" : "Mute"}>{muted ? <VolumeX size={16} /> : <Volume2 size={16} />}</button>
+          <Menu side="top" align="end" label="View options" trigger={(p) => <button {...p} className="icon-btn" aria-label="View options" title="View options"><Eye size={16} /></button>}>
+            <MenuLabel>Picture</MenuLabel>
+            {mp4H > 0 && <MenuItem checked={quality === "file"} onSelect={() => setQuality("file")}>{mp4H}p file (exact frames)</MenuItem>}
+            <MenuItem checked={quality === "stream"} onSelect={() => setQuality("stream")}>Stream (adapts to connection)</MenuItem>
+            <MenuSep />
+            <MenuItem checked={showDrawings} onSelect={() => setShowDrawings(!showDrawings)}>Show note drawings</MenuItem>
+            <MenuItem icon={<Maximize size={16} />} kbd="F" onSelect={toggleFullscreen}>Full screen</MenuItem>
+            <MenuItem icon={<Keyboard size={16} />} kbd="?" onSelect={() => setDialog("keys")}>Keyboard shortcuts</MenuItem>
+          </Menu>
+        </div>
+  );
+
   return (
     <div className="review" ref={rootRef}>
       <TopBar right={
@@ -332,6 +367,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
               {player.error && <div className="stage-msg">{player.error}</div>}
             </div>
           </div>
+          {narrow && transportBar}
 
           {ready && (
             <div className="composer-zone">
@@ -410,37 +446,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
         )}
       </div>
 
-      <div className="transport">
-        <button className="play" onClick={() => player.toggle()} disabled={!ready} aria-label={player.playing ? "Pause (Space)" : "Play (Space)"}>{player.playing ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}</button>
-        <button className="timebtn" onClick={() => { const m: TimeMode = timeMode === "tc" ? "frames" : timeMode === "frames" ? "clock" : "tc"; setTimeMode(m); writePref("wr.timeMode", m); }}
-          title="Switch between timecode, frames and minutes">
-          <AtFrame clock={player.clock}>{(f) => <>{timeMode === "frames" && <span className="of">fr</span>}{timeText(f)}<span className="of">/ {timeText(endFrame)}</span></>}</AtFrame>
-        </button>
-        {ready ? <Scrubber
-          clock={player.clock}
-          frameCount={frameCount || 1}
-          notes={(notes ?? []).map((n) => ({ id: n._id, kind: n.kind, inFrame: n.inFrame, outFrame: n.outFrame, status: n.status }))}
-          sel={sel}
-          highlight={hl}
-          onSeek={(f) => void player.seekToFrame(f)}
-          onSelect={(a, b) => { setWhole(false); setSel({ a, b }); }}
-          label={(f) => tc(f)}
-        /> : <div style={{ flex: 1 }} />}
-        <Menu side="top" align="end" label="Playback speed" trigger={(p) => <button {...p} className="speedbtn" title="Playback speed">{rate}×</button>}>
-          <MenuLabel>Speed</MenuLabel>
-          {SPEEDS.map((s) => <MenuItem key={s} checked={rate === s} onSelect={() => setRate(s)}>{s}×</MenuItem>)}
-        </Menu>
-        <button className="icon-btn hide-sm" onClick={() => setMuted(!muted)} aria-label={muted ? "Unmute" : "Mute"} title={muted ? "Unmute" : "Mute"}>{muted ? <VolumeX size={16} /> : <Volume2 size={16} />}</button>
-        <Menu side="top" align="end" label="View options" trigger={(p) => <button {...p} className="icon-btn" aria-label="View options" title="View options"><Eye size={16} /></button>}>
-          <MenuLabel>Picture</MenuLabel>
-          {mp4H > 0 && <MenuItem checked={quality === "file"} onSelect={() => setQuality("file")}>{mp4H}p file (exact frames)</MenuItem>}
-          <MenuItem checked={quality === "stream"} onSelect={() => setQuality("stream")}>Stream (adapts to connection)</MenuItem>
-          <MenuSep />
-          <MenuItem checked={showDrawings} onSelect={() => setShowDrawings(!showDrawings)}>Show note drawings</MenuItem>
-          <MenuItem icon={<Maximize size={16} />} kbd="F" onSelect={toggleFullscreen}>Full screen</MenuItem>
-          <MenuItem icon={<Keyboard size={16} />} kbd="?" onSelect={() => setDialog("keys")}>Keyboard shortcuts</MenuItem>
-        </Menu>
-      </div>
+      {!narrow && transportBar}
 
       {dialog === "rename" && <RenameVideo videoId={data._id} title={data.title} onClose={() => setDialog(null)} />}
       {dialog === "starttc" && version && <StartTcDialog versionId={version._id} startTc={startTc} onClose={() => setDialog(null)} onSaved={() => showToast("Start timecode saved")} />}
