@@ -7,41 +7,83 @@ import type { Doc, Id } from "./_generated/dataModel";
 
 const clean = (s: string, max = 200) => s.trim().replace(/\s+/g, " ").slice(0, max);
 
-export const home = query({
-  args: {},
-  handler: async (ctx) => {
-    await requireMe(ctx);
-    const projects = await ctx.db.query("projects").collect();
-    const videos = await ctx.db.query("videos").collect();
-    const out = [];
-    for (const p of projects.sort((a, b) => b.createdAt - a.createdAt)) {
-      const vids = videos.filter((x) => x.projectId === p._id).sort((a, b) => b.updatedAt - a.updatedAt);
-      const vidsOut = [];
-      for (const vid of vids) {
-        const versions = await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect();
-        const latest = versions.sort((a, b) => b.number - a.number)[0] ?? null;
-        const notes = await ctx.db.query("notes").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect();
-        vidsOut.push({
-          _id: vid._id,
-          title: vid.title,
-          updatedAt: vid.updatedAt,
-          versionCount: versions.length,
-          latest: latest && { number: latest.number, status: latest.status, bunnyGuid: latest.bunnyGuid, encodeProgress: latest.encodeProgress ?? 0 },
-          openNotes: notes.filter((n) => n.status === "open" && n.versionId === latest?._id).length,
-        });
-      }
-      out.push({ _id: p._id, name: p.name, jobNumber: p.jobNumber ?? null, client: p.client ?? null, videos: vidsOut });
-    }
-    return out;
-  },
-});
-
 export const projectNames = query({
   args: {},
   handler: async (ctx) => {
     await requireMe(ctx);
     const projects = await ctx.db.query("projects").collect();
     return projects.sort((a, b) => b.createdAt - a.createdAt).map((p) => ({ _id: p._id, name: p.name }));
+  },
+});
+
+// One read for Home, Projects, the sidebar and search: every project and video with its latest version.
+export const overview = query({
+  args: {},
+  handler: async (ctx) => {
+    const me = await requireMe(ctx);
+    const projects = await ctx.db.query("projects").collect();
+    const videos = await ctx.db.query("videos").collect();
+    const opens = await ctx.db.query("opens").withIndex("by_user", (q) => q.eq("userId", me.userId)).collect();
+    const openedAt = new Map(opens.map((o) => [o.videoId as string, o.openedAt]));
+    const vidsOut = [];
+    for (const vid of videos) {
+      const versions = await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect();
+      const latest = versions.sort((a, b) => b.number - a.number)[0] ?? null;
+      const notes = await ctx.db.query("notes").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect();
+      vidsOut.push({
+        _id: vid._id,
+        projectId: vid.projectId,
+        title: vid.title,
+        createdAt: vid.createdAt,
+        updatedAt: vid.updatedAt,
+        lastOpenedAt: openedAt.get(vid._id) ?? null,
+        versionCount: versions.length,
+        noteCount: notes.length,
+        openNotes: latest ? notes.filter((n) => n.status === "open" && n.versionId === latest._id).length : 0,
+        latest: latest && {
+          number: latest.number, status: latest.status, bunnyGuid: latest.bunnyGuid, encodeProgress: latest.encodeProgress ?? 0,
+          frameCount: latest.frameCount ?? null, fpsNum: latest.fpsNum ?? 24000, fpsDen: latest.fpsDen ?? 1001,
+          startTimecode: latest.startTimecode, width: latest.width ?? null, height: latest.height ?? null,
+        },
+      });
+    }
+    return {
+      projects: projects.map((p) => ({
+        _id: p._id, name: p.name, jobNumber: p.jobNumber ?? null, client: p.client ?? null, createdAt: p.createdAt,
+        videoCount: videos.filter((x) => x.projectId === p._id).length,
+        updatedAt: Math.max(p.createdAt, ...videos.filter((x) => x.projectId === p._id).map((x) => x.updatedAt)),
+      })),
+      videos: vidsOut,
+    };
+  },
+});
+
+// Remembers that I opened a video (for "Last opened").
+export const markOpened = mutation({
+  args: { videoId: v.id("videos") },
+  handler: async (ctx, { videoId }) => {
+    const me = await requireMe(ctx);
+    const row = await ctx.db.query("opens").withIndex("by_user_video", (q) => q.eq("userId", me.userId).eq("videoId", videoId)).unique();
+    if (row) await ctx.db.patch(row._id, { openedAt: Date.now() });
+    else await ctx.db.insert("opens", { userId: me.userId, videoId, openedAt: Date.now() });
+  },
+});
+
+export const renameProject = mutation({
+  args: { projectId: v.id("projects"), name: v.string(), jobNumber: v.optional(v.string()) },
+  handler: async (ctx, a) => {
+    await requireMe(ctx);
+    const name = clean(a.name, 120);
+    if (!name) throw new ConvexError("Give the project a name.");
+    await ctx.db.patch(a.projectId, { name, jobNumber: a.jobNumber !== undefined ? clean(a.jobNumber, 40) || undefined : undefined });
+  },
+});
+
+export const setVersionDescription = mutation({
+  args: { versionId: v.id("versions"), description: v.string() },
+  handler: async (ctx, a) => {
+    await requireMe(ctx);
+    await ctx.db.patch(a.versionId, { description: a.description.trim().slice(0, 2000) || undefined });
   },
 });
 
@@ -91,11 +133,16 @@ export const video = query({
     if (!vid) return null;
     const project = await ctx.db.get(vid.projectId);
     const versions = await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", videoId)).collect();
+    const notes = await ctx.db.query("notes").withIndex("by_video", (q) => q.eq("videoId", videoId)).collect();
     return {
       _id: vid._id,
       title: vid.title,
       project: project && { _id: project._id, name: project.name, jobNumber: project.jobNumber ?? null },
-      versions: versions.sort((a, b) => a.number - b.number).map(publicVersion),
+      versions: versions.sort((a, b) => a.number - b.number).map((x) => ({
+        ...publicVersion(x),
+        noteCount: notes.filter((n) => n.versionId === x._id).length,
+        openCount: notes.filter((n) => n.versionId === x._id && n.status === "open").length,
+      })),
     };
   },
 });
@@ -117,6 +164,9 @@ export function publicVersion(x: Doc<"versions">) {
     mp4Heights: x.mp4Heights ?? [],
     encodeProgress: x.encodeProgress ?? 0,
     error: x.error ?? null,
+    description: x.description ?? null,
+    uploaderName: x.uploaderName ?? null,
+    fileSize: x.fileSize ?? null,
     createdAt: x.createdAt,
   };
 }
@@ -147,7 +197,7 @@ export const reportFrameCount = mutation({
 // ---- internal, used by uploads.ts ----
 
 export const insertVersion = internalMutation({
-  args: { videoId: v.id("videos"), bunnyGuid: v.string(), fileName: v.string(), fileSize: v.optional(v.number()) },
+  args: { videoId: v.id("videos"), bunnyGuid: v.string(), fileName: v.string(), fileSize: v.optional(v.number()), uploaderName: v.optional(v.string()) },
   handler: async (ctx, a) => {
     const existing = await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", a.videoId)).collect();
     const number = existing.reduce((m, x) => Math.max(m, x.number), 0) + 1;
@@ -159,6 +209,7 @@ export const insertVersion = internalMutation({
       fileName: a.fileName.slice(0, 300),
       fileSize: a.fileSize,
       startTimecode: "01:00:00:00",
+      uploaderName: a.uploaderName,
       createdAt: Date.now(),
     });
     await ctx.db.patch(a.videoId, { updatedAt: Date.now() });

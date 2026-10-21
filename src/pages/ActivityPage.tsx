@@ -1,0 +1,96 @@
+// Activity: uploads, new versions and notes, newest first. Notes from one sitting sit in one row of cards.
+import { useState } from "react";
+import { useQuery } from "convex/react";
+import { Activity, ArrowUpRight, Pencil, SlidersHorizontal } from "lucide-react";
+import { api } from "../../convex/_generated/api";
+import { TopBar } from "../shell/Shell";
+import { linkProps } from "../lib/router";
+import { Avatar, Menu, MenuItem, MenuLabel, Thumb } from "../ui/kit";
+import { ago, lengthText } from "../lib/format";
+import { frameTc } from "../../convex/lib/frames";
+
+export default function ActivityPage() {
+  const feed = useQuery(api.activity.feed, { limit: 100 });
+  const [show, setShow] = useState({ videos: true, versions: true, notes: true });
+  const [who, setWho] = useState<string | null>(null);
+  const people = [...new Set((feed ?? []).map((e) => e.actor).filter(Boolean) as string[])];
+  const rows = (feed ?? []).filter((e) =>
+    (e.type === "notes" ? show.notes : e.version.number === 1 ? show.videos : show.versions) && (!who || e.actor === who));
+
+  return (
+    <>
+      <TopBar right={
+        <Menu align="end" label="Show" trigger={(p) => <button {...p} className="icon-btn md" aria-label="Filter activity" title="Filter"><SlidersHorizontal size={16} /></button>}>
+          <MenuLabel>Show</MenuLabel>
+          <MenuItem keepOpen checked={show.videos} onSelect={() => setShow({ ...show, videos: !show.videos })}>New videos</MenuItem>
+          <MenuItem keepOpen checked={show.versions} onSelect={() => setShow({ ...show, versions: !show.versions })}>New versions</MenuItem>
+          <MenuItem keepOpen checked={show.notes} onSelect={() => setShow({ ...show, notes: !show.notes })}>Notes</MenuItem>
+        </Menu>
+      }>
+        <Activity size={15} color="var(--text-secondary)" /><span className="here">Activity</span>
+      </TopBar>
+      <div className="content">
+        <div className="toolbar">
+          <div className="tabs" role="tablist">
+            <button role="tab" className="tab" aria-selected={!who} onClick={() => setWho(null)}>All activity</button>
+            {people.map((p) => <button key={p} role="tab" className="tab" aria-selected={who === p} onClick={() => setWho(p)}><Avatar name={p} />{p}</button>)}
+          </div>
+        </div>
+        {feed === undefined ? <p className="caption" style={{ padding: "8px 24px" }}>Loading…</p>
+          : rows.length === 0 ? <div className="empty"><img src="/brand/spark-cream.png" alt="" /><span>Nothing here yet.</span></div>
+          : (
+            <div className="feed">
+              {rows.map((e, i) => {
+                const ver = e.version;
+                const fps = { num: ver.fpsNum, den: ver.fpsDen };
+                const href = `/v/${ver.videoId}?version=${ver.number}`;
+                return (
+                  <div className="event" key={i}>
+                    <div className="when">{ago(e.at)}</div>
+                    <div>
+                      <div className="ehead">
+                        <Avatar name={e.actor ?? "?"} />
+                        <b>{e.actor ?? "Someone"}</b>
+                        {e.type === "notes" ? <>left {e.notes.length} note{e.notes.length === 1 ? "" : "s"} on</> : ver.number > 1 ? <>added <span className="chip">v{ver.number}</span> of</> : <>added</>}
+                        <a className="v" {...linkProps(href)}><Thumb guid={ver.bunnyGuid} /> {ver.videoTitle}</a>
+                        {e.type === "notes" && <span className="chip">v{ver.number}</span>}
+                        {ver.projectName && <span className="secondary">· {ver.projectName}</span>}
+                      </div>
+                      <div className="ebody">
+                        {e.type === "notes" ? (
+                          <div className="ncards">
+                            {e.notes.map((n) => (
+                              <a key={n._id} className={`ncard${n.status === "done" ? " done" : ""}`} {...linkProps(`${href}&note=${n._id}`)}>
+                                <div className="nh">
+                                  <span className="tcpill">
+                                    <span className="dot" style={{ background: n.kind === "frame" ? "var(--mk-frame)" : n.kind === "range" ? "var(--mk-range)" : "var(--mk-video)" }} />
+                                    {n.kind === "general" ? "Whole video" : frameTc(n.inFrame!, ver.startTimecode, fps)}
+                                  </span>
+                                  {n.hasDrawing && <Pencil size={13} aria-label="Has a drawing" />}
+                                  {n.status === "done" && <span>Done</span>}
+                                  <ArrowUpRight size={14} style={{ marginLeft: "auto" }} />
+                                </div>
+                                {n.text ? <div className="nt">{n.text}</div> : <div className="nt secondary">Drawing</div>}
+                              </a>
+                            ))}
+                          </div>
+                        ) : (
+                          <a className="card" {...linkProps(href)}>
+                            <div className="media">
+                              <Thumb guid={ver.bunnyGuid} className="" />
+                              {lengthText(ver.frameCount, fps) && <span className="chip">{lengthText(ver.frameCount, fps)}</span>}
+                            </div>
+                            <div className="ct"><b>{ver.videoTitle}</b>{ver.number > 1 && <span className="chip">v{ver.number}</span>}</div>
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+      </div>
+    </>
+  );
+}

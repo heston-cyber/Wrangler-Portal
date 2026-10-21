@@ -20,13 +20,13 @@ const MAX_POLLS = 720; // 2 hours
 export const startUpload = action({
   args: { videoId: v.id("videos"), fileName: v.string(), fileSize: v.optional(v.number()) },
   handler: async (ctx, a): Promise<{ versionId: Id<"versions">; number: number; libraryId: string; videoId: string; expire: number; signature: string; endpoint: string }> => {
-    await ctx.runQuery(internal.users.assertAllowed, {});
+    const who: { name: string } = await ctx.runQuery(internal.users.assertAllowed, {});
     const { lib, key } = bunnyEnv();
     const title = a.fileName.slice(0, 200);
     const created = (await bunnyCall(`/library/${lib}/videos`, { method: "POST", body: JSON.stringify({ title }) })) as { guid?: string };
     if (!created.guid) throw new ConvexError("Bunny didn't create the video.");
     const { versionId, number }: { versionId: Id<"versions">; number: number } = await ctx.runMutation(internal.library.insertVersion, {
-      videoId: a.videoId, bunnyGuid: created.guid, fileName: a.fileName, fileSize: a.fileSize,
+      videoId: a.videoId, bunnyGuid: created.guid, fileName: a.fileName, fileSize: a.fileSize, uploaderName: who.name,
     });
     const expire = Math.floor(Date.now() / 1000) + 24 * 3600;
     const signature = await sha256Hex(`${lib}${key}${expire}${created.guid}`);

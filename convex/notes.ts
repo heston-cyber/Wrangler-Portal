@@ -71,6 +71,7 @@ export const create = mutation({
       createdAt: now,
       updatedAt: now,
     });
+    await ctx.db.patch(ver.videoId, { updatedAt: now });
     await ctx.scheduler.runAfter(NOTIFY_DELAY_MS, internal.slack.newNotes, { versionId: a.versionId });
     return id;
   },

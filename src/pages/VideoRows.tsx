@@ -1,0 +1,49 @@
+// Video list rows and grid cards, shared by Home and Projects.
+import type { FunctionReturnType } from "convex/server";
+import type { api } from "../../convex/_generated/api";
+import { linkProps } from "../lib/router";
+import { Thumb } from "../ui/kit";
+import { ago, lengthText, statusChip } from "../lib/format";
+
+export type Overview = FunctionReturnType<typeof api.library.overview>;
+export type VideoItem = Overview["videos"][number];
+
+const fpsOf = (x: VideoItem) => ({ num: x.latest?.fpsNum ?? 24000, den: x.latest?.fpsDen ?? 1001 });
+
+export function VideoRow({ x, meta, projectName }: { x: VideoItem; meta: React.ReactNode; projectName?: string }) {
+  const st = x.latest ? statusChip(x.latest.status, x.latest.encodeProgress) : { text: "No versions", tone: "" as const };
+  const len = x.latest ? lengthText(x.latest.frameCount, fpsOf(x)) : null;
+  return (
+    <a className="vrow" {...linkProps(`/v/${x._id}`)}>
+      <Thumb guid={x.latest?.bunnyGuid} />
+      <span className="t">
+        <b>{x.title}</b>
+        {x.latest && x.latest.number > 1 && <span className="chip">v{x.latest.number}</span>}
+        {st && <span className={`chip ${st.tone}`}>{st.text}</span>}
+        {projectName && <span className="secondary hide-sm" style={{ fontSize: 12.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{projectName}</span>}
+      </span>
+      <span className={`open${x.openNotes ? " has" : ""}`}>{x.openNotes ? `${x.openNotes} open` : ""}</span>
+      <span className="dur">{len && <span className="chip dur">{len}</span>}</span>
+      <span className="meta">{meta}</span>
+    </a>
+  );
+}
+
+export function VideoCard({ x, meta }: { x: VideoItem; meta: React.ReactNode }) {
+  const st = x.latest ? statusChip(x.latest.status, x.latest.encodeProgress) : { text: "No versions", tone: "" as const };
+  const len = x.latest ? lengthText(x.latest.frameCount, fpsOf(x)) : null;
+  return (
+    <a className="card" {...linkProps(`/v/${x._id}`)}>
+      <div className="media">
+        <Thumb guid={x.latest?.bunnyGuid} className="" />
+        {st && <span className={`chip st ${st.tone}`}>{st.text}</span>}
+        {len && <span className="chip">{len}</span>}
+      </div>
+      <div className="ct"><b>{x.title}</b>{x.latest && x.latest.number > 1 && <span className="chip">v{x.latest.number}</span>}</div>
+      <div className="cm">{x.openNotes ? <span style={{ color: "var(--text-primary)" }}>{x.openNotes} open · </span> : null}{meta}</div>
+    </a>
+  );
+}
+
+export const updatedMeta = (x: VideoItem) => <>Updated <em>{ago(x.updatedAt)}</em></>;
+export const openedMeta = (x: VideoItem) => x.lastOpenedAt ? <>Opened <em>{ago(x.lastOpenedAt)}</em></> : <>Not opened yet</>;

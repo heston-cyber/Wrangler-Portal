@@ -1,4 +1,6 @@
-import { query, internalQuery } from "./_generated/server";
+import { query, mutation, internalQuery } from "./_generated/server";
+import { v, ConvexError } from "convex/values";
+import { requireMe } from "./lib/access";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { allowedEmails } from "./auth";
 
@@ -26,5 +28,16 @@ export const assertAllowed = internalQuery({
     if (!allowedEmails().includes(email)) throw new Error("Not allowed.");
     const name = (user?.name as string | undefined) || "Heston";
     return { userId, name };
+  },
+});
+
+// The name shown on notes and replies.
+export const setName = mutation({
+  args: { name: v.string() },
+  handler: async (ctx, { name }) => {
+    const me = await requireMe(ctx);
+    const n = name.trim().replace(/\s+/g, " ").slice(0, 60);
+    if (!n) throw new ConvexError("Enter a name.");
+    await ctx.db.patch(me.userId, { name: n });
   },
 });

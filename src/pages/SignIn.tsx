@@ -28,9 +28,11 @@ export default function SignIn() {
 
   return (
     <div className="signin">
+      <img className="watermark" src="/brand/spark-watermark.png" alt="" aria-hidden />
       <form onSubmit={onSubmit}>
-        <p className="label">Wrangler Productions</p>
-        <h1>Wrangler Review</h1>
+        <img className="logo" src="/brand/wordmark-cream.png" alt="Wrangler Productions" />
+        <span className="eyebrow">Wrangler Review</span>
+        <h1 className="title" style={{ marginBottom: 6 }}>{flow === "signIn" ? "Sign in." : "Set a password."}</h1>
         <label className="field">
           <span className="label">Email</span>
           <input className="input" id="email" name="email" type="email" autoComplete="email" required />
@@ -41,8 +43,8 @@ export default function SignIn() {
         </label>
         <input name="flow" type="hidden" value={flow} />
         {error && <p className="error" role="alert">{error}</p>}
-        <button className="btn solid" type="submit" disabled={busy}>{busy ? "One moment…" : flow === "signIn" ? "Sign in" : "Create password"}</button>
-        <button className="btn" type="button" onClick={() => { setFlow(flow === "signIn" ? "signUp" : "signIn"); setError(null); }}>
+        <button className="btn primary lg" type="submit" disabled={busy}>{busy ? "One moment…" : flow === "signIn" ? "Sign in" : "Create password"}</button>
+        <button className="btn ghost" type="button" onClick={() => { setFlow(flow === "signIn" ? "signUp" : "signIn"); setError(null); }}>
           {flow === "signIn" ? "Create your password" : "I already have one"}
         </button>
       </form>

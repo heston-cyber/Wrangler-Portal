@@ -118,6 +118,9 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
   }
 
   const seekChain = useRef<Promise<number>>(Promise.resolve(0));
+  // Where queued jumps are headed, so quick key presses add up instead of all starting from the same frame.
+  const pending = useRef<{ target: number; id: number } | null>(null);
+  const seq = useRef(0);
   async function seekToFrameNow(n: number) {
     const v = videoRef.current;
     if (!v) return n;
@@ -136,7 +139,12 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
   }
   // Jumps run one after another so fast key repeats don't fight.
   function seekToFrame(n: number) {
-    seekChain.current = seekChain.current.then(() => seekToFrameNow(n), () => seekToFrameNow(n));
+    const max = (frameCount ?? Infinity) - 1;
+    const target = Math.max(0, Math.min(n, max));
+    const id = ++seq.current;
+    pending.current = { target, id };
+    const run = () => seekToFrameNow(target);
+    seekChain.current = seekChain.current.then(run, run).finally(() => { if (pending.current?.id === id) pending.current = null; });
     return seekChain.current;
   }
 
@@ -150,7 +158,7 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
     playing,
     error,
     seekToFrame,
-    step: (d: number) => seekToFrame(clock.get() + d),
+    step: (d: number) => seekToFrame((pending.current?.target ?? clock.get()) + d),
     play: () => videoRef.current?.play().catch(() => {}),
     pause: () => videoRef.current?.pause(),
     toggle: () => { const v = videoRef.current; if (!v) return; if (v.paused) v.play().catch(() => {}); else v.pause(); },

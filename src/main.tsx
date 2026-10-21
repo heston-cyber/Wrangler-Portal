@@ -3,6 +3,10 @@ import ReactDOM from "react-dom/client";
 import { ConvexReactClient } from "convex/react";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import App from "./App";
+import "@fontsource/saira/latin-400.css";
+import "@fontsource/saira/latin-500.css";
+import "@fontsource/saira/latin-600.css";
+import "@fontsource/saira/latin-700.css";
 import "./styles.css";
 
 const url = import.meta.env.VITE_CONVEX_URL as string | undefined;

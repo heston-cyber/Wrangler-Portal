@@ -27,8 +27,8 @@ async function setup() {
 describe("access", () => {
   test("signed-out and not-allowed people get nothing", async () => {
     const { t, other } = await setup();
-    await expect(t.query(api.library.home, {})).rejects.toThrow(/Sign in/);
-    await expect(other.query(api.library.home, {})).rejects.toThrow(/Not allowed/);
+    await expect(t.query(api.library.overview, {})).rejects.toThrow(/Sign in/);
+    await expect(other.query(api.library.overview, {})).rejects.toThrow(/Not allowed/);
     const who = await other.query(api.users.me, {});
     expect(who?.allowed).toBe(false);
   });
@@ -85,5 +85,52 @@ describe("notes", () => {
     await me.mutation(api.library.setStartTimecode, { versionId, startTimecode: "00:59:58:00" });
     const vid = await me.query(api.library.video, { videoId });
     expect(vid!.versions.map((x) => [x.number, x.startTimecode])).toEqual([[1, "00:59:58:00"], [2, "01:00:00:00"]]);
+  });
+});
+
+describe("library pages", () => {
+  async function library() {
+    const s = await setup();
+    const projectId = await s.me.mutation(api.library.createProject, { name: "SSM26", jobNumber: "26122" });
+    const a = await s.me.mutation(api.library.createVideo, { projectId, title: "Spirit Intro" });
+    const b = await s.me.mutation(api.library.createVideo, { projectId, title: "Recap" });
+    const v1 = await s.t.mutation(internal.library.insertVersion, { videoId: a, bunnyGuid: "ga1", fileName: "intro.mov", uploaderName: "Heston" });
+    const v2 = await s.t.mutation(internal.library.insertVersion, { videoId: a, bunnyGuid: "ga2", fileName: "intro_v2.mov", uploaderName: "Heston" });
+    return { ...s, projectId, a, b, v1, v2 };
+  }
+
+  test("overview lists every video with its latest version, open notes and when I opened it", async () => {
+    const { me, a, b, v2, other } = await library();
+    await me.mutation(api.notes.create, { versionId: v2.versionId, kind: "frame", inFrame: 10, text: "Fix" });
+    await me.mutation(api.library.markOpened, { videoId: a });
+    const o = await me.query(api.library.overview, {});
+    expect(o.projects.map((p) => [p.name, p.jobNumber, p.videoCount])).toEqual([["SSM26", "26122", 2]]);
+    const intro = o.videos.find((x) => x._id === a)!;
+    expect([intro.latest?.number, intro.versionCount, intro.openNotes, intro.noteCount]).toEqual([2, 2, 1, 1]);
+    expect(intro.lastOpenedAt).toBeTypeOf("number");
+    expect(o.videos.find((x) => x._id === b)!.lastOpenedAt).toBeNull();
+    await expect(other.query(api.library.overview, {})).rejects.toThrow(/Not allowed/);
+  });
+
+  test("activity: one entry per upload, notes from one sitting grouped", async () => {
+    const { me, v1, v2 } = await library();
+    await me.mutation(api.notes.create, { versionId: v1.versionId, kind: "frame", inFrame: 40, text: "B" });
+    await me.mutation(api.notes.create, { versionId: v1.versionId, kind: "frame", inFrame: 5, text: "A" });
+    await me.mutation(api.notes.create, { versionId: v2.versionId, kind: "general", text: "Whole thing" });
+    const feed = await me.query(api.activity.feed, {});
+    const kinds = feed.map((e) => (e.type === "version" ? `version v${e.version.number}` : `notes v${e.version.number} x${e.notes.length}`));
+    expect(kinds.sort()).toEqual(["notes v1 x2", "notes v2 x1", "version v1", "version v2"].sort());
+    const sitting = feed.find((e) => e.type === "notes" && e.version.number === 1);
+    expect(sitting && sitting.type === "notes" && sitting.notes.map((n) => n.text)).toEqual(["A", "B"]);
+  });
+
+  test("version description and display name", async () => {
+    const { me, a, v2 } = await library();
+    await me.mutation(api.library.setVersionDescription, { versionId: v2.versionId, description: "  Tighter open, new music  " });
+    const vid = await me.query(api.library.video, { videoId: a });
+    expect(vid!.versions[1].description).toBe("Tighter open, new music");
+    await me.mutation(api.users.setName, { name: "Heston Hill" });
+    expect((await me.query(api.users.me, {}))?.name).toBe("Heston Hill");
+    await expect(me.mutation(api.users.setName, { name: "   " })).rejects.toThrow(/Enter a name/);
   });
 });

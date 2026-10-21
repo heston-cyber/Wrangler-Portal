@@ -40,6 +40,8 @@ export default defineSchema({
     encodeProgress: v.optional(v.number()),
     pollCount: v.optional(v.number()),
     error: v.optional(v.string()),
+    description: v.optional(v.string()), // what changed in this version
+    uploaderName: v.optional(v.string()),
     createdAt: v.number(),
     readyAt: v.optional(v.number()),
   })
@@ -76,6 +78,15 @@ export default defineSchema({
     authorId: v.optional(v.id("users")),
     createdAt: v.number(),
   }).index("by_note", ["noteId"]),
+
+  // When each person last opened each video (Home's "Last opened", the sidebar list).
+  opens: defineTable({
+    userId: v.id("users"),
+    videoId: v.id("videos"),
+    openedAt: v.number(),
+  })
+    .index("by_user", ["userId", "openedAt"])
+    .index("by_user_video", ["userId", "videoId"]),
 
   // Stills kept in Convex storage until Bunny Storage is set up.
   stillFiles: defineTable({
