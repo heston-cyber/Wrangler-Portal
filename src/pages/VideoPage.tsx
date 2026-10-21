@@ -5,7 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useConvex, useMutation, useQuery } from "convex/react";
 import {
   ArrowUp, Brush, Check, Circle, Download, Ellipsis, Eye, Keyboard, Maximize, MoveUpRight, PanelRight, Pause, Pencil, Play,
-  ArrowRightFromLine, ArrowRightToLine, Crosshair, Film, Mic, Plus, SlidersHorizontal, Square, Timer, Undo2, Upload, Volume2, VolumeX, X,
+  Crosshair, Film, Mic, Plus, SlidersHorizontal, Square, Timer, Undo2, Upload, Volume2, VolumeX, X,
 } from "lucide-react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
@@ -50,6 +50,19 @@ export default function VideoPage({ videoId, versionNumber, noteId }: { videoId:
 type VideoData = NonNullable<FunctionReturnType<typeof api.library.video>>;
 type Version = VideoData["versions"][number];
 type TimeMode = "tc" | "frames" | "clock";
+
+// Range in and out marks: an editor's bracket with a chevron pointing into the range. "Out" is "in" mirrored, so they match in size.
+function InOutIcon({ side, size = 17 }: { side: "in" | "out"; size?: number }) {
+  return (
+    <svg className="lucide" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <g transform={side === "out" ? "translate(24 0) scale(-1 1)" : undefined}>
+        <path d="M9 4H5v16h4" />
+        <path d="M12 8l4 4-4 4" />
+        <path d="M16 12H9" />
+      </g>
+    </svg>
+  );
+}
 
 // Re-renders only its own children on every frame, not the whole page.
 function AtFrame({ clock, children }: { clock: FrameClock; children: (frame: number) => React.ReactNode }) {
@@ -527,8 +540,8 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                   </span>
                   <span className="right">
                     <button className={`icon-btn tool${!whole && !sel ? " on" : ""}`} onClick={() => { setWhole(false); setSel(null); }} aria-label="This frame" title="This frame"><Crosshair size={17} /></button>
-                    <button className={`icon-btn tool${sel ? " on" : ""}`} onClick={setIn} aria-label="Range: start here (I)" title="Range: start here (I)"><ArrowRightFromLine size={17} /></button>
-                    <button className={`icon-btn tool${sel ? " on" : ""}`} onClick={setOut} aria-label="Range: end here (O)" title="Range: end here (O)"><ArrowRightToLine size={17} /></button>
+                    <button className={`icon-btn tool${sel ? " on" : ""}`} onClick={setIn} aria-label="Range: start here (I)" title="Range: start here (I)"><InOutIcon side="in" /></button>
+                    <button className={`icon-btn tool${sel ? " on" : ""}`} onClick={setOut} aria-label="Range: end here (O)" title="Range: end here (O)"><InOutIcon side="out" /></button>
                     <button className={`icon-btn tool${whole ? " on" : ""}`} onClick={() => { setWhole(!whole); setSel(null); }} aria-label="Whole video" title="Whole video"><Film size={17} /></button>
                     <span className="tsep" aria-hidden />
                     {canRecord() && !DEMO && (
