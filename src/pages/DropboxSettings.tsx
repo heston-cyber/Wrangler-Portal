@@ -87,7 +87,7 @@ export function DropboxSettings({ show }: { show: (m: string) => void }) {
               <span className="pl">
                 <code className="mono">{f.path.split("/").filter(Boolean).join(" › ")}</code>
                 <span className={`secondary busyline${f.status === "failed" ? " error" : ""}`} style={{ fontSize: 12.5 }}>
-                  {(f.status === "waiting" || f.status === "importing") && <Spinner />}{STATUS[f.status] ?? f.status}{f.status === "imported" && f.versionNumber ? ` as v${f.versionNumber}` : ""}
+                  {(f.status === "waiting" || f.status === "importing") && <Spinner />}{STATUS[f.status] ?? f.status}{f.status === "imported" ? (f.versionNumber ? ` as v${f.versionNumber}` : " · its version was deleted on the site") : ""}
                   {f.reason && (f.status === "skipped" || f.status === "failed") ? ` · ${f.reason}` : ""} · {ago(f.at)}
                 </span>
               </span>

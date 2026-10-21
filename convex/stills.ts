@@ -3,6 +3,7 @@
 import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
+import { bunnyCall, bunnyEnv } from "./bunny";
 
 const MAX_BYTES = 4_000_000;
 
@@ -76,5 +77,30 @@ export const upload = action({
     const url = await ctx.storage.getUrl(storageId);
     if (!url) throw new ConvexError("Couldn't save the still.");
     return url;
+  },
+});
+
+// After a version is deleted: removes its Bunny Stream video (when nothing else uses it) and its stills.
+// Only touches files on our own stills CDN / storage zone.
+export const cleanup = internalAction({
+  args: { bunnyGuid: v.union(v.string(), v.null()), stillUrls: v.array(v.string()) },
+  handler: async (_ctx, { bunnyGuid, stillUrls }) => {
+    const out = { video: "kept", stills: 0 };
+    if (bunnyGuid) {
+      const { lib } = bunnyEnv();
+      await bunnyCall(`/library/${lib}/videos/${encodeURIComponent(bunnyGuid)}`, { method: "DELETE" }).then(() => { out.video = "deleted"; }).catch(() => { out.video = "already gone"; });
+    }
+    const bs = bunnyStorage();
+    if (bs) {
+      for (const u of stillUrls) {
+        const prefix = `https://${bs.cdn}/`;
+        if (!u.startsWith(prefix)) continue;
+        const path = u.slice(prefix.length);
+        if (!/^stills\/[\w/.-]+$/.test(path)) continue;
+        const res = await fetch(`https://${bs.host}/${bs.zone}/${path}`, { method: "DELETE", headers: { AccessKey: bs.password } });
+        if (res.ok || res.status === 404) out.stills++;
+      }
+    }
+    return out;
   },
 });

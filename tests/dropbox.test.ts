@@ -340,3 +340,36 @@ describe("get_transcript", () => {
     expect((await call({ video: "spirit intro" })).structuredContent.note).toMatch(/still being made/);
   });
 });
+
+describe("deleting a version", () => {
+  test("notes, replies and transcript go; other versions keep their numbers; shared Bunny videos and stills are kept", async () => {
+    const { t, me } = await setup();
+    const projectId = await me.mutation(api.library.createProject, { name: "P" });
+    const videoId = await me.mutation(api.library.createVideo, { projectId, title: "V" });
+    const v1 = (await t.mutation(internal.library.insertVersion, { videoId, bunnyGuid: "g1", fileName: "a.mp4" })).versionId;
+    const v2 = (await t.mutation(internal.library.insertVersion, { videoId, bunnyGuid: "g2", fileName: "b.mp4" })).versionId;
+    const v3 = (await t.mutation(internal.library.insertVersion, { videoId, bunnyGuid: "g2", fileName: "copy.mp4" })).versionId; // shares g2
+    const n = await me.mutation(api.notes.create, { versionId: v2, kind: "frame", inFrame: 5, text: "x", still: "https://cdn.example/stills/a.jpg" });
+    await me.mutation(api.notes.create, { versionId: v3, kind: "frame", inFrame: 5, text: "copy", still: "https://cdn.example/stills/a.jpg" });
+    await me.mutation(api.notes.reply, { noteId: n as never, text: "r" });
+    await t.run(async (ctx) => {
+      const storageId = await ctx.storage.store(new Blob(["{}"]));
+      await ctx.db.insert("transcripts", { versionId: v2, status: "done", storageId, attempts: 1, updatedAt: 0 });
+    });
+    expect(await me.mutation(api.library.deleteVersion, { versionId: v2 })).toEqual({ deleted: 2 });
+    const left = await t.run(async (ctx) => ({
+      versions: (await ctx.db.query("versions").collect()).map((x) => x.number),
+      notes: (await ctx.db.query("notes").collect()).map((x) => x.text),
+      replies: (await ctx.db.query("replies").collect()).length,
+      transcripts: (await ctx.db.query("transcripts").collect()).length,
+      cleanup: (await ctx.db.system.query("_scheduled_functions").collect()).filter((s) => s.name.includes("cleanup")).map((s) => s.args[0]),
+    }));
+    expect(left).toEqual({ versions: [1, 3], notes: ["copy"], replies: 0, transcripts: 0, cleanup: [{ bunnyGuid: null, stillUrls: [] }] });
+    // Deleting the last one using g2 does remove the Bunny video. Numbers carry on from the highest left, so the next one is v2.
+    await me.mutation(api.library.deleteVersion, { versionId: v3 });
+    const sched = await t.run(async (ctx) => (await ctx.db.system.query("_scheduled_functions").collect()).filter((s) => s.name.includes("cleanup")).map((s) => s.args[0]));
+    expect(sched[1]).toEqual({ bunnyGuid: "g2", stillUrls: ["https://cdn.example/stills/a.jpg"] });
+    expect((await t.mutation(internal.library.insertVersion, { videoId, bunnyGuid: "g4", fileName: "d.mp4" })).number).toBe(2);
+    void v1;
+  });
+});

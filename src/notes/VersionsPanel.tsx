@@ -1,13 +1,13 @@
 // The Versions tab: every version of the video, newest first, with what changed and its notes.
 import { useState } from "react";
 import { useMutation } from "convex/react";
-import { ArrowUpRight, Film } from "lucide-react";
+import { ArrowUpRight, Ellipsis, Film, Pencil, Trash2, X } from "lucide-react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import { navigate } from "../lib/router";
 import { ago, sizeText, statusChip, transcriptChip, uploadText } from "../lib/format";
 import type { UploadState } from "../lib/uploads";
-import { Spinner } from "../ui/kit";
+import { Menu, MenuItem, Modal, Spinner } from "../ui/kit";
 
 type VideoData = NonNullable<FunctionReturnType<typeof api.library.video>>;
 export type Version = VideoData["versions"][number];
@@ -31,6 +31,9 @@ export function VersionsList({ videoId, versions, current, uploads }: { videoId:
 
 function VersionItem({ videoId, v, current }: { videoId: string; v: Version; current: boolean }) {
   const save = useMutation(api.library.setVersionDescription);
+  const remove = useMutation(api.library.deleteVersion);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(v.description ?? "");
   const st = statusChip(v.status, v.encodeProgress);
@@ -41,7 +44,13 @@ function VersionItem({ videoId, v, current }: { videoId: string; v: Version; cur
     <div className={`vcard rect${current ? " current" : ""}`}>
       <div className="rrow">
         <span className="rlabel">Version {v.number}{v.uploaderName ? ` · ${v.uploaderName}` : ""} · {ago(v.createdAt)}</span>
-        {current && <span className="right"><span className="viewing">Viewing</span></span>}
+        <span className="right">
+          {current && <span className="viewing">Viewing</span>}
+          <Menu align="end" label={`Version ${v.number} options`} trigger={(p) => <button {...p} className="icon-btn" aria-label={`Version ${v.number} options`}><Ellipsis size={15} /></button>}>
+            <MenuItem icon={<Pencil size={16} />} onSelect={() => setEditing(true)}>Edit what changed</MenuItem>
+            <MenuItem icon={<Trash2 size={16} />} danger onSelect={() => setConfirming(true)}>Delete version</MenuItem>
+          </Menu>
+        </span>
       </div>
       <div className="rbold" title={v.fileName}>v{v.number}</div>
       <div className="rtags">
@@ -60,6 +69,27 @@ function VersionItem({ videoId, v, current }: { videoId: string; v: Version; cur
         <div className={`desc${v.description ? "" : " ph"}`} role="button" tabIndex={0} onClick={() => setEditing(true)} onKeyDown={(e) => { if (e.key === "Enter") setEditing(true); }}>
           {v.description || "Add a note about what changed"}
         </div>
+      )}
+      {confirming && (
+        <Modal onClose={() => setConfirming(false)} label={`Delete version ${v.number}`} width={480}>
+          <div style={{ display: "grid", gap: 18 }}>
+            <div className="dhead">
+              <h2 className="headline">Delete v{v.number}? <span className="rest">This can't be undone.</span></h2>
+              <button className="icon-btn" onClick={() => setConfirming(false)} aria-label="Close"><X size={18} /></button>
+            </div>
+            <p className="caption" style={{ margin: 0, lineHeight: 1.5 }}>
+              {v.noteCount ? `Its ${v.noteCount} ${v.noteCount === 1 ? "note" : "notes"}, drawings and transcript are deleted with it.` : "Its transcript is deleted with it."} The other versions keep their numbers, and the original file{v.dropboxPath ? " in Dropbox" : ""} isn't touched.
+            </p>
+            <div className="dfoot">
+              <button className="btn" onClick={() => setConfirming(false)}>Cancel</button>
+              <button className="btn primary" disabled={busy} onClick={async () => {
+                setBusy(true);
+                try { await remove({ versionId: v._id }); setConfirming(false); if (current) navigate(`/v/${videoId}`); }
+                finally { setBusy(false); }
+              }}><Trash2 size={15} />{busy ? "Deleting…" : `Delete v${v.number}`}</button>
+            </div>
+          </div>
+        </Modal>
       )}
       {(v.status === "failed" || !current) && (
         <div className="vf">
