@@ -634,3 +634,21 @@ export const folderShape = internalAction({
     return { connected: true, accountType: acct?.account_type?.[".tag"] ?? null, team: Boolean(acct?.team), rootIsTeamSpace: acct?.root_info?.[".tag"] ?? null, entries };
   },
 });
+
+// For the CI check: drop rows and Dropbox-made versions with ids and times only (no names), to trace an import.
+export const debugTrace = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const t = (x?: number) => (x ? new Date(x).toISOString().slice(11, 19) : null);
+    const files = (await ctx.db.query("dropFiles").collect()).map((f) => ({
+      id: f._id.slice(-6), status: f.status, rev: f.rev, created: t(f._creationTime), firstSeen: t(f.firstSeenAt), lastChange: t(f.lastChangeAt), imported: t(f.importedAt), version: f.versionId?.slice(-6) ?? null, sizeMB: Math.round(f.size / 1e5) / 10,
+    }));
+    const versions = (await ctx.db.query("versions").collect()).filter((x) => x.dropboxPath).map((x) => ({
+      id: x._id.slice(-6), number: x.number, video: x.videoId.slice(-6), guid: x.bunnyGuid.slice(0, 8), created: t(x.createdAt), status: x.status,
+    }));
+    const scheduled = (await ctx.db.system.query("_scheduled_functions").order("desc").take(60))
+      .filter((s) => s.name.includes("importFile") || s.name.includes("dropbox:sync"))
+      .map((s) => ({ name: s.name, at: t(s.scheduledTime), state: s.state.kind, args: s.name.includes("importFile") ? String((s.args[0] as { fileId?: string })?.fileId ?? "").slice(-6) : null }));
+    return { files, versions, scheduled };
+  },
+});
