@@ -1,7 +1,7 @@
 // Activity: uploads, new versions and notes, newest first. Notes from one sitting sit in one row of cards.
 import { useState } from "react";
 import { useQuery } from "convex/react";
-import { Activity, ArrowUpRight, Pencil, SlidersHorizontal } from "lucide-react";
+import { Activity, ArrowUpRight, SlidersHorizontal } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import { TopBar } from "../shell/Shell";
 import { linkProps } from "../lib/router";
@@ -60,27 +60,39 @@ export default function ActivityPage() {
                         {e.type === "notes" ? (
                           <div className="ncards">
                             {e.notes.map((n) => (
-                              <a key={n._id} className={`ncard${n.status === "done" ? " done" : ""}`} {...linkProps(`${href}&note=${n._id}`)}>
-                                <div className="nh">
-                                  <span className="tcpill">
+                              <a key={n._id} className={`ncard rect${n.status === "done" ? " done" : ""}`} {...linkProps(`${href}&note=${n._id}`)}>
+                                <div className="rrow">
+                                  <span className="rlabel">
                                     <span className="dot" style={{ background: n.kind === "frame" ? "var(--mk-frame)" : n.kind === "range" ? "var(--mk-range)" : "var(--mk-video)" }} />
-                                    {n.kind === "general" ? "Whole video" : frameTc(n.inFrame!, ver.startTimecode, fps)}
+                                    {n.kind === "frame" ? "Frame" : n.kind === "range" ? "Range" : "Note"}
                                   </span>
-                                  {n.hasDrawing && <Pencil size={13} aria-label="Has a drawing" />}
-                                  {n.status === "done" && <span>Done</span>}
-                                  <ArrowUpRight size={14} style={{ marginLeft: "auto" }} />
+                                  <span className="right"><ArrowUpRight size={14} /></span>
                                 </div>
-                                {n.text ? <div className="nt">{n.text}</div> : <div className="nt secondary">Drawing</div>}
+                                <div className="rbold">
+                                  {n.kind === "general" ? "Whole video" : frameTc(n.inFrame!, ver.startTimecode, fps)}
+                                  {n.kind === "range" && n.outFrame !== null && <span className="out">→ {frameTc(n.outFrame, ver.startTimecode, fps)}</span>}
+                                </div>
+                                {(n.hasDrawing || n.status === "done") && (
+                                  <div className="rtags">
+                                    {n.hasDrawing && <span className="rtag">Drawing</span>}
+                                    {n.status === "done" && <span className="rtag">Done</span>}
+                                  </div>
+                                )}
+                                {n.text ? <div className="nt">{n.text}</div> : <div className="nt secondary">Drawing only</div>}
                               </a>
                             ))}
                           </div>
                         ) : (
-                          <a className="card" {...linkProps(href)}>
-                            <div className="media">
-                              <Thumb guid={ver.bunnyGuid} className="" />
-                              {lengthText(ver.frameCount, fps) && <span className="chip">{lengthText(ver.frameCount, fps)}</span>}
+                          <a className="card rect" {...linkProps(href)}>
+                            <div className="media"><Thumb guid={ver.bunnyGuid} className="" /></div>
+                            <div className="cbody">
+                              <span className="rlabel">{ver.number > 1 ? `New version · v${ver.number}` : "New video"}</span>
+                              <div className="rbold ctitle">{ver.videoTitle}</div>
+                              <div className="rtags">
+                                {lengthText(ver.frameCount, fps) && <span className="rtag">{lengthText(ver.frameCount, fps)}</span>}
+                                {ver.projectName && <span className="rtag">{ver.projectName}</span>}
+                              </div>
                             </div>
-                            <div className="ct"><b>{ver.videoTitle}</b>{ver.number > 1 && <span className="chip">v{ver.number}</span>}</div>
                           </a>
                         )}
                       </div>

@@ -29,18 +29,24 @@ export function VideoRow({ x, meta, projectName }: { x: VideoItem; meta: React.R
   );
 }
 
-export function VideoCard({ x, meta }: { x: VideoItem; meta: React.ReactNode }) {
+export function VideoCard({ x, meta, projectName }: { x: VideoItem; meta: React.ReactNode; projectName?: string }) {
   const st = x.latest ? statusChip(x.latest.status, x.latest.encodeProgress) : { text: "No versions", tone: "" as const };
   const len = x.latest ? lengthText(x.latest.frameCount, fpsOf(x)) : null;
   return (
-    <a className="card" {...linkProps(`/v/${x._id}`)}>
+    <a className="card rect" {...linkProps(`/v/${x._id}`)}>
       <div className="media">
         <Thumb guid={x.latest?.bunnyGuid} className="" />
-        {st && <span className={`chip st ${st.tone}`}>{st.text}</span>}
-        {len && <span className="chip">{len}</span>}
       </div>
-      <div className="ct"><b>{x.title}</b>{x.latest && x.latest.number > 1 && <span className="chip">v{x.latest.number}</span>}</div>
-      <div className="cm">{x.openNotes ? <span style={{ color: "var(--text-primary)" }}>{x.openNotes} open · </span> : null}{meta}</div>
+      <div className="cbody">
+        <span className="rlabel">{projectName ? `${projectName} · ` : ""}{x.latest ? `v${x.latest.number}` : "No versions"}</span>
+        <div className="rbold ctitle">{x.title}</div>
+        <div className="rtags">
+          {len && <span className="rtag">{len}</span>}
+          {st && <span className="rtag">{st.text}</span>}
+          {x.openNotes > 0 && <span className="rtag">{x.openNotes} open</span>}
+        </div>
+        <div className="cm">{meta}</div>
+      </div>
     </a>
   );
 }

@@ -132,7 +132,7 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
               </div>
               {!collapsed.has(g.key) && (
                 g.items.length === 0 ? <p className="caption" style={{ padding: "8px 28px" }}>No videos yet.</p>
-                  : view === "grid" ? <div className="grid">{g.items.map((x) => <VideoCard key={x._id} x={x} meta={meta(x)} />)}</div>
+                  : view === "grid" ? <div className="grid">{g.items.map((x) => <VideoCard key={x._id} x={x} meta={meta(x)} projectName={group !== "project" && !projectId ? pmap.get(x.projectId)?.name : undefined} />)}</div>
                   : <div style={{ paddingTop: 4 }}>{g.items.map((x) => <VideoRow key={x._id} x={x} meta={meta(x)} projectName={group !== "project" && !projectId ? pmap.get(x.projectId)?.name : undefined} />)}</div>
               )}
             </section>

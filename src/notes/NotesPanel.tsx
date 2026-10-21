@@ -5,13 +5,14 @@ import { Check, Copy, Ellipsis, Pencil, Reply, Trash2 } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import type { Doc } from "../../convex/_generated/dataModel";
 import type { FrameClock } from "../player/useFramePlayer";
-import { Avatar, Menu, MenuItem, MenuSep } from "../ui/kit";
+import { Menu, MenuItem, MenuSep } from "../ui/kit";
 import { ago } from "../lib/format";
 
 export type NoteRow = Doc<"notes"> & { replies: Doc<"replies">[] };
 export type NoteFilter = { status: "open" | "done" | "all"; kinds: { frame: boolean; range: boolean; general: boolean }; sort: "timecode" | "newest" };
 export const defaultFilter: NoteFilter = { status: "all", kinds: { frame: true, range: true, general: true }, sort: "timecode" };
 
+export const kindName = (k: NoteRow["kind"]) => (k === "frame" ? "Frame" : k === "range" ? "Range" : "Whole video");
 export const kindColor = (k: NoteRow["kind"]) => (k === "frame" ? "var(--mk-frame)" : k === "range" ? "var(--mk-range)" : "var(--mk-video)");
 
 // Re-render only when the set of notes under the playhead changes, not on every frame.
@@ -87,18 +88,26 @@ function NoteCard({ n, here, focused, focusTick, tc, onJump, onCopied }: { n: No
   return (
     <article ref={ref} className={`note${focused ? " focus" : here ? " here" : ""}${n.status === "done" ? " done" : ""}`}
       onClick={(e) => { if (n.kind !== "general" && !(e.target as HTMLElement).closest("button, a, textarea, input, form")) onJump(n); }}>
-      <div className="nhead">
-        <Avatar name={n.authorName} />
-        <span className="who">{n.authorName}</span>
-        <span className="ago">{ago(n.createdAt)}</span>
-        <span className="right">
-          {n.drawing ? <Pencil size={13} aria-label="Has a drawing" /> : null}
-          {n.kind === "general"
-            ? <span className="tcpill"><span className="dot" style={{ background: kindColor(n.kind) }} />{when}</span>
-            : <button className="tcpill" onClick={() => onJump(n)} title="Jump here"><span className="dot" style={{ background: kindColor(n.kind) }} />{when}</button>}
-        </span>
+      {/* Altar II card pattern: red label, bold value, grey outlined detail boxes */}
+      <div className="rlabel">
+        <span className="dot" style={{ background: kindColor(n.kind) }} />
+        {n.kind === "general" ? "Note" : kindName(n.kind)} · {n.authorName} · {ago(n.createdAt)}
       </div>
-      {len > 0 && <span className="secondary" style={{ fontSize: 12, marginTop: -4 }}>{len} frames</span>}
+      {n.kind === "general"
+        ? <div className="rbold">Whole video</div>
+        : (
+          <button className="rbold jump" onClick={() => onJump(n)} title="Jump here">
+            {tc(n.inFrame!)}
+            {n.kind === "range" && <span className="out">→ {tc(n.outFrame!)}</span>}
+          </button>
+        )}
+      <div className="rtags">
+        {n.kind === "frame" && <span className="rtag">1 frame</span>}
+        {n.kind === "range" && <span className="rtag">{len} frames</span>}
+        {n.drawing ? <span className="rtag">Drawing</span> : null}
+        {n.replies.length > 0 && <span className="rtag">{n.replies.length} {n.replies.length === 1 ? "reply" : "replies"}</span>}
+        {n.status === "done" && <span className="rtag">Done</span>}
+      </div>
 
       {editing ? (
         <div className="edit">

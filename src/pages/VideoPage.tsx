@@ -10,7 +10,7 @@ import {
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import { frameTc, frameDuration, isValidTc, nominal, type Fps } from "../../convex/lib/frames";
+import { frameTc, frameDuration, fpsValue, isValidTc, nominal, type Fps } from "../../convex/lib/frames";
 import { BUNNY_CDN_HOST } from "../config";
 import { linkProps, navigate } from "../lib/router";
 import { isVideoFile, startUpload, useUploads } from "../lib/uploads";
@@ -291,26 +291,14 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const openCount = (notes ?? []).filter((n) => n.status === "open").length;
   const st = version ? statusChip(version.status, version.encodeProgress) : null;
 
-  // The play bar: along the bottom on desktop (like Flask); right under the picture on phones.
+  // The timeline box (Altar II card pattern: red label, bold value, grey detail boxes).
+  // Along the bottom on desktop (like Flask); right under the picture on phones.
+  const cycleTime = () => { const m: TimeMode = timeMode === "tc" ? "frames" : timeMode === "frames" ? "clock" : "tc"; setTimeMode(m); writePref("wr.timeMode", m); };
   const transportBar = (
-        <div className="transport">
-          <button className="play" onClick={() => player.toggle()} disabled={!ready} aria-label={player.playing ? "Pause (Space)" : "Play (Space)"}>{player.playing ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}</button>
-          <button className="timebtn" onClick={() => { const m: TimeMode = timeMode === "tc" ? "frames" : timeMode === "frames" ? "clock" : "tc"; setTimeMode(m); writePref("wr.timeMode", m); }}
-            title="Switch between timecode, frames and minutes">
-            <AtFrame clock={player.clock}>{(f) => <>{timeMode === "frames" && <span className="of">fr</span>}{timeText(f)}<span className="of">/ {timeText(endFrame)}</span></>}</AtFrame>
-          </button>
-          {ready ? <Scrubber
-            clock={player.clock}
-            frameCount={frameCount || 1}
-            notes={(notes ?? []).map((n) => ({ id: n._id, kind: n.kind, inFrame: n.inFrame, outFrame: n.outFrame, status: n.status, text: n.text }))}
-            sel={sel}
-            highlight={hl}
-            activeId={focusId}
-            onPick={pick}
-            onSeek={(f) => { setFocusId(null); setHl(null); void player.seekToFrame(f); }}
-            onSelect={(a, b) => { setWhole(false); setSel({ a, b }); }}
-            label={(f) => tc(f)}
-          /> : <div style={{ flex: 1 }} />}
+    <div className="transport rect">
+      <div className="rrow">
+        <span className="rlabel">Timeline{version ? ` · v${version.number}` : ""} · {fpsValue(fps).toFixed(3)} fps</span>
+        <span className="right">
           <Menu side="top" align="end" label="Playback speed" trigger={(p) => <button {...p} className="speedbtn" title="Playback speed">{rate}×</button>}>
             <MenuLabel>Speed</MenuLabel>
             {SPEEDS.map((s) => <MenuItem key={s} checked={rate === s} onSelect={() => setRate(s)}>{s}×</MenuItem>)}
@@ -325,7 +313,33 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
             <MenuItem icon={<Maximize size={16} />} kbd="F" onSelect={toggleFullscreen}>Full screen</MenuItem>
             <MenuItem icon={<Keyboard size={16} />} kbd="?" onSelect={() => setDialog("keys")}>Keyboard shortcuts</MenuItem>
           </Menu>
-        </div>
+        </span>
+      </div>
+      <div className="rrow">
+        <button className="play" onClick={() => player.toggle()} disabled={!ready} aria-label={player.playing ? "Pause (Space)" : "Play (Space)"}>{player.playing ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}</button>
+        <button className="rbold jump" onClick={cycleTime} title="Switch between timecode, frames and minutes">
+          <AtFrame clock={player.clock}>{(f) => <>{timeMode === "frames" ? `Fr ${f}` : timeText(f)}</>}</AtFrame>
+        </button>
+        <span className="rtags">
+          <AtFrame clock={player.clock}>{(f) => <span className="rtag">{timeMode === "frames" ? tc(f) : `Fr ${f}`}</span>}</AtFrame>
+          <span className="rtag hide-xs">End {timeMode === "frames" ? endFrame : timeText(endFrame)}</span>
+        </span>
+      </div>
+      {ready ? (
+        <Scrubber
+          clock={player.clock}
+          frameCount={frameCount || 1}
+          notes={(notes ?? []).map((n) => ({ id: n._id, kind: n.kind, inFrame: n.inFrame, outFrame: n.outFrame, status: n.status, text: n.text }))}
+          sel={sel}
+          highlight={hl}
+          activeId={focusId}
+          onPick={pick}
+          onSeek={(f) => { setFocusId(null); setHl(null); void player.seekToFrame(f); }}
+          onSelect={(a, b) => { setWhole(false); setSel({ a, b }); }}
+          label={(f) => tc(f)}
+        />
+      ) : null}
+    </div>
   );
 
   return (
@@ -397,25 +411,40 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                   <button className="btn sm" onClick={() => setDrawing(false)}><Check size={14} />Done</button>
                 </div>
               )}
-              <div className="composer">
-                <button className={`icon-btn tool${drawing ? " on" : ""}`} onClick={() => { player.pause(); setDrawing(!drawing); }} aria-label="Draw (D)" title="Draw (D)"><Pencil size={17} /></button>
-                <Menu side="top" label="Note on" trigger={(p) => (
-                  <button {...p} className="target" title="What this note is on">
+              <div className="composer rect">
+                <div className="rrow">
+                  <span className="rlabel">
                     <span className="dot" style={{ background: whole ? "var(--mk-video)" : sel ? "var(--mk-range)" : "var(--mk-frame)" }} />
-                    {whole ? "Whole video" : sel ? <>{tc(sel.a)} → {tc(sel.b)}</> : <AtFrame clock={player.clock}>{(f) => tc(shapes.length && drawFrame !== null ? drawFrame : f)}</AtFrame>}
-                  </button>
-                )}>
-                  <MenuLabel>Note on</MenuLabel>
-                  <MenuItem checked={!whole && !sel} onSelect={() => { setWhole(false); setSel(null); }}>This frame</MenuItem>
-                  <MenuItem kbd="I" onSelect={setIn}>Range: start here</MenuItem>
-                  <MenuItem kbd="O" onSelect={setOut}>Range: end here</MenuItem>
-                  {sel && <MenuItem kbd="X" onSelect={() => setSel(null)}>Clear range</MenuItem>}
-                  <MenuItem checked={whole} onSelect={() => { setWhole(!whole); setSel(null); }}>Whole video</MenuItem>
-                </Menu>
-                <textarea ref={textRef} rows={1} value={text} onChange={(e) => setText(e.target.value)} onFocus={() => player.pause()}
-                  placeholder={drawing ? "Add words to your drawing…" : "Leave a note…"} aria-label="Note"
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void post(); } }} />
-                <button className="send" onClick={() => void post()} disabled={posting || (!text.trim() && !shapes.length)} aria-label="Add note" title="Add note (Enter)"><ArrowUp size={18} /></button>
+                    New note{whole ? "" : sel ? " · Range" : " · Frame"}
+                  </span>
+                  <span className="right">
+                    <button className={`icon-btn tool${drawing ? " on" : ""}`} onClick={() => { player.pause(); setDrawing(!drawing); }} aria-label="Draw (D)" title="Draw (D)"><Pencil size={17} /></button>
+                  </span>
+                </div>
+                <div className="rrow">
+                  <Menu side="top" label="Note on" trigger={(p) => (
+                    <button {...p} className="rbold jump" title="What this note is on: frame, range or whole video">
+                      {whole ? "Whole video" : sel ? <>{tc(sel.a)}<span className="out">→ {tc(sel.b)}</span></> : <AtFrame clock={player.clock}>{(f) => tc(shapes.length && drawFrame !== null ? drawFrame : f)}</AtFrame>}
+                    </button>
+                  )}>
+                    <MenuLabel>Note on</MenuLabel>
+                    <MenuItem checked={!whole && !sel} onSelect={() => { setWhole(false); setSel(null); }}>This frame</MenuItem>
+                    <MenuItem kbd="I" onSelect={setIn}>Range: start here</MenuItem>
+                    <MenuItem kbd="O" onSelect={setOut}>Range: end here</MenuItem>
+                    {sel && <MenuItem kbd="X" onSelect={() => setSel(null)}>Clear range</MenuItem>}
+                    <MenuItem checked={whole} onSelect={() => { setWhole(!whole); setSel(null); }}>Whole video</MenuItem>
+                  </Menu>
+                  <span className="rtags">
+                    {!whole && <span className="rtag">{sel ? `${sel.b - sel.a + 1} frames` : "1 frame"}</span>}
+                    {shapes.length > 0 && <span className="rtag">Drawing</span>}
+                  </span>
+                </div>
+                <div className="cinput">
+                  <textarea ref={textRef} rows={1} value={text} onChange={(e) => setText(e.target.value)} onFocus={() => player.pause()}
+                    placeholder={drawing ? "Add words to your drawing…" : "Leave a note…"} aria-label="Note"
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void post(); } }} />
+                  <button className="send" onClick={() => void post()} disabled={posting || (!text.trim() && !shapes.length)} aria-label="Add note" title="Add note (Enter)"><ArrowUp size={18} /></button>
+                </div>
               </div>
             </div>
           )}
