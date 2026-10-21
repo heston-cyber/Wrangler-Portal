@@ -47,7 +47,13 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
   const playingNow = useRef(false);
   const lastMedia = useRef<number | null>(null);
   const FD = frameDuration(fps);
-  const frameOf = (t: number) => Math.max(0, Math.round(t / FD));
+  // Where the first frame sits on the source's timeline. 0 for Bunny's MP4 copies; about 0.021 s on Bunny's streams,
+  // whose picture starts one AAC block after the sound (found Oct 21). At 24 fps that's just over half a frame, which
+  // made stream frame numbers read one high and exact jumps ping-pong between the frames either side.
+  // Measured from the first frame each time a source loads; every frame number and jump is relative to it.
+  const offset = useRef(0);
+  const offsetReady = useRef<Promise<void>>(Promise.resolve());
+  const frameOf = (t: number) => Math.max(0, Math.round((t - offset.current) / FD));
   const hasRVFC = typeof HTMLVideoElement !== "undefined" && "requestVideoFrameCallback" in HTMLVideoElement.prototype;
 
   // The scrub copy: downloaded in the background, shown over the picture only while dragging.
@@ -87,6 +93,21 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
     playingNow.current = false;
     lastMedia.current = null;
     clock.set(0);
+    offset.current = 0;
+    let measured = false;
+    let resolveOffset: () => void = () => {};
+    offsetReady.current = new Promise<void>((r) => { resolveOffset = r; });
+    const settleOffset = (o: number) => { if (measured) return; measured = true; offset.current = o; resolveOffset(); };
+    const offsetTimer = setTimeout(() => settleOffset(0), 3000);
+    const onLoadedData = () => {
+      if (!hasRVFC) { settleOffset(0); return; }
+      v.requestVideoFrameCallback((_n, md) => {
+        // Only trust it if this really is the first frame (nothing has moved the video yet).
+        settleOffset(md.mediaTime >= 0 && md.mediaTime < FD && v.currentTime < FD ? md.mediaTime : 0);
+        clock.set(frameOf(md.mediaTime));
+      });
+    };
+    v.addEventListener("loadeddata", onLoadedData);
     let hls: Hls | null = null;
     v.crossOrigin = "anonymous";
     const isHls = /\.m3u8(\?|$)/.test(src);
@@ -127,6 +148,9 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
     else v.addEventListener("timeupdate", onTime);
     return () => {
       alive = false;
+      clearTimeout(offsetTimer);
+      settleOffset(0); // don't leave a queued jump waiting on a source that's gone
+      v.removeEventListener("loadeddata", onLoadedData);
       if (hasRVFC) v.cancelVideoFrameCallback(handle);
       v.removeEventListener("timeupdate", onTime);
       v.removeEventListener("loadedmetadata", onMeta);
@@ -168,15 +192,29 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
     const max = (frameCount ?? Infinity) - 1;
     const target = Math.max(0, Math.min(n, max));
     if (!v.paused) v.pause();
+    await offsetReady.current;
     if (clock.get() === target && lastMedia.current !== null) return target;
-    let t = (target + 0.5) * FD + bias.current;
+    let t = (target + 0.5) * FD + offset.current + bias.current;
     let landed = await seekTime(t);
     const path = [landed];
-    for (let i = 0; i < 3 && landed !== target; i++) {
-      t -= (landed - target) * FD * 0.6;
+    // A landing far off (e.g. a stream not seekable yet, right after switching to it) is retried as is,
+    // never "corrected" from: correcting from it threw the picture hundreds of frames either way.
+    if (Math.abs(landed - target) > 2) {
+      await new Promise((r) => setTimeout(r, 250));
       landed = await seekTime(t);
       path.push(landed);
-      if (landed === target) bias.current = t - (target + 0.5) * FD;
+    }
+    // Nudge toward the target, halving the step after an overshoot so it can't ping-pong between the frames either side.
+    let step = 0.6;
+    let lastSign = 0;
+    for (let i = 0; i < 4 && landed !== target && Math.abs(landed - target) <= 2; i++) {
+      const sign = Math.sign(landed - target);
+      if (lastSign && sign !== lastSign) step /= 2;
+      lastSign = sign;
+      t -= (landed - target) * FD * step;
+      landed = await seekTime(t);
+      path.push(landed);
+      if (landed === target) bias.current = t - (target + 0.5) * FD - offset.current;
     }
     // Jumps that needed correcting (the picture visibly steps between frames) are reported, for diagnosing devices remotely.
     if (path.length > 1) seekReports.current.push({ target, path, bias: Math.round(bias.current * 1e4) / 1e4, at: Date.now() });
@@ -215,10 +253,11 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
         const el = px ?? videoRef.current;
         if (!el) break;
         const p = nextFrame(400, el);
-        el.currentTime = Math.max(0, (target + 0.5) * FD + (px ? 0 : bias.current));
+        // The scrub copy is an MP4 (first frame at 0); the main source may be a stream with its offset.
+        el.currentTime = Math.max(0, (target + 0.5) * FD + (px ? 0 : offset.current + bias.current));
         const md = await p;
         if (md) {
-          clock.set(frameOf(md.mediaTime));
+          clock.set(px ? Math.max(0, Math.round(md.mediaTime / FD)) : frameOf(md.mediaTime));
           // The full file isn't on this frame yet, so the exact jump on letting go must not skip itself.
           lastMedia.current = px ? null : md.mediaTime;
         }
