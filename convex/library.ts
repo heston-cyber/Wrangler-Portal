@@ -72,12 +72,18 @@ export const markOpened = mutation({
 });
 
 export const renameProject = mutation({
-  args: { projectId: v.id("projects"), name: v.string(), jobNumber: v.optional(v.string()) },
+  args: { projectId: v.id("projects"), name: v.string(), jobNumber: v.optional(v.string()), client: v.optional(v.string()) },
   handler: async (ctx, a) => {
     await requireMe(ctx);
     const name = clean(a.name, 120);
     if (!name) throw new ConvexError("Give the project a name.");
-    await ctx.db.patch(a.projectId, { name, jobNumber: a.jobNumber !== undefined ? clean(a.jobNumber, 40) || undefined : undefined });
+    const p = await ctx.db.get(a.projectId);
+    await ctx.db.patch(a.projectId, {
+      name,
+      jobNumber: a.jobNumber !== undefined ? clean(a.jobNumber, 40) || undefined : undefined,
+      // Leaving client out keeps what's there; an empty string clears it.
+      client: a.client !== undefined ? clean(a.client, 120) || undefined : p?.client,
+    });
   },
 });
 

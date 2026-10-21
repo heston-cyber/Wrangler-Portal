@@ -10,7 +10,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { requireMe } from "./lib/access";
 import { bunnyCall, bunnyEnv } from "./bunny";
 import { httpRangeReader, mp4HasIndex } from "./lib/mp4";
-import { directLink, placeFor, projectMatches, splitJob } from "./lib/dropboxPath";
+import { directLink, pickProject, placeFor, splitJob } from "./lib/dropboxPath";
 
 const API = "https://api.dropboxapi.com/2";
 const SETTLE_MS = 60_000; // a file must sit unchanged this long before we look at it
@@ -246,6 +246,21 @@ export const recordFiles = internalMutation({
   },
 });
 
+// A file (or folder) was deleted or moved away: anything still waiting under that path won't be imported.
+// Versions already made stay; the review site never deletes anything because of Dropbox.
+export const recordRemoved = internalMutation({
+  args: { pathsLower: v.array(v.string()) },
+  handler: async (ctx, { pathsLower }) => {
+    for (const status of ["waiting", "importing"] as const) {
+      for (const f of await ctx.db.query("dropFiles").withIndex("by_status", (q) => q.eq("status", status)).collect()) {
+        if (pathsLower.some((p) => f.pathLower === p || f.pathLower.startsWith(p + "/"))) {
+          await ctx.db.patch(f._id, { status: "skipped", reason: "Removed from Dropbox before it was imported.", lastChangeAt: Date.now() });
+        }
+      }
+    }
+  },
+});
+
 export const dueFiles = internalQuery({
   args: { now: v.number() },
   handler: async (ctx, { now }) => {
@@ -282,6 +297,8 @@ export const sync = internalAction({
         const files = (r.entries ?? []).filter((e: any) => e[".tag"] === "file")
           .map((e: any) => ({ pathLower: e.path_lower, pathDisplay: e.path_display, rev: e.rev, size: e.size }));
         if (files.length) changes += await ctx.runMutation(internal.dropbox.recordFiles, { files });
+        const gone = (r.entries ?? []).filter((e: any) => e[".tag"] === "deleted").map((e: any) => e.path_lower as string);
+        if (gone.length) await ctx.runMutation(internal.dropbox.recordRemoved, { pathsLower: gone });
         cursor = r.cursor;
         if (!r.has_more) break;
         r = await dbx(ctx, "/files/list_folder/continue", { cursor });
@@ -359,14 +376,16 @@ export const patchFile = internalMutation({
 
 // Finds the project and video for /<Project>/<Video>/, making them if they're new.
 export const findOrCreateTarget = internalMutation({
-  args: { project: v.string(), video: v.string() },
+  args: { client: v.optional(v.string()), project: v.string(), video: v.string() },
   handler: async (ctx, a) => {
     const now = Date.now();
     const projects = await ctx.db.query("projects").collect();
-    let project = projects.find((p) => projectMatches(a.project, p));
+    const picked = pickProject(projects, a.project, a.client);
+    let project = picked?.project;
+    if (picked?.setClient && a.client) await ctx.db.patch(picked.project._id, { client: a.client.trim() });
     if (!project) {
       const { jobNumber, name } = splitJob(a.project);
-      const id = await ctx.db.insert("projects", { name, ...(jobNumber ? { jobNumber } : {}), createdAt: now });
+      const id = await ctx.db.insert("projects", { name, ...(jobNumber ? { jobNumber } : {}), ...(a.client ? { client: a.client.trim() } : {}), createdAt: now });
       project = (await ctx.db.get(id))!;
     }
     const videos = await ctx.db.query("videos").withIndex("by_project", (q) => q.eq("projectId", project!._id)).collect();
@@ -451,7 +470,7 @@ export const importFile = internalAction({
           return { result: "not finished yet" };
         }
       }
-      const target = await ctx.runMutation(internal.dropbox.findOrCreateTarget, { project: place.project, video: place.video });
+      const target = await ctx.runMutation(internal.dropbox.findOrCreateTarget, { client: place.client, project: place.project, video: place.video });
       link = await shareLink(ctx, f.pathLower);
       const { lib } = bunnyEnv();
       const tag = `wr-import-${fileId}`;
@@ -474,6 +493,10 @@ export const importFile = internalAction({
       return { result: "imported" };
     } catch (e) {
       if (link?.shared) await revokeUrl(ctx, link.url).catch(() => null);
+      if (e instanceof DropboxError && e.status === 409 && /not_found/.test(e.summary)) {
+        await ctx.runMutation(internal.dropbox.patchFile, { fileId, patch: { status: "skipped", reason: "Removed from Dropbox before it was imported." } });
+        return { result: "removed before import" };
+      }
       await ctx.runMutation(internal.dropbox.patchFile, { fileId, patch: { status: "failed", reason: errText(e) } });
       return { result: `failed: ${errText(e)}` };
     }

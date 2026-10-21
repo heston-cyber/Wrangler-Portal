@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { api, internal } from "../convex/_generated/api";
 import schema from "../convex/schema";
-import { directLink, placeFor, projectMatches, splitJob } from "../convex/lib/dropboxPath";
+import { directLink, pickProject, placeFor, projectMatches, splitJob } from "../convex/lib/dropboxPath";
 import { buildTranscript, secondsToFrame, toFrameWords, toSegments } from "../convex/lib/transcript";
 import { dropboxSignatureOk } from "../convex/dropbox";
 
@@ -38,7 +38,9 @@ describe("drop folder rule", () => {
     expect(placeFor("/26122 Spirit Days/Spirit Intro/SpiritIntro_v4.mov")).toMatchObject({ ok: true, project: "26122 Spirit Days", video: "Spirit Intro", fileName: "SpiritIntro_v4.mov", checkIndex: true });
     expect(placeFor("/26122 Spirit Days/Spirit Intro/clip.mxf")).toMatchObject({ ok: true, checkIndex: false });
     expect(placeFor("/loose.mp4")).toMatchObject({ ok: false });
-    expect(placeFor("/A/B/C/deep.mp4")).toMatchObject({ ok: false });
+    expect(placeFor("/ICG/26122 Spirit Days/Spirit Intro/v5.mov")).toMatchObject({ ok: true, client: "ICG", project: "26122 Spirit Days", video: "Spirit Intro", fileName: "v5.mov" });
+    expect(placeFor("/26122 Spirit Days/Spirit Intro/v5.mov")).not.toHaveProperty("client");
+    expect(placeFor("/A/B/C/D/too-deep.mp4")).toMatchObject({ ok: false });
     expect(placeFor("/A/B/notes.txt")).toMatchObject({ ok: false, ignore: true });
     expect(placeFor("/A/B/.DS_Store")).toMatchObject({ ok: false, ignore: true });
     expect(placeFor("/A/B/render.mp4.part")).toMatchObject({ ok: false, ignore: true });
@@ -123,6 +125,18 @@ describe("noticing files", () => {
     expect(await t.query(internal.dropbox.dueFiles, { now: Date.now() + 61_000 })).toHaveLength(1);
   });
 
+  test("a client folder files the project under that client, and keeps same-named projects of other clients apart", () => {
+    const ps = [
+      { name: "Social", client: "ICG" },
+      { name: "Social", client: "Floor Trader" },
+      { name: "Spirit Days", jobNumber: "26122" },
+    ];
+    expect(pickProject(ps, "Social", "floor trader")).toEqual({ project: ps[1], setClient: false });
+    expect(pickProject(ps, "26122 Spirit Days", "ICG")).toEqual({ project: ps[2], setClient: true });
+    expect(pickProject(ps, "Social", "UTT")).toBeNull();
+    expect(pickProject(ps, "Spirit Days")).toEqual({ project: ps[2], setClient: false });
+  });
+
   test("folders find the existing project and video, or make them", async () => {
     const { t, me } = await setup();
     const projectId = await me.mutation(api.library.createProject, { name: "Spirit Days", jobNumber: "26122" });
@@ -132,6 +146,19 @@ describe("noticing files", () => {
     const b = await t.mutation(internal.dropbox.findOrCreateTarget, { project: "26130 Floor Trader", video: "Backrooms Teaser" });
     const made = await t.run(async (ctx) => ({ p: await ctx.db.get(b.projectId), v: await ctx.db.get(b.videoId) }));
     expect([made.p?.name, made.p?.jobNumber, made.v?.title]).toEqual(["Floor Trader", "26130", "Backrooms Teaser"]);
+    // With a client folder: the existing Spirit Days project gets filed under ICG; a new one is made with its client.
+    const c = await t.mutation(internal.dropbox.findOrCreateTarget, { client: "ICG", project: "26122 Spirit Days", video: "Spirit Intro" });
+    expect(c).toEqual({ projectId, videoId });
+    expect((await t.run((ctx) => ctx.db.get(projectId)))!.client).toBe("ICG");
+    const d = await t.mutation(internal.dropbox.findOrCreateTarget, { client: "Hill Creative", project: "Wrangler Reel", video: "Cut A" });
+    expect((await t.run((ctx) => ctx.db.get(d.projectId)))!.client).toBe("Hill Creative");
+    // Setting a client by hand, and clearing it.
+    await me.mutation(api.library.renameProject, { projectId, name: "Spirit Days", jobNumber: "26122", client: "ICG Ministries" });
+    expect((await t.run((ctx) => ctx.db.get(projectId)))!.client).toBe("ICG Ministries");
+    await me.mutation(api.library.renameProject, { projectId, name: "Spirit Days", jobNumber: "26122" });
+    expect((await t.run((ctx) => ctx.db.get(projectId)))!.client).toBe("ICG Ministries");
+    await me.mutation(api.library.renameProject, { projectId, name: "Spirit Days", jobNumber: "26122", client: "" });
+    expect((await t.run((ctx) => ctx.db.get(projectId)))!.client).toBeUndefined();
   });
 });
 
@@ -221,6 +248,22 @@ describe("importing a render", () => {
     const f = (await t.run((ctx) => ctx.db.get(fileId)))!;
     expect([f.status, f.checks]).toEqual(["waiting", 1]);
     expect(calls.some((c) => c.url.includes("sharing") || c.url.includes("bunnycdn"))).toBe(false);
+  });
+
+  test("a file removed before it's imported is skipped, not failed; deleting folders skips what was waiting in them", async () => {
+    const { t } = await setup();
+    const fileId = await connectedWithFile(t, fixture.length);
+    vi.stubGlobal("fetch", async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.endsWith("/files/get_metadata")) return new Response(JSON.stringify({ error_summary: "path/not_found/.." }), { status: 409 });
+      return new Response("{}", { status: 500 });
+    });
+    expect((await t.action(internal.dropbox.importFile, { fileId })).result).toBe("removed before import");
+    expect((await t.run((ctx) => ctx.db.get(fileId)))!.status).toBe("skipped");
+    await t.mutation(internal.dropbox.recordFiles, { files: [{ pathLower: "/p/v/x.mp4", pathDisplay: "/P/V/x.mp4", rev: "a", size: 1 }] });
+    await t.mutation(internal.dropbox.recordRemoved, { pathsLower: ["/p"] });
+    const row = await t.run((ctx) => ctx.db.query("dropFiles").withIndex("by_path", (q) => q.eq("pathLower", "/p/v/x.mp4")).first());
+    expect([row!.status, row!.reason]).toEqual(["skipped", "Removed from Dropbox before it was imported."]);
   });
 
   test("a file that changed since it was seen goes back to waiting", async () => {

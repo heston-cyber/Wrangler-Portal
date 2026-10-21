@@ -34,6 +34,7 @@ function UploadDialog({ initial, onClose }: { initial: { file?: File; projectId?
   const [projectId, setProjectId] = useState<string>(initial.newProject ? "__new" : initial.projectId ?? "");
   const [newName, setNewName] = useState("");
   const [jobNumber, setJobNumber] = useState("");
+  const [client, setClient] = useState("");
   const [file, setFile] = useState<File | null>(initial.file ?? null);
   const [title, setTitle] = useState(initial.file ? titleFrom(initial.file.name) : "");
   const [over, setOver] = useState(false);
@@ -60,7 +61,7 @@ function UploadDialog({ initial, onClose }: { initial: { file?: File; projectId?
     if (!projectOnly && !title.trim()) { setError("Give the video a title."); return; }
     setBusy(true);
     try {
-      const pid = isNew ? await createProject({ name: newName, jobNumber: jobNumber || undefined }) : (chosen as Id<"projects">);
+      const pid = isNew ? await createProject({ name: newName, jobNumber: jobNumber || undefined, client: client.trim() || undefined }) : (chosen as Id<"projects">);
       if (projectOnly) { onClose(); navigate(`/projects/${pid}`); return; }
       const videoId = await createVideo({ projectId: pid, title });
       void startUpload(convex, videoId, file!);
@@ -114,6 +115,12 @@ function UploadDialog({ initial, onClose }: { initial: { file?: File; projectId?
               <input className="input" value={jobNumber} onChange={(e) => setJobNumber(e.target.value)} placeholder="26127" />
             </label>
           </div>
+        )}
+        {isNew && (
+          <label className="field">
+            <span className="label">Client (optional)</span>
+            <input className="input" value={client} onChange={(e) => setClient(e.target.value)} placeholder="Floor Trader" />
+          </label>
         )}
         {!projectOnly && (
           <label className="field">

@@ -679,3 +679,12 @@ button.tcpill:hover, .composer .target:hover { background: var(--wp-black); box-
 .chip .spin, .rtag .spin { margin-right: 5px; vertical-align: -2px; }
 .busyline { display: flex; align-items: center; gap: 6px; }
 .stage-msg .spin { margin-right: 8px; vertical-align: -3px; }
+
+/* ---------- Projects › Client grouping ---------- */
+.chead { display: flex; align-items: center; gap: 8px; margin: 14px 12px 6px; padding: 0 4px; height: 34px; color: var(--text-accent); }
+.chead:first-child { margin-top: 2px; }
+.chead button.collapse { border: 0; background: none; color: var(--text-accent); display: grid; place-items: center; padding: 0; width: 18px; }
+.chead .ctitle { font-family: var(--font-title); font-weight: 600; font-size: 15px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.chead .n { color: var(--text-secondary); font-size: 12.5px; }
+.group.nested { margin-left: 30px; }
+@media (max-width: 560px) { .group.nested { margin-left: 18px; } }
