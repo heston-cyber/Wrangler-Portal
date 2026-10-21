@@ -19,7 +19,7 @@ import { markersEdl } from "../lib/edl";
 import { clockText, projectLabel, statusChip, transcriptChip } from "../lib/format";
 import { useFrame, useFramePlayer, type FrameClock } from "../player/useFramePlayer";
 import { Timeline, type Wave } from "../player/Timeline";
-import { COLORS, DrawingLayer, type Shape, type Tool } from "../player/Drawing";
+import { BRUSH_SIZES, COLORS, DrawingLayer, type Shape, type Tool } from "../player/Drawing";
 import { captureAndUpload } from "../player/stills";
 import { NotesList, defaultFilter, kindColor, type NoteFilter, type NoteRow } from "../notes/NotesPanel";
 import { VersionsList } from "../notes/VersionsPanel";
@@ -120,11 +120,12 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const [quality, setQuality] = useState<"file" | "stream">(mp4H ? "file" : "stream");
   const ready = version?.status === "ready";
   const src = !version || !ready ? null : quality === "file" && mp4H ? mediaUrl(version.bunnyGuid, `play_${mp4H}p.mp4`) : mediaUrl(version.bunnyGuid, "playlist.m3u8");
-  // Scrub copy: the best MP4 copy up to 720p that fits (48 MB on computers, 16 MB on phones), downloaded once the video is ready.
+  // Scrub copy: the best MP4 copy up to 720p that fits (80 MB on computers, 30 MB on phones), downloaded once the video is ready.
+  // New uploads have only 360p (800 kbps, about 6 MB a minute) and 1080p (Bunny library setting, Oct 21).
   const scrubCopies = useMemo(() => {
     if (!version || !ready) return undefined;
     const hs = [...version.mp4Heights].filter((h) => h <= 720).sort((a, b) => b - a);
-    return { urls: hs.map((h) => mediaUrl(version.bunnyGuid, `play_${h}p.mp4`)), maxBytes: (narrow ? 16 : 48) * 1_000_000 };
+    return { urls: hs.map((h) => mediaUrl(version.bunnyGuid, `play_${h}p.mp4`)), maxBytes: (narrow ? 30 : 80) * 1_000_000 };
   }, [version, ready, narrow]);
   const player = useFramePlayer(src, fps, version?.frameCountExact ? version.frameCount : null, scrubCopies);
   const frameCount = player.frameCount ?? version?.frameCount ?? 0;
@@ -154,6 +155,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const [drawing, setDrawing] = useState(false);
   const [tool, setTool] = useState<Tool>("pen");
   const [color, setColor] = useState(COLORS[0]);
+  const [brush, setBrush] = useState<number>(() => { const w = Number(readPref("wr.brush", "0.006")); return BRUSH_SIZES.some((b) => b.w === w) ? w : 0.006; });
   const [shapes, setShapes] = useState<Shape[]>([]);
   const [drawFrame, setDrawFrame] = useState<number | null>(null);
   const [text, setText] = useState("");
@@ -508,7 +510,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                 return (
                   <>
                     {saved.length > 0 && <DrawingLayer shapes={saved} onChange={() => {}} active={false} tool={tool} color={color} aspect={aspect} />}
-                    <DrawingLayer shapes={elsewhere ? [] : shapes} onChange={onShapes} active={drawing && !elsewhere} tool={tool} color={color} aspect={aspect} />
+                    <DrawingLayer shapes={elsewhere ? [] : shapes} onChange={onShapes} active={drawing && !elsewhere} tool={tool} color={color} aspect={aspect} width={brush} />
                     {elsewhere && <div className="drawhint"><button className="btn sm" onClick={() => void player.seekToFrame(drawFrame!)}>Your drawing is on {tc(drawFrame!)} · go back</button></div>}
                   </>
                 );
@@ -535,6 +537,12 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                   ))}
                   <span className="vr" />
                   {COLORS.map((c) => <button key={c} className={`sw${color === c ? " on" : ""}`} style={{ background: c }} onClick={() => setColor(c)} aria-label={`Colour ${c}`} />)}
+                  <span className="vr" />
+                  {BRUSH_SIZES.map((b) => (
+                    <button key={b.name} className={`icon-btn szbtn${brush === b.w ? " on" : ""}`} onClick={() => { setBrush(b.w); writePref("wr.brush", String(b.w)); }} aria-label={`Brush size: ${b.name}`} title={`Brush size: ${b.name}`}>
+                      <i style={{ width: b.dot, height: b.dot }} />
+                    </button>
+                  ))}
                   <span className="vr" />
                   <button className="icon-btn" disabled={!shapes.length} onClick={() => onShapes(shapes.slice(0, -1))} aria-label="Undo" title="Undo"><Undo2 size={16} /></button>
                   <button className="icon-btn" disabled={!shapes.length} onClick={() => onShapes([])} aria-label="Clear drawing" title="Clear"><X size={16} /></button>

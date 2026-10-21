@@ -9,7 +9,13 @@ export type Shape =
   | { t: "arrow" | "box" | "ellipse"; x1: number; y1: number; x2: number; y2: number; c: string; w: number };
 
 export const COLORS = ["#ff3b30", "#ffd60a", "#ffffff", "#30d5ff"];
-const WIDTH = 0.006; // stroke width as a share of the picture width
+// Brush sizes (stroke width as a share of the picture width). Medium is the size every drawing used before Oct 21.
+export const BRUSH_SIZES = [
+  { name: "Fine", w: 0.003, dot: 4 },
+  { name: "Medium", w: 0.006, dot: 7 },
+  { name: "Bold", w: 0.012, dot: 11 },
+] as const;
+const WIDTH = 0.006;
 
 function penPath(pts: [number, number, number][], W: number, H: number, w: number) {
   const outline = getStroke(pts.map(([x, y, p]) => [x * W, y * H, p]), { size: w * W * 1.6, thinning: 0.5, smoothing: 0.5, streamline: 0.4, simulatePressure: pts.every((p) => p[2] === 0.5) });
@@ -60,8 +66,8 @@ export function drawShapesOnCanvas(ctx: CanvasRenderingContext2D, shapes: Shape[
   ctx.restore();
 }
 
-export function DrawingLayer({ shapes, onChange, active, tool, color, aspect }: {
-  shapes: Shape[]; onChange: (s: Shape[]) => void; active: boolean; tool: Tool; color: string; aspect: number;
+export function DrawingLayer({ shapes, onChange, active, tool, color, aspect, width = WIDTH }: {
+  shapes: Shape[]; onChange: (s: Shape[]) => void; active: boolean; tool: Tool; color: string; aspect: number; width?: number;
 }) {
   const ref = useRef<SVGSVGElement>(null);
   const [draft, setDraft] = useState<Shape | null>(null);
@@ -84,7 +90,7 @@ export function DrawingLayer({ shapes, onChange, active, tool, color, aspect }: 
         e.preventDefault();
         (e.target as Element).setPointerCapture?.(e.pointerId);
         const [x, y, p] = pos(e);
-        setDraft(tool === "pen" ? { t: "pen", pts: [[x, y, p]], c: color, w: WIDTH } : { t: tool, x1: x, y1: y, x2: x, y2: y, c: color, w: WIDTH });
+        setDraft(tool === "pen" ? { t: "pen", pts: [[x, y, p]], c: color, w: width } : { t: tool, x1: x, y1: y, x2: x, y2: y, c: color, w: width });
       }}
       onPointerMove={(e) => {
         if (!draft) return;
