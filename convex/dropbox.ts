@@ -455,9 +455,10 @@ export const importFile = internalAction({
       link = await shareLink(ctx, f.pathLower);
       const { lib } = bunnyEnv();
       const tag = `wr-import-${fileId}`;
-      await bunnyCall(`/library/${lib}/videos/fetch`, { method: "POST", body: JSON.stringify({ url: link.shared ? directLink(link.url) : link.url, title: tag }) });
-      // Bunny's fetch doesn't return the new video's id, so find it by its one-off title, then give it the file's name.
-      let guid: string | null = null;
+      const fetched = (await bunnyCall(`/library/${lib}/videos/fetch`, { method: "POST", body: JSON.stringify({ url: link.shared ? directLink(link.url) : link.url, title: tag }) })) as { id?: string };
+      // Bunny returns the new video's id (seen live, Oct 21), though its docs don't promise it: if it's missing,
+      // find the video by its one-off title. Then give it the file's name.
+      let guid: string | null = typeof fetched?.id === "string" && fetched.id ? fetched.id : null;
       for (let i = 0; i < 20 && !guid; i++) {
         await new Promise((r) => setTimeout(r, i === 0 ? 1500 : 3000));
         const found = (await bunnyCall(`/library/${lib}/videos?page=1&itemsPerPage=10&search=${encodeURIComponent(tag)}`)) as { items?: Array<{ guid: string; title: string }> };

@@ -136,7 +136,7 @@ describe("noticing files", () => {
 });
 
 // A pretend Dropbox + Bunny, enough for one import.
-function fakeServices(file: Uint8Array, opts: { rev?: string; revs?: Record<string, string> } = {}) {
+function fakeServices(file: Uint8Array, opts: { rev?: string; revs?: Record<string, string>; fetchId?: string } = {}) {
   const calls: Array<{ url: string; body: any }> = [];
   const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json" } });
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
@@ -154,12 +154,12 @@ function fakeServices(file: Uint8Array, opts: { rev?: string; revs?: Record<stri
       if (s >= file.length) return new Response(null, { status: 416 });
       return new Response(file.slice(s, e + 1), { status: 206 });
     }
-    if (url.includes("video.bunnycdn.com") && url.endsWith("/videos/fetch")) return json({ success: true, statusCode: 200 });
+    if (url.includes("video.bunnycdn.com") && url.endsWith("/videos/fetch")) return json(opts.fetchId ? { id: opts.fetchId, success: true, statusCode: 200 } : { success: true, statusCode: 200 });
     if (url.includes("video.bunnycdn.com") && url.includes("search=")) {
       const tag = decodeURIComponent(/search=([^&]+)/.exec(url)![1]);
       return json({ items: [{ guid: "guid-from-dropbox", title: tag }] });
     }
-    if (url.includes("video.bunnycdn.com/library/785477/videos/guid-from-dropbox")) return json({ success: true });
+    if (url.includes("video.bunnycdn.com/library/785477/videos/guid-")) return json({ success: true });
     return json({ error_summary: `unexpected ${url}` }, 500);
   });
   return calls;
@@ -201,6 +201,16 @@ describe("importing a render", () => {
     await t.action(internal.dropbox.revokeForVersion, { versionId: state.ver._id });
     expect(calls.filter((c) => c.url.endsWith("/sharing/revoke_shared_link"))).toHaveLength(1);
   }, 20_000);
+
+  test("when Bunny returns the new video's id, it's used straight away (no search)", async () => {
+    const { t } = await setup();
+    const fileId = await connectedWithFile(t, fixture.length);
+    const calls = fakeServices(fixture, { fetchId: "guid-direct" });
+    expect((await t.action(internal.dropbox.importFile, { fileId })).result).toBe("imported");
+    expect(calls.some((c) => c.url.includes("search="))).toBe(false);
+    const ver = await t.run(async (ctx) => ctx.db.get((await ctx.db.get(fileId))!.versionId!));
+    expect(ver!.bunnyGuid).toBe("guid-direct");
+  });
 
   test("a file that's still being written waits, and nothing is shared", async () => {
     const { t } = await setup();
