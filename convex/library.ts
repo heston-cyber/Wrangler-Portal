@@ -30,6 +30,7 @@ export const overview = query({
       const versions = await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect();
       const latest = versions.sort((a, b) => b.number - a.number)[0] ?? null;
       const notes = await ctx.db.query("notes").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect();
+      const tr = latest ? await ctx.db.query("transcripts").withIndex("by_version", (q) => q.eq("versionId", latest._id)).first() : null;
       vidsOut.push({
         _id: vid._id,
         projectId: vid.projectId,
@@ -44,6 +45,7 @@ export const overview = query({
           number: latest.number, status: latest.status, bunnyGuid: latest.bunnyGuid, encodeProgress: latest.encodeProgress ?? 0,
           frameCount: latest.frameCount ?? null, fpsNum: latest.fpsNum ?? 24000, fpsDen: latest.fpsDen ?? 1001,
           startTimecode: latest.startTimecode, width: latest.width ?? null, height: latest.height ?? null,
+          transcript: tr?.status ?? null,
         },
       });
     }
@@ -134,6 +136,11 @@ export const video = query({
     const project = await ctx.db.get(vid.projectId);
     const versions = await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", videoId)).collect();
     const notes = await ctx.db.query("notes").withIndex("by_video", (q) => q.eq("videoId", videoId)).collect();
+    const trs = new Map<string, string>();
+    for (const x of versions) {
+      const t = await ctx.db.query("transcripts").withIndex("by_version", (q) => q.eq("versionId", x._id)).first();
+      if (t) trs.set(x._id, t.status);
+    }
     return {
       _id: vid._id,
       title: vid.title,
@@ -142,6 +149,7 @@ export const video = query({
         ...publicVersion(x),
         noteCount: notes.filter((n) => n.versionId === x._id).length,
         openCount: notes.filter((n) => n.versionId === x._id && n.status === "open").length,
+        transcript: (trs.get(x._id) ?? null) as "pending" | "running" | "done" | "failed" | null,
       })),
     };
   },

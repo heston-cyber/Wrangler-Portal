@@ -26,11 +26,12 @@ export function clockText(seconds: number) {
   return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
 }
 
-export function statusChip(status: string, progress: number): { text: string; tone: "" | "warn" | "fail" } | null {
+// busy = still working on it (uploading or converting): the chip shows a spinner.
+export function statusChip(status: string, progress: number): { text: string; tone: "" | "warn" | "fail"; busy?: boolean } | null {
   if (status === "ready") return null;
   if (status === "failed") return { text: "Failed", tone: "fail" };
-  if (status === "uploading") return { text: "Uploading", tone: "warn" };
-  return { text: progress > 0 ? `Converting ${progress}%` : "Converting", tone: "warn" };
+  if (status === "uploading") return { text: "Uploading", tone: "warn", busy: true };
+  return { text: progress > 0 ? `Converting ${progress}%` : "Converting", tone: "warn", busy: true };
 }
 
 export function uploadText(status: string, sent: number, total: number, error?: string) {
@@ -61,3 +62,10 @@ export function dayBucket(t: number, now = Date.now()) {
 
 export const projectLabel = (p: { name: string; jobNumber: string | null } | null | undefined) =>
   p ? (p.jobNumber ? `${p.jobNumber} ${p.name}` : p.name) : "";
+
+// The transcript's state, as a chip: only while it's being made, or when it failed.
+export function transcriptChip(status: string | null | undefined): { text: string; busy: boolean } | null {
+  if (status === "pending" || status === "running") return { text: "Transcribing", busy: true };
+  if (status === "failed") return { text: "No transcript", busy: false };
+  return null;
+}

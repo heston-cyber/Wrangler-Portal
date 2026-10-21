@@ -57,7 +57,7 @@ function overview() {
       return {
         ...x, versionCount: (versions[x._id] ?? []).length, noteCount: notes.filter((n) => n.videoId === x._id).length,
         openNotes: l ? notes.filter((n) => n.versionId === l._id && n.status === "open").length : 0,
-        latest: l && { number: l.number, status: l.status, bunnyGuid: l.bunnyGuid, encodeProgress: l.encodeProgress, frameCount: l.frameCount, fpsNum: l.fpsNum, fpsDen: l.fpsDen, startTimecode: l.startTimecode, width: l.width, height: l.height },
+        latest: l && { number: l.number, status: l.status, bunnyGuid: l.bunnyGuid, encodeProgress: l.encodeProgress, frameCount: l.frameCount, fpsNum: l.fpsNum, fpsDen: l.fpsDen, startTimecode: l.startTimecode, width: l.width, height: l.height, transcript: l.number === 2 ? "running" : "done" },
       };
     }),
   };

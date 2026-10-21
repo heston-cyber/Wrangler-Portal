@@ -6,6 +6,7 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import type { TranscriptFile } from "../../convex/lib/transcript";
 import { useFrame, type FrameClock } from "../player/useFramePlayer";
+import { Spinner } from "../ui/kit";
 
 export function TranscriptList({ versionId, clock, tc, onSeek }: { versionId: Id<"versions">; clock: FrameClock; tc: (f: number) => string; onSeek: (frame: number) => void }) {
   const info = useQuery(api.transcripts.forVersion, { versionId });
@@ -36,8 +37,8 @@ export function TranscriptList({ versionId, clock, tc, onSeek }: { versionId: Id
     return (
       <div className="tempty rect">
         <span className="rlabel">Transcript</span>
-        <div className="rbold">{info ? "In progress" : "Not yet"}</div>
-        <p className="caption" style={{ margin: 0 }}>{info ? "ElevenLabs is transcribing this version. It shows up here in a minute or two." : "Versions are transcribed after they finish processing."}</p>
+        <div className="rbold busyline">{info && <Spinner size={18} />}{info ? "Transcribing" : "Not yet"}</div>
+        <p className="caption" style={{ margin: 0 }}>{info ? "ElevenLabs is transcribing this version. It shows up here by itself in a minute or two." : "Versions are transcribed after they finish processing."}</p>
         {!info && <button className="btn sm" onClick={() => void retry({ versionId })}><RotateCw size={14} />Transcribe now</button>}
       </div>
     );

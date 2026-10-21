@@ -1,7 +1,7 @@
 // Small shared pieces: popover menus, dialogs, avatars, thumbnails, toasts.
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Film } from "lucide-react";
+import { Film, LoaderCircle } from "lucide-react";
 import { BUNNY_CDN_HOST } from "../config";
 
 // ---------- Menu: a button that opens a popover list ----------
@@ -120,4 +120,9 @@ export function useIsNarrow(px = 820) {
   const [n, setN] = useState(() => window.innerWidth <= px);
   useEffect(() => { const on = () => setN(window.innerWidth <= px); window.addEventListener("resize", on); return () => window.removeEventListener("resize", on); }, [px]);
   return n;
+}
+
+// ---------- Spinner (for anything still uploading, converting or importing) ----------
+export function Spinner({ size = 12 }: { size?: number }) {
+  return <LoaderCircle size={size} className="spin" aria-hidden />;
 }

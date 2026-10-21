@@ -79,6 +79,9 @@ export const retry = mutation({
   args: { versionId: v.id("versions") },
   handler: async (ctx, { versionId }) => {
     await requireMe(ctx);
+    const row = await ctx.db.query("transcripts").withIndex("by_version", (q) => q.eq("versionId", versionId)).first();
+    if (row) await ctx.db.patch(row._id, { status: "pending", error: undefined, updatedAt: Date.now() });
+    else await ctx.db.insert("transcripts", { versionId, status: "pending", attempts: 0, updatedAt: Date.now() });
     await ctx.scheduler.runAfter(0, internal.transcribe.run, { versionId, attempt: 0 });
   },
 });

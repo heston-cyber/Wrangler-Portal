@@ -5,8 +5,9 @@ import { ArrowUpRight, Film } from "lucide-react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import { navigate } from "../lib/router";
-import { ago, sizeText, statusChip, uploadText } from "../lib/format";
+import { ago, sizeText, statusChip, transcriptChip, uploadText } from "../lib/format";
 import type { UploadState } from "../lib/uploads";
+import { Spinner } from "../ui/kit";
 
 type VideoData = NonNullable<FunctionReturnType<typeof api.library.video>>;
 export type Version = VideoData["versions"][number];
@@ -18,7 +19,7 @@ export function VersionsList({ videoId, versions, current, uploads }: { videoId:
       {active.map((u) => (
         <div key={u.key} className="vcard rect">
           <span style={{ fontSize: 12.5 }}><b style={{ fontWeight: 500 }}>v{u.versionNumber ?? "…"} · {u.fileName}</b></span>
-          <span className="secondary" style={{ fontSize: 12 }}>{uploadText(u.status, u.sent, u.total, u.error)}</span>
+          <span className="secondary busyline" style={{ fontSize: 12 }}>{u.status !== "failed" && <Spinner />}{uploadText(u.status, u.sent, u.total, u.error)}</span>
           <div className="progress"><i style={{ width: `${u.total ? (100 * u.sent) / u.total : 0}%` }} /></div>
         </div>
       ))}
@@ -33,6 +34,7 @@ function VersionItem({ videoId, v, current }: { videoId: string; v: Version; cur
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(v.description ?? "");
   const st = statusChip(v.status, v.encodeProgress);
+  const tr = v.status === "ready" ? transcriptChip(v.transcript) : null;
   const open = () => navigate(`/v/${videoId}?version=${v.number}`);
   const commit = async () => { setEditing(false); if ((draft.trim() || null) !== (v.description ?? null)) await save({ versionId: v._id, description: draft }); };
   return (
@@ -43,7 +45,8 @@ function VersionItem({ videoId, v, current }: { videoId: string; v: Version; cur
       </div>
       <div className="rbold" title={v.fileName}>v{v.number}</div>
       <div className="rtags">
-        {st && <span className="rtag">{st.text}</span>}
+        {st && <span className="rtag">{st.busy && <Spinner />}{st.text}</span>}
+        {tr && <span className="rtag">{tr.busy && <Spinner />}{tr.text}</span>}
         {v.noteCount > 0 ? <span className="rtag">{v.openCount ? `${v.openCount} open` : "All done"} · {v.noteCount} {v.noteCount === 1 ? "note" : "notes"}</span> : <span className="rtag">No notes</span>}
         {v.fileSize ? <span className="rtag">{sizeText(v.fileSize)}</span> : null}
       </div>

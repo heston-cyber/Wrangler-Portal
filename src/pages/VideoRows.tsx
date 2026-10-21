@@ -2,8 +2,8 @@
 import type { FunctionReturnType } from "convex/server";
 import type { api } from "../../convex/_generated/api";
 import { linkProps } from "../lib/router";
-import { Thumb } from "../ui/kit";
-import { ago, lengthText, statusChip } from "../lib/format";
+import { Spinner, Thumb } from "../ui/kit";
+import { ago, lengthText, statusChip, transcriptChip } from "../lib/format";
 
 export type Overview = FunctionReturnType<typeof api.library.overview>;
 export type VideoItem = Overview["videos"][number];
@@ -12,6 +12,7 @@ const fpsOf = (x: VideoItem) => ({ num: x.latest?.fpsNum ?? 24000, den: x.latest
 
 export function VideoRow({ x, meta, projectName }: { x: VideoItem; meta: React.ReactNode; projectName?: string }) {
   const st = x.latest ? statusChip(x.latest.status, x.latest.encodeProgress) : { text: "No versions", tone: "" as const };
+  const tr = x.latest?.status === "ready" ? transcriptChip(x.latest.transcript) : null;
   const len = x.latest ? lengthText(x.latest.frameCount, fpsOf(x)) : null;
   return (
     <a className="vrow" {...linkProps(`/v/${x._id}`)}>
@@ -19,7 +20,8 @@ export function VideoRow({ x, meta, projectName }: { x: VideoItem; meta: React.R
       <span className="t">
         <b>{x.title}</b>
         {x.latest && x.latest.number > 1 && <span className="chip">v{x.latest.number}</span>}
-        {st && <span className={`chip ${st.tone}`}>{st.text}</span>}
+        {st && <span className={`chip ${st.tone}`}>{st.busy && <Spinner />}{st.text}</span>}
+        {tr && <span className={`chip${tr.busy ? " warn" : ""}`}>{tr.busy && <Spinner />}{tr.text}</span>}
         {projectName && <span className="secondary hide-sm" style={{ fontSize: 12.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{projectName}</span>}
       </span>
       <span className={`open${x.openNotes ? " has" : ""}`}>{x.openNotes ? `${x.openNotes} open` : ""}</span>
@@ -31,6 +33,7 @@ export function VideoRow({ x, meta, projectName }: { x: VideoItem; meta: React.R
 
 export function VideoCard({ x, meta, projectName }: { x: VideoItem; meta: React.ReactNode; projectName?: string }) {
   const st = x.latest ? statusChip(x.latest.status, x.latest.encodeProgress) : { text: "No versions", tone: "" as const };
+  const tr = x.latest?.status === "ready" ? transcriptChip(x.latest.transcript) : null;
   const len = x.latest ? lengthText(x.latest.frameCount, fpsOf(x)) : null;
   return (
     <a className="card rect" {...linkProps(`/v/${x._id}`)}>
@@ -42,7 +45,8 @@ export function VideoCard({ x, meta, projectName }: { x: VideoItem; meta: React.
         <div className="rbold ctitle">{x.title}</div>
         <div className="rtags">
           {len && <span className="rtag">{len}</span>}
-          {st && <span className="rtag">{st.text}</span>}
+          {st && <span className="rtag">{st.busy && <Spinner />}{st.text}</span>}
+          {tr && <span className="rtag">{tr.busy && <Spinner />}{tr.text}</span>}
           {x.openNotes > 0 && <span className="rtag">{x.openNotes} open</span>}
         </div>
         <div className="cm">{meta}</div>

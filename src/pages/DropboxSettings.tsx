@@ -5,7 +5,7 @@ import { ArrowUpRight, FolderInput, RotateCw } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import { ago } from "../lib/format";
 import { linkProps } from "../lib/router";
-import { Modal } from "../ui/kit";
+import { Modal, Spinner } from "../ui/kit";
 
 const STATUS: Record<string, string> = {
   waiting: "Waiting for it to finish",
@@ -86,8 +86,8 @@ export function DropboxSettings({ show }: { show: (m: string) => void }) {
             <div className="prow droprow" key={f._id}>
               <span className="pl">
                 <code className="mono">{f.path.split("/").filter(Boolean).join(" › ")}</code>
-                <span className={`secondary${f.status === "failed" ? " error" : ""}`} style={{ display: "block", fontSize: 12.5 }}>
-                  {STATUS[f.status] ?? f.status}{f.status === "imported" && f.versionNumber ? ` as v${f.versionNumber}` : ""}
+                <span className={`secondary busyline${f.status === "failed" ? " error" : ""}`} style={{ fontSize: 12.5 }}>
+                  {(f.status === "waiting" || f.status === "importing") && <Spinner />}{STATUS[f.status] ?? f.status}{f.status === "imported" && f.versionNumber ? ` as v${f.versionNumber}` : ""}
                   {f.reason && (f.status === "skipped" || f.status === "failed") ? ` · ${f.reason}` : ""} · {ago(f.at)}
                 </span>
               </span>

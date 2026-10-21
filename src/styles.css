@@ -671,3 +671,11 @@ button.tcpill:hover, .composer .target:hover { background: var(--wp-black); box-
 .tline .tsp { color: var(--text-secondary); font-weight: 500; }
 .tline .ttx { font-size: 14px; line-height: 1.45; color: var(--text-primary); }
 .tempty { display: grid; gap: 8px; padding: 16px; justify-items: start; }
+
+/* ---------- Spinner: anything still uploading, converting or importing ---------- */
+@keyframes spin { to { transform: rotate(360deg); } }
+.lucide.spin { animation: spin .9s linear infinite; color: var(--text-accent); flex: none; }
+@media (prefers-reduced-motion: reduce) { .lucide.spin { animation-duration: 2.4s; } }
+.chip .spin, .rtag .spin { margin-right: 5px; vertical-align: -2px; }
+.busyline { display: flex; align-items: center; gap: 6px; }
+.stage-msg .spin { margin-right: 8px; vertical-align: -3px; }

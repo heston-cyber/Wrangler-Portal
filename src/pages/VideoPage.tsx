@@ -15,7 +15,7 @@ import { BUNNY_CDN_HOST } from "../config";
 import { linkProps, navigate } from "../lib/router";
 import { isVideoFile, startUpload, useUploads } from "../lib/uploads";
 import { markersEdl } from "../lib/edl";
-import { clockText, projectLabel, statusChip } from "../lib/format";
+import { clockText, projectLabel, statusChip, transcriptChip } from "../lib/format";
 import { useFrame, useFramePlayer, type FrameClock } from "../player/useFramePlayer";
 import { Scrubber } from "../player/Scrubber";
 import { COLORS, DrawingLayer, type Shape, type Tool } from "../player/Drawing";
@@ -24,7 +24,7 @@ import { NotesList, defaultFilter, kindColor, type NoteFilter, type NoteRow } fr
 import { VersionsList } from "../notes/VersionsPanel";
 import { TranscriptList } from "../notes/TranscriptPanel";
 import { Sep, TopBar } from "../shell/Shell";
-import { Menu, MenuItem, MenuLabel, MenuSep, Modal, useIsNarrow, useToast } from "../ui/kit";
+import { Menu, MenuItem, MenuLabel, MenuSep, Modal, Spinner, useIsNarrow, useToast } from "../ui/kit";
 
 export default function VideoPage({ videoId, versionNumber, noteId }: { videoId: Id<"videos">; versionNumber: number | null; noteId: string | null }) {
   const data = useQuery(api.library.video, { videoId });
@@ -291,6 +291,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const timeText = (f: number) => timeMode === "frames" ? `${f}` : timeMode === "clock" ? clockText(f * frameDuration(fps)) : tc(f);
   const openCount = (notes ?? []).filter((n) => n.status === "open").length;
   const st = version ? statusChip(version.status, version.encodeProgress) : null;
+  const tr = version?.status === "ready" ? transcriptChip(version.transcript) : null;
 
   // The timeline box (Altar II card pattern: red label, bold value, grey detail boxes).
   // Along the bottom on desktop (like Flask); right under the picture on phones.
@@ -356,7 +357,8 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
         {data.project && <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps(`/projects/${data.project._id}`)}>{projectLabel(data.project)}</a><Sep /></span>}
         <span className="here">{data.title}</span>
         {version && <button className="chip" onClick={() => setPanel("versions")} title="Versions">v{version.number}{data.versions.length > 1 ? ` of ${data.versions.length}` : ""}</button>}
-        {st && <span className={`chip ${st.tone}`}>{st.text}</span>}
+        {st && <span className={`chip ${st.tone}`}>{st.busy && <Spinner />}{st.text}</span>}
+        {tr?.busy && <span className="chip warn"><Spinner />{tr.text}</span>}
         <Menu label="Video options" trigger={(p) => <button {...p} className="icon-btn" aria-label="Video options"><Ellipsis size={16} /></button>}>
           <MenuItem icon={<Upload size={16} />} onSelect={newVersion}>Upload a new version</MenuItem>
           <MenuItem icon={<Pencil size={16} />} onSelect={() => setDialog("rename")}>Rename video</MenuItem>
@@ -393,7 +395,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                   <button className="btn primary" onClick={newVersion}><Upload size={16} />Upload the first version</button>
                 </div></div>
               )}
-              {version && !ready && <div className="stage-msg">{version.status === "failed" ? `This version failed: ${version.error ?? "unknown error"}` : `v${version.number} · ${st?.text ?? ""}. It plays here when Bunny is done.`}</div>}
+              {version && !ready && <div className="stage-msg">{st?.busy && <Spinner size={16} />}{version.status === "failed" ? `This version failed: ${version.error ?? "unknown error"}` : `v${version.number} · ${st?.text ?? ""}. It plays here when Bunny is done.`}</div>}
               {player.error && <div className="stage-msg">{player.error}</div>}
             </div>
           </div>
