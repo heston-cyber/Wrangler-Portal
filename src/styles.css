@@ -426,8 +426,15 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 .scrub .knob { position: absolute; top: 10px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--accent); box-shadow: 0 1px 4px rgba(0, 0, 0, .6); }
 .scrub .sel { position: absolute; top: 9px; height: 14px; border-radius: 4px; background: var(--accent-tint); box-shadow: inset 0 0 0 1px var(--accent-ring); }
 .scrub .hl { position: absolute; top: 9px; height: 14px; border-radius: 4px; background: rgba(242, 201, 76, .14); box-shadow: inset 0 0 0 1px rgba(242, 201, 76, .55); }
-.scrub .mk { position: absolute; top: 24px; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%; }
-.scrub .rbar { position: absolute; height: 3px; border-radius: 2px; }
+/* note marks: a larger invisible tap area around each visible mark */
+.scrub .mkhit { position: absolute; top: 18px; width: 18px; height: 18px; margin-left: -9px; display: grid; place-items: center; cursor: pointer; z-index: 2; }
+.scrub .mk { display: block; width: 6px; height: 6px; border-radius: 50%; transition: transform var(--dur-fast) var(--ease-out); }
+.scrub .mkhit:hover .mk { transform: scale(1.5); }
+.scrub .mkhit.active .mk { transform: scale(1.6); box-shadow: 0 0 0 2px var(--wp-black), 0 0 0 3.5px var(--accent); }
+.scrub .rhit { position: absolute; height: 11px; display: flex; align-items: center; cursor: pointer; z-index: 1; }
+.scrub .rbar { display: block; width: 100%; height: 3px; border-radius: 2px; transition: height var(--dur-fast); }
+.scrub .rhit:hover .rbar { height: 5px; }
+.scrub .rhit.active .rbar { height: 5px; box-shadow: 0 0 0 1.5px var(--wp-black), 0 0 0 3px var(--accent); }
 .scrub .mk.done, .scrub .rbar.done { opacity: .35; }
 .scrub .hover { position: absolute; bottom: 34px; transform: translateX(-50%); padding: 3px 8px; border-radius: 8px; background: var(--fill-glass-strong); font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; box-shadow: var(--shadow-float); }
 
@@ -439,7 +446,8 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 
 .note { background: var(--surface-block); border-radius: 14px; padding: 12px; display: grid; gap: 9px; font-size: 13.5px; transition: background var(--dur-fast), box-shadow var(--dur-fast); }
 .note:hover { background: var(--surface-block-hover); }
-.note.here { box-shadow: inset 0 0 0 1px var(--accent-ring); background: var(--surface-block-hover); }
+.note.here { box-shadow: inset 0 0 0 1px var(--border-strong); }
+.note.focus { box-shadow: inset 0 0 0 1.5px var(--accent); background: var(--surface-block-hover); }
 .note.done .ntext, .note.done .nstill { opacity: .55; }
 .note .nhead { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
 .note .nhead .who { color: var(--text-primary); font-weight: 500; }
@@ -496,6 +504,9 @@ button.tcpill:hover { background: var(--fill-chip-hover); }
   .side { width: auto; flex: none; padding: 8px; }
   .side .sbody { overflow: visible; }
   .transport { flex-wrap: wrap; border-top: 0; padding: 4px 0 0; row-gap: 0; }
+  /* the picture, play bar and note box stay pinned under the top bar while the notes scroll */
+  .stagecol { position: sticky; top: 48px; z-index: 15; background: var(--surface-band); padding-bottom: 2px; }
+  .composer-zone { padding: 8px 0 6px; }
   .transport .scrub { margin: 0 7px; }
   .transport .scrub { order: -1; flex-basis: 100%; }
   .hide-sm { display: none !important; }

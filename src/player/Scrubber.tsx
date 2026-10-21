@@ -1,17 +1,19 @@
 // The scrub bar in the transport: click to jump, drag to scrub, Shift-drag to mark a range.
-// Note markers sit under the bar in Resolve's colours (blue frame, yellow range).
+// Note markers sit under the bar in Resolve's colours (blue frame, yellow range). Clicking one picks that note.
 import { useRef, useState } from "react";
 import { useFrame, type FrameClock } from "./useFramePlayer";
 
-export type BarNote = { id: string; kind: "frame" | "range" | "general"; inFrame?: number; outFrame?: number; status: "open" | "done" };
+export type BarNote = { id: string; kind: "frame" | "range" | "general"; inFrame?: number; outFrame?: number; status: "open" | "done"; text?: string };
 
-export function Scrubber({ clock, frameCount, notes, sel, highlight, onSeek, onSelect, label }: {
+export function Scrubber({ clock, frameCount, notes, sel, highlight, activeId, onSeek, onSelect, onPick, label }: {
   clock: FrameClock;
   frameCount: number;
   notes: BarNote[];
   sel: { a: number; b: number } | null;
   highlight?: { a: number; b: number } | null;
+  activeId?: string | null;
   onSeek: (f: number) => void;
+  onPick: (id: string) => void;
   onSelect: (a: number, b: number) => void;
   label: (f: number) => string;
 }) {
@@ -60,18 +62,28 @@ export function Scrubber({ clock, frameCount, notes, sel, highlight, onSeek, onS
         if (drag.range) onSelect(Math.min(drag.start, f), Math.max(drag.start, f));
         onSeek(f);
       }}
-      onPointerUp={() => setDrag(null)}
+      onPointerUp={(e) => { setDrag(null); if (e.pointerType !== "mouse") setHover(null); }}
       onPointerLeave={() => { if (!drag) setHover(null); }}
     >
       <div className="track" />
       <div className="fillbar" style={{ width: pct(frame + 0.5) }} />
       {highlight && <div className="hl" style={{ left: pct(highlight.a), width: `max(3px, ${pct(highlight.b - highlight.a + 1)})` }} />}
       {sel && <div className="sel" style={{ left: pct(sel.a), width: `max(3px, ${pct(sel.b - sel.a + 1)})` }} />}
-      {notes.filter((x) => x.kind === "frame" && x.inFrame !== undefined).map((x) => (
-        <div key={x.id} className={`mk${x.status === "done" ? " done" : ""}`} style={{ left: pct(x.inFrame! + 0.5), background: "var(--mk-frame)" }} />
-      ))}
       {ranges.map((x) => (
-        <div key={x.id} className={`rbar${x.status === "done" ? " done" : ""}`} style={{ left: pct(x.inFrame!), width: `max(3px, ${pct(x.outFrame! - x.inFrame! + 1)})`, top: 32 + 4 * (lanes.get(x.id) ?? 0), background: "var(--mk-range)" }} />
+        <div key={x.id} className={`rhit${x.id === activeId ? " active" : ""}`} role="button" aria-label={`Range note ${label(x.inFrame!)} to ${label(x.outFrame!)}`}
+          title={`${label(x.inFrame!)} → ${label(x.outFrame!)}${x.text ? ` · ${x.text.slice(0, 80)}` : ""}`}
+          style={{ left: pct(x.inFrame!), width: `max(8px, ${pct(x.outFrame! - x.inFrame! + 1)})`, top: 28 + 4 * (lanes.get(x.id) ?? 0) }}
+          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onPick(x.id); }}>
+          <i className={`rbar${x.status === "done" ? " done" : ""}`} style={{ background: "var(--mk-range)" }} />
+        </div>
+      ))}
+      {notes.filter((x) => x.kind === "frame" && x.inFrame !== undefined).map((x) => (
+        <div key={x.id} className={`mkhit${x.id === activeId ? " active" : ""}`} role="button" aria-label={`Note at ${label(x.inFrame!)}`}
+          title={`${label(x.inFrame!)}${x.text ? ` · ${x.text.slice(0, 80)}` : ""}`}
+          style={{ left: pct(x.inFrame! + 0.5) }}
+          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onPick(x.id); }}>
+          <i className={`mk${x.status === "done" ? " done" : ""}`} style={{ background: "var(--mk-frame)" }} />
+        </div>
       ))}
       <div className="knob" style={{ left: pct(frame + 0.5) }} />
       {hover !== null && <div className="hover" style={{ left: pct(hover + 0.5) }}>{label(hover)}</div>}

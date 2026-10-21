@@ -23,13 +23,14 @@ function useHereIds(clock: FrameClock, notes: NoteRow[]) {
   return useSyncExternalStore(clock.subscribe, key);
 }
 
-export function NotesList({ notes, clock, tc, filter, onJump, focusId, onCopied }: {
+export function NotesList({ notes, clock, tc, filter, onJump, focusId, focusTick, onCopied }: {
   notes: NoteRow[] | undefined;
   clock: FrameClock;
   tc: (f: number) => string;
   filter: NoteFilter;
   onJump: (n: NoteRow) => void;
   focusId: string | null;
+  focusTick: number;
   onCopied: (what: string) => void;
 }) {
   const list = notes ?? [];
@@ -48,10 +49,10 @@ export function NotesList({ notes, clock, tc, filter, onJump, focusId, onCopied 
       </div>
     );
   }
-  return <>{shown.map((n) => <NoteCard key={n._id} n={n} here={hereSet.has(n._id)} focused={focusId === n._id} tc={tc} onJump={onJump} onCopied={onCopied} />)}</>;
+  return <>{shown.map((n) => <NoteCard key={n._id} n={n} here={hereSet.has(n._id)} focused={focusId === n._id} focusTick={focusTick} tc={tc} onJump={onJump} onCopied={onCopied} />)}</>;
 }
 
-function NoteCard({ n, here, focused, tc, onJump, onCopied }: { n: NoteRow; here: boolean; focused: boolean; tc: (f: number) => string; onJump: (n: NoteRow) => void; onCopied: (what: string) => void }) {
+function NoteCard({ n, here, focused, focusTick, tc, onJump, onCopied }: { n: NoteRow; here: boolean; focused: boolean; focusTick: number; tc: (f: number) => string; onJump: (n: NoteRow) => void; onCopied: (what: string) => void }) {
   const setStatus = useMutation(api.notes.setStatus);
   const reply = useMutation(api.notes.reply);
   const remove = useMutation(api.notes.remove);
@@ -62,14 +63,29 @@ function NoteCard({ n, here, focused, tc, onJump, onCopied }: { n: NoteRow; here
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(n.text);
   const ref = useRef<HTMLElement>(null);
-  useEffect(() => { if (focused) ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [focused]);
+  // Picked from the bar, a link or a jump: bring it into view (again on every pick).
+  useEffect(() => {
+    if (!focused) return;
+    const el = ref.current;
+    if (!el) return;
+    // Phones pin the player at the top: scroll the page so the note lands just below it.
+    const pinned = document.querySelector(".stagecol");
+    const scroller = el.closest(".main") as HTMLElement | null;
+    if (pinned && scroller && getComputedStyle(pinned).position === "sticky") {
+      const top = pinned.getBoundingClientRect().bottom + 8;
+      const r = el.getBoundingClientRect();
+      if (r.top < top || r.bottom > window.innerHeight) scroller.scrollBy({ top: r.top - top, behavior: "smooth" });
+    } else {
+      el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [focused, focusTick]);
 
   const when = n.kind === "general" ? "Whole video" : n.kind === "range" ? `${tc(n.inFrame!)} → ${tc(n.outFrame!)}` : tc(n.inFrame!);
   const len = n.kind === "range" ? n.outFrame! - n.inFrame! + 1 : 0;
   const copy = (text: string, what: string) => { void navigator.clipboard?.writeText(text).then(() => onCopied(what), () => onCopied("Couldn't copy")); };
 
   return (
-    <article ref={ref} className={`note${here || focused ? " here" : ""}${n.status === "done" ? " done" : ""}`}
+    <article ref={ref} className={`note${focused ? " focus" : here ? " here" : ""}${n.status === "done" ? " done" : ""}`}
       onClick={(e) => { if (n.kind !== "general" && !(e.target as HTMLElement).closest("button, a, textarea, input, form")) onJump(n); }}>
       <div className="nhead">
         <Avatar name={n.authorName} />

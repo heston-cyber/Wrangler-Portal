@@ -116,6 +116,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const [muted, setMuted] = useState(false);
   const [showDrawings, setShowDrawings] = useState(true);
   const [focusId, setFocusId] = useState<string | null>(noteId);
+  const [focusTick, setFocusTick] = useState(0);
   const [dialog, setDialog] = useState<null | "rename" | "starttc" | "keys">(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -155,9 +156,19 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
 
   const jump = useCallback((n: NoteRow) => {
     setFocusId(n._id);
+    setFocusTick((t) => t + 1);
     if (n.inFrame !== undefined) void player.seekToFrame(n.inFrame);
     setHl(n.kind === "range" ? { a: n.inFrame!, b: n.outFrame! } : null);
   }, [player]);
+
+  // A note's mark on the bar was clicked: open the Notes tab, make sure the note is listed, then jump to it.
+  const pick = (id: string) => {
+    const n = (notes ?? []).find((x) => x._id === id);
+    if (!n) return;
+    setPanel("notes");
+    if (!filter.kinds[n.kind] || (filter.status !== "all" && filter.status !== n.status)) setFilter(defaultFilter);
+    jump(n);
+  };
 
   // Opened from a link to one note (?note=…): jump to it once the video is ready.
   const jumped = useRef(false);
@@ -291,10 +302,12 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           {ready ? <Scrubber
             clock={player.clock}
             frameCount={frameCount || 1}
-            notes={(notes ?? []).map((n) => ({ id: n._id, kind: n.kind, inFrame: n.inFrame, outFrame: n.outFrame, status: n.status }))}
+            notes={(notes ?? []).map((n) => ({ id: n._id, kind: n.kind, inFrame: n.inFrame, outFrame: n.outFrame, status: n.status, text: n.text }))}
             sel={sel}
             highlight={hl}
-            onSeek={(f) => void player.seekToFrame(f)}
+            activeId={focusId}
+            onPick={pick}
+            onSeek={(f) => { setFocusId(null); setHl(null); void player.seekToFrame(f); }}
             onSelect={(a, b) => { setWhole(false); setSel({ a, b }); }}
             label={(f) => tc(f)}
           /> : <div style={{ flex: 1 }} />}
@@ -439,7 +452,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
             </div>
             <div className="sbody">
               {panel === "notes"
-                ? <NotesList notes={version ? notes : []} clock={player.clock} tc={tc} filter={filter} onJump={jump} focusId={focusId} onCopied={showToast} />
+                ? <NotesList notes={version ? notes : []} clock={player.clock} tc={tc} filter={filter} onJump={jump} focusId={focusId} focusTick={focusTick} onCopied={showToast} />
                 : <VersionsList videoId={data._id} versions={data.versions} current={version?.number ?? null} uploads={uploads} />}
             </div>
           </aside>
