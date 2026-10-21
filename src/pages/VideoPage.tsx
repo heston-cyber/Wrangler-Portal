@@ -290,7 +290,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       }>
         <a {...linkProps("/")} aria-label="Home" style={{ display: "flex" }}><img className="logo" src="/brand/wordmark-cream.png" alt="Wrangler Productions" /></a>
         <Sep />
-        {data.project && <><a className="hide-sm" {...linkProps(`/projects/${data.project._id}`)}>{projectLabel(data.project)}</a><Sep /></>}
+        {data.project && <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps(`/projects/${data.project._id}`)}>{projectLabel(data.project)}</a><Sep /></span>}
         <span className="here">{data.title}</span>
         {version && <button className="chip" onClick={() => setPanel("versions")} title="Versions">v{version.number}{data.versions.length > 1 ? ` of ${data.versions.length}` : ""}</button>}
         {st && <span className={`chip ${st.tone}`}>{st.text}</span>}
