@@ -267,7 +267,7 @@ export const getVersionInternal = internalQuery({
 export const patchVersion = internalMutation({
   args: { versionId: v.id("versions"), patch: v.any() },
   handler: async (ctx, { versionId, patch }) => {
-    const allowed = ["status", "fpsNum", "fpsDen", "width", "height", "lengthSeconds", "mp4Heights", "encodeProgress", "pollCount", "error", "readyAt", "frameCount", "frameCountFrom"];
+    const allowed = ["status", "fpsNum", "fpsDen", "width", "height", "lengthSeconds", "mp4Heights", "encodeProgress", "pollCount", "error", "readyAt", "frameCount", "frameCountFrom", "stages"];
     const p: Record<string, unknown> = {};
     for (const k of allowed) if (k in patch) p[k] = patch[k];
     await ctx.db.patch(versionId, p);

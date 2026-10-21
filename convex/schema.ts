@@ -45,6 +45,10 @@ export default defineSchema({
     dropboxPath: v.optional(v.string()), // where the original lives, when it came from the Dropbox drop folder
     createdAt: v.number(),
     readyAt: v.optional(v.number()),
+    // Oct 21 measurement: each change in what Bunny has made while converting (and for a few minutes after),
+    // to see how much sooner the 1080p copy is usable than "ready". s = Bunny status, p = progress %,
+    // res = the copies Bunny lists, mp4 = the MP4 copies that actually answer on the CDN.
+    stages: v.optional(v.array(v.object({ t: v.number(), s: v.number(), p: v.number(), res: v.string(), mp4: v.array(v.number()) }))),
   })
     .index("by_video", ["videoId", "number"])
     .index("by_guid", ["bunnyGuid"]),

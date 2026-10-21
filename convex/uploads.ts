@@ -3,7 +3,7 @@
 import { action, internalAction, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
-import { bunnyCall, bunnyEnv, getBunnyVideo } from "./bunny";
+import { bunnyCall, bunnyEnv, getBunnyVideo, type BunnyVideo } from "./bunny";
 import { fpsFromFloat } from "./lib/frames";
 import { httpRangeReader, mp4FrameCount } from "./lib/mp4";
 import type { Id } from "./_generated/dataModel";
@@ -107,6 +107,9 @@ export const poll = internalAction({
       patch.status = "ready";
       patch.readyAt = Date.now();
     }
+    // Measurement (Oct 21): log what Bunny has made each time it changes.
+    const stages = await nextStages(row.version, b).catch(() => null);
+    if (stages) patch.stages = stages;
     await ctx.runMutation(internal.library.patchVersion, { versionId, patch });
     // Came from the Dropbox drop folder: once Bunny has the file (anything past "created"), delete the share link.
     if (row.version.dropboxPath && b.status !== 0 && (ready || failed || count % 3 === 1)) {
@@ -121,6 +124,8 @@ export const poll = internalAction({
       // Waveform for the timeline, from the same MP4 copy.
       await ctx.runMutation(internal.waveforms.markPending, { versionId });
       await ctx.scheduler.runAfter(45_000, internal.waveform.run, { versionId, attempt: 0 });
+      // Keep logging for a few minutes after "ready", in case the MP4 copies land later.
+      await ctx.scheduler.runAfter(10_000, internal.uploads.stageCheck, { versionId, attempt: 0 });
     } else if (!failed && count < MAX_POLLS) {
       await ctx.scheduler.runAfter(POLL_MS, internal.uploads.poll, { versionId });
     }
@@ -130,6 +135,70 @@ export const poll = internalAction({
 // Exact frame count, read from the converted MP4's index (a few small range reads, not a download).
 // Bunny can finish its MP4 copies a little after the stream is ready, so this retries for ~10 minutes.
 const streamCdn = () => process.env.BUNNY_STREAM_CDN || "vz-3ba0610b-f90.b-cdn.net";
+
+// ---------- Measurement (Oct 21, Heston's "option 2") ----------
+// Could a version open as soon as Bunny's 1080p copy is usable, instead of waiting for "ready"? To find out, every
+// check while converting (and every 10 s for up to 3 minutes after) logs any change in Bunny's status, progress,
+// the copies it lists, and which MP4 copies actually answer on the CDN. An MP4 is only asked for once Bunny lists
+// that size, so the CDN isn't asked for files that can't exist yet.
+type Stage = { t: number; s: number; p: number; res: string; mp4: number[] };
+const CHECK_HEIGHTS = [360, 1080];
+const listedHeights = (res: string | null | undefined) =>
+  (res || "").split(",").map((x) => parseInt(x, 10)).filter((h) => CHECK_HEIGHTS.includes(h));
+
+export async function nextStages(version: { bunnyGuid: string; stages?: Stage[] }, b: BunnyVideo): Promise<Stage[] | null> {
+  const prev = version.stages ?? [];
+  const last = prev[prev.length - 1];
+  const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
+  const mp4: number[] = [];
+  for (const h of listedHeights(b.availableResolutions)) {
+    if (last?.mp4.includes(h)) { mp4.push(h); continue; } // seen already; files don't disappear
+    try {
+      const r = await fetch(`https://${streamCdn()}/${version.bunnyGuid}/play_${h}p.mp4`, { method: "HEAD", headers: { Referer: site, Origin: new URL(site).origin } });
+      if (r.ok) mp4.push(h);
+    } catch { /* not there yet, or a blip: try again next check */ }
+  }
+  const e: Stage = { t: Date.now(), s: b.status, p: b.encodeProgress ?? 0, res: b.availableResolutions || "", mp4 };
+  if (last && last.s === e.s && last.p === e.p && last.res === e.res && last.mp4.join() === e.mp4.join()) return null;
+  return [...prev, e].slice(-80);
+}
+
+export const stageCheck = internalAction({
+  args: { versionId: v.id("versions"), attempt: v.number() },
+  handler: async (ctx, { versionId, attempt }): Promise<void> => {
+    const row = await ctx.runQuery(internal.library.getVersionInternal, { versionId });
+    if (!row) return;
+    let b: BunnyVideo | null = null;
+    try { b = await getBunnyVideo(row.version.bunnyGuid); } catch { /* try again next time */ }
+    let stages = row.version.stages ?? [];
+    if (b) {
+      const next = await nextStages(row.version, b).catch(() => null);
+      if (next) { stages = next; await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { stages } }); }
+    }
+    const last = stages[stages.length - 1];
+    const listed = listedHeights(last?.res);
+    const settled = !!b && b.status === 3 && listed.length > 0 && listed.every((h) => last.mp4.includes(h));
+    if (!settled && attempt < 18) await ctx.scheduler.runAfter(10_000, internal.uploads.stageCheck, { versionId, attempt: attempt + 1 });
+  },
+});
+
+// For the CI check (public logs): the logged stages of the latest versions, as seconds after the first check.
+// Each row: [seconds, Bunny status, progress %, copies listed, MP4s answering]. No names.
+export const stageTimes = internalQuery({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, { limit }) => {
+    const vs = (await ctx.db.query("versions").collect()).filter((x) => x.stages?.length).slice(-(limit ?? 5));
+    return vs.map((x) => {
+      const t0 = x.stages![0].t;
+      return {
+        n: x.number, src: x.dropboxPath ? "dropbox" : "browser", sizeMB: x.fileSize ? Math.round(x.fileSize / 1e6) : null,
+        lenSec: x.lengthSeconds ? Math.round(x.lengthSeconds) : null, res: x.width && x.height ? `${x.width}x${x.height}` : null,
+        readySec: x.readyAt ? Math.round((x.readyAt - t0) / 1000) : null,
+        stages: x.stages!.map((s) => [Math.round((s.t - t0) / 1000), s.s, s.p, s.res, s.mp4.join("/")]),
+      };
+    });
+  },
+});
 
 export const countFrames = internalAction({
   args: { versionId: v.id("versions"), attempt: v.number() },
