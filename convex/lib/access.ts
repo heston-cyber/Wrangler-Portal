@@ -13,7 +13,8 @@ export async function requireMe(ctx: QueryCtx | MutationCtx): Promise<Me> {
   const user = await ctx.db.get(userId);
   const email = (user?.email ?? "").toLowerCase();
   if (!email || !allowedEmails().includes(email)) throw new ConvexError("Not allowed.");
-  const name = (user?.name as string | undefined) || (email.startsWith("heston") ? "Heston" : email.split("@")[0]);
+  const local = email.split("@")[0];
+  const name = (user?.name as string | undefined) || local[0].toUpperCase() + local.slice(1);
   return { userId, name, email };
 }
 

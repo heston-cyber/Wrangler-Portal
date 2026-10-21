@@ -13,7 +13,10 @@ export const me = query({
     const user = await ctx.db.get(userId);
     if (!user) return null;
     const email = (user.email ?? "").toLowerCase();
-    return { id: userId, email, name: (user.name as string | undefined) ?? null, allowed: allowedEmails().includes(email) };
+    // Same fallback as notes use, so the menu shows a name rather than an email.
+    const local = email.split("@")[0] ?? "";
+    const fallback = local ? local[0].toUpperCase() + local.slice(1) : null;
+    return { id: userId, email, name: (user.name as string | undefined) || fallback, allowed: allowedEmails().includes(email) };
   },
 });
 
