@@ -80,9 +80,12 @@ export async function mp4FrameCount(read: RangeRead, maxMoovBytes = 64_000_000):
 }
 
 // Range reads over HTTP (server or browser). Throws on HTTP errors.
-export function httpRangeReader(url: string): RangeRead {
+// referer: Bunny Stream libraries can be locked to the site's own address.
+export function httpRangeReader(url: string, referer?: string): RangeRead {
   return async (start, end) => {
-    const res = await fetch(url, { headers: { Range: `bytes=${start}-${end}` } });
+    const headers: Record<string, string> = { Range: `bytes=${start}-${end}` };
+    if (referer) { headers.Referer = referer; headers.Origin = new URL(referer).origin; }
+    const res = await fetch(url, { headers });
     if (res.status === 416) return new Uint8Array(0);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const buf = new Uint8Array(await res.arrayBuffer());

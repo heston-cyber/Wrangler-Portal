@@ -110,7 +110,8 @@ export const countFrames = internalAction({
     for (const h of heights) {
       const url = `https://${streamCdn()}/${row.version.bunnyGuid}/play_${h}p.mp4`;
       try {
-        const n = await mp4FrameCount(httpRangeReader(url));
+        const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
+        const n = await mp4FrameCount(httpRangeReader(url, site));
         if (n) {
           await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { frameCount: n, frameCountFrom: "file" } });
           return { frameCount: n, from: `${h}p MP4` };
