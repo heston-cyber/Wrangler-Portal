@@ -51,7 +51,7 @@ function VersionItem({ videoId, v, current }: { videoId: string; v: Version; cur
             {v.noteCount > 0 && <span className="chip fill" title={`${v.openCount} open of ${v.noteCount}`}>{v.openCount ? `${v.openCount} open` : `${v.noteCount} done`}</span>}
           </span>
         </div>
-        <div className="file"><Film size={14} color="var(--text-secondary)" /><span>{v.fileName}</span>{v.fileSize ? <span className="secondary" style={{ marginLeft: "auto", flex: "0 0 auto" }}>{sizeText(v.fileSize)}</span> : null}</div>
+        <div className="file"><Film size={14} /><span>{v.fileName}</span>{v.fileSize ? <span className="secondary" style={{ marginLeft: "auto", flex: "0 0 auto" }}>{sizeText(v.fileSize)}</span> : null}</div>
         {editing ? (
           <textarea className="input" style={{ minHeight: 64, fontSize: 13 }} value={draft} autoFocus onChange={(e) => setDraft(e.target.value)}
             onBlur={() => void commit()}

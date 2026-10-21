@@ -15,7 +15,7 @@ export default function Settings({ me }: { me: { name: string | null; email: str
   const changed = name.trim() !== (me.name ?? "") && name.trim().length > 0;
   return (
     <>
-      <TopBar><SettingsIcon size={15} color="var(--text-secondary)" /><span className="here">Settings</span></TopBar>
+      <TopBar><SettingsIcon size={15} /><span className="here">Settings</span></TopBar>
       <div className="content">
         <div className="settings">
           <div style={{ display: "grid", gap: 8 }}>

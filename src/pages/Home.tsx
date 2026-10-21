@@ -27,7 +27,7 @@ export default function Home() {
 
   return (
     <>
-      <TopBar><House size={15} color="var(--text-secondary)" /><span className="here">Home</span></TopBar>
+      <TopBar><House size={15} /><span className="here">Home</span></TopBar>
       <div className="content"
         onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setOver(true); } }}
         onDragLeave={(e) => { if (e.currentTarget === e.target) setOver(false); }}

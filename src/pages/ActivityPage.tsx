@@ -27,7 +27,7 @@ export default function ActivityPage() {
           <MenuItem keepOpen checked={show.notes} onSelect={() => setShow({ ...show, notes: !show.notes })}>Notes</MenuItem>
         </Menu>
       }>
-        <Activity size={15} color="var(--text-secondary)" /><span className="here">Activity</span>
+        <Activity size={15} /><span className="here">Activity</span>
       </TopBar>
       <div className="content">
         <div className="toolbar">

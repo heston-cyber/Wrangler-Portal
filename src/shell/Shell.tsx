@@ -131,7 +131,7 @@ function SearchPalette({ onClose }: { onClose: () => void }) {
     <Modal onClose={onClose} label="Search" width={560}>
       <div style={{ display: "grid", gap: 12, margin: -8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 6px" }}>
-          <Search size={18} color="var(--text-secondary)" />
+          <Search size={18} />
           <input ref={inputRef} className="input" style={{ background: "transparent", boxShadow: "none", padding: 0, height: 40, fontSize: 16 }}
             placeholder="Search videos and projects…" value={q}
             onChange={(e) => { setQ(e.target.value); setI(0); }}

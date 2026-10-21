@@ -92,7 +92,7 @@ function NoteCard({ n, here, focused, focusTick, tc, onJump, onCopied }: { n: No
         <span className="who">{n.authorName}</span>
         <span className="ago">{ago(n.createdAt)}</span>
         <span className="right">
-          {n.drawing ? <Pencil size={13} color="var(--text-secondary)" aria-label="Has a drawing" /> : null}
+          {n.drawing ? <Pencil size={13} aria-label="Has a drawing" /> : null}
           {n.kind === "general"
             ? <span className="tcpill"><span className="dot" style={{ background: kindColor(n.kind) }} />{when}</span>
             : <button className="tcpill" onClick={() => onJump(n)} title="Jump here"><span className="dot" style={{ background: kindColor(n.kind) }} />{when}</button>}

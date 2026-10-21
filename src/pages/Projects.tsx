@@ -83,7 +83,7 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
           </Menu>
         </>
       }>
-        <Clapperboard size={15} color="var(--text-secondary)" />
+        <Clapperboard size={15} />
         {projectId ? <><a {...linkProps("/projects")}>Projects</a><Sep /><span className="here">{project ? projectLabel(project) : "…"}</span></> : <span className="here">Projects</span>}
       </TopBar>
 

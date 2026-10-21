@@ -522,3 +522,21 @@ button.tcpill:hover { background: var(--fill-chip-hover); }
 @media (max-width: 820px), (pointer: coarse) {
   input, textarea, select, .input, .composer textarea, .edit textarea.input { font-size: 16px !important; }
 }
+
+/* Signal red for controls, timecodes and icons (Heston, Oct 20). Note-type dots keep Resolve's colours. */
+.lucide { color: var(--accent); }
+.mitem .lucide, .icon-btn .lucide, .navitem .lucide, .btn .lucide, .thumb.ph .lucide { color: var(--accent); }
+/* on a red fill, icons go black so they don't vanish */
+.btn.primary .lucide, .btn.on .lucide, .btn.danger .lucide, .composer .send .lucide, .donepill.is .lucide, .chip.red .lucide { color: inherit; }
+.composer .send:disabled .lucide { color: var(--text-secondary); }
+.icon-btn:disabled .lucide { color: var(--text-secondary); }
+/* video controls */
+.transport .play { color: var(--accent); }
+.timebtn, .timebtn .of { color: var(--accent); }
+.timebtn .of { opacity: .6; }
+.speedbtn { color: var(--accent); }
+/* timecodes */
+.composer .target, .tcpill, .scrub .hover { color: var(--accent); }
+/* red timecodes sit on black pills so they stay readable */
+.tcpill, .composer .target { background: var(--wp-black); box-shadow: inset 0 0 0 1px rgba(255, 0, 0, .28); }
+button.tcpill:hover, .composer .target:hover { background: var(--wp-black); box-shadow: inset 0 0 0 1px var(--accent); }
