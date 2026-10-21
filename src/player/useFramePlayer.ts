@@ -26,11 +26,14 @@ export const useFrame = (clock: FrameClock) => useSyncExternalStore(clock.subscr
 
 export type Player = ReturnType<typeof useFramePlayer>;
 
-export function useFramePlayer(src: string | null, fps: Fps, knownFrameCount: number | null) {
+// exactFrameCount: counted from the file by the backend. Without it, the player estimates from the
+// video's length, which can be one high when audio runs past the last picture.
+export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: number | null) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const clock = useMemo(makeClock, []);
   const [playing, setPlaying] = useState(false);
-  const [frameCount, setFrameCount] = useState<number | null>(knownFrameCount);
+  const [estimatedFrameCount, setEstimatedFrameCount] = useState<number | null>(null);
+  const frameCount = exactFrameCount ?? estimatedFrameCount;
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bias = useRef(0);
@@ -61,7 +64,7 @@ export function useFramePlayer(src: string | null, fps: Fps, knownFrameCount: nu
     }
     const onMeta = () => {
       setReady(true);
-      if (isFinite(v.duration) && v.duration > 0) setFrameCount(Math.round(v.duration / FD));
+      if (isFinite(v.duration) && v.duration > 0) setEstimatedFrameCount(Math.round(v.duration / FD));
     };
     const onErr = () => setError("The video couldn't load. Try the other quality, or refresh.");
     const onPlay = () => setPlaying(true);
@@ -142,6 +145,7 @@ export function useFramePlayer(src: string | null, fps: Fps, knownFrameCount: nu
     clock,
     fps,
     frameCount,
+    estimatedFrameCount,
     ready,
     playing,
     error,

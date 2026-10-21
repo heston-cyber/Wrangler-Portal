@@ -31,6 +31,7 @@ export default defineSchema({
     fpsNum: v.optional(v.number()), // 24000
     fpsDen: v.optional(v.number()), // 1001
     frameCount: v.optional(v.number()),
+    frameCountFrom: v.optional(v.union(v.literal("file"), v.literal("player"))), // "file" = counted in the MP4, exact
     width: v.optional(v.number()),
     height: v.optional(v.number()),
     lengthSeconds: v.optional(v.number()),

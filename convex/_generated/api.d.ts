@@ -14,6 +14,7 @@ import type * as http from "../http.js";
 import type * as library from "../library.js";
 import type * as lib_access from "../lib/access.js";
 import type * as lib_frames from "../lib/frames.js";
+import type * as lib_mp4 from "../lib/mp4.js";
 import type * as notes from "../notes.js";
 import type * as phase0 from "../phase0.js";
 import type * as slack from "../slack.js";
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   library: typeof library;
   "lib/access": typeof lib_access;
   "lib/frames": typeof lib_frames;
+  "lib/mp4": typeof lib_mp4;
   notes: typeof notes;
   phase0: typeof phase0;
   slack: typeof slack;

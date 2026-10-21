@@ -50,12 +50,14 @@ function VideoView({ data, version }: { data: VideoData; version: Version | null
   const [quality, setQuality] = useState<"file" | "stream">(mp4H ? "file" : "stream");
   const ready = version?.status === "ready";
   const src = !version || !ready ? null : quality === "file" && mp4H ? `https://${BUNNY_CDN_HOST}/${version.bunnyGuid}/play_${mp4H}p.mp4` : `https://${BUNNY_CDN_HOST}/${version.bunnyGuid}/playlist.m3u8`;
-  const player = useFramePlayer(src, fps, version?.frameCount ?? null);
+  const player = useFramePlayer(src, fps, version?.frameCountExact ? version.frameCount : null);
   const frameCount = player.frameCount ?? version?.frameCount ?? 0;
 
+  // Until the backend has counted the file, save the player's estimate so lists can show a length.
   useEffect(() => {
-    if (version && player.frameCount && player.frameCount !== version.frameCount) void reportFrameCount({ versionId: version._id, frameCount: player.frameCount });
-  }, [player.frameCount, version, reportFrameCount]);
+    const est = player.estimatedFrameCount;
+    if (version && !version.frameCountExact && est && est !== version.frameCount) void reportFrameCount({ versionId: version._id, frameCount: est });
+  }, [player.estimatedFrameCount, version, reportFrameCount]);
 
   // Composer state
   const [sel, setSel] = useState<{ a: number; b: number } | null>(null);

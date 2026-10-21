@@ -5,6 +5,7 @@ import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
 import { bunnyCall, bunnyEnv, getBunnyVideo } from "./bunny";
 import { fpsFromFloat } from "./lib/frames";
+import { httpRangeReader, mp4FrameCount } from "./lib/mp4";
 import type { Id } from "./_generated/dataModel";
 
 async function sha256Hex(text: string) {
@@ -86,9 +87,51 @@ export const poll = internalAction({
     }
     await ctx.runMutation(internal.library.patchVersion, { versionId, patch });
     if (ready) {
+      await ctx.scheduler.runAfter(0, internal.uploads.countFrames, { versionId, attempt: 0 });
       await ctx.scheduler.runAfter(0, internal.slack.versionReady, { versionId });
     } else if (!failed && count < MAX_POLLS) {
       await ctx.scheduler.runAfter(POLL_MS, internal.uploads.poll, { versionId });
     }
+  },
+});
+
+// Exact frame count, read from the converted MP4's index (a few small range reads, not a download).
+// Bunny can finish its MP4 copies a little after the stream is ready, so this retries for ~10 minutes.
+const streamCdn = () => process.env.BUNNY_STREAM_CDN || "vz-3ba0610b-f90.b-cdn.net";
+
+export const countFrames = internalAction({
+  args: { versionId: v.id("versions"), attempt: v.number() },
+  handler: async (ctx, { versionId, attempt }): Promise<{ frameCount: number | null; from?: string; error?: string }> => {
+    const row = await ctx.runQuery(internal.library.getVersionInternal, { versionId });
+    if (!row) return { frameCount: null, error: "no such version" };
+    const heights = [...(row.version.mp4Heights ?? [])].sort((a, b) => b - a);
+    if (!heights.length) return { frameCount: null, error: "no MP4 copy to read" };
+    let lastError = "";
+    for (const h of heights) {
+      const url = `https://${streamCdn()}/${row.version.bunnyGuid}/play_${h}p.mp4`;
+      try {
+        const n = await mp4FrameCount(httpRangeReader(url));
+        if (n) {
+          await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { frameCount: n, frameCountFrom: "file" } });
+          return { frameCount: n, from: `${h}p MP4` };
+        }
+        lastError = `${h}p: no frame index found`;
+      } catch (e) {
+        lastError = `${h}p: ${e instanceof Error ? e.message : String(e)}`;
+      }
+    }
+    if (attempt < 20) await ctx.scheduler.runAfter(30_000, internal.uploads.countFrames, { versionId, attempt: attempt + 1 });
+    return { frameCount: null, error: lastError };
+  },
+});
+
+// One-off: count frames for every ready version that only has the player's estimate. Returns counts only.
+export const countAllFrames = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ frameCount: number | null; from?: string; error?: string }[]> => {
+    const ids: Id<"versions">[] = await ctx.runQuery(internal.library.versionsNeedingCount, {});
+    const out = [];
+    for (const id of ids) out.push(await ctx.runAction(internal.uploads.countFrames, { versionId: id, attempt: 99 }));
+    return out;
   },
 });

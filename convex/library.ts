@@ -110,6 +110,7 @@ export function publicVersion(x: Doc<"versions">) {
     fpsNum: x.fpsNum ?? 24000,
     fpsDen: x.fpsDen ?? 1001,
     frameCount: x.frameCount ?? null,
+    frameCountExact: x.frameCountFrom === "file",
     width: x.width ?? null,
     height: x.height ?? null,
     startTimecode: x.startTimecode,
@@ -130,14 +131,16 @@ export const setStartTimecode = mutation({
   },
 });
 
-// The player reports the real frame count once it has loaded the video (Bunny only gives whole seconds).
+// Fallback only: the player's estimate from the video's length. It can be one high when the audio runs
+// past the last picture, so it never replaces a count read from the file itself.
 export const reportFrameCount = mutation({
   args: { versionId: v.id("versions"), frameCount: v.number() },
   handler: async (ctx, a) => {
     await requireMe(ctx);
     const ver = await ctx.db.get(a.versionId);
-    if (!ver || !Number.isInteger(a.frameCount) || a.frameCount <= 0 || a.frameCount > 10_000_000) return;
-    if (ver.frameCount !== a.frameCount) await ctx.db.patch(a.versionId, { frameCount: a.frameCount });
+    if (!ver || ver.frameCountFrom === "file") return;
+    if (!Number.isInteger(a.frameCount) || a.frameCount <= 0 || a.frameCount > 10_000_000) return;
+    if (ver.frameCount !== a.frameCount) await ctx.db.patch(a.versionId, { frameCount: a.frameCount, frameCountFrom: "player" });
   },
 });
 
@@ -177,9 +180,18 @@ export const getVersionInternal = internalQuery({
 export const patchVersion = internalMutation({
   args: { versionId: v.id("versions"), patch: v.any() },
   handler: async (ctx, { versionId, patch }) => {
-    const allowed = ["status", "fpsNum", "fpsDen", "width", "height", "lengthSeconds", "mp4Heights", "encodeProgress", "pollCount", "error", "readyAt"];
+    const allowed = ["status", "fpsNum", "fpsDen", "width", "height", "lengthSeconds", "mp4Heights", "encodeProgress", "pollCount", "error", "readyAt", "frameCount", "frameCountFrom"];
     const p: Record<string, unknown> = {};
     for (const k of allowed) if (k in patch) p[k] = patch[k];
     await ctx.db.patch(versionId, p);
+  },
+});
+
+// Ready versions whose frame count hasn't been read from the file yet.
+export const versionsNeedingCount = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const all = await ctx.db.query("versions").collect();
+    return all.filter((x) => x.status === "ready" && x.frameCountFrom !== "file").map((x) => x._id);
   },
 });
