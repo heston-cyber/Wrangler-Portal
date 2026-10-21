@@ -297,7 +297,7 @@ export const markersFor = internalQuery({
       const duration = n.kind === "range" ? n.outFrame! - n.inFrame! + 1 : 1;
       return {
         note_id: n._id as string, kind: n.kind, frame, duration, label,
-        line: `${kindLabel[n.kind]}${n.kind === "range" ? ` ${duration}f → ${frameTc(n.outFrame!, ver.startTimecode, fps)}` : ""}: ${label}${n.drawing ? " [has drawing: see get_note_images]" : ""} (${n.authorName})`,
+        line: `${kindLabel[n.kind]}${n.kind === "range" ? ` ${duration}f → ${frameTc(n.outFrame!, ver.startTimecode, fps)}` : ""}: ${label}${n.drawing ? " [has drawing: see get_note_images]" : ""}${n.status === "done" ? " [done]" : ""} (${n.authorName})`,
       };
     });
     // Resolve keeps one marker per frame, so notes that start on the same frame share a marker:
@@ -326,7 +326,7 @@ export const markersFor = internalQuery({
       placement: [
         "frame is counted from the render's first frame (frame 0). In DaVinci Resolve, timeline.AddMarker(frameId, color, name, note, duration, customData) takes frameId relative to the timeline's start, so a render of the whole timeline maps 1:1.",
         "Before placing anything, check the timeline matches this render: same frame rate, the timeline's start timecode equals render.start_timecode, and its length equals render.frame_count. If any differ, don't place markers. Tell Heston what differs and ask how to proceed.",
-        "Use custom_data so markers can be matched back to notes later: it holds the note id, or several ids separated by commas. Resolve keeps only one marker per frame, so notes that start on the same frame are already merged into one marker here (note_ids lists them). Place exactly one marker per entry. Whole-video notes go at frame 0 in Green, merged with anything else on frame 0.",
+        "Use custom_data so markers can be matched back to notes later: it holds the note id, or several ids separated by commas. Resolve keeps only one marker per frame, so notes that start on the same frame are already merged into one marker here (note_ids lists them). Place exactly one marker per entry. Colours: Blue = frame, Yellow = range, Green = whole video. Whole-video notes go at frame 0; a merged marker takes the colour of its most specific note (range, then frame, then whole video), so frame 0 is only Green when it holds whole-video notes alone.",
       ],
       markers,
       edl: markersEdl(`${found.video.title} v${ver.number}`, notes.map((n) => ({ kind: n.kind, inFrame: n.inFrame, outFrame: n.outFrame, text: n.text, status: n.status, authorName: n.authorName })), ver.startTimecode, fps),

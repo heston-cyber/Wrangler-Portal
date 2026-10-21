@@ -21,6 +21,11 @@ describe("markersEdl", () => {
       { kind: "range", inFrame: 0, outFrame: 23, text: "Fade up", status: "open", authorName: "H" },
     ], "01:00:00:00", { num: 24000, den: 1001 });
     expect(edl.match(/^\d{3} /gm)).toHaveLength(1);
-    expect(edl).toContain(" |C:ResolveColorYellow |M:Whole video: Louder / Slate / Fade up |D:24");
+    expect(edl).toContain(" |C:ResolveColorYellow |M:3 notes: Whole video: Louder / Slate / Fade up |D:24");
+    const long = markersEdl("T", [
+      { kind: "general", text: "x".repeat(400), status: "open", authorName: "H" },
+      { kind: "range", inFrame: 0, outFrame: 23, text: "Fade up", status: "open", authorName: "H" },
+    ], "01:00:00:00", { num: 24000, den: 1001 });
+    expect(long).toContain("… / Fade up |D:24");
   });
 });

@@ -5,7 +5,10 @@ export type EdlNote = { kind: "frame" | "range" | "general"; inFrame?: number; o
 
 const COLOR = { frame: "ResolveColorBlue", range: "ResolveColorYellow", general: "ResolveColorGreen" } as const;
 
-const clean = (s: string) => s.replace(/[|\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 180);
+const clean = (s: string, max = 180) => {
+  const t = s.replace(/[|\r\n\t]+/g, " ").replace(/\s+/g, " ").trim();
+  return t.length > max ? t.slice(0, max - 1).trimEnd() + "…" : t;
+};
 
 // Resolve keeps one marker per frame, so notes that start on the same frame become one marker:
 // longest duration, colour of the most specific note (range > frame > whole video), labels joined with " / ".
@@ -27,7 +30,9 @@ export function markersEdl(title: string, notes: EdlNote[], startTc: string, fps
     const dur = Math.max(...group.map(durOf));
     const tin = framesToTc(start + f, n);
     const tout = framesToTc(start + f + 1, n);
-    const label = clean(group.map((x) => `${x.kind === "general" ? "Whole video: " : ""}${x.text || "(drawing)"}${x.status === "done" ? " [done]" : ""}`).join(" / "));
+    const one = (x: EdlNote) => `${x.kind === "general" ? "Whole video: " : ""}${x.text || "(drawing)"}${x.status === "done" ? " [done]" : ""}`;
+    // Each note keeps its own share of the room, so a long first note can't push the others out.
+    const label = group.length === 1 ? clean(one(lead)) : clean(`${group.length} notes: ` + group.map((x) => clean(one(x), Math.floor(480 / group.length))).join(" / "), 520);
     lines.push(`${String(i).padStart(3, "0")}  001      V     C        ${tin} ${tout} ${tin} ${tout}  `);
     lines.push(` |C:${COLOR[lead.kind]} |M:${label} |D:${dur}`);
     lines.push("");
