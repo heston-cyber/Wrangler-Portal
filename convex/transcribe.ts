@@ -5,8 +5,11 @@ import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { buildTranscript } from "./lib/transcript";
+import { mp4FrameCount } from "./lib/mp4";
 
 const MAX_BYTES = 900_000_000;
+const WAIT_MS = 15_000;
+const MAX_WAITS = 40;
 const streamCdn = () => process.env.BUNNY_STREAM_CDN || "vz-3ba0610b-f90.b-cdn.net";
 const MODELS = ["scribe_v2", "scribe_v1"];
 
@@ -17,22 +20,30 @@ export const run = internalAction({
     if (!key) return { result: "no ElevenLabs key" };
     const row = await ctx.runQuery(internal.library.getVersionInternal, { versionId });
     if (!row || row.version.status !== "ready") return { result: "version not ready" };
-    const heights = [...(row.version.mp4Heights ?? [])].sort((a, b) => a - b);
-    if (!heights.length) {
-      // Bunny makes its MP4 copies a little after the stream is ready.
-      if (attempt < 20) {
+    // This starts the moment the version is ready (Oct 21: no more fixed 1-minute wait). Bunny can make its MP4 copy
+    // a little after that, so until the copy is there, check again every 15 seconds (for up to 10 minutes).
+    const waitForMp4 = async (why: string): Promise<{ result: string }> => {
+      if (attempt < MAX_WAITS) {
         await ctx.runMutation(internal.transcripts.markPending, { versionId, note: "Waiting for Bunny's MP4 copy." });
-        await ctx.scheduler.runAfter(30_000, internal.transcribe.run, { versionId, attempt: attempt + 1 });
-        return { result: "waiting for MP4" };
+        await ctx.scheduler.runAfter(WAIT_MS, internal.transcribe.run, { versionId, attempt: attempt + 1 });
+        return { result: `waiting for MP4 (${why})` };
       }
       await ctx.runMutation(internal.transcripts.fail, { versionId, error: "Bunny never made an MP4 copy to transcribe." });
       return { result: "no MP4" };
+    };
+    const heights = [...(row.version.mp4Heights ?? [])].sort((a, b) => a - b);
+    if (!heights.length) return await waitForMp4("none listed yet");
+    const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
+    const url = `https://${streamCdn()}/${row.version.bunnyGuid}/play_${heights[0]}p.mp4`;
+    let media: Response;
+    try {
+      media = await fetch(url, { headers: { Referer: site, Origin: new URL(site).origin } });
+    } catch {
+      return await waitForMp4("network");
     }
+    if (media.status === 404) return await waitForMp4("not made yet");
     const tries = await ctx.runMutation(internal.transcripts.begin, { versionId });
     try {
-      const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
-      const url = `https://${streamCdn()}/${row.version.bunnyGuid}/play_${heights[0]}p.mp4`;
-      const media = await fetch(url, { headers: { Referer: site, Origin: new URL(site).origin } });
       if (!media.ok) throw new Error(`Couldn't read Bunny's MP4 (${media.status}).`);
       const buf = Buffer.from(await media.arrayBuffer());
       if (buf.length > MAX_BYTES) throw new Error("The cut is too big to transcribe in one go.");
@@ -56,7 +67,12 @@ export const run = internalAction({
       if (!stt) throw new Error(lastErr || "ElevenLabs didn't answer.");
 
       const fps = { num: row.version.fpsNum ?? 24000, den: row.version.fpsDen ?? 1001 };
-      const file = buildTranscript(stt, fps, row.version.frameCount ?? null);
+      // Words are kept inside the last frame. The exact count is read alongside this and is usually saved by now;
+      // if it isn't, count the frames in the copy just downloaded.
+      const fresh = await ctx.runQuery(internal.library.getVersionInternal, { versionId });
+      const exact = fresh?.version.frameCountFrom === "file" ? fresh.version.frameCount ?? null : null;
+      const counted = exact ?? (await mp4FrameCount(async (s, e) => buf.subarray(s, e + 1)).catch(() => null));
+      const file = buildTranscript(stt, fps, counted ?? fresh?.version.frameCount ?? null);
       const storageId = await ctx.storage.store(new Blob([JSON.stringify(file)], { type: "application/json" }));
       await ctx.runMutation(internal.transcripts.finish, {
         versionId, storageId, language: file.language ?? undefined, wordCount: file.words.length, segmentCount: file.segments.length, model,
