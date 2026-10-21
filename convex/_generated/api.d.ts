@@ -23,6 +23,7 @@ import type * as notes from "../notes.js";
 import type * as phase0 from "../phase0.js";
 import type * as slack from "../slack.js";
 import type * as stills from "../stills.js";
+import type * as testdata from "../testdata.js";
 import type * as stillsDb from "../stillsDb.js";
 import type * as uploads from "../uploads.js";
 import type * as users from "../users.js";
@@ -49,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   phase0: typeof phase0;
   slack: typeof slack;
   stills: typeof stills;
+  testdata: typeof testdata;
   stillsDb: typeof stillsDb;
   uploads: typeof uploads;
   users: typeof users;

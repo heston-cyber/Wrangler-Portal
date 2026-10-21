@@ -195,3 +195,20 @@ describe("tools", () => {
     expect(unknown.j.error.code).toBe(-32602);
   });
 });
+
+describe("acceptance test data", () => {
+  test("seed copies the real notes, adds 11, and leaves the real video alone; remove cleans up", async () => {
+    const { t, videoId } = await setup();
+    const res = await t.mutation(internal.testdata.seedConnectorTest, { sourceVideoId: videoId as never });
+    expect(res).toMatchObject({ already: false, copied: 3, added: 11, total: 14 });
+    const again = await t.mutation(internal.testdata.seedConnectorTest, { sourceVideoId: videoId as never });
+    expect(again.already).toBe(true);
+    const counts = await t.run(async (ctx) => {
+      const notes = await ctx.db.query("notes").collect();
+      return { all: notes.length, real: notes.filter((n) => n.videoId === videoId).length };
+    });
+    expect(counts).toEqual({ all: 17, real: 3 });
+    expect((await t.mutation(internal.testdata.removeConnectorTest, {})).removed).toBe(14);
+    expect(await t.run(async (ctx) => (await ctx.db.query("notes").collect()).length)).toBe(3);
+  });
+});
