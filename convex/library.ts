@@ -6,6 +6,7 @@ import { internal } from "./_generated/api";
 import { requireMe } from "./lib/access";
 import { isValidTc } from "./lib/frames";
 import type { Doc, Id } from "./_generated/dataModel";
+import { insertVideo, nextFileName } from "./lib/register";
 
 const clean = (s: string, max = 200) => s.trim().replace(/\s+/g, " ").slice(0, max);
 
@@ -37,6 +38,7 @@ export const overview = query({
         _id: vid._id,
         projectId: vid.projectId,
         title: vid.title,
+        number: vid.number ?? null,
         createdAt: vid.createdAt,
         updatedAt: vid.updatedAt,
         lastOpenedAt: openedAt.get(vid._id) ?? null,
@@ -138,8 +140,7 @@ export const createVideo = mutation({
     const title = clean(a.title, 160);
     if (!title) throw new ConvexError("Give the video a title.");
     if (!(await ctx.db.get(a.projectId))) throw new ConvexError("That project no longer exists.");
-    const now = Date.now();
-    return await ctx.db.insert("videos", { projectId: a.projectId, title, createdAt: now, updatedAt: now });
+    return (await insertVideo(ctx, { projectId: a.projectId, title })).videoId;
   },
 });
 
@@ -171,6 +172,9 @@ export const video = query({
     return {
       _id: vid._id,
       title: vid.title,
+      number: vid.number ?? null,
+      shortTitle: vid.shortTitle ?? null,
+      nextFileName: nextFileName(vid, versions.reduce((m, x) => Math.max(m, x.number), 0)),
       project: project && { _id: project._id, name: project.name, jobNumber: project.jobNumber ?? null },
       versions: versions.sort((a, b) => a.number - b.number).map((x) => ({
         ...publicVersion(x),

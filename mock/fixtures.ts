@@ -18,9 +18,9 @@ const projects = [
   { _id: "p3", name: "Wrangler Reel 2026", jobNumber: null, client: null, createdAt: now - 40 * day },
 ];
 const videos: any[] = [
-  { _id: "v1", projectId: "p1", title: "Brand Film", createdAt: now - 3 * day, updatedAt: now - 12 * min, lastOpenedAt: now - 3 * min },
-  { _id: "v2", projectId: "p1", title: "Opening Weekend Recap", createdAt: now - 2 * day, updatedAt: now - 10 * hr, lastOpenedAt: now - 10 * hr },
-  { _id: "v3", projectId: "p2", title: "Fall Teaser", createdAt: now - 20 * min, updatedAt: now - 20 * min, lastOpenedAt: null },
+  { _id: "v1", projectId: "p1", title: "Brand Film", number: 1, shortTitle: "BrandFilm", createdAt: now - 3 * day, updatedAt: now - 12 * min, lastOpenedAt: now - 3 * min },
+  { _id: "v2", projectId: "p1", title: "Opening Weekend Recap", number: 2, shortTitle: "OpeningRecap", createdAt: now - 2 * day, updatedAt: now - 10 * hr, lastOpenedAt: now - 10 * hr },
+  { _id: "v3", projectId: "p2", title: "Fall Teaser", number: 3, shortTitle: "FallTeaser", createdAt: now - 20 * min, updatedAt: now - 20 * min, lastOpenedAt: null },
   { _id: "v4", projectId: "p3", title: "Barcode frame test", createdAt: now - 6 * day, updatedAt: now - 6 * day, lastOpenedAt: now - 5 * day },
   { _id: "v5", projectId: "p3", title: "Reel cutdown 9x16", createdAt: now - 12 * day, updatedAt: now - 12 * day, lastOpenedAt: null },
 ];
@@ -90,9 +90,31 @@ function video(id: string) {
   if (!v) return null;
   const p = projects.find((x) => x._id === v.projectId)!;
   return {
-    _id: v._id, title: v.title, project: { _id: p._id, name: p.name, jobNumber: p.jobNumber },
+    _id: v._id, title: v.title, number: v.number ?? null, shortTitle: v.shortTitle ?? null, nextFileName: nextName(v),
+    project: { _id: p._id, name: p.name, jobNumber: p.jobNumber },
     versions: (versions[id] ?? []).map((x) => ({ ...x, noteCount: notes.filter((n) => n.versionId === x._id).length, openCount: notes.filter((n) => n.versionId === x._id && n.status === "open").length })),
   };
+}
+const pad5 = (n: number) => String(n).padStart(5, "0");
+function nextName(v: any) {
+  if (!v.number) return null;
+  const top = (versions[v._id] ?? []).reduce((m: number, x: any) => Math.max(m, x.number), 0);
+  return `${pad5(v.number)}_${v.shortTitle}_v${top + 1}`;
+}
+let nextNumber = 4;
+let sheet: any = null;
+function registerList() {
+  const rows = videos.filter((v) => v.number).map((v) => {
+    const p = projects.find((x) => x._id === v.projectId)!;
+    const l = latestOf(v._id);
+    const open = l ? notes.filter((n) => n.versionId === l._id && n.status === "open").length : 0;
+    return {
+      videoId: v._id, number: v.number, numberText: pad5(v.number), shortTitle: v.shortTitle, title: v.title, client: p.client, project: p.name, projectId: p._id, jobNumber: p.jobNumber,
+      versions: (versions[v._id] ?? []).length, latest: l?.number ?? null, status: !l ? "Waiting for v1" : l.status === "ready" ? (open ? "Open notes" : "Ready") : "Converting",
+      openNotes: open, createdAt: v.createdAt, lastActivity: v.updatedAt, nextFileName: nextName(v), link: "",
+    };
+  }).sort((a, b) => b.number - a.number);
+  return { rows, unnumbered: videos.filter((v) => !v.number).length };
 }
 function feed() {
   const info = (verId: string) => {
@@ -127,6 +149,9 @@ export const store = {
       case "notes:forVersion": return notes.filter((n) => n.versionId === args.versionId).map((n) => (n.voice ? { ...n, voiceUrl: null } : n));
       case "activity:feed": return feed().slice(0, args.limit ?? 60);
       case "connector:listKeys": return keys;
+      case "register:list": return registerList();
+      case "register:sheetKey": return sheet;
+      case "register:nextName": { const v = videos.find((x) => x._id === args.videoId); return v?.number ? { number: pad5(v.number), shortTitle: v.shortTitle, fileName: nextName(v) } : null; }
       case "dropbox:status": return { configured: true, transcripts: true, connected: true, email: "heston@wranglerproductions.com", name: "Heston Hill", connectedAt: Date.now() - 86_400_000, lastSyncAt: Date.now() - 40_000, lastError: null,
         recent: [
           { _id: "d1", path: "/Harbor Coffee/26201 Harbor Coffee Launch/Brand Film/26201_BrandFilm_v3.mov", status: "waiting", reason: "Waiting for the file to finish.", at: Date.now() - 30_000, size: 1, videoId: null, versionNumber: null, linkGone: true },
@@ -159,6 +184,18 @@ export const store = {
     if (name === "library:reportFrameCount") return;
     if (name === "notes:voiceUploadUrl") return "/mock-upload";
     if (name === "notes:discardVoice") { (window as any).__discarded = args.storageId; return; }
+    if (name === "register:newVideo") {
+      let pid = args.projectId;
+      if (!pid) { pid = "p" + Date.now(); projects.push({ _id: pid, name: args.projectName, jobNumber: args.jobNumber ?? null, client: args.client ?? null, createdAt: Date.now() }); }
+      const id = "v" + Date.now(); const number = nextNumber++;
+      videos.push({ _id: id, projectId: pid, title: args.title, number, shortTitle: args.shortTitle, createdAt: Date.now(), updatedAt: Date.now(), lastOpenedAt: null });
+      bump();
+      const p = projects.find((x) => x._id === pid)!;
+      return { videoId: id, number, numberText: pad5(number), shortTitle: args.shortTitle, fileName: `${pad5(number)}_${args.shortTitle}_v1`, project: p.name, client: p.client, link: "" };
+    }
+    if (name === "register:addToRegister") { const v = videos.find((x) => x._id === args.videoId); const n = args.number ?? nextNumber++; v.number = n; v.shortTitle = args.shortTitle; bump(); return { number: pad5(n), title: v.title, next: nextName(v) }; }
+    if (name === "register:setShortTitle") { const v = videos.find((x) => x._id === args.videoId); if (v) v.shortTitle = args.shortTitle; bump(); return; }
+    if (name === "register:removeSheetKey") { sheet = null; bump(); return; }
     if (name === "connector:revokeKey") { keys = keys.filter((k) => k._id !== args.keyId); bump(); return; }
     if (name === "library:createClient") {
       const n = String(args.name).trim();
@@ -179,6 +216,7 @@ export const store = {
         { text: "and", start: 1.1, end: 1.2 }, { text: "trim", start: 1.25, end: 1.45 }, { text: "here.", start: 1.6, end: 1.9 },
       ] };
     }
+    if (name === "register:makeSheetKey") { sheet = { prefix: "wrs_demo0", createdAt: Date.now(), lastUsedAt: null }; bump(); return { key: "wrs_demo0000000000000000000000000000" }; }
     if (name === "connector:createKey") {
       const key = "wr_" + "MockKeyForScreenshotsOnly0123456789abcdefgh";
       keys = [{ _id: "k" + Date.now(), prefix: key.slice(0, 10), label: "Claude", createdAt: Date.now(), lastUsedAt: null }, ...keys]; bump();

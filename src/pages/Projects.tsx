@@ -3,14 +3,15 @@
 import { useState } from "react";
 import { BrandImg } from "../ui/BrandImg";
 import { useMutation, useQuery } from "convex/react";
-import { Building2, ChevronDown, ChevronRight, Clapperboard, Ellipsis, FolderPlus, LayoutGrid, List, Pencil, Plus, SlidersHorizontal, Trash2, Upload, X } from "lucide-react";
+import { Building2, ChevronDown, ChevronRight, Clapperboard, Ellipsis, FolderPlus, LayoutGrid, List, ListOrdered, Pencil, Plus, SlidersHorizontal, Trash2, Upload, X } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { Sep, TopBar } from "../shell/Shell";
 import { useUpload } from "../shell/UploadDialog";
 import { linkProps, navigate } from "../lib/router";
 import { isVideoFile } from "../lib/uploads";
-import { Menu, MenuItem, MenuLabel, MenuSep, Modal } from "../ui/kit";
+import { Menu, MenuItem, MenuLabel, MenuSep, Modal, useToast } from "../ui/kit";
+import { NewVideo } from "./Register";
 import { dayBucket, projectLabel } from "../lib/format";
 import { VideoCard, VideoRow, openedMeta, updatedMeta, type Overview, type VideoItem } from "./VideoRows";
 
@@ -45,6 +46,8 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
   const made = new Set(overview?.clients ?? []); // clients made with "New client", shown even with no projects
   const clients = [...new Set([...(overview?.projects ?? []).map(clientOf), ...made])].sort((a, b) => (a === NO_CLIENT ? 1 : b === NO_CLIENT ? -1 : a.localeCompare(b)));
   const [newClient, setNewClient] = useState(false);
+  const [newVideo, setNewVideo] = useState(false);
+  const [toast, showToast] = useToast();
   const client = !projectId && clientPref && clients.includes(clientPref) ? clientPref : ""; // "" = all clients
   const pmap = new Map((overview?.projects ?? []).map((p) => [p._id as string, p]));
   const vids = (overview?.videos ?? []).filter((x) => (!projectId || x.projectId === projectId) && (!client || clientOf(pmap.get(x.projectId)) === client));
@@ -98,6 +101,7 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
             <MenuItem checked={sort === "az"} onSelect={() => setSort("az")}>A → Z</MenuItem>
           </Menu>
           <Menu align="end" label="Add" trigger={(p) => <button {...p} className="btn primary sm"><Plus size={15} />Add</button>}>
+            <MenuItem icon={<ListOrdered size={16} />} onSelect={() => setNewVideo(true)}>New video (gets a number)</MenuItem>
             <MenuItem icon={<Upload size={16} />} onSelect={() => openUpload({ projectId })}>Upload a video</MenuItem>
             <MenuSep />
             <MenuItem icon={<FolderPlus size={16} />} onSelect={() => openUpload({ newProject: true, client: client && client !== NO_CLIENT ? client : undefined })}>New project</MenuItem>
@@ -200,6 +204,8 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
         )}
       </div>
       {renaming && <RenameProject p={renaming} onClose={() => setRenaming(null)} />}
+      {newVideo && <NewVideo onClose={() => setNewVideo(false)} show={showToast} projectId={projectId} />}
+      {toast}
       {newClient && <NewClient onClose={() => setNewClient(false)} onDone={() => { setNewClient(false); setGroup("client"); setClient(""); }} />}
       {deletingProject && (
         <DeleteProject p={deletingProject} vids={(overview?.videos ?? []).filter((x) => x.projectId === deletingProject._id)}

@@ -809,3 +809,37 @@ button.tcpill:hover, .composer .target:hover { background: var(--surface-inset);
   .review.fs .tl-wave { height: 28px; margin-top: 3px; border-radius: 8px; }
   .review.fs .tl-wave .bars { inset: 3px 2px; }
 }
+
+/* ---------- The register (Phase R2) ---------- */
+code.mono, .input.mono, .chip.num, .fname code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.chip.num { color: var(--text-primary); letter-spacing: .02em; }
+.register { max-width: 1120px; margin: 0 auto; padding: 24px 16px 40px; display: grid; gap: 18px; }
+.reghead { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: flex-end; justify-content: space-between; }
+.reghead .headline { max-width: 52ch; }
+.regsearch { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); min-width: 0; }
+.regsearch .input { width: 260px; max-width: 100%; }
+.regwrap { overflow-x: auto; background: var(--surface-block); border-radius: 16px; }
+.regtable { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.regtable th { text-align: left; font-size: var(--fs-eyebrow); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-secondary); padding: 12px 14px 10px; white-space: nowrap; }
+.regtable td { padding: 10px 14px; border-top: 1px solid var(--border-hairline); vertical-align: middle; white-space: nowrap; }
+.regtable tbody tr { cursor: pointer; }
+.regtable tbody tr:hover td { background: var(--surface-block-hover); }
+.regtable td.num { color: var(--text-primary); font-weight: 600; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.regtable td.vid a { color: var(--text-primary); font-weight: 500; text-decoration: none; }
+.regtable td.vid a:hover { text-decoration: underline; }
+.regstat { display: inline-flex; gap: 6px; align-items: center; }
+.regnote { margin: 0; }
+.regnote a { color: inherit; }
+.fname { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
+.fname code { font-size: 12.5px; color: var(--text-primary); user-select: all; overflow: hidden; text-overflow: ellipsis; }
+.fname.compact .icon-btn { width: 26px; height: 26px; }
+.keyline .fname code { white-space: normal; word-break: break-all; font-size: 14px; }
+.nextrender { display: grid; gap: 4px; padding: 10px 12px; margin: 0 0 10px; background: var(--surface-block); border-radius: 12px; }
+.madelist { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.madelist code { font-size: 12px; }
+.scriptbox { margin: 0; max-height: 220px; overflow: auto; font-size: 11.5px; line-height: 1.45; white-space: pre; color: var(--text-primary); user-select: all; }
+.modal .steps, .dialog .steps { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 13.5px; line-height: 1.5; }
+@media (max-width: 820px) { .regsearch, .regsearch .input { width: 100%; } }
+.regnext { margin-top: 4px; }
+.regnext.mobile-only { display: none !important; }
+@media (max-width: 820px) { .regnext.mobile-only { display: flex !important; } .regtable td.vid { white-space: normal; } }

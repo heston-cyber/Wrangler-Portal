@@ -2,6 +2,7 @@ import { httpRouter } from "convex/server";
 import { auth } from "./auth";
 import { mcpOther, mcpPost } from "./mcp";
 import { callback as dropboxCallback, webhookNotify, webhookVerify } from "./dropbox";
+import { feed as registerFeed } from "./register";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);
@@ -19,5 +20,8 @@ http.route({ pathPrefix: "/mcp/", method: "DELETE", handler: mcpOther });
 http.route({ path: "/dropbox/callback", method: "GET", handler: dropboxCallback });
 http.route({ path: "/dropbox/webhook", method: "GET", handler: webhookVerify });
 http.route({ path: "/dropbox/webhook", method: "POST", handler: webhookNotify });
+
+// The register's read-only feed for the Google Sheet copy (Phase R2).
+http.route({ path: "/register-feed", method: "GET", handler: registerFeed });
 
 export default http;

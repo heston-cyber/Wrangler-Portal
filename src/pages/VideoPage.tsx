@@ -5,7 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { BrandImg } from "../ui/BrandImg";
 import { useConvex, useMutation, useQuery } from "convex/react";
 import {
-  ArrowUp, Brush, Check, Circle, Download, Ellipsis, Eye, Keyboard, Maximize, Minimize, MoveUpRight, PanelRight, Pause, Pencil, Play,
+  ArrowUp, Brush, Check, Circle, Copy, Download, ListOrdered, Ellipsis, Eye, Keyboard, Maximize, Minimize, MoveUpRight, PanelRight, Pause, Pencil, Play,
   Crosshair, Film, Mic, Plus, SlidersHorizontal, Square, Timer, Undo2, Upload, Volume2, VolumeX, X,
 } from "lucide-react";
 import type { FunctionReturnType } from "convex/server";
@@ -30,6 +30,8 @@ import { mapWords, playedRange, pointersFrom, transcriptText, type Pointer, type
 import { secondsText } from "../notes/NotesPanel";
 import { Sep, TopBar } from "../shell/Shell";
 import { Menu, MenuItem, MenuLabel, MenuSep, Modal, Spinner, useIsNarrow, useToast } from "../ui/kit";
+import { FileName, copyText } from "./Register";
+import { shortTitleFrom } from "../../convex/lib/register";
 
 export default function VideoPage({ videoId, versionNumber, noteId }: { videoId: Id<"videos">; versionNumber: number | null; noteId: string | null }) {
   const data = useQuery(api.library.video, { videoId });
@@ -210,7 +212,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   useEffect(() => () => { if (fullscreenElement()) void exitPageFullscreen().catch(() => {}); }, []);
   const [focusId, setFocusId] = useState<string | null>(noteId);
   const [focusTick, setFocusTick] = useState(0);
-  const [dialog, setDialog] = useState<null | "rename" | "starttc" | "keys">(null);
+  const [dialog, setDialog] = useState<null | "rename" | "starttc" | "keys" | "register">(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -558,13 +560,16 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
         <Sep />
         <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps("/projects")}>Projects</a><Sep /></span>
         {data.project && <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps(`/projects/${data.project._id}`)}>{projectLabel(data.project)}</a><Sep /></span>}
+        {data.number && <span className="chip num mono" title="Register number">{String(data.number).padStart(5, "0")}</span>}
         <span className="here">{data.title}</span>
         {version && <button className="chip" onClick={() => setPanel("versions")} title="Versions">v{version.number}{data.versions.length > 1 ? ` of ${data.versions.length}` : ""}</button>}
         {st && <span className={`chip ${st.tone}`}>{st.busy && <Spinner />}{st.text}</span>}
         {tr?.busy && <span className="chip warn"><Spinner />{tr.text}</span>}
         <Menu label="Video options" trigger={(p) => <button {...p} className="icon-btn" aria-label="Video options"><Ellipsis size={16} /></button>}>
           <MenuItem icon={<Upload size={16} />} onSelect={newVersion}>Upload a new version</MenuItem>
-          <MenuItem icon={<Pencil size={16} />} onSelect={() => setDialog("rename")}>Rename video</MenuItem>
+          <MenuItem icon={<Pencil size={16} />} onSelect={() => setDialog("rename")}>{data.number ? "Rename or change short title" : "Rename video"}</MenuItem>
+          {!data.number && <MenuItem icon={<ListOrdered size={16} />} onSelect={() => setDialog("register")}>Add to the register…</MenuItem>}
+          {data.nextFileName && <MenuItem icon={<Copy size={16} />} onSelect={() => void copyText(`${data.nextFileName}.mp4`, showToast, "File name copied")}>Copy next render name</MenuItem>}
           <MenuItem icon={<Timer size={16} />} onSelect={() => setDialog("starttc")} disabled={!version}>Start timecode…</MenuItem>
           <MenuSep />
           <MenuItem icon={<Download size={16} />} onSelect={downloadEdl} disabled={!notes?.length}>Download Resolve markers</MenuItem>
@@ -748,7 +753,15 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
               {panel === "notes"
                 ? <NotesList notes={version ? notes : []} clock={player.clock} tc={tc} filter={filter} onJump={jump} focusId={focusId} focusTick={focusTick} onCopied={showToast} onSeekFrame={(f) => void player.seekToFrame(f)} />
                 : panel === "versions"
-                  ? <VersionsList videoId={data._id} versions={data.versions} current={version?.number ?? null} uploads={uploads} />
+                  ? <>
+                      {data.nextFileName && (
+                        <div className="nextrender">
+                          <span className="rlabel">Next render</span>
+                          <FileName name={`${data.nextFileName}.mp4`} show={showToast} />
+                        </div>
+                      )}
+                      <VersionsList videoId={data._id} versions={data.versions} current={version?.number ?? null} uploads={uploads} />
+                    </>
                   : version ? <TranscriptList versionId={version._id} clock={player.clock} tc={tc} onSeek={(f) => void player.seekToFrame(f)} /> : null}
             </div>
           </aside>
@@ -757,22 +770,67 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
 
       {!narrow && transportBar}
 
-      {dialog === "rename" && <RenameVideo videoId={data._id} title={data.title} onClose={() => setDialog(null)} />}
+      {dialog === "rename" && <RenameVideo videoId={data._id} title={data.title} shortTitle={data.shortTitle} onClose={() => setDialog(null)} />}
       {dialog === "starttc" && version && <StartTcDialog versionId={version._id} startTc={startTc} onClose={() => setDialog(null)} onSaved={() => showToast("Start timecode saved")} />}
       {dialog === "keys" && <ShortcutsDialog onClose={() => setDialog(null)} />}
+      {dialog === "register" && <AddToRegister videoId={data._id} title={data.title} onClose={() => setDialog(null)} onDone={(m) => showToast(m)} />}
       {toast}
     </div>
   );
 }
 
-function RenameVideo({ videoId, title, onClose }: { videoId: Id<"videos">; title: string; onClose: () => void }) {
+function AddToRegister({ videoId, title, onClose, onDone }: { videoId: Id<"videos">; title: string; onClose: () => void; onDone: (m: string) => void }) {
+  const add = useMutation(api.register.addToRegister);
+  const [short, setShort] = useState(shortTitleFrom(title));
+  const [num, setNum] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <Modal onClose={onClose} label="Add to the register">
+      <form style={{ display: "grid", gap: 18 }} onSubmit={async (e) => {
+        e.preventDefault();
+        const n = num.trim() ? Number(num.trim()) : undefined;
+        if (n !== undefined && !(Number.isInteger(n) && n >= 1 && n <= 99999)) { setError("Numbers run 1 to 99999, or leave it empty for the next one."); return; }
+        try { const r = await add({ videoId, shortTitle: short.trim(), number: n }); onClose(); onDone(`Now ${r.number}. Next render: ${r.next}.mp4`); }
+        catch (err) { setError((err as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]); }
+      }}>
+        <div className="dhead"><h2 className="headline">Add to the register. <span className="rest">It gets a number, and its next renders get register names.</span></h2><button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button></div>
+        <div className="row2">
+          <label className="field"><span className="label">Short title (file names)</span><input className="input mono" value={short} onChange={(e) => setShort(e.target.value)} spellCheck={false} autoFocus /></label>
+          <label className="field"><span className="label">Number (empty = next)</span><input className="input mono" value={num} onChange={(e) => setNum(e.target.value.replace(/\D/g, "").slice(0, 5))} inputMode="numeric" placeholder="next" /></label>
+        </div>
+        {error && <p className="error" role="alert">{error}</p>}
+        <div className="dfoot"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary" type="submit"><ListOrdered size={15} />Add</button></div>
+      </form>
+    </Modal>
+  );
+}
+
+function RenameVideo({ videoId, title, shortTitle, onClose }: { videoId: Id<"videos">; title: string; shortTitle: string | null; onClose: () => void }) {
   const rename = useMutation(api.library.renameVideo);
+  const setShort = useMutation(api.register.setShortTitle);
   const [t, setT] = useState(title);
+  const [st, setSt] = useState(shortTitle ?? "");
+  const [error, setError] = useState<string | null>(null);
   return (
     <Modal onClose={onClose} label="Rename video">
-      <form style={{ display: "grid", gap: 18 }} onSubmit={async (e) => { e.preventDefault(); if (t.trim()) { await rename({ videoId, title: t }); onClose(); } }}>
+      <form style={{ display: "grid", gap: 18 }} onSubmit={async (e) => {
+        e.preventDefault();
+        if (!t.trim()) return;
+        try {
+          if (shortTitle !== null && st.trim() !== shortTitle) await setShort({ videoId, shortTitle: st.trim() });
+          await rename({ videoId, title: t });
+          onClose();
+        } catch (err) { setError((err as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]); }
+      }}>
         <div className="dhead"><h2 className="headline">Rename video.</h2><button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button></div>
         <label className="field"><span className="label">Title</span><input className="input" value={t} onChange={(e) => setT(e.target.value)} autoFocus /></label>
+        {shortTitle !== null && (
+          <label className="field">
+            <span className="label">Short title (file names from the next render on)</span>
+            <input className="input mono" value={st} onChange={(e) => setSt(e.target.value)} spellCheck={false} />
+          </label>
+        )}
+        {error && <p className="error" role="alert">{error}</p>}
         <div className="dfoot"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary" type="submit">Save</button></div>
       </form>
     </Modal>

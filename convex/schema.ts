@@ -17,9 +17,19 @@ export default defineSchema({
   videos: defineTable({
     projectId: v.id("projects"),
     title: v.string(),
+    // The register (Oct 22): every video made from now on gets a number (never reused) and a short title,
+    // which make its file names: 00001_LCArizona_v4. Older videos may have neither.
+    number: v.optional(v.number()),
+    shortTitle: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_project", ["projectId"]),
+  }).index("by_project", ["projectId"]).index("by_number", ["number"]),
+
+  // Counters that only go up (the next video number).
+  counters: defineTable({ key: v.string(), value: v.number() }).index("by_key", ["key"]),
+
+  // Read-only keys for the Google Sheet copy of the register. Only the hash is kept.
+  sheetKeys: defineTable({ hash: v.string(), prefix: v.string(), createdAt: v.number(), lastUsedAt: v.optional(v.number()) }).index("by_hash", ["hash"]),
 
   versions: defineTable({
     videoId: v.id("videos"),

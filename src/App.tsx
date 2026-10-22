@@ -6,6 +6,7 @@ import SignIn from "./pages/SignIn";
 import Home from "./pages/Home";
 import Projects from "./pages/Projects";
 import ActivityPage from "./pages/ActivityPage";
+import Register from "./pages/Register";
 import Settings from "./pages/Settings";
 import VideoPage from "./pages/VideoPage";
 import { Shell } from "./shell/Shell";
@@ -46,6 +47,7 @@ function SignedIn() {
   else if (project) page = <Projects key={project[1]} projectId={project[1] as Id<"projects">} />;
   else if (path.startsWith("/projects")) page = <Projects key="all" />;
   else if (path.startsWith("/activity")) page = <ActivityPage />;
+  else if (path.startsWith("/register")) page = <Register />;
   else if (path.startsWith("/settings")) page = <Settings me={me} />;
   else page = <Home />;
   return (

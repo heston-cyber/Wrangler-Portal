@@ -32,6 +32,8 @@ import type * as phase0 from "../phase0.js";
 import type * as player from "../player.js";
 import type * as r1test from "../r1test.js";
 import type * as r1results from "../r1results.js";
+import type * as register from "../register.js";
+import type * as lib_register from "../lib/register.js";
 import type * as slack from "../slack.js";
 import type * as stills from "../stills.js";
 import type * as testdata from "../testdata.js";
@@ -74,6 +76,8 @@ declare const fullApi: ApiFromModules<{
   player: typeof player;
   r1test: typeof r1test;
   r1results: typeof r1results;
+  register: typeof register;
+  "lib/register": typeof lib_register;
   slack: typeof slack;
   stills: typeof stills;
   testdata: typeof testdata;

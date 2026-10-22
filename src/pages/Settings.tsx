@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { Copy, KeyRound, Monitor, Moon, Plus, Settings as SettingsIcon, Sun, X } from "lucide-react";
+import { Copy, KeyRound, Monitor, Moon, Plus, Settings as SettingsIcon, Sheet, Sun, X } from "lucide-react";
 import { useTheme, type ThemePref } from "../lib/theme";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -14,6 +14,38 @@ import { DropboxSettings } from "./DropboxSettings";
 // The connector lives on the Convex site host: <deployment>.convex.site/mcp
 const CONVEX = (import.meta.env.VITE_CONVEX_URL as string | undefined) || "https://handsome-hummingbird-11.convex.cloud";
 export const MCP_URL = CONVEX.replace(/\.convex\.cloud\/?$/, ".convex.site") + "/mcp";
+const FEED_URL = CONVEX.replace(/\.convex\.cloud\/?$/, ".convex.site") + "/register-feed";
+
+// The Apps Script that keeps the Google Sheet copy of the register up to date (pulls every 10 minutes).
+function sheetScript(key: string) {
+  return `// Wrangler Review register: copies the register into the "Register" tab every 10 minutes.
+// Run setUp once (it asks for permission), then leave it. Edits in the sheet are overwritten; change things on the site.
+const FEED = "${FEED_URL}";
+const KEY = "${key}";
+
+function refreshRegister() {
+  const res = UrlFetchApp.fetch(FEED, { headers: { "X-Key": KEY }, muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) throw new Error("Wrangler Review feed answered " + res.getResponseCode() + ": " + res.getContentText().slice(0, 200));
+  const data = JSON.parse(res.getContentText());
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheetByName("Register") || ss.insertSheet("Register", 0);
+  const cols = data.columns;
+  const rows = data.rows.map(function (r) { return cols.map(function (c) { return r[c] === undefined || r[c] === null ? "" : r[c]; }); });
+  sh.clearContents();
+  sh.getRange(1, 1, Math.max(rows.length + 1, 2), 2).setNumberFormat("@"); // keep 00001 as text
+  sh.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight("bold");
+  if (rows.length) sh.getRange(2, 1, rows.length, cols.length).setValues(rows);
+  sh.setFrozenRows(1);
+  sh.getRange(1, cols.length + 2).setValue("Updated " + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MMM d, h:mm a"));
+}
+
+function setUp() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === "refreshRegister") ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger("refreshRegister").timeBased().everyMinutes(10).create();
+  refreshRegister();
+}
+`;
+}
 
 // Light / Dark / System, kept per browser (this device only).
 function Appearance() {
@@ -76,6 +108,8 @@ export default function Settings({ me }: { me: { name: string | null; email: str
           <DropboxSettings show={show} />
 
           <Connector show={show} />
+
+          <SheetCopy show={show} />
 
           <div className="panel">
             <div className="prow">
@@ -195,5 +229,66 @@ function KeyLine({ label, value, onCopy }: { label: string; value: string; onCop
         <button className="icon-btn" onClick={() => onCopy(value)} aria-label={`Copy: ${label}`} title="Copy"><Copy size={15} /></button>
       </div>
     </div>
+  );
+}
+
+function SheetCopy({ show }: { show: (m: string) => void }) {
+  const status = useQuery(api.register.sheetKey, {});
+  const makeKey = useAction(api.register.makeSheetKey);
+  const removeKey = useMutation(api.register.removeSheetKey);
+  const [script, setScript] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const make = async () => {
+    setBusy(true);
+    try { setScript(sheetScript((await makeKey({})).key)); }
+    catch (e) { show((e as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]); }
+    finally { setBusy(false); }
+  };
+  return (
+    <>
+      <div style={{ display: "grid", gap: 8 }} id="sheet">
+        <span className="eyebrow">Google Sheet copy</span>
+        <h1 className="headline">The register in a Google Sheet. <span className="rest">A copy that refreshes itself every 10 minutes. Changes happen here, not in the sheet.</span></h1>
+      </div>
+      <div className="panel">
+        <div className="prow">
+          <span className="pl">
+            Sheet key
+            <span className="secondary" style={{ display: "block", fontSize: 12.5 }}>
+              {status === undefined ? "…" : status ? <>Key <code className="mono">{status.prefix}…</code> made {ago(status.createdAt)} · {status.lastUsedAt ? <>sheet last refreshed {ago(status.lastUsedAt)}</> : "not used yet"}</> : "No key yet. The sheet reads the register with it, and can't change anything."}
+            </span>
+          </span>
+          <span className="pr">
+            {status && <button className="btn sm" onClick={async () => { await removeKey({}); show("Sheet key removed. The sheet stops refreshing."); }}>Turn off</button>}
+            <button className="btn primary sm" disabled={busy} onClick={() => void make()}><Sheet size={15} />{busy ? "Making…" : status ? "New key and script" : "Set up the sheet"}</button>
+          </span>
+        </div>
+      </div>
+      {script && (
+        <Modal onClose={() => setScript(null)} label="Google Sheet script" width={640}>
+          <div style={{ display: "grid", gap: 16 }}>
+            <div className="dhead">
+              <h2 className="headline">Your sheet script. <span className="rest">Its key is inside. Copy it now; it won't be shown again.</span></h2>
+              <button className="icon-btn" onClick={() => setScript(null)} aria-label="Close"><X size={18} /></button>
+            </div>
+            <ol className="steps">
+              <li>Make a Google Sheet (<b>sheets.new</b>) and name it <b>Wrangler Review Register</b>.</li>
+              <li>In the sheet, open <b>Extensions › Apps Script</b>. Delete what's in the editor, paste the script, and press <b>Save</b>.</li>
+              <li>Pick <b>setUp</b> in the function menu at the top, then press <b>Run</b>. Allow access when Google asks: <b>Review permissions</b>, your account, <b>Advanced</b>, then <b>Go to … (unsafe)</b> and <b>Allow</b>. It's your own script.</li>
+              <li>Back in the sheet, the <b>Register</b> tab fills in. It refreshes every 10 minutes on its own.</li>
+            </ol>
+            <div className="keyline rect">
+              <span className="rlabel">Apps Script</span>
+              <pre className="mono scriptbox">{script}</pre>
+            </div>
+            <p className="caption secondary" style={{ margin: 0 }}>Keep the script out of chats and email. The key only reads the register, and you can turn it off here any time. Making a new key stops the old one.</p>
+            <div className="dfoot">
+              <button className="btn" onClick={() => setScript(null)}>Done</button>
+              <button className="btn primary" onClick={() => void copy(script, show, "Script copied")}><Copy size={15} />Copy script</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }

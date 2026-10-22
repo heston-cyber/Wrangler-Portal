@@ -18,6 +18,7 @@ export function VideoRow({ x, meta, projectName }: { x: VideoItem; meta: React.R
     <a className="vrow" {...linkProps(`/v/${x._id}`)}>
       <Thumb guid={x.latest?.bunnyGuid} />
       <span className="t">
+        {x.number ? <span className="chip num mono" title="Register number">{String(x.number).padStart(5, "0")}</span> : null}
         <b>{x.title}</b>
         {x.latest && x.latest.number > 1 && <span className="chip">v{x.latest.number}</span>}
         {st && <span className={`chip ${st.tone}`}>{st.busy && <Spinner />}{st.text}</span>}
@@ -41,7 +42,7 @@ export function VideoCard({ x, meta, projectName }: { x: VideoItem; meta: React.
         <Thumb guid={x.latest?.bunnyGuid} className="" />
       </div>
       <div className="cbody">
-        <span className="rlabel">{projectName ? `${projectName} · ` : ""}{x.latest ? `v${x.latest.number}` : "No versions"}</span>
+        <span className="rlabel">{x.number ? `${String(x.number).padStart(5, "0")} · ` : ""}{projectName ? `${projectName} · ` : ""}{x.latest ? `v${x.latest.number}` : "No versions"}</span>
         <div className="rbold ctitle">{x.title}</div>
         <div className="rtags">
           {len && <span className="rtag">{len}</span>}

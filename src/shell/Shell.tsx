@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { BrandImg } from "../ui/BrandImg";
 import { useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { Activity, ChevronDown, Clapperboard, House, LogOut, Menu as MenuIcon, Search, Settings, X } from "lucide-react";
+import { Activity, ChevronDown, Clapperboard, House, ListOrdered, LogOut, Menu as MenuIcon, Search, Settings, X } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import { linkProps, navigate, useLocation } from "../lib/router";
 import { useUploads } from "../lib/uploads";
@@ -59,6 +59,7 @@ function Sidebar({ me, className, onClose, onSearch }: { me: { name: string | nu
       </div>
       <a className="navitem" aria-current={cur("/")} {...linkProps("/")}><House size={16} />Home</a>
       <a className="navitem" aria-current={cur("/projects")} {...linkProps("/projects")}><Clapperboard size={16} />Projects</a>
+      <a className="navitem" aria-current={cur("/register")} {...linkProps("/register")}><ListOrdered size={16} />Register</a>
       <a className="navitem" aria-current={cur("/activity")} {...linkProps("/activity")}><Activity size={16} />Activity</a>
 
       {recent.length > 0 && <div className="navgroup">Last opened</div>}

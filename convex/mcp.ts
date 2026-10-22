@@ -17,7 +17,8 @@ const SERVER_INFO = { name: "wrangler-review", title: "Wrangler Review", version
 const INSTRUCTIONS = `Wrangler Review is Heston's video review site (Wrangler Productions). Notes are pinned to exact frames of a rendered version: frame 0 is the render's first frame; out_frame is inclusive. Timecodes use the version's start timecode (usually 01:00:00:00).
 Typical flow when Heston says he left notes or revisions: find_videos (if you don't have the video) → get_notes (open notes on the latest version) → get_note_images for notes with drawings or when you need to see the frame → do the work → reply_to_note to say what you changed → mark_notes done.
 get_transcript gives what's said in the cut, pinned to frames; use it to find a line by its words or to read around a note.
-To put notes into DaVinci Resolve as markers, use get_resolve_markers and follow its placement rules: confirm the timeline's frame rate, start timecode and length match the render before placing anything; if they don't, stop and tell Heston.`;
+To put notes into DaVinci Resolve as markers, use get_resolve_markers and follow its placement rules: confirm the timeline's frame rate, start timecode and length match the render before placing anything; if they don't, stop and tell Heston.
+The register: every video made since Oct 22, 2026 has a five-digit number (never reused). Files and Resolve timelines are named NNNNN_ShortTitle_vN (e.g. 00001_LCArizona_v4). register_video adds a new video and gives its number and first file name; add_to_register numbers an older video; next_render_name gives the name for a video's next render; set_version_description records what changed in a version. find_videos also finds a video by its number.`;
 
 type Json = Record<string, unknown>;
 type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
@@ -78,6 +79,41 @@ const TOOLS = [
     name: "mark_notes", title: "Mark notes done or open",
     description: "Sets notes to done (handled) or back to open. Only mark a note done once its change is actually made, or when Heston says so.",
     inputSchema: { type: "object", properties: { note_ids: { type: "array", items: { type: "string" }, minItems: 1 }, status: { type: "string", enum: ["done", "open"] } }, required: ["note_ids", "status"], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  {
+    name: "register_video", title: "Register a new video",
+    description: "Adds a new video to the register: gives it the next five-digit number and returns its first file name (NNNNN_ShortTitle_v1.mp4), which is also the Resolve timeline name. Uses an existing project when the name matches (\"Spirit Days\", \"26122 Spirit Days\" or the job number), otherwise makes it. Check find_videos first so you don't register the same video twice.",
+    inputSchema: { type: "object", properties: {
+      title: { type: "string", minLength: 1, description: "The video's title, e.g. \"LC Arizona\"." },
+      short_title: { type: "string", description: "The title part of its file names: letters, digits and hyphens, e.g. LCArizona. Made from the title when left out." },
+      project: { type: "string", minLength: 1, description: "Project name, e.g. \"26122 Spirit Days\" or \"Spirit Days\"." },
+      job_number: { type: "string", description: "Job number for a new project, e.g. 26127." },
+      client: { type: "string", description: "Client for a new project, e.g. \"All 4 One\"." },
+    }, required: ["title", "project"], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  },
+  {
+    name: "add_to_register", title: "Add an older video to the register",
+    description: "Gives a video made before numbering started a register number and short title, so its renders get register names. Leave out number to give it the next one; pass number only when Heston asks for a specific one (it must be free). Optionally files its project under a client.",
+    inputSchema: { type: "object", properties: {
+      video_id: videoArgs.video_id, video: videoArgs.video,
+      number: { type: "integer", minimum: 1, maximum: 99999, description: "A specific free number, e.g. 1 for 00001." },
+      short_title: { type: "string", minLength: 1, description: "The title part of its file names: letters, digits and hyphens, e.g. LCArizona." },
+      client: { type: "string", description: "File the video's project under this client." },
+    }, required: ["short_title"], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  },
+  {
+    name: "next_render_name", title: "Next render name",
+    description: "Gives the file name for a registered video's next render (NNNNN_ShortTitle_vN.mp4, one past its latest version), the matching Resolve timeline name, and where to render it.",
+    inputSchema: { type: "object", properties: { video_id: videoArgs.video_id, video: { type: "string", description: "The video's number (e.g. 00001) or words from its title or project." } }, additionalProperties: false },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  {
+    name: "set_version_description", title: "Describe a version",
+    description: "Sets what changed in a version (shown on the site under the version), e.g. \"Step 3: VO and music; tightened the open\". The latest version unless you pass version. Replaces the old description.",
+    inputSchema: { type: "object", properties: { video_id: videoArgs.video_id, video: videoArgs.video, version: videoArgs.version, description: { type: "string", description: "What changed, in a sentence or two." } }, required: ["description"], additionalProperties: false },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
 ];
@@ -192,6 +228,34 @@ async function callTool(ctx: ActionCtx, name: string, args: Json): Promise<ToolR
       const status = args.status === "done" || args.status === "open" ? args.status : null;
       if (!ids.length || !status) return fail("Pass note_ids and status (done or open).");
       return ok(await ctx.runMutation(internal.connector.setStatuses, { noteIds: ids, status }));
+    }
+    if (name === "register_video") {
+      const title = str(args.title), project = str(args.project);
+      if (!title || !project) return fail("Pass title and project.");
+      const r = await ctx.runMutation(internal.register.newVideoInternal, {
+        title, projectName: project, shortTitle: str(args.short_title), jobNumber: str(args.job_number), client: str(args.client),
+      });
+      return ok({ video_id: r.videoId, number: r.numberText, title, short_title: r.shortTitle, project: r.project, client: r.client, first_file_name: r.fileName + ".mp4", timeline_name: r.fileName, link: r.link });
+    }
+    if (name === "add_to_register") {
+      const st = str(args.short_title);
+      if (!st) return fail("Pass short_title.");
+      const res = await ctx.runMutation(internal.connector.addToRegisterFor, { videoId: str(args.video_id), video: str(args.video), number: int(args.number), shortTitle: st, client: str(args.client) });
+      if ("error" in res) return fail(res.error as string, "candidates" in res && res.candidates ? { candidates: res.candidates } : undefined);
+      return ok(res as Json);
+    }
+    if (name === "next_render_name") {
+      const words = str(args.video);
+      const res = await ctx.runQuery(internal.connector.nextRenderFor, { videoId: str(args.video_id), video: words && /^\d{1,5}$/.test(words.trim()) ? words.trim().padStart(5, "0") : words });
+      if ("error" in res) return fail(res.error as string, "candidates" in res && res.candidates ? { candidates: res.candidates } : undefined);
+      return ok(res as Json);
+    }
+    if (name === "set_version_description") {
+      const d = typeof args.description === "string" ? args.description : undefined;
+      if (d === undefined) return fail("Pass description.");
+      const res = await ctx.runMutation(internal.connector.describeVersion, { videoId: str(args.video_id), video: str(args.video), version: int(args.version), description: d });
+      if ("error" in res) return fail(res.error as string, "candidates" in res && res.candidates ? { candidates: res.candidates } : undefined);
+      return ok(res as Json);
     }
     return fail(`Unknown tool: ${name}`);
   } catch (e) {

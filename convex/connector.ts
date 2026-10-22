@@ -8,6 +8,8 @@ import { requireMe } from "./lib/access";
 import type { Doc, Id } from "./_generated/dataModel";
 import { frameTc, fpsValue, type Fps } from "./lib/frames";
 import { markersEdl } from "./lib/edl";
+import { nextFileName, pad5, videoByNumber } from "./lib/register";
+import { numberVideo } from "./register";
 
 export async function sha256Hex(text: string) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -129,6 +131,12 @@ export async function findVideo(ctx: QueryCtx, videoId?: string, words?: string)
   }
   if (!words?.trim()) return { error: "Give video_id or video (words from the title, project or job number)." };
   const q = words.toLowerCase().trim();
+  // A register number ("00001" or "1") or a register file name ("00001_LCArizona_v4") finds that video.
+  const num = /^(\d{1,5})(?:_|$)/.exec(q);
+  if (num) {
+    const vid = await videoByNumber(ctx, Number(num[1]));
+    if (vid) return { video: vid, project: await ctx.db.get(vid.projectId) };
+  }
   const projects = new Map((await ctx.db.query("projects").collect()).map((p) => [p._id as string, p]));
   const scored = (await ctx.db.query("videos").collect()).map((vid) => {
     const p = projects.get(vid.projectId);
@@ -182,15 +190,23 @@ export const findVideos = internalQuery({
     const projects = new Map((await ctx.db.query("projects").collect()).map((p) => [p._id as string, p]));
     const q = (words ?? "").toLowerCase().trim();
     const out = [];
-    for (const vid of await ctx.db.query("videos").collect()) {
+    const all = await ctx.db.query("videos").collect();
+    const qn0 = /^\d{1,5}$/.test(q) ? pad5(Number(q)) : null;
+    // A number finds that register number; if no video has it (e.g. a job number), search words as usual.
+    const numberMode = Boolean(qn0 && all.some((x) => x.number && pad5(x.number) === qn0));
+    for (const vid of all) {
       const p = projects.get(vid.projectId);
-      const hay = `${vid.title} ${p?.name ?? ""} ${p?.jobNumber ?? ""} ${p?.client ?? ""}`.toLowerCase();
-      if (q && !q.split(/\s+/).every((w) => hay.includes(w))) continue;
+      const num = vid.number ? pad5(vid.number) : "";
+      const hay = `${vid.title} ${p?.name ?? ""} ${p?.jobNumber ?? ""} ${p?.client ?? ""} ${num} ${vid.shortTitle ?? ""}`.toLowerCase();
+      if (numberMode ? qn0 !== num : q && !q.split(/\s+/).every((w) => hay.includes(w))) continue;
       const versions = (await ctx.db.query("versions").withIndex("by_video", (x) => x.eq("videoId", vid._id)).collect()).sort((a, b) => a.number - b.number);
       const notes = await ctx.db.query("notes").withIndex("by_video", (x) => x.eq("videoId", vid._id)).collect();
+      const next = nextFileName(vid, versions.length ? versions[versions.length - 1].number : 0);
       out.push({
         video_id: vid._id,
+        number: num || null,
         title: vid.title,
+        next_render: next ? next + ".mp4" : null,
         project: p?.name ?? null,
         job_number: p?.jobNumber ?? null,
         client: p?.client ?? null,
@@ -371,5 +387,48 @@ export const setStatuses = internalMutation({
       changed.push(raw);
     }
     return { status, changed, missing };
+  },
+});
+
+// ---------- the register (Phase R2) ----------
+
+export const nextRenderFor = internalQuery({
+  args: { videoId: v.optional(v.string()), video: v.optional(v.string()) },
+  handler: async (ctx, a) => {
+    const found = await findVideo(ctx, a.videoId, a.video);
+    if ("error" in found) return found;
+    const vid = found.video;
+    const versions = await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect();
+    const top = versions.reduce((m, x) => Math.max(m, x.number), 0);
+    const name = nextFileName(vid, top);
+    if (!name) return { error: `${vid.title} isn't in the register (it was made before numbering started), so it has no register file name.` };
+    return {
+      video_id: vid._id, number: pad5(vid.number!), title: vid.title, short_title: vid.shortTitle, project: found.project?.name ?? null,
+      latest_version: top || null, next_version: top + 1, next_file_name: name + ".mp4", timeline_name: name,
+      where: "Render with the Wrangler Review preset that matches the timeline (16x9 1920x1080, Scope 1920x804 or Vertical 1080x1920) into Dropbox › Apps/Wrangler Review/<Client>/<Project>/<Video>/.",
+    };
+  },
+});
+
+export const describeVersion = internalMutation({
+  args: { videoId: v.optional(v.string()), video: v.optional(v.string()), version: v.optional(v.number()), description: v.string() },
+  handler: async (ctx, a) => {
+    const found = await findVideo(ctx, a.videoId, a.video);
+    if ("error" in found) return found;
+    const picked = await pickVersion(ctx, found.video._id, a.version);
+    if ("error" in picked) return { error: picked.error };
+    const text = a.description.trim().slice(0, 2000);
+    await ctx.db.patch(picked.ver._id, { description: text || undefined });
+    return { video: found.video.title, version: picked.ver.number, description: text || null };
+  },
+});
+
+export const addToRegisterFor = internalMutation({
+  args: { videoId: v.optional(v.string()), video: v.optional(v.string()), number: v.optional(v.number()), shortTitle: v.string(), client: v.optional(v.string()) },
+  handler: async (ctx, a) => {
+    const found = await findVideo(ctx, a.videoId, a.video);
+    if ("error" in found) return found;
+    const r = await numberVideo(ctx, { videoId: found.video._id, number: a.number, shortTitle: a.shortTitle, client: a.client });
+    return { video_id: found.video._id, number: r.number, title: r.title, next_file_name: r.next ? r.next + ".mp4" : null, timeline_name: r.next };
   },
 });

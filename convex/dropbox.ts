@@ -11,6 +11,7 @@ import { requireMe } from "./lib/access";
 import { bunnyCall, bunnyEnv } from "./bunny";
 import { httpRangeReader, mp4HasIndex } from "./lib/mp4";
 import { directLink, pickProject, placeFor, splitJob } from "./lib/dropboxPath";
+import { insertVideo, parseRegisterName, videoByNumber } from "./lib/register";
 
 const API = "https://api.dropboxapi.com/2";
 const SETTLE_MS = 60_000; // a file must sit unchanged this long before we look at it
@@ -379,8 +380,12 @@ export const patchFile = internalMutation({
 
 // Finds the project and video for /<Project>/<Video>/, making them if they're new.
 export const findOrCreateTarget = internalMutation({
-  args: { client: v.optional(v.string()), project: v.string(), video: v.string() },
+  args: { client: v.optional(v.string()), project: v.string(), video: v.string(), fileName: v.optional(v.string()) },
   handler: async (ctx, a) => {
+    // A file named for the register (00001_LCArizona_v4.mp4) goes to that video, whatever folder it's in.
+    const reg = a.fileName ? parseRegisterName(a.fileName) : null;
+    const numbered = reg ? await videoByNumber(ctx, reg.number) : null;
+    if (numbered) return { projectId: numbered.projectId, videoId: numbered._id };
     const now = Date.now();
     const projects = await ctx.db.query("projects").collect();
     const picked = pickProject(projects, a.project, a.client);
@@ -395,8 +400,8 @@ export const findOrCreateTarget = internalMutation({
     const t = a.video.trim().toLowerCase();
     let video = videos.find((x) => x.title.trim().toLowerCase() === t);
     if (!video) {
-      const id = await ctx.db.insert("videos", { projectId: project._id, title: a.video.trim(), createdAt: now, updatedAt: now });
-      video = (await ctx.db.get(id))!;
+      const { videoId } = await insertVideo(ctx, { projectId: project._id, title: a.video.trim() });
+      video = (await ctx.db.get(videoId))!;
     }
     return { projectId: project._id, videoId: video._id };
   },
@@ -473,7 +478,7 @@ export const importFile = internalAction({
           return { result: "not finished yet" };
         }
       }
-      const target = await ctx.runMutation(internal.dropbox.findOrCreateTarget, { client: place.client, project: place.project, video: place.video });
+      const target = await ctx.runMutation(internal.dropbox.findOrCreateTarget, { client: place.client, project: place.project, video: place.video, fileName: place.fileName });
       link = await shareLink(ctx, f.pathLower);
       const { lib } = bunnyEnv();
       const tag = `wr-import-${fileId}`;
