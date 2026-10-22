@@ -21,6 +21,7 @@ export const versionReady = internalAction({
   handler: async (ctx, { versionId }) => {
     const row = await ctx.runQuery(internal.library.getVersionInternal, { versionId });
     if (!row || !row.video) return;
+    if (row.project?.name === "Tests") return; // Claude's test videos never ping Slack
     const link = `${SITE}/v/${row.video._id}?version=${row.version.number}`;
     const where = row.project ? `${row.project.jobNumber ? row.project.jobNumber + " " : ""}${row.project.name} · ` : "";
     await post({
