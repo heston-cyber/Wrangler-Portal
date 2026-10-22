@@ -180,6 +180,13 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     void player.seekToFrame(f).then(() => { if (play) void player.play(); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player.ready]);
+  // The first drag on each version is logged with the scrub copy's state, so phones that don't scrub can be diagnosed.
+  const scrubLogged = useRef<string | null>(null);
+  const logScrub = () => {
+    if (!version || scrubLogged.current === version._id) return;
+    scrubLogged.current = version._id;
+    void logPlayback({ versionId: version._id, kind: "scrub", msg: JSON.stringify(player.proxyStatus()).slice(0, 300), src: quality, ua: navigator.userAgent }).catch(() => {});
+  };
   // Jumps that needed correcting get logged every few seconds (at most 5 per batch).
   useEffect(() => {
     if (!version) return;
@@ -555,7 +562,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           highlight={hl}
           activeId={focusId}
           onPick={pick}
-          onScrub={(f, first) => { if (first) { setFocusId(null); setHl(null); } player.scrubTo(f); }}
+          onScrub={(f, first) => { if (first) { setFocusId(null); setHl(null); logScrub(); } player.scrubTo(f, first); }}
           onSeek={(f) => { void player.endScrub(f); }}
           onSelect={(a, b) => { setWhole(false); setSel({ a, b }); }}
           label={tc}
@@ -604,7 +611,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           <div className="stagewrap" ref={wrapRef} style={narrow && !fs ? { height: box.h || undefined } : undefined}>
             <div className="stage" style={{ width: box.w || undefined, height: box.h || undefined, aspectRatio: box.w ? undefined : `${aspect}` }}>
               <video ref={player.videoRef} playsInline preload="auto" onClick={() => !drawing && player.toggle()} />
-              {player.proxyUrl && <video ref={player.proxyRef} className={`proxy${player.proxyOn ? " on" : ""}`} src={player.proxyUrl} muted playsInline preload="auto" onLoadedData={player.onProxyLoaded} aria-hidden />}
+              {player.proxyUrl && <video ref={player.proxyRef} className={`proxy${player.proxyOn ? " on" : ""}`} src={player.proxyUrl} muted playsInline preload="auto" onLoadedData={player.onProxyLoaded} onSeeked={player.onProxyLoaded} onLoadedMetadata={player.onProxyMeta} aria-hidden />}
               <AtFrame clock={player.clock}>{(frame) => {
                 const elsewhere = shapes.length > 0 && drawFrame !== null && drawFrame !== frame;
                 const saved = showDrawings ? savedDrawings.filter((d) => d.frame === frame).flatMap((d) => d.shapes) : [];

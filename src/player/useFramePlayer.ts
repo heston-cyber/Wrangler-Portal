@@ -61,22 +61,28 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
   const proxyReady = useRef(false);
   const [proxyUrl, setProxyUrl] = useState<string | null>(null);
   const [proxyOn, setProxyOn] = useState(false);
+  // What happened to the scrub copy, for the playback log (Oct 22: dragging didn't show pictures on Heston's iPhone).
+  const proxyInfo = useRef<{ state: string; mb?: number; dlMs?: number; at?: number }>({ state: "none" });
   const scrubKey = scrub ? `${scrub.urls.join(",")}|${scrub.maxBytes}` : "";
   useEffect(() => {
-    if (!ready || !scrub || !scrub.urls.length) return;
+    if (!ready || !scrub || !scrub.urls.length) { proxyInfo.current = { state: scrub?.urls.length ? "waiting for video" : "no copy" }; return; }
     const ac = new AbortController();
     let made: string | null = null;
+    proxyInfo.current = { state: "starting" };
     const timer = setTimeout(async () => {
+      const t0 = performance.now();
       for (const url of scrub.urls) {
         try {
           const head = await fetch(url, { method: "HEAD", signal: ac.signal });
           const len = Number(head.headers.get("content-length") || 0);
-          if (!head.ok || !len || len > scrub.maxBytes) continue;
+          if (!head.ok || !len || len > scrub.maxBytes) { proxyInfo.current = { state: !head.ok ? `head ${head.status}` : !len ? "no length" : "too big", mb: Math.round(len / 1e5) / 10 }; continue; }
+          proxyInfo.current = { state: "downloading", mb: Math.round(len / 1e5) / 10 };
           const blob = await (await fetch(url, { signal: ac.signal })).blob();
           made = URL.createObjectURL(blob);
+          proxyInfo.current = { state: "downloaded", mb: Math.round(blob.size / 1e5) / 10, dlMs: Math.round(performance.now() - t0), at: Date.now() };
           setProxyUrl(made);
           return;
-        } catch { if (ac.signal.aborted) return; }
+        } catch (e) { if (ac.signal.aborted) return; proxyInfo.current = { state: `failed: ${(e as Error).message}`.slice(0, 80) }; }
       }
     }, 1000);
     return () => { clearTimeout(timer); ac.abort(); if (made) URL.revokeObjectURL(made); proxyReady.current = false; setProxyUrl(null); setProxyOn(false); };
@@ -237,9 +243,16 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
   // With the scrub copy ready, the drag moves the copy (shown over the picture) and the full file stays put until letting go.
   const scrubTarget = useRef<number | null>(null);
   const scrubRun = useRef<Promise<void> | null>(null);
-  function scrubTo(n: number) {
+  function scrubTo(n: number, first = false) {
     const max = (frameCount ?? Infinity) - 1;
     scrubTarget.current = Math.max(0, Math.min(n, max));
+    // iPhones load nothing into a video until a tap starts it: the first touch on the timeline (a tap) wakes the
+    // downloaded scrub copy up, so it's ready for this drag or the next.
+    const pv = proxyRef.current;
+    if (first && pv && proxyUrl && !proxyReady.current) {
+      pv.muted = true;
+      try { const p = pv.play(); if (p) p.then(() => pv.pause()).catch(() => {}); } catch { /* ignore */ }
+    }
     if (scrubRun.current) return;
     const px = proxyReady.current ? proxyRef.current : null;
     if (px) setProxyOn(true);
@@ -288,7 +301,10 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
     proxyRef,
     proxyUrl,
     proxyOn,
-    onProxyLoaded: () => { proxyReady.current = true; },
+    onProxyLoaded: () => { if (!proxyReady.current) { proxyReady.current = true; proxyInfo.current = { ...proxyInfo.current, state: "ready" }; } },
+    // Safari on iPhone may stop at the index without loading a frame: a tiny jump makes it load one.
+    onProxyMeta: (e: { currentTarget: HTMLVideoElement }) => { const el = e.currentTarget; if (!proxyReady.current && el.readyState < 2) el.currentTime = 0.001; },
+    proxyStatus: () => ({ ...proxyInfo.current, ready: proxyReady.current, rs: proxyRef.current?.readyState ?? null, ago: proxyInfo.current.at ? Math.round((Date.now() - proxyInfo.current.at) / 1000) : null }),
     step: (d: number) => seekToFrame((pending.current?.target ?? clock.get()) + d),
     play: () => { setProxyOn(false); return videoRef.current?.play().catch(() => {}); },
     pause: () => videoRef.current?.pause(),
