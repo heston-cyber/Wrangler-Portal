@@ -88,6 +88,7 @@ function load(id: string): Promise<number> {
       const r = await seekTo(0);
       finish(r.landed == null ? -1 : performance.now() - t0);
     }, { once: true });
+    v.removeAttribute("src"); v.load(); // start from nothing, even when it's the same file again
     v.src = urlOf(f.file);
     v.load();
     watch();
