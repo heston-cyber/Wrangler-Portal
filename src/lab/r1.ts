@@ -76,6 +76,7 @@ async function seekTo(f: number): Promise<{ ms: number; landed: number | null }>
 // fetch it (Chrome can otherwise park a reloaded file at "metadata only").
 function load(id: string): Promise<number> {
   const f = FILES.find((x) => x.id === id)!;
+  v.removeAttribute("src"); v.load(); // start from nothing, even when it's the same file again
   errors = []; stalls = 0;
   return new Promise((resolve) => {
     const t0 = performance.now();
@@ -88,7 +89,6 @@ function load(id: string): Promise<number> {
       const r = await seekTo(0);
       finish(r.landed == null ? -1 : performance.now() - t0);
     }, { once: true });
-    v.removeAttribute("src"); v.load(); // start from nothing, even when it's the same file again
     v.src = urlOf(f.file);
     v.load();
     watch();
