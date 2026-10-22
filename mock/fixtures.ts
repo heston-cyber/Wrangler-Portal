@@ -9,7 +9,7 @@ type Ver = any;
 const fps = { fpsNum: 24000, fpsDen: 1001 };
 const mk = (o: any): Ver => ({
   status: "ready", encodeProgress: 100, ...fps, frameCountExact: true, width: 1920, height: 1080, startTimecode: "01:00:00:00",
-  mp4Heights: [240, 360, 480, 720, 1080], error: null, description: null, uploaderName: "Heston", fileSize: 812_000_000, ...o,
+  mp4Heights: [240, 360, 480, 720, 1080], error: null, description: null, uploaderName: "Heston", fileSize: 812_000_000, storageBytes: 1_240_000_000, ...o,
 });
 
 const projects = [
@@ -76,8 +76,13 @@ function overview() {
     }),
     videos: videos.map((x) => {
       const l = latestOf(x._id);
+      const vs = versions[x._id] ?? [];
       return {
-        ...x, versionCount: (versions[x._id] ?? []).length, noteCount: notes.filter((n) => n.videoId === x._id).length,
+        ...x, shortTitle: x.shortTitle ?? null, number: x.number ?? null, final: x.final ?? null,
+        firstUploadAt: vs.length ? Math.min(...vs.map((v: any) => v.createdAt)) : null,
+        storageBytes: vs.length ? vs.reduce((m: number, v: any) => m + (v.storageBytes ?? 0), 0) : null,
+        source: l ? (l.dropboxPath ? "Dropbox" : "Browser") : null,
+        versionCount: vs.length, noteCount: notes.filter((n) => n.videoId === x._id).length,
         openNotes: l ? notes.filter((n) => n.versionId === l._id && n.status === "open").length : 0,
         latest: l && { number: l.number, status: l.status, bunnyGuid: l.bunnyGuid, encodeProgress: l.encodeProgress, frameCount: l.frameCount, fpsNum: l.fpsNum, fpsDen: l.fpsDen, startTimecode: l.startTimecode, width: l.width, height: l.height, transcript: l.number === 2 ? "running" : "done" },
       };
@@ -90,7 +95,7 @@ function video(id: string) {
   if (!v) return null;
   const p = projects.find((x) => x._id === v.projectId)!;
   return {
-    _id: v._id, title: v.title, number: v.number ?? null, shortTitle: v.shortTitle ?? null, nextFileName: nextName(v),
+    _id: v._id, title: v.title, number: v.number ?? null, shortTitle: v.shortTitle ?? null, nextFileName: nextName(v), final: v.final ?? null,
     project: { _id: p._id, name: p.name, jobNumber: p.jobNumber },
     versions: (versions[id] ?? []).map((x) => ({ ...x, noteCount: notes.filter((n) => n.versionId === x._id).length, openCount: notes.filter((n) => n.versionId === x._id && n.status === "open").length })),
   };
@@ -102,6 +107,7 @@ function nextName(v: any) {
   return `${pad5(v.number)}_${v.shortTitle}_v${top + 1}`;
 }
 let nextNumber = 4;
+let prefs: Record<string, unknown> = {};
 let sheet: any = null;
 function registerList() {
   const rows = videos.filter((v) => v.number).map((v) => {
@@ -150,6 +156,7 @@ export const store = {
       case "activity:feed": return feed().slice(0, args.limit ?? 60);
       case "connector:listKeys": return keys;
       case "register:list": return registerList();
+      case "prefs:mine": return { ...prefs };
       case "register:sheetKey": return sheet;
       case "register:nextName": { const v = videos.find((x) => x._id === args.videoId); return v?.number ? { number: pad5(v.number), shortTitle: v.shortTitle, fileName: nextName(v) } : null; }
       case "dropbox:status": return { configured: true, transcripts: true, connected: true, email: "heston@wranglerproductions.com", name: "Heston Hill", connectedAt: Date.now() - 86_400_000, lastSyncAt: Date.now() - 40_000, lastError: null,
@@ -184,6 +191,16 @@ export const store = {
     if (name === "library:reportFrameCount") return;
     if (name === "notes:voiceUploadUrl") return "/mock-upload";
     if (name === "notes:discardVoice") { (window as any).__discarded = args.storageId; return; }
+    if (name === "prefs:set") { prefs = { ...prefs, [args.key]: args.value }; bump(); return; }
+    if (name === "library:approveFinal") {
+      const vs = versions[args.videoId] ?? []; const deleted = vs.filter((x: any) => x.number !== args.keep).map((x: any) => x.number);
+      const freed = vs.filter((x: any) => x.number !== args.keep).reduce((m: number, x: any) => m + (x.storageBytes ?? 0), 0);
+      versions[args.videoId] = vs.filter((x: any) => x.number === args.keep);
+      notes = notes.filter((n) => n.videoId !== args.videoId || versions[args.videoId].some((x: any) => x._id === n.versionId));
+      const v = videos.find((x) => x._id === args.videoId); v.final = { version: args.keep, at: Date.now() }; v.updatedAt = Date.now(); bump();
+      return { kept: args.keep, deleted, freedBytes: freed };
+    }
+    if (name === "library:clearFinal") { const v = videos.find((x) => x._id === args.videoId); v.final = null; bump(); return; }
     if (name === "register:newVideo") {
       let pid = args.projectId;
       if (!pid) { pid = "p" + Date.now(); projects.push({ _id: pid, name: args.projectName, jobNumber: args.jobNumber ?? null, client: args.client ?? null, createdAt: Date.now() }); }

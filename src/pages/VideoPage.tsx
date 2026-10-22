@@ -5,7 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { BrandImg } from "../ui/BrandImg";
 import { useConvex, useMutation, useQuery } from "convex/react";
 import {
-  ArrowUp, Brush, Check, Circle, Copy, Download, ListOrdered, Ellipsis, Eye, Keyboard, Maximize, Minimize, MoveUpRight, PanelRight, Pause, Pencil, Play,
+  ArrowUp, Brush, Check, Circle, CircleCheckBig, Copy, Download, ListOrdered, Ellipsis, Eye, Keyboard, Maximize, Minimize, MoveUpRight, PanelRight, Pause, Pencil, Play,
   Crosshair, Film, Mic, Plus, SlidersHorizontal, Square, Timer, Undo2, Upload, Volume2, VolumeX, X,
 } from "lucide-react";
 import type { FunctionReturnType } from "convex/server";
@@ -32,6 +32,9 @@ import { Sep, TopBar } from "../shell/Shell";
 import { Menu, MenuItem, MenuLabel, MenuSep, Modal, Spinner, useIsNarrow, useToast } from "../ui/kit";
 import { FileName, copyText } from "./Register";
 import { shortTitleFrom } from "../../convex/lib/register";
+import { FinalBadge } from "./VideoRows";
+import { ApproveFinal } from "./ApproveFinal";
+import { useLibrarySettings } from "../lib/details";
 
 export default function VideoPage({ videoId, versionNumber, noteId }: { videoId: Id<"videos">; versionNumber: number | null; noteId: string | null }) {
   const data = useQuery(api.library.video, { videoId });
@@ -212,7 +215,8 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   useEffect(() => () => { if (fullscreenElement()) void exitPageFullscreen().catch(() => {}); }, []);
   const [focusId, setFocusId] = useState<string | null>(noteId);
   const [focusTick, setFocusTick] = useState(0);
-  const [dialog, setDialog] = useState<null | "rename" | "starttc" | "keys" | "register">(null);
+  const [dialog, setDialog] = useState<null | "rename" | "starttc" | "keys" | "register" | "final">(null);
+  const libSettings = useLibrarySettings();
   const rootRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -562,6 +566,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
         {data.project && <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps(`/projects/${data.project._id}`)}>{projectLabel(data.project)}</a><Sep /></span>}
         {data.number && <span className="chip num mono" title="Register number">{String(data.number).padStart(5, "0")}</span>}
         <span className="here">{data.title}</span>
+        <FinalBadge final={data.final} />
         {version && <button className="chip" onClick={() => setPanel("versions")} title="Versions">v{version.number}{data.versions.length > 1 ? ` of ${data.versions.length}` : ""}</button>}
         {st && <span className={`chip ${st.tone}`}>{st.busy && <Spinner />}{st.text}</span>}
         {tr?.busy && <span className="chip warn"><Spinner />{tr.text}</span>}
@@ -569,6 +574,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           <MenuItem icon={<Upload size={16} />} onSelect={newVersion}>Upload a new version</MenuItem>
           <MenuItem icon={<Pencil size={16} />} onSelect={() => setDialog("rename")}>{data.number ? "Rename or change short title" : "Rename video"}</MenuItem>
           {!data.number && <MenuItem icon={<ListOrdered size={16} />} onSelect={() => setDialog("register")}>Add to the register…</MenuItem>}
+          {(libSettings.approveFinal || data.final) && data.versions.length > 0 && <MenuItem icon={<CircleCheckBig size={16} />} onSelect={() => setDialog("final")}>{data.final ? "Final version…" : "Approve final…"}</MenuItem>}
           {data.nextFileName && <MenuItem icon={<Copy size={16} />} onSelect={() => void copyText(`${data.nextFileName}.mp4`, showToast, "File name copied")}>Copy next render name</MenuItem>}
           <MenuItem icon={<Timer size={16} />} onSelect={() => setDialog("starttc")} disabled={!version}>Start timecode…</MenuItem>
           <MenuSep />
@@ -773,6 +779,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       {dialog === "rename" && <RenameVideo videoId={data._id} title={data.title} shortTitle={data.shortTitle} onClose={() => setDialog(null)} />}
       {dialog === "starttc" && version && <StartTcDialog versionId={version._id} startTc={startTc} onClose={() => setDialog(null)} onSaved={() => showToast("Start timecode saved")} />}
       {dialog === "keys" && <ShortcutsDialog onClose={() => setDialog(null)} />}
+      {dialog === "final" && <ApproveFinal videoId={data._id} title={data.title} onClose={() => setDialog(null)} onDone={(m) => showToast(m)} />}
       {dialog === "register" && <AddToRegister videoId={data._id} title={data.title} onClose={() => setDialog(null)} onDone={(m) => showToast(m)} />}
       {toast}
     </div>

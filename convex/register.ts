@@ -19,6 +19,7 @@ type Row = {
   client: string | null; project: string; projectId: Id<"projects">; jobNumber: string | null;
   versions: number; latest: number | null; status: string; openNotes: number;
   createdAt: number; lastActivity: number; nextFileName: string | null; link: string;
+  final: { version: number; at: number } | null; storageBytes: number | null;
 };
 
 async function rows(ctx: QueryCtx): Promise<{ rows: Row[]; unnumbered: number }> {
@@ -37,7 +38,8 @@ async function rows(ctx: QueryCtx): Promise<{ rows: Row[]; unnumbered: number }>
       videoId: vid._id, number: vid.number, numberText: pad5(vid.number), shortTitle: vid.shortTitle ?? "", title: vid.title,
       client: p?.client?.trim() || null, project: p?.name ?? "", projectId: vid.projectId, jobNumber: p?.jobNumber ?? null,
       versions: versions.length, latest: latest?.number ?? null,
-      status: !latest ? "Waiting for v1" : latest.status === "ready" ? (open ? "Open notes" : "Ready") : latest.status === "failed" ? "Failed" : "Converting",
+      status: vid.final ? `Final v${vid.final.version}` : !latest ? "Waiting for v1" : latest.status === "ready" ? (open ? "Open notes" : "Ready") : latest.status === "failed" ? "Failed" : "Converting",
+      final: vid.final ?? null, storageBytes: versions.some((x) => x.storageBytes !== undefined) ? versions.reduce((m, x) => m + (x.storageBytes ?? 0), 0) : null,
       openNotes: open, createdAt: vid.createdAt, lastActivity: Math.max(vid.updatedAt, lastNote),
       nextFileName: nextFileName(vid, latest?.number ?? 0), link: `${site()}/v/${vid._id}`,
     });
@@ -232,13 +234,14 @@ export const feedRows = internalMutation({
   },
 });
 
-export const FEED_COLUMNS = ["Number", "Next render", "Title", "Short title", "Client", "Project", "Job", "Latest version", "Versions", "Status", "Open notes", "Created", "Last activity", "Link"] as const;
+export const FEED_COLUMNS = ["Number", "Next render", "Title", "Short title", "Client", "Project", "Job", "Latest version", "Versions", "Status", "Final", "Open notes", "Storage (GB)", "Created", "Last activity", "Link"] as const;
 
 export function feedTable(r: Row[]) {
   return r.map((x) => ({
     "Number": x.numberText, "Next render": x.nextFileName ? x.nextFileName + ".mp4" : "", "Title": x.title, "Short title": x.shortTitle,
     "Client": x.client ?? "", "Project": x.project, "Job": x.jobNumber ?? "", "Latest version": x.latest ? `v${x.latest}` : "",
-    "Versions": x.versions, "Status": x.status, "Open notes": x.openNotes, "Created": iso(x.createdAt), "Last activity": iso(x.lastActivity), "Link": x.link,
+    "Versions": x.versions, "Status": x.status, "Final": x.final ? `v${x.final.version} · ${iso(x.final.at).slice(0, 10)}` : "", "Open notes": x.openNotes,
+    "Storage (GB)": x.storageBytes === null ? "" : Math.round(x.storageBytes / 1e7) / 100, "Created": iso(x.createdAt), "Last activity": iso(x.lastActivity), "Link": x.link,
   }));
 }
 

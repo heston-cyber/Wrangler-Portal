@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { BrandImg } from "../ui/BrandImg";
 import { useMutation, useQuery } from "convex/react";
-import { Building2, ChevronDown, ChevronRight, Clapperboard, Ellipsis, FolderPlus, LayoutGrid, List, ListOrdered, Pencil, Plus, SlidersHorizontal, Trash2, Upload, X } from "lucide-react";
+import { Building2, ChevronDown, ChevronRight, Clapperboard, Ellipsis, FolderPlus, LayoutGrid, List, ListOrdered, Pencil, Plus, Rows3, SlidersHorizontal, Trash2, Upload, X } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { Sep, TopBar } from "../shell/Shell";
@@ -13,10 +13,13 @@ import { isVideoFile } from "../lib/uploads";
 import { Menu, MenuItem, MenuLabel, MenuSep, Modal, useToast } from "../ui/kit";
 import { NewVideo } from "./Register";
 import { dayBucket, projectLabel } from "../lib/format";
-import { VideoCard, VideoRow, openedMeta, updatedMeta, type Overview, type VideoItem } from "./VideoRows";
+import { VideoCard, VideoRow, openedMeta, type Overview, type VideoItem } from "./VideoRows";
+import { FILTERS, SORTS, passes, sorter as sortBy, useLibrarySettings, type FilterKey, type SortKey } from "../lib/details";
+import { ShowDetails } from "./ShowDetails";
+import { ApproveFinal } from "./ApproveFinal";
 
 type GroupBy = "client" | "project" | "activity" | "opened" | "status";
-type SortBy = "activity" | "created" | "az";
+type SortBy = SortKey;
 type View = "list" | "grid";
 
 function usePref<T extends string>(key: string, fallback: T): [T, (v: T) => void] {
@@ -32,6 +35,10 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
   const [groupPref, setGroup] = usePref<GroupBy>("wr.groupBy", "project");
   const [sort, setSort] = usePref<SortBy>("wr.sortBy", "activity");
   const [view, setView] = usePref<View>("wr.view", "list");
+  const [filter, setFilter] = usePref<FilterKey>("wr.filter", "all");
+  const lib = useLibrarySettings();
+  const [showDetails, setShowDetails] = useState(false);
+  const [approving, setApproving] = useState<VideoItem | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [renaming, setRenaming] = useState<Overview["projects"][number] | null>(null);
   const collapsedHas = (k: string) => collapsed.has(k);
@@ -50,10 +57,9 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
   const [toast, showToast] = useToast();
   const client = !projectId && clientPref && clients.includes(clientPref) ? clientPref : ""; // "" = all clients
   const pmap = new Map((overview?.projects ?? []).map((p) => [p._id as string, p]));
-  const vids = (overview?.videos ?? []).filter((x) => (!projectId || x.projectId === projectId) && (!client || clientOf(pmap.get(x.projectId)) === client));
+  const vids = (overview?.videos ?? []).filter((x) => (!projectId || x.projectId === projectId) && (!client || clientOf(pmap.get(x.projectId)) === client) && passes(filter, x));
   const shownProjects = [...(overview?.projects ?? [])].filter((p) => !client || clientOf(p) === client).sort((a, b) => b.updatedAt - a.updatedAt);
-  const sorter = (a: VideoItem, b: VideoItem) =>
-    sort === "az" ? a.title.localeCompare(b.title) : sort === "created" ? b.createdAt - a.createdAt : b.updatedAt - a.updatedAt;
+  const sorter = sortBy(SORTS.some((x) => x.key === sort) ? sort : "activity");
 
   type Group = { key: string; title: React.ReactNode; meta?: string; items: VideoItem[]; project?: Overview["projects"][number]; clientHead?: { count: number }; emptyClient?: string };
   let groups: Group[] = [];
@@ -71,8 +77,8 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
   } else if (group === "project") {
     groups = shownProjects.map((p) => projectGroup(p, true));
   } else if (group === "status") {
-    const order = ["Open notes", "Ready", "Converting", "No versions"];
-    const st = (x: VideoItem) => !x.latest ? "No versions" : x.latest.status !== "ready" ? "Converting" : x.openNotes ? "Open notes" : "Ready";
+    const order = ["Open notes", "Ready", "Final", "Converting", "No versions"];
+    const st = (x: VideoItem) => !x.latest ? "No versions" : x.latest.status !== "ready" ? "Converting" : x.openNotes ? "Open notes" : x.final ? "Final" : "Ready";
     groups = order.map((k) => ({ key: k, title: k, items: vids.filter((x) => st(x) === k).sort(sorter) })).filter((g) => g.items.length);
   } else {
     const time = (x: VideoItem) => (group === "opened" ? x.lastOpenedAt : x.updatedAt);
@@ -82,7 +88,12 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
       key: k, title: k, items: vids.filter((x) => bucket(x) === k).sort((a, b) => sort === "activity" ? (time(b) ?? 0) - (time(a) ?? 0) : sorter(a, b)),
     })).filter((g) => g.items.length);
   }
-  const meta = (x: VideoItem) => (group === "opened" ? openedMeta(x) : updatedMeta(x));
+  const meta = (x: VideoItem) => (group === "opened" ? openedMeta(x) : undefined);
+  const rowProps = (x: VideoItem) => ({
+    x, meta: meta(x), project: pmap.get(x.projectId), fields: lib.fields,
+    projectName: group !== "project" && !projectId && !lib.fields.includes("project") ? pmap.get(x.projectId)?.name : undefined,
+    onApprove: lib.approveFinal ? setApproving : undefined,
+  });
   const toggle = (k: string) => setCollapsed((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
 
   return (
@@ -95,10 +106,14 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
               <button className={`btn sm${view === "list" ? " on" : ""}`} style={{ flex: 1 }} onClick={() => setView("list")}><List size={14} />List</button>
             </div>
             <MenuSep />
+            <MenuLabel>Show</MenuLabel>
+            {FILTERS.map((f) => <MenuItem key={f.key} keepOpen checked={filter === f.key} onSelect={() => setFilter(f.key)}>{f.label}</MenuItem>)}
+            <MenuSep />
             <MenuLabel>Sort inside groups</MenuLabel>
-            <MenuItem checked={sort === "activity"} onSelect={() => setSort("activity")}>Latest activity</MenuItem>
-            <MenuItem checked={sort === "created"} onSelect={() => setSort("created")}>Last created</MenuItem>
-            <MenuItem checked={sort === "az"} onSelect={() => setSort("az")}>A → Z</MenuItem>
+            {SORTS.map((o) => <MenuItem key={o.key} keepOpen checked={sort === o.key} onSelect={() => setSort(o.key)}>{o.label}</MenuItem>)}
+            <MenuSep />
+            <MenuItem icon={<Rows3 size={16} />} onSelect={() => setShowDetails(true)}>Show details…</MenuItem>
+            <MenuItem keepOpen checked={lib.approveFinal} onSelect={() => lib.setApproveFinal(!lib.approveFinal)}>Approve final buttons</MenuItem>
           </Menu>
           <Menu align="end" label="Add" trigger={(p) => <button {...p} className="btn primary sm"><Plus size={15} />Add</button>}>
             <MenuItem icon={<ListOrdered size={16} />} onSelect={() => setNewVideo(true)}>New video (gets a number)</MenuItem>
@@ -191,8 +206,8 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
               </div>
               {!collapsed.has(g.key) && (
                 g.items.length === 0 ? <p className="caption" style={{ padding: "8px 28px" }}>No videos yet.</p>
-                  : view === "grid" ? <div className="grid">{g.items.map((x) => <VideoCard key={x._id} x={x} meta={meta(x)} projectName={group !== "project" && !projectId ? pmap.get(x.projectId)?.name : undefined} />)}</div>
-                  : <div style={{ paddingTop: 4 }}>{g.items.map((x) => <VideoRow key={x._id} x={x} meta={meta(x)} projectName={group !== "project" && !projectId ? pmap.get(x.projectId)?.name : undefined} />)}</div>
+                  : view === "grid" ? <div className="grid">{g.items.map((x) => <VideoCard key={x._id} {...rowProps(x)} />)}</div>
+                  : <div style={{ paddingTop: 4 }}>{g.items.map((x) => <VideoRow key={x._id} {...rowProps(x)} />)}</div>
               )}
             </section>
           ))}
@@ -204,6 +219,8 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
         )}
       </div>
       {renaming && <RenameProject p={renaming} onClose={() => setRenaming(null)} />}
+      {showDetails && <ShowDetails fields={lib.fields} onChange={lib.setFields} onClose={() => setShowDetails(false)} />}
+      {approving && <ApproveFinal videoId={approving._id} title={approving.title} onClose={() => setApproving(null)} onDone={showToast} />}
       {newVideo && <NewVideo onClose={() => setNewVideo(false)} show={showToast} projectId={projectId} />}
       {toast}
       {newClient && <NewClient onClose={() => setNewClient(false)} onDone={() => { setNewClient(false); setGroup("client"); setClient(""); }} />}

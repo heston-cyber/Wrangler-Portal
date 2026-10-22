@@ -21,9 +21,14 @@ export default defineSchema({
     // which make its file names: 00001_LCArizona_v4. Older videos may have neither.
     number: v.optional(v.number()),
     shortTitle: v.optional(v.string()),
+    // Approve final (R2b): the version kept when the others were deleted. A later upload clears it.
+    final: v.optional(v.object({ version: v.number(), at: v.number() })),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_project", ["projectId"]).index("by_number", ["number"]),
+
+  // Settings that follow the account to every device (R2b: which details show in the library, Approve final on/off).
+  userPrefs: defineTable({ userId: v.id("users"), key: v.string(), value: v.any(), updatedAt: v.number() }).index("by_user_key", ["userId", "key"]),
 
   // Counters that only go up (the next video number).
   counters: defineTable({ key: v.string(), value: v.number() }).index("by_key", ["key"]),
@@ -61,6 +66,9 @@ export default defineSchema({
     stages: v.optional(v.array(v.object({ t: v.number(), s: v.number(), p: v.number(), res: v.string(), mp4: v.array(v.number()) }))),
     // Oct 21: the 1080p file failed to play on some device, so every device opens this version on the stream.
     streamOnly: v.optional(v.boolean()),
+    // Oct 22 (R2b): space this version uses on Bunny (Bunny's storageSize: the original plus its copies).
+    storageBytes: v.optional(v.number()),
+    storageCheckedAt: v.optional(v.number()),
   })
     .index("by_video", ["videoId", "number"])
     .index("by_guid", ["bunnyGuid"]),

@@ -34,11 +34,17 @@ export const overview = query({
       const latest = versions.sort((a, b) => b.number - a.number)[0] ?? null;
       const notes = await ctx.db.query("notes").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect();
       const tr = latest ? await ctx.db.query("transcripts").withIndex("by_version", (q) => q.eq("versionId", latest._id)).first() : null;
+      const storageBytes = versions.reduce((sum, x) => sum + (x.storageBytes ?? 0), 0);
       vidsOut.push({
         _id: vid._id,
         projectId: vid.projectId,
         title: vid.title,
         number: vid.number ?? null,
+        shortTitle: vid.shortTitle ?? null,
+        final: vid.final ?? null,
+        firstUploadAt: versions.length ? Math.min(...versions.map((x) => x.createdAt)) : null,
+        storageBytes: versions.some((x) => x.storageBytes !== undefined) ? storageBytes : null,
+        source: latest ? (latest.dropboxPath ? "Dropbox" : "Browser") : null,
         createdAt: vid.createdAt,
         updatedAt: vid.updatedAt,
         lastOpenedAt: openedAt.get(vid._id) ?? null,
@@ -174,6 +180,7 @@ export const video = query({
       title: vid.title,
       number: vid.number ?? null,
       shortTitle: vid.shortTitle ?? null,
+      final: vid.final ?? null,
       nextFileName: nextFileName(vid, versions.reduce((m, x) => Math.max(m, x.number), 0)),
       project: project && { _id: project._id, name: project.name, jobNumber: project.jobNumber ?? null },
       versions: versions.sort((a, b) => a.number - b.number).map((x) => ({
@@ -209,6 +216,7 @@ export function publicVersion(x: Doc<"versions">) {
     dropboxPath: x.dropboxPath ?? null,
     createdAt: x.createdAt,
     streamOnly: x.streamOnly ?? false,
+    storageBytes: x.storageBytes ?? null,
   };
 }
 
@@ -253,7 +261,7 @@ export const insertVersion = internalMutation({
       uploaderName: a.uploaderName,
       createdAt: Date.now(),
     });
-    await ctx.db.patch(a.videoId, { updatedAt: Date.now() });
+    await ctx.db.patch(a.videoId, { updatedAt: Date.now(), final: undefined }); // a new version reopens an approved video
     return { versionId: id as Id<"versions">, number };
   },
 });
@@ -272,7 +280,7 @@ export const getVersionInternal = internalQuery({
 export const patchVersion = internalMutation({
   args: { versionId: v.id("versions"), patch: v.any() },
   handler: async (ctx, { versionId, patch }) => {
-    const allowed = ["status", "fpsNum", "fpsDen", "width", "height", "lengthSeconds", "mp4Heights", "encodeProgress", "pollCount", "error", "readyAt", "frameCount", "frameCountFrom", "stages"];
+    const allowed = ["status", "fpsNum", "fpsDen", "width", "height", "lengthSeconds", "mp4Heights", "encodeProgress", "pollCount", "error", "readyAt", "frameCount", "frameCountFrom", "stages", "storageBytes", "storageCheckedAt"];
     const p: Record<string, unknown> = {};
     for (const k of allowed) if (k in patch) p[k] = patch[k];
     await ctx.db.patch(versionId, p);
@@ -385,5 +393,53 @@ export const deleteClient = mutation({
     for (const p of projects) videos += await removeProject(ctx, p._id, stills, guids);
     if (projects.length) await scheduleCleanup(ctx, stills, guids);
     return { projects: projects.length, videos };
+  },
+});
+
+// ---------- Approve final (R2b, Oct 22) ----------
+// Keeps one version and deletes everything belonging to the others, right away: their Bunny files, notes, drawings,
+// replies, stills, transcripts and voice notes. Dropbox originals are never touched. Heston chose no undo.
+export const approveFinal = mutation({
+  args: { videoId: v.id("videos"), keep: v.number() },
+  handler: async (ctx, { videoId, keep }) => {
+    await requireMe(ctx);
+    const vid = await ctx.db.get(videoId);
+    if (!vid) throw new ConvexError("That video no longer exists.");
+    const versions = await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", videoId)).collect();
+    const kept = versions.find((x) => x.number === keep);
+    if (!kept) throw new ConvexError(`There's no v${keep}.`);
+    if (kept.status !== "ready") throw new ConvexError(`v${keep} isn't ready yet. Approve a version that plays.`);
+    const stills = new Set<string>(), guids = new Set<string>();
+    const deleted: number[] = [];
+    let freed = 0;
+    for (const ver of versions.sort((a, b) => a.number - b.number)) {
+      if (ver._id === kept._id) continue;
+      freed += ver.storageBytes ?? 0;
+      deleted.push(ver.number);
+      await removeVersion(ctx, ver, `Deleted by Approve final (kept v${keep}).`, stills, guids);
+    }
+    const now = Date.now();
+    await ctx.db.patch(videoId, { final: { version: keep, at: now }, updatedAt: now });
+    if (deleted.length) await scheduleCleanup(ctx, stills, guids);
+    return { kept: keep, deleted, freedBytes: freed };
+  },
+});
+
+// Takes the Final badge off without deleting anything.
+export const clearFinal = mutation({
+  args: { videoId: v.id("videos") },
+  handler: async (ctx, { videoId }) => {
+    await requireMe(ctx);
+    await ctx.db.patch(videoId, { final: undefined });
+  },
+});
+
+export const versionsForStorage = internalQuery({
+  args: { all: v.boolean() },
+  handler: async (ctx, { all }) => {
+    const cutoff = Date.now() - 11 * 3600_000;
+    return (await ctx.db.query("versions").collect())
+      .filter((x) => x.status === "ready" && (all || !x.storageCheckedAt || x.storageCheckedAt < cutoff))
+      .map((x) => ({ _id: x._id, bunnyGuid: x.bunnyGuid }));
   },
 });

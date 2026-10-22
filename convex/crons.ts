@@ -5,4 +5,6 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 crons.interval("dropbox drop folder", { minutes: 1 }, internal.dropbox.sync, {});
+// Bunny storage per version, for the "Storage" detail and Approve final (R2b).
+crons.interval("bunny storage sizes", { hours: 12 }, internal.uploads.refreshStorage, {});
 export default crons;

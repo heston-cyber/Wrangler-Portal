@@ -100,6 +100,7 @@ export const poll = internalAction({
     const patch: Record<string, unknown> = {
       pollCount: count, encodeProgress: b.encodeProgress ?? 0, width: b.width || undefined, height: b.height || undefined,
       lengthSeconds: b.length || undefined, fpsNum: b.framerate ? fps.num : undefined, fpsDen: b.framerate ? fps.den : undefined, mp4Heights,
+      ...(typeof b.storageSize === "number" ? { storageBytes: b.storageSize, storageCheckedAt: Date.now() } : {}),
     };
     const failed = b.status === 5 || b.status === 8;
     const ready = (b.status === 3 || b.status === 4) && (b.encodeProgress ?? 0) >= 100;
@@ -176,7 +177,9 @@ export const stageCheck = internalAction({
     let stages = row.version.stages ?? [];
     if (b) {
       const next = await nextStages(row.version, b).catch(() => null);
-      if (next) { stages = next; await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { stages } }); }
+      if (next) stages = next;
+      const storage = typeof b.storageSize === "number" ? { storageBytes: b.storageSize, storageCheckedAt: Date.now() } : {};
+      if (next || "storageBytes" in storage) await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { ...(next ? { stages } : {}), ...storage } });
     }
     const last = stages[stages.length - 1];
     const listed = listedHeights(last?.res);
@@ -238,5 +241,25 @@ export const countAllFrames = internalAction({
     const out = [];
     for (const id of ids) out.push(await ctx.runAction(internal.uploads.countFrames, { versionId: id, attempt: 99 }));
     return out;
+  },
+});
+
+// Bunny storage per version (R2b): refreshed once a day, since Bunny's copies keep landing after "ready".
+// Returns counts only (safe for the public CI log).
+export const refreshStorage = internalAction({
+  args: { all: v.optional(v.boolean()) },
+  handler: async (ctx, { all }): Promise<{ checked: number; updated: number; failed: number }> => {
+    const due: Array<{ _id: Id<"versions">; bunnyGuid: string }> = await ctx.runQuery(internal.library.versionsForStorage, { all: all ?? false });
+    let updated = 0, failed = 0;
+    for (const ver of due) {
+      try {
+        const b = await getBunnyVideo(ver.bunnyGuid);
+        if (typeof b.storageSize === "number") {
+          await ctx.runMutation(internal.library.patchVersion, { versionId: ver._id, patch: { storageBytes: b.storageSize, storageCheckedAt: Date.now() } });
+          updated++;
+        }
+      } catch { failed++; }
+    }
+    return { checked: due.length, updated, failed };
   },
 });

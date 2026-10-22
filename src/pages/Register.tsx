@@ -1,14 +1,18 @@
 // The register (Phase R2, Oct 22): every numbered video in one table, New video, and the file name to render next.
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { Check, Copy, ListOrdered, Plus, Search, X } from "lucide-react";
+import { Check, Copy, ListOrdered, Plus, Rows3, Search, X } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { shortTitleError, shortTitleFrom } from "../../convex/lib/register";
 import { TopBar } from "../shell/Shell";
 import { linkProps, navigate } from "../lib/router";
 import { Modal, useToast } from "../ui/kit";
-import { ago, projectLabel } from "../lib/format";
+import { projectLabel } from "../lib/format";
+import { FIELDS, fieldText, pad5, useLibrarySettings } from "../lib/details";
+import { FinalBadge } from "./VideoRows";
+import { ShowDetails } from "./ShowDetails";
+import { ApproveFinal } from "./ApproveFinal";
 
 export async function copyText(text: string, show: (m: string) => void, what = "Copied") {
   try { await navigator.clipboard.writeText(text); show(what); }
@@ -25,18 +29,34 @@ export function FileName({ name, show, compact }: { name: string; show: (m: stri
 }
 
 export default function Register() {
-  const data = useQuery(api.register.list, {});
+  const overview = useQuery(api.library.overview);
+  const lib = useLibrarySettings();
   const [toast, show] = useToast();
   const [q, setQ] = useState("");
   const [adding, setAdding] = useState(false);
+  const [approving, setApproving] = useState<{ _id: Id<"videos">; title: string } | null>(null);
+  const [details, setDetails] = useState(false);
+  const pmap = useMemo(() => new Map((overview?.projects ?? []).map((p) => [p._id as string, p])), [overview]);
+  const numbered = useMemo(() => (overview?.videos ?? []).filter((x) => x.number).sort((a, b) => b.number! - a.number!), [overview]);
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return (data?.rows ?? []).filter((r) => !needle || `${r.numberText} ${r.title} ${r.shortTitle} ${r.client ?? ""} ${r.project} ${r.jobNumber ?? ""}`.toLowerCase().includes(needle));
-  }, [data, q]);
+    return numbered.filter((x) => {
+      const p = pmap.get(x.projectId);
+      return !needle || `${pad5(x.number!)} ${x.title} ${x.shortTitle ?? ""} ${p?.client ?? ""} ${p?.name ?? ""} ${p?.jobNumber ?? ""}`.toLowerCase().includes(needle);
+    });
+  }, [numbered, pmap, q]);
+  const cols = lib.fields.filter((k) => k !== "number");
+  const nextName = (x: (typeof numbered)[number]) => x.shortTitle ? `${pad5(x.number!)}_${x.shortTitle}_v${(x.latest?.number ?? 0) + 1}.mp4` : null;
+  const unnumbered = (overview?.videos ?? []).length - numbered.length;
 
   return (
     <>
-      <TopBar right={<button className="btn primary sm" onClick={() => setAdding(true)}><Plus size={15} />New video</button>}>
+      <TopBar right={
+        <>
+          <button className="icon-btn md" onClick={() => setDetails(true)} aria-label="Show details" title="Show details"><Rows3 size={16} /></button>
+          <button className="btn primary sm" onClick={() => setAdding(true)}><Plus size={15} />New video</button>
+        </>
+      }>
         <ListOrdered size={15} /><span className="here">Register</span>
       </TopBar>
       <div className="content">
@@ -52,9 +72,9 @@ export default function Register() {
             </label>
           </div>
 
-          {data === undefined ? null : data.rows.length === 0 ? (
+          {overview === undefined ? null : numbered.length === 0 ? (
             <div className="empty">
-              <span>No numbered videos yet. New video gives out 00001.</span>
+              <span>No numbered videos yet. New video gives out the next number.</span>
               <button className="btn primary" onClick={() => setAdding(true)}><Plus size={15} />New video</button>
             </div>
           ) : (
@@ -64,42 +84,45 @@ export default function Register() {
                   <tr>
                     <th scope="col">No.</th>
                     <th scope="col">Video</th>
-                    <th scope="col" className="hide-sm">Client · Project</th>
-                    <th scope="col">Latest</th>
+                    {cols.map((k) => <th scope="col" key={k} className={k === "activity" || k === "firstUpload" || k === "source" ? "hide-sm" : undefined}>{FIELDS.find((f) => f.key === k)!.label.replace(" and job number", "").replace("Resolution and frame rate", "Format")}</th>)}
                     <th scope="col" className="hide-sm">Next render</th>
-                    <th scope="col" className="hide-sm">Activity</th>
+                    {lib.approveFinal && <th scope="col" className="hide-sm"><span className="sr-only">Approve final</span></th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.videoId} onClick={() => navigate(`/v/${r.videoId}`)}>
-                      <td className="num mono">{r.numberText}</td>
-                      <td className="vid">
-                        <a {...linkProps(`/v/${r.videoId}`)} onClick={(e) => e.stopPropagation()}>{r.title}</a>
-                        {r.nextFileName && <span className="mobile-only regnext"><FileName name={`${r.nextFileName}.mp4`} show={show} compact /></span>}
-                      </td>
-                      <td className="hide-sm secondary">{r.client ? `${r.client} · ` : ""}{projectLabel({ name: r.project, jobNumber: r.jobNumber })}</td>
-                      <td>
-                        <span className="regstat">
-                          {r.latest ? <span className="chip">v{r.latest}</span> : null}
-                          <span className={`chip${r.status === "Open notes" ? " warn" : r.status === "Failed" ? " red" : ""}`}>{r.status === "Open notes" ? `${r.openNotes} open` : r.status}</span>
-                        </span>
-                      </td>
-                      <td className="hide-sm">{r.nextFileName ? <FileName name={`${r.nextFileName}.mp4`} show={show} compact /> : null}</td>
-                      <td className="hide-sm secondary tnum">{ago(r.lastActivity)}</td>
-                    </tr>
-                  ))}
-                  {rows.length === 0 && <tr><td colSpan={6} className="secondary">Nothing matches “{q}”.</td></tr>}
+                  {rows.map((x) => {
+                    const p = pmap.get(x.projectId);
+                    const next = nextName(x);
+                    return (
+                      <tr key={x._id} onClick={() => navigate(`/v/${x._id}`)}>
+                        <td className="num mono">{pad5(x.number!)}</td>
+                        <td className="vid">
+                          <span className="vidline"><a {...linkProps(`/v/${x._id}`)} onClick={(e) => e.stopPropagation()}>{x.title}</a><FinalBadge final={x.final} /></span>
+                          {next && <span className="mobile-only regnext"><FileName name={next} show={show} compact /></span>}
+                        </td>
+                        {cols.map((k) => <td key={k} className={`${k === "activity" || k === "firstUpload" || k === "source" ? "hide-sm " : ""}secondary`}>{fieldText(k, x, p) ?? ""}</td>)}
+                        <td className="hide-sm">{next ? <FileName name={next} show={show} compact /> : null}</td>
+                        {lib.approveFinal && (
+                          <td className="hide-sm" onClick={(e) => e.stopPropagation()}>
+                            {x.latest && <button className={`btn sm approve${x.final ? " done" : ""}`} onClick={() => setApproving({ _id: x._id, title: x.title })}>{x.final ? `Final v${x.final.version}` : "Approve final"}</button>}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                  {rows.length === 0 && <tr><td colSpan={cols.length + 4} className="secondary">Nothing matches “{q}”.</td></tr>}
                 </tbody>
               </table>
             </div>
           )}
-          {data && data.unnumbered > 0 && (
-            <p className="caption secondary regnote">{data.unnumbered === 1 ? "1 video from before numbering isn't in the register." : `${data.unnumbered} videos from before numbering aren't in the register.`} They're still on the <a {...linkProps("/projects")}>Projects</a> page.</p>
+          {overview && unnumbered > 0 && (
+            <p className="caption secondary regnote">{unnumbered === 1 ? "1 video from before numbering isn't in the register." : `${unnumbered} videos from before numbering aren't in the register.`} They're still on the <a {...linkProps("/projects")}>Projects</a> page; add one from its page (⋯ › Add to the register).</p>
           )}
         </div>
       </div>
       {adding && <NewVideo onClose={() => setAdding(false)} show={show} />}
+      {details && <ShowDetails fields={lib.fields} onChange={lib.setFields} onClose={() => setDetails(false)} />}
+      {approving && <ApproveFinal videoId={approving._id} title={approving.title} onClose={() => setApproving(null)} onDone={show} />}
       {toast}
     </>
   );

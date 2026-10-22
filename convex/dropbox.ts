@@ -418,7 +418,7 @@ export const addVersion = internalMutation({
       videoId: a.videoId, number, status: "processing", pollCount: 0, bunnyGuid: a.bunnyGuid, fileName: a.fileName.slice(0, 300),
       fileSize: a.fileSize, startTimecode: "01:00:00:00", uploaderName: "Dropbox", dropboxPath: a.dropboxPath, createdAt: now,
     });
-    await ctx.db.patch(a.videoId, { updatedAt: now });
+    await ctx.db.patch(a.videoId, { updatedAt: now, final: undefined }); // a new version reopens an approved video
     await ctx.db.patch(a.fileId, { status: "imported", versionId, shareUrl: a.shareUrl, importedAt: now, lastChangeAt: now, reason: undefined });
     return { versionId, number };
   },

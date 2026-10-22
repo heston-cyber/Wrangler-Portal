@@ -207,6 +207,7 @@ export const findVideos = internalQuery({
         number: num || null,
         title: vid.title,
         next_render: next ? next + ".mp4" : null,
+        final: vid.final ? `v${vid.final.version} (approved ${iso(vid.final.at).slice(0, 10)})` : null,
         project: p?.name ?? null,
         job_number: p?.jobNumber ?? null,
         client: p?.client ?? null,

@@ -30,6 +30,7 @@ import type * as lib_voice from "../lib/voice.js";
 import type * as notes from "../notes.js";
 import type * as phase0 from "../phase0.js";
 import type * as player from "../player.js";
+import type * as prefs from "../prefs.js";
 import type * as r1test from "../r1test.js";
 import type * as r1results from "../r1results.js";
 import type * as register from "../register.js";
@@ -74,6 +75,7 @@ declare const fullApi: ApiFromModules<{
   notes: typeof notes;
   phase0: typeof phase0;
   player: typeof player;
+  prefs: typeof prefs;
   r1test: typeof r1test;
   r1results: typeof r1results;
   register: typeof register;

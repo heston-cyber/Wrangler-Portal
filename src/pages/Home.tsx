@@ -10,7 +10,8 @@ import { isVideoFile, useUploads } from "../lib/uploads";
 import { linkProps } from "../lib/router";
 import { Avatar, Thumb } from "../ui/kit";
 import { ago, uploadText } from "../lib/format";
-import { VideoRow, openedMeta, updatedMeta } from "./VideoRows";
+import { VideoRow, openedMeta } from "./VideoRows";
+import { useLibrarySettings } from "../lib/details";
 import { House } from "lucide-react";
 
 export default function Home() {
@@ -22,6 +23,8 @@ export default function Home() {
   const [tab, setTab] = useState<"opened" | "videos" | "activity">("opened");
   const videos = overview?.videos ?? [];
   const pmap = new Map((overview?.projects ?? []).map((p) => [p._id as string, p.name]));
+  const projects = new Map((overview?.projects ?? []).map((p) => [p._id as string, p]));
+  const lib = useLibrarySettings();
   const opened = videos.filter((x) => x.lastOpenedAt).sort((a, b) => b.lastOpenedAt! - a.lastOpenedAt!).slice(0, 8);
   const latest = [...videos].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 8);
   const shownTab = tab === "opened" && opened.length === 0 && overview ? "videos" : tab;
@@ -61,7 +64,7 @@ export default function Home() {
               : shownTab === "activity" ? <RecentActivity />
               : (shownTab === "opened" ? opened : latest).length === 0 ? <p className="caption" style={{ padding: "8px 18px" }}>No videos yet. Upload your first render above.</p>
               : (shownTab === "opened" ? opened : latest).map((x) => (
-                <VideoRow key={x._id} x={x} projectName={pmap.get(x.projectId)} meta={shownTab === "opened" ? openedMeta(x) : updatedMeta(x)} />
+                <VideoRow key={x._id} x={x} project={projects.get(x.projectId)} fields={lib.fields} projectName={lib.fields.includes("project") ? undefined : pmap.get(x.projectId)} meta={shownTab === "opened" ? openedMeta(x) : undefined} />
               ))}
           </div>
         </div>

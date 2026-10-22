@@ -29,6 +29,7 @@ export async function bunnyCall(path: string, init: RequestInit = {}) {
 export type BunnyVideo = {
   guid: string; title: string; status: number; encodeProgress: number; framerate: number;
   width: number; height: number; length: number; availableResolutions: string | null; hasMP4Fallback: boolean;
+  storageSize?: number;
 };
 
 export async function getBunnyVideo(guid: string): Promise<BunnyVideo> {
