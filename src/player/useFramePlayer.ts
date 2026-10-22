@@ -116,6 +116,9 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
     v.addEventListener("loadeddata", onLoadedData);
     let hls: Hls | null = null;
     v.crossOrigin = "anonymous";
+    // iPhones (WebKit) won't load or jump around in a video with sound until it's been played by a tap, so the
+    // picture stays muted whenever it isn't playing; play() unmutes it inside the tap (Oct 22, R3 phone test).
+    v.muted = true;
     const isHls = /\.m3u8(\?|$)/.test(src);
     if (isHls && !v.canPlayType("application/vnd.apple.mpegurl") && Hls.isSupported()) {
       hls = new Hls({ capLevelToPlayerSize: false });
@@ -136,7 +139,7 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
       setErrorCode(v.error?.code || 2);
     };
     const onPlay = () => { playingNow.current = true; setPlaying(true); };
-    const onPause = () => { playingNow.current = false; setPlaying(false); };
+    const onPause = () => { playingNow.current = false; setPlaying(false); v.muted = true; };
     v.addEventListener("loadedmetadata", onMeta);
     v.addEventListener("error", onErr);
     v.addEventListener("play", onPlay);
@@ -179,11 +182,26 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
     });
   }
 
+  function seekedOrTimeout(el: HTMLVideoElement, timeout: number) {
+    return new Promise<boolean>((res) => {
+      if (!el.seeking) return res(true);
+      const h = () => { clearTimeout(tm); res(true); };
+      const tm = setTimeout(() => { el.removeEventListener("seeked", h); res(false); }, timeout);
+      el.addEventListener("seeked", h, { once: true });
+    });
+  }
+
   async function seekTime(t: number) {
     const v = videoRef.current!;
     const p = nextFrame(2000);
     v.currentTime = Math.max(0, t);
-    const md = await p;
+    let md = await p;
+    // Still loading (a phone fetching a part of a big file): a frame reported now is the old one. Wait for the jump
+    // to finish rather than issuing it again, which cancels it (that's how jumps never landed on the iPhone).
+    if (v.seeking) {
+      await seekedOrTimeout(v, 12000);
+      md = await nextFrame(800);
+    }
     if (md) { lastMedia.current = md.mediaTime; clock.set(frameOf(md.mediaTime)); }
     return md ? frameOf(md.mediaTime) : frameOf(v.currentTime);
   }
@@ -201,6 +219,7 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
     await offsetReady.current;
     if (clock.get() === target && lastMedia.current !== null) return target;
     let t = (target + 0.5) * FD + offset.current + bias.current;
+    const t0 = performance.now();
     let landed = await seekTime(t);
     const path = [landed];
     // A landing far off (e.g. a stream not seekable yet, right after switching to it) is retried as is,
@@ -223,10 +242,11 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
       if (landed === target) bias.current = t - (target + 0.5) * FD - offset.current;
     }
     // Jumps that needed correcting (the picture visibly steps between frames) are reported, for diagnosing devices remotely.
-    if (path.length > 1) seekReports.current.push({ target, path, bias: Math.round(bias.current * 1e4) / 1e4, at: Date.now() });
+    const ms = Math.round(performance.now() - t0);
+    if (path.length > 1 || ms > 1500) seekReports.current.push({ target, path, bias: Math.round(bias.current * 1e4) / 1e4, at: Date.now(), ms });
     return landed;
   }
-  const seekReports = useRef<Array<{ target: number; path: number[]; bias: number; at: number }>>([]);
+  const seekReports = useRef<Array<{ target: number; path: number[]; bias: number; at: number; ms?: number }>>([]);
   // Jumps run one after another so fast key repeats don't fight.
   function seekToFrame(n: number) {
     const max = (frameCount ?? Infinity) - 1;
@@ -241,6 +261,7 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
   // Dragging the playhead: one quick seek at a time, always to the newest spot, skipping the ones in between.
   // (Queuing a frame-exact jump for every finger move made phones fall seconds behind.) Letting go does one exact jump.
   // With the scrub copy ready, the drag moves the copy (shown over the picture) and the full file stays put until letting go.
+  const sound = useRef(true);
   const scrubTarget = useRef<number | null>(null);
   const scrubRun = useRef<Promise<void> | null>(null);
   function scrubTo(n: number, first = false) {
@@ -265,10 +286,13 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
         scrubTarget.current = null;
         const el = px ?? videoRef.current;
         if (!el) break;
-        const p = nextFrame(400, el);
+        const p = nextFrame(px ? 400 : 1500, el);
         // The scrub copy is an MP4 (first frame at 0); the main source may be a stream with its offset.
         el.currentTime = Math.max(0, (target + 0.5) * FD + (px ? 0 : offset.current + bias.current));
-        const md = await p;
+        let md = await p;
+        // Without the scrub copy (still downloading), let each jump in the full file finish before the next one:
+        // starting a new jump cancels the one loading, so on a phone the picture never moved.
+        if (el.seeking) { await seekedOrTimeout(el, 6000); md = await nextFrame(600, el); }
         if (md) {
           clock.set(px ? Math.max(0, Math.round(md.mediaTime / FD)) : frameOf(md.mediaTime));
           // The full file isn't on this frame yet, so the exact jump on letting go must not skip itself.
@@ -306,9 +330,11 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
     onProxyMeta: (e: { currentTarget: HTMLVideoElement }) => { const el = e.currentTarget; if (!proxyReady.current && el.readyState < 2) el.currentTime = 0.001; },
     proxyStatus: () => ({ ...proxyInfo.current, ready: proxyReady.current, rs: proxyRef.current?.readyState ?? null, ago: proxyInfo.current.at ? Math.round((Date.now() - proxyInfo.current.at) / 1000) : null }),
     step: (d: number) => seekToFrame((pending.current?.target ?? clock.get()) + d),
-    play: () => { setProxyOn(false); return videoRef.current?.play().catch(() => {}); },
+    play: () => { setProxyOn(false); const v = videoRef.current; if (v) v.muted = !sound.current; return v?.play().catch(() => {}); },
     pause: () => videoRef.current?.pause(),
-    toggle: () => { const v = videoRef.current; if (!v) return; setProxyOn(false); if (v.paused) v.play().catch(() => {}); else v.pause(); },
+    toggle: () => { const v = videoRef.current; if (!v) return; setProxyOn(false); if (v.paused) { v.muted = !sound.current; v.play().catch(() => {}); } else v.pause(); },
+    // Sound on or off (the mute button, voice notes). Applied while playing; a paused picture is always muted.
+    setSound: (on: boolean) => { sound.current = on; const v = videoRef.current; if (v && !v.paused) v.muted = !on; },
     // After pausing, wait for the paused frame to settle so a note gets the frame you're looking at.
     settle: async () => { const v = videoRef.current; if (v && !v.paused) { v.pause(); await new Promise((r) => setTimeout(r, 150)); } return clock.get(); },
   };

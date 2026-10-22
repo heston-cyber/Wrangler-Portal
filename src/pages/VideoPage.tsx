@@ -275,7 +275,8 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const [wrapRef, box] = useFit(aspect, narrow && !fs);
 
   useEffect(() => { const v = player.videoRef.current; if (v) v.playbackRate = rate; }, [rate, player.videoRef, src]);
-  useEffect(() => { const v = player.videoRef.current; if (v) v.muted = muted; }, [muted, player.videoRef, src]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { player.setSound(!muted); }, [muted, src]);
 
   // Grow the note box with its text.
   useLayoutEffect(() => {
