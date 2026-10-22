@@ -72,16 +72,22 @@ async function seekTo(f: number): Promise<{ ms: number; landed: number | null }>
   return { ms: performance.now() - t0, landed };
 }
 
+// Load time = from setting the source to the first picture on screen. Asking for frame 0 makes every browser
+// fetch it (Chrome can otherwise park a reloaded file at "metadata only").
 function load(id: string): Promise<number> {
   const f = FILES.find((x) => x.id === id)!;
   errors = []; stalls = 0;
   return new Promise((resolve) => {
     const t0 = performance.now();
-    const ok = () => { cleanup(); resolve(performance.now() - t0); };
-    const bad = () => { cleanup(); resolve(-1); };
-    const cleanup = () => { v.removeEventListener("loadeddata", ok); v.removeEventListener("error", bad); };
-    v.addEventListener("loadeddata", ok, { once: true });
+    let done = false;
+    const finish = (ms: number) => { if (!done) { done = true; clearTimeout(timer); v.removeEventListener("error", bad); resolve(ms); } };
+    const bad = () => finish(-1);
+    const timer = setTimeout(() => { errors.push("load: no picture after 20 s"); finish(-1); }, 20000);
     v.addEventListener("error", bad, { once: true });
+    v.addEventListener("loadedmetadata", async () => {
+      const r = await seekTo(0);
+      finish(r.landed == null ? -1 : performance.now() - t0);
+    }, { once: true });
     v.src = urlOf(f.file);
     v.load();
     watch();
