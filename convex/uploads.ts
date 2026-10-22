@@ -244,15 +244,30 @@ export const countAllFrames = internalAction({
   },
 });
 
+async function scrubSize(guid: string): Promise<number | null> {
+  const lib = process.env.BUNNY_SCRUB_LIBRARY_ID, key = process.env.BUNNY_SCRUB_API_KEY;
+  if (!lib || !key) return null;
+  const r = await fetch(`https://video.bunnycdn.com/library/${lib}/videos/${encodeURIComponent(guid)}`, { headers: { AccessKey: key, accept: "application/json" } });
+  if (!r.ok) return null;
+  const j = await r.json() as { storageSize?: number };
+  return typeof j.storageSize === "number" ? j.storageSize : null;
+}
+
 // Bunny storage per version (R2b): refreshed once a day, since Bunny's copies keep landing after "ready".
 // Returns counts only (safe for the public CI log).
 export const refreshStorage = internalAction({
   args: { all: v.optional(v.boolean()) },
   handler: async (ctx, { all }): Promise<{ checked: number; updated: number; failed: number }> => {
-    const due: Array<{ _id: Id<"versions">; bunnyGuid: string }> = await ctx.runQuery(internal.library.versionsForStorage, { all: all ?? false });
+    const due: Array<{ _id: Id<"versions">; bunnyGuid: string; scrubGuid: string | null; fileSize: number }> = await ctx.runQuery(internal.library.versionsForStorage, { all: all ?? false });
     let updated = 0, failed = 0;
     for (const ver of due) {
       try {
+        // A review render (R3): the file in Bunny Storage plus its 360p scrub copy (whose size lands after "ready").
+        if (ver.scrubGuid) {
+          const s = await scrubSize(ver.scrubGuid);
+          if (s !== null) { await ctx.runMutation(internal.library.patchVersion, { versionId: ver._id, patch: { storageBytes: ver.fileSize + s, storageCheckedAt: Date.now() } }); updated++; }
+          continue;
+        }
         const b = await getBunnyVideo(ver.bunnyGuid);
         if (typeof b.storageSize === "number") {
           await ctx.runMutation(internal.library.patchVersion, { versionId: ver._id, patch: { storageBytes: b.storageSize, storageCheckedAt: Date.now() } });

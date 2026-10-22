@@ -458,7 +458,7 @@ export const versionsForStorage = internalQuery({
   handler: async (ctx, { all }) => {
     const cutoff = Date.now() - 11 * 3600_000;
     return (await ctx.db.query("versions").collect())
-      .filter((x) => x.status === "ready" && x.bunnyGuid && (all || !x.storageCheckedAt || x.storageCheckedAt < cutoff))
-      .map((x) => ({ _id: x._id, bunnyGuid: x.bunnyGuid }));
+      .filter((x) => x.status === "ready" && (x.bunnyGuid || (x.source === "file" && x.scrubGuid)) && (all || !x.storageCheckedAt || x.storageCheckedAt < cutoff))
+      .map((x) => ({ _id: x._id, bunnyGuid: x.bunnyGuid, scrubGuid: x.source === "file" ? x.scrubGuid ?? null : null, fileSize: x.fileSize ?? 0 }));
   },
 });
