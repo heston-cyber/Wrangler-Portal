@@ -31,6 +31,7 @@ import type * as notes from "../notes.js";
 import type * as phase0 from "../phase0.js";
 import type * as player from "../player.js";
 import type * as r1test from "../r1test.js";
+import type * as r1results from "../r1results.js";
 import type * as slack from "../slack.js";
 import type * as stills from "../stills.js";
 import type * as testdata from "../testdata.js";
@@ -72,6 +73,7 @@ declare const fullApi: ApiFromModules<{
   phase0: typeof phase0;
   player: typeof player;
   r1test: typeof r1test;
+  r1results: typeof r1results;
   slack: typeof slack;
   stills: typeof stills;
   testdata: typeof testdata;

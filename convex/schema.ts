@@ -208,6 +208,13 @@ export default defineSchema({
     ua: v.optional(v.string()),
   }).index("by_at", ["at"]),
 
+  // Phase R1 (Oct 22): results from the review-format test page (lab/r1.html), posted with the test link's key.
+  r1Results: defineTable({
+    at: v.number(),
+    device: v.string(),
+    rows: v.string(), // JSON
+  }),
+
   // Stills kept in Convex storage until Bunny Storage is set up.
   stillFiles: defineTable({
     storageId: v.id("_storage"),

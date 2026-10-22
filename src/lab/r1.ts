@@ -1,4 +1,6 @@
 // Phase R1 (Oct 22): how each candidate review export behaves when played straight from the CDN.
+import { ConvexHttpClient } from "convex/browser";
+import { api } from "../../convex/_generated/api";
 // The link carries the CDN folder in its hash (#k=<folder>&h=<host>), so nothing about the test files is in the page.
 const FPS = 24;
 const FD = 1 / FPS;
@@ -21,7 +23,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const frameOf = (t: number) => Math.round(t * FPS);
 const tc = (n: number) => [1 + Math.floor(n / 86400), Math.floor(n / 1440) % 60, Math.floor(n / 24) % 60, n % 24].map((x) => String(x).padStart(2, "0")).join(":");
 
-type Row = { id: string; run: number; load: number; jumpMed: number; jump90: number; jumpMax: number; exact: number; jumps: number; misses: number[]; step: number; dropped: number; frames: number; stalls: number; errors: string[] };
+type Row = { hidden?: boolean; id: string; run: number; load: number; jumpMed: number; jump90: number; jumpMax: number; exact: number; jumps: number; misses: number[]; step: number; dropped: number; frames: number; stalls: number; errors: string[] };
 const results: Row[] = [];
 const runs: Record<string, number> = {};
 let busy = false;
@@ -37,6 +39,16 @@ for (const f of FILES) {
 if (!folder || !host) $("status").textContent = "This link is missing its test folder. Use the link from Claude.";
 
 v.addEventListener("waiting", () => { stalls++; });
+let hiddenDuringRun = false;
+document.addEventListener("visibilitychange", () => { if (document.hidden) hiddenDuringRun = true; });
+const convexUrl = import.meta.env.VITE_CONVEX_URL as string | undefined;
+const client = convexUrl ? new ConvexHttpClient(convexUrl) : null;
+function post(row: Row) {
+  if (!client || !folder) return;
+  client.mutation(api.r1results.report, { k: folder, device: $("device").textContent ?? "", rows: JSON.stringify(row) })
+    .then(() => { $("copied").textContent = "Results sent to Claude."; })
+    .catch(() => { $("copied").textContent = "Couldn't send results; use Copy results."; });
+}
 v.addEventListener("error", () => { errors.push(`${v.error?.code}: ${(v.error?.message ?? "").slice(0, 80)}`); });
 
 let shown = -1;
@@ -110,9 +122,10 @@ async function run(id: string) {
   pick.value = id;
   status.textContent = `${id}: loading…`; prog(0);
   v.pause();
+  hiddenDuringRun = document.hidden;
   const loadMs = await load(id);
   const row: Row = { id, run: (runs[id] = (runs[id] ?? 0) + 1), load: Math.round(loadMs), jumpMed: 0, jump90: 0, jumpMax: 0, exact: 0, jumps: 0, misses: [], step: 0, dropped: 0, frames: 0, stalls: 0, errors: [] };
-  if (loadMs < 0) { row.errors = errors.slice(); results.push(row); render(); status.textContent = `${id}: couldn't load.`; return; }
+  if (loadMs < 0) { row.errors = errors.slice(); row.hidden = hiddenDuringRun; results.push(row); render(); post(row); status.textContent = hiddenDuringRun ? `${id}: the page was hidden, run it again with the page on screen.` : `${id}: couldn't load.`; return; }
   const T = targets(25);
   const ms: number[] = [];
   for (let i = 0; i < T.length; i++) {
@@ -148,10 +161,12 @@ async function run(id: string) {
   if (q0 && q1) { row.dropped = q1.droppedVideoFrames - q0.droppedVideoFrames; row.frames = q1.totalVideoFrames - q0.totalVideoFrames; }
   row.stalls = stalls - s0;
   row.errors = errors.slice();
+  row.hidden = hiddenDuringRun;
   results.push(row);
   render();
+  post(row);
   prog(1);
-  status.textContent = `${id}: done.`;
+  status.textContent = hiddenDuringRun ? `${id}: done, but the page was hidden part of the time, so run it again with the page on screen.` : `${id}: done.`;
 }
 
 function render() {
@@ -160,7 +175,7 @@ function render() {
   for (const r of results) {
     const tr = document.createElement("tr");
     const cells: [string, string?][] = [
-      [r.id], [String(r.run)], [r.load < 0 ? "fail" : String(r.load), r.load < 0 ? "bad" : undefined],
+      [r.hidden ? `${r.id} (hidden)` : r.id, r.hidden ? "bad" : undefined], [String(r.run)], [r.load < 0 ? "fail" : String(r.load), r.load < 0 ? "bad" : undefined],
       [String(r.jumpMed)], [String(r.jump90)],
       [`${r.exact}/${r.jumps}`, r.exact === r.jumps && r.misses.length === 0 ? "good" : "bad"],
       [String(r.step)], [`${r.dropped}/${r.frames}`, r.dropped > 2 ? "bad" : undefined], [String(r.stalls), r.stalls > 0 ? "bad" : undefined],
