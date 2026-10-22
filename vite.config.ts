@@ -10,6 +10,7 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, "index.html"),
         frametest: resolve(__dirname, "lab/frametest.html"),
+        r1: resolve(__dirname, "lab/r1.html"),
       },
     },
   },
