@@ -38,6 +38,9 @@ describe("drop folder rule", () => {
     expect(placeFor("/26122 Spirit Days/Spirit Intro/SpiritIntro_v4.mov")).toMatchObject({ ok: true, project: "26122 Spirit Days", video: "Spirit Intro", fileName: "SpiritIntro_v4.mov", checkIndex: true });
     expect(placeFor("/26122 Spirit Days/Spirit Intro/clip.mxf")).toMatchObject({ ok: true, checkIndex: false });
     expect(placeFor("/loose.mp4")).toMatchObject({ ok: false });
+    expect(placeFor("/_tests/r1/R1_A.mp4")).toMatchObject({ ok: false, ignore: true });
+    expect(placeFor("/_tests/a/b/c.mp4")).toMatchObject({ ok: false, ignore: true });
+    expect(placeFor("/Client/_Project/Video/v1.mp4")).toMatchObject({ ok: true, project: "_Project" });
     expect(placeFor("/ICG/26122 Spirit Days/Spirit Intro/v5.mov")).toMatchObject({ ok: true, client: "ICG", project: "26122 Spirit Days", video: "Spirit Intro", fileName: "v5.mov" });
     expect(placeFor("/26122 Spirit Days/Spirit Intro/v5.mov")).not.toHaveProperty("client");
     expect(placeFor("/A/B/C/D/too-deep.mp4")).toMatchObject({ ok: false });

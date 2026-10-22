@@ -3,6 +3,7 @@
 //   /<Project>/<Video>/<any file name>           →  the next version of <Video> in <Project>
 //   /<Client>/<Project>/<Video>/<any file name>  →  the same, with the project filed under <Client>
 // Paths here are relative to the app folder (Dropbox reports them that way for app-folder apps).
+// Top-level folders whose names start with "_" are ignored (scratch space, e.g. _tests/r1/ for format tests).
 
 export const VIDEO_EXTS = ["mp4", "mov", "m4v", "mxf", "mkv", "webm", "avi"];
 const INDEXED = ["mp4", "mov", "m4v"]; // formats whose finished state we can check (their index is written last)
@@ -19,6 +20,8 @@ export function placeFor(pathDisplay: string): DropPlace {
   }
   const ext = (fileName.split(".").pop() ?? "").toLowerCase();
   if (!VIDEO_EXTS.includes(ext)) return { ok: false, reason: `Not a video file (.${ext}).`, ignore: true };
+  // A top-level folder starting with "_" (e.g. _tests) is scratch space the site leaves alone (Oct 22).
+  if (parts.length > 1 && parts[0].trim().startsWith("_")) return { ok: false, reason: "Scratch folder (starts with _).", ignore: true };
   if (parts.length !== 3 && parts.length !== 4) {
     return { ok: false, reason: "Put renders in a <Client>/<Project>/<Video>/ or <Project>/<Video>/ folder inside Apps/Wrangler Review, e.g. ICG/26122 Spirit Days/Spirit Intro/." };
   }

@@ -208,6 +208,9 @@ async function accessToken(ctx: ActionCtx, force = false): Promise<string> {
   return tok.access_token!;
 }
 
+// For backend-only Node actions that stream files (never returned to a client or logged).
+export const freshToken = internalAction({ args: {}, handler: async (ctx): Promise<string> => accessToken(ctx) });
+
 async function dbx(ctx: ActionCtx, path: string, body: unknown): Promise<any> {
   let r = await rawCall(await accessToken(ctx), path, body);
   if (r.status === 401) r = await rawCall(await accessToken(ctx, true), path, body);
