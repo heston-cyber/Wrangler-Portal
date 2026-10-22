@@ -17,6 +17,7 @@ const API = "https://api.dropboxapi.com/2";
 const SETTLE_MS = 60_000; // a file must sit unchanged this long before we look at it
 const MAX_CHECKS = 180; // ~3 hours of "not finished yet" before giving up
 const LINK_SWEEP_MS = 3 * 3600_000; // any share link still around after this gets deleted regardless
+const RECENT_DROPS = 10; // Settings shows at most this many recent drops (Heston, Oct 22)
 
 const site = () => (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/$/, "");
 const redirectUri = () => `${(process.env.CONVEX_SITE_URL || "").replace(/\/$/, "")}/dropbox/callback`;
@@ -41,7 +42,7 @@ export const status = query({
     const conn = await ctx.db.query("dropbox").first();
     const files = (await ctx.db.query("dropFiles").order("desc").take(40))
       .filter((f) => f.status !== "existing")
-      .sort((a, b) => b.lastChangeAt - a.lastChangeAt).slice(0, 12);
+      .sort((a, b) => b.lastChangeAt - a.lastChangeAt).slice(0, RECENT_DROPS);
     const recent = [];
     for (const f of files) {
       const ver = f.versionId ? await ctx.db.get(f.versionId) : null;

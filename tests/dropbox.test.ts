@@ -296,6 +296,12 @@ describe("importing a render", () => {
     expect(s).toMatchObject({ configured: true, connected: true, email: "heston@wranglerproductions.com" });
     expect(s.recent[0]).toMatchObject({ path: "/26122 Spirit Days/Spirit Intro/V1.mp4", status: "waiting" });
     expect(JSON.stringify(s)).not.toMatch(/SECRET|refreshToken|accessToken|cursor/);
+    // at most 10, newest first
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 14; i++) await ctx.db.insert("dropFiles", { pathLower: `/p/v/f${i}.mp4`, pathDisplay: `/P/V/f${i}.mp4`, rev: `r${i}`, size: 10, status: "imported", checks: 0, firstSeenAt: 1000 + i, lastChangeAt: 1000 + i });
+    });
+    const s2 = await me.query(api.dropbox.status, {});
+    expect(s2.recent).toHaveLength(10);
   });
 });
 
