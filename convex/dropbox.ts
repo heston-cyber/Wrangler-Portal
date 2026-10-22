@@ -2,19 +2,26 @@
 // Flow: Dropbox tells us something changed (webhook, plus a check every minute) → we list what changed → once a
 // file has stopped changing and is complete, Bunny pulls it through a share link → the link is deleted as soon as
 // Bunny has the file. Tokens stay in the backend; the Settings page only ever sees names, dates and statuses.
-import { action, httpAction, internalAction, internalMutation, internalQuery, query } from "./_generated/server";
+import { action, httpAction, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireMe } from "./lib/access";
 import { bunnyCall, bunnyEnv } from "./bunny";
-import { httpRangeReader, mp4HasIndex } from "./lib/mp4";
+import { checkReviewExport, httpRangeReader, mp4HasIndex } from "./lib/mp4";
 import { directLink, pickProject, placeFor, splitJob } from "./lib/dropboxPath";
 import { insertVideo, parseRegisterName, videoByNumber } from "./lib/register";
 
 const API = "https://api.dropboxapi.com/2";
 const SETTLE_MS = 60_000; // a file must sit unchanged this long before we look at it
+// R3: a register-named MP4 is looked at sooner. The import still checks every box in the file adds up to its size
+// (an unfinished render never passes), so waiting the full minute only slowed review exports down.
+const FAST_SETTLE_MS = 15_000;
+const fastLane = (pathDisplay: string) => {
+  const p = placeFor(pathDisplay);
+  return p.ok && !!p.register && (p.ext === "mp4" || p.ext === "m4v");
+};
 const MAX_CHECKS = 180; // ~3 hours of "not finished yet" before giving up
 const LINK_SWEEP_MS = 3 * 3600_000; // any share link still around after this gets deleted regardless
 const RECENT_DROPS = 10; // Settings shows at most this many recent drops (Heston, Oct 22)
@@ -62,6 +69,32 @@ export const status = query({
       lastError: conn?.lastError ?? null,
       recent,
     };
+  },
+});
+
+// R3: renders whose names need fixing (last 14 days), for the Register page.
+export const flagged = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireMe(ctx);
+    const since = Date.now() - 14 * 86400_000;
+    return (await ctx.db.query("dropFiles").withIndex("by_status", (q) => q.eq("status", "flagged")).collect())
+      .filter((f) => f.lastChangeAt > since)
+      .sort((a, b) => b.lastChangeAt - a.lastChangeAt)
+      .map((f) => ({ _id: f._id, path: f.pathDisplay, reason: f.reason ?? null, at: f.lastChangeAt }));
+  },
+});
+
+// Try a flagged render again (after adding its number to the register, say), without saving it again.
+export const retryFlagged = mutation({
+  args: { fileId: v.id("dropFiles") },
+  handler: async (ctx, { fileId }) => {
+    await requireMe(ctx);
+    const f = await ctx.db.get(fileId);
+    if (!f || f.status !== "flagged") return false;
+    await ctx.db.patch(fileId, { status: "waiting", reason: undefined, lastChangeAt: Date.now() - 10 * 60_000, checks: 0 });
+    await ctx.scheduler.runAfter(0, internal.dropbox.importFile, { fileId });
+    return true;
   },
 });
 
@@ -237,7 +270,7 @@ export const recordFiles = internalMutation({
       if (latest && latest.rev === f.rev) continue;
       const status = baseline ? "existing" : place.ok ? "waiting" : "skipped";
       const reason = !place.ok ? place.reason : undefined;
-      if (latest && !baseline && (latest.status === "waiting" || (latest.status === "failed" && !latest.versionId) || latest.status === "skipped")) {
+      if (latest && !baseline && (latest.status === "waiting" || (latest.status === "failed" && !latest.versionId) || latest.status === "skipped" || latest.status === "flagged")) {
         await ctx.db.patch(latest._id, { rev: f.rev, size: f.size, pathDisplay: f.pathDisplay, status, reason, lastChangeAt: now, checks: 0 });
       } else if (!latest || latest.status !== "importing") {
         await ctx.db.insert("dropFiles", { ...f, status, reason, firstSeenAt: now, lastChangeAt: now, checks: 0 });
@@ -256,10 +289,10 @@ export const recordFiles = internalMutation({
 export const recordRemoved = internalMutation({
   args: { pathsLower: v.array(v.string()) },
   handler: async (ctx, { pathsLower }) => {
-    for (const status of ["waiting", "importing"] as const) {
+    for (const status of ["waiting", "importing", "flagged"] as const) {
       for (const f of await ctx.db.query("dropFiles").withIndex("by_status", (q) => q.eq("status", status)).collect()) {
         if (pathsLower.some((p) => f.pathLower === p || f.pathLower.startsWith(p + "/"))) {
-          await ctx.db.patch(f._id, { status: "skipped", reason: "Removed from Dropbox before it was imported.", lastChangeAt: Date.now() });
+          await ctx.db.patch(f._id, { status: "skipped", reason: status === "flagged" ? "Renamed or removed in Dropbox." : "Removed from Dropbox before it was imported.", lastChangeAt: Date.now() });
         }
       }
     }
@@ -272,7 +305,7 @@ export const dueFiles = internalQuery({
     const waiting = await ctx.db.query("dropFiles").withIndex("by_status", (q) => q.eq("status", "waiting")).collect();
     const stuck = (await ctx.db.query("dropFiles").withIndex("by_status", (q) => q.eq("status", "importing")).collect())
       .filter((f) => now - f.lastChangeAt > 20 * 60_000); // an import that died mid-way gets another go
-    return [...waiting.filter((f) => now - f.lastChangeAt >= SETTLE_MS), ...stuck].slice(0, 5).map((f) => f._id);
+    return [...waiting.filter((f) => now - f.lastChangeAt >= (fastLane(f.pathDisplay) ? FAST_SETTLE_MS : SETTLE_MS)), ...stuck].slice(0, 5).map((f) => f._id);
   },
 });
 
@@ -315,6 +348,8 @@ export const sync = internalAction({
     }
     const due: Id<"dropFiles">[] = await ctx.runQuery(internal.dropbox.dueFiles, { now: Date.now() });
     for (const fileId of due) await ctx.scheduler.runAfter(0, internal.dropbox.importFile, { fileId });
+    // Something new came in: look again just after the short wait, rather than at the next minute's check.
+    if (changes > 0) await ctx.scheduler.runAfter(FAST_SETTLE_MS + 2000, internal.dropbox.sync, {});
     for (const fileId of await ctx.runQuery(internal.dropbox.linksToSweep, { now: Date.now() })) {
       await ctx.scheduler.runAfter(0, internal.dropbox.revokeLink, { fileId });
     }
@@ -409,19 +444,90 @@ export const findOrCreateTarget = internalMutation({
 });
 
 export const addVersion = internalMutation({
-  args: { fileId: v.id("dropFiles"), videoId: v.id("videos"), bunnyGuid: v.string(), fileName: v.string(), fileSize: v.number(), dropboxPath: v.string(), shareUrl: v.optional(v.string()) },
+  args: { fileId: v.id("dropFiles"), videoId: v.id("videos"), bunnyGuid: v.string(), fileName: v.string(), fileSize: v.number(), dropboxPath: v.string(), shareUrl: v.optional(v.string()), number: v.optional(v.number()), note: v.optional(v.string()) },
   handler: async (ctx, a) => {
     const existing = await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", a.videoId)).collect();
-    const number = existing.reduce((m, x) => Math.max(m, x.number), 0) + 1;
+    const number = a.number && !existing.some((x) => x.number === a.number) ? a.number : existing.reduce((m, x) => Math.max(m, x.number), 0) + 1;
     const now = Date.now();
     const versionId = await ctx.db.insert("versions", {
       videoId: a.videoId, number, status: "processing", pollCount: 0, bunnyGuid: a.bunnyGuid, fileName: a.fileName.slice(0, 300),
       fileSize: a.fileSize, startTimecode: "01:00:00:00", uploaderName: "Dropbox", dropboxPath: a.dropboxPath, createdAt: now,
     });
     await ctx.db.patch(a.videoId, { updatedAt: now, final: undefined }); // a new version reopens an approved video
-    await ctx.db.patch(a.fileId, { status: "imported", versionId, shareUrl: a.shareUrl, importedAt: now, lastChangeAt: now, reason: undefined });
+    await ctx.db.patch(a.fileId, { status: "imported", versionId, shareUrl: a.shareUrl, importedAt: now, lastChangeAt: now, reason: a.note });
     return { versionId, number };
   },
+});
+
+// ---------- Render-to-review (R3, Oct 22) ----------
+
+// What a register name points at: the video for its number, and whether its version number is free.
+export const registerTarget = internalQuery({
+  args: { number: v.number(), version: v.optional(v.number()) },
+  handler: async (ctx, a) => {
+    const vid = await videoByNumber(ctx, a.number);
+    if (!vid) return { found: false as const };
+    const versions = await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect();
+    const top = versions.reduce((m, x) => Math.max(m, x.number), 0);
+    const taken = a.version !== undefined && versions.some((x) => x.number === a.version);
+    return { found: true as const, videoId: vid._id, shortTitle: vid.shortTitle ?? "", next: top + 1, taken };
+  },
+});
+
+export const flagFile = internalMutation({
+  args: { fileId: v.id("dropFiles"), reason: v.string() },
+  handler: async (ctx, { fileId, reason }) => {
+    await ctx.db.patch(fileId, { status: "flagged", reason, lastChangeAt: Date.now() });
+  },
+});
+
+// A review export: the version starts as "processing" while the render is copied into Bunny Storage.
+export const addFileVersion = internalMutation({
+  args: {
+    fileId: v.id("dropFiles"), videoId: v.id("videos"), number: v.optional(v.number()), fileName: v.string(), fileSize: v.number(), dropboxPath: v.string(),
+    frames: v.number(), fpsNum: v.number(), fpsDen: v.number(), width: v.number(), height: v.number(), seconds: v.number(),
+  },
+  handler: async (ctx, a) => {
+    const existing = await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", a.videoId)).collect();
+    const number = a.number && !existing.some((x) => x.number === a.number) ? a.number : existing.reduce((m, x) => Math.max(m, x.number), 0) + 1;
+    const now = Date.now();
+    const rand = Array.from(crypto.getRandomValues(new Uint8Array(8))).map((b) => b.toString(16).padStart(2, "0")).join("");
+    const safe = a.fileName.replace(/[^\w.-]+/g, "_").replace(/\.{2,}/g, "_").slice(0, 120);
+    const storagePath = `review/${a.videoId}/${rand}/${safe}`;
+    const versionId = await ctx.db.insert("versions", {
+      videoId: a.videoId, number, status: "processing", source: "file", bunnyGuid: "", storagePath, fileName: a.fileName.slice(0, 300), fileSize: a.fileSize,
+      fpsNum: a.fpsNum, fpsDen: a.fpsDen, frameCount: a.frames, frameCountFrom: "file", width: a.width, height: a.height, lengthSeconds: a.seconds,
+      mp4Heights: [], startTimecode: "01:00:00:00", uploaderName: "Dropbox", dropboxPath: a.dropboxPath, createdAt: now, encodeProgress: 0,
+    });
+    await ctx.db.patch(a.videoId, { updatedAt: now, final: undefined });
+    await ctx.db.patch(a.fileId, { status: "imported", versionId, importedAt: now, lastChangeAt: now, reason: undefined });
+    return { versionId, number, storagePath };
+  },
+});
+
+// The copy finished: the version plays now. Transcript, waveform, Slack and the scrub copy follow.
+export const fileReady = internalMutation({
+  args: { versionId: v.id("versions"), fileUrl: v.string(), bytes: v.number(), copyMs: v.number() },
+  handler: async (ctx, a) => {
+    const ver = await ctx.db.get(a.versionId);
+    if (!ver || (ver.status === "ready" && ver.fileUrl)) return; // already done (a second copy run finds it ready)
+    const now = Date.now();
+    await ctx.db.patch(a.versionId, { status: "ready", readyAt: now, fileUrl: a.fileUrl, storageBytes: a.bytes, storageCheckedAt: now, encodeProgress: 100, copyError: undefined });
+    await ctx.db.patch(ver.videoId, { updatedAt: now });
+    await ctx.scheduler.runAfter(0, internal.slack.versionReady, { versionId: a.versionId });
+    if (process.env.ELEVENLABS_API_KEY) await ctx.runMutation(internal.transcripts.markPending, { versionId: a.versionId });
+    await ctx.scheduler.runAfter(0, internal.transcribe.run, { versionId: a.versionId, attempt: 0 });
+    await ctx.runMutation(internal.waveforms.markPending, { versionId: a.versionId });
+    await ctx.scheduler.runAfter(2000, internal.waveform.run, { versionId: a.versionId, attempt: 0 });
+    await ctx.scheduler.runAfter(0, internal.reviewFiles.startScrub, { versionId: a.versionId });
+  },
+});
+
+export const fileVersionsWithoutScrub = internalQuery({
+  args: {},
+  handler: async (ctx) => (await ctx.db.query("versions").collect())
+    .filter((x) => x.source === "file" && x.status === "ready" && x.fileUrl && (!x.scrubGuid || x.scrubStatus === "failed"))
+    .map((x) => x._id as string),
 });
 
 async function shareLink(ctx: ActionCtx, path: string): Promise<{ url: string; shared: boolean }> {
@@ -466,8 +572,26 @@ export const importFile = internalAction({
         await ctx.runMutation(internal.dropbox.patchFile, { fileId, patch: { status: "waiting", rev: meta.rev, size: meta.size, lastChangeAt: Date.now(), checks: 0 } });
         return { result: "changed again; waiting" };
       }
+      // R3: the name decides the video. Anything that doesn't match is flagged, never guessed.
+      const reg = place.register;
+      if (!reg) {
+        await ctx.runMutation(internal.dropbox.flagFile, { fileId, reason: "Not a register name. Name it like 00002_Title_v1 (Register › New video gives the name), then save it again." });
+        return { result: "flagged: not a register name" };
+      }
+      const num = String(reg.number).padStart(5, "0");
+      const hit = await ctx.runQuery(internal.dropbox.registerTarget, { number: reg.number, version: reg.version ?? undefined });
+      if (!hit.found) {
+        await ctx.runMutation(internal.dropbox.flagFile, { fileId, reason: `There's no video ${num} in the register. Add it with Register › New video, then save the render again with the name it gives.` });
+        return { result: "flagged: unknown number" };
+      }
+      if (hit.taken) {
+        await ctx.runMutation(internal.dropbox.flagFile, { fileId, reason: `v${reg.version} of ${num} is already on the site. Rename it ${num}_${hit.shortTitle || reg.shortTitle}_v${hit.next}.${place.ext} and save it again.` });
+        return { result: "flagged: version taken" };
+      }
+      let tempLink: string | null = null;
       if (place.checkIndex) {
         const t = await dbx(ctx, "/files/get_temporary_link", { path: f.pathLower });
+        tempLink = t.link as string;
         const complete = await mp4HasIndex(httpRangeReader(t.link), meta.size);
         if (!complete) {
           const checks = f.checks + 1;
@@ -479,7 +603,24 @@ export const importFile = internalAction({
           return { result: "not finished yet" };
         }
       }
-      const target = await ctx.runMutation(internal.dropbox.findOrCreateTarget, { client: place.client, project: place.project, video: place.video, fileName: place.fileName });
+      const target = { videoId: hit.videoId };
+      // A review export (H.264 + AAC MP4, index at the front) is stored and played as it is.
+      let why = "";
+      if (tempLink && (place.ext === "mp4" || place.ext === "m4v")) {
+        const chk = await checkReviewExport(httpRangeReader(tempLink), meta.size);
+        if (chk.ok) {
+          const r = await ctx.runMutation(internal.dropbox.addFileVersion, {
+            fileId, videoId: target.videoId, number: reg.version ?? undefined, fileName: place.fileName, fileSize: meta.size, dropboxPath: f.pathDisplay,
+            frames: chk.frames, fpsNum: chk.fpsNum, fpsDen: chk.fpsDen, width: chk.width, height: chk.height, seconds: chk.seconds,
+          });
+          await ctx.scheduler.runAfter(0, internal.reviewFiles.copy, { versionId: r.versionId, dropboxPath: f.pathLower, size: meta.size, attempt: 0 });
+          return { result: "copying a review export" };
+        }
+        why = chk.reason;
+      } else {
+        why = `.${place.ext} file`;
+      }
+      // Anything else goes to Bunny Stream to be converted, as before.
       link = await shareLink(ctx, f.pathLower);
       const { lib } = bunnyEnv();
       const tag = `wr-import-${fileId}`;
@@ -496,7 +637,7 @@ export const importFile = internalAction({
       await bunnyCall(`/library/${lib}/videos/${guid}`, { method: "POST", body: JSON.stringify({ title: place.fileName }) }).catch(() => null);
       const { versionId } = await ctx.runMutation(internal.dropbox.addVersion, {
         fileId, videoId: target.videoId, bunnyGuid: guid, fileName: place.fileName, fileSize: f.size, dropboxPath: f.pathDisplay,
-        shareUrl: link.shared ? link.url : undefined,
+        shareUrl: link.shared ? link.url : undefined, number: reg.version ?? undefined, note: `Converted by Bunny (not a review export: ${why})`,
       });
       await ctx.scheduler.runAfter(5000, internal.uploads.poll, { versionId });
       return { result: "imported" };

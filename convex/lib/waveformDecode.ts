@@ -10,7 +10,7 @@ export type PeaksResult =
   | { status: "done"; rate: number; seconds: number; peaks: Uint8Array }
   | { status: "none"; reason: string };
 
-export async function peaksFromMp4(read: RangeRead): Promise<PeaksResult> {
+export async function peaksFromMp4(read: RangeRead, opts: { maxGap?: number; parallel?: number } = {}): Promise<PeaksResult> {
   const moov = await readMoov(read);
   if (!moov) throw new Error("Couldn't find the MP4's index (moov).");
   const track = audioTrackFromMoov(moov);
@@ -23,8 +23,15 @@ export async function peaksFromMp4(read: RangeRead): Promise<PeaksResult> {
   const dec = await decoder(window ? { asc: track.asc, gapless: window } : { asc: track.asc });
   const meter = new PeakMeter(rate);
   try {
-    for (const part of readPlan(track.chunks)) {
-      const buf = await read(part.start, part.end - 1);
+    const plan = readPlan(track.chunks, 8_000_000, opts.maxGap ?? Infinity);
+    const parallel = Math.max(1, opts.parallel ?? 1);
+    // Reads run ahead of the decoder (up to `parallel` at once); decoding stays in order.
+    const pending: Array<Promise<Uint8Array>> = [];
+    let next = 0;
+    const fill = () => { while (next < plan.length && pending.length < parallel) { const p = plan[next++]; pending.push(read(p.start, p.end - 1)); } };
+    for (const part of plan) {
+      fill();
+      const buf = await pending.shift()!;
       if (buf.length < part.end - part.start) throw new Error("The MP4 ended early.");
       const frames: Uint8Array[] = [];
       for (let k = part.from; k < part.to; k++) {

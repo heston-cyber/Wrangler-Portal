@@ -14,7 +14,8 @@ export const run = internalAction({
     const row = await ctx.runQuery(internal.library.getVersionInternal, { versionId });
     if (!row || row.version.status !== "ready") return { result: "version not ready" };
     const heights = [...(row.version.mp4Heights ?? [])].sort((a, b) => a - b);
-    if (!heights.length) {
+    const fileUrl = row.version.source === "file" ? row.version.fileUrl : undefined;
+    if (!heights.length && !fileUrl) {
       // Bunny makes its MP4 copies a little after the stream is ready.
       if (attempt < 20) {
         await ctx.runMutation(internal.waveforms.markPending, { versionId, note: "Waiting for Bunny's MP4 copy." });
@@ -27,7 +28,8 @@ export const run = internalAction({
     const tries = await ctx.runMutation(internal.waveforms.begin, { versionId });
     try {
       const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
-      const url = `https://${streamCdn()}/${row.version.bunnyGuid}/play_${heights[0]}p.mp4`;
+      // A review render (R3) is read straight from Bunny Storage: only its sound chunks, a few at a time.
+      const url = fileUrl ?? `https://${streamCdn()}/${row.version.bunnyGuid}/play_${heights[0]}p.mp4`;
       const read = async (a: number, b: number) => {
         const res = await fetch(url, { headers: { Range: `bytes=${a}-${b}`, Referer: site, Origin: new URL(site).origin } });
         if (res.status === 416) return new Uint8Array(0);
@@ -35,7 +37,7 @@ export const run = internalAction({
         const buf = new Uint8Array(await res.arrayBuffer());
         return res.status === 200 ? buf.subarray(0, b - a + 1) : buf;
       };
-      const r = await peaksFromMp4(read);
+      const r = await peaksFromMp4(read, fileUrl ? { maxGap: 1_000_000, parallel: 6 } : {});
       if (r.status === "none") {
         await ctx.runMutation(internal.waveforms.none, { versionId, reason: r.reason });
         return { result: `no waveform: ${r.reason}` };

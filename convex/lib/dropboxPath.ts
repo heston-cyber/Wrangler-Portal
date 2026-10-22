@@ -1,16 +1,23 @@
-// The drop folder rule (Heston, Oct 20: one folder per video, inside the app's own folder; Oct 21: an optional
-// client level above the project):
-//   /<Project>/<Video>/<any file name>           →  the next version of <Video> in <Project>
-//   /<Client>/<Project>/<Video>/<any file name>  →  the same, with the project filed under <Client>
+// The drop folder rule. Since R3 (Oct 22) the file NAME decides the video: NNNNN_ShortTitle_vN.mp4 is version N of
+// register number NNNNN, in any folder inside Apps/Wrangler Review. Any other name is flagged on the Register page,
+// never guessed. (Before that, Oct 20–22, the folder decided: /<Client>/<Project>/<Video>/<any file name>.)
 // Paths here are relative to the app folder (Dropbox reports them that way for app-folder apps).
 // Top-level folders whose names start with "_" are ignored (scratch space, e.g. _tests/r1/ for format tests).
 
 export const VIDEO_EXTS = ["mp4", "mov", "m4v", "mxf", "mkv", "webm", "avi"];
 const INDEXED = ["mp4", "mov", "m4v"]; // formats whose finished state we can check (their index is written last)
 
+export type RegisterName = { number: number; shortTitle: string; version: number | null };
 export type DropPlace =
-  | { ok: true; client?: string; project: string; video: string; fileName: string; ext: string; checkIndex: boolean }
+  | { ok: true; client?: string; project: string; video: string; fileName: string; ext: string; checkIndex: boolean; register?: RegisterName }
   | { ok: false; reason: string; ignore?: boolean };
+
+// "00001_LCArizona_v4.mp4" → { number: 1, shortTitle: "LCArizona", version: 4 } (R3: register names). Null otherwise.
+export function registerName(fileName: string): RegisterName | null {
+  const base = fileName.replace(/\.[A-Za-z0-9]{2,4}$/, "");
+  const m = /^(\d{5})_([A-Za-z0-9][A-Za-z0-9-]*?)(?:_[vV](\d{1,4}))?$/.exec(base);
+  return m ? { number: Number(m[1]), shortTitle: m[2], version: m[3] ? Number(m[3]) : null } : null;
+}
 
 export function placeFor(pathDisplay: string): DropPlace {
   const parts = pathDisplay.split("/").filter(Boolean);
@@ -22,12 +29,16 @@ export function placeFor(pathDisplay: string): DropPlace {
   if (!VIDEO_EXTS.includes(ext)) return { ok: false, reason: `Not a video file (.${ext}).`, ignore: true };
   // A top-level folder starting with "_" (e.g. _tests) is scratch space the site leaves alone (Oct 22).
   if (parts.length > 1 && parts[0].trim().startsWith("_")) return { ok: false, reason: "Scratch folder (starts with _).", ignore: true };
-  if (parts.length !== 3 && parts.length !== 4) {
-    return { ok: false, reason: "Put renders in a <Client>/<Project>/<Video>/ or <Project>/<Video>/ folder inside Apps/Wrangler Review, e.g. ICG/26122 Spirit Days/Spirit Intro/." };
+  // R3: a register name (00001_Title_v4.mp4) decides the video by its number, in any folder.
+  const reg = registerName(fileName);
+  if (reg) {
+    const folders = parts.slice(0, -1).map((x) => x.trim());
+    const [client, project] = folders.length >= 2 ? [folders[0], folders[1]] : [undefined, folders[0] ?? ""];
+    return { ok: true, ...(client ? { client } : {}), project, video: "", fileName, ext, checkIndex: INDEXED.includes(ext), register: reg };
   }
-  const [client, project, video] = parts.length === 4 ? [parts[0].trim(), parts[1].trim(), parts[2].trim()] : [undefined, parts[0].trim(), parts[1].trim()];
-  if (!project || !video || client === "") return { ok: false, reason: "The client, project and video folders need names." };
-  return { ok: true, ...(client ? { client } : {}), project, video, fileName, ext, checkIndex: INDEXED.includes(ext) };
+  // Not a register name: the import flags it (with how to fix it) instead of guessing a video from the folders.
+  const folders = parts.slice(0, -1).map((x) => x.trim());
+  return { ok: true, project: folders[folders.length - 1] ?? "", video: "", fileName, ext, checkIndex: INDEXED.includes(ext) };
 }
 
 // "26122 Spirit Days" → job 26122, name "Spirit Days". Anything else is just a name.

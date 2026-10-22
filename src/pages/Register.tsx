@@ -1,13 +1,14 @@
 // The register (Phase R2, Oct 22): every numbered video in one table, New video, and the file name to render next.
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { Check, Copy, ListOrdered, Plus, Rows3, Search, X } from "lucide-react";
+import { Check, Copy, ListOrdered, Plus, RotateCw, Rows3, Search, TriangleAlert, X } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { shortTitleError, shortTitleFrom } from "../../convex/lib/register";
 import { TopBar } from "../shell/Shell";
 import { linkProps, navigate } from "../lib/router";
 import { Modal, useToast } from "../ui/kit";
+import { ago } from "../lib/format";
 import { projectLabel } from "../lib/format";
 import { FIELDS, fieldText, pad5, useLibrarySettings } from "../lib/details";
 import { FinalBadge } from "./VideoRows";
@@ -72,6 +73,8 @@ export default function Register() {
             </label>
           </div>
 
+          <FlaggedDrops show={show} />
+
           {overview === undefined ? null : numbered.length === 0 ? (
             <div className="empty">
               <span>No numbered videos yet. New video gives out the next number.</span>
@@ -125,6 +128,28 @@ export default function Register() {
       {approving && <ApproveFinal videoId={approving._id} title={approving.title} onClose={() => setApproving(null)} onDone={show} />}
       {toast}
     </>
+  );
+}
+
+// R3: renders in Dropbox whose names don't match the register. Rename the file in Dropbox (it's picked up again), or
+// add the number to the register and press Try again.
+function FlaggedDrops({ show }: { show: (m: string) => void }) {
+  const flagged = useQuery(api.dropbox.flagged, {});
+  const retry = useMutation(api.dropbox.retryFlagged);
+  if (!flagged?.length) return null;
+  return (
+    <div className="flagbox" role="status">
+      <p className="flaghead"><TriangleAlert size={15} /> <b>{flagged.length === 1 ? "1 render in Dropbox needs a new name" : `${flagged.length} renders in Dropbox need new names`}</b></p>
+      {flagged.map((f) => (
+        <div className="flagrow" key={f._id}>
+          <span className="fl">
+            <code className="mono">{f.path.split("/").filter(Boolean).join(" › ")}</code>
+            <span className="secondary">{f.reason} · {ago(f.at)}</span>
+          </span>
+          <button className="btn sm" onClick={async () => { await retry({ fileId: f._id }); show("Trying it again"); }}><RotateCw size={14} />Try again</button>
+        </div>
+      ))}
+    </div>
   );
 }
 

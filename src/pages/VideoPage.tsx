@@ -124,19 +124,30 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const startFrames = useMemo(() => { try { return tcToFrames(startTc, nominal(fps)); } catch { return 0; } }, [startTc, fps]);
 
   // Source: Bunny's 1080p MP4 copy by default (full quality, exact frames); its stream as the fallback.
-  const mp4H = version ? Math.max(0, ...version.mp4Heights.filter((h) => h <= 1080)) : 0;
+  // A review render (R3, source "file") plays the render itself from Bunny Storage; its 360p scrub copy is the fallback.
+  const isFile = version?.source === "file";
+  const fileUrl = isFile ? version?.fileUrl ?? null : null;
+  const scrubHls = isFile ? version?.scrub?.hls ?? null : null;
+  const mp4H = !version ? 0 : isFile ? (fileUrl ? version.height ?? 1080 : 0) : Math.max(0, ...version.mp4Heights.filter((h) => h <= 1080));
+  const hasStream = !isFile || !!scrubHls;
   // A version whose 1080p file failed before opens on the stream (remembered per browser; see the fallback below).
-  const streamOnlyKey = version ? `wr.streamOnly.${version.bunnyGuid}` : "";
-  const [quality, setQuality] = useState<"file" | "stream">(() => (mp4H && !version?.streamOnly && !readFlag(streamOnlyKey) ? "file" : "stream"));
+  const streamOnlyKey = version ? `wr.streamOnly.${version.bunnyGuid || version._id}` : "";
+  const [quality, setQuality] = useState<"file" | "stream">(() => (mp4H && !(version?.streamOnly && !isFile) && !readFlag(streamOnlyKey) ? "file" : "stream"));
   const ready = version?.status === "ready";
-  const src = !version || !ready ? null : quality === "file" && mp4H ? mediaUrl(version.bunnyGuid, `play_${mp4H}p.mp4`) : mediaUrl(version.bunnyGuid, "playlist.m3u8");
+  const src = !version || !ready ? null
+    : isFile ? (quality === "stream" && scrubHls ? scrubHls : fileUrl)
+    : quality === "file" && mp4H ? mediaUrl(version.bunnyGuid, `play_${mp4H}p.mp4`) : mediaUrl(version.bunnyGuid, "playlist.m3u8");
   // Scrub copy: the best MP4 copy up to 720p that fits (80 MB on computers, 30 MB on phones), downloaded once the video is ready.
   // New uploads have only 360p (800 kbps, about 6 MB a minute) and 1080p (Bunny library setting, Oct 21).
+  // A review render's scrub copy comes from the scrub library a few minutes after it plays; it's picked up when it lands.
+  const scrubMp4 = isFile ? version?.scrub?.mp4 ?? null : null;
   const scrubCopies = useMemo(() => {
     if (!version || !ready) return undefined;
+    const maxBytes = (narrow ? 30 : 80) * 1_000_000;
+    if (isFile) return scrubMp4 ? { urls: [scrubMp4], maxBytes } : undefined;
     const hs = [...version.mp4Heights].filter((h) => h <= 720).sort((a, b) => b - a);
-    return { urls: hs.map((h) => mediaUrl(version.bunnyGuid, `play_${h}p.mp4`)), maxBytes: (narrow ? 30 : 80) * 1_000_000 };
-  }, [version, ready, narrow]);
+    return { urls: hs.map((h) => mediaUrl(version.bunnyGuid, `play_${h}p.mp4`)), maxBytes };
+  }, [version, ready, narrow, isFile, scrubMp4]);
   const player = useFramePlayer(src, fps, version?.frameCountExact ? version.frameCount : null, scrubCopies);
   const frameCount = player.frameCount ?? version?.frameCount ?? 0;
 
@@ -152,13 +163,14 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     if (!player.errorCode || !version) return;
     const d = player.errorDetail.current;
     void logPlayback({ versionId: version._id, kind: "error", code: player.errorCode, msg: d?.msg, t: d?.t, src: quality, ua: navigator.userAgent }).catch(() => {});
-    if (quality !== "file") return;
+    if (quality !== "file" || !hasStream) return;
     resumeAt.current = { f: player.clock.get(), play: !!d?.playing };
     writeFlag(streamOnlyKey);
-    void markFileFailed({ versionId: version._id }).catch(() => {});
+    // A review render's fallback is only 360p, so other devices keep trying the full file.
+    if (!isFile) void markFileFailed({ versionId: version._id }).catch(() => {});
     void logPlayback({ versionId: version._id, kind: "fallback", t: d?.t, src: "stream", ua: navigator.userAgent }).catch(() => {});
     setQuality("stream");
-    showToast("The 1080p file hit a playback error here, so this version switched to the stream. Same frames.");
+    showToast(isFile ? "The full-size render hit a playback error here, so this version switched to its 360p copy. Same frames." : "The 1080p file hit a playback error here, so this version switched to the stream. Same frames.");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player.errorCode]);
   useEffect(() => {
@@ -480,7 +492,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const endFrame = Math.max(0, frameCount - 1);
   const timeText = (f: number) => timeMode === "frames" ? `${f}` : timeMode === "clock" ? clockText(f * frameDuration(fps)) : tc(f);
   const openCount = (notes ?? []).filter((n) => n.status === "open").length;
-  const st = version ? statusChip(version.status, version.encodeProgress) : null;
+  const st = version ? statusChip(version.status, version.encodeProgress, isFile) : null;
   const tr = version?.status === "ready" ? transcriptChip(version.transcript) : null;
 
   // The timeline box (Altar II card pattern: red label, bold value, grey detail boxes).
@@ -497,8 +509,8 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const viewMenu = (
     <Menu side="top" align="end" label="View options" trigger={(p) => <button {...p} className="icon-btn" aria-label="View options" title="View options"><Eye size={16} /></button>}>
       <MenuLabel>Picture</MenuLabel>
-      {mp4H > 0 && <MenuItem checked={quality === "file"} onSelect={() => setQuality("file")}>{mp4H}p file (exact frames)</MenuItem>}
-      <MenuItem checked={quality === "stream"} onSelect={() => setQuality("stream")}>Stream (adapts to connection)</MenuItem>
+      {mp4H > 0 && <MenuItem checked={quality === "file" || (isFile && !scrubHls)} onSelect={() => setQuality("file")}>{isFile ? `The render, ${mp4H}p (exact frames)` : `${mp4H}p file (exact frames)`}</MenuItem>}
+      {hasStream && <MenuItem checked={quality === "stream" && !(isFile && !scrubHls)} onSelect={() => setQuality("stream")}>{isFile ? "Small copy, 360p (slow connections)" : "Stream (adapts to connection)"}</MenuItem>}
       <MenuSep />
       <MenuItem checked={showDrawings} onSelect={() => setShowDrawings(!showDrawings)}>Show note drawings</MenuItem>
       <MenuItem icon={fs ? <Minimize size={16} /> : <Maximize size={16} />} kbd="F" onSelect={toggleFullscreen}>{fs ? "Exit full screen" : "Full screen"}</MenuItem>
@@ -610,7 +622,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                   <button className="btn primary" onClick={newVersion}><Upload size={16} />Upload the first version</button>
                 </div></div>
               )}
-              {version && !ready && <div className="stage-msg">{st?.busy && <Spinner size={16} />}{version.status === "failed" ? `This version failed: ${version.error ?? "unknown error"}` : `v${version.number} · ${st?.text ?? ""}. It plays here when Bunny is done.`}</div>}
+              {version && !ready && <div className="stage-msg">{st?.busy && <Spinner size={16} />}{version.status === "failed" ? `This version failed: ${version.error ?? "unknown error"}` : isFile ? `v${version.number} · ${st?.text ?? ""}. It plays here in about a minute.` : `v${version.number} · ${st?.text ?? ""}. It plays here when Bunny is done.`}</div>}
               {player.error && <div className="stage-msg">{player.error}</div>}
             </div>
           </div>

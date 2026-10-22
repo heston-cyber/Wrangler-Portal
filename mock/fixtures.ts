@@ -7,10 +7,15 @@ const min = 60_000, hr = 3_600_000, day = 86_400_000;
 
 type Ver = any;
 const fps = { fpsNum: 24000, fpsDen: 1001 };
-const mk = (o: any): Ver => ({
-  status: "ready", encodeProgress: 100, ...fps, frameCountExact: true, width: 1920, height: 1080, startTimecode: "01:00:00:00",
-  mp4Heights: [240, 360, 480, 720, 1080], error: null, description: null, uploaderName: "Heston", fileSize: 812_000_000, storageBytes: 1_240_000_000, ...o,
-});
+const mk = (o: any): Ver => {
+  const v = {
+    status: "ready", encodeProgress: 100, ...fps, frameCountExact: true, width: 1920, height: 1080, startTimecode: "01:00:00:00",
+    mp4Heights: [240, 360, 480, 720, 1080], error: null, description: null, uploaderName: "Heston", fileSize: 812_000_000, storageBytes: 1_240_000_000,
+    source: "stream", fileUrl: null, scrub: null, scrubStatus: null, ...o,
+  };
+  // R3: a review render plays its own file; its thumbnail comes with the scrub copy.
+  return { ...v, thumbUrl: v.source === "file" ? (v.scrub ? mediaUrl(v.bunnyGuid || "g-fire", "thumbnail.jpg") : null) : mediaUrl(v.bunnyGuid, "thumbnail.jpg") };
+};
 
 const projects = [
   { _id: "p1", name: "Harbor Coffee Launch", jobNumber: "26201", client: "Harbor Coffee", createdAt: now - 20 * day },
@@ -29,7 +34,11 @@ const versions: Record<string, Ver[]> = {
     mk({ _id: "ver1a", number: 1, bunnyGuid: "g-river", fileName: "26201_BrandFilm_v1.mov", frameCount: 3149, createdAt: now - 3 * day, description: null }),
     mk({ _id: "ver1b", number: 2, bunnyGuid: "g-river", fileName: "26201_BrandFilm_v2_Final.mov", frameCount: 3149, createdAt: now - 12 * min, description: "Tighter open, new music bed, fixed the lower third." }),
   ],
-  v2: [mk({ _id: "ver2a", number: 1, bunnyGuid: "g-fire", fileName: "26201_OpeningWeekend_v1.mp4", frameCount: 2280, createdAt: now - 10 * hr })],
+  v2: [
+    mk({ _id: "ver2a", number: 1, bunnyGuid: "g-fire", fileName: "26201_OpeningWeekend_v1.mp4", frameCount: 2280, createdAt: now - 10 * hr }),
+    // R3: a review render from Dropbox, played as rendered, with its 360p scrub copy.
+    mk({ _id: "ver2b", number: 2, bunnyGuid: "", source: "file", fileUrl: mediaUrl("g-fire", "play_1080p.mp4"), scrub: { mp4: mediaUrl("g-fire", "play_360p.mp4"), hls: mediaUrl("g-fire", "playlist.m3u8") }, scrubStatus: "ready", mp4Heights: [], fileName: "00002_OpeningRecap_v2.mp4", frameCount: 2280, createdAt: now - 25 * min, dropboxPath: "/Harbor Coffee/00002_OpeningRecap_v2.mp4", fileSize: 182_000_000, storageBytes: 188_000_000 }),
+  ],
   v3: [mk({ _id: "ver3a", number: 1, bunnyGuid: "g-int", fileName: "26205_FallTeaser_v1.mov", frameCount: null, status: "processing", encodeProgress: 45, createdAt: now - 20 * min })],
   v4: [mk({ _id: "ver4a", number: 1, bunnyGuid: "g-barcode", fileName: "frametest_23976_h264.mp4", frameCount: 480, createdAt: now - 6 * day, fileSize: 6_000_000 })],
   v5: [mk({ _id: "ver5a", number: 1, bunnyGuid: "g-int", fileName: "Reel_9x16.mp4", frameCount: 1440, createdAt: now - 12 * day, width: 1080, height: 1920 })],
@@ -84,7 +93,7 @@ function overview() {
         source: l ? (l.dropboxPath ? "Dropbox" : "Browser") : null,
         versionCount: vs.length, noteCount: notes.filter((n) => n.videoId === x._id).length,
         openNotes: l ? notes.filter((n) => n.versionId === l._id && n.status === "open").length : 0,
-        latest: l && { number: l.number, status: l.status, bunnyGuid: l.bunnyGuid, encodeProgress: l.encodeProgress, frameCount: l.frameCount, fpsNum: l.fpsNum, fpsDen: l.fpsDen, startTimecode: l.startTimecode, width: l.width, height: l.height, transcript: l.number === 2 ? "running" : "done" },
+        latest: l && { number: l.number, status: l.status, bunnyGuid: l.bunnyGuid, thumbUrl: l.thumbUrl, isFile: l.source === "file", encodeProgress: l.encodeProgress, frameCount: l.frameCount, fpsNum: l.fpsNum, fpsDen: l.fpsDen, startTimecode: l.startTimecode, width: l.width, height: l.height, transcript: l.number === 2 ? "running" : "done" },
       };
     }),
     clients: [...madeClients].sort((a, b) => a.localeCompare(b)),
@@ -126,7 +135,7 @@ function feed() {
   const info = (verId: string) => {
     for (const [vid, vs] of Object.entries(versions)) for (const x of vs) if (x._id === verId) {
       const v = videos.find((y) => y._id === vid)!;
-      return { versionId: x._id, videoId: vid, videoTitle: v.title, projectName: projects.find((p) => p._id === v.projectId)!.name, number: x.number, bunnyGuid: x.bunnyGuid, status: x.status, frameCount: x.frameCount, fpsNum: x.fpsNum, fpsDen: x.fpsDen, startTimecode: x.startTimecode };
+      return { versionId: x._id, videoId: vid, videoTitle: v.title, projectName: projects.find((p) => p._id === v.projectId)!.name, number: x.number, bunnyGuid: x.bunnyGuid, thumbUrl: x.thumbUrl, status: x.status, frameCount: x.frameCount, fpsNum: x.fpsNum, fpsDen: x.fpsDen, startTimecode: x.startTimecode };
     }
     return null;
   };
@@ -142,6 +151,10 @@ function feed() {
   return ev.sort((a, b) => b.at - a.at);
 }
 
+let flagged: any[] = [
+  { _id: "d3", path: "/loose render.mp4", reason: "Not a register name. Name it like 00002_Title_v1 (Register › New video gives the name), then save it again.", at: now - 2 * hr },
+  { _id: "d5", path: "/Northline/00009_FallTeaser_v1.mp4", reason: "There's no video 00009 in the register. Add it with Register › New video, then save the render again with the name it gives.", at: now - 6 * min },
+];
 let keys: any[] = [{ _id: "k1", prefix: "wr_Q2xhdWR", label: "Claude", createdAt: Date.now() - 86_400_000 * 2, lastUsedAt: Date.now() - 3_600_000 }];
 
 export const store = {
@@ -163,8 +176,10 @@ export const store = {
         recent: [
           { _id: "d1", path: "/Harbor Coffee/26201 Harbor Coffee Launch/Brand Film/26201_BrandFilm_v3.mov", status: "waiting", reason: "Waiting for the file to finish.", at: Date.now() - 30_000, size: 1, videoId: null, versionNumber: null, linkGone: true },
           { _id: "d2", path: "/Harbor Coffee/26201 Harbor Coffee Launch/Brand Film/26201_BrandFilm_v2_Final.mov", status: "imported", reason: null, at: Date.now() - 3_600_000, size: 1, videoId: videos[0]?._id ?? null, versionNumber: 2, linkGone: true },
-          { _id: "d3", path: "/loose render.mp4", status: "skipped", reason: "Put renders in a <Project>/<Video>/ folder inside Apps/Wrangler Review, e.g. 26201 Harbor Coffee Launch/Brand Film/.", at: Date.now() - 7_200_000, size: 1, videoId: null, versionNumber: null, linkGone: true },
+          { _id: "d4", path: "/Harbor Coffee/00002_OpeningRecap_v2.mp4", status: "imported", reason: null, at: Date.now() - 25 * min, size: 1, videoId: "v2", versionNumber: 2, linkGone: true },
+          { _id: "d3", path: "/loose render.mp4", status: "flagged", reason: "Not a register name. Name it like 00002_Title_v1 (Register › New video gives the name), then save it again.", at: Date.now() - 7_200_000, size: 1, videoId: null, versionNumber: null, linkGone: true },
         ] };
+      case "dropbox:flagged": return flagged;
       case "transcripts:forVersion": return { status: "done", language: "eng", wordCount: 40, error: null, updatedAt: Date.now(), url: "./mock-transcript.json" };
       case "waveforms:forVersion": {
         const v = Object.values(versions).flat().find((x) => x._id === args.versionId);
@@ -213,6 +228,7 @@ export const store = {
     if (name === "register:addToRegister") { const v = videos.find((x) => x._id === args.videoId); const n = args.number ?? nextNumber++; v.number = n; v.shortTitle = args.shortTitle; bump(); return { number: pad5(n), title: v.title, next: nextName(v) }; }
     if (name === "register:setShortTitle") { const v = videos.find((x) => x._id === args.videoId); if (v) v.shortTitle = args.shortTitle; bump(); return; }
     if (name === "register:removeSheetKey") { sheet = null; bump(); return; }
+    if (name === "dropbox:retryFlagged") { flagged = flagged.filter((f) => f._id !== args.fileId); bump(); return true; }
     if (name === "connector:revokeKey") { keys = keys.filter((k) => k._id !== args.keyId); bump(); return; }
     if (name === "library:createClient") {
       const n = String(args.name).trim();

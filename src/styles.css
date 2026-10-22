@@ -832,6 +832,14 @@ code.mono, .input.mono, .chip.num, .fname code { font-family: ui-monospace, "SF 
 .regstat { display: inline-flex; gap: 6px; align-items: center; }
 .regnote { margin: 0; }
 .regnote a { color: inherit; }
+/* R3: renders whose names don't match the register */
+.flagbox { display: grid; gap: 10px; padding: 14px 16px; border-radius: 12px; background: var(--accent-tint); font-size: 13px; }
+.flaghead svg { color: var(--accent); }
+.flaghead { margin: 0; display: flex; align-items: center; gap: 8px; }
+.flagrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.flagrow .fl { display: grid; gap: 3px; min-width: 0; }
+.flagrow code { overflow-wrap: anywhere; }
+.flagrow .secondary { font-size: 12.5px; }
 .fname { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
 .fname code { font-size: 12.5px; color: var(--text-primary); user-select: all; overflow: hidden; text-overflow: ellipsis; }
 .fname.compact .icon-btn { width: 26px; height: 26px; }

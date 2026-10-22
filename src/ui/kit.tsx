@@ -101,10 +101,12 @@ export function Avatar({ name, size }: { name: string | null | undefined; size?:
 }
 
 // ---------- Thumbnail from Bunny ----------
-export function Thumb({ guid, className = "thumb", alt = "" }: { guid: string | null | undefined; className?: string; alt?: string }) {
-  const [bad, setBad] = useState(false);
-  if (!guid || bad) return <span className={`${className} ph`} aria-hidden><Film size={14} /></span>;
-  return <img className={className} src={mediaUrl(guid, "thumbnail.jpg")} alt={alt} loading="lazy" onError={() => setBad(true)} />;
+// src (R3): the server's thumbnail URL, which knows where each version lives; guid is the older way (Bunny Stream only).
+export function Thumb({ guid, src, className = "thumb", alt = "" }: { guid?: string | null; src?: string | null; className?: string; alt?: string }) {
+  const url = src !== undefined ? src : guid ? mediaUrl(guid, "thumbnail.jpg") : null;
+  const [badUrl, setBadUrl] = useState<string | null>(null);
+  if (!url || badUrl === url) return <span className={`${className} ph`} aria-hidden><Film size={14} /></span>;
+  return <img className={className} src={url} alt={alt} loading="lazy" onError={() => setBadUrl(url)} />;
 }
 
 // ---------- Toast ----------

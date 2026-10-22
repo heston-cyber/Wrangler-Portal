@@ -43,7 +43,7 @@ export function VideoRow({ x, meta, projectName, project, fields = DEFAULT_FIELD
   return (
     <div className="vline">
       <a className="vrow" {...linkProps(`/v/${x._id}`)}>
-        <Thumb guid={x.latest?.bunnyGuid} />
+        <Thumb src={x.latest?.thumbUrl ?? null} />
         <span className="t">
           {fields.includes("number") && x.number ? <span className="chip num mono" title="Register number">{pad5(x.number)}</span> : null}
           <b>{x.title}</b>
@@ -69,7 +69,7 @@ export function VideoCard({ x, meta, projectName, project, fields = DEFAULT_FIEL
     <div className="cardwrap">
       <a className="card rect" {...linkProps(`/v/${x._id}`)}>
         <div className="media">
-          <Thumb guid={x.latest?.bunnyGuid} className="" />
+          <Thumb src={x.latest?.thumbUrl ?? null} className="" />
         </div>
         <div className="cbody">
           <span className="rlabel">{fields.includes("number") && x.number ? `${pad5(x.number)} · ` : ""}{projectName ? `${projectName} · ` : ""}{x.latest ? `v${x.latest.number}` : "No versions"}</span>

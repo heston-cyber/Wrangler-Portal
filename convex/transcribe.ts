@@ -31,6 +31,25 @@ export const run = internalAction({
       await ctx.runMutation(internal.transcripts.fail, { versionId, error: "Bunny never made an MP4 copy to transcribe." });
       return { result: "no MP4" };
     };
+    // A review render (R3): ElevenLabs reads it straight from Bunny Storage by URL, so nothing is downloaded here.
+    if (row.version.source === "file" && row.version.fileUrl) {
+      const tries = await ctx.runMutation(internal.transcripts.begin, { versionId });
+      try {
+        const { stt, model } = await sttFromUrl(key, row.version.fileUrl);
+        const fps = { num: row.version.fpsNum ?? 24000, den: row.version.fpsDen ?? 1001 };
+        const file = buildTranscript(stt, fps, row.version.frameCount ?? null);
+        const storageId = await ctx.storage.store(new Blob([JSON.stringify(file)], { type: "application/json" }));
+        await ctx.runMutation(internal.transcripts.finish, {
+          versionId, storageId, language: file.language ?? undefined, wordCount: file.words.length, segmentCount: file.segments.length, model,
+        });
+        return { result: `done: ${file.words.length} words` };
+      } catch (e) {
+        const msg = ((e as Error).message || String(e)).slice(0, 300);
+        await ctx.runMutation(internal.transcripts.fail, { versionId, error: msg });
+        if (tries < 3 && !/ 40[13]:|invalid_api_key|authentication_error|missing_permissions/.test(msg)) await ctx.scheduler.runAfter(5 * 60_000, internal.transcribe.run, { versionId, attempt: attempt + 1 });
+        return { result: `failed: ${msg}` };
+      }
+    }
     const heights = [...(row.version.mp4Heights ?? [])].sort((a, b) => a - b);
     if (!heights.length) return await waitForMp4("none listed yet");
     const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
@@ -87,6 +106,32 @@ export const run = internalAction({
     }
   },
 });
+
+// ElevenLabs fetches the file itself. source_url is the current name; cloud_storage_url is the older one
+// (deprecated, Oct 2026), tried only if the newer name is refused.
+async function sttFromUrl(key: string, url: string): Promise<{ stt: any; model: string }> {
+  let lastErr = "";
+  for (const field of ["source_url", "cloud_storage_url"]) {
+    for (const m of MODELS) {
+      const form = new FormData();
+      form.append("model_id", m);
+      form.append(field, url);
+      form.append("timestamps_granularity", "word");
+      form.append("diarize", "true");
+      form.append("tag_audio_events", "false");
+      const res = await fetch("https://api.elevenlabs.io/v1/speech-to-text", { method: "POST", headers: { "xi-api-key": key }, body: form });
+      const text = await res.text();
+      if (res.ok) return { stt: JSON.parse(text), model: m };
+      lastErr = `ElevenLabs ${res.status}: ${text.slice(0, 200)}`;
+      if (res.status === 400 || res.status === 422) {
+        if (/model/i.test(text)) continue; // try the older model
+        if (field === "source_url" && /source_url|file/i.test(text)) break; // try the older field
+      }
+      throw new Error(lastErr);
+    }
+  }
+  throw new Error(lastErr || "ElevenLabs didn't answer.");
+}
 
 // Voice notes: transcribe a recording the browser just uploaded. Returns words with seconds; the page pins them to frames.
 export const voiceWords = action({

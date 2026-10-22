@@ -133,7 +133,9 @@ export function audioTrackFromMoov(moov: Uint8Array): AudioTrack | null | "unsup
 }
 
 // Groups chunks into reads of at most `maxBytes` (one HTTP range each), keeping decode order.
-export function readPlan(chunks: AudioChunk[], maxBytes = 8_000_000): Array<{ start: number; end: number; from: number; to: number }> {
+// maxGap (R3): for a full-size review render, don't read across long runs of picture between audio chunks;
+// read the sound chunks on their own instead (the reads then run a few at a time).
+export function readPlan(chunks: AudioChunk[], maxBytes = 8_000_000, maxGap = Infinity): Array<{ start: number; end: number; from: number; to: number }> {
   const out: Array<{ start: number; end: number; from: number; to: number }> = [];
   let i = 0;
   const endOf = (c: AudioChunk) => c.off + c.sizes.reduce((a, b) => a + b, 0);
@@ -141,7 +143,7 @@ export function readPlan(chunks: AudioChunk[], maxBytes = 8_000_000): Array<{ st
     const start = chunks[i].off;
     let end = endOf(chunks[i]);
     let j = i + 1;
-    while (j < chunks.length && chunks[j].off >= end && endOf(chunks[j]) - start <= maxBytes) { end = endOf(chunks[j]); j++; }
+    while (j < chunks.length && chunks[j].off >= end && chunks[j].off - end <= maxGap && endOf(chunks[j]) - start <= maxBytes) { end = endOf(chunks[j]); j++; }
     out.push({ start, end, from: i, to: j });
     i = j;
   }

@@ -69,6 +69,17 @@ export default defineSchema({
     // Oct 22 (R2b): space this version uses on Bunny (Bunny's storageSize: the original plus its copies).
     storageBytes: v.optional(v.number()),
     storageCheckedAt: v.optional(v.number()),
+    // Render-to-review (R3, Oct 22): a review export is stored and played as it is ("file"); anything else is converted
+    // by Bunny Stream as before ("stream", or missing). File versions have no bunnyGuid ("").
+    source: v.optional(v.union(v.literal("stream"), v.literal("file"))),
+    storagePath: v.optional(v.string()), // path in the Bunny Storage zone, e.g. review/<video>/<version>.mp4
+    fileUrl: v.optional(v.string()), // the CDN address the player uses
+    copyError: v.optional(v.string()),
+    // The 360p scrub copy, made by the separate scrub library (BUNNY_SCRUB_*).
+    scrubGuid: v.optional(v.string()),
+    scrubStatus: v.optional(v.union(v.literal("pending"), v.literal("ready"), v.literal("failed"))),
+    scrubPolls: v.optional(v.number()),
+    scrubReadyAt: v.optional(v.number()),
   })
     .index("by_video", ["videoId", "number"])
     .index("by_guid", ["bunnyGuid"]),
@@ -168,6 +179,7 @@ export default defineSchema({
       v.literal("skipped"),   // not a video, or not in <Project>/<Video>/
       v.literal("failed"),
       v.literal("existing"),  // was already there when Dropbox was connected
+      v.literal("flagged"),   // R3: its name needs fixing (unknown number, version already there, not a register name)
     ),
     reason: v.optional(v.string()),
     firstSeenAt: v.number(),

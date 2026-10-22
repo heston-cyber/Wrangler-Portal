@@ -13,6 +13,7 @@ const STATUS: Record<string, string> = {
   imported: "Imported",
   skipped: "Not imported",
   failed: "Failed",
+  flagged: "Needs a new name",
 };
 
 export function DropboxSettings({ show }: { show: (m: string) => void }) {
@@ -43,7 +44,7 @@ export function DropboxSettings({ show }: { show: (m: string) => void }) {
     <>
       <div style={{ display: "grid", gap: 8 }} id="dropbox">
         <span className="eyebrow">Dropbox drop folder</span>
-        <h1 className="headline">Render straight to review. <span className="rest">Anything saved in a video's folder in Dropbox becomes that video's next version.</span></h1>
+        <h1 className="headline">Render straight to review. <span className="rest">A render saved in Dropbox with its register name becomes that video's next version.</span></h1>
       </div>
 
       <div className="panel">
@@ -86,9 +87,9 @@ export function DropboxSettings({ show }: { show: (m: string) => void }) {
             <div className="prow droprow" key={f._id}>
               <span className="pl">
                 <code className="mono">{f.path.split("/").filter(Boolean).join(" › ")}</code>
-                <span className={`secondary busyline${f.status === "failed" ? " error" : ""}`} style={{ fontSize: 12.5 }}>
+                <span className={`secondary busyline${f.status === "failed" || f.status === "flagged" ? " error" : ""}`} style={{ fontSize: 12.5 }}>
                   {(f.status === "waiting" || f.status === "importing") && <Spinner />}{STATUS[f.status] ?? f.status}{f.status === "imported" ? (f.versionNumber ? ` as v${f.versionNumber}` : " · its version was deleted on the site") : ""}
-                  {f.reason && (f.status === "skipped" || f.status === "failed") ? ` · ${f.reason}` : ""} · {ago(f.at)}
+                  {f.reason && f.status !== "waiting" && f.status !== "importing" ? ` · ${f.reason}` : ""} · {ago(f.at)}
                 </span>
               </span>
               {f.videoId && <span className="pr"><a className="btn sm" {...linkProps(`/v/${f.videoId}?version=${f.versionNumber}`)}><ArrowUpRight size={14} />Open</a></span>}
@@ -98,12 +99,12 @@ export function DropboxSettings({ show }: { show: (m: string) => void }) {
       )}
 
       <div className="panel setup">
-        <div className="prow"><span className="pl"><b>How to render into it</b> <span className="secondary" style={{ display: "block", fontSize: 12.5 }}>One folder per video. The file name doesn't matter.</span></span></div>
+        <div className="prow"><span className="pl"><b>How to render into it</b> <span className="secondary" style={{ display: "block", fontSize: 12.5 }}>The file name decides the video. Folders inside the drop folder are up to you.</span></span></div>
         <ol className="steps">
-          <li>In Dropbox, open <b>Apps › Wrangler Review</b>. Make a folder for the project, then one inside it for the video, e.g. <code className="mono">26122 Spirit Days › Spirit Intro</code>.</li>
-          <li>In Resolve's Deliver page, set <b>Location</b> to that video folder and render.</li>
-          <li>About a minute after Dropbox finishes uploading, it shows up as the video's next version. Your original stays in Dropbox.</li>
-          <li>Starting the folder name with the job number matches an existing project by number. A new folder makes a new project or video.</li>
+          <li>Get the name from the <b>Register</b>: <b>New video</b> for a new one (it gets the next number), or <b>Copy next render name</b> on a video, e.g. <code className="mono">00002_SpiritIntro_v1</code>. Name the Resolve timeline the same.</li>
+          <li>In Resolve's Deliver page, pick the <b>Wrangler Review</b> preset that fits (16x9, Scope or Vertical), set <b>Location</b> to <b>Apps › Wrangler Review</b> (any folder in it) and use that name for the file.</li>
+          <li>A render made with a Wrangler Review preset plays on the site about a minute after Dropbox finishes, exactly as rendered. Anything else (ProRes, a .mov, an MP4 with the index at the end) is converted by Bunny first, which takes longer.</li>
+          <li>A name that isn't in the register, or a version that's already on the site, is flagged on the Register page with what to rename it. Nothing is guessed. Your original stays in Dropbox.</li>
         </ol>
       </div>
 

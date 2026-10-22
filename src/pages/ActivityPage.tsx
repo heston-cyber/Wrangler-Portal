@@ -53,7 +53,7 @@ export default function ActivityPage() {
                         <Avatar name={e.actor ?? "?"} />
                         <b>{e.actor ?? "Someone"}</b>
                         {e.type === "notes" ? <>left {e.notes.length} note{e.notes.length === 1 ? "" : "s"} on</> : ver.number > 1 ? <>added <span className="chip">v{ver.number}</span> of</> : <>added</>}
-                        <a className="v" {...linkProps(href)}><Thumb guid={ver.bunnyGuid} /> {ver.videoTitle}</a>
+                        <a className="v" {...linkProps(href)}><Thumb src={ver.thumbUrl} /> {ver.videoTitle}</a>
                         {e.type === "notes" && <span className="chip">v{ver.number}</span>}
                         {ver.projectName && <span className="secondary">· {ver.projectName}</span>}
                       </div>
@@ -85,7 +85,7 @@ export default function ActivityPage() {
                           </div>
                         ) : (
                           <a className="card rect" {...linkProps(href)}>
-                            <div className="media"><Thumb guid={ver.bunnyGuid} className="" /></div>
+                            <div className="media"><Thumb src={ver.thumbUrl} className="" /></div>
                             <div className="cbody">
                               <span className="rlabel">{ver.number > 1 ? `New version · v${ver.number}` : "New video"}</span>
                               <div className="rbold ctitle">{ver.videoTitle}</div>

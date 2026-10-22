@@ -4,6 +4,7 @@ import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
 import { bunnyCall, bunnyEnv } from "./bunny";
+import { encPath, reviewZones } from "./lib/reviewStorage";
 
 const MAX_BYTES = 4_000_000;
 
@@ -86,6 +87,27 @@ export const cleanup = internalAction({
   args: { bunnyGuid: v.union(v.string(), v.null()), stillUrls: v.array(v.string()) },
   handler: async (_ctx, { bunnyGuid, stillUrls }) => {
     const out = { video: "kept", stills: 0 };
+    // R3: "storage:<path>" is a render in the Storage zone; "scrub:<guid>" is its 360p copy in the scrub library.
+    if (bunnyGuid?.startsWith("storage:")) {
+      const path = bunnyGuid.slice("storage:".length);
+      if (/^review\/[\w/.-]+$/.test(path) && !path.includes("..")) {
+        // The render is in the review zone (or the stills zone, before it had its own): delete wherever it is.
+        out.video = "already gone";
+        for (const z of reviewZones()) {
+          const res = await fetch(`https://${z.host}/${z.zone}/${encPath(path)}`, { method: "DELETE", headers: { AccessKey: z.password } });
+          if (res.ok) out.video = "deleted";
+          else if (res.status !== 404) out.video = `storage ${res.status}`;
+        }
+      }
+      bunnyGuid = null;
+    } else if (bunnyGuid?.startsWith("scrub:")) {
+      const lib = process.env.BUNNY_SCRUB_LIBRARY_ID, key = process.env.BUNNY_SCRUB_API_KEY;
+      if (lib && key) {
+        const res = await fetch(`https://video.bunnycdn.com/library/${lib}/videos/${encodeURIComponent(bunnyGuid.slice(6))}`, { method: "DELETE", headers: { AccessKey: key } });
+        out.video = res.ok ? "deleted" : res.status === 404 ? "already gone" : `scrub ${res.status}`;
+      }
+      bunnyGuid = null;
+    }
     if (bunnyGuid) {
       const { lib } = bunnyEnv();
       await bunnyCall(`/library/${lib}/videos/${encodeURIComponent(bunnyGuid)}`, { method: "DELETE" }).then(() => { out.video = "deleted"; }).catch(() => { out.video = "already gone"; });

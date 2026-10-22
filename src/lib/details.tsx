@@ -42,7 +42,7 @@ export function statusText(x: Item): { text: string; tone: "" | "warn" | "fail" 
   if (x.final) return { text: `Final v${x.final.version}`, tone: "final" };
   if (!x.latest) return { text: "No versions", tone: "" };
   if (x.latest.status === "failed") return { text: "Failed", tone: "fail" };
-  if (x.latest.status !== "ready") return { text: x.latest.encodeProgress > 0 ? `Converting ${x.latest.encodeProgress}%` : "Converting", tone: "warn" };
+  if (x.latest.status !== "ready") return { text: x.latest.isFile ? "Copying" : x.latest.encodeProgress > 0 ? `Converting ${x.latest.encodeProgress}%` : "Converting", tone: "warn" };
   return { text: "Ready", tone: "" };
 }
 

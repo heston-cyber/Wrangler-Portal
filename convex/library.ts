@@ -7,6 +7,7 @@ import { requireMe } from "./lib/access";
 import { isValidTc } from "./lib/frames";
 import type { Doc, Id } from "./_generated/dataModel";
 import { insertVideo, nextFileName } from "./lib/register";
+import { scrubUrls, thumbUrl } from "./lib/media";
 
 const clean = (s: string, max = 200) => s.trim().replace(/\s+/g, " ").slice(0, max);
 
@@ -52,7 +53,7 @@ export const overview = query({
         noteCount: notes.length,
         openNotes: latest ? notes.filter((n) => n.status === "open" && n.versionId === latest._id).length : 0,
         latest: latest && {
-          number: latest.number, status: latest.status, bunnyGuid: latest.bunnyGuid, encodeProgress: latest.encodeProgress ?? 0,
+          number: latest.number, status: latest.status, bunnyGuid: latest.bunnyGuid, thumbUrl: thumbUrl(latest), encodeProgress: latest.encodeProgress ?? 0, isFile: latest.source === "file",
           frameCount: latest.frameCount ?? null, fpsNum: latest.fpsNum ?? 24000, fpsDen: latest.fpsDen ?? 1001,
           startTimecode: latest.startTimecode, width: latest.width ?? null, height: latest.height ?? null,
           transcript: tr?.status ?? null,
@@ -217,6 +218,11 @@ export function publicVersion(x: Doc<"versions">) {
     createdAt: x.createdAt,
     streamOnly: x.streamOnly ?? false,
     storageBytes: x.storageBytes ?? null,
+    source: x.source ?? "stream",
+    fileUrl: x.source === "file" ? x.fileUrl ?? null : null,
+    scrub: scrubUrls(x),
+    scrubStatus: x.scrubStatus ?? null,
+    thumbUrl: thumbUrl(x),
   };
 }
 
@@ -280,7 +286,7 @@ export const getVersionInternal = internalQuery({
 export const patchVersion = internalMutation({
   args: { versionId: v.id("versions"), patch: v.any() },
   handler: async (ctx, { versionId, patch }) => {
-    const allowed = ["status", "fpsNum", "fpsDen", "width", "height", "lengthSeconds", "mp4Heights", "encodeProgress", "pollCount", "error", "readyAt", "frameCount", "frameCountFrom", "stages", "storageBytes", "storageCheckedAt"];
+    const allowed = ["status", "fpsNum", "fpsDen", "width", "height", "lengthSeconds", "mp4Heights", "encodeProgress", "pollCount", "error", "readyAt", "frameCount", "frameCountFrom", "stages", "storageBytes", "storageCheckedAt", "fileUrl", "copyError", "scrubGuid", "scrubStatus", "scrubPolls", "scrubReadyAt"];
     const p: Record<string, unknown> = {};
     for (const k of allowed) if (k in patch) p[k] = patch[k];
     await ctx.db.patch(versionId, p);
@@ -315,7 +321,9 @@ async function removeVersion(ctx: MutationCtx, ver: Doc<"versions">, why: string
   for (const f of await ctx.db.query("dropFiles").withIndex("by_version", (q) => q.eq("versionId", ver._id)).collect()) {
     await ctx.db.patch(f._id, { versionId: undefined, reason: why });
   }
-  guids.add(ver.bunnyGuid);
+  if (ver.bunnyGuid) guids.add(ver.bunnyGuid);
+  if (ver.storagePath) guids.add(`storage:${ver.storagePath}`);
+  if (ver.scrubGuid) guids.add(`scrub:${ver.scrubGuid}`);
   await ctx.db.delete(ver._id);
 }
 
@@ -327,7 +335,10 @@ async function scheduleCleanup(ctx: MutationCtx, stills: Set<string>, guids: Set
     }
   }
   const gone: string[] = [];
-  for (const g of guids) if (!(await ctx.db.query("versions").withIndex("by_guid", (q) => q.eq("bunnyGuid", g)).first())) gone.push(g);
+  for (const g of guids) {
+    if (g.startsWith("storage:") || g.startsWith("scrub:")) { gone.push(g); continue; }
+    if (!(await ctx.db.query("versions").withIndex("by_guid", (q) => q.eq("bunnyGuid", g)).first())) gone.push(g);
+  }
   for (let i = 0; i < Math.max(gone.length, 1); i++) {
     await ctx.scheduler.runAfter(i * 500, internal.stills.cleanup, { bunnyGuid: gone[i] ?? null, stillUrls: i === 0 ? [...stills] : [] });
   }
@@ -439,7 +450,7 @@ export const versionsForStorage = internalQuery({
   handler: async (ctx, { all }) => {
     const cutoff = Date.now() - 11 * 3600_000;
     return (await ctx.db.query("versions").collect())
-      .filter((x) => x.status === "ready" && (all || !x.storageCheckedAt || x.storageCheckedAt < cutoff))
+      .filter((x) => x.status === "ready" && x.bunnyGuid && (all || !x.storageCheckedAt || x.storageCheckedAt < cutoff))
       .map((x) => ({ _id: x._id, bunnyGuid: x.bunnyGuid }));
   },
 });

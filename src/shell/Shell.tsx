@@ -65,7 +65,7 @@ function Sidebar({ me, className, onClose, onSearch }: { me: { name: string | nu
       {recent.length > 0 && <div className="navgroup">Last opened</div>}
       {recent.map((x) => (
         <a key={x._id} className="navitem" aria-current={path === `/v/${x._id}` ? "page" : undefined} {...linkProps(`/v/${x._id}`)} title={x.title}>
-          <Thumb guid={x.latest?.bunnyGuid} className="thumb-xs" /><span className="t">{x.title}</span>
+          <Thumb src={x.latest?.thumbUrl ?? null} className="thumb-xs" /><span className="t">{x.title}</span>
         </a>
       ))}
 
@@ -117,11 +117,11 @@ function SearchPalette({ onClose }: { onClose: () => void }) {
   const projects = overview?.projects ?? [];
   const pmap = new Map(projects.map((p) => [p._id as string, p]));
   const needle = q.trim().toLowerCase();
-  type Row = { key: string; to: string; kind: "video" | "project"; title: string; sub: string; guid?: string | null };
+  type Row = { key: string; to: string; kind: "video" | "project"; title: string; sub: string; thumb?: string | null };
   const vids: Row[] = (overview?.videos ?? [])
     .filter((x) => !needle || `${x.title} ${projectLabel(pmap.get(x.projectId))}`.toLowerCase().includes(needle))
     .sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0) || b.updatedAt - a.updatedAt)
-    .map((x) => ({ key: x._id, to: `/v/${x._id}`, kind: "video", title: x.title, sub: projectLabel(pmap.get(x.projectId)), guid: x.latest?.bunnyGuid }));
+    .map((x) => ({ key: x._id, to: `/v/${x._id}`, kind: "video", title: x.title, sub: projectLabel(pmap.get(x.projectId)), thumb: x.latest?.thumbUrl ?? null }));
   const projs: Row[] = projects
     .filter((p) => !needle || projectLabel(p).toLowerCase().includes(needle) || (p.client ?? "").toLowerCase().includes(needle))
     .sort((a, b) => b.updatedAt - a.updatedAt)
@@ -155,7 +155,7 @@ function SearchPalette({ onClose }: { onClose: () => void }) {
           {rows.map((r, n) => (<span key={r.key} style={{ display: "contents" }}>
             {tab === "all" && r.kind === "project" && rows[n - 1]?.kind !== "project" && <div className="mlabel" style={{ marginTop: 6 }}>Projects</div>}
             <button className="mitem" style={{ background: n === i ? "var(--surface-block-hover)" : undefined }} onMouseEnter={() => setI(n)} onClick={() => go(r)}>
-              {r.kind === "video" ? <Thumb guid={r.guid} className="thumb" /> : <span className="thumb ph" style={{ display: "grid" }}><Clapperboard size={14} /></span>}
+              {r.kind === "video" ? <Thumb src={r.thumb ?? null} className="thumb" /> : <span className="thumb ph" style={{ display: "grid" }}><Clapperboard size={14} /></span>}
               <span style={{ display: "grid", minWidth: 0 }}>
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title}</span>
                 <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{r.sub}</span>

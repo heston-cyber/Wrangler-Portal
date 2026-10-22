@@ -34,16 +34,16 @@ async function setup() {
 }
 
 describe("drop folder rule", () => {
-  test("<Project>/<Video>/file is a render; anything else is explained or ignored", () => {
-    expect(placeFor("/26122 Spirit Days/Spirit Intro/SpiritIntro_v4.mov")).toMatchObject({ ok: true, project: "26122 Spirit Days", video: "Spirit Intro", fileName: "SpiritIntro_v4.mov", checkIndex: true });
+  test("R3: the file name decides; any video file is looked at, register names carry their number; the rest is ignored", () => {
+    expect(placeFor("/26122 Spirit Days/Spirit Intro/00004_SpiritIntro_v4.mov")).toMatchObject({ ok: true, fileName: "00004_SpiritIntro_v4.mov", checkIndex: true, register: { number: 4, shortTitle: "SpiritIntro", version: 4 } });
+    expect(placeFor("/00002_Teaser_v1.mp4")).toMatchObject({ ok: true, ext: "mp4", register: { number: 2, version: 1 } });
+    expect(placeFor("/A/B/C/D/00002_Teaser.mp4")).toMatchObject({ ok: true, register: { number: 2, version: null } });
     expect(placeFor("/26122 Spirit Days/Spirit Intro/clip.mxf")).toMatchObject({ ok: true, checkIndex: false });
-    expect(placeFor("/loose.mp4")).toMatchObject({ ok: false });
+    expect(placeFor("/26122 Spirit Days/Spirit Intro/clip.mxf")).not.toHaveProperty("register");
+    expect(placeFor("/loose.mp4")).toMatchObject({ ok: true });
+    expect(placeFor("/loose.mp4")).not.toHaveProperty("register");
     expect(placeFor("/_tests/r1/R1_A.mp4")).toMatchObject({ ok: false, ignore: true });
-    expect(placeFor("/_tests/a/b/c.mp4")).toMatchObject({ ok: false, ignore: true });
-    expect(placeFor("/Client/_Project/Video/v1.mp4")).toMatchObject({ ok: true, project: "_Project" });
-    expect(placeFor("/ICG/26122 Spirit Days/Spirit Intro/v5.mov")).toMatchObject({ ok: true, client: "ICG", project: "26122 Spirit Days", video: "Spirit Intro", fileName: "v5.mov" });
-    expect(placeFor("/26122 Spirit Days/Spirit Intro/v5.mov")).not.toHaveProperty("client");
-    expect(placeFor("/A/B/C/D/too-deep.mp4")).toMatchObject({ ok: false });
+    expect(placeFor("/_tests/a/b/00001_X_v1.mp4")).toMatchObject({ ok: false, ignore: true });
     expect(placeFor("/A/B/notes.txt")).toMatchObject({ ok: false, ignore: true });
     expect(placeFor("/A/B/.DS_Store")).toMatchObject({ ok: false, ignore: true });
     expect(placeFor("/A/B/render.mp4.part")).toMatchObject({ ok: false, ignore: true });
@@ -106,10 +106,10 @@ describe("noticing files", () => {
     const { t } = await setup();
     const f = (path: string, rev: string) => ({ pathLower: path.toLowerCase(), pathDisplay: path, rev, size: 1000 });
     await t.mutation(internal.dropbox.recordFiles, { files: [f("/P/V/old.mp4", "r0")], baseline: true });
-    expect(await t.mutation(internal.dropbox.recordFiles, { files: [f("/P/V/new.mp4", "r1"), f("/P/V/notes.txt", "x"), f("/loose.mp4", "r9")] })).toBe(1);
+    expect(await t.mutation(internal.dropbox.recordFiles, { files: [f("/P/V/new.mp4", "r1"), f("/P/V/notes.txt", "x"), f("/_scratch/a.mp4", "r9")] })).toBe(1);
     expect(await t.mutation(internal.dropbox.recordFiles, { files: [f("/P/V/new.mp4", "r1")] })).toBe(0);
     const rows = await t.run((ctx) => ctx.db.query("dropFiles").collect());
-    expect(rows.map((r) => [r.pathDisplay, r.status]).sort()).toEqual([["/P/V/new.mp4", "waiting"], ["/P/V/old.mp4", "existing"], ["/loose.mp4", "skipped"]]);
+    expect(rows.map((r) => [r.pathDisplay, r.status]).sort()).toEqual([["/P/V/new.mp4", "waiting"], ["/P/V/old.mp4", "existing"]]);
     // Still waiting and the file changes again: same row, clock restarts.
     await t.mutation(internal.dropbox.recordFiles, { files: [f("/P/V/new.mp4", "r2")] });
     let same = await t.run((ctx) => ctx.db.query("dropFiles").withIndex("by_path", (q) => q.eq("pathLower", "/p/v/new.mp4")).collect());
@@ -121,11 +121,16 @@ describe("noticing files", () => {
     expect(same.map((r) => [r.rev, r.status]).sort()).toEqual([["r2", "imported"], ["r3", "waiting"]]);
   });
 
-  test("a file must sit still for a minute before it's looked at", async () => {
+  test("a file must sit still for a minute before it's looked at; a register-named MP4 for 15 seconds", async () => {
     const { t } = await setup();
-    await t.mutation(internal.dropbox.recordFiles, { files: [{ pathLower: "/p/v/a.mp4", pathDisplay: "/P/V/a.mp4", rev: "r1", size: 1 }] });
-    expect(await t.query(internal.dropbox.dueFiles, { now: Date.now() + 30_000 })).toHaveLength(0);
-    expect(await t.query(internal.dropbox.dueFiles, { now: Date.now() + 61_000 })).toHaveLength(1);
+    await t.mutation(internal.dropbox.recordFiles, { files: [
+      { pathLower: "/p/v/a.mp4", pathDisplay: "/P/V/a.mp4", rev: "r1", size: 1 },
+      { pathLower: "/00001_a_v2.mp4", pathDisplay: "/00001_A_v2.mp4", rev: "r1", size: 1 },
+      { pathLower: "/00001_a_v3.mov", pathDisplay: "/00001_A_v3.mov", rev: "r1", size: 1 },
+    ] });
+    expect(await t.query(internal.dropbox.dueFiles, { now: Date.now() + 10_000 })).toHaveLength(0);
+    expect(await t.query(internal.dropbox.dueFiles, { now: Date.now() + 16_000 })).toHaveLength(1);
+    expect(await t.query(internal.dropbox.dueFiles, { now: Date.now() + 61_000 })).toHaveLength(3);
   });
 
   test("a client folder files the project under that client, and keeps same-named projects of other clients apart", () => {
@@ -198,10 +203,17 @@ function fakeServices(file: Uint8Array, opts: { rev?: string; revs?: Record<stri
 describe("importing a render", () => {
   const fixture = new Uint8Array(readFileSync(join(__dirname, "fixtures", "moov-end-long-audio.mp4")));
 
-  async function connectedWithFile(t: ReturnType<typeof convexTest>, size: number) {
+  // The register has video 00001 (Spirit Intro); the render is saved with its register name.
+  async function connectedWithFile(t: ReturnType<typeof convexTest>, size: number, name = "00001_SpiritIntro_v1.mp4") {
     await t.mutation(internal.dropbox.saveConnection, { accountId: "dbid:x", email: "heston@wranglerproductions.com", refreshToken: "SECRET-RT", accessToken: "SECRET-AT", accessExpiresAt: Date.now() + 3_600_000, cursor: "c0" });
-    await t.mutation(internal.dropbox.recordFiles, { files: [{ pathLower: "/26122 spirit days/spirit intro/v1.mp4", pathDisplay: "/26122 Spirit Days/Spirit Intro/V1.mp4", rev: "r1", size }] });
-    return (await t.run((ctx) => ctx.db.query("dropFiles").first()))!._id;
+    await t.run(async (ctx) => {
+      if (await ctx.db.query("videos").first()) return;
+      const projectId = await ctx.db.insert("projects", { name: "Spirit Days", jobNumber: "26122", createdAt: 0 });
+      await ctx.db.insert("videos", { projectId, title: "Spirit Intro", number: 1, shortTitle: "SpiritIntro", createdAt: 0, updatedAt: 0 });
+      await ctx.db.insert("counters", { key: "videoNumber", value: 1 });
+    });
+    await t.mutation(internal.dropbox.recordFiles, { files: [{ pathLower: `/26122 spirit days/${name.toLowerCase()}`, pathDisplay: `/26122 Spirit Days/${name}`, rev: "r1", size }] });
+    return (await t.run((ctx) => ctx.db.query("dropFiles").order("desc").first()))!._id;
   }
 
   test("a finished file becomes v1, Bunny gets a direct link, and the link is deleted once Bunny has it", async () => {
@@ -209,6 +221,7 @@ describe("importing a render", () => {
     const fileId = await connectedWithFile(t, fixture.length);
     const calls = fakeServices(fixture);
     const res = await t.action(internal.dropbox.importFile, { fileId });
+    // The fixture's index is at the end, so it isn't a review export: Bunny converts it, as before.
     expect(res.result).toBe("imported");
     const fetchCall = calls.find((c) => c.url.endsWith("/videos/fetch"))!;
     expect(fetchCall.body.url).toBe("https://www.dropbox.com/scl/fi/abc/V1.mp4?rlkey=xyz&dl=1");
@@ -219,8 +232,9 @@ describe("importing a render", () => {
       const proj = (await ctx.db.get(vid.projectId))!;
       return { f, ver, vid, proj };
     });
-    expect([state.f.status, state.ver.number, state.ver.bunnyGuid, state.ver.uploaderName, state.ver.dropboxPath, state.ver.status]).toEqual(["imported", 1, "guid-from-dropbox", "Dropbox", "/26122 Spirit Days/Spirit Intro/V1.mp4", "processing"]);
-    expect([state.proj.name, state.proj.jobNumber, state.vid.title]).toEqual(["Spirit Days", "26122", "Spirit Intro"]);
+    expect([state.f.status, state.ver.number, state.ver.bunnyGuid, state.ver.uploaderName, state.ver.dropboxPath, state.ver.status]).toEqual(["imported", 1, "guid-from-dropbox", "Dropbox", "/26122 Spirit Days/00001_SpiritIntro_v1.mp4", "processing"]);
+    expect([state.proj.name, state.proj.jobNumber, state.vid.title, state.vid.number]).toEqual(["Spirit Days", "26122", "Spirit Intro", 1]);
+    expect(state.f.reason).toMatch(/Converted by Bunny \(not a review export: The index is at the end/);
     const ov = await me.query(api.library.overview, {});
     expect(ov.videos.map((x: { title: string }) => x.title)).toContain("Spirit Intro");
 
@@ -277,16 +291,15 @@ describe("importing a render", () => {
     expect((await t.run((ctx) => ctx.db.get(fileId)))!.rev).toBe("r2");
   });
 
-  test("the second render in the same folder is v2 of the same video", async () => {
+  test("the next render of the same number is v2 of the same video", async () => {
     const { t } = await setup();
     const first = await connectedWithFile(t, fixture.length);
-    fakeServices(fixture, { revs: { "/26122 spirit days/spirit intro/v2.mp4": "s1" } });
+    fakeServices(fixture, { revs: { "/26122 spirit days/00001_spiritintro_v2.mp4": "r1" } });
     await t.action(internal.dropbox.importFile, { fileId: first });
-    await t.mutation(internal.dropbox.recordFiles, { files: [{ pathLower: "/26122 spirit days/spirit intro/v2.mp4", pathDisplay: "/26122 Spirit Days/Spirit Intro/V2.mp4", rev: "s1", size: fixture.length }] });
-    const second = (await t.run((ctx) => ctx.db.query("dropFiles").withIndex("by_path", (q) => q.eq("pathLower", "/26122 spirit days/spirit intro/v2.mp4")).first()))!._id;
+    const second = await connectedWithFile(t, fixture.length, "00001_SpiritIntro_v2.mp4");
     await t.action(internal.dropbox.importFile, { fileId: second });
     const nums = await t.run(async (ctx) => (await ctx.db.query("versions").collect()).map((x) => [x.number, x.fileName]));
-    expect(nums).toEqual([[1, "V1.mp4"], [2, "V2.mp4"]]);
+    expect(nums).toEqual([[1, "00001_SpiritIntro_v1.mp4"], [2, "00001_SpiritIntro_v2.mp4"]]);
   }, 30_000);
 
   test("settings show the connection and recent drops, never tokens", async () => {
@@ -294,7 +307,7 @@ describe("importing a render", () => {
     await connectedWithFile(t, 10);
     const s = await me.query(api.dropbox.status, {});
     expect(s).toMatchObject({ configured: true, connected: true, email: "heston@wranglerproductions.com" });
-    expect(s.recent[0]).toMatchObject({ path: "/26122 Spirit Days/Spirit Intro/V1.mp4", status: "waiting" });
+    expect(s.recent[0]).toMatchObject({ path: "/26122 Spirit Days/00001_SpiritIntro_v1.mp4", status: "waiting" });
     expect(JSON.stringify(s)).not.toMatch(/SECRET|refreshToken|accessToken|cursor/);
     // at most 10, newest first
     await t.run(async (ctx) => {

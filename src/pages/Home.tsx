@@ -81,7 +81,7 @@ function RecentActivity() {
     <>
       {feed.map((e, i) => (
         <a key={i} className="vrow" style={{ gridTemplateColumns: "52px minmax(0,1fr) auto" }} {...linkProps(`/v/${e.version.videoId}?version=${e.version.number}`)}>
-          <Thumb guid={e.version.bunnyGuid} />
+          <Thumb src={e.version.thumbUrl} />
           <span className="t" style={{ gap: 6 }}>
             <Avatar name={e.actor ?? "?"} />
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

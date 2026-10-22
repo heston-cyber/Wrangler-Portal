@@ -27,10 +27,11 @@ export function clockText(seconds: number) {
 }
 
 // busy = still working on it (uploading or converting): the chip shows a spinner.
-export function statusChip(status: string, progress: number): { text: string; tone: "" | "warn" | "fail"; busy?: boolean } | null {
+export function statusChip(status: string, progress: number, isFile = false): { text: string; tone: "" | "warn" | "fail"; busy?: boolean } | null {
   if (status === "ready") return null;
   if (status === "failed") return { text: "Failed", tone: "fail" };
   if (status === "uploading") return { text: "Uploading", tone: "warn", busy: true };
+  if (isFile) return { text: "Copying from Dropbox", tone: "warn", busy: true };
   return { text: progress > 0 ? `Converting ${progress}%` : "Converting", tone: "warn", busy: true };
 }
 
