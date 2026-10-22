@@ -344,6 +344,14 @@ async function scheduleCleanup(ctx: MutationCtx, stills: Set<string>, guids: Set
   }
 }
 
+// For test helpers: removes one video (all its versions and their files) the same way the site does.
+export async function removeVideoAndFiles(ctx: MutationCtx, videoId: Id<"videos">) {
+  const stills = new Set<string>(), guids = new Set<string>();
+  await removeVideo(ctx, videoId, stills, guids);
+  await scheduleCleanup(ctx, stills, guids);
+  return guids.size;
+}
+
 async function removeVideo(ctx: MutationCtx, videoId: Id<"videos">, stills: Set<string>, guids: Set<string>) {
   for (const ver of await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", videoId)).collect()) {
     await removeVersion(ctx, ver, "Its video was deleted on the site.", stills, guids);

@@ -80,6 +80,7 @@ export default defineSchema({
     scrubStatus: v.optional(v.union(v.literal("pending"), v.literal("ready"), v.literal("failed"))),
     scrubPolls: v.optional(v.number()),
     scrubReadyAt: v.optional(v.number()),
+    copyMs: v.optional(v.number()), // R3: how long the Dropbox → Bunny Storage copy took
   })
     .index("by_video", ["videoId", "number"])
     .index("by_guid", ["bunnyGuid"]),

@@ -36,6 +36,8 @@ import type * as r1test from "../r1test.js";
 import type * as r1results from "../r1results.js";
 import type * as register from "../register.js";
 import type * as reviewFiles from "../reviewFiles.js";
+import type * as reviewTest from "../reviewTest.js";
+import type * as scrubCheck from "../scrubCheck.js";
 import type * as lib_media from "../lib/media.js";
 import type * as lib_reviewStorage from "../lib/reviewStorage.js";
 import type * as lib_register from "../lib/register.js";
@@ -85,6 +87,8 @@ declare const fullApi: ApiFromModules<{
   r1results: typeof r1results;
   register: typeof register;
   reviewFiles: typeof reviewFiles;
+  reviewTest: typeof reviewTest;
+  scrubCheck: typeof scrubCheck;
   "lib/media": typeof lib_media;
   "lib/reviewStorage": typeof lib_reviewStorage;
   "lib/register": typeof lib_register;

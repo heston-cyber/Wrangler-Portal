@@ -512,7 +512,7 @@ export const fileReady = internalMutation({
     const ver = await ctx.db.get(a.versionId);
     if (!ver || (ver.status === "ready" && ver.fileUrl)) return; // already done (a second copy run finds it ready)
     const now = Date.now();
-    await ctx.db.patch(a.versionId, { status: "ready", readyAt: now, fileUrl: a.fileUrl, storageBytes: a.bytes, storageCheckedAt: now, encodeProgress: 100, copyError: undefined });
+    await ctx.db.patch(a.versionId, { status: "ready", readyAt: now, fileUrl: a.fileUrl, storageBytes: a.bytes, storageCheckedAt: now, encodeProgress: 100, copyError: undefined, copyMs: a.copyMs });
     await ctx.db.patch(ver.videoId, { updatedAt: now });
     await ctx.scheduler.runAfter(0, internal.slack.versionReady, { versionId: a.versionId });
     if (process.env.ELEVENLABS_API_KEY) await ctx.runMutation(internal.transcripts.markPending, { versionId: a.versionId });
