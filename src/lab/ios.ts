@@ -69,21 +69,25 @@ async function tryWay(w: Way) {
   out.firstFrameMs = Math.round(performance.now() - f0);
   const ms: number[] = [], misses: Array<[number, number | null]> = [];
   let timeouts = 0;
+  const early: Array<[number, number]> = []; // the frame callback reported a different frame than the jump landed on
   for (const [i, n] of TARGETS.entries()) {
     status(`${w.id}: jump ${i + 1} of ${TARGETS.length}…`);
     const s0 = performance.now();
+    const pf = frame(v, 10000); // registered before the jump, the way the site's player does it
     const ok = once(v, "seeked", 10000);
     v.currentTime = (n + 0.5) * FD;
     const seeked = await ok;
-    const landed = await frame(v, 1500);
     const t = Math.round(performance.now() - s0);
+    const shown = await Promise.race([pf, sleep(400).then(() => undefined)]);
+    const landed = Math.floor(v.currentTime / FD + 1e-6);
     ms.push(t);
     if (!seeked) timeouts++;
     if (landed !== n) misses.push([n, landed]);
+    if (shown !== undefined && shown !== null && shown !== n) early.push([n, shown]);
     await sleep(150);
   }
   out.jumpMed = med(ms); out.jumpMax = Math.max(...ms); out.exact = TARGETS.length - misses.length; out.jumps = TARGETS.length; out.timeouts = timeouts;
-  out.misses = misses.slice(0, 6); out.error = v.error ? `error ${v.error.code}` : null;
+  out.misses = misses.slice(0, 6); out.frameCallbackOff = early.length; out.frameCallbackSamples = early.slice(0, 4); out.error = v.error ? `error ${v.error.code}` : null;
   if (dl) { await Promise.race([dl, sleep(15000)]); }
   ac.abort();
   v.removeAttribute("src"); v.load();
