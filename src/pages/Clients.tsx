@@ -43,6 +43,7 @@ export function ClientsSettings({ show }: { show: (m: string) => void }) {
               {i.name ? <>{i.name} <span className="secondary">· {i.email}</span></> : i.email}
               <span className="secondary" style={{ display: "block", fontSize: 12.5 }}>
                 {i.acceptedAt ? `Account made ${ago(i.acceptedAt)}${i.lastSignInAt ? ` · last signed in ${ago(i.lastSignInAt)}` : ""}` : `Invited ${ago(i.createdAt)} · no account yet`}
+                {(i.emails.versionsOff || i.emails.repliesOff) && <> · stopped emails about {[i.emails.versionsOff && "new versions", i.emails.repliesOff && "replies"].filter(Boolean).join(" and ")}</>}
               </span>
             </span>
             <span className="pr"><button className="btn sm" onClick={async () => { await revoke({ inviteId: i._id }); show("Invite removed"); }}><UserX size={14} />Remove</button></span>

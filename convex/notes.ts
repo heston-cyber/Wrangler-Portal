@@ -5,6 +5,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { requireMe } from "./lib/access";
 import { accessToVersion, authorOf, noteVisible, ownsNote, shareArg, type Access } from "./lib/viewer";
 import { signStillUrl } from "./lib/media";
+import { ALERT_DELAY_MS } from "./emails";
 
 const kind = v.union(v.literal("frame"), v.literal("range"), v.literal("general"));
 const voiceArg = v.object({
@@ -106,8 +107,13 @@ export const create = mutation({
       updatedAt: now,
     });
     await ctx.db.patch(ver.videoId, { updatedAt: now });
-    if (access.share) await ctx.db.insert("shareActivity", { shareId: access.share._id, kind: "note", who: access.kind === "client" ? `${access.name} · ${access.email}` : authorOf(access), videoId: ver.videoId, noteId: id, at: now });
-    await ctx.scheduler.runAfter(NOTIFY_DELAY_MS, internal.slack.newNotes, { versionId: a.versionId });
+    if (access.share) {
+      await ctx.db.insert("shareActivity", { shareId: access.share._id, kind: "note", who: access.kind === "client" ? `${access.name} · ${access.email}` : authorOf(access), videoId: ver.videoId, noteId: id, at: now });
+      // C4: Heston's email, 10 minutes after the last note of the sitting (client and guest notes don't go to Slack).
+      await ctx.scheduler.runAfter(ALERT_DELAY_MS, internal.emails.ownerAlert, { videoId: ver.videoId });
+    } else {
+      await ctx.scheduler.runAfter(NOTIFY_DELAY_MS, internal.slack.newNotes, { versionId: a.versionId });
+    }
     return id;
   },
 });
@@ -161,6 +167,7 @@ export const setReplyHidden = mutation({
     await requireMe(ctx);
     if (!(await ctx.db.get(replyId))) throw new ConvexError("That reply no longer exists.");
     await ctx.db.patch(replyId, { hidden });
+    if (!hidden) await ctx.scheduler.runAfter(0, internal.emails.replyToNote, { replyId }); // shown to the client: tell them (once)
   },
 });
 
@@ -182,10 +189,13 @@ export const reply = mutation({
     const { access } = await noteFor(ctx, noteId, share, "comment");
     const t = text.trim().slice(0, MAX_TEXT);
     if (!t) throw new ConvexError("Write a reply first.");
-    return await ctx.db.insert("replies", {
+    const replyId = await ctx.db.insert("replies", {
       noteId, text: t, authorName: authorOf(access), authorId: access.kind === "guest" ? undefined : access.userId,
       guestKey: access.kind === "guest" ? access.guestKey ?? undefined : undefined, createdAt: Date.now(),
     });
+    // C4: the owner's reply to a client's note goes to them by email (emails.replyData decides who qualifies).
+    if (access.kind === "owner") await ctx.scheduler.runAfter(0, internal.emails.replyToNote, { replyId });
+    return replyId;
   },
 });
 

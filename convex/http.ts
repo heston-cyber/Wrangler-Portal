@@ -3,6 +3,7 @@ import { auth } from "./auth";
 import { mcpOther, mcpPost } from "./mcp";
 import { callback as dropboxCallback, webhookNotify, webhookVerify } from "./dropbox";
 import { feed as registerFeed } from "./register";
+import { stop as emailStop } from "./emails";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);
@@ -23,5 +24,8 @@ http.route({ path: "/dropbox/webhook", method: "POST", handler: webhookNotify })
 
 // The register's read-only feed for the Google Sheet copy (Phase R2).
 http.route({ path: "/register-feed", method: "GET", handler: registerFeed });
+
+// Emails (C4): the "stop these emails" link.
+http.route({ path: "/email/stop", method: "GET", handler: emailStop });
 
 export default http;

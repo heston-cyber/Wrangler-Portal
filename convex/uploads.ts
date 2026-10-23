@@ -8,6 +8,7 @@ import { fpsFromFloat } from "./lib/frames";
 import { httpRangeReader, mp4FrameCount } from "./lib/mp4";
 import type { Id } from "./_generated/dataModel";
 import { signUrl } from "./lib/media";
+import { NEW_VERSION_DELAY_MS } from "./emails";
 
 async function sha256Hex(text: string) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -123,6 +124,7 @@ export const poll = internalAction({
     if (ready) {
       await ctx.scheduler.runAfter(0, internal.uploads.countFrames, { versionId, attempt: 0 });
       await ctx.scheduler.runAfter(0, internal.slack.versionReady, { versionId });
+      await ctx.scheduler.runAfter(NEW_VERSION_DELAY_MS, internal.emails.newVersion, { versionId }); // C4
       // Transcribe straight away (it used to wait a minute for the frame count; now it counts frames itself if needed).
       if (process.env.ELEVENLABS_API_KEY) await ctx.runMutation(internal.transcripts.markPending, { versionId });
       await ctx.scheduler.runAfter(0, internal.transcribe.run, { versionId, attempt: 0 });

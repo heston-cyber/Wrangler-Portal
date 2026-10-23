@@ -170,8 +170,8 @@ let shareActivity: any[] = [
   { _id: "a3", kind: "opened", who: "Pat (guest)", at: Date.now() - 40 * 60_000, videoId: null, videoTitle: null, noteId: null },
 ];
 let invites: any[] = [
-  { _id: "i1", email: "maya@harborcoffee.example", name: "Maya Chen", createdAt: Date.now() - 3 * 86_400_000, revokedAt: null, acceptedAt: Date.now() - 2 * 86_400_000, lastSignInAt: Date.now() - 5 * 3_600_000 },
-  { _id: "i2", email: "dan@fairgroundsfit.example", name: null, createdAt: Date.now() - 3_600_000, revokedAt: null, acceptedAt: null, lastSignInAt: null },
+  { _id: "i1", email: "maya@harborcoffee.example", name: "Maya Chen", createdAt: Date.now() - 3 * 86_400_000, revokedAt: null, acceptedAt: Date.now() - 2 * 86_400_000, lastSignInAt: Date.now() - 5 * 3_600_000, emails: { versionsOff: false, repliesOff: true } },
+  { _id: "i2", email: "dan@fairgroundsfit.example", name: null, createdAt: Date.now() - 3_600_000, revokedAt: null, acceptedAt: null, lastSignInAt: null, emails: { versionsOff: false, repliesOff: false } },
 ];
 let sheet: any = null;
 function registerList() {
@@ -327,7 +327,7 @@ export const store = {
       const email = String(args.email).trim().toLowerCase();
       const ex = invites.find((i) => i.email === email && !i.revokedAt);
       if (ex) return { inviteId: ex._id, already: true };
-      invites = [{ _id: "i" + Date.now(), email, name: args.name ?? null, createdAt: Date.now(), revokedAt: null, acceptedAt: null, lastSignInAt: null }, ...invites]; bump();
+      invites = [{ _id: "i" + Date.now(), email, name: args.name ?? null, createdAt: Date.now(), revokedAt: null, acceptedAt: null, lastSignInAt: null, emails: { versionsOff: false, repliesOff: false } }, ...invites]; bump();
       return { inviteId: "x", already: false };
     }
     if (name === "clients:revokeInvite") { invites = invites.map((i) => (i._id === args.inviteId ? { ...i, revokedAt: Date.now() } : i)); bump(); return; }

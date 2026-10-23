@@ -71,6 +71,23 @@ export default defineSchema({
     at: v.number(),
   }).index("by_share", ["shareId", "at"]).index("by_at", ["at"]),
 
+  // Emails (client side C4, Oct 23). Each address's "stop these" choices, with the random key its unsubscribe
+  // links carry; and a log so each email goes out once (key = what it was about + who got it).
+  emailPrefs: defineTable({
+    email: v.string(), // lower-case
+    key: v.string(),
+    versionsOff: v.optional(v.boolean()),
+    repliesOff: v.optional(v.boolean()),
+    updatedAt: v.number(),
+  }).index("by_email", ["email"]).index("by_key", ["key"]),
+  emailLog: defineTable({
+    key: v.string(),
+    kind: v.string(),
+    to: v.string(),
+    at: v.number(),
+    resendId: v.optional(v.string()),
+  }).index("by_key", ["key"]).index("by_at", ["at"]),
+
   projects: defineTable({
     name: v.string(),
     jobNumber: v.optional(v.string()),
@@ -184,6 +201,7 @@ export default defineSchema({
     visibility: v.optional(v.union(v.literal("private"), v.literal("shared"))),
     guestKey: v.optional(v.string()),       // a guest's browser id, so they can edit their own notes
     shareId: v.optional(v.id("shares")),    // the share the note came through
+    alertedAt: v.optional(v.number()),      // C4: when Heston's email about this client/guest note went out
   })
     .index("by_version", ["versionId"])
     .index("by_video", ["videoId"]),

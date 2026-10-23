@@ -13,6 +13,7 @@ import { checkReviewExport, httpRangeReader, mp4HasIndex } from "./lib/mp4";
 import { directLink, pickProject, placeFor, splitJob } from "./lib/dropboxPath";
 import { insertVideo, parseRegisterName, videoByNumber } from "./lib/register";
 import { signUrl } from "./lib/media";
+import { NEW_VERSION_DELAY_MS } from "./emails";
 
 const API = "https://api.dropboxapi.com/2";
 const SETTLE_MS = 60_000; // a file must sit unchanged this long before we look at it
@@ -516,6 +517,7 @@ export const fileReady = internalMutation({
     await ctx.db.patch(a.versionId, { status: "ready", readyAt: now, fileUrl: a.fileUrl, storageBytes: a.bytes, storageCheckedAt: now, encodeProgress: 100, copyError: undefined, copyMs: a.copyMs });
     await ctx.db.patch(ver.videoId, { updatedAt: now });
     await ctx.scheduler.runAfter(0, internal.slack.versionReady, { versionId: a.versionId });
+    await ctx.scheduler.runAfter(NEW_VERSION_DELAY_MS, internal.emails.newVersion, { versionId: a.versionId }); // C4
     if (process.env.ELEVENLABS_API_KEY) await ctx.runMutation(internal.transcripts.markPending, { versionId: a.versionId });
     await ctx.scheduler.runAfter(0, internal.transcribe.run, { versionId: a.versionId, attempt: 0 });
     await ctx.runMutation(internal.waveforms.markPending, { versionId: a.versionId });

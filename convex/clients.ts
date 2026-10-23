@@ -4,6 +4,7 @@ import { mutation, query, type MutationCtx } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { requireMe, requireSignedIn } from "./lib/access";
 import { allowedEmails } from "./auth";
+import { prefsByEmail } from "./emails";
 
 const cleanEmail = (e: string) => e.trim().toLowerCase();
 const valid = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && e.length <= 200;
@@ -48,12 +49,14 @@ export const listInvites = query({
   handler: async (ctx) => {
     await requireMe(ctx);
     const rows = await ctx.db.query("invites").collect();
+    const prefs = await prefsByEmail(ctx, rows.map((i) => i.email));
     const out = [];
     for (const i of rows.sort((a, b) => b.createdAt - a.createdAt)) {
       const user = i.userId ? await ctx.db.get(i.userId) : null;
       out.push({
         _id: i._id, email: i.email, name: user?.name ?? i.name ?? null, createdAt: i.createdAt, revokedAt: i.revokedAt ?? null,
         acceptedAt: i.acceptedAt ?? null, lastSignInAt: user?.lastSignInAt ?? null,
+        emails: prefs.get(i.email) ?? { versionsOff: false, repliesOff: false }, // C4: what they've switched off
       });
     }
     return out;
