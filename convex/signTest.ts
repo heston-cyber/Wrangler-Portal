@@ -11,7 +11,9 @@ import { reviewStorage } from "./lib/reviewStorage";
 import { scrubCdn, signUrl, stillsCdn, streamCdn } from "./lib/media";
 
 async function status(url: string, range = true): Promise<number> {
-  const r = await fetch(url, { headers: range ? { Range: "bytes=0-1" } : {} });
+  // The Stream pull zone also checks the referrer (hotlink protection), so the check sends the site's, like a browser.
+  const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
+  const r = await fetch(url, { headers: { ...(range ? { Range: "bytes=0-1" } : {}), Referer: site, Origin: new URL(site).origin } });
   await r.arrayBuffer();
   return r.status;
 }
