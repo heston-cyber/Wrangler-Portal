@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import type { FunctionReturnType } from "convex/server";
 import { useConvex, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { CircleCheckBig, Ellipsis, Share2, Trash2, Upload, X } from "lucide-react";
+import { Check, CircleCheckBig, Ellipsis, Share2, SquareCheck, Trash2, Upload, X } from "lucide-react";
 import { linkProps, navigate } from "../lib/router";
 import { Menu, MenuItem, MenuSep, Modal, Spinner, Thumb, useToast } from "../ui/kit";
 import { ago, transcriptChip } from "../lib/format";
@@ -33,20 +33,30 @@ function Detail({ k, x, p }: { k: FieldKey; x: VideoItem; p: Project | undefined
   return <span className={`dt dt-${k}`}>{t}</span>;
 }
 
+// Selection (Oct 23): when `select` is given, rows show a checkbox and clicking a row toggles it instead of opening.
+export type Selection = { on: boolean; has: (id: string) => boolean; toggle: (id: string) => void; start: (id: string) => void };
 type RowProps = {
   x: VideoItem; meta?: React.ReactNode; projectName?: string; project?: Project;
-  fields?: FieldKey[]; onApprove?: (x: VideoItem) => void;
+  fields?: FieldKey[]; onApprove?: (x: VideoItem) => void; select?: Selection;
 };
 
-export function VideoRow({ x, meta, projectName, project, fields = DEFAULT_FIELDS, onApprove }: RowProps) {
+export function SelectBox({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) {
+  return <button type="button" className={`selbox${on ? " on" : ""}`} role="checkbox" aria-checked={on} aria-label={label} onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClick(); }}>{on && <Check size={13} />}</button>;
+}
+
+export function VideoRow({ x, meta, projectName, project, fields = DEFAULT_FIELDS, onApprove, select }: RowProps) {
   const st = statusText(x);
   const busy = x.latest && x.latest.status !== "ready";
   const tr = x.latest?.status === "ready" ? transcriptChip(x.latest.transcript) : null;
   const rest = fields.filter((k) => k !== "number");
   const canApprove = onApprove && x.latest && x.versionCount > 0;
+  const selecting = !!select?.on;
+  const picked = selecting && select!.has(x._id);
+  const link = selecting ? { href: `/v/${x._id}`, onClick: (e: React.MouseEvent) => { e.preventDefault(); select!.toggle(x._id); } } : linkProps(`/v/${x._id}`);
   return (
-    <div className="vline">
-      <a className="vrow" {...linkProps(`/v/${x._id}`)}>
+    <div className={`vline${picked ? " picked" : ""}`}>
+      {selecting && <SelectBox on={picked} onClick={() => select!.toggle(x._id)} label={`Select ${x.title}`} />}
+      <a className="vrow" {...link} aria-selected={selecting ? picked : undefined}>
         <Thumb src={x.latest?.thumbUrl ?? null} />
         <span className="t">
           {fields.includes("number") && x.number ? <span className="chip num mono" title="Register number">{pad5(x.number)}</span> : null}
@@ -60,14 +70,14 @@ export function VideoRow({ x, meta, projectName, project, fields = DEFAULT_FIELD
         <span className="details">{rest.map((k) => <Detail key={k} k={k} x={x} p={project} />)}</span>
         {meta && <span className="meta">{meta}</span>}
       </a>
-      {canApprove && <button className={`btn sm approve${x.final ? " done" : ""}`} onClick={() => onApprove!(x)} title="Keep one version and delete the others">{x.final ? `Final v${x.final.version}` : "Approve final"}</button>}
-      <VideoMenu x={x} />
+      {canApprove && !selecting && <button className={`btn sm approve${x.final ? " done" : ""}`} onClick={() => onApprove!(x)} title="Keep one version and delete the others">{x.final ? `Final v${x.final.version}` : "Approve final"}</button>}
+      {!selecting && <VideoMenu x={x} onSelect={select ? () => select.start(x._id) : undefined} />}
     </div>
   );
 }
 
 // The ⋯ menu at the end of a video row or card (Oct 23): share, upload a new version from this computer, delete.
-export function VideoMenu({ x }: { x: VideoItem }) {
+export function VideoMenu({ x, onSelect }: { x: VideoItem; onSelect?: () => void }) {
   const convex = useConvex();
   const del = useMutation(api.library.deleteVideo);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -80,6 +90,7 @@ export function VideoMenu({ x }: { x: VideoItem }) {
       <Menu align="end" label="Video options" trigger={(p) => <button {...p} className="icon-btn vmenu" aria-label={`${x.title} options`}><Ellipsis size={15} /></button>}>
         <MenuItem icon={<Share2 size={16} />} onSelect={() => setDialog("share")}>Share video…</MenuItem>
         <MenuItem icon={<Upload size={16} />} onSelect={() => fileRef.current?.click()}>Upload a new version</MenuItem>
+        {onSelect && <MenuItem icon={<SquareCheck size={16} />} onSelect={onSelect}>Select…</MenuItem>}
         <MenuSep />
         <MenuItem icon={<Trash2 size={16} />} danger onSelect={() => setDialog("delete")}>Delete video</MenuItem>
       </Menu>
@@ -110,13 +121,17 @@ export function VideoMenu({ x }: { x: VideoItem }) {
   );
 }
 
-export function VideoCard({ x, meta, projectName, project, fields = DEFAULT_FIELDS, onApprove }: RowProps) {
+export function VideoCard({ x, meta, projectName, project, fields = DEFAULT_FIELDS, onApprove, select }: RowProps) {
   const st = statusText(x);
   const busy = x.latest && x.latest.status !== "ready";
   const rest = fields.filter((k) => k !== "number" && k !== "latest");
+  const selecting = !!select?.on;
+  const picked = selecting && select!.has(x._id);
+  const link = selecting ? { href: `/v/${x._id}`, onClick: (e: React.MouseEvent) => { e.preventDefault(); select!.toggle(x._id); } } : linkProps(`/v/${x._id}`);
   return (
-    <div className="cardwrap">
-      <a className="card rect" {...linkProps(`/v/${x._id}`)}>
+    <div className={`cardwrap${picked ? " picked" : ""}`}>
+      {selecting && <span className="cardsel"><SelectBox on={picked} onClick={() => select!.toggle(x._id)} label={`Select ${x.title}`} /></span>}
+      <a className="card rect" {...link} aria-selected={selecting ? picked : undefined}>
         <div className="media">
           <Thumb src={x.latest?.thumbUrl ?? null} className="" />
         </div>
@@ -135,11 +150,44 @@ export function VideoCard({ x, meta, projectName, project, fields = DEFAULT_FIEL
           {meta && <div className="cm">{meta}</div>}
         </div>
       </a>
-      {onApprove && x.latest && <button className={`btn sm approve${x.final ? " done" : ""}`} onClick={() => onApprove(x)}>{x.final ? `Final v${x.final.version}` : "Approve final"}</button>}
-      <span className="cardmenu"><VideoMenu x={x} /></span>
+      {onApprove && x.latest && !selecting && <button className={`btn sm approve${x.final ? " done" : ""}`} onClick={() => onApprove(x)}>{x.final ? `Final v${x.final.version}` : "Approve final"}</button>}
+      {!selecting && <span className="cardmenu"><VideoMenu x={x} onSelect={select ? () => select.start(x._id) : undefined} /></span>}
     </div>
   );
 }
 
 export const updatedMeta = (x: VideoItem) => <>Updated <em>{ago(x.updatedAt)}</em></>;
 export const openedMeta = (x: VideoItem) => x.lastOpenedAt ? <>Opened <em>{ago(x.lastOpenedAt)}</em></> : <>Not opened yet</>;
+
+
+// The bar at the bottom while selecting (Oct 23): count, Download selected (one zip), Delete selected (owner), Cancel.
+export function SelectBar({ count, size, onAll, allCount, onDownload, onDelete, onCancel, busy }: {
+  count: number; size: string | null; onAll?: () => void; allCount?: number; onDownload?: () => void; onDelete?: () => void; onCancel: () => void; busy?: string | null;
+}) {
+  return (
+    <div className="selbar" role="toolbar" aria-label="Selected videos">
+      <span className="rbold">{count} selected{size ? <span className="secondary"> · {size}</span> : null}</span>
+      {onAll && allCount !== undefined && count < allCount && <button className="linkbtn" onClick={onAll}>Select all {allCount}</button>}
+      <span className="right">
+        {busy ? <span className="secondary">{busy}</span> : <>
+          {onDownload && <button className="btn sm primary" disabled={!count} onClick={onDownload}>Download selected</button>}
+          {onDelete && <button className="btn sm" disabled={!count} onClick={onDelete}><Trash2 size={14} />Delete selected</button>}
+        </>}
+        <button className="btn sm ghost" onClick={onCancel} disabled={!!busy}><X size={14} />Done</button>
+      </span>
+    </div>
+  );
+}
+
+// Selection state shared by the pages that offer it.
+export function useSelection(): Selection & { ids: string[]; set: (ids: string[]) => void; clear: () => void } {
+  const [on, setOn] = useState(false);
+  const [ids, setIds] = useState<string[]>([]);
+  return {
+    on, ids, has: (id) => ids.includes(id),
+    toggle: (id) => setIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id])),
+    start: (id) => { setOn(true); setIds([id]); },
+    set: (next) => setIds(next),
+    clear: () => { setOn(false); setIds([]); },
+  };
+}

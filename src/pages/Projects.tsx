@@ -13,7 +13,8 @@ import { isVideoFile } from "../lib/uploads";
 import { Menu, MenuItem, MenuLabel, MenuSep, Modal, useToast } from "../ui/kit";
 import { NewVideo } from "./Register";
 import { dayBucket, projectLabel } from "../lib/format";
-import { VideoCard, VideoRow, openedMeta, type Overview, type VideoItem } from "./VideoRows";
+import { SelectBar, VideoCard, VideoRow, openedMeta, useSelection, type Overview, type VideoItem } from "./VideoRows";
+import { bytesText, downloadZip } from "../lib/download";
 import { FILTERS, SORTS, passes, sorter as sortBy, useLibrarySettings, type FilterKey, type SortKey } from "../lib/details";
 import { ShowDetails } from "./ShowDetails";
 import { ApproveFinal } from "./ApproveFinal";
@@ -46,6 +47,11 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
   const [deletingProject, setDeletingProject] = useState<Overview["projects"][number] | null>(null);
   const [deletingClient, setDeletingClient] = useState<string | null>(null);
   const [sharing, setSharing] = useState<{ target: ShareTarget; label: string } | null>(null);
+  // Selecting videos (Oct 23): ⋯ › Select… on any row; then download the selection as one zip, or delete it.
+  const sel = useSelection();
+  const deleteVideos = useMutation(api.library.deleteVideos);
+  const [selBusy, setSelBusy] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [clientPref, setClient] = usePref<string>("wr.client", "");
   const project = projectId ? overview?.projects.find((p) => p._id === projectId) : undefined;
   const group: GroupBy = projectId && (groupPref === "project" || groupPref === "client") ? "activity" : groupPref;
@@ -92,11 +98,29 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
   }
   const meta = (x: VideoItem) => (group === "opened" ? openedMeta(x) : undefined);
   const rowProps = (x: VideoItem) => ({
-    x, meta: meta(x), project: pmap.get(x.projectId), fields: lib.fields,
+    x, meta: meta(x), project: pmap.get(x.projectId), fields: lib.fields, select: sel,
     projectName: group !== "project" && !projectId && !lib.fields.includes("project") ? pmap.get(x.projectId)?.name : undefined,
     onApprove: lib.approveFinal ? setApproving : undefined,
   });
   const toggle = (k: string) => setCollapsed((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  const picked = vids.filter((x) => sel.has(x._id));
+  const pickedFiles = picked.map((x) => x.latest?.download).filter((d): d is { url: string; name: string; bytes: number | null } => !!d);
+  const pickedSize = pickedFiles.length && pickedFiles.every((f) => f.bytes) ? bytesText(pickedFiles.reduce((a, f) => a + (f.bytes ?? 0), 0)) : null;
+  async function downloadSelected() {
+    if (!pickedFiles.length) { showToast("Nothing playable is selected."); return; }
+    try {
+      const name = project ? `${projectLabel(project)}.zip` : client ? `${client}.zip` : "Wrangler Review.zip";
+      const ok = await downloadZip(pickedFiles, name, (p) => setSelBusy(`${p.total ? Math.round((100 * p.done) / p.total) + "%" : bytesText(p.done)} · ${p.files} of ${p.ofFiles}`));
+      if (ok) showToast(`Downloaded ${pickedFiles.length} ${pickedFiles.length === 1 ? "file" : "files"}`);
+    } catch (e) { showToast("Download didn't work: " + ((e as Error).message || "")); }
+    finally { setSelBusy(null); }
+  }
+  async function deleteSelected() {
+    setConfirmDelete(false); setSelBusy("Deleting…");
+    try { const r = await deleteVideos({ videoIds: picked.map((x) => x._id) }); showToast(`Deleted ${r.deleted} ${r.deleted === 1 ? "video" : "videos"}`); sel.clear(); }
+    catch (e) { showToast((e as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]); }
+    finally { setSelBusy(null); }
+  }
 
   return (
     <>
@@ -217,6 +241,10 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
               )}
             </section>
           ))}
+        {sel.on && (
+          <SelectBar count={picked.length} size={pickedSize} allCount={vids.length} onAll={() => sel.set(vids.map((x) => x._id))}
+            onDownload={() => void downloadSelected()} onDelete={() => setConfirmDelete(true)} onCancel={sel.clear} busy={selBusy} />
+        )}
         {projectId && project && (
           <div style={{ display: "flex", gap: 8, padding: "6px 24px 24px" }}>
             <button className="btn sm" onClick={() => setSharing({ target: { kind: "project", projectId: project._id }, label: projectLabel(project) })}><Share2 size={14} />Share project</button>
@@ -226,6 +254,18 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
         )}
       </div>
       {renaming && <RenameProject p={renaming} onClose={() => setRenaming(null)} />}
+      {confirmDelete && (
+        <Modal onClose={() => setConfirmDelete(false)} label="Delete selected videos" width={480}>
+          <div style={{ display: "grid", gap: 18 }}>
+            <div className="dhead">
+              <h2 className="headline">Delete {plural(picked.length, "video")}? <span className="rest">This can't be undone.</span></h2>
+              <button className="icon-btn" onClick={() => setConfirmDelete(false)} aria-label="Close"><X size={18} /></button>
+            </div>
+            <p className="caption" style={{ margin: 0, lineHeight: 1.5 }}>{picked.map((x) => x.title).join(", ")} — their {counts(picked)} are deleted, with their drawings, recordings and transcripts. Files in Dropbox aren't touched.</p>
+            <div className="dfoot"><button className="btn" onClick={() => setConfirmDelete(false)}>Cancel</button><button className="btn primary" onClick={() => void deleteSelected()}><Trash2 size={15} />Delete {plural(picked.length, "video")}</button></div>
+          </div>
+        </Modal>
+      )}
       {sharing && <ShareDialog target={sharing.target} label={sharing.label} onClose={() => setSharing(null)} show={showToast} />}
       {showDetails && <ShowDetails fields={lib.fields} onChange={lib.setFields} onClose={() => setShowDetails(false)} />}
       {approving && <ApproveFinal videoId={approving._id} title={approving.title} onClose={() => setApproving(null)} onDone={showToast} />}

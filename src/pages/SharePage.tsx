@@ -4,7 +4,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { useAuthActions, useAuthToken } from "@convex-dev/auth/react";
-import { ArrowRight, Download, Ellipsis, FolderDown, Lock, Play } from "lucide-react";
+import { ArrowRight, Download, Ellipsis, FolderDown, Lock, Play, SquareCheck } from "lucide-react";
+import { SelectBar, SelectBox, useSelection } from "./VideoRows";
 import { bytesText, downloadOne, downloadZip, type Progress } from "../lib/download";
 import { navigate } from "../lib/router";
 import { api } from "../../convex/_generated/api";
@@ -30,6 +31,7 @@ export default function SharePage({ token, videoId, versionNumber, noteId }: { t
   const signedIn = !!useAuthToken();
   const [toast, show] = useToast();
   const [busy, setBusy] = useState<Progress | null>(null);
+  const sel = useSelection();
   const pct = (p: Progress) => (p.total ? `${Math.round((100 * p.done) / p.total)}%` : bytesText(p.done));
   async function saveOne(f: { url: string; name: string; bytes: number | null }) {
     if (busy) return;
@@ -112,6 +114,12 @@ export default function SharePage({ token, videoId, versionNumber, noteId }: { t
           <h1 className="headline">{ok.label}. <span className="rest">{ok.videos.length === 0 ? "Nothing to watch yet; check back when Wrangler Productions tells you a cut is ready." : ok.access === "comment" ? "Open a video to watch it and leave notes on exact frames." : "Open a video to watch it."}</span></h1>
         </div>
         {busy && <div className="dlbar rect" role="status"><span className="rlabel">Downloading</span><span className="rbold">{pct(busy)}</span><span className="secondary">{busy.ofFiles > 1 ? `${busy.files} of ${busy.ofFiles} · ` : ""}{busy.file}</span></div>}
+        {sel.on && (() => {
+          const chosen = ok.videos.filter((v) => sel.has(v._id));
+          const files = filesOf(chosen);
+          return <SelectBar count={chosen.length} size={sizeOf(files)} allCount={ok.videos.length} onAll={() => sel.set(ok.videos.map((v) => v._id))}
+            onDownload={ok.downloads ? () => void saveAll(files, `${ok.label}.zip`) : undefined} onCancel={sel.clear} busy={busy ? `${pct(busy)} · ${busy.files} of ${busy.ofFiles}` : null} />;
+        })()}
         {groups.map((g) => {
           const files = filesOf(g.videos);
           const size = sizeOf(files);
@@ -130,9 +138,12 @@ export default function SharePage({ token, videoId, versionNumber, noteId }: { t
               </div>
               {g.videos.map((v) => {
                 const d = latestOf(v)?.download ?? null;
+                const picked = sel.on && sel.has(v._id);
+                const link = sel.on ? { href: `/s/${token}/v/${v._id}`, onClick: (e: React.MouseEvent) => { e.preventDefault(); sel.toggle(v._id); } } : linkProps(`/s/${token}/v/${v._id}`);
                 return (
-                  <div className="vline" key={v._id}>
-                    <a className="vrow" {...linkProps(`/s/${token}/v/${v._id}`)}>
+                  <div className={`vline${picked ? " picked" : ""}`} key={v._id}>
+                    {sel.on && <SelectBox on={picked} onClick={() => sel.toggle(v._id)} label={`Select ${v.title}`} />}
+                    <a className="vrow" {...link} aria-selected={sel.on ? picked : undefined}>
                       <Thumb src={latestOf(v)?.thumbUrl ?? null} />
                       <span className="t">
                         {v.number ? <span className="chip num mono">{String(v.number).padStart(5, "0")}</span> : null}
@@ -142,10 +153,11 @@ export default function SharePage({ token, videoId, versionNumber, noteId }: { t
                       <span className="details" />
                       <span className="meta">Updated <em>{ago(v.updatedAt)}</em> <ArrowRight size={14} style={{ verticalAlign: -2 }} /></span>
                     </a>
-                    <Menu align="end" label="Video options" trigger={(p) => <button {...p} className="icon-btn vmenu" aria-label={`${v.title} options`}><Ellipsis size={15} /></button>}>
+                    {!sel.on && <Menu align="end" label="Video options" trigger={(p) => <button {...p} className="icon-btn vmenu" aria-label={`${v.title} options`}><Ellipsis size={15} /></button>}>
                       <MenuItem icon={<Play size={16} />} onSelect={() => navigate(`/s/${token}/v/${v._id}`)}>Open</MenuItem>
                       {ok.downloads && d && <MenuItem icon={<Download size={16} />} onSelect={() => void saveOne(d)}>Download{d.bytes ? ` · ${bytesText(d.bytes)}` : ""}</MenuItem>}
-                    </Menu>
+                      {ok.downloads && <MenuItem icon={<SquareCheck size={16} />} onSelect={() => sel.start(v._id)}>Select…</MenuItem>}
+                    </Menu>}
                   </div>
                 );
               })}

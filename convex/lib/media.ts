@@ -96,3 +96,14 @@ export async function versionMedia(v: Doc<"versions">): Promise<VersionMedia> {
   out.thumb = await signUrl(`${base}/thumbnail.jpg`, { folder, expiresAt });
   return out;
 }
+
+/** What "Download" saves for a version: the render itself (file versions) or the largest MP4 copy up to 1080p. */
+export async function downloadFor(x: Doc<"versions">): Promise<{ url: string; name: string; bytes: number | null } | null> {
+  if (x.status !== "ready") return null;
+  const m = await versionMedia(x);
+  const h = Math.max(0, ...(x.mp4Heights ?? []).filter((n) => n <= 1080));
+  const url = m.file ?? (h ? m.mp4[h] : null);
+  if (!url) return null;
+  const name = x.fileName && /\.mp4$/i.test(x.fileName) ? x.fileName : `${(x.fileName || "video").replace(/\.[^.]+$/, "")}_v${x.number}.mp4`;
+  return { url, name, bytes: x.fileSize ?? null };
+}

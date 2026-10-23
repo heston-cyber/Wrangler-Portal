@@ -7,7 +7,7 @@ import { requireMe } from "./lib/access";
 import { isValidTc } from "./lib/frames";
 import type { Doc, Id } from "./_generated/dataModel";
 import { insertVideo, nextFileName } from "./lib/register";
-import { scrubUrls, signedThumbUrl, thumbUrl, versionMedia } from "./lib/media";
+import { downloadFor, signedThumbUrl, versionMedia } from "./lib/media";
 import { accessToVideo, accessToVersion, shareArg, versionShown } from "./lib/viewer";
 
 const clean = (s: string, max = 200) => s.trim().replace(/\s+/g, " ").slice(0, max);
@@ -58,6 +58,7 @@ export const overview = query({
           frameCount: latest.frameCount ?? null, fpsNum: latest.fpsNum ?? 24000, fpsDen: latest.fpsDen ?? 1001,
           startTimecode: latest.startTimecode, width: latest.width ?? null, height: latest.height ?? null,
           transcript: tr?.status ?? null,
+          download: await downloadFor(latest), // C3: for "Download selected" on the Projects page
         },
       });
     }
@@ -409,6 +410,17 @@ export const deleteVideo = mutation({
     if (!(await ctx.db.get(videoId))) throw new ConvexError("That video no longer exists.");
     const versions = await removeVideoAndFiles(ctx, videoId);
     return { versions };
+  },
+});
+
+// Several videos at once ("Delete selected", Oct 23).
+export const deleteVideos = mutation({
+  args: { videoIds: v.array(v.id("videos")) },
+  handler: async (ctx, { videoIds }) => {
+    await requireMe(ctx);
+    let deleted = 0;
+    for (const id of videoIds.slice(0, 200)) if (await ctx.db.get(id)) { await removeVideoAndFiles(ctx, id); deleted++; }
+    return { deleted };
   },
 });
 

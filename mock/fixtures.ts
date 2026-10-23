@@ -98,7 +98,8 @@ function overview() {
         source: l ? (l.dropboxPath ? "Dropbox" : "Browser") : null,
         versionCount: vs.length, noteCount: notes.filter((n) => n.videoId === x._id).length,
         openNotes: l ? notes.filter((n) => n.versionId === l._id && n.status === "open").length : 0,
-        latest: l && { number: l.number, status: l.status, bunnyGuid: l.bunnyGuid, thumbUrl: l.thumbUrl, isFile: l.source === "file", encodeProgress: l.encodeProgress, frameCount: l.frameCount, fpsNum: l.fpsNum, fpsDen: l.fpsDen, startTimecode: l.startTimecode, width: l.width, height: l.height, transcript: l.number === 2 ? "running" : "done" },
+        latest: l && { number: l.number, status: l.status, bunnyGuid: l.bunnyGuid, thumbUrl: l.thumbUrl, isFile: l.source === "file", encodeProgress: l.encodeProgress, frameCount: l.frameCount, fpsNum: l.fpsNum, fpsDen: l.fpsDen, startTimecode: l.startTimecode, width: l.width, height: l.height, transcript: l.number === 2 ? "running" : "done",
+          download: l.status === "ready" ? { url: l.media.file ?? l.media.mp4[1080] ?? null, name: l.fileName.replace(/\.[^.]+$/, ".mp4"), bytes: l.fileSize ?? null } : null },
       };
     }),
     clients: [...madeClients].sort((a, b) => a.localeCompare(b)),
@@ -336,6 +337,7 @@ export const store = {
       if (madeClients.concat(projects.map((p) => p.client ?? "")).some((c) => c.toLowerCase() === n.toLowerCase())) throw new Error(`There's already a client called ${n}.`);
       madeClients = [...madeClients, n]; bump(); return n;
     }
+    if (name === "library:deleteVideos") { for (const id of args.videoIds) { const i = videos.findIndex((v) => v._id === id); if (i >= 0) videos.splice(i, 1); } bump(); return { deleted: args.videoIds.length }; }
     if (name === "library:deleteClient") { madeClients = madeClients.filter((c) => c !== args.client); bump(); return { projects: 0, videos: 0 }; }
     bump();
   },
