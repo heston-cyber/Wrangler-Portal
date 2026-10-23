@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import type { FunctionReturnType } from "convex/server";
 import { useConvex, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { Check, CircleCheckBig, Ellipsis, Share2, SquareCheck, Trash2, Upload, X } from "lucide-react";
+import { Check, CircleCheckBig, Ellipsis, Share2, Trash2, Upload, X } from "lucide-react";
 import { linkProps, navigate } from "../lib/router";
 import { Menu, MenuItem, MenuSep, Modal, Spinner, Thumb, useToast } from "../ui/kit";
 import { ago, transcriptChip } from "../lib/format";
@@ -34,7 +34,7 @@ function Detail({ k, x, p }: { k: FieldKey; x: VideoItem; p: Project | undefined
 }
 
 // Selection (Oct 23): when `select` is given, rows show a checkbox and clicking a row toggles it instead of opening.
-export type Selection = { on: boolean; has: (id: string) => boolean; toggle: (id: string) => void; start: (id: string) => void };
+export type Selection = { on: boolean; has: (id: string) => boolean; toggle: (id: string) => void; start: (ids?: string[]) => void };
 type RowProps = {
   x: VideoItem; meta?: React.ReactNode; projectName?: string; project?: Project;
   fields?: FieldKey[]; onApprove?: (x: VideoItem) => void; select?: Selection;
@@ -71,13 +71,13 @@ export function VideoRow({ x, meta, projectName, project, fields = DEFAULT_FIELD
         {meta && <span className="meta">{meta}</span>}
       </a>
       {canApprove && !selecting && <button className={`btn sm approve${x.final ? " done" : ""}`} onClick={() => onApprove!(x)} title="Keep one version and delete the others">{x.final ? `Final v${x.final.version}` : "Approve final"}</button>}
-      {!selecting && <VideoMenu x={x} onSelect={select ? () => select.start(x._id) : undefined} />}
+      {!selecting && <VideoMenu x={x} />}
     </div>
   );
 }
 
 // The ⋯ menu at the end of a video row or card (Oct 23): share, upload a new version from this computer, delete.
-export function VideoMenu({ x, onSelect }: { x: VideoItem; onSelect?: () => void }) {
+export function VideoMenu({ x }: { x: VideoItem }) {
   const convex = useConvex();
   const del = useMutation(api.library.deleteVideo);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -90,7 +90,6 @@ export function VideoMenu({ x, onSelect }: { x: VideoItem; onSelect?: () => void
       <Menu align="end" label="Video options" trigger={(p) => <button {...p} className="icon-btn vmenu" aria-label={`${x.title} options`}><Ellipsis size={15} /></button>}>
         <MenuItem icon={<Share2 size={16} />} onSelect={() => setDialog("share")}>Share video…</MenuItem>
         <MenuItem icon={<Upload size={16} />} onSelect={() => fileRef.current?.click()}>Upload a new version</MenuItem>
-        {onSelect && <MenuItem icon={<SquareCheck size={16} />} onSelect={onSelect}>Select…</MenuItem>}
         <MenuSep />
         <MenuItem icon={<Trash2 size={16} />} danger onSelect={() => setDialog("delete")}>Delete video</MenuItem>
       </Menu>
@@ -151,7 +150,7 @@ export function VideoCard({ x, meta, projectName, project, fields = DEFAULT_FIEL
         </div>
       </a>
       {onApprove && x.latest && !selecting && <button className={`btn sm approve${x.final ? " done" : ""}`} onClick={() => onApprove(x)}>{x.final ? `Final v${x.final.version}` : "Approve final"}</button>}
-      {!selecting && <span className="cardmenu"><VideoMenu x={x} onSelect={select ? () => select.start(x._id) : undefined} /></span>}
+      {!selecting && <span className="cardmenu"><VideoMenu x={x} /></span>}
     </div>
   );
 }
@@ -186,7 +185,7 @@ export function useSelection(): Selection & { ids: string[]; set: (ids: string[]
   return {
     on, ids, has: (id) => ids.includes(id),
     toggle: (id) => setIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id])),
-    start: (id) => { setOn(true); setIds([id]); },
+    start: (ids = []) => { setOn(true); setIds(ids); },
     set: (next) => setIds(next),
     clear: () => { setOn(false); setIds([]); },
   };

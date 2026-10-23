@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { BrandImg } from "../ui/BrandImg";
 import { useMutation, useQuery } from "convex/react";
-import { Building2, ChevronDown, ChevronRight, Clapperboard, Ellipsis, FolderPlus, LayoutGrid, List, ListOrdered, Pencil, Plus, Rows3, Share2, SlidersHorizontal, Trash2, Upload, X } from "lucide-react";
+import { Building2, ChevronDown, ChevronRight, Clapperboard, Ellipsis, FolderPlus, LayoutGrid, List, ListOrdered, Pencil, Plus, Rows3, Share2, SlidersHorizontal, SquareCheck, Trash2, Upload, X } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { Sep, TopBar } from "../shell/Shell";
@@ -208,6 +208,7 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
                   <button className="icon-btn" title={`New project for ${g.title}`} aria-label={`New project for ${g.title}`} onClick={() => openUpload({ newProject: true, client: String(g.title) })}><Plus size={15} /></button>
                   <Menu align="end" label="Client options" trigger={(p) => <button {...p} className="icon-btn" aria-label={`${g.title} options`}><Ellipsis size={15} /></button>}>
                     <MenuItem icon={<Share2 size={16} />} onSelect={() => setSharing({ target: { kind: "client", client: String(g.title) }, label: String(g.title) })}>Share client…</MenuItem>
+                    <MenuItem icon={<SquareCheck size={16} />} onSelect={() => sel.start()}>Select videos…</MenuItem>
                     <MenuSep />
                     <MenuItem icon={<Trash2 size={16} />} danger onSelect={() => setDeletingClient(String(g.title))}>Delete client</MenuItem>
                   </Menu>
@@ -226,6 +227,7 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
                     <button className="icon-btn" title="Upload to this project" aria-label="Upload to this project" onClick={() => openUpload({ projectId: g.project!._id })}><Plus size={15} /></button>
                     <Menu align="end" label="Project options" trigger={(p) => <button {...p} className="icon-btn" aria-label="Project options"><Ellipsis size={15} /></button>}>
                       <MenuItem icon={<Share2 size={16} />} onSelect={() => setSharing({ target: { kind: "project", projectId: g.project!._id }, label: projectLabel(g.project) })}>Share project…</MenuItem>
+                      <MenuItem icon={<SquareCheck size={16} />} onSelect={() => sel.start()}>Select videos…</MenuItem>
                       <MenuItem icon={<Pencil size={16} />} onSelect={() => setRenaming(g.project!)}>Rename or set client</MenuItem>
                       <MenuItem icon={<Upload size={16} />} onSelect={() => openUpload({ projectId: g.project!._id })}>Upload a video</MenuItem>
                       <MenuSep />
@@ -248,6 +250,7 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
         {projectId && project && (
           <div style={{ display: "flex", gap: 8, padding: "6px 24px 24px" }}>
             <button className="btn sm" onClick={() => setSharing({ target: { kind: "project", projectId: project._id }, label: projectLabel(project) })}><Share2 size={14} />Share project</button>
+            <button className="btn sm" onClick={() => sel.start()}><SquareCheck size={14} />Select videos</button>
             <button className="btn sm" onClick={() => setRenaming(project)}><Pencil size={14} />Rename or set client</button>
             <button className="btn sm" onClick={() => setDeletingProject(project)}><Trash2 size={14} />Delete project</button>
           </div>

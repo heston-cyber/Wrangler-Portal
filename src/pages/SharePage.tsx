@@ -133,6 +133,10 @@ export default function SharePage({ token, videoId, versionNumber, noteId }: { t
                     <button className="btn sm" disabled={!!busy} onClick={() => void saveAll(files, `${pname}.zip`)} title={`One zip with the latest version of each video${size ? ` (about ${size})` : ""}`}>
                       <FolderDown size={14} />Download all{size ? <span className="secondary hide-sm"> · {size}</span> : null}
                     </button>
+                    <Menu align="end" label="Project options" trigger={(p) => <button {...p} className="icon-btn" aria-label={`${pname} options`}><Ellipsis size={15} /></button>}>
+                      <MenuItem icon={<SquareCheck size={16} />} onSelect={() => sel.start()}>Select videos…</MenuItem>
+                      <MenuItem icon={<FolderDown size={16} />} onSelect={() => void saveAll(files, `${pname}.zip`)}>Download all{size ? ` · ${size}` : ""}</MenuItem>
+                    </Menu>
                   </span>
                 )}
               </div>
@@ -156,7 +160,6 @@ export default function SharePage({ token, videoId, versionNumber, noteId }: { t
                     {!sel.on && <Menu align="end" label="Video options" trigger={(p) => <button {...p} className="icon-btn vmenu" aria-label={`${v.title} options`}><Ellipsis size={15} /></button>}>
                       <MenuItem icon={<Play size={16} />} onSelect={() => navigate(`/s/${token}/v/${v._id}`)}>Open</MenuItem>
                       {ok.downloads && d && <MenuItem icon={<Download size={16} />} onSelect={() => void saveOne(d)}>Download{d.bytes ? ` · ${bytesText(d.bytes)}` : ""}</MenuItem>}
-                      {ok.downloads && <MenuItem icon={<SquareCheck size={16} />} onSelect={() => sel.start(v._id)}>Select…</MenuItem>}
                     </Menu>}
                   </div>
                 );
