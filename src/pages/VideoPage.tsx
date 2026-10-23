@@ -109,6 +109,8 @@ const writeFlag = (key: string) => { if (key) writePref(key, "1"); };
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
 // iPhone, iPad (iPadOS reports itself as a Mac with touch).
 const IOS = typeof navigator !== "undefined" && (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
+// ?noscrub in the address plays the way an iPhone does (no downloaded scrub copy), for testing on a computer.
+const NO_SCRUB = IOS || (typeof location !== "undefined" && new URLSearchParams(location.search).has("noscrub"));
 
 function ReviewView({ data, version, noteId }: { data: VideoData; version: Version | null; noteId: string | null }) {
   const convex = useConvex();
@@ -151,7 +153,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     const maxBytes = (narrow ? 30 : 80) * 1_000_000;
     // iPhones and iPads: no downloaded scrub copy. A second video there never got past its index and slowed the main
     // one down (Oct 22 phone tests); the full render alone jumps in about 0.4 s on the iPhone, so dragging uses it.
-    if (IOS) return undefined;
+    if (NO_SCRUB) return undefined;
     if (isFile) return scrubMp4 ? { urls: [scrubMp4], maxBytes } : undefined;
     const hs = [...version.mp4Heights].filter((h) => h <= 720).sort((a, b) => b - a);
     return { urls: hs.map((h) => mediaUrl(version.bunnyGuid, `play_${h}p.mp4`)), maxBytes };
