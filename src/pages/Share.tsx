@@ -184,6 +184,7 @@ export function EditShare({ s, onClose, show }: { s: PublicShare; onClose: () =>
   const update = useMutation(api.shares.update);
   const addMember = useMutation(api.shares.addMember);
   const removeMember = useMutation(api.shares.removeMember);
+  const resendInvite = useMutation(api.shares.resendInvite);
   const [access, setAccess] = useState(s.access);
   const [allVersions, setAllVersions] = useState(s.allVersions);
   const [downloads, setDownloads] = useState(s.downloads);
@@ -223,7 +224,10 @@ export function EditShare({ s, onClose, show }: { s: PublicShare; onClose: () =>
               {s.people.map((p) => (
                 <div className="prow" key={p.email}>
                   <span className="pl">{p.name ? <>{p.name} <span className="secondary">· {p.email}</span></> : p.email}<span className="secondary" style={{ display: "block", fontSize: 12.5 }}>{!p.invited ? "Invite removed in Settings › Clients; can't open this" : p.hasAccount ? "Has an account" : "No account yet"}{p.emailedAt ? ` · emailed ${ago(p.emailedAt)}` : ""}</span></span>
-                  <span className="pr"><button type="button" className="btn sm" onClick={async () => { await removeMember({ shareId: s._id, email: p.email }); show("Removed"); }}><X size={14} />Remove</button></span>
+                  <span className="pr">
+                    <button type="button" className="btn sm" title="Send the invite email again" onClick={async () => { try { await resendInvite({ shareId: s._id, email: p.email }); show("Invite sent again"); } catch (ex) { show(err(ex)); } }}><Mail size={14} />Resend</button>
+                    <button type="button" className="btn sm" onClick={async () => { await removeMember({ shareId: s._id, email: p.email }); show("Removed"); }}><X size={14} />Remove</button>
+                  </span>
                 </div>
               ))}
               <div className="prow">

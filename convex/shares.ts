@@ -158,6 +158,19 @@ export const addMember = mutation({
   },
 });
 
+// Send a person's invite email again (owner; at most once a minute per person).
+export const resendInvite = mutation({
+  args: { shareId: v.id("shares"), email: v.string() },
+  handler: async (ctx, a) => {
+    await requireMe(ctx);
+    const email = a.email.trim().toLowerCase();
+    const m = (await membersOf(ctx, a.shareId)).find((x) => x.email === email);
+    if (!m) throw new ConvexError("That person isn't on this share.");
+    if (m.emailedAt && Date.now() - m.emailedAt < 60_000) throw new ConvexError("Sent less than a minute ago; give it a moment.");
+    await ctx.scheduler.runAfter(0, internal.shares.sendInviteEmail, { shareId: a.shareId, email });
+  },
+});
+
 export const removeMember = mutation({
   args: { shareId: v.id("shares"), email: v.string() },
   handler: async (ctx, a) => {
