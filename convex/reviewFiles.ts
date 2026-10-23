@@ -8,6 +8,7 @@ import { v } from "convex/values";
 import https from "node:https";
 import { Readable } from "node:stream";
 import { encPath, reviewStorage } from "./lib/reviewStorage";
+import { signUrl } from "./lib/media";
 
 const MAX_COPY_TRIES = 3;
 const SCRUB_POLL_MS = 10_000;
@@ -60,7 +61,7 @@ export const copy = internalAction({
       });
       if (status < 200 || status >= 300) throw new Error(`Bunny Storage answered ${status}`);
       const fileUrl = `https://${bs.cdn}/${encPath(ver.storagePath)}`;
-      const head = await fetch(fileUrl, { headers: { Range: "bytes=0-1" } });
+      const head = await fetch(await signUrl(fileUrl), { headers: { Range: "bytes=0-1" } });
       await head.arrayBuffer();
       if (head.status !== 206 && head.status !== 200) throw new Error(`The CDN answered ${head.status} for the copy`);
       await ctx.runMutation(internal.dropbox.fileReady, { versionId, fileUrl, bytes: length, copyMs: Date.now() - t0 });
@@ -89,7 +90,7 @@ export const startScrub = internalAction({
     if (row.version.scrubGuid && row.version.scrubStatus !== "failed") return { result: "already has one" };
     const tag = `wr-scrub-${versionId}`;
     try {
-      const fetched = await scrubCall("/videos/fetch", { method: "POST", body: JSON.stringify({ url: row.version.fileUrl, title: tag }) }) as { id?: string };
+      const fetched = await scrubCall("/videos/fetch", { method: "POST", body: JSON.stringify({ url: await signUrl(row.version.fileUrl), title: tag }) }) as { id?: string };
       let guid: string | null = typeof fetched?.id === "string" && fetched.id ? fetched.id : null;
       for (let i = 0; i < 20 && !guid; i++) {
         await new Promise((r) => setTimeout(r, i === 0 ? 1500 : 3000));

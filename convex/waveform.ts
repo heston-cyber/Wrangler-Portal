@@ -5,6 +5,7 @@ import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { peaksFromMp4 } from "./lib/waveformDecode";
+import { signUrl } from "./lib/media";
 
 const streamCdn = () => process.env.BUNNY_STREAM_CDN || "vz-3ba0610b-f90.b-cdn.net";
 
@@ -29,7 +30,7 @@ export const run = internalAction({
     try {
       const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
       // A review render (R3) is read straight from Bunny Storage: only its sound chunks, a few at a time.
-      const url = fileUrl ?? `https://${streamCdn()}/${row.version.bunnyGuid}/play_${heights[0]}p.mp4`;
+      const url = await signUrl(fileUrl ?? `https://${streamCdn()}/${row.version.bunnyGuid}/play_${heights[0]}p.mp4`);
       const read = async (a: number, b: number) => {
         const res = await fetch(url, { headers: { Range: `bytes=${a}-${b}`, Referer: site, Origin: new URL(site).origin } });
         if (res.status === 416) return new Uint8Array(0);

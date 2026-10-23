@@ -6,6 +6,7 @@ import { v, ConvexError } from "convex/values";
 import { bunnyCall, bunnyEnv } from "./bunny";
 import { encPath, reviewZones } from "./lib/reviewStorage";
 import { shareArg } from "./lib/viewer";
+import { signUrl } from "./lib/media";
 
 const MAX_BYTES = 4_000_000;
 
@@ -46,7 +47,7 @@ export const storageCheck = internalAction({
     });
     let cdnStatus = 0, matches = false;
     if (put.ok) {
-      const got = await fetch(`https://${bs.cdn}/${path}`);
+      const got = await fetch(await signUrl(`https://${bs.cdn}/${path}`));
       cdnStatus = got.status;
       matches = got.ok && (await got.text()) === body;
     }

@@ -7,6 +7,7 @@ import { v } from "convex/values";
 import { buildTranscript } from "./lib/transcript";
 import { mp4FrameCount } from "./lib/mp4";
 import { shareArg } from "./lib/viewer";
+import { signUrl } from "./lib/media";
 
 const MAX_BYTES = 900_000_000;
 const WAIT_MS = 15_000;
@@ -36,7 +37,7 @@ export const run = internalAction({
     if (row.version.source === "file" && row.version.fileUrl) {
       const tries = await ctx.runMutation(internal.transcripts.begin, { versionId });
       try {
-        const { stt, model } = await sttFromUrl(key, row.version.fileUrl);
+        const { stt, model } = await sttFromUrl(key, await signUrl(row.version.fileUrl));
         const fps = { num: row.version.fpsNum ?? 24000, den: row.version.fpsDen ?? 1001 };
         const file = buildTranscript(stt, fps, row.version.frameCount ?? null);
         const storageId = await ctx.storage.store(new Blob([JSON.stringify(file)], { type: "application/json" }));
@@ -54,7 +55,7 @@ export const run = internalAction({
     const heights = [...(row.version.mp4Heights ?? [])].sort((a, b) => a - b);
     if (!heights.length) return await waitForMp4("none listed yet");
     const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
-    const url = `https://${streamCdn()}/${row.version.bunnyGuid}/play_${heights[0]}p.mp4`;
+    const url = await signUrl(`https://${streamCdn()}/${row.version.bunnyGuid}/play_${heights[0]}p.mp4`);
     let media: Response;
     try {
       media = await fetch(url, { headers: { Referer: site, Origin: new URL(site).origin } });
@@ -179,7 +180,7 @@ export const voiceSelfTest = internalAction({
     const src: { guid: string; height: number } | null = await ctx.runQuery(internal.dropbox.anyReadyMp4, {});
     if (!src) return { ok: false, step: "no ready version" };
     const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
-    const media: Response = await fetch(`https://${streamCdn()}/${src.guid}/play_${src.height}p.mp4`, { headers: { Referer: site, Origin: new URL(site).origin } });
+    const media: Response = await fetch(await signUrl(`https://${streamCdn()}/${src.guid}/play_${src.height}p.mp4`), { headers: { Referer: site, Origin: new URL(site).origin } });
     if (!media.ok) return { ok: false, step: `media ${media.status}` };
     const storageId = await ctx.storage.store(new Blob([await media.arrayBuffer()], { type: "audio/mp4" }));
     try {

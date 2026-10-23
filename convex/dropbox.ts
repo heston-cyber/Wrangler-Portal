@@ -12,6 +12,7 @@ import { bunnyCall, bunnyEnv } from "./bunny";
 import { checkReviewExport, httpRangeReader, mp4HasIndex } from "./lib/mp4";
 import { directLink, pickProject, placeFor, splitJob } from "./lib/dropboxPath";
 import { insertVideo, parseRegisterName, videoByNumber } from "./lib/register";
+import { signUrl } from "./lib/media";
 
 const API = "https://api.dropboxapi.com/2";
 const SETTLE_MS = 60_000; // a file must sit unchanged this long before we look at it
@@ -702,7 +703,7 @@ export const bunnyFetchCheck = internalAction({
     const src: { guid: string; height: number } | null = await ctx.runQuery(internal.dropbox.anyReadyMp4, {});
     if (!src) return { ok: false, step: "no ready version with an MP4 copy" };
     const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
-    const url = `https://${process.env.BUNNY_STREAM_CDN || "vz-3ba0610b-f90.b-cdn.net"}/${src.guid}/play_${src.height}p.mp4`;
+    const url = await signUrl(`https://${process.env.BUNNY_STREAM_CDN || "vz-3ba0610b-f90.b-cdn.net"}/${src.guid}/play_${src.height}p.mp4`);
     const tag = `wr-fetch-check-${randomToken(6)}`;
     const steps: string[] = [];
     let guid: string | null = null;

@@ -7,6 +7,7 @@ import { bunnyCall, bunnyEnv, getBunnyVideo, type BunnyVideo } from "./bunny";
 import { fpsFromFloat } from "./lib/frames";
 import { httpRangeReader, mp4FrameCount } from "./lib/mp4";
 import type { Id } from "./_generated/dataModel";
+import { signUrl } from "./lib/media";
 
 async function sha256Hex(text: string) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -158,7 +159,7 @@ export async function nextStages(version: { bunnyGuid: string; stages?: Stage[] 
   for (const h of listedHeights(b.availableResolutions)) {
     if (last?.mp4.includes(h)) { mp4.push(h); continue; } // seen already; files don't disappear
     try {
-      const r = await fetch(`https://${streamCdn()}/${version.bunnyGuid}/play_${h}p.mp4`, { method: "HEAD", headers: { Referer: site, Origin: new URL(site).origin } });
+      const r = await fetch(await signUrl(`https://${streamCdn()}/${version.bunnyGuid}/play_${h}p.mp4`), { method: "HEAD", headers: { Referer: site, Origin: new URL(site).origin } });
       if (r.ok) mp4.push(h);
     } catch { /* not there yet, or a blip: try again next check */ }
   }
@@ -215,7 +216,7 @@ export const countFrames = internalAction({
     if (!heights.length) return { frameCount: null, error: "no MP4 copy to read" };
     let lastError = "";
     for (const h of heights) {
-      const url = `https://${streamCdn()}/${row.version.bunnyGuid}/play_${h}p.mp4`;
+      const url = await signUrl(`https://${streamCdn()}/${row.version.bunnyGuid}/play_${h}p.mp4`);
       try {
         const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
         const n = await mp4FrameCount(httpRangeReader(url, site));
