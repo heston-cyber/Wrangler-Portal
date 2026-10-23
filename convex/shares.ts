@@ -12,7 +12,7 @@ import { ensureInvite } from "./clients";
 import { randomToken } from "./lib/hash";
 import { SITE, sendEmail } from "./lib/email";
 import { signedThumbUrl } from "./lib/media";
-import { clientKey, coveredProjects, coveredVideos, gateShare, labelOf, passcodeHash, shareState, type Share } from "./lib/shareAccess";
+import { clientKey, coveredProjects, coveredVideos, gateShare, labelOf, passcodeHash, shareState, showsAllVersions, type Share } from "./lib/shareAccess";
 
 const target = v.object({ kind: v.union(v.literal("client"), v.literal("project"), v.literal("video")), client: v.optional(v.string()), projectId: v.optional(v.id("projects")), videoId: v.optional(v.id("videos")) });
 const settings = { access: v.union(v.literal("view"), v.literal("comment")), allVersions: v.boolean(), downloads: v.boolean(), emailNewVersions: v.boolean(), expiresAt: v.optional(v.number()), passcode: v.optional(v.string()) };
@@ -233,7 +233,7 @@ export const open = query({
     const outVideos = [];
     for (const vid of videos) {
       const all = (await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect()).filter((x) => x.status === "ready").sort((a, b) => a.number - b.number);
-      const shown = s.allVersions ? all : all.slice(-1);
+      const shown = showsAllVersions(s) ? all : all.slice(-1);
       if (!shown.length) continue; // nothing playable yet: a client doesn't see an empty video
       outVideos.push({
         _id: vid._id, title: vid.title, number: vid.number ?? null, projectId: vid.projectId, updatedAt: vid.updatedAt,
@@ -295,7 +295,7 @@ export const mine = query({
         const ready = (await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect()).filter((x) => x.status === "ready").sort((a, b) => b.number - a.number);
         if (!ready.length) continue;
         const p = projects.find((x) => x._id === vid.projectId);
-        videos.push({ _id: vid._id, title: vid.title, number: vid.number ?? null, projectId: vid.projectId, project: p ? projectLabelOf(p) : null, client: p?.client ?? null, updatedAt: vid.updatedAt, latest: ready[0].number, versions: s.allVersions ? ready.length : 1, thumbUrl: await signedThumbUrl(ready[0]) });
+        videos.push({ _id: vid._id, title: vid.title, number: vid.number ?? null, projectId: vid.projectId, project: p ? projectLabelOf(p) : null, client: p?.client ?? null, updatedAt: vid.updatedAt, latest: ready[0].number, versions: showsAllVersions(s) ? ready.length : 1, thumbUrl: await signedThumbUrl(ready[0]) });
       }
       out.push({ token: s.token, kind: s.kind, label: l.label, sub: l.sub, access: s.access, client: s.kind === "client" ? s.client ?? null : (projects[0]?.client ?? null), createdAt: s.createdAt, videos: videos.sort((a, b) => b.updatedAt - a.updatedAt) });
     }

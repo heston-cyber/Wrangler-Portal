@@ -99,7 +99,7 @@ export default function SharePage({ token, videoId, versionNumber, noteId }: { t
                 <span className="t">
                   {v.number ? <span className="chip num mono">{String(v.number).padStart(5, "0")}</span> : null}
                   <b>{v.title}</b>
-                  <span className="chip">v{v.versions[v.versions.length - 1]?.number}{v.versions.length > 1 ? ` of ${v.versions.length}` : ""}</span>
+                  <span className="chip">v{v.versions[v.versions.length - 1]?.number}{v.versions.length > 1 && ok.access === "comment" ? ` of ${v.versions.length}` : ""}</span>
                 </span>
                 <span className="details" />
                 <span className="meta">Updated <em>{ago(v.updatedAt)}</em> <ArrowRight size={14} style={{ verticalAlign: -2 }} /></span>

@@ -8,6 +8,9 @@ import { viewerOf, type Viewer } from "./access";
 
 export type Share = Doc<"shares">;
 
+/** Does this share list every ready version, or only the latest? View-only links are the latest only (Heston, Oct 23). */
+export const showsAllVersions = (s: Pick<Share, "allVersions" | "access">) => s.allVersions && s.access === "comment";
+
 export const clientKey = (name: string | null | undefined) => (name ?? "").trim();
 
 export const passcodeHash = (token: string, passcode: string) => sha256Hex(`${token}:${passcode}`);

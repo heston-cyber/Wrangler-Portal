@@ -6,7 +6,7 @@ import type { QueryCtx, MutationCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { viewerOf } from "./access";
-import { coversVideo, gateShare, type Share } from "./shareAccess";
+import { coversVideo, gateShare, showsAllVersions, type Share } from "./shareAccess";
 
 export const shareArg = v.optional(v.object({
   token: v.string(),
@@ -49,7 +49,7 @@ export async function accessToVersion(ctx: QueryCtx | MutationCtx, versionId: Id
 
 export async function versionShown(ctx: QueryCtx | MutationCtx, share: Share, version: Doc<"versions">): Promise<boolean> {
   if (version.status !== "ready") return false;
-  if (share.allVersions) return true;
+  if (showsAllVersions(share)) return true;
   const all = await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", version.videoId)).collect();
   const latest = all.filter((x) => x.status === "ready").sort((a, b) => b.number - a.number)[0];
   return !!latest && latest._id === version._id;

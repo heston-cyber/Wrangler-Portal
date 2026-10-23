@@ -185,8 +185,12 @@ describe("the gate", () => {
 
   test("only the latest version unless Show all versions is on", async () => {
     const { t, ids, me } = await setup();
-    const all = await me.mutation(api.shares.create, { target: { kind: "video", videoId: ids.brand }, ...base, allVersions: true });
-    const latest = await me.mutation(api.shares.create, { target: { kind: "video", videoId: ids.brand }, ...base, allVersions: false });
+    // Show all versions applies to comment links; a view-only link is always the latest version (Heston, Oct 23).
+    const all = await me.mutation(api.shares.create, { target: { kind: "video", videoId: ids.brand }, ...base, access: "comment", allVersions: true });
+    const latest = await me.mutation(api.shares.create, { target: { kind: "video", videoId: ids.brand }, ...base, access: "comment", allVersions: false });
+    const viewAll = await me.mutation(api.shares.create, { target: { kind: "video", videoId: ids.brand }, ...base, access: "view", allVersions: true });
+    const va = await t.query(api.shares.open, { token: viewAll.token });
+    expect(va.state === "ok" && va.videos[0].versions.map((v) => v.number)).toEqual([2]);
     const a = await t.query(api.shares.open, { token: all.token });
     const l = await t.query(api.shares.open, { token: latest.token });
     expect(a.state === "ok" && a.videos[0].versions.map((v) => v.number)).toEqual([1, 2]);

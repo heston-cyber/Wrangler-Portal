@@ -256,7 +256,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   // View-only links (C3): no notes at all; the panel opens on the transcript instead.
   const noNotes = viewer.can === "view";
   const firstTab: "notes" | "transcript" = noNotes ? "transcript" : "notes";
-  const [panel, setPanel] = useState<"notes" | "versions" | "transcript" | null>(() => (window.innerWidth <= 820 ? firstTab : readPref<string>("wr.panel", "notes") === "none" ? null : firstTab));
+  const [panel, setPanel] = useState<"notes" | "versions" | "transcript" | null>(() => (noNotes ? null : window.innerWidth <= 820 ? firstTab : readPref<string>("wr.panel", "notes") === "none" ? null : firstTab));
   const [filter, setFilter] = useState<NoteFilter>(defaultFilter);
   const [timeMode, setTimeMode] = useState<TimeMode>(() => readPref<TimeMode>("wr.timeMode", "tc"));
   const [rate, setRate] = useState(1);
@@ -622,7 +622,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           {owner && <button className={`btn sm${covering?.some((s) => s.state === "on") ? " on" : ""}`} onClick={() => setDialog("share")} title={covering?.length ? `Shared: ${covering.filter((s) => s.state === "on").length} live ${covering.filter((s) => s.state === "on").length === 1 ? "link" : "links"}` : "Share this video"}><Share2 size={15} /><span className="hide-sm">Share</span></button>}
           {owner && <button className="btn sm hide-sm" onClick={downloadEdl} disabled={!notes?.length} title="Download the notes as Resolve markers (EDL)"><Download size={15} />Resolve markers</button>}
           {!owner && canDownload && <a className="btn sm" href={downloadUrl!} target="_blank" rel="noreferrer" download title="Download this version"><Download size={15} /><span className="hide-sm">Download</span></a>}
-          <button className={`icon-btn md${panel ? " on" : ""}`} onClick={openPanel} aria-label={panel ? "Hide panel" : "Show panel"} title={panel ? "Hide panel" : "Show panel"}><PanelRight size={16} /></button>
+          {!noNotes && <button className={`icon-btn md${panel ? " on" : ""}`} onClick={openPanel} aria-label={panel ? "Hide panel" : "Show panel"} title={panel ? "Hide panel" : "Show panel"}><PanelRight size={16} /></button>}
         </>
       }>
         <a {...linkProps(viewer.home)} aria-label="Home" style={{ display: "flex" }}><BrandImg name="wordmark" className="logo" alt="Wrangler Productions" /></a>
@@ -634,7 +634,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
         {data.number && <span className="chip num mono" title="Register number">{String(data.number).padStart(5, "0")}</span>}
         <span className="here">{data.title}</span>
         <FinalBadge final={data.final} />
-        {version && <button className="chip" onClick={() => setPanel("versions")} title="Versions">v{version.number}{data.versions.length > 1 ? ` of ${data.versions.length}` : ""}</button>}
+        {version && (noNotes ? <span className="chip" title="Version">v{version.number}</span> : <button className="chip" onClick={() => setPanel("versions")} title="Versions">v{version.number}{data.versions.length > 1 ? ` of ${data.versions.length}` : ""}</button>)}
         {st && <span className={`chip ${st.tone}`}>{st.busy && <Spinner />}{st.text}</span>}
         {tr?.busy && <span className="chip warn"><Spinner />{tr.text}</span>}
         {!owner && viewer.can === "view" && <span className="chip fill hide-sm" title="This link is view only">View only</span>}
@@ -813,7 +813,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           )}
         </div>
 
-        {panel && (
+        {panel && !noNotes && (
           <aside className="side" aria-label="Notes and versions">
             <div className="shead">
               <div className="tabs" role="tablist">

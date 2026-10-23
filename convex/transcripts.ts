@@ -91,7 +91,8 @@ export const retry = mutation({
 export const forVersion = query({
   args: { versionId: v.id("versions"), share: shareArg },
   handler: async (ctx, { versionId, share }) => {
-    await accessToVersion(ctx, versionId, share);
+    const { access } = await accessToVersion(ctx, versionId, share);
+    if (access.can === "view") return null; // a view-only link is just the video (Heston, Oct 23)
     const row = await ctx.db.query("transcripts").withIndex("by_version", (q) => q.eq("versionId", versionId)).first();
     if (!row) return null;
     return {

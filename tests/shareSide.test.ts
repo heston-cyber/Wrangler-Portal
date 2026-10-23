@@ -71,13 +71,14 @@ describe("who may do what on a video through a share", () => {
     const share = guest(viewLink.token);
     const vid = await t.query(api.library.video, { videoId: ids.brand, share });
     expect(vid).toMatchObject({ can: "view", viewer: { kind: "guest", name: "Pat" }, downloads: false, nextFileName: null, shortTitle: null });
-    expect(vid!.versions.map((v) => v.number)).toEqual([1, 2]); // the processing v3 isn't shown
+    expect(vid!.versions.map((v) => v.number)).toEqual([2]); // view only: the latest ready version, nothing else (v3 is still processing)
     expect(vid!.versions[0].dropboxPath).toBeNull();
     // A view link shows no notes at all (Heston, Oct 23): just the video.
     expect(await t.query(api.notes.forVersion, { versionId: ids.v2, share })).toEqual([]);
     expect(vid!.versions.find((v) => v.number === 2)!.noteCount).toBe(0);
-    expect((await t.query(api.transcripts.forVersion, { versionId: ids.v2, share }))?.status).toBe("done");
-    expect((await t.query(api.waveforms.forVersion, { versionId: ids.v2, share }))?.status).toBe("done");
+    expect(await t.query(api.transcripts.forVersion, { versionId: ids.v2, share })).toBeNull(); // no transcript on a view link
+    expect((await t.query(api.waveforms.forVersion, { versionId: ids.v2, share }))?.status).toBe("done"); // the timeline keeps its waveform
+    await expect(t.query(api.waveforms.forVersion, { versionId: ids.v1, share })).rejects.toThrow(/Not allowed/); // the earlier version is out of reach
     await t.mutation(api.player.log, { versionId: ids.v2, kind: "stall", share });
     await t.mutation(api.library.reportFrameCount, { versionId: ids.v2, frameCount: 101, share });
     await expect(t.mutation(api.notes.create, { versionId: ids.v2, kind: "general", text: "hi", share })).rejects.toThrow(/view only/);
