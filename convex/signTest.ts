@@ -61,3 +61,31 @@ export const run = internalAction({
     }
   },
 });
+
+// Puts the public frame-test clip into the storage zone and returns a signed link on the test pull zone (valid 30
+// minutes) for the lab frame-accuracy page. The clip is public already; the link carries a token, never the key.
+export const playerLink = internalAction({
+  args: {},
+  handler: async () => {
+    const key = process.env.BUNNY_SIGN_TEST_KEY, cdn = process.env.BUNNY_SIGN_TEST_CDN;
+    const z = reviewStorage();
+    if (!key || !cdn || !z) return { configured: false };
+    const src = await fetch("https://review.wranglerportal.com/lab/frametest_23976_h264.mp4");
+    if (!src.ok) return { fetch: src.status };
+    const body = new Uint8Array(await src.arrayBuffer());
+    const path = "review/_signtest/frametest_23976_h264.mp4";
+    const put = await fetch(`https://${z.host}/${z.zone}/${path}`, { method: "PUT", headers: { AccessKey: z.password, "content-type": "video/mp4" }, body });
+    if (!put.ok) return { write: put.status };
+    return { bytes: body.length, url: await signBunnyUrl(`https://${cdn}/${path}`, key, { ttlSeconds: 1800 }), unsignedUrl: `https://${cdn}/${path}` };
+  },
+});
+
+export const playerLinkCleanup = internalAction({
+  args: {},
+  handler: async () => {
+    const z = reviewStorage();
+    if (!z) return { removed: false };
+    const r = await fetch(`https://${z.host}/${z.zone}/review/_signtest/frametest_23976_h264.mp4`, { method: "DELETE", headers: { AccessKey: z.password } });
+    return { removed: r.ok, status: r.status };
+  },
+});
