@@ -109,9 +109,15 @@ export default function SharePage({ token, videoId, versionNumber, noteId }: { t
           <a {...linkProps(viewer.home)} aria-label="Home" style={{ display: "flex" }}><BrandImg name="wordmark" className="logo" alt="Wrangler Productions" /></a>
           {isClient && <a className="btn sm" {...linkProps("/")}>Shared with me</a>}
         </div>
-        <div style={{ display: "grid", gap: 8 }}>
+        <div style={{ display: "grid", gap: 8, gridTemplateColumns: "minmax(0,1fr) auto", alignItems: "start" }}>
           <span className="eyebrow">{ok.kind === "client" ? "Shared with you" : ok.client ?? "Shared with you"}</span>
-          <h1 className="headline">{ok.label}. <span className="rest">{ok.videos.length === 0 ? "Nothing to watch yet; check back when Wrangler Productions tells you a cut is ready." : ok.access === "comment" ? "Open a video to watch it and leave notes on exact frames." : "Open a video to watch it."}</span></h1>
+          {ok.downloads && filesOf(ok.videos).length > 0 && (
+            <Menu align="end" label={`${ok.label} options`} trigger={(p) => <button {...p} className="icon-btn md" aria-label={`${ok.label} options`}><Ellipsis size={16} /></button>}>
+              <MenuItem icon={<SquareCheck size={16} />} onSelect={() => sel.start()}>Select videos…</MenuItem>
+              <MenuItem icon={<FolderDown size={16} />} onSelect={() => void saveAll(filesOf(ok.videos), `${ok.label}.zip`)}>Download all{sizeOf(filesOf(ok.videos)) ? ` · ${sizeOf(filesOf(ok.videos))}` : ""}</MenuItem>
+            </Menu>
+          )}
+          <h1 className="headline" style={{ gridColumn: "1 / -1" }}>{ok.label}. <span className="rest">{ok.videos.length === 0 ? "Nothing to watch yet; check back when Wrangler Productions tells you a cut is ready." : ok.access === "comment" ? "Open a video to watch it and leave notes on exact frames." : "Open a video to watch it."}</span></h1>
         </div>
         {busy && <div className="dlbar rect" role="status"><span className="rlabel">Downloading</span><span className="rbold">{pct(busy)}</span><span className="secondary">{busy.ofFiles > 1 ? `${busy.files} of ${busy.ofFiles} · ` : ""}{busy.file}</span></div>}
         {sel.on && (() => {
