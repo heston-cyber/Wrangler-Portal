@@ -6,7 +6,7 @@
 // BUNNY_SIGN_TEST_CDN (e.g. wranglerreviewsigntest.b-cdn.net).
 import { internalAction, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { signBunnyUrl } from "./lib/bunnySign";
+import { signBunnyUrl, streamFolder } from "./lib/bunnySign";
 import { reviewStorage } from "./lib/reviewStorage";
 import { scrubCdn, signUrl, stillsCdn, streamCdn } from "./lib/media";
 
@@ -107,8 +107,28 @@ export const live = internalAction({
       const keyed = signed !== url;
       out[zone] = { keyed, unsigned: await status(url), signed: await status(signed) };
     }
-    const zones = Object.values(out) as Array<{ keyed?: boolean; unsigned?: number; signed?: number; sample?: boolean }>;
-    return { ...out, pass: zones.every((z) => z.sample === false || !z.keyed || (z.unsigned === 403 && (z.signed === 200 || z.signed === 206))), allKeyed: zones.every((z) => z.sample === false || z.keyed) };
+    // HLS on the main library: the token sits in the path, and the variant playlists the master lists must open too.
+    if (sample.stream) {
+      const guid = sample.stream.split("/")[3];
+      const master = await signUrl(`https://${streamCdn()}/${guid}/playlist.m3u8`, { folder: streamFolder(guid), directory: true });
+      const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
+      const r = await fetch(master, { headers: { Referer: site, Origin: new URL(site).origin } });
+      const text = r.ok ? await r.text() : "";
+      const variant = text.split("\n").find((l) => l && !l.startsWith("#"));
+      const variantUrl = variant ? new URL(variant, master).toString() : null;
+      const v = variantUrl ? await fetch(variantUrl, { headers: { Referer: site, Origin: new URL(site).origin } }) : null;
+      const seg = v?.ok ? (await v.text()).split("\n").find((l) => l && !l.startsWith("#")) : null;
+      const segUrl = seg && variantUrl ? new URL(seg, variantUrl).toString() : null;
+      out.hls = { master: r.status, variant: v?.status ?? null, segment: segUrl ? await status(segUrl) : null, tokenInPath: master.includes("/bcdn_token=") };
+    }
+    // The scrub library has no video right now (R3 test files were cleaned up): any address on it must still be refused unsigned.
+    if (!sample.scrub && scrubCdn() && process.env.BUNNY_SCRUB_TOKEN_KEY) {
+      const probe = `https://${scrubCdn()}/00000000-0000-0000-0000-000000000000/thumbnail.jpg`;
+      out.scrub = { sample: false, unsignedProbe: await status(probe), keyed: true };
+    }
+    const zones = Object.values(out).filter((z) => z && typeof z === "object" && "keyed" in (z as object)) as Array<{ keyed?: boolean; unsigned?: number; signed?: number; sample?: boolean }>;
+    const hls = out.hls as { master: number; variant: number | null; segment: number | null } | undefined;
+    return { ...out, pass: zones.every((z) => z.sample === false || !z.keyed || (z.unsigned === 403 && (z.signed === 200 || z.signed === 206))) && (!hls || (hls.master === 200 && hls.variant === 200 && (hls.segment === 200 || hls.segment === 206))), allKeyed: zones.every((z) => z.sample === false || z.keyed) };
   },
 });
 
