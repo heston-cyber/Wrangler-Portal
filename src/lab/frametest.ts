@@ -402,7 +402,7 @@ async function save(rec: FunctionArgs<typeof api.phase0.saveRun>) {
 async function refreshRuns() {
   if (!client) return;
   try {
-    const runs = await client.query(api.phase0.listRuns, {});
+    const runs = await client.query(api.phase0.listRuns, {}).catch(() => [] as never[]); // owner-only since C1
     const box = $("runs");
     if (!runs.length) return;
     box.innerHTML = "";

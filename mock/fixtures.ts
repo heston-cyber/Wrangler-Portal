@@ -117,6 +117,10 @@ function nextName(v: any) {
 }
 let nextNumber = 4;
 let prefs: Record<string, unknown> = {};
+let invites: any[] = [
+  { _id: "i1", email: "maya@harborcoffee.example", name: "Maya Chen", createdAt: Date.now() - 3 * 86_400_000, revokedAt: null, acceptedAt: Date.now() - 2 * 86_400_000, lastSignInAt: Date.now() - 5 * 3_600_000 },
+  { _id: "i2", email: "dan@fairgroundsfit.example", name: null, createdAt: Date.now() - 3_600_000, revokedAt: null, acceptedAt: null, lastSignInAt: null },
+];
 let sheet: any = null;
 function registerList() {
   const rows = videos.filter((v) => v.number).map((v) => {
@@ -162,7 +166,11 @@ export const store = {
   version: () => ver,
   query(name: string, args: any): any {
     switch (name) {
-      case "users:me": return { id: "u1", email: "heston@wranglerproductions.com", name: "Heston", allowed: true };
+      case "users:me": return new URLSearchParams(location.search).has("asclient")
+        ? { id: "u2", email: "maya@harborcoffee.example", name: "Maya Chen", allowed: false, role: "client" }
+        : { id: "u1", email: "heston@wranglerproductions.com", name: "Heston", allowed: true, role: "owner" };
+      case "clients:listInvites": return invites;
+      case "clients:account": return { email: "heston@wranglerproductions.com", name: "Heston", kind: "owner" };
       case "library:overview": return overview();
       case "library:video": return video(args.videoId);
       case "notes:forVersion": return notes.filter((n) => n.versionId === args.versionId).map((n) => (n.voice ? { ...n, voiceUrl: null } : n));
@@ -229,6 +237,14 @@ export const store = {
     if (name === "register:setShortTitle") { const v = videos.find((x) => x._id === args.videoId); if (v) v.shortTitle = args.shortTitle; bump(); return; }
     if (name === "register:removeSheetKey") { sheet = null; bump(); return; }
     if (name === "dropbox:retryFlagged") { flagged = flagged.filter((f) => f._id !== args.fileId); bump(); return true; }
+    if (name === "clients:invite") {
+      const email = String(args.email).trim().toLowerCase();
+      const ex = invites.find((i) => i.email === email && !i.revokedAt);
+      if (ex) return { inviteId: ex._id, already: true };
+      invites = [{ _id: "i" + Date.now(), email, name: args.name ?? null, createdAt: Date.now(), revokedAt: null, acceptedAt: null, lastSignInAt: null }, ...invites]; bump();
+      return { inviteId: "x", already: false };
+    }
+    if (name === "clients:revokeInvite") { invites = invites.map((i) => (i._id === args.inviteId ? { ...i, revokedAt: Date.now() } : i)); bump(); return; }
     if (name === "connector:revokeKey") { keys = keys.filter((k) => k._id !== args.keyId); bump(); return; }
     if (name === "library:createClient") {
       const n = String(args.name).trim();

@@ -1,10 +1,10 @@
 import { query, mutation, internalQuery } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
-import { requireMe } from "./lib/access";
+import { requireSignedIn } from "./lib/access";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { allowedEmails } from "./auth";
 
-// The signed-in person, or null.
+// The signed-in person, or null. `allowed` = owner (the site as before); `role` tells the page which side to show.
 export const me = query({
   args: {},
   handler: async (ctx) => {
@@ -13,10 +13,11 @@ export const me = query({
     const user = await ctx.db.get(userId);
     if (!user) return null;
     const email = (user.email ?? "").toLowerCase();
-    // Same fallback as notes use, so the menu shows a name rather than an email.
     const local = email.split("@")[0] ?? "";
     const fallback = local ? local[0].toUpperCase() + local.slice(1) : null;
-    return { id: userId, email, name: (user.name as string | undefined) || fallback, allowed: allowedEmails().includes(email) };
+    const owner = allowedEmails().includes(email);
+    const role: "owner" | "client" | null = owner ? "owner" : user.role === "client" ? "client" : null;
+    return { id: userId, email, name: (user.name as string | undefined) || fallback, allowed: owner, role };
   },
 });
 
@@ -38,7 +39,7 @@ export const assertAllowed = internalQuery({
 export const setName = mutation({
   args: { name: v.string() },
   handler: async (ctx, { name }) => {
-    const me = await requireMe(ctx);
+    const me = await requireSignedIn(ctx);
     const n = name.trim().replace(/\s+/g, " ").slice(0, 60);
     if (!n) throw new ConvexError("Enter a name.");
     await ctx.db.patch(me.userId, { name: n });

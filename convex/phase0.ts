@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { requireMe } from "./lib/access";
 
 // Phase 0 frame-test log. Kept so the test page keeps working; capped and harmless.
 const MAX_RUNS = 300;
@@ -19,7 +20,8 @@ export const saveRun = mutation({
   },
 });
 
+// Owner only since C1 (Oct 23); the lab pages call it without a sign-in and just show no list.
 export const listRuns = query({
   args: {},
-  handler: async (ctx) => await ctx.db.query("phase0Runs").order("desc").take(30),
+  handler: async (ctx) => { await requireMe(ctx); return await ctx.db.query("phase0Runs").order("desc").take(30); },
 });

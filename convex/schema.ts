@@ -6,6 +6,28 @@ import { v } from "convex/values";
 // Timecode is derived from frames + the version's start timecode, never from seconds.
 export default defineSchema({
   ...authTables,
+  // Client side (C1, Oct 23): the auth users table with a role. Owners are the ALLOWED_EMAILS list (Heston);
+  // clients are people he invited. Anyone else can't make an account.
+  users: defineTable({
+    name: v.optional(v.string()),
+    image: v.optional(v.string()),
+    email: v.optional(v.string()),
+    emailVerificationTime: v.optional(v.number()),
+    phone: v.optional(v.string()),
+    phoneVerificationTime: v.optional(v.number()),
+    isAnonymous: v.optional(v.boolean()),
+    role: v.optional(v.union(v.literal("owner"), v.literal("client"))),
+    lastSignInAt: v.optional(v.number()),
+  }).index("email", ["email"]).index("phone", ["phone"]),
+  // Emails allowed to make a client account. Made by the owner (the Share dialog in C2, or Settings › Clients).
+  invites: defineTable({
+    email: v.string(),            // lower-case
+    name: v.optional(v.string()), // what Heston calls them, shown until they set their own
+    createdAt: v.number(),
+    revokedAt: v.optional(v.number()),
+    acceptedAt: v.optional(v.number()),
+    userId: v.optional(v.id("users")),
+  }).index("by_email", ["email"]),
 
   projects: defineTable({
     name: v.string(),

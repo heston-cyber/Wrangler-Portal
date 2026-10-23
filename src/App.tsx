@@ -3,6 +3,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../convex/_generated/api";
 import { useLocation } from "./lib/router";
 import SignIn from "./pages/SignIn";
+import ClientHome from "./pages/ClientHome";
 import Home from "./pages/Home";
 import Projects from "./pages/Projects";
 import ActivityPage from "./pages/ActivityPage";
@@ -18,7 +19,7 @@ const Loading = () => <div className="signin"><span className="label">Loading…
 export default function App() {
   const { isLoading, isAuthenticated } = useConvexAuth();
   if (isLoading) return <Loading />;
-  if (!isAuthenticated) return <SignIn />;
+  if (!isAuthenticated) return <SignIn invitedEmail={new URLSearchParams(location.search).get("invited")} />;
   return <SignedIn />;
 }
 
@@ -27,6 +28,8 @@ function SignedIn() {
   const { signOut } = useAuthActions();
   const { path, search } = useLocation();
   if (me === undefined) return <Loading />;
+  // Clients (C1): their own page, nothing of the owner's side.
+  if (me && !me.allowed && me.role === "client") return <ClientHome me={me} />;
   if (!me || !me.allowed) {
     return (
       <div className="signin">

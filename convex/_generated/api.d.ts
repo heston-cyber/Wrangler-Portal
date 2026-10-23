@@ -11,6 +11,8 @@
 import type * as activity from "../activity.js";
 import type * as auth from "../auth.js";
 import type * as bunny from "../bunny.js";
+import type * as clients from "../clients.js";
+import type * as lib_email from "../lib/email.js";
 import type * as connector from "../connector.js";
 import type * as crons from "../crons.js";
 import type * as dropbox from "../dropbox.js";
@@ -65,6 +67,8 @@ declare const fullApi: ApiFromModules<{
   activity: typeof activity;
   auth: typeof auth;
   bunny: typeof bunny;
+  clients: typeof clients;
+  "lib/email": typeof lib_email;
   connector: typeof connector;
   crons: typeof crons;
   dropbox: typeof dropbox;

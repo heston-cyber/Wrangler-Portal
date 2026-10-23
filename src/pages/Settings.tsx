@@ -10,6 +10,7 @@ import { TopBar } from "../shell/Shell";
 import { Avatar, Modal, useToast } from "../ui/kit";
 import { ago } from "../lib/format";
 import { DropboxSettings } from "./DropboxSettings";
+import { ClientsSettings } from "./Clients";
 
 // The connector lives on the Convex site host: <deployment>.convex.site/mcp
 const CONVEX = (import.meta.env.VITE_CONVEX_URL as string | undefined) || "https://handsome-hummingbird-11.convex.cloud";
@@ -110,6 +111,8 @@ export default function Settings({ me }: { me: { name: string | null; email: str
           <Connector show={show} />
 
           <SheetCopy show={show} />
+
+          <ClientsSettings show={show} />
 
           <div className="panel">
             <div className="prow">
