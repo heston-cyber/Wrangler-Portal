@@ -4,9 +4,11 @@
 // forms) covers files under it; an unsigned, an expired and a tampered link are refused. Statuses only.
 // Env: BUNNY_SIGN_TEST_KEY (the test zone's token key, pasted into the Convex dashboard by Heston),
 // BUNNY_SIGN_TEST_CDN (e.g. wranglerreviewsigntest.b-cdn.net).
-import { internalAction } from "./_generated/server";
+import { internalAction, internalQuery } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { signBunnyUrl } from "./lib/bunnySign";
 import { reviewStorage } from "./lib/reviewStorage";
+import { scrubCdn, signUrl, stillsCdn, streamCdn } from "./lib/media";
 
 async function status(url: string, range = true): Promise<number> {
   const r = await fetch(url, { headers: range ? { Range: "bytes=0-1" } : {} });
@@ -87,5 +89,40 @@ export const playerLinkCleanup = internalAction({
     if (!z) return { removed: false };
     const r = await fetch(`https://${z.host}/${z.zone}/review/_signtest/frametest_23976_h264.mp4`, { method: "DELETE", headers: { AccessKey: z.password } });
     return { removed: r.ok, status: r.status };
+  },
+});
+
+// C3: the live zones after token authentication is switched on. For each zone with a key: an unsigned link must be
+// refused (403) and a signed one must answer. Statuses only. Zones without a key are reported, not failed.
+export const live = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const sample = await ctx.runQuery(internal.signTest.sampleUrls, {});
+    const out: Record<string, unknown> = {};
+    for (const [zone, url] of Object.entries(sample)) {
+      if (!url) { out[zone] = { sample: false }; continue; }
+      const signed = await signUrl(url);
+      const keyed = signed !== url;
+      out[zone] = { keyed, unsigned: await status(url), signed: await status(signed) };
+    }
+    const zones = Object.values(out) as Array<{ keyed?: boolean; unsigned?: number; signed?: number; sample?: boolean }>;
+    return { ...out, pass: zones.every((z) => z.sample === false || !z.keyed || (z.unsigned === 403 && (z.signed === 200 || z.signed === 206))), allKeyed: zones.every((z) => z.sample === false || z.keyed) };
+  },
+});
+
+export const sampleUrls = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const versions = await ctx.db.query("versions").collect();
+    const stream = versions.find((v) => v.status === "ready" && v.bunnyGuid && v.source !== "file");
+    const file = versions.find((v) => v.status === "ready" && v.source === "file" && v.fileUrl);
+    const scrub = versions.find((v) => v.scrubStatus === "ready" && v.scrubGuid);
+    const note = (await ctx.db.query("notes").collect()).find((n) => n.still && stillsCdn() && n.still.startsWith(`https://${stillsCdn()}/`));
+    return {
+      stream: stream ? `https://${streamCdn()}/${stream.bunnyGuid}/thumbnail.jpg` : null,
+      render: file?.fileUrl ?? null,
+      scrub: scrub && scrubCdn() ? `https://${scrubCdn()}/${scrub.scrubGuid}/thumbnail.jpg` : null,
+      stills: note?.still ?? null,
+    };
   },
 });
