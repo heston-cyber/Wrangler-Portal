@@ -129,8 +129,13 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
       hls.attachMedia(v);
     } else {
       v.src = src;
+      v.load();
     }
     const onMeta = () => {
+      // iPhones stop loading at the index (readyState 1) and a jump issued later never finishes: every jump then
+      // waited forever (Oct 22 player test on Heston's iPhone). Asking for the first frame right away, the way the R1
+      // and phone test pages did, keeps the video loading; jumps after that land in about 0.4 s.
+      if (!isHls && v.readyState < 2) v.currentTime = FD / 2;
       setReady(true);
       if (isFinite(v.duration) && v.duration > 0) setEstimatedFrameCount(Math.round(v.duration / FD));
     };
@@ -196,6 +201,7 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
 
   async function seekTime(t: number) {
     const v = videoRef.current!;
+    if (v.readyState < 2) await new Promise<void>((res) => { const h = () => { clearTimeout(tm); res(); }; const tm = setTimeout(() => { v.removeEventListener("loadeddata", h); res(); }, 5000); v.addEventListener("loadeddata", h, { once: true }); });
     const p = nextFrame(2000);
     v.currentTime = Math.max(0, t);
     let md = await p;
