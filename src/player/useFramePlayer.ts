@@ -199,12 +199,16 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
     const p = nextFrame(2000);
     v.currentTime = Math.max(0, t);
     let md = await p;
-    // Still loading (a phone fetching a part of a big file): a frame reported now is the old one. Wait for the jump
-    // to finish rather than issuing it again, which cancels it (that's how jumps never landed on the iPhone).
-    if (v.seeking) {
+    // A frame far from the one asked for while the jump is still loading (a phone fetching part of a big file) is
+    // the old one: wait for the jump to finish rather than issuing it again, which cancels it (that's how jumps never
+    // landed on the iPhone). Chrome often shows the new frame just before 'seeked': that one is kept.
+    const near = (m: VideoFrameCallbackMetadata | null) => !!m && Math.abs(m.mediaTime + FD / 2 - t) <= FD * 1.5;
+    if (!near(md) && v.seeking) {
       await seekedOrTimeout(v, 12000);
-      md = await nextFrame(800);
+      md = await nextFrame(250);
+      if (!near(md)) md = null;
     }
+    if (!md) { const f = Math.max(0, Math.floor((v.currentTime - offset.current) / FD + 1e-6)); lastMedia.current = v.currentTime; clock.set(f); return f; }
     if (md) { lastMedia.current = md.mediaTime; clock.set(frameOf(md.mediaTime)); }
     return md ? frameOf(md.mediaTime) : frameOf(v.currentTime);
   }
@@ -291,11 +295,15 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
         if (!el) break;
         const p = nextFrame(px ? 400 : 1500, el);
         // The scrub copy is an MP4 (first frame at 0); the main source may be a stream with its offset.
-        el.currentTime = Math.max(0, (target + 0.5) * FD + (px ? 0 : offset.current + bias.current));
+        const want = Math.max(0, (target + 0.5) * FD + (px ? 0 : offset.current + bias.current));
+        el.currentTime = want;
         let md = await p;
-        // Without the scrub copy (still downloading), let each jump in the full file finish before the next one:
-        // starting a new jump cancels the one loading, so on a phone the picture never moved.
-        if (el.seeking) { await seekedOrTimeout(el, 6000); md = await nextFrame(600, el); }
+        // Without the scrub copy (a phone), let each jump in the full file finish before the next one: starting a new
+        // jump cancels the one loading, so on a phone the picture never moved. A frame far from the one asked for,
+        // reported while the jump is still loading, is the old one.
+        const near = (m: VideoFrameCallbackMetadata | null) => !!m && Math.abs(m.mediaTime + FD / 2 - want) <= FD * 1.5;
+        if (!near(md) && el.seeking) { await seekedOrTimeout(el, 6000); md = await nextFrame(250, el); if (!near(md)) md = null; }
+        if (!md) { clock.set(Math.max(0, Math.floor((el.currentTime - (px ? 0 : offset.current)) / FD + 1e-6))); if (!px) lastMedia.current = null; continue; }
         if (md) {
           clock.set(px ? Math.max(0, Math.round(md.mediaTime / FD)) : frameOf(md.mediaTime));
           // The full file isn't on this frame yet, so the exact jump on letting go must not skip itself.
