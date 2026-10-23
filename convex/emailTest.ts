@@ -152,3 +152,26 @@ export const liveCleanupDb = internalMutation({
     return { videos, shares, users };
   },
 });
+
+// Where did the last emails get to? Asks Resend for each one's latest event (sent / delivered / bounced / complained).
+export const resendStatus = internalAction({
+  args: {},
+  handler: async (ctx): Promise<unknown> => {
+    const key = process.env.RESEND_API_KEY;
+    if (!key) return { configured: false };
+    const rows: any = await ctx.runQuery(internal.emailTest.recentLog, {});
+    const out = [];
+    for (const r of rows) {
+      if (!r.resendId || r.resendId === "sent") { out.push({ kind: r.kind, to: r.to, status: "no id" }); continue; }
+      const res = await fetch(`https://api.resend.com/emails/${r.resendId}`, { headers: { Authorization: `Bearer ${key}` } });
+      const j = await res.json().catch(() => ({})) as { last_event?: string; created_at?: string; from?: string };
+      out.push({ kind: r.kind, to: r.to, http: res.status, lastEvent: j.last_event ?? null, created: j.created_at ?? null, from: j.from ?? null });
+    }
+    return out;
+  },
+});
+
+export const recentLog = internalQuery({
+  args: {},
+  handler: async (ctx) => (await ctx.db.query("emailLog").withIndex("by_at").order("desc").take(8)).map((l) => ({ kind: l.kind, to: l.to.replace(/^(.).*@/, "$1…@"), resendId: l.resendId ?? null })),
+});
