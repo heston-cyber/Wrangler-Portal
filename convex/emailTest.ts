@@ -175,3 +175,12 @@ export const recentLog = internalQuery({
   args: {},
   handler: async (ctx) => (await ctx.db.query("emailLog").withIndex("by_at").order("desc").take(8)).map((l) => ({ kind: l.kind, to: l.to.replace(/^(.).*@/, "$1…@"), resendId: l.resendId ?? null })),
 });
+
+// Did the last share invites go out? Masked addresses, times only.
+export const recentInvites = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const members = (await ctx.db.query("shareMembers").collect()).sort((a, b) => b.addedAt - a.addedAt).slice(0, 5);
+    return members.map((m) => ({ to: m.email.replace(/^(.).*@/, "$1…@"), addedAgoMin: Math.round((Date.now() - m.addedAt) / 60000), emailed: m.emailedAt ? `${Math.round((Date.now() - m.emailedAt) / 60000)} min ago` : "NOT SENT" }));
+  },
+});
