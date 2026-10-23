@@ -11,7 +11,7 @@ import { accessToVersion, shareArg } from "./lib/viewer";
 import { ensureInvite } from "./clients";
 import { randomToken } from "./lib/hash";
 import { SITE, sendEmail } from "./lib/email";
-import { signedThumbUrl } from "./lib/media";
+import { signedThumbUrl, versionMedia } from "./lib/media";
 import { clientKey, coveredProjects, coveredVideos, gateShare, labelOf, passcodeHash, shareState, showsAllVersions, type Share } from "./lib/shareAccess";
 
 const target = v.object({ kind: v.union(v.literal("client"), v.literal("project"), v.literal("video")), client: v.optional(v.string()), projectId: v.optional(v.id("projects")), videoId: v.optional(v.id("videos")) });
@@ -220,6 +220,16 @@ export const activity = query({
 
 // ---------- the share link (anyone; gated) ----------
 
+// What "Download" saves for a version: the render itself (file versions) or the largest MP4 copy up to 1080p.
+async function downloadFor(x: Doc<"versions">): Promise<{ url: string; name: string; bytes: number | null } | null> {
+  const m = await versionMedia(x);
+  const h = Math.max(0, ...(x.mp4Heights ?? []).filter((n) => n <= 1080));
+  const url = m.file ?? (h ? m.mp4[h] : null);
+  if (!url) return null;
+  const name = x.fileName && /\.mp4$/i.test(x.fileName) ? x.fileName : `${(x.fileName || "video").replace(/\.[^.]+$/, "")}_v${x.number}.mp4`;
+  return { url, name, bytes: x.fileSize ?? null };
+}
+
 // What a share link shows. The answer depends on who's asking and the share's state; nothing outside the share
 // is ever returned. Streams and signed links come with C3; this returns the structure and the metadata.
 export const open = query({
@@ -240,6 +250,8 @@ export const open = query({
         versions: await Promise.all(shown.map(async (x) => ({
           _id: x._id, number: x.number, frameCount: x.frameCount ?? null, fpsNum: x.fpsNum ?? 24000, fpsDen: x.fpsDen ?? 1001, startTimecode: x.startTimecode,
           width: x.width ?? null, height: x.height ?? null, createdAt: x.createdAt, description: x.description ?? null, thumbUrl: await signedThumbUrl(x),
+          // C3: the file to download (the render, or the best MP4 copy), when the share allows downloads.
+          download: s.downloads ? await downloadFor(x) : null,
         }))),
       });
     }

@@ -137,7 +137,8 @@ function openShare(token: string, passcode?: string) {
   const ps = kind === "client" ? projects.filter((p) => p.client === "Harbor Coffee") : kind === "project" ? projects.filter((p) => p._id === "p1") : projects.filter((p) => p._id === "p1");
   const vids = videos.filter((v) => (kind === "video" ? v._id === "v1" : ps.some((p) => p._id === v.projectId))).map((v) => ({
     _id: v._id, title: v.title, number: v.number ?? null, projectId: v.projectId, updatedAt: v.updatedAt,
-    versions: (versions[v._id] ?? []).filter((x) => x.status === "ready").map((x) => ({ _id: x._id, number: x.number, frameCount: x.frameCount, fpsNum: x.fpsNum, fpsDen: x.fpsDen, startTimecode: x.startTimecode, width: x.width, height: x.height, createdAt: x.createdAt, description: x.description, thumbUrl: x.thumbUrl })),
+    versions: (versions[v._id] ?? []).filter((x) => x.status === "ready").map((x) => ({ _id: x._id, number: x.number, frameCount: x.frameCount, fpsNum: x.fpsNum, fpsDen: x.fpsDen, startTimecode: x.startTimecode, width: x.width, height: x.height, createdAt: x.createdAt, description: x.description, thumbUrl: x.thumbUrl,
+      download: sh.downloads ? { url: x.media.file ?? x.media.mp4[1080] ?? null, name: x.fileName.replace(/\.[^.]+$/, ".mp4"), bytes: x.fileSize ?? null } : null })),
   })).filter((v) => v.versions.length);
   return { state: "ok", token, kind, label: kind === "client" ? "Harbor Coffee" : kind === "project" ? "26201 Harbor Coffee Launch" : "Brand Film", sub: kind === "video" ? "26201 Harbor Coffee Launch" : null, access: sh.access, who: sh.who, allVersions: true, downloads: sh.downloads, expiresAt: null,
     guest: sh.who !== "invited", viewer: sh.who === "invited" ? { kind: "client", name: "Maya Chen", email: "maya@harborcoffee.example" } : null, client: "Harbor Coffee",

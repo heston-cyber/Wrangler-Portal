@@ -931,3 +931,6 @@ code.mono, .input.mono, .chip.num, .fname code { font-family: ui-monospace, "SF 
 .reply.hidden .ntext { opacity: .7; }
 .reply .rh .linkbtn { color: var(--text-secondary); font-size: 12px; }
 .composer.guestname { gap: 10px; }
+.sharelist .vline > .vmenu { margin-right: 4px; }
+.sharelist .ghead .right .btn .secondary { margin-left: 4px; }
+.dlbar { display: flex; align-items: center; gap: 12px; padding: 10px 14px; }

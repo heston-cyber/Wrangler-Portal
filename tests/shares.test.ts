@@ -44,7 +44,7 @@ async function setup() {
     const promo = await ctx.db.insert("projects", { name: "Promo", client: "Prairie Fitness", createdAt: now });
     const video = async (projectId: Id<"projects">, title: string, versions: number[]) => {
       const id = await ctx.db.insert("videos", { projectId, title, createdAt: now, updatedAt: now });
-      for (const n of versions) await ctx.db.insert("versions", { videoId: id, number: n, status: "ready", bunnyGuid: `g-${title}-${n}`, fileName: `${title}_v${n}.mp4`, startTimecode: "01:00:00:00", createdAt: now + n, frameCount: 100 } as never);
+      for (const n of versions) await ctx.db.insert("versions", { videoId: id, number: n, status: "ready", bunnyGuid: `g-${title}-${n}`, fileName: `${title}_v${n}.mp4`, startTimecode: "01:00:00:00", createdAt: now + n, frameCount: 100, mp4Heights: [360, 1080], fileSize: 5_000_000 } as never);
       return id;
     };
     const brand = await video(launch, "Brand Film", [1, 2]);
@@ -198,6 +198,9 @@ describe("the gate", () => {
     await me.mutation(api.shares.update, { shareId: latest.shareId, allVersions: true, access: "comment", downloads: true });
     const l2 = await t.query(api.shares.open, { token: latest.token });
     expect(l2).toMatchObject({ access: "comment", downloads: true });
+    // With downloads on, each version names the file to save; without, nothing.
+    expect(l2.state === "ok" && l2.videos[0].versions[1].download).toMatchObject({ name: "Brand Film_v2.mp4" });
+    expect(a.state === "ok" && a.videos[0].versions[0].download).toBeNull();
     expect(l2.state === "ok" && l2.videos[0].versions.length).toBe(2);
   });
 

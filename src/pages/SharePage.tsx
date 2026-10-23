@@ -4,11 +4,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { useAuthActions, useAuthToken } from "@convex-dev/auth/react";
-import { ArrowRight, Lock } from "lucide-react";
+import { ArrowRight, Download, Ellipsis, FolderDown, Lock, Play } from "lucide-react";
+import { bytesText, downloadOne, downloadZip, type Progress } from "../lib/download";
+import { navigate } from "../lib/router";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { BrandImg } from "../ui/BrandImg";
-import { Thumb } from "../ui/kit";
+import { Menu, MenuItem, Thumb, useToast } from "../ui/kit";
 import { ago } from "../lib/format";
 import { linkProps } from "../lib/router";
 import { guestKey, readGuestName, readPasscode, ViewerCtx, writeGuestName, writePasscode, type Viewer } from "../lib/viewer";
@@ -26,6 +28,21 @@ export default function SharePage({ token, videoId, versionNumber, noteId }: { t
   const touch = useMutation(api.shares.touch);
   const { signOut } = useAuthActions();
   const signedIn = !!useAuthToken();
+  const [toast, show] = useToast();
+  const [busy, setBusy] = useState<Progress | null>(null);
+  const pct = (p: Progress) => (p.total ? `${Math.round((100 * p.done) / p.total)}%` : bytesText(p.done));
+  async function saveOne(f: { url: string; name: string; bytes: number | null }) {
+    if (busy) return;
+    try { const ok = await downloadOne(f.url, f.name, f.bytes, setBusy); if (ok) show("Downloaded"); }
+    catch (e) { show("Download didn't work: " + ((e as Error).message || "")); }
+    finally { setBusy(null); }
+  }
+  async function saveAll(files: Array<{ url: string; name: string; bytes: number | null }>, zipName: string) {
+    if (busy || !files.length) return;
+    try { const ok = await downloadZip(files, zipName, setBusy); if (ok) show("Downloaded"); }
+    catch (e) { show("Download didn't work: " + ((e as Error).message || "")); }
+    finally { setBusy(null); }
+  }
   const state = res?.state;
   useEffect(() => {
     if (state === "ok") void touch({ token, passcode, kind: "opened", guestName }).catch(() => {});
@@ -78,6 +95,10 @@ export default function SharePage({ token, videoId, versionNumber, noteId }: { t
   }
   // A project or a client: the videos, grouped by project.
   const groups = ok.projects.map((p) => ({ p, videos: ok.videos.filter((v) => v.projectId === p._id) })).filter((g) => g.videos.length);
+  const latestOf = (v: typeof ok.videos[number]) => v.versions[v.versions.length - 1];
+  // Everything downloadable in a project: the latest version of each video (file name as rendered).
+  const filesOf = (vs: typeof ok.videos) => vs.map((v) => latestOf(v)?.download).filter((d): d is { url: string; name: string; bytes: number | null } => !!d);
+  const sizeOf = (fs: Array<{ bytes: number | null }>) => (fs.every((f) => f.bytes) ? bytesText(fs.reduce((a, f) => a + (f.bytes ?? 0), 0)) : null);
   return (
     <div className="sharelist">
       <BrandImg name="watermark" className="watermark" hidden />
@@ -90,24 +111,49 @@ export default function SharePage({ token, videoId, versionNumber, noteId }: { t
           <span className="eyebrow">{ok.kind === "client" ? "Shared with you" : ok.client ?? "Shared with you"}</span>
           <h1 className="headline">{ok.label}. <span className="rest">{ok.videos.length === 0 ? "Nothing to watch yet; check back when Wrangler Productions tells you a cut is ready." : ok.access === "comment" ? "Open a video to watch it and leave notes on exact frames." : "Open a video to watch it."}</span></h1>
         </div>
-        {groups.map((g) => (
-          <section className="group" key={g.p._id}>
-            {ok.kind === "client" && <div className="ghead"><span className="gtitle">{g.p.jobNumber ? `${g.p.jobNumber} ${g.p.name}` : g.p.name}</span><span className="n">{g.videos.length}</span></div>}
-            {g.videos.map((v) => (
-              <a key={v._id} className="vrow" {...linkProps(`/s/${token}/v/${v._id}`)}>
-                <Thumb src={v.versions[v.versions.length - 1]?.thumbUrl ?? null} />
-                <span className="t">
-                  {v.number ? <span className="chip num mono">{String(v.number).padStart(5, "0")}</span> : null}
-                  <b>{v.title}</b>
-                  <span className="chip">v{v.versions[v.versions.length - 1]?.number}{v.versions.length > 1 && ok.access === "comment" ? ` of ${v.versions.length}` : ""}</span>
-                </span>
-                <span className="details" />
-                <span className="meta">Updated <em>{ago(v.updatedAt)}</em> <ArrowRight size={14} style={{ verticalAlign: -2 }} /></span>
-              </a>
-            ))}
-          </section>
-        ))}
+        {busy && <div className="dlbar rect" role="status"><span className="rlabel">Downloading</span><span className="rbold">{pct(busy)}</span><span className="secondary">{busy.ofFiles > 1 ? `${busy.files} of ${busy.ofFiles} · ` : ""}{busy.file}</span></div>}
+        {groups.map((g) => {
+          const files = filesOf(g.videos);
+          const size = sizeOf(files);
+          const pname = g.p.jobNumber ? `${g.p.jobNumber} ${g.p.name}` : g.p.name;
+          return (
+            <section className="group" key={g.p._id}>
+              <div className="ghead">
+                <span className="gtitle">{pname}</span><span className="n">{g.videos.length}</span>
+                {ok.downloads && files.length > 0 && (
+                  <span className="right">
+                    <button className="btn sm" disabled={!!busy} onClick={() => void saveAll(files, `${pname}.zip`)} title={`One zip with the latest version of each video${size ? ` (about ${size})` : ""}`}>
+                      <FolderDown size={14} />Download all{size ? <span className="secondary hide-sm"> · {size}</span> : null}
+                    </button>
+                  </span>
+                )}
+              </div>
+              {g.videos.map((v) => {
+                const d = latestOf(v)?.download ?? null;
+                return (
+                  <div className="vline" key={v._id}>
+                    <a className="vrow" {...linkProps(`/s/${token}/v/${v._id}`)}>
+                      <Thumb src={latestOf(v)?.thumbUrl ?? null} />
+                      <span className="t">
+                        {v.number ? <span className="chip num mono">{String(v.number).padStart(5, "0")}</span> : null}
+                        <b>{v.title}</b>
+                        <span className="chip">v{latestOf(v)?.number}{v.versions.length > 1 && ok.access === "comment" ? ` of ${v.versions.length}` : ""}</span>
+                      </span>
+                      <span className="details" />
+                      <span className="meta">Updated <em>{ago(v.updatedAt)}</em> <ArrowRight size={14} style={{ verticalAlign: -2 }} /></span>
+                    </a>
+                    <Menu align="end" label="Video options" trigger={(p) => <button {...p} className="icon-btn vmenu" aria-label={`${v.title} options`}><Ellipsis size={15} /></button>}>
+                      <MenuItem icon={<Play size={16} />} onSelect={() => navigate(`/s/${token}/v/${v._id}`)}>Open</MenuItem>
+                      {ok.downloads && d && <MenuItem icon={<Download size={16} />} onSelect={() => void saveOne(d)}>Download{d.bytes ? ` · ${bytesText(d.bytes)}` : ""}</MenuItem>}
+                    </Menu>
+                  </div>
+                );
+              })}
+            </section>
+          );
+        })}
       </div>
+      {toast}
     </div>
   );
 }

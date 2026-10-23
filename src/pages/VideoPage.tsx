@@ -37,6 +37,7 @@ import { ApproveFinal } from "./ApproveFinal";
 import { useLibrarySettings } from "../lib/details";
 import { ShareDialog } from "./Share";
 import { useShareArgs, useViewer } from "../lib/viewer";
+import { downloadOne } from "../lib/download";
 
 export default function VideoPage({ videoId, versionNumber, noteId }: { videoId: Id<"videos">; versionNumber: number | null; noteId: string | null }) {
   const viewer = useViewer();
@@ -538,31 +539,15 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   // Download (C3): the render itself, or the best MP4 copy, when the share allows it (the owner always may).
   const downloadUrl = version?.media.file ?? (version && mp4H ? version.media.mp4[mp4H] : null) ?? null;
   const canDownload = !!downloadUrl && (owner || viewer.downloads);
-  // A plain link to another domain won't save (browsers ignore `download` across origins and just play the file), so
-  // the file is fetched here and handed to the browser as a download, with progress. Falls back to opening the link.
+  // A plain link to another domain only plays the file, so it's fetched and saved here (lib/download), with progress.
   const [dl, setDl] = useState<{ pct: number } | null>(null);
   async function downloadFile() {
     if (!downloadUrl || !version || dl) return;
     const name = `${(data.title || "video").replace(/[^\w\- ]+/g, "").trim() || "video"}_v${version.number}.mp4`;
     setDl({ pct: 0 });
     try {
-      const res = await fetch(downloadUrl);
-      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-      const total = Number(res.headers.get("content-length")) || 0;
-      const reader = res.body.getReader();
-      const chunks: BlobPart[] = [];
-      let got = 0;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value); got += value.byteLength;
-        if (total) setDl({ pct: Math.round((100 * got) / total) });
-      }
-      const url = URL.createObjectURL(new Blob(chunks, { type: "video/mp4" }));
-      const a = document.createElement("a");
-      a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      showToast("Downloaded");
+      const ok = await downloadOne(downloadUrl, name, version.fileSize ?? null, (p) => setDl({ pct: p.total ? Math.round((100 * p.done) / p.total) : 0 }));
+      if (ok) showToast("Downloaded");
     } catch {
       window.open(downloadUrl, "_blank", "noopener");
       showToast("Opened the file in a new tab; save it from there.");
