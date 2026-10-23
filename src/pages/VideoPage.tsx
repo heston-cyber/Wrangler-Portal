@@ -6,7 +6,7 @@ import { BrandImg } from "../ui/BrandImg";
 import { useConvex, useMutation, useQuery } from "convex/react";
 import {
   ArrowUp, Brush, Check, Circle, CircleCheckBig, Copy, Download, ListOrdered, Ellipsis, Eye, Keyboard, Maximize, Minimize, MoveUpRight, PanelRight, Pause, Pencil, Play,
-  Crosshair, Film, Mic, Plus, SlidersHorizontal, Square, Timer, Undo2, Upload, Volume2, VolumeX, X,
+  Crosshair, Film, Mic, Plus, Share2, SlidersHorizontal, Square, Timer, Undo2, Upload, Volume2, VolumeX, X,
 } from "lucide-react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
@@ -35,6 +35,7 @@ import { shortTitleFrom } from "../../convex/lib/register";
 import { FinalBadge } from "./VideoRows";
 import { ApproveFinal } from "./ApproveFinal";
 import { useLibrarySettings } from "../lib/details";
+import { ShareDialog } from "./Share";
 
 export default function VideoPage({ videoId, versionNumber, noteId }: { videoId: Id<"videos">; versionNumber: number | null; noteId: string | null }) {
   const data = useQuery(api.library.video, { videoId });
@@ -252,7 +253,8 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   useEffect(() => () => { if (fullscreenElement()) void exitPageFullscreen().catch(() => {}); }, []);
   const [focusId, setFocusId] = useState<string | null>(noteId);
   const [focusTick, setFocusTick] = useState(0);
-  const [dialog, setDialog] = useState<null | "rename" | "starttc" | "keys" | "register" | "final">(null);
+  const [dialog, setDialog] = useState<null | "rename" | "starttc" | "keys" | "register" | "final" | "share">(null);
+  const covering = useQuery(api.shares.coveringVideo, { videoId: data._id });
   const libSettings = useLibrarySettings();
   const rootRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -594,6 +596,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     <div className={`review${fs ? " fs" : ""}`} ref={rootRef}>
       <TopBar right={
         <>
+          <button className={`btn sm${covering?.some((s) => s.state === "on") ? " on" : ""}`} onClick={() => setDialog("share")} title={covering?.length ? `Shared: ${covering.filter((s) => s.state === "on").length} live ${covering.filter((s) => s.state === "on").length === 1 ? "link" : "links"}` : "Share this video"}><Share2 size={15} /><span className="hide-sm">Share</span></button>
           <button className="btn sm hide-sm" onClick={downloadEdl} disabled={!notes?.length} title="Download the notes as Resolve markers (EDL)"><Download size={15} />Resolve markers</button>
           <button className={`icon-btn md${panel ? " on" : ""}`} onClick={() => setPanelPref(panel ? null : "notes")} aria-label={panel ? "Hide panel" : "Show panel"} title={panel ? "Hide panel" : "Show panel"}><PanelRight size={16} /></button>
         </>
@@ -609,6 +612,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
         {st && <span className={`chip ${st.tone}`}>{st.busy && <Spinner />}{st.text}</span>}
         {tr?.busy && <span className="chip warn"><Spinner />{tr.text}</span>}
         <Menu label="Video options" trigger={(p) => <button {...p} className="icon-btn" aria-label="Video options"><Ellipsis size={16} /></button>}>
+          <MenuItem icon={<Share2 size={16} />} onSelect={() => setDialog("share")}>Share…</MenuItem>
           <MenuItem icon={<Upload size={16} />} onSelect={newVersion}>Upload a new version</MenuItem>
           <MenuItem icon={<Pencil size={16} />} onSelect={() => setDialog("rename")}>{data.number ? "Rename or change short title" : "Rename video"}</MenuItem>
           {!data.number && <MenuItem icon={<ListOrdered size={16} />} onSelect={() => setDialog("register")}>Add to the register…</MenuItem>}
@@ -817,6 +821,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       {dialog === "rename" && <RenameVideo videoId={data._id} title={data.title} shortTitle={data.shortTitle} onClose={() => setDialog(null)} />}
       {dialog === "starttc" && version && <StartTcDialog versionId={version._id} startTc={startTc} onClose={() => setDialog(null)} onSaved={() => showToast("Start timecode saved")} />}
       {dialog === "keys" && <ShortcutsDialog onClose={() => setDialog(null)} />}
+      {dialog === "share" && <ShareDialog target={{ kind: "video", videoId: data._id }} label={data.title} onClose={() => setDialog(null)} show={showToast} />}
       {dialog === "final" && <ApproveFinal videoId={data._id} title={data.title} onClose={() => setDialog(null)} onDone={(m) => showToast(m)} />}
       {dialog === "register" && <AddToRegister videoId={data._id} title={data.title} onClose={() => setDialog(null)} onDone={(m) => showToast(m)} />}
       {toast}

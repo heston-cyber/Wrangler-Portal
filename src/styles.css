@@ -891,3 +891,18 @@ code.mono, .input.mono, .chip.num, .fname code { font-family: ui-monospace, "SF 
   .vline > .approve { margin-right: 0; padding: 0 9px; }
 }
 @media (max-width: 720px) { .vrow .details { justify-content: flex-start; flex-wrap: wrap; } }
+
+/* ---------- Shares (client side C2, Oct 23) ---------- */
+.sharegrid { display: grid; grid-template-columns: auto 1fr; gap: 12px 16px; align-items: center; }
+.sharechecks { display: grid; gap: 10px; }
+.sharecheck { color: var(--text-primary); }
+.check input:checked + .box .lucide { color: inherit; }
+.expires { display: flex; align-items: center; gap: 10px; font-size: var(--fs-caption); flex-wrap: wrap; }
+.expires .input.sm { width: 160px; height: 32px; }
+.prow.linkrow { padding: 10px 12px; background: var(--surface-base); border-radius: 12px; gap: 10px; }
+.prow.linkrow > .lucide { flex: none; color: var(--text-secondary); }
+.prow.linkrow code.addr { max-width: none; flex: 1; background: transparent; padding: 0; }
+.sharerow .pr .icon-btn.on { color: var(--accent); }
+.sharelog { margin: 0; padding: 0 0 6px 0; list-style: none; display: grid; gap: 4px; font-size: 12.5px; }
+.sharelog .secondary { display: inline-block; min-width: 64px; }
+@media (max-width: 560px) { .sharegrid { grid-template-columns: 1fr; } }

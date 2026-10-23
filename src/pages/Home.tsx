@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { BrandImg } from "../ui/BrandImg";
 import { useQuery } from "convex/react";
-import { Plus, Search } from "lucide-react";
+import { Link2, Plus, Search } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import { TopBar, useShell } from "../shell/Shell";
 import { useUpload } from "../shell/UploadDialog";
@@ -79,7 +79,19 @@ function RecentActivity() {
   if (feed.length === 0) return <p className="caption" style={{ padding: "8px 18px" }}>Nothing yet.</p>;
   return (
     <>
-      {feed.map((e, i) => (
+      {feed.map((e, i) => e.type === "share" ? (
+        <a key={i} className="vrow" style={{ gridTemplateColumns: "52px minmax(0,1fr) auto" }} {...linkProps("/settings#shares")}>
+          <span className="thumb ph" aria-hidden><Link2 size={14} /></span>
+          <span className="t" style={{ gap: 6 }}>
+            <Avatar name={e.actor} />
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <span className="secondary">{e.actor} {e.kind === "opened" ? "opened the link for " : `watched ${e.videoTitle ?? "a video"} through the link for `}</span>
+              {e.share.label}
+            </span>
+          </span>
+          <span className="meta">{ago(e.at)}</span>
+        </a>
+      ) : (
         <a key={i} className="vrow" style={{ gridTemplateColumns: "52px minmax(0,1fr) auto" }} {...linkProps(`/v/${e.version.videoId}?version=${e.version.number}`)}>
           <Thumb src={e.version.thumbUrl} />
           <span className="t" style={{ gap: 6 }}>

@@ -35,13 +35,15 @@ afterEach(() => vi.unstubAllGlobals());
 const OPEN: Record<string, string> = {
   "users.me": "returns the caller's own identity, or null",
   "phase0.saveRun": "lab test log: append-only, capped, holds no client data",
+  "shares.open": "a share link: answers by the share's own gate (off/expired/passcode/invited), tested in shares.test.ts",
+  "shares.touch": "records an open on a share link: same gate; a missing token records nothing",
 };
 // Functions with their own gate (a key in the arguments): refused with the wrong key, whoever calls.
 const KEYED = new Set(["r1results.report"]);
 // Functions any signed-in account may call (owner or client), never a stranger.
 const SIGNED_IN = new Set(["users.setName", "clients.account"]);
 
-type Ids = { projectId: Id<"projects">; videoId: Id<"videos">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage"> };
+type Ids = { projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage"> };
 
 // Minimal valid arguments for each function, so the access check (not argument validation) is what refuses.
 function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
@@ -63,6 +65,11 @@ function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "player.log": { versionId: ids.versionId, kind: "error" }, "player.fileFailed": { versionId: ids.versionId },
     "prefs.mine": {}, "prefs.set": { key: "details", value: [] },
     "r1results.report": { k: "wrong", device: "d", rows: "r" },
+    "shares.create": { target: { kind: "video", videoId: ids.videoId }, access: "view", who: "link", allVersions: true, downloads: false, emailNewVersions: false },
+    "shares.update": { shareId: ids.shareId, access: "comment" }, "shares.setOff": { shareId: ids.shareId, off: true }, "shares.remove": { shareId: ids.shareId },
+    "shares.addMember": { shareId: ids.shareId, email: "x@example.com" }, "shares.removeMember": { shareId: ids.shareId, email: "x@example.com" },
+    "shares.list": {}, "shares.forTarget": { target: { kind: "video", videoId: ids.videoId } }, "shares.coveringVideo": { videoId: ids.videoId }, "shares.activity": { shareId: ids.shareId },
+    "shares.open": { token: "nope" }, "shares.touch": { token: "nope", kind: "opened" },
     "register.list": {}, "register.nextName": { videoId: ids.videoId }, "register.newVideo": { title: "X", shortTitle: "X", projectName: "P" }, "register.setShortTitle": { videoId: ids.videoId, shortTitle: "X" },
     "register.addToRegister": { videoId: ids.videoId, shortTitle: "X" }, "register.makeSheetKey": {}, "register.sheetKey": {}, "register.removeSheetKey": {},
     "stills.upload": { dataBase64: "AA==", contentType: "image/jpeg" },
@@ -101,8 +108,9 @@ async function setup() {
     const fileId = await ctx.db.insert("dropFiles", { pathLower: "/x.mp4", pathDisplay: "/x.mp4", rev: "r", size: 1, status: "flagged", firstSeenAt: 0, lastChangeAt: 0, checks: 0 } as never);
     const inviteId = await ctx.db.insert("invites", { email: "client@example.com", createdAt: 0, acceptedAt: 0, userId: client });
     const keyId = await ctx.db.insert("connectorKeys", { hash: "h", prefix: "wr_x", label: "k", createdAt: 0 } as never);
+    const shareId = await ctx.db.insert("shares", { token: "tok", kind: "video", videoId, access: "view", who: "link", allVersions: true, downloads: false, emailNewVersions: false, createdAt: 0, createdBy: owner });
     const storageId = await ctx.storage.store(new Blob(["x"]));
-    return { projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
+    return { projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
   });
   return { t, ids };
 }

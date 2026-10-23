@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { BrandImg } from "../ui/BrandImg";
 import { useQuery } from "convex/react";
-import { Activity, ArrowUpRight, SlidersHorizontal } from "lucide-react";
+import { Activity, ArrowUpRight, Link2, SlidersHorizontal } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import { TopBar } from "../shell/Shell";
 import { linkProps } from "../lib/router";
@@ -12,11 +12,11 @@ import { frameTc } from "../../convex/lib/frames";
 
 export default function ActivityPage() {
   const feed = useQuery(api.activity.feed, { limit: 100 });
-  const [show, setShow] = useState({ videos: true, versions: true, notes: true });
+  const [show, setShow] = useState({ videos: true, versions: true, notes: true, shares: true });
   const [who, setWho] = useState<string | null>(null);
   const people = [...new Set((feed ?? []).map((e) => e.actor).filter(Boolean) as string[])];
   const rows = (feed ?? []).filter((e) =>
-    (e.type === "notes" ? show.notes : e.version.number === 1 ? show.videos : show.versions) && (!who || e.actor === who));
+    (e.type === "share" ? show.shares : e.type === "notes" ? show.notes : e.version.number === 1 ? show.videos : show.versions) && (!who || e.actor === who));
 
   return (
     <>
@@ -26,6 +26,7 @@ export default function ActivityPage() {
           <MenuItem keepOpen checked={show.videos} onSelect={() => setShow({ ...show, videos: !show.videos })}>New videos</MenuItem>
           <MenuItem keepOpen checked={show.versions} onSelect={() => setShow({ ...show, versions: !show.versions })}>New versions</MenuItem>
           <MenuItem keepOpen checked={show.notes} onSelect={() => setShow({ ...show, notes: !show.notes })}>Notes</MenuItem>
+          <MenuItem keepOpen checked={show.shares} onSelect={() => setShow({ ...show, shares: !show.shares })}>Shared links opened</MenuItem>
         </Menu>
       }>
         <Activity size={15} /><span className="here">Activity</span>
@@ -42,6 +43,24 @@ export default function ActivityPage() {
           : (
             <div className="feed">
               {rows.map((e, i) => {
+                if (e.type === "share") {
+                  return (
+                    <div className="event" key={i}>
+                      <div className="when">{ago(e.at)}</div>
+                      <div>
+                        <div className="ehead">
+                          <Avatar name={e.actor} />
+                          <b>{e.actor}</b>
+                          {e.kind === "opened" ? <>opened the shared link for</> : <>watched</>}
+                          {e.kind === "viewed" && e.videoId ? <a className="v" {...linkProps(`/v/${e.videoId}`)}>{e.videoTitle ?? "a video"}</a> : null}
+                          {e.kind === "viewed" && <span className="secondary">through the link for</span>}
+                          <a className="v" {...linkProps("/settings#shares")}><Link2 size={14} /> {e.share.label}</a>
+                          <span className="secondary">· shared {e.share.shareKind}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
                 const ver = e.version;
                 const fps = { num: ver.fpsNum, den: ver.fpsDen };
                 const href = `/v/${ver.videoId}?version=${ver.number}`;

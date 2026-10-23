@@ -29,6 +29,48 @@ export default defineSchema({
     userId: v.optional(v.id("users")),
   }).index("by_email", ["email"]),
 
+  // Shares (client side C2, Oct 23): a link that lets someone outside see a client, a project or one video.
+  // "link" shares open for anyone with the address (optionally behind a passcode); "invited" shares open only for
+  // signed-in accounts whose email is on the share (shareMembers) and still invited. Off and expired are refused
+  // the moment they happen. What a share covers is computed live (a new video under a shared project is covered).
+  shares: defineTable({
+    token: v.string(), // the random part of review.wranglerportal.com/s/<token>
+    kind: v.union(v.literal("client"), v.literal("project"), v.literal("video")),
+    client: v.optional(v.string()),        // kind "client": the client name as filed on its projects
+    projectId: v.optional(v.id("projects")),
+    videoId: v.optional(v.id("videos")),
+    access: v.union(v.literal("view"), v.literal("comment")),
+    who: v.union(v.literal("link"), v.literal("invited")),
+    allVersions: v.boolean(),    // off = only the latest version
+    downloads: v.boolean(),      // allow downloading the 1080p file (C3)
+    emailNewVersions: v.boolean(), // email the people on it when a new version lands (C4)
+    expiresAt: v.optional(v.number()),
+    passcodeHash: v.optional(v.string()), // link shares only; SHA-256 of token + passcode
+    createdAt: v.number(),
+    createdBy: v.id("users"),
+    offAt: v.optional(v.number()),
+    lastOpenedAt: v.optional(v.number()),
+    openCount: v.optional(v.number()),
+  }).index("by_token", ["token"]).index("by_video", ["videoId"]).index("by_project", ["projectId"]),
+
+  // The emails on an invited share.
+  shareMembers: defineTable({
+    shareId: v.id("shares"),
+    email: v.string(), // lower-case
+    addedAt: v.number(),
+    emailedAt: v.optional(v.number()),
+  }).index("by_share", ["shareId"]).index("by_email", ["email"]),
+
+  // What happened on a share: opened, a video viewed, a note left (C3). `who` is a name or email, or "guest".
+  shareActivity: defineTable({
+    shareId: v.id("shares"),
+    kind: v.union(v.literal("opened"), v.literal("viewed"), v.literal("note")),
+    who: v.string(),
+    videoId: v.optional(v.id("videos")),
+    noteId: v.optional(v.id("notes")),
+    at: v.number(),
+  }).index("by_share", ["shareId", "at"]).index("by_at", ["at"]),
+
   projects: defineTable({
     name: v.string(),
     jobNumber: v.optional(v.string()),

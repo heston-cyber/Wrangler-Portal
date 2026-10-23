@@ -11,16 +11,8 @@ import { markersEdl } from "./lib/edl";
 import { nextFileName, pad5, videoByNumber } from "./lib/register";
 import { numberVideo } from "./register";
 
-export async function sha256Hex(text: string) {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-function base64url(bytes: Uint8Array) {
-  let s = "";
-  for (const b of bytes) s += String.fromCharCode(b);
-  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
+import { base64url, sha256Hex } from "./lib/hash";
+export { sha256Hex };
 
 // ---------- keys ----------
 

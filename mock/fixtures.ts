@@ -117,6 +117,22 @@ function nextName(v: any) {
 }
 let nextNumber = 4;
 let prefs: Record<string, unknown> = {};
+const mkShare = (o: Partial<any>) => ({
+  _id: "s" + Math.random().toString(36).slice(2, 8), token: "demo" + Math.random().toString(36).slice(2, 10), kind: "video", client: null, projectId: null, videoId: null,
+  label: "Brand Film", sub: "26201 Harbor Coffee Launch", gone: false, access: "comment", who: "link", allVersions: true, downloads: false, emailNewVersions: true,
+  expiresAt: null, hasPasscode: false, createdAt: Date.now(), offAt: null, state: "on", lastOpenedAt: null, openCount: 0, people: [], ...o,
+  get url() { return `https://review.wranglerportal.com/s/${this.token}`; },
+});
+let shares: any[] = [
+  mkShare({ _id: "s1", kind: "client", client: "Harbor Coffee", label: "Harbor Coffee", sub: null, who: "invited", people: [{ email: "maya@harborcoffee.example", name: "Maya Chen", hasAccount: true, invited: true, emailedAt: Date.now() - 3 * 86_400_000 }], createdAt: Date.now() - 3 * 86_400_000, lastOpenedAt: Date.now() - 5 * 3_600_000, openCount: 4 }),
+  mkShare({ _id: "s2", kind: "video", videoId: "v1", label: "Brand Film", sub: "26201 Harbor Coffee Launch", access: "view", hasPasscode: true, expiresAt: Date.now() + 9 * 86_400_000, createdAt: Date.now() - 86_400_000, lastOpenedAt: Date.now() - 40 * 60_000, openCount: 1 }),
+  mkShare({ _id: "s3", kind: "project", projectId: "p2", label: "26205 Northline Fall Campaign", sub: "Northline Outfitters", who: "invited", people: [{ email: "dan@fairgroundsfit.example", name: null, hasAccount: false, invited: true, emailedAt: Date.now() - 3_600_000 }], createdAt: Date.now() - 3_600_000, state: "off", offAt: Date.now() - 600_000 }),
+];
+let shareActivity: any[] = [
+  { _id: "a1", kind: "viewed", who: "Maya Chen · maya@harborcoffee.example", at: Date.now() - 5 * 3_600_000, videoId: "v1", videoTitle: "Brand Film", noteId: null },
+  { _id: "a2", kind: "opened", who: "Maya Chen · maya@harborcoffee.example", at: Date.now() - 5 * 3_600_000 - 60_000, videoId: null, videoTitle: null, noteId: null },
+  { _id: "a3", kind: "opened", who: "Pat (guest)", at: Date.now() - 40 * 60_000, videoId: null, videoTitle: null, noteId: null },
+];
 let invites: any[] = [
   { _id: "i1", email: "maya@harborcoffee.example", name: "Maya Chen", createdAt: Date.now() - 3 * 86_400_000, revokedAt: null, acceptedAt: Date.now() - 2 * 86_400_000, lastSignInAt: Date.now() - 5 * 3_600_000 },
   { _id: "i2", email: "dan@fairgroundsfit.example", name: null, createdAt: Date.now() - 3_600_000, revokedAt: null, acceptedAt: null, lastSignInAt: null },
@@ -170,6 +186,10 @@ export const store = {
         ? { id: "u2", email: "maya@harborcoffee.example", name: "Maya Chen", allowed: false, role: "client" }
         : { id: "u1", email: "heston@wranglerproductions.com", name: "Heston", allowed: true, role: "owner" };
       case "clients:listInvites": return invites;
+      case "shares:list": return shares;
+      case "shares:forTarget": return shares.filter((x) => args.target.kind === x.kind && (x.kind === "client" ? x.client === args.target.client : x.kind === "project" ? x.projectId === args.target.projectId : x.videoId === args.target.videoId));
+      case "shares:coveringVideo": return shares.filter((x) => x.videoId === args.videoId || x.kind === "client");
+      case "shares:activity": return args.shareId === "s1" ? shareActivity : args.shareId === "s2" ? shareActivity.slice(2) : [];
       case "clients:account": return { email: "heston@wranglerproductions.com", name: "Heston", kind: "owner" };
       case "library:overview": return overview();
       case "library:video": return video(args.videoId);
@@ -237,6 +257,19 @@ export const store = {
     if (name === "register:setShortTitle") { const v = videos.find((x) => x._id === args.videoId); if (v) v.shortTitle = args.shortTitle; bump(); return; }
     if (name === "register:removeSheetKey") { sheet = null; bump(); return; }
     if (name === "dropbox:retryFlagged") { flagged = flagged.filter((f) => f._id !== args.fileId); bump(); return true; }
+    if (name === "shares:create") {
+      const t = args.target;
+      const label = t.kind === "client" ? t.client : t.kind === "project" ? (projects.find((p) => p._id === t.projectId)?.name ?? "Project") : (videos.find((x) => x._id === t.videoId)?.title ?? "Video");
+      const s = mkShare({ kind: t.kind, client: t.client ?? null, projectId: t.projectId ?? null, videoId: t.videoId ?? null, label, sub: null, access: args.access, who: args.who, allVersions: args.allVersions, downloads: args.downloads, emailNewVersions: args.emailNewVersions, expiresAt: args.expiresAt ?? null, hasPasscode: !!args.passcode,
+        people: (args.emails ?? []).map((e: string) => ({ email: e.toLowerCase(), name: null, hasAccount: false, invited: true, emailedAt: Date.now() })) });
+      shares = [s, ...shares]; bump();
+      return { shareId: s._id, token: s.token, url: s.url, added: (args.emails ?? []).map((e: string) => e.toLowerCase()) };
+    }
+    if (name === "shares:setOff") { shares = shares.map((x) => (x._id === args.shareId ? { ...x, state: args.off ? "off" : "on", offAt: args.off ? Date.now() : null, get url() { return `https://review.wranglerportal.com/s/${this.token}`; } } : x)); bump(); return; }
+    if (name === "shares:remove") { shares = shares.filter((x) => x._id !== args.shareId); bump(); return; }
+    if (name === "shares:update") { shares = shares.map((x) => (x._id === args.shareId ? { ...x, ...Object.fromEntries(Object.entries(args).filter(([k, v]) => k !== "shareId" && k !== "passcode" && v !== undefined)), hasPasscode: args.passcode === undefined ? x.hasPasscode : !!args.passcode, get url() { return `https://review.wranglerportal.com/s/${this.token}`; } } : x)); bump(); return; }
+    if (name === "shares:addMember") { shares = shares.map((x) => (x._id === args.shareId ? { ...x, people: [...x.people, { email: args.email.toLowerCase(), name: null, hasAccount: false, invited: true, emailedAt: Date.now() }], get url() { return `https://review.wranglerportal.com/s/${this.token}`; } } : x)); bump(); return { email: args.email.toLowerCase() }; }
+    if (name === "shares:removeMember") { shares = shares.map((x) => (x._id === args.shareId ? { ...x, people: x.people.filter((p: any) => p.email !== args.email), get url() { return `https://review.wranglerportal.com/s/${this.token}`; } } : x)); bump(); return; }
     if (name === "clients:invite") {
       const email = String(args.email).trim().toLowerCase();
       const ex = invites.find((i) => i.email === email && !i.revokedAt);

@@ -5,6 +5,7 @@ import { v } from "convex/values";
 import { requireMe } from "./lib/access";
 import type { Doc, Id } from "./_generated/dataModel";
 import { thumbUrl } from "./lib/media";
+import { labelOf } from "./lib/shareAccess";
 
 const SITTING_GAP_MS = 3 * 3600_000;
 
@@ -35,7 +36,8 @@ export const feed = query({
 
     type Event =
       | { type: "version"; at: number; actor: string | null; version: VersionInfo }
-      | { type: "notes"; at: number; actor: string; version: VersionInfo; notes: NoteCard[] };
+      | { type: "notes"; at: number; actor: string; version: VersionInfo; notes: NoteCard[] }
+      | { type: "share"; at: number; actor: string; kind: "opened" | "viewed"; share: { _id: Id<"shares">; label: string; shareKind: Doc<"shares">["kind"] }; videoId: Id<"videos"> | null; videoTitle: string | null };
     type NoteCard = { _id: Id<"notes">; kind: Doc<"notes">["kind"]; inFrame: number | null; outFrame: number | null; text: string; hasDrawing: boolean; still: string | null; status: Doc<"notes">["status"]; createdAt: number };
     const events: Event[] = [];
 
@@ -61,6 +63,20 @@ export const feed = query({
         events.push(open);
       }
       lastAt = n.createdAt;
+    }
+    // Share activity (C2): someone opened a share or viewed a video through it. Notes they leave are notes above.
+    const labels = new Map<string, { label: string; shareKind: Doc<"shares">["kind"] }>();
+    for (const a of await ctx.db.query("shareActivity").withIndex("by_at").order("desc").take(300)) {
+      if (a.kind === "note") continue;
+      let l = labels.get(a.shareId);
+      if (!l) {
+        const s = await ctx.db.get(a.shareId);
+        if (!s) continue;
+        l = { label: (await labelOf(ctx, s)).label, shareKind: s.kind };
+        labels.set(a.shareId, l);
+      }
+      const vid = a.videoId ? videos.get(a.videoId) : null;
+      events.push({ type: "share", at: a.at, actor: a.who, kind: a.kind, share: { _id: a.shareId, ...l }, videoId: a.videoId ?? null, videoTitle: vid?.title ?? null });
     }
     // Inside a sitting, show notes in timeline order.
     for (const e of events) if (e.type === "notes") e.notes.sort((a, b) => (a.inFrame ?? -1) - (b.inFrame ?? -1) || a.createdAt - b.createdAt);
