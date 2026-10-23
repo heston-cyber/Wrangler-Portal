@@ -107,6 +107,8 @@ const readFlag = (key: string) => !!key && readPref<string>(key, "") === "1";
 const writeFlag = (key: string) => { if (key) writePref(key, "1"); };
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
+// iPhone, iPad (iPadOS reports itself as a Mac with touch).
+const IOS = typeof navigator !== "undefined" && (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
 
 function ReviewView({ data, version, noteId }: { data: VideoData; version: Version | null; noteId: string | null }) {
   const convex = useConvex();
@@ -131,11 +133,14 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const mp4H = !version ? 0 : isFile ? (fileUrl ? version.height ?? 1080 : 0) : Math.max(0, ...version.mp4Heights.filter((h) => h <= 1080));
   const hasStream = !isFile || !!scrubHls;
   // A version whose 1080p file failed before opens on the stream (remembered per browser; see the fallback below).
-  const streamOnlyKey = version ? `wr.streamOnly.${version.bunnyGuid || version._id}` : "";
+  // (Renamed Oct 22: flags saved by a false error on the iPhone are ignored.)
+  const streamOnlyKey = version ? `wr.streamOnly2.${version.bunnyGuid || version._id}` : "";
   const [quality, setQuality] = useState<"file" | "stream">(() => (mp4H && !(version?.streamOnly && !isFile) && !readFlag(streamOnlyKey) ? "file" : "stream"));
   const ready = version?.status === "ready";
+  // One quiet retry of the full file before falling back (see the error handler below).
+  const [retryN, setRetryN] = useState(0);
   const src = !version || !ready ? null
-    : isFile ? (quality === "stream" && scrubHls ? scrubHls : fileUrl)
+    : isFile ? (quality === "stream" && scrubHls ? scrubHls : fileUrl && retryN ? `${fileUrl}#retry${retryN}` : fileUrl)
     : quality === "file" && mp4H ? mediaUrl(version.bunnyGuid, `play_${mp4H}p.mp4`) : mediaUrl(version.bunnyGuid, "playlist.m3u8");
   // Scrub copy: the best MP4 copy up to 720p that fits (80 MB on computers, 30 MB on phones), downloaded once the video is ready.
   // New uploads have only 360p (800 kbps, about 6 MB a minute) and 1080p (Bunny library setting, Oct 21).
@@ -144,6 +149,9 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const scrubCopies = useMemo(() => {
     if (!version || !ready) return undefined;
     const maxBytes = (narrow ? 30 : 80) * 1_000_000;
+    // iPhones and iPads: no downloaded scrub copy. A second video there never got past its index and slowed the main
+    // one down (Oct 22 phone tests); the full render alone jumps in about 0.4 s on the iPhone, so dragging uses it.
+    if (IOS) return undefined;
     if (isFile) return scrubMp4 ? { urls: [scrubMp4], maxBytes } : undefined;
     const hs = [...version.mp4Heights].filter((h) => h <= 720).sort((a, b) => b - a);
     return { urls: hs.map((h) => mediaUrl(version.bunnyGuid, `play_${h}p.mp4`)), maxBytes };
@@ -159,12 +167,20 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const logPlayback = useMutation(api.player.log);
   const markFileFailed = useMutation(api.player.fileFailed);
   const resumeAt = useRef<{ f: number; play: boolean } | null>(null);
+  const retried = useRef<string | null>(null);
   useEffect(() => {
     if (!player.errorCode || !version) return;
     const d = player.errorDetail.current;
     void logPlayback({ versionId: version._id, kind: "error", code: player.errorCode, msg: d?.msg, t: d?.t, src: quality, ua: navigator.userAgent }).catch(() => {});
     if (quality !== "file" || !hasStream) return;
     resumeAt.current = { f: player.clock.get(), play: !!d?.playing };
+    // A review render gets one quiet retry first: a phone dropping a big file's connection isn't a broken file.
+    if (isFile && retried.current !== version._id) {
+      retried.current = version._id;
+      void logPlayback({ versionId: version._id, kind: "retry", t: d?.t, src: "file", ua: navigator.userAgent }).catch(() => {});
+      setRetryN((n) => n + 1);
+      return;
+    }
     writeFlag(streamOnlyKey);
     // A review render's fallback is only 360p, so other devices keep trying the full file.
     if (!isFile) void markFileFailed({ versionId: version._id }).catch(() => {});

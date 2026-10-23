@@ -114,6 +114,7 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
       });
     };
     v.addEventListener("loadeddata", onLoadedData);
+    const attachedAt = performance.now();
     let hls: Hls | null = null;
     v.crossOrigin = "anonymous";
     // iPhones (WebKit) won't load or jump around in a video with sound until it's been played by a tap, so the
@@ -134,7 +135,9 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
       if (isFinite(v.duration) && v.duration > 0) setEstimatedFrameCount(Math.round(v.duration / FD));
     };
     const onErr = () => {
-      errorDetail.current = { msg: v.error?.message || "", t: v.currentTime, playing: playingNow.current };
+      // An error left over from the source before (Safari reports one when the old source is cleared) isn't this one.
+      if (!alive || !v.error) return;
+      errorDetail.current = { msg: `${v.error.message || ""} · ns ${v.networkState} rs ${v.readyState} after ${Math.round(performance.now() - attachedAt)} ms`.slice(0, 280), t: v.currentTime, playing: playingNow.current };
       setError("The video couldn't load. Try the other quality, or refresh.");
       setErrorCode(v.error?.code || 2);
     };
