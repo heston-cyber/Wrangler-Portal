@@ -15,6 +15,7 @@ import type * as clients from "../clients.js";
 import type * as shares from "../shares.js";
 import type * as lib_shareAccess from "../lib/shareAccess.js";
 import type * as lib_hash from "../lib/hash.js";
+import type * as lib_viewer from "../lib/viewer.js";
 import type * as lib_email from "../lib/email.js";
 import type * as connector from "../connector.js";
 import type * as crons from "../crons.js";
@@ -74,6 +75,7 @@ declare const fullApi: ApiFromModules<{
   shares: typeof shares;
   "lib/shareAccess": typeof lib_shareAccess;
   "lib/hash": typeof lib_hash;
+  "lib/viewer": typeof lib_viewer;
   "lib/email": typeof lib_email;
   connector: typeof connector;
   crons: typeof crons;

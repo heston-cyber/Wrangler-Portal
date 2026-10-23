@@ -1,9 +1,11 @@
 import type { ConvexReactClient } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { drawShapesOnCanvas, type Shape } from "./Drawing";
+import type { Id } from "../../convex/_generated/dataModel";
+import type { ShareRef } from "../lib/viewer";
 
 // Grab the frame on screen (plus any drawing) as a JPEG and upload it. Returns its URL.
-export async function captureAndUpload(convex: ConvexReactClient, video: HTMLVideoElement, shapes: Shape[] = [], maxW = 1600): Promise<string> {
+export async function captureAndUpload(convex: ConvexReactClient, video: HTMLVideoElement, shapes: Shape[] = [], maxW = 1600, who: { versionId?: Id<"versions">; share?: ShareRef } = {}): Promise<string> {
   const vw = video.videoWidth || 1920, vh = video.videoHeight || 1080;
   const s = Math.min(1, maxW / vw);
   const W = Math.round(vw * s), H = Math.round(vh * s);
@@ -20,5 +22,5 @@ export async function captureAndUpload(convex: ConvexReactClient, video: HTMLVid
     r.onerror = () => rej(r.error);
     r.readAsDataURL(blob);
   });
-  return await convex.action(api.stills.upload, { dataBase64, contentType: "image/jpeg" });
+  return await convex.action(api.stills.upload, { dataBase64, contentType: "image/jpeg", ...who });
 }

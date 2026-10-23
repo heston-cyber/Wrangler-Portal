@@ -12,7 +12,7 @@ import { Menu, MenuItem, Modal, Spinner } from "../ui/kit";
 type VideoData = NonNullable<FunctionReturnType<typeof api.library.video>>;
 export type Version = VideoData["versions"][number];
 
-export function VersionsList({ videoId, versions, current, uploads }: { videoId: string; versions: Version[]; current: number | null; uploads: UploadState[] }) {
+export function VersionsList({ videoId, versions, current, uploads, owner = true, open }: { videoId: string; versions: Version[]; current: number | null; uploads: UploadState[]; owner?: boolean; open?: (n: number) => void }) {
   const active = uploads.filter((u) => u.status !== "done");
   return (
     <div className="vlist">
@@ -23,13 +23,13 @@ export function VersionsList({ videoId, versions, current, uploads }: { videoId:
           <div className="progress"><i style={{ width: `${u.total ? (100 * u.sent) / u.total : 0}%` }} /></div>
         </div>
       ))}
-      {[...versions].reverse().map((v) => <VersionItem key={v._id} videoId={videoId} v={v} current={v.number === current} />)}
-      {versions.length === 0 && active.length === 0 && <p className="caption" style={{ padding: 12 }}>No versions yet. Use + to upload the first one.</p>}
+      {[...versions].reverse().map((v) => <VersionItem key={v._id} videoId={videoId} v={v} current={v.number === current} owner={owner} openIt={open} />)}
+      {versions.length === 0 && active.length === 0 && <p className="caption" style={{ padding: 12 }}>{owner ? "No versions yet. Use + to upload the first one." : "No versions yet."}</p>}
     </div>
   );
 }
 
-function VersionItem({ videoId, v, current }: { videoId: string; v: Version; current: boolean }) {
+function VersionItem({ videoId, v, current, owner, openIt }: { videoId: string; v: Version; current: boolean; owner: boolean; openIt?: (n: number) => void }) {
   const save = useMutation(api.library.setVersionDescription);
   const remove = useMutation(api.library.deleteVersion);
   const [confirming, setConfirming] = useState(false);
@@ -38,7 +38,7 @@ function VersionItem({ videoId, v, current }: { videoId: string; v: Version; cur
   const [draft, setDraft] = useState(v.description ?? "");
   const st = statusChip(v.status, v.encodeProgress);
   const tr = v.status === "ready" ? transcriptChip(v.transcript) : null;
-  const open = () => navigate(`/v/${videoId}?version=${v.number}`);
+  const open = () => (openIt ? openIt(v.number) : navigate(`/v/${videoId}?version=${v.number}`));
   const commit = async () => { setEditing(false); if ((draft.trim() || null) !== (v.description ?? null)) await save({ versionId: v._id, description: draft }); };
   return (
     <div className={`vcard rect${current ? " current" : ""}`}>
@@ -46,10 +46,10 @@ function VersionItem({ videoId, v, current }: { videoId: string; v: Version; cur
         <span className="rlabel">Version {v.number}{v.uploaderName ? ` · ${v.uploaderName}` : ""} · {ago(v.createdAt)}</span>
         <span className="right">
           {current && <span className="viewing">Viewing</span>}
-          <Menu align="end" label={`Version ${v.number} options`} trigger={(p) => <button {...p} className="icon-btn" aria-label={`Version ${v.number} options`}><Ellipsis size={15} /></button>}>
+          {owner && <Menu align="end" label={`Version ${v.number} options`} trigger={(p) => <button {...p} className="icon-btn" aria-label={`Version ${v.number} options`}><Ellipsis size={15} /></button>}>
             <MenuItem icon={<Pencil size={16} />} onSelect={() => setEditing(true)}>Edit what changed</MenuItem>
             <MenuItem icon={<Trash2 size={16} />} danger onSelect={() => setConfirming(true)}>Delete version</MenuItem>
-          </Menu>
+          </Menu>}
         </span>
       </div>
       <div className="rbold" title={v.fileName}>v{v.number}</div>

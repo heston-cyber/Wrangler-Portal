@@ -2,15 +2,15 @@
 // later; and a version whose 1080p file failed anywhere is marked so every device opens it on the stream.
 import { internalQuery, mutation } from "./_generated/server";
 import { v } from "convex/values";
-import { requireMe } from "./lib/access";
+import { accessToVersion, shareArg } from "./lib/viewer";
 
 export const log = mutation({
   args: {
     versionId: v.id("versions"), kind: v.string(), code: v.optional(v.number()), msg: v.optional(v.string()),
-    t: v.optional(v.number()), src: v.optional(v.string()), ua: v.optional(v.string()),
+    t: v.optional(v.number()), src: v.optional(v.string()), ua: v.optional(v.string()), share: shareArg,
   },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await accessToVersion(ctx, a.versionId, a.share);
     // A runaway loop can't flood the table: at most 300 entries an hour.
     const recent = await ctx.db.query("playerLogs").withIndex("by_at", (q) => q.gt("at", Date.now() - 3_600_000)).take(301);
     if (recent.length > 300) return;
@@ -22,11 +22,10 @@ export const log = mutation({
 });
 
 export const fileFailed = mutation({
-  args: { versionId: v.id("versions") },
-  handler: async (ctx, { versionId }) => {
-    await requireMe(ctx);
-    const ver = await ctx.db.get(versionId);
-    if (ver && !ver.streamOnly) await ctx.db.patch(versionId, { streamOnly: true });
+  args: { versionId: v.id("versions"), share: shareArg },
+  handler: async (ctx, { versionId, share }) => {
+    const { version: ver } = await accessToVersion(ctx, versionId, share);
+    if (!ver.streamOnly) await ctx.db.patch(versionId, { streamOnly: true });
   },
 });
 

@@ -2,14 +2,15 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { BrandImg } from "../ui/BrandImg";
 import { useMutation } from "convex/react";
-import { Check, Copy, Ellipsis, Mic, Pencil, Reply, Trash2 } from "lucide-react";
+import { Check, Copy, Ellipsis, Eye, EyeOff, Mic, Pencil, Reply, Trash2 } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import type { Doc } from "../../convex/_generated/dataModel";
 import type { FrameClock } from "../player/useFramePlayer";
 import { Menu, MenuItem, MenuSep } from "../ui/kit";
 import { ago } from "../lib/format";
+import { useShareArgs, useViewer } from "../lib/viewer";
 
-export type NoteRow = Doc<"notes"> & { replies: Doc<"replies">[]; voiceUrl?: string | null };
+export type NoteRow = Doc<"notes"> & { replies: Doc<"replies">[]; voiceUrl?: string | null; mine?: boolean; visibility?: "private" | "shared" };
 export type NoteFilter = { status: "open" | "done" | "all"; kinds: { frame: boolean; range: boolean; general: boolean }; sort: "timecode" | "newest" };
 export const defaultFilter: NoteFilter = { status: "all", kinds: { frame: true, range: true, general: true }, sort: "timecode" };
 
@@ -57,9 +58,20 @@ export function NotesList({ notes, clock, tc, filter, onJump, focusId, focusTick
 
 function NoteCard({ n, here, focused, focusTick, tc, onJump, onCopied, onSeekFrame }: { n: NoteRow; here: boolean; focused: boolean; focusTick: number; tc: (f: number) => string; onJump: (n: NoteRow) => void; onCopied: (what: string) => void; onSeekFrame?: (frame: number) => void }) {
   const setStatus = useMutation(api.notes.setStatus);
-  const reply = useMutation(api.notes.reply);
-  const remove = useMutation(api.notes.remove);
-  const editText = useMutation(api.notes.editText);
+  const setVisibility = useMutation(api.notes.setVisibility);
+  const setReplyHidden = useMutation(api.notes.setReplyHidden);
+  const replyM = useMutation(api.notes.reply);
+  const removeM = useMutation(api.notes.remove);
+  const editM = useMutation(api.notes.editText);
+  const shareArgs = useShareArgs();
+  const { can } = useViewer();
+  const owner = can === "owner";
+  const canComment = can !== "view";
+  const mine = owner || !!n.mine;
+  const shared = n.visibility === "shared";
+  const reply = (a: { noteId: typeof n._id; text: string }) => replyM({ ...a, ...shareArgs });
+  const remove = (a: { noteId: typeof n._id }) => removeM({ ...a, ...shareArgs });
+  const editText = (a: { noteId: typeof n._id; text: string }) => editM({ ...a, ...shareArgs });
   const [replying, setReplying] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -110,6 +122,7 @@ function NoteCard({ n, here, focused, focusTick, tc, onJump, onCopied, onSeekFra
         {n.voice ? <span className="rtag"><Mic size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Voice · {secondsText(n.voice.durationMs)}</span> : null}
         {n.replies.length > 0 && <span className="rtag">{n.replies.length} {n.replies.length === 1 ? "reply" : "replies"}</span>}
         {n.status === "done" && <span className="rtag">Done</span>}
+        {owner && (shared ? <span className="rtag shared"><Eye size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Shared</span> : <span className="rtag"><EyeOff size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Private</span>)}
       </div>
 
       {editing ? (
@@ -148,7 +161,10 @@ function NoteCard({ n, here, focused, focusTick, tc, onJump, onCopied, onSeekFra
       )}
 
       {n.replies.map((r) => (
-        <div key={r._id} className="reply"><span className="rh">{r.authorName} · {ago(r.createdAt)}</span><div className="ntext">{r.text}</div></div>
+        <div key={r._id} className={`reply${r.hidden ? " hidden" : ""}`}>
+          <span className="rh">{r.authorName} · {ago(r.createdAt)}{owner && r.hidden && <> · <button className="linkbtn" onClick={() => void setReplyHidden({ replyId: r._id, hidden: false })} title="Only you can see this reply. Show it to the people this video is shared with.">private · show</button></>}{owner && !r.hidden && r.authorName === "Claude" && <> · <button className="linkbtn" onClick={() => void setReplyHidden({ replyId: r._id, hidden: true })}>hide</button></>}</span>
+          <div className="ntext">{r.text}</div>
+        </div>
       ))}
       {replying && (
         <form className="edit" onSubmit={async (e) => { e.preventDefault(); if (!replyText.trim()) return; await reply({ noteId: n._id, text: replyText }); setReplyText(""); setReplying(false); }}>
@@ -171,18 +187,21 @@ function NoteCard({ n, here, focused, focusTick, tc, onJump, onCopied, onSeekFra
         </div>
       ) : (
         <div className="nfoot">
-          <button className={`donepill${n.status === "done" ? " is" : ""}`} onClick={() => void setStatus({ noteId: n._id, status: n.status === "done" ? "open" : "done" })}
-            aria-pressed={n.status === "done"}>
-            <Check size={13} />{n.status === "done" ? "Done" : "Mark done"}
-          </button>
+          {owner ? (
+            <button className={`donepill${n.status === "done" ? " is" : ""}`} onClick={() => void setStatus({ noteId: n._id, status: n.status === "done" ? "open" : "done" })}
+              aria-pressed={n.status === "done"}>
+              <Check size={13} />{n.status === "done" ? "Done" : "Mark done"}
+            </button>
+          ) : n.status === "done" ? <span className="donepill is" aria-label="Marked done"><Check size={13} />Done</span> : <span />}
           <span className="right">
-            {!replying && <button className="icon-btn" onClick={() => setReplying(true)} aria-label="Reply" title="Reply"><Reply size={15} /></button>}
+            {!replying && canComment && <button className="icon-btn" onClick={() => setReplying(true)} aria-label="Reply" title="Reply"><Reply size={15} /></button>}
             <Menu align="end" label="Note options" trigger={(p) => <button {...p} className="icon-btn" aria-label="Note options"><Ellipsis size={15} /></button>}>
               {n.kind !== "general" && <MenuItem icon={<Copy size={16} />} onSelect={() => copy(when, "Timecode copied")}>Copy timecode</MenuItem>}
               <MenuItem icon={<Copy size={16} />} onSelect={() => copy(`${when} — ${n.text}`, "Note copied")}>Copy note</MenuItem>
-              <MenuItem icon={<Pencil size={16} />} onSelect={() => { setDraft(n.text); setEditing(true); }}>Edit</MenuItem>
-              <MenuSep />
-              <MenuItem icon={<Trash2 size={16} />} danger onSelect={() => setConfirming(true)}>Delete</MenuItem>
+              {owner && <MenuItem icon={shared ? <EyeOff size={16} /> : <Eye size={16} />} onSelect={() => void setVisibility({ noteId: n._id, visibility: shared ? "private" : "shared" })}>{shared ? "Make private" : "Share with clients"}</MenuItem>}
+              {mine && canComment && <MenuItem icon={<Pencil size={16} />} onSelect={() => { setDraft(n.text); setEditing(true); }}>Edit</MenuItem>}
+              {mine && canComment && <MenuSep />}
+              {mine && canComment && <MenuItem icon={<Trash2 size={16} />} danger onSelect={() => setConfirming(true)}>Delete</MenuItem>}
             </Menu>
           </span>
         </div>

@@ -5,6 +5,7 @@ import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
 import { bunnyCall, bunnyEnv } from "./bunny";
 import { encPath, reviewZones } from "./lib/reviewStorage";
+import { shareArg } from "./lib/viewer";
 
 const MAX_BYTES = 4_000_000;
 
@@ -55,9 +56,9 @@ export const storageCheck = internalAction({
 });
 
 export const upload = action({
-  args: { dataBase64: v.string(), contentType: v.union(v.literal("image/jpeg"), v.literal("image/png")) },
-  handler: async (ctx, { dataBase64, contentType }): Promise<string> => {
-    await ctx.runQuery(internal.users.assertAllowed, {});
+  args: { dataBase64: v.string(), contentType: v.union(v.literal("image/jpeg"), v.literal("image/png")), versionId: v.optional(v.id("versions")), share: shareArg },
+  handler: async (ctx, { dataBase64, contentType, versionId, share }): Promise<string> => {
+    if (versionId) await ctx.runQuery(internal.shares.assertCanComment, { versionId, share }); else await ctx.runQuery(internal.users.assertAllowed, {});
     const bytes = decodeBase64(dataBase64);
     if (bytes.length === 0 || bytes.length > MAX_BYTES) throw new ConvexError("That still is too big.");
     const ext = contentType === "image/png" ? "png" : "jpg";

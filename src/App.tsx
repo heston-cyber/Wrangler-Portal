@@ -10,6 +10,7 @@ import ActivityPage from "./pages/ActivityPage";
 import Register from "./pages/Register";
 import Settings from "./pages/Settings";
 import VideoPage from "./pages/VideoPage";
+import SharePage from "./pages/SharePage";
 import { Shell } from "./shell/Shell";
 import { UploadProvider } from "./shell/UploadDialog";
 import type { Id } from "../convex/_generated/dataModel";
@@ -18,6 +19,14 @@ const Loading = () => <div className="signin"><span className="label">Loading…
 
 export default function App() {
   const { isLoading, isAuthenticated } = useConvexAuth();
+  const { path, search } = useLocation();
+  // A share link (C3) works signed in or out; the page decides what the link shows.
+  const share = /^\/s\/([^/]+)(?:\/v\/([^/]+))?\/?$/.exec(path);
+  if (share) {
+    if (isLoading) return <Loading />;
+    const params = new URLSearchParams(search);
+    return <SharePage key={share[1]} token={share[1]} videoId={(share[2] as Id<"videos"> | undefined) ?? null} versionNumber={Number(params.get("version")) || null} noteId={params.get("note")} />;
+  }
   if (isLoading) return <Loading />;
   if (!isAuthenticated) return <SignIn invitedEmail={new URLSearchParams(location.search).get("invited")} />;
   return <SignedIn />;

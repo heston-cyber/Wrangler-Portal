@@ -4,7 +4,7 @@ import { query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireMe } from "./lib/access";
 import type { Doc, Id } from "./_generated/dataModel";
-import { thumbUrl } from "./lib/media";
+import { signedThumbUrl } from "./lib/media";
 import { labelOf } from "./lib/shareAccess";
 
 const SITTING_GAP_MS = 3 * 3600_000;
@@ -29,7 +29,7 @@ export const feed = query({
       if (!vid) continue;
       info.set(ver._id, {
         versionId: ver._id, videoId: ver.videoId, videoTitle: vid.title, projectName: projects.get(vid.projectId)?.name ?? null,
-        number: ver.number, bunnyGuid: ver.bunnyGuid, thumbUrl: thumbUrl(ver), status: ver.status, frameCount: ver.frameCount ?? null,
+        number: ver.number, bunnyGuid: ver.bunnyGuid, thumbUrl: await signedThumbUrl(ver), status: ver.status, frameCount: ver.frameCount ?? null,
         fpsNum: ver.fpsNum ?? 24000, fpsDen: ver.fpsDen ?? 1001, startTimecode: ver.startTimecode,
       });
     }

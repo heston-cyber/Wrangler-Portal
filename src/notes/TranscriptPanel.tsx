@@ -1,6 +1,7 @@
 // The Transcript tab: what's said in this version, line by line, pinned to frames. Click a line to jump there.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { useShareArgs, useViewer } from "../lib/viewer";
 import { RotateCw } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -9,7 +10,9 @@ import { useFrame, type FrameClock } from "../player/useFramePlayer";
 import { Spinner } from "../ui/kit";
 
 export function TranscriptList({ versionId, clock, tc, onSeek }: { versionId: Id<"versions">; clock: FrameClock; tc: (f: number) => string; onSeek: (frame: number) => void }) {
-  const info = useQuery(api.transcripts.forVersion, { versionId });
+  const shareArgs = useShareArgs();
+  const { can } = useViewer();
+  const info = useQuery(api.transcripts.forVersion, { versionId, ...shareArgs });
   const retry = useMutation(api.transcripts.retry);
   const [file, setFile] = useState<TranscriptFile | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -39,7 +42,7 @@ export function TranscriptList({ versionId, clock, tc, onSeek }: { versionId: Id
         <span className="rlabel">Transcript</span>
         <div className="rbold busyline">{info && <Spinner size={18} />}{info ? "Transcribing" : "Not yet"}</div>
         <p className="caption" style={{ margin: 0 }}>{info ? "ElevenLabs is transcribing this version. It shows up here by itself in a minute or two." : "Versions are transcribed after they finish processing."}</p>
-        {!info && <button className="btn sm" onClick={() => void retry({ versionId })}><RotateCw size={14} />Transcribe now</button>}
+        {!info && can === "owner" && <button className="btn sm" onClick={() => void retry({ versionId })}><RotateCw size={14} />Transcribe now</button>}
       </div>
     );
   }
@@ -49,7 +52,7 @@ export function TranscriptList({ versionId, clock, tc, onSeek }: { versionId: Id
         <span className="rlabel">Transcript</span>
         <div className="rbold">Didn't work</div>
         <p className="caption" style={{ margin: 0 }}>{info.error ?? "The transcript file couldn't be loaded."}</p>
-        <button className="btn sm" onClick={() => void retry({ versionId })}><RotateCw size={14} />Try again</button>
+        {can === "owner" && <button className="btn sm" onClick={() => void retry({ versionId })}><RotateCw size={14} />Try again</button>}
       </div>
     );
   }

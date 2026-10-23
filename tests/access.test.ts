@@ -41,9 +41,9 @@ const OPEN: Record<string, string> = {
 // Functions with their own gate (a key in the arguments): refused with the wrong key, whoever calls.
 const KEYED = new Set(["r1results.report"]);
 // Functions any signed-in account may call (owner or client), never a stranger.
-const SIGNED_IN = new Set(["users.setName", "clients.account"]);
+const SIGNED_IN = new Set(["users.setName", "clients.account", "shares.mine"]);
 
-type Ids = { projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage"> };
+type Ids = { projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage"> };
 
 // Minimal valid arguments for each function, so the access check (not argument validation) is what refuses.
 function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
@@ -56,10 +56,10 @@ function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "library.renameProject": { projectId: ids.projectId, name: "X" }, "library.setVersionDescription": { versionId: ids.versionId, description: "x" },
     "library.createProject": { name: "X" }, "library.createVideo": { projectId: ids.projectId, title: "X" }, "library.renameVideo": { videoId: ids.videoId, title: "X" },
     "library.video": { videoId: ids.videoId }, "library.setStartTimecode": { versionId: ids.versionId, startTimecode: "01:00:00:00" },
-    "library.reportFrameCount": { versionId: ids.versionId, frameCount: 10 }, "library.deleteVersion": { versionId: ids.versionId }, "library.deleteProject": { projectId: ids.projectId },
+    "library.reportFrameCount": { versionId: ids.versionId, frameCount: 10 }, "library.deleteVersion": { versionId: ids.versionId }, "library.deleteProject": { projectId: ids.projectId }, "library.deleteVideo": { videoId: ids.videoId },
     "library.deleteClient": { client: "X", typed: "X" }, "library.approveFinal": { videoId: ids.videoId, keep: 1 }, "library.clearFinal": { videoId: ids.videoId },
     "notes.forVersion": { versionId: ids.versionId }, "notes.create": { versionId: ids.versionId, kind: "general", text: "x" }, "notes.editText": { noteId: ids.noteId, text: "y" },
-    "notes.setStatus": { noteId: ids.noteId, status: "done" }, "notes.remove": { noteId: ids.noteId }, "notes.reply": { noteId: ids.noteId, text: "r" },
+    "notes.setStatus": { noteId: ids.noteId, status: "done" }, "notes.setVisibility": { noteId: ids.noteId, visibility: "shared" }, "notes.setReplyHidden": { replyId: ids.replyId, hidden: false }, "notes.remove": { noteId: ids.noteId }, "notes.reply": { noteId: ids.noteId, text: "r" },
     "notes.voiceUploadUrl": {}, "notes.discardVoice": { storageId: ids.storageId },
     "phase0.saveRun": { label: "l", device: "d", browser: "b", source: "s", engine: "e", pass: true, userAgent: "ua", results: {}, misses: [] }, "phase0.listRuns": {},
     "player.log": { versionId: ids.versionId, kind: "error" }, "player.fileFailed": { versionId: ids.versionId },
@@ -69,7 +69,7 @@ function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "shares.update": { shareId: ids.shareId, access: "comment" }, "shares.setOff": { shareId: ids.shareId, off: true }, "shares.remove": { shareId: ids.shareId },
     "shares.addMember": { shareId: ids.shareId, email: "x@example.com" }, "shares.removeMember": { shareId: ids.shareId, email: "x@example.com" },
     "shares.list": {}, "shares.forTarget": { target: { kind: "video", videoId: ids.videoId } }, "shares.coveringVideo": { videoId: ids.videoId }, "shares.activity": { shareId: ids.shareId },
-    "shares.open": { token: "nope" }, "shares.touch": { token: "nope", kind: "opened" },
+    "shares.open": { token: "nope" }, "shares.touch": { token: "nope", kind: "opened" }, "shares.mine": {},
     "register.list": {}, "register.nextName": { videoId: ids.videoId }, "register.newVideo": { title: "X", shortTitle: "X", projectName: "P" }, "register.setShortTitle": { videoId: ids.videoId, shortTitle: "X" },
     "register.addToRegister": { videoId: ids.videoId, shortTitle: "X" }, "register.makeSheetKey": {}, "register.sheetKey": {}, "register.removeSheetKey": {},
     "stills.upload": { dataBase64: "AA==", contentType: "image/jpeg" },
@@ -105,12 +105,13 @@ async function setup() {
     const videoId = await ctx.db.insert("videos", { projectId, title: "V", createdAt: 0, updatedAt: 0 });
     const versionId = await ctx.db.insert("versions", { videoId, number: 1, status: "ready", bunnyGuid: "g", fileName: "a.mp4", startTimecode: "01:00:00:00", createdAt: 0 } as never);
     const noteId = await ctx.db.insert("notes", { versionId, videoId, kind: "general", text: "n", status: "open", authorName: "Heston", createdAt: 0, updatedAt: 0 } as never);
+    const replyId = await ctx.db.insert("replies", { noteId, text: "r", authorName: "Claude", createdAt: 0, hidden: true });
     const fileId = await ctx.db.insert("dropFiles", { pathLower: "/x.mp4", pathDisplay: "/x.mp4", rev: "r", size: 1, status: "flagged", firstSeenAt: 0, lastChangeAt: 0, checks: 0 } as never);
     const inviteId = await ctx.db.insert("invites", { email: "client@example.com", createdAt: 0, acceptedAt: 0, userId: client });
     const keyId = await ctx.db.insert("connectorKeys", { hash: "h", prefix: "wr_x", label: "k", createdAt: 0 } as never);
     const shareId = await ctx.db.insert("shares", { token: "tok", kind: "video", videoId, access: "view", who: "link", allVersions: true, downloads: false, emailNewVersions: false, createdAt: 0, createdBy: owner });
     const storageId = await ctx.storage.store(new Blob(["x"]));
-    return { projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
+    return { projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
   });
   return { t, ids };
 }

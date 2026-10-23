@@ -4,7 +4,7 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
-import { requireMe } from "./lib/access";
+import { accessToVersion, shareArg } from "./lib/viewer";
 
 async function upsert(ctx: MutationCtx, versionId: Id<"versions">, patch: Record<string, unknown>) {
   const row = await ctx.db.query("waveforms").withIndex("by_version", (q) => q.eq("versionId", versionId)).first();
@@ -54,9 +54,9 @@ export const fail = internalMutation({
 
 // The review page's timeline.
 export const forVersion = query({
-  args: { versionId: v.id("versions") },
-  handler: async (ctx, { versionId }) => {
-    await requireMe(ctx);
+  args: { versionId: v.id("versions"), share: shareArg },
+  handler: async (ctx, { versionId, share }) => {
+    await accessToVersion(ctx, versionId, share);
     const row = await ctx.db.query("waveforms").withIndex("by_version", (q) => q.eq("versionId", versionId)).first();
     if (!row) return null;
     return { status: row.status, rate: row.rate ?? null, seconds: row.seconds ?? null, peaks: row.status === "done" ? row.peaks ?? null : null };

@@ -9,3 +9,4 @@ export function useAuthActions() {
     signOut: async () => {},
   };
 }
+export function useAuthToken() { return new URLSearchParams(location.search).has("signedout") ? null : "demo-token"; }

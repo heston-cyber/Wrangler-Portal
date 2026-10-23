@@ -6,11 +6,12 @@ import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe } from "./lib/access";
+import { requireMe, requireSignedIn } from "./lib/access";
+import { accessToVersion, shareArg } from "./lib/viewer";
 import { ensureInvite } from "./clients";
 import { randomToken } from "./lib/hash";
 import { SITE, sendEmail } from "./lib/email";
-import { thumbUrl } from "./lib/media";
+import { signedThumbUrl } from "./lib/media";
 import { clientKey, coveredProjects, coveredVideos, gateShare, labelOf, passcodeHash, shareState, type Share } from "./lib/shareAccess";
 
 const target = v.object({ kind: v.union(v.literal("client"), v.literal("project"), v.literal("video")), client: v.optional(v.string()), projectId: v.optional(v.id("projects")), videoId: v.optional(v.id("videos")) });
@@ -236,10 +237,10 @@ export const open = query({
       if (!shown.length) continue; // nothing playable yet: a client doesn't see an empty video
       outVideos.push({
         _id: vid._id, title: vid.title, number: vid.number ?? null, projectId: vid.projectId, updatedAt: vid.updatedAt,
-        versions: shown.map((x) => ({
+        versions: await Promise.all(shown.map(async (x) => ({
           _id: x._id, number: x.number, frameCount: x.frameCount ?? null, fpsNum: x.fpsNum ?? 24000, fpsDen: x.fpsDen ?? 1001, startTimecode: x.startTimecode,
-          width: x.width ?? null, height: x.height ?? null, createdAt: x.createdAt, description: x.description ?? null, thumbUrl: thumbUrl(x),
-        })),
+          width: x.width ?? null, height: x.height ?? null, createdAt: x.createdAt, description: x.description ?? null, thumbUrl: await signedThumbUrl(x),
+        }))),
       });
     }
     const l = await labelOf(ctx, s);
@@ -271,6 +272,42 @@ export const touch = mutation({
     if (viewer.kind !== "owner" && a.kind === "opened") await ctx.db.patch(s._id, { lastOpenedAt: now, openCount: (s.openCount ?? 0) + 1 });
     return { recorded: true, state: "ok" };
   },
+});
+
+// Shared with me (C3): everything an invited client can open, grouped by client and project. Owners get nothing
+// here (their side is the whole library).
+export const mine = query({
+  args: {},
+  handler: async (ctx) => {
+    const me = await requireSignedIn(ctx);
+    if (me.kind !== "client") return [];
+    const invite = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", me.email)).collect()).find((i) => !i.revokedAt);
+    if (!invite) return [];
+    const members = await ctx.db.query("shareMembers").withIndex("by_email", (q) => q.eq("email", me.email)).collect();
+    const out = [];
+    for (const m of members) {
+      const s = await ctx.db.get(m.shareId);
+      if (!s || shareState(s)) continue;
+      const l = await labelOf(ctx, s);
+      const projects = await coveredProjects(ctx, s);
+      const videos = [];
+      for (const vid of await coveredVideos(ctx, s)) {
+        const ready = (await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect()).filter((x) => x.status === "ready").sort((a, b) => b.number - a.number);
+        if (!ready.length) continue;
+        const p = projects.find((x) => x._id === vid.projectId);
+        videos.push({ _id: vid._id, title: vid.title, number: vid.number ?? null, projectId: vid.projectId, project: p ? projectLabelOf(p) : null, client: p?.client ?? null, updatedAt: vid.updatedAt, latest: ready[0].number, versions: s.allVersions ? ready.length : 1, thumbUrl: await signedThumbUrl(ready[0]) });
+      }
+      out.push({ token: s.token, kind: s.kind, label: l.label, sub: l.sub, access: s.access, client: s.kind === "client" ? s.client ?? null : (projects[0]?.client ?? null), createdAt: s.createdAt, videos: videos.sort((a, b) => b.updatedAt - a.updatedAt) });
+    }
+    return out.sort((a, b) => b.createdAt - a.createdAt);
+  },
+});
+const projectLabelOf = (p: { name: string; jobNumber?: string }) => (p.jobNumber ? `${p.jobNumber} ${p.name}` : p.name);
+
+// For actions (stills, voice transcription): may this caller comment on this version? Throws if not.
+export const assertCanComment = internalQuery({
+  args: { versionId: v.id("versions"), share: shareArg },
+  handler: async (ctx, { versionId, share }) => { await accessToVersion(ctx, versionId, share, "comment"); return true; },
 });
 
 // ---------- the invite email ----------

@@ -13,8 +13,12 @@ const mk = (o: any): Ver => {
     mp4Heights: [240, 360, 480, 720, 1080], error: null, description: null, uploaderName: "Heston", fileSize: 812_000_000, storageBytes: 1_240_000_000,
     source: "stream", fileUrl: null, scrub: null, scrubStatus: null, ...o,
   };
-  // R3: a review render plays its own file; its thumbnail comes with the scrub copy.
-  return { ...v, thumbUrl: v.source === "file" ? (v.scrub ? mediaUrl(v.bunnyGuid || "g-fire", "thumbnail.jpg") : null) : mediaUrl(v.bunnyGuid, "thumbnail.jpg") };
+  // R3: a review render plays its own file; its thumbnail comes with the scrub copy. C3: every link under `media`.
+  const thumbUrl = v.source === "file" ? (v.scrub ? mediaUrl(v.bunnyGuid || "g-fire", "thumbnail.jpg") : null) : mediaUrl(v.bunnyGuid, "thumbnail.jpg");
+  const media = v.source === "file"
+    ? { hls: null, mp4: {}, file: v.fileUrl, scrub: v.scrub, thumb: thumbUrl }
+    : { hls: mediaUrl(v.bunnyGuid, "playlist.m3u8"), mp4: Object.fromEntries((v.mp4Heights as number[]).map((h) => [h, mediaUrl(v.bunnyGuid, `play_${h}p.mp4`)])), file: null, scrub: null, thumb: thumbUrl };
+  return { ...v, thumbUrl, media };
 };
 
 const projects = [
@@ -46,7 +50,8 @@ const versions: Record<string, Ver[]> = {
 const drawing = { shapes: [{ t: "ellipse", x1: 0.56, y1: 0.18, x2: 0.8, y2: 0.52, c: "#ff3b30", w: 0.006 }, { t: "arrow", x1: 0.34, y1: 0.7, x2: 0.54, y2: 0.45, c: "#ff3b30", w: 0.006 }] };
 let notes: any[] = [
   { _id: "n1", versionId: "ver1b", videoId: "v1", kind: "general", text: "Music bed is a touch loud under the VO the whole way. Pull it 3 dB.", status: "open", authorName: "Heston", createdAt: now - 9 * min, replies: [] },
-  { _id: "n2", versionId: "ver1b", videoId: "v1", kind: "frame", inFrame: 400, drawFrame: 400, drawing, text: "Light in the top right pulls the eye. Can we knock it down in the grade?", status: "open", authorName: "Heston", createdAt: now - 8 * min, replies: [], still: mediaUrl("g-river", "thumbnail.jpg") },
+  { _id: "n2", versionId: "ver1b", videoId: "v1", kind: "frame", inFrame: 400, drawFrame: 400, drawing, text: "Light in the top right pulls the eye. Can we knock it down in the grade?", status: "open", authorName: "Heston", visibility: "shared", createdAt: now - 8 * min, replies: [{ _id: "r1", noteId: "n2", text: "Pulled the window down 0.6 stops in the grade; the eye stays on her now.", authorName: "Claude", createdAt: now - 5 * min, hidden: true }], still: mediaUrl("g-river", "thumbnail.jpg") },
+  { _id: "n6", versionId: "ver1b", videoId: "v1", kind: "frame", inFrame: 980, text: "Love this shot. Can it hold a beat longer before the cut?", status: "open", authorName: "Maya Chen", visibility: "shared", createdAt: now - 3 * min, replies: [{ _id: "r2", noteId: "n6", text: "Yes, I'll give it 8 more frames in v3.", authorName: "Heston", createdAt: now - 2 * min }] },
   { _id: "n3", versionId: "ver1b", videoId: "v1", kind: "range", inFrame: 626, outFrame: 932, text: "This section drags. Lose about a second and a half, keep the river shot.", status: "open", authorName: "Heston", createdAt: now - 7 * min, replies: [{ _id: "r1", noteId: "n3", text: "Trimmed in v3, trying it at 1:00:39.", authorName: "Heston", createdAt: now - 2 * min }] },
   { _id: "n4", versionId: "ver1b", videoId: "v1", kind: "frame", inFrame: 1712, text: "Lower third typo: Saturday.", status: "done", authorName: "Heston", createdAt: now - 6 * min, doneAt: now - 1 * min, replies: [] },
   { _id: "n5", versionId: "ver1a", videoId: "v1", kind: "frame", inFrame: 12, text: "Open on the wide, not the close-up.", status: "done", authorName: "Heston", createdAt: now - 2 * day, replies: [] },
@@ -99,15 +104,44 @@ function overview() {
     clients: [...madeClients].sort((a, b) => a.localeCompare(b)),
   };
 }
-function video(id: string) {
+function video(id: string, share?: { token: string; guestName?: string }) {
   const v = videos.find((x) => x._id === id);
   if (!v) return null;
   const p = projects.find((x) => x._id === v.projectId)!;
+  const sh = share ? demoShare(share.token) : null;
+  const can = sh ? sh.access : "owner";
   return {
-    _id: v._id, title: v.title, number: v.number ?? null, shortTitle: v.shortTitle ?? null, nextFileName: nextName(v), final: v.final ?? null,
+    _id: v._id, title: v.title, number: v.number ?? null, shortTitle: sh ? null : v.shortTitle ?? null, nextFileName: sh ? null : nextName(v), final: v.final ?? null,
     project: { _id: p._id, name: p.name, jobNumber: p.jobNumber },
-    versions: (versions[id] ?? []).map((x) => ({ ...x, noteCount: notes.filter((n) => n.versionId === x._id).length, openCount: notes.filter((n) => n.versionId === x._id && n.status === "open").length })),
+    versions: (versions[id] ?? []).filter((x) => !sh || x.status === "ready").map((x) => ({ ...x, noteCount: notes.filter((n) => n.versionId === x._id).length, openCount: notes.filter((n) => n.versionId === x._id && n.status === "open").length })),
+    can, viewer: sh ? (sh.who === "invited" ? { kind: "client", name: "Maya Chen" } : { kind: "guest", name: share?.guestName ?? "Someone" }) : { kind: "owner", name: "Heston" }, downloads: sh ? sh.downloads : true,
   };
+}
+// Demo share links: ?view / ?comment / ?invited / ?passcode in the token pick the kind; anything else is a plain comment link.
+function demoShare(token: string) {
+  const t = token.toLowerCase();
+  if (t === "off") return null;
+  return { access: t.includes("view") ? "view" : "comment", who: t.includes("invited") ? "invited" : "link", downloads: t.includes("dl"), passcode: t.includes("pass") };
+}
+let demoPasscodeOk = false;
+function openShare(token: string, passcode?: string) {
+  const t = token.toLowerCase();
+  if (t === "missing") return { state: "missing", label: null };
+  if (t === "off") return { state: "off", label: "Brand Film" };
+  if (t === "expired") return { state: "expired", label: "Harbor Coffee" };
+  if (t === "signin") return { state: "signin", label: "Harbor Coffee" };
+  if (t === "notinvited") return { state: "notInvited", label: "Harbor Coffee" };
+  const sh = demoShare(token)!;
+  if (sh.passcode && !demoPasscodeOk) { if (!passcode) return { state: "passcode", label: "Brand Film" }; if (passcode !== "coffee") return { state: "wrongPasscode", label: "Brand Film" }; demoPasscodeOk = true; }
+  const kind = t.includes("client") ? "client" : t.includes("project") ? "project" : "video";
+  const ps = kind === "client" ? projects.filter((p) => p.client === "Harbor Coffee") : kind === "project" ? projects.filter((p) => p._id === "p1") : projects.filter((p) => p._id === "p1");
+  const vids = videos.filter((v) => (kind === "video" ? v._id === "v1" : ps.some((p) => p._id === v.projectId))).map((v) => ({
+    _id: v._id, title: v.title, number: v.number ?? null, projectId: v.projectId, updatedAt: v.updatedAt,
+    versions: (versions[v._id] ?? []).filter((x) => x.status === "ready").map((x) => ({ _id: x._id, number: x.number, frameCount: x.frameCount, fpsNum: x.fpsNum, fpsDen: x.fpsDen, startTimecode: x.startTimecode, width: x.width, height: x.height, createdAt: x.createdAt, description: x.description, thumbUrl: x.thumbUrl })),
+  })).filter((v) => v.versions.length);
+  return { state: "ok", token, kind, label: kind === "client" ? "Harbor Coffee" : kind === "project" ? "26201 Harbor Coffee Launch" : "Brand Film", sub: kind === "video" ? "26201 Harbor Coffee Launch" : null, access: sh.access, who: sh.who, allVersions: true, downloads: sh.downloads, expiresAt: null,
+    guest: sh.who !== "invited", viewer: sh.who === "invited" ? { kind: "client", name: "Maya Chen", email: "maya@harborcoffee.example" } : null, client: "Harbor Coffee",
+    projects: ps.map((p) => ({ _id: p._id, name: p.name, jobNumber: p.jobNumber, client: p.client })), videos: vids };
 }
 const pad5 = (n: number) => String(n).padStart(5, "0");
 function nextName(v: any) {
@@ -192,8 +226,16 @@ export const store = {
       case "shares:activity": return args.shareId === "s1" ? shareActivity : args.shareId === "s2" ? shareActivity.slice(2) : [];
       case "clients:account": return { email: "heston@wranglerproductions.com", name: "Heston", kind: "owner" };
       case "library:overview": return overview();
-      case "library:video": return video(args.videoId);
-      case "notes:forVersion": return notes.filter((n) => n.versionId === args.versionId).map((n) => (n.voice ? { ...n, voiceUrl: null } : n));
+      case "library:video": return video(args.videoId, args.share);
+      case "shares:open": return openShare(args.token, args.passcode);
+      case "shares:mine": return [
+        { token: "invitedclient", kind: "client", label: "Harbor Coffee", sub: null, access: "comment", client: "Harbor Coffee", createdAt: Date.now() - 86_400_000,
+          videos: videos.filter((v) => v.projectId === "p1").map((v) => ({ _id: v._id, title: v.title, number: v.number ?? null, projectId: v.projectId, project: "26201 Harbor Coffee Launch", client: "Harbor Coffee", updatedAt: v.updatedAt, latest: (versions[v._id] ?? []).length, versions: (versions[v._id] ?? []).length, thumbUrl: (versions[v._id] ?? [])[0]?.thumbUrl ?? null })) },
+      ];
+      case "notes:forVersion": {
+        const sh = args.share ? demoShare(args.share.token) : null;
+        return notes.filter((n) => n.versionId === args.versionId).filter((n) => !sh || n.visibility === "shared").map((n) => ({ ...(n.voice ? { ...n, voiceUrl: null } : n), visibility: n.visibility ?? "private", mine: sh ? n.authorName?.includes("(guest)") || n.authorName === "Maya Chen" : true }));
+      }
       case "activity:feed": return feed().slice(0, args.limit ?? 60);
       case "connector:listKeys": return keys;
       case "register:list": return registerList();
@@ -219,6 +261,12 @@ export const store = {
     }
   },
   async mutation(name: string, args: any): Promise<any> {
+    if (name === "notes:create" && args.share) {
+      const sh = demoShare(args.share.token)!;
+      const id = "n" + Date.now();
+      notes = [...notes, { _id: id, versionId: args.versionId, videoId: "v1", kind: args.kind, inFrame: args.inFrame, outFrame: args.outFrame, drawFrame: args.drawFrame, drawing: args.drawing, text: args.text, still: args.still, status: "open", authorName: sh.who === "invited" ? "Maya Chen" : `${args.share.guestName} (guest)`, visibility: "shared", createdAt: Date.now(), replies: [] }];
+      bump(); return id;
+    }
     if (name === "notes:create") {
       const id = "n" + Math.random().toString(36).slice(2, 7);
       const v = Object.entries(versions).find(([, vs]) => vs.some((x) => x._id === args.versionId))![0];
@@ -265,6 +313,9 @@ export const store = {
       shares = [s, ...shares]; bump();
       return { shareId: s._id, token: s.token, url: s.url, added: (args.emails ?? []).map((e: string) => e.toLowerCase()) };
     }
+    if (name === "shares:touch") return { recorded: true, state: "ok" };
+    if (name === "notes:setVisibility") { const n = notes.find((x) => x._id === args.noteId); if (n) n.visibility = args.visibility; bump(); return; }
+    if (name === "notes:setReplyHidden") { for (const n of notes) for (const r of n.replies ?? []) if (r._id === args.replyId) r.hidden = args.hidden; bump(); return; }
     if (name === "shares:setOff") { shares = shares.map((x) => (x._id === args.shareId ? { ...x, state: args.off ? "off" : "on", offAt: args.off ? Date.now() : null, get url() { return `https://review.wranglerportal.com/s/${this.token}`; } } : x)); bump(); return; }
     if (name === "shares:remove") { shares = shares.filter((x) => x._id !== args.shareId); bump(); return; }
     if (name === "shares:update") { shares = shares.map((x) => (x._id === args.shareId ? { ...x, ...Object.fromEntries(Object.entries(args).filter(([k, v]) => k !== "shareId" && k !== "passcode" && v !== undefined)), hasPasscode: args.passcode === undefined ? x.hasPasscode : !!args.passcode, get url() { return `https://review.wranglerportal.com/s/${this.token}`; } } : x)); bump(); return; }

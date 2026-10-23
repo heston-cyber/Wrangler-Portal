@@ -858,7 +858,11 @@ code.mono, .input.mono, .chip.num, .fname code { font-family: ui-monospace, "SF 
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .vline { display: flex; align-items: center; gap: 8px; }
 .vline > .vrow { flex: 1; min-width: 0; }
-.vline > .approve { flex: none; margin-right: 10px; }
+.vline > .approve { flex: none; margin-right: 4px; }
+.vline > .vmenu { flex: none; margin-right: 10px; }
+.cardwrap { position: relative; }
+.cardwrap .cardmenu { position: absolute; top: 8px; right: 8px; }
+.cardwrap .cardmenu .icon-btn { background: rgba(3, 1, 4, .6); color: var(--wp-cream); backdrop-filter: var(--blur-glass); }
 .vrow .pname { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vrow .details { display: flex; align-items: center; justify-content: flex-end; gap: 6px 14px; color: var(--text-secondary); font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 0; }
 .vrow .details .dt { white-space: nowrap; }
@@ -906,3 +910,24 @@ code.mono, .input.mono, .chip.num, .fname code { font-family: ui-monospace, "SF 
 .sharelog { margin: 0; padding: 0 0 6px 0; list-style: none; display: grid; gap: 4px; font-size: 12.5px; }
 .sharelog .secondary { display: inline-block; min-width: 64px; }
 @media (max-width: 560px) { .sharegrid { grid-template-columns: 1fr; } }
+
+/* ---------- Share link pages (client side C3, Oct 23) ---------- */
+.sharewrap { height: 100%; }
+.sharelist { position: relative; min-height: 100%; overflow: hidden; padding: 28px 24px 48px; }
+.sharelist .watermark { position: absolute; left: -140px; bottom: -160px; width: 520px; opacity: .06; pointer-events: none; }
+.sharelist .inner { position: relative; width: min(860px, 100%); margin: 0 auto; display: grid; gap: 20px; }
+.sharelist .shead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sharelist .logo { height: 26px; }
+.sharelist .group { display: grid; gap: 2px; }
+.sharelist .vrow { padding-left: 10px; }
+.sharelist .vrow .meta .lucide { color: var(--text-secondary); }
+.sharenote { max-width: 380px; margin: 24px auto -8px; text-align: center; position: relative; z-index: 1; }
+.sharedpanel .prow.vlink { color: var(--text-primary); text-decoration: none; }
+.sharedpanel .prow.vlink:hover { background: var(--surface-block); }
+.sharedpanel .prow.sub { min-height: 36px; padding-top: 6px; padding-bottom: 6px; }
+.sharedpill { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border: 0; border-radius: var(--radius-pill); background: var(--fill-chip); color: var(--text-secondary); font-size: 12px; font-weight: 600; cursor: pointer; }
+.sharedpill.is { background: var(--accent-tint); color: var(--accent); }
+.rtag.shared { color: var(--accent); }
+.reply.hidden .ntext { opacity: .7; }
+.reply .rh .linkbtn { color: var(--text-secondary); font-size: 12px; }
+.composer.guestname { gap: 10px; }

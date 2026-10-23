@@ -6,6 +6,7 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { buildTranscript } from "./lib/transcript";
 import { mp4FrameCount } from "./lib/mp4";
+import { shareArg } from "./lib/viewer";
 
 const MAX_BYTES = 900_000_000;
 const WAIT_MS = 15_000;
@@ -135,9 +136,9 @@ async function sttFromUrl(key: string, url: string): Promise<{ stt: any; model: 
 
 // Voice notes: transcribe a recording the browser just uploaded. Returns words with seconds; the page pins them to frames.
 export const voiceWords = action({
-  args: { storageId: v.id("_storage"), mime: v.string() },
-  handler: async (ctx, { storageId, mime }): Promise<{ language: string | null; words: Array<{ text: string; start: number; end: number; type?: string }> }> => {
-    await ctx.runQuery(internal.users.assertAllowed, {});
+  args: { storageId: v.id("_storage"), mime: v.string(), versionId: v.optional(v.id("versions")), share: shareArg },
+  handler: async (ctx, { storageId, mime, versionId, share }): Promise<{ language: string | null; words: Array<{ text: string; start: number; end: number; type?: string }> }> => {
+    if (versionId) await ctx.runQuery(internal.shares.assertCanComment, { versionId, share }); else await ctx.runQuery(internal.users.assertAllowed, {});
     const key = process.env.ELEVENLABS_API_KEY;
     if (!key) throw new Error("Transcription isn't set up (no ElevenLabs key).");
     const blob = await ctx.storage.get(storageId);

@@ -7,7 +7,8 @@ import { requireMe } from "./lib/access";
 import { isValidTc } from "./lib/frames";
 import type { Doc, Id } from "./_generated/dataModel";
 import { insertVideo, nextFileName } from "./lib/register";
-import { scrubUrls, thumbUrl } from "./lib/media";
+import { scrubUrls, signedThumbUrl, thumbUrl, versionMedia } from "./lib/media";
+import { accessToVideo, accessToVersion, shareArg, versionShown } from "./lib/viewer";
 
 const clean = (s: string, max = 200) => s.trim().replace(/\s+/g, " ").slice(0, max);
 
@@ -53,7 +54,7 @@ export const overview = query({
         noteCount: notes.length,
         openNotes: latest ? notes.filter((n) => n.status === "open" && n.versionId === latest._id).length : 0,
         latest: latest && {
-          number: latest.number, status: latest.status, bunnyGuid: latest.bunnyGuid, thumbUrl: thumbUrl(latest), encodeProgress: latest.encodeProgress ?? 0, isFile: latest.source === "file",
+          number: latest.number, status: latest.status, bunnyGuid: latest.bunnyGuid, thumbUrl: await signedThumbUrl(latest), encodeProgress: latest.encodeProgress ?? 0, isFile: latest.source === "file",
           frameCount: latest.frameCount ?? null, fpsNum: latest.fpsNum ?? 24000, fpsDen: latest.fpsDen ?? 1001,
           startTimecode: latest.startTimecode, width: latest.width ?? null, height: latest.height ?? null,
           transcript: tr?.status ?? null,
@@ -161,41 +162,60 @@ export const renameVideo = mutation({
   },
 });
 
-// Everything the video page needs about one video.
+// Everything the video page needs about one video. The owner, or anyone a share lets in (C3): they get only the
+// versions the share shows and none of the owner's details, plus what they're allowed to do.
 export const video = query({
-  args: { videoId: v.id("videos") },
-  handler: async (ctx, { videoId }) => {
-    await requireMe(ctx);
+  args: { videoId: v.id("videos"), share: shareArg },
+  handler: async (ctx, { videoId, share }) => {
     const vid = await ctx.db.get(videoId);
-    if (!vid) return null;
+    if (!vid) { await requireMe(ctx); return null; }
+    const access = await accessToVideo(ctx, videoId, share);
     const project = await ctx.db.get(vid.projectId);
-    const versions = await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", videoId)).collect();
-    const notes = await ctx.db.query("notes").withIndex("by_video", (q) => q.eq("videoId", videoId)).collect();
+    let versions = await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", videoId)).collect();
+    const allNotes = await ctx.db.query("notes").withIndex("by_video", (q) => q.eq("videoId", videoId)).collect();
+    const notes = access.kind === "owner" ? allNotes : allNotes.filter((n) => n.visibility === "shared");
+    if (access.share) {
+      const shown = [];
+      for (const x of versions) if (await versionShown(ctx, access.share, x)) shown.push(x);
+      versions = shown;
+    }
     const trs = new Map<string, string>();
     for (const x of versions) {
       const t = await ctx.db.query("transcripts").withIndex("by_version", (q) => q.eq("versionId", x._id)).first();
       if (t) trs.set(x._id, t.status);
     }
+    const owner = access.kind === "owner";
+    const out = [];
+    for (const x of versions.sort((a, b) => a.number - b.number)) {
+      out.push({
+        ...(await publicVersion(x)),
+        dropboxPath: owner ? x.dropboxPath ?? null : null,
+        noteCount: notes.filter((n) => n.versionId === x._id).length,
+        openCount: notes.filter((n) => n.versionId === x._id && n.status === "open").length,
+        transcript: (trs.get(x._id) ?? null) as "pending" | "running" | "done" | "failed" | null,
+      });
+    }
     return {
       _id: vid._id,
       title: vid.title,
       number: vid.number ?? null,
-      shortTitle: vid.shortTitle ?? null,
+      shortTitle: owner ? vid.shortTitle ?? null : null,
       final: vid.final ?? null,
-      nextFileName: nextFileName(vid, versions.reduce((m, x) => Math.max(m, x.number), 0)),
+      nextFileName: owner ? nextFileName(vid, versions.reduce((m, x) => Math.max(m, x.number), 0)) : null,
       project: project && { _id: project._id, name: project.name, jobNumber: project.jobNumber ?? null },
-      versions: versions.sort((a, b) => a.number - b.number).map((x) => ({
-        ...publicVersion(x),
-        noteCount: notes.filter((n) => n.versionId === x._id).length,
-        openCount: notes.filter((n) => n.versionId === x._id && n.status === "open").length,
-        transcript: (trs.get(x._id) ?? null) as "pending" | "running" | "done" | "failed" | null,
-      })),
+      versions: out,
+      // C3: what the caller may do here, and who they are to the page.
+      can: access.can,
+      viewer: access.kind === "owner" ? { kind: "owner" as const, name: access.name } : access.kind === "client" ? { kind: "client" as const, name: access.name } : { kind: "guest" as const, name: access.name },
+      downloads: owner || !!access.share?.downloads,
     };
   },
 });
 
-export function publicVersion(x: Doc<"versions">) {
+export async function publicVersion(x: Doc<"versions">) {
+  const media = await versionMedia(x);
   return {
+    media,
     _id: x._id,
     number: x.number,
     status: x.status,
@@ -219,10 +239,10 @@ export function publicVersion(x: Doc<"versions">) {
     streamOnly: x.streamOnly ?? false,
     storageBytes: x.storageBytes ?? null,
     source: x.source ?? "stream",
-    fileUrl: x.source === "file" ? x.fileUrl ?? null : null,
-    scrub: scrubUrls(x),
+    fileUrl: media.file,
+    scrub: media.scrub,
     scrubStatus: x.scrubStatus ?? null,
-    thumbUrl: thumbUrl(x),
+    thumbUrl: media.thumb,
   };
 }
 
@@ -239,11 +259,10 @@ export const setStartTimecode = mutation({
 // Fallback only: the player's estimate from the video's length. It can be one high when the audio runs
 // past the last picture, so it never replaces a count read from the file itself.
 export const reportFrameCount = mutation({
-  args: { versionId: v.id("versions"), frameCount: v.number() },
+  args: { versionId: v.id("versions"), frameCount: v.number(), share: shareArg },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
-    const ver = await ctx.db.get(a.versionId);
-    if (!ver || ver.frameCountFrom === "file") return;
+    const { version: ver } = await accessToVersion(ctx, a.versionId, a.share);
+    if (ver.frameCountFrom === "file") return;
     if (!Number.isInteger(a.frameCount) || a.frameCount <= 0 || a.frameCount > 10_000_000) return;
     if (ver.frameCount !== a.frameCount) await ctx.db.patch(a.versionId, { frameCount: a.frameCount, frameCountFrom: "player" });
   },
@@ -379,6 +398,17 @@ export const deleteVersion = mutation({
     await ctx.db.patch(ver.videoId, { updatedAt: Date.now() });
     await scheduleCleanup(ctx, stills, guids);
     return { deleted: ver.number };
+  },
+});
+
+// A whole video: all its versions and their files (the ⋯ menu on a video row, Oct 23).
+export const deleteVideo = mutation({
+  args: { videoId: v.id("videos") },
+  handler: async (ctx, { videoId }) => {
+    await requireMe(ctx);
+    if (!(await ctx.db.get(videoId))) throw new ConvexError("That video no longer exists.");
+    const versions = await removeVideoAndFiles(ctx, videoId);
+    return { versions };
   },
 });
 

@@ -12,6 +12,7 @@ import { nextFileName, pad5, videoByNumber } from "./lib/register";
 import { numberVideo } from "./register";
 
 import { base64url, sha256Hex } from "./lib/hash";
+import { signStillUrl } from "./lib/media";
 export { sha256Hex };
 
 // ---------- keys ----------
@@ -285,8 +286,8 @@ export const notesForImages = internalQuery({
         note_id: raw, missing: false as const, type: kindName(n.kind), text: n.text,
         in_timecode: tc(n.inFrame), out_timecode: n.kind === "range" ? tc(n.outFrame) : null,
         drawing_timecode: n.drawing ? tc(n.drawFrame ?? n.inFrame) : null,
-        still: n.still ?? null, stillIn: n.kind === "range" ? n.stillIn ?? null : null, stillOut: n.kind === "range" ? n.stillOut ?? null : null,
-        pointers: (n.voice?.pointers ?? []).filter((p) => p.still).map((p) => ({ word: p.word, timecode: tc(p.f), still: p.still! })),
+        still: (await signStillUrl(n.still)) ?? null, stillIn: n.kind === "range" ? (await signStillUrl(n.stillIn)) ?? null : null, stillOut: n.kind === "range" ? (await signStillUrl(n.stillOut)) ?? null : null,
+        pointers: await Promise.all((n.voice?.pointers ?? []).filter((p) => p.still).map(async (p) => ({ word: p.word, timecode: tc(p.f), still: (await signStillUrl(p.still))! }))),
       });
     }
     return out;
@@ -361,7 +362,7 @@ export const replyAsClaude = internalMutation({
     if (!note || !id) throw new ConvexError(`No note with id ${a.noteId}.`);
     const text = a.text.trim().slice(0, 5000);
     if (!text) throw new ConvexError("The reply is empty.");
-    await ctx.db.insert("replies", { noteId: id, text, authorName: "Claude", createdAt: Date.now() });
+    await ctx.db.insert("replies", { noteId: id, text, authorName: "Claude", createdAt: Date.now(), hidden: true }); // private to Heston until he shows it (C3)
     await ctx.db.patch(note.videoId, { updatedAt: Date.now() });
     return { note_id: a.noteId, replied: true };
   },

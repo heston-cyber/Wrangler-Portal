@@ -179,6 +179,11 @@ export default defineSchema({
     updatedAt: v.number(),
     doneAt: v.optional(v.number()),
     notifiedAt: v.optional(v.number()),
+    // Client side (C3, Oct 23): who may see the note. Heston's notes are private unless he marks them Shared;
+    // notes left through a share are shared. Missing = private (every note from before C3).
+    visibility: v.optional(v.union(v.literal("private"), v.literal("shared"))),
+    guestKey: v.optional(v.string()),       // a guest's browser id, so they can edit their own notes
+    shareId: v.optional(v.id("shares")),    // the share the note came through
   })
     .index("by_version", ["versionId"])
     .index("by_video", ["videoId"]),
@@ -189,6 +194,9 @@ export default defineSchema({
     authorName: v.string(),
     authorId: v.optional(v.id("users")),
     createdAt: v.number(),
+    // C3: a reply others can't see even when the note is shared (Claude's connector replies, until Heston shows one).
+    hidden: v.optional(v.boolean()),
+    guestKey: v.optional(v.string()),
   }).index("by_note", ["noteId"]),
 
   // When each person last opened each video (Home's "Last opened", the sidebar list).

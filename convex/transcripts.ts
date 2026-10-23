@@ -3,6 +3,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { requireMe } from "./lib/access";
+import { accessToVersion, shareArg } from "./lib/viewer";
 import { findVideo, pickVersion, versionInfo } from "./connector";
 
 export const begin = internalMutation({
@@ -88,9 +89,9 @@ export const retry = mutation({
 
 // The review page's Transcript tab: status, plus a URL for the transcript file when it's ready.
 export const forVersion = query({
-  args: { versionId: v.id("versions") },
-  handler: async (ctx, { versionId }) => {
-    await requireMe(ctx);
+  args: { versionId: v.id("versions"), share: shareArg },
+  handler: async (ctx, { versionId, share }) => {
+    await accessToVersion(ctx, versionId, share);
     const row = await ctx.db.query("transcripts").withIndex("by_version", (q) => q.eq("versionId", versionId)).first();
     if (!row) return null;
     return {

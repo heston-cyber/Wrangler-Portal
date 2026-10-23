@@ -5,14 +5,14 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { BrandImg } from "../ui/BrandImg";
 import { useConvex, useMutation, useQuery } from "convex/react";
 import {
-  ArrowUp, Brush, Check, Circle, CircleCheckBig, Copy, Download, ListOrdered, Ellipsis, Eye, Keyboard, Maximize, Minimize, MoveUpRight, PanelRight, Pause, Pencil, Play,
+  ArrowUp, Brush, Check, Circle, CircleCheckBig, Copy, Download, ListOrdered, Ellipsis, Eye, EyeOff, Keyboard, Maximize, Minimize, MoveUpRight, PanelRight, Pause, Pencil, Play,
   Crosshair, Film, Mic, Plus, Share2, SlidersHorizontal, Square, Timer, Undo2, Upload, Volume2, VolumeX, X,
 } from "lucide-react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { frameTc, frameDuration, fpsValue, isValidTc, nominal, tcToFrames, type Fps } from "../../convex/lib/frames";
-import { DEMO, mediaUrl } from "../config";
+import { DEMO } from "../config";
 import { linkProps, navigate } from "../lib/router";
 import { isVideoFile, startUpload, useUploads } from "../lib/uploads";
 import { markersEdl } from "../lib/edl";
@@ -36,17 +36,24 @@ import { FinalBadge } from "./VideoRows";
 import { ApproveFinal } from "./ApproveFinal";
 import { useLibrarySettings } from "../lib/details";
 import { ShareDialog } from "./Share";
+import { useShareArgs, useViewer } from "../lib/viewer";
 
 export default function VideoPage({ videoId, versionNumber, noteId }: { videoId: Id<"videos">; versionNumber: number | null; noteId: string | null }) {
-  const data = useQuery(api.library.video, { videoId });
+  const viewer = useViewer();
+  const shareArgs = useShareArgs();
+  const data = useQuery(api.library.video, { videoId, ...shareArgs });
   const markOpened = useMutation(api.library.markOpened);
-  useEffect(() => { void markOpened({ videoId }).catch(() => {}); }, [videoId, markOpened]);
+  const touch = useMutation(api.shares.touch);
+  useEffect(() => {
+    if (viewer.can === "owner") void markOpened({ videoId }).catch(() => {});
+    else if (viewer.share) void touch({ token: viewer.share.token, passcode: viewer.share.passcode, kind: "viewed", videoId, guestName: viewer.share.guestName }).catch(() => {});
+  }, [videoId, markOpened, touch, viewer.can, viewer.share]);
   if (data === undefined) return <><TopBar><span className="secondary">Loading…</span></TopBar><div className="content" /></>;
   if (data === null) {
     return (
       <>
-        <TopBar><a {...linkProps("/")}>Home</a></TopBar>
-        <div className="content"><div className="empty">This video doesn't exist any more. <a className="btn" {...linkProps("/projects")}>All projects</a></div></div>
+        <TopBar><a {...linkProps(viewer.home)}>Home</a></TopBar>
+        <div className="content"><div className="empty">This video doesn't exist any more. <a className="btn" {...linkProps(viewer.can === "owner" ? "/projects" : viewer.home)}>{viewer.can === "owner" ? "All projects" : "Back"}</a></div></div>
       </>
     );
   }
@@ -116,9 +123,14 @@ const NO_SCRUB = IOS || (typeof location !== "undefined" && new URLSearchParams(
 function ReviewView({ data, version, noteId }: { data: VideoData; version: Version | null; noteId: string | null }) {
   const convex = useConvex();
   const narrow = useIsNarrow();
+  const viewer = useViewer();
+  const shareArgs = useShareArgs();
+  const owner = viewer.can === "owner";
+  const canComment = viewer.can !== "view";
   const uploads = useUploads(data._id);
-  const notes = useQuery(api.notes.forVersion, version ? { versionId: version._id } : "skip") as NoteRow[] | undefined;
-  const wave = useQuery(api.waveforms.forVersion, version ? { versionId: version._id } : "skip") as Wave | undefined;
+  const notes = useQuery(api.notes.forVersion, version ? { versionId: version._id, ...shareArgs } : "skip") as NoteRow[] | undefined;
+  const wave = useQuery(api.waveforms.forVersion, version ? { versionId: version._id, ...shareArgs } : "skip") as Wave | undefined;
+  const [sharedNotes, setSharedNotes] = useState(() => readFlag("wr.shareNotes")); // the owner's Shared switch on the note box
   const createNote = useMutation(api.notes.create);
   const reportFrameCount = useMutation(api.library.reportFrameCount);
   const [toast, showToast] = useToast();
@@ -144,7 +156,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const [retryN, setRetryN] = useState(0);
   const src = !version || !ready ? null
     : isFile ? (quality === "stream" && scrubHls ? scrubHls : fileUrl && retryN ? `${fileUrl}#retry${retryN}` : fileUrl)
-    : quality === "file" && mp4H ? mediaUrl(version.bunnyGuid, `play_${mp4H}p.mp4`) : mediaUrl(version.bunnyGuid, "playlist.m3u8");
+    : quality === "file" && mp4H ? version.media.mp4[mp4H] : version.media.hls;
   // Scrub copy: the best MP4 copy up to 720p that fits (80 MB on computers, 30 MB on phones), downloaded once the video is ready.
   // New uploads have only 360p (800 kbps, about 6 MB a minute) and 1080p (Bunny library setting, Oct 21).
   // A review render's scrub copy comes from the scrub library a few minutes after it plays; it's picked up when it lands.
@@ -157,7 +169,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     if (NO_SCRUB) return undefined;
     if (isFile) return scrubMp4 ? { urls: [scrubMp4], maxBytes } : undefined;
     const hs = [...version.mp4Heights].filter((h) => h <= 720).sort((a, b) => b - a);
-    return { urls: hs.map((h) => mediaUrl(version.bunnyGuid, `play_${h}p.mp4`)), maxBytes };
+    return { urls: hs.map((h) => version.media.mp4[h]).filter(Boolean), maxBytes };
   }, [version, ready, narrow, isFile, scrubMp4]);
   const player = useFramePlayer(src, fps, version?.frameCountExact ? version.frameCount : null, scrubCopies);
   const frameCount = player.frameCount ?? version?.frameCount ?? 0;
@@ -174,20 +186,20 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   useEffect(() => {
     if (!player.errorCode || !version) return;
     const d = player.errorDetail.current;
-    void logPlayback({ versionId: version._id, kind: "error", code: player.errorCode, msg: d?.msg, t: d?.t, src: quality, ua: navigator.userAgent }).catch(() => {});
+    void logPlayback({ versionId: version._id, kind: "error", code: player.errorCode, msg: d?.msg, t: d?.t, src: quality, ua: navigator.userAgent, ...shareArgs }).catch(() => {});
     if (quality !== "file" || !hasStream) return;
     resumeAt.current = { f: player.clock.get(), play: !!d?.playing };
     // A review render gets one quiet retry first: a phone dropping a big file's connection isn't a broken file.
     if (isFile && retried.current !== version._id) {
       retried.current = version._id;
-      void logPlayback({ versionId: version._id, kind: "retry", t: d?.t, src: "file", ua: navigator.userAgent }).catch(() => {});
+      void logPlayback({ versionId: version._id, kind: "retry", t: d?.t, src: "file", ua: navigator.userAgent, ...shareArgs }).catch(() => {});
       setRetryN((n) => n + 1);
       return;
     }
     writeFlag(streamOnlyKey);
     // A review render's fallback is only 360p, so other devices keep trying the full file.
-    if (!isFile) void markFileFailed({ versionId: version._id }).catch(() => {});
-    void logPlayback({ versionId: version._id, kind: "fallback", t: d?.t, src: "stream", ua: navigator.userAgent }).catch(() => {});
+    if (!isFile) void markFileFailed({ versionId: version._id, ...shareArgs }).catch(() => {});
+    void logPlayback({ versionId: version._id, kind: "fallback", t: d?.t, src: "stream", ua: navigator.userAgent, ...shareArgs }).catch(() => {});
     setQuality("stream");
     showToast(isFile ? "The full-size render hit a playback error here, so this version switched to its 360p copy. Same frames." : "The 1080p file hit a playback error here, so this version switched to the stream. Same frames.");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -204,7 +216,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const logScrub = () => {
     if (!version || scrubLogged.current === version._id) return;
     scrubLogged.current = version._id;
-    void logPlayback({ versionId: version._id, kind: "scrub", msg: JSON.stringify(player.proxyStatus()).slice(0, 300), src: quality, ua: navigator.userAgent }).catch(() => {});
+    void logPlayback({ versionId: version._id, kind: "scrub", msg: JSON.stringify(player.proxyStatus()).slice(0, 300), src: quality, ua: navigator.userAgent, ...shareArgs }).catch(() => {});
   };
   // Jumps that needed correcting get logged every few seconds (at most 5 per batch).
   useEffect(() => {
@@ -212,7 +224,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     const id = setInterval(() => {
       const r = player.seekReports.current.splice(0);
       if (!r.length) return;
-      void logPlayback({ versionId: version._id, kind: "seek", msg: JSON.stringify(r.slice(-5)).slice(0, 300), src: quality, ua: navigator.userAgent }).catch(() => {});
+      void logPlayback({ versionId: version._id, kind: "seek", msg: JSON.stringify(r.slice(-5)).slice(0, 300), src: quality, ua: navigator.userAgent, ...shareArgs }).catch(() => {});
     }, 5000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -226,7 +238,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     const onWaiting = () => {
       clear();
       if (v.paused) return;
-      timer = setTimeout(() => { void logPlayback({ versionId: version._id, kind: "stall", t: v.currentTime, src: quality, ua: navigator.userAgent }).catch(() => {}); }, 4000);
+      timer = setTimeout(() => { void logPlayback({ versionId: version._id, kind: "stall", t: v.currentTime, src: quality, ua: navigator.userAgent, ...shareArgs }).catch(() => {}); }, 4000);
     };
     v.addEventListener("waiting", onWaiting);
     ["playing", "pause", "seeked", "emptied"].forEach((e) => v.addEventListener(e, clear));
@@ -236,7 +248,8 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
 
   useEffect(() => {
     const est = player.estimatedFrameCount;
-    if (version && !version.frameCountExact && est && est !== version.frameCount) void reportFrameCount({ versionId: version._id, frameCount: est });
+    if (version && !version.frameCountExact && est && est !== version.frameCount) void reportFrameCount({ versionId: version._id, frameCount: est, ...shareArgs });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player.estimatedFrameCount, version, reportFrameCount]);
 
   // Panel, transport and view state
@@ -254,7 +267,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const [focusId, setFocusId] = useState<string | null>(noteId);
   const [focusTick, setFocusTick] = useState(0);
   const [dialog, setDialog] = useState<null | "rename" | "starttc" | "keys" | "register" | "final" | "share">(null);
-  const covering = useQuery(api.shares.coveringVideo, { videoId: data._id });
+  const covering = useQuery(api.shares.coveringVideo, owner ? { videoId: data._id } : "skip");
   const libSettings = useLibrarySettings();
   const rootRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -358,12 +371,12 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     try {
       player.pause();
       setVoiceBusy("Uploading");
-      const url = await uploadUrl({});
+      const url = await uploadUrl({ versionId: version._id, ...shareArgs });
       const up = await fetch(url, { method: "POST", headers: { "Content-Type": rec.mime.split(";")[0] }, body: rec.blob });
       if (!up.ok) throw new Error("The recording didn't upload.");
       const { storageId } = (await up.json()) as { storageId: Id<"_storage"> };
       setVoiceBusy("Transcribing");
-      const res = await convex.action(api.transcribe.voiceWords, { storageId, mime: rec.mime });
+      const res = await convex.action(api.transcribe.voiceWords, { storageId, mime: rec.mime, versionId: version._id, ...shareArgs });
       const words = mapWords(res.words, rec.frames);
       const pointers = pointersFrom(words);
       const range = playedRange(rec.frames);
@@ -373,7 +386,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           try {
             await player.seekToFrame(p.f);
             const drawn = shapes.filter((_, i) => (shapeTimes.current[i] ?? -1) <= p.s);
-            p.still = await captureAndUpload(convex, v, drawn);
+            p.still = await captureAndUpload(convex, v, drawn, undefined, { versionId: version._id, ...shareArgs });
           } catch { /* a missing still isn't fatal */ }
         }
       }
@@ -395,7 +408,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     setVoiceDraft(null);
     URL.revokeObjectURL(d.audioUrl);
     setText("");
-    await discardVoice({ storageId: d.storageId }).catch(() => null);
+    await discardVoice({ storageId: d.storageId, ...(version ? { versionId: version._id } : {}), ...shareArgs }).catch(() => null);
   }
   const setIn = () => { const f = player.clock.get(); setWhole(false); setSel((s) => ({ a: f, b: s && s.b >= f ? s.b : f })); };
   const setOut = () => { const f = player.clock.get(); setWhole(false); setSel((s) => ({ a: s && s.a <= f ? s.a : f, b: f })); };
@@ -415,20 +428,21 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       const outFrame = kind === "range" ? sel!.b : undefined;
       let still: string | undefined, stillIn: string | undefined, stillOut: string | undefined;
       let stillProblem = false;
+      const who = { versionId: version._id, ...shareArgs };
       try {
         if (shapes.length && drawFrame !== null) {
           await player.seekToFrame(drawFrame);
-          still = await captureAndUpload(convex, v, shapes);
+          still = await captureAndUpload(convex, v, shapes, undefined, who);
         }
         if (kind === "frame" && !still) {
           await player.seekToFrame(inFrame!);
-          still = await captureAndUpload(convex, v);
+          still = await captureAndUpload(convex, v, [], undefined, who);
         }
         if (kind === "range") {
           await player.seekToFrame(inFrame!);
-          stillIn = await captureAndUpload(convex, v);
+          stillIn = await captureAndUpload(convex, v, [], undefined, who);
           await player.seekToFrame(outFrame!);
-          stillOut = await captureAndUpload(convex, v);
+          stillOut = await captureAndUpload(convex, v, [], undefined, who);
           if (!still) still = stillIn;
         }
       } catch {
@@ -442,6 +456,8 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           storageId: voiceDraft.storageId, mime: voiceDraft.mime, durationMs: voiceDraft.durationMs, language: voiceDraft.language,
           played: voiceDraft.played, words: voiceDraft.words, pointers: voiceDraft.pointers,
         } : undefined,
+        shared: owner ? sharedNotes : undefined,
+        ...shareArgs,
       });
       await player.seekToFrame(kind === "range" ? inFrame! : here);
       setText(""); setShapes([]); setDrawFrame(null); setDrawing(false); setSel(null); setWhole(false);
@@ -475,16 +491,16 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       else if (e.key === "ArrowRight") { e.preventDefault(); void player.step(e.shiftKey ? n : 1); }
       else if (k === "j") { e.preventDefault(); void player.step(-n); }
       else if (k === "l") { e.preventDefault(); player.play(); }
-      else if (k === "i") { e.preventDefault(); setIn(); }
-      else if (k === "o") { e.preventDefault(); setOut(); }
+      else if (k === "i" && canComment) { e.preventDefault(); setIn(); }
+      else if (k === "o" && canComment) { e.preventDefault(); setOut(); }
       else if (k === "x") { e.preventDefault(); setSel(null); }
-      else if (k === "d") { e.preventDefault(); player.pause(); setDrawing((d) => !d); }
+      else if (k === "d" && canComment) { e.preventDefault(); player.pause(); setDrawing((d) => !d); }
       else if (k === "f") { e.preventDefault(); toggleFullscreen(); }
       else if (e.key === "?") { e.preventDefault(); setDialog("keys"); }
       else if (e.key === "Escape") { if (drawing) setDrawing(false); else if (sel) setSel(null); else setHl(null); }
       else if (e.key === "Home") { e.preventDefault(); void player.seekToFrame(0); }
       else if (e.key === "End") { e.preventDefault(); void player.seekToFrame(frameCount - 1); }
-      else if (e.key === "Enter") { e.preventDefault(); player.pause(); textRef.current?.focus(); }
+      else if (e.key === "Enter" && canComment) { e.preventDefault(); player.pause(); textRef.current?.focus(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -516,6 +532,9 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   }
 
   const newVersion = () => fileRef.current?.click();
+  // Download (C3): the render itself, or the best MP4 copy, when the share allows it (the owner always may).
+  const downloadUrl = version?.media.file ?? (version && mp4H ? version.media.mp4[mp4H] : null) ?? null;
+  const canDownload = !!downloadUrl && (owner || viewer.downloads);
   const setPanelPref = (p: "notes" | "versions" | "transcript" | null) => { setPanel(p); writePref("wr.panel", p ? "notes" : "none"); };
   const endFrame = Math.max(0, frameCount - 1);
   const timeText = (f: number) => timeMode === "frames" ? `${f}` : timeMode === "clock" ? clockText(f * frameDuration(fps)) : tc(f);
@@ -596,21 +615,31 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     <div className={`review${fs ? " fs" : ""}`} ref={rootRef}>
       <TopBar right={
         <>
-          <button className={`btn sm${covering?.some((s) => s.state === "on") ? " on" : ""}`} onClick={() => setDialog("share")} title={covering?.length ? `Shared: ${covering.filter((s) => s.state === "on").length} live ${covering.filter((s) => s.state === "on").length === 1 ? "link" : "links"}` : "Share this video"}><Share2 size={15} /><span className="hide-sm">Share</span></button>
-          <button className="btn sm hide-sm" onClick={downloadEdl} disabled={!notes?.length} title="Download the notes as Resolve markers (EDL)"><Download size={15} />Resolve markers</button>
+          {owner && <button className={`btn sm${covering?.some((s) => s.state === "on") ? " on" : ""}`} onClick={() => setDialog("share")} title={covering?.length ? `Shared: ${covering.filter((s) => s.state === "on").length} live ${covering.filter((s) => s.state === "on").length === 1 ? "link" : "links"}` : "Share this video"}><Share2 size={15} /><span className="hide-sm">Share</span></button>}
+          {owner && <button className="btn sm hide-sm" onClick={downloadEdl} disabled={!notes?.length} title="Download the notes as Resolve markers (EDL)"><Download size={15} />Resolve markers</button>}
+          {!owner && canDownload && <a className="btn sm" href={downloadUrl!} target="_blank" rel="noreferrer" download title="Download this version"><Download size={15} /><span className="hide-sm">Download</span></a>}
           <button className={`icon-btn md${panel ? " on" : ""}`} onClick={() => setPanelPref(panel ? null : "notes")} aria-label={panel ? "Hide panel" : "Show panel"} title={panel ? "Hide panel" : "Show panel"}><PanelRight size={16} /></button>
         </>
       }>
-        <a {...linkProps("/")} aria-label="Home" style={{ display: "flex" }}><BrandImg name="wordmark" className="logo" alt="Wrangler Productions" /></a>
+        <a {...linkProps(viewer.home)} aria-label="Home" style={{ display: "flex" }}><BrandImg name="wordmark" className="logo" alt="Wrangler Productions" /></a>
         <Sep />
-        <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps("/projects")}>Projects</a><Sep /></span>
-        {data.project && <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps(`/projects/${data.project._id}`)}>{projectLabel(data.project)}</a><Sep /></span>}
+        {owner && <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps("/projects")}>Projects</a><Sep /></span>}
+        {data.project && (owner
+          ? <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps(`/projects/${data.project._id}`)}>{projectLabel(data.project)}</a><Sep /></span>
+          : <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps(viewer.home)}>{projectLabel(data.project)}</a><Sep /></span>)}
         {data.number && <span className="chip num mono" title="Register number">{String(data.number).padStart(5, "0")}</span>}
         <span className="here">{data.title}</span>
         <FinalBadge final={data.final} />
         {version && <button className="chip" onClick={() => setPanel("versions")} title="Versions">v{version.number}{data.versions.length > 1 ? ` of ${data.versions.length}` : ""}</button>}
         {st && <span className={`chip ${st.tone}`}>{st.busy && <Spinner />}{st.text}</span>}
         {tr?.busy && <span className="chip warn"><Spinner />{tr.text}</span>}
+        {!owner && viewer.can === "view" && <span className="chip fill hide-sm" title="This link is view only">View only</span>}
+        {!owner ? (
+          <Menu label="Options" trigger={(p) => <button {...p} className="icon-btn" aria-label="Options"><Ellipsis size={16} /></button>}>
+            {canDownload && <MenuItem icon={<Download size={16} />} onSelect={() => window.open(downloadUrl!, "_blank")}>Download this version</MenuItem>}
+            <MenuItem icon={<Keyboard size={16} />} onSelect={() => setDialog("keys")} kbd="?">Keyboard shortcuts</MenuItem>
+          </Menu>
+        ) : (
         <Menu label="Video options" trigger={(p) => <button {...p} className="icon-btn" aria-label="Video options"><Ellipsis size={16} /></button>}>
           <MenuItem icon={<Share2 size={16} />} onSelect={() => setDialog("share")}>Share…</MenuItem>
           <MenuItem icon={<Upload size={16} />} onSelect={newVersion}>Upload a new version</MenuItem>
@@ -623,6 +652,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           <MenuItem icon={<Download size={16} />} onSelect={downloadEdl} disabled={!notes?.length}>Download Resolve markers</MenuItem>
           <MenuItem icon={<Keyboard size={16} />} onSelect={() => setDialog("keys")} kbd="?">Keyboard shortcuts</MenuItem>
         </Menu>
+        )}
       </TopBar>
       <input ref={fileRef} type="file" hidden accept="video/*,.mov,.mp4,.m4v,.mxf,.mkv"
         onChange={(e) => { const f = e.target.files?.[0]; if (f && isVideoFile(f)) { void startUpload(convex, data._id, f); setPanel("versions"); showToast("Uploading a new version…"); } e.target.value = ""; }} />
@@ -648,8 +678,8 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
               }}</AtFrame>
               {!version && (
                 <div className="stage-msg"><div style={{ display: "grid", gap: 12, justifyItems: "center" }}>
-                  <span>No versions yet.</span>
-                  <button className="btn primary" onClick={newVersion}><Upload size={16} />Upload the first version</button>
+                  <span>{owner ? "No versions yet." : "Nothing to play yet."}</span>
+                  {owner && <button className="btn primary" onClick={newVersion}><Upload size={16} />Upload the first version</button>}
                 </div></div>
               )}
               {version && !ready && <div className="stage-msg">{st?.busy && <Spinner size={16} />}{version.status === "failed" ? `This version failed: ${version.error ?? "unknown error"}` : isFile ? `v${version.number} · ${st?.text ?? ""}. It plays here in about a minute.` : `v${version.number} · ${st?.text ?? ""}. It plays here when Bunny is done.`}</div>}
@@ -659,7 +689,13 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           {narrow && transportBar}
           </div>
 
-          {ready && (
+          {ready && !canComment && narrow && <div className="composer-zone"><div className="composer rect"><div className="rrow ctime">{playButton}<span className="rbold jump" onClick={cycleTime}><AtFrame clock={player.clock}>{(f) => shownTime(f)}</AtFrame></span><span className="right">{speedMenu}{viewMenu}{fsButton}</span></div></div></div>}
+          {ready && canComment && viewer.needsName && (
+            <div className="composer-zone">
+              <GuestName onSave={(n) => viewer.setGuestName?.(n)} />
+            </div>
+          )}
+          {ready && canComment && !viewer.needsName && (
             <div className="composer-zone">
               {drawing && (
                 <div className="drawbar" role="toolbar" aria-label="Drawing tools">
@@ -687,6 +723,12 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                     New note{whole ? "" : sel ? " · Range" : " · Frame"}
                   </span>
                   <span className="right">
+                    {owner && (
+                      <button className={`sharedpill${sharedNotes ? " is" : ""}`} onClick={() => { setSharedNotes(!sharedNotes); writePref("wr.shareNotes", sharedNotes ? "0" : "1"); }} aria-pressed={sharedNotes} title={sharedNotes ? "New notes are visible to anyone this video is shared with" : "New notes are private to you"}>
+                        {sharedNotes ? <Eye size={13} /> : <EyeOff size={13} />}{sharedNotes ? "Shared" : "Private"}
+                      </button>
+                    )}
+                    <span className="tsep" aria-hidden />
                     <button className={`icon-btn tool${!whole && !sel ? " on" : ""}`} onClick={() => { setWhole(false); setSel(null); }} aria-label="This frame" title="This frame"><Crosshair size={17} /></button>
                     <button className={`icon-btn tool${sel ? " on" : ""}`} onClick={setIn} aria-label="Range: start here (I)" title="Range: start here (I)"><InOutIcon side="in" /></button>
                     <button className={`icon-btn tool${sel ? " on" : ""}`} onClick={setOut} aria-label="Range: end here (O)" title="Range: end here (O)"><InOutIcon side="out" /></button>
@@ -792,7 +834,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                     <MenuItem keepOpen checked={filter.sort === "newest"} onSelect={() => setFilter({ ...filter, sort: "newest" })}>Newest first</MenuItem>
                     {filter !== defaultFilter && <><MenuSep /><MenuItem onSelect={() => setFilter(defaultFilter)}>Reset</MenuItem></>}
                   </Menu>
-                ) : panel === "versions" ? (
+                ) : panel === "versions" && owner ? (
                   <button className="icon-btn" onClick={newVersion} aria-label="Upload a new version" title="Upload a new version"><Plus size={16} /></button>
                 ) : null}
               </span>
@@ -802,13 +844,13 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                 ? <NotesList notes={version ? notes : []} clock={player.clock} tc={tc} filter={filter} onJump={jump} focusId={focusId} focusTick={focusTick} onCopied={showToast} onSeekFrame={(f) => void player.seekToFrame(f)} />
                 : panel === "versions"
                   ? <>
-                      {data.nextFileName && (
+                      {owner && data.nextFileName && (
                         <div className="nextrender">
                           <span className="rlabel">Next render</span>
                           <FileName name={`${data.nextFileName}.mp4`} show={showToast} />
                         </div>
                       )}
-                      <VersionsList videoId={data._id} versions={data.versions} current={version?.number ?? null} uploads={uploads} />
+                      <VersionsList videoId={data._id} versions={data.versions} current={version?.number ?? null} uploads={uploads} owner={owner} open={(n) => navigate(owner ? `/v/${data._id}?version=${n}` : `${viewer.home}/v/${data._id}?version=${n}`)} />
                     </>
                   : version ? <TranscriptList versionId={version._id} clock={player.clock} tc={tc} onSeek={(f) => void player.seekToFrame(f)} /> : null}
             </div>
@@ -826,6 +868,22 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       {dialog === "register" && <AddToRegister videoId={data._id} title={data.title} onClose={() => setDialog(null)} onDone={(m) => showToast(m)} />}
       {toast}
     </div>
+  );
+}
+
+// A guest on a comment link (C3): asked for a name once, before their first note; remembered on this device.
+function GuestName({ onSave }: { onSave: (name: string) => void }) {
+  const [name, setName] = useState("");
+  return (
+    <form className="composer rect guestname" onSubmit={(e) => { e.preventDefault(); if (name.trim()) onSave(name.trim()); }}>
+      <div className="rrow"><span className="rlabel">Leave notes</span></div>
+      <div className="rbold">What's your name?</div>
+      <p className="caption" style={{ margin: 0 }}>It goes on the notes you leave, so Wrangler Productions knows who said what. Asked once on this device.</p>
+      <div className="cinput">
+        <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" maxLength={60} autoComplete="name" aria-label="Your name" />
+        <button className="send" type="submit" disabled={!name.trim()} aria-label="Save name"><ArrowUp size={18} /></button>
+      </div>
+    </form>
   );
 }
 
