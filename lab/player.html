@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Player Test</title>
+<style>
+:root { --bg: #131416; --line: #2b2e33; --fg: #e9e7e2; --muted: #9b9a95; --accent: #ffd25a; --pass: #5fd38a; --fail: #ff6b5e; color-scheme: dark; }
+html, body { margin: 0; background: var(--bg); color: var(--fg); }
+body { font: 15px/1.45 -apple-system, "Helvetica Neue", Arial, sans-serif; padding: max(16px, env(safe-area-inset-top)) 16px 40px; }
+.wrap { max-width: 720px; margin: 0 auto; display: grid; gap: 12px; }
+.eyebrow { font: 600 12px/1.2 ui-monospace, Menlo, monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+h1 { font-size: 24px; margin: 0; }
+p { margin: 0; color: var(--muted); }
+.screen { background: #000; border: 1px solid var(--line); aspect-ratio: 16 / 9; }
+.screen video { width: 100%; height: 100%; display: block; }
+button { font: 600 17px/1 -apple-system, sans-serif; background: var(--accent); color: #17150f; border: 0; border-radius: 10px; padding: 16px 18px; }
+button:disabled { opacity: .45; }
+.status { font: 14px/1.4 ui-monospace, Menlo, monospace; }
+pre { font: 12px/1.35 ui-monospace, Menlo, monospace; white-space: pre-wrap; color: var(--muted); max-height: 40vh; overflow: auto; margin: 0; }
+.good { color: var(--pass); } .bad { color: var(--fail); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="module" src="/src/lab/playertest.tsx"></script>
+</body>
+</html>
