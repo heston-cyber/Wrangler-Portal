@@ -80,7 +80,9 @@ export const playerLink = internalAction({
     const path = "review/_signtest/frametest_23976_h264.mp4";
     const put = await fetch(`https://${z.host}/${z.zone}/${path}`, { method: "PUT", headers: { AccessKey: z.password, "content-type": "video/mp4" }, body });
     if (!put.ok) return { write: put.status };
-    return { bytes: body.length, url: await signBunnyUrl(`https://${cdn}/${path}`, key, { ttlSeconds: 1800 }), unsignedUrl: `https://${cdn}/${path}` };
+    // C3: the same clip through the live stills/renders zone, signed with its key (the real player's path).
+    const live = stillsCdn() && process.env.BUNNY_STILLS_TOKEN_KEY ? await signUrl(`https://${stillsCdn()}/${path}`) : null;
+    return { bytes: body.length, url: await signBunnyUrl(`https://${cdn}/${path}`, key, { ttlSeconds: 1800 }), unsignedUrl: `https://${cdn}/${path}`, liveUrl: live, liveUnsigned: live ? `https://${stillsCdn()}/${path}` : null };
   },
 });
 
