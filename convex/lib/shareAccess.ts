@@ -14,6 +14,10 @@ export const showsAllVersions = (s: Pick<Share, "allVersions" | "access">) => s.
 export const clientKey = (name: string | null | undefined) => (name ?? "").trim();
 
 export const passcodeHash = (token: string, passcode: string) => sha256Hex(`${token}:${passcode}`);
+/** What the page holds after a right passcode: a proof derived from the hash, never the passcode itself. Only the
+ *  `unlock` mutation (rate-limited) can mint it, so a passcode can't be guessed against the open query. */
+export const passProof = (token: string, hash: string) => sha256Hex(`unlock:${token}:${hash}`);
+export const MIN_PASSCODE = 8;
 
 /** Why a share won't open right now, or null when it would (before the who/passcode checks). */
 export function shareState(share: Share, now = Date.now()): "off" | "expired" | null {
@@ -92,7 +96,7 @@ export async function gateShare(ctx: QueryCtx | MutationCtx, token: string, pass
   }
   if (share.passcodeHash) {
     if (!passcode) return { ok: false, reason: "passcode", share };
-    if ((await passcodeHash(share.token, passcode)) !== share.passcodeHash) return { ok: false, reason: "wrongPasscode", share };
+    if (passcode !== (await passProof(share.token, share.passcodeHash))) return { ok: false, reason: "wrongPasscode", share };
   }
   return { ok: true, viewer, guest: viewer.kind === "nobody", share };
 }

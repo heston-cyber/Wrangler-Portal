@@ -150,10 +150,23 @@ describe("the gate", () => {
   test("a passcode on a link share: asked for, wrong one refused, right one opens; owners skip it; invited shares refuse one", async () => {
     const { t, ids, me, maya } = await setup();
     stubResend([]);
+    await expect(me.mutation(api.shares.create, { target: { kind: "client", client: "Harbor Coffee" }, ...base, passcode: "short" })).rejects.toThrow(/at least 8/);
     const r = await me.mutation(api.shares.create, { target: { kind: "client", client: "Harbor Coffee" }, ...base, passcode: " coffee-2026 " });
     expect((await t.query(api.shares.open, { token: r.token })).state).toBe("passcode");
-    expect((await t.query(api.shares.open, { token: r.token, passcode: "wrong" })).state).toBe("wrongPasscode");
-    expect(titles(await t.query(api.shares.open, { token: r.token, passcode: "coffee-2026" }))).toEqual(["Brand Film", "Spot", "Teaser"]);
+    // The passcode itself never opens the share: only the proof that `unlock` hands out, and unlock is rate-limited.
+    expect((await t.query(api.shares.open, { token: r.token, passcode: "coffee-2026" })).state).toBe("wrongPasscode");
+    expect(await t.mutation(api.shares.unlock, { token: r.token, passcode: "wrong" })).toEqual({ state: "wrong" });
+    const ok = await t.mutation(api.shares.unlock, { token: r.token, passcode: "coffee-2026" });
+    expect(ok.state).toBe("ok");
+    const proof = (ok as { proof: string }).proof;
+    expect(titles(await t.query(api.shares.open, { token: r.token, passcode: proof }))).toEqual(["Brand Film", "Spot", "Teaser"]);
+    // Five wrong tries lock it for a minute; the right one is refused while locked.
+    for (let i = 0; i < 4; i++) expect((await t.mutation(api.shares.unlock, { token: r.token, passcode: "nope" })).state).toBe("wrong");
+    expect(await t.mutation(api.shares.unlock, { token: r.token, passcode: "nope" })).toEqual({ state: "locked", seconds: 60 });
+    expect((await t.mutation(api.shares.unlock, { token: r.token, passcode: "coffee-2026" })).state).toBe("locked");
+    await t.run(async (ctx) => ctx.db.patch(r.shareId, { passLockedUntil: Date.now() - 1 }));
+    expect((await t.mutation(api.shares.unlock, { token: r.token, passcode: "coffee-2026" })).state).toBe("ok");
+    expect(await t.mutation(api.shares.unlock, { token: "nope", passcode: "x" })).toEqual({ state: "missing" });
     expect((await maya.query(api.shares.open, { token: r.token })).state).toBe("passcode"); // a client is a link visitor here
     expect((await me.query(api.shares.open, { token: r.token })).state).toBe("ok");
     expect((await me.query(api.shares.list, {}))[0]).toMatchObject({ hasPasscode: true });

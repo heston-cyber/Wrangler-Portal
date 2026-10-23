@@ -51,6 +51,8 @@ export default defineSchema({
     offAt: v.optional(v.number()),
     lastOpenedAt: v.optional(v.number()),
     openCount: v.optional(v.number()),
+    passFails: v.optional(v.number()),       // wrong passcodes in a row (security review, Oct 23)
+    passLockedUntil: v.optional(v.number()), // no more tries until then
   }).index("by_token", ["token"]).index("by_video", ["videoId"]).index("by_project", ["projectId"]),
 
   // The emails on an invited share.
@@ -66,6 +68,7 @@ export default defineSchema({
     shareId: v.id("shares"),
     kind: v.union(v.literal("opened"), v.literal("viewed"), v.literal("note")),
     who: v.string(),
+    whoKey: v.optional(v.string()), // who, for telling people apart (guest browser key / user id); never shown
     videoId: v.optional(v.id("videos")),
     noteId: v.optional(v.id("notes")),
     at: v.number(),
@@ -87,6 +90,9 @@ export default defineSchema({
     at: v.number(),
     resendId: v.optional(v.string()),
   }).index("by_key", ["key"]).index("by_at", ["at"]),
+
+  // Per-hour counters for what commenters may do (security review, Oct 23).
+  rateLimits: defineTable({ key: v.string(), count: v.number(), hour: v.number() }).index("by_key", ["key"]).index("by_hour", ["hour"]),
 
   projects: defineTable({
     name: v.string(),
@@ -202,6 +208,7 @@ export default defineSchema({
     guestKey: v.optional(v.string()),       // a guest's browser id, so they can edit their own notes
     shareId: v.optional(v.id("shares")),    // the share the note came through
     alertedAt: v.optional(v.number()),      // C4: when Heston's email about this client/guest note went out
+    authorKind: v.optional(v.union(v.literal("owner"), v.literal("client"), v.literal("guest"))), // set by the server, never the name
   })
     .index("by_version", ["versionId"])
     .index("by_video", ["videoId"]),
@@ -215,6 +222,7 @@ export default defineSchema({
     // C3: a reply others can't see even when the note is shared (Claude's connector replies, until Heston shows one).
     hidden: v.optional(v.boolean()),
     guestKey: v.optional(v.string()),
+    authorKind: v.optional(v.union(v.literal("owner"), v.literal("client"), v.literal("guest"))),
   }).index("by_note", ["noteId"]),
 
   // When each person last opened each video (Home's "Last opened", the sidebar list).

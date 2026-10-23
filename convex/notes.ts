@@ -3,7 +3,8 @@ import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireMe } from "./lib/access";
-import { accessToVersion, authorOf, noteVisible, ownsNote, shareArg, type Access } from "./lib/viewer";
+import { accessToVersion, authorOf, limitKey, noteVisible, ownsNote, shareArg, type Access } from "./lib/viewer";
+import { bump } from "./lib/rate";
 import { signStillUrl } from "./lib/media";
 import { ALERT_DELAY_MS } from "./emails";
 
@@ -33,11 +34,15 @@ export const forVersion = query({
       if (!noteVisible(access, n)) continue;
       const replies = (await ctx.db.query("replies").withIndex("by_note", (q) => q.eq("noteId", n._id)).collect()).filter((r) => access.kind === "owner" || !r.hidden);
       const voiceUrl = n.voice ? await ctx.storage.getUrl(n.voice.storageId) : null;
+      // Only what the page needs: never another person's guestKey, ids or storage handles (security review, Oct 23).
       out.push({
-        ...n,
+        _id: n._id, _creationTime: n._creationTime, versionId: n.versionId, videoId: n.videoId, kind: n.kind,
+        inFrame: n.inFrame, outFrame: n.outFrame, drawFrame: n.drawFrame, text: n.text, drawing: n.drawing,
         still: await signStillUrl(n.still), stillIn: await signStillUrl(n.stillIn), stillOut: await signStillUrl(n.stillOut),
-        voice: n.voice ? { ...n.voice, pointers: await Promise.all(n.voice.pointers.map(async (p) => ({ ...p, still: await signStillUrl(p.still) }))) } : undefined,
-        voiceUrl, replies: replies.sort((a, b) => a.createdAt - b.createdAt),
+        voice: n.voice ? { mime: n.voice.mime, durationMs: n.voice.durationMs, language: n.voice.language, played: n.voice.played, words: n.voice.words, pointers: await Promise.all(n.voice.pointers.map(async (p) => ({ ...p, still: await signStillUrl(p.still) }))) } : undefined,
+        status: n.status, authorName: n.authorName, authorKind: kindOfNote(n),
+        createdAt: n.createdAt, updatedAt: n.updatedAt, doneAt: n.doneAt,
+        voiceUrl, replies: replies.sort((a, b) => a.createdAt - b.createdAt).map((r) => ({ _id: r._id, text: r.text, authorName: r.authorName, authorKind: r.authorKind ?? (r.guestKey ? "guest" as const : "owner" as const), createdAt: r.createdAt, hidden: r.hidden ?? false })),
         mine: ownsNote(access, n), // may edit or delete (the owner: always; others: their own open notes)
         visibility: (n.visibility ?? "private") as "private" | "shared",
       });
@@ -46,6 +51,10 @@ export const forVersion = query({
     return out.sort((a, b) => (a.inFrame ?? -1) - (b.inFrame ?? -1) || a.createdAt - b.createdAt);
   },
 });
+
+// Who wrote a note: stored since the security review (Oct 23); older rows are read from what they carry.
+const kindOfNote = (n: Pick<Doc<"notes">, "authorKind" | "shareId" | "authorId" | "guestKey">): "owner" | "client" | "guest" =>
+  n.authorKind ?? (n.shareId || n.guestKey ? (n.authorId ? "client" : "guest") : "owner");
 
 function checkFrames(k: string, inFrame?: number, outFrame?: number) {
   const ok = (f?: number) => f !== undefined && Number.isInteger(f) && f >= 0 && f < 10_000_000;
@@ -74,6 +83,7 @@ export const create = mutation({
   },
   handler: async (ctx, a) => {
     const { access, version: ver } = await accessToVersion(ctx, a.versionId, a.share, "comment");
+    if (access.kind !== "owner") await bump(ctx, "notes", limitKey(access));
     checkFrames(a.kind, a.inFrame, a.outFrame);
     const text = a.text.trim().slice(0, MAX_TEXT);
     if (!text && !a.drawing && !a.voice) throw new ConvexError("Write a note or draw something first.");
@@ -99,6 +109,7 @@ export const create = mutation({
       voice: a.voice,
       status: "open",
       authorName: authorOf(access),
+      authorKind: access.kind,
       authorId: access.kind === "guest" ? undefined : access.userId,
       guestKey: access.kind === "guest" ? access.guestKey ?? undefined : undefined,
       shareId: access.share?._id,
@@ -120,8 +131,13 @@ export const create = mutation({
 
 // A still URL a note may carry: only our stills zone or Convex storage, never an arbitrary address.
 function stillOk(u: string) {
+  let p: URL;
+  try { p = new URL(u); } catch { return false; }
+  if (p.protocol !== "https:" || p.search || p.hash || p.href !== u || p.pathname.includes("..")) return false;
   const cdn = process.env.BUNNY_STILLS_CDN;
-  return (cdn && u.startsWith(`https://${cdn}/stills/`)) || /^https:\/\/[\w.-]+\.convex\.cloud\/api\/storage\//.test(u);
+  if (cdn && p.host === cdn) return p.pathname.startsWith("/stills/");
+  const cloud = process.env.CONVEX_CLOUD_URL;
+  return !!cloud && p.origin === cloud && p.pathname.startsWith("/api/storage/");
 }
 
 async function noteFor(ctx: Parameters<typeof accessToVersion>[0], noteId: Id<"notes">, share: Parameters<typeof accessToVersion>[2], need: "view" | "comment"): Promise<{ note: Doc<"notes">; access: Access }> {
@@ -187,10 +203,11 @@ export const reply = mutation({
   args: { noteId: v.id("notes"), text: v.string(), share: shareArg },
   handler: async (ctx, { noteId, text, share }) => {
     const { access } = await noteFor(ctx, noteId, share, "comment");
+    if (access.kind !== "owner") await bump(ctx, "replies", limitKey(access));
     const t = text.trim().slice(0, MAX_TEXT);
     if (!t) throw new ConvexError("Write a reply first.");
     const replyId = await ctx.db.insert("replies", {
-      noteId, text: t, authorName: authorOf(access), authorId: access.kind === "guest" ? undefined : access.userId,
+      noteId, text: t, authorName: authorOf(access), authorKind: access.kind, authorId: access.kind === "guest" ? undefined : access.userId,
       guestKey: access.kind === "guest" ? access.guestKey ?? undefined : undefined, createdAt: Date.now(),
     });
     // C4: the owner's reply to a client's note goes to them by email (emails.replyData decides who qualifies).
@@ -221,7 +238,8 @@ export const markNotified = internalMutation({
 export const voiceUploadUrl = mutation({
   args: { versionId: v.optional(v.id("versions")), share: shareArg },
   handler: async (ctx, { versionId, share }) => {
-    if (versionId) await accessToVersion(ctx, versionId, share, "comment"); else await requireMe(ctx);
+    if (versionId) { const { access } = await accessToVersion(ctx, versionId, share, "comment"); if (access.kind !== "owner") await bump(ctx, "voice", limitKey(access)); }
+    else await requireMe(ctx);
     return await ctx.storage.generateUploadUrl();
   },
 });

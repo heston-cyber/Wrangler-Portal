@@ -101,9 +101,14 @@ describe("new version", () => {
     await t.run(async (ctx) => ctx.db.patch(ids.v2, { status: "ready", mp4Heights: [1080] }));
     await t.action(internal.emails.newVersion, { versionId: ids.v2 });
     const key = /email\/stop\?k=([\w-]+)&t=versions/.exec(mails[0].text)![1];
-    const bad = await t.fetch(`/email/stop?k=nope&t=versions`);
+    // GET only shows the button (mail scanners follow links); POST does it.
+    const ask = await t.fetch(`/email/stop?k=${key}&t=versions`);
+    expect(ask.status).toBe(200);
+    expect(await ask.text()).toContain("Yes, stop them");
+    expect((await me.query(api.clients.listInvites, {})).find((i) => i.email === "maya@harbor.example")!.emails.versionsOff).toBe(false);
+    const bad = await t.fetch(`/email/stop?k=nope&t=versions`, { method: "POST" });
     expect(bad.status).toBe(404);
-    const res = await t.fetch(`/email/stop?k=${key}&t=versions`);
+    const res = await t.fetch(`/email/stop?k=${key}&t=versions`, { method: "POST" });
     expect(res.status).toBe(200);
     expect(await res.text()).toContain("No more emails about new versions");
     // Another version: Maya gets nothing; replies are a separate switch and still arrive.

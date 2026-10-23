@@ -21,8 +21,19 @@ import VideoPage from "./VideoPage";
 type OpenResult = NonNullable<ReturnType<typeof useQuery<typeof api.shares.open>>>;
 
 export default function SharePage({ token, videoId, versionNumber, noteId }: { token: string; videoId: Id<"videos"> | null; versionNumber: number | null; noteId: string | null }) {
+  // After a right passcode the page keeps a proof from `unlock` (never the passcode); `open` takes the proof.
   const [passcode, setPasscode] = useState<string | undefined>(() => readPasscode(token));
   const [typed, setTyped] = useState("");
+  const [passMsg, setPassMsg] = useState<string | null>(null);
+  const unlock = useMutation(api.shares.unlock);
+  async function tryPasscode() {
+    setPassMsg(null);
+    const r = await unlock({ token, passcode: typed.trim() });
+    if (r.state === "ok") { setPasscode(r.proof); setTyped(""); }
+    else if (r.state === "locked") setPassMsg(`Too many wrong tries. Wait ${Math.ceil(r.seconds / 60)} minute${r.seconds > 60 ? "s" : ""} and try again.`);
+    else if (r.state === "wrong") setPassMsg("That one didn't match. Try again.");
+    else setPasscode(undefined);
+  }
   const [guestName, setGuestNameState] = useState(() => readGuestName());
   const key = useMemo(() => guestKey(), []);
   const res = useQuery(api.shares.open, { token, passcode });
@@ -47,7 +58,7 @@ export default function SharePage({ token, videoId, versionNumber, noteId }: { t
   }
   const state = res?.state;
   useEffect(() => {
-    if (state === "ok") void touch({ token, passcode, kind: "opened", guestName }).catch(() => {});
+    if (state === "ok") void touch({ token, passcode, kind: "opened", guestName, guestKey: key }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, token]);
   useEffect(() => { if (state === "ok" && passcode) writePasscode(token, passcode); }, [state, passcode, token]);
@@ -67,9 +78,9 @@ export default function SharePage({ token, videoId, versionNumber, noteId }: { t
   if (res.state === "notInvited") return <Frame eyebrow={res.label ?? "Wrangler Review"} title="This link isn't shared with your account." text="It was shared with a particular email. If that's a different address of yours, sign out and sign in with that one." action={<button className="btn" onClick={() => void signOut()}>Sign out</button>} />;
   if (res.state === "passcode" || res.state === "wrongPasscode") {
     return (
-      <Frame eyebrow={res.label ?? "Wrangler Review"} title="This link has a passcode." text={res.state === "wrongPasscode" ? "That one didn't match. Try again." : "Type the passcode you were given."}>
-        <form style={{ display: "grid", gap: 12, width: "min(380px, 100%)" }} onSubmit={(e) => { e.preventDefault(); setPasscode(typed.trim()); }}>
-          <label className="field"><span className="label">Passcode</span><input className="input" value={typed} onChange={(e) => setTyped(e.target.value)} autoFocus autoComplete="off" aria-label="Passcode" /></label>
+      <Frame eyebrow="Wrangler Review" title="This link has a passcode." text={passMsg ?? (res.state === "wrongPasscode" ? "That one didn't match. Try again." : "Type the passcode you were given.")}>
+        <form style={{ display: "grid", gap: 12, width: "min(380px, 100%)" }} onSubmit={(e) => { e.preventDefault(); void tryPasscode(); }}>
+          <label className="field"><span className="label">Passcode</span><input className="input" type="password" value={typed} onChange={(e) => setTyped(e.target.value)} autoFocus autoComplete="off" aria-label="Passcode" /></label>
           <button className="btn primary lg" type="submit" disabled={!typed.trim()}><Lock size={15} />Open</button>
         </form>
       </Frame>

@@ -37,6 +37,7 @@ const OPEN: Record<string, string> = {
   "phase0.saveRun": "lab test log: append-only, capped, holds no client data",
   "shares.open": "a share link: answers by the share's own gate (off/expired/passcode/invited), tested in shares.test.ts",
   "shares.touch": "records an open on a share link: same gate; a missing token records nothing",
+  "shares.unlock": "the passcode box on a share link: rate-limited; a missing token answers 'missing'",
 };
 // Functions with their own gate (a key in the arguments): refused with the wrong key, whoever calls.
 const KEYED = new Set(["r1results.report"]);
@@ -69,7 +70,7 @@ function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "shares.update": { shareId: ids.shareId, access: "comment" }, "shares.setOff": { shareId: ids.shareId, off: true }, "shares.remove": { shareId: ids.shareId },
     "shares.addMember": { shareId: ids.shareId, email: "x@example.com" }, "shares.removeMember": { shareId: ids.shareId, email: "x@example.com" },
     "shares.list": {}, "shares.forTarget": { target: { kind: "video", videoId: ids.videoId } }, "shares.coveringVideo": { videoId: ids.videoId }, "shares.activity": { shareId: ids.shareId },
-    "shares.open": { token: "nope" }, "shares.touch": { token: "nope", kind: "opened" }, "shares.mine": {},
+    "shares.open": { token: "nope" }, "shares.touch": { token: "nope", kind: "opened" }, "shares.unlock": { token: "nope", passcode: "x" }, "shares.mine": {},
     "register.list": {}, "register.nextName": { videoId: ids.videoId }, "register.newVideo": { title: "X", shortTitle: "X", projectName: "P" }, "register.setShortTitle": { videoId: ids.videoId, shortTitle: "X" },
     "register.addToRegister": { videoId: ids.videoId, shortTitle: "X" }, "register.makeSheetKey": {}, "register.sheetKey": {}, "register.removeSheetKey": {},
     "stills.upload": { dataBase64: "AA==", contentType: "image/jpeg" },

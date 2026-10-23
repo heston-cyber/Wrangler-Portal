@@ -55,6 +55,9 @@ export async function versionShown(ctx: QueryCtx | MutationCtx, share: Share, ve
   return !!latest && latest._id === version._id;
 }
 
+/** A key for per-hour limits: the share plus the person (guest key or account). */
+export const limitKey = (a: Access) => (a.kind === "owner" ? "owner" : a.kind === "client" ? `${a.share._id}:u:${a.userId}` : `${a.share._id}:g:${a.guestKey ?? "anon"}`);
+
 /** The name that goes on a note or reply. */
 export const authorOf = (a: Access) => (a.kind === "guest" ? `${a.name} (guest)` : a.name);
 

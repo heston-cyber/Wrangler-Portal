@@ -47,7 +47,7 @@ export default function VideoPage({ videoId, versionNumber, noteId }: { videoId:
   const touch = useMutation(api.shares.touch);
   useEffect(() => {
     if (viewer.can === "owner") void markOpened({ videoId }).catch(() => {});
-    else if (viewer.share) void touch({ token: viewer.share.token, passcode: viewer.share.passcode, kind: "viewed", videoId, guestName: viewer.share.guestName }).catch(() => {});
+    else if (viewer.share) void touch({ token: viewer.share.token, passcode: viewer.share.passcode, kind: "viewed", videoId, guestName: viewer.share.guestName, guestKey: viewer.share.guestKey }).catch(() => {});
   }, [videoId, markOpened, touch, viewer.can, viewer.share]);
   if (data === undefined) return <><TopBar><span className="secondary">Loading…</span></TopBar><div className="content" /></>;
   if (data === null) {

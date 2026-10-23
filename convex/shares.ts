@@ -7,18 +7,24 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireMe, requireSignedIn } from "./lib/access";
-import { accessToVersion, shareArg } from "./lib/viewer";
+import { accessToVersion, limitKey, shareArg } from "./lib/viewer";
+import { bump } from "./lib/rate";
 import { ensureInvite } from "./clients";
 import { randomToken } from "./lib/hash";
 import { SITE, sendEmail } from "./lib/email";
 import { downloadFor, signedThumbUrl } from "./lib/media";
-import { clientKey, coveredProjects, coveredVideos, gateShare, labelOf, passcodeHash, shareState, showsAllVersions, type Share } from "./lib/shareAccess";
+import { clientKey, coveredProjects, coveredVideos, gateShare, labelOf, MIN_PASSCODE, passProof, passcodeHash, shareState, showsAllVersions, type Share } from "./lib/shareAccess";
 
 const target = v.object({ kind: v.union(v.literal("client"), v.literal("project"), v.literal("video")), client: v.optional(v.string()), projectId: v.optional(v.id("projects")), videoId: v.optional(v.id("videos")) });
 const settings = { access: v.union(v.literal("view"), v.literal("comment")), allVersions: v.boolean(), downloads: v.boolean(), emailNewVersions: v.boolean(), expiresAt: v.optional(v.number()), passcode: v.optional(v.string()) };
 
 const MAX_PASSCODE = 60;
-const cleanPass = (p: string | undefined) => { const s = (p ?? "").trim(); if (s.length > MAX_PASSCODE) throw new ConvexError("Keep the passcode under 60 characters."); return s; };
+const cleanPass = (p: string | undefined) => {
+  const s = (p ?? "").trim();
+  if (s.length > MAX_PASSCODE) throw new ConvexError("Keep the passcode under 60 characters.");
+  if (s && s.length < MIN_PASSCODE) throw new ConvexError(`Use at least ${MIN_PASSCODE} characters for the passcode.`);
+  return s;
+};
 
 /** Checks the target exists and returns the share's target fields. */
 async function targetFields(ctx: QueryCtx | MutationCtx, t: { kind: "client" | "project" | "video"; client?: string; projectId?: Id<"projects">; videoId?: Id<"videos"> }) {
@@ -227,7 +233,7 @@ export const open = query({
   args: { token: v.string(), passcode: v.optional(v.string()) },
   handler: async (ctx, { token, passcode }) => {
     const g = await gateShare(ctx, token, passcode);
-    if (!g.ok) return { state: g.reason, label: g.share && g.reason !== "missing" ? (await labelOf(ctx, g.share)).label : null };
+    if (!g.ok) return { state: g.reason, label: g.share && (g.reason === "off" || g.reason === "expired") ? (await labelOf(ctx, g.share)).label : null };
     const s = g.share;
     const projects = await coveredProjects(ctx, s);
     const videos = await coveredVideos(ctx, s);
@@ -257,21 +263,45 @@ export const open = query({
   },
 });
 
+// The passcode box on a link share. Five wrong tries lock the share for a minute, doubling each time (an hour at
+// most); the page keeps the proof it gets back, never the passcode (security review, Oct 23).
+export const unlock = mutation({
+  args: { token: v.string(), passcode: v.string() },
+  handler: async (ctx, { token, passcode }) => {
+    const s = await ctx.db.query("shares").withIndex("by_token", (q) => q.eq("token", token)).unique();
+    if (!s || shareState(s)) return { state: "missing" as const };
+    if (!s.passcodeHash) return { state: "none" as const };
+    const now = Date.now();
+    if (s.passLockedUntil && s.passLockedUntil > now) return { state: "locked" as const, seconds: Math.ceil((s.passLockedUntil - now) / 1000) };
+    if ((await passcodeHash(token, passcode.trim())) !== s.passcodeHash) {
+      const fails = (s.passFails ?? 0) + 1;
+      const lock = fails >= 5 ? Math.min(60, 2 ** (fails - 5)) * 60_000 : 0;
+      await ctx.db.patch(s._id, { passFails: fails, ...(lock ? { passLockedUntil: now + lock } : {}) });
+      return lock ? { state: "locked" as const, seconds: lock / 1000 } : { state: "wrong" as const };
+    }
+    if (s.passFails) await ctx.db.patch(s._id, { passFails: 0, passLockedUntil: undefined });
+    return { state: "ok" as const, proof: await passProof(token, s.passcodeHash) };
+  },
+});
+
 // Records an open or a view on a share (the link page calls it). Same gate as `open`; one row per person, kind and
 // video per half hour, so a page that refreshes doesn't pile up rows.
 export const touch = mutation({
-  args: { token: v.string(), passcode: v.optional(v.string()), kind: v.union(v.literal("opened"), v.literal("viewed")), videoId: v.optional(v.id("videos")), guestName: v.optional(v.string()) },
+  args: { token: v.string(), passcode: v.optional(v.string()), kind: v.union(v.literal("opened"), v.literal("viewed")), videoId: v.optional(v.id("videos")), guestName: v.optional(v.string()), guestKey: v.optional(v.string()) },
   handler: async (ctx, a) => {
     const g = await gateShare(ctx, a.token, a.passcode);
     if (!g.ok) return { recorded: false, state: g.reason };
     const s = g.share;
-    if (a.kind === "viewed" && a.videoId && !(await coveredVideos(ctx, s)).some((x) => x._id === a.videoId)) return { recorded: false, state: "notCovered" };
+    if (a.videoId && !(await coveredVideos(ctx, s)).some((x) => x._id === a.videoId)) return { recorded: false, state: "notCovered" };
     const viewer = g.viewer;
     const who = viewer.kind === "owner" ? "Heston (owner)" : viewer.kind === "client" ? `${viewer.name} · ${viewer.email}` : `${(a.guestName ?? "").trim().slice(0, 60) || "Someone"} (guest)`;
+    // One row per person, kind and video per half hour; guests are told apart by their browser key, not the name they type.
+    const whoKey = viewer.kind === "nobody" ? `g:${(a.guestKey ?? "").slice(0, 80)}` : viewer.kind === "client" ? `u:${viewer.userId}` : "owner";
     const now = Date.now();
-    const recent = await ctx.db.query("shareActivity").withIndex("by_share", (q) => q.eq("shareId", s._id).gt("at", now - 30 * 60_000)).collect();
-    if (recent.some((r) => r.kind === a.kind && r.who === who && (r.videoId ?? null) === (a.videoId ?? null))) return { recorded: false, state: "recent" };
-    await ctx.db.insert("shareActivity", { shareId: s._id, kind: a.kind, who, ...(a.videoId ? { videoId: a.videoId } : {}), at: now });
+    const recent = await ctx.db.query("shareActivity").withIndex("by_share", (q) => q.eq("shareId", s._id).gt("at", now - 30 * 60_000)).take(500);
+    if (recent.length >= 500) return { recorded: false, state: "busy" };
+    if (recent.some((r) => r.kind === a.kind && (r.whoKey ?? r.who) === (r.whoKey ? whoKey : who) && (r.videoId ?? null) === (a.videoId ?? null))) return { recorded: false, state: "recent" };
+    await ctx.db.insert("shareActivity", { shareId: s._id, kind: a.kind, who, whoKey, ...(a.videoId ? { videoId: a.videoId } : {}), at: now });
     if (viewer.kind !== "owner" && a.kind === "opened") await ctx.db.patch(s._id, { lastOpenedAt: now, openCount: (s.openCount ?? 0) + 1 });
     return { recorded: true, state: "ok" };
   },
@@ -308,9 +338,13 @@ export const mine = query({
 const projectLabelOf = (p: { name: string; jobNumber?: string }) => (p.jobNumber ? `${p.jobNumber} ${p.name}` : p.name);
 
 // For actions (stills, voice transcription): may this caller comment on this version? Throws if not.
-export const assertCanComment = internalQuery({
-  args: { versionId: v.id("versions"), share: shareArg },
-  handler: async (ctx, { versionId, share }) => { await accessToVersion(ctx, versionId, share, "comment"); return true; },
+export const assertCanComment = internalMutation({
+  args: { versionId: v.id("versions"), share: shareArg, count: v.optional(v.union(v.literal("stills"), v.literal("voice"))) },
+  handler: async (ctx, { versionId, share, count }) => {
+    const { access } = await accessToVersion(ctx, versionId, share, "comment");
+    if (count && access.kind !== "owner") await bump(ctx, count, limitKey(access));
+    return true;
+  },
 });
 
 // ---------- the invite email ----------

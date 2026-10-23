@@ -188,8 +188,11 @@ export const video = query({
     const owner = access.kind === "owner";
     const out = [];
     for (const x of versions.sort((a, b) => a.number - b.number)) {
+      const pv = await publicVersion(x);
+      // Clients and guests get what the player needs, not the owner's details (security review, Oct 23).
+      const slim = owner ? pv : { ...pv, fileName: `v${x.number}`, uploaderName: null, bunnyGuid: "", error: null, storageBytes: null, streamOnly: false, scrubStatus: pv.scrub ? "ready" as const : null, dropboxPath: null };
       out.push({
-        ...(await publicVersion(x)),
+        ...slim,
         dropboxPath: owner ? x.dropboxPath ?? null : null,
         noteCount: notes.filter((n) => n.versionId === x._id).length,
         openCount: notes.filter((n) => n.versionId === x._id && n.status === "open").length,
@@ -262,8 +265,8 @@ export const setStartTimecode = mutation({
 export const reportFrameCount = mutation({
   args: { versionId: v.id("versions"), frameCount: v.number(), share: shareArg },
   handler: async (ctx, a) => {
-    const { version: ver } = await accessToVersion(ctx, a.versionId, a.share);
-    if (ver.frameCountFrom === "file") return;
+    const { version: ver, access } = await accessToVersion(ctx, a.versionId, a.share);
+    if (access.kind !== "owner" || ver.frameCountFrom === "file") return; // viewers' estimates are ignored (security review)
     if (!Number.isInteger(a.frameCount) || a.frameCount <= 0 || a.frameCount > 10_000_000) return;
     if (ver.frameCount !== a.frameCount) await ctx.db.patch(a.versionId, { frameCount: a.frameCount, frameCountFrom: "player" });
   },

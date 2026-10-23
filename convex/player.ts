@@ -24,8 +24,8 @@ export const log = mutation({
 export const fileFailed = mutation({
   args: { versionId: v.id("versions"), share: shareArg },
   handler: async (ctx, { versionId, share }) => {
-    const { version: ver } = await accessToVersion(ctx, versionId, share);
-    if (!ver.streamOnly) await ctx.db.patch(versionId, { streamOnly: true });
+    const { version: ver, access } = await accessToVersion(ctx, versionId, share);
+    if (access.kind === "owner" && !ver.streamOnly) await ctx.db.patch(versionId, { streamOnly: true });
   },
 });
 

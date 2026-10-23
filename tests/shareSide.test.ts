@@ -231,3 +231,62 @@ describe("signed media", () => {
     expect((await t.query(api.shares.open, { token: viewLink.token }) as { videos: Array<{ versions: Array<{ thumbUrl: string | null }> }> }).videos[0].versions[0].thumbUrl).toMatch(/\?token=/);
   });
 });
+
+// Security review (Oct 23): the holes it found stay closed.
+describe("after the security review", () => {
+  test("H1: other people's guest keys never leave the server, and a forged key can't touch their notes", async () => {
+    const { t, ids, commentLink } = await setup();
+    const pat = guest(commentLink.token, "Pat"), sam = guest(commentLink.token, "Sam");
+    const noteId = await t.mutation(api.notes.create, { versionId: ids.v2, kind: "general", text: "pat's note", share: pat });
+    const seen = (await t.query(api.notes.forVersion, { versionId: ids.v2, share: sam })).find((n) => n._id === noteId)! as Record<string, unknown>;
+    for (const k of ["guestKey", "authorId", "shareId", "alertedAt", "notifiedAt"]) expect(seen).not.toHaveProperty(k);
+    expect((seen.voice as unknown) ?? undefined).toBeUndefined();
+    expect(seen.authorKind).toBe("guest");
+    await expect(t.mutation(api.notes.editText, { noteId, text: "x", share: sam })).rejects.toThrow(/own notes/);
+    // Replies carry no ids either.
+    await t.mutation(api.notes.reply, { noteId, text: "hi", share: sam });
+    const r = (await t.query(api.notes.forVersion, { versionId: ids.v2, share: pat })).find((n) => n._id === noteId)!.replies[0] as Record<string, unknown>;
+    expect(Object.keys(r).sort()).toEqual(["_id", "authorKind", "authorName", "createdAt", "hidden", "text"]);
+  });
+
+  test("M1: a still must be one of ours, by parsed URL, not by prefix", async () => {
+    const { t, ids, commentLink } = await setup();
+    const share = guest(commentLink.token);
+    const bad = ["https://wrangler-review-stills.b-cdn.net/stills/../review/x/abc/b2.mp4", "https://wrangler-review-stills.b-cdn.net/review/x/abc/b2.mp4", "https://evil.convex.cloud/api/storage/abc", "https://wrangler-review-stills.b-cdn.net/stills/a.jpg?x=1", "http://wrangler-review-stills.b-cdn.net/stills/a.jpg"];
+    for (const still of bad) await expect(t.mutation(api.notes.create, { versionId: ids.v2, kind: "frame", inFrame: 1, text: "x", still, share })).rejects.toThrow(/isn't one of ours/);
+    await t.mutation(api.notes.create, { versionId: ids.v2, kind: "frame", inFrame: 1, text: "ok", still: "https://wrangler-review-stills.b-cdn.net/stills/2026/10/a.jpg", share });
+  });
+
+  test("L3/L4: viewers can't change versions, and see only player data", async () => {
+    const { t, ids, me, commentLink } = await setup();
+    const share = guest(commentLink.token);
+    await t.mutation(api.player.fileFailed, { versionId: ids.v1, share });
+    await t.mutation(api.library.reportFrameCount, { versionId: ids.v1, frameCount: 7, share });
+    const v1 = (await me.query(api.library.video, { videoId: ids.brand }))!.versions.find((v) => v.number === 1)!;
+    expect(v1.streamOnly).toBe(false);
+    expect(v1.frameCount).toBe(100);
+    const seen = (await t.query(api.library.video, { videoId: ids.brand, share }))!.versions.find((v) => v.number === 1)!;
+    expect(seen).toMatchObject({ fileName: "v1", uploaderName: null, bunnyGuid: "", error: null, storageBytes: null, dropboxPath: null });
+  });
+
+  test("L2: opens are told apart by the guest's browser key, not the typed name; uncovered videos aren't recorded", async () => {
+    const { t, ids, me, viewLink } = await setup();
+    for (const name of ["Pat", "Pat2", "Pat3"]) await t.mutation(api.shares.touch, { token: viewLink.token, kind: "opened", guestName: name, guestKey: "same-browser" });
+    expect((await me.query(api.shares.list, {})).find((s) => s._id === viewLink.shareId)!.openCount).toBe(1);
+    expect((await t.mutation(api.shares.touch, { token: viewLink.token, kind: "opened", videoId: ids.otherVid, guestKey: "k" })).state).toBe("notCovered");
+  });
+
+  test("M3: a client can't take the owner's name", async () => {
+    const { maya } = await setup();
+    await expect(maya.mutation(api.users.setName, { name: "Heston" })).rejects.toThrow(/taken/);
+    await expect(maya.mutation(api.users.setName, { name: "heston hill" })).rejects.toThrow(/taken/);
+    await maya.mutation(api.users.setName, { name: "Maya C" });
+  });
+
+  test("M4: a commenter's notes are capped per hour", async () => {
+    const { t, ids, commentLink } = await setup();
+    const share = guest(commentLink.token, "Spam");
+    for (let i = 0; i < 120; i++) await t.mutation(api.notes.create, { versionId: ids.v2, kind: "general", text: `n${i}`, share });
+    await expect(t.mutation(api.notes.create, { versionId: ids.v2, kind: "general", text: "one more", share })).rejects.toThrow(/a lot in one hour/);
+  });
+});

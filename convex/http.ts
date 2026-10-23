@@ -27,5 +27,6 @@ http.route({ path: "/register-feed", method: "GET", handler: registerFeed });
 
 // Emails (C4): the "stop these emails" link.
 http.route({ path: "/email/stop", method: "GET", handler: emailStop });
+http.route({ path: "/email/stop", method: "POST", handler: emailStop });
 
 export default http;

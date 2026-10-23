@@ -2,7 +2,7 @@ import { query, mutation, internalQuery } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { requireSignedIn } from "./lib/access";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { allowedEmails } from "./auth";
+import { allowedEmails, ownerNames } from "./auth";
 
 // The signed-in person, or null. `allowed` = owner (the site as before); `role` tells the page which side to show.
 export const me = query({
@@ -42,6 +42,7 @@ export const setName = mutation({
     const me = await requireSignedIn(ctx);
     const n = name.trim().replace(/\s+/g, " ").slice(0, 60);
     if (!n) throw new ConvexError("Enter a name.");
+    if (me.kind !== "owner" && ownerNames().has(n.toLowerCase())) throw new ConvexError("That name is taken.");
     await ctx.db.patch(me.userId, { name: n });
   },
 });

@@ -6,6 +6,9 @@ import { sendEmail, sixDigits } from "./lib/email";
 import type { MutationCtx } from "./_generated/server";
 
 // Owners: the emails in ALLOWED_EMAILS (comma-separated Convex env var). Everyone else needs an invite (C1, Oct 23).
+/** Names a client may not use: the owners' names and email local parts ("heston"), lower-case. Security review, Oct 23. */
+export const ownerNames = () => new Set([...allowedEmails().map((e) => e.split("@")[0]), ...(process.env.OWNER_NAMES || "Heston,Heston Hill,Wrangler,Wrangler Productions,Claude").split(",")].map((s) => s.trim().toLowerCase()).filter(Boolean));
+
 export function allowedEmails(): string[] {
   return (process.env.ALLOWED_EMAILS ?? "")
     .split(",")
@@ -69,7 +72,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       if (args.existingUserId) {
         const patch: Record<string, unknown> = { lastSignInAt: Date.now() };
         if (verified) patch.emailVerificationTime = Date.now();
-        if (typeof args.profile.name === "string" && args.profile.name) patch.name = args.profile.name;
+        if (typeof args.profile.name === "string" && args.profile.name && !(args.existingUserId && !allowedEmails().includes(email) && ownerNames().has(args.profile.name.trim().toLowerCase()))) patch.name = args.profile.name;
         await ctx.db.patch(args.existingUserId, patch);
         return args.existingUserId;
       }
@@ -78,7 +81,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       if (!owner && !invite) throw new ConvexError("This email hasn't been invited to Wrangler Review.");
       const userId = await ctx.db.insert("users", {
         email, role: owner ? "owner" : "client",
-        name: (typeof args.profile.name === "string" && args.profile.name) || invite?.name || undefined,
+        name: (typeof args.profile.name === "string" && args.profile.name && !(!owner && ownerNames().has(args.profile.name.trim().toLowerCase())) ? args.profile.name : undefined) || invite?.name || undefined,
         emailVerificationTime: verified ? Date.now() : undefined, lastSignInAt: Date.now(),
       });
       if (invite) await ctx.db.patch(invite._id, { acceptedAt: Date.now(), userId });

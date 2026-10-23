@@ -17,4 +17,4 @@ export async function sendEmail(msg: { to: string; subject: string; text: string
   return j.id ?? "";
 }
 
-export const sixDigits = () => String(Math.floor(100000 + Math.random() * 900000));
+export const sixDigits = () => { const b = new Uint32Array(1); crypto.getRandomValues(b); return String(100000 + (b[0] % 900000)); };

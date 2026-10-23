@@ -139,7 +139,7 @@ async function sttFromUrl(key: string, url: string): Promise<{ stt: any; model: 
 export const voiceWords = action({
   args: { storageId: v.id("_storage"), mime: v.string(), versionId: v.optional(v.id("versions")), share: shareArg },
   handler: async (ctx, { storageId, mime, versionId, share }): Promise<{ language: string | null; words: Array<{ text: string; start: number; end: number; type?: string }> }> => {
-    if (versionId) await ctx.runQuery(internal.shares.assertCanComment, { versionId, share }); else await ctx.runQuery(internal.users.assertAllowed, {});
+    if (versionId) await ctx.runMutation(internal.shares.assertCanComment, { versionId, share, count: "voice" }); else await ctx.runQuery(internal.users.assertAllowed, {});
     const key = process.env.ELEVENLABS_API_KEY;
     if (!key) throw new Error("Transcription isn't set up (no ElevenLabs key).");
     const blob = await ctx.storage.get(storageId);

@@ -4,13 +4,13 @@ import { BrandImg } from "../ui/BrandImg";
 import { useMutation } from "convex/react";
 import { Check, Copy, Ellipsis, Eye, EyeOff, Mic, Pencil, Reply, Trash2 } from "lucide-react";
 import { api } from "../../convex/_generated/api";
-import type { Doc } from "../../convex/_generated/dataModel";
+import type { FunctionReturnType } from "convex/server";
 import type { FrameClock } from "../player/useFramePlayer";
 import { Menu, MenuItem, MenuSep } from "../ui/kit";
 import { ago } from "../lib/format";
 import { useShareArgs, useViewer } from "../lib/viewer";
 
-export type NoteRow = Doc<"notes"> & { replies: Doc<"replies">[]; voiceUrl?: string | null; mine?: boolean; visibility?: "private" | "shared" };
+export type NoteRow = FunctionReturnType<typeof api.notes.forVersion>[number];
 export type NoteFilter = { status: "open" | "done" | "all"; kinds: { frame: boolean; range: boolean; general: boolean }; sort: "timecode" | "newest" };
 export const defaultFilter: NoteFilter = { status: "all", kinds: { frame: true, range: true, general: true }, sort: "timecode" };
 
@@ -105,7 +105,7 @@ function NoteCard({ n, here, focused, focusTick, tc, onJump, onCopied, onSeekFra
       {/* Altar II card pattern: red label, bold value, grey outlined detail boxes */}
       <div className="rlabel">
         <span className="dot" style={{ background: kindColor(n.kind) }} />
-        {n.kind === "general" ? "Note" : kindName(n.kind)} · {n.authorName} · {ago(n.createdAt)}
+        {n.kind === "general" ? "Note" : kindName(n.kind)} · {n.authorName}{n.authorKind === "client" ? " (client)" : ""} · {ago(n.createdAt)}
       </div>
       {n.kind === "general"
         ? <div className="rbold">Whole video</div>
@@ -162,7 +162,7 @@ function NoteCard({ n, here, focused, focusTick, tc, onJump, onCopied, onSeekFra
 
       {n.replies.map((r) => (
         <div key={r._id} className={`reply${r.hidden ? " hidden" : ""}`}>
-          <span className="rh">{r.authorName} · {ago(r.createdAt)}{owner && r.hidden && <> · <button className="linkbtn" onClick={() => void setReplyHidden({ replyId: r._id, hidden: false })} title="Only you can see this reply. Show it to the people this video is shared with.">private · show</button></>}{owner && !r.hidden && r.authorName === "Claude" && <> · <button className="linkbtn" onClick={() => void setReplyHidden({ replyId: r._id, hidden: true })}>hide</button></>}</span>
+          <span className="rh">{r.authorName}{r.authorKind === "client" ? " (client)" : ""} · {ago(r.createdAt)}{owner && r.hidden && <> · <button className="linkbtn" onClick={() => void setReplyHidden({ replyId: r._id, hidden: false })} title="Only you can see this reply. Show it to the people this video is shared with.">private · show</button></>}{owner && !r.hidden && r.authorName === "Claude" && <> · <button className="linkbtn" onClick={() => void setReplyHidden({ replyId: r._id, hidden: true })}>hide</button></>}</span>
           <div className="ntext">{r.text}</div>
         </div>
       ))}

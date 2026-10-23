@@ -289,16 +289,22 @@ const page = (title: string, body: string) => `<!doctype html><meta charset="utf
 <div style="font:600 11px/1 Helvetica,Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#ff1a0e;margin-bottom:14px">Wrangler Review</div>
 <h1 style="font-size:24px;margin:0 0 12px">${title}</h1><p style="margin:0;color:#b8b2aa">${body}</p></div></body>`;
 
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+// GET shows a button (mail scanners follow links; they don't press buttons); POST does it.
 export const stop = httpAction(async (ctx, req) => {
   const u = new URL(req.url);
   const key = u.searchParams.get("k") ?? "", t = u.searchParams.get("t");
   const kind: Kind | null = t === "versions" || t === "replies" ? t : null;
   const html = (s: string, b: string, status = 200) => new Response(page(s, b), { status, headers: { "content-type": "text/html; charset=utf-8" } });
-  if (!key || !kind) return html("That link isn't right.", "Use the link at the bottom of the email, whole.", 400);
+  if (!key || !kind || key.length > 64) return html("That link isn't right.", "Use the link at the bottom of the email, whole.", 400);
+  const what = kind === "versions" ? "new versions" : "replies to your notes";
+  if (req.method !== "POST") {
+    return html(`Stop emails about ${what}?`, `<form method="post" action="${esc(u.pathname)}?k=${encodeURIComponent(key)}&amp;t=${kind}" style="margin-top:18px"><button style="font:600 14px Helvetica,Arial,sans-serif;background:#ff1a0e;color:#fff;border:0;border-radius:999px;padding:12px 22px;cursor:pointer">Yes, stop them</button></form><span style="display:block;margin-top:14px;font-size:13px">Emails you ask for yourself (sign-in codes) still arrive.</span>`);
+  }
   const email = await ctx.runMutation(internal.emails.setOff, { key, kind, off: true });
   if (!email) return html("That link isn't right.", "Use the link at the bottom of the email, whole.", 404);
-  const what = kind === "versions" ? "new versions" : "replies to your notes";
-  return html(`Done. No more emails about ${what}.`, `${email} won't get them any more. Emails you ask for yourself (sign-in codes) still arrive. Changed your mind? Reply to any Wrangler Review email.`);
+  return html(`Done. No more emails about ${what}.`, `${esc(email)} won't get them any more. Changed your mind? Reply to any Wrangler Review email.`);
 });
 
 /** For Settings › Clients: each invited person's choices. */

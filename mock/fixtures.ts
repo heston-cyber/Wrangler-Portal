@@ -316,6 +316,7 @@ export const store = {
       return { shareId: s._id, token: s.token, url: s.url, added: (args.emails ?? []).map((e: string) => e.toLowerCase()) };
     }
     if (name === "shares:touch") return { recorded: true, state: "ok" };
+    if (name === "shares:unlock") { if (args.passcode === "coffee") { demoPasscodeOk = true; return { state: "ok", proof: "demo-proof" }; } return { state: "wrong" }; }
     if (name === "notes:setVisibility") { const n = notes.find((x) => x._id === args.noteId); if (n) n.visibility = args.visibility; bump(); return; }
     if (name === "notes:setReplyHidden") { for (const n of notes) for (const r of n.replies ?? []) if (r._id === args.replyId) r.hidden = args.hidden; bump(); return; }
     if (name === "shares:setOff") { shares = shares.map((x) => (x._id === args.shareId ? { ...x, state: args.off ? "off" : "on", offAt: args.off ? Date.now() : null, get url() { return `https://review.wranglerportal.com/s/${this.token}`; } } : x)); bump(); return; }
