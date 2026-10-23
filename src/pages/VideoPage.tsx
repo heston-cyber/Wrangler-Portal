@@ -538,6 +538,38 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   // Download (C3): the render itself, or the best MP4 copy, when the share allows it (the owner always may).
   const downloadUrl = version?.media.file ?? (version && mp4H ? version.media.mp4[mp4H] : null) ?? null;
   const canDownload = !!downloadUrl && (owner || viewer.downloads);
+  // A plain link to another domain won't save (browsers ignore `download` across origins and just play the file), so
+  // the file is fetched here and handed to the browser as a download, with progress. Falls back to opening the link.
+  const [dl, setDl] = useState<{ pct: number } | null>(null);
+  async function downloadFile() {
+    if (!downloadUrl || !version || dl) return;
+    const name = `${(data.title || "video").replace(/[^\w\- ]+/g, "").trim() || "video"}_v${version.number}.mp4`;
+    setDl({ pct: 0 });
+    try {
+      const res = await fetch(downloadUrl);
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      const total = Number(res.headers.get("content-length")) || 0;
+      const reader = res.body.getReader();
+      const chunks: BlobPart[] = [];
+      let got = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value); got += value.byteLength;
+        if (total) setDl({ pct: Math.round((100 * got) / total) });
+      }
+      const url = URL.createObjectURL(new Blob(chunks, { type: "video/mp4" }));
+      const a = document.createElement("a");
+      a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      showToast("Downloaded");
+    } catch {
+      window.open(downloadUrl, "_blank", "noopener");
+      showToast("Opened the file in a new tab; save it from there.");
+    } finally {
+      setDl(null);
+    }
+  }
   const setPanelPref = (p: "notes" | "versions" | "transcript" | null) => { setPanel(p); writePref("wr.panel", p ? "notes" : "none"); };
   const openPanel = () => setPanelPref(panel ? null : firstTab);
   const endFrame = Math.max(0, frameCount - 1);
@@ -621,7 +653,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
         <>
           {owner && <button className={`btn sm${covering?.some((s) => s.state === "on") ? " on" : ""}`} onClick={() => setDialog("share")} title={covering?.length ? `Shared: ${covering.filter((s) => s.state === "on").length} live ${covering.filter((s) => s.state === "on").length === 1 ? "link" : "links"}` : "Share this video"}><Share2 size={15} /><span className="hide-sm">Share</span></button>}
           {owner && <button className="btn sm hide-sm" onClick={downloadEdl} disabled={!notes?.length} title="Download the notes as Resolve markers (EDL)"><Download size={15} />Resolve markers</button>}
-          {!owner && canDownload && <a className="btn sm" href={downloadUrl!} target="_blank" rel="noreferrer" download title="Download this version"><Download size={15} /><span className="hide-sm">Download</span></a>}
+          {!owner && canDownload && <button className="btn sm" onClick={() => void downloadFile()} disabled={!!dl} title="Download this version">{dl ? <Spinner /> : <Download size={15} />}<span className="hide-sm">{dl ? (dl.pct ? `${dl.pct}%` : "Downloading…") : "Download"}</span></button>}
           {!noNotes && <button className={`icon-btn md${panel ? " on" : ""}`} onClick={openPanel} aria-label={panel ? "Hide panel" : "Show panel"} title={panel ? "Hide panel" : "Show panel"}><PanelRight size={16} /></button>}
         </>
       }>
@@ -640,7 +672,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
         {!owner && viewer.can === "view" && <span className="chip fill hide-sm" title="This link is view only">View only</span>}
         {!owner ? (
           <Menu label="Options" trigger={(p) => <button {...p} className="icon-btn" aria-label="Options"><Ellipsis size={16} /></button>}>
-            {canDownload && <MenuItem icon={<Download size={16} />} onSelect={() => window.open(downloadUrl!, "_blank")}>Download this version</MenuItem>}
+            {canDownload && <MenuItem icon={<Download size={16} />} onSelect={() => void downloadFile()}>Download this version</MenuItem>}
             <MenuItem icon={<Keyboard size={16} />} onSelect={() => setDialog("keys")} kbd="?">Keyboard shortcuts</MenuItem>
           </Menu>
         ) : (
