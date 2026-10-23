@@ -406,7 +406,7 @@ export const nextRenderFor = internalQuery({
     return {
       video_id: vid._id, number: pad5(vid.number!), title: vid.title, short_title: vid.shortTitle, project: found.project?.name ?? null,
       latest_version: top || null, next_version: top + 1, next_file_name: name + ".mp4", timeline_name: name,
-      where: "Render with the Wrangler Review preset that matches the timeline (16x9 1920x1080, Scope 1920x804 or Vertical 1080x1920) into Dropbox › Apps/Wrangler Review/<Client>/<Project>/<Video>/.",
+      where: "Render with the Wrangler Review preset that matches the timeline (16x9 1920x1080, Scope 1920x804 or Vertical 1080x1920) into any folder inside Dropbox › Apps/Wrangler Review, with exactly this file name. The name decides the video.",
     };
   },
 });
