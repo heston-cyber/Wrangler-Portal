@@ -66,17 +66,16 @@ type S = Awaited<ReturnType<typeof setup>>;
 const guest = (token: string, name = "Pat") => ({ token, guestKey: "gk-" + name, guestName: name });
 
 describe("who may do what on a video through a share", () => {
-  test("a view link: watch, read shared notes, transcript and waveform; never write", async () => {
+  test("a view link: watch, transcript and waveform; no notes, never write", async () => {
     const { t, ids, viewLink } = await setup();
     const share = guest(viewLink.token);
     const vid = await t.query(api.library.video, { videoId: ids.brand, share });
     expect(vid).toMatchObject({ can: "view", viewer: { kind: "guest", name: "Pat" }, downloads: false, nextFileName: null, shortTitle: null });
     expect(vid!.versions.map((v) => v.number)).toEqual([1, 2]); // the processing v3 isn't shown
     expect(vid!.versions[0].dropboxPath).toBeNull();
-    const notes = await t.query(api.notes.forVersion, { versionId: ids.v2, share });
-    expect(notes.map((n) => n.text)).toEqual(["shared with client"]);
-    expect(notes[0].replies.map((r) => r.text)).toEqual(["Heston's reply"]); // Claude's hidden reply stays hidden
-    expect(notes[0].mine).toBe(false);
+    // A view link shows no notes at all (Heston, Oct 23): just the video.
+    expect(await t.query(api.notes.forVersion, { versionId: ids.v2, share })).toEqual([]);
+    expect(vid!.versions.find((v) => v.number === 2)!.noteCount).toBe(0);
     expect((await t.query(api.transcripts.forVersion, { versionId: ids.v2, share }))?.status).toBe("done");
     expect((await t.query(api.waveforms.forVersion, { versionId: ids.v2, share }))?.status).toBe("done");
     await t.mutation(api.player.log, { versionId: ids.v2, kind: "stall", share });
@@ -91,6 +90,15 @@ describe("who may do what on a video through a share", () => {
     await expect(t.mutation(api.notes.setStatus, { noteId: ids.shared, status: "done" })).rejects.toThrow(/Sign in first/);
     await expect(t.mutation(api.notes.setVisibility, { noteId: ids.shared, visibility: "private" })).rejects.toThrow(/Sign in first/);
     await expect(t.query(api.library.overview, {})).rejects.toThrow(/Sign in first/);
+  });
+
+  test("a comment link: shared notes and visible replies, never the private ones", async () => {
+    const { t, ids, commentLink } = await setup();
+    const share = guest(commentLink.token);
+    const notes = await t.query(api.notes.forVersion, { versionId: ids.v2, share });
+    expect(notes.map((n) => n.text)).toEqual(["shared with client"]);
+    expect(notes[0].replies.map((r) => r.text)).toEqual(["Heston's reply"]); // Claude's hidden reply stays hidden
+    expect(notes[0].mine).toBe(false);
   });
 
   test("a comment link: a guest with a name leaves, edits and deletes their own open notes; not others'", async () => {
@@ -168,8 +176,8 @@ describe("who may do what on a video through a share", () => {
   });
 
   test("the owner's Shared switch and hidden replies", async () => {
-    const { t, ids, me, viewLink } = await setup();
-    const share = guest(viewLink.token);
+    const { t, ids, me, commentLink } = await setup();
+    const share = guest(commentLink.token);
     await me.mutation(api.notes.setVisibility, { noteId: ids.priv, visibility: "shared" });
     expect((await t.query(api.notes.forVersion, { versionId: ids.v2, share })).map((n) => n.text).sort()).toEqual(["private thought", "shared with client"]);
     await me.mutation(api.notes.setVisibility, { noteId: ids.shared, visibility: "private" });
@@ -188,8 +196,8 @@ describe("who may do what on a video through a share", () => {
 
 describe("signed media", () => {
   test("without keys the links are plain; with keys every link to that zone carries a token and the owner's side too", async () => {
-    const { t, ids, me, viewLink } = await setup();
-    const share = guest(viewLink.token);
+    const { t, ids, me, commentLink, viewLink } = await setup();
+    const share = guest(commentLink.token);
     const plain = await t.query(api.library.video, { videoId: ids.brand, share });
     const v1 = plain!.versions.find((v) => v.number === 1)!, v2 = plain!.versions.find((v) => v.number === 2)!;
     expect(v1.media.hls).toBe("https://vz-3ba0610b-f90.b-cdn.net/guid-1/playlist.m3u8");

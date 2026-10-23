@@ -173,7 +173,7 @@ export const video = query({
     const project = await ctx.db.get(vid.projectId);
     let versions = await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", videoId)).collect();
     const allNotes = await ctx.db.query("notes").withIndex("by_video", (q) => q.eq("videoId", videoId)).collect();
-    const notes = access.kind === "owner" ? allNotes : allNotes.filter((n) => n.visibility === "shared");
+    const notes = access.kind === "owner" ? allNotes : access.can === "view" ? [] : allNotes.filter((n) => n.visibility === "shared");
     if (access.share) {
       const shown = [];
       for (const x of versions) if (await versionShown(ctx, access.share, x)) shown.push(x);

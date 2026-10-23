@@ -253,7 +253,10 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   }, [player.estimatedFrameCount, version, reportFrameCount]);
 
   // Panel, transport and view state
-  const [panel, setPanel] = useState<"notes" | "versions" | "transcript" | null>(() => (window.innerWidth <= 820 ? "notes" : readPref<string>("wr.panel", "notes") === "none" ? null : "notes"));
+  // View-only links (C3): no notes at all; the panel opens on the transcript instead.
+  const noNotes = viewer.can === "view";
+  const firstTab: "notes" | "transcript" = noNotes ? "transcript" : "notes";
+  const [panel, setPanel] = useState<"notes" | "versions" | "transcript" | null>(() => (window.innerWidth <= 820 ? firstTab : readPref<string>("wr.panel", "notes") === "none" ? null : firstTab));
   const [filter, setFilter] = useState<NoteFilter>(defaultFilter);
   const [timeMode, setTimeMode] = useState<TimeMode>(() => readPref<TimeMode>("wr.timeMode", "tc"));
   const [rate, setRate] = useState(1);
@@ -536,6 +539,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const downloadUrl = version?.media.file ?? (version && mp4H ? version.media.mp4[mp4H] : null) ?? null;
   const canDownload = !!downloadUrl && (owner || viewer.downloads);
   const setPanelPref = (p: "notes" | "versions" | "transcript" | null) => { setPanel(p); writePref("wr.panel", p ? "notes" : "none"); };
+  const openPanel = () => setPanelPref(panel ? null : firstTab);
   const endFrame = Math.max(0, frameCount - 1);
   const timeText = (f: number) => timeMode === "frames" ? `${f}` : timeMode === "clock" ? clockText(f * frameDuration(fps)) : tc(f);
   const openCount = (notes ?? []).filter((n) => n.status === "open").length;
@@ -559,7 +563,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       {mp4H > 0 && <MenuItem checked={quality === "file" || (isFile && !scrubHls)} onSelect={() => setQuality("file")}>{isFile ? `The render, ${mp4H}p (exact frames)` : `${mp4H}p file (exact frames)`}</MenuItem>}
       {hasStream && <MenuItem checked={quality === "stream" && !(isFile && !scrubHls)} onSelect={() => setQuality("stream")}>{isFile ? "Small copy, 360p (slow connections)" : "Stream (adapts to connection)"}</MenuItem>}
       <MenuSep />
-      <MenuItem checked={showDrawings} onSelect={() => setShowDrawings(!showDrawings)}>Show note drawings</MenuItem>
+      {!noNotes && <MenuItem checked={showDrawings} onSelect={() => setShowDrawings(!showDrawings)}>Show note drawings</MenuItem>}
       <MenuItem icon={fs ? <Minimize size={16} /> : <Maximize size={16} />} kbd="F" onSelect={toggleFullscreen}>{fs ? "Exit full screen" : "Full screen"}</MenuItem>
       <MenuItem icon={<Keyboard size={16} />} kbd="?" onSelect={() => setDialog("keys")}>Keyboard shortcuts</MenuItem>
     </Menu>
@@ -597,7 +601,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           fps={fps}
           wave={wave}
           compact={narrow}
-          notes={(notes ?? []).map((n) => ({ id: n._id, kind: n.kind, inFrame: n.inFrame, outFrame: n.outFrame, status: n.status, text: n.text }))}
+          notes={noNotes ? [] : (notes ?? []).map((n) => ({ id: n._id, kind: n.kind, inFrame: n.inFrame, outFrame: n.outFrame, status: n.status, text: n.text }))}
           sel={sel}
           highlight={hl}
           activeId={focusId}
@@ -618,7 +622,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           {owner && <button className={`btn sm${covering?.some((s) => s.state === "on") ? " on" : ""}`} onClick={() => setDialog("share")} title={covering?.length ? `Shared: ${covering.filter((s) => s.state === "on").length} live ${covering.filter((s) => s.state === "on").length === 1 ? "link" : "links"}` : "Share this video"}><Share2 size={15} /><span className="hide-sm">Share</span></button>}
           {owner && <button className="btn sm hide-sm" onClick={downloadEdl} disabled={!notes?.length} title="Download the notes as Resolve markers (EDL)"><Download size={15} />Resolve markers</button>}
           {!owner && canDownload && <a className="btn sm" href={downloadUrl!} target="_blank" rel="noreferrer" download title="Download this version"><Download size={15} /><span className="hide-sm">Download</span></a>}
-          <button className={`icon-btn md${panel ? " on" : ""}`} onClick={() => setPanelPref(panel ? null : "notes")} aria-label={panel ? "Hide panel" : "Show panel"} title={panel ? "Hide panel" : "Show panel"}><PanelRight size={16} /></button>
+          <button className={`icon-btn md${panel ? " on" : ""}`} onClick={openPanel} aria-label={panel ? "Hide panel" : "Show panel"} title={panel ? "Hide panel" : "Show panel"}><PanelRight size={16} /></button>
         </>
       }>
         <a {...linkProps(viewer.home)} aria-label="Home" style={{ display: "flex" }}><BrandImg name="wordmark" className="logo" alt="Wrangler Productions" /></a>
@@ -667,7 +671,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
               {player.proxyUrl && <video ref={player.proxyRef} className={`proxy${player.proxyOn ? " on" : ""}`} src={player.proxyUrl} muted playsInline preload="auto" onLoadedData={player.onProxyLoaded} onSeeked={player.onProxyLoaded} onLoadedMetadata={player.onProxyMeta} aria-hidden />}
               <AtFrame clock={player.clock}>{(frame) => {
                 const elsewhere = shapes.length > 0 && drawFrame !== null && drawFrame !== frame;
-                const saved = showDrawings ? savedDrawings.filter((d) => d.frame === frame).flatMap((d) => d.shapes) : [];
+                const saved = showDrawings && !noNotes ? savedDrawings.filter((d) => d.frame === frame).flatMap((d) => d.shapes) : [];
                 return (
                   <>
                     {saved.length > 0 && <DrawingLayer shapes={saved} onChange={() => {}} active={false} tool={tool} color={color} aspect={aspect} />}
@@ -813,7 +817,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           <aside className="side" aria-label="Notes and versions">
             <div className="shead">
               <div className="tabs" role="tablist">
-                <button role="tab" className="tab" aria-selected={panel === "notes"} onClick={() => setPanel("notes")}>Notes <span className="count">{openCount || ""}</span></button>
+                {!noNotes && <button role="tab" className="tab" aria-selected={panel === "notes"} onClick={() => setPanel("notes")}>Notes <span className="count">{openCount || ""}</span></button>}
                 <button role="tab" className="tab" aria-selected={panel === "versions"} onClick={() => setPanel("versions")}>Versions <span className="count">{data.versions.length || ""}</span></button>
                 <button role="tab" className="tab" aria-selected={panel === "transcript"} onClick={() => setPanel("transcript")}>Transcript</button>
               </div>

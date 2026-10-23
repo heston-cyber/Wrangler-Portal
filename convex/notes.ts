@@ -25,6 +25,7 @@ export const forVersion = query({
   args: { versionId: v.id("versions"), share: shareArg },
   handler: async (ctx, { versionId, share }) => {
     const { access } = await accessToVersion(ctx, versionId, share);
+    if (access.can === "view") return []; // a view-only link shows no notes at all (Heston, Oct 23)
     const notes = await ctx.db.query("notes").withIndex("by_version", (q) => q.eq("versionId", versionId)).collect();
     const out = [];
     for (const n of notes) {
