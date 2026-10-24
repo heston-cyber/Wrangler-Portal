@@ -1,0 +1,56 @@
+name: Smoke test
+
+# Opens the live site in a real browser the way a guest would (tests/smoke/smoke.mjs) after every deploy, every
+# morning, and on demand. Fails if any page shows the error screen, throws, or the clip doesn't load through its
+# signed link. The fixtures (a test clip in the Tests project and five share links) come from smoke:run; their
+# tokens are links to that clip and are masked in this log all the same.
+on:
+  workflow_run:
+    workflows: [Deploy]
+    types: [completed]
+  schedule:
+    - cron: "17 12 * * *" # 7:17 am Oklahoma City (CDT)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Browser
+        run: |
+          npm i --no-save playwright@1.56.0
+          npx playwright install --with-deps chrome
+      - name: Fixtures (tokens masked)
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: |
+          export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7C/|}"
+          export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7c/|}"
+          out="$(npx convex run smoke:run '{}' 2>/dev/null)"
+          for t in $(echo "$out" | node -e 'const j=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(Object.values(j.tokens).join(" "))'); do echo "::add-mask::$t"; done
+          echo "$out" | node -e 'const j=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(JSON.stringify({clipStatus:j.clipStatus,uploaded:j.uploaded,madeVideo:j.madeVideo,made:j.made}))'
+          { echo "SMOKE<<EOF"; echo "$out"; echo "EOF"; } >> "$GITHUB_ENV"
+      - name: Smoke
+        run: node tests/smoke/smoke.mjs
+      - name: Screenshots of what failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-screenshots
+          path: smoke-*.png
+          if-no-files-found: ignore

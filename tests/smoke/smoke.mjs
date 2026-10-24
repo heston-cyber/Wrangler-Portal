@@ -18,13 +18,19 @@ const browser = await (async () => {
   try { return await chromium.launch({ channel: "chrome", headless: !process.env.SMOKE_HEADED }); }
   catch { return await chromium.launch({ headless: !process.env.SMOKE_HEADED }); }
 })();
+let h264Noted = false;
 
 async function check(name, fn) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
-  page.on("console", (m) => { if (m.type() === "error" && !/favicon|net::ERR_/.test(m.text())) errors.push(`console: ${m.text().slice(0, 160)}`); });
+  page.on("console", (m) => {
+    if (m.type() !== "error" || /favicon|net::ERR_/.test(m.text())) return;
+    // GitHub Pages answers a deep link with 404.html (the site itself) and a 404 status: that one is expected.
+    if (/404/.test(m.text()) && m.location()?.url === page.url()) return;
+    errors.push(`console: ${m.text().slice(0, 160)}`);
+  });
   try {
     await fn(page);
     if (await page.getByText("Something broke on this page.").count()) throw new Error("the error screen is showing");
@@ -46,6 +52,8 @@ const see = (page, text) => page.getByText(text, { exact: false }).first().waitF
 async function clipLoads(page) {
   const res = await page.waitForResponse((r) => /\.mp4(\?|$)/.test(r.url()) && r.request().resourceType() !== "fetch", { timeout: 30_000 });
   if (![200, 206].includes(res.status())) throw new Error(`clip answered ${res.status()}`);
+  const h264 = await page.evaluate(() => document.createElement("video").canPlayType('video/mp4; codecs="avc1.42E01E"'));
+  if (!h264) { if (!h264Noted) { h264Noted = true; console.log("note: this browser can't decode H.264, so the clip's duration isn't checked (its signed link answered)"); } return; }
   await page.waitForFunction(() => { const v = document.querySelector("video"); return !!v && v.readyState >= 1 && v.duration > 0; }, null, { timeout: 30_000 })
     .catch(() => { throw new Error("video never reported a duration (codec or signed link)"); });
 }
@@ -89,11 +97,11 @@ await check("a comment link: video page, name prompt, then the note box", async 
   await see(page, "What's your name?");
   await page.getByLabel("Your name").fill("Smoke Test");
   await page.getByLabel("Save name").click();
-  await page.getByLabel("Note").waitFor({ timeout: 10_000 }); // the composer opens by default once there's a name
+  await page.getByRole("textbox", { name: "Note" }).waitFor({ timeout: 10_000 }); // the composer opens by default once there's a name
   if (await page.getByText("What's your name?").count()) throw new Error("the name prompt stayed");
   // Reload: the name is remembered on this device, so the note box is straight back.
   await page.reload();
-  await page.getByLabel("Note").waitFor({ timeout: 20_000 });
+  await page.getByRole("textbox", { name: "Note" }).waitFor({ timeout: 20_000 });
 });
 
 await check("a view-only link: player only, no note box, no name prompt", async (page) => {
@@ -102,7 +110,7 @@ await check("a view-only link: player only, no note box, no name prompt", async 
   await clipLoads(page);
   await see(page, "View only");
   if (await page.getByText("What's your name?").count()) throw new Error("a view link asked for a name");
-  if (await page.getByLabel("Note").count()) throw new Error("a view link showed the note box");
+  if (await page.getByRole("textbox", { name: "Note" }).count()) throw new Error("a view link showed the note box");
 });
 
 await browser.close();

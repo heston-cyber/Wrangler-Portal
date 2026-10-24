@@ -5,3 +5,4 @@ dist/
 *.tsbuildinfo
 dist-mock
 dist-demo
+smoke-*.png
