@@ -63,6 +63,19 @@ export const listInvites = query({
   },
 });
 
+// May this email make an account? Asked by the sign-up page before it tries, so the reason is plain when it can't
+// (the auth error itself is redacted in production). Says only invited / not invited, nothing else.
+export const canSignUp = query({
+  args: { email: v.string() },
+  handler: async (ctx, { email }) => {
+    const e = cleanEmail(email);
+    if (!valid(e)) return { ok: false, reason: "invalid" as const };
+    if (allowedEmails().includes(e)) return { ok: true, reason: "owner" as const };
+    const inv = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", e)).collect()).find((i) => !i.revokedAt);
+    return inv ? { ok: true, reason: "invited" as const } : { ok: false, reason: "notInvited" as const };
+  },
+});
+
 // A signed-in account's own details, for the account page (owner or client).
 export const account = query({
   args: {},

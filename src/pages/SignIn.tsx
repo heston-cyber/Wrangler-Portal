@@ -2,6 +2,8 @@
 import { useState } from "react";
 import { BrandImg } from "../ui/BrandImg";
 import { useAuthActions } from "@convex-dev/auth/react";
+import { useConvex } from "convex/react";
+import { api } from "../../convex/_generated/api";
 
 type Flow = "signIn" | "signUp" | "code" | "reset" | "resetCode";
 
@@ -11,6 +13,7 @@ const TITLES: Record<Flow, string> = {
 
 export default function SignIn({ invitedEmail }: { invitedEmail?: string | null }) {
   const { signIn } = useAuthActions();
+  const convex = useConvex();
   const [flow, setFlow] = useState<Flow>(invitedEmail ? "signUp" : "signIn");
   const [email, setEmail] = useState(invitedEmail ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +39,10 @@ export default function SignIn({ invitedEmail }: { invitedEmail?: string | null 
     const mail = String(fd.get("email") ?? email).trim().toLowerCase();
     setEmail(mail);
     try {
+      if (flow === "signUp") {
+        const can = await convex.query(api.clients.canSignUp, { email: mail });
+        if (!can.ok) { setError(can.reason === "invalid" ? "Enter a valid email." : "This email hasn't been invited to Wrangler Review. Ask the person who shared with you to invite it."); return; }
+      }
       if (flow === "signIn" || flow === "signUp") {
         fd.set("flow", flow);
         fd.set("email", mail);

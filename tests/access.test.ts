@@ -38,6 +38,7 @@ const OPEN: Record<string, string> = {
   "shares.open": "a share link: answers by the share's own gate (off/expired/passcode/invited), tested in shares.test.ts",
   "shares.touch": "records an open on a share link: same gate; a missing token records nothing",
   "shares.unlock": "the passcode box on a share link: rate-limited; a missing token answers 'missing'",
+  "clients.canSignUp": "the sign-up page's pre-check: says only whether an email is invited",
 };
 // Functions with their own gate (a key in the arguments): refused with the wrong key, whoever calls.
 const KEYED = new Set(["r1results.report"]);
@@ -50,7 +51,7 @@ type Ids = { projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shar
 function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
   return {
     "activity.feed": {},
-    "clients.invite": { email: "x@example.com" }, "clients.revokeInvite": { inviteId: ids.inviteId }, "clients.listInvites": {}, "clients.account": {},
+    "clients.invite": { email: "x@example.com" }, "clients.canSignUp": { email: "x@example.com" }, "clients.revokeInvite": { inviteId: ids.inviteId }, "clients.listInvites": {}, "clients.account": {},
     "connector.createKey": {}, "connector.listKeys": {}, "connector.revokeKey": { keyId: ids.keyId },
     "dropbox.status": {}, "dropbox.flagged": {}, "dropbox.retryFlagged": { fileId: ids.fileId }, "dropbox.authUrl": {}, "dropbox.disconnect": {}, "dropbox.syncNow": {},
     "library.projectNames": {}, "library.overview": {}, "library.createClient": { name: "X" }, "library.markOpened": { videoId: ids.videoId },
