@@ -2,15 +2,18 @@
 // order; and whether the Approve final button is on. Kept per user.
 import { mutation, query } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
-import { requireMe } from "./lib/access";
+import { requireMe, viewerOf } from "./lib/access";
 
 const KEYS = ["details", "approveFinal"] as const;
 
+// Anyone may ask (the video page does, whoever is looking); only the owner has any settings. Clients and guests get
+// an empty answer rather than an error (C5 fix, Oct 24: a client opening a shared video hit "Not allowed." here).
 export const mine = query({
   args: {},
   handler: async (ctx) => {
-    const me = await requireMe(ctx);
+    const me = await viewerOf(ctx);
     const out: Record<string, unknown> = {};
+    if (me.kind !== "owner") return out;
     for (const k of KEYS) {
       const row = await ctx.db.query("userPrefs").withIndex("by_user_key", (q) => q.eq("userId", me.userId).eq("key", k)).first();
       if (row) out[k] = row.value;

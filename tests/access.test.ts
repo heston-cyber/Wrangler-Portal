@@ -39,6 +39,7 @@ const OPEN: Record<string, string> = {
   "shares.touch": "records an open on a share link: same gate; a missing token records nothing",
   "shares.unlock": "the passcode box on a share link: rate-limited; a missing token answers 'missing'",
   "clients.canSignUp": "the sign-up page's pre-check: says only whether an email is invited",
+  "prefs.mine": "the owner's display settings: the video page asks whoever is looking; anyone but the owner gets {}",
 };
 // Functions with their own gate (a key in the arguments): refused with the wrong key, whoever calls.
 const KEYED = new Set(["r1results.report"]);
@@ -180,6 +181,10 @@ describe("access matrix", () => {
     await c.mutation(api.users.setName, { name: "Casey" });
     expect((await c.query(api.clients.account, {})).name).toBe("Casey");
     await expect(c.query(api.library.overview, {})).rejects.toThrow(/Not allowed/);
+    // The video page asks for the owner's display settings whoever is looking: a client (or a guest) gets {} back.
+    expect(await c.query(api.prefs.mine, {})).toEqual({});
+    expect(await t.query(api.prefs.mine, {})).toEqual({});
+    await expect(c.mutation(api.prefs.set, { key: "details", value: [] })).rejects.toThrow(/Not allowed/);
   });
 });
 
