@@ -49,8 +49,10 @@ async function check(name, fn) {
 const see = (page, text) => page.getByText(text, { exact: false }).first().waitFor({ timeout: 20_000 });
 
 // The clip is a "file" version: the player asks for the MP4 through a signed link. 200/206 means the token works.
-async function clipLoads(page) {
-  const res = await page.waitForResponse((r) => /\.mp4(\?|$)/.test(r.url()) && r.request().resourceType() !== "fetch", { timeout: 30_000 });
+// Start watching before the page opens (a fast browser can have the answer before the video element shows).
+const watchClip = (page) => page.waitForResponse((r) => /\.mp4(\?|$)/.test(r.url()) && r.request().resourceType() !== "fetch", { timeout: 30_000 });
+async function clipLoads(page, clip) {
+  const res = await clip;
   if (![200, 206].includes(res.status())) throw new Error(`clip answered ${res.status()}`);
   const h264 = await page.evaluate(() => document.createElement("video").canPlayType('video/mp4; codecs="avc1.42E01E"'));
   if (!h264) { if (!h264Noted) { h264Noted = true; console.log("note: this browser can't decode H.264, so the clip's duration isn't checked (its signed link answered)"); } return; }
@@ -91,9 +93,10 @@ await check("a passcode link: wrong passcode refused, right one opens the video"
 });
 
 await check("a comment link: video page, name prompt, then the note box", async (page) => {
+  const clip = watchClip(page);
   await page.goto(`${site}/s/${T.comment}`);
   await page.locator("video").first().waitFor({ timeout: 20_000 });
-  await clipLoads(page);
+  await clipLoads(page, clip);
   await see(page, "What's your name?");
   await page.getByLabel("Your name").fill("Smoke Test");
   await page.getByLabel("Save name").click();
@@ -105,9 +108,10 @@ await check("a comment link: video page, name prompt, then the note box", async 
 });
 
 await check("a view-only link: player only, no note box, no name prompt", async (page) => {
+  const clip = watchClip(page);
   await page.goto(`${site}/s/${T.view}`);
   await page.locator("video").first().waitFor({ timeout: 20_000 });
-  await clipLoads(page);
+  await clipLoads(page, clip);
   await see(page, "View only");
   if (await page.getByText("What's your name?").count()) throw new Error("a view link asked for a name");
   if (await page.getByRole("textbox", { name: "Note" }).count()) throw new Error("a view link showed the note box");
