@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { ConvexReactClient } from "convex/react";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import App from "./App";
+import { ErrorBoundary } from "./ErrorBoundary";
 import "@fontsource/saira/latin-400.css";
 import "@fontsource/saira/latin-500.css";
 import "@fontsource/saira/latin-600.css";
@@ -18,7 +19,7 @@ const convex = new ConvexReactClient(url || "https://handsome-hummingbird-11.con
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ConvexAuthProvider client={convex}>
-      <App />
+      <ErrorBoundary><App /></ErrorBoundary>
     </ConvexAuthProvider>
   </React.StrictMode>,
 );
