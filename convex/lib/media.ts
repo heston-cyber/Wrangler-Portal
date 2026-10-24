@@ -101,7 +101,7 @@ export async function versionMedia(v: Doc<"versions">): Promise<VersionMedia> {
 export async function downloadFor(x: Doc<"versions">): Promise<{ url: string; name: string; bytes: number | null } | null> {
   if (x.status !== "ready") return null;
   const m = await versionMedia(x);
-  const h = Math.max(0, ...(x.mp4Heights ?? []).filter((n) => n <= 1080));
+  const h = Math.max(0, ...(x.mp4Heights ?? []).filter((n) => n <= 2160));
   const url = m.file ?? (h ? m.mp4[h] : null);
   if (!url) return null;
   const name = x.fileName && /\.mp4$/i.test(x.fileName) ? x.fileName : `${(x.fileName || "video").replace(/\.[^.]+$/, "")}_v${x.number}.mp4`;

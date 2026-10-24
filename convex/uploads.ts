@@ -15,7 +15,7 @@ async function sha256Hex(text: string) {
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-const MP4_HEIGHTS = [240, 360, 480, 720, 1080];
+const MP4_HEIGHTS = [240, 360, 480, 720, 1080, 1440, 2160]; // 4K (Oct 23): copies up to 2160p when the library makes them
 const POLL_MS = 10_000;
 const MAX_POLLS = 720; // 2 hours
 
@@ -279,5 +279,26 @@ export const refreshStorage = internalAction({
       } catch { failed++; }
     }
     return { checked: due.length, updated, failed };
+  },
+});
+
+// 4K (Oct 23): after the library's encoding settings change and a video is re-encoded on Bunny, pick up the new
+// copies (e.g. 2160p) on versions that are already "ready". Run from CI with { all: true } or one versionId.
+export const refreshHeights = internalAction({
+  args: { versionId: v.optional(v.id("versions")), all: v.optional(v.boolean()) },
+  handler: async (ctx, { versionId, all }): Promise<{ checked: number; updated: number; heights: Record<string, number[]> }> => {
+    const rows: Array<{ _id: Id<"versions">; bunnyGuid: string; mp4Heights: number[] }> = await ctx.runQuery(internal.library.versionsForHeights, { versionId: versionId ?? null, all: all ?? false });
+    let updated = 0; const heights: Record<string, number[]> = {};
+    for (const ver of rows) {
+      const b = await getBunnyVideo(ver.bunnyGuid);
+      const res = (b.availableResolutions || "").split(",").map((s: string) => parseInt(s, 10)).filter((n: number) => !isNaN(n));
+      const mp4Heights = b.hasMP4Fallback ? MP4_HEIGHTS.filter((h) => res.includes(h)) : [];
+      heights[ver._id.slice(0, 6)] = mp4Heights;
+      if (JSON.stringify(mp4Heights) !== JSON.stringify(ver.mp4Heights)) {
+        await ctx.runMutation(internal.library.patchVersion, { versionId: ver._id, patch: { mp4Heights, width: b.width || undefined, height: b.height || undefined } });
+        updated++;
+      }
+    }
+    return { checked: rows.length, updated, heights };
   },
 });

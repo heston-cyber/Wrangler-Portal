@@ -306,6 +306,14 @@ export const getVersionInternal = internalQuery({
   },
 });
 
+export const versionsForHeights = internalQuery({
+  args: { versionId: v.union(v.id("versions"), v.null()), all: v.boolean() },
+  handler: async (ctx, { versionId, all }) => {
+    const rows = versionId ? [await ctx.db.get(versionId)] : all ? await ctx.db.query("versions").collect() : [];
+    return rows.filter((x): x is Doc<"versions"> => !!x && x.status === "ready" && !!x.bunnyGuid && x.source !== "file").map((x) => ({ _id: x._id, bunnyGuid: x.bunnyGuid, mp4Heights: x.mp4Heights ?? [] }));
+  },
+});
+
 export const patchVersion = internalMutation({
   args: { versionId: v.id("versions"), patch: v.any() },
   handler: async (ctx, { versionId, patch }) => {

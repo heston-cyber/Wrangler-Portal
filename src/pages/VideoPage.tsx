@@ -147,7 +147,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const isFile = version?.source === "file";
   const fileUrl = isFile ? version?.fileUrl ?? null : null;
   const scrubHls = isFile ? version?.scrub?.hls ?? null : null;
-  const mp4H = !version ? 0 : isFile ? (fileUrl ? version.height ?? 1080 : 0) : Math.max(0, ...version.mp4Heights.filter((h) => h <= 1080));
+  const mp4H = !version ? 0 : isFile ? (fileUrl ? version.height ?? 1080 : 0) : Math.max(0, ...version.mp4Heights.filter((h) => h <= 2160));
   const hasStream = !isFile || !!scrubHls;
   // A version whose 1080p file failed before opens on the stream (remembered per browser; see the fallback below).
   // (Renamed Oct 22: flags saved by a false error on the iPhone are ignored.)
