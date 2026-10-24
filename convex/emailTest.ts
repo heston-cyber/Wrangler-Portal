@@ -181,6 +181,6 @@ export const recentInvites = internalQuery({
   args: {},
   handler: async (ctx) => {
     const members = (await ctx.db.query("shareMembers").collect()).sort((a, b) => b.addedAt - a.addedAt).slice(0, 5);
-    return members.map((m) => ({ to: m.email.replace(/^(.).*@/, "$1…@"), addedAgoMin: Math.round((Date.now() - m.addedAt) / 60000), emailed: m.emailedAt ? `${Math.round((Date.now() - m.emailedAt) / 60000)} min ago` : "NOT SENT" }));
+    return members.map((m) => ({ shareId: m.shareId, to: m.email.replace(/^(.).*@/, "$1…@"), addedAgoMin: Math.round((Date.now() - m.addedAt) / 60000), emailed: m.emailedAt ? `${Math.round((Date.now() - m.emailedAt) / 60000)} min ago` : "NOT SENT" }));
   },
 });
