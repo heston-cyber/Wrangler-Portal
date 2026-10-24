@@ -76,10 +76,10 @@ export const unclaim = internalMutation({
 export const unsubUrl = (key: string, kind: Kind) => `${process.env.CONVEX_SITE_URL ?? ""}/email/stop?k=${encodeURIComponent(key)}&t=${kind}`;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function deliver(ctx: { runMutation: (ref: any, args: any) => Promise<any> }, key: string, kind: string, to: string, subject: string, text: string): Promise<boolean> {
+async function deliver(ctx: { runMutation: (ref: any, args: any) => Promise<any> }, key: string, kind: string, to: string, subject: string, text: string, unsubscribe?: string): Promise<boolean> {
   if (!(await ctx.runMutation(internal.emails.claim, { key, kind, to }))) return false;
   try {
-    const id = await sendEmail({ to, subject, text, tag: kind });
+    const id = await sendEmail({ to, subject, text, tag: kind, unsubscribe });
     await ctx.runMutation(internal.emails.sent, { key, resendId: id || "sent" });
     return true;
   } catch (e) {
@@ -144,7 +144,7 @@ export const newVersion = internalAction({
     for (const r of ok) {
       const p = d.people.find((x: { email: string }) => x.email === r.email)!;
       const m = newVersionText({ ...d, name: p.name, link: `${SITE()}/s/${p.token}/v/${d.videoId}?version=${d.number}`, unsub: unsubUrl(r.key, "versions") });
-      if (await deliver(ctx, `version:${versionId}:${r.email}`, "versions", r.email, m.subject, m.text)) sent++;
+      if (await deliver(ctx, `version:${versionId}:${r.email}`, "versions", r.email, m.subject, m.text, unsubUrl(r.key, "versions"))) sent++;
     }
     return { sent };
   },
@@ -204,7 +204,7 @@ export const replyToNote = internalAction({
     const ok: Array<{ email: string; key: string }> = await ctx.runMutation(internal.emails.recipients, { emails: [d.to], kind: "replies" });
     if (!ok.length) return { sent: 0 };
     const m = replyText({ ...d, unsub: unsubUrl(ok[0].key, "replies") });
-    return { sent: (await deliver(ctx, `reply:${replyId}`, "replies", d.to, m.subject, m.text)) ? 1 : 0 };
+    return { sent: (await deliver(ctx, `reply:${replyId}`, "replies", d.to, m.subject, m.text, unsubUrl(ok[0].key, "replies"))) ? 1 : 0 };
   },
 });
 

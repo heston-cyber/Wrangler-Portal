@@ -237,7 +237,7 @@ describe("the owner's side", () => {
     vi.useRealTimers();
     expect(mails.map((m) => m.to).sort()).toEqual(["maya@harbor.example", "new.person@example.com"]);
     const toMaya = mails.find((m) => m.to === "maya@harbor.example")!;
-    expect(toMaya.subject).toBe('"Brand Film" — shared with you on Wrangler Review');
+    expect(toMaya.subject).toBe('Heston shared Brand Film with you on Wrangler Review');
     expect(toMaya.text).toContain(`https://review.wranglerportal.com/s/${r.token}`);
     expect(toMaya.text).toContain("you can leave notes");
     expect(toMaya.text).toContain("Sign in with your Wrangler Review account");

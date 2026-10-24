@@ -400,7 +400,7 @@ export function inviteEmailText(d: { token: string; kind: string; label: string;
     ``,
     `— Wrangler Review`,
   ];
-  return { subject: `${d.kind === "video" ? `"${d.label}"` : d.label} — shared with you on Wrangler Review`, text: lines.join("\n"), link };
+  return { subject: `Heston shared ${d.label} with you on Wrangler Review`, text: lines.join("\n"), link };
 }
 
 export const sendInviteEmail = internalAction({
