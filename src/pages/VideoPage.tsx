@@ -5,8 +5,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { BrandImg } from "../ui/BrandImg";
 import { useConvex, useMutation, useQuery } from "convex/react";
 import {
-  ArrowUp, Brush, Check, Circle, CircleCheckBig, Copy, Download, ListOrdered, Ellipsis, Eye, EyeOff, Keyboard, Maximize, Minimize, MoveUpRight, PanelRight, Pause, Pencil, Play,
-  Crosshair, Film, Mic, Plus, Share2, SlidersHorizontal, Square, Timer, Undo2, Upload, Volume2, VolumeX, X,
+  ArrowUp, Brush, Check, ChevronDown, ChevronUp, Circle, CircleCheckBig, Copy, Download, ListOrdered, Ellipsis, EyeOff, Eye, Keyboard, Maximize, Minimize, MoveUpRight, PanelRight, Pause, Pencil, Play,
+  Crosshair, Film, Mic, Plus, Settings, Share2, SlidersHorizontal, Square, Timer, Undo2, Upload, Volume2, VolumeX, X,
 } from "lucide-react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
@@ -132,6 +132,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const notes = useQuery(api.notes.forVersion, version ? { versionId: version._id, ...shareArgs } : "skip") as NoteRow[] | undefined;
   const wave = useQuery(api.waveforms.forVersion, version ? { versionId: version._id, ...shareArgs } : "skip") as Wave | undefined;
   const [sharedNotes, setSharedNotes] = useState(() => readFlag("wr.shareNotes")); // the owner's Shared switch on the note box
+  const [composerOpen, setComposerOpen] = useState(true); // the note box folds down to a pill (Heston, Oct 23); open on every load
   const createNote = useMutation(api.notes.create);
   const reportFrameCount = useMutation(api.library.reportFrameCount);
   const [toast, showToast] = useToast();
@@ -504,7 +505,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       else if (e.key === "Escape") { if (drawing) setDrawing(false); else if (sel) setSel(null); else setHl(null); }
       else if (e.key === "Home") { e.preventDefault(); void player.seekToFrame(0); }
       else if (e.key === "End") { e.preventDefault(); void player.seekToFrame(frameCount - 1); }
-      else if (e.key === "Enter" && canComment) { e.preventDefault(); player.pause(); textRef.current?.focus(); }
+      else if (e.key === "Enter" && canComment) { e.preventDefault(); player.pause(); if (!composerOpen) setComposerOpen(true); setTimeout(() => textRef.current?.focus(), 0); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -568,23 +569,21 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const cycleTime = () => { const m: TimeMode = timeMode === "tc" ? "frames" : timeMode === "frames" ? "clock" : "tc"; setTimeMode(m); writePref("wr.timeMode", m); };
   const shownTime = (f: number) => (timeMode === "frames" ? `Fr ${f}` : timeText(f));
   const playButton = <button className="play" onClick={() => player.toggle()} disabled={!ready} aria-label={player.playing ? "Pause (Space)" : "Play (Space)"}>{player.playing ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}</button>;
-  const speedMenu = (
-    <Menu side="top" align="end" label="Playback speed" trigger={(p) => <button {...p} className="speedbtn" title="Playback speed">{rate}×</button>}>
+  // One cog for speed, picture quality, drawings and shortcuts (Heston, Oct 23).
+  const settingsMenu = (
+    <Menu side="top" align="center" label="Playback settings" trigger={(p) => <button {...p} className={`icon-btn${rate !== 1 ? " on" : ""}`} aria-label="Playback settings" title={`Settings · ${rate}×`}><Settings size={16} /></button>}>
       <MenuLabel>Speed</MenuLabel>
-      {SPEEDS.map((s) => <MenuItem key={s} checked={rate === s} onSelect={() => setRate(s)}>{s}×</MenuItem>)}
-    </Menu>
-  );
-  const viewMenu = (
-    <Menu side="top" align="end" label="View options" trigger={(p) => <button {...p} className="icon-btn" aria-label="View options" title="View options"><Eye size={16} /></button>}>
+      {SPEEDS.map((s) => <MenuItem key={s} keepOpen checked={rate === s} onSelect={() => setRate(s)}>{s}×</MenuItem>)}
+      <MenuSep />
       <MenuLabel>Picture</MenuLabel>
       {mp4H > 0 && <MenuItem checked={quality === "file" || (isFile && !scrubHls)} onSelect={() => setQuality("file")}>{isFile ? `The render, ${mp4H}p (exact frames)` : `${mp4H}p file (exact frames)`}</MenuItem>}
       {hasStream && <MenuItem checked={quality === "stream" && !(isFile && !scrubHls)} onSelect={() => setQuality("stream")}>{isFile ? "Small copy, 360p (slow connections)" : "Stream (adapts to connection)"}</MenuItem>}
       <MenuSep />
       {!noNotes && <MenuItem checked={showDrawings} onSelect={() => setShowDrawings(!showDrawings)}>Show note drawings</MenuItem>}
-      <MenuItem icon={fs ? <Minimize size={16} /> : <Maximize size={16} />} kbd="F" onSelect={toggleFullscreen}>{fs ? "Exit full screen" : "Full screen"}</MenuItem>
       <MenuItem icon={<Keyboard size={16} />} kbd="?" onSelect={() => setDialog("keys")}>Keyboard shortcuts</MenuItem>
     </Menu>
   );
+  const speedMenu = settingsMenu, viewMenu = null;
   const fsButton = (
     <button className="icon-btn fsbtn" onClick={toggleFullscreen} disabled={!ready} aria-label={fs ? "Exit full screen (F)" : "Full screen (F)"} title={fs ? "Exit full screen (F)" : "Full screen (F)"}>
       {fs ? <Minimize size={16} /> : <Maximize size={16} />}
@@ -592,21 +591,24 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   );
   const transportBar = (
     <div className="transport rect">
-      {(!narrow || fs) && <div className="rrow thead">
-        {playButton}
-        <button className="rbold jump" onClick={cycleTime} title="Switch between timecode, frames and minutes">
-          <AtFrame clock={player.clock}>{(f) => <>{timeMode === "frames" ? `Fr ${f}` : timeText(f)}</>}</AtFrame>
-        </button>
-        <span className="rtags">
-          <AtFrame clock={player.clock}>{(f) => <span className="rtag">{timeMode === "frames" ? tc(f) : `Fr ${f}`}</span>}</AtFrame>
-          <span className="rtag hide-xs">End {timeMode === "frames" ? endFrame : timeText(endFrame)}</span>
+      {(!narrow || fs) && <div className="thead3">
+        <span className="tleft">
+          <button className="rbold jump" onClick={cycleTime} title="Switch between timecode, frames and minutes">
+            <AtFrame clock={player.clock}>{(f) => <>{timeMode === "frames" ? `Fr ${f}` : timeText(f)}</>}</AtFrame>
+          </button>
+          <span className="rtags">
+            <AtFrame clock={player.clock}>{(f) => <span className="rtag">{timeMode === "frames" ? tc(f) : `Fr ${f}`}</span>}</AtFrame>
+            <span className="rtag hide-xs">End {timeMode === "frames" ? endFrame : timeText(endFrame)}</span>
+          </span>
         </span>
-        <span className="right">
-          <span className="rlabel hide-sm">Timeline{version ? ` · v${version.number}` : ""} · {fpsValue(fps).toFixed(3)} fps</span>
-          {speedMenu}
+        <span className="tcenter">
+          {playButton}
+          {settingsMenu}
           <button className="icon-btn" onClick={() => setMuted(!muted)} aria-label={muted ? "Unmute" : "Mute"} title={muted ? "Unmute" : "Mute"}>{muted ? <VolumeX size={16} /> : <Volume2 size={16} />}</button>
-          {viewMenu}
           {fsButton}
+        </span>
+        <span className="tright">
+          <span className="rlabel hide-sm">Timeline{version ? ` · v${version.number}` : ""} · {fpsValue(fps).toFixed(3)} fps</span>
         </span>
       </div>}
       {ready ? (
@@ -716,7 +718,15 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
               <GuestName onSave={(n) => viewer.setGuestName?.(n)} />
             </div>
           )}
-          {ready && canComment && !viewer.needsName && (
+          {ready && canComment && !viewer.needsName && !composerOpen && (
+            <div className="composer-zone">
+              <button className="composer-pill" onClick={() => setComposerOpen(true)} aria-expanded={false} title="Open the note box">
+                <span className="dot" style={{ background: whole ? "var(--mk-video)" : sel ? "var(--mk-range)" : "var(--mk-frame)" }} />
+                New note{text.trim() || shapes.length || voiceDraft ? " · draft" : ""}<ChevronUp size={14} />
+              </button>
+            </div>
+          )}
+          {ready && canComment && !viewer.needsName && composerOpen && (
             <div className="composer-zone">
               {drawing && (
                 <div className="drawbar" role="toolbar" aria-label="Drawing tools">
@@ -739,6 +749,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
               )}
               <div className="composer rect">
                 <div className="rrow">
+                  <button className="rtag hidebtn" onClick={() => setComposerOpen(false)} aria-label="Hide the note box" title="Hide the note box"><ChevronDown size={12} />Hide</button>
                   <span className="rlabel">
                     <span className="dot" style={{ background: whole ? "var(--mk-video)" : sel ? "var(--mk-range)" : "var(--mk-frame)" }} />
                     New note{whole ? "" : sel ? " · Range" : " · Frame"}
