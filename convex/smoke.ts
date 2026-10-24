@@ -14,10 +14,12 @@ import { passcodeHash } from "./lib/shareAccess";
 import { randomToken } from "./lib/hash";
 import { signUrl } from "./lib/media";
 import { renderFolder } from "./lib/bunnySign";
+import { reviewStorage } from "./lib/reviewStorage";
 
 export const TITLE = "Smoke test (keep)";
 export const PASSCODE = "smoketest1";
-const PATH = "review/_emailtest/frametest_23976_h264.mp4";
+const PATH = "review/_smoke/frametest_23976_h264.mp4";
+const LAB_CLIP = "https://review.wranglerportal.com/lab/frametest_23976_h264.mp4";
 const DAY = 86_400_000;
 
 type Kind = "comment" | "view" | "pass" | "off" | "expired";
@@ -51,6 +53,11 @@ export const ensure = internalMutation({
       madeVideo = true;
     }
     const videoId = video._id;
+    // The clip's path moved once (Oct 24): keep the version pointing at the current one.
+    const fileUrl = `https://${process.env.BUNNY_REVIEW_CDN || process.env.BUNNY_STILLS_CDN}/${PATH}`;
+    for (const ver of await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", videoId)).collect()) {
+      if (ver.storagePath !== PATH || ver.fileUrl !== fileUrl) await ctx.db.patch(ver._id, { storagePath: PATH, fileUrl });
+    }
     const have = new Map<Kind, Doc<"shares">>();
     for (const s of await ctx.db.query("shares").withIndex("by_video", (q) => q.eq("videoId", videoId)).collect()) {
       const k = kindOf(s);
@@ -93,10 +100,22 @@ export const run = internalAction({
     const f: any = await ctx.runMutation(internal.smoke.ensure, {});
     const clip: any = await ctx.runQuery(internal.smoke.clip, { videoId: f.videoId as Id<"videos"> });
     let clipStatus: number | null = null;
+    let uploaded = false;
     if (clip?.fileUrl) {
       const u = await signUrl(clip.fileUrl, clip.storagePath ? { folder: renderFolder(clip.storagePath) } : {});
-      try { clipStatus = (await fetch(u, { method: "HEAD" })).status; } catch { clipStatus = 0; }
+      const head = async () => { try { return (await fetch(u, { method: "HEAD" })).status; } catch { return 0; } };
+      clipStatus = await head();
+      // The clip lives in the review zone under its own path; put it there (from the public lab copy) if it's gone.
+      const z = reviewStorage();
+      if (clipStatus === 404 && z && clip.storagePath) {
+        const src = await fetch(LAB_CLIP);
+        if (src.ok) {
+          const put = await fetch(`https://${z.host}/${z.zone}/${clip.storagePath}`, { method: "PUT", headers: { AccessKey: z.password, "content-type": "video/mp4" }, body: new Uint8Array(await src.arrayBuffer()) });
+          uploaded = put.ok;
+          clipStatus = await head();
+        }
+      }
     }
-    return { ...f, clipStatus, site: process.env.SITE_URL || "https://review.wranglerportal.com" };
+    return { ...f, clipStatus, uploaded, site: process.env.SITE_URL || "https://review.wranglerportal.com" };
   },
 });
