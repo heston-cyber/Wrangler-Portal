@@ -3,11 +3,44 @@
 // never guessed. (Before that, Oct 20–22, the folder decided: /<Client>/<Project>/<Video>/<any file name>.)
 // Paths here are relative to the app folder (Dropbox reports them that way for app-folder apps).
 // Top-level folders whose names start with "_" are ignored (scratch space, e.g. _tests/r1/ for format tests).
+//
+// C7 (Oct 24): folders make projects. Two fixed folders at the top:
+//   Clients/<Client>/<Project>/   → the client and the project (made the minute the folder appears, even empty)
+//   Projects/<Project>/           → a project with no client
+// Anything deeper is the editor's own tidiness; anything else at the top level is left alone. A project folder named
+// "26122 Spirit Days" gives job 26122. The file name still decides the video (the number wins over the folder).
 
 export const VIDEO_EXTS = ["mp4", "mov", "m4v", "mxf", "mkv", "webm", "avi"];
 const INDEXED = ["mp4", "mov", "m4v"]; // formats whose finished state we can check (their index is written last)
 
 export type RegisterName = { number: number; shortTitle: string; version: number | null };
+export type FolderPlace =
+  | { kind: "client"; client: string; folder: string }
+  | { kind: "project"; project: string; client?: string; folder: string; clientFolder?: string };
+
+/** What a folder (or the folder a file sits in) means under the Clients/ and Projects/ rule, by its path_lower. */
+export function folderPlace(pathLower: string, pathDisplay?: string): FolderPlace | null {
+  const low = pathLower.split("/").filter(Boolean);
+  const disp = (pathDisplay ?? pathLower).split("/").filter(Boolean);
+  if (low.length < 2 || disp.length !== low.length) return null;
+  const at = (n: number) => "/" + low.slice(0, n).join("/");
+  if (low[0] === "clients") {
+    if (low.length === 2) return { kind: "client", client: disp[1].trim(), folder: at(2) };
+    return { kind: "project", client: disp[1].trim(), project: disp[2].trim(), folder: at(3), clientFolder: at(2) };
+  }
+  if (low[0] === "projects") return { kind: "project", project: disp[1].trim(), folder: at(2) };
+  return null;
+}
+
+/** The project folder a file sits in (the folder's own place), or null when it isn't under Clients/ or Projects/. */
+export function projectFolderOf(pathLower: string, pathDisplay?: string): Extract<FolderPlace, { kind: "project" }> | null {
+  const low = pathLower.split("/").filter(Boolean);
+  const want = low[0] === "clients" ? 3 : low[0] === "projects" ? 2 : 0;
+  if (!want || low.length <= want) return null; // the file itself is one deeper than the project folder
+  const disp = (pathDisplay ?? pathLower).split("/").filter(Boolean);
+  const p = folderPlace("/" + low.slice(0, want).join("/"), "/" + disp.slice(0, want).join("/"));
+  return p && p.kind === "project" ? p : null;
+}
 export type DropPlace =
   | { ok: true; client?: string; project: string; video: string; fileName: string; ext: string; checkIndex: boolean; register?: RegisterName }
   | { ok: false; reason: string; ignore?: boolean };

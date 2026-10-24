@@ -99,12 +99,13 @@ export function DropboxSettings({ show }: { show: (m: string) => void }) {
       )}
 
       <div className="panel setup">
-        <div className="prow"><span className="pl"><b>How to render into it</b> <span className="secondary" style={{ display: "block", fontSize: 12.5 }}>The file name decides the video. Folders inside the drop folder are up to you.</span></span></div>
+        <div className="prow"><span className="pl"><b>How to render into it</b> <span className="secondary" style={{ display: "block", fontSize: 12.5 }}>The file name decides the video. Folders make projects: <code className="mono">Clients/‹Client›/‹Project›/</code> or <code className="mono">Projects/‹Project›/</code>.</span></span></div>
         <ol className="steps">
           <li>Get the name from the <b>Register</b>: <b>New video</b> for a new one (it gets the next number), or <b>Copy next render name</b> on a video, e.g. <code className="mono">00002_SpiritIntro_v1</code>. Name the Resolve timeline the same.</li>
           <li>In Resolve's Deliver page, pick the <b>Wrangler Review</b> preset that fits (16x9, Scope or Vertical), set <b>Location</b> to <b>Apps › Wrangler Review</b> (any folder in it) and use that name for the file.</li>
           <li>A render made with a Wrangler Review preset plays on the site about a minute after Dropbox finishes, exactly as rendered. Anything else (ProRes, a .mov, an MP4 with the index at the end) is converted by Bunny first, which takes longer.</li>
-          <li>A name that isn't in the register, or a version that's already on the site, is flagged on the Register page with what to rename it. Nothing is guessed. Your original stays in Dropbox.</li>
+          <li>A name that isn't in the register, or a version that's already on the site, is flagged on the Register page with what to rename it. Nothing is guessed. Your original stays in Dropbox. A flagged render sitting in a project folder can be registered and imported from there in one go.</li>
+          <li>New folders make projects: <code className="mono">Clients › Floor Trader › Backrooms</code> makes the client and the project the minute the folder appears (even empty); <code className="mono">Projects › 26122 Spirit Days</code> makes a project with job 26122 and no client. Renaming a folder renames the project; deleting one never deletes anything here. Anything else at the top level is left alone.</li>
         </ol>
       </div>
 

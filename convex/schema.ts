@@ -99,7 +99,10 @@ export default defineSchema({
     jobNumber: v.optional(v.string()),
     client: v.optional(v.string()),
     createdAt: v.number(),
-  }).index("by_name", ["name"]),
+    // C7: the Dropbox folder that made or matched this project (path_lower, e.g. /clients/floor trader/backrooms).
+    // A renamed folder renames the project; a deleted folder only clears this.
+    dropboxFolder: v.optional(v.string()),
+  }).index("by_name", ["name"]).index("by_dropbox_folder", ["dropboxFolder"]),
 
   videos: defineTable({
     projectId: v.id("projects"),
@@ -281,6 +284,8 @@ export default defineSchema({
       v.literal("flagged"),   // R3: its name needs fixing (unknown number, version already there, not a register name)
     ),
     reason: v.optional(v.string()),
+    // C7: "Register & import" on a flagged file: the name the site gives it (the Dropbox file isn't renamed).
+    registerAs: v.optional(v.object({ number: v.number(), shortTitle: v.string(), version: v.number() })),
     firstSeenAt: v.number(),
     lastChangeAt: v.number(),
     checks: v.number(),
@@ -323,7 +328,8 @@ export default defineSchema({
   clients: defineTable({
     name: v.string(),
     createdAt: v.number(),
-  }).index("by_name", ["name"]),
+    dropboxFolder: v.optional(v.string()), // C7: /clients/<name> when a folder made or matched it
+  }).index("by_name", ["name"]).index("by_dropbox_folder", ["dropboxFolder"]),
 
   // Playback problems the browser reported (Oct 21), so they can be diagnosed on devices Claude can't reach.
   playerLogs: defineTable({

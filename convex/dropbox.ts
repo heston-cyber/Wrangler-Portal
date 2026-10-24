@@ -10,8 +10,8 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { requireMe } from "./lib/access";
 import { bunnyCall, bunnyEnv } from "./bunny";
 import { checkReviewExport, httpRangeReader, mp4HasIndex } from "./lib/mp4";
-import { directLink, pickProject, placeFor, splitJob } from "./lib/dropboxPath";
-import { insertVideo, parseRegisterName, videoByNumber } from "./lib/register";
+import { directLink, folderPlace, pickProject, placeFor, projectFolderOf, splitJob } from "./lib/dropboxPath";
+import { insertVideo, parseRegisterName, shortTitleError, shortTitleFrom, videoByNumber } from "./lib/register";
 import { signUrl } from "./lib/media";
 import { NEW_VERSION_DELAY_MS } from "./emails";
 
@@ -80,10 +80,18 @@ export const flagged = query({
   handler: async (ctx) => {
     await requireMe(ctx);
     const since = Date.now() - 14 * 86400_000;
-    return (await ctx.db.query("dropFiles").withIndex("by_status", (q) => q.eq("status", "flagged")).collect())
+    const rows = (await ctx.db.query("dropFiles").withIndex("by_status", (q) => q.eq("status", "flagged")).collect())
       .filter((f) => f.lastChangeAt > since)
       .sort((a, b) => b.lastChangeAt - a.lastChangeAt)
-      .map((f) => ({ _id: f._id, path: f.pathDisplay, reason: f.reason ?? null, at: f.lastChangeAt }));
+      .map((f) => ({ _id: f._id, path: f.pathDisplay, reason: f.reason ?? null, at: f.lastChangeAt, folder: projectFolderOf(f.pathLower, f.pathDisplay)?.folder ?? null }));
+    // C7: which flagged files sit in a folder the site knows as a project (so "Register & import" can be offered).
+    const out = [];
+    for (const r of rows) {
+      const p = r.folder ? await ctx.db.query("projects").withIndex("by_dropbox_folder", (q) => q.eq("dropboxFolder", r.folder!)).first() : null;
+      const base = (r.path.split("/").pop() ?? "").replace(/\.[A-Za-z0-9]{2,4}$/, "");
+      out.push({ _id: r._id, path: r.path, reason: r.reason, at: r.at, project: p ? { name: p.name, client: p.client ?? null } : null, suggestedTitle: base.replace(/[_-]+/g, " ").trim() });
+    }
+    return out;
   },
 });
 
@@ -319,6 +327,100 @@ export const linksToSweep = internalQuery({
       .map((f) => f._id),
 });
 
+// C7 (Oct 24): folders make projects. Clients/<Client>/<Project>/ makes the client and the project; Projects/<Project>/
+// makes a project with no client. A folder is remembered on what it made (dropboxFolder), so renaming the folder
+// renames the project or client (a rename arrives as the old path deleted and the new one added, in one batch).
+// Deleting a folder deletes nothing here: it just forgets the link. Returns how many things were made or renamed.
+export const recordFolders = internalMutation({
+  args: { folders: v.array(v.object({ pathLower: v.string(), pathDisplay: v.string() })), gone: v.array(v.string()) },
+  handler: async (ctx, { folders, gone }) => {
+    let changed = 0;
+    const now = Date.now();
+    const goneLeft = new Set(gone.map((g) => g.toLowerCase()));
+    const sameLevel = (a: string, b: string) => a.split("/").length === b.split("/").length && a.slice(0, a.lastIndexOf("/")) === b.slice(0, b.lastIndexOf("/"));
+    const norm = (x: string) => x.trim().toLowerCase();
+
+    const ensureClient = async (name: string, folder: string) => {
+      const byFolder = await ctx.db.query("clients").withIndex("by_dropbox_folder", (q) => q.eq("dropboxFolder", folder)).first();
+      if (byFolder) {
+        if (byFolder.name !== name) { await renameClient(byFolder.name, name, byFolder._id, folder, folder); changed++; }
+        return name;
+      }
+      const all = await ctx.db.query("clients").collect();
+      const byName = all.find((c) => norm(c.name) === norm(name));
+      if (byName) { await ctx.db.patch(byName._id, { dropboxFolder: folder }); return byName.name; }
+      // The old folder of a renamed client went away in the same batch.
+      for (const g of goneLeft) {
+        if (!sameLevel(g, folder)) continue;
+        const old = all.find((c) => c.dropboxFolder === g);
+        if (old) { goneLeft.delete(g); await renameClient(old.name, name, old._id, g, folder); changed++; return name; }
+      }
+      // Projects already filed under this client name (made on the site) count as the client existing.
+      const projectsUnder = (await ctx.db.query("projects").collect()).some((p) => norm(p.client ?? "") === norm(name));
+      await ctx.db.insert("clients", { name, createdAt: now, dropboxFolder: folder });
+      if (!projectsUnder) changed++;
+      return name;
+    };
+    // A client's projects follow it: their client name, and their folders (which moved with the client folder).
+    const renameClient = async (from: string, to: string, clientId: Id<"clients">, oldFolder: string, newFolder: string) => {
+      await ctx.db.patch(clientId, { name: to, dropboxFolder: newFolder });
+      for (const p of await ctx.db.query("projects").collect()) {
+        const patch: Record<string, unknown> = {};
+        if (norm(p.client ?? "") === norm(from)) patch.client = to;
+        if (p.dropboxFolder && oldFolder !== newFolder && p.dropboxFolder.startsWith(oldFolder + "/")) patch.dropboxFolder = newFolder + p.dropboxFolder.slice(oldFolder.length);
+        if (Object.keys(patch).length) await ctx.db.patch(p._id, patch);
+      }
+    };
+
+    const ensureProject = async (folderName: string, client: string | undefined, folder: string) => {
+      const byFolder = await ctx.db.query("projects").withIndex("by_dropbox_folder", (q) => q.eq("dropboxFolder", folder)).first();
+      const split = splitJob(folderName);
+      if (byFolder) {
+        const patch: Record<string, unknown> = {};
+        if (byFolder.name !== split.name) patch.name = split.name;
+        if (split.jobNumber && byFolder.jobNumber !== split.jobNumber) patch.jobNumber = split.jobNumber;
+        if (client && norm(byFolder.client ?? "") !== norm(client)) patch.client = client;
+        if (Object.keys(patch).length) { await ctx.db.patch(byFolder._id, patch); changed++; }
+        return;
+      }
+      const all = await ctx.db.query("projects").collect();
+      const picked = pickProject(all.filter((p) => !p.dropboxFolder), folderName, client);
+      if (picked) {
+        await ctx.db.patch(picked.project._id, { dropboxFolder: folder, ...(picked.setClient && client ? { client } : {}) });
+        return;
+      }
+      for (const g of goneLeft) {
+        if (!sameLevel(g, folder)) continue;
+        const old = all.find((p) => p.dropboxFolder === g);
+        if (old) {
+          goneLeft.delete(g);
+          await ctx.db.patch(old._id, { name: split.name, dropboxFolder: folder, ...(split.jobNumber ? { jobNumber: split.jobNumber } : {}), ...(client ? { client } : {}) });
+          changed++;
+          return;
+        }
+      }
+      await ctx.db.insert("projects", { name: split.name, ...(split.jobNumber ? { jobNumber: split.jobNumber } : {}), ...(client ? { client } : {}), createdAt: now, dropboxFolder: folder });
+      changed++;
+    };
+
+    // Shallow first, so a client folder exists before the project folders inside it.
+    const sorted = [...folders].sort((a, b) => a.pathLower.split("/").length - b.pathLower.split("/").length);
+    for (const f of sorted) {
+      const place = folderPlace(f.pathLower, f.pathDisplay);
+      if (!place) continue;
+      if (place.kind === "client") { await ensureClient(place.client, place.folder); continue; }
+      const client = place.client && place.clientFolder ? await ensureClient(place.client, place.clientFolder) : undefined;
+      await ensureProject(place.project, client, place.folder);
+    }
+    // Folders that went away without coming back under a new name: forget the link, keep everything else.
+    for (const g of goneLeft) {
+      for (const p of await ctx.db.query("projects").withIndex("by_dropbox_folder", (q) => q.eq("dropboxFolder", g)).collect()) await ctx.db.patch(p._id, { dropboxFolder: undefined });
+      for (const c of await ctx.db.query("clients").withIndex("by_dropbox_folder", (q) => q.eq("dropboxFolder", g)).collect()) await ctx.db.patch(c._id, { dropboxFolder: undefined });
+    }
+    return changed;
+  },
+});
+
 // Runs every minute (crons.ts) and whenever Dropbox's webhook fires.
 export const sync = internalAction({
   args: {},
@@ -339,6 +441,9 @@ export const sync = internalAction({
         if (files.length) changes += await ctx.runMutation(internal.dropbox.recordFiles, { files });
         const gone = (r.entries ?? []).filter((e: any) => e[".tag"] === "deleted").map((e: any) => e.path_lower as string);
         if (gone.length) await ctx.runMutation(internal.dropbox.recordRemoved, { pathsLower: gone });
+        // C7: folders under Clients/ and Projects/ make (or rename) clients and projects.
+        const folders = (r.entries ?? []).filter((e: any) => e[".tag"] === "folder").map((e: any) => ({ pathLower: e.path_lower as string, pathDisplay: e.path_display as string }));
+        if (folders.length || gone.length) changes += await ctx.runMutation(internal.dropbox.recordFolders, { folders, gone });
         cursor = r.cursor;
         if (!r.has_more) break;
         r = await dbx(ctx, "/files/list_folder/continue", { cursor });
@@ -472,7 +577,45 @@ export const registerTarget = internalQuery({
     const versions = await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect();
     const top = versions.reduce((m, x) => Math.max(m, x.number), 0);
     const taken = a.version !== undefined && versions.some((x) => x.number === a.version);
-    return { found: true as const, videoId: vid._id, shortTitle: vid.shortTitle ?? "", next: top + 1, taken };
+    return { found: true as const, videoId: vid._id, projectId: vid.projectId, shortTitle: vid.shortTitle ?? "", next: top + 1, taken };
+  },
+});
+
+// C7: when a register-named file sits in a project folder that isn't the video's project, a note for the drop list.
+export const folderNote = internalQuery({
+  args: { pathLower: v.string(), pathDisplay: v.string(), projectId: v.id("projects") },
+  handler: async (ctx, a) => {
+    const pf = projectFolderOf(a.pathLower, a.pathDisplay);
+    if (!pf) return null;
+    const folderProject = await ctx.db.query("projects").withIndex("by_dropbox_folder", (q) => q.eq("dropboxFolder", pf.folder)).first();
+    if (!folderProject || folderProject._id === a.projectId) return null;
+    const own = await ctx.db.get(a.projectId);
+    return `Saved under ${pf.client ? `${pf.client} › ` : ""}${pf.project}, but video is in ${own?.client ? `${own.client} › ` : ""}${own?.name ?? "another project"} (the number wins).`;
+  },
+});
+
+// C7: "Register & import" on a flagged render that sits in a project folder: registers a new video in that project
+// (title and short title from the file name unless given), and imports the file as its v1 under the register name.
+// The file in Dropbox keeps its own name; only the site's copy is named by the register.
+export const registerFlagged = mutation({
+  args: { fileId: v.id("dropFiles"), title: v.optional(v.string()), shortTitle: v.optional(v.string()) },
+  handler: async (ctx, a) => {
+    await requireMe(ctx);
+    const f = await ctx.db.get(a.fileId);
+    if (!f || f.status !== "flagged") throw new ConvexError("That file isn't waiting to be registered.");
+    const pf = projectFolderOf(f.pathLower, f.pathDisplay);
+    if (!pf) throw new ConvexError("Move it into a project folder first (Clients/<Client>/<Project>/ or Projects/<Project>/).");
+    const project = await ctx.db.query("projects").withIndex("by_dropbox_folder", (q) => q.eq("dropboxFolder", pf.folder)).first();
+    if (!project) throw new ConvexError("That folder hasn't been picked up as a project yet. Give it a minute, then try again.");
+    const base = (f.pathDisplay.split("/").pop() ?? "video").replace(/\.[A-Za-z0-9]{2,4}$/, "");
+    const title = (a.title ?? "").trim().slice(0, 160) || base.replace(/[_-]+/g, " ").trim() || "Video";
+    const shortTitle = (a.shortTitle ?? "").trim() || shortTitleFrom(title);
+    const bad = shortTitleError(shortTitle);
+    if (bad) throw new ConvexError(bad);
+    const made = await insertVideo(ctx, { projectId: project._id, title, shortTitle });
+    await ctx.db.patch(f._id, { status: "waiting", reason: undefined, registerAs: { number: made.number, shortTitle, version: 1 }, lastChangeAt: Date.now() - 10 * 60_000, checks: 0 });
+    await ctx.scheduler.runAfter(0, internal.dropbox.importFile, { fileId: f._id });
+    return { videoId: made.videoId, number: String(made.number).padStart(5, "0"), fileName: `${made.fileName}.${f.pathDisplay.split(".").pop()}`, project: project.name, client: project.client ?? null };
   },
 });
 
@@ -487,7 +630,7 @@ export const flagFile = internalMutation({
 export const addFileVersion = internalMutation({
   args: {
     fileId: v.id("dropFiles"), videoId: v.id("videos"), number: v.optional(v.number()), fileName: v.string(), fileSize: v.number(), dropboxPath: v.string(),
-    frames: v.number(), fpsNum: v.number(), fpsDen: v.number(), width: v.number(), height: v.number(), seconds: v.number(),
+    frames: v.number(), fpsNum: v.number(), fpsDen: v.number(), width: v.number(), height: v.number(), seconds: v.number(), note: v.optional(v.string()),
   },
   handler: async (ctx, a) => {
     const existing = await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", a.videoId)).collect();
@@ -502,7 +645,7 @@ export const addFileVersion = internalMutation({
       mp4Heights: [], startTimecode: "01:00:00:00", uploaderName: "Dropbox", dropboxPath: a.dropboxPath, createdAt: now, encodeProgress: 0,
     });
     await ctx.db.patch(a.videoId, { updatedAt: now, final: undefined });
-    await ctx.db.patch(a.fileId, { status: "imported", versionId, importedAt: now, lastChangeAt: now, reason: undefined });
+    await ctx.db.patch(a.fileId, { status: "imported", versionId, importedAt: now, lastChangeAt: now, reason: a.note });
     return { versionId, number, storagePath };
   },
 });
@@ -576,9 +719,11 @@ export const importFile = internalAction({
         return { result: "changed again; waiting" };
       }
       // R3: the name decides the video. Anything that doesn't match is flagged, never guessed.
-      const reg = place.register;
+      // C7: "Register & import" on a flagged file gives it a register name on the site without renaming the file.
+      const reg = f.registerAs ?? place.register;
+      const fileName = f.registerAs ? `${String(f.registerAs.number).padStart(5, "0")}_${f.registerAs.shortTitle}_v${f.registerAs.version}.${place.ext}` : place.fileName;
       if (!reg) {
-        await ctx.runMutation(internal.dropbox.flagFile, { fileId, reason: "Not a register name. Name it like 00002_Title_v1 (Register › New video gives the name), then save it again." });
+        await ctx.runMutation(internal.dropbox.flagFile, { fileId, reason: "Not a register name. Press Register & import to make it a new video in its folder's project, or name it like 00002_Title_v1 (Register › New video gives the name) and save it again." });
         return { result: "flagged: not a register name" };
       }
       const num = String(reg.number).padStart(5, "0");
@@ -607,14 +752,16 @@ export const importFile = internalAction({
         }
       }
       const target = { videoId: hit.videoId };
+      // C7: the number wins over the folder; say so when they disagree, so a misfiled render is easy to spot.
+      const folderNote: string | null = await ctx.runQuery(internal.dropbox.folderNote, { pathLower: f.pathLower, pathDisplay: f.pathDisplay, projectId: hit.projectId });
       // A review export (H.264 + AAC MP4, index at the front) is stored and played as it is.
       let why = "";
       if (tempLink && (place.ext === "mp4" || place.ext === "m4v")) {
         const chk = await checkReviewExport(httpRangeReader(tempLink), meta.size);
         if (chk.ok) {
           const r = await ctx.runMutation(internal.dropbox.addFileVersion, {
-            fileId, videoId: target.videoId, number: reg.version ?? undefined, fileName: place.fileName, fileSize: meta.size, dropboxPath: f.pathDisplay,
-            frames: chk.frames, fpsNum: chk.fpsNum, fpsDen: chk.fpsDen, width: chk.width, height: chk.height, seconds: chk.seconds,
+            fileId, videoId: target.videoId, number: reg.version ?? undefined, fileName, fileSize: meta.size, dropboxPath: f.pathDisplay,
+            frames: chk.frames, fpsNum: chk.fpsNum, fpsDen: chk.fpsDen, width: chk.width, height: chk.height, seconds: chk.seconds, note: folderNote ?? undefined,
           });
           await ctx.scheduler.runAfter(0, internal.reviewFiles.copy, { versionId: r.versionId, dropboxPath: f.pathLower, size: meta.size, attempt: 0 });
           return { result: "copying a review export" };
@@ -637,10 +784,10 @@ export const importFile = internalAction({
         guid = found.items?.find((x) => x.title === tag)?.guid ?? null;
       }
       if (!guid) throw new Error("Bunny didn't start the import.");
-      await bunnyCall(`/library/${lib}/videos/${guid}`, { method: "POST", body: JSON.stringify({ title: place.fileName }) }).catch(() => null);
+      await bunnyCall(`/library/${lib}/videos/${guid}`, { method: "POST", body: JSON.stringify({ title: fileName }) }).catch(() => null);
       const { versionId } = await ctx.runMutation(internal.dropbox.addVersion, {
-        fileId, videoId: target.videoId, bunnyGuid: guid, fileName: place.fileName, fileSize: f.size, dropboxPath: f.pathDisplay,
-        shareUrl: link.shared ? link.url : undefined, number: reg.version ?? undefined, note: `Converted by Bunny (not a review export: ${why})`,
+        fileId, videoId: target.videoId, bunnyGuid: guid, fileName, fileSize: f.size, dropboxPath: f.pathDisplay,
+        shareUrl: link.shared ? link.url : undefined, number: reg.version ?? undefined, note: `Converted by Bunny (not a review export: ${why})${folderNote ? ` · ${folderNote}` : ""}`,
       });
       await ctx.scheduler.runAfter(5000, internal.uploads.poll, { versionId });
       return { result: "imported" };

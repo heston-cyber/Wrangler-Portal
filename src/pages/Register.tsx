@@ -136,9 +136,11 @@ export default function Register() {
 function FlaggedDrops({ show }: { show: (m: string) => void }) {
   const flagged = useQuery(api.dropbox.flagged, {});
   const retry = useMutation(api.dropbox.retryFlagged);
+  const [registering, setRegistering] = useState<NonNullable<typeof flagged>[number] | null>(null);
   if (!flagged?.length) return null;
   return (
     <div className="flagbox" role="status">
+      {registering && <RegisterFlagged file={registering} show={show} onClose={() => setRegistering(null)} />}
       <p className="flaghead"><TriangleAlert size={15} /> <b>{flagged.length === 1 ? "1 render in Dropbox needs a new name" : `${flagged.length} renders in Dropbox need new names`}</b></p>
       {flagged.map((f) => (
         <div className="flagrow" key={f._id}>
@@ -146,10 +148,67 @@ function FlaggedDrops({ show }: { show: (m: string) => void }) {
             <code className="mono">{f.path.split("/").filter(Boolean).join(" › ")}</code>
             <span className="secondary">{f.reason} · {ago(f.at)}</span>
           </span>
-          <button className="btn sm" onClick={async () => { await retry({ fileId: f._id }); show("Trying it again"); }}><RotateCw size={14} />Try again</button>
+          <span style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {f.project && <button className="btn sm primary" onClick={() => setRegistering(f)}><Plus size={14} />Register & import</button>}
+            <button className="btn sm" onClick={async () => { await retry({ fileId: f._id }); show("Trying it again"); }}><RotateCw size={14} />Try again</button>
+          </span>
         </div>
       ))}
     </div>
+  );
+}
+
+// C7: a flagged render in a project folder becomes a new video in that project, and imports as its v1. The file in
+// Dropbox keeps its name; the site's copy gets the register name.
+function RegisterFlagged({ file, show, onClose }: { file: { _id: Id<"dropFiles">; path: string; project: { name: string; client: string | null } | null; suggestedTitle: string }; show: (m: string) => void; onClose: () => void }) {
+  const register = useMutation(api.dropbox.registerFlagged);
+  const [title, setTitle] = useState(file.suggestedTitle);
+  const [short, setShort] = useState("");
+  const [shortEdited, setShortEdited] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const shortTitle = shortEdited ? short : shortTitleFrom(title);
+  const shortBad = title.trim() || shortEdited ? shortTitleError(shortTitle) : null;
+  const where = file.project ? `${file.project.client ? file.project.client + " › " : ""}${file.project.name}` : "";
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!title.trim()) { setError("Give the video a title."); return; }
+    if (shortBad) { setError(shortBad); return; }
+    setBusy(true);
+    try {
+      const r = await register({ fileId: file._id, title, shortTitle });
+      show(`${r.number} registered in ${r.project}; importing as ${r.fileName}`);
+      onClose();
+    } catch (err) {
+      setError((err as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]);
+    } finally { setBusy(false); }
+  }
+  return (
+    <Modal onClose={onClose} label="Register and import" width={560}>
+      <form onSubmit={submit} style={{ display: "grid", gap: 18 }}>
+        <div className="dhead">
+          <div style={{ display: "grid", gap: 6 }}>
+            <span className="eyebrow">Register</span>
+            <h2 className="headline">New video in {where}. <span className="rest">Then this render imports as its v1.</span></h2>
+          </div>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
+        </div>
+        <p className="caption secondary" style={{ margin: 0 }}><code className="mono">{file.path.split("/").filter(Boolean).join(" › ")}</code> keeps its name in Dropbox; the site's copy gets the register name.</p>
+        <div className="row2">
+          <label className="field"><span className="label">Title</span><input className="input" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus /></label>
+          <label className="field">
+            <span className="label">Short title (file names)</span>
+            <input className="input mono" value={shortTitle} onChange={(e) => { setShort(e.target.value); setShortEdited(true); }} spellCheck={false} aria-invalid={Boolean(shortBad)} />
+          </label>
+        </div>
+        {(error || shortBad) && <p className="error" role="alert">{error ?? shortBad}</p>}
+        <div className="dfoot">
+          <button type="button" className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn primary" disabled={busy}><Check size={15} />{busy ? "One moment…" : "Register & import"}</button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -193,7 +252,7 @@ export function NewVideo({ onClose, show, projectId: initialProject }: { onClose
   }
 
   if (made) {
-    const folder = `Apps/Wrangler Review/${made.client ? made.client + "/" : ""}${made.project}/<video folder>/`;
+    const folder = made.client ? `Apps/Wrangler Review/Clients/${made.client}/${made.project}/` : `Apps/Wrangler Review/Projects/${made.project}/`;
     return (
       <Modal onClose={onClose} label="New video" width={560}>
         <div style={{ display: "grid", gap: 18 }}>
@@ -211,7 +270,7 @@ export function NewVideo({ onClose, show, projectId: initialProject }: { onClose
           <ul className="caption secondary madelist">
             <li>Name the Resolve timeline <code className="mono">{made.fileName}</code>.</li>
             <li>Render with the <b>Wrangler Review</b> preset that fits the timeline (16x9, Scope or Vertical).</li>
-            <li>Save it in Dropbox › <code className="mono">{folder}</code>. The number puts it on this video whatever the video folder is called.</li>
+            <li>Save it in Dropbox › <code className="mono">{folder}</code> (any folder inside the drop folder works: the number puts it on this video).</li>
           </ul>
           <div className="dfoot">
             <button className="btn" onClick={onClose}>Done</button>
