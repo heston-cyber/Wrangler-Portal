@@ -47,6 +47,7 @@ import type * as reviewFiles from "../reviewFiles.js";
 import type * as reviewTest from "../reviewTest.js";
 import type * as scrubCheck from "../scrubCheck.js";
 import type * as signTest from "../signTest.js";
+import type * as smoke from "../smoke.js";
 import type * as lib_bunnySign from "../lib/bunnySign.js";
 import type * as lib_media from "../lib/media.js";
 import type * as lib_reviewStorage from "../lib/reviewStorage.js";
@@ -108,6 +109,7 @@ declare const fullApi: ApiFromModules<{
   reviewTest: typeof reviewTest;
   scrubCheck: typeof scrubCheck;
   signTest: typeof signTest;
+  smoke: typeof smoke;
   "lib/bunnySign": typeof lib_bunnySign;
   "lib/media": typeof lib_media;
   "lib/reviewStorage": typeof lib_reviewStorage;
