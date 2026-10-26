@@ -1,0 +1,36 @@
+name: Cloudflare Worker
+
+# Deploys the link-preview Worker (infra/cloudflare) whenever it changes, and on demand. Needs the repo secret
+# CLOUDFLARE_API_TOKEN ("Edit Cloudflare Workers" template, zone wranglerportal.com) and the repo variable
+# CLOUDFLARE_ACCOUNT_ID. The token never prints; wrangler's output names only the Worker and its route.
+on:
+  push:
+    branches: [main]
+    paths: ["infra/cloudflare/**", ".github/workflows/cloudflare.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ vars.CLOUDFLARE_ACCOUNT_ID != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Deploy the Worker and its route
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: infra/cloudflare
+        run: npx --yes wrangler@4 deploy
+      - name: Check a share page carries preview tags
+        run: |
+          sleep 10
+          # The smoke test's own share links are fine to open; this just looks for the tags, not the token.
+          code=$(curl -s -o /tmp/page.html -w '%{http_code}' https://review.wranglerportal.com/s/notarealtoken0000)
+          echo "status for a made-up link: $code (Worker answers 200; GitHub alone answers 404)"
+          grep -c 'property="og:' /tmp/page.html || true

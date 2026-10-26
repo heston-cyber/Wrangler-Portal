@@ -1,0 +1,11 @@
+# Wrangler Review — link previews Worker (C8). Deployed by .github/workflows/cloudflare.yml with
+# CLOUDFLARE_API_TOKEN (repo secret) and CLOUDFLARE_ACCOUNT_ID (repo variable). The route puts it in front of
+# share links only; everything else on review.wranglerportal.com goes straight to GitHub Pages.
+name = "wrangler-review-og"
+main = "og-worker.js"
+compatibility_date = "2026-10-01"
+workers_dev = false
+
+routes = [
+  { pattern = "review.wranglerportal.com/s/*", zone_name = "wranglerportal.com" },
+]
