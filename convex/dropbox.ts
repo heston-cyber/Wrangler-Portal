@@ -11,7 +11,7 @@ import { requireMe } from "./lib/access";
 import { bunnyCall, bunnyEnv } from "./bunny";
 import { checkReviewExport, httpRangeReader, mp4HasIndex } from "./lib/mp4";
 import { directLink, folderPlace, pickProject, placeFor, projectFolderOf, splitJob } from "./lib/dropboxPath";
-import { insertVideo, parseRegisterName, shortTitleError, shortTitleFrom, videoByNumber } from "./lib/register";
+import { highestVersion, insertVideo, parseRegisterName, shortTitleError, shortTitleFrom, videoByNumber } from "./lib/register";
 import { signUrl } from "./lib/media";
 import { NEW_VERSION_DELAY_MS } from "./emails";
 
@@ -598,11 +598,22 @@ export const folderNote = internalQuery({
 // (title and short title from the file name unless given), and imports the file as its v1 under the register name.
 // The file in Dropbox keeps its own name; only the site's copy is named by the register.
 export const registerFlagged = mutation({
-  args: { fileId: v.id("dropFiles"), title: v.optional(v.string()), shortTitle: v.optional(v.string()) },
+  args: { fileId: v.id("dropFiles"), title: v.optional(v.string()), shortTitle: v.optional(v.string()), videoId: v.optional(v.id("videos")) },
   handler: async (ctx, a) => {
     await requireMe(ctx);
     const f = await ctx.db.get(a.fileId);
     if (!f || f.status !== "flagged") throw new ConvexError("That file isn't waiting to be registered.");
+    const ext = f.pathDisplay.split(".").pop();
+    // The next version of a video that's already in the register (a plain-named render of an existing cut).
+    if (a.videoId) {
+      const vid = await ctx.db.get(a.videoId);
+      if (!vid?.number || !vid.shortTitle) throw new ConvexError("That video isn't in the register yet.");
+      const version = (await highestVersion(ctx, vid._id)) + 1;
+      await ctx.db.patch(f._id, { status: "waiting", reason: undefined, registerAs: { number: vid.number, shortTitle: vid.shortTitle, version }, lastChangeAt: Date.now() - 10 * 60_000, checks: 0 });
+      await ctx.scheduler.runAfter(0, internal.dropbox.importFile, { fileId: f._id });
+      const p = await ctx.db.get(vid.projectId);
+      return { videoId: vid._id, number: String(vid.number).padStart(5, "0"), fileName: `${String(vid.number).padStart(5, "0")}_${vid.shortTitle}_v${version}.${ext}`, project: p?.name ?? "", client: p?.client ?? null };
+    }
     const pf = projectFolderOf(f.pathLower, f.pathDisplay);
     if (!pf) throw new ConvexError("Move it into a project folder first (Clients/<Client>/<Project>/ or Projects/<Project>/).");
     const project = await ctx.db.query("projects").withIndex("by_dropbox_folder", (q) => q.eq("dropboxFolder", pf.folder)).first();
@@ -615,7 +626,7 @@ export const registerFlagged = mutation({
     const made = await insertVideo(ctx, { projectId: project._id, title, shortTitle });
     await ctx.db.patch(f._id, { status: "waiting", reason: undefined, registerAs: { number: made.number, shortTitle, version: 1 }, lastChangeAt: Date.now() - 10 * 60_000, checks: 0 });
     await ctx.scheduler.runAfter(0, internal.dropbox.importFile, { fileId: f._id });
-    return { videoId: made.videoId, number: String(made.number).padStart(5, "0"), fileName: `${made.fileName}.${f.pathDisplay.split(".").pop()}`, project: project.name, client: project.client ?? null };
+    return { videoId: made.videoId, number: String(made.number).padStart(5, "0"), fileName: `${made.fileName}.${ext}`, project: project.name, client: project.client ?? null };
   },
 });
 

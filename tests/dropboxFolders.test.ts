@@ -133,6 +133,20 @@ describe("a flagged render in a project folder", () => {
     await expect(me.mutation(api.dropbox.registerFlagged, { fileId })).rejects.toThrow(/isn't waiting/);
   });
 
+  test("…or the next version of a video already in the register, wherever the file sits", async () => {
+    const { t, me, fileId } = await flaggedIn("/Clients/Floor Trader/Backrooms/teaser (qr code).mp4");
+    const videoId = await t.run(async (ctx) => {
+      const p = (await ctx.db.query("projects").first())!;
+      const id = await ctx.db.insert("videos", { projectId: p._id, title: "Teaser", number: 7, shortTitle: "Teaser", createdAt: 1, updatedAt: 1 });
+      await ctx.db.insert("versions", { videoId: id, number: 1, status: "ready", bunnyGuid: "g", fileName: "00007_Teaser_v1.mp4", startTimecode: "01:00:00:00", createdAt: 1 } as never);
+      return id;
+    });
+    const r = await me.mutation(api.dropbox.registerFlagged, { fileId, videoId });
+    expect(r).toMatchObject({ number: "00007", fileName: "00007_Teaser_v2.mp4", project: "Backrooms" });
+    expect(await t.run((ctx) => ctx.db.get(fileId))).toMatchObject({ status: "waiting", registerAs: { number: 7, shortTitle: "Teaser", version: 2 } });
+    expect((await t.run((ctx) => ctx.db.query("videos").collect())).length).toBe(1); // no new video
+  });
+
   test("outside a project folder there is nothing to register into", async () => {
     const { me, fileId } = await flaggedIn("/Clients/Floor Trader/teaser.mp4");
     expect((await me.query(api.dropbox.flagged, {}))[0].project).toBeNull();

@@ -73,7 +73,7 @@ export default function Register() {
             </label>
           </div>
 
-          <FlaggedDrops show={show} />
+          <FlaggedDrops show={show} videos={numbered.map((x) => { const p = pmap.get(x.projectId); return { videoId: x._id, numberText: pad5(x.number!), title: x.title, project: p?.name ?? "", client: p?.client?.trim() || null, latest: x.latest?.number ?? null }; })} />
 
           {overview === undefined ? null : numbered.length === 0 ? (
             <div className="empty">
@@ -133,14 +133,15 @@ export default function Register() {
 
 // R3: renders in Dropbox whose names don't match the register. Rename the file in Dropbox (it's picked up again), or
 // add the number to the register and press Try again.
-function FlaggedDrops({ show }: { show: (m: string) => void }) {
+type PickRow = { videoId: Id<"videos">; numberText: string; title: string; project: string; client: string | null; latest: number | null };
+function FlaggedDrops({ show, videos }: { show: (m: string) => void; videos: PickRow[] }) {
   const flagged = useQuery(api.dropbox.flagged, {});
   const retry = useMutation(api.dropbox.retryFlagged);
   const [registering, setRegistering] = useState<NonNullable<typeof flagged>[number] | null>(null);
   if (!flagged?.length) return null;
   return (
     <div className="flagbox" role="status">
-      {registering && <RegisterFlagged file={registering} show={show} onClose={() => setRegistering(null)} />}
+      {registering && <RegisterFlagged file={registering} videos={videos} show={show} onClose={() => setRegistering(null)} />}
       <p className="flaghead"><TriangleAlert size={15} /> <b>{flagged.length === 1 ? "1 render in Dropbox needs a new name" : `${flagged.length} renders in Dropbox need new names`}</b></p>
       {flagged.map((f) => (
         <div className="flagrow" key={f._id}>
@@ -149,7 +150,7 @@ function FlaggedDrops({ show }: { show: (m: string) => void }) {
             <span className="secondary">{f.reason} · {ago(f.at)}</span>
           </span>
           <span style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            {f.project && <button className="btn sm primary" onClick={() => setRegistering(f)}><Plus size={14} />Register & import</button>}
+            {(f.project || videos.length > 0) && <button className="btn sm primary" onClick={() => setRegistering(f)}><Plus size={14} />Register & import</button>}
             <button className="btn sm" onClick={async () => { await retry({ fileId: f._id }); show("Trying it again"); }}><RotateCw size={14} />Try again</button>
           </span>
         </div>
@@ -160,8 +161,13 @@ function FlaggedDrops({ show }: { show: (m: string) => void }) {
 
 // C7: a flagged render in a project folder becomes a new video in that project, and imports as its v1. The file in
 // Dropbox keeps its name; the site's copy gets the register name.
-function RegisterFlagged({ file, show, onClose }: { file: { _id: Id<"dropFiles">; path: string; project: { name: string; client: string | null } | null; suggestedTitle: string }; show: (m: string) => void; onClose: () => void }) {
+function RegisterFlagged({ file, videos, show, onClose }: { file: { _id: Id<"dropFiles">; path: string; project: { name: string; client: string | null } | null; suggestedTitle: string }; videos: PickRow[]; show: (m: string) => void; onClose: () => void }) {
   const register = useMutation(api.dropbox.registerFlagged);
+  // Videos in the file's own project first, then the rest.
+  const sortedVideos = [...videos].sort((a, b) => Number(b.project === file.project?.name) - Number(a.project === file.project?.name) || a.numberText.localeCompare(b.numberText));
+  const [mode, setMode] = useState<"new" | "version">(file.project ? "new" : "version");
+  const [videoId, setVideoId] = useState<string>(sortedVideos[0]?.videoId ?? "");
+  const picked = sortedVideos.find((x) => x.videoId === videoId) ?? null;
   const [title, setTitle] = useState(file.suggestedTitle);
   const [short, setShort] = useState("");
   const [shortEdited, setShortEdited] = useState(false);
@@ -173,12 +179,13 @@ function RegisterFlagged({ file, show, onClose }: { file: { _id: Id<"dropFiles">
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!title.trim()) { setError("Give the video a title."); return; }
-    if (shortBad) { setError(shortBad); return; }
+    if (mode === "version" && !picked) { setError("Pick the video this is a new version of."); return; }
+    if (mode === "new" && !title.trim()) { setError("Give the video a title."); return; }
+    if (mode === "new" && shortBad) { setError(shortBad); return; }
     setBusy(true);
     try {
-      const r = await register({ fileId: file._id, title, shortTitle });
-      show(`${r.number} registered in ${r.project}; importing as ${r.fileName}`);
+      const r = mode === "version" && picked ? await register({ fileId: file._id, videoId: picked.videoId }) : await register({ fileId: file._id, title, shortTitle });
+      show(mode === "version" ? `Importing as ${r.fileName}` : `${r.number} registered in ${r.project}; importing as ${r.fileName}`);
       onClose();
     } catch (err) {
       setError((err as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]);
@@ -190,22 +197,33 @@ function RegisterFlagged({ file, show, onClose }: { file: { _id: Id<"dropFiles">
         <div className="dhead">
           <div style={{ display: "grid", gap: 6 }}>
             <span className="eyebrow">Register</span>
-            <h2 className="headline">New video in {where}. <span className="rest">Then this render imports as its v1.</span></h2>
+            <h2 className="headline">{mode === "new" ? <>New video in {where}. <span className="rest">Then this render imports as its v1.</span></> : <>Next version. <span className="rest">This render imports as v{(picked?.latest ?? 0) + 1} of the video you pick.</span></>}</h2>
           </div>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
         </div>
         <p className="caption secondary" style={{ margin: 0 }}><code className="mono">{file.path.split("/").filter(Boolean).join(" › ")}</code> keeps its name in Dropbox; the site's copy gets the register name.</p>
-        <div className="row2">
+        <span className="seg" role="radiogroup" aria-label="What this render is">
+          <button type="button" className={`segbtn${mode === "new" ? " on" : ""}`} role="radio" aria-checked={mode === "new"} disabled={!file.project} title={file.project ? undefined : "Not in a project folder"} onClick={() => setMode("new")}>New video{where ? ` in ${where}` : ""}</button>
+          <button type="button" className={`segbtn${mode === "version" ? " on" : ""}`} role="radio" aria-checked={mode === "version"} disabled={!sortedVideos.length} onClick={() => setMode("version")}>Next version of a video</button>
+        </span>
+        {mode === "version" && (
+          <label className="field"><span className="label">Video</span>
+            <select className="input" value={videoId} onChange={(e) => setVideoId(e.target.value)}>
+              {sortedVideos.map((x) => <option key={x.videoId} value={x.videoId}>{x.numberText} · {x.title} — {x.client ? `${x.client} › ` : ""}{x.project}{x.latest ? ` (v${x.latest} so far)` : ""}</option>)}
+            </select>
+          </label>
+        )}
+        {mode === "new" && <div className="row2">
           <label className="field"><span className="label">Title</span><input className="input" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus /></label>
           <label className="field">
             <span className="label">Short title (file names)</span>
             <input className="input mono" value={shortTitle} onChange={(e) => { setShort(e.target.value); setShortEdited(true); }} spellCheck={false} aria-invalid={Boolean(shortBad)} />
           </label>
-        </div>
-        {(error || shortBad) && <p className="error" role="alert">{error ?? shortBad}</p>}
+        </div>}
+        {(error || (mode === "new" && shortBad)) && <p className="error" role="alert">{error ?? shortBad}</p>}
         <div className="dfoot">
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" disabled={busy}><Check size={15} />{busy ? "One moment…" : "Register & import"}</button>
+          <button className="btn primary" disabled={busy}><Check size={15} />{busy ? "One moment…" : mode === "new" ? "Register & import" : "Import as next version"}</button>
         </div>
       </form>
     </Modal>
