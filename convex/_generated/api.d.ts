@@ -21,6 +21,7 @@ import type * as lib_email from "../lib/email.js";
 import type * as connector from "../connector.js";
 import type * as crons from "../crons.js";
 import type * as dropbox from "../dropbox.js";
+import type * as diag from "../diag.js";
 import type * as emailTest from "../emailTest.js";
 import type * as finalTest from "../finalTest.js";
 import type * as http from "../http.js";
@@ -83,6 +84,7 @@ declare const fullApi: ApiFromModules<{
   connector: typeof connector;
   crons: typeof crons;
   dropbox: typeof dropbox;
+  diag: typeof diag;
   emailTest: typeof emailTest;
   finalTest: typeof finalTest;
   http: typeof http;
