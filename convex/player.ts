@@ -1,6 +1,7 @@
 // Playback problems reported by the browser (Oct 21). Logged so problems on phones and other machines can be read
 // later; and a version whose 1080p file failed anywhere is marked so every device opens it on the stream.
 import { internalQuery, mutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { accessToVersion, shareArg } from "./lib/viewer";
 
@@ -21,10 +22,14 @@ export const log = mutation({
   },
 });
 
+// Oct 26: only a decode error (code 3) marks a version stream-only. Code 4 (no source / not supported) with nothing
+// loaded usually means the MP4 copy wasn't there yet, so the copies are re-checked instead and the list corrected.
 export const fileFailed = mutation({
-  args: { versionId: v.id("versions"), share: shareArg },
-  handler: async (ctx, { versionId, share }) => {
+  args: { versionId: v.id("versions"), share: shareArg, code: v.optional(v.number()) },
+  handler: async (ctx, { versionId, share, code }) => {
     const { version: ver, access } = await accessToVersion(ctx, versionId, share);
+    if (ver.source === "file" || !ver.bunnyGuid) return;
+    if (code === 4) { await ctx.scheduler.runAfter(0, internal.uploads.refreshHeights, { versionId }); return; }
     if (access.kind === "owner" && !ver.streamOnly) await ctx.db.patch(versionId, { streamOnly: true });
   },
 });

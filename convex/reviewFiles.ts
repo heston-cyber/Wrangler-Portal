@@ -5,10 +5,12 @@
 import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 import https from "node:https";
 import { Readable } from "node:stream";
 import { encPath, reviewStorage } from "./lib/reviewStorage";
 import { signUrl } from "./lib/media";
+import { streamFolder } from "./lib/bunnySign";
 
 const MAX_COPY_TRIES = 3;
 const SCRUB_POLL_MS = 10_000;
@@ -123,7 +125,8 @@ export const pollScrub = internalAction({
       }
       const has360 = (b.availableResolutions || "").split(",").map((x) => parseInt(x, 10)).includes(360);
       if ((b.status === 3 || b.status === 4) && has360) {
-        const mp4 = await fetch(`https://${s.cdn}/${row.version.scrubGuid}/play_360p.mp4`, { headers: { Range: "bytes=0-1", Referer: `${process.env.SITE_URL || "https://review.wranglerportal.com"}/` } });
+        // Signed since C3 (Oct 23): the scrub zone needs a token too. (Unsigned, this was 403 and every copy "failed".)
+        const mp4 = await fetch(await signUrl(`https://${s.cdn}/${row.version.scrubGuid}/play_360p.mp4`, { folder: streamFolder(row.version.scrubGuid) }), { headers: { Range: "bytes=0-1", Referer: `${process.env.SITE_URL || "https://review.wranglerportal.com"}/` } });
         await mp4.arrayBuffer();
         if (mp4.status === 206 || mp4.status === 200) {
           const total = (row.version.fileSize ?? 0) + (b.storageSize ?? 0);
@@ -139,6 +142,26 @@ export const pollScrub = internalAction({
     await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { scrubPolls: polls } });
     await ctx.scheduler.runAfter(SCRUB_POLL_MS, internal.reviewFiles.pollScrub, { versionId });
     return { result: "waiting" };
+  },
+});
+
+// Scrub copies marked "failed" while the ready check was unsigned (Oct 23–26): look at them again (CI, counts only).
+export const repollScrub = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ repolled: number; started: number }> => {
+    const rows: Array<{ _id: Id<"versions">; scrubGuid?: string; scrubStatus?: string; fileUrl?: string }> = await ctx.runQuery(internal.library.fileVersionsNeedingScrub, {});
+    let repolled = 0, started = 0;
+    for (const r of rows) {
+      if (r.scrubGuid) {
+        await ctx.runMutation(internal.library.patchVersion, { versionId: r._id, patch: { scrubStatus: "pending", scrubPolls: 0 } });
+        await ctx.scheduler.runAfter(0, internal.reviewFiles.pollScrub, { versionId: r._id });
+        repolled++;
+      } else if (r.fileUrl) {
+        await ctx.scheduler.runAfter(0, internal.reviewFiles.startScrub, { versionId: r._id });
+        started++;
+      }
+    }
+    return { repolled, started };
   },
 });
 

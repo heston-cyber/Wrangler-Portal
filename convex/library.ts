@@ -306,11 +306,20 @@ export const getVersionInternal = internalQuery({
   },
 });
 
+// Review renders (file versions) whose 360p copy isn't ready: failed, or never started.
+export const fileVersionsNeedingScrub = internalQuery({
+  args: {},
+  handler: async (ctx) =>
+    (await ctx.db.query("versions").collect())
+      .filter((x) => x.source === "file" && x.status === "ready" && x.scrubStatus !== "ready" && x.scrubStatus !== "pending")
+      .map((x) => ({ _id: x._id, scrubGuid: x.scrubGuid, scrubStatus: x.scrubStatus, fileUrl: x.fileUrl })),
+});
+
 export const versionsForHeights = internalQuery({
   args: { versionId: v.union(v.id("versions"), v.null()), all: v.boolean() },
   handler: async (ctx, { versionId, all }) => {
     const rows = versionId ? [await ctx.db.get(versionId)] : all ? await ctx.db.query("versions").collect() : [];
-    return rows.filter((x): x is Doc<"versions"> => !!x && x.status === "ready" && !!x.bunnyGuid && x.source !== "file").map((x) => ({ _id: x._id, bunnyGuid: x.bunnyGuid, mp4Heights: x.mp4Heights ?? [] }));
+    return rows.filter((x): x is Doc<"versions"> => !!x && x.status === "ready" && !!x.bunnyGuid && x.source !== "file").map((x) => ({ _id: x._id, bunnyGuid: x.bunnyGuid, mp4Heights: x.mp4Heights ?? [], streamOnly: x.streamOnly ?? false }));
   },
 });
 

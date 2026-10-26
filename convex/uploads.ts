@@ -97,15 +97,18 @@ export const poll = internalAction({
       return;
     }
     const fps = fpsFromFloat(b.framerate);
-    const res = (b.availableResolutions || "").split(",").map((s) => parseInt(s, 10)).filter((n) => !isNaN(n));
-    const mp4Heights = b.hasMP4Fallback ? MP4_HEIGHTS.filter((h) => res.includes(h)) : [];
+    const failed = b.status === 5 || b.status === 8;
+    const ready = (b.status === 3 || b.status === 4) && (b.encodeProgress ?? 0) >= 100;
+    // Measurement (Oct 21): log what Bunny has made each time it changes (it also asks each MP4 copy whether it's there).
+    const stages = await nextStages(row.version, b).catch(() => null);
+    const lastStage = (stages ?? row.version.stages ?? []).slice(-1)[0];
+    // Only MP4 copies that answer go on the version (Oct 26); the stage check keeps adding the rest as they appear.
+    const mp4Heights = ready ? await answeringHeights(row.version.bunnyGuid, b, lastStage?.mp4 ?? row.version.mp4Heights ?? []) : [];
     const patch: Record<string, unknown> = {
       pollCount: count, encodeProgress: b.encodeProgress ?? 0, width: b.width || undefined, height: b.height || undefined,
       lengthSeconds: b.length || undefined, fpsNum: b.framerate ? fps.num : undefined, fpsDen: b.framerate ? fps.den : undefined, mp4Heights,
       ...(typeof b.storageSize === "number" ? { storageBytes: b.storageSize, storageCheckedAt: Date.now() } : {}),
     };
-    const failed = b.status === 5 || b.status === 8;
-    const ready = (b.status === 3 || b.status === 4) && (b.encodeProgress ?? 0) >= 100;
     if (failed) {
       patch.status = "failed";
       patch.error = "Bunny couldn't convert this file.";
@@ -113,8 +116,6 @@ export const poll = internalAction({
       patch.status = "ready";
       patch.readyAt = Date.now();
     }
-    // Measurement (Oct 21): log what Bunny has made each time it changes.
-    const stages = await nextStages(row.version, b).catch(() => null);
     if (stages) patch.stages = stages;
     await ctx.runMutation(internal.library.patchVersion, { versionId, patch });
     // Came from the Dropbox drop folder: once Bunny has the file (anything past "created"), delete the share link.
@@ -153,18 +154,28 @@ const CHECK_HEIGHTS = [360, 1080];
 const listedHeights = (res: string | null | undefined) =>
   (res || "").split(",").map((x) => parseInt(x, 10)).filter((h) => CHECK_HEIGHTS.includes(h));
 
+// The MP4 copies that actually answer right now (Bunny lists a resolution before its MP4 fallback file exists, and
+// may never make one for 2160p). Only these go on the version, so the player is never handed a file that isn't there.
+export async function answeringHeights(guid: string, b: Pick<BunnyVideo, "availableResolutions" | "hasMP4Fallback">, known: number[] = []): Promise<number[]> {
+  if (!b.hasMP4Fallback) return [];
+  const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
+  const out: number[] = [];
+  for (const h of MP4_HEIGHTS.filter((h) => listedHeights(b.availableResolutions).includes(h))) {
+    if (known.includes(h)) { out.push(h); continue; } // seen already; files don't disappear
+    try {
+      const r = await fetch(await signUrl(`https://${streamCdn()}/${guid}/play_${h}p.mp4`), { method: "HEAD", headers: { Referer: site, Origin: new URL(site).origin } });
+      if (r.ok) out.push(h);
+    } catch { /* not there yet, or a blip */ }
+  }
+  return out;
+}
+
 export async function nextStages(version: { bunnyGuid: string; stages?: Stage[] }, b: BunnyVideo): Promise<Stage[] | null> {
   const prev = version.stages ?? [];
   const last = prev[prev.length - 1];
   const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
-  const mp4: number[] = [];
-  for (const h of listedHeights(b.availableResolutions)) {
-    if (last?.mp4.includes(h)) { mp4.push(h); continue; } // seen already; files don't disappear
-    try {
-      const r = await fetch(await signUrl(`https://${streamCdn()}/${version.bunnyGuid}/play_${h}p.mp4`), { method: "HEAD", headers: { Referer: site, Origin: new URL(site).origin } });
-      if (r.ok) mp4.push(h);
-    } catch { /* not there yet, or a blip: try again next check */ }
-  }
+  const mp4 = await answeringHeights(version.bunnyGuid, { ...b, hasMP4Fallback: true }, last?.mp4 ?? []);
+  void site;
   const e: Stage = { t: Date.now(), s: b.status, p: b.encodeProgress ?? 0, res: b.availableResolutions || "", mp4 };
   if (last && last.s === e.s && last.p === e.p && last.res === e.res && last.mp4.join() === e.mp4.join()) return null;
   return [...prev, e].slice(-80);
@@ -182,7 +193,11 @@ export const stageCheck = internalAction({
       const next = await nextStages(row.version, b).catch(() => null);
       if (next) stages = next;
       const storage = typeof b.storageSize === "number" ? { storageBytes: b.storageSize, storageCheckedAt: Date.now() } : {};
-      if (next || "storageBytes" in storage) await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { ...(next ? { stages } : {}), ...storage } });
+      // Copies that have appeared since the version went ready join the list (and 2160p when Bunny ever makes it).
+      const answering = (next ?? stages)[(next ?? stages).length - 1]?.mp4 ?? [];
+      const merged = [...new Set([...(row.version.mp4Heights ?? []), ...answering])].sort((a, b) => a - b);
+      const grew = merged.length !== (row.version.mp4Heights ?? []).length;
+      if (next || grew || "storageBytes" in storage) await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { ...(next ? { stages } : {}), ...(grew ? { mp4Heights: merged } : {}), ...storage } });
     }
     const last = stages[stages.length - 1];
     const listed = listedHeights(last?.res);
@@ -287,15 +302,16 @@ export const refreshStorage = internalAction({
 export const refreshHeights = internalAction({
   args: { versionId: v.optional(v.id("versions")), all: v.optional(v.boolean()) },
   handler: async (ctx, { versionId, all }): Promise<{ checked: number; updated: number; heights: Record<string, number[]> }> => {
-    const rows: Array<{ _id: Id<"versions">; bunnyGuid: string; mp4Heights: number[] }> = await ctx.runQuery(internal.library.versionsForHeights, { versionId: versionId ?? null, all: all ?? false });
+    const rows: Array<{ _id: Id<"versions">; bunnyGuid: string; mp4Heights: number[]; streamOnly?: boolean }> = await ctx.runQuery(internal.library.versionsForHeights, { versionId: versionId ?? null, all: all ?? false });
     let updated = 0; const heights: Record<string, number[]> = {};
     for (const ver of rows) {
       const b = await getBunnyVideo(ver.bunnyGuid);
-      const res = (b.availableResolutions || "").split(",").map((s: string) => parseInt(s, 10)).filter((n: number) => !isNaN(n));
-      const mp4Heights = b.hasMP4Fallback ? MP4_HEIGHTS.filter((h) => res.includes(h)) : [];
+      const mp4Heights = await answeringHeights(ver.bunnyGuid, b);
       heights[ver._id.slice(0, 6)] = mp4Heights;
-      if (JSON.stringify(mp4Heights) !== JSON.stringify(ver.mp4Heights)) {
-        await ctx.runMutation(internal.library.patchVersion, { versionId: ver._id, patch: { mp4Heights, width: b.width || undefined, height: b.height || undefined } });
+      // A version marked stream-only because a copy wasn't there yet gets its files back once they answer.
+      const unmark = ver.streamOnly && mp4Heights.length > 0;
+      if (JSON.stringify(mp4Heights) !== JSON.stringify(ver.mp4Heights) || unmark) {
+        await ctx.runMutation(internal.library.patchVersion, { versionId: ver._id, patch: { mp4Heights, width: b.width || undefined, height: b.height || undefined, ...(unmark ? { streamOnly: undefined } : {}) } });
         updated++;
       }
     }

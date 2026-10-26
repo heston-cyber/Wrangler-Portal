@@ -200,7 +200,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     }
     writeFlag(streamOnlyKey);
     // A review render's fallback is only 360p, so other devices keep trying the full file.
-    if (!isFile) void markFileFailed({ versionId: version._id, ...shareArgs }).catch(() => {});
+    if (!isFile) void markFileFailed({ versionId: version._id, code: player.errorCode ?? undefined, ...shareArgs }).catch(() => {});
     void logPlayback({ versionId: version._id, kind: "fallback", t: d?.t, src: "stream", ua: navigator.userAgent, ...shareArgs }).catch(() => {});
     setQuality("stream");
     showToast(isFile ? "The full-size render hit a playback error here, so this version switched to its 360p copy. Same frames." : "The 1080p file hit a playback error here, so this version switched to the stream. Same frames.");
