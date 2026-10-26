@@ -3,7 +3,7 @@
 import { ConvexError } from "convex/values";
 import type { MutationCtx } from "../_generated/server";
 
-export const LIMITS = { notes: 120, stills: 240, voice: 40, replies: 120 } as const;
+export const LIMITS = { notes: 120, stills: 240, voice: 40, replies: 120, views: 60 } as const;
 
 export async function bump(ctx: MutationCtx, what: keyof typeof LIMITS, who: string) {
   const hour = Math.floor(Date.now() / 3_600_000);

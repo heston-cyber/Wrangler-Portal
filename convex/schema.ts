@@ -74,6 +74,24 @@ export default defineSchema({
     at: v.number(),
   }).index("by_share", ["shareId", "at"]).index("by_at", ["at"]),
 
+  // C9 (Oct 26): views. One row per sitting (a page load of a version by one person): how far they got and how much
+  // they watched, from the player's heartbeat. The owner's own sittings are kept but never counted.
+  views: defineTable({
+    videoId: v.id("videos"),
+    versionId: v.id("versions"),
+    shareId: v.optional(v.id("shares")),
+    session: v.string(),          // random per page load, from the browser
+    kind: v.union(v.literal("owner"), v.literal("client"), v.literal("guest")),
+    who: v.string(),              // the name shown ("Pat (guest)")
+    whoKey: v.string(),           // for telling people apart; never shown
+    startedAt: v.number(),
+    lastAt: v.number(),
+    watchedSec: v.number(),       // seconds of playback seen (rewatching counts again)
+    maxSec: v.number(),           // the furthest point reached
+    lengthSec: v.number(),        // the version's length as the player saw it
+    completed: v.boolean(),       // got within a few seconds of the end
+  }).index("by_video", ["videoId", "lastAt"]).index("by_version", ["versionId", "lastAt"]).index("by_share", ["shareId", "lastAt"]).index("by_session", ["versionId", "session"]),
+
   // Emails (client side C4, Oct 23). Each address's "stop these" choices, with the random key its unsubscribe
   // links carry; and a log so each email goes out once (key = what it was about + who got it).
   emailPrefs: defineTable({

@@ -961,3 +961,7 @@ code.mono, .input.mono, .chip.num, .fname code { font-family: ui-monospace, "SF 
 .composer .rtag.hidebtn { color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: transparent; border: 0; cursor: pointer; gap: 4px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
 .composer .rtag.hidebtn:hover { background: var(--accent-tint); }
 .composer .rtag.hidebtn .lucide { color: inherit; }
+
+/* C9: views list — how far each sitting got */
+.viewbar { display: inline-block; width: 120px; height: 6px; border-radius: 3px; background: var(--fill-chip); overflow: hidden; flex: none; }
+.viewbar > span { display: block; height: 100%; background: var(--accent); border-radius: 3px; }

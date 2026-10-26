@@ -57,6 +57,7 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "transcripts.forVersion": { pages: ["video"], args: (i, s) => ({ versionId: i.versionId, share: s ?? undefined }) },
   "prefs.mine": { pages: ["video"], args: () => ({}) },
   "shares.coveringVideo": { pages: ["owner"], args: () => "skip" }, // VideoPage skips it unless the owner is looking
+  "views.forVideo": { pages: ["owner"], args: () => "skip" }, // the Views chip only renders for the owner
   "library.overview": { pages: ["owner"], args: () => "skip" },
   "activity.feed": { pages: ["owner"], args: () => "skip" },
   "clients.listInvites": { pages: ["owner"], args: () => "skip" },

@@ -39,6 +39,8 @@ import { ShareDialog } from "./Share";
 import { useShareArgs, useViewer } from "../lib/viewer";
 import { downloadOne } from "../lib/download";
 import { makePoster } from "../player/poster";
+import { useWatchBeat } from "../player/useWatchBeat";
+import { ViewsChip, ViewsDialog } from "./Views";
 
 export default function VideoPage({ videoId, versionNumber, noteId }: { videoId: Id<"videos">; versionNumber: number | null; noteId: string | null }) {
   const viewer = useViewer();
@@ -183,6 +185,8 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     return { urls: hs.map((h) => version.media.mp4[h]).filter(Boolean), maxBytes };
   }, [version, ready, narrow, isFile, scrubMp4]);
   const player = useFramePlayer(src, fps, version?.frameCountExact ? version.frameCount : null, scrubCopies);
+  // C9: clients and guests report how much they watch (owners don't).
+  useWatchBeat(version && ready ? version._id : null, player.videoRef, viewer.share ?? undefined, !owner);
   const frameCount = player.frameCount ?? version?.frameCount ?? 0;
 
   // If the 1080p file fails, switch to the stream at the same frame and carry on.
@@ -280,7 +284,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   useEffect(() => () => { if (fullscreenElement()) void exitPageFullscreen().catch(() => {}); }, []);
   const [focusId, setFocusId] = useState<string | null>(noteId);
   const [focusTick, setFocusTick] = useState(0);
-  const [dialog, setDialog] = useState<null | "rename" | "starttc" | "keys" | "register" | "final" | "share">(null);
+  const [dialog, setDialog] = useState<null | "rename" | "starttc" | "keys" | "register" | "final" | "share" | "views">(null);
   const covering = useQuery(api.shares.coveringVideo, owner ? { videoId: data._id } : "skip");
   const libSettings = useLibrarySettings();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -647,6 +651,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     <div className={`review${fs ? " fs" : ""}`} ref={rootRef}>
       <TopBar right={
         <>
+          {owner && <ViewsChip videoId={data._id} onOpen={() => setDialog("views")} />}
           {owner && <button className={`btn sm${covering?.some((s) => s.state === "on") ? " on" : ""}`} onClick={() => setDialog("share")} title={covering?.length ? `Shared: ${covering.filter((s) => s.state === "on").length} live ${covering.filter((s) => s.state === "on").length === 1 ? "link" : "links"}` : "Share this video"}><Share2 size={15} /><span className="hide-sm">Share</span></button>}
           {owner && <button className="btn sm hide-sm" onClick={downloadEdl} disabled={!notes?.length} title="Download the notes as Resolve markers (EDL)"><Download size={15} />Resolve markers</button>}
           {!owner && canDownload && <button className="btn sm" onClick={() => void downloadFile()} disabled={!!dl} title="Download this version">{dl ? <Spinner /> : <Download size={15} />}<span className="hide-sm">{dl ? (dl.pct ? `${dl.pct}%` : "Downloading…") : "Download"}</span></button>}
@@ -905,6 +910,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       {dialog === "starttc" && version && <StartTcDialog versionId={version._id} startTc={startTc} onClose={() => setDialog(null)} onSaved={() => showToast("Start timecode saved")} />}
       {dialog === "keys" && <ShortcutsDialog onClose={() => setDialog(null)} />}
       {dialog === "share" && <ShareDialog target={{ kind: "video", videoId: data._id }} label={data.title} onClose={() => setDialog(null)} show={showToast} />}
+      {dialog === "views" && <ViewsDialog videoId={data._id} title={data.title} onClose={() => setDialog(null)} />}
       {dialog === "final" && <ApproveFinal videoId={data._id} title={data.title} onClose={() => setDialog(null)} onDone={(m) => showToast(m)} />}
       {dialog === "register" && <AddToRegister videoId={data._id} title={data.title} onClose={() => setDialog(null)} onDone={(m) => showToast(m)} />}
       {toast}

@@ -9,6 +9,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import type { PublicShare } from "../../convex/shares";
 import { Modal, useToast } from "../ui/kit";
 import { ago } from "../lib/format";
+import { watchText } from "./Views";
 
 export type ShareTarget = { kind: "client"; client: string } | { kind: "project"; projectId: Id<"projects"> } | { kind: "video"; videoId: Id<"videos"> };
 
@@ -301,7 +302,7 @@ function ShareActivity({ shareId }: { shareId: Id<"shares"> }) {
     <div className="prow" style={{ paddingTop: 0, borderTop: 0, display: "block" }}>
       {rows.length === 0 ? <span className="caption">Nothing yet.</span> : (
         <ul className="sharelog">
-          {rows.map((r) => <li key={r._id}><span className="secondary">{ago(r.at)}</span> {r.who} {r.kind === "opened" ? "opened the link" : r.kind === "viewed" ? <>watched <b>{r.videoTitle ?? "a video"}</b></> : <>left a note on <b>{r.videoTitle ?? "a video"}</b></>}</li>)}
+          {rows.map((r) => <li key={r._id}><span className="secondary">{ago(r.at)}</span> {r.who} {r.kind === "opened" ? "opened the link" : r.kind === "viewed" ? <>opened <b>{r.videoTitle ?? "a video"}</b></> : r.kind === "watched" && r.watch ? <>watched <b>{r.videoTitle ?? "a video"}</b> v{r.watch.version} {watchText(r.watch)}</> : <>left a note on <b>{r.videoTitle ?? "a video"}</b></>}</li>)}
         </ul>
       )}
     </div>

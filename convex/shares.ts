@@ -6,6 +6,7 @@ import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { viewsForShare } from "./views";
 import { requireMe, requireSignedIn } from "./lib/access";
 import { accessToVersion, limitKey, shareArg } from "./lib/viewer";
 import { bump } from "./lib/rate";
@@ -227,13 +228,18 @@ export const activity = query({
   args: { shareId: v.id("shares"), limit: v.optional(v.number()) },
   handler: async (ctx, { shareId, limit }) => {
     await requireMe(ctx);
-    const rows = await ctx.db.query("shareActivity").withIndex("by_share", (q) => q.eq("shareId", shareId)).order("desc").take(Math.min(limit ?? 50, 200));
-    const out = [];
+    const n = Math.min(limit ?? 50, 200);
+    const rows = await ctx.db.query("shareActivity").withIndex("by_share", (q) => q.eq("shareId", shareId)).order("desc").take(n);
+    const out: Array<{ _id: string; kind: "opened" | "viewed" | "note" | "watched"; who: string; at: number; videoId: Id<"videos"> | null; videoTitle: string | null; noteId: Id<"notes"> | null; watch?: { version: number; watchedSec: number; maxSec: number; lengthSec: number; completed: boolean } }> = [];
     for (const r of rows) {
       const vid = r.videoId ? await ctx.db.get(r.videoId) : null;
       out.push({ _id: r._id, kind: r.kind, who: r.who, at: r.at, videoId: r.videoId ?? null, videoTitle: vid?.title ?? null, noteId: r.noteId ?? null });
     }
-    return out;
+    // C9: what they watched, from the player's heartbeat (one line per sitting, placed by when it was last seen).
+    for (const w of await viewsForShare(ctx, shareId, n)) {
+      out.push({ _id: `w:${w.videoId}:${w.startedAt}`, kind: "watched", who: w.who, at: w.lastAt, videoId: w.videoId, videoTitle: w.videoTitle, noteId: null, watch: { version: w.version, watchedSec: w.watchedSec, maxSec: w.maxSec, lengthSec: w.lengthSec, completed: w.completed } });
+    }
+    return out.sort((a, b) => b.at - a.at).slice(0, n);
   },
 });
 

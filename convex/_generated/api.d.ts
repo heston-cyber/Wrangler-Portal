@@ -62,6 +62,7 @@ import type * as transcripts from "../transcripts.js";
 import type * as stillsDb from "../stillsDb.js";
 import type * as uploads from "../uploads.js";
 import type * as users from "../users.js";
+import type * as views from "../views.js";
 import type * as waveform from "../waveform.js";
 import type * as waveforms from "../waveforms.js";
 
@@ -126,6 +127,7 @@ declare const fullApi: ApiFromModules<{
   stillsDb: typeof stillsDb;
   uploads: typeof uploads;
   users: typeof users;
+  views: typeof views;
   waveform: typeof waveform;
   waveforms: typeof waveforms;
 }>;
