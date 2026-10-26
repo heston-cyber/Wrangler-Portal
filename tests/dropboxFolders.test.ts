@@ -95,6 +95,19 @@ describe("folders make projects", () => {
     expect(await projects()).toEqual([{ name: "Backrooms Halloween", client: "Floor Trader Inc", jobNumber: null, folder: "/clients/floor trader inc/backrooms halloween" }]);
   });
 
+  test("a job number from the folder name leaves with it on a rename; one set on the site stays", async () => {
+    const { t, projects, folders } = await setup();
+    await folders(["/Projects/00002 CG Safety Video"]);
+    expect(await projects()).toEqual([{ name: "CG Safety Video", client: null, jobNumber: "00002", folder: "/projects/00002 cg safety video" }]);
+    await folders(["/Projects/CG Safety Video"], ["/Projects/00002 CG Safety Video"]);
+    expect(await projects()).toEqual([{ name: "CG Safety Video", client: null, jobNumber: null, folder: "/projects/cg safety video" }]);
+    // Set on the site: a folder rename without a number keeps it.
+    const pid = await t.run(async (ctx) => (await ctx.db.query("projects").first())!._id);
+    await t.run((ctx) => ctx.db.patch(pid, { jobNumber: "26300" }));
+    await folders(["/Projects/Safety Video"], ["/Projects/CG Safety Video"]);
+    expect(await projects()).toEqual([{ name: "Safety Video", client: null, jobNumber: "26300", folder: "/projects/safety video" }]);
+  });
+
   test("deleting a folder deletes nothing on the site; it only forgets the link", async () => {
     const { projects, folders } = await setup();
     await folders(["/Projects/Spirit Days"]);
@@ -115,10 +128,12 @@ describe("a flagged render in a project folder", () => {
   }
 
   test("the Register page knows which project it sits in and suggests a title", async () => {
-    const { me } = await flaggedIn("/Clients/Floor Trader/Backrooms/backrooms_teaser-cut.mp4");
+    const { me, t } = await flaggedIn("/Clients/Floor Trader/Backrooms/backrooms_teaser-cut.mp4");
     const rows = await me.query(api.dropbox.flagged, {});
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ project: { name: "Backrooms", client: "Floor Trader" }, suggestedTitle: "backrooms teaser cut" });
+    await t.run((ctx) => ctx.db.insert("dropFiles", { pathLower: "/clients/floor trader/backrooms/00002_cgsafetyvideo_v1.mp4", pathDisplay: "/Clients/Floor Trader/Backrooms/00002_CGSafetyVideo_v1.mp4", rev: "r2", size: 10, status: "flagged", firstSeenAt: 1, lastChangeAt: Date.now(), checks: 0 }));
+    expect((await me.query(api.dropbox.flagged, {})).find((r) => /CGSafety/.test(r.path))?.suggestedTitle).toBe("CGSafetyVideo");
   });
 
   test("Register & import: a new video in that project; the file imports as its v1 under the register name", async () => {

@@ -89,7 +89,9 @@ export const flagged = query({
     for (const r of rows) {
       const p = r.folder ? await ctx.db.query("projects").withIndex("by_dropbox_folder", (q) => q.eq("dropboxFolder", r.folder!)).first() : null;
       const base = (r.path.split("/").pop() ?? "").replace(/\.[A-Za-z0-9]{2,4}$/, "");
-      out.push({ _id: r._id, path: r.path, reason: r.reason, at: r.at, project: p ? { name: p.name, client: p.client ?? null } : null, suggestedTitle: base.replace(/[_-]+/g, " ").trim() });
+      // A title to suggest: the file name without a leading number, a trailing _vN, or underscores.
+      const suggestedTitle = base.replace(/^\d{5}[_\s-]+/, "").replace(/[_\s-]+[vV]\d{1,4}$/, "").replace(/[_-]+/g, " ").trim();
+      out.push({ _id: r._id, path: r.path, reason: r.reason, at: r.at, project: p ? { name: p.name, client: p.client ?? null } : null, suggestedTitle });
     }
     return out;
   },
@@ -394,7 +396,10 @@ export const recordFolders = internalMutation({
         const old = all.find((p) => p.dropboxFolder === g);
         if (old) {
           goneLeft.delete(g);
-          await ctx.db.patch(old._id, { name: split.name, dropboxFolder: folder, ...(split.jobNumber ? { jobNumber: split.jobNumber } : {}), ...(client ? { client } : {}) });
+          // A job number the old folder name carried goes with it; one set on the site stays.
+          const oldJob = splitJob(g.split("/").pop() ?? "").jobNumber;
+          const jobNumber = split.jobNumber ?? (oldJob && old.jobNumber === oldJob ? undefined : old.jobNumber);
+          await ctx.db.patch(old._id, { name: split.name, dropboxFolder: folder, jobNumber, ...(client ? { client } : {}) });
           changed++;
           return;
         }
