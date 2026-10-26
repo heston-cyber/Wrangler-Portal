@@ -590,7 +590,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       <MenuSep />
       <MenuLabel>Picture</MenuLabel>
       {mp4H > 0 && <MenuItem checked={quality === "file" || (isFile && !scrubHls)} onSelect={() => setQuality("file")}>{isFile ? `The render, ${mp4H}p (exact frames)` : `${mp4H}p file (exact frames)`}</MenuItem>}
-      {hasStream && <MenuItem checked={quality === "stream" && !(isFile && !scrubHls)} onSelect={() => setQuality("stream")}>{isFile ? "Small copy, 360p (slow connections)" : "Stream (adapts to connection)"}</MenuItem>}
+      {hasStream && <MenuItem checked={quality === "stream" && !(isFile && !scrubHls)} onSelect={() => setQuality("stream")}>{isFile ? "Small copy, 360p (slow connections)" : player.streamTop ? `Stream, ${player.streamTop}p (highest; frames approximate)` : version?.height && version.height > mp4H ? `Stream, up to ${version.height}p (adapts to connection)` : "Stream (adapts to connection)"}</MenuItem>}
       <MenuSep />
       {!noNotes && <MenuItem checked={showDrawings} onSelect={() => setShowDrawings(!showDrawings)}>Show note drawings</MenuItem>}
       <MenuItem icon={<Keyboard size={16} />} kbd="?" onSelect={() => setDialog("keys")}>Keyboard shortcuts</MenuItem>

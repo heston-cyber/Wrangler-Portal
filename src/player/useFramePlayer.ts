@@ -39,6 +39,8 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
   const frameCount = exactFrameCount ?? estimatedFrameCount;
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The stream's top picture height when hls.js plays it (it's locked to the highest rendition); null on native HLS.
+  const [streamTop, setStreamTop] = useState<number | null>(null);
   // The browser's MediaError code (2 network, 3 decode, 4 not supported), so the page can switch copies,
   // plus what the browser said, where it happened, and whether it was playing (to carry on after switching).
   const [errorCode, setErrorCode] = useState(0);
@@ -95,6 +97,7 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
     if (!v || !src) return;
     setReady(false);
     setError(null);
+    setStreamTop(null);
     setErrorCode(0);
     playingNow.current = false;
     lastMedia.current = null;
@@ -123,7 +126,7 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
     const isHls = /\.m3u8(\?|$)/.test(src);
     if (isHls && !v.canPlayType("application/vnd.apple.mpegurl") && Hls.isSupported()) {
       hls = new Hls({ capLevelToPlayerSize: false });
-      hls.on(Hls.Events.MANIFEST_PARSED, () => { if (hls) hls.currentLevel = hls.levels.length - 1; });
+      hls.on(Hls.Events.MANIFEST_PARSED, () => { if (hls) { hls.currentLevel = hls.levels.length - 1; setStreamTop(hls.levels[hls.levels.length - 1]?.height ?? null); } });
       hls.on(Hls.Events.ERROR, (_e, d) => { if (d.fatal) { setError("The video couldn't load. Try the other quality."); setErrorCode(2); } });
       hls.loadSource(src);
       hls.attachMedia(v);
@@ -326,6 +329,7 @@ export function useFramePlayer(src: string | null, fps: Fps, exactFrameCount: nu
 
   const api = {
     videoRef,
+    streamTop,
     clock,
     fps,
     frameCount,
