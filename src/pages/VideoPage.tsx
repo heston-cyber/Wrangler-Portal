@@ -38,6 +38,7 @@ import { useLibrarySettings } from "../lib/details";
 import { ShareDialog } from "./Share";
 import { useShareArgs, useViewer } from "../lib/viewer";
 import { downloadOne } from "../lib/download";
+import { makePoster } from "../player/poster";
 
 export default function VideoPage({ videoId, versionNumber, noteId }: { videoId: Id<"videos">; versionNumber: number | null; noteId: string | null }) {
   const viewer = useViewer();
@@ -154,6 +155,14 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const streamOnlyKey = version ? `wr.streamOnly2.${version.bunnyGuid || version._id}` : "";
   const [quality, setQuality] = useState<"file" | "stream">(() => (mp4H && !(version?.streamOnly && !isFile) && !readFlag(streamOnlyKey) ? "file" : "stream"));
   const ready = version?.status === "ready";
+  // C8: the owner's browser makes a version's preview picture the first time it opens it (once per version).
+  const posterTried = useRef<string | null>(null);
+  useEffect(() => {
+    if (!owner || !version || !ready || !version.needsPoster || posterTried.current === version._id) return;
+    posterTried.current = version._id;
+    void makePoster(convex, version._id, version).catch(() => null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [owner, version?._id, ready, version?.needsPoster]);
   // One quiet retry of the full file before falling back (see the error handler below).
   const [retryN, setRetryN] = useState(0);
   const src = !version || !ready ? null
@@ -686,7 +695,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           <div className="pinned">
           <div className="stagewrap" ref={wrapRef} style={narrow && !fs ? { height: box.h || undefined } : undefined}>
             <div className="stage" style={{ width: box.w || undefined, height: box.h || undefined, aspectRatio: box.w ? undefined : `${aspect}` }}>
-              <video ref={player.videoRef} playsInline preload="auto" onClick={() => !drawing && player.toggle()} />
+              <video ref={player.videoRef} playsInline preload="auto" poster={version?.posterUrl ?? undefined} onClick={() => !drawing && player.toggle()} />
               {player.proxyUrl && <video ref={player.proxyRef} className={`proxy${player.proxyOn ? " on" : ""}`} src={player.proxyUrl} muted playsInline preload="auto" onLoadedData={player.onProxyLoaded} onSeeked={player.onProxyLoaded} onLoadedMetadata={player.onProxyMeta} aria-hidden />}
               <AtFrame clock={player.clock}>{(frame) => {
                 const elsewhere = shapes.length > 0 && drawFrame !== null && drawFrame !== frame;

@@ -38,6 +38,7 @@ import type * as lib_waveformDecode from "../lib/waveformDecode.js";
 import type * as lib_transcript from "../lib/transcript.js";
 import type * as lib_voice from "../lib/voice.js";
 import type * as notes from "../notes.js";
+import type * as og from "../og.js";
 import type * as phase0 from "../phase0.js";
 import type * as player from "../player.js";
 import type * as prefs from "../prefs.js";
@@ -101,6 +102,7 @@ declare const fullApi: ApiFromModules<{
   "lib/transcript": typeof lib_transcript;
   "lib/voice": typeof lib_voice;
   notes: typeof notes;
+  og: typeof og;
   phase0: typeof phase0;
   player: typeof player;
   prefs: typeof prefs;

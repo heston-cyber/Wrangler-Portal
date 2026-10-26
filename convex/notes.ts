@@ -5,6 +5,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { requireMe } from "./lib/access";
 import { accessToVersion, authorOf, limitKey, noteVisible, ownsNote, shareArg, type Access } from "./lib/viewer";
 import { bump } from "./lib/rate";
+import { stillOk } from "./lib/stillOk";
 import { signStillUrl } from "./lib/media";
 import { ALERT_DELAY_MS } from "./emails";
 
@@ -130,15 +131,6 @@ export const create = mutation({
 });
 
 // A still URL a note may carry: only our stills zone or Convex storage, never an arbitrary address.
-function stillOk(u: string) {
-  let p: URL;
-  try { p = new URL(u); } catch { return false; }
-  if (p.protocol !== "https:" || p.search || p.hash || p.href !== u || p.pathname.includes("..")) return false;
-  const cdn = process.env.BUNNY_STILLS_CDN;
-  if (cdn && p.host === cdn) return p.pathname.startsWith("/stills/");
-  const cloud = process.env.CONVEX_CLOUD_URL;
-  return !!cloud && p.origin === cloud && p.pathname.startsWith("/api/storage/");
-}
 
 async function noteFor(ctx: Parameters<typeof accessToVersion>[0], noteId: Id<"notes">, share: Parameters<typeof accessToVersion>[2], need: "view" | "comment"): Promise<{ note: Doc<"notes">; access: Access }> {
   const note = await ctx.db.get(noteId);

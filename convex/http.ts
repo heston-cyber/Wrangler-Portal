@@ -4,6 +4,7 @@ import { mcpOther, mcpPost } from "./mcp";
 import { callback as dropboxCallback, webhookNotify, webhookVerify } from "./dropbox";
 import { feed as registerFeed } from "./register";
 import { stop as emailStop } from "./emails";
+import { og } from "./og";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);
@@ -26,6 +27,9 @@ http.route({ path: "/dropbox/webhook", method: "POST", handler: webhookNotify })
 http.route({ path: "/register-feed", method: "GET", handler: registerFeed });
 
 // Emails (C4): the "stop these emails" link.
+// C8: link previews for share links (JSON tags and the picture), asked for by the Cloudflare Worker and by chat apps.
+http.route({ pathPrefix: "/og/", method: "GET", handler: og });
+
 http.route({ path: "/email/stop", method: "GET", handler: emailStop });
 http.route({ path: "/email/stop", method: "POST", handler: emailStop });
 

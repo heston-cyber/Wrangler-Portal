@@ -156,6 +156,10 @@ export default defineSchema({
     stages: v.optional(v.array(v.object({ t: v.number(), s: v.number(), p: v.number(), res: v.string(), mp4: v.array(v.number()) }))),
     // Oct 21: the 1080p file failed to play on some device, so every device opens this version on the stream.
     streamOnly: v.optional(v.boolean()),
+    // C8 (Oct 26): the preview picture — first non-black frame with the Wrangler wordmark, made in Heston's browser.
+    // Used for link previews, the player's poster and list thumbnails.
+    posterUrl: v.optional(v.string()),
+    posterAt: v.optional(v.number()),
     // Oct 22 (R2b): space this version uses on Bunny (Bunny's storageSize: the original plus its copies).
     storageBytes: v.optional(v.number()),
     storageCheckedAt: v.optional(v.number()),

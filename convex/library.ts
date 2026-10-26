@@ -7,7 +7,8 @@ import { requireMe } from "./lib/access";
 import { isValidTc } from "./lib/frames";
 import type { Doc, Id } from "./_generated/dataModel";
 import { insertVideo, nextFileName } from "./lib/register";
-import { downloadFor, signedThumbUrl, versionMedia } from "./lib/media";
+import { downloadFor, signStillUrl, signedThumbUrl, versionMedia } from "./lib/media";
+import { stillOk } from "./lib/stillOk";
 import { accessToVideo, accessToVersion, shareArg, versionShown } from "./lib/viewer";
 
 const clean = (s: string, max = 200) => s.trim().replace(/\s+/g, " ").slice(0, max);
@@ -54,7 +55,7 @@ export const overview = query({
         noteCount: notes.length,
         openNotes: latest ? notes.filter((n) => n.status === "open" && n.versionId === latest._id).length : 0,
         latest: latest && {
-          number: latest.number, status: latest.status, bunnyGuid: latest.bunnyGuid, thumbUrl: await signedThumbUrl(latest), encodeProgress: latest.encodeProgress ?? 0, isFile: latest.source === "file",
+          number: latest.number, status: latest.status, bunnyGuid: latest.bunnyGuid, thumbUrl: (await signStillUrl(latest.posterUrl)) ?? (await signedThumbUrl(latest)), encodeProgress: latest.encodeProgress ?? 0, isFile: latest.source === "file",
           frameCount: latest.frameCount ?? null, fpsNum: latest.fpsNum ?? 24000, fpsDen: latest.fpsDen ?? 1001,
           startTimecode: latest.startTimecode, width: latest.width ?? null, height: latest.height ?? null,
           transcript: tr?.status ?? null,
@@ -247,8 +248,24 @@ export async function publicVersion(x: Doc<"versions">) {
     scrub: media.scrub,
     scrubStatus: x.scrubStatus ?? null,
     thumbUrl: media.thumb,
+    // C8: the preview picture (signed), and whether one still needs making (the owner's browser makes it).
+    posterUrl: await signStillUrl(x.posterUrl),
+    needsPoster: x.status === "ready" && !x.posterUrl,
   };
 }
+
+// C8: the owner's browser made a preview picture for a version (first non-black frame + wordmark) and uploaded it
+// as a still; remember it. Only our own stills are accepted.
+export const setPoster = mutation({
+  args: { versionId: v.id("versions"), url: v.string() },
+  handler: async (ctx, { versionId, url }) => {
+    await requireMe(ctx);
+    if (!stillOk(url)) throw new ConvexError("That picture isn't one of ours.");
+    const ver = await ctx.db.get(versionId);
+    if (!ver) throw new ConvexError("That version no longer exists.");
+    await ctx.db.patch(versionId, { posterUrl: url, posterAt: Date.now() });
+  },
+});
 
 export const setStartTimecode = mutation({
   args: { versionId: v.id("versions"), startTimecode: v.string() },
