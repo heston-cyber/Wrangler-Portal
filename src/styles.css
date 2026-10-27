@@ -1337,3 +1337,20 @@ button.ws-hubcard:disabled { opacity: .6; cursor: default; }
 .wsb-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .wsb-format .ws-seg { flex-wrap: wrap; }
 .wsb-dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border-strong); display: inline-block; }
+/* ---------- The builder on a phone: the page fills the width, the panel is a sheet over a bottom bar ---------- */
+.wsb-phonebar, .wsb-sheetclose { display: none; }
+@media (pointer: coarse) { .wsb-handle { display: none; } }
+@media (max-width: 760px) {
+  .wsb-stage { padding: 8px 8px 96px; }
+  .wsb-page { border-radius: 10px; }
+  .wsb-panel { position: fixed; z-index: 60; left: 0; right: 0; bottom: calc(58px + env(safe-area-inset-bottom)); max-height: 62vh; border-left: 0; border-radius: 16px 16px 0 0; box-shadow: 0 -10px 30px rgba(0,0,0,.35); transform: translateY(calc(100% + 70px)); transition: transform var(--dur-med, .25s) var(--ease-out, ease); padding-bottom: 24px; }
+  .wsb-panel.open { transform: none; }
+  .wsb-panel > .tabs { position: sticky; top: -14px; z-index: 2; background: var(--surface-band); margin: -14px -14px 0; padding: 10px 8px 6px; align-items: center; }
+  .wsb-sheetclose { display: grid; margin-left: auto; }
+  .wsb-phonebar { display: flex; position: fixed; z-index: 61; left: 0; right: 0; bottom: 0; padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); background: var(--surface-float); border-top: 1px solid var(--border-hairline); justify-content: space-around; }
+  .wsb-phonebar button { flex: 1; display: grid; justify-items: center; gap: 2px; border: 0; background: transparent; color: var(--text-secondary); font-size: 11px; padding: 4px 0; border-radius: 10px; }
+  .wsb-phonebar button.on { color: var(--accent); background: var(--accent-tint); }
+  .wsb-secfoot { flex-wrap: wrap; }
+  .wsb-sizes .wsb-size { padding: 10px 4px; }
+  .ws-seg button, .wsb-marks button { min-height: 38px; }
+}

@@ -6,7 +6,7 @@ import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { Fragment, Slice, type Node as PMNode } from "@tiptap/pm/model";
 import { dropPoint } from "@tiptap/pm/transform";
 import { isAtom, newNodes, sectionClause, type InsertKind, type LineAttrs, type PNode, type TextSize } from "../../../convex/lib/wsBuilder";
-import { BlockSelection } from "./blockSelection";
+import { BlockSelection, blockRange, blockStartAt } from "./blockSelection";
 
 /** The lines (paragraphs) in the selection. */
 export function selectedLines(editor: Editor): PMNode[] {
@@ -129,4 +129,55 @@ export function outline(doc: PMNode, values: Record<string, string>, fillFn: (s:
     else if (name === "section") out.push({ pos, text: fillFn(n.firstChild?.textContent || "Section", values), level: 0 });
   });
   return out;
+}
+
+/** The block (a line, a container or a special block) the cursor is in, or the selected blocks. */
+function currentBlocks(editor: Editor): { from: number; to: number } | null {
+  const sel = editor.state.selection;
+  if (sel instanceof BlockSelection) return { from: sel.from, to: sel.to };
+  const start = blockStartAt(editor.state.doc, sel.from, sel instanceof NodeSelection ? sel.from : -1);
+  if (start === null) return null;
+  const n = editor.state.doc.nodeAt(start);
+  return n ? { from: start, to: start + n.nodeSize } : null;
+}
+/** Move the current block(s) up or down past one neighbour (phones can't drag; the Format tab has these). */
+export function moveBlock(editor: Editor, dir: -1 | 1): boolean {
+  const r = currentBlocks(editor);
+  if (!r) return false;
+  const { state } = editor;
+  const $f = state.doc.resolve(r.from);
+  const parent = $f.parent, idx = $f.index();
+  const $t = state.doc.resolve(r.to);
+  const last = $t.index() - 1;
+  if (dir < 0 && idx === 0) return false;
+  if (dir > 0 && last >= parent.childCount - 1) return false;
+  const slice = state.doc.slice(r.from, r.to);
+  const sel = state.selection;
+  const offset = sel.from - r.from, span = sel.to - sel.from;
+  const tr = state.tr.delete(r.from, r.to);
+  const neighbour = dir < 0 ? parent.child(idx - 1) : parent.child(last + 1);
+  const at = dir < 0 ? r.from - neighbour.nodeSize : r.from + neighbour.nodeSize;
+  tr.insert(at, slice.content);
+  const a = Math.min(at + offset, tr.doc.content.size), b = Math.min(a + span, tr.doc.content.size);
+  if (sel instanceof BlockSelection) { const s = blockRange(tr.doc, at, at + slice.content.size - (slice.content.lastChild?.nodeSize ?? 0)); if (s) tr.setSelection(s); }
+  else try { tr.setSelection(TextSelection.create(tr.doc, a, b)); } catch { tr.setSelection(TextSelection.near(tr.doc.resolve(at + 1))); }
+  editor.view.dispatch(tr.scrollIntoView());
+  editor.view.focus();
+  return true;
+}
+export function duplicateBlock(editor: Editor): boolean {
+  const r = currentBlocks(editor);
+  if (!r) return false;
+  const slice = editor.state.doc.slice(r.from, r.to);
+  editor.view.dispatch(editor.state.tr.insert(r.to, slice.content).scrollIntoView());
+  return true;
+}
+export function deleteBlock(editor: Editor): boolean {
+  const r = currentBlocks(editor);
+  if (!r) return false;
+  const tr = editor.state.tr.delete(r.from, r.to);
+  if (!tr.doc.content.size) tr.insert(0, editor.schema.nodes.paragraph.create({ size: "body" }));
+  tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(r.from, tr.doc.content.size))));
+  editor.view.dispatch(tr.scrollIntoView());
+  return true;
 }

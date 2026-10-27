@@ -6,7 +6,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import type { Editor } from "@tiptap/react";
 import { TextSelection } from "@tiptap/pm/state";
 import {
-  BookmarkPlus, Check, Eye, FileSignature, Heading, Heading1, LayoutTemplate, List, Minus, PanelTop, PenLine, Plus, Receipt, Redo2, Undo2,
+  BookmarkPlus, Check, Eye, FileSignature, Palette, Heading, Heading1, LayoutTemplate, List, Minus, PanelTop, PenLine, Plus, Receipt, Redo2, Undo2,
   ScrollText, Send, SeparatorHorizontal, Space, TriangleAlert, Type, Users, X,
 } from "lucide-react";
 import { api } from "../../convex/_generated/api";
@@ -73,6 +73,16 @@ export default function Builder({ mode }: { mode: Mode }) {
   const [problems, setProblems] = useState<string[] | null>(null);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [menu, setMenu] = useState<MenuAt | null>(null);
+  // Phones: the panel is a sheet that slides up from a bar at the bottom.
+  const [sheet, setSheet] = useState(false);
+  // Phones zoom into anything under 16px when it's tapped; the builder sets its own text size there instead.
+  useEffect(() => {
+    const m = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
+    if (!m) return;
+    const was = m.content;
+    m.content = `${was.replace(/,?\s*maximum-scale=[^,]*/g, "")}, maximum-scale=1`;
+    return () => { m.content = was; };
+  }, []);
   useEditorTick(editor);
 
   // First load only: after that the page's copy is the truth and saves go up. Older documents (a list of blocks) are
@@ -179,8 +189,13 @@ export default function Builder({ mode }: { mode: Mode }) {
   const st = doc.style;
   const values = fieldValues(doc.fields, doc.page);
   const t = totals(doc.page);
-  const pageW = Math.max(300, Math.min(760, stageW - 32)), scale = pageW / PAGE_PT[st.pageSize].w;
+  const phone = stageW < 600;
+  const pageW = phone ? stageW - 16 : Math.max(300, Math.min(760, stageW - 32)), scale = pageW / PAGE_PT[st.pageSize].w;
   const px = (pt: number) => pt * scale;
+  // On a phone the page keeps the screen's width and the text a readable size (16px body), so lines wrap differently
+  // from the PDF there; the PDF itself doesn't change.
+  const textPx = phone ? Math.max(16, px(st.baseSize)) : px(st.baseSize);
+  const padPx = phone ? Math.max(14, px(st.margin) * 0.45) : px(st.margin);
   const H = cssFamily(st.fonts.heading.family), B = cssFamily(st.fonts.body.family);
   const sent = mode.kind === "build" && build?.document && (build.document.status === "sent" || build.document.status === "completed");
   const items = editor && !editor.isDestroyed ? outline(editor.state.doc, values, (s, v) => fill(s, v, "…")) : [];
@@ -261,24 +276,25 @@ export default function Builder({ mode }: { mode: Mode }) {
               if (e.clientX < r.left) { e.preventDefault(); marginSelect(editor.view, e.clientY, r.left + 8); }
               else if (e.clientY > r.bottom) { e.preventDefault(); editor.chain().focus("end").run(); }
             }}
-            style={{ width: pageW, minHeight: px(PAGE_PT[st.pageSize].h), background: st.page, color: st.text, fontFamily: B, fontSize: px(st.baseSize), padding: `${px(st.margin)}px`, ["--wsb-accent" as string]: st.accent, ["--wsb-muted" as string]: st.muted, ["--wsb-heading" as string]: st.heading, ["--wsb-hfont" as string]: H, ["--wsb-bfont" as string]: B, ["--wsb-text" as string]: st.text, ["--wsb-pagebg" as string]: st.page }}>
-            {st.cover && files[st.cover.fileId] && <div className="wsb-cover" style={{ height: px(st.cover.height), backgroundImage: `url(${files[st.cover.fileId]})`, margin: `-${px(st.margin)}px -${px(st.margin)}px ${px(18)}px` }} />}
+            style={{ width: pageW, minHeight: px(PAGE_PT[st.pageSize].h), background: st.page, color: st.text, fontFamily: B, fontSize: textPx, padding: `${padPx}px`, ["--wsb-accent" as string]: st.accent, ["--wsb-muted" as string]: st.muted, ["--wsb-heading" as string]: st.heading, ["--wsb-hfont" as string]: H, ["--wsb-bfont" as string]: B, ["--wsb-text" as string]: st.text, ["--wsb-pagebg" as string]: st.page }}>
+            {st.cover && files[st.cover.fileId] && <div className="wsb-cover" style={{ height: px(st.cover.height), backgroundImage: `url(${files[st.cover.fileId]})`, margin: `-${padPx}px -${padPx}px ${px(18)}px` }} />}
             {st.logo && files[st.logo.fileId] && <div style={{ textAlign: st.logo.align, marginBottom: px(st.baseSize * 1.2) }}><img src={files[st.logo.fileId]!} alt="Logo" style={{ width: px(st.logo.width) }} /></div>}
             <PageEditor page={doc.page} onChange={onPage} onEditor={setEditor} onSelectText={onSelectText} onMenu={setMenu} missing={missing} />
-            {st.footer && <div className="wsb-footer" style={{ color: st.muted, fontSize: px(st.baseSize * 0.75) }}><span>{doc.title}</span><span>Page 1 of …</span></div>}
+            {st.footer && <div className="wsb-footer" style={{ color: st.muted, fontSize: textPx * 0.75 }}><span>{doc.title}</span><span>Page 1 of …</span></div>}
           </div>
         </div>
 
         {/* The panel */}
-        <aside className="wsb-panel">
+        <aside className={`wsb-panel${sheet ? " open" : ""}`}>
           <div className="tabs" role="tablist">
             {(["insert", "format", "style", "details"] as Tab[]).map((k) => <button key={k} className="tab" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>{k[0].toUpperCase() + k.slice(1)}</button>)}
+            <button className="icon-btn wsb-sheetclose" aria-label="Close" onClick={() => setSheet(false)}><X size={18} /></button>
           </div>
           {tab === "insert" && (
             <div className="wsb-pane">
               <span className="ws-flabel">Drag onto the page (or into a container), or click to add after the cursor</span>
-              {INSERT.map((x) => <button key={x.kind} className="wsb-insert" draggable onDragStart={(e) => dragNodes(e, newNodes(x.kind))} onDragEnd={() => endInsertDrag(editor)} onClick={() => editor && insertKind(editor, x.kind)}>{x.icon}<span><b>{INSERT_LABEL[x.kind]}</b><span className="secondary">{x.hint}</span></span></button>)}
-              <ClauseLibrary clauses={clauses} onInsert={(c) => editor && insertNodes(editor, [clauseSection(c)])} onDragStart={(e, c) => dragNodes(e, [clauseSection(c)])} onDragEnd={() => endInsertDrag(editor)} />
+              {INSERT.map((x) => <button key={x.kind} className="wsb-insert" draggable onDragStart={(e) => dragNodes(e, newNodes(x.kind))} onDragEnd={() => endInsertDrag(editor)} onClick={() => { if (editor) insertKind(editor, x.kind); if (phone) setSheet(false); }}>{x.icon}<span><b>{INSERT_LABEL[x.kind]}</b><span className="secondary">{x.hint}</span></span></button>)}
+              <ClauseLibrary clauses={clauses} onInsert={(c) => { if (editor) insertNodes(editor, [clauseSection(c)]); if (phone) setSheet(false); }} onDragStart={(e, c) => dragNodes(e, [clauseSection(c)])} onDragEnd={() => endInsertDrag(editor)} />
             </div>
           )}
           {tab === "format" && <FormatPanel editor={editor} accent={st.accent} onSaveClause={(sec) => void onSaveClause(sec)} />}
@@ -289,6 +305,12 @@ export default function Builder({ mode }: { mode: Mode }) {
         </aside>
       </div>
 
+      {/* Phones: the panel's tabs as a bar at the bottom; tapping one slides the panel up as a sheet. */}
+      <nav className="wsb-phonebar" aria-label="Builder panel">
+        {([["insert", <Plus size={18} key="i" />, "Insert"], ["format", <Type size={18} key="f" />, "Format"], ["style", <Palette size={18} key="s" />, "Style"], ["details", <Users size={18} key="d" />, "Details"]] as const).map(([k, icon, label]) => (
+          <button key={k} className={sheet && tab === k ? "on" : ""} onMouseDown={(e) => e.preventDefault()} onClick={() => { if (sheet && tab === k) setSheet(false); else { setTab(k); setSheet(true); } }}>{icon}<span>{label}</span></button>
+        ))}
+      </nav>
       {preview && (
         <Modal onClose={() => { URL.revokeObjectURL(preview); setPreview(null); }} label="PDF preview" width={900}>
           <div className="wsb-preview">

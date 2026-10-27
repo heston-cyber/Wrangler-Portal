@@ -3,13 +3,13 @@
 import { useEffect, useReducer } from "react";
 import type { Editor } from "@tiptap/react";
 import {
-  AlignCenter, AlignJustify, AlignLeft, AlignRight, BookmarkPlus, Bold, ClipboardPaste, Copy, Indent, Italic, List, ListOrdered, Outdent,
+  AlignCenter, AlignJustify, AlignLeft, AlignRight, ArrowDown, ArrowUp, BookmarkPlus, Bold, ClipboardPaste, Copy, Indent, Italic, List, ListOrdered, Outdent,
   Paintbrush, RemoveFormatting, Scissors, SquareDashed, SlidersHorizontal, Strikethrough, Trash2, Type, Underline, Ungroup, Group, Palette,
 } from "lucide-react";
 import { ContextMenu, MenuItem, MenuLabel, MenuSep, MenuSub } from "../ui/kit";
 import { TEXT_SIZES, type PNode, type TextSize } from "../../convex/lib/wsBuilder";
 import {
-  clearFormatting, currentSection, lineAttr, selectedAtom, setAtom, setLines, setSection, setSize, toggleDeco, unwrapSection, wrapInSection,
+  clearFormatting, currentSection, deleteBlock, duplicateBlock, lineAttr, moveBlock, selectedAtom, setAtom, setLines, setSection, setSize, toggleDeco, unwrapSection, wrapInSection,
 } from "./editor/commands";
 import { BlockSelection } from "./editor/blockSelection";
 
@@ -34,9 +34,24 @@ const MARKS = [
 ] as const;
 const keep = (e: React.MouseEvent) => e.preventDefault(); // panel buttons don't take the cursor out of the page
 
+/** Move, copy or delete the block with the cursor (or the selected blocks); on a phone this is how blocks move. */
+function BlockBar({ editor }: { editor: Editor }) {
+  return (
+    <div className="field"><span className="ws-flabel">Block</span><div className="ws-seg wsb-marks">
+      <button aria-label="Move up" title="Move up" onMouseDown={keep} onClick={() => moveBlock(editor, -1)}><ArrowUp size={15} /></button>
+      <button aria-label="Move down" title="Move down" onMouseDown={keep} onClick={() => moveBlock(editor, 1)}><ArrowDown size={15} /></button>
+      <button aria-label="Duplicate" title="Duplicate" onMouseDown={keep} onClick={() => duplicateBlock(editor)}><Copy size={15} /></button>
+      <button aria-label="Delete" title="Delete" onMouseDown={keep} onClick={() => deleteBlock(editor)}><Trash2 size={15} /></button>
+    </div></div>
+  );
+}
+
 export function FormatPanel({ editor, accent, onSaveClause }: { editor: Editor | null; accent: string; onSaveClause: (s: PNode) => void }) {
   useEditorTick(editor);
   if (!editor) return <p className="caption secondary">Click into the page to format it.</p>;
+  return <div className="wsb-pane wsb-format"><BlockBar editor={editor} /><FormatBody editor={editor} accent={accent} onSaveClause={onSaveClause} /></div>;
+}
+function FormatBody({ editor, accent, onSaveClause }: { editor: Editor; accent: string; onSaveClause: (s: PNode) => void }) {
   const atom = selectedAtom(editor);
   if (atom && atom.node.type.name === "spacer") {
     return <label className="field"><span className="ws-flabel">Space height (pt)</span><input className="input sm" type="number" min={4} max={200} value={Number(atom.node.attrs.size) || 18} onChange={(e) => setAtom(editor, atom.pos, { size: Math.max(4, Math.min(200, Number(e.target.value) || 18)) })} /></label>;
@@ -51,7 +66,7 @@ export function FormatPanel({ editor, accent, onSaveClause }: { editor: Editor |
   const block = editor.state.selection instanceof BlockSelection;
   const inList = editor.isActive("bulletList") || editor.isActive("orderedList");
   return (
-    <div className="wsb-pane wsb-format">
+    <>
       {block && <p className="caption secondary">{editor.state.selection instanceof BlockSelection ? (editor.state.selection as BlockSelection).blocks().length : 0} blocks selected. Shift+↑/↓ adds more, Enter goes back to typing.</p>}
       <div className="field"><span className="ws-flabel">Text</span>
         <div className="wsb-sizes">{TEXT_SIZES.map((z, i) => <button key={z.key} className={`wsb-size ${z.key}${size === z.key ? " on" : ""}`} onMouseDown={keep} onClick={() => setSize(editor, z.key)} title={`${z.label} (${z.hint}) · Ctrl+${i + 1}`}>{z.label}</button>)}</div>
@@ -100,7 +115,7 @@ export function FormatPanel({ editor, accent, onSaveClause }: { editor: Editor |
           <button className="btn ghost sm" onMouseDown={keep} onClick={() => wrapInSection(editor, "card")}><SquareDashed size={13} />Make a card</button>
         </div>
       </>}
-    </div>
+    </>
   );
 }
 
