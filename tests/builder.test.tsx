@@ -220,6 +220,30 @@ describe("T-B3 templates, clauses and styles", () => {
     await expect(me.mutation(api.builder.saveClause, { title: "  ", body: rich(""), initials: false })).rejects.toThrow(/title/);
   });
 
+  test("Google fonts are fetched as TTF (what PDFs embed), once", async () => {
+    const { t, me } = await owner();
+    const asked: string[] = [];
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input);
+      asked.push(url);
+      if (url.startsWith("https://fonts.googleapis.com/")) {
+        const ua = new Headers(init?.headers).get("user-agent") ?? "";
+        const ext = /Mozilla/.test(ua) ? "woff" : "ttf"; // what Google does
+        const face = (w: number, i: boolean) => `@font-face { font-family: 'Lora'; font-style: ${i ? "italic" : "normal"}; font-weight: ${w}; src: url(https://fonts.gstatic.com/s/lora/x${w}${i ? "i" : ""}.${ext}) format('truetype'); }`;
+        return new Response([face(400, false), face(700, false), face(400, true), face(700, true)].join("\n"));
+      }
+      if (url.startsWith("https://fonts.gstatic.com/")) return new Response(new Uint8Array([0, 1, 0, 0, 1, 2, 3]));
+      return new Response("{}", { status: 500 });
+    });
+    expect(await me.action(api.builder.ensureGoogleFont, { family: "Lora" })).toEqual({ added: 4 });
+    expect(await me.action(api.builder.ensureGoogleFont, { family: "Lora" })).toEqual({ added: 0 });
+    const fonts = await me.query(api.builder.listFonts, {});
+    expect(fonts.map((f) => `${f.weight}${f.italic ? "i" : ""}`).sort()).toEqual(["400", "400i", "700", "700i"]);
+    expect(asked.filter((u) => u.includes("gstatic")).every((u) => u.endsWith(".ttf"))).toBe(true);
+    await expect(me.action(api.builder.ensureGoogleFont, { family: "Bad<script>" })).rejects.toThrow(/doesn't look right/);
+    void t;
+  });
+
   test("styles: the default is what new documents start with", async () => {
     const { me } = await owner();
     const night = PRESET_STYLES.find((s) => s.name === "Night")!;

@@ -458,6 +458,10 @@ export const hasFamily = internalQuery({
   handler: async (ctx, { family }) => (await ctx.db.query("wsFonts").withIndex("by_family", (q) => q.eq("family", family)).collect()).length > 0,
 });
 
+// Google Fonts answers a browser with WOFF/WOFF2 (which PDFs can't embed) and a plain HTTP client with TTF files.
+// Checked Oct 27: an old Firefox user agent gets .woff; "curl/8" gets .ttf.
+export const TTF_UA = "curl/8";
+
 /** Fetches a Google font's regular, italic, bold and bold-italic TTFs (once) into storage. */
 export const ensureGoogleFont = action({
   args: { family: v.string() },
@@ -466,11 +470,10 @@ export const ensureGoogleFont = action({
     const fam = family.trim().slice(0, 80);
     if (!/^[A-Za-z0-9 ]+$/.test(fam)) throw new ConvexError("That font name doesn't look right.");
     if (await ctx.runQuery(internal.builder.hasFamily, { family: fam })) return { added: 0 };
-    // An old browser's user agent makes Google Fonts answer with TTF files instead of WOFF2.
-    const css = await fetch(`https://fonts.googleapis.com/css2?family=${encodeURIComponent(fam).replace(/%20/g, "+")}:ital,wght@0,400;0,700;1,400;1,700&display=swap`, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:20.0) Gecko/20100101 Firefox/20.0" } });
+    const css = await fetch(`https://fonts.googleapis.com/css2?family=${encodeURIComponent(fam).replace(/%20/g, "+")}:ital,wght@0,400;0,700;1,400;1,700&display=swap`, { headers: { "User-Agent": TTF_UA } });
     if (!css.ok) {
       // Some families have no italic or bold: ask for whatever exists.
-      const plain = await fetch(`https://fonts.googleapis.com/css2?family=${encodeURIComponent(fam).replace(/%20/g, "+")}&display=swap`, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:20.0) Gecko/20100101 Firefox/20.0" } });
+      const plain = await fetch(`https://fonts.googleapis.com/css2?family=${encodeURIComponent(fam).replace(/%20/g, "+")}&display=swap`, { headers: { "User-Agent": TTF_UA } });
       if (!plain.ok) throw new ConvexError(`Google Fonts doesn't have "${fam}".`);
       return addFaces(ctx, fam, await plain.text());
     }
