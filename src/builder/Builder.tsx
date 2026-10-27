@@ -183,7 +183,7 @@ export default function Builder({ mode }: { mode: Mode }) {
   const px = (pt: number) => pt * scale;
   const H = cssFamily(st.fonts.heading.family), B = cssFamily(st.fonts.body.family);
   const sent = mode.kind === "build" && build?.document && (build.document.status === "sent" || build.document.status === "completed");
-  const items = editor && !editor.isDestroyed ? outline(editor.state.doc, values, fill) : [];
+  const items = editor && !editor.isDestroyed ? outline(editor.state.doc, values, (s, v) => fill(s, v, "…")) : [];
 
   const onSaveClause = async (sec: PNode) => {
     const c = sectionClause(sec);
