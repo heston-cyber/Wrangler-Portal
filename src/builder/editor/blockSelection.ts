@@ -5,7 +5,7 @@
 //
 // The selection is a run of sibling blocks inside one container (the page, or a section). It's its own Selection
 // type, so the browser draws no text highlight; the blocks get a highlight class instead.
-import { Plugin, PluginKey, Selection, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
+import { Plugin, PluginKey, Selection, SelectionRange, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { Slice, type Node as PMNode, type ResolvedPos } from "@tiptap/pm/model";
 import type { Mappable } from "@tiptap/pm/transform";
@@ -44,6 +44,70 @@ export class BlockSelection extends Selection {
   }
 }
 try { Selection.jsonID("wsblock", BlockSelection as unknown as typeof Selection); } catch { /* registered already (hot reload) */ }
+
+/**
+ * Phone select mode (Craft's circles, Oct 27): any blocks ticked, not just a run. Each ticked block is one range of
+ * the selection, so formatting (sizes, alignment, colour, marks) and delete act on exactly those blocks. A block here
+ * is a line (or list, or special block) in the page or inside a container; containers themselves aren't ticked.
+ */
+export class PickSelection extends Selection {
+  readonly picks: number[];
+  constructor(doc: PMNode, picks: number[]) {
+    const ps = [...new Set(picks)].filter((p) => !!doc.nodeAt(p)).sort((a, b) => a - b);
+    const ranges = ps.map((p) => new SelectionRange(doc.resolve(p), doc.resolve(p + doc.nodeAt(p)!.nodeSize)));
+    if (!ranges.length) { const $s = Selection.atStart(doc).$from; ranges.push(new SelectionRange($s, $s)); }
+    super(ranges[0].$from, ranges[ranges.length - 1].$to, ranges);
+    this.picks = ps;
+  }
+  visible = false;
+  map(doc: PMNode, mapping: Mappable): Selection {
+    return new PickSelection(doc, this.picks.map((p) => pickStartAt(doc, mapping.map(p, -1))).filter((p): p is number => p !== null));
+  }
+  eq(other: Selection): boolean { return other instanceof PickSelection && other.picks.join() === this.picks.join(); }
+  toJSON() { return { type: "wspick", picks: this.picks }; }
+  static fromJSON(doc: PMNode, json: { picks: number[] }) { return new PickSelection(doc, json.picks ?? []); }
+  content() { return this.$from.doc.slice(this.from, this.to, true); }
+  blocks(): Array<{ node: PMNode; pos: number }> { const doc = this.$from.doc; return this.picks.map((pos) => ({ node: doc.nodeAt(pos)!, pos })); }
+}
+try { Selection.jsonID("wspick", PickSelection as unknown as typeof Selection); } catch { /* registered already (hot reload) */ }
+
+/** Every block that can be ticked: the page's children, and the lines inside containers (not the containers). */
+export function pickableBlocks(doc: PMNode): number[] {
+  const out: number[] = [];
+  doc.forEach((n, pos) => {
+    if (n.type.name === "section") n.forEach((c, off) => out.push(pos + 1 + off));
+    else out.push(pos);
+  });
+  return out;
+}
+/** The tickable block at (or holding) this position. */
+export function pickStartAt(doc: PMNode, pos: number): number | null {
+  const all = pickableBlocks(doc);
+  let best: number | null = null;
+  for (const p of all) { if (p <= pos && pos < p + doc.nodeAt(p)!.nodeSize) best = p; }
+  return best;
+}
+export const pickKey = new PluginKey<{ active: boolean }>("wsPick");
+export const pickActive = (state: EditorState) => !!pickKey.getState(state)?.active;
+
+/** The circles: while select mode is on, every block shows one, filled when ticked. */
+export function pickPlugin() {
+  return new Plugin<{ active: boolean }>({
+    key: pickKey,
+    state: {
+      init: () => ({ active: false }),
+      apply: (tr, v) => { const m = tr.getMeta(pickKey) as { active: boolean } | undefined; return m ?? v; },
+    },
+    props: {
+      decorations(state) {
+        if (!pickActive(state)) return null;
+        const sel = state.selection;
+        const on = new Set(sel instanceof PickSelection ? sel.picks : []);
+        return DecorationSet.create(state.doc, pickableBlocks(state.doc).map((p) => Decoration.node(p, p + state.doc.nodeAt(p)!.nodeSize, { class: on.has(p) ? "wsb-pickable wsb-picked" : "wsb-pickable" })));
+      },
+    },
+  });
+}
 
 /** The start of the block (a child of the page or of a section) at this position. */
 export function blockStartAt(doc: PMNode, pos: number, inside = -1): number | null {

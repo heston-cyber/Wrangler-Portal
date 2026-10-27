@@ -9,7 +9,7 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { ATOMS, TEXT_SIZES, type AtomType, type TextSize } from "../../../convex/lib/wsBuilder";
 import { AtomView, SectionView } from "./nodes";
-import { blockSelectionPlugin } from "./blockSelection";
+import { blockSelectionPlugin, pickPlugin } from "./blockSelection";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -161,5 +161,5 @@ export const FieldHighlight = Extension.create<{ missing: () => Set<string> }>({
 
 export const BlockSelect = Extension.create({
   name: "wsBlockSelect",
-  addProseMirrorPlugins() { return [blockSelectionPlugin()]; },
+  addProseMirrorPlugins() { return [blockSelectionPlugin(), pickPlugin()]; },
 });

@@ -1342,11 +1342,28 @@ button.ws-hubcard:disabled { opacity: .6; cursor: default; }
 .wsb-dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border-strong); display: inline-block; }
 /* ---------- The builder on a phone: the page fills the width, the panel is a sheet over a bottom bar ---------- */
 .wsb-phonebar, .wsb-sheetclose { display: none; }
+/* Select mode (phones, Craft's circles): every block gets a circle at the right; ticked ones fill and tint. */
+.wsb-picking .ProseMirror { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; caret-color: transparent; }
+.wsb-picking .wsb-handle { display: none !important; }
+.wsb-doc .wsb-pickable { position: relative; padding-right: 36px !important; border-radius: 8px; cursor: pointer; }
+.wsb-doc .wsb-pickable::after { content: ""; position: absolute; right: 6px; top: max(2px, calc(0.5lh - 11px)); width: 22px; height: 22px; box-sizing: border-box; border-radius: 50%; border: 2px solid color-mix(in srgb, currentColor 30%, transparent); background: var(--wsb-pagebg, #fff); pointer-events: none; }
+.wsb-doc .wsb-picked { background: color-mix(in srgb, #2f7bf6 13%, transparent) !important; }
+.wsb-doc .wsb-picked::after { border-color: #2f7bf6; background: #2f7bf6; box-shadow: inset 0 0 0 4px var(--wsb-pagebg, #fff); }
+.wsb-doc .wsb-sec .wsb-pickable { margin-left: -4px; padding-left: 4px; }
+.wsb-pickdone { position: fixed; z-index: 62; top: calc(10px + env(safe-area-inset-top)); right: 14px; width: 52px; height: 52px; border-radius: 50%; border: 0; display: grid; place-items: center; background: #2f7bf6; color: #fff; box-shadow: 0 6px 18px rgba(47,123,246,.45); }
+.wsb-pickcount { position: fixed; z-index: 62; top: calc(22px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); padding: 6px 12px; border-radius: 999px; background: var(--surface-float); border: 1px solid var(--border-hairline); font-size: 13px; box-shadow: 0 4px 14px rgba(0,0,0,.18); white-space: nowrap; }
+.wsb-pickbar button:disabled { opacity: .4; }
+.wsb-pickbar button.danger { color: var(--text-accent); }
+.wsb-pickactions { position: fixed; z-index: 62; right: 10px; bottom: calc(66px + env(safe-area-inset-bottom)); width: min(260px, calc(100vw - 20px)); display: grid; padding: 6px; border-radius: 14px; background: var(--surface-float); border: 1px solid var(--border-hairline); box-shadow: 0 10px 30px rgba(0,0,0,.3); }
+.wsb-pickactions button { display: flex; align-items: center; gap: 10px; border: 0; background: transparent; color: var(--text-primary); padding: 11px 10px; border-radius: 9px; font-size: 15px; text-align: left; }
+.wsb-pickactions button:disabled { opacity: .4; }
+.wsb-pickactions button:not(:disabled):active { background: var(--surface-block); }
+.wsb-pickactions .caption { margin: 4px 10px 6px; }
 @media (pointer: coarse) { .wsb-handle { display: none; } }
 @media (max-width: 760px) {
   .wsb-stage { padding: 8px 8px 96px; }
   .wsb-page { border-radius: 10px; }
-  .wsb-panel { position: fixed; z-index: 60; left: 0; right: 0; bottom: calc(58px + env(safe-area-inset-bottom)); max-height: 62vh; border-left: 0; border-radius: 16px 16px 0 0; box-shadow: 0 -10px 30px rgba(0,0,0,.35); transform: translateY(calc(100% + 70px)); transition: transform var(--dur-med, .25s) var(--ease-out, ease); padding-bottom: 24px; }
+  .wsb-panel { position: fixed; z-index: 60; top: auto; left: 0; right: 0; bottom: calc(58px + env(safe-area-inset-bottom)); max-height: 62vh; border-left: 0; border-radius: 16px 16px 0 0; box-shadow: 0 -10px 30px rgba(0,0,0,.35); transform: translateY(calc(100% + 70px)); transition: transform var(--dur-med, .25s) var(--ease-out, ease); padding-bottom: 24px; }
   .wsb-panel.open { transform: none; }
   .wsb-panel > .tabs { position: sticky; top: -14px; z-index: 2; background: var(--surface-band); margin: -14px -14px 0; padding: 10px 8px 6px; align-items: center; }
   .wsb-sheetclose { display: grid; margin-left: auto; }

@@ -7,13 +7,17 @@
 //        after it for another container, and replaces an empty line.
 //   T-E3 block selection: Esc selects the line, Shift+↓ adds blocks, Ctrl+4 changes them all and keeps them selected,
 //        Esc again selects the container, Backspace deletes, Enter goes back to typing.
+//   T-E4 phone select mode (Craft's circles): any blocks ticked, not just a run; sizes, colour, marks and lists change
+//        exactly those; delete, duplicate and move work on them; the page can't be typed in meanwhile.
 import { afterEach, describe, expect, test } from "vitest";
 import { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { TextSelection } from "@tiptap/pm/state";
 import { BlockSelect, headlessNodes } from "../src/builder/editor/schema";
-import { BlockSelection } from "../src/builder/editor/blockSelection";
-import { currentSection, insertKind, lineAttr, setLines, unwrapSection, wrapInSection } from "../src/builder/editor/commands";
+import { BlockSelection, PickSelection, pickableBlocks } from "../src/builder/editor/blockSelection";
+import {
+  canMovePicked, currentSection, deletePicked, duplicatePicked, insertKind, isPicking, lineAttr, movePicked, picks, pickAll, setLines, setPickMode, toggleListPicked, unwrapSection, wrapInSection,
+} from "../src/builder/editor/commands";
 import { serviceAgreementBlocks, serviceAgreementPage } from "../convex/lib/wsStarter";
 import {
   buildProblems, emptyFields, line, migrate, nodesOf, pageOf, section, sectionClause, clauseSection, signerKeys, textOf, totals,
@@ -170,5 +174,60 @@ describe("T-E3 block selection", () => {
     key(e, "Escape"); key(e, "ArrowDown", { shiftKey: true });
     key(e, "Backspace");
     expect(sizes(e, "Scope of work").map((x) => x.split(":")[1])).toEqual(["Scope of wor", "The COMPANY ", "Any changes "]);
+  });
+});
+
+describe("T-E4 phone select mode", () => {
+  const page = (): Page => ({ type: "doc", content: [line("One"), line("Two"), line("Three"), section([line("In A", { size: "heading" }), line("In B")]), line("Four")] });
+  const texts = (e: ReturnType<typeof make>) => { const out: string[] = []; e.state.doc.descendants((n) => { if (n.type.name === "paragraph") out.push(`${n.textContent}:${n.attrs.size}`); return true; }); return out; };
+
+  test("ticks any blocks (lines inside containers too, not the containers); formatting changes exactly those", () => {
+    const e = make(page());
+    const all = pickableBlocks(e.state.doc);
+    expect(all.map((p) => e.state.doc.nodeAt(p)!.textContent)).toEqual(["One", "Two", "Three", "In A", "In B", "Four"]);
+    setPickMode(e, true, all[0]);
+    expect(isPicking(e)).toBe(true);
+    expect(e.isEditable).toBe(false);
+    pickAll(e, [all[0], all[2], all[4]]);
+    expect(e.state.selection).toBeInstanceOf(PickSelection);
+    e.chain().setLineSize("caption").run();
+    expect(texts(e)).toEqual(["One:caption", "Two:body", "Three:caption", "In A:heading", "In B:caption", "Four:body"]);
+    setLines(e, { color: "accent", align: "center" });
+    const colored: string[] = []; e.state.doc.descendants((n) => { if (n.type.name === "paragraph" && n.attrs.color === "accent") colored.push(n.textContent); return true; });
+    expect(colored).toEqual(["One", "Three", "In B"]);
+    e.chain().toggleBold().run();
+    const bold: string[] = []; e.state.doc.descendants((n) => { if (n.isText && n.marks.some((m) => m.type.name === "bold")) bold.push(n.text!); return true; });
+    expect(bold).toEqual(["One", "Three", "In B"]);
+    expect(lineAttr(e, "size", "body")).toBe("caption");
+    // Still ticked after all that.
+    expect(picks(e).map((p) => e.state.doc.nodeAt(p)!.textContent)).toEqual(["One", "Three", "In B"]);
+  });
+
+  test("lists, duplicate, move and delete act on the ticked blocks only; done goes back to typing", () => {
+    const e = make(page());
+    const all = pickableBlocks(e.state.doc);
+    setPickMode(e, true);
+    pickAll(e, [all[0], all[2]]);
+    toggleListPicked(e, "bulletList");
+    expect(e.state.doc.child(0).type.name).toBe("bulletList");
+    expect(e.state.doc.child(1).type.name).toBe("paragraph");
+    expect(e.state.doc.child(2).type.name).toBe("bulletList");
+    expect(picks(e)).toHaveLength(2);
+    expect(canMovePicked(e)).toBe(false); // not next to each other
+    duplicatePicked(e);
+    expect(e.state.doc.childCount).toBe(7);
+    expect(picks(e).map((p) => e.state.doc.nodeAt(p)!.textContent)).toEqual(["One", "Three"]); // the copies
+    expect(deletePicked(e)).toBe(2);
+    expect(e.state.doc.childCount).toBe(5);
+    const now = pickableBlocks(e.state.doc);
+    pickAll(e, [now[1], now[2]]); // Two, Three: together
+    expect(canMovePicked(e)).toBe(true);
+    movePicked(e, -1);
+    expect([0, 1, 2].map((i) => e.state.doc.child(i).textContent)).toEqual(["Two", "Three", "One"]);
+    expect(movePicked(e, -1)).toBe(false); // already at the top
+    setPickMode(e, false);
+    expect(isPicking(e)).toBe(false);
+    expect(e.isEditable).toBe(true);
+    expect(e.state.selection).toBeInstanceOf(TextSelection);
   });
 });

@@ -2,11 +2,11 @@
 // lines in the selection (a text selection across lines, a block selection, or just the line with the cursor), so a
 // batch of lines changes together.
 import type { Editor } from "@tiptap/react";
-import { NodeSelection, TextSelection } from "@tiptap/pm/state";
+import { NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
 import { Fragment, Slice, type Node as PMNode } from "@tiptap/pm/model";
 import { dropPoint } from "@tiptap/pm/transform";
 import { isAtom, newNodes, sectionClause, type InsertKind, type LineAttrs, type PNode, type TextSize } from "../../../convex/lib/wsBuilder";
-import { BlockSelection, blockRange, blockStartAt } from "./blockSelection";
+import { BlockSelection, PickSelection, blockRange, blockStartAt, pickActive, pickKey, pickStartAt } from "./blockSelection";
 
 /** The lines (paragraphs) in the selection. */
 export function selectedLines(editor: Editor): PMNode[] {
@@ -14,7 +14,7 @@ export function selectedLines(editor: Editor): PMNode[] {
   const out: PMNode[] = [];
   const sel = state.selection;
   if (sel.empty) { const p = sel.$from.parent; return p.type.name === "paragraph" ? [p] : []; }
-  state.doc.nodesBetween(sel.from, sel.to, (n) => { if (n.type.name === "paragraph") out.push(n); });
+  for (const r of sel.ranges) state.doc.nodesBetween(r.$from.pos, r.$to.pos, (n) => { if (n.type.name === "paragraph") out.push(n); });
   return out;
 }
 
@@ -180,4 +180,126 @@ export function deleteBlock(editor: Editor): boolean {
   tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(r.from, tr.doc.content.size))));
   editor.view.dispatch(tr.scrollIntoView());
   return true;
+}
+
+// ---------- phone select mode (Craft's circles, Oct 27) ----------
+
+/** Turn select mode on (optionally ticking the block at a position) or off. The page can't be typed in meanwhile. */
+export function setPickMode(editor: Editor, on: boolean, at?: number | null) {
+  const { state } = editor;
+  const tr = state.tr.setMeta(pickKey, { active: on });
+  if (on) { const p = at == null ? null : pickStartAt(state.doc, at); tr.setSelection(new PickSelection(state.doc, p === null ? [] : [p])); }
+  else if (state.selection instanceof PickSelection) {
+    const last = state.selection.picks[state.selection.picks.length - 1];
+    tr.setSelection(last === undefined ? Selection.atStart(state.doc) : TextSelection.near(state.doc.resolve(Math.min(last + 1, state.doc.content.size))));
+  }
+  editor.setEditable(!on);
+  editor.view.dispatch(tr);
+  if (on) (document.activeElement as HTMLElement | null)?.blur?.();
+}
+export const isPicking = (editor: Editor | null) => !!editor && !editor.isDestroyed && pickActive(editor.state);
+export const picks = (editor: Editor): number[] => (editor.state.selection instanceof PickSelection ? editor.state.selection.picks : []);
+
+/** Tick or untick the block under a tap. */
+export function togglePickAt(editor: Editor, coords: { left: number; top: number }): boolean {
+  const r = editor.view.posAtCoords(coords);
+  if (!r) return false;
+  const { doc } = editor.state;
+  const p = pickStartAt(doc, r.inside >= 0 ? r.inside : r.pos);
+  if (p === null) return false;
+  const cur = picks(editor);
+  const next = cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p];
+  editor.view.dispatch(editor.state.tr.setSelection(new PickSelection(doc, next)));
+  return true;
+}
+export function pickAll(editor: Editor, all: number[]) { editor.view.dispatch(editor.state.tr.setSelection(new PickSelection(editor.state.doc, all))); }
+
+/** Delete every ticked block (one undo step). */
+export function deletePicked(editor: Editor): number {
+  const ps = picks(editor);
+  if (!ps.length) return 0;
+  const { state } = editor;
+  const tr = state.tr;
+  for (const p of [...ps].sort((a, b) => b - a)) { const n = tr.doc.nodeAt(p); if (n) tr.delete(p, p + n.nodeSize); }
+  if (!tr.doc.content.size) tr.insert(0, editor.schema.nodes.paragraph.create({ size: "body" }));
+  tr.setSelection(new PickSelection(tr.doc, []));
+  editor.view.dispatch(tr.scrollIntoView());
+  return ps.length;
+}
+/** Copies of the ticked blocks, each right after its original; the copies become the ticked ones. */
+export function duplicatePicked(editor: Editor): number {
+  const ps = picks(editor);
+  if (!ps.length) return 0;
+  const tr = editor.state.tr;
+  const made: number[] = [];
+  for (const p of [...ps].sort((a, b) => b - a)) {
+    const n = tr.doc.nodeAt(p);
+    if (!n) continue;
+    tr.insert(p + n.nodeSize, n.copy(n.content));
+    made.forEach((m, i) => { made[i] = m + n.nodeSize; });
+    made.push(p + n.nodeSize);
+  }
+  tr.setSelection(new PickSelection(tr.doc, made));
+  editor.view.dispatch(tr.scrollIntoView());
+  return made.length;
+}
+/** Move the ticked blocks up or down one place. Only when they sit together, one after another. */
+export function canMovePicked(editor: Editor): boolean {
+  const ps = picks(editor);
+  if (!ps.length) return false;
+  const { doc } = editor.state;
+  const $a = doc.resolve(ps[0]);
+  let end = ps[0];
+  for (const p of ps) { if (p !== end || doc.resolve(p).parent !== $a.parent) return false; end = p + doc.nodeAt(p)!.nodeSize; }
+  return true;
+}
+export function movePicked(editor: Editor, dir: -1 | 1): boolean {
+  if (!canMovePicked(editor)) return false;
+  const ps = picks(editor);
+  const { state } = editor;
+  const from = ps[0], to = ps[ps.length - 1] + state.doc.nodeAt(ps[ps.length - 1])!.nodeSize;
+  const $f = state.doc.resolve(from), parent = $f.parent, idx = $f.index(), last = state.doc.resolve(to).index() - 1;
+  if (dir < 0 && idx === 0) return false;
+  if (dir > 0 && last >= parent.childCount - 1) return false;
+  const slice = state.doc.slice(from, to);
+  const neighbour = dir < 0 ? parent.child(idx - 1) : parent.child(last + 1);
+  const at = dir < 0 ? from - neighbour.nodeSize : from + neighbour.nodeSize;
+  const tr = state.tr.delete(from, to).insert(at, slice.content);
+  tr.setSelection(new PickSelection(tr.doc, ps.map((p) => p - from + at)));
+  const dom = editor.view.nodeDOM(at) as HTMLElement | null;
+  editor.view.dispatch(tr);
+  (editor.view.nodeDOM(at) as HTMLElement | null ?? dom)?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+  return true;
+}
+/** Lists for ticked blocks: each ticked line becomes (or stops being) a list, separately. */
+export function toggleListPicked(editor: Editor, kind: "bulletList" | "orderedList"): boolean {
+  const ps = picks(editor);
+  if (!ps.length) return false;
+  const doc = editor.state.doc;
+  let chain = editor.chain();
+  for (const p of [...ps].sort((a, b) => b - a)) {
+    const n = doc.nodeAt(p);
+    if (!n || (n.type.name !== "paragraph" && n.type.name !== "bulletList" && n.type.name !== "orderedList")) continue;
+    chain = chain.setTextSelection({ from: p + 1, to: p + n.nodeSize - 1 });
+    chain = kind === "bulletList" ? chain.toggleBulletList() : chain.toggleOrderedList();
+  }
+  return chain.command(({ tr }) => {
+    tr.setSelection(new PickSelection(tr.doc, ps.map((p) => pickStartAt(tr.doc, tr.mapping.map(p, -1))).filter((x): x is number => x !== null)));
+    return true;
+  }).run();
+}
+/** "+ Content": leave select mode with the cursor after the last ticked block, so Insert adds there. */
+export function insertAfterPicked(editor: Editor) {
+  const ps = picks(editor);
+  const last = ps[ps.length - 1];
+  setPickMode(editor, false);
+  if (last === undefined) return;
+  const n = editor.state.doc.nodeAt(last);
+  if (!n) return;
+  const r = blockRange(editor.state.doc, last, last);
+  if (r) editor.view.dispatch(editor.state.tr.setSelection(r));
+}
+/** The ticked blocks' text, for Copy. */
+export function pickedText(editor: Editor): string {
+  return picks(editor).map((p) => editor.state.doc.nodeAt(p)?.textBetween(0, editor.state.doc.nodeAt(p)!.content.size, "\n", " ") ?? "").filter(Boolean).join("\n");
 }

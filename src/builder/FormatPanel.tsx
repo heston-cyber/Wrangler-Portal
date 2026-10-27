@@ -11,7 +11,8 @@ import { TEXT_SIZES, type PNode, type TextSize } from "../../convex/lib/wsBuilde
 import {
   clearFormatting, currentSection, deleteBlock, duplicateBlock, lineAttr, moveBlock, selectedAtom, setAtom, setLines, setSection, setSize, toggleDeco, unwrapSection, wrapInSection,
 } from "./editor/commands";
-import { BlockSelection } from "./editor/blockSelection";
+import { BlockSelection, PickSelection } from "./editor/blockSelection";
+import { isPicking, toggleListPicked } from "./editor/commands";
 
 /** Re-render whenever the editor's selection or content changes, so the buttons show what's on. */
 export function useEditorTick(editor: Editor | null) {
@@ -49,7 +50,10 @@ function BlockBar({ editor }: { editor: Editor }) {
 export function FormatPanel({ editor, accent, onSaveClause }: { editor: Editor | null; accent: string; onSaveClause: (s: PNode) => void }) {
   useEditorTick(editor);
   if (!editor) return <p className="caption secondary">Click into the page to format it.</p>;
-  return <div className="wsb-pane wsb-format"><BlockBar editor={editor} /><FormatBody editor={editor} accent={accent} onSaveClause={onSaveClause} /></div>;
+  // In phone select mode the action bar moves and deletes; this sheet is just the style of the ticked blocks.
+  const picking = isPicking(editor);
+  if (picking && !(editor.state.selection as PickSelection).picks?.length) return <p className="caption secondary">Tick some blocks first.</p>;
+  return <div className="wsb-pane wsb-format">{!picking && <BlockBar editor={editor} />}<FormatBody editor={editor} accent={accent} onSaveClause={onSaveClause} /></div>;
 }
 function FormatBody({ editor, accent, onSaveClause }: { editor: Editor; accent: string; onSaveClause: (s: PNode) => void }) {
   const atom = selectedAtom(editor);
@@ -64,9 +68,14 @@ function FormatBody({ editor, accent, onSaveClause }: { editor: Editor; accent: 
   const font = lineAttr(editor, "font", null);
   const sec = currentSection(editor);
   const block = editor.state.selection instanceof BlockSelection;
-  const inList = editor.isActive("bulletList") || editor.isActive("orderedList");
+  const picked = editor.state.selection instanceof PickSelection ? editor.state.selection.picks.length : 0;
+  const inList = !picked && (editor.isActive("bulletList") || editor.isActive("orderedList"));
+  const pickedKinds = picked ? new Set((editor.state.selection as PickSelection).blocks().map((b) => b.node.type.name)) : null;
+  const list = (k: "bulletList" | "orderedList") => (picked ? toggleListPicked(editor, k) : k === "bulletList" ? editor.chain().focus().toggleBulletList().run() : editor.chain().focus().toggleOrderedList().run());
+  const listOn = (k: "bulletList" | "orderedList") => (pickedKinds ? pickedKinds.size === 1 && pickedKinds.has(k) : editor.isActive(k));
   return (
     <>
+      {picked > 0 && <p className="caption secondary">{picked} block{picked === 1 ? "" : "s"} ticked: changes here apply to all of them.</p>}
       {block && <p className="caption secondary">{editor.state.selection instanceof BlockSelection ? (editor.state.selection as BlockSelection).blocks().length : 0} blocks selected. Shift+↑/↓ adds more, Enter goes back to typing.</p>}
       <div className="field"><span className="ws-flabel">Text</span>
         <div className="wsb-sizes">{TEXT_SIZES.map((z, i) => <button key={z.key} className={`wsb-size ${z.key}${size === z.key ? " on" : ""}`} onMouseDown={keep} onClick={() => setSize(editor, z.key)} title={`${z.label} (${z.hint}) · Ctrl+${i + 1}`}>{z.label}</button>)}</div>
@@ -75,8 +84,8 @@ function FormatBody({ editor, accent, onSaveClause }: { editor: Editor; accent: 
         {MARKS.map((m) => <button key={m.key} className={editor.isActive(m.key) ? "on" : ""} aria-pressed={editor.isActive(m.key)} aria-label={m.label} title={`${m.label} (${m.kbd})`} onMouseDown={keep} onClick={() => m.run(editor)}><m.Icon size={15} /></button>)}
       </div>
       <div className="ws-seg wsb-marks">
-        <button className={editor.isActive("bulletList") ? "on" : ""} aria-label="Bulleted list" title="Bulleted list" onMouseDown={keep} onClick={() => editor.chain().focus().toggleBulletList().run()}><List size={15} /></button>
-        <button className={editor.isActive("orderedList") ? "on" : ""} aria-label="Numbered list" title="Numbered list" onMouseDown={keep} onClick={() => editor.chain().focus().toggleOrderedList().run()}><ListOrdered size={15} /></button>
+        <button className={listOn("bulletList") ? "on" : ""} aria-label="Bulleted list" title="Bulleted list" onMouseDown={keep} onClick={() => list("bulletList")}><List size={15} /></button>
+        <button className={listOn("orderedList") ? "on" : ""} aria-label="Numbered list" title="Numbered list" onMouseDown={keep} onClick={() => list("orderedList")}><ListOrdered size={15} /></button>
         <button aria-label="Outdent" title="Outdent (⇧Tab)" disabled={!inList} onMouseDown={keep} onClick={() => editor.chain().focus().liftListItem("listItem").run()}><Outdent size={15} /></button>
         <button aria-label="Indent" title="Indent (Tab)" disabled={!inList} onMouseDown={keep} onClick={() => editor.chain().focus().sinkListItem("listItem").run()}><Indent size={15} /></button>
         <button aria-label="Clear formatting" title="Clear formatting" onMouseDown={keep} onClick={() => clearFormatting(editor)}><RemoveFormatting size={15} /></button>
@@ -97,7 +106,7 @@ function FormatBody({ editor, accent, onSaveClause }: { editor: Editor; accent: 
         <button className={font === "heading" ? "on" : ""} onMouseDown={keep} onClick={() => setLines(editor, { font: "heading" })}>Heading font</button>
         <button className={font === "body" ? "on" : ""} onMouseDown={keep} onClick={() => setLines(editor, { font: "body" })}>Body font</button>
       </div></div>
-      <span className="label">Container</span>
+      {picked > 0 ? null : <><span className="label">Container</span>
       {sec ? <>
         <div className="ws-seg">
           <button className={sec.node.attrs.look !== "card" ? "on" : ""} onMouseDown={keep} onClick={() => setSection(editor, { look: "plain" })}>Section</button>
@@ -114,7 +123,7 @@ function FormatBody({ editor, accent, onSaveClause }: { editor: Editor; accent: 
           <button className="btn ghost sm" onMouseDown={keep} onClick={() => wrapInSection(editor, "plain")}><Group size={13} />Make a section</button>
           <button className="btn ghost sm" onMouseDown={keep} onClick={() => wrapInSection(editor, "card")}><SquareDashed size={13} />Make a card</button>
         </div>
-      </>}
+      </>}</>}
     </>
   );
 }

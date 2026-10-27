@@ -7,7 +7,7 @@ import type { Editor } from "@tiptap/react";
 import { TextSelection } from "@tiptap/pm/state";
 import {
   BookmarkPlus, Check, Eye, FileSignature, Palette, Heading, Heading1, LayoutTemplate, List, Minus, PanelTop, PenLine, Plus, Receipt, Redo2, Undo2,
-  ScrollText, Send, SeparatorHorizontal, Space, TriangleAlert, Type, Users, X,
+  ScrollText, Send, SeparatorHorizontal, Space, TriangleAlert, Type, Users, X, CircleCheck, Trash2, Ellipsis, ArrowUp, ArrowDown, Copy, CopyPlus, ListChecks, CircleSlash,
 } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -23,8 +23,10 @@ import { StylePanel } from "./StylePanel";
 import { FormatPanel, QuickMenu, useEditorTick, type MenuAt } from "./FormatPanel";
 import { PageEditor, endInsertDrag, startInsertDrag } from "./editor/PageEditor";
 import { BuilderCtx } from "./editor/nodes";
-import { insertKind, insertNodes, outline } from "./editor/commands";
-import { marginSelect } from "./editor/blockSelection";
+import {
+  canMovePicked, deletePicked, duplicatePicked, insertAfterPicked, insertKind, insertNodes, isPicking, movePicked, outline, pickAll, pickedText, picks, setPickMode, togglePickAt,
+} from "./editor/commands";
+import { marginSelect, pickableBlocks } from "./editor/blockSelection";
 import { errText, uploadToStorage } from "../pages/sign/common";
 
 type Mode = { kind: "build"; buildId: Id<"wsBuilds"> } | { kind: "template"; templateId: Id<"wsTemplates"> };
@@ -84,6 +86,29 @@ export default function Builder({ mode }: { mode: Mode }) {
     return () => { m.content = was; };
   }, []);
   useEditorTick(editor);
+
+  // Phones: Craft-style select mode. A circle on every block; tap blocks to tick them, then Style, + Content, Actions
+  // or Delete from the bar at the bottom; the blue ✓ finishes. Press and hold a block (or Select in the bar) to start.
+  const picking = isPicking(editor);
+  const ticked = editor && picking ? picks(editor).length : 0;
+  const [actions, setActions] = useState(false);
+  const pressTimer = useRef<number | null>(null);
+  const justPicked = useRef(0);
+  const startPick = (at?: { left: number; top: number }) => {
+    if (!editor) return;
+    const r = at ? editor.view.posAtCoords(at) : null;
+    setPickMode(editor, true, r ? (r.inside >= 0 ? r.inside : r.pos) : null);
+    setSheet(false); setActions(false);
+    justPicked.current = Date.now();
+    try { navigator.vibrate?.(10); } catch { /* not on iPhone */ }
+  };
+  const endPick = () => { if (editor) setPickMode(editor, false); setSheet(false); setActions(false); };
+  useEffect(() => {
+    if (!picking) return;
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") endPick(); };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  });
 
   // First load only: after that the page's copy is the truth and saves go up. Older documents (a list of blocks) are
   // converted to the page editor's lines here.
@@ -268,7 +293,22 @@ export default function Builder({ mode }: { mode: Mode }) {
         {/* The page */}
         <div className="wsb-stage" ref={stageRef}>
           {sent && <div className="ws-banner"><TriangleAlert size={15} /> {build!.document!.label} is {build!.document!.status === "sent" ? "out for signature" : "signed"}. Changes here won't reach it; cancel it first to send a new version.</div>}
-          <div className="wsb-page"
+          <div className={`wsb-page${picking ? " wsb-picking" : ""}`}
+            // Select mode: a tap ticks the block under it; nothing else on the page reacts (no typing, no fields).
+            onMouseDownCapture={(e) => { if (picking) { e.preventDefault(); e.stopPropagation(); } }}
+            onClickCapture={(e) => {
+              if (!picking || !editor) return;
+              e.preventDefault(); e.stopPropagation();
+              if (Date.now() - justPicked.current < 600) return;
+              togglePickAt(editor, { left: e.clientX, top: e.clientY });
+            }}
+            onTouchStart={(e) => {
+              if (picking || !phone || e.touches.length !== 1) return;
+              const t = e.touches[0], at = { left: t.clientX, top: t.clientY };
+              pressTimer.current = window.setTimeout(() => { pressTimer.current = null; startPick(at); }, 550);
+            }}
+            onTouchMove={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } }}
+            onTouchEnd={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } }}
             onMouseDown={(e) => {
               // A drag in the page's margin selects whole blocks (like Craft); a click below the text goes to the end.
               if (e.target !== e.currentTarget || !editor) return;
@@ -306,11 +346,36 @@ export default function Builder({ mode }: { mode: Mode }) {
       </div>
 
       {/* Phones: the panel's tabs as a bar at the bottom; tapping one slides the panel up as a sheet. */}
-      <nav className="wsb-phonebar" aria-label="Builder panel">
-        {([["insert", <Plus size={18} key="i" />, "Insert"], ["format", <Type size={18} key="f" />, "Format"], ["style", <Palette size={18} key="s" />, "Style"], ["details", <Users size={18} key="d" />, "Details"]] as const).map(([k, icon, label]) => (
-          <button key={k} className={sheet && tab === k ? "on" : ""} onMouseDown={(e) => e.preventDefault()} onClick={() => { if (sheet && tab === k) setSheet(false); else { setTab(k); setSheet(true); } }}>{icon}<span>{label}</span></button>
-        ))}
-      </nav>
+      {!picking && (
+        <nav className="wsb-phonebar" aria-label="Builder panel">
+          {([["insert", <Plus size={18} key="i" />, "Insert"], ["format", <Type size={18} key="f" />, "Format"], ["style", <Palette size={18} key="s" />, "Style"], ["details", <Users size={18} key="d" />, "Details"]] as const).map(([k, icon, label]) => (
+            <button key={k} className={sheet && tab === k ? "on" : ""} onMouseDown={(e) => e.preventDefault()} onClick={() => { if (sheet && tab === k) setSheet(false); else { setTab(k); setSheet(true); } }}>{icon}<span>{label}</span></button>
+          ))}
+          <button onMouseDown={(e) => e.preventDefault()} onClick={() => startPick()}><CircleCheck size={18} /><span>Select</span></button>
+        </nav>
+      )}
+      {/* Select mode (phones): what's ticked, the actions for it, and the ✓ to finish. */}
+      {picking && editor && <>
+        <button className="wsb-pickdone" aria-label="Done selecting" onClick={endPick}><Check size={24} strokeWidth={3} /></button>
+        <div className="wsb-pickcount" role="status">{ticked ? `${ticked} selected` : "Tap blocks to select them"}</div>
+        <nav className="wsb-phonebar wsb-pickbar" aria-label="Selected blocks">
+          <button disabled={!ticked} onClick={() => { setTab("format"); setActions(false); setSheet(!(sheet && tab === "format")); }} className={sheet && tab === "format" ? "on" : ""}><Type size={18} /><span>Style</span></button>
+          <button onClick={() => { insertAfterPicked(editor); setTab("insert"); setActions(false); setSheet(true); }}><Plus size={18} /><span>+ Content</span></button>
+          <button className={actions ? "on" : ""} onClick={() => { setSheet(false); setActions(!actions); }}><Ellipsis size={18} /><span>Actions</span></button>
+          <button className="danger" disabled={!ticked} onClick={() => { const n = deletePicked(editor); setSheet(false); setActions(false); show(`Deleted ${n} block${n === 1 ? "" : "s"}. Undo brings ${n === 1 ? "it" : "them"} back.`); }}><Trash2 size={18} /><span>Delete</span></button>
+        </nav>
+        {actions && (
+          <div className="wsb-pickactions" role="menu">
+            <button role="menuitem" disabled={!canMovePicked(editor)} onClick={() => movePicked(editor, -1)}><ArrowUp size={16} />Move up</button>
+            <button role="menuitem" disabled={!canMovePicked(editor)} onClick={() => movePicked(editor, 1)}><ArrowDown size={16} />Move down</button>
+            <button role="menuitem" disabled={!ticked} onClick={() => { duplicatePicked(editor); setActions(false); }}><CopyPlus size={16} />Duplicate</button>
+            <button role="menuitem" disabled={!ticked} onClick={() => { void navigator.clipboard?.writeText(pickedText(editor)).then(() => show("Copied the text"), () => show("Couldn't copy")); setActions(false); }}><Copy size={16} />Copy text</button>
+            <button role="menuitem" onClick={() => { pickAll(editor, pickableBlocks(editor.state.doc)); setActions(false); }}><ListChecks size={16} />Select all</button>
+            <button role="menuitem" disabled={!ticked} onClick={() => { pickAll(editor, []); setActions(false); }}><CircleSlash size={16} />Clear selection</button>
+            {!canMovePicked(editor) && ticked > 1 && <p className="caption secondary">Move works on blocks next to each other.</p>}
+          </div>
+        )}
+      </>}
       {preview && (
         <Modal onClose={() => { URL.revokeObjectURL(preview); setPreview(null); }} label="PDF preview" width={900}>
           <div className="wsb-preview">
