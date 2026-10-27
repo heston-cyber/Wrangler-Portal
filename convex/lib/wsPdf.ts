@@ -1,0 +1,129 @@
+// Wrangler Sign — PDF handling (Phase S0, Oct 26). Runs in the default Convex runtime and in the browser: no Node APIs.
+//
+// The uploaded PDF is never redrawn. Signing stamps go on a copy:
+//   - boxes are given the way the placement screen sees the page: a page index plus fractions (0..1) of the page as
+//     DISPLAYED (top-left origin, after the page's /Rotate and inside its crop box);
+//   - each stamp is a PNG (signature, initials — drawn or typed, rendered by the signing page) or a line of text
+//     (name, title, date) in Helvetica, so the backend needs no font files;
+//   - a marker under a box (e.g. "{{sign:client}}") is painted over in white first;
+//   - an audit certificate page is appended at the end.
+import { PDFDocument, PDFPage, StandardFonts, degrees, rgb, EncryptedPDFError } from "@cantoo/pdf-lib";
+
+export type Box = { page: number; x: number; y: number; w: number; h: number };
+// `cover`: an area painted white first (the marker's own text, e.g. "{{sign:client}}"), separate from where the
+// stamp is drawn, so nothing around the marker gets clipped.
+export type Stamp =
+  | { box: Box; kind: "image"; png: Uint8Array; cover?: Box }
+  | { box: Box; kind: "text"; text: string; cover?: Box };
+
+export type PageInfo = { width: number; height: number; rotate: number };
+export type Inspection =
+  | { ok: true; pages: PageInfo[]; hasForm: boolean; producer?: string }
+  | { ok: false; reason: "encrypted" | "unreadable"; detail?: string };
+
+// Fixed dates so the same input always gives the same bytes (T-S0.2).
+const FIXED = new Date(Date.UTC(2000, 0, 1));
+
+const rot = (p: PDFPage) => (((p.getRotation().angle % 360) + 360) % 360) as 0 | 90 | 180 | 270;
+
+function displayed(p: PDFPage): PageInfo {
+  const c = p.getCropBox();
+  const r = rot(p);
+  return r % 180 === 0 ? { width: c.width, height: c.height, rotate: r } : { width: c.height, height: c.width, rotate: r };
+}
+
+/** A displayed point (dx, dy from the top-left, in points) → PDF user space. */
+function toUser(p: PDFPage, dx: number, dy: number): { x: number; y: number } {
+  const c = p.getCropBox();
+  const cw = c.width, ch = c.height;
+  let u: number, v: number;
+  switch (rot(p)) {
+    case 0: u = dx; v = ch - dy; break;
+    case 90: u = dy; v = dx; break;
+    case 180: u = cw - dx; v = dy; break;
+    default: u = cw - dy; v = ch - dx; break; // 270
+  }
+  return { x: c.x + u, y: c.y + v };
+}
+
+export async function inspect(bytes: Uint8Array): Promise<Inspection> {
+  let doc: PDFDocument;
+  try {
+    doc = await PDFDocument.load(bytes, { updateMetadata: false });
+  } catch (e) {
+    if (e instanceof EncryptedPDFError || /encrypt/i.test(String(e))) return { ok: false, reason: "encrypted" };
+    return { ok: false, reason: "unreadable", detail: String(e).slice(0, 160) };
+  }
+  if (doc.isEncrypted) return { ok: false, reason: "encrypted" };
+  let hasForm = false;
+  try { hasForm = doc.getForm().getFields().length > 0; } catch { /* no form */ }
+  return { ok: true, pages: doc.getPages().map(displayed), hasForm, producer: doc.getProducer() };
+}
+
+/** Stamp onto a copy of the PDF and append the certificate. Returns the new bytes. */
+export async function stamp(original: Uint8Array, stamps: Stamp[], certificate: string[]): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(original, { updateMetadata: false });
+  if (doc.isEncrypted) throw new Error("This PDF is protected with a password. Export it again without protection.");
+  // Form fields stay editable in viewers; flatten them so nothing on a signed copy can be typed over.
+  try { const f = doc.getForm(); if (f.getFields().length) f.flatten(); } catch { /* no form */ }
+  const helv = await doc.embedFont(StandardFonts.Helvetica);
+  const pages = doc.getPages();
+  const ink = rgb(0.07, 0.12, 0.35);
+
+  for (const s of stamps) {
+    const p = pages[s.box.page];
+    if (!p) throw new Error(`No page ${s.box.page + 1}`);
+    const d = displayed(p);
+    const bw = s.box.w * d.width, bh = s.box.h * d.height;
+    const dx = s.box.x * d.width, dyBottom = (s.box.y + s.box.h) * d.height; // the box's displayed bottom-left
+    const o = toUser(p, dx, dyBottom);
+    const angle = degrees(d.rotate); // draw upright as displayed
+    void o;
+    if (s.cover) {
+      if (s.cover.page !== s.box.page) throw new Error("A cover must be on the stamp's page");
+      const co = toUser(p, s.cover.x * d.width, (s.cover.y + s.cover.h) * d.height);
+      p.drawRectangle({ x: co.x, y: co.y, width: s.cover.w * d.width, height: s.cover.h * d.height, rotate: angle, color: rgb(1, 1, 1) });
+    }
+    if (s.kind === "image") {
+      const img = await doc.embedPng(s.png);
+      const k = Math.min(bw / img.width, bh / img.height);
+      const w = img.width * k, h = img.height * k;
+      // Left-aligned, vertically centred in the box (in displayed space), then mapped to user space.
+      const o2 = toUser(p, dx, dyBottom - (bh - h) / 2);
+      p.drawImage(img, { x: o2.x, y: o2.y, width: w, height: h, rotate: angle });
+    } else {
+      const size = Math.max(6, Math.min(12, bh * 0.7));
+      const o2 = toUser(p, dx + 2, dyBottom - (bh - size) / 2 - size * 0.2);
+      p.drawText(s.text, { x: o2.x, y: o2.y, size, font: helv, color: ink, rotate: angle });
+    }
+  }
+
+  // The certificate: plain text pages at the end, Letter size.
+  const W = 612, H = 792, M = 54, size = 9, lead = 12.5;
+  const wrap = (line: string): string[] => {
+    const out: string[] = []; let cur = "";
+    for (const word of line.split(" ")) {
+      const t = cur ? `${cur} ${word}` : word;
+      if (helv.widthOfTextAtSize(t, size) > W - 2 * M && cur) { out.push(cur); cur = word; } else cur = t;
+    }
+    out.push(cur);
+    return out;
+  };
+  let page = doc.addPage([W, H]);
+  let y = H - M;
+  for (const raw of certificate) {
+    for (const line of raw === "" ? [""] : wrap(raw)) {
+      if (y < M) { page = doc.addPage([W, H]); y = H - M; }
+      page.drawText(line, { x: M, y, size, font: helv, color: rgb(0.1, 0.1, 0.1) });
+      y -= lead;
+    }
+  }
+
+  doc.setModificationDate(FIXED);
+  return doc.save({ useObjectStreams: false });
+}
+
+export async function sha256Bytes(bytes: Uint8Array): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new Uint8Array(bytes)); // copy: a plain ArrayBuffer for Web Crypto
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
