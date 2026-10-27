@@ -1278,3 +1278,7 @@ button.ws-hubcard:disabled { opacity: .6; cursor: default; }
 .ws-table tr.ws-menurow td { background: var(--surface-block-hover); }
 .wsb-undo { display: inline-flex; gap: 2px; margin-right: 4px; }
 .wsb-undo .icon-btn:disabled { opacity: .35; }
+/* Titles and headings take the style's Headings colour (".wsb-page input" would otherwise make them the text colour) */
+.wsb-page .wsb-title { color: var(--wsb-title-color, var(--wsb-heading)); }
+.wsb-page .wsb-heading { color: var(--wsb-heading); }
+.wsb-marks button { display: grid; place-items: center; padding: 6px 9px; }

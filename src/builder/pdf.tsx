@@ -53,7 +53,8 @@ export function DocPdf({ d, assets, label }: { d: BuildDoc; assets: Assets; labe
     const deco = f?.deco === "focus" ? { borderLeftWidth: 2.5, borderLeftColor: accent, paddingLeft: 10 } : f?.deco === "block" ? { backgroundColor: tint(accent, st.page, 0.08), padding: 10, borderRadius: 6 } : {};
     return <View key={key} wrap={wrap} style={{ marginBottom: base * 0.9, ...deco }}>{children}</View>;
   };
-  const txt = (f?: Fmt) => ({ textAlign: f?.align ?? "left", color: colorOf(f), fontFamily: f?.font === "heading" ? H : undefined });
+  // Only what the block sets: an unset colour must not wipe the heading colour it's spread over.
+  const txt = (f?: Fmt) => ({ textAlign: f?.align ?? "left", ...(colorOf(f) ? { color: colorOf(f) } : {}), ...(f?.font === "heading" ? { fontFamily: H } : {}) });
 
   const marker = (kind: string, key: string) => <Text style={{ color: st.page, fontSize: base * 0.9, fontFamily: B }}>{`{{${kind}:${key}}}`}</Text>;
 

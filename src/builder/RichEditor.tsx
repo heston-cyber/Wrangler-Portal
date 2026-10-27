@@ -1,17 +1,22 @@
 // A text area for the builder (B2): Tiptap with bold, italic, underline and lists. Stores Tiptap's JSON (the same
 // shape the PDF renderer and the clause library use).
-import { useEffect, useRef } from "react";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { createContext, useContext, useEffect, useRef } from "react";
+import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Bold, Italic, List, ListOrdered, Underline } from "lucide-react";
 import type { Rich } from "../../convex/lib/wsBuilder";
 
+/** The builder listens here for the text editor that has the cursor, so its Format tab can format the selected text. */
+export const ActiveEditor = createContext<(e: Editor | null) => void>(() => {});
+
 export function RichEditor({ value, onChange, placeholder, style, className }: { value: Rich; onChange: (r: Rich) => void; placeholder?: string; style?: React.CSSProperties; className?: string }) {
   const last = useRef(JSON.stringify(value));
+  const setActive = useContext(ActiveEditor);
   const editor = useEditor({
     extensions: [StarterKit.configure({ heading: false, codeBlock: false, blockquote: false, code: false, horizontalRule: false, strike: false, link: false, dropcursor: false, undoRedo: false })],
     content: value,
     editorProps: { attributes: { class: "wsb-rich", ...(placeholder ? { "data-placeholder": placeholder } : {}) } },
+    onFocus: ({ editor: e }) => setActive(e as Editor),
     onUpdate: ({ editor: e }) => { const j = e.getJSON() as Rich; last.current = JSON.stringify(j); onChange(j); },
   });
   // Undo and redo are the builder's (one history for the whole document), so the editor's own is off.

@@ -16,7 +16,9 @@ import {
   BLOCK_LABEL, BUILTIN_FONTS, FIELD_HELP, PAGE_PT, PRESET_STYLES, buildProblems, emptyFields, fieldValues, fill, money, newBlock, newId, rich, signerKeys, totals,
   type Block, type BlockType, type BuildDoc, type ExtraSigner, type Fields, type Fmt, type Rich, type Style, type TextSize,
 } from "../../convex/lib/wsBuilder";
-import { RichEditor } from "./RichEditor";
+import { ActiveEditor, RichEditor } from "./RichEditor";
+import type { Editor } from "@tiptap/react";
+import { QuickFormatMenu, SelectedTextTools, hasTextSelection, type QuickAt } from "./TextFormat";
 import { cssFamily, loadForScreen, type FontRow } from "./fonts";
 import { StylePanel } from "./StylePanel";
 import { isNoop, place, sameSpot, spotFor, type Drag, type Spot } from "./dnd";
@@ -67,6 +69,15 @@ export default function Builder({ mode }: { mode: Mode }) {
   const [problems, setProblems] = useState<string[] | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [spot, setSpot] = useState<Spot | null>(null);
+  // The text area with the cursor (for the Format tab's "Selected text"), and the right-click quick menu.
+  const [active, setActive] = useState<{ editor: Editor; blockId: string } | null>(null);
+  const [quick, setQuick] = useState<(QuickAt & { blockId: string }) | null>(null);
+  const onEditorFocus = useCallback((e: Editor | null) => {
+    const id = (e?.view.dom as HTMLElement | undefined)?.closest<HTMLElement>("[data-block]")?.dataset.block;
+    setActive(e && id ? { editor: e, blockId: id } : null);
+  }, []);
+  // Highlighting text on the page selects its block and opens Format.
+  const afterSelect = (blockId: string) => setTimeout(() => { if (hasTextSelection()) { setSel(blockId); setTab("format"); } }, 0);
 
   // First load only: after that the page's copy is the truth and saves go up.
   useEffect(() => {
@@ -253,7 +264,7 @@ export default function Builder({ mode }: { mode: Mode }) {
   const extraKeys = keys.filter((k) => k !== "heston" && k !== "client");
 
   return (
-    <>
+    <ActiveEditor.Provider value={onEditorFocus}>
       <TopBar right={<>
         <span className="wsb-undo">
           <button className="icon-btn" aria-label="Undo" title={`Undo (${mac ? "⌘Z" : "Ctrl+Z"})`} disabled={!hist.current.past.length} onClick={() => step("undo")}><Undo2 size={16} /></button>
@@ -296,6 +307,16 @@ export default function Builder({ mode }: { mode: Mode }) {
             {doc.blocks.map((b, i) => (
               <div key={b.id} data-block={b.id} className={`wsb-block${sel === b.id ? " sel" : ""}${drag?.kind === "move" && drag.id === b.id ? " dragging" : ""}${spot?.id === b.id ? (spot.after ? " drop-after" : " drop-before") : ""}`}
                 onClick={(e) => { e.stopPropagation(); setSel(b.id); }}
+                onMouseUp={() => afterSelect(b.id)} onKeyUp={(e) => { if (e.shiftKey || e.key === "a") afterSelect(b.id); }}
+                onFocusCapture={(e) => { if (!(e.target as HTMLElement).closest("[contenteditable]")) setActive(null); }}
+                onContextMenu={(e) => {
+                  if (e.shiftKey || !hasTextSelection()) return; // the browser's own menu
+                  e.preventDefault();
+                  const target = document.activeElement as HTMLElement;
+                  const ed = active && active.blockId === b.id && target.closest("[contenteditable]") ? active.editor : null;
+                  setSel(b.id);
+                  setQuick({ x: e.clientX, y: e.clientY, target, editor: ed, blockId: b.id });
+                }}
                 onDragOver={(e) => overSpot(e, spotFor(b.id, e.currentTarget.getBoundingClientRect(), e.clientY))} onDrop={drop}>
                 <div className="wsb-tools" onClick={(e) => e.stopPropagation()}>
                   <span className="wsb-grip" draggable onDragStart={(e) => startDrag(e, { kind: "move", id: b.id }, e.currentTarget.closest(".wsb-block"))} onDragEnd={endDrag} title="Drag to move" aria-label="Drag to move"><GripVertical size={14} /></span>
@@ -327,7 +348,10 @@ export default function Builder({ mode }: { mode: Mode }) {
           )}
           {tab === "format" && (
             <div className="wsb-pane">
-              {!selected ? <p className="caption secondary">Select a block on the page to format it.</p> : <FormatPane b={selected} setBlock={(f) => setBlock(selected.id, f)} accent={st.accent} />}
+              {!selected ? <p className="caption secondary">Select a block on the page to format it, or highlight some text.</p> : <>
+                {active && active.blockId === selected.id && !active.editor.isDestroyed && <SelectedTextTools editor={active.editor} />}
+                <FormatPane b={selected} setBlock={(f) => setBlock(selected.id, f)} accent={st.accent} />
+              </>}
             </div>
           )}
           {tab === "style" && <StylePanel style={st} onChange={(s) => setDoc((d) => ({ ...d, style: s }))} fonts={fontRows} files={files as Record<string, string | null>} show={show} />}
@@ -349,8 +373,14 @@ export default function Builder({ mode }: { mode: Mode }) {
       {asTemplate && <SaveTemplate doc={doc} onClose={() => setAsTemplate(false)} onSave={async (name, description) => {
         try { await saveAsTemplate({ name, description, title: doc.title, blocks: doc.blocks, fields: doc.fields, signers: [], style: doc.style }); setAsTemplate(false); show(`Saved as the template "${name}"`); } catch (e) { show(errText(e)); }
       }} />}
+      {quick && (() => {
+        const qb = doc.blocks.find((x) => x.id === quick.blockId);
+        const qf = ((qb as { fmt?: Fmt } | undefined)?.fmt) ?? {};
+        return <QuickFormatMenu at={quick} fmt={qf} onClose={() => setQuick(null)} onMore={() => { setSel(quick.blockId); setTab("format"); }}
+          setFmt={(p) => setBlock(quick.blockId, (x) => ({ ...x, fmt: { ...((x as { fmt?: Fmt }).fmt ?? {}), ...p } }) as Block)} />;
+      })()}
       {toast}
-    </>
+    </ActiveEditor.Provider>
   );
 }
 
@@ -370,6 +400,8 @@ const SIZE_PX: Record<TextSize, number> = { title: 2.3, subtitle: 1.35, heading:
 function decoStyle(f: Fmt | undefined): React.CSSProperties {
   return {
     textAlign: f?.align, color: !f?.color ? undefined : f.color === "accent" ? "var(--wsb-accent)" : f.color,
+    // A block's own colour also colours its title (as in the PDF); otherwise titles use the style's heading colour.
+    ...(f?.color ? { ["--wsb-title-color" as string]: f.color === "accent" ? "var(--wsb-accent)" : f.color } : {}),
     ...(f?.deco === "focus" ? { borderLeft: "2.5px solid var(--wsb-accent)", paddingLeft: 10 } : f?.deco === "block" ? { background: "color-mix(in srgb, var(--wsb-accent) 8%, transparent)", padding: 10, borderRadius: 6 } : {}),
     fontFamily: f?.font === "heading" ? "var(--wsb-hfont)" : undefined,
   };
