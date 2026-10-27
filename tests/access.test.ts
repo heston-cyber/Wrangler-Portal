@@ -91,6 +91,7 @@ function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "sign.extendExpiry": { documentId: ids.docId, days: 7 },
     "signDone.retry": { documentId: ids.docId, step: "copies" }, "signDone.downloadAudit": { documentId: ids.docId },
     "wsArchive.status": {}, "wsArchive.authUrl": {}, "wsArchive.disconnect": {},
+    "wsConnector.createKey": {}, "wsConnector.listKeys": {}, "wsConnector.revokeKey": { keyId: ids.wsKeyId },
   };
 }
 
@@ -125,8 +126,9 @@ async function setup() {
     const shareId = await ctx.db.insert("shares", { token: "tok", kind: "video", videoId, access: "view", who: "link", allVersions: true, downloads: false, emailNewVersions: false, createdAt: 0, createdBy: owner });
     const storageId = await ctx.storage.store(new Blob(["x"]));
     const docId = await ctx.db.insert("wsDocuments", { number: 1, title: "D", status: "draft", currentVersion: 1, createdAt: 0, updatedAt: 0 });
+    const wsKeyId = await ctx.db.insert("wsConnectorKeys", { hash: "x", prefix: "ws_x", label: "t", createdAt: 0 });
     const wsVersionId = await ctx.db.insert("wsVersions", { documentId: docId, number: 1, fileId: storageId, fileName: "a.pdf", fileSha256: "0", fileBytes: 1, pages: [{ width: 612, height: 792, rotate: 0 }], signers: [], boxes: [], signingOrder: "any", createdAt: 0, updatedAt: 0 });
-    return { docId, wsVersionId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
+    return { docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
   });
   return { t, ids };
 }

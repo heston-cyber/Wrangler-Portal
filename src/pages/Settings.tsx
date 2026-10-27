@@ -73,7 +73,7 @@ function Appearance() {
   );
 }
 
-async function copy(text: string, show: (m: string) => void, what = "Copied") {
+export async function copy(text: string, show: (m: string) => void, what = "Copied") {
   try { await navigator.clipboard.writeText(text); show(what); }
   catch { show("Couldn't copy. Select the text and copy it yourself."); }
 }
@@ -226,7 +226,7 @@ function Connector({ show }: { show: (m: string) => void }) {
   );
 }
 
-function KeyLine({ label, value, onCopy }: { label: string; value: string; onCopy: (v: string) => void }) {
+export function KeyLine({ label, value, onCopy }: { label: string; value: string; onCopy: (v: string) => void }) {
   return (
     <div className="keyline rect">
       <span className="rlabel">{label}</span>

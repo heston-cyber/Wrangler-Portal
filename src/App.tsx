@@ -20,6 +20,7 @@ import type { Id } from "../convex/_generated/dataModel";
 const SignList = lazy(() => import("./pages/sign/SignList"));
 const SignDoc = lazy(() => import("./pages/sign/SignDoc"));
 const SignSignature = lazy(() => import("./pages/sign/SignSignature"));
+const SignConnector = lazy(() => import("./pages/sign/SignConnector"));
 // S2: the client's signing page. sign.wranglerportal.com/<token>, or /x/<token> on any host (a fallback).
 const SignerApp = lazy(() => import("./pages/signer/SignerApp"));
 const VerifyPage = lazy(() => import("./pages/signer/VerifyPage"));
@@ -79,6 +80,7 @@ function SignedIn() {
   else if (path.startsWith("/projects")) page = <Projects key="all" />;
   else if (signDoc) page = <Suspense fallback={<Loading />}><SignDoc key={signDoc[1]} documentId={signDoc[1] as Id<"wsDocuments">} versionNumber={Number(params.get("v")) || null} /></Suspense>;
   else if (path.startsWith("/sign/signature")) page = <Suspense fallback={<Loading />}><SignSignature /></Suspense>;
+  else if (path.startsWith("/sign/connector")) page = <Suspense fallback={<Loading />}><SignConnector /></Suspense>;
   else if (path.startsWith("/sign")) page = <Suspense fallback={<Loading />}><SignList /></Suspense>;
   else if (path.startsWith("/activity")) page = <ActivityPage />;
   else if (path.startsWith("/register")) page = <Register />;

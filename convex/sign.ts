@@ -4,7 +4,7 @@
 // signers, then approves. Approval locks that version: its file hash, boxes, signers, signing order and invoice are
 // covered by one lock hash. Any change after that is a new version; earlier versions are kept as they were.
 // Sending, signing and completion are Phases S2–S3.
-import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery, mutation, query, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -79,8 +79,17 @@ export const list = query({
 
 export const get = query({
   args: { documentId: v.id("wsDocuments"), versionNumber: v.optional(v.number()) },
-  handler: async (ctx, { documentId, versionNumber }) => {
-    await requireMe(ctx);
+  handler: async (ctx, a) => { await requireMe(ctx); return getCore(ctx, a.documentId, a.versionNumber); },
+});
+
+// S4: the same, for the Claude connector.
+export const getAs = internalQuery({
+  args: { documentId: v.id("wsDocuments"), versionNumber: v.optional(v.number()) },
+  handler: async (ctx, a) => getCore(ctx, a.documentId, a.versionNumber),
+});
+
+async function getCore(ctx: QueryCtx, documentId: Id<"wsDocuments">, versionNumber?: number) {
+  {
     const doc = await ctx.db.get(documentId);
     if (!doc) return null;
     const versions = await ctx.db.query("wsVersions").withIndex("by_document", (q) => q.eq("documentId", documentId)).collect();
@@ -101,8 +110,8 @@ export const get = query({
         .map((x) => ({ key: x.signerKey, name: x.name, email: x.email, order: x.order, status: x.status, link: signLink(x.token), sentAt: x.sentAt ?? null, lastEmailAt: x.lastEmailAt ?? null, openedAt: x.openedAt ?? null, verifiedAt: x.verifiedAt ?? null, consentAt: x.consentAt ?? null, signedAt: x.signedAt ?? null, lockedUntil: x.lockedUntil ?? null })) : [],
       problems: approvalProblems({ signers: shown.signers, boxes: shown.boxes, pages: shown.pages.length, payment: shown.payment ?? null, ownerSignatureAdopted: !!sig }),
     };
-  },
-});
+  }
+}
 
 export const ownerSignature = query({
   args: {},
@@ -154,8 +163,20 @@ export const create = action({
   },
 });
 
+// S4: a PDF Claude uploaded through the connector (already in storage).
+export const createAs = internalAction({
+  args: { storageId: v.id("_storage"), fileName: v.string(), title: v.optional(v.string()), actor: v.string() },
+  handler: async (ctx, { storageId, fileName, title, actor }): Promise<{ documentId: Id<"wsDocuments">; label: string }> => {
+    const pdf = await readPdf(ctx, storageId);
+    return ctx.runMutation(internal.sign.insertDocument, {
+      storageId, fileName: fileName.slice(0, 200), title: (title?.trim() || titleFromFile(fileName)).slice(0, 120),
+      sha: pdf.sha, bytes: pdf.bytes.length, pages: pdf.pages, actor,
+    });
+  },
+});
+
 export const insertDocument = internalMutation({
-  args: { storageId: v.id("_storage"), fileName: v.string(), title: v.string(), sha: v.string(), bytes: v.number(), pages: v.array(v.object({ width: v.number(), height: v.number(), rotate: v.number() })) },
+  args: { storageId: v.id("_storage"), fileName: v.string(), title: v.string(), sha: v.string(), bytes: v.number(), pages: v.array(v.object({ width: v.number(), height: v.number(), rotate: v.number() })), actor: v.optional(v.string()) },
   handler: async (ctx, a) => {
     const c = await ctx.db.query("counters").withIndex("by_key", (q) => q.eq("key", "wsNumber")).first();
     const number = c?.value ?? 1;
@@ -166,7 +187,7 @@ export const insertDocument = internalMutation({
       documentId, number: 1, fileId: a.storageId, fileName: a.fileName, fileSha256: a.sha, fileBytes: a.bytes, pages: a.pages,
       signers: [{ key: "client", name: "", email: "", order: 1 }], boxes: [], signingOrder: "any", createdAt: now, updatedAt: now,
     });
-    await appendEvent(ctx, documentId, { kind: "created", actor: OWNER_KEY, versionNumber: 1, detail: `Uploaded "${a.fileName}" (${a.pages.length} page${a.pages.length === 1 ? "" : "s"}), SHA-256 ${a.sha}` });
+    await appendEvent(ctx, documentId, { kind: "created", actor: a.actor ?? OWNER_KEY, versionNumber: 1, detail: `Uploaded "${a.fileName}" (${a.pages.length} page${a.pages.length === 1 ? "" : "s"}), SHA-256 ${a.sha}` });
     return { documentId, label: docLabel(number) };
   },
 });
@@ -178,8 +199,21 @@ export const saveLayout = mutation({
     versionId: v.id("wsVersions"), title: v.string(), signers: v.array(signerV), boxes: v.array(boxV),
     signingOrder: v.union(v.literal("any"), v.literal("sequence")), payment: paymentV, hasTextLayer: v.optional(v.boolean()),
   },
-  handler: async (ctx, a) => {
-    await requireMe(ctx);
+  handler: async (ctx, a) => { await requireMe(ctx); return saveLayoutCore(ctx, a); },
+});
+
+// S4: the same, for the Claude connector.
+export const saveLayoutAs = internalMutation({
+  args: {
+    versionId: v.id("wsVersions"), title: v.string(), signers: v.array(signerV), boxes: v.array(boxV),
+    signingOrder: v.union(v.literal("any"), v.literal("sequence")), payment: paymentV, hasTextLayer: v.optional(v.boolean()),
+  },
+  handler: async (ctx, a) => saveLayoutCore(ctx, a),
+});
+
+type LayoutArgs = { versionId: Id<"wsVersions">; title: string; signers: LayoutSigner[]; boxes: Array<LayoutBox>; signingOrder: "any" | "sequence"; payment: { amountCents: number; description: string } | null; hasTextLayer?: boolean };
+async function saveLayoutCore(ctx: MutationCtx, a: LayoutArgs) {
+  {
     const { ver, doc } = await loadEditable(ctx, a.versionId);
     const signers = withOwner(a.signers, await currentSignature(ctx));
     const problems = shapeProblems({ signers, boxes: a.boxes as LayoutBox[], pages: ver.pages.length });
@@ -191,13 +225,21 @@ export const saveLayout = mutation({
     });
     await ctx.db.patch(doc._id, { title, updatedAt: Date.now() });
     return null;
-  },
-});
+  }
+}
 
 export const approve = mutation({
   args: { versionId: v.id("wsVersions") },
-  handler: async (ctx, { versionId }) => {
-    await requireMe(ctx);
+  handler: async (ctx, { versionId }) => { await requireMe(ctx); return approveCore(ctx, versionId, OWNER_KEY); },
+});
+
+export const approveAs = internalMutation({
+  args: { versionId: v.id("wsVersions"), actor: v.string() },
+  handler: async (ctx, { versionId, actor }) => approveCore(ctx, versionId, actor),
+});
+
+async function approveCore(ctx: MutationCtx, versionId: Id<"wsVersions">, actor: string) {
+  {
     const { ver, doc } = await loadEditable(ctx, versionId);
     const sig = await currentSignature(ctx);
     const problems = approvalProblems({ signers: ver.signers, boxes: ver.boxes, pages: ver.pages.length, payment: ver.payment ?? null, ownerSignatureAdopted: !!sig });
@@ -206,10 +248,10 @@ export const approve = mutation({
     const now = Date.now();
     await ctx.db.patch(ver._id, { approvedAt: now, lockHash, updatedAt: now });
     await ctx.db.patch(doc._id, { status: "approved", updatedAt: now });
-    await appendEvent(ctx, doc._id, { kind: "approved", actor: OWNER_KEY, versionNumber: ver.number, detail: `Version ${ver.number} approved and locked. Lock hash ${lockHash}. ${ver.boxes.length} boxes, ${ver.signers.length} signers.` });
+    await appendEvent(ctx, doc._id, { kind: "approved", actor, versionNumber: ver.number, detail: `Version ${ver.number} approved and locked${actor === OWNER_KEY ? "" : " by Claude, on Heston's OK in chat"}. Lock hash ${lockHash}. ${ver.boxes.length} boxes, ${ver.signers.length} signers.` });
     return { lockHash };
-  },
-});
+  }
+}
 
 // A new version from the current one: same file, same layout, unlocked. Only before it's sent.
 export const revise = mutation({
@@ -351,8 +393,16 @@ async function applyOwner(ctx: MutationCtx, versionId: Id<"wsVersions">) {
 // the first in line when they sign one after another), and the links work until the expiry date.
 export const send = mutation({
   args: { versionId: v.id("wsVersions"), expiresInDays: v.optional(v.number()) },
-  handler: async (ctx, { versionId, expiresInDays }) => {
-    await requireMe(ctx);
+  handler: async (ctx, a) => { await requireMe(ctx); return sendCore(ctx, a.versionId, a.expiresInDays, OWNER_KEY); },
+});
+
+export const sendAs = internalMutation({
+  args: { versionId: v.id("wsVersions"), expiresInDays: v.optional(v.number()), actor: v.string() },
+  handler: async (ctx, a) => sendCore(ctx, a.versionId, a.expiresInDays, a.actor),
+});
+
+async function sendCore(ctx: MutationCtx, versionId: Id<"wsVersions">, expiresInDays: number | undefined, actor: string) {
+  {
     const ver = await ctx.db.get(versionId);
     if (!ver) throw new ConvexError("That version doesn't exist.");
     const doc = (await ctx.db.get(ver.documentId))!;
@@ -371,16 +421,16 @@ export const send = mutation({
         token: randomToken(18), status: live ? "sent" : "waiting", ...(live ? { sentAt: now } : {}),
       });
       if (live) {
-        await appendEvent(ctx, doc._id, { kind: "sent", actor: OWNER_KEY, versionNumber: ver.number, email: c.email, detail: `Signing link emailed to ${c.name} (${c.email}).` });
+        await appendEvent(ctx, doc._id, { kind: "sent", actor, versionNumber: ver.number, email: c.email, detail: `Signing link emailed to ${c.name} (${c.email}).` });
         await ctx.scheduler.runAfter(0, internal.signing.emailInvite, { signingId, kind: "invite" });
       }
     }
     const expiresAt = now + days * 86_400_000;
     await ctx.db.patch(doc._id, { status: "sent", sentAt: now, sentVersion: ver.number, expiresAt, updatedAt: now });
-    await appendEvent(ctx, doc._id, { kind: "send_settings", actor: OWNER_KEY, versionNumber: ver.number, detail: `Sent version ${ver.number} to ${clients.length} signer${clients.length === 1 ? "" : "s"} (${ver.signingOrder === "any" ? "any order" : "one after another"}); links work until ${new Date(expiresAt).toISOString()}.` });
+    await appendEvent(ctx, doc._id, { kind: "send_settings", actor, versionNumber: ver.number, detail: `${actor === OWNER_KEY ? "" : "Sent by Claude, on Heston's OK in chat. "}Sent version ${ver.number} to ${clients.length} signer${clients.length === 1 ? "" : "s"} (${ver.signingOrder === "any" ? "any order" : "one after another"}); links work until ${new Date(expiresAt).toISOString()}.` });
     return { sent: clients.length, expiresAt };
-  },
-});
+  }
+}
 
 async function sentDoc(ctx: MutationCtx, documentId: Id<"wsDocuments">) {
   const doc = await ctx.db.get(documentId);
@@ -393,8 +443,16 @@ async function sentDoc(ctx: MutationCtx, documentId: Id<"wsDocuments">) {
 // Cancel a sent document: every link stops working at once; signers who were sent a link get a short email.
 export const voidDocument = mutation({
   args: { documentId: v.id("wsDocuments"), reason: v.optional(v.string()) },
-  handler: async (ctx, { documentId, reason }) => {
-    await requireMe(ctx);
+  handler: async (ctx, a) => { await requireMe(ctx); return voidCore(ctx, a.documentId, a.reason, OWNER_KEY); },
+});
+
+export const voidAs = internalMutation({
+  args: { documentId: v.id("wsDocuments"), reason: v.optional(v.string()), actor: v.string() },
+  handler: async (ctx, a) => voidCore(ctx, a.documentId, a.reason, a.actor),
+});
+
+async function voidCore(ctx: MutationCtx, documentId: Id<"wsDocuments">, reason: string | undefined, actor: string) {
+  {
     const { doc, signings } = await sentDoc(ctx, documentId);
     const now = Date.now();
     const why = reason?.trim().slice(0, 300) || undefined;
@@ -404,24 +462,32 @@ export const voidDocument = mutation({
       await ctx.db.patch(x._id, { status: "closed", sessionHash: undefined, sessionExpiresAt: undefined, codeHash: undefined, codeExpiresAt: undefined });
       if (x.sentAt) await ctx.scheduler.runAfter(0, internal.signing.emailInvite, { signingId: x._id, kind: "voided" });
     }
-    await appendEvent(ctx, doc._id, { kind: "voided", actor: OWNER_KEY, versionNumber: doc.sentVersion, detail: `Cancelled. Every signing link stopped working.${why ? ` Reason: ${why}` : ""}` });
+    await appendEvent(ctx, doc._id, { kind: "voided", actor, versionNumber: doc.sentVersion, detail: `Cancelled${actor === OWNER_KEY ? "" : " by Claude, on Heston's OK in chat"}. Every signing link stopped working.${why ? ` Reason: ${why}` : ""}` });
     return null;
-  },
-});
+  }
+}
 
 export const resend = mutation({
   args: { documentId: v.id("wsDocuments"), signerKey: v.string() },
-  handler: async (ctx, { documentId, signerKey }) => {
-    await requireMe(ctx);
+  handler: async (ctx, a) => { await requireMe(ctx); return resendCore(ctx, a.documentId, a.signerKey, OWNER_KEY); },
+});
+
+export const resendAs = internalMutation({
+  args: { documentId: v.id("wsDocuments"), signerKey: v.string(), actor: v.string() },
+  handler: async (ctx, a) => resendCore(ctx, a.documentId, a.signerKey, a.actor),
+});
+
+async function resendCore(ctx: MutationCtx, documentId: Id<"wsDocuments">, signerKey: string, actor: string) {
+  {
     const { doc, signings } = await sentDoc(ctx, documentId);
     const x = signings.find((y) => y.signerKey === signerKey);
     if (!x || x.status !== "sent") throw new ConvexError(x?.status === "signed" ? "They've already signed." : "It isn't their turn yet.");
     if (x.lastEmailAt && Date.now() - x.lastEmailAt < 60_000) throw new ConvexError("An email just went to them. Wait a minute.");
     await ctx.scheduler.runAfter(0, internal.signing.emailInvite, { signingId: x._id, kind: "reminder" });
-    await appendEvent(ctx, doc._id, { kind: "reminder_sent", actor: OWNER_KEY, versionNumber: doc.sentVersion, email: x.email, detail: `Reminder emailed to ${x.name} (${x.email}).` });
+    await appendEvent(ctx, doc._id, { kind: "reminder_sent", actor, versionNumber: doc.sentVersion, email: x.email, detail: `Reminder emailed to ${x.name} (${x.email}).` });
     return null;
-  },
-});
+  }
+}
 
 export const extendExpiry = mutation({
   args: { documentId: v.id("wsDocuments"), days: v.number() },
@@ -450,6 +516,17 @@ export const preview = action({
   args: { versionId: v.id("wsVersions") },
   handler: async (ctx, { versionId }): Promise<{ url: string; fileName: string }> => {
     await ctx.runQuery(internal.users.assertAllowed, {});
+    return buildPreview(ctx, versionId);
+  },
+});
+
+export const previewAs = internalAction({
+  args: { versionId: v.id("wsVersions") },
+  handler: async (ctx, { versionId }): Promise<{ url: string; fileName: string }> => buildPreview(ctx, versionId),
+});
+
+async function buildPreview(ctx: ActionCtx, versionId: Id<"wsVersions">): Promise<{ url: string; fileName: string }> {
+  {
     const data = await ctx.runQuery(internal.sign.previewData, { versionId });
     if (!data) throw new ConvexError("That version doesn't exist.");
     const pdfBlob = await ctx.storage.get(data.fileId);
@@ -480,8 +557,8 @@ export const preview = action({
     const url = await ctx.storage.getUrl(id);
     if (!url) throw new ConvexError("The preview couldn't be saved.");
     return { url, fileName: `${data.label} v${data.versionNumber} PREVIEW.pdf` };
-  },
-});
+  }
+}
 
 export const previewData = internalQuery({
   args: { versionId: v.id("wsVersions") },

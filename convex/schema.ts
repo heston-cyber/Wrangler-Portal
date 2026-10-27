@@ -411,6 +411,15 @@ export default defineSchema({
     })),
     finishError: v.optional(v.string()), // the signed copy couldn't be made (shown to Heston with a Retry)
   }).index("by_number", ["number"]).index("by_updated", ["updatedAt"]).index("by_final_sha", ["final.sha256"]),
+  // S4: keys for Wrangler Sign's own Claude connector (/ws-mcp), separate from Wrangler Review's. Hash only.
+  wsConnectorKeys: defineTable({
+    hash: v.string(),
+    prefix: v.string(),
+    label: v.string(),
+    createdAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+  }).index("by_hash", ["hash"]),
   // S3: the archive's own Dropbox app ("Wrangler Sign", App folder), separate from Wrangler Review's.
   wsDropbox: defineTable({
     accountId: v.string(),

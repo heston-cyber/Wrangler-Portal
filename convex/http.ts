@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
 import { auth } from "./auth";
 import { mcpOther, mcpPost } from "./mcp";
+import { post as wsMcpPost, other as wsMcpOther } from "./wsMcp";
 import { callback as dropboxCallback, webhookNotify, webhookVerify } from "./dropbox";
 import { feed as registerFeed } from "./register";
 import { stop as emailStop } from "./emails";
@@ -21,6 +22,13 @@ http.route({ path: "/mcp", method: "DELETE", handler: mcpOther });
 http.route({ pathPrefix: "/mcp/", method: "POST", handler: mcpPost });
 http.route({ pathPrefix: "/mcp/", method: "GET", handler: mcpOther });
 http.route({ pathPrefix: "/mcp/", method: "DELETE", handler: mcpOther });
+
+// Wrangler Sign's own connector (S4), with its own keys (ws_…).
+for (const method of ["POST", "GET", "DELETE"] as const) {
+  const handler = method === "POST" ? wsMcpPost : wsMcpOther;
+  http.route({ path: "/ws-mcp", method, handler });
+  http.route({ pathPrefix: "/ws-mcp/", method, handler });
+}
 
 // Dropbox: the Connect Dropbox return address, and the webhook (GET = one-time check, POST = "something changed").
 http.route({ path: "/dropbox/callback", method: "GET", handler: dropboxCallback });

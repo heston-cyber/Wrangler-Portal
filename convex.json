@@ -1,5 +1,8 @@
 {
   "node": {
-    "externalPackages": ["@audio/decode-aac"]
+    "externalPackages": [
+      "@audio/decode-aac",
+      "pdfjs-dist"
+    ]
   }
 }

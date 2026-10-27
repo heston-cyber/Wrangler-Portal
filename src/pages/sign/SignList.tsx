@@ -1,7 +1,7 @@
 // Contracts: every Wrangler Sign document, and "New document" (upload a finished PDF). Phase S1, Oct 27.
 import { useEffect, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Archive, FilePlus2, FileSignature, PenLine } from "lucide-react";
+import { Archive, Bot, FilePlus2, FileSignature, PenLine } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import { TopBar } from "../../shell/Shell";
 import { linkProps, navigate } from "../../lib/router";
@@ -51,6 +51,7 @@ export default function SignList() {
   return (
     <>
       <TopBar right={<>
+        <a className="btn ghost sm hide-sm" {...linkProps("/sign/connector")}><Bot size={15} />Claude connector</a>
         <a className="btn ghost sm" {...linkProps("/sign/signature")}><PenLine size={15} />Your signature</a>
         <button className="btn primary sm" onClick={pick} disabled={!!busy}>{busy ? <Spinner /> : <FilePlus2 size={15} />}New document</button>
       </>}>

@@ -8,10 +8,8 @@ import { internal } from "./_generated/api";
 import { sha256Hex } from "./connector";
 import { frameTc, isValidTc, nominal, tcToFrames } from "./lib/frames";
 import type { TranscriptFile } from "./lib/transcript";
+import { fail, ok, servePost, serveOther, text, type Content, type Json, type McpConfig, type Tool, type ToolResult } from "./lib/mcpServer";
 
-const MODERN = ["2026-07-28"];
-const LEGACY = ["2025-11-25", "2025-06-18", "2025-03-26"];
-const SUPPORTED = [...MODERN, ...LEGACY];
 const SERVER_INFO = { name: "wrangler-review", title: "Wrangler Review", version: "1.0.0" };
 
 const INSTRUCTIONS = `Wrangler Review is Heston's video review site (Wrangler Productions). Notes are pinned to exact frames of a rendered version: frame 0 is the render's first frame; out_frame is inclusive. Timecodes use the version's start timecode (usually 01:00:00:00).
@@ -20,9 +18,6 @@ get_transcript gives what's said in the cut, pinned to frames; use it to find a 
 To put notes into DaVinci Resolve as markers, use get_resolve_markers and follow its placement rules: confirm the timeline's frame rate, start timecode and length match the render before placing anything; if they don't, stop and tell Heston.
 The register: every video made since Oct 22, 2026 has a five-digit number (never reused). Files and Resolve timelines are named NNNNN_ShortTitle_vN (e.g. 00001_LCArizona_v4). register_video adds a new video and gives its number and first file name; add_to_register numbers an older video; next_render_name gives the name for a video's next render; set_version_description records what changed in a version. find_videos also finds a video by its number. A render saved anywhere inside Dropbox › Apps/Wrangler Review with its register name becomes that version of that video (the Wrangler Review presets play as rendered; other files are converted first); any other name is flagged on the site's Register page, never guessed.`;
 
-type Json = Record<string, unknown>;
-type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
-type ToolResult = { content: Content[]; structuredContent?: Json; isError?: boolean };
 
 const videoArgs = {
   video_id: { type: "string", description: "The video's id from find_videos. Use this when you have it." },
@@ -31,7 +26,7 @@ const videoArgs = {
   status: { type: "string", enum: ["open", "done", "all"], description: "Which notes: open (default), done, or all." },
 };
 
-const TOOLS = [
+const TOOLS: Tool[] = [
   {
     name: "find_videos", title: "Find videos",
     description: "Lists projects and videos on Wrangler Review with their versions and open/total note counts, newest activity first. Pass query to filter by words from the title, project name, job number or client.",
@@ -118,12 +113,6 @@ const TOOLS = [
   },
 ];
 
-const text = (t: string): Content => ({ type: "text", text: t });
-const ok = (data: Json | Json[]): ToolResult => ({
-  content: [text(JSON.stringify(data, null, 1))],
-  structuredContent: Array.isArray(data) ? { items: data } : data,
-});
-const fail = (msg: string, extra?: Json): ToolResult => ({ content: [text(extra ? `${msg}\n${JSON.stringify(extra, null, 1)}` : msg)], isError: true });
 
 function bytesToBase64(bytes: Uint8Array) {
   let s = "";
@@ -263,112 +252,16 @@ async function callTool(ctx: ActionCtx, name: string, args: Json): Promise<ToolR
   }
 }
 
-// ---------- JSON-RPC over HTTP ----------
 
-type Rpc = { jsonrpc?: string; id?: string | number | null; method?: string; params?: Json };
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
-const rpcError = (id: Rpc["id"], code: number, message: string, data?: unknown, status = 200) =>
-  json({ jsonrpc: "2.0", id: id ?? null, error: { code, message, ...(data !== undefined ? { data } : {}) } }, status);
 
-const ALLOWED_ORIGINS = [/^https:\/\/([a-z0-9-]+\.)*claude\.ai$/, /^https:\/\/([a-z0-9-]+\.)*anthropic\.com$/, /^https:\/\/review\.wranglerportal\.com$/];
-
-function decodeHeader(v: string | null) {
-  if (!v) return v;
-  const m = /^=\?base64\?(.*)\?=$/.exec(v);
-  if (!m) return v;
-  try { return new TextDecoder().decode(Uint8Array.from(atob(m[1]), (c) => c.charCodeAt(0))); } catch { return null; }
-}
-
-async function authorized(ctx: ActionCtx, req: Request) {
-  const auth = req.headers.get("authorization") || "";
-  // The key goes in a header when Claude offers "Request headers"; otherwise it can ride in the address (/mcp/<key>).
-  const inPath = /^\/mcp\/(wr_[A-Za-z0-9_-]+)\/?$/.exec(new URL(req.url).pathname)?.[1];
-  const key = (/^Bearer\s+(\S+)$/i.exec(auth)?.[1] || req.headers.get("x-api-key") || inPath || "").trim();
-  if (!key.startsWith("wr_") || key.length < 20) return false;
-  return await ctx.runMutation(internal.connector.checkKey, { hash: await sha256Hex(key) });
-}
-
-async function handle(ctx: ActionCtx, req: Request, msg: Rpc): Promise<{ body: unknown; status: number } | null> {
-  if (!msg || typeof msg !== "object" || typeof msg.method !== "string") {
-    // A JSON-RPC response or junk: nothing to answer.
-    return null;
-  }
-  const isRequest = msg.id !== undefined && msg.id !== null;
-  if (!isRequest) return null; // notifications (e.g. notifications/initialized) are accepted silently
-  const params = (msg.params ?? {}) as Json;
-  const meta = (params._meta ?? {}) as Json;
-  const metaVersion = typeof meta["io.modelcontextprotocol/protocolVersion"] === "string" ? (meta["io.modelcontextprotocol/protocolVersion"] as string) : null;
-  const modern = msg.method !== "initialize" && metaVersion !== null;
-  const reply = (result: Json) => ({ body: { jsonrpc: "2.0", id: msg.id, result: modern ? { resultType: "complete", ...result, _meta: { "io.modelcontextprotocol/serverInfo": SERVER_INFO } } : result }, status: 200 });
-  const err = (code: number, message: string, data?: unknown, status = 200) => ({ body: { jsonrpc: "2.0", id: msg.id, error: { code, message, ...(data !== undefined ? { data } : {}) } }, status });
-
-  if (modern) {
-    if (!MODERN.includes(metaVersion!)) {
-      if (LEGACY.includes(metaVersion!)) {
-        // A legacy version sent the modern way: serve it anyway, it's the same data.
-      } else return err(-32022, "Unsupported protocol version", { supported: SUPPORTED, requested: metaVersion }, 400);
-    }
-    // Header/body consistency (2026-07-28). Missing headers are tolerated; mismatches are refused.
-    const hv = req.headers.get("mcp-protocol-version");
-    if (hv && hv !== metaVersion) return err(-32020, `Header mismatch: MCP-Protocol-Version ${hv} does not match body ${metaVersion}`, undefined, 400);
-    const hm = req.headers.get("mcp-method");
-    if (hm && hm !== msg.method) return err(-32020, `Header mismatch: Mcp-Method ${hm} does not match body ${msg.method}`, undefined, 400);
-    const hn = req.headers.get("mcp-name");
-    if (hn && msg.method === "tools/call" && decodeHeader(hn) !== params.name) return err(-32020, "Header mismatch: Mcp-Name does not match the tool name", undefined, 400);
-  }
-
-  switch (msg.method) {
-    case "initialize": {
-      const asked = typeof params.protocolVersion === "string" ? params.protocolVersion : LEGACY[0];
-      return reply({
-        protocolVersion: LEGACY.includes(asked) ? asked : LEGACY[0],
-        capabilities: { tools: { listChanged: false } },
-        serverInfo: SERVER_INFO,
-        instructions: INSTRUCTIONS,
-      });
-    }
-    case "server/discover":
-      return reply({ supportedVersions: SUPPORTED, capabilities: { tools: {} }, instructions: INSTRUCTIONS, ttlMs: 3_600_000, cacheScope: "private" });
-    case "ping":
-      return reply({});
-    case "tools/list":
-      return reply(modern ? { tools: TOOLS, ttlMs: 300_000, cacheScope: "private" } : { tools: TOOLS });
-    case "tools/call": {
-      const name = typeof params.name === "string" ? params.name : "";
-      if (!TOOLS.some((t) => t.name === name)) return err(-32602, `Unknown tool: ${name}`);
-      const result = await callTool(ctx, name, (params.arguments ?? {}) as Json);
-      return reply(result as unknown as Json);
-    }
-    default:
-      return err(-32601, `Method not found: ${msg.method}`, undefined, modern ? 404 : 200);
-  }
-}
-
-export const mcpPost = httpAction(async (ctx, req) => {
-  const origin = req.headers.get("origin");
-  if (origin && !ALLOWED_ORIGINS.some((r) => r.test(origin))) return rpcError(null, -32000, "Origin not allowed", undefined, 403);
-  if (!(await authorized(ctx, req))) {
-    return new Response(JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32001, message: "Unauthorized: this connector needs its key (Authorization: Bearer wr_…). Create one on the review site under Settings → Claude connector." } }), {
-      status: 401, headers: { "content-type": "application/json" },
-    });
-  }
-  let body: unknown;
-  try { body = await req.json(); } catch { return rpcError(null, -32700, "Parse error", undefined, 400); }
-
-  if (Array.isArray(body)) {
-    // Legacy JSON-RPC batch (2025-03-26).
-    const out = [];
-    for (const m of body) { const r = await handle(ctx, req, m as Rpc); if (r) out.push(r.body); }
-    return out.length ? json(out) : new Response(null, { status: 202 });
-  }
-  const r = await handle(ctx, req, body as Rpc);
-  if (!r) return new Response(null, { status: 202 });
-  return json(r.body, r.status);
-});
-
-// No standalone streams or sessions: GET and DELETE aren't supported here.
-export const mcpOther = httpAction(async () => new Response(null, { status: 405, headers: { allow: "POST" } }));
-
+const CONFIG: McpConfig = {
+  serverInfo: SERVER_INFO, instructions: INSTRUCTIONS, tools: TOOLS, callTool,
+  authorized: async (ctx, key) => await ctx.runMutation(internal.connector.checkKey, { hash: await sha256Hex(key) }),
+  keyPrefix: "wr_", pathPrefix: "/mcp",
+  unauthorized: "Unauthorized: this connector needs its key (Authorization: Bearer wr_…). Create one on the review site under Settings → Claude connector.",
+};
+export const mcpPost = httpAction(async (ctx, req) => servePost(ctx, req, CONFIG));
+export const mcpOther = httpAction(async () => serveOther());
 
 // ---------- live self-test (run from CI with `convex run mcp:selfTest`) ----------
 // Makes a temporary key, calls this deployment's /mcp the way Claude would, then deletes the key.

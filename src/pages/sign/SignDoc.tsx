@@ -10,7 +10,7 @@ import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps, navigate } from "../../lib/router";
 import { Menu, MenuItem, Modal, Spinner, useToast } from "../../ui/kit";
 import { approvalProblems, KINDS, OWNER_KEY, type Kind, type LayoutBox, type LayoutSigner, type Payment, type Rect } from "../../../convex/lib/wsLayout";
-import { DEFAULT_SIZE, type ScanResult } from "../../sign/markers";
+import { DEFAULT_SIZE, applyScan, type ScanResult } from "../../sign/markers";
 import { deviceName } from "../../../convex/lib/wsFinal";
 import { findMarkers, openPdf, renderPage, type PdfDoc } from "../../sign/pdf";
 import { central, errText, KIND_LABEL, signerColor, StatusChip, uploadToStorage } from "./common";
@@ -20,7 +20,6 @@ const useGetDoc = (documentId: Id<"wsDocuments">, versionNumber: number | null) 
 
 type Layout = { title: string; signers: LayoutSigner[]; boxes: LayoutBox[]; signingOrder: "any" | "sequence"; payment: Payment | null };
 
-const OWNER_ALIASES = new Set(["heston", "wrangler", "company", "owner", "me", "provider"]);
 const newId = () => `b${Math.random().toString(36).slice(2, 10)}`;
 const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), hi);
 
@@ -356,23 +355,6 @@ function Editor({ data }: { data: Data }) {
 }
 
 // ---------- markers → layout ----------
-
-function applyScan(l: Layout, r: ScanResult, replace: boolean): Layout {
-  const keyOf = (k: string) => (OWNER_ALIASES.has(k) ? OWNER_KEY : k);
-  const found = r.markers.map((m, i) => ({ ...m, signer: keyOf(m.signer), i }));
-  let signers = [...l.signers];
-  for (const k of new Set(found.map((m) => m.signer))) {
-    if (signers.some((s) => s.key === k)) continue;
-    signers = k === OWNER_KEY ? [{ key: OWNER_KEY, name: "", email: "", order: 1 }, ...signers] : [...signers, { key: k, name: "", email: "", order: 1 }];
-  }
-  const boxes: LayoutBox[] = found.map((m) => ({ id: `m${m.box.page}-${m.i}`, signer: m.signer, kind: m.kind, page: m.box.page, x: m.box.x, y: m.box.y, w: m.box.w, h: m.box.h, ...(m.check ? {} : { cover: m.cover }), fromMarker: true }));
-  const kept = replace ? l.boxes.filter((b) => !b.fromMarker) : l.boxes;
-  // The blank "client" a new document starts with goes away if the markers name the signers some other way.
-  const used = new Set([...kept, ...boxes].map((b) => b.signer));
-  signers = signers.filter((s) => s.key === OWNER_KEY || used.has(s.key) || s.name || s.email);
-  if (!signers.some((s) => s.key !== OWNER_KEY)) signers.push({ key: "client", name: "", email: "", order: 1 });
-  return { ...l, signers, boxes: [...kept, ...boxes] };
-}
 
 function nextClientKey(signers: LayoutSigner[]) {
   const have = new Set(signers.map((s) => s.key));
