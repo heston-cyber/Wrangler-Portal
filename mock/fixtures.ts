@@ -1,6 +1,7 @@
 // Sample data for the screenshot harness and the demo artifact. Mutations change it so the pages react like the real thing.
 // Every client, project and note here is made up.
 import { mediaUrl } from "../src/config";
+import { builderMutation, builderQuery } from "./builderFixtures";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const now = Date.now();
 const min = 60_000, hr = 3_600_000, day = 86_400_000;
@@ -267,6 +268,7 @@ export const store = {
   subscribe: (l: () => void) => { subs.add(l); return () => subs.delete(l); },
   version: () => ver,
   query(name: string, args: any): any {
+    if (name.startsWith("builder:")) return builderQuery(name, args);
     switch (name) {
       case "users:me": return new URLSearchParams(location.search).has("asclient")
         ? { id: "u2", email: "maya@harborcoffee.example", name: "Maya Chen", allowed: false, role: "client" }
@@ -278,7 +280,8 @@ export const store = {
       case "shares:activity": return args.shareId === "s1" ? shareActivity : args.shareId === "s2" ? shareActivity.slice(2) : [];
       case "clients:account": return { email: "heston@wranglerproductions.com", name: "Heston", kind: "owner" };
       case "library:overview": return overview();
-      case "sign:list": return signDocs.map((d) => { const v = signVers.find((x) => x.documentId === d._id && x.number === d.currentVersion); return { _id: d._id, label: signLabel(d.number), title: d.title, status: d.status, version: d.currentVersion, updatedAt: d.updatedAt, createdAt: d.createdAt, signers: v.signers.filter((s: any) => s.key !== "heston").map((s: any) => s.name || s.email || s.key), pages: v.pages.length, approved: !!v.approvedAt }; });
+      case "sign:list": return signDocs.map((d) => { const v = signVers.find((x) => x.documentId === d._id && x.number === d.currentVersion); return { _id: d._id, label: signLabel(d.number), title: d.title, status: d.status, version: d.currentVersion, updatedAt: d.updatedAt, createdAt: d.createdAt, signers: v.signers.filter((s: any) => s.key !== "heston").map((s: any) => s.name || s.email || s.key), pages: v.pages.length, approved: !!v.approvedAt, number: d.number, emails: v.signers.filter((s: any) => s.key !== "heston").map((s: any) => s.email), sentAt: d.sentAt ?? null, completedAt: d.completedAt ?? null, amount: null, fromBuilder: false }; });
+      case "wsArchive:status": return { configured: true, connected: true, email: "heston@wranglerproductions.com", pending: 0, lastError: null };
       case "sign:get": return signGet(args.documentId, args.versionNumber);
       case "sign:ownerSignature": return signSig ? { adopted: true, email: "heston@wranglerproductions.com", ...signSig } : { adopted: false, email: "heston@wranglerproductions.com" };
       case "library:video": return video(args.videoId, args.share);
@@ -316,6 +319,7 @@ export const store = {
     }
   },
   async mutation(name: string, args: any): Promise<any> {
+    if (name.startsWith("builder:")) { const out = builderMutation(name, args); bump(); return out; }
     if (name === "notes:create" && args.share) {
       const sh = demoShare(args.share.token)!;
       const id = "n" + Date.now();

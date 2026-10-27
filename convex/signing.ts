@@ -19,6 +19,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { appendEvent } from "./lib/wsAudit";
 import { OWNER_KEY, docLabel, type LayoutBox } from "./lib/wsLayout";
+import { PRESET_STYLES } from "./lib/wsBuilder";
 import { sha256Bytes } from "./lib/wsPdf";
 import { randomToken, sha256Hex } from "./lib/hash";
 import { sendEmail, SITE, sixDigits } from "./lib/email";
@@ -249,12 +250,23 @@ export const docFor = internalMutation({
         signedAt: s.signedAt ?? null, signedDate: s.signedDate ?? null,
       },
       heston: ver.ownerSignedAt && owner ? { name: owner.name, title: owner.title, signedDate: centralDate(ver.ownerSignedAt), signatureUrl: await ctx.storage.getUrl(owner.signatureFileId), initialsUrl: await ctx.storage.getUrl(owner.initialsFileId) } : null,
+      look: await lookOf(ctx, doc),
       consent: { id: CONSENT_ID, lines: consentText(COMPANY, contact()) },
       statement: SIGN_STATEMENT,
       today: centralDate(Date.now()),
     };
   },
 });
+
+// B2: the signing page's background: the document's own (from its builder style), or the default style's backdrop.
+async function lookOf(ctx: MutationCtx, doc: Doc<"wsDocuments">): Promise<{ backdrop: string; image: string | null }> {
+  if (doc.look) return { backdrop: doc.look.backdrop, image: doc.look.backdropImageId ? await ctx.storage.getUrl(doc.look.backdropImageId) : null };
+  const def = (await ctx.db.query("wsStyles").collect()).find((x) => x.isDefault)?.style as { backdrop?: string; backdropImage?: { fileId: string } | null } | undefined;
+  const preset = (await ctx.db.query("counters").withIndex("by_key", (q) => q.eq("key", "wsDefaultPreset")).first())?.value ?? 0;
+  const st = def ?? PRESET_STYLES[preset] ?? PRESET_STYLES[0];
+  const img = st.backdropImage?.fileId ? await ctx.storage.getUrl(st.backdropImage.fileId as Id<"_storage">) : null;
+  return { backdrop: st.backdrop && /^#[0-9a-f]{3,8}$/i.test(st.backdrop) ? st.backdrop : "#e9e7e2", image: img };
+}
 
 export const consent = internalMutation({
   args: { token: v.string(), session: v.string(), agreed: v.boolean(), ...whoArgs },

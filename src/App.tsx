@@ -17,7 +17,11 @@ import { UploadProvider } from "./shell/UploadDialog";
 import type { Id } from "../convex/_generated/dataModel";
 
 // Wrangler Sign (S1): its own chunk, so pdf.js only loads on those pages.
-const SignList = lazy(() => import("./pages/sign/SignList"));
+const SignHome = lazy(() => import("./pages/sign/SignHome"));
+const SignDocs = lazy(() => import("./pages/sign/SignDocs"));
+const SignNew = lazy(() => import("./pages/sign/SignNew"));
+const SignTemplates = lazy(() => import("./pages/sign/SignTemplates"));
+const Builder = lazy(() => import("./builder/Builder"));
 const SignDoc = lazy(() => import("./pages/sign/SignDoc"));
 const SignSignature = lazy(() => import("./pages/sign/SignSignature"));
 const SignConnector = lazy(() => import("./pages/sign/SignConnector"));
@@ -81,7 +85,12 @@ function SignedIn() {
   else if (signDoc) page = <Suspense fallback={<Loading />}><SignDoc key={signDoc[1]} documentId={signDoc[1] as Id<"wsDocuments">} versionNumber={Number(params.get("v")) || null} /></Suspense>;
   else if (path.startsWith("/sign/signature")) page = <Suspense fallback={<Loading />}><SignSignature /></Suspense>;
   else if (path.startsWith("/sign/connector")) page = <Suspense fallback={<Loading />}><SignConnector /></Suspense>;
-  else if (path.startsWith("/sign")) page = <Suspense fallback={<Loading />}><SignList /></Suspense>;
+  else if (/^\/sign\/docs\/?$/.test(path)) page = <Suspense fallback={<Loading />}><SignDocs /></Suspense>;
+  else if (/^\/sign\/new\/?$/.test(path)) page = <Suspense fallback={<Loading />}><SignNew /></Suspense>;
+  else if (/^\/sign\/b\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3] as Id<"wsBuilds">; page = <Suspense fallback={<Loading />}><Builder key={id} mode={{ kind: "build", buildId: id }} /></Suspense>; }
+  else if (/^\/sign\/templates\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3] as Id<"wsTemplates">; page = <Suspense fallback={<Loading />}><Builder key={id} mode={{ kind: "template", templateId: id }} /></Suspense>; }
+  else if (/^\/sign\/templates\/?$/.test(path)) page = <Suspense fallback={<Loading />}><SignTemplates /></Suspense>;
+  else if (path.startsWith("/sign")) page = <Suspense fallback={<Loading />}><SignHome /></Suspense>;
   else if (path.startsWith("/activity")) page = <ActivityPage />;
   else if (path.startsWith("/register")) page = <Register />;
   else if (path.startsWith("/settings")) page = <Settings me={me} />;

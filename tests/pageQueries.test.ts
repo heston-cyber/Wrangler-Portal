@@ -74,6 +74,16 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "wsConnector.listKeys": { pages: ["owner"], args: () => "skip" },
   "sign.get": { pages: ["owner"], args: () => "skip" },
   "sign.ownerSignature": { pages: ["owner"], args: () => "skip" },
+  // The doc builder (B1–B3): owner-only pages.
+  "builder.fileUrls": { pages: ["owner"], args: () => "skip" },
+  "builder.getBuild": { pages: ["owner"], args: () => "skip" },
+  "builder.getProfile": { pages: ["owner"], args: () => "skip" },
+  "builder.getTemplate": { pages: ["owner"], args: () => "skip" },
+  "builder.listBuilds": { pages: ["owner"], args: () => "skip" },
+  "builder.listClauses": { pages: ["owner"], args: () => "skip" },
+  "builder.listFonts": { pages: ["owner"], args: () => "skip" },
+  "builder.listStyles": { pages: ["owner"], args: () => "skip" },
+  "builder.listTemplates": { pages: ["owner"], args: () => "skip" },
 };
 
 async function setup() {

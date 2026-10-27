@@ -410,7 +410,53 @@ export default defineSchema({
       at: v.number(), pdfPath: v.optional(v.string()), auditPath: v.optional(v.string()), verified: v.optional(v.boolean()), error: v.optional(v.string()),
     })),
     finishError: v.optional(v.string()), // the signed copy couldn't be made (shown to Heston with a Retry)
+    buildId: v.optional(v.id("wsBuilds")), // B2: made in the builder
+    look: v.optional(v.object({ backdrop: v.string(), backdropImageId: v.optional(v.id("_storage")) })), // the signing page's background
   }).index("by_number", ["number"]).index("by_updated", ["updatedAt"]).index("by_final_sha", ["final.sha256"]),
+  // B2–B3 (Oct 27): the doc builder. A build is the editable source of a document made from blocks (the blocks, the
+  // fill-in fields and the style); "Continue to signing" renders it to a PDF, which becomes the document's version.
+  // Blocks, fields and style are JSON shaped by src/builder/model.ts and checked there and in convex/builder.ts.
+  wsBuilds: defineTable({
+    title: v.string(),
+    blocks: v.any(),
+    fields: v.any(),
+    style: v.any(),
+    signers: v.any(),                       // client signers (name, email, title) for when it's sent
+    templateId: v.optional(v.id("wsTemplates")),
+    documentId: v.optional(v.id("wsDocuments")), // set once it has gone to signing
+    renderedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_updated", ["updatedAt"]).index("by_document", ["documentId"]),
+  wsTemplates: defineTable({
+    name: v.string(),
+    description: v.optional(v.string()),
+    blocks: v.any(),
+    fields: v.any(),
+    style: v.any(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_updated", ["updatedAt"]),
+  wsClauses: defineTable({
+    title: v.string(),
+    body: v.any(),                          // rich text (the builder's text JSON)
+    initials: v.boolean(),                  // ask the client to initial it
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_updated", ["updatedAt"]),
+  // Styles, like craft.do's: named looks (fonts, colours, background colour or image, logo, page layout), one marked
+  // default for new docs; a doc or template keeps its own copy, so changing a style later doesn't change sent PDFs.
+  wsStyles: defineTable({ name: v.string(), style: v.any(), isDefault: v.boolean(), createdAt: v.number(), updatedAt: v.number() }).index("by_updated", ["updatedAt"]),
+  wsProfile: defineTable({ business: v.any(), updatedAt: v.number() }), // the business details documents start with
+  wsFonts: defineTable({
+    family: v.string(),
+    weight: v.number(),                     // 400, 700 …
+    italic: v.boolean(),
+    fileId: v.id("_storage"),
+    fileName: v.string(),
+    source: v.union(v.literal("upload"), v.literal("local"), v.literal("google")),
+    createdAt: v.number(),
+  }).index("by_family", ["family"]),
   // S4: keys for Wrangler Sign's own Claude connector (/ws-mcp), separate from Wrangler Review's. Hash only.
   wsConnectorKeys: defineTable({
     hash: v.string(),

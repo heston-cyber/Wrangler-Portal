@@ -3,7 +3,7 @@
 // can be added, moved, resized, reassigned or deleted by hand. Drafts save as you go. Approving locks the version.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Archive, Ban, CalendarClock, Check, Copy, Download, ExternalLink, FileCheck2, Receipt, Crosshair, Eye, FilePlus2, FileSignature, History, Lock, Mail, MoreHorizontal, Plus, RefreshCw, ScanSearch, Send, ShieldCheck, ShieldAlert, Trash2, TriangleAlert, UserPlus, X } from "lucide-react";
+import { Pencil, Archive, Ban, CalendarClock, Check, Copy, Download, ExternalLink, FileCheck2, Receipt, Crosshair, Eye, FilePlus2, FileSignature, History, Lock, Mail, MoreHorizontal, Plus, RefreshCw, ScanSearch, Send, ShieldCheck, ShieldAlert, Trash2, TriangleAlert, UserPlus, X } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Sep, TopBar } from "../../shell/Shell";
@@ -198,6 +198,7 @@ function Editor({ data }: { data: Data }) {
     <>
       <TopBar right={<>
         {editable && <span className={`ws-save ${saveState}`}>{saveState === "saving" ? <><Spinner /> Saving</> : saveState === "error" ? <><TriangleAlert size={14} /> Not saved</> : <><Check size={14} /> Saved</>}</span>}
+        {doc.buildId && doc.status !== "sent" && doc.status !== "completed" && <a className="btn ghost sm" {...linkProps(`/sign/b/${doc.buildId}`)}><Pencil size={14} />Edit in builder</a>}
         <StatusChip status={doc.status} />
         <Menu align="end" label="Document" trigger={(p) => <button {...p} className="icon-btn" aria-label="More"><MoreHorizontal size={18} /></button>}>
           <MenuItem icon={<Eye size={16} />} onSelect={() => void onPreview()}>Preview the PDF</MenuItem>

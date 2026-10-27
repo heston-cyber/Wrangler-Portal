@@ -17,6 +17,7 @@ type DocData = {
   me: { name: string; title: string | null; email: string; consentAt: number | null; initialed: string[]; adopted: { name: string; title: string | null; method: string; signatureUrl: string; initialsUrl: string } | null; signedAt: number | null; signedDate: string | null };
   heston: { name: string; title: string; signedDate: string; signatureUrl: string; initialsUrl: string } | null;
   consent: { id: string; lines: string[] }; statement: string; today: string;
+  look?: { backdrop: string; image: string | null };
 };
 
 export default function SignerApp({ token }: { token: string }) {
@@ -173,8 +174,9 @@ function Signing({ token, session, onLost, onDone }: { token: string; session: s
     setSigned({ complete: !!r.complete });
   };
 
+  const look = doc.look;
   return (
-    <div className="wsx">
+    <div className="wsx wsx-look" style={look ? { background: look.image ? `${look.backdrop} center / cover fixed url(${look.image})` : look.backdrop } : undefined}>
       <header className="wsx-top sticky">
         <BrandImg name="wordmark" alt="Wrangler Productions" />
         <span className="wsx-doctitle">{doc.title}<span className="secondary"> · {doc.label}</span></span>

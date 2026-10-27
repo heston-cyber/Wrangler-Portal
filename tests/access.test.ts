@@ -46,7 +46,7 @@ const KEYED = new Set(["r1results.report"]);
 // Functions any signed-in account may call (owner or client), never a stranger.
 const SIGNED_IN = new Set(["users.setName", "clients.account", "shares.mine"]);
 
-type Ids = { docId: Id<"wsDocuments">; wsVersionId: Id<"wsVersions">; projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage"> };
+type Ids = { buildId: Id<"wsBuilds">; templateId: Id<"wsTemplates">; clauseId: Id<"wsClauses">; styleId: Id<"wsStyles">; docId: Id<"wsDocuments">; wsVersionId: Id<"wsVersions">; projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage"> };
 
 // Minimal valid arguments for each function, so the access check (not argument validation) is what refuses.
 function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
@@ -91,6 +91,15 @@ function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "sign.extendExpiry": { documentId: ids.docId, days: 7 },
     "signDone.retry": { documentId: ids.docId, step: "copies" }, "signDone.downloadAudit": { documentId: ids.docId },
     "wsArchive.status": {}, "wsArchive.authUrl": {}, "wsArchive.disconnect": {},
+    "builder.getProfile": {}, "builder.saveProfile": { business: { name: "", legalName: "", contact: "", title: "", email: "", phone: "", address: "" } },
+    "builder.listBuilds": {}, "builder.getBuild": { buildId: ids.buildId }, "builder.createBuild": {}, "builder.saveBuild": { buildId: ids.buildId, title: "T", blocks: [], fields: {}, signers: [], style: {} },
+    "builder.deleteBuild": { buildId: ids.buildId }, "builder.toSigning": { buildId: ids.buildId, storageId: ids.storageId },
+    "builder.listTemplates": {}, "builder.getTemplate": { templateId: ids.templateId }, "builder.saveAsTemplate": { name: "N", title: "T", blocks: [], fields: {}, signers: [], style: {} },
+    "builder.updateTemplate": { templateId: ids.templateId, name: "N", blocks: [], fields: {}, style: {} }, "builder.duplicateTemplate": { templateId: ids.templateId }, "builder.deleteTemplate": { templateId: ids.templateId }, "builder.ensureStarter": {},
+    "builder.listClauses": {}, "builder.saveClause": { title: "C", body: {}, initials: false }, "builder.duplicateClause": { clauseId: ids.clauseId }, "builder.deleteClause": { clauseId: ids.clauseId },
+    "builder.listStyles": {}, "builder.saveStyle": { name: "S", style: {} }, "builder.setDefaultStyle": { styleId: ids.styleId }, "builder.deleteStyle": { styleId: ids.styleId },
+    "builder.uploadUrl": {}, "builder.fileUrls": { ids: [ids.storageId] }, "builder.checkImage": { storageId: ids.storageId },
+    "builder.listFonts": {}, "builder.addFont": { storageId: ids.storageId, family: "F", weight: 400, italic: false, fileName: "f.ttf", source: "upload" }, "builder.deleteFont": { family: "F" }, "builder.ensureGoogleFont": { family: "Lora" },
     "wsConnector.createKey": {}, "wsConnector.listKeys": {}, "wsConnector.revokeKey": { keyId: ids.wsKeyId },
   };
 }
@@ -128,7 +137,11 @@ async function setup() {
     const docId = await ctx.db.insert("wsDocuments", { number: 1, title: "D", status: "draft", currentVersion: 1, createdAt: 0, updatedAt: 0 });
     const wsKeyId = await ctx.db.insert("wsConnectorKeys", { hash: "x", prefix: "ws_x", label: "t", createdAt: 0 });
     const wsVersionId = await ctx.db.insert("wsVersions", { documentId: docId, number: 1, fileId: storageId, fileName: "a.pdf", fileSha256: "0", fileBytes: 1, pages: [{ width: 612, height: 792, rotate: 0 }], signers: [], boxes: [], signingOrder: "any", createdAt: 0, updatedAt: 0 });
-    return { docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
+    const buildId = await ctx.db.insert("wsBuilds", { title: "B", blocks: [], fields: {}, style: {}, signers: [], createdAt: 0, updatedAt: 0 });
+    const templateId = await ctx.db.insert("wsTemplates", { name: "T", blocks: [], fields: {}, style: {}, createdAt: 0, updatedAt: 0 });
+    const clauseId = await ctx.db.insert("wsClauses", { title: "C", body: {}, initials: false, createdAt: 0, updatedAt: 0 });
+    const styleId = await ctx.db.insert("wsStyles", { name: "S", style: {}, isDefault: false, createdAt: 0, updatedAt: 0 });
+    return { buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
   });
   return { t, ids };
 }

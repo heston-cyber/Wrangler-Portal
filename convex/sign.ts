@@ -68,10 +68,12 @@ export const list = query({
     const docs = await ctx.db.query("wsDocuments").withIndex("by_updated").order("desc").take(500);
     return Promise.all(docs.map(async (d) => {
       const ver = await currentVersion(ctx, d);
+      const clients = ver.signers.filter((s) => s.key !== OWNER_KEY);
       return {
-        _id: d._id, label: docLabel(d.number), title: d.title, status: d.status, version: d.currentVersion, updatedAt: d.updatedAt, createdAt: d.createdAt,
-        signers: ver.signers.filter((s) => s.key !== OWNER_KEY).map((s) => s.name || s.email || s.key),
-        pages: ver.pages.length, approved: !!ver.approvedAt,
+        _id: d._id, label: docLabel(d.number), number: d.number, title: d.title, status: d.status, version: d.currentVersion, updatedAt: d.updatedAt, createdAt: d.createdAt,
+        signers: clients.map((s) => s.name || s.email || s.key), emails: clients.map((s) => s.email).filter(Boolean),
+        pages: ver.pages.length, approved: !!ver.approvedAt, sentAt: d.sentAt ?? null, completedAt: d.completedAt ?? null,
+        amount: ver.payment ? ver.payment.amountCents / 100 : null, fromBuilder: !!d.buildId,
       };
     }));
   },
@@ -281,6 +283,34 @@ export const replaceFile = action({
     await ctx.runQuery(internal.users.assertAllowed, {});
     const pdf = await readPdf(ctx, storageId);
     return ctx.runMutation(internal.sign.insertReplacement, { documentId, storageId, fileName: fileName.slice(0, 200), sha: pdf.sha, bytes: pdf.bytes.length, pages: pdf.pages });
+  },
+});
+
+// B2: the builder's checks on a PDF it rendered (same as an upload's).
+export const inspectUpload = internalAction({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, { storageId }): Promise<{ sha: string; bytes: number; pages: Array<{ width: number; height: number; rotate: number }> }> => {
+    const pdf = await readPdf(ctx, storageId);
+    return { sha: pdf.sha, bytes: pdf.bytes.length, pages: pdf.pages };
+  },
+});
+
+// B2: a builder draft rebuilt: the draft version gets the new PDF in place (it was never approved, so nothing refers to
+// the old file), and its boxes start again from the new markers.
+export const replaceDraftFile = internalMutation({
+  args: { documentId: v.id("wsDocuments"), storageId: v.id("_storage"), fileName: v.string(), sha: v.string(), bytes: v.number(), pages: v.array(v.object({ width: v.number(), height: v.number(), rotate: v.number() })), title: v.string() },
+  handler: async (ctx, a) => {
+    const doc = await ctx.db.get(a.documentId);
+    if (!doc) throw new ConvexError("That document doesn't exist.");
+    const ver = await currentVersion(ctx, doc);
+    if (doc.status !== "draft" || ver.approvedAt) throw new ConvexError("Only a draft can be rebuilt in place.");
+    const old = ver.fileId;
+    const now = Date.now();
+    await ctx.db.patch(ver._id, { fileId: a.storageId, fileName: a.fileName, fileSha256: a.sha, fileBytes: a.bytes, pages: a.pages, boxes: [], hasTextLayer: true, updatedAt: now });
+    await ctx.db.patch(doc._id, { title: a.title.slice(0, 120), updatedAt: now });
+    if (old !== a.storageId) await ctx.storage.delete(old);
+    await appendEvent(ctx, doc._id, { kind: "rebuilt", actor: OWNER_KEY, versionNumber: ver.number, detail: `Rebuilt from the builder: "${a.fileName}" (${a.pages.length} page${a.pages.length === 1 ? "" : "s"}), SHA-256 ${a.sha}` });
+    return { versionId: ver._id };
   },
 });
 
