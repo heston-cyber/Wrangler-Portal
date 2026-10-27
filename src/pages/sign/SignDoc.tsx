@@ -714,7 +714,7 @@ function FinishedCard({ data, show }: { data: Data; show: (m: string) => void })
       {f ? (
         <>
           <a className="btn primary" href={data.finalUrl ?? undefined} download={f.fileName} target="_blank" rel="noreferrer"><FileCheck2 size={15} />Download the signed PDF</a>
-          <HashLine label="Signed SHA-256" value={f.sha256} />
+          <HashLine label="SHA-256" value={f.sha256} />
           <button className="btn ghost sm" disabled={busy === "audit"} onClick={() => void getAudit()}>{busy === "audit" ? <Spinner /> : <Download size={13} />}Download the audit record (JSON)</button>
         </>
       ) : doc.finishError ? (

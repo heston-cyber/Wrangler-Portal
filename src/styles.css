@@ -1122,8 +1122,9 @@ code.mono, .input.mono, .chip.num, .fname code { font-family: ui-monospace, "SF 
 .btn.danger-text { color: var(--text-accent); }
 .wsx-nowrap { white-space: nowrap; }
 .ws-steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; font-size: var(--fs-caption); }
-.ws-steps li { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; overflow-wrap: anywhere; }
-.ws-steps li > svg { flex: 0 0 auto; margin-top: 3px; color: var(--text-secondary); }
+.ws-steps li { display: grid; grid-template-columns: 14px minmax(0, 1fr); column-gap: 8px; row-gap: 4px; align-items: start; overflow-wrap: anywhere; }
+.ws-steps li > svg { margin-top: 3px; color: var(--text-secondary); }
+.ws-steps li > .btn { grid-column: 2; justify-self: start; }
 .ws-steps a { text-decoration: underline; }
 .wsx-drop { width: 100%; padding: 30px 16px; }
 .wsx-result { width: 100%; padding: 12px 14px; border-radius: var(--radius-md); display: grid; gap: 6px; }
