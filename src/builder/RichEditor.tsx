@@ -9,7 +9,7 @@ import type { Rich } from "../../convex/lib/wsBuilder";
 export function RichEditor({ value, onChange, placeholder, style, className }: { value: Rich; onChange: (r: Rich) => void; placeholder?: string; style?: React.CSSProperties; className?: string }) {
   const last = useRef(JSON.stringify(value));
   const editor = useEditor({
-    extensions: [StarterKit.configure({ heading: false, codeBlock: false, blockquote: false, code: false, horizontalRule: false, strike: false, link: false })],
+    extensions: [StarterKit.configure({ heading: false, codeBlock: false, blockquote: false, code: false, horizontalRule: false, strike: false, link: false, dropcursor: false })],
     content: value,
     editorProps: { attributes: { class: "wsb-rich", ...(placeholder ? { "data-placeholder": placeholder } : {}) } },
     onUpdate: ({ editor: e }) => { const j = e.getJSON() as Rich; last.current = JSON.stringify(j); onChange(j); },

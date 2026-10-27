@@ -19,6 +19,7 @@ import {
 import { RichEditor } from "./RichEditor";
 import { cssFamily, loadForScreen, type FontRow } from "./fonts";
 import { StylePanel } from "./StylePanel";
+import { isNoop, place, sameSpot, spotFor, type Drag, type Spot } from "./dnd";
 import { errText, uploadToStorage } from "../pages/sign/common";
 
 type Mode = { kind: "build"; buildId: Id<"wsBuilds"> } | { kind: "template"; templateId: Id<"wsTemplates"> };
@@ -64,7 +65,8 @@ export default function Builder({ mode }: { mode: Mode }) {
   const [preview, setPreview] = useState<string | null>(null);
   const [asTemplate, setAsTemplate] = useState(false);
   const [problems, setProblems] = useState<string[] | null>(null);
-  const [drag, setDrag] = useState<string | null>(null);
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const [spot, setSpot] = useState<Spot | null>(null);
 
   // First load only: after that the page's copy is the truth and saves go up.
   useEffect(() => {
@@ -148,13 +150,34 @@ export default function Builder({ mode }: { mode: Mode }) {
     if (i < 0 || j < 0 || j >= d.blocks.length) return d;
     const blocks = [...d.blocks]; [blocks[i], blocks[j]] = [blocks[j], blocks[i]]; return { ...d, blocks };
   });
-  const dropOn = (target: string) => setDoc((d) => {
-    if (!drag || drag === target) return d;
-    const blocks = d.blocks.filter((b) => b.id !== drag);
-    const moving = d.blocks.find((b) => b.id === drag)!;
-    blocks.splice(blocks.findIndex((b) => b.id === target), 0, moving);
-    return { ...d, blocks };
-  });
+  // Drag and drop: a line shows where it will land; dropping moves the block or adds the new one there.
+  const endDrag = () => { setDrag(null); setSpot(null); };
+  const startDrag = (e: React.DragEvent, d: Drag, image?: Element | null) => {
+    setDrag(d);
+    e.dataTransfer.effectAllowed = d.kind === "move" ? "move" : "copy";
+    // Firefox won't start a drag without data. Our own type, not text: the text editors and fields would paste text.
+    e.dataTransfer.setData("application/x-wrangler-block", d.kind === "move" ? d.id : d.label);
+    if (image) e.dataTransfer.setDragImage(image, 24, 16);
+  };
+  const overSpot = (e: React.DragEvent, s: Spot) => {
+    if (!drag) return;
+    e.preventDefault(); e.stopPropagation();
+    e.dataTransfer.dropEffect = drag.kind === "move" ? "move" : "copy";
+    const next = isNoop(doc?.blocks ?? [], drag, s) ? null : s;
+    if (!sameSpot(next, spot)) setSpot(next);
+  };
+  const drop = (e: React.DragEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    if (drag && spot) {
+      const r = place(doc!.blocks, drag, spot);
+      if (r) {
+        setDoc((d) => ({ ...d, blocks: r.blocks }));
+        setSel(r.id);
+        if (drag.kind === "new") setTimeout(() => document.querySelector<HTMLElement>(`[data-block="${r.id}"] input, [data-block="${r.id}"] textarea, [data-block="${r.id}"] [contenteditable]`)?.focus(), 60);
+      }
+    }
+    endDrag();
+  };
   const duplicate = (id: string) => setDoc((d) => {
     const i = d.blocks.findIndex((b) => b.id === id);
     const copy = JSON.parse(JSON.stringify(d.blocks[i])) as Block; copy.id = newId();
@@ -219,16 +242,20 @@ export default function Builder({ mode }: { mode: Mode }) {
         {/* The page */}
         <div className="wsb-stage" ref={stageRef} onClick={(e) => { if (e.target === e.currentTarget) setSel(null); }}>
           {sent && <div className="ws-banner"><TriangleAlert size={15} /> {build!.document!.label} is {build!.document!.status === "sent" ? "out for signature" : "signed"}. Changes here won't reach it; cancel it first to send a new version.</div>}
-          <div className="wsb-page" style={{ width: pageW, minHeight: px(PAGE_PT[st.pageSize].h), background: st.page, color: st.text, fontFamily: B, fontSize: px(st.baseSize), padding: `${px(st.margin)}px`, ["--wsb-accent" as string]: st.accent, ["--wsb-muted" as string]: st.muted, ["--wsb-heading" as string]: st.heading, ["--wsb-hfont" as string]: H }}>
+          <div className={`wsb-page${drag ? " dropping" : ""}${spot?.id === "end" ? " drop-end" : ""}`} onDragOver={(e) => {
+            // Over the page but not a block: above the first block means first, anywhere else means last.
+            const first = e.currentTarget.querySelector<HTMLElement>("[data-block]");
+            overSpot(e, first && e.clientY < first.getBoundingClientRect().top ? { id: first.dataset.block!, after: false } : { id: "end", after: true });
+          }} onDrop={drop} style={{ width: pageW, minHeight: px(PAGE_PT[st.pageSize].h), background: st.page, color: st.text, fontFamily: B, fontSize: px(st.baseSize), padding: `${px(st.margin)}px`, ["--wsb-accent" as string]: st.accent, ["--wsb-muted" as string]: st.muted, ["--wsb-heading" as string]: st.heading, ["--wsb-hfont" as string]: H }}>
             {st.cover && files[st.cover.fileId] && <div className="wsb-cover" style={{ height: px(st.cover.height), backgroundImage: `url(${files[st.cover.fileId]})`, margin: `-${px(st.margin)}px -${px(st.margin)}px ${px(18)}px` }} />}
             {st.logo && files[st.logo.fileId] && <div style={{ textAlign: st.logo.align, marginBottom: px(st.baseSize * 1.2) }}><img src={files[st.logo.fileId]!} alt="Logo" style={{ width: px(st.logo.width) }} /></div>}
-            {doc.blocks.length === 0 && <p className="wsb-empty" style={{ color: st.muted }}>Add blocks from the Insert panel on the right.</p>}
+            {doc.blocks.length === 0 && <p className="wsb-empty" style={{ color: st.muted }}>Drag blocks here from the Insert panel, or click one to add it.</p>}
             {doc.blocks.map((b, i) => (
-              <div key={b.id} data-block={b.id} className={`wsb-block${sel === b.id ? " sel" : ""}${drag === b.id ? " dragging" : ""}`}
+              <div key={b.id} data-block={b.id} className={`wsb-block${sel === b.id ? " sel" : ""}${drag?.kind === "move" && drag.id === b.id ? " dragging" : ""}${spot?.id === b.id ? (spot.after ? " drop-after" : " drop-before") : ""}`}
                 onClick={(e) => { e.stopPropagation(); setSel(b.id); }}
-                onDragOver={(e) => { if (drag) e.preventDefault(); }} onDrop={(e) => { e.preventDefault(); dropOn(b.id); setDrag(null); }}>
+                onDragOver={(e) => overSpot(e, spotFor(b.id, e.currentTarget.getBoundingClientRect(), e.clientY))} onDrop={drop}>
                 <div className="wsb-tools" onClick={(e) => e.stopPropagation()}>
-                  <span className="wsb-grip" draggable onDragStart={(e) => { setDrag(b.id); e.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDrag(null)} title="Drag to move" aria-label="Drag to move"><GripVertical size={14} /></span>
+                  <span className="wsb-grip" draggable onDragStart={(e) => startDrag(e, { kind: "move", id: b.id }, e.currentTarget.closest(".wsb-block"))} onDragEnd={endDrag} title="Drag to move" aria-label="Drag to move"><GripVertical size={14} /></span>
                   <span className="wsb-kind">{BLOCK_LABEL[b.type]}</span>
                   <button className="icon-btn" aria-label="Move up" disabled={i === 0} onClick={() => move(b.id, -1)}><ArrowUp size={13} /></button>
                   <button className="icon-btn" aria-label="Move down" disabled={i === doc.blocks.length - 1} onClick={() => move(b.id, 1)}><ArrowDown size={13} /></button>
@@ -250,9 +277,9 @@ export default function Builder({ mode }: { mode: Mode }) {
           </div>
           {tab === "insert" && (
             <div className="wsb-pane">
-              <span className="ws-flabel">Click to add after the selected block</span>
-              {INSERT.map((x) => <button key={x.type} className="wsb-insert" onClick={() => insert(newBlock(x.type))}>{x.icon}<span><b>{BLOCK_LABEL[x.type]}</b><span className="secondary">{x.hint}</span></span></button>)}
-              <ClauseLibrary clauses={clauses} onInsert={(c) => insert({ id: newId(), type: "clause", title: c.title, rich: c.body as Rich, initials: c.initials, clauseId: c._id })} />
+              <span className="ws-flabel">Drag onto the page, or click to add after the selected block</span>
+              {INSERT.map((x) => <button key={x.type} className="wsb-insert" draggable onDragStart={(e) => startDrag(e, { kind: "new", make: () => newBlock(x.type), label: BLOCK_LABEL[x.type] })} onDragEnd={endDrag} onClick={() => insert(newBlock(x.type))}>{x.icon}<span><b>{BLOCK_LABEL[x.type]}</b><span className="secondary">{x.hint}</span></span></button>)}
+              <ClauseLibrary clauses={clauses} onInsert={(c) => insert(clauseBlock(c))} onDragStart={(e, c) => startDrag(e, { kind: "new", make: () => clauseBlock(c), label: c.title })} onDragEnd={endDrag} />
             </div>
           )}
           {tab === "format" && (
@@ -393,7 +420,9 @@ function BlockEdit({ b, d, values, px, setBlock, onDetails, onSaveClause }: { b:
 
 // ---------- the panel's parts ----------
 
-function ClauseLibrary({ clauses, onInsert }: { clauses: Array<{ _id: string; title: string; body: unknown; initials: boolean }> | undefined; onInsert: (c: { _id: string; title: string; body: unknown; initials: boolean }) => void }) {
+type LibClause = { _id: string; title: string; body: unknown; initials: boolean };
+const clauseBlock = (c: LibClause): Block => ({ id: newId(), type: "clause", title: c.title, rich: c.body as Rich, initials: c.initials, clauseId: c._id });
+function ClauseLibrary({ clauses, onInsert, onDragStart, onDragEnd }: { clauses: LibClause[] | undefined; onInsert: (c: LibClause) => void; onDragStart: (e: React.DragEvent, c: LibClause) => void; onDragEnd: () => void }) {
   const [q, setQ] = useState("");
   const list = (clauses ?? []).filter((c) => !q || c.title.toLowerCase().includes(q.toLowerCase()));
   return (
@@ -401,7 +430,7 @@ function ClauseLibrary({ clauses, onInsert }: { clauses: Array<{ _id: string; ti
       <div className="ws-cardhead"><span className="label">Clause library</span><a className="btn ghost sm" {...linkProps("/sign/templates?tab=clauses")}>Manage</a></div>
       <input className="input sm" placeholder="Search clauses" value={q} onChange={(e) => setQ(e.target.value)} />
       {clauses === undefined ? <Spinner /> : list.length === 0 ? <p className="caption secondary">{clauses.length ? "No clause matches." : "No saved clauses yet. Save one from any clause block."}</p>
-        : list.map((c) => <button key={c._id} className="wsb-libitem" onClick={() => onInsert(c)}><ScrollText size={14} /><span>{c.title}</span>{c.initials && <span className="chip">initials</span>}</button>)}
+        : list.map((c) => <button key={c._id} className="wsb-libitem" draggable onDragStart={(e) => onDragStart(e, c)} onDragEnd={onDragEnd} onClick={() => onInsert(c)} title="Drag onto the page, or click to add"><ScrollText size={14} /><span>{c.title}</span>{c.initials && <span className="chip">initials</span>}</button>)}
     </div>
   );
 }

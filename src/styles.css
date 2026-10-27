@@ -1262,3 +1262,12 @@ button.ws-hubcard:disabled { opacity: .6; cursor: default; }
 .ws-hub + .ws-cardhead, .ws-hub + div > .label { margin-top: 18px; }
 /* On a phone the builder's page keeps its own (scaled) sizes; the 16px rule that stops iOS zooming would blow them up. */
 @media (max-width: 760px) { .wsb-page :is(.wsb-items, .wsb-pay, .wsb-parties) input { font-size: inherit !important; } }
+/* Builder drag and drop: a line where the block will land */
+.wsb-block.drop-before::before, .wsb-block.drop-after::after, .wsb-page.drop-end::after { content: ""; position: absolute; left: 6px; right: 6px; height: 3px; border-radius: 3px; background: var(--wsb-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--wsb-accent) 22%, transparent); pointer-events: none; z-index: 5; }
+.wsb-block.drop-before::before { top: -7px; } .wsb-block.drop-after::after { bottom: -7px; }
+.wsb-page.drop-end::after { position: relative; display: block; left: 0; right: 0; margin-top: 6px; }
+.wsb-page.dropping .wsb-richbar { display: none !important; }
+.wsb-insert[draggable="true"], .wsb-libitem[draggable="true"] { cursor: grab; }
+.wsb-insert[draggable="true"]:active, .wsb-libitem[draggable="true"]:active { cursor: grabbing; }
+/* While dragging, the text fields don't take part (no text caret, no pasting): the block under the pointer does. */
+.wsb-page.dropping :is(input, textarea, [contenteditable]) { pointer-events: none; }
