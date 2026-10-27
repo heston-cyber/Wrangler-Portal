@@ -10,6 +10,7 @@ import { linkProps, navigate, useLocation } from "../lib/router";
 import { useUploads } from "../lib/uploads";
 import { Avatar, Menu, MenuItem, MenuSep, Modal, Thumb } from "../ui/kit";
 import { projectLabel } from "../lib/format";
+import { lightFor } from "./lights";
 
 type ShellCtx = { openSidebar: () => void; openSearch: () => void; overlay: boolean };
 const Ctx = createContext<ShellCtx>({ openSidebar: () => {}, openSearch: () => {}, overlay: false });
@@ -34,7 +35,10 @@ export function Shell({ me, overlay, children }: { me: { name: string | null; em
       <div className="app">
         {showSidebar && <Sidebar me={me} className={`${drawer ? "open" : ""}${overlay ? " overlay" : ""}`} onClose={() => setDrawer(false)} onSearch={() => setSearch(true)} />}
         {drawer && <div className="scrim" onClick={() => setDrawer(false)} style={overlay ? { position: "fixed", inset: 0, zIndex: 79, background: "rgba(3,1,4,.55)" } : undefined} />}
-        <div className="main" style={overlay ? { margin: 0, height: "100%", borderRadius: 0, boxShadow: "none" } : undefined}>{children}</div>
+        <div className="main" style={overlay ? { margin: 0, height: "100%", borderRadius: 0, boxShadow: "none" } : undefined}>
+          {!overlay && lightFor(path) && <div className={`d1-light ${lightFor(path)!.cls}`} style={{ backgroundImage: `url(${lightFor(path)!.src})` }} aria-hidden />}
+          {children}
+        </div>
       </div>
       {search && <SearchPalette onClose={() => setSearch(false)} />}
     </Ctx.Provider>

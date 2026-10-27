@@ -1,0 +1,179 @@
+/* Direction 1 facelift (Oct 27): the portal takes on the look of the new Wrangler website (Figma "Wrangler Website —
+   Style Directions", Direction 1 design system). Aesthetics only: every page keeps its layout and behaviour.
+     type     Inter for reading, Industry for headings and tracked uppercase labels, Instrument Serif for navigation
+     colour   ink #030104 and paper #F4F1E9 in opacity tiers (78 / 55 / 45 %), one red #FF0000 that glows
+     shape    6 / 12 / 20 / 30 px corners; frosted glass blocks with a hairline paper edge and fine grain
+     light    one oversized red-to-orange light shape behind each main page (shell/lights.ts)
+   Loaded after styles.css, so removing this file and the light layer puts the old look back. */
+
+:root {
+  --font-body: "Inter", system-ui, -apple-system, Helvetica, Arial, sans-serif;
+  --font-ui: var(--font-body);
+  --font-serif: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --font-label: var(--font-title);
+
+  --paper: 244, 241, 233; /* #F4F1E9 */
+  --ink: 3, 1, 4;          /* #030104 */
+
+  --text-primary: rgb(var(--paper));
+  --text-secondary: rgba(var(--paper), .58);
+  --text-muted: rgba(var(--paper), .76);
+  --text-faint: rgba(var(--paper), .38);
+  --text-accent: #ff0000;
+  --on-accent: #f4f1e9;
+
+  --border-hairline: rgba(var(--paper), .12);
+  --border-strong: rgba(var(--paper), .28);
+  --border-faint: rgba(var(--paper), .07);
+  --border-glass: rgba(var(--paper), .14);
+
+  --surface-base: #030104;
+  --surface-band: #030104;
+  --surface-block: rgba(var(--paper), .04);
+  --surface-block-hover: rgba(var(--paper), .08);
+  --surface-raised: rgba(var(--paper), .065);
+  --surface-media: rgba(var(--paper), .1);
+  --surface-inset: rgba(var(--ink), .55);
+  --surface-float: rgba(16, 14, 17, .82);
+  --fill-chip: rgba(var(--paper), .07);
+  --fill-chip-hover: rgba(var(--paper), .13);
+  --fill-glass: rgba(16, 14, 17, .62);
+  --fill-glass-strong: rgba(16, 14, 17, .84);
+
+  --radius-sm: 6px; --radius-md: 12px; --radius-card: 20px; --radius-lg: 30px;
+  --blur-glass: blur(18px) saturate(135%);
+  --shadow-float: 0 18px 50px rgba(0, 0, 0, .55), 0 0 0 1px var(--border-glass);
+
+  /* the website's red glows */
+  --glow-button: 0 0 6px rgba(255, 0, 0, .65), 0 0 18px rgba(255, 0, 0, .45), 0 0 40px rgba(255, 13, 0, .25);
+  --glow-text: 0 0 2px rgba(255, 0, 0, .55), 0 0 8px rgba(255, 0, 0, .35), 0 0 18px rgba(255, 13, 0, .18);
+  /* glass grain: the website's fine noise, very faint */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.18'/%3E%3C/svg%3E");
+}
+
+:root[data-theme="light"] {
+  --text-primary: rgb(var(--ink));
+  --text-secondary: rgba(var(--ink), .58);
+  --text-muted: rgba(var(--ink), .74);
+  --text-faint: rgba(var(--ink), .38);
+  --text-accent: #d00000;
+  --on-accent: #f4f1e9;
+  --border-hairline: rgba(var(--ink), .1);
+  --border-strong: rgba(var(--ink), .24);
+  --border-faint: rgba(var(--ink), .06);
+  --border-glass: rgba(var(--ink), .12);
+  --surface-base: #f4f1e9;
+  --surface-band: #f4f1e9;
+  --surface-block: rgba(255, 255, 255, .55);
+  --surface-block-hover: rgba(255, 255, 255, .8);
+  --surface-raised: rgba(255, 255, 255, .62);
+  --surface-media: rgba(var(--ink), .07);
+  --surface-inset: rgba(255, 255, 255, .7);
+  --surface-float: rgba(250, 248, 243, .88);
+  --fill-chip: rgba(var(--ink), .06);
+  --fill-chip-hover: rgba(var(--ink), .11);
+  --fill-glass: rgba(250, 248, 243, .7);
+  --fill-glass-strong: rgba(250, 248, 243, .9);
+  --shadow-float: 0 18px 50px rgba(40, 30, 20, .18), 0 0 0 1px var(--border-glass);
+  --glow-button: 0 0 6px rgba(255, 0, 0, .35), 0 0 18px rgba(255, 0, 0, .22), 0 0 40px rgba(255, 13, 0, .12);
+  --glow-text: none;
+}
+
+/* ---------- type ---------- */
+body { font-family: var(--font-body); font-size: 14.5px; letter-spacing: -.003em; }
+.title { font-weight: 600; letter-spacing: -.035em; line-height: 1; }
+.headline { font-weight: 600; letter-spacing: -.03em; line-height: 1.08; }
+.headline .rest { font-weight: 500; }
+.eyebrow, .label { font-family: var(--font-label); font-weight: 500; letter-spacing: .3em; font-size: 11px; }
+.eyebrow { color: var(--text-accent); text-shadow: var(--glow-text); }
+.navgroup { font-family: var(--font-label); font-weight: 500; letter-spacing: .28em; text-transform: uppercase; font-size: 10.5px; color: var(--text-faint); }
+.caption { line-height: 1.5; }
+.error { color: var(--text-accent); }
+
+/* ---------- buttons: glass by default; the red one glows ---------- */
+.btn {
+  border-radius: var(--radius-md); font-family: var(--font-body); font-weight: 600; font-size: 13.5px; letter-spacing: -.01em;
+  background: var(--fill-chip); box-shadow: inset 0 0 0 1px var(--border-glass);
+}
+.btn:hover { background: var(--fill-chip-hover); }
+.btn.primary, .btn.on { background: var(--accent); color: var(--on-accent); box-shadow: var(--glow-button); }
+.btn.primary:hover { background: #ff1a10; box-shadow: var(--glow-button), 0 0 60px rgba(255, 30, 0, .18); }
+.btn.cream { box-shadow: none; }
+.btn.ghost { box-shadow: none; }
+.btn.danger { box-shadow: inset 0 0 0 1px rgba(255, 0, 0, .35); }
+.btn.lg { border-radius: 14px; font-size: 15px; }
+.icon-btn { border-radius: 10px; }
+.chip.red { color: var(--on-accent); box-shadow: 0 0 8px rgba(255, 0, 0, .45); }
+
+/* tabs and chips: the website's tracked labels */
+.tab { font-family: var(--font-body); font-weight: 600; font-size: 13px; letter-spacing: -.01em; border-radius: 10px; }
+.tab[aria-selected="true"] { box-shadow: inset 0 0 0 1px rgba(255, 0, 0, .35); }
+.chip { border-radius: var(--radius-sm); }
+
+/* fields: sunk glass with a hairline edge */
+.input { background: var(--surface-raised); box-shadow: inset 0 0 0 1px var(--border-glass); border-radius: var(--radius-md); }
+.input:focus { box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 4px rgba(255, 0, 0, .12); }
+.check .box { box-shadow: inset 0 0 0 1.5px var(--border-strong); }
+.check input:checked + .box { box-shadow: 0 0 8px rgba(255, 0, 0, .5); }
+
+/* ---------- glass: every block on a page frosts what's behind it ---------- */
+.panel, .note, .vcard, .rect, .regwrap, .nextrender, .ws-card, .ws-hubcard, .wst-card, .wst-clause, .ws-sigform, .ws-sigcard,
+.wsx-card, .ws-note, .ws-recent .regwrap, .ehead, .drop, .selbar {
+  background-color: var(--surface-block);
+  background-image: var(--grain);
+  background-blend-mode: soft-light;
+  backdrop-filter: blur(14px) saturate(130%); -webkit-backdrop-filter: blur(14px) saturate(130%);
+  box-shadow: inset 0 0 0 1px var(--border-glass);
+}
+.note, .vcard, .rect, .vcard.rect { border-radius: var(--radius-card); }
+.panel, .regwrap, .ws-card, .ws-hubcard, .wst-card, .wst-clause, .ws-sigform, .ws-sigcard, .wsx-card { border-radius: var(--radius-card); }
+.ws-hubcard:hover, .wst-card:hover { background-color: var(--surface-block-hover); box-shadow: inset 0 0 0 1px var(--border-strong); }
+.menu, .dialog, .toast { background-image: var(--grain); background-blend-mode: soft-light; }
+.menu { border-radius: 16px; }
+.dialog { border-radius: var(--radius-lg); backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass); }
+.backdrop { background: rgba(var(--ink), .62); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+:root[data-theme="light"] .backdrop { background: rgba(40, 32, 24, .28); }
+
+/* ---------- the frame ---------- */
+.sidebar .navitem { font-family: var(--font-serif); font-size: 19px; letter-spacing: -.02em; height: 36px; color: var(--text-muted); border-radius: 10px; }
+.sidebar .navitem svg { width: 15px; height: 15px; }
+.sidebar .navitem[aria-current="page"] { background: transparent; color: var(--accent); text-shadow: var(--glow-text); box-shadow: inset 2px 0 0 var(--accent); border-radius: 0 10px 10px 0; }
+.sidebar .navitem[aria-current="page"] svg { filter: drop-shadow(0 0 4px rgba(255, 0, 0, .55)); }
+.sidebar .navitem.acct { font-family: var(--font-body); font-size: 13.5px; }
+.sidebar a.navitem .t { font-family: var(--font-body); font-size: 13px; letter-spacing: -.005em; }
+.main { position: relative; isolation: isolate; box-shadow: inset 0 0 0 1px var(--border-glass); border-radius: 18px; }
+.main > :not(.d1-light) { position: relative; z-index: 1; }
+.topbar { border-bottom-color: var(--border-hairline); background: rgba(var(--ink), .35); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+:root[data-theme="light"] .topbar { background: rgba(244, 241, 233, .55); }
+.crumbs { font-size: 13.5px; }
+.crumbs .here { font-weight: 600; }
+
+/* ---------- the light shapes (behind everything, bleeding off the edges) ---------- */
+.d1-light {
+  position: absolute; z-index: 0; pointer-events: none; background-size: cover; background-repeat: no-repeat;
+  width: 140%; aspect-ratio: 9 / 5; mix-blend-mode: screen; opacity: .5;
+  -webkit-mask-image: radial-gradient(closest-side, #000 55%, transparent); mask-image: radial-gradient(closest-side, #000 55%, transparent);
+}
+.d1-light.l-elbow { right: -42%; top: -18%; transform: rotate(-8deg); }
+.d1-light.l-arcs { right: -38%; top: -30%; transform: scaleX(-1); }
+.d1-light.l-ribbon { left: -20%; top: -48%; opacity: .3; }
+.d1-light.l-ribbon-b { right: -36%; bottom: -46%; opacity: .4; transform: scaleY(-1); }
+.d1-light.l-bars { right: -46%; top: -36%; opacity: .5; transform: rotate(-12deg); }
+.d1-light.l-blob { right: -40%; top: -40%; opacity: .32; }
+:root[data-theme="light"] .d1-light { mix-blend-mode: multiply; opacity: .16; filter: saturate(1.2); }
+/* the old watermark gives way to the light */
+.main .watermark { display: none; }
+
+/* sign-in */
+.signin .d1-light { width: 160%; left: -30%; top: -20%; opacity: .55; }
+.signin > :not(.d1-light) { position: relative; z-index: 1; }
+
+/* phones: the light still sits behind, a little larger and dimmer */
+@media (max-width: 820px) {
+  .d1-light { width: 260%; opacity: .38; }
+  .sidebar .navitem { font-size: 21px; height: 42px; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .panel, .note, .vcard, .rect, .regwrap, .ws-card, .ws-hubcard, .wst-card, .wst-clause, .dialog, .menu { backdrop-filter: none; -webkit-backdrop-filter: none; }
+}

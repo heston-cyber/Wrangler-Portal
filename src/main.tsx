@@ -8,7 +8,13 @@ import "@fontsource/saira/latin-400.css";
 import "@fontsource/saira/latin-500.css";
 import "@fontsource/saira/latin-600.css";
 import "@fontsource/saira/latin-700.css";
+import "@fontsource/inter/latin-400.css";
+import "@fontsource/inter/latin-500.css";
+import "@fontsource/inter/latin-600.css";
+import "@fontsource/inter/latin-700.css";
+import "@fontsource/instrument-serif/latin-400.css";
 import "./styles.css";
+import "./d1.css";
 import { applyTheme } from "./lib/theme";
 
 applyTheme();

@@ -1,5 +1,6 @@
 // Sign in, create an account (owners and invited clients), prove the email with a code, reset a password (C1, Oct 23).
 import { useState } from "react";
+import { LIGHTS } from "../shell/lights";
 import { BrandImg } from "../ui/BrandImg";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvex } from "convex/react";
@@ -68,7 +69,7 @@ export default function SignIn({ invitedEmail }: { invitedEmail?: string | null 
   const askEmail = flow !== "code" && flow !== "resetCode";
   return (
     <div className="signin">
-      <BrandImg name="watermark" className="watermark" hidden />
+      <div className="d1-light l-cross" style={{ backgroundImage: `url(${LIGHTS.cross})` }} aria-hidden />
       <form onSubmit={onSubmit}>
         <BrandImg name="wordmark" className="logo" alt="Wrangler Productions" />
         <span className="eyebrow">Wrangler Review</span>
