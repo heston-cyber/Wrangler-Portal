@@ -65,6 +65,11 @@ import type * as users from "../users.js";
 import type * as views from "../views.js";
 import type * as waveform from "../waveform.js";
 import type * as waveforms from "../waveforms.js";
+import type * as sign from "../sign.js";
+import type * as wsS0 from "../wsS0.js";
+import type * as lib_wsAudit from "../lib/wsAudit.js";
+import type * as lib_wsLayout from "../lib/wsLayout.js";
+import type * as lib_wsPdf from "../lib/wsPdf.js";
 
 import type {
   ApiFromModules,
@@ -130,6 +135,11 @@ declare const fullApi: ApiFromModules<{
   views: typeof views;
   waveform: typeof waveform;
   waveforms: typeof waveforms;
+  sign: typeof sign;
+  wsS0: typeof wsS0;
+  "lib/wsAudit": typeof lib_wsAudit;
+  "lib/wsLayout": typeof lib_wsLayout;
+  "lib/wsPdf": typeof lib_wsPdf;
 }>;
 
 export declare const api: FilterApi<

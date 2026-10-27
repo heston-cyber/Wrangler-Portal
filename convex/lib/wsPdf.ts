@@ -5,7 +5,8 @@
 //     DISPLAYED (top-left origin, after the page's /Rotate and inside its crop box);
 //   - each stamp is a PNG (signature, initials — drawn or typed, rendered by the signing page) or a line of text
 //     (name, title, date) in Helvetica, so the backend needs no font files;
-//   - a marker under a box (e.g. "{{sign:client}}") is painted over in white first;
+//   - a marker's own text (e.g. "{{sign:client}}") is painted over in white first (Stamp.cover);
+//   - images sit on the box's bottom edge (the signature line); text sits on a baseline just above it;
 //   - an audit certificate page is appended at the end.
 import { PDFDocument, PDFPage, StandardFonts, degrees, rgb, EncryptedPDFError } from "@cantoo/pdf-lib";
 
@@ -76,9 +77,7 @@ export async function stamp(original: Uint8Array, stamps: Stamp[], certificate: 
     const d = displayed(p);
     const bw = s.box.w * d.width, bh = s.box.h * d.height;
     const dx = s.box.x * d.width, dyBottom = (s.box.y + s.box.h) * d.height; // the box's displayed bottom-left
-    const o = toUser(p, dx, dyBottom);
     const angle = degrees(d.rotate); // draw upright as displayed
-    void o;
     if (s.cover) {
       if (s.cover.page !== s.box.page) throw new Error("A cover must be on the stamp's page");
       const co = toUser(p, s.cover.x * d.width, (s.cover.y + s.cover.h) * d.height);
@@ -88,12 +87,13 @@ export async function stamp(original: Uint8Array, stamps: Stamp[], certificate: 
       const img = await doc.embedPng(s.png);
       const k = Math.min(bw / img.width, bh / img.height);
       const w = img.width * k, h = img.height * k;
-      // Left-aligned, vertically centred in the box (in displayed space), then mapped to user space.
-      const o2 = toUser(p, dx, dyBottom - (bh - h) / 2);
+      // Left-aligned and sitting on the box's bottom edge (the signature line), then mapped to user space.
+      const o2 = toUser(p, dx, dyBottom);
       p.drawImage(img, { x: o2.x, y: o2.y, width: w, height: h, rotate: angle });
     } else {
-      const size = Math.max(6, Math.min(12, bh * 0.7));
-      const o2 = toUser(p, dx + 2, dyBottom - (bh - size) / 2 - size * 0.2);
+      // On a baseline a quarter of the type size above the box's bottom, where a marker's own text sat.
+      const size = Math.max(6, Math.min(11, bh * 0.72));
+      const o2 = toUser(p, dx + 1, dyBottom - size * 0.25);
       p.drawText(s.text, { x: o2.x, y: o2.y, size, font: helv, color: ink, rotate: angle });
     }
   }

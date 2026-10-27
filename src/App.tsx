@@ -11,9 +11,15 @@ import Register from "./pages/Register";
 import Settings from "./pages/Settings";
 import VideoPage from "./pages/VideoPage";
 import SharePage from "./pages/SharePage";
+import { lazy, Suspense } from "react";
 import { Shell } from "./shell/Shell";
 import { UploadProvider } from "./shell/UploadDialog";
 import type { Id } from "../convex/_generated/dataModel";
+
+// Wrangler Sign (S1): its own chunk, so pdf.js only loads on those pages.
+const SignList = lazy(() => import("./pages/sign/SignList"));
+const SignDoc = lazy(() => import("./pages/sign/SignDoc"));
+const SignSignature = lazy(() => import("./pages/sign/SignSignature"));
 
 const Loading = () => <div className="signin"><span className="label">Loading…</span></div>;
 
@@ -54,10 +60,14 @@ function SignedIn() {
   const params = new URLSearchParams(search);
   const video = /^\/v\/([^/]+)\/?$/.exec(path);
   const project = /^\/projects\/([^/]+)\/?$/.exec(path);
+  const signDoc = /^\/sign\/d\/([^/]+)\/?$/.exec(path);
   let page: React.ReactNode;
   if (video) page = <VideoPage key={video[1]} videoId={video[1] as Id<"videos">} versionNumber={Number(params.get("version")) || null} noteId={params.get("note")} />;
   else if (project) page = <Projects key={project[1]} projectId={project[1] as Id<"projects">} />;
   else if (path.startsWith("/projects")) page = <Projects key="all" />;
+  else if (signDoc) page = <Suspense fallback={<Loading />}><SignDoc key={signDoc[1]} documentId={signDoc[1] as Id<"wsDocuments">} versionNumber={Number(params.get("v")) || null} /></Suspense>;
+  else if (path.startsWith("/sign/signature")) page = <Suspense fallback={<Loading />}><SignSignature /></Suspense>;
+  else if (path.startsWith("/sign")) page = <Suspense fallback={<Loading />}><SignList /></Suspense>;
   else if (path.startsWith("/activity")) page = <ActivityPage />;
   else if (path.startsWith("/register")) page = <Register />;
   else if (path.startsWith("/settings")) page = <Settings me={me} />;

@@ -1,4 +1,5 @@
-// Wrangler Sign — Phase S0 checks (Oct 26). Throwaway: removed when Phase S1 starts.
+// Wrangler Sign — Phase S0 checks (Oct 26). Throwaway: removed once Heston has run the IP check (T-S0.3) and the
+// Stripe test-mode draft (T-S0.5).
 // The repo and its Actions logs are public, so every function here returns statuses, sizes and short hash
 // prefixes only: no email addresses, no IPs in logs, no keys.
 //

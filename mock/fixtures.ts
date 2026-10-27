@@ -213,6 +213,41 @@ let flagged: any[] = [
 ];
 let keys: any[] = [{ _id: "k1", prefix: "wr_Q2xhdWR", label: "Claude", createdAt: Date.now() - 86_400_000 * 2, lastUsedAt: Date.now() - 3_600_000 }];
 
+// ---------- Wrangler Sign (S1) ----------
+// One draft with no boxes yet (the page finds the markers in mock/sign-sample.pdf) and one approved document.
+const signSvg = (t: string, size: number) => "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${t.length * size * 0.5}" height="${size * 1.4}"><text x="4" y="${size}" font-family="cursive" font-size="${size}" fill="#121e5a">${t}</text></svg>`);
+let signSig: any = new URLSearchParams(location.search).has("nosig") ? null : { name: "Heston Hill", title: "Founder", method: "typed", adoptedAt: now - 2 * 86_400_000, signatureSha256: "9f2c4b1e7a6d3c5b8e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d", signatureUrl: signSvg("Heston Hill", 48), initialsUrl: signSvg("HH", 40) };
+let signDocs: any[] = [
+  { _id: "wd1", number: 1, title: "Sample Service Agreement", status: "draft", currentVersion: 1, createdAt: now - 20 * min, updatedAt: now - 20 * min },
+  { _id: "wd2", number: 2, title: "Harbor Coffee — Brand Film", status: "approved", currentVersion: 1, createdAt: now - 2 * 86_400_000, updatedAt: now - 3 * hr },
+];
+const pages2 = [{ width: 612, height: 792, rotate: 0 }, { width: 612, height: 792, rotate: 0 }];
+let signVers: any[] = [
+  { _id: "wv1", documentId: "wd1", number: 1, fileName: "Sample_Service_Agreement.pdf", fileSha256: "4c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d", fileBytes: 4073, pages: pages2, signers: [{ key: "client", name: "", email: "", order: 1 }], boxes: [], signingOrder: "any", createdAt: now - 20 * min, updatedAt: now - 20 * min },
+  { _id: "wv2", documentId: "wd2", number: 1, fileName: "Harbor_Brand_Film_Agreement.pdf", fileSha256: "a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2", fileBytes: 4073, pages: pages2,
+    signers: [{ key: "heston", name: "Heston Hill", email: "heston@wranglerproductions.com", title: "Founder", order: 1 }, { key: "client", name: "Maya Chen", email: "maya@harborcoffee.example", title: "Marketing Director", order: 1 }],
+    boxes: [{ id: "x1", signer: "client", kind: "initials", page: 0, x: 0.17, y: 0.205, w: 0.09, h: 0.025 }, { id: "x2", signer: "client", kind: "sign", page: 1, x: 0.22, y: 0.62, w: 0.29, h: 0.04 }, { id: "x3", signer: "heston", kind: "sign", page: 1, x: 0.38, y: 0.68, w: 0.29, h: 0.04 }],
+    signingOrder: "any", payment: { amountCents: 120000, description: "Deposit — Harbor Coffee brand film" }, approvedAt: now - 3 * hr, lockHash: "e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6", createdAt: now - 2 * 86_400_000, updatedAt: now - 3 * hr },
+];
+const signLabel = (n: number) => `WS-${String(n).padStart(5, "0")}`;
+function signGet(documentId: string, versionNumber?: number) {
+  const doc = signDocs.find((d) => d._id === documentId); if (!doc) return null;
+  const vs = signVers.filter((v) => v.documentId === documentId);
+  const v = vs.find((x) => x.number === (versionNumber ?? doc.currentVersion)) ?? vs.find((x) => x.number === doc.currentVersion);
+  const events = [{ seq: 1, at: doc.createdAt, kind: "created", actor: "heston", versionNumber: 1, detail: `Uploaded "${v.fileName}" (2 pages), SHA-256 ${v.fileSha256}`, email: null, ip: null },
+    ...(v.approvedAt ? [{ seq: 2, at: v.approvedAt, kind: "approved", actor: "heston", versionNumber: 1, detail: `Version 1 approved and locked. Lock hash ${v.lockHash}.`, email: null, ip: null }] : [])];
+  const clients = v.signers.filter((s: any) => s.key !== "heston");
+  const problems = v.approvedAt ? [] : [...(clients.some((s: any) => !s.name) ? ["Signer \"client\" needs a name."] : []), ...(clients.some((s: any) => !s.email) ? ["Signer \"client\" needs a valid email."] : [])];
+  return {
+    doc: { ...doc, label: signLabel(doc.number) },
+    version: { ...v, fileUrl: "/mock/sign-sample.pdf", isCurrent: v.number === doc.currentVersion, editable: v.number === doc.currentVersion && !v.approvedAt && doc.status === "draft" },
+    versions: vs.map((x) => ({ number: x.number, fileName: x.fileName, fileSha256: x.fileSha256, approvedAt: x.approvedAt ?? null, lockHash: x.lockHash ?? null, ownerSignedAt: null, createdAt: x.createdAt })),
+    events, chain: { ok: true, count: events.length },
+    owner: { email: "heston@wranglerproductions.com", name: signSig?.name ?? null, title: signSig?.title ?? null, adopted: !!signSig },
+    problems,
+  };
+}
+
 export const store = {
   subscribe: (l: () => void) => { subs.add(l); return () => subs.delete(l); },
   version: () => ver,
@@ -228,6 +263,9 @@ export const store = {
       case "shares:activity": return args.shareId === "s1" ? shareActivity : args.shareId === "s2" ? shareActivity.slice(2) : [];
       case "clients:account": return { email: "heston@wranglerproductions.com", name: "Heston", kind: "owner" };
       case "library:overview": return overview();
+      case "sign:list": return signDocs.map((d) => { const v = signVers.find((x) => x.documentId === d._id && x.number === d.currentVersion); return { _id: d._id, label: signLabel(d.number), title: d.title, status: d.status, version: d.currentVersion, updatedAt: d.updatedAt, createdAt: d.createdAt, signers: v.signers.filter((s: any) => s.key !== "heston").map((s: any) => s.name || s.email || s.key), pages: v.pages.length, approved: !!v.approvedAt }; });
+      case "sign:get": return signGet(args.documentId, args.versionNumber);
+      case "sign:ownerSignature": return signSig ? { adopted: true, email: "heston@wranglerproductions.com", ...signSig } : { adopted: false, email: "heston@wranglerproductions.com" };
       case "library:video": return video(args.videoId, args.share);
       case "shares:open": return openShare(args.token, args.passcode);
       case "shares:mine": return [
@@ -338,6 +376,9 @@ export const store = {
       if (madeClients.concat(projects.map((p) => p.client ?? "")).some((c) => c.toLowerCase() === n.toLowerCase())) throw new Error(`There's already a client called ${n}.`);
       madeClients = [...madeClients, n]; bump(); return n;
     }
+    if (name === "sign:saveLayout") { const v = signVers.find((x) => x._id === args.versionId); Object.assign(v, { signers: args.signers, boxes: args.boxes, signingOrder: args.signingOrder, payment: args.payment ?? undefined, updatedAt: Date.now() }); const d = signDocs.find((x) => x._id === v.documentId); d.title = args.title; d.updatedAt = Date.now(); bump(); return null; }
+    if (name === "sign:approve") { const v = signVers.find((x) => x._id === args.versionId); v.approvedAt = Date.now(); v.lockHash = "1f2e3d4c5b6a79880716253443526170819a2b3c4d5e6f708192a3b4c5d6e7f8"; signDocs.find((x) => x._id === v.documentId).status = "approved"; bump(); return { lockHash: v.lockHash }; }
+    if (name === "sign:uploadUrl") return "mock://upload";
     if (name === "library:deleteVideos") { for (const id of args.videoIds) { const i = videos.findIndex((v) => v._id === id); if (i >= 0) videos.splice(i, 1); } bump(); return { deleted: args.videoIds.length }; }
     if (name === "library:deleteClient") { madeClients = madeClients.filter((c) => c !== args.client); bump(); return { projects: 0, videos: 0 }; }
     bump();

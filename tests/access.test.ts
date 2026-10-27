@@ -46,7 +46,7 @@ const KEYED = new Set(["r1results.report"]);
 // Functions any signed-in account may call (owner or client), never a stranger.
 const SIGNED_IN = new Set(["users.setName", "clients.account", "shares.mine"]);
 
-type Ids = { projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage"> };
+type Ids = { docId: Id<"wsDocuments">; wsVersionId: Id<"wsVersions">; projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage"> };
 
 // Minimal valid arguments for each function, so the access check (not argument validation) is what refuses.
 function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
@@ -81,6 +81,12 @@ function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "uploads.startUpload": { videoId: ids.videoId, fileName: "a.mp4", fileSize: 1 }, "uploads.uploadFinished": { versionId: ids.versionId }, "uploads.uploadFailed": { versionId: ids.versionId, error: "x" },
     "users.me": {}, "users.setName": { name: "N" },
     "waveforms.forVersion": { versionId: ids.versionId },
+    "sign.list": {}, "sign.get": { documentId: ids.docId }, "sign.ownerSignature": {}, "sign.uploadUrl": {},
+    "sign.create": { storageId: ids.storageId, fileName: "a.pdf" }, "sign.replaceFile": { documentId: ids.docId, storageId: ids.storageId, fileName: "a.pdf" },
+    "sign.saveLayout": { versionId: ids.wsVersionId, title: "T", signers: [], boxes: [], signingOrder: "any", payment: null },
+    "sign.approve": { versionId: ids.wsVersionId }, "sign.revise": { documentId: ids.docId }, "sign.remove": { documentId: ids.docId },
+    "sign.adoptSignature": { name: "N", title: "T", method: "typed", signatureStorageId: ids.storageId, initialsStorageId: ids.storageId },
+    "sign.preview": { versionId: ids.wsVersionId },
   };
 }
 
@@ -114,7 +120,9 @@ async function setup() {
     const keyId = await ctx.db.insert("connectorKeys", { hash: "h", prefix: "wr_x", label: "k", createdAt: 0 } as never);
     const shareId = await ctx.db.insert("shares", { token: "tok", kind: "video", videoId, access: "view", who: "link", allVersions: true, downloads: false, emailNewVersions: false, createdAt: 0, createdBy: owner });
     const storageId = await ctx.storage.store(new Blob(["x"]));
-    return { projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
+    const docId = await ctx.db.insert("wsDocuments", { number: 1, title: "D", status: "draft", currentVersion: 1, createdAt: 0, updatedAt: 0 });
+    const wsVersionId = await ctx.db.insert("wsVersions", { documentId: docId, number: 1, fileId: storageId, fileName: "a.pdf", fileSha256: "0", fileBytes: 1, pages: [{ width: 612, height: 792, rotate: 0 }], signers: [], boxes: [], signingOrder: "any", createdAt: 0, updatedAt: 0 });
+    return { docId, wsVersionId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
   });
   return { t, ids };
 }

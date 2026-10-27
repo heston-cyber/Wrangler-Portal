@@ -378,6 +378,80 @@ export default defineSchema({
     createdAt: v.number(),
   }),
 
+  // ---------- Wrangler Sign (Phase S1, Oct 27) ----------
+  // A document is a finished PDF Heston uploads to be signed. Every change after approval makes a new version; old
+  // versions are kept, never overwritten. Boxes are where signatures, initials, names, dates and titles go, in
+  // fractions of the page as displayed (see convex/lib/wsPdf.ts). Signer "heston" is Heston himself: his boxes are
+  // filled with his adopted signature when the document is sent (S2).
+  wsDocuments: defineTable({
+    number: v.number(),                 // WS-00001 …, from counters "wsNumber", never reused
+    title: v.string(),
+    status: v.union(v.literal("draft"), v.literal("approved"), v.literal("sent"), v.literal("completed"), v.literal("voided")),
+    currentVersion: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_number", ["number"]).index("by_updated", ["updatedAt"]),
+  wsVersions: defineTable({
+    documentId: v.id("wsDocuments"),
+    number: v.number(),
+    fileId: v.id("_storage"),           // the PDF exactly as uploaded; never modified
+    fileName: v.string(),
+    fileSha256: v.string(),
+    fileBytes: v.number(),
+    pages: v.array(v.object({ width: v.number(), height: v.number(), rotate: v.number() })),
+    hasTextLayer: v.optional(v.boolean()), // false: probably a scan, markers can't be found
+    signers: v.array(v.object({
+      key: v.string(),                  // "heston" or a client key ("client", "client2", …), as used in markers
+      name: v.string(),
+      email: v.string(),
+      title: v.optional(v.string()),
+      order: v.number(),                // 1, 2, … (used when signingOrder is "sequence")
+    })),
+    boxes: v.array(v.object({
+      id: v.string(),
+      signer: v.string(),
+      kind: v.union(v.literal("sign"), v.literal("initials"), v.literal("name"), v.literal("date"), v.literal("title")),
+      page: v.number(), x: v.number(), y: v.number(), w: v.number(), h: v.number(),
+      cover: v.optional(v.object({ page: v.number(), x: v.number(), y: v.number(), w: v.number(), h: v.number() })),
+      fromMarker: v.optional(v.boolean()),
+    })),
+    signingOrder: v.union(v.literal("any"), v.literal("sequence")),
+    payment: v.optional(v.object({ amountCents: v.number(), description: v.string() })), // draft invoice on completion (S3)
+    approvedAt: v.optional(v.number()),
+    lockHash: v.optional(v.string()),   // SHA-256 over the file hash + layout + signers + payment, at approval
+    ownerSignedAt: v.optional(v.number()),
+    ownerSignatureId: v.optional(v.id("wsOwnerSignatures")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_document", ["documentId", "number"]),
+  // The audit trail: append-only, one chain per document. hash = SHA-256(prevHash + this event's canonical JSON).
+  wsEvents: defineTable({
+    documentId: v.id("wsDocuments"),
+    seq: v.number(),
+    at: v.number(),
+    kind: v.string(),
+    actor: v.string(),                  // "heston", "claude", "signer:<key>", "system"
+    versionNumber: v.optional(v.number()),
+    email: v.optional(v.string()),
+    ip: v.optional(v.string()),
+    userAgent: v.optional(v.string()),
+    detail: v.optional(v.string()),
+    prevHash: v.string(),
+    hash: v.string(),
+  }).index("by_document", ["documentId", "seq"]),
+  // Heston's adopted signature. A new adoption replaces the old one (replacedAt); old ones are kept for the record.
+  wsOwnerSignatures: defineTable({
+    name: v.string(),
+    title: v.string(),
+    method: v.union(v.literal("typed"), v.literal("drawn")),
+    signatureFileId: v.id("_storage"),
+    initialsFileId: v.id("_storage"),
+    signatureSha256: v.string(),
+    initialsSha256: v.string(),
+    adoptedAt: v.number(),
+    replacedAt: v.optional(v.number()),
+  }).index("by_adopted", ["adoptedAt"]),
+
   // Phase 0 only: results of the frame-accuracy test page (lab/frametest.html).
   phase0Runs: defineTable({
     createdAt: v.string(),
