@@ -62,6 +62,13 @@ function Editor({ data }: { data: Data }) {
   const [sending, setSending] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const hasTextRef = useRef<boolean | undefined>(undefined);
+  // S3: once everyone has signed, the page shows the signed copy (with its certificate pages); the original with its
+  // boxes is one click away.
+  const signedAvailable = !!data.finalUrl && version.isCurrent && doc.sentVersion === version.number;
+  const [showOriginal, setShowOriginal] = useState(false);
+  const showSigned = signedAvailable && !showOriginal;
+  const src = showSigned ? data.finalUrl : version.fileUrl;
+  const [signedPages, setSignedPages] = useState<Array<{ width: number; height: number; rotate: number }> | null>(null);
 
   const setLayout = useCallback((f: (l: Layout) => Layout) => { setLayoutRaw((l) => f(l)); setDirty(true); }, []);
 
@@ -88,10 +95,17 @@ function Editor({ data }: { data: Data }) {
   useEffect(() => {
     let dead = false;
     setPdf(null); setPdfError(null);
-    if (!version.fileUrl) { setPdfError("The PDF file is missing."); return; }
-    openPdf(version.fileUrl).then((d) => { if (!dead) setPdf(d); }, (e) => { if (!dead) setPdfError(String(e?.message ?? e)); });
+    if (!src) { setPdfError("The PDF file is missing."); return; }
+    openPdf(src).then(async (d) => {
+      if (showSigned) {
+        const sizes = [];
+        for (let i = 1; i <= d.numPages; i++) { const vp = (await d.getPage(i)).getViewport({ scale: 1 }); sizes.push({ width: vp.width, height: vp.height, rotate: 0 }); }
+        if (!dead) setSignedPages(sizes);
+      }
+      if (!dead) setPdf(d);
+    }, (e) => { if (!dead) setPdfError(String(e?.message ?? e)); });
     return () => { dead = true; };
-  }, [version.fileUrl]);
+  }, [src?.split("?")[0], showSigned]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const runScan = useCallback(async (replace: boolean) => {
     if (!pdf) return;
@@ -199,11 +213,12 @@ function Editor({ data }: { data: Data }) {
       <div className="content ws-doc">
         <div className="ws-pages" onClick={(e) => { if (e.target === e.currentTarget) setSelected(null); }}>
           {viewingOld && <div className="ws-banner"><History size={15} /> You're looking at version {version.number}, an older version. <a {...linkProps(`/sign/d/${doc._id}`)}>Open the current one</a></div>}
-          {!editable && version.approvedAt && version.isCurrent && <div className="ws-banner ok"><Lock size={15} /> {doc.status === "sent" ? `Version ${version.number} is out for signature. To change anything, cancel signing, then make a new version.` : doc.status === "completed" ? `Version ${version.number} is signed by everyone.` : `Version ${version.number} is approved and locked. To change anything, make a new version.`}</div>}
+          {!editable && version.approvedAt && version.isCurrent && !signedAvailable && <div className="ws-banner ok"><Lock size={15} /> {doc.status === "sent" ? `Version ${version.number} is out for signature. To change anything, cancel signing, then make a new version.` : doc.status === "completed" ? `Version ${version.number} is signed by everyone.` : `Version ${version.number} is approved and locked. To change anything, make a new version.`}</div>}
           {placing && <div className="ws-banner place"><Crosshair size={15} /> Click on a page to place the {KIND_LABEL[placing.kind].toLowerCase()} box for {nameOf(layout.signers, placing.signer)}. <button className="btn ghost sm" onClick={() => setPlacing(null)}>Cancel</button></div>}
           {pdfError && <div className="ws-banner bad"><TriangleAlert size={15} /> Couldn't open the PDF: {pdfError}</div>}
           {!pdf && !pdfError && <p className="caption" style={{ padding: 24 }}><Spinner /> Opening the PDF…</p>}
-          {pdf && <PagesView pdf={pdf} pages={version.pages} boxes={layout.boxes} signerKeys={signerKeys} signers={layout.signers} editable={editable} selected={selected} placing={!!placing}
+          {signedAvailable && <div className="ws-banner ok"><FileCheck2 size={15} /> {showSigned ? "You're looking at the signed copy, with its certificate at the end." : "You're looking at the original with its boxes."} <button className="btn ghost sm" onClick={() => { setPdf(null); setShowOriginal(!showOriginal); }}>{showSigned ? "Show the original" : "Show the signed copy"}</button></div>}
+          {pdf && (!showSigned || signedPages) && <PagesView pdf={pdf} pages={showSigned ? signedPages! : version.pages} boxes={showSigned ? [] : layout.boxes} signerKeys={signerKeys} signers={layout.signers} editable={editable} selected={selected} placing={!!placing}
             onSelect={setSelected} onPlace={addBoxAt}
             onChange={(id, r) => setLayout((l) => ({ ...l, boxes: l.boxes.map((b) => (b.id === id ? { ...b, ...r } : b)) }))} />}
         </div>

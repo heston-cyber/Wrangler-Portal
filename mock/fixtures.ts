@@ -220,6 +220,7 @@ let signSig: any = new URLSearchParams(location.search).has("nosig") ? null : { 
 let signDocs: any[] = [
   { _id: "wd1", number: 1, title: "Sample Service Agreement", status: "draft", currentVersion: 1, createdAt: now - 20 * min, updatedAt: now - 20 * min },
   { _id: "wd2", number: 2, title: "Harbor Coffee — Brand Film", status: "approved", currentVersion: 1, createdAt: now - 2 * 86_400_000, updatedAt: now - 3 * hr },
+  { _id: "wd4", number: 4, title: "Signed Sample Agreement", status: "completed", currentVersion: 1, sentAt: now - 3 * hr, sentVersion: 1, completedAt: now - hr, final: { fileId: "f", sha256: "dc062428786904b354433aa3388415766845efb8fe1e3b36a21fdb157d33b225", bytes: 146000, fileName: "WS-00004 Signed Sample Agreement (signed).pdf", at: now - hr }, invoice: { status: "none", at: now - hr }, copies: { status: "sent", at: now - hr, sent: ["jordan@example.com", "heston@wranglerproductions.com"], failed: [] }, archive: { status: "waiting", at: now - hr }, createdAt: now - 4 * hr, updatedAt: now - hr },
   { _id: "wd3", number: 3, title: "Ridgeline Outfitters — Spring Campaign", status: "sent", currentVersion: 1, sentAt: now - 26 * hr, sentVersion: 1, expiresAt: now + 29 * 86_400_000, createdAt: now - 3 * 86_400_000, updatedAt: now - 2 * hr },
 ];
 const signSignings: Record<string, any[]> = {
@@ -230,6 +231,7 @@ const signSignings: Record<string, any[]> = {
 };
 const pages2 = [{ width: 612, height: 792, rotate: 0 }, { width: 612, height: 792, rotate: 0 }];
 let signVers: any[] = [
+  { _id: "wv4", documentId: "wd4", number: 1, fileName: "Sample.pdf", fileSha256: "4c1d", fileBytes: 4073, pages: [{ width: 612, height: 792, rotate: 0 }, { width: 612, height: 792, rotate: 0 }], signers: [{ key: "client", name: "Jordan", email: "jordan@example.com", order: 1 }], boxes: [{ id: "z1", signer: "client", kind: "sign", page: 1, x: 0.22, y: 0.62, w: 0.29, h: 0.04 }], signingOrder: "any", approvedAt: now - 4 * hr, lockHash: "ab", createdAt: now - 4 * hr, updatedAt: now - 4 * hr },
   { _id: "wv1", documentId: "wd1", number: 1, fileName: "Sample_Service_Agreement.pdf", fileSha256: "4c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d", fileBytes: 4073, pages: pages2, signers: [{ key: "client", name: "", email: "", order: 1 }], boxes: [], signingOrder: "any", createdAt: now - 20 * min, updatedAt: now - 20 * min },
   { _id: "wv2", documentId: "wd2", number: 1, fileName: "Harbor_Brand_Film_Agreement.pdf", fileSha256: "a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2", fileBytes: 4073, pages: pages2,
     signers: [{ key: "heston", name: "Heston Hill", email: "heston@wranglerproductions.com", title: "Founder", order: 1 }, { key: "client", name: "Maya Chen", email: "maya@harborcoffee.example", title: "Marketing Director", order: 1 }],
@@ -257,6 +259,7 @@ function signGet(documentId: string, versionNumber?: number) {
     owner: { email: "heston@wranglerproductions.com", name: signSig?.name ?? null, title: signSig?.title ?? null, adopted: !!signSig },
     problems,
     signings: signSignings[documentId] ?? [],
+    finalUrl: doc.final ? "/mock/sign-sample.pdf" : null,
   };
 }
 
