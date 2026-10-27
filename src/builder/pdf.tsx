@@ -11,7 +11,7 @@ import {
   PAGE_PT, fieldValues, fill, money, nodesOf, totals,
   type BuildDoc, type ItemRow, type LineAttrs, type PNode, type TextSize,
 } from "../../convex/lib/wsBuilder";
-import type { FontRow } from "./fonts";
+import type { FontRow } from "../../convex/lib/wsBuilder";
 
 export type Assets = { fonts: FontRow[]; files: Record<string, string | null> };
 

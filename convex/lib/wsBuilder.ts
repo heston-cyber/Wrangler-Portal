@@ -230,6 +230,8 @@ export function missingFields(page: Page, f: Fields): string[] {
 // ---------- style ----------
 
 export type FontRef = { family: string; source: "builtin" | "google" | "custom" };
+/** A stored font face, with a link to its file (the page and the PDF renderer load them). */
+export type FontRow = { _id: string; family: string; weight: number; italic: boolean; url: string | null; source: string; fileName: string };
 export type Style = {
   name: string;
   backdrop: string;           // around the page: in the builder, and behind the pages on the signing page (not in the PDF)

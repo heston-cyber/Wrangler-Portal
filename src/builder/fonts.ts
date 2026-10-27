@@ -1,6 +1,7 @@
 // Fonts for built documents (B2): the same files drive the builder's page on screen (FontFace) and the PDF
 // (@react-pdf/renderer's Font.register). Files live in Convex storage (convex/builder.ts › wsFonts).
-export type FontRow = { _id: string; family: string; weight: number; italic: boolean; url: string | null; source: string; fileName: string };
+export type { FontRow } from "../../convex/lib/wsBuilder";
+import type { FontRow } from "../../convex/lib/wsBuilder";
 
 const screenLoaded = new Set<string>();
 /** Makes the family usable in CSS on this page. */

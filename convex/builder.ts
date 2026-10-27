@@ -7,16 +7,17 @@
 //   profile    the business details new documents start with
 // "Continue to signing" takes the PDF the page rendered and turns the build into a Wrangler Sign document (or rebuilds
 // its draft), with boxes placed from the markers the renderer wrote and the signers and deposit from the build.
-import { action, internalMutation, internalQuery, mutation, query, type ActionCtx, type QueryCtx } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery, mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { requireMe } from "./lib/access";
 import {
   DEFAULT_BUSINESS, DEFAULT_STYLE, MAX_BUILD_JSON, PRESET_STYLES, buildProblems, emptyFields, newId, totals,
-  line, pageOf, type Business, type BuildDoc, type ExtraSigner, type Fields, type ItemRow, type Page, type PNode, type Style,
+  line, pageOf, textOf, type Business, type BuildDoc, type ExtraSigner, type Fields, type ItemRow, type Page, type PNode, type Style,
 } from "./lib/wsBuilder";
 import { serviceAgreementBlocks, serviceAgreementPage } from "./lib/wsStarter";
+import { pdfLinesToPage, type ImportResult } from "./lib/wsPdfImport";
 import { applyScan } from "./lib/wsMarkers";
 import { OWNER_KEY, docLabel, type LayoutBox, type LayoutSigner } from "./lib/wsLayout";
 import { safeFileName } from "./lib/wsFinal";
@@ -469,6 +470,16 @@ export const ensureGoogleFont = action({
   args: { family: v.string() },
   handler: async (ctx, { family }): Promise<{ added: number }> => {
     await ctx.runQuery(internal.users.assertAllowed, {});
+    return googleFont(ctx, family);
+  },
+});
+// The same, for the backend's own PDF rendering (the connector).
+export const ensureGoogleFontInternal = internalAction({
+  args: { family: v.string() },
+  handler: async (ctx, { family }): Promise<{ added: number }> => googleFont(ctx, family),
+});
+async function googleFont(ctx: ActionCtx, family: string): Promise<{ added: number }> {
+  {
     const fam = family.trim().slice(0, 80);
     if (!/^[A-Za-z0-9 ]+$/.test(fam)) throw new ConvexError("That font name doesn't look right.");
     if (await ctx.runQuery(internal.builder.hasFamily, { family: fam })) return { added: 0 };
@@ -480,8 +491,8 @@ export const ensureGoogleFont = action({
       return addFaces(ctx, fam, await plain.text());
     }
     return addFaces(ctx, fam, await css.text());
-  },
-});
+  }
+}
 
 async function addFaces(ctx: ActionCtx, family: string, css: string): Promise<{ added: number }> {
   let added = 0;
@@ -505,4 +516,138 @@ async function addFaces(ctx: ActionCtx, family: string, css: string): Promise<{ 
 export const forDocument = internalQuery({
   args: { documentId: v.id("wsDocuments") },
   handler: async (ctx, { documentId }) => ctx.db.query("wsBuilds").withIndex("by_document", (q) => q.eq("documentId", documentId)).first(),
+});
+
+// ---------- B4 (Oct 27): the connector's builder tools, the backend's own PDF rendering, and PDF → editable draft ----------
+
+/** A new build from a page and fields (the connector, and PDF imports). */
+export async function insertBuild(ctx: MutationCtx, a: { title: string; page: Page; fields?: Partial<Fields>; signers?: ExtraSigner[]; style?: Style; templateId?: Id<"wsTemplates"> }) {
+  tooBig(a.page, a.fields, a.signers);
+  const now = Date.now();
+  const business = await profile(ctx);
+  const base = emptyFields(business);
+  const fields: Fields = { ...base, ...(a.fields ?? {}), business, client: { ...base.client, ...(a.fields?.client ?? {}) }, custom: a.fields?.custom ?? [] };
+  return ctx.db.insert("wsBuilds", {
+    title: clean(a.title) || "Untitled document", blocks: freshIds(a.page), fields, signers: a.signers ?? [], style: a.style ?? await defaultStyle(ctx),
+    ...(a.templateId ? { templateId: a.templateId } : {}), createdAt: now, updatedAt: now,
+  });
+}
+export const createBuildFor = internalMutation({
+  args: { title: v.string(), page: v.any(), fields: v.optional(v.any()), signers: v.optional(v.any()), templateId: v.optional(v.id("wsTemplates")) },
+  handler: async (ctx, a) => {
+    const t = a.templateId ? await ctx.db.get(a.templateId) : null;
+    if (a.templateId && !t) throw new ConvexError("That template doesn't exist.");
+    const tf = (t?.fields as Partial<Fields> | undefined) ?? {};
+    const fields = { project: tf.project ?? "", custom: tf.custom ?? [], ...((a.fields as Partial<Fields>) ?? {}) };
+    return insertBuild(ctx, { title: a.title, page: a.page ? pageOf(a.page) : pageOf(t?.blocks), fields, signers: a.signers as ExtraSigner[] | undefined, style: t ? (t.style as Style) : undefined, templateId: t?._id });
+  },
+});
+export const patchBuild = internalMutation({
+  args: { buildId: v.id("wsBuilds"), title: v.optional(v.string()), page: v.optional(v.any()), fields: v.optional(v.any()), signers: v.optional(v.any()) },
+  handler: async (ctx, a) => {
+    const b = await ctx.db.get(a.buildId);
+    if (!b) throw new ConvexError("That draft doesn't exist.");
+    tooBig(a.page, a.fields, a.signers);
+    await ctx.db.patch(a.buildId, {
+      ...(a.title !== undefined ? { title: clean(a.title) || "Untitled document" } : {}), ...(a.page !== undefined ? { blocks: pageOf(a.page) } : {}),
+      ...(a.fields !== undefined ? { fields: a.fields } : {}), ...(a.signers !== undefined ? { signers: a.signers } : {}), updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+export const buildInternal = internalQuery({
+  args: { buildId: v.id("wsBuilds") },
+  handler: async (ctx, { buildId }) => {
+    const b = await ctx.db.get(buildId);
+    if (!b) return null;
+    const doc = b.documentId ? await ctx.db.get(b.documentId) : null;
+    return { ...b, page: pageOf(b.blocks), document: doc ? { _id: doc._id, label: docLabel(doc.number), status: doc.status } : null };
+  },
+});
+/** A draft by its id or words from its title (the connector's "draft" argument). */
+export const findBuild = internalQuery({
+  args: { ref: v.string() },
+  handler: async (ctx, { ref }): Promise<{ ok: true; buildId: Id<"wsBuilds"> } | { ok: false; error: string; candidates?: Array<{ draft_id: string; title: string }> }> => {
+    const r = ref.trim();
+    if (!r) return { ok: false, error: "Pass the draft: its draft_id or words from its title." };
+    const id = ctx.db.normalizeId("wsBuilds", r);
+    if (id && (await ctx.db.get(id))) return { ok: true, buildId: id };
+    const words = r.toLowerCase().split(/\s+/);
+    const rows = (await ctx.db.query("wsBuilds").withIndex("by_updated").order("desc").take(300)).filter((b) => words.every((w) => b.title.toLowerCase().includes(w)));
+    if (rows.length === 1) return { ok: true, buildId: rows[0]._id };
+    if (!rows.length) return { ok: false, error: `No draft matches "${r}". list_drafts shows them.` };
+    return { ok: false, error: `${rows.length} drafts match "${r}"; pass a draft_id.`, candidates: rows.slice(0, 10).map((b) => ({ draft_id: b._id, title: b.title })) };
+  },
+});
+export const listBuildsInternal = internalQuery({
+  args: { query: v.optional(v.string()) },
+  handler: async (ctx, { query: q }) => {
+    const words = (q ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+    const rows = await ctx.db.query("wsBuilds").withIndex("by_updated").order("desc").take(300);
+    const out = [];
+    for (const b of rows.filter((x) => words.every((w) => x.title.toLowerCase().includes(w))).slice(0, 50)) {
+      const doc = b.documentId ? await ctx.db.get(b.documentId) : null;
+      out.push({ draft_id: b._id, title: b.title, client: (b.fields as Fields)?.client?.name || null, updated: new Date(b.updatedAt).toISOString(), document: doc ? `${docLabel(doc.number)} (${doc.status})` : null });
+    }
+    return out;
+  },
+});
+export const templatesInternal = internalQuery({
+  args: {},
+  handler: async (ctx) => (await ctx.db.query("wsTemplates").withIndex("by_updated").order("desc").collect()).map((t) => ({ _id: t._id, name: t.name, description: t.description ?? "", fields: t.fields, page: pageOf(t.blocks) })),
+});
+export const saveTemplateFrom = internalMutation({
+  args: { buildId: v.id("wsBuilds"), name: v.string(), description: v.optional(v.string()) },
+  handler: async (ctx, a) => {
+    const b = await ctx.db.get(a.buildId);
+    if (!b) throw new ConvexError("That draft doesn't exist.");
+    const f = b.fields as Fields;
+    const now = Date.now();
+    return ctx.db.insert("wsTemplates", { name: clean(a.name) || b.title, description: clean(a.description ?? "", 300) || undefined, blocks: pageOf(b.blocks), fields: { project: f?.project ?? "", custom: (f?.custom ?? []).map((c) => ({ ...c, value: "" })) }, style: b.style, createdAt: now, updatedAt: now });
+  },
+});
+
+/** What the backend needs to render a build to a PDF: the document, the stored fonts and the style's images. */
+export const renderInputs = internalQuery({
+  args: { buildId: v.id("wsBuilds") },
+  handler: async (ctx, { buildId }) => {
+    const b = await ctx.db.get(buildId);
+    if (!b) return null;
+    const st = b.style as Style;
+    const fonts = await Promise.all((await ctx.db.query("wsFonts").collect()).map(async (f) => ({ _id: f._id as string, family: f.family, weight: f.weight, italic: f.italic, source: f.source, fileName: f.fileName, url: await ctx.storage.getUrl(f.fileId) })));
+    const files: Record<string, string | null> = {};
+    for (const id of [st.logo?.fileId, st.cover?.fileId].filter(Boolean) as string[]) { try { files[id] = await ctx.storage.getUrl(id as Id<"_storage">); } catch { files[id] = null; } }
+    const doc = b.documentId ? await ctx.db.get(b.documentId) : null;
+    const d: BuildDoc = { title: b.title, page: pageOf(b.blocks), fields: b.fields as Fields, signers: (b.signers as ExtraSigner[]) ?? [], style: st };
+    return { d, fonts, files, label: doc ? docLabel(doc.number) : undefined };
+  },
+});
+
+/** PDF → editable draft (the New document page's "Import a PDF to edit", and the connector's import_pdf). */
+export async function importPdfCore(ctx: ActionCtx, storageId: Id<"_storage">, title?: string, keep = false): Promise<{ buildId: Id<"wsBuilds">; notes: string[]; stats: ImportResult["stats"] }> {
+  try {
+    const lines = await ctx.runAction(internal.wsNode.extractLines, { storageId });
+    const r = pdfLinesToPage(lines);
+    if (!r.stats.paragraphs) throw new Error("This PDF has no text to bring in (it may be a scanned image). Claude can read it and write the draft with create_draft instead.");
+    const first = r.page.content.find((n) => n.type === "paragraph" && n.attrs?.size === "title");
+    const name = clean(title ?? "") || textOf(first).slice(0, 120) || "Imported document";
+    const buildId = await ctx.runMutation(internal.builder.createBuildFor, { title: name, page: r.page });
+    return { buildId, notes: r.notes, stats: r.stats };
+  } finally {
+    if (!keep) await ctx.storage.delete(storageId).catch(() => {}); // an upload only; a document's own file stays
+  }
+}
+export const importPdf = action({
+  args: { storageId: v.id("_storage"), title: v.optional(v.string()) },
+  handler: async (ctx, { storageId, title }): Promise<{ buildId: Id<"wsBuilds">; notes: string[] }> => {
+    await ctx.runQuery(internal.users.assertAllowed, {});
+    try { const r = await importPdfCore(ctx, storageId, title); return { buildId: r.buildId, notes: r.notes }; }
+    catch (e) { throw new ConvexError(errText(e)); }
+  },
+});
+
+// The connector's live self-test makes a throwaway draft to render, then removes it.
+export const dropBuildInternal = internalMutation({
+  args: { buildId: v.id("wsBuilds") },
+  handler: async (ctx, { buildId }) => { await ctx.db.delete(buildId); return null; },
 });
