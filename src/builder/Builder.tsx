@@ -121,6 +121,43 @@ export default function Builder({ mode }: { mode: Mode }) {
     if (lock) (editor.view.dom as HTMLElement).blur();
   }, [editor, sheet, picking, phoneNow]);
 
+  // Phones: while typing, the line with the cursor stays in view: above the keyboard and the bottom bar, below the top
+  // bar. Checked when the selection moves, as text is typed, and when the keyboard opens or the screen scrolls.
+  useEffect(() => {
+    if (!editor || !phoneNow) return;
+    let raf = 0;
+    const check = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (editor.isDestroyed || !editor.isEditable || !editor.view.hasFocus()) return;
+        const vv = window.visualViewport;
+        const vTop = vv ? vv.offsetTop : 0, vBottom = vv ? vv.offsetTop + vv.height : innerHeight;
+        const top = Math.max(vTop, document.querySelector(".topbar, header")?.getBoundingClientRect().bottom ?? 0) + 12;
+        const bar = document.querySelector(".wsb-phonebar")?.getBoundingClientRect();
+        const bottom = Math.min(vBottom, bar && bar.height && bar.top > vTop + 100 ? bar.top : vBottom) - 20;
+        let c: { top: number; bottom: number };
+        try { c = editor.view.coordsAtPos(editor.state.selection.head); } catch { return; }
+        let delta = 0;
+        if (c.bottom > bottom) delta = c.bottom - bottom;
+        else if (c.top < top) delta = c.top - top;
+        if (!delta) return;
+        let sc: HTMLElement | null = (editor.view.dom as HTMLElement).parentElement;
+        while (sc && !(/(auto|scroll)/.test(getComputedStyle(sc).overflowY) && sc.scrollHeight > sc.clientHeight)) sc = sc.parentElement;
+        (sc ?? (document.scrollingElement as HTMLElement)).scrollBy({ top: delta, behavior: "auto" });
+      });
+    };
+    const late = () => { check(); setTimeout(check, 300); }; // the keyboard slides up over ~250ms
+    editor.on("selectionUpdate", check);
+    editor.on("update", check);
+    editor.on("focus", late);
+    window.visualViewport?.addEventListener("resize", late);
+    return () => {
+      cancelAnimationFrame(raf);
+      editor.off("selectionUpdate", check); editor.off("update", check); editor.off("focus", late);
+      window.visualViewport?.removeEventListener("resize", late);
+    };
+  }, [editor, phoneNow]);
+
   // Phones: press and hold an Insert item (or a clause) to drag it onto the page.
   const [tdrag, setTdrag] = useState<TouchDragView | null>(null);
   const touch = useMemo(() => touchDragger({

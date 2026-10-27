@@ -158,7 +158,7 @@ function currentBlocks(editor: Editor): { from: number; to: number } | null {
   return n ? { from: start, to: start + n.nodeSize } : null;
 }
 /** Move the current block(s) up or down past one neighbour (phones can't drag; the Format tab has these). */
-export function moveBlock(editor: Editor, dir: -1 | 1): boolean {
+export function moveBlock(editor: Editor, dir: -1 | 1, opts: { scroll?: boolean } = {}): boolean {
   const r = currentBlocks(editor);
   if (!r) return false;
   const { state } = editor;
@@ -178,15 +178,15 @@ export function moveBlock(editor: Editor, dir: -1 | 1): boolean {
   const a = Math.min(at + offset, tr.doc.content.size), b = Math.min(a + span, tr.doc.content.size);
   if (sel instanceof BlockSelection) { const s = blockRange(tr.doc, at, at + slice.content.size - (slice.content.lastChild?.nodeSize ?? 0)); if (s) tr.setSelection(s); }
   else try { tr.setSelection(TextSelection.create(tr.doc, a, b)); } catch { tr.setSelection(TextSelection.near(tr.doc.resolve(at + 1))); }
-  editor.view.dispatch(tr.scrollIntoView());
-  editor.view.focus();
+  editor.view.dispatch(opts.scroll === false ? tr : tr.scrollIntoView());
+  if (opts.scroll !== false) editor.view.focus();
   return true;
 }
 export function duplicateBlock(editor: Editor): boolean {
   const r = currentBlocks(editor);
   if (!r) return false;
   const slice = editor.state.doc.slice(r.from, r.to);
-  editor.view.dispatch(editor.state.tr.insert(r.to, slice.content).scrollIntoView());
+  editor.view.dispatch(editor.state.tr.insert(r.to, slice.content));
   return true;
 }
 export function deleteBlock(editor: Editor): boolean {

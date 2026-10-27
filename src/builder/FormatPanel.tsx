@@ -37,14 +37,34 @@ const keep = (e: React.MouseEvent) => e.preventDefault(); // panel buttons don't
 
 /** Move, copy or delete the block with the cursor (or the selected blocks); on a phone this is how blocks move. */
 function BlockBar({ editor }: { editor: Editor }) {
+  // On a phone the sheet covers the lower half of the screen: keep the moved block in view above it.
+  const shown = (ok: boolean) => { if (ok) requestAnimationFrame(() => keepInView(editor)); };
   return (
     <div className="field"><span className="ws-flabel">Block</span><div className="ws-seg wsb-marks">
-      <button aria-label="Move up" title="Move up" onMouseDown={keep} onClick={() => moveBlock(editor, -1)}><ArrowUp size={15} /></button>
-      <button aria-label="Move down" title="Move down" onMouseDown={keep} onClick={() => moveBlock(editor, 1)}><ArrowDown size={15} /></button>
-      <button aria-label="Duplicate" title="Duplicate" onMouseDown={keep} onClick={() => duplicateBlock(editor)}><Copy size={15} /></button>
+      <button aria-label="Move up" title="Move up" onMouseDown={keep} onClick={() => shown(moveBlock(editor, -1, { scroll: false }))}><ArrowUp size={15} /></button>
+      <button aria-label="Move down" title="Move down" onMouseDown={keep} onClick={() => shown(moveBlock(editor, 1, { scroll: false }))}><ArrowDown size={15} /></button>
+      <button aria-label="Duplicate" title="Duplicate" onMouseDown={keep} onClick={() => shown(duplicateBlock(editor))}><Copy size={15} /></button>
       <button aria-label="Delete" title="Delete" onMouseDown={keep} onClick={() => deleteBlock(editor)}><Trash2 size={15} /></button>
     </div></div>
   );
+}
+
+/** Scroll the page just enough that the block with the selection sits between the top bar and an open sheet. */
+function keepInView(editor: Editor) {
+  if (editor.isDestroyed) return;
+  const at = editor.view.domAtPos(editor.state.selection.from);
+  let el: HTMLElement | null = (at.node.nodeType === 1 ? at.node : at.node.parentElement) as HTMLElement | null;
+  if (el && el.childNodes[at.offset] instanceof HTMLElement && el.classList.contains("wsb-doc")) el = el.childNodes[at.offset] as HTMLElement;
+  const block = el?.closest(".wsb-doc > *, .wsb-sec-body > *") as HTMLElement | null ?? el;
+  if (!block) return;
+  let sc: HTMLElement | null = block.parentElement;
+  while (sc && !(/(auto|scroll)/.test(getComputedStyle(sc).overflowY) && sc.scrollHeight > sc.clientHeight)) sc = sc.parentElement;
+  const scroller = sc ?? (document.scrollingElement as HTMLElement);
+  const panel = document.querySelector(".wsb-panel.open")?.getBoundingClientRect();
+  const topLimit = 64, bottomLimit = (panel && panel.top > 0 ? panel.top : innerHeight) - 16;
+  const r = block.getBoundingClientRect();
+  if (r.top < topLimit) scroller.scrollBy({ top: r.top - topLimit, behavior: "smooth" });
+  else if (r.bottom > bottomLimit) scroller.scrollBy({ top: Math.min(r.bottom - bottomLimit, r.top - topLimit), behavior: "smooth" });
 }
 
 export function FormatPanel({ editor, accent, onSaveClause }: { editor: Editor | null; accent: string; onSaveClause: (s: PNode) => void }) {
