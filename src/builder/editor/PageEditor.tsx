@@ -8,7 +8,7 @@ import { Placeholder } from "@tiptap/extensions";
 import { NodeSelection } from "@tiptap/pm/state";
 import { DOMSerializer, Fragment, Slice } from "@tiptap/pm/model";
 import { GripVertical } from "lucide-react";
-import type { Page, PNode } from "../../../convex/lib/wsBuilder";
+import { isAtom, type Page, type PNode } from "../../../convex/lib/wsBuilder";
 import { Atoms, BlockSelect, FieldHighlight, Line, Section, fieldsKey } from "./schema";
 import { BlockSelection, blockRange, blockStartAt } from "./blockSelection";
 import { dropNodes } from "./commands";
@@ -66,6 +66,8 @@ export function PageEditor({ page, onChange, onEditor, onSelectText, onMenu, mis
     onUpdate: ({ editor: e }) => { const j = e.getJSON() as Page; last.current = JSON.stringify(j); cb.current.onChange(j); },
     onSelectionUpdate: ({ editor: e }) => {
       const s = e.state.selection;
+      // Phones: tapping a special block (parties, line items, signatures…) selects it without the keyboard coming up.
+      if (s instanceof NodeSelection && isAtom(s.node.type.name) && matchMedia("(pointer: coarse)").matches && document.activeElement === e.view.dom) (e.view.dom as HTMLElement).blur();
       const has = !s.empty || s instanceof BlockSelection;
       if (has && !hadSelection.current) cb.current.onSelectText();
       hadSelection.current = has;

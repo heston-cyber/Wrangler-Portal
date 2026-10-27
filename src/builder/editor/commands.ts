@@ -105,7 +105,7 @@ export function insertNodes(editor: Editor, nodes: PNode[]) {
 export const insertKind = (editor: Editor, kind: InsertKind) => insertNodes(editor, newNodes(kind));
 
 /** Drop dragged Insert items or clauses at the pointer (a valid spot nearby, inside containers too). */
-export function dropNodes(editor: Editor, nodes: PNode[], coords: { left: number; top: number }): boolean {
+export function dropNodes(editor: Editor, nodes: PNode[], coords: { left: number; top: number }, opts: { focus?: boolean } = {}): boolean {
   const { view, state } = editor;
   const at = view.posAtCoords(coords);
   if (!at) return false;
@@ -114,9 +114,26 @@ export function dropNodes(editor: Editor, nodes: PNode[], coords: { left: number
   const pos = dropPoint(state.doc, at.pos, slice) ?? at.pos;
   const tr = state.tr.insert(pos, frag);
   tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(pos + 1, tr.doc.content.size))));
-  view.dispatch(tr.scrollIntoView());
-  view.focus();
+  view.dispatch(opts.focus === false ? tr : tr.scrollIntoView());
+  if (opts.focus !== false) view.focus(); // a phone drop doesn't bring the keyboard up
   return true;
+}
+/** Where a drop at these coordinates would land, as a line to draw (screen coordinates), for the phone drag. */
+export function dropLineAt(editor: Editor, nodes: PNode[], coords: { left: number; top: number }): { top: number; left: number; width: number } | null {
+  const { view, state } = editor;
+  const at = view.posAtCoords(coords);
+  if (!at) return null;
+  let slice: Slice;
+  try { slice = new Slice(Fragment.fromArray(nodes.map((n) => state.schema.nodeFromJSON(n))), 0, 0); } catch { return null; }
+  const pos = dropPoint(state.doc, at.pos, slice) ?? at.pos;
+  const $p = state.doc.resolve(pos);
+  // The line goes between the block before and the one after, across the container the drop lands in.
+  const before = $p.nodeBefore ? view.nodeDOM(pos - $p.nodeBefore.nodeSize) as HTMLElement | null : null;
+  const after = $p.nodeAfter ? view.nodeDOM(pos) as HTMLElement | null : null;
+  const box = (after ?? before)?.getBoundingClientRect?.();
+  if (!box) { const c = view.coordsAtPos(pos); const r = (view.dom as HTMLElement).getBoundingClientRect(); return { top: c.top, left: r.left, width: r.width }; }
+  const top = after ? (before ? (before.getBoundingClientRect().bottom + box.top) / 2 : box.top - 2) : box.bottom + 2;
+  return { top, left: box.left, width: box.width };
 }
 
 /** Outline entries: titles, subtitles and headings, and containers (by their first line), with where they are. */

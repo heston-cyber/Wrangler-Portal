@@ -27,6 +27,7 @@ import {
   canMovePicked, deletePicked, duplicatePicked, insertAfterPicked, insertKind, insertNodes, isPicking, movePicked, outline, pickAll, pickedText, picks, setPickMode, togglePickAt,
 } from "./editor/commands";
 import { marginSelect, pickableBlocks } from "./editor/blockSelection";
+import { touchDragger, type TouchDragView } from "./touchDrag";
 import { errText, uploadToStorage } from "../pages/sign/common";
 
 type Mode = { kind: "build"; buildId: Id<"wsBuilds"> } | { kind: "template"; templateId: Id<"wsTemplates"> };
@@ -109,6 +110,29 @@ export default function Builder({ mode }: { mode: Mode }) {
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   });
+
+  // Phones: the keyboard is only up while you're typing on the page. With a sheet open (or in select mode) the page is
+  // read-only for the moment, so Format's buttons and Insert's items act on it without bringing the keyboard back.
+  const phoneNow = typeof matchMedia === "function" && matchMedia("(max-width: 599px)").matches;
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    const lock = picking || (phoneNow && sheet);
+    if (editor.isEditable !== !lock) editor.setEditable(!lock);
+    if (lock) (editor.view.dom as HTMLElement).blur();
+  }, [editor, sheet, picking, phoneNow]);
+
+  // Phones: press and hold an Insert item (or a clause) to drag it onto the page.
+  const [tdrag, setTdrag] = useState<TouchDragView | null>(null);
+  const touch = useMemo(() => touchDragger({
+    editor: () => editorRef.current,
+    onView: setTdrag,
+    onPicked: () => setSheet(false),
+    onDropped: (label) => showRef.current(`Added ${label}`),
+  }), []);
+  const editorRef = useRef<Editor | null>(null);
+  editorRef.current = editor;
+  const showRef = useRef(show);
+  showRef.current = show;
 
   // First load only: after that the page's copy is the truth and saves go up. Older documents (a list of blocks) are
   // converted to the page editor's lines here.
@@ -332,9 +356,9 @@ export default function Builder({ mode }: { mode: Mode }) {
           </div>
           {tab === "insert" && (
             <div className="wsb-pane">
-              <span className="ws-flabel">Drag onto the page (or into a container), or click to add after the cursor</span>
-              {INSERT.map((x) => <button key={x.kind} className="wsb-insert" draggable onDragStart={(e) => dragNodes(e, newNodes(x.kind))} onDragEnd={() => endInsertDrag(editor)} onClick={() => { if (editor) insertKind(editor, x.kind); if (phone) setSheet(false); }}>{x.icon}<span><b>{INSERT_LABEL[x.kind]}</b><span className="secondary">{x.hint}</span></span></button>)}
-              <ClauseLibrary clauses={clauses} onInsert={(c) => { if (editor) insertNodes(editor, [clauseSection(c)]); if (phone) setSheet(false); }} onDragStart={(e, c) => dragNodes(e, [clauseSection(c)])} onDragEnd={() => endInsertDrag(editor)} />
+              <span className="ws-flabel">{phone ? "Tap to add after the cursor, or press and hold to drag onto the page" : "Drag onto the page (or into a container), or click to add after the cursor"}</span>
+              {INSERT.map((x) => <button key={x.kind} className="wsb-insert" draggable onDragStart={(e) => dragNodes(e, newNodes(x.kind))} onDragEnd={() => endInsertDrag(editor)} {...touch.item(() => newNodes(x.kind), INSERT_LABEL[x.kind])} onClick={() => { if (touch.justDropped()) return; if (editor) insertKind(editor, x.kind); if (phone) setSheet(false); }}>{x.icon}<span><b>{INSERT_LABEL[x.kind]}</b><span className="secondary">{x.hint}</span></span></button>)}
+              <ClauseLibrary clauses={clauses} onInsert={(c) => { if (touch.justDropped()) return; if (editor) insertNodes(editor, [clauseSection(c)]); if (phone) setSheet(false); }} onDragStart={(e, c) => dragNodes(e, [clauseSection(c)])} onDragEnd={() => endInsertDrag(editor)} touchProps={(c) => touch.item(() => [clauseSection(c)], c.title)} />
             </div>
           )}
           {tab === "format" && <FormatPanel editor={editor} accent={st.accent} onSaveClause={(sec) => void onSaveClause(sec)} />}
@@ -388,6 +412,10 @@ export default function Builder({ mode }: { mode: Mode }) {
       {asTemplate && <SaveTemplate doc={doc} onClose={() => setAsTemplate(false)} onSave={async (name, description) => {
         try { await saveAsTemplate({ name, description, title: doc.title, blocks: doc.page, fields: doc.fields, signers: [], style: doc.style }); setAsTemplate(false); show(`Saved as the template "${name}"`); } catch (e) { show(errText(e)); }
       }} />}
+      {tdrag && <>
+        {tdrag.line && <div className="wsb-tdragline" style={{ top: tdrag.line.top - 2, left: tdrag.line.left, width: tdrag.line.width }} />}
+        <div className="wsb-tdrag" style={{ left: tdrag.x, top: tdrag.y }}>{tdrag.label}</div>
+      </>}
       {menu && editor && <QuickMenu editor={editor} at={menu} accent={st.accent} onClose={() => setMenu(null)} onMore={() => setTab("format")} onSaveClause={(sec) => void onSaveClause(sec)} />}
       {toast}
     </BuilderCtx.Provider>
@@ -395,7 +423,7 @@ export default function Builder({ mode }: { mode: Mode }) {
 }
 
 type LibClause = { _id: string; title: string; body: unknown; initials: boolean };
-function ClauseLibrary({ clauses, onInsert, onDragStart, onDragEnd }: { clauses: LibClause[] | undefined; onInsert: (c: LibClause) => void; onDragStart: (e: React.DragEvent, c: LibClause) => void; onDragEnd: () => void }) {
+function ClauseLibrary({ clauses, onInsert, onDragStart, onDragEnd, touchProps }: { clauses: LibClause[] | undefined; onInsert: (c: LibClause) => void; onDragStart: (e: React.DragEvent, c: LibClause) => void; onDragEnd: () => void; touchProps: (c: LibClause) => Record<string, unknown> }) {
   const [q, setQ] = useState("");
   const list = (clauses ?? []).filter((c) => !q || c.title.toLowerCase().includes(q.toLowerCase()));
   return (
@@ -403,7 +431,7 @@ function ClauseLibrary({ clauses, onInsert, onDragStart, onDragEnd }: { clauses:
       <div className="ws-cardhead"><span className="label">Clause library</span><a className="btn ghost sm" {...linkProps("/sign/templates?tab=clauses")}>Manage</a></div>
       <input className="input sm" placeholder="Search clauses" value={q} onChange={(e) => setQ(e.target.value)} />
       {clauses === undefined ? <Spinner /> : list.length === 0 ? <p className="caption secondary">{clauses.length ? "No clause matches." : "No saved clauses yet. Save one from any clause block."}</p>
-        : list.map((c) => <button key={c._id} className="wsb-libitem" draggable onDragStart={(e) => onDragStart(e, c)} onDragEnd={onDragEnd} onClick={() => onInsert(c)} title="Drag onto the page, or click to add"><ScrollText size={14} /><span>{c.title}</span>{c.initials && <span className="chip">initials</span>}</button>)}
+        : list.map((c) => <button key={c._id} className="wsb-libitem" draggable onDragStart={(e) => onDragStart(e, c)} onDragEnd={onDragEnd} {...touchProps(c)} onClick={() => onInsert(c)} title="Drag onto the page, or click to add"><ScrollText size={14} /><span>{c.title}</span>{c.initials && <span className="chip">initials</span>}</button>)}
     </div>
   );
 }
