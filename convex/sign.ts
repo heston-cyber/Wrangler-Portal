@@ -91,7 +91,7 @@ export const get = query({
       doc: { ...doc, label: docLabel(doc.number) },
       version: { ...shown, fileUrl: await ctx.storage.getUrl(shown.fileId), isCurrent: shown.number === doc.currentVersion, editable: shown.number === doc.currentVersion && !shown.approvedAt && doc.status === "draft" },
       versions: versions.sort((a, b) => b.number - a.number).map((x) => ({ number: x.number, fileName: x.fileName, fileSha256: x.fileSha256, approvedAt: x.approvedAt ?? null, lockHash: x.lockHash ?? null, ownerSignedAt: x.ownerSignedAt ?? null, createdAt: x.createdAt })),
-      events: events.map((e) => ({ seq: e.seq, at: e.at, kind: e.kind, actor: e.actor, versionNumber: e.versionNumber ?? null, detail: e.detail ?? null, email: e.email ?? null, ip: e.ip ?? null })),
+      events: events.map((e) => ({ seq: e.seq, at: e.at, kind: e.kind, actor: e.actor, versionNumber: e.versionNumber ?? null, detail: e.detail ?? null, email: e.email ?? null, ip: e.ip ?? null, userAgent: e.userAgent ?? null })),
       chain: await verifyChain(events),
       owner: { email: ownerEmail(), name: sig?.name ?? null, title: sig?.title ?? null, adopted: !!sig },
       signings: doc.sentVersion !== undefined ? (await ctx.db.query("wsSignings").withIndex("by_document", (q) => q.eq("documentId", documentId).eq("versionNumber", doc.sentVersion!)).collect())

@@ -312,7 +312,7 @@ function Editor({ data }: { data: Data }) {
             </div>
             <ol className="ws-events">
               {[...data.events].reverse().map((e) => (
-                <li key={e.seq}><span className="secondary ws-small">{central(e.at)} · {e.actor === OWNER_KEY ? "You" : e.actor}</span><span>{eventLabel(e.kind)}{e.versionNumber ? ` (v${e.versionNumber})` : ""}</span>{e.detail && <span className="secondary ws-small ws-detail">{e.detail}</span>}</li>
+                <li key={e.seq}><span className="secondary ws-small">{central(e.at)} · {e.actor === OWNER_KEY ? "You" : e.actor}</span><span>{eventLabel(e.kind)}{e.versionNumber ? ` (v${e.versionNumber})` : ""}</span>{e.detail && <span className="secondary ws-small ws-detail">{e.detail}</span>}{(e.ip || e.userAgent) && <span className="secondary ws-small ws-detail" title={e.userAgent ?? undefined}>{[e.ip ? `IP ${e.ip}` : null, device(e.userAgent)].filter(Boolean).join(" · ")}</span>}</li>
               ))}
             </ol>
           </section>
@@ -374,8 +374,15 @@ const EVENT_LABEL: Record<string, string> = {
   sent: "Link emailed", send_settings: "Sent for signature", email_bounced: "Email failed", reminder_sent: "Reminder emailed", voided: "Cancelled", expiry_changed: "Expiry changed",
   opened: "Opened the link", code_sent: "Code emailed", code_failed: "Wrong code", email_verified: "Email confirmed", consent_given: "Agreed to sign electronically",
   page_viewed: "Viewed a page", signature_adopted: "Adopted a signature", signature_changed: "Changed their signature", initialed: "Initialed", initials_removed: "Took initials off",
-  signed: "Signed", all_signed: "Everyone signed",
+  signed: "Signed", all_signed: "Everyone signed", email_delivered_to_resend: "Email sent", email_failed: "Email failed",
 };
+// A short, readable name for the browser that did something (the full string stays in the trail).
+function device(ua: string | null): string | null {
+  if (!ua) return null;
+  const os = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android" : /Mac OS X/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : /Linux/.test(ua) ? "Linux" : null;
+  const br = /Edg\//.test(ua) ? "Edge" : /CriOS|Chrome\//.test(ua) ? "Chrome" : /FxiOS|Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : null;
+  return [br, os].filter(Boolean).join(" on ") || null;
+}
 const eventLabel = (k: string) => EVENT_LABEL[k] ?? k.replace(/_/g, " ");
 
 // ---------- pages and boxes ----------
