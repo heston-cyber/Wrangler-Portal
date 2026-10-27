@@ -15,10 +15,10 @@ export default function SignHome() {
   const docs = useQuery(api.sign.list);
   const templates = useQuery(api.builder.listTemplates);
   const c = docs ? countByStatus(docs) : null;
-  const recent = (docs ?? []).slice(0, 5);
+  const recent = (docs ?? []).filter((d) => !d.hidden).slice(0, 5);
   const [menu, setMenu] = useState<MenuAt | null>(null);
   const [toast, show] = useToast();
-  const md = (d: NonNullable<typeof docs>[number]): MenuDoc => ({ _id: d._id, label: d.label, title: d.title, status: d.status, inBuilder: false, buildId: d.buildId ?? null });
+  const md = (d: NonNullable<typeof docs>[number]): MenuDoc => ({ _id: d._id, label: d.label, title: d.title, status: d.status, inBuilder: false, buildId: d.buildId ?? null, hidden: d.hidden });
   const card = (to: string, icon: React.ReactNode, title: string, text: string, meta: React.ReactNode) => (
     <a className="ws-hubcard" {...linkProps(to)}>
       <span className="ws-hubicon">{icon}</span>

@@ -105,7 +105,7 @@ export const listDocs = internalQuery({
         signers: (ver?.signers ?? []).filter((s) => s.key !== OWNER_KEY).map((s) => s.name || s.email || s.key),
         heston_signs: !!ver?.signers.some((s) => s.key === OWNER_KEY),
         amount: ver?.payment ? ver.payment.amountCents / 100 : null,
-        updated: new Date(d.updatedAt).toISOString(), completed: d.completedAt ? new Date(d.completedAt).toISOString() : null,
+        updated: new Date(d.updatedAt).toISOString(), completed: d.completedAt ? new Date(d.completedAt).toISOString() : null, hidden_from_list: !!d.hiddenAt,
       });
     }
     return out;

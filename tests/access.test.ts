@@ -89,7 +89,7 @@ function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "sign.preview": { versionId: ids.wsVersionId },
     "sign.send": { versionId: ids.wsVersionId }, "sign.voidDocument": { documentId: ids.docId }, "sign.resend": { documentId: ids.docId, signerKey: "client" },
     "sign.extendExpiry": { documentId: ids.docId, days: 7 },
-    "sign.requestsFor": { documentId: ids.docId }, "sign.pendingRequests": {}, "sign.decideRequest": { requestId: ids.requestId, confirm: false },
+    "sign.requestsFor": { documentId: ids.docId }, "sign.setHidden": { documentId: ids.docId, hidden: true }, "sign.pendingRequests": {}, "sign.decideRequest": { requestId: ids.requestId, confirm: false },
     "signDone.retry": { documentId: ids.docId, step: "copies" }, "signDone.downloadAudit": { documentId: ids.docId },
     "wsArchive.status": {}, "wsArchive.authUrl": {}, "wsArchive.disconnect": {},
     "builder.getProfile": {}, "builder.saveProfile": { business: { name: "", legalName: "", contact: "", title: "", email: "", phone: "", address: "" } },

@@ -413,6 +413,7 @@ export default defineSchema({
       at: v.number(), pdfPath: v.optional(v.string()), auditPath: v.optional(v.string()), verified: v.optional(v.boolean()), error: v.optional(v.string()),
     })),
     finishError: v.optional(v.string()), // the signed copy couldn't be made (shown to Heston with a Retry)
+    hiddenAt: v.optional(v.number()),   // removed from the Docs list (Oct 27); the record is kept
     buildId: v.optional(v.id("wsBuilds")), // B2: made in the builder
     look: v.optional(v.object({ backdrop: v.string(), backdropImageId: v.optional(v.id("_storage")) })), // the signing page's background
   }).index("by_number", ["number"]).index("by_updated", ["updatedAt"]).index("by_final_sha", ["final.sha256"]),

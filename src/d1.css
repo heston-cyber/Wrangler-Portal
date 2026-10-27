@@ -193,3 +193,11 @@ body { font-family: var(--font-body); font-size: 14.5px; letter-spacing: -.003em
   .crumbs .chip { flex: none; }
   .crumbs .here { min-width: 3em; }
 }
+
+/* phones: the contracts lists fit the screen; the title wraps instead of the table scrolling sideways (Oct 27) */
+@media (max-width: 600px) {
+  .ws-table td, .ws-table th { padding-left: 8px; padding-right: 6px; }
+  .ws-table td:not(.num):not(.ws-more) { white-space: normal; }
+  .ws-table td.num { font-size: 11px; letter-spacing: -.02em; }
+  .ws-table td.ws-more { width: 30px; padding-right: 4px; }
+}

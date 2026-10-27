@@ -75,6 +75,7 @@ export const list = query({
         signers: clients.map((s) => s.name || s.email || s.key), emails: clients.map((s) => s.email).filter(Boolean),
         pages: ver.pages.length, approved: !!ver.approvedAt, sentAt: d.sentAt ?? null, completedAt: d.completedAt ?? null,
         amount: ver.payment ? ver.payment.amountCents / 100 : null, fromBuilder: !!d.buildId, buildId: d.buildId ?? null,
+        hidden: !!d.hiddenAt,
       };
     }));
   },
@@ -329,6 +330,21 @@ export const insertReplacement = internalMutation({
     await ctx.db.patch(doc._id, { status: "draft", currentVersion: number, updatedAt: now, sentAt: undefined, sentVersion: undefined, expiresAt: undefined, voidedAt: undefined, voidReason: undefined });
     await appendEvent(ctx, doc._id, { kind: "new_version", actor: OWNER_KEY, versionNumber: number, detail: `Version ${number}: new file "${a.fileName}" (${a.pages.length} pages), SHA-256 ${a.sha}. Earlier versions are kept.` });
     return { versionNumber: number };
+  },
+});
+
+// Remove a document from the Docs list, or put it back (Oct 27). Nothing is deleted: its versions, files, trail and
+// signed copy stay, it still verifies, and the "Hidden" filter shows it. The trail notes both.
+export const setHidden = mutation({
+  args: { documentId: v.id("wsDocuments"), hidden: v.boolean() },
+  handler: async (ctx, { documentId, hidden }) => {
+    await requireMe(ctx);
+    const doc = await ctx.db.get(documentId);
+    if (!doc) throw new ConvexError("That document doesn't exist.");
+    if (!!doc.hiddenAt === hidden) return null;
+    await ctx.db.patch(documentId, { hiddenAt: hidden ? Date.now() : undefined });
+    await appendEvent(ctx, documentId, { kind: hidden ? "hidden_from_list" : "shown_in_list", actor: OWNER_KEY, versionNumber: doc.currentVersion, detail: hidden ? "Removed from the Docs list. The document and its record are kept." : "Put back in the Docs list." });
+    return null;
   },
 });
 

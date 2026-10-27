@@ -33,7 +33,14 @@ describe("T-B1 the Docs list", () => {
 
   test("status tabs and counts", () => {
     expect(filterDocs(docs, { ...DEFAULT_QUERY, status: "sent" }, now).map((d) => d.number)).toEqual([2]);
-    expect(countByStatus(docs)).toEqual({ all: 4, draft: 1, approved: 0, sent: 1, completed: 1, voided: 1 });
+    expect(countByStatus(docs)).toEqual({ all: 4, draft: 1, approved: 0, sent: 1, completed: 1, voided: 1, hidden: 0 });
+  });
+  test("a contract removed from the list only shows under Hidden, and isn't counted anywhere else", () => {
+    const withHidden = [...docs, { ...row(5, "completed", "Test one", "Me", 2), hidden: true }];
+    expect(countByStatus(withHidden)).toEqual({ all: 4, draft: 1, approved: 0, sent: 1, completed: 1, voided: 1, hidden: 1 });
+    expect(filterDocs(withHidden, { ...DEFAULT_QUERY }, now).map((d) => d.number)).not.toContain(5);
+    expect(filterDocs(withHidden, { ...DEFAULT_QUERY, status: "completed" }, now).map((d) => d.number)).toEqual([1]);
+    expect(filterDocs(withHidden, { ...DEFAULT_QUERY, status: "hidden" }, now).map((d) => d.number)).toEqual([5]);
   });
   test("search matches number, title, client and email, every word", () => {
     expect(filterDocs(docs, { ...DEFAULT_QUERY, q: "ripley" }, now).map((d) => d.number)).toEqual([1]);

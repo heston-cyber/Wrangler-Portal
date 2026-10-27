@@ -33,7 +33,7 @@ export default function SignDocs() {
   const filtered = q.q || q.range !== "any";
   const [menu, setMenu] = useState<MenuAt | null>(null);
   const [toast, show] = useToast();
-  const md = (d: { _id: string; label: string; title: string; status: MenuDoc["status"]; inBuilder: boolean; buildId: string | null }): MenuDoc => ({ _id: d._id, label: d.label, title: d.title, status: d.status, inBuilder: d.inBuilder, buildId: d.buildId });
+  const md = (d: { _id: string; label: string; title: string; status: MenuDoc["status"]; inBuilder: boolean; buildId: string | null; hidden?: boolean }): MenuDoc => ({ _id: d._id, label: d.label, title: d.title, status: d.status, inBuilder: d.inBuilder, buildId: d.buildId, hidden: d.hidden });
   return (
     <>
       <TopBar right={<a className="btn primary sm" {...linkProps("/sign/new")}><FilePlus2 size={15} />New document</a>}>
@@ -42,7 +42,7 @@ export default function SignDocs() {
       <div className="content">
         <div className="ws-list">
           <div className="tabs" role="tablist" aria-label="Status">
-            {TABS.map((t) => (
+            {TABS.filter((t) => t.key !== "hidden" || (counts?.hidden ?? 0) > 0 || q.status === "hidden").map((t) => (
               <button key={t.key} className="tab" role="tab" aria-selected={q.status === t.key} onClick={() => set({ status: t.key })}>{t.label}{counts && <span className="count">{counts[t.key]}</span>}</button>
             ))}
           </div>
@@ -77,7 +77,7 @@ export default function SignDocs() {
                 </table>
               </div>
             )}
-          {docs && rows.length > 0 && <p className="caption secondary">{rows.length} of {docs.length} document{docs.length === 1 ? "" : "s"} · right-click a row for actions</p>}
+          {docs && rows.length > 0 && <p className="caption secondary">{rows.length} of {q.status === "hidden" ? counts!.hidden : counts!.all} document{(q.status === "hidden" ? counts!.hidden : counts!.all) === 1 ? "" : "s"}{q.status === "hidden" ? " removed from the list (kept for the record)" : ""} · right-click a row (or ⋯) for actions</p>}
           {menu && <DocMenu at={menu} onClose={() => setMenu(null)} show={show} />}
           {toast}
         </div>

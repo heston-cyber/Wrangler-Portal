@@ -192,3 +192,19 @@ describe("T-SR security review fixes", () => {
     expect(publicHttps("https://example.com/a.pdf").hostname).toBe("example.com");
   });
 });
+
+describe("T-SR removing a contract from the list (Oct 27)", () => {
+  test("a signed contract can be hidden and put back; nothing is deleted and the trail says so", async () => {
+    const x = await setup();
+    await x.send();
+    await x.me.mutation(api.sign.setHidden, { documentId: x.documentId, hidden: true });
+    const listed = await x.me.query(api.sign.list, {});
+    expect(listed.find((d) => d._id === x.documentId)?.hidden).toBe(true);
+    const g = (await x.me.query(api.sign.get, { documentId: x.documentId }))!;
+    expect(g.doc.status).toBe("sent");
+    expect(g.events.some((e) => e.kind === "hidden_from_list")).toBe(true);
+    await x.me.mutation(api.sign.setHidden, { documentId: x.documentId, hidden: false });
+    expect((await x.me.query(api.sign.list, {})).find((d) => d._id === x.documentId)?.hidden).toBe(false);
+    await expect(x.me.mutation(api.sign.remove, { documentId: x.documentId })).rejects.toThrow(/kept for the record/);
+  });
+});

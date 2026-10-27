@@ -2,8 +2,9 @@
 export type DocRow = {
   _id: string; label: string; number: number; title: string; status: "draft" | "approved" | "sent" | "completed" | "voided";
   signers: string[]; emails: string[]; createdAt: number; updatedAt: number; sentAt: number | null; completedAt: number | null;
+  hidden?: boolean;
 };
-export type StatusTab = "all" | "draft" | "approved" | "sent" | "completed" | "voided";
+export type StatusTab = "all" | "draft" | "approved" | "sent" | "completed" | "voided" | "hidden";
 export type SortKey = "updated" | "created" | "number" | "title" | "client";
 export type DateRange = "any" | "7d" | "30d" | "90d" | "year";
 export type DocQuery = { status: StatusTab; q: string; sort: SortKey; dir: "asc" | "desc"; range: DateRange };
@@ -11,6 +12,7 @@ export type DocQuery = { status: StatusTab; q: string; sort: SortKey; dir: "asc"
 export const TABS: Array<{ key: StatusTab; label: string }> = [
   { key: "all", label: "All" }, { key: "draft", label: "Drafts" }, { key: "approved", label: "Approved" },
   { key: "sent", label: "Out for signature" }, { key: "completed", label: "Signed" }, { key: "voided", label: "Cancelled" },
+  { key: "hidden", label: "Hidden" },
 ];
 export const SORTS: Array<{ key: SortKey; label: string }> = [
   { key: "updated", label: "Last updated" }, { key: "created", label: "Created" }, { key: "number", label: "Number" },
@@ -37,7 +39,9 @@ export function filterDocs<T extends DocRow>(docs: T[], q: DocQuery, now = Date.
   const words = q.q.toLowerCase().split(/\s+/).filter(Boolean);
   const from = since(q.range, now);
   const out = docs.filter((d) => {
-    if (q.status !== "all" && d.status !== q.status) return false;
+    // Hidden documents only show under "Hidden"; every other tab leaves them out.
+    if (q.status === "hidden") { if (!d.hidden) return false; }
+    else if (d.hidden || (q.status !== "all" && d.status !== q.status)) return false;
     if (from && d.updatedAt < from) return false;
     if (!words.length) return true;
     const hay = `${d.label} ${d.number} ${d.title} ${d.signers.join(" ")} ${d.emails.join(" ")}`.toLowerCase();
@@ -53,8 +57,8 @@ export function filterDocs<T extends DocRow>(docs: T[], q: DocQuery, now = Date.
 }
 
 export function countByStatus(docs: DocRow[]): Record<StatusTab, number> {
-  const c: Record<StatusTab, number> = { all: docs.length, draft: 0, approved: 0, sent: 0, completed: 0, voided: 0 };
-  for (const d of docs) c[d.status]++;
+  const c: Record<StatusTab, number> = { all: 0, draft: 0, approved: 0, sent: 0, completed: 0, voided: 0, hidden: 0 };
+  for (const d of docs) { if (d.hidden) { c.hidden++; continue; } c.all++; c[d.status]++; }
   return c;
 }
 
