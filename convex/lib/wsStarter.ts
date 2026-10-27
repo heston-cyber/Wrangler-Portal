@@ -1,9 +1,9 @@
-// The starter template (B3): Heston's Service Agreement, from his vault note CONTRACT.md (Oct 27, 2026), as blocks.
+// The starter template (B3; as a page since E1): Heston's Service Agreement, from his vault note CONTRACT.md (Oct 27, 2026), as blocks.
 // Wording is his, unchanged, except: [Name of Client] and [Date] became the {client.name} and {date} fields, and the
 // budget and payment split became the line items and payment schedule blocks.
 // CONTRACT.md has TWO different revisions clauses; both are kept, under a "PICK ONE" note that blocks sending until
 // one is deleted (Heston decides; nothing here picks for him).
-import { bullets, newId, rich, type Block, type Rich } from "./wsBuilder";
+import { bullets, migrate, newId, rich, type Page, type Rich, type V1Block as Block } from "./wsBuilder";
 
 const P = (...lines: string[]): Rich => rich(...lines);
 const clause = (title: string, body: Rich, initials = false): Block => ({ id: newId(), type: "clause", title, rich: body, initials });
@@ -48,3 +48,6 @@ export function serviceAgreementBlocks(): Block[] {
     { id: newId(), type: "signatures", title: "Signatures", signers: ["heston", "client"], showTitle: true, showDate: true },
   ];
 }
+
+/** The starter as a page (E1): the blocks above, converted the same way older documents are. */
+export const serviceAgreementPage = (): Page => migrate(serviceAgreementBlocks());

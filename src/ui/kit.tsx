@@ -66,8 +66,10 @@ export function MenuItem({ icon, children, onSelect, kbd, checked, danger, disab
   icon?: React.ReactNode; children: React.ReactNode; onSelect?: () => void; kbd?: string; checked?: boolean; danger?: boolean; disabled?: boolean; keepOpen?: boolean;
 }) {
   const { close } = useContext(MenuContext);
+  const sub = useContext(SubContext);
   return (
     <button type="button" role="menuitem" className={`mitem${danger ? " danger" : ""}`} disabled={disabled}
+      onMouseEnter={() => sub.setOpen(null)} onMouseDown={(e) => e.preventDefault()}
       onClick={() => { if (!keepOpen) close(); onSelect?.(); }}>
       {icon}
       <span>{children}</span>
@@ -91,17 +93,19 @@ export function ContextMenu({ at, onClose, children, label }: { at: { x: number;
     pop.current.querySelector<HTMLButtonElement>(".mitem:not(:disabled)")?.focus();
   }, [at.x, at.y]);
   useEffect(() => {
-    const onDown = (e: PointerEvent) => { if (!pop.current?.contains(e.target as Node)) onClose(); };
+    const inMenu = (t: EventTarget | null) => !!(t as HTMLElement | null)?.closest?.(".menu"); // this menu or one of its submenus
+    const onDown = (e: PointerEvent) => { if (!inMenu(e.target)) onClose(); };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") { e.stopPropagation(); onClose(); return; }
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
-        const items = [...(pop.current?.querySelectorAll<HTMLButtonElement>(".mitem:not(:disabled)") ?? [])];
+        const menu = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>(".menu") ?? pop.current;
+        const items = [...(menu?.querySelectorAll<HTMLButtonElement>(":scope > .mitem:not(:disabled), :scope > .msub > .mitem:not(:disabled)") ?? [])];
         const i = items.indexOf(document.activeElement as HTMLButtonElement);
         items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
       }
     };
-    const onCtx = (e: MouseEvent) => { if (!pop.current?.contains(e.target as Node)) onClose(); };
+    const onCtx = (e: MouseEvent) => { if (!inMenu(e.target)) onClose(); };
     window.addEventListener("pointerdown", onDown, true);
     window.addEventListener("keydown", onKey, true);
     window.addEventListener("contextmenu", onCtx, true);
@@ -114,9 +118,48 @@ export function ContextMenu({ at, onClose, children, label }: { at: { x: number;
   }, [onClose]);
   return createPortal(
     <div ref={pop} className="menu" role="menu" aria-label={label} style={pos ?? { left: -9999, top: -9999 }} onClick={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()}>
-      <MenuContext.Provider value={{ close: onClose }}>{children}</MenuContext.Provider>
+      <MenuContext.Provider value={{ close: onClose }}><SubContext.Provider value={useSubState()}>{children}</SubContext.Provider></MenuContext.Provider>
     </div>,
     document.body,
+  );
+}
+
+// ---------- MenuSub: an item that opens a submenu to its side (hover, click or →; ← or Esc closes it) ----------
+type SubCtx = { open: string | null; setOpen: (id: string | null) => void };
+const SubContext = createContext<SubCtx>({ open: null, setOpen: () => {} });
+function useSubState(): SubCtx { const [open, setOpen] = useState<string | null>(null); return { open, setOpen }; }
+let subSeq = 0;
+export function MenuSub({ icon, label, children }: { icon?: React.ReactNode; label: React.ReactNode; children: React.ReactNode }) {
+  const parent = useContext(SubContext);
+  const id = useRef(`s${++subSeq}`).current;
+  const btn = useRef<HTMLButtonElement>(null);
+  const pop = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const open = parent.open === id;
+  const inner = useSubState();
+  useLayoutEffect(() => {
+    if (!open || !btn.current || !pop.current) { setPos(null); return; }
+    const r = btn.current.getBoundingClientRect(), p = pop.current.getBoundingClientRect();
+    let left = r.right + 4;
+    if (left + p.width > window.innerWidth - 8) left = Math.max(8, r.left - p.width - 4);
+    const top = Math.max(8, Math.min(r.top - 6, window.innerHeight - p.height - 8));
+    setPos({ left, top });
+  }, [open]);
+  const show = (focusFirst = false) => { parent.setOpen(id); if (focusFirst) setTimeout(() => pop.current?.querySelector<HTMLButtonElement>(".mitem:not(:disabled)")?.focus(), 0); };
+  return (
+    <div className="msub" onMouseEnter={() => show()}>
+      <button ref={btn} type="button" role="menuitem" aria-haspopup="menu" aria-expanded={open} className={`mitem${open ? " open" : ""}`}
+        onClick={() => show(true)} onKeyDown={(e) => { if (e.key === "ArrowRight") { e.preventDefault(); show(true); } }}>
+        {icon}<span>{label}</span><span className="msub-arrow" aria-hidden>›</span>
+      </button>
+      {open && createPortal(
+        <div ref={pop} className="menu msub-pop" role="menu" style={pos ?? { left: -9999, top: -9999 }} onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => { if (e.key === "ArrowLeft" || e.key === "Escape") { e.preventDefault(); e.stopPropagation(); parent.setOpen(null); btn.current?.focus(); } }}>
+          <SubContext.Provider value={inner}>{children}</SubContext.Provider>
+        </div>,
+        document.body,
+      )}
+    </div>
   );
 }
 export const MenuLabel = ({ children }: { children: React.ReactNode }) => <div className="mlabel">{children}</div>;

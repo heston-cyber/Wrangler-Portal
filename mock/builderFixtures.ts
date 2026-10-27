@@ -18,7 +18,7 @@ export function builderQuery(name: string, args: any): any {
     case "builder:getProfile": return business;
     case "builder:listBuilds": return builds.map((b) => ({ _id: b._id, title: b.title, updatedAt: b.updatedAt, createdAt: b.createdAt, documentId: b.documentId ?? null, client: b.fields?.client?.name ?? "" }));
     case "builder:getBuild": { const b = builds.find((x) => x._id === args.buildId); return b ? { ...b, document: null } : null; }
-    case "builder:listTemplates": return templates.map((t) => ({ _id: t._id, name: t.name, description: t.description ?? "", updatedAt: t.updatedAt, blocks: t.blocks.length, styleName: t.style?.name ?? "" }));
+    case "builder:listTemplates": return templates.map((t) => ({ _id: t._id, name: t.name, description: t.description ?? "", updatedAt: t.updatedAt, blocks: Array.isArray(t.blocks) ? t.blocks.length : t.blocks.content.length, styleName: t.style?.name ?? "" }));
     case "builder:getTemplate": return templates.find((t) => t._id === args.templateId) ?? null;
     case "builder:listClauses": return [...clauses].sort((a, b) => a.title.localeCompare(b.title));
     case "builder:listStyles": { const any = styles.some((x) => x.isDefault); return { presets: PRESET_STYLES.map((st, i) => ({ index: i, style: st, isDefault: !any && i === 0 })), saved: styles }; }

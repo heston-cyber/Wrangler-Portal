@@ -14,9 +14,9 @@ import type { Id } from "./_generated/dataModel";
 import { requireMe } from "./lib/access";
 import {
   DEFAULT_BUSINESS, DEFAULT_STYLE, MAX_BUILD_JSON, PRESET_STYLES, buildProblems, emptyFields, newId, totals,
-  type Block, type Business, type BuildDoc, type ExtraSigner, type Fields, type Style,
+  line, pageOf, type Business, type BuildDoc, type ExtraSigner, type Fields, type ItemRow, type Page, type PNode, type Style,
 } from "./lib/wsBuilder";
-import { serviceAgreementBlocks } from "./lib/wsStarter";
+import { serviceAgreementBlocks, serviceAgreementPage } from "./lib/wsStarter";
 import { applyScan } from "./lib/wsMarkers";
 import { OWNER_KEY, docLabel, type LayoutBox, type LayoutSigner } from "./lib/wsLayout";
 import { safeFileName } from "./lib/wsFinal";
@@ -82,20 +82,23 @@ export const createBuild = mutation({
     const t = templateId ? await ctx.db.get(templateId) : null;
     if (templateId && !t) throw new ConvexError("That template doesn't exist.");
     const fields: Fields = t ? { ...emptyFields(business), ...(t.fields as Partial<Fields>), business, client: emptyFields(business).client, date: emptyFields(business).date } : emptyFields(business);
-    const blocks: Block[] = t ? reId(t.blocks as Block[]) : [
-      { id: newId(), type: "heading", text: "Untitled document", size: "title" },
-      { id: newId(), type: "parties", title: "Parties" },
-      { id: newId(), type: "text", rich: { type: "doc", content: [{ type: "paragraph" }] } },
-      { id: newId(), type: "signatures", title: "Signatures", signers: ["heston", "client"], showTitle: true, showDate: true },
-    ];
+    const blocks: Page = t ? freshIds(pageOf(t.blocks)) : { type: "doc", content: [
+      line("Untitled document", { size: "title" }),
+      line("Parties", { size: "heading" }), { type: "parties", attrs: {} },
+      line(""),
+      line("Signatures", { size: "heading" }), { type: "signatures", attrs: { signers: ["heston", "client"], showTitle: true, showDate: true } },
+    ] };
     const style = t ? (t.style as Style) : await defaultStyle(ctx);
     return ctx.db.insert("wsBuilds", { title: t ? t.name : "Untitled document", blocks, fields, signers: [], style, ...(t ? { templateId: t._id } : {}), createdAt: now, updatedAt: now });
   },
 });
-// A copy of a template's blocks gets fresh ids, so two documents never share block or row ids.
-function reId(blocks: Block[]): Block[] {
-  return blocks.map((b) => ({ ...b, id: newId(), ...(b.type === "items" ? { rows: b.rows.map((r) => ({ ...r, id: newId() })) } : {}) }) as Block);
+// A copy of a template gets fresh line-item ids, so two documents never share row ids.
+function freshIds(page: Page): Page {
+  const fix = (n: PNode): PNode => n.type === "items" ? { ...n, attrs: { ...n.attrs, rows: ((n.attrs?.rows as ItemRow[]) ?? []).map((r) => ({ ...r, id: newId() })) } } : n.content ? { ...n, content: n.content.map(fix) } : n;
+  return fix(page as PNode) as Page;
 }
+// The page as sent: a ProseMirror document (E1), or B2's list of blocks from an older page still open somewhere.
+const isPage = (x: unknown) => Array.isArray(x) || (!!x && typeof x === "object" && (x as Page).type === "doc" && Array.isArray((x as Page).content));
 
 const docArgs = { title: v.string(), blocks: v.any(), fields: v.any(), signers: v.any(), style: v.any() };
 
@@ -106,7 +109,7 @@ export const saveBuild = mutation({
     const b = await ctx.db.get(a.buildId);
     if (!b) throw new ConvexError("That document doesn't exist.");
     tooBig(a.blocks, a.fields, a.signers, a.style);
-    if (!Array.isArray(a.blocks) || !Array.isArray(a.signers)) throw new ConvexError("That document isn't in the right shape.");
+    if (!isPage(a.blocks) || !Array.isArray(a.signers)) throw new ConvexError("That document isn't in the right shape.");
     await ctx.db.patch(a.buildId, { title: clean(a.title) || "Untitled document", blocks: a.blocks, fields: a.fields, signers: a.signers, style: a.style, updatedAt: Date.now() });
     return null;
   },
@@ -160,7 +163,7 @@ export const toSigning = action({
 export async function toSigningCore(ctx: ActionCtx, buildId: Id<"wsBuilds">, storageId: Id<"_storage">, actor = OWNER_KEY) {
   const r = await ctx.runQuery(internal.builder.buildForSigning, { buildId });
   if (!r) { await ctx.storage.delete(storageId); throw new Error("That document doesn't exist."); }
-  const d: BuildDoc = { title: r.build.title, blocks: r.build.blocks as Block[], fields: r.build.fields as Fields, signers: (r.build.signers as ExtraSigner[]) ?? [], style: r.build.style as Style };
+  const d: BuildDoc = { title: r.build.title, page: pageOf(r.build.blocks), fields: r.build.fields as Fields, signers: (r.build.signers as ExtraSigner[]) ?? [], style: r.build.style as Style };
   const problems = buildProblems(d);
   if (problems.length) { await ctx.storage.delete(storageId); throw new Error(problems[0]); }
   const fileName = `${safeFileName(d.title)}.pdf`;
@@ -193,7 +196,7 @@ export async function toSigningCore(ctx: ActionCtx, buildId: Id<"wsBuilds">, sto
     const s = d.signers.find((x) => x.key === k);
     signers.push({ key: k, name: s?.name.trim() ?? "", email: s?.email.trim().toLowerCase() ?? "", ...(s?.title.trim() ? { title: s.title.trim() } : {}), order: 1 });
   }
-  const t = totals(d.blocks);
+  const t = totals(d.page);
   const payment = t.invoiceDeposit ? { amountCents: Math.round(t.deposit * 100), description: `Deposit (${t.depositPct}%)${d.fields.project ? `: ${d.fields.project}` : ""}`.slice(0, 200) } : null;
   await ctx.runMutation(internal.sign.saveLayoutAs, { versionId: got!.version._id, title: d.title, signers, boxes, signingOrder: "any", payment, hasTextLayer: true });
   return { documentId, label, rebuilt };
@@ -206,7 +209,7 @@ export const listTemplates = query({
   handler: async (ctx) => {
     await requireMe(ctx);
     const rows = await ctx.db.query("wsTemplates").withIndex("by_updated").order("desc").collect();
-    return rows.map((t) => ({ _id: t._id, name: t.name, description: t.description ?? "", updatedAt: t.updatedAt, blocks: (t.blocks as Block[]).length, styleName: (t.style as Style)?.name ?? "" }));
+    return rows.map((t) => ({ _id: t._id, name: t.name, description: t.description ?? "", updatedAt: t.updatedAt, blocks: pageOf(t.blocks).content.length, styleName: (t.style as Style)?.name ?? "" }));
   },
 });
 
@@ -248,7 +251,7 @@ export const duplicateTemplate = mutation({
     const t = await ctx.db.get(templateId);
     if (!t) throw new ConvexError("That template doesn't exist.");
     const now = Date.now();
-    return ctx.db.insert("wsTemplates", { name: `${t.name} (copy)`.slice(0, 120), description: t.description, blocks: reId(t.blocks as Block[]), fields: t.fields, style: t.style, createdAt: now, updatedAt: now });
+    return ctx.db.insert("wsTemplates", { name: `${t.name} (copy)`.slice(0, 120), description: t.description, blocks: freshIds(pageOf(t.blocks)), fields: t.fields, style: t.style, createdAt: now, updatedAt: now });
   },
 });
 
@@ -270,9 +273,8 @@ export const ensureStarter = mutation({
     if (done) return { added: false };
     await ctx.db.insert("counters", { key: "wsStarterMade", value: 1 });
     const now = Date.now();
-    const blocks = serviceAgreementBlocks();
-    await ctx.db.insert("wsTemplates", { name: "Service Agreement", description: "Your service agreement (from CONTRACT.md). Pick one revisions clause before sending.", blocks, fields: { project: "", custom: [] }, style: await defaultStyle(ctx), createdAt: now, updatedAt: now });
-    for (const b of blocks) if (b.type === "clause") await ctx.db.insert("wsClauses", { title: b.title, body: b.rich, initials: b.initials, createdAt: now, updatedAt: now });
+    await ctx.db.insert("wsTemplates", { name: "Service Agreement", description: "Your service agreement (from CONTRACT.md). Pick one revisions clause before sending.", blocks: serviceAgreementPage(), fields: { project: "", custom: [] }, style: await defaultStyle(ctx), createdAt: now, updatedAt: now });
+    for (const b of serviceAgreementBlocks()) if (b.type === "clause") await ctx.db.insert("wsClauses", { title: b.title, body: b.rich, initials: b.initials, createdAt: now, updatedAt: now });
     return { added: true };
   },
 });

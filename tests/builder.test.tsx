@@ -12,8 +12,8 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { api } from "../convex/_generated/api";
 import schema from "../convex/schema";
 import { DocPdf } from "../src/builder/pdf";
-import { serviceAgreementBlocks } from "../convex/lib/wsStarter";
-import { DEFAULT_STYLE, PRESET_STYLES, buildProblems, emptyFields, plainText, rich, type Block, type BuildDoc } from "../convex/lib/wsBuilder";
+import { serviceAgreementPage } from "../convex/lib/wsStarter";
+import { DEFAULT_STYLE, PRESET_STYLES, buildProblems, emptyFields, line, plainText, rich, textOf, type BuildDoc, type PNode } from "../convex/lib/wsBuilder";
 import { scanMarkers } from "../convex/lib/wsMarkers";
 import { DEFAULT_QUERY, countByStatus, filterDocs, readQuery, writeQuery, type DocRow } from "../src/sign/docFilter";
 
@@ -67,12 +67,15 @@ function agreement(): BuildDoc {
   const f = emptyFields(undefined, new Date(Date.UTC(2026, 9, 27, 12)));
   f.client = { name: "Dillon Ripley", company: "United Turf and Track, Inc", email: "dillon@example.com", phone: "", address: "Arcadia, OK" };
   f.project = "UTT Flagship Film";
-  const blocks = serviceAgreementBlocks().map((b): Block => {
-    if (b.type === "items") return { ...b, rows: b.rows.map((r, i) => (i === 0 ? { ...r, rate: 4800 } : r)) };
-    if (b.type === "clause" && /PICK ONE:/.test(plainText(b.rich))) return { ...b, rich: rich("Two rounds of revisions are included.") };
-    return b;
-  });
-  return { title: "Service Agreement — UTT", blocks, fields: f, signers: [], style: DEFAULT_STYLE };
+  // The starter, with a price on the first line item and one revisions clause picked (the PICK ONE line and the other
+  // clause removed).
+  const fix = (n: PNode): PNode => {
+    if (n.type === "items") return { ...n, attrs: { ...n.attrs, rows: (n.attrs!.rows as Array<{ rate: number }>).map((r, i) => (i ? r : { ...r, rate: 4800 })) } };
+    if (n.type === "section" && /PICK ONE:/.test(textOf(n))) return { ...n, content: (n.content ?? []).filter((c) => !/PICK ONE:|One round of revisions/.test(textOf(c))) };
+    return n;
+  };
+  const page = { type: "doc" as const, content: serviceAgreementPage().content.map(fix) };
+  return { title: "Service Agreement — UTT", page, fields: f, signers: [], style: DEFAULT_STYLE };
 }
 const render = async (d: BuildDoc) => new Uint8Array(await renderToBuffer(<DocPdf d={d} assets={{ fonts: [], files: {} }} label="WS-00009" />));
 
@@ -81,7 +84,7 @@ describe("T-B2 rendering and Continue to signing", () => {
   test("the starter as written can't go to signing until the revisions clause is picked", () => {
     const d = agreement();
     expect(buildProblems(d)).toEqual([]);
-    const raw = { ...d, blocks: serviceAgreementBlocks() };
+    const raw = { ...d, page: serviceAgreementPage() };
     expect(buildProblems(raw).join(" ")).toMatch(/PICK ONE/);
     expect(buildProblems({ ...d, fields: { ...d.fields, client: { ...d.fields.client, email: "nope" } } }).join(" ")).toMatch(/client's email/);
   });
@@ -128,7 +131,7 @@ describe("T-B2 rendering and Continue to signing", () => {
     await me.action(api.sign.adoptSignature, { name: "Heston Hill", title: "Founder", method: "typed", signatureStorageId: await png(), initialsStorageId: await png() });
     const d = agreement();
     const buildId = await me.mutation(api.builder.createBuild, {});
-    await me.mutation(api.builder.saveBuild, { buildId, title: d.title, blocks: d.blocks, fields: d.fields, signers: [], style: d.style });
+    await me.mutation(api.builder.saveBuild, { buildId, title: d.title, blocks: d.page, fields: d.fields, signers: [], style: d.style });
     const put = async () => { const b = await render(d); return t.run((ctx) => ctx.storage.store(new Blob([b], { type: "application/pdf" }))); };
 
     const first = await me.action(api.builder.toSigning, { buildId, storageId: await put() });
@@ -188,7 +191,7 @@ describe("T-B3 templates, clauses and styles", () => {
     const { me } = await owner();
     const d = agreement();
     d.fields.custom = [{ key: "shoot.days", label: "Shoot days", value: "3" }];
-    const templateId = await me.mutation(api.builder.saveAsTemplate, { name: "UTT style", title: d.title, blocks: d.blocks, fields: d.fields, signers: [], style: d.style });
+    const templateId = await me.mutation(api.builder.saveAsTemplate, { name: "UTT style", title: d.title, blocks: d.page, fields: d.fields, signers: [], style: d.style });
     const tpl: any = await me.query(api.builder.getTemplate, { templateId });
     expect(JSON.stringify(tpl.fields)).not.toContain("Dillon");
     expect(tpl.fields.custom).toEqual([{ key: "shoot.days", label: "Shoot days", value: "" }]);
@@ -196,16 +199,18 @@ describe("T-B3 templates, clauses and styles", () => {
     const buildId = await me.mutation(api.builder.createBuild, { templateId });
     const b: any = await me.query(api.builder.getBuild, { buildId });
     expect(b.title).toBe("UTT style");
-    expect(b.blocks).toHaveLength(d.blocks.length);
-    expect(b.blocks[0].id).not.toBe(d.blocks[0].id); // fresh ids
+    expect(b.blocks.content).toHaveLength(d.page.content.length);
+    const rowId = (x: { content: PNode[] }) => (x.content.find((n) => n.type === "items")?.attrs?.rows as Array<{ id: string }> | undefined)?.[0]?.id;
+    expect(rowId(b.blocks)).toBeTruthy();
+    expect(rowId(b.blocks)).not.toBe(rowId(d.page)); // fresh line-item ids
     expect(b.fields.client.name).toBe("");
     expect(b.templateId).toBe(templateId);
 
     const copy = await me.mutation(api.builder.duplicateTemplate, { templateId });
     expect((await me.query(api.builder.listTemplates, {})).map((x) => x.name).sort()).toEqual(["UTT style", "UTT style (copy)"]);
-    await me.mutation(api.builder.updateTemplate, { templateId: copy, name: "Renamed", blocks: [], fields: tpl.fields, style: tpl.style });
+    await me.mutation(api.builder.updateTemplate, { templateId: copy, name: "Renamed", blocks: { type: "doc", content: [line("")] }, fields: tpl.fields, style: tpl.style });
     await me.mutation(api.builder.deleteTemplate, { templateId });
-    expect((await me.query(api.builder.getBuild, { buildId }))!.blocks).toHaveLength(d.blocks.length); // the document keeps its copy
+    expect(((await me.query(api.builder.getBuild, { buildId }))!.blocks as { content: unknown[] }).content).toHaveLength(d.page.content.length); // the document keeps its copy
     expect((await me.query(api.builder.listTemplates, {})).map((x) => x.name)).toEqual(["Renamed"]);
     await expect(me.mutation(api.builder.createBuild, { templateId })).rejects.toThrow(/doesn't exist/);
   });

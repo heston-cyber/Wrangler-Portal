@@ -1,11 +1,13 @@
-// The doc builder (B2, Oct 27), laid out like Craft: the outline on the left, the page in the middle (edited where it
-// sits), and a panel on the right with Insert · Format · Style · Details. It edits either a build (a document on its
-// way to signing) or a template. Everything saves as you go.
+// The doc builder (B2, Oct 27; one Craft-style editor since E1), laid out like Craft: the outline on the left, the
+// page in the middle (every line is a block you edit where it sits), and a panel on the right with Insert · Format ·
+// Style · Details. It edits either a build (a document on its way to signing) or a template. Everything saves as you go.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
+import type { Editor } from "@tiptap/react";
+import { TextSelection } from "@tiptap/pm/state";
 import {
-  AlignCenter, AlignJustify, AlignLeft, AlignRight, ArrowDown, ArrowUp, BookmarkPlus, Check, Copy, Eye, FileSignature, GripVertical,
-  Heading, LayoutTemplate, List, Minus, PenLine, Plus, Receipt, Redo2, Undo2, ScrollText, Send, SeparatorHorizontal, Space, Trash2, TriangleAlert, Type, Upload, Users, X,
+  BookmarkPlus, Check, Eye, FileSignature, Heading, Heading1, LayoutTemplate, List, Minus, PanelTop, PenLine, Plus, Receipt, Redo2, Undo2,
+  ScrollText, Send, SeparatorHorizontal, Space, TriangleAlert, Type, Users, X,
 } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -13,32 +15,35 @@ import { Sep, TopBar } from "../shell/Shell";
 import { linkProps, navigate } from "../lib/router";
 import { Modal, Spinner, useToast } from "../ui/kit";
 import {
-  BLOCK_LABEL, BUILTIN_FONTS, FIELD_HELP, PAGE_PT, PRESET_STYLES, buildProblems, emptyFields, fieldValues, fill, money, newBlock, newId, rich, signerKeys, totals,
-  type Block, type BlockType, type BuildDoc, type ExtraSigner, type Fields, type Fmt, type Rich, type Style, type TextSize,
+  FIELD_HELP, INSERT_LABEL, PAGE_PT, buildProblems, clauseSection, emptyFields, fieldValues, fill, missingFields, money, newNodes, pageOf, sectionClause, signerKeys, totals,
+  type BuildDoc, type ExtraSigner, type Fields, type InsertKind, type PNode, type Style,
 } from "../../convex/lib/wsBuilder";
-import { ActiveEditor, RichEditor } from "./RichEditor";
-import type { Editor } from "@tiptap/react";
-import { QuickFormatMenu, SelectedTextTools, hasTextSelection, type QuickAt } from "./TextFormat";
 import { cssFamily, loadForScreen, type FontRow } from "./fonts";
 import { StylePanel } from "./StylePanel";
-import { isNoop, place, sameSpot, spotFor, type Drag, type Spot } from "./dnd";
+import { FormatPanel, QuickMenu, useEditorTick, type MenuAt } from "./FormatPanel";
+import { PageEditor, endInsertDrag, startInsertDrag } from "./editor/PageEditor";
+import { BuilderCtx } from "./editor/nodes";
+import { insertKind, insertNodes, outline } from "./editor/commands";
+import { marginSelect } from "./editor/blockSelection";
 import { errText, uploadToStorage } from "../pages/sign/common";
 
 type Mode = { kind: "build"; buildId: Id<"wsBuilds"> } | { kind: "template"; templateId: Id<"wsTemplates"> };
 type Tab = "insert" | "format" | "style" | "details";
 type Meta = { name: string; description: string };
 
-const INSERT: Array<{ type: BlockType; icon: React.ReactNode; hint: string }> = [
-  { type: "heading", icon: <Heading size={16} />, hint: "A title or section heading" },
-  { type: "text", icon: <Type size={16} />, hint: "Paragraphs and lists" },
-  { type: "parties", icon: <Users size={16} />, hint: "You and the client" },
-  { type: "items", icon: <List size={16} />, hint: "Services with qty, rate, total" },
-  { type: "payment", icon: <Receipt size={16} />, hint: "Deposit and balance (sets the Stripe draft)" },
-  { type: "clause", icon: <ScrollText size={16} />, hint: "A titled section, optional initials" },
-  { type: "signatures", icon: <PenLine size={16} />, hint: "Signature, name, title and date lines" },
-  { type: "divider", icon: <Minus size={16} />, hint: "A line between sections" },
-  { type: "pagebreak", icon: <SeparatorHorizontal size={16} />, hint: "Start a new page" },
-  { type: "spacer", icon: <Space size={16} />, hint: "Some empty space" },
+const INSERT: Array<{ kind: InsertKind; icon: React.ReactNode; hint: string }> = [
+  { kind: "title", icon: <Heading1 size={16} />, hint: "The document's title (Ctrl+1)" },
+  { kind: "heading", icon: <Heading size={16} />, hint: "A section heading (Ctrl+3)" },
+  { kind: "text", icon: <Type size={16} />, hint: "A line of text (Ctrl+5)" },
+  { kind: "section", icon: <ScrollText size={16} />, hint: "A container of lines: a clause, with optional initials" },
+  { kind: "card", icon: <PanelTop size={16} />, hint: "A tinted container of lines" },
+  { kind: "parties", icon: <Users size={16} />, hint: "You and the client" },
+  { kind: "items", icon: <List size={16} />, hint: "Services with qty, rate, total" },
+  { kind: "payment", icon: <Receipt size={16} />, hint: "Deposit and balance (sets the Stripe draft)" },
+  { kind: "signatures", icon: <PenLine size={16} />, hint: "Signature, name, title and date lines" },
+  { kind: "divider", icon: <Minus size={16} />, hint: "A line between sections" },
+  { kind: "pagebreak", icon: <SeparatorHorizontal size={16} />, hint: "Start a new page" },
+  { kind: "spacer", icon: <Space size={16} />, hint: "Some empty space" },
 ];
 
 export default function Builder({ mode }: { mode: Mode }) {
@@ -61,37 +66,29 @@ export default function Builder({ mode }: { mode: Mode }) {
   const [meta, setMeta] = useState<Meta>({ name: "", description: "" });
   const [dirty, setDirty] = useState(false);
   const [saveState, setSaveState] = useState<"saved" | "saving" | "error">("saved");
-  const [sel, setSel] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("insert");
   const [busy, setBusy] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [asTemplate, setAsTemplate] = useState(false);
   const [problems, setProblems] = useState<string[] | null>(null);
-  const [drag, setDrag] = useState<Drag | null>(null);
-  const [spot, setSpot] = useState<Spot | null>(null);
-  // The text area with the cursor (for the Format tab's "Selected text"), and the right-click quick menu.
-  const [active, setActive] = useState<{ editor: Editor; blockId: string } | null>(null);
-  const [quick, setQuick] = useState<(QuickAt & { blockId: string }) | null>(null);
-  const onEditorFocus = useCallback((e: Editor | null) => {
-    const id = (e?.view.dom as HTMLElement | undefined)?.closest<HTMLElement>("[data-block]")?.dataset.block;
-    setActive(e && id ? { editor: e, blockId: id } : null);
-  }, []);
-  // Highlighting text on the page selects its block and opens Format.
-  const afterSelect = (blockId: string) => setTimeout(() => { if (hasTextSelection()) { setSel(blockId); setTab("format"); } }, 0);
+  const [editor, setEditor] = useState<Editor | null>(null);
+  const [menu, setMenu] = useState<MenuAt | null>(null);
+  useEditorTick(editor);
 
-  // First load only: after that the page's copy is the truth and saves go up.
+  // First load only: after that the page's copy is the truth and saves go up. Older documents (a list of blocks) are
+  // converted to the page editor's lines here.
   useEffect(() => {
     if (doc) return;
-    if (mode.kind === "build" && build) setDocRaw({ title: build.title, blocks: build.blocks as Block[], fields: build.fields as Fields, signers: (build.signers as ExtraSigner[]) ?? [], style: build.style as Style });
+    if (mode.kind === "build" && build) setDocRaw({ title: build.title, page: pageOf(build.blocks), fields: build.fields as Fields, signers: (build.signers as ExtraSigner[]) ?? [], style: build.style as Style });
     if (mode.kind === "template" && tpl && profile) {
       const f = { ...emptyFields(profile), ...(tpl.fields as Partial<Fields>) } as Fields;
-      setDocRaw({ title: tpl.name, blocks: tpl.blocks as Block[], fields: { ...f, business: profile, client: emptyFields(profile).client }, signers: [], style: tpl.style as Style });
+      setDocRaw({ title: tpl.name, page: pageOf(tpl.blocks), fields: { ...f, business: profile, client: emptyFields(profile).client }, signers: [], style: tpl.style as Style });
       setMeta({ name: tpl.name, description: tpl.description ?? "" });
     }
   }, [build, tpl, profile, doc, mode.kind]);
 
-  // Undo and redo (⌘Z, ⇧⌘Z or ⌘Y; the buttons in the bar): one history for the whole document. Changes made within a
-  // second of each other (typing a sentence, dragging a colour) are one step.
+  // Undo and redo (⌘Z, ⇧⌘Z or ⌘Y; the buttons in the bar): one history for the whole document, the page and the
+  // panels alike. Changes made within a second of each other (typing a sentence, dragging a colour) are one step.
   const docRef = useRef<BuildDoc | null>(null);
   docRef.current = doc;
   const hist = useRef<{ past: BuildDoc[]; future: BuildDoc[]; at: number }>({ past: [], future: [], at: 0 });
@@ -115,7 +112,6 @@ export default function Builder({ mode }: { mode: Mode }) {
     to.push(d); h.at = 0;
     docRef.current = n;
     setDocRaw(n); setDirty(true); setHistTick((x) => x + 1);
-    setSel((s) => (s && n.blocks.some((b) => b.id === s) ? s : null));
   }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -130,7 +126,7 @@ export default function Builder({ mode }: { mode: Mode }) {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [step]);
   const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
-  const setBlock = useCallback((id: string, f: (b: Block) => Block) => setDoc((d) => ({ ...d, blocks: d.blocks.map((b) => (b.id === id ? f(b) : b)) })), [setDoc]);
+  const onPage = useCallback((page: BuildDoc["page"]) => setDoc((d) => ({ ...d, page })), [setDoc]);
 
   // Save a moment after the last change.
   useEffect(() => {
@@ -138,8 +134,8 @@ export default function Builder({ mode }: { mode: Mode }) {
     setSaveState("saving");
     const t = setTimeout(async () => {
       try {
-        if (mode.kind === "build") await saveBuild({ buildId: mode.buildId, title: doc.title, blocks: doc.blocks, fields: doc.fields, signers: doc.signers, style: doc.style });
-        else await updateTemplate({ templateId: mode.templateId, name: meta.name || doc.title, description: meta.description, blocks: doc.blocks, fields: { project: doc.fields.project, custom: doc.fields.custom }, style: doc.style });
+        if (mode.kind === "build") await saveBuild({ buildId: mode.buildId, title: doc.title, blocks: doc.page, fields: doc.fields, signers: doc.signers, style: doc.style });
+        else await updateTemplate({ templateId: mode.templateId, name: meta.name || doc.title, description: meta.description, blocks: doc.page, fields: { project: doc.fields.project, custom: doc.fields.custom }, style: doc.style });
         setDirty(false); setSaveState("saved");
       } catch (e) { setSaveState("error"); show(errText(e)); }
     }, 700);
@@ -172,68 +168,28 @@ export default function Builder({ mode }: { mode: Mode }) {
     ro.current.observe(el);
     setStageW(el.clientWidth);
   }, []);
+  const onSelectText = useCallback(() => setTab("format"), []);
+
+  const missingKey = doc ? missingFields(doc.page, doc.fields).sort().join(",") : "";
+  const missing = useMemo(() => new Set(missingKey ? missingKey.split(",") : []), [missingKey]);
 
   if (!doc) return <><TopBar><FileSignature size={15} /><a {...linkProps("/sign")}>Contracts</a></TopBar><div className="content"><p className="caption" style={{ padding: 24 }}><Spinner /> Loading…</p></div></>;
   if (mode.kind === "build" && build === null) return <><TopBar><FileSignature size={15} /><a {...linkProps("/sign")}>Contracts</a></TopBar><div className="content"><div className="empty">This document doesn't exist.</div></div></>;
 
   const st = doc.style;
-  const values = fieldValues(doc.fields, doc.blocks);
-  const t = totals(doc.blocks);
-  const selected = doc.blocks.find((b) => b.id === sel) ?? null;
+  const values = fieldValues(doc.fields, doc.page);
+  const t = totals(doc.page);
   const pageW = Math.max(300, Math.min(760, stageW - 32)), scale = pageW / PAGE_PT[st.pageSize].w;
   const px = (pt: number) => pt * scale;
   const H = cssFamily(st.fonts.heading.family), B = cssFamily(st.fonts.body.family);
   const sent = mode.kind === "build" && build?.document && (build.document.status === "sent" || build.document.status === "completed");
+  const items = editor && !editor.isDestroyed ? outline(editor.state.doc, values, fill) : [];
 
-  const insert = (b: Block) => {
-    setDoc((d) => {
-      const i = sel ? d.blocks.findIndex((x) => x.id === sel) : -1;
-      const blocks = [...d.blocks];
-      blocks.splice(i >= 0 ? i + 1 : blocks.length, 0, b);
-      return { ...d, blocks };
-    });
-    setSel(b.id);
-    setTimeout(() => document.querySelector(`[data-block="${b.id}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 60);
+  const onSaveClause = async (sec: PNode) => {
+    const c = sectionClause(sec);
+    try { await saveClause({ title: c.title, body: c.body, initials: c.initials }); show(`"${c.title}" saved to the clause library`); } catch (e) { show(errText(e)); }
   };
-  const move = (id: string, dir: -1 | 1) => setDoc((d) => {
-    const i = d.blocks.findIndex((b) => b.id === id), j = i + dir;
-    if (i < 0 || j < 0 || j >= d.blocks.length) return d;
-    const blocks = [...d.blocks]; [blocks[i], blocks[j]] = [blocks[j], blocks[i]]; return { ...d, blocks };
-  });
-  // Drag and drop: a line shows where it will land; dropping moves the block or adds the new one there.
-  const endDrag = () => { setDrag(null); setSpot(null); };
-  const startDrag = (e: React.DragEvent, d: Drag, image?: Element | null) => {
-    setDrag(d);
-    e.dataTransfer.effectAllowed = d.kind === "move" ? "move" : "copy";
-    // Firefox won't start a drag without data. Our own type, not text: the text editors and fields would paste text.
-    e.dataTransfer.setData("application/x-wrangler-block", d.kind === "move" ? d.id : d.label);
-    if (image) e.dataTransfer.setDragImage(image, 24, 16);
-  };
-  const overSpot = (e: React.DragEvent, s: Spot) => {
-    if (!drag) return;
-    e.preventDefault(); e.stopPropagation();
-    e.dataTransfer.dropEffect = drag.kind === "move" ? "move" : "copy";
-    const next = isNoop(doc?.blocks ?? [], drag, s) ? null : s;
-    if (!sameSpot(next, spot)) setSpot(next);
-  };
-  const drop = (e: React.DragEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    if (drag && spot) {
-      const r = place(doc!.blocks, drag, spot);
-      if (r) {
-        setDoc((d) => ({ ...d, blocks: r.blocks }));
-        setSel(r.id);
-        if (drag.kind === "new") setTimeout(() => document.querySelector<HTMLElement>(`[data-block="${r.id}"] input, [data-block="${r.id}"] textarea, [data-block="${r.id}"] [contenteditable]`)?.focus(), 60);
-      }
-    }
-    endDrag();
-  };
-  const duplicate = (id: string) => setDoc((d) => {
-    const i = d.blocks.findIndex((b) => b.id === id);
-    const copy = JSON.parse(JSON.stringify(d.blocks[i])) as Block; copy.id = newId();
-    const blocks = [...d.blocks]; blocks.splice(i + 1, 0, copy); return { ...d, blocks };
-  });
-  const remove = (id: string) => { setDoc((d) => ({ ...d, blocks: d.blocks.filter((b) => b.id !== id) })); if (sel === id) setSel(null); };
+  const dragNodes = (e: React.DragEvent, nodes: PNode[]) => startInsertDrag(e, nodes);
 
   const assets = () => ({ fonts: fontRows, files: files as Record<string, string | null> });
   const render = async () => { const { renderPdf } = await import("./pdf"); return renderPdf(doc, assets(), build?.document?.label); };
@@ -247,7 +203,7 @@ export default function Builder({ mode }: { mode: Mode }) {
     if (p.length) { setProblems(p); setTab("details"); return; }
     setBusy("continue");
     try {
-      if (dirty && mode.kind === "build") { await saveBuild({ buildId: mode.buildId, title: doc.title, blocks: doc.blocks, fields: doc.fields, signers: doc.signers, style: doc.style }); setDirty(false); }
+      if (dirty && mode.kind === "build") { await saveBuild({ buildId: mode.buildId, title: doc.title, blocks: doc.page, fields: doc.fields, signers: doc.signers, style: doc.style }); setDirty(false); }
       const blob = await render();
       const storageId = await uploadToStorage(await uploadUrl({}), new File([blob], `${doc.title}.pdf`, { type: "application/pdf" }));
       const r = await toSigning({ buildId: (mode as { buildId: Id<"wsBuilds"> }).buildId, storageId });
@@ -259,12 +215,17 @@ export default function Builder({ mode }: { mode: Mode }) {
     try { const id = await createBuild({ templateId: (mode as { templateId: Id<"wsTemplates"> }).templateId }); navigate(`/sign/b/${id}`); }
     catch (e) { show(errText(e)); setBusy(null); }
   };
+  const goTo = (pos: number) => {
+    if (!editor) return;
+    editor.chain().focus().setTextSelection(TextSelection.near(editor.state.doc.resolve(Math.min(pos + 1, editor.state.doc.content.size))).from).run();
+    (editor.view.nodeDOM(pos) as HTMLElement | null)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
 
-  const keys = signerKeys(doc.blocks);
+  const keys = signerKeys(doc.page);
   const extraKeys = keys.filter((k) => k !== "heston" && k !== "client");
 
   return (
-    <ActiveEditor.Provider value={onEditorFocus}>
+    <BuilderCtx.Provider value={{ doc, values, px, onDetails: () => setTab("details"), onSaveClause: (sec) => void onSaveClause(sec) }}>
       <TopBar right={<>
         <span className="wsb-undo">
           <button className="icon-btn" aria-label="Undo" title={`Undo (${mac ? "⌘Z" : "Ctrl+Z"})`} disabled={!hist.current.past.length} onClick={() => step("undo")}><Undo2 size={16} /></button>
@@ -286,50 +247,24 @@ export default function Builder({ mode }: { mode: Mode }) {
         {/* Outline */}
         <nav className="wsb-outline" aria-label="Outline">
           <span className="label">Outline</span>
-          {doc.blocks.map((b) => (
-            <button key={b.id} className={`wsb-oitem${sel === b.id ? " on" : ""}${b.type === "heading" || b.type === "clause" ? "" : " sub"}`} onClick={() => { setSel(b.id); document.querySelector(`[data-block="${b.id}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" }); }}>
-              {outlineText(b, values)}
-            </button>
-          ))}
+          {items.map((o) => <button key={o.pos} className={`wsb-oitem${o.level ? " sub" : ""}`} onClick={() => goTo(o.pos)}>{o.text}</button>)}
         </nav>
 
         {/* The page */}
-        <div className="wsb-stage" ref={stageRef} onClick={(e) => { if (e.target === e.currentTarget) setSel(null); }}>
+        <div className="wsb-stage" ref={stageRef}>
           {sent && <div className="ws-banner"><TriangleAlert size={15} /> {build!.document!.label} is {build!.document!.status === "sent" ? "out for signature" : "signed"}. Changes here won't reach it; cancel it first to send a new version.</div>}
-          <div className={`wsb-page${drag ? " dropping" : ""}${spot?.id === "end" ? " drop-end" : ""}`} onDragOver={(e) => {
-            // Over the page but not a block: above the first block means first, anywhere else means last.
-            const first = e.currentTarget.querySelector<HTMLElement>("[data-block]");
-            overSpot(e, first && e.clientY < first.getBoundingClientRect().top ? { id: first.dataset.block!, after: false } : { id: "end", after: true });
-          }} onDrop={drop} style={{ width: pageW, minHeight: px(PAGE_PT[st.pageSize].h), background: st.page, color: st.text, fontFamily: B, fontSize: px(st.baseSize), padding: `${px(st.margin)}px`, ["--wsb-accent" as string]: st.accent, ["--wsb-muted" as string]: st.muted, ["--wsb-heading" as string]: st.heading, ["--wsb-hfont" as string]: H }}>
+          <div className="wsb-page"
+            onMouseDown={(e) => {
+              // A drag in the page's margin selects whole blocks (like Craft); a click below the text goes to the end.
+              if (e.target !== e.currentTarget || !editor) return;
+              const r = editor.view.dom.getBoundingClientRect();
+              if (e.clientX < r.left) { e.preventDefault(); marginSelect(editor.view, e.clientY, r.left + 8); }
+              else if (e.clientY > r.bottom) { e.preventDefault(); editor.chain().focus("end").run(); }
+            }}
+            style={{ width: pageW, minHeight: px(PAGE_PT[st.pageSize].h), background: st.page, color: st.text, fontFamily: B, fontSize: px(st.baseSize), padding: `${px(st.margin)}px`, ["--wsb-accent" as string]: st.accent, ["--wsb-muted" as string]: st.muted, ["--wsb-heading" as string]: st.heading, ["--wsb-hfont" as string]: H, ["--wsb-bfont" as string]: B, ["--wsb-text" as string]: st.text, ["--wsb-pagebg" as string]: st.page }}>
             {st.cover && files[st.cover.fileId] && <div className="wsb-cover" style={{ height: px(st.cover.height), backgroundImage: `url(${files[st.cover.fileId]})`, margin: `-${px(st.margin)}px -${px(st.margin)}px ${px(18)}px` }} />}
             {st.logo && files[st.logo.fileId] && <div style={{ textAlign: st.logo.align, marginBottom: px(st.baseSize * 1.2) }}><img src={files[st.logo.fileId]!} alt="Logo" style={{ width: px(st.logo.width) }} /></div>}
-            {doc.blocks.length === 0 && <p className="wsb-empty" style={{ color: st.muted }}>Drag blocks here from the Insert panel, or click one to add it.</p>}
-            {doc.blocks.map((b, i) => (
-              <div key={b.id} data-block={b.id} className={`wsb-block${sel === b.id ? " sel" : ""}${drag?.kind === "move" && drag.id === b.id ? " dragging" : ""}${spot?.id === b.id ? (spot.after ? " drop-after" : " drop-before") : ""}`}
-                onClick={(e) => { e.stopPropagation(); setSel(b.id); }}
-                onMouseUp={() => afterSelect(b.id)} onKeyUp={(e) => { if (e.shiftKey || e.key === "a") afterSelect(b.id); }}
-                onFocusCapture={(e) => { if (!(e.target as HTMLElement).closest("[contenteditable]")) setActive(null); }}
-                onContextMenu={(e) => {
-                  if (e.shiftKey || !hasTextSelection()) return; // the browser's own menu
-                  e.preventDefault();
-                  const target = document.activeElement as HTMLElement;
-                  const ed = active && active.blockId === b.id && target.closest("[contenteditable]") ? active.editor : null;
-                  setSel(b.id);
-                  setQuick({ x: e.clientX, y: e.clientY, target, editor: ed, blockId: b.id });
-                }}
-                onDragOver={(e) => overSpot(e, spotFor(b.id, e.currentTarget.getBoundingClientRect(), e.clientY))} onDrop={drop}>
-                <div className="wsb-tools" onClick={(e) => e.stopPropagation()}>
-                  <span className="wsb-grip" draggable onDragStart={(e) => startDrag(e, { kind: "move", id: b.id }, e.currentTarget.closest(".wsb-block"))} onDragEnd={endDrag} title="Drag to move" aria-label="Drag to move"><GripVertical size={14} /></span>
-                  <span className="wsb-kind">{BLOCK_LABEL[b.type]}</span>
-                  <button className="icon-btn" aria-label="Move up" disabled={i === 0} onClick={() => move(b.id, -1)}><ArrowUp size={13} /></button>
-                  <button className="icon-btn" aria-label="Move down" disabled={i === doc.blocks.length - 1} onClick={() => move(b.id, 1)}><ArrowDown size={13} /></button>
-                  <button className="icon-btn" aria-label="Duplicate" onClick={() => duplicate(b.id)}><Copy size={13} /></button>
-                  <button className="icon-btn" aria-label="Delete block" onClick={() => remove(b.id)}><Trash2 size={13} /></button>
-                </div>
-                <BlockEdit b={b} d={doc} values={values} px={px} setBlock={(f) => setBlock(b.id, f)} onDetails={() => setTab("details")}
-                  onSaveClause={async (c) => { try { await saveClause({ title: c.title, body: c.rich, initials: c.initials }); show(`"${c.title}" saved to the clause library`); } catch (e) { show(errText(e)); } }} />
-              </div>
-            ))}
+            <PageEditor page={doc.page} onChange={onPage} onEditor={setEditor} onSelectText={onSelectText} onMenu={setMenu} missing={missing} />
             {st.footer && <div className="wsb-footer" style={{ color: st.muted, fontSize: px(st.baseSize * 0.75) }}><span>{doc.title}</span><span>Page 1 of …</span></div>}
           </div>
         </div>
@@ -341,19 +276,12 @@ export default function Builder({ mode }: { mode: Mode }) {
           </div>
           {tab === "insert" && (
             <div className="wsb-pane">
-              <span className="ws-flabel">Drag onto the page, or click to add after the selected block</span>
-              {INSERT.map((x) => <button key={x.type} className="wsb-insert" draggable onDragStart={(e) => startDrag(e, { kind: "new", make: () => newBlock(x.type), label: BLOCK_LABEL[x.type] })} onDragEnd={endDrag} onClick={() => insert(newBlock(x.type))}>{x.icon}<span><b>{BLOCK_LABEL[x.type]}</b><span className="secondary">{x.hint}</span></span></button>)}
-              <ClauseLibrary clauses={clauses} onInsert={(c) => insert(clauseBlock(c))} onDragStart={(e, c) => startDrag(e, { kind: "new", make: () => clauseBlock(c), label: c.title })} onDragEnd={endDrag} />
+              <span className="ws-flabel">Drag onto the page (or into a container), or click to add after the cursor</span>
+              {INSERT.map((x) => <button key={x.kind} className="wsb-insert" draggable onDragStart={(e) => dragNodes(e, newNodes(x.kind))} onDragEnd={() => endInsertDrag(editor)} onClick={() => editor && insertKind(editor, x.kind)}>{x.icon}<span><b>{INSERT_LABEL[x.kind]}</b><span className="secondary">{x.hint}</span></span></button>)}
+              <ClauseLibrary clauses={clauses} onInsert={(c) => editor && insertNodes(editor, [clauseSection(c)])} onDragStart={(e, c) => dragNodes(e, [clauseSection(c)])} onDragEnd={() => endInsertDrag(editor)} />
             </div>
           )}
-          {tab === "format" && (
-            <div className="wsb-pane">
-              {!selected ? <p className="caption secondary">Select a block on the page to format it, or highlight some text.</p> : <>
-                {active && active.blockId === selected.id && !active.editor.isDestroyed && <SelectedTextTools editor={active.editor} />}
-                <FormatPane b={selected} setBlock={(f) => setBlock(selected.id, f)} accent={st.accent} />
-              </>}
-            </div>
-          )}
+          {tab === "format" && <FormatPanel editor={editor} accent={st.accent} onSaveClause={(sec) => void onSaveClause(sec)} />}
           {tab === "style" && <StylePanel style={st} onChange={(s) => setDoc((d) => ({ ...d, style: s }))} fonts={fontRows} files={files as Record<string, string | null>} show={show} />}
           {tab === "details" && (
             <DetailsPane doc={doc} setDoc={setDoc} extraKeys={extraKeys} mode={mode.kind} meta={meta} setMeta={(m) => { setMeta(m); setDirty(true); }} total={t} problems={problems ?? (mode.kind === "build" ? buildProblems(doc) : [])} show={show} />
@@ -371,132 +299,15 @@ export default function Builder({ mode }: { mode: Mode }) {
         </Modal>
       )}
       {asTemplate && <SaveTemplate doc={doc} onClose={() => setAsTemplate(false)} onSave={async (name, description) => {
-        try { await saveAsTemplate({ name, description, title: doc.title, blocks: doc.blocks, fields: doc.fields, signers: [], style: doc.style }); setAsTemplate(false); show(`Saved as the template "${name}"`); } catch (e) { show(errText(e)); }
+        try { await saveAsTemplate({ name, description, title: doc.title, blocks: doc.page, fields: doc.fields, signers: [], style: doc.style }); setAsTemplate(false); show(`Saved as the template "${name}"`); } catch (e) { show(errText(e)); }
       }} />}
-      {quick && (() => {
-        const qb = doc.blocks.find((x) => x.id === quick.blockId);
-        const qf = ((qb as { fmt?: Fmt } | undefined)?.fmt) ?? {};
-        return <QuickFormatMenu at={quick} fmt={qf} onClose={() => setQuick(null)} onMore={() => { setSel(quick.blockId); setTab("format"); }}
-          setFmt={(p) => setBlock(quick.blockId, (x) => ({ ...x, fmt: { ...((x as { fmt?: Fmt }).fmt ?? {}), ...p } }) as Block)} />;
-      })()}
+      {menu && editor && <QuickMenu editor={editor} at={menu} accent={st.accent} onClose={() => setMenu(null)} onMore={() => setTab("format")} onSaveClause={(sec) => void onSaveClause(sec)} />}
       {toast}
-    </ActiveEditor.Provider>
+    </BuilderCtx.Provider>
   );
 }
-
-function outlineText(b: Block, values: Record<string, string>): string {
-  switch (b.type) {
-    case "heading": return fill(b.text, values, "…") || "Heading";
-    case "clause": return b.title || "Clause";
-    case "text": { const first = (b.rich.content?.[0]?.content ?? []).map((n) => n.text ?? "").join(""); return first ? fill(first, values, "…").slice(0, 40) : "Text"; }
-    default: return (b as { title?: string }).title || BLOCK_LABEL[b.type];
-  }
-}
-
-// ---------- blocks, as edited on the page ----------
-
-const SIZE_PX: Record<TextSize, number> = { title: 2.3, subtitle: 1.35, heading: 1.3, strong: 1, body: 1, caption: 0.85 };
-
-function decoStyle(f: Fmt | undefined): React.CSSProperties {
-  return {
-    textAlign: f?.align, color: !f?.color ? undefined : f.color === "accent" ? "var(--wsb-accent)" : f.color,
-    // A block's own colour also colours its title (as in the PDF); otherwise titles use the style's heading colour.
-    ...(f?.color ? { ["--wsb-title-color" as string]: f.color === "accent" ? "var(--wsb-accent)" : f.color } : {}),
-    ...(f?.deco === "focus" ? { borderLeft: "2.5px solid var(--wsb-accent)", paddingLeft: 10 } : f?.deco === "block" ? { background: "color-mix(in srgb, var(--wsb-accent) 8%, transparent)", padding: 10, borderRadius: 6 } : {}),
-    fontFamily: f?.font === "heading" ? "var(--wsb-hfont)" : undefined,
-  };
-}
-
-function BlockEdit({ b, d, values, px, setBlock, onDetails, onSaveClause }: { b: Block; d: BuildDoc; values: Record<string, string>; px: (n: number) => number; setBlock: (f: (b: Block) => Block) => void; onDetails: () => void; onSaveClause: (c: Extract<Block, { type: "clause" }>) => void }) {
-  const base = d.style.baseSize;
-  const title = (text: string | undefined, onChange: (s: string) => void, placeholder = "Section title") => (
-    <input className="wsb-title" value={text ?? ""} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} style={{ fontSize: px(base * 1.3) }} />
-  );
-  switch (b.type) {
-    case "heading":
-      return <textarea className="wsb-heading" rows={1} value={b.text} onChange={(e) => { e.target.style.height = "auto"; e.target.style.height = `${e.target.scrollHeight}px`; setBlock((x) => ({ ...(x as typeof b), text: e.target.value })); }}
-        style={{ ...decoStyle(b.fmt), fontSize: px(base * SIZE_PX[b.size]), fontWeight: b.size === "subtitle" ? 400 : 700, fontFamily: b.fmt?.font === "body" ? undefined : "var(--wsb-hfont)" }} placeholder="Heading" />;
-    case "text":
-      return <div style={{ ...decoStyle(b.fmt), fontSize: px(base * SIZE_PX[b.size ?? "body"]), fontWeight: b.size === "strong" ? 700 : undefined, color: b.size === "caption" ? "var(--wsb-muted)" : decoStyle(b.fmt).color }}>
-        <RichEditor value={b.rich} onChange={(r) => setBlock((x) => ({ ...(x as typeof b), rich: r }))} placeholder="Type here. Use {client.name}, {project}, {total} … for fill-in fields." />
-      </div>;
-    case "parties": {
-      const f = d.fields;
-      return <div style={decoStyle(b.fmt)}>
-        {title(b.title, (s) => setBlock((x) => ({ ...(x as typeof b), title: s })))}
-        <div className="wsb-parties" onClick={onDetails} title="Edit in Details">
-          <div><span className="wsb-cap">Business</span><b>{f.business.legalName}{f.business.name ? `, dba ${f.business.name}` : ""}</b><span>{f.business.contact}</span><span>{f.business.email}</span><span>{f.business.address}</span></div>
-          <div><span className="wsb-cap">Client</span><b>{f.client.company || f.client.name || "Client name (Details)"}</b>{f.client.company && <span>{f.client.name}</span>}<span>{f.client.email}</span><span>{f.client.address}</span></div>
-        </div>
-      </div>;
-    }
-    case "items": {
-      const sum = b.rows.reduce((a, r) => a + (Number(r.qty) || 0) * (Number(r.rate) || 0), 0);
-      const setRow = (id: string, p: Partial<typeof b.rows[number]>) => setBlock((x) => ({ ...(x as typeof b), rows: (x as typeof b).rows.map((r) => (r.id === id ? { ...r, ...p } : r)) }));
-      return <div style={decoStyle(b.fmt)}>
-        {title(b.title, (s) => setBlock((x) => ({ ...(x as typeof b), title: s })))}
-        <table className="wsb-items">
-          <thead><tr><th>Description</th><th>Qty</th><th>Rate</th><th>Amount</th><th /></tr></thead>
-          <tbody>{b.rows.map((r) => (
-            <tr key={r.id}>
-              <td><input value={r.description} placeholder="What it is" onChange={(e) => setRow(r.id, { description: e.target.value })} /></td>
-              <td><input type="number" min={0} step="any" value={r.qty} onChange={(e) => setRow(r.id, { qty: Number(e.target.value) })} /></td>
-              <td><input type="number" min={0} step="any" value={r.rate} onChange={(e) => setRow(r.id, { rate: Number(e.target.value) })} /></td>
-              <td className="num">{money((Number(r.qty) || 0) * (Number(r.rate) || 0))}</td>
-              <td><button className="icon-btn" aria-label="Remove line" onClick={() => setBlock((x) => ({ ...(x as typeof b), rows: (x as typeof b).rows.filter((y) => y.id !== r.id) }))}><X size={13} /></button></td>
-            </tr>
-          ))}</tbody>
-          <tfoot><tr><td><button className="btn ghost sm" onClick={() => setBlock((x) => ({ ...(x as typeof b), rows: [...(x as typeof b).rows, { id: newId(), description: "", qty: 1, rate: 0 }] }))}><Plus size={13} />Add a line</button></td><td /><td className="num"><b>Total</b></td><td className="num"><b>{money(sum)}</b></td><td /></tr></tfoot>
-        </table>
-      </div>;
-    }
-    case "payment": {
-      const t = totals(d.blocks);
-      return <div style={decoStyle(b.fmt)}>
-        {title(b.title, (s) => setBlock((x) => ({ ...(x as typeof b), title: s })))}
-        <RichEditor value={b.terms} onChange={(r) => setBlock((x) => ({ ...(x as typeof b), terms: r }))} />
-        <div className="wsb-pay">
-          <label>Deposit <input type="number" min={0} max={100} value={b.depositPct} onChange={(e) => setBlock((x) => ({ ...(x as typeof b), depositPct: Math.max(0, Math.min(100, Number(e.target.value) || 0)) }))} />%</label>
-          <span>Total <b>{money(t.total)}</b></span><span>Deposit <b>{money(t.deposit)}</b></span><span>Balance <b>{money(t.balance)}</b></span>
-          <label className="wsb-check"><input type="checkbox" checked={b.invoiceDeposit} onChange={(e) => setBlock((x) => ({ ...(x as typeof b), invoiceDeposit: e.target.checked }))} />Draft a Stripe invoice for the deposit when it's signed</label>
-          <label className="wsb-check"><input type="checkbox" checked={!!b.initials} onChange={(e) => setBlock((x) => ({ ...(x as typeof b), initials: e.target.checked }))} />Client initials</label>
-        </div>
-      </div>;
-    }
-    case "clause":
-      return <div style={decoStyle(b.fmt)}>
-        {title(b.title, (s) => setBlock((x) => ({ ...(x as typeof b), title: s })), "Clause title")}
-        <RichEditor value={b.rich} onChange={(r) => setBlock((x) => ({ ...(x as typeof b), rich: r }))} placeholder="The clause's wording." />
-        <div className="wsb-clausefoot">
-          <label className="wsb-check"><input type="checkbox" checked={b.initials} onChange={(e) => setBlock((x) => ({ ...(x as typeof b), initials: e.target.checked }))} />Client initials here</label>
-          <button className="btn ghost sm" onClick={() => onSaveClause(b)}><BookmarkPlus size={13} />Save to clause library</button>
-        </div>
-      </div>;
-    case "signatures": {
-      const all = ["heston", "client", "client2", "client3", "client4"];
-      const name = (k: string) => k === "heston" ? d.fields.business.contact || "You" : k === "client" ? d.fields.client.name || "Client" : d.signers.find((s) => s.key === k)?.name || `Client ${k.replace("client", "")}`;
-      return <div style={decoStyle(b.fmt)}>
-        {title(b.title, (s) => setBlock((x) => ({ ...(x as typeof b), title: s })))}
-        <div className="wsb-sigpick">
-          {all.map((k) => <label key={k} className="wsb-check"><input type="checkbox" checked={b.signers.includes(k)} onChange={(e) => setBlock((x) => ({ ...(x as typeof b), signers: e.target.checked ? [...(x as typeof b).signers, k].sort((p, q) => all.indexOf(p) - all.indexOf(q)) : (x as typeof b).signers.filter((y) => y !== k) }))} />{k === "heston" ? "You" : k === "client" ? "Client" : `Client ${k.replace("client", "")}`}</label>)}
-          <label className="wsb-check"><input type="checkbox" checked={b.showTitle} onChange={(e) => setBlock((x) => ({ ...(x as typeof b), showTitle: e.target.checked }))} />Title line</label>
-          <label className="wsb-check"><input type="checkbox" checked={b.showDate} onChange={(e) => setBlock((x) => ({ ...(x as typeof b), showDate: e.target.checked }))} />Date line</label>
-        </div>
-        <div className="wsb-sigs">
-          {b.signers.map((k) => <div key={k}><span className="wsb-cap">{name(k)}</span><div className="wsb-line tall">Signature</div><div className="wsb-line">Name</div>{b.showTitle && <div className="wsb-line">Title</div>}{b.showDate && <div className="wsb-line">Date</div>}</div>)}
-        </div>
-      </div>;
-    }
-    case "divider": return <div className={`wsb-sep ${d.style.separator}`} />;
-    case "pagebreak": return <div className="wsb-break"><span>Page break</span></div>;
-    case "spacer": return <div style={{ height: px(b.size) }} className="wsb-spacer" />;
-  }
-}
-
-// ---------- the panel's parts ----------
 
 type LibClause = { _id: string; title: string; body: unknown; initials: boolean };
-const clauseBlock = (c: LibClause): Block => ({ id: newId(), type: "clause", title: c.title, rich: c.body as Rich, initials: c.initials, clauseId: c._id });
 function ClauseLibrary({ clauses, onInsert, onDragStart, onDragEnd }: { clauses: LibClause[] | undefined; onInsert: (c: LibClause) => void; onDragStart: (e: React.DragEvent, c: LibClause) => void; onDragEnd: () => void }) {
   const [q, setQ] = useState("");
   const list = (clauses ?? []).filter((c) => !q || c.title.toLowerCase().includes(q.toLowerCase()));
@@ -510,34 +321,6 @@ function ClauseLibrary({ clauses, onInsert, onDragStart, onDragEnd }: { clauses:
   );
 }
 
-const SWATCHES = ["", "accent", "#1d1d1f", "#6b6862", "#1f3a5f", "#2e6b3f", "#8a3d03", "#7a2a8a"];
-
-function FormatPane({ b, setBlock, accent }: { b: Block; setBlock: (f: (b: Block) => Block) => void; accent: string }) {
-  if (b.type === "divider" || b.type === "pagebreak") return <p className="caption secondary">Nothing to format on a {BLOCK_LABEL[b.type].toLowerCase()}. Its look is set in Style (separator).</p>;
-  if (b.type === "spacer") return <label className="field"><span className="ws-flabel">Height (pt)</span><input className="input sm" type="number" min={4} max={200} value={b.size} onChange={(e) => setBlock((x) => ({ ...(x as typeof b), size: Math.max(4, Math.min(200, Number(e.target.value) || 12)) }))} /></label>;
-  const fmt = (b as { fmt?: Fmt }).fmt ?? {};
-  const setFmt = (p: Partial<Fmt>) => setBlock((x) => ({ ...x, fmt: { ...((x as { fmt?: Fmt }).fmt ?? {}), ...p } }) as Block);
-  const hasSize = b.type === "heading" || b.type === "text";
-  const sizes: TextSize[] = ["title", "subtitle", "heading", "strong", "body", "caption"];
-  return (
-    <>
-      {hasSize && <div className="field"><span className="ws-flabel">Text</span><div className="wsb-grid3">{sizes.map((z) => <button key={z} className={`btn sm ${((b as { size?: TextSize }).size ?? "body") === z ? "primary" : "ghost"}`} onClick={() => setBlock((x) => ({ ...x, size: z }) as Block)}>{z[0].toUpperCase() + z.slice(1)}</button>)}</div></div>}
-      <div className="field"><span className="ws-flabel">Alignment</span><div className="ws-seg">
-        {([["left", <AlignLeft size={14} key="l" />], ["center", <AlignCenter size={14} key="c" />], ["right", <AlignRight size={14} key="r" />], ["justify", <AlignJustify size={14} key="j" />]] as const).map(([a, ic]) => <button key={a} className={(fmt.align ?? "left") === a ? "on" : ""} onClick={() => setFmt({ align: a })} aria-label={a}>{ic}</button>)}
-      </div></div>
-      <div className="field"><span className="ws-flabel">Colour</span><div className="wsb-swatches">
-        {SWATCHES.map((c) => <button key={c || "default"} className={`wsb-swatch${(fmt.color ?? "") === c ? " on" : ""}`} style={{ background: c === "accent" ? accent : c || "transparent" }} onClick={() => setFmt({ color: c || undefined })} aria-label={c ? `Colour ${c}` : "Default colour"} title={c === "accent" ? "Accent" : c || "Default"}>{!c && "A"}</button>)}
-        <input type="color" aria-label="Pick a colour" value={fmt.color && fmt.color.startsWith("#") ? fmt.color : "#000000"} onChange={(e) => setFmt({ color: e.target.value })} />
-      </div></div>
-      <div className="field"><span className="ws-flabel">Decoration</span><div className="ws-seg">
-        {(["none", "focus", "block"] as const).map((x) => <button key={x} className={(fmt.deco ?? "none") === x ? "on" : ""} onClick={() => setFmt({ deco: x })}>{x === "none" ? "None" : x === "focus" ? "Focus line" : "Block"}</button>)}
-      </div></div>
-      <div className="field"><span className="ws-flabel">Font</span><div className="ws-seg">
-        {(["body", "heading"] as const).map((x) => <button key={x} className={(fmt.font ?? (b.type === "heading" ? "heading" : "body")) === x ? "on" : ""} onClick={() => setFmt({ font: x })}>{x === "body" ? "Body font" : "Heading font"}</button>)}
-      </div></div>
-    </>
-  );
-}
 
 function DetailsPane({ doc, setDoc, extraKeys, mode, meta, setMeta, total, problems, show }: {
   doc: BuildDoc; setDoc: (f: (d: BuildDoc) => BuildDoc) => void; extraKeys: string[]; mode: "build" | "template"; meta: Meta; setMeta: (m: Meta) => void;
@@ -607,7 +390,7 @@ function SaveTemplate({ doc, onClose, onSave }: { doc: BuildDoc; onClose: () => 
     <Modal onClose={onClose} label="Save as template" width={460}>
       <div style={{ display: "grid", gap: 12 }}>
         <h2 className="headline">Save as a template</h2>
-        <p className="caption secondary">The blocks, fields and style are saved; the client's details aren't.</p>
+        <p className="caption secondary">The page, fields and style are saved; the client's details aren't.</p>
         <label className="field"><span className="ws-flabel">Name</span><input className="input sm" value={name} onChange={(e) => setName(e.target.value)} /></label>
         <label className="field"><span className="ws-flabel">Description (optional)</span><input className="input sm" value={desc} onChange={(e) => setDesc(e.target.value)} /></label>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}><button className="btn ghost" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!name.trim() || busy} onClick={async () => { setBusy(true); await onSave(name, desc); setBusy(false); }}>{busy ? <Spinner /> : <LayoutTemplate size={15} />}Save template</button></div>
