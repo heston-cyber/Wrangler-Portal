@@ -183,3 +183,13 @@ body { font-family: var(--font-body); font-size: 14.5px; letter-spacing: -.003em
 /* the builder's phone bars float over a white page: frosted, near-solid ink */
 .wsb-phonebar, .wsb-pickactions, .wsb-pickcount { background: rgb(12, 10, 13); backdrop-filter: blur(22px) saturate(140%); -webkit-backdrop-filter: blur(22px) saturate(140%); }
 :root[data-theme="light"] .wsb-phonebar, :root[data-theme="light"] .wsb-pickactions, :root[data-theme="light"] .wsb-pickcount { background: rgb(250, 248, 243); }
+
+/* phones: in the review page's top bar the logo steps aside and the title gives way, never the register number or the menu (Oct 27) */
+@media (max-width: 600px) {
+  .main .crumbs > a:has(img.logo), .main .crumbs > a:has(img.logo) + .sep { display: none !important; } /* the menu button is home there */
+  .sharewrap .crumbs > a:has(img.logo) { flex: none; }  /* clients keep the logo as their way home */
+  .sharewrap .crumbs img.logo { height: 16px; }
+  .sharewrap .topbar > .icon-btn.mobile-only { display: none !important; } /* no menu behind it on a share link */
+  .crumbs .chip { flex: none; }
+  .crumbs .here { min-width: 3em; }
+}
