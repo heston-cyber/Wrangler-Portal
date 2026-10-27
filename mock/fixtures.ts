@@ -283,6 +283,8 @@ export const store = {
       case "sign:list": return signDocs.map((d) => { const v = signVers.find((x) => x.documentId === d._id && x.number === d.currentVersion); return { _id: d._id, label: signLabel(d.number), title: d.title, status: d.status, version: d.currentVersion, updatedAt: d.updatedAt, createdAt: d.createdAt, signers: v.signers.filter((s: any) => s.key !== "heston").map((s: any) => s.name || s.email || s.key), pages: v.pages.length, approved: !!v.approvedAt, number: d.number, emails: v.signers.filter((s: any) => s.key !== "heston").map((s: any) => s.email), sentAt: d.sentAt ?? null, completedAt: d.completedAt ?? null, amount: null, fromBuilder: false, buildId: null }; });
       case "wsArchive:status": return { configured: true, connected: true, email: "heston@wranglerproductions.com", pending: 0, lastError: null };
       case "sign:get": return signGet(args.documentId, args.versionNumber);
+      case "sign:requestsFor": return [];
+      case "sign:pendingRequests": return [];
       case "sign:ownerSignature": return signSig ? { adopted: true, email: "heston@wranglerproductions.com", ...signSig } : { adopted: false, email: "heston@wranglerproductions.com" };
       case "library:video": return video(args.videoId, args.share);
       case "shares:open": return openShare(args.token, args.passcode);

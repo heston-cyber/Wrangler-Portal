@@ -143,7 +143,9 @@ export const voiceWords = action({
     const key = process.env.ELEVENLABS_API_KEY;
     if (!key) throw new Error("Transcription isn't set up (no ElevenLabs key).");
     const blob = await ctx.storage.get(storageId);
-    if (!blob) throw new Error("The recording didn't upload.");
+    // Security review (Oct 27): only a recording (an audio upload) is sent off, never another stored file.
+    if (!blob || !/^(audio|video)\//i.test(blob.type)) throw new Error("The recording didn't upload.");
+    await ctx.runMutation(internal.notes.registerVoice, { storageId, versionId });
     return await sttWords(key, blob, mime);
   },
 });

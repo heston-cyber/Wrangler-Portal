@@ -197,6 +197,9 @@ export default defineSchema({
     .index("by_video", ["videoId", "number"])
     .index("by_guid", ["bunnyGuid"]),
 
+  // Security review (Oct 27): recordings uploaded for voice notes. Only these storage ids can be attached to a note
+  // or thrown away from the page, so a guest can't reach any other stored file (Sign PDFs, signatures).
+  voiceUploads: defineTable({ storageId: v.id("_storage"), versionId: v.optional(v.id("versions")), createdAt: v.number() }).index("by_storage", ["storageId"]),
   notes: defineTable({
     versionId: v.id("versions"),
     videoId: v.id("videos"),
@@ -498,6 +501,7 @@ export default defineSchema({
     codeAttempts: v.optional(v.number()),
     codeSends: v.optional(v.array(v.number())),  // recent send times, for the rate limit
     failures: v.optional(v.array(v.number())),   // recent wrong codes
+    failTotal: v.optional(v.number()),           // wrong codes over the link's whole life
     lockedUntil: v.optional(v.number()),
     verifiedAt: v.optional(v.number()),
     sessionHash: v.optional(v.string()),
@@ -563,6 +567,20 @@ export default defineSchema({
     prevHash: v.string(),
     hash: v.string(),
   }).index("by_document", ["documentId", "seq"]),
+  // Security review (Oct 27): what Claude asked to do through the connector (approve, send, cancel). Nothing happens
+  // until Heston confirms it on the document page, signed in; a request lasts a day.
+  wsRequests: defineTable({
+    documentId: v.id("wsDocuments"),
+    what: v.union(v.literal("approve"), v.literal("send"), v.literal("cancel")),
+    versionNumber: v.number(),
+    expiresInDays: v.optional(v.number()),
+    reason: v.optional(v.string()),
+    said: v.string(),                      // what Claude said Heston told it in chat
+    status: v.union(v.literal("pending"), v.literal("done"), v.literal("declined"), v.literal("expired"), v.literal("replaced"), v.literal("failed")),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    decidedAt: v.optional(v.number()),
+  }).index("by_document", ["documentId", "status"]).index("by_status", ["status", "createdAt"]),
   // Heston's adopted signature. A new adoption replaces the old one (replacedAt); old ones are kept for the record.
   wsOwnerSignatures: defineTable({
     name: v.string(),

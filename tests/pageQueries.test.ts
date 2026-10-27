@@ -74,6 +74,8 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "wsConnector.listKeys": { pages: ["owner"], args: () => "skip" },
   "sign.get": { pages: ["owner"], args: () => "skip" },
   "sign.ownerSignature": { pages: ["owner"], args: () => "skip" },
+  "sign.requestsFor": { pages: ["owner"], args: () => "skip" },
+  "sign.pendingRequests": { pages: ["owner"], args: () => "skip" },
   // The doc builder (B1–B3): owner-only pages.
   "builder.fileUrls": { pages: ["owner"], args: () => "skip" },
   "builder.getBuild": { pages: ["owner"], args: () => "skip" },

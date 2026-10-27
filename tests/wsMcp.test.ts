@@ -99,36 +99,76 @@ describe("T-S4.1 a contract drafted in chat", () => {
   });
 });
 
-describe("T-S4.2 approve and send only on Heston's OK", () => {
-  test("refused without his words, refused out of order, and on the record when done", async () => {
+describe("T-S4.2 approve, send and cancel only when Heston confirms on the site", () => {
+  test("Claude's call only leaves a request; Heston's Confirm does it; refused out of order; declining does nothing", async () => {
     const x = await setup();
     await x.call("create_document", { title: "CO", pdf_base64: await contractPdf(), signers: [{ name: "Dillon Ripley", email: "dillon@example.com" }] });
-    // Send before approval: refused, nothing emailed.
+    const docId = (await x.t.run((ctx) => ctx.db.query("wsDocuments").first()))!._id;
+    const pending = () => x.me.query(api.sign.requestsFor, { documentId: docId });
+    const status = async () => (await x.t.run((ctx) => ctx.db.get(docId)))!.status;
+    // Send before approval: refused, nothing asked.
     const early = await x.call("send_document", { document: "WS-00001", heston_ok: "send it" });
     expect(early.error).toBe(true); expect(early.text).toMatch(/only an approved document/);
     // No words from Heston: refused by the tool.
     const r0 = await x.rpc({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "approve_document", arguments: { document: "WS-00001" } } });
     expect(r0.j.result.isError).toBe(true);
     expect(r0.j.result.content[0].text).toMatch(/Ask Heston first/);
-    // With his words: approved, and the trail has them.
+    // With "his words": only a request. The document is still a draft.
     const a = await x.call("approve_document", { document: "WS-00001", heston_ok: "Looks good, approve it" });
     expect(a.error, a.text).toBe(false);
+    expect(a.data).toMatchObject({ requested: "approve", done: false, waiting_for_heston: true });
+    expect(a.data.confirm_at).toMatch(/\/sign\/d\//);
+    expect(await status()).toBe("draft");
+    const [req] = await pending();
+    expect(req).toMatchObject({ what: "approve", said: "Looks good, approve it" });
+    // Heston confirms on the site: approved, by him.
+    await x.me.mutation(api.sign.decideRequest, { requestId: req._id, confirm: true });
+    expect(await status()).toBe("approved");
+    await expect(x.me.mutation(api.sign.decideRequest, { requestId: req._id, confirm: true })).rejects.toThrow(/already done/);
     // Editing after approval is refused.
     expect((await x.call("update_document", { document: "WS-00001", title: "Changed" })).text).toMatch(/can't be edited/);
-    const s = await x.call("send_document", { document: "WS-00001", heston_ok: "Yes send it to Dillon", expires_in_days: 14 });
-    expect(s.error, s.text).toBe(false);
-    expect(s.data.sent_to).toEqual(["Dillon Ripley <dillon@example.com>"]);
+    // Send: a request; declined → nothing goes out.
+    const s1 = await x.call("send_document", { document: "WS-00001", heston_ok: "Yes send it to Dillon", expires_in_days: 14 });
+    expect(s1.data).toMatchObject({ requested: "send", done: false });
+    await x.me.mutation(api.sign.decideRequest, { requestId: (await pending())[0]._id, confirm: false });
     await x.flush();
+    expect(await status()).toBe("approved");
+    expect(x.mails.filter((m) => m.subject.startsWith("Please sign"))).toHaveLength(0);
+    // Asked again and confirmed: sent, with the 14 days Claude asked for.
+    await x.call("send_document", { document: "WS-00001", heston_ok: "ok now send it", expires_in_days: 14 });
+    await x.me.mutation(api.sign.decideRequest, { requestId: (await pending())[0]._id, confirm: true });
+    await x.flush();
+    expect(await status()).toBe("sent");
     expect(x.mails.map((m) => m.subject)).toContain("Please sign: CO (WS-00001)");
+    const doc = (await x.t.run((ctx) => ctx.db.get(docId)))!;
+    expect(Math.round((doc.expiresAt! - doc.sentAt!) / 86_400_000)).toBe(14);
     const ev = (await x.call("get_audit_trail", { document: "WS-00001" })).data.events;
-    const said = ev.filter((e: any) => e.kind === "claude_asked_ok").map((e: any) => e.detail);
-    expect(said[0]).toContain('"Looks good, approve it"');
-    expect(said[1]).toContain('"Yes send it to Dillon"');
-    expect(ev.find((e: any) => e.kind === "approved")).toMatchObject({ actor: "claude" });
-    expect(ev.find((e: any) => e.kind === "send_settings")).toMatchObject({ actor: "claude" });
-    // Sending again, or approving a sent document, is refused.
-    expect((await x.call("send_document", { document: "WS-00001", heston_ok: "again" })).error).toBe(true);
+    expect(ev.filter((e: any) => e.kind === "claude_requested").map((e: any) => e.detail).join("\n")).toContain('"Looks good, approve it"');
+    expect(ev.find((e: any) => e.kind === "claude_request_declined")).toBeTruthy();
+    expect(ev.find((e: any) => e.kind === "approved")).toMatchObject({ actor: "heston" });
+    expect(ev.find((e: any) => e.kind === "send_settings")).toMatchObject({ actor: "heston" });
+    // get_document shows what happened to each request.
+    const g = await x.call("get_document", { document: "WS-00001" });
+    expect(g.data.requests.map((r: any) => `${r.what}:${r.status}`)).toEqual(["send:done", "send:declined", "approve:done"]);
+    // Out of order is refused at the request.
     expect((await x.call("approve_document", { document: "WS-00001", heston_ok: "again" })).error).toBe(true);
+    // Cancel: a request too.
+    await x.call("void_document", { document: "WS-00001", heston_ok: "cancel it", reason: "Wrong amount" });
+    expect(await status()).toBe("sent");
+    await x.me.mutation(api.sign.decideRequest, { requestId: (await pending())[0]._id, confirm: true });
+    expect(await status()).toBe("voided");
+  });
+
+  test("a request is only for the version it was asked about, and lasts a day", async () => {
+    const x = await setup();
+    await x.call("create_document", { title: "CO", pdf_base64: await contractPdf(), signers: [{ name: "Dillon Ripley", email: "dillon@example.com" }] });
+    const docId = (await x.t.run((ctx) => ctx.db.query("wsDocuments").first()))!._id;
+    await x.call("approve_document", { document: "WS-00001", heston_ok: "approve" });
+    const [req] = await x.me.query(api.sign.requestsFor, { documentId: docId });
+    await x.t.run(async (ctx) => { await ctx.db.patch(req._id, { createdAt: Date.now() - 25 * 3600_000 }); });
+    expect(await x.me.query(api.sign.requestsFor, { documentId: docId })).toHaveLength(0);
+    await expect(x.me.mutation(api.sign.decideRequest, { requestId: req._id, confirm: true })).rejects.toThrow(/over a day old/);
+    expect((await x.t.run((ctx) => ctx.db.get(docId)))!.status).toBe("draft");
   });
 });
 

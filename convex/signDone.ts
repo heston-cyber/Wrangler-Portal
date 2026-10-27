@@ -198,13 +198,21 @@ async function makeInvoice(ctx: ActionCtx, d: Data) {
   if (!billTo) throw new Error("No client to bill.");
   const label = docLabel(doc.number);
   const meta = { "metadata[ws_doc]": label, "metadata[ws_document_id]": doc._id, "metadata[ws_version]": String(ver.number) };
-  const found = await stripe(key, "GET", `customers?${new URLSearchParams({ email: billTo.email, limit: "1" })}`);
-  const customer = (found.data?.[0]?.id as string | undefined) ?? (await stripe(key, "POST", "customers", { name: billTo.name, email: billTo.email, ...meta }, `ws-cust-${doc._id}`)).id as string;
-  const inv = await stripe(key, "POST", "invoices", {
+  // Security review (Oct 27): Stripe's email filter is case-sensitive and its idempotency keys last 24 hours, so a
+  // retry could make a second customer or a second draft. Search (case-insensitive) finds the customer, and a draft
+  // already made for this document and version is reused rather than made again.
+  const q = (x: string) => x.replace(/["\\]/g, "");
+  const found = await stripe(key, "GET", `customers/search?${new URLSearchParams({ query: `email:"${q(billTo.email)}"`, limit: "10" })}`);
+  const match = (found.data as Array<{ id: string; email?: string | null }> | undefined)?.find((c) => (c.email ?? "").toLowerCase() === billTo.email.toLowerCase());
+  const customer = match?.id ?? (await stripe(key, "POST", "customers", { name: billTo.name, email: billTo.email, ...meta }, `ws-cust-${doc._id}`)).id as string;
+  const earlier = await stripe(key, "GET", `invoices/search?${new URLSearchParams({ query: `metadata["ws_document_id"]:"${q(doc._id)}" AND metadata["ws_version"]:"${ver.number}"`, limit: "10" })}`);
+  const prior = (earlier.data as Array<Record<string, any>> | undefined) ?? [];
+  if (prior.some((x) => x.status !== "draft")) throw new Error(`Stripe already has a finalized invoice for this document (${prior.find((x) => x.status !== "draft")!.id}). Check it in Stripe.`);
+  const inv = prior[0] ?? await stripe(key, "POST", "invoices", {
     customer, collection_method: "send_invoice", days_until_due: String(Math.max(0, Number(process.env.WS_INVOICE_DUE_DAYS ?? 3) || 0)), auto_advance: "false",
     description: `${pay.description} (${label}, "${doc.title}")`, ...meta,
   }, `ws-inv-${doc._id}-v${ver.number}`);
-  await stripe(key, "POST", "invoiceitems", { customer, invoice: inv.id, amount: String(pay.amountCents), currency: "usd", description: pay.description, ...meta }, `ws-item-${doc._id}-v${ver.number}`);
+  if (!prior[0] || Number(prior[0].total ?? 0) === 0) await stripe(key, "POST", "invoiceitems", { customer: (inv.customer as string) ?? customer, invoice: inv.id, amount: String(pay.amountCents), currency: "usd", description: pay.description, ...meta }, `ws-item-${doc._id}-v${ver.number}`);
   const check = await stripe(key, "GET", `invoices/${inv.id}`);
   if (check.status !== "draft") throw new Error(`Stripe says the invoice is "${check.status}", not a draft. Check it in Stripe.`);
   const url = `https://dashboard.stripe.com/${check.livemode ? "" : "test/"}invoices/${inv.id}`;

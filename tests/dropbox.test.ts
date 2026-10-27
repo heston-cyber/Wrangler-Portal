@@ -404,6 +404,7 @@ describe("voice notes", () => {
     const { versionId } = await t.mutation(internal.library.insertVersion, { videoId, bunnyGuid: "g", fileName: "a.mp4" });
     await t.run(async (ctx) => { await ctx.db.patch(versionId, { status: "ready", fpsNum: 24000, fpsDen: 1001, frameCount: 3149 }); });
     const storageId = await t.run((ctx) => ctx.storage.store(new Blob(["fake audio"], { type: "audio/webm" })));
+    await t.mutation(internal.notes.registerVoice, { storageId });
     const voice = {
       storageId, mime: "audio/webm;codecs=opus", durationMs: 4200, language: "eng", played: true,
       words: [{ t: "Make", f: 400, s: 10, e: 200 }, { t: "this", f: 401, s: 210, e: 400 }, { t: "brighter.", f: 450, s: 2100, e: 2600 }],
@@ -414,7 +415,8 @@ describe("voice notes", () => {
     expect(n.voice?.words.map((w: { t: string }) => w.t)).toEqual(["Make", "this", "brighter."]);
     expect(n.voiceUrl).toBeTypeOf("string");
     // Voice alone is enough to post.
-    const s2 = await t.run((ctx) => ctx.storage.store(new Blob(["x"])));
+    const s2 = await t.run((ctx) => ctx.storage.store(new Blob(["x"], { type: "audio/mp4" })));
+    await t.mutation(internal.notes.registerVoice, { storageId: s2 });
     await me.mutation(api.notes.create, { versionId, kind: "frame", inFrame: 10, text: "", voice: { ...voice, storageId: s2, pointers: [] } });
     // The connector sees the transcript and the pointing word with its timecode and still.
     const { key } = await me.action(api.connector.createKey, {});
@@ -428,9 +430,15 @@ describe("voice notes", () => {
     expect(await t.run((ctx) => ctx.db.system.get(storageId))).toBeNull();
     await me.mutation(api.notes.discardVoice, { storageId: s2 });
     expect(await t.run((ctx) => ctx.db.system.get(s2))).not.toBeNull();
-    const s3 = await t.run((ctx) => ctx.storage.store(new Blob(["y"])));
+    const s3 = await t.run((ctx) => ctx.storage.store(new Blob(["y"], { type: "audio/webm" })));
+    await t.mutation(internal.notes.registerVoice, { storageId: s3 });
     await me.mutation(api.notes.discardVoice, { storageId: s3 });
     expect(await t.run((ctx) => ctx.db.system.get(s3))).toBeNull();
+    // Security review (Oct 27): any other stored file (a Sign PDF, say) is never thrown away from here.
+    const pdfFile = await t.run((ctx) => ctx.storage.store(new Blob(["%PDF"], { type: "application/pdf" })));
+    await me.mutation(api.notes.discardVoice, { storageId: pdfFile });
+    expect(await t.run((ctx) => ctx.db.system.get(pdfFile))).not.toBeNull();
+    await expect(me.mutation(api.notes.create, { versionId, kind: "frame", inFrame: 12, text: "", voice: { ...voice, storageId: pdfFile, pointers: [] } })).rejects.toThrow(/didn't upload/);
   });
 });
 

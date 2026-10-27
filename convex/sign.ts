@@ -16,7 +16,8 @@ import { inspect, sha256Bytes, stamp, type Stamp } from "./lib/wsPdf";
 import { sha256Hex } from "./lib/hash";
 import { allowedEmails } from "./auth";
 import { randomToken } from "./lib/hash";
-import { DEFAULT_EXPIRY_DAYS, signLink } from "./lib/wsSigning";
+import { DEFAULT_EXPIRY_DAYS, cleanLine, signLink } from "./lib/wsSigning";
+import { pngProblem } from "./lib/pngCheck";
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
 const MAX_PNG_BYTES = 600 * 1024;
@@ -56,7 +57,7 @@ async function loadEditable(ctx: MutationCtx, versionId: Id<"wsVersions">) {
 
 // Heston's own signer row always carries his adopted name and title and his own email, whatever the page sent.
 function withOwner(signers: LayoutSigner[], sig: Doc<"wsOwnerSignatures"> | null): LayoutSigner[] {
-  return signers.map((s) => s.key === OWNER_KEY ? { key: OWNER_KEY, name: sig?.name ?? "Heston Hill", email: ownerEmail(), title: sig?.title ?? "Founder", order: s.order } : { ...s, name: s.name.trim(), email: s.email.trim().toLowerCase(), title: s.title?.trim() || undefined });
+  return signers.map((s) => s.key === OWNER_KEY ? { key: OWNER_KEY, name: sig?.name ?? "Heston Hill", email: ownerEmail(), title: sig?.title ?? "Founder", order: s.order } : { ...s, name: cleanLine(s.name), email: s.email.trim().toLowerCase(), title: cleanLine(s.title) || undefined });
 }
 
 // ---------- reading ----------
@@ -235,10 +236,6 @@ export const approve = mutation({
   handler: async (ctx, { versionId }) => { await requireMe(ctx); return approveCore(ctx, versionId, OWNER_KEY); },
 });
 
-export const approveAs = internalMutation({
-  args: { versionId: v.id("wsVersions"), actor: v.string() },
-  handler: async (ctx, { versionId, actor }) => approveCore(ctx, versionId, actor),
-});
 
 async function approveCore(ctx: MutationCtx, versionId: Id<"wsVersions">, actor: string) {
   {
@@ -308,7 +305,9 @@ export const replaceDraftFile = internalMutation({
     const now = Date.now();
     await ctx.db.patch(ver._id, { fileId: a.storageId, fileName: a.fileName, fileSha256: a.sha, fileBytes: a.bytes, pages: a.pages, boxes: [], hasTextLayer: true, updatedAt: now });
     await ctx.db.patch(doc._id, { title: a.title.slice(0, 120), updatedAt: now });
-    if (old !== a.storageId) await ctx.storage.delete(old);
+    // An earlier version (sent, then cancelled) may share this file: it stays as long as anything refers to it.
+    const shared = (await ctx.db.query("wsVersions").withIndex("by_document", (q) => q.eq("documentId", doc._id)).collect()).some((x) => x._id !== ver._id && x.fileId === old) || doc.final?.fileId === old;
+    if (old !== a.storageId && !shared) await ctx.storage.delete(old);
     await appendEvent(ctx, doc._id, { kind: "rebuilt", actor: OWNER_KEY, versionNumber: ver.number, detail: `Rebuilt from the builder: "${a.fileName}" (${a.pages.length} page${a.pages.length === 1 ? "" : "s"}), SHA-256 ${a.sha}` });
     return { versionId: ver._id };
   },
@@ -341,6 +340,10 @@ export const remove = mutation({
     const doc = await ctx.db.get(documentId);
     if (!doc) return null;
     if (doc.status !== "draft" && doc.status !== "approved") throw new ConvexError("Sent documents are kept for the record and can't be deleted.");
+    // Security review (Oct 27): a document that was ever sent stays, even after cancel → new version (a draft again).
+    const everSent = doc.sentAt || (await ctx.db.query("wsSignings").withIndex("by_document", (q) => q.eq("documentId", documentId)).first())
+      || (await eventsOf(ctx, documentId)).some((e) => e.kind === "sent");
+    if (everSent) throw new ConvexError("This document was sent for signing once, so it's kept for the record and can't be deleted.");
     const versions = await ctx.db.query("wsVersions").withIndex("by_document", (q) => q.eq("documentId", documentId)).collect();
     const files = new Set<Id<"_storage">>(versions.map((x) => x.fileId));
     for (const x of versions) await ctx.db.delete(x._id);
@@ -355,7 +358,7 @@ export const remove = mutation({
 
 // ---------- Heston's signature ----------
 
-function isPng(b: Uint8Array) { return b.length > 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47; }
+function isPng(b: Uint8Array) { return pngProblem(b) === null; }
 
 export const adoptSignature = action({
   args: { name: v.string(), title: v.string(), method: v.union(v.literal("typed"), v.literal("drawn")), signatureStorageId: v.id("_storage"), initialsStorageId: v.id("_storage") },
@@ -428,10 +431,6 @@ export const send = mutation({
   handler: async (ctx, a) => { await requireMe(ctx); return sendCore(ctx, a.versionId, a.expiresInDays, OWNER_KEY); },
 });
 
-export const sendAs = internalMutation({
-  args: { versionId: v.id("wsVersions"), expiresInDays: v.optional(v.number()), actor: v.string() },
-  handler: async (ctx, a) => sendCore(ctx, a.versionId, a.expiresInDays, a.actor),
-});
 
 async function sendCore(ctx: MutationCtx, versionId: Id<"wsVersions">, expiresInDays: number | undefined, actor: string) {
   {
@@ -478,10 +477,6 @@ export const voidDocument = mutation({
   handler: async (ctx, a) => { await requireMe(ctx); return voidCore(ctx, a.documentId, a.reason, OWNER_KEY); },
 });
 
-export const voidAs = internalMutation({
-  args: { documentId: v.id("wsDocuments"), reason: v.optional(v.string()), actor: v.string() },
-  handler: async (ctx, a) => voidCore(ctx, a.documentId, a.reason, a.actor),
-});
 
 async function voidCore(ctx: MutationCtx, documentId: Id<"wsDocuments">, reason: string | undefined, actor: string) {
   {
@@ -610,4 +605,95 @@ export const previewData = internalQuery({
 export const deletePreview = internalMutation({
   args: { storageId: v.id("_storage") },
   handler: async (ctx, { storageId }) => { await ctx.storage.delete(storageId); return null; },
+});
+
+// ---------- Claude's requests (security review, Oct 27) ----------
+// The connector can't approve, send or cancel on its own: it leaves a request, and Heston confirms or declines it
+// on the document page while signed in. So text slipped into a PDF, an email or a signer's name can't get a
+// contract sent with his signature on it, whatever it persuades Claude to type.
+const REQUEST_TTL = 24 * 3600_000;
+const WHAT_LABEL = { approve: "approve", send: "send", cancel: "cancel" } as const;
+
+export const requestAs = internalMutation({
+  args: { documentId: v.id("wsDocuments"), what: v.union(v.literal("approve"), v.literal("send"), v.literal("cancel")), said: v.string(), expiresInDays: v.optional(v.number()), reason: v.optional(v.string()) },
+  handler: async (ctx, a) => {
+    const doc = await ctx.db.get(a.documentId);
+    if (!doc) throw new ConvexError("That document doesn't exist.");
+    const need = a.what === "approve" ? "draft" : a.what === "send" ? "approved" : "sent";
+    if (doc.status !== need) throw new ConvexError(`${docLabel(doc.number)} is ${doc.status}; only ${need === "draft" ? "a draft can be approved" : need === "approved" ? "an approved document can be sent" : "a document out for signature can be cancelled"}.`);
+    if (a.what === "approve") {
+      const ver = await currentVersion(ctx, doc);
+      const problems = approvalProblems({ signers: ver.signers, boxes: ver.boxes, pages: ver.pages.length, payment: ver.payment ?? null, ownerSignatureAdopted: !!(await currentSignature(ctx)) });
+      if (problems.length) throw new ConvexError(problems.join(" "));
+    }
+    if (a.expiresInDays !== undefined && (a.expiresInDays < 1 || a.expiresInDays > 90)) throw new ConvexError("Links can last 1 to 90 days.");
+    const now = Date.now();
+    for (const r of await ctx.db.query("wsRequests").withIndex("by_document", (q) => q.eq("documentId", doc._id).eq("status", "pending")).collect()) {
+      if (r.what === a.what) await ctx.db.patch(r._id, { status: "replaced", decidedAt: now });
+    }
+    const said = cleanLine(a.said, 200);
+    const requestId = await ctx.db.insert("wsRequests", { documentId: doc._id, what: a.what, versionNumber: doc.currentVersion, expiresInDays: a.expiresInDays, reason: a.reason?.trim().slice(0, 300) || undefined, said, status: "pending", createdAt: now });
+    await appendEvent(ctx, doc._id, { kind: "claude_requested", actor: "claude", versionNumber: doc.currentVersion, detail: `Claude asked to ${WHAT_LABEL[a.what]} version ${doc.currentVersion} through the connector, saying Heston told it: "${said}". Waiting for Heston to confirm on the site.` });
+    return { requestId, expiresAt: now + REQUEST_TTL };
+  },
+});
+
+async function pendingOf(ctx: QueryCtx, documentId: Id<"wsDocuments">) {
+  const now = Date.now();
+  return (await ctx.db.query("wsRequests").withIndex("by_document", (q) => q.eq("documentId", documentId).eq("status", "pending")).collect()).filter((r) => now - r.createdAt < REQUEST_TTL);
+}
+
+export const requestsFor = query({
+  args: { documentId: v.id("wsDocuments") },
+  handler: async (ctx, { documentId }) => {
+    await requireMe(ctx);
+    return (await pendingOf(ctx, documentId)).map((r) => ({ _id: r._id, what: r.what, versionNumber: r.versionNumber, expiresInDays: r.expiresInDays ?? null, reason: r.reason ?? null, said: r.said, createdAt: r.createdAt }));
+  },
+});
+
+export const pendingRequests = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireMe(ctx);
+    const now = Date.now();
+    const rows = (await ctx.db.query("wsRequests").withIndex("by_status", (q) => q.eq("status", "pending")).order("desc").take(50)).filter((r) => now - r.createdAt < REQUEST_TTL);
+    const out = [];
+    for (const r of rows) { const d = await ctx.db.get(r.documentId); if (d) out.push({ _id: r._id, documentId: r.documentId, label: docLabel(d.number), title: d.title, what: r.what, createdAt: r.createdAt }); }
+    return out;
+  },
+});
+
+export const requestStatus = internalQuery({
+  args: { documentId: v.id("wsDocuments") },
+  handler: async (ctx, { documentId }) => {
+    const rows = await ctx.db.query("wsRequests").withIndex("by_document", (q) => q.eq("documentId", documentId)).collect();
+    const now = Date.now();
+    return rows.sort((a, b) => b.createdAt - a.createdAt).slice(0, 5).map((r) => ({ what: r.what, status: r.status === "pending" && now - r.createdAt >= REQUEST_TTL ? "expired" : r.status, asked: new Date(r.createdAt).toISOString(), decided: r.decidedAt ? new Date(r.decidedAt).toISOString() : null, error: r.error ?? null }));
+  },
+});
+
+export const decideRequest = mutation({
+  args: { requestId: v.id("wsRequests"), confirm: v.boolean() },
+  handler: async (ctx, { requestId, confirm }) => {
+    await requireMe(ctx);
+    const r = await ctx.db.get(requestId);
+    if (!r) throw new ConvexError("That request doesn't exist.");
+    const now = Date.now();
+    if (r.status !== "pending") throw new ConvexError(`That request was already ${r.status}.`);
+    if (now - r.createdAt >= REQUEST_TTL) { await ctx.db.patch(r._id, { status: "expired", decidedAt: now }); throw new ConvexError("That request is over a day old. Ask Claude again, or do it yourself here."); }
+    const doc = (await ctx.db.get(r.documentId))!;
+    if (!confirm) {
+      await ctx.db.patch(r._id, { status: "declined", decidedAt: now });
+      await appendEvent(ctx, doc._id, { kind: "claude_request_declined", actor: OWNER_KEY, versionNumber: doc.currentVersion, detail: `Heston declined Claude's request to ${WHAT_LABEL[r.what]} this document.` });
+      return { done: false };
+    }
+    if (doc.currentVersion !== r.versionNumber) throw new ConvexError(`The document has moved on to version ${doc.currentVersion} since Claude asked. Decline this and check it again.`);
+    await appendEvent(ctx, doc._id, { kind: "claude_request_confirmed", actor: OWNER_KEY, versionNumber: doc.currentVersion, detail: `Heston confirmed on the site, signed in: ${WHAT_LABEL[r.what]} (asked by Claude).` });
+    const ver = await currentVersion(ctx, doc);
+    if (r.what === "approve") await approveCore(ctx, ver._id, OWNER_KEY);
+    else if (r.what === "send") await sendCore(ctx, ver._id, r.expiresInDays, OWNER_KEY);
+    else await voidCore(ctx, doc._id, r.reason, OWNER_KEY);
+    await ctx.db.patch(r._id, { status: "done", decidedAt: now });
+    return { done: true };
+  },
 });

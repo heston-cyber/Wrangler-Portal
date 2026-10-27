@@ -4,11 +4,11 @@ export const FROM = () => process.env.EMAIL_FROM || "Wrangler Review <review@wra
 export const REPLY_TO = () => process.env.EMAIL_REPLY_TO || "heston@wranglerproductions.com";
 export const SITE = () => (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/$/, "");
 
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 // A plain HTML twin of the text (mail filters trust multipart text+HTML more than text alone): paragraphs kept,
 // links clickable, nothing fancy.
 export function htmlFromText(text: string): string {
-  const paras = text.split(/\n{2,}/).map((p) => esc(p).replace(/\n/g, "<br>").replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#c8102e">$1</a>'));
+  const paras = text.split(/\n{2,}/).map((p) => esc(p).replace(/\n/g, "<br>").replace(/(https?:\/\/[^\s<&]+(?:&amp;[^\s<&]+)*)/g, '<a href="$1" style="color:#c8102e">$1</a>'));
   return `<!doctype html><html><body style="margin:0;padding:24px;background:#ffffff;color:#1a1a1a;font:15px/1.55 -apple-system,Helvetica,Arial,sans-serif"><div style="max-width:560px;margin:0 auto">${paras.map((p) => `<p style="margin:0 0 14px">${p}</p>`).join("")}</div></body></html>`;
 }
 

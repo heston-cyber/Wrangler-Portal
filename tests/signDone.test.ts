@@ -33,7 +33,7 @@ async function sha(b: Uint8Array) { return [...new Uint8Array(await crypto.subtl
 type Mail = { to: string; subject: string; text: string; attachments?: Array<{ filename: string; content: string }> };
 type World = {
   mails: Mail[];
-  stripe: { calls: Array<{ method: string; path: string; idem?: string; form?: Record<string, string> }>; invoices: Map<string, any> };
+  stripe: { calls: Array<{ method: string; path: string; idem?: string; form?: Record<string, string> }>; invoices: Map<string, any>; customers: Array<{ id: string; email: string }> };
   dropbox: { files: Map<string, Uint8Array>; corrupt: boolean };
 };
 
@@ -52,7 +52,8 @@ function stub(w: World) {
       w.stripe.calls.push({ method, path, idem, form });
       if (idem && idemSeen.has(idem)) return ok(idemSeen.get(idem));
       let out: any;
-      if (method === "GET" && path.startsWith("customers?")) out = { data: [] };
+      if (method === "GET" && path.startsWith("customers/search?")) out = { data: [...w.stripe.customers].filter((c) => new URLSearchParams(path.split("?")[1]).get("query")!.toLowerCase().includes(c.email.toLowerCase())) };
+      else if (method === "GET" && path.startsWith("invoices/search?")) { const q = new URLSearchParams(path.split("?")[1]).get("query")!; out = { data: [...w.stripe.invoices.values()].filter((i) => q.includes(`"${i.form["metadata[ws_document_id]"]}"`) && q.includes(`"${i.form["metadata[ws_version]"]}"`)) }; }
       else if (method === "POST" && path === "customers") out = { id: "cus_1" };
       else if (method === "POST" && path === "invoices") { const id = `in_${w.stripe.invoices.size + 1}`; out = { id, status: "draft" }; w.stripe.invoices.set(id, { id, status: "draft", total: 0, livemode: false, form }); }
       else if (method === "POST" && path === "invoiceitems") { const inv = w.stripe.invoices.get(form!.invoice); inv.total += Number(form!.amount); out = { id: "ii_1" }; }
@@ -84,7 +85,7 @@ async function pdf(): Promise<Uint8Array> {
 
 async function signedDocument(opts: { payment?: boolean } = {}) {
   const t = convexTest(schema, modules);
-  const w: World = { mails: [], stripe: { calls: [], invoices: new Map() }, dropbox: { files: new Map(), corrupt: false } };
+  const w: World = { mails: [], stripe: { calls: [], invoices: new Map(), customers: [] }, dropbox: { files: new Map(), corrupt: false } };
   stub(w);
   const sub = await t.run(async (ctx) => {
     const owner = await ctx.db.insert("users", { email: "heston@wranglerproductions.com", name: "Heston", role: "owner" });

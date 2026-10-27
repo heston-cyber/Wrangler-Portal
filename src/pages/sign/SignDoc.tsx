@@ -14,6 +14,7 @@ import { DEFAULT_SIZE, applyScan, type ScanResult } from "../../sign/markers";
 import { deviceName } from "../../../convex/lib/wsFinal";
 import { findMarkers, openPdf, renderPage, type PdfDoc } from "../../sign/pdf";
 import { central, errText, KIND_LABEL, signerColor, StatusChip, uploadToStorage } from "./common";
+import { ClaudeRequests } from "./ClaudeRequests";
 
 type Data = NonNullable<ReturnType<typeof useGetDoc>>;
 const useGetDoc = (documentId: Id<"wsDocuments">, versionNumber: number | null) => useQuery(api.sign.get, { documentId, ...(versionNumber ? { versionNumber } : {}) });
@@ -214,6 +215,7 @@ function Editor({ data }: { data: Data }) {
 
       <div className="content ws-doc">
         <div className="ws-pages" onClick={(e) => { if (e.target === e.currentTarget) setSelected(null); }}>
+          <ClaudeRequests documentId={doc._id} label={doc.label} />
           {viewingOld && <div className="ws-banner"><History size={15} /> You're looking at version {version.number}, an older version. <a {...linkProps(`/sign/d/${doc._id}`)}>Open the current one</a></div>}
           {!editable && version.approvedAt && version.isCurrent && !signedAvailable && <div className="ws-banner ok"><Lock size={15} /> {doc.status === "sent" ? `Version ${version.number} is out for signature. To change anything, cancel signing, then make a new version.` : doc.status === "completed" ? `Version ${version.number} is signed by everyone.` : `Version ${version.number} is approved and locked. To change anything, make a new version.`}</div>}
           {placing && <div className="ws-banner place"><Crosshair size={15} /> Click on a page to place the {KIND_LABEL[placing.kind].toLowerCase()} box for {nameOf(layout.signers, placing.signer)}. <button className="btn ghost sm" onClick={() => setPlacing(null)}>Cancel</button></div>}

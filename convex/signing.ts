@@ -26,13 +26,17 @@ import { sendEmail, SITE, sixDigits } from "./lib/email";
 import {
   CODE_GAP, CODE_PER_HOUR, CODE_TRIES, CODE_TTL, CONSENT_ID, FAILS_BEFORE_LOCK, LOCK_FOR, OPEN_EVENT_GAP, SESSION_TTL,
   SIGN_FROM, SIGN_SITE, callerIp, centralDate, consentText, linkState, maskEmail, signLink,
+  FAILS_LIFETIME, SIGNER_ACTIONS_PER_HOUR, cleanLine, hasLink,
 } from "./lib/wsSigning";
+import { pngProblem } from "./lib/pngCheck";
 import { allowedEmails } from "./auth";
+import { bump } from "./lib/rate";
 
 export const SIGN_STATEMENT = "By clicking Sign, I agree that my electronic signature and initials on this document are the legal equivalent of my handwritten signature and initials, and that I intend to sign it.";
 export const COMPANY = "Wrangler Productions, a DBA of Hill Creative LLC";
 export const contact = () => allowedEmails()[0] ?? "heston@wranglerproductions.com";
 const MAX_PNG = 400 * 1024;
+const LOCKED_FOR_GOOD = "This link is locked after too many wrong codes. Ask Wrangler Productions to send it again.";
 
 type Who = { ip?: string; userAgent?: string };
 type Fail = { error: string; code?: string };
@@ -41,7 +45,8 @@ type Fail = { error: string; code?: string };
 
 export function corsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get("origin") ?? "";
-  const allowed = new Set([SIGN_SITE(), SITE(), ...(process.env.SIGN_CORS_EXTRA ?? "").split(",").map((s) => s.trim()).filter(Boolean)].map((u) => new URL(u).origin));
+  const allowed = new Set([SIGN_SITE(), SITE(), ...(process.env.SIGN_CORS_EXTRA ?? "").split(",").map((s) => s.trim()).filter(Boolean)]
+    .map((u) => { try { return new URL(u).origin; } catch { return ""; } }).filter(Boolean)); // a typo in SIGN_CORS_EXTRA mustn't break every request
   return allowed.has(origin) ? { "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Access-Control-Max-Age": "600", Vary: "Origin" } : { Vary: "Origin" };
 }
 const json = (req: Request, body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store", ...corsHeaders(req) } });
@@ -80,11 +85,14 @@ export const api = httpAction(async (ctx, req) => {
       case "viewed": return json(req, await ctx.runMutation(internal.signing.viewed, { token, session: session ?? "", page: Number(body.page) | 0, ...who }));
       case "initial": return json(req, await ctx.runMutation(internal.signing.initial, { token, session: session ?? "", boxId: String(body.boxId ?? "").slice(0, 40), on: body.on !== false, ...who }));
       case "adopt": {
-        const name = String(body.name ?? "").trim().slice(0, 120), title = String(body.title ?? "").trim().slice(0, 120);
+        // Security review (Oct 27): the name and title go into emails to the other signers and into the certificate,
+        // so they're one plain line with no web address; the images must really be PNGs of a sane size.
+        const name = cleanLine(body.name), title = cleanLine(body.title);
         const method = body.method === "drawn" ? "drawn" : "typed";
         const sig = decodePng(body.signature), ini = decodePng(body.initials);
-        if (!sig || !ini) return json(req, { error: "The signature images didn't come through. Try again." }, 400);
+        if (!sig || !ini || pngProblem(sig) || pngProblem(ini)) return json(req, { error: "The signature images didn't come through. Try again." }, 400);
         if (!name) return json(req, { error: "Type your full name." }, 400);
+        if (hasLink(name, true) || hasLink(title, false)) return json(req, { error: "Type just your name (and title), without a web or email address." }, 400);
         const check = await ctx.runMutation(internal.signing.sessionOk, { token, session: session ?? "" });
         if (!check.ok) return json(req, { error: check.error, code: check.code }, 401);
         const signatureFileId = await ctx.storage.store(new Blob([new Uint8Array(sig)], { type: "image/png" }));
@@ -176,6 +184,7 @@ export const requestCode = internalMutation({
     if (!l) return { error: "This link doesn't go anywhere.", code: "missing" };
     if (l.state.state !== "ready") return { error: STATE_MSG[l.state.state] ?? "This link can't be used.", code: l.state.state };
     const now = Date.now();
+    if (l.s.lockedUntil === Number.MAX_SAFE_INTEGER) return { error: LOCKED_FOR_GOOD, code: "locked" };
     if (l.s.lockedUntil && l.s.lockedUntil > now) return { error: `Too many wrong codes. Try again after ${new Date(l.s.lockedUntil).toLocaleTimeString("en-US", { timeZone: "America/Chicago", hour: "numeric", minute: "2-digit" })}.`, code: "locked" };
     const sends = (l.s.codeSends ?? []).filter((t) => now - t < 3600_000);
     if (sends.length && now - sends[sends.length - 1] < CODE_GAP) return { error: "A code is on its way. Wait a moment before asking for another.", code: "wait" };
@@ -195,15 +204,24 @@ export const verifyCode = internalMutation({
     if (l.state.state !== "ready") return { error: STATE_MSG[l.state.state] ?? "This link can't be used.", code: l.state.state };
     const now = Date.now();
     const s = l.s;
-    if (s.lockedUntil && s.lockedUntil > now) return { error: "Too many wrong codes. Wait 15 minutes, then ask for a new code.", code: "locked" };
+    if (s.lockedUntil && s.lockedUntil > now) return { error: s.lockedUntil === Number.MAX_SAFE_INTEGER ? LOCKED_FOR_GOOD : "Too many wrong codes. Wait 15 minutes, then ask for a new code.", code: "locked" };
     if (!s.codeHash || !s.codeExpiresAt) return { error: "Ask for a code first.", code: "nocode" };
     if (s.codeExpiresAt < now) return { error: "That code has expired. Ask for a new one.", code: "expired_code" };
     const good = code.length === 6 && (await sha256Hex(`${token}:code:${code}`)) === s.codeHash;
     if (!good) {
       const attempts = (s.codeAttempts ?? 0) + 1;
       const failures = [...(s.failures ?? []).filter((t) => now - t < 3600_000), now];
+      // Security review (Oct 27): the hourly lock resets, so wrong codes also add up over the link's whole life; at
+      // FAILS_LIFETIME the link locks for good and Heston is told (he can cancel and send it again).
+      const total = (s.failTotal ?? 0) + 1;
+      if (total >= FAILS_LIFETIME) {
+        await ctx.db.patch(s._id, { codeAttempts: attempts, failures, failTotal: total, codeHash: undefined, codeExpiresAt: undefined, lockedUntil: Number.MAX_SAFE_INTEGER, sessionHash: undefined, sessionExpiresAt: undefined });
+        await ev(ctx, s, "link_locked", { ip, userAgent }, `Wrong code (${total} in all): the link is locked for good. Wrangler Productions can cancel and send it again.`);
+        await ctx.scheduler.runAfter(0, internal.signing.notifyOwner, { signingId: s._id, kind: "locked" });
+        return { error: LOCKED_FOR_GOOD, code: "locked" };
+      }
       const lock = failures.length >= FAILS_BEFORE_LOCK ? now + LOCK_FOR : undefined;
-      await ctx.db.patch(s._id, { codeAttempts: attempts, failures, ...(attempts >= CODE_TRIES ? { codeHash: undefined, codeExpiresAt: undefined } : {}), ...(lock ? { lockedUntil: lock } : {}) });
+      await ctx.db.patch(s._id, { codeAttempts: attempts, failures, failTotal: total, ...(attempts >= CODE_TRIES ? { codeHash: undefined, codeExpiresAt: undefined } : {}), ...(lock ? { lockedUntil: lock } : {}) });
       await ev(ctx, s, "code_failed", { ip, userAgent }, lock ? "Wrong code; the link is locked for 15 minutes." : attempts >= CODE_TRIES ? "Wrong code; that code is used up." : "Wrong code.");
       return { error: lock ? "Too many wrong codes. Wait 15 minutes, then ask for a new code." : attempts >= CODE_TRIES ? "That code is used up. Ask for a new one." : "That code isn't right. Check the email and try again.", code: lock ? "locked" : "wrong" };
     }
@@ -305,6 +323,7 @@ export const adoptRecord = internalMutation({
     const r = await withSession(ctx, a.token, a.session);
     if ("error" in r) return r;
     if (!r.s.consentAt) return { error: "Agree to sign electronically first." };
+    if (await tooBusy(ctx, r.s._id)) return { error: BUSY };
     const old = r.s.adopted;
     await ctx.db.patch(r.s._id, { adopted: { name: a.name, title: a.title, method: a.method, signatureFileId: a.signatureFileId, initialsFileId: a.initialsFileId, signatureSha256: a.signatureSha256, initialsSha256: a.initialsSha256, at: Date.now() } });
     if (old) { await ctx.storage.delete(old.signatureFileId); await ctx.storage.delete(old.initialsFileId); }
@@ -312,6 +331,13 @@ export const adoptRecord = internalMutation({
     return { ok: true };
   },
 });
+
+// Security review (Oct 27): each initials toggle and signature change is an event in the trail, so a script could
+// pile up thousands. A signer gets SIGNER_ACTIONS_PER_HOUR of them an hour, far more than real use needs.
+const BUSY = "That's a lot of changes in one hour. Wait a little, then try again.";
+async function tooBusy(ctx: MutationCtx, id: Id<"wsSignings">): Promise<boolean> {
+  try { await bump(ctx, "wsSigner", id, SIGNER_ACTIONS_PER_HOUR); return false; } catch { return true; }
+}
 
 export const initial = internalMutation({
   args: { token: v.string(), session: v.string(), boxId: v.string(), on: v.boolean(), ...whoArgs },
@@ -324,6 +350,7 @@ export const initial = internalMutation({
     if (!box || box.signer !== r.s.signerKey || box.kind !== "initials") return { error: "That isn't one of your initial boxes." };
     const done = new Set(r.s.initialed ?? []);
     if (on === done.has(boxId)) return { ok: true };
+    if (await tooBusy(ctx, r.s._id)) return { error: BUSY };
     if (on) done.add(boxId); else done.delete(boxId);
     await ctx.db.patch(r.s._id, { initialed: [...done] });
     await ev(ctx, r.s, on ? "initialed" : "initials_removed", { ip, userAgent }, `${on ? "Initialed" : "Took initials off"} the box on page ${box.page + 1}.`);
@@ -430,11 +457,16 @@ export const markEmailed = internalMutation({
 // Heston hears when someone signs. When everyone has, his copy of the signed PDF is that email (signDone.ts);
 // "all_signed" stays for the rare case the copy can't be made.
 export const notifyOwner = internalAction({
-  args: { signingId: v.id("wsSignings"), kind: v.union(v.literal("signed"), v.literal("all_signed")) },
+  args: { signingId: v.id("wsSignings"), kind: v.union(v.literal("signed"), v.literal("all_signed"), v.literal("locked")) },
   handler: async (ctx, { signingId, kind }) => {
     const d = await ctx.runQuery(internal.signing.emailData, { signingId });
     if (!d) return null;
     const link = `${SITE()}/sign/d/${d.doc._id}`;
+    if (kind === "locked") {
+      const text = `${d.s.name}'s signing link for "${d.doc.title}" (${d.label}) had too many wrong codes, so it's locked for good.\n\nIf that was ${d.s.name.split(" ")[0]} having trouble, cancel the document and send it again for a fresh link. If not, someone else may have the link.\n\nOpen it: ${link}`;
+      try { await sendEmail({ from: SIGN_FROM(), to: contact(), replyTo: null, subject: `Signing link locked: ${d.label}`, text, tag: "ws-owner-locked" }); } catch (e) { console.error("notifyOwner", String((e as Error).message).slice(0, 120)); }
+      return null;
+    }
     const left = d.all.filter((x) => x.status !== "signed").map((x) => x.name);
     const text = kind === "all_signed"
       ? `Everyone has signed "${d.doc.title}" (${d.label}).\n\nOpen it: ${link}\n\n(The signed PDF and the copies to everyone come with Phase S3.)`

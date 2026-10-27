@@ -78,6 +78,7 @@ import type * as wsNode from "../wsNode.js";
 import type * as wsRender from "../wsRender.js";
 import type * as lib_wsPageMd from "../lib/wsPageMd.js";
 import type * as lib_wsPdfImport from "../lib/wsPdfImport.js";
+import type * as lib_pngCheck from "../lib/pngCheck.js";
 import type * as lib_mcpServer from "../lib/mcpServer.js";
 import type * as lib_wsMarkers from "../lib/wsMarkers.js";
 import type * as wsArchive from "../wsArchive.js";
@@ -164,6 +165,7 @@ declare const fullApi: ApiFromModules<{
   wsRender: typeof wsRender;
   "lib/wsPageMd": typeof lib_wsPageMd;
   "lib/wsPdfImport": typeof lib_wsPdfImport;
+  "lib/pngCheck": typeof lib_pngCheck;
   "lib/mcpServer": typeof lib_mcpServer;
   "lib/wsMarkers": typeof lib_wsMarkers;
   wsArchive: typeof wsArchive;

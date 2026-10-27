@@ -1000,6 +1000,9 @@ code.mono, .input.mono, .chip.num, .fname code { font-family: ui-monospace, "SF 
 .ws-banner.place { background: var(--accent-tint); }
 .ws-banner.bad { color: var(--text-accent); }
 .ws-banner a { text-decoration: underline; }
+.ws-banner.ws-claudereq { background: var(--accent-tint); align-items: flex-start; }
+.ws-claudereq-text { flex: 1 1 260px; min-width: 0; }
+.ws-claudereq-btns { display: flex; gap: 6px; }
 
 .ws-side { position: sticky; top: 0; max-height: calc(100vh - 70px); overflow-y: auto; padding: 14px 16px 40px 0; display: grid; gap: 12px; align-content: start; }
 .ws-card { background: var(--surface-block); border-radius: var(--radius-card); padding: 14px; display: grid; gap: 10px; }

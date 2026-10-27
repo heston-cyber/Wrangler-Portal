@@ -2,6 +2,8 @@ name: Convex run
 
 # Runs one backend function by hand (used by Claude for Phase 0 checks).
 # The repo is public, so these logs are public: only run functions whose output is safe to show.
+# Security review (Oct 27): only the self-tests (and the S0 checks) can be run this way; anything else needs this
+# list changed in a commit. Internal functions that read or change documents can't be reached from here.
 on:
   workflow_dispatch:
     inputs:
@@ -32,6 +34,10 @@ jobs:
           FN: ${{ inputs.fn }}
           ARGS: ${{ inputs.args }}
         run: |
+          if ! [[ "$FN" =~ ^[A-Za-z0-9_]+:([A-Za-z0-9_]*[sS]elf[tT]est)$ || "$FN" =~ ^wsS0:[A-Za-z0-9_]+$ ]]; then
+            echo "Not allowed: $FN (only *:selfTest-style functions and wsS0:* run here)"; exit 1
+          fi
+          if ! printf '%s' "$ARGS" | jq -e 'type == "object"' > /dev/null; then echo "args must be a JSON object"; exit 1; fi
           export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7C/|}"
           export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7c/|}"
           npx convex run "$FN" "$ARGS"

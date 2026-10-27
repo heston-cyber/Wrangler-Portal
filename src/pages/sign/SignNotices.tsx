@@ -6,6 +6,7 @@ import { api } from "../../../convex/_generated/api";
 import { linkProps } from "../../lib/router";
 import { Spinner } from "../../ui/kit";
 import { errText } from "./common";
+import { ClaudeRequestNotices } from "./ClaudeRequests";
 
 export function SignNotices() {
   const sig = useQuery(api.sign.ownerSignature);
@@ -24,6 +25,7 @@ export function SignNotices() {
   const onConnect = async () => { setConnecting(true); try { location.href = await connect({}); } catch (e) { setNote(errText(e)); setConnecting(false); } };
   return (
     <>
+      <ClaudeRequestNotices />
       {sig && !sig.adopted && (
         <div className="ws-note" role="status"><PenLine size={16} /><span><b>Adopt your signature first.</b> It goes on every document you send.</span><a className="btn sm" {...linkProps("/sign/signature")}>Set it up</a></div>
       )}

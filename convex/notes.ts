@@ -90,7 +90,7 @@ export const create = mutation({
     if (!text && !a.drawing && !a.voice) throw new ConvexError("Write a note or draw something first.");
     if (a.voice) {
       if (a.voice.words.length > 20_000 || a.voice.pointers.length > 20) throw new ConvexError("That voice note is too long.");
-      if (!(await ctx.db.system.get(a.voice.storageId))) throw new ConvexError("The recording didn't upload. Try again.");
+      if (!(await ctx.db.system.get(a.voice.storageId)) || !(await voiceRow(ctx, a.voice.storageId))) throw new ConvexError("The recording didn't upload. Try again.");
     }
     if (a.drawing && JSON.stringify(a.drawing).length > 200_000) throw new ConvexError("That drawing is too big.");
     if (access.kind !== "owner") for (const u of [a.still, a.stillIn, a.stillOut, ...(a.voice?.pointers.map((p) => p.still) ?? [])]) if (u && !stillOk(u)) throw new ConvexError("That still isn't one of ours.");
@@ -236,12 +236,28 @@ export const voiceUploadUrl = mutation({
   },
 });
 
+// Security review (Oct 27): the voice-note functions take a storage id from the page; they only ever touch a
+// recording that went through voiceWords (checked there to be audio), so a guest can't read or delete any other
+// stored file (Sign PDFs, signatures).
+const voiceRow = (ctx: { db: any }, storageId: Id<"_storage">): Promise<Doc<"voiceUploads"> | null> =>
+  ctx.db.query("voiceUploads").withIndex("by_storage", (q: any) => q.eq("storageId", storageId)).first();
+
+export const registerVoice = internalMutation({
+  args: { storageId: v.id("_storage"), versionId: v.optional(v.id("versions")) },
+  handler: async (ctx, { storageId, versionId }) => {
+    if (!(await voiceRow(ctx, storageId))) await ctx.db.insert("voiceUploads", { storageId, versionId, createdAt: Date.now() });
+    return null;
+  },
+});
+
 // A recorded draft you threw away: remove the recording (only if no note uses it).
 export const discardVoice = mutation({
   args: { storageId: v.id("_storage"), versionId: v.optional(v.id("versions")), share: shareArg },
   handler: async (ctx, { storageId, versionId, share }) => {
     if (versionId) await accessToVersion(ctx, versionId, share, "comment"); else await requireMe(ctx);
+    const row = await voiceRow(ctx, storageId);
+    if (!row) return; // only a voice recording, never another stored file
     const used = (await ctx.db.query("notes").collect()).some((n) => n.voice?.storageId === storageId);
-    if (!used) await ctx.storage.delete(storageId).catch(() => null);
+    if (!used) { await ctx.storage.delete(storageId).catch(() => null); await ctx.db.delete(row._id); }
   },
 });
