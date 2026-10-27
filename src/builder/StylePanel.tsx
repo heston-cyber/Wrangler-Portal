@@ -73,6 +73,7 @@ export function StylePanel({ style, onChange, fonts, files, show }: { style: Sty
       </> : <button className="btn ghost sm" onClick={() => logoIn.current?.click()} disabled={busy === "image"}><Upload size={13} />Upload your logo</button>}</div>
 
       <span className="label">Separator</span>
+      <p className="caption secondary">How Divider blocks look (add one from Insert).</p>
       <div className="ws-seg">{(["line", "thick", "dots", "none"] as const).map((x) => <button key={x} className={style.separator === x ? "on" : ""} onClick={() => set({ separator: x })}>{x[0].toUpperCase() + x.slice(1)}</button>)}</div>
 
       <span className="label">Fonts</span>

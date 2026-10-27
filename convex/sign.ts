@@ -73,7 +73,7 @@ export const list = query({
         _id: d._id, label: docLabel(d.number), number: d.number, title: d.title, status: d.status, version: d.currentVersion, updatedAt: d.updatedAt, createdAt: d.createdAt,
         signers: clients.map((s) => s.name || s.email || s.key), emails: clients.map((s) => s.email).filter(Boolean),
         pages: ver.pages.length, approved: !!ver.approvedAt, sentAt: d.sentAt ?? null, completedAt: d.completedAt ?? null,
-        amount: ver.payment ? ver.payment.amountCents / 100 : null, fromBuilder: !!d.buildId,
+        amount: ver.payment ? ver.payment.amountCents / 100 : null, fromBuilder: !!d.buildId, buildId: d.buildId ?? null,
       };
     }));
   },
@@ -346,6 +346,8 @@ export const remove = mutation({
     for (const x of versions) await ctx.db.delete(x._id);
     for (const f of files) await ctx.storage.delete(f);
     for (const e of await eventsOf(ctx, documentId)) await ctx.db.delete(e._id);
+    // Made in the builder: its builder draft goes too (it would otherwise hang on to a document that's gone).
+    if (doc.buildId) { const b = await ctx.db.get(doc.buildId); if (b && b.documentId === documentId) await ctx.db.delete(b._id); }
     await ctx.db.delete(documentId);
     return null;
   },

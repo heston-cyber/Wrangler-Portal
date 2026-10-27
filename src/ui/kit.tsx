@@ -77,6 +77,48 @@ export function MenuItem({ icon, children, onSelect, kbd, checked, danger, disab
   );
 }
 export const MenuSep = () => <div className="sep" role="separator" />;
+
+// ---------- ContextMenu: the same menu, opened at the pointer (right-click) or under a ⋯ button ----------
+export function ContextMenu({ at, onClose, children, label }: { at: { x: number; y: number }; onClose: () => void; children: React.ReactNode; label?: string }) {
+  const pop = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!pop.current) return;
+    const p = pop.current.getBoundingClientRect();
+    const left = Math.max(8, Math.min(at.x, window.innerWidth - p.width - 8));
+    const top = at.y + p.height > window.innerHeight - 8 ? Math.max(8, at.y - p.height) : at.y;
+    setPos({ left, top });
+    pop.current.querySelector<HTMLButtonElement>(".mitem:not(:disabled)")?.focus();
+  }, [at.x, at.y]);
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => { if (!pop.current?.contains(e.target as Node)) onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.stopPropagation(); onClose(); return; }
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const items = [...(pop.current?.querySelectorAll<HTMLButtonElement>(".mitem:not(:disabled)") ?? [])];
+        const i = items.indexOf(document.activeElement as HTMLButtonElement);
+        items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
+      }
+    };
+    const onCtx = (e: MouseEvent) => { if (!pop.current?.contains(e.target as Node)) onClose(); };
+    window.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("contextmenu", onCtx, true);
+    window.addEventListener("resize", onClose);
+    window.addEventListener("scroll", onClose, true);
+    return () => {
+      window.removeEventListener("pointerdown", onDown, true); window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("contextmenu", onCtx, true); window.removeEventListener("resize", onClose); window.removeEventListener("scroll", onClose, true);
+    };
+  }, [onClose]);
+  return createPortal(
+    <div ref={pop} className="menu" role="menu" aria-label={label} style={pos ?? { left: -9999, top: -9999 }} onClick={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()}>
+      <MenuContext.Provider value={{ close: onClose }}>{children}</MenuContext.Provider>
+    </div>,
+    document.body,
+  );
+}
 export const MenuLabel = ({ children }: { children: React.ReactNode }) => <div className="mlabel">{children}</div>;
 
 // ---------- Modal ----------

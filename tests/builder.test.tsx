@@ -151,6 +151,11 @@ describe("T-B2 rendering and Continue to signing", () => {
     await t.run(async (ctx) => ctx.db.patch(first.documentId, { status: "sent" }));
     await expect(me.action(api.builder.toSigning, { buildId, storageId: await put() })).rejects.toThrow(/out for signature/);
     await expect(me.mutation(api.builder.deleteBuild, { buildId })).rejects.toThrow(/gone to signing/);
+    // Deleting the document (right-click › Delete, while it's a draft) takes its builder draft with it.
+    await t.run(async (ctx) => ctx.db.patch(first.documentId, { status: "draft" }));
+    await me.mutation(api.sign.remove, { documentId: first.documentId });
+    expect(await me.query(api.builder.getBuild, { buildId })).toBeNull();
+    expect(await me.query(api.builder.listBuilds, {})).toEqual([]);
   }, 120_000);
 });
 

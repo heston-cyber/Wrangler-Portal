@@ -58,7 +58,9 @@ function Editor({ data }: { data: Data }) {
   const sig = useQuery(api.sign.ownerSignature);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [sending, setSending] = useState(false);
+  // ?send=1 (from the Docs right-click menu) opens the send dialog straight away; the address is tidied after.
+  const [sending, setSending] = useState(() => new URLSearchParams(location.search).get("send") === "1" && doc.status === "approved" && version.isCurrent);
+  useEffect(() => { if (new URLSearchParams(location.search).has("send")) history.replaceState(null, "", location.pathname); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const fileInput = useRef<HTMLInputElement>(null);
   const hasTextRef = useRef<boolean | undefined>(undefined);
   // S3: once everyone has signed, the page shows the signed copy (with its certificate pages); the original with its

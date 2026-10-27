@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight, ArrowDown, ArrowUp, BookmarkPlus, Check, Copy, Eye, FileSignature, GripVertical,
-  Heading, LayoutTemplate, List, Minus, PenLine, Plus, Receipt, ScrollText, Send, SeparatorHorizontal, Space, Trash2, TriangleAlert, Type, Upload, Users, X,
+  Heading, LayoutTemplate, List, Minus, PenLine, Plus, Receipt, Redo2, Undo2, ScrollText, Send, SeparatorHorizontal, Space, Trash2, TriangleAlert, Type, Upload, Users, X,
 } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -79,7 +79,46 @@ export default function Builder({ mode }: { mode: Mode }) {
     }
   }, [build, tpl, profile, doc, mode.kind]);
 
-  const setDoc = useCallback((f: (d: BuildDoc) => BuildDoc) => { setDocRaw((d) => (d ? f(d) : d)); setDirty(true); }, []);
+  // Undo and redo (⌘Z, ⇧⌘Z or ⌘Y; the buttons in the bar): one history for the whole document. Changes made within a
+  // second of each other (typing a sentence, dragging a colour) are one step.
+  const docRef = useRef<BuildDoc | null>(null);
+  docRef.current = doc;
+  const hist = useRef<{ past: BuildDoc[]; future: BuildDoc[]; at: number }>({ past: [], future: [], at: 0 });
+  const [, setHistTick] = useState(0);
+  const setDoc = useCallback((f: (d: BuildDoc) => BuildDoc) => {
+    const d = docRef.current;
+    if (!d) return;
+    const n = f(d);
+    if (n === d) return;
+    const h = hist.current, now = Date.now();
+    if (now - h.at > 1000 || !h.past.length) { h.past.push(d); if (h.past.length > 200) h.past.shift(); }
+    h.at = now; h.future = [];
+    docRef.current = n;
+    setDocRaw(n); setDirty(true); setHistTick((x) => x + 1);
+  }, []);
+  const step = useCallback((dir: "undo" | "redo") => {
+    const d = docRef.current, h = hist.current;
+    const from = dir === "undo" ? h.past : h.future, to = dir === "undo" ? h.future : h.past;
+    if (!d || !from.length) return;
+    const n = from.pop()!;
+    to.push(d); h.at = 0;
+    docRef.current = n;
+    setDocRaw(n); setDirty(true); setHistTick((x) => x + 1);
+    setSel((s) => (s && n.blocks.some((b) => b.id === s) ? s : null));
+  }, []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k !== "z" && k !== "y") return;
+      if ((e.target as HTMLElement | null)?.closest?.("[role=dialog]")) return; // a dialog's own field keeps its own undo
+      e.preventDefault(); e.stopPropagation();
+      step(k === "y" || e.shiftKey ? "redo" : "undo");
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [step]);
+  const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
   const setBlock = useCallback((id: string, f: (b: Block) => Block) => setDoc((d) => ({ ...d, blocks: d.blocks.map((b) => (b.id === id ? f(b) : b)) })), [setDoc]);
 
   // Save a moment after the last change.
@@ -216,6 +255,10 @@ export default function Builder({ mode }: { mode: Mode }) {
   return (
     <>
       <TopBar right={<>
+        <span className="wsb-undo">
+          <button className="icon-btn" aria-label="Undo" title={`Undo (${mac ? "⌘Z" : "Ctrl+Z"})`} disabled={!hist.current.past.length} onClick={() => step("undo")}><Undo2 size={16} /></button>
+          <button className="icon-btn" aria-label="Redo" title={`Redo (${mac ? "⇧⌘Z" : "Ctrl+Shift+Z"})`} disabled={!hist.current.future.length} onClick={() => step("redo")}><Redo2 size={16} /></button>
+        </span>
         <span className={`ws-save hide-sm ${saveState}`}>{saveState === "saving" ? <><Spinner /> Saving</> : saveState === "error" ? <><TriangleAlert size={14} /> Not saved</> : <><Check size={14} /> Saved</>}</span>
         <button className="btn ghost sm hide-sm" onClick={() => void onPreview()} disabled={busy === "preview"}>{busy === "preview" ? <Spinner /> : <Eye size={15} />}Preview PDF</button>
         {mode.kind === "build" ? <>

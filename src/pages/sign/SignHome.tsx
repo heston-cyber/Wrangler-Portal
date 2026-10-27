@@ -1,6 +1,9 @@
 // Contracts, the front page (B1, Oct 27): New document · Templates · Docs, plus what's happening now.
+import { useState } from "react";
 import { useQuery } from "convex/react";
-import { Bot, ChevronRight, FilePlus2, FileSignature, Files, LayoutTemplate, PenLine } from "lucide-react";
+import { Bot, ChevronRight, FilePlus2, FileSignature, Files, LayoutTemplate, MoreHorizontal, PenLine } from "lucide-react";
+import { useToast } from "../../ui/kit";
+import { DocMenu, menuOpeners, type MenuAt, type MenuDoc } from "./DocMenu";
 import { api } from "../../../convex/_generated/api";
 import { TopBar } from "../../shell/Shell";
 import { linkProps, navigate } from "../../lib/router";
@@ -13,6 +16,9 @@ export default function SignHome() {
   const templates = useQuery(api.builder.listTemplates);
   const c = docs ? countByStatus(docs) : null;
   const recent = (docs ?? []).slice(0, 5);
+  const [menu, setMenu] = useState<MenuAt | null>(null);
+  const [toast, show] = useToast();
+  const md = (d: NonNullable<typeof docs>[number]): MenuDoc => ({ _id: d._id, label: d.label, title: d.title, status: d.status, inBuilder: false, buildId: d.buildId ?? null });
   const card = (to: string, icon: React.ReactNode, title: string, text: string, meta: React.ReactNode) => (
     <a className="ws-hubcard" {...linkProps(to)}>
       <span className="ws-hubicon">{icon}</span>
@@ -46,18 +52,21 @@ export default function SignHome() {
               <div className="regwrap">
                 <table className="regtable ws-table"><tbody>
                   {recent.map((d) => (
-                    <tr key={d._id} onClick={() => navigate(`/sign/d/${d._id}`)} style={{ cursor: "pointer" }}>
+                    <tr key={d._id} onClick={() => navigate(`/sign/d/${d._id}`)} style={{ cursor: "pointer" }} tabIndex={0} className={menu?.doc._id === d._id ? "ws-menurow" : undefined} {...menuOpeners(md(d), setMenu)}>
                       <td className="num mono">{d.label}</td>
                       <td><a {...linkProps(`/sign/d/${d._id}`)} onClick={(e) => e.stopPropagation()}>{d.title}</a></td>
                       <td className="hide-sm secondary">{d.signers.filter(Boolean).join(", ") || "—"}</td>
                       <td><StatusChip status={d.status} /></td>
                       <td className="hide-sm secondary">{central(d.updatedAt)}</td>
+                      <td className="ws-more"><button className="icon-btn" aria-label={`Actions for ${d.label === "—" ? d.title : d.label}`} aria-haspopup="menu" onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setMenu({ doc: md(d), x: r.right - 200, y: r.bottom + 4 }); }}><MoreHorizontal size={16} /></button></td>
                     </tr>
                   ))}
                 </tbody></table>
               </div>
             </section>
           )}
+          {menu && <DocMenu at={menu} onClose={() => setMenu(null)} show={show} />}
+          {toast}
         </div>
       </div>
     </>

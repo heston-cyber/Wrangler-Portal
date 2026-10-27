@@ -9,16 +9,25 @@ import type { Rich } from "../../convex/lib/wsBuilder";
 export function RichEditor({ value, onChange, placeholder, style, className }: { value: Rich; onChange: (r: Rich) => void; placeholder?: string; style?: React.CSSProperties; className?: string }) {
   const last = useRef(JSON.stringify(value));
   const editor = useEditor({
-    extensions: [StarterKit.configure({ heading: false, codeBlock: false, blockquote: false, code: false, horizontalRule: false, strike: false, link: false, dropcursor: false })],
+    extensions: [StarterKit.configure({ heading: false, codeBlock: false, blockquote: false, code: false, horizontalRule: false, strike: false, link: false, dropcursor: false, undoRedo: false })],
     content: value,
     editorProps: { attributes: { class: "wsb-rich", ...(placeholder ? { "data-placeholder": placeholder } : {}) } },
     onUpdate: ({ editor: e }) => { const j = e.getJSON() as Rich; last.current = JSON.stringify(j); onChange(j); },
   });
-  // Outside changes (undo from elsewhere, a clause re-inserted) replace the content; our own edits don't.
+  // Undo and redo are the builder's (one history for the whole document), so the editor's own is off.
+  // Outside changes (undo and redo, a clause re-inserted) replace the content; our own edits don't.
   useEffect(() => {
     if (!editor) return;
     const s = JSON.stringify(value);
-    if (s !== last.current) { last.current = s; editor.commands.setContent(value, { emitUpdate: false }); }
+    if (s === last.current) return;
+    last.current = s;
+    // Keep the cursor where it was (clamped to the new text), so typing carries on after an undo.
+    const focused = editor.isFocused, { from, to } = editor.state.selection;
+    editor.commands.setContent(value, { emitUpdate: false });
+    if (focused) {
+      const end = editor.state.doc.content.size - 1;
+      editor.chain().setTextSelection({ from: Math.max(1, Math.min(from, end)), to: Math.max(1, Math.min(to, end)) }).focus().run();
+    }
   }, [value, editor]);
   if (!editor) return null;
   const btn = (on: boolean, label: string, icon: React.ReactNode, run: () => void) => (
