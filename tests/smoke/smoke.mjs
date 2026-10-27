@@ -53,7 +53,11 @@ const see = (page, text) => page.getByText(text, { exact: false }).first().waitF
 const watchClip = (page) => page.waitForResponse((r) => /\.mp4(\?|$)/.test(r.url()) && r.request().resourceType() !== "fetch", { timeout: 30_000 });
 async function clipLoads(page, clip) {
   const res = await clip;
-  if (![200, 206].includes(res.status())) throw new Error(`clip answered ${res.status()}`);
+  if (![200, 206].includes(res.status())) {
+    // Which file, from where, and was it the CDN's cached answer? (Host and file name only: the query holds the token.)
+    const u = new URL(res.url()), h = res.headers();
+    throw new Error(`clip answered ${res.status()} (${u.host} …/${u.pathname.split("/").pop()}; server ${h["server"] ?? "?"}, cdn-cache ${h["cdn-cache"] ?? "?"}, age ${h["age"] ?? "?"})`);
+  }
   const h264 = await page.evaluate(() => document.createElement("video").canPlayType('video/mp4; codecs="avc1.42E01E"'));
   if (!h264) { if (!h264Noted) { h264Noted = true; console.log("note: this browser can't decode H.264, so the clip's duration isn't checked (its signed link answered)"); } return; }
   await page.waitForFunction(() => { const v = document.querySelector("video"); return !!v && v.readyState >= 1 && v.duration > 0; }, null, { timeout: 30_000 })
