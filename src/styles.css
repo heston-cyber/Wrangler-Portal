@@ -1347,7 +1347,9 @@ button.ws-hubcard:disabled { opacity: .6; cursor: default; }
 .wsb-tdrag { position: fixed; z-index: 70; transform: translate(-50%, calc(-100% - 18px)); padding: 8px 14px; border-radius: 12px; background: var(--accent); color: #fff; font-weight: 600; font-size: 14px; box-shadow: 0 8px 22px rgba(0,0,0,.35); pointer-events: none; white-space: nowrap; }
 .wsb-tdragline { position: fixed; z-index: 69; height: 4px; border-radius: 2px; background: #2f7bf6; box-shadow: 0 0 0 3px color-mix(in srgb, #2f7bf6 25%, transparent); pointer-events: none; }
 /* Select mode (phones, Craft's circles): every block gets a circle at the right; ticked ones fill and tint. */
-.wsb-picking .ProseMirror { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; caret-color: transparent; }
+.wsb-picking, .wsb-picking * { -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; }
+.wsb-picking .ProseMirror { caret-color: transparent; }
+.wsb-footer, .wsb-cover { -webkit-user-select: none; user-select: none; }
 .wsb-picking .wsb-handle { display: none !important; }
 .wsb-doc .wsb-pickable { position: relative; padding-right: 36px !important; border-radius: 8px; cursor: pointer; }
 .wsb-doc .wsb-pickable::after { content: ""; position: absolute; right: 6px; top: max(2px, calc(0.5lh - 11px)); width: 22px; height: 22px; box-sizing: border-box; border-radius: 50%; border: 2px solid color-mix(in srgb, currentColor 30%, transparent); background: var(--wsb-pagebg, #fff); pointer-events: none; }

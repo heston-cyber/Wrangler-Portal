@@ -102,6 +102,14 @@ export default function Builder({ mode }: { mode: Mode }) {
     setSheet(false); setActions(false);
     justPicked.current = Date.now();
     try { navigator.vibrate?.(10); } catch { /* not on iPhone */ }
+    // The same press-and-hold also starts the phone's own text selection (blue handles, Copy / Search). Clear it,
+    // and keep clearing it while the finger is still down, so only the block gets ticked.
+    const clear = () => { try { const s = window.getSelection(); if (s && s.rangeCount) s.removeAllRanges(); } catch { /* nothing selected */ } };
+    clear();
+    const stopAt = Date.now() + 1500;
+    const onSel = () => { if (Date.now() > stopAt) { document.removeEventListener("selectionchange", onSel); return; } clear(); };
+    document.addEventListener("selectionchange", onSel);
+    setTimeout(() => document.removeEventListener("selectionchange", onSel), 1600);
   };
   const endPick = () => { if (editor) setPickMode(editor, false); setSheet(false); setActions(false); };
   useEffect(() => {
@@ -366,7 +374,7 @@ export default function Builder({ mode }: { mode: Mode }) {
             onTouchStart={(e) => {
               if (picking || !phone || e.touches.length !== 1) return;
               const t = e.touches[0], at = { left: t.clientX, top: t.clientY };
-              pressTimer.current = window.setTimeout(() => { pressTimer.current = null; startPick(at); }, 550);
+              pressTimer.current = window.setTimeout(() => { pressTimer.current = null; startPick(at); }, 420); // before the phone's own text selection kicks in (~500 ms)
             }}
             onTouchMove={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } }}
             onTouchEnd={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } }}
@@ -380,7 +388,7 @@ export default function Builder({ mode }: { mode: Mode }) {
             style={{ width: pageW, minHeight: px(PAGE_PT[st.pageSize].h), background: st.page, color: st.text, fontFamily: B, fontSize: textPx, padding: `${padPx}px`, ["--wsb-accent" as string]: st.accent, ["--wsb-muted" as string]: st.muted, ["--wsb-heading" as string]: st.heading, ["--wsb-hfont" as string]: H, ["--wsb-bfont" as string]: B, ["--wsb-text" as string]: st.text, ["--wsb-pagebg" as string]: st.page }}>
             {st.cover && files[st.cover.fileId] && <div className="wsb-cover" style={{ height: px(st.cover.height), backgroundImage: `url(${files[st.cover.fileId]})`, margin: `-${padPx}px -${padPx}px ${px(18)}px` }} />}
             {st.logo && files[st.logo.fileId] && <div style={{ textAlign: st.logo.align, marginBottom: px(st.baseSize * 1.2) }}><img src={files[st.logo.fileId]!} alt="Logo" style={{ width: px(st.logo.width) }} /></div>}
-            <PageEditor page={doc.page} onChange={onPage} onEditor={setEditor} onSelectText={onSelectText} onMenu={setMenu} missing={missing} />
+            <PageEditor page={doc.page} onChange={onPage} onEditor={setEditor} onSelectText={onSelectText} onMenu={(m) => { if (picking || Date.now() - justPicked.current < 1500) return; setMenu(m); }} missing={missing} />
             {st.footer && <div className="wsb-footer" style={{ color: st.muted, fontSize: textPx * 0.75 }}><span>{doc.title}</span><span>Page 1 of …</span></div>}
           </div>
         </div>
