@@ -66,6 +66,8 @@ import type * as views from "../views.js";
 import type * as waveform from "../waveform.js";
 import type * as waveforms from "../waveforms.js";
 import type * as sign from "../sign.js";
+import type * as signing from "../signing.js";
+import type * as lib_wsSigning from "../lib/wsSigning.js";
 import type * as wsS0 from "../wsS0.js";
 import type * as lib_wsAudit from "../lib/wsAudit.js";
 import type * as lib_wsLayout from "../lib/wsLayout.js";
@@ -136,6 +138,8 @@ declare const fullApi: ApiFromModules<{
   waveform: typeof waveform;
   waveforms: typeof waveforms;
   sign: typeof sign;
+  signing: typeof signing;
+  "lib/wsSigning": typeof lib_wsSigning;
   wsS0: typeof wsS0;
   "lib/wsAudit": typeof lib_wsAudit;
   "lib/wsLayout": typeof lib_wsLayout;

@@ -3,7 +3,7 @@
 // can be added, moved, resized, reassigned or deleted by hand. Drafts save as you go. Approving locks the version.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Check, Copy, Crosshair, Eye, FilePlus2, FileSignature, History, Lock, MoreHorizontal, Plus, RefreshCw, ScanSearch, ShieldCheck, ShieldAlert, Trash2, TriangleAlert, UserPlus, X } from "lucide-react";
+import { Ban, CalendarClock, Check, Copy, Crosshair, Eye, FilePlus2, FileSignature, History, Lock, Mail, MoreHorizontal, Plus, RefreshCw, ScanSearch, Send, ShieldCheck, ShieldAlert, Trash2, TriangleAlert, UserPlus, X } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Sep, TopBar } from "../../shell/Shell";
@@ -58,6 +58,7 @@ function Editor({ data }: { data: Data }) {
   const sig = useQuery(api.sign.ownerSignature);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [sending, setSending] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const hasTextRef = useRef<boolean | undefined>(undefined);
 
@@ -197,7 +198,7 @@ function Editor({ data }: { data: Data }) {
       <div className="content ws-doc">
         <div className="ws-pages" onClick={(e) => { if (e.target === e.currentTarget) setSelected(null); }}>
           {viewingOld && <div className="ws-banner"><History size={15} /> You're looking at version {version.number}, an older version. <a {...linkProps(`/sign/d/${doc._id}`)}>Open the current one</a></div>}
-          {!editable && version.approvedAt && version.isCurrent && <div className="ws-banner ok"><Lock size={15} /> Version {version.number} is approved and locked. To change anything, make a new version.</div>}
+          {!editable && version.approvedAt && version.isCurrent && <div className="ws-banner ok"><Lock size={15} /> {doc.status === "sent" ? `Version ${version.number} is out for signature. To change anything, cancel signing, then make a new version.` : doc.status === "completed" ? `Version ${version.number} is signed by everyone.` : `Version ${version.number} is approved and locked. To change anything, make a new version.`}</div>}
           {placing && <div className="ws-banner place"><Crosshair size={15} /> Click on a page to place the {KIND_LABEL[placing.kind].toLowerCase()} box for {nameOf(layout.signers, placing.signer)}. <button className="btn ghost sm" onClick={() => setPlacing(null)}>Cancel</button></div>}
           {pdfError && <div className="ws-banner bad"><TriangleAlert size={15} /> Couldn't open the PDF: {pdfError}</div>}
           {!pdf && !pdfError && <p className="caption" style={{ padding: 24 }}><Spinner /> Opening the PDF…</p>}
@@ -219,18 +220,21 @@ function Editor({ data }: { data: Data }) {
                 <button className="btn primary" disabled={problems.length > 0 || dirty || saveState !== "saved" || busy === "approve"} onClick={() => void onApprove()}>
                   {busy === "approve" ? <Spinner /> : <Lock size={15} />}Approve and lock
                 </button>
-                <p className="caption secondary">Approving locks this version: the file, the boxes, the signers and the invoice. Sending comes next (Phase S2).</p>
+                <p className="caption secondary">Approving locks this version: the file, the boxes, the signers and the invoice. Then you send it.</p>
               </>
             ) : version.approvedAt ? (
               <>
                 <p className="caption"><Lock size={13} /> Approved {central(version.approvedAt)}</p>
                 <HashLine label="Lock hash" value={version.lockHash ?? ""} />
                 <HashLine label="File SHA-256" value={version.fileSha256} />
-                {version.isCurrent && doc.status === "approved" && <button className="btn" disabled={busy === "revise"} onClick={() => void onRevise()}>{busy === "revise" ? <Spinner /> : <RefreshCw size={15} />}Make changes (new version)</button>}
+                {version.isCurrent && doc.status === "approved" && <button className="btn primary" onClick={() => setSending(true)}><Send size={15} />Send for signature…</button>}
+                {version.isCurrent && (doc.status === "approved" || doc.status === "voided") && <button className="btn" disabled={busy === "revise"} onClick={() => void onRevise()}>{busy === "revise" ? <Spinner /> : <RefreshCw size={15} />}Make changes (new version)</button>}
               </>
             ) : <p className="caption secondary">This version was never approved.</p>}
             <button className="btn ghost sm" onClick={() => void onPreview()} disabled={busy === "preview"}>{busy === "preview" ? <Spinner /> : <Eye size={14} />}Preview the PDF as it will be signed</button>
           </section>
+
+          {data.signings.length > 0 && <SigningCard data={data} show={show} />}
 
           {/* Details */}
           <section className="ws-card">
@@ -327,6 +331,7 @@ function Editor({ data }: { data: Data }) {
           </div>
         </Modal>
       )}
+      {sending && <SendDialog data={data} onClose={() => setSending(false)} onSent={(n) => { setSending(false); show(`Sent to ${n} signer${n === 1 ? "" : "s"}. You'll get an email as each one signs.`); }} />}
       {busy === "replace" && <div className="toast" role="status"><Spinner /> Uploading the new PDF…</div>}
       {toast}
     </>
@@ -364,7 +369,13 @@ function nameOf(signers: LayoutSigner[], key: string) {
   return s?.name ? `${s.name} (${key})` : key;
 }
 
-const EVENT_LABEL: Record<string, string> = { created: "Uploaded", approved: "Approved and locked", new_version: "New version", owner_signed: "You signed" };
+const EVENT_LABEL: Record<string, string> = {
+  created: "Uploaded", approved: "Approved and locked", new_version: "New version", owner_signed: "You signed",
+  sent: "Link emailed", send_settings: "Sent for signature", email_bounced: "Email failed", reminder_sent: "Reminder emailed", voided: "Cancelled", expiry_changed: "Expiry changed",
+  opened: "Opened the link", code_sent: "Code emailed", code_failed: "Wrong code", email_verified: "Email confirmed", consent_given: "Agreed to sign electronically",
+  page_viewed: "Viewed a page", signature_adopted: "Adopted a signature", signature_changed: "Changed their signature", initialed: "Initialed", initials_removed: "Took initials off",
+  signed: "Signed", all_signed: "Everyone signed",
+};
 const eventLabel = (k: string) => EVENT_LABEL[k] ?? k.replace(/_/g, " ");
 
 // ---------- pages and boxes ----------
@@ -541,3 +552,130 @@ function HashLine({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+// ---------- sending (S2) ----------
+
+type SendData = Data;
+
+function SendDialog({ data, onClose, onSent }: { data: SendData; onClose: () => void; onSent: (n: number) => void }) {
+  const send = useMutation(api.sign.send);
+  const [days, setDays] = useState(30);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const v = data.version;
+  const clients = v.signers.filter((s) => s.key !== OWNER_KEY).sort((a, b) => a.order - b.order);
+  const ownerSigns = v.signers.some((s) => s.key === OWNER_KEY);
+  const until = new Date(Date.now() + days * 86_400_000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  const go = async () => {
+    setBusy(true); setErr(null);
+    try { const r = await send({ versionId: v._id, expiresInDays: days }); onSent(r.sent); }
+    catch (e) { setErr(errText(e)); setBusy(false); }
+  };
+  return (
+    <Modal onClose={onClose} label="Send for signature" width={480}>
+      <div style={{ display: "grid", gap: 12 }}>
+        <h2 className="headline">Send {data.doc.label} for signature?</h2>
+        <ol className="ws-sendlist">
+          {clients.map((c, i) => (
+            <li key={c.key}><span className="ws-dot" style={{ ["--c" as string]: signerColor(c.key, v.signers.map((x) => x.key)) }} /><span><b>{c.name}</b>{c.title ? `, ${c.title}` : ""}<br /><span className="secondary ws-small">{c.email}</span></span>
+              <span className="secondary ws-small" style={{ marginLeft: "auto" }}>{v.signingOrder === "sequence" ? (i === 0 ? "gets it now" : `after ${clients[i - 1].name.split(" ")[0]}`) : "gets it now"}</span></li>
+          ))}
+        </ol>
+        {ownerSigns && <p className="caption"><FileSignature size={13} /> Your adopted signature goes on your boxes now, dated today.</p>}
+        <label className="field"><span className="ws-flabel">Links work for</span>
+          <span style={{ display: "flex", gap: 8, alignItems: "center" }}><input className="input sm" type="number" min={1} max={90} value={days} onChange={(e) => setDays(Math.max(1, Math.min(90, Number(e.target.value) || 1)))} style={{ width: 80 }} /><span className="caption secondary">days, until {until}</span></span>
+        </label>
+        <p className="caption secondary">Each signer gets an email from contracts@wranglerportal.com with their own link. They confirm their email with a code, agree to sign electronically, then sign. Replies come to you.</p>
+        {err && <p className="caption ws-err"><TriangleAlert size={13} /> {err}</p>}
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button className="btn ghost" onClick={onClose}>Cancel</button>
+          <button className="btn primary" disabled={busy} onClick={() => void go()}>{busy ? <Spinner /> : <Send size={15} />}Sign and send</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function signingStep(x: Data["signings"][number], now: number): { text: string; cls: string } {
+  if (x.status === "signed") return { text: `Signed ${central(x.signedAt!)}`, cls: "done" };
+  if (x.status === "closed") return { text: "Link cancelled", cls: "void" };
+  if (x.status === "waiting") return { text: "Waiting for their turn", cls: "" };
+  if (x.lockedUntil && x.lockedUntil > now) return { text: "Locked: too many wrong codes", cls: "void" };
+  if (x.consentAt) return { text: "Agreed, signing", cls: "sent" };
+  if (x.verifiedAt) return { text: "Confirmed their email", cls: "sent" };
+  if (x.openedAt) return { text: `Opened ${central(x.openedAt)}`, cls: "sent" };
+  return { text: `Emailed ${central(x.lastEmailAt ?? x.sentAt ?? now)}`, cls: "sent" };
+}
+
+function SigningCard({ data, show }: { data: Data; show: (m: string) => void }) {
+  const { doc } = data;
+  const resend = useMutation(api.sign.resend);
+  const extend = useMutation(api.sign.extendExpiry);
+  const voidDoc = useMutation(api.sign.voidDocument);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [voiding, setVoiding] = useState(false);
+  const [reason, setReason] = useState("");
+  const [extending, setExtending] = useState(false);
+  const [days, setDays] = useState(14);
+  const now = Date.now();
+  const live = doc.status === "sent";
+  const expired = live && !!doc.expiresAt && doc.expiresAt < now;
+  const copy = async (link: string) => { try { await navigator.clipboard.writeText(link); show("Link copied. It only works for that signer, after they confirm their email."); } catch { show(link); } };
+  const run = async (key: string, f: () => Promise<unknown>, ok: string) => { setBusy(key); try { await f(); show(ok); } catch (e) { show(errText(e)); } finally { setBusy(null); } };
+  return (
+    <section className="ws-card">
+      <div className="ws-cardhead"><span className="label">Signing · v{doc.sentVersion}</span>
+        <span className="secondary ws-small">{doc.status === "completed" && doc.completedAt ? `done ${central(doc.completedAt)}` : doc.status === "voided" ? "cancelled" : expired ? "expired" : doc.expiresAt ? `until ${new Date(doc.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}</span>
+      </div>
+      {doc.status === "voided" && <p className="caption ws-err"><Ban size={13} /> Cancelled {doc.voidedAt ? central(doc.voidedAt) : ""}{doc.voidReason ? `: ${doc.voidReason}` : "."} Make a new version to send it again.</p>}
+      {expired && <p className="caption ws-err"><CalendarClock size={13} /> The links have expired. Extend them to let signers finish.</p>}
+      {data.signings.map((x) => {
+        const st = signingStep(x, now);
+        return (
+          <div key={x.key} className="ws-signing">
+            <div className="ws-signerhead"><b>{x.name}</b><span className={`chip ws-chip ${st.cls}`}>{st.text}</span></div>
+            <span className="secondary ws-small">{x.email}</span>
+            {live && x.status === "sent" && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <button className="btn ghost sm" onClick={() => void copy(x.link)}><Copy size={13} />Copy link</button>
+                <button className="btn ghost sm" disabled={busy === x.key} onClick={() => void run(x.key, () => resend({ documentId: doc._id, signerKey: x.key }), `Reminder sent to ${x.name}.`)}>{busy === x.key ? <Spinner /> : <Mail size={13} />}Send reminder</button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+      {live && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <button className="btn ghost sm" onClick={() => setExtending(true)}><CalendarClock size={13} />{expired ? "Extend the links" : "Change expiry"}</button>
+          <button className="btn ghost sm danger-text" onClick={() => setVoiding(true)}><Ban size={13} />Cancel signing…</button>
+        </div>
+      )}
+      {extending && (
+        <Modal onClose={() => setExtending(false)} label="Change expiry" width={380}>
+          <div style={{ display: "grid", gap: 12 }}>
+            <h2 className="headline">Links work for</h2>
+            <span style={{ display: "flex", gap: 8, alignItems: "center" }}><input className="input sm" type="number" min={1} max={90} value={days} onChange={(e) => setDays(Math.max(1, Math.min(90, Number(e.target.value) || 1)))} style={{ width: 80 }} /><span className="caption secondary">more days from today</span></span>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="btn ghost" onClick={() => setExtending(false)}>Cancel</button>
+              <button className="btn primary" disabled={busy === "extend"} onClick={() => void run("extend", async () => { await extend({ documentId: doc._id, days }); setExtending(false); }, "Expiry changed.")}>Save</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {voiding && (
+        <Modal onClose={() => setVoiding(false)} label="Cancel signing" width={440}>
+          <div style={{ display: "grid", gap: 12 }}>
+            <h2 className="headline">Cancel {doc.label}?</h2>
+            <p className="caption">Every signing link stops working now, and anyone who got one is emailed that it was cancelled. Signatures already made stay in the trail. You can make a new version and send that.</p>
+            <label className="field"><span className="ws-flabel">Reason (optional, shown in the email)</span><input className="input sm" value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Updated the dates" /></label>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="btn ghost" onClick={() => setVoiding(false)}>Keep it</button>
+              <button className="btn danger" disabled={busy === "void"} onClick={() => void run("void", async () => { await voidDoc({ documentId: doc._id, reason: reason.trim() || undefined }); setVoiding(false); }, "Cancelled. The links no longer work.")}><Ban size={15} />Cancel signing</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </section>
+  );
+}
+

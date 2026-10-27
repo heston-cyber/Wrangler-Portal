@@ -1,0 +1,10 @@
+# Wrangler Sign — the signing site on sign.wranglerportal.com (S2). Deployed by .github/workflows/cloudflare.yml.
+# custom_domain = true makes Cloudflare create the DNS record and certificate for sign.wranglerportal.com itself.
+name = "wrangler-sign"
+main = "sign-worker.js"
+compatibility_date = "2026-10-01"
+workers_dev = false
+
+routes = [
+  { pattern = "sign.wranglerportal.com", custom_domain = true },
+]

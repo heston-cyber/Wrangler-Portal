@@ -12,10 +12,11 @@ export function htmlFromText(text: string): string {
   return `<!doctype html><html><body style="margin:0;padding:24px;background:#ffffff;color:#1a1a1a;font:15px/1.55 -apple-system,Helvetica,Arial,sans-serif"><div style="max-width:560px;margin:0 auto">${paras.map((p) => `<p style="margin:0 0 14px">${p}</p>`).join("")}</div></body></html>`;
 }
 
-export async function sendEmail(msg: { to: string; subject: string; text: string; html?: string; replyTo?: string | null; tag?: string; unsubscribe?: string }): Promise<string> {
+export async function sendEmail(msg: { to: string; subject: string; text: string; html?: string; replyTo?: string | null; tag?: string; unsubscribe?: string; from?: string; attachments?: Array<{ filename: string; content: string }> }): Promise<string> {
   const key = process.env.RESEND_API_KEY;
   if (!key) throw new Error("Email isn't set up (no Resend key).");
-  const body: Record<string, unknown> = { from: FROM(), to: [msg.to], subject: msg.subject, text: msg.text, html: msg.html ?? htmlFromText(msg.text) };
+  const body: Record<string, unknown> = { from: msg.from ?? FROM(), to: [msg.to], subject: msg.subject, text: msg.text, html: msg.html ?? htmlFromText(msg.text) };
+  if (msg.attachments?.length) body.attachments = msg.attachments;
   if (msg.unsubscribe) body.headers = { "List-Unsubscribe": `<${msg.unsubscribe}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" };
   if (msg.replyTo !== null) body.reply_to = msg.replyTo ?? REPLY_TO();
   if (msg.tag) body.tags = [{ name: "kind", value: msg.tag }];

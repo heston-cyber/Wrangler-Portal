@@ -220,7 +220,14 @@ let signSig: any = new URLSearchParams(location.search).has("nosig") ? null : { 
 let signDocs: any[] = [
   { _id: "wd1", number: 1, title: "Sample Service Agreement", status: "draft", currentVersion: 1, createdAt: now - 20 * min, updatedAt: now - 20 * min },
   { _id: "wd2", number: 2, title: "Harbor Coffee — Brand Film", status: "approved", currentVersion: 1, createdAt: now - 2 * 86_400_000, updatedAt: now - 3 * hr },
+  { _id: "wd3", number: 3, title: "Ridgeline Outfitters — Spring Campaign", status: "sent", currentVersion: 1, sentAt: now - 26 * hr, sentVersion: 1, expiresAt: now + 29 * 86_400_000, createdAt: now - 3 * 86_400_000, updatedAt: now - 2 * hr },
 ];
+const signSignings: Record<string, any[]> = {
+  wd3: [
+    { key: "client", name: "Jordan Pike", email: "jordan@ridgeline.example", order: 1, status: "signed", link: "https://sign.wranglerportal.com/AbCdEfGhIjKlMnOpQrStUv", sentAt: now - 26 * hr, lastEmailAt: now - 26 * hr, openedAt: now - 20 * hr, verifiedAt: now - 20 * hr, consentAt: now - 20 * hr, signedAt: now - 19 * hr, lockedUntil: null },
+    { key: "client2", name: "Sam Ortega", email: "sam@ridgeline.example", order: 1, status: "sent", link: "https://sign.wranglerportal.com/ZyXwVuTsRqPoNmLkJiHgFe", sentAt: now - 26 * hr, lastEmailAt: now - 26 * hr, openedAt: now - 2 * hr, verifiedAt: null, consentAt: null, signedAt: null, lockedUntil: null },
+  ],
+};
 const pages2 = [{ width: 612, height: 792, rotate: 0 }, { width: 612, height: 792, rotate: 0 }];
 let signVers: any[] = [
   { _id: "wv1", documentId: "wd1", number: 1, fileName: "Sample_Service_Agreement.pdf", fileSha256: "4c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d", fileBytes: 4073, pages: pages2, signers: [{ key: "client", name: "", email: "", order: 1 }], boxes: [], signingOrder: "any", createdAt: now - 20 * min, updatedAt: now - 20 * min },
@@ -228,6 +235,10 @@ let signVers: any[] = [
     signers: [{ key: "heston", name: "Heston Hill", email: "heston@wranglerproductions.com", title: "Founder", order: 1 }, { key: "client", name: "Maya Chen", email: "maya@harborcoffee.example", title: "Marketing Director", order: 1 }],
     boxes: [{ id: "x1", signer: "client", kind: "initials", page: 0, x: 0.17, y: 0.205, w: 0.09, h: 0.025 }, { id: "x2", signer: "client", kind: "sign", page: 1, x: 0.22, y: 0.62, w: 0.29, h: 0.04 }, { id: "x3", signer: "heston", kind: "sign", page: 1, x: 0.38, y: 0.68, w: 0.29, h: 0.04 }],
     signingOrder: "any", payment: { amountCents: 120000, description: "Deposit — Harbor Coffee brand film" }, approvedAt: now - 3 * hr, lockHash: "e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6", createdAt: now - 2 * 86_400_000, updatedAt: now - 3 * hr },
+  { _id: "wv3", documentId: "wd3", number: 1, fileName: "Ridgeline_Spring_Campaign.pdf", fileSha256: "b3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2", fileBytes: 4073, pages: pages2,
+    signers: [{ key: "heston", name: "Heston Hill", email: "heston@wranglerproductions.com", title: "Founder", order: 1 }, { key: "client", name: "Jordan Pike", email: "jordan@ridgeline.example", order: 1 }, { key: "client2", name: "Sam Ortega", email: "sam@ridgeline.example", order: 1 }],
+    boxes: [{ id: "y2", signer: "client", kind: "sign", page: 1, x: 0.22, y: 0.62, w: 0.29, h: 0.04 }, { id: "y4", signer: "client2", kind: "sign", page: 1, x: 0.22, y: 0.74, w: 0.29, h: 0.04 }, { id: "y3", signer: "heston", kind: "sign", page: 1, x: 0.38, y: 0.68, w: 0.29, h: 0.04 }],
+    signingOrder: "any", approvedAt: now - 27 * hr, lockHash: "f7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6", ownerSignedAt: now - 26 * hr, createdAt: now - 3 * 86_400_000, updatedAt: now - 27 * hr },
 ];
 const signLabel = (n: number) => `WS-${String(n).padStart(5, "0")}`;
 function signGet(documentId: string, versionNumber?: number) {
@@ -245,6 +256,7 @@ function signGet(documentId: string, versionNumber?: number) {
     events, chain: { ok: true, count: events.length },
     owner: { email: "heston@wranglerproductions.com", name: signSig?.name ?? null, title: signSig?.title ?? null, adopted: !!signSig },
     problems,
+    signings: signSignings[documentId] ?? [],
   };
 }
 
@@ -377,6 +389,8 @@ export const store = {
       madeClients = [...madeClients, n]; bump(); return n;
     }
     if (name === "sign:saveLayout") { const v = signVers.find((x) => x._id === args.versionId); Object.assign(v, { signers: args.signers, boxes: args.boxes, signingOrder: args.signingOrder, payment: args.payment ?? undefined, updatedAt: Date.now() }); const d = signDocs.find((x) => x._id === v.documentId); d.title = args.title; d.updatedAt = Date.now(); bump(); return null; }
+    if (name === "sign:send") { const v = signVers.find((x) => x._id === args.versionId); const d = signDocs.find((x) => x._id === v.documentId); const t = Date.now(); Object.assign(d, { status: "sent", sentAt: t, sentVersion: v.number, expiresAt: t + (args.expiresInDays ?? 30) * 86_400_000 }); v.ownerSignedAt = t;
+      signSignings[d._id] = v.signers.filter((x: any) => x.key !== "heston").map((x: any) => ({ key: x.key, name: x.name, email: x.email, order: 1, status: "sent", link: "https://sign.wranglerportal.com/MockToken" + x.key, sentAt: t, lastEmailAt: t, openedAt: null, verifiedAt: null, consentAt: null, signedAt: null, lockedUntil: null })); bump(); return { sent: signSignings[d._id].length, expiresAt: d.expiresAt }; }
     if (name === "sign:approve") { const v = signVers.find((x) => x._id === args.versionId); v.approvedAt = Date.now(); v.lockHash = "1f2e3d4c5b6a79880716253443526170819a2b3c4d5e6f708192a3b4c5d6e7f8"; signDocs.find((x) => x._id === v.documentId).status = "approved"; bump(); return { lockHash: v.lockHash }; }
     if (name === "sign:uploadUrl") return "mock://upload";
     if (name === "library:deleteVideos") { for (const id of args.videoIds) { const i = videos.findIndex((v) => v._id === id); if (i >= 0) videos.splice(i, 1); } bump(); return { deleted: args.videoIds.length }; }

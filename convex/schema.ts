@@ -390,7 +390,52 @@ export default defineSchema({
     currentVersion: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
+    // S2: sending
+    sentAt: v.optional(v.number()),
+    sentVersion: v.optional(v.number()),
+    expiresAt: v.optional(v.number()),   // links stop working after this
+    voidedAt: v.optional(v.number()),
+    voidReason: v.optional(v.string()),
+    completedAt: v.optional(v.number()), // every client signer has signed
   }).index("by_number", ["number"]).index("by_updated", ["updatedAt"]),
+  // S2: one row per client signer of a sent version. The link is sign.wranglerportal.com/<token>; the email code
+  // proves the signer controls the address it was sent to; a session (hash only) lets the page act after that.
+  wsSignings: defineTable({
+    documentId: v.id("wsDocuments"),
+    versionNumber: v.number(),
+    signerKey: v.string(),
+    name: v.string(),
+    email: v.string(),
+    title: v.optional(v.string()),
+    order: v.number(),
+    token: v.string(),
+    status: v.union(v.literal("waiting"), v.literal("sent"), v.literal("signed"), v.literal("closed")),
+    sentAt: v.optional(v.number()),
+    lastEmailAt: v.optional(v.number()),
+    openedAt: v.optional(v.number()),
+    lastOpenEventAt: v.optional(v.number()),
+    codeHash: v.optional(v.string()),
+    codeExpiresAt: v.optional(v.number()),
+    codeAttempts: v.optional(v.number()),
+    codeSends: v.optional(v.array(v.number())),  // recent send times, for the rate limit
+    failures: v.optional(v.array(v.number())),   // recent wrong codes
+    lockedUntil: v.optional(v.number()),
+    verifiedAt: v.optional(v.number()),
+    sessionHash: v.optional(v.string()),
+    sessionExpiresAt: v.optional(v.number()),
+    consentAt: v.optional(v.number()),
+    consentVersion: v.optional(v.string()),
+    viewedPages: v.optional(v.array(v.number())),
+    adopted: v.optional(v.object({
+      name: v.string(), title: v.optional(v.string()), method: v.union(v.literal("typed"), v.literal("drawn")),
+      signatureFileId: v.id("_storage"), initialsFileId: v.id("_storage"), signatureSha256: v.string(), initialsSha256: v.string(), at: v.number(),
+    })),
+    initialed: v.optional(v.array(v.string())), // box ids
+    signedAt: v.optional(v.number()),
+    signedDate: v.optional(v.string()),           // the date written into date boxes, Central time
+    signIp: v.optional(v.string()),
+    signUserAgent: v.optional(v.string()),
+  }).index("by_token", ["token"]).index("by_document", ["documentId", "versionNumber"]),
   wsVersions: defineTable({
     documentId: v.id("wsDocuments"),
     number: v.number(),

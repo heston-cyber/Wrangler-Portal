@@ -15,6 +15,8 @@ import { approvalProblems, docLabel, lockText, OWNER_KEY, shapeProblems, type La
 import { inspect, sha256Bytes, stamp, type Stamp } from "./lib/wsPdf";
 import { sha256Hex } from "./lib/hash";
 import { allowedEmails } from "./auth";
+import { randomToken } from "./lib/hash";
+import { DEFAULT_EXPIRY_DAYS, signLink } from "./lib/wsSigning";
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
 const MAX_PNG_BYTES = 600 * 1024;
@@ -92,6 +94,9 @@ export const get = query({
       events: events.map((e) => ({ seq: e.seq, at: e.at, kind: e.kind, actor: e.actor, versionNumber: e.versionNumber ?? null, detail: e.detail ?? null, email: e.email ?? null, ip: e.ip ?? null })),
       chain: await verifyChain(events),
       owner: { email: ownerEmail(), name: sig?.name ?? null, title: sig?.title ?? null, adopted: !!sig },
+      signings: doc.sentVersion !== undefined ? (await ctx.db.query("wsSignings").withIndex("by_document", (q) => q.eq("documentId", documentId).eq("versionNumber", doc.sentVersion!)).collect())
+        .sort((a, b) => a.order - b.order)
+        .map((x) => ({ key: x.signerKey, name: x.name, email: x.email, order: x.order, status: x.status, link: signLink(x.token), sentAt: x.sentAt ?? null, lastEmailAt: x.lastEmailAt ?? null, openedAt: x.openedAt ?? null, verifiedAt: x.verifiedAt ?? null, consentAt: x.consentAt ?? null, signedAt: x.signedAt ?? null, lockedUntil: x.lockedUntil ?? null })) : [],
       problems: approvalProblems({ signers: shown.signers, boxes: shown.boxes, pages: shown.pages.length, payment: shown.payment ?? null, ownerSignatureAdopted: !!sig }),
     };
   },
@@ -211,7 +216,7 @@ export const revise = mutation({
     await requireMe(ctx);
     const doc = await ctx.db.get(documentId);
     if (!doc) throw new ConvexError("That document doesn't exist.");
-    if (doc.status !== "approved") throw new ConvexError(doc.status === "draft" ? "This draft can be edited as it is." : "Sent documents can't be changed here (voiding comes with sending).");
+    if (doc.status !== "approved" && doc.status !== "voided") throw new ConvexError(doc.status === "draft" ? "This draft can be edited as it is." : doc.status === "sent" ? "Cancel (void) it first; then make the changes as a new version and send that." : "A signed document can't be changed.");
     const cur = await currentVersion(ctx, doc);
     const now = Date.now();
     const number = cur.number + 1;
@@ -219,8 +224,8 @@ export const revise = mutation({
       documentId, number, fileId: cur.fileId, fileName: cur.fileName, fileSha256: cur.fileSha256, fileBytes: cur.fileBytes, pages: cur.pages,
       hasTextLayer: cur.hasTextLayer, signers: cur.signers, boxes: cur.boxes, signingOrder: cur.signingOrder, payment: cur.payment, createdAt: now, updatedAt: now,
     });
-    await ctx.db.patch(documentId, { status: "draft", currentVersion: number, updatedAt: now });
-    await appendEvent(ctx, documentId, { kind: "new_version", actor: OWNER_KEY, versionNumber: number, detail: `Version ${number} started from version ${cur.number} (same file). Version ${cur.number} stays as approved.` });
+    await ctx.db.patch(documentId, { status: "draft", currentVersion: number, updatedAt: now, sentAt: undefined, sentVersion: undefined, expiresAt: undefined, voidedAt: undefined, voidReason: undefined });
+    await appendEvent(ctx, documentId, { kind: "new_version", actor: OWNER_KEY, versionNumber: number, detail: `Version ${number} started from version ${cur.number} (same file). Version ${cur.number} stays as it was.` });
     return { versionNumber: number };
   },
 });
@@ -240,7 +245,7 @@ export const insertReplacement = internalMutation({
   handler: async (ctx, a) => {
     const doc = await ctx.db.get(a.documentId);
     if (!doc) { await ctx.storage.delete(a.storageId); throw new ConvexError("That document doesn't exist."); }
-    if (doc.status !== "draft" && doc.status !== "approved") { await ctx.storage.delete(a.storageId); throw new ConvexError("Sent documents can't be changed here."); }
+    if (doc.status !== "draft" && doc.status !== "approved" && doc.status !== "voided") { await ctx.storage.delete(a.storageId); throw new ConvexError(doc.status === "sent" ? "Cancel (void) it first, then replace the PDF." : "A signed document can't be changed."); }
     const cur = await currentVersion(ctx, doc);
     const now = Date.now();
     const number = cur.number + 1;
@@ -248,7 +253,7 @@ export const insertReplacement = internalMutation({
       documentId: doc._id, number, fileId: a.storageId, fileName: a.fileName, fileSha256: a.sha, fileBytes: a.bytes, pages: a.pages,
       signers: cur.signers, boxes: [], signingOrder: cur.signingOrder, payment: cur.payment, createdAt: now, updatedAt: now,
     });
-    await ctx.db.patch(doc._id, { status: "draft", currentVersion: number, updatedAt: now });
+    await ctx.db.patch(doc._id, { status: "draft", currentVersion: number, updatedAt: now, sentAt: undefined, sentVersion: undefined, expiresAt: undefined, voidedAt: undefined, voidReason: undefined });
     await appendEvent(ctx, doc._id, { kind: "new_version", actor: OWNER_KEY, versionNumber: number, detail: `Version ${number}: new file "${a.fileName}" (${a.pages.length} pages), SHA-256 ${a.sha}. Earlier versions are kept.` });
     return { versionNumber: number };
   },
@@ -316,7 +321,11 @@ export const insertSignature = internalMutation({
 // PDF at completion together with everyone else's.
 export const applyOwnerSignature = internalMutation({
   args: { versionId: v.id("wsVersions") },
-  handler: async (ctx, { versionId }) => {
+  handler: async (ctx, { versionId }) => applyOwner(ctx, versionId),
+});
+
+async function applyOwner(ctx: MutationCtx, versionId: Id<"wsVersions">) {
+  {
     const ver = await ctx.db.get(versionId);
     if (!ver) throw new ConvexError("That version doesn't exist.");
     const doc = (await ctx.db.get(ver.documentId))!;
@@ -331,6 +340,98 @@ export const applyOwnerSignature = internalMutation({
     await ctx.db.patch(ver._id, { ownerSignedAt: now, ownerSignatureId: sig._id });
     await appendEvent(ctx, doc._id, { kind: "owner_signed", actor: OWNER_KEY, versionNumber: ver.number, email: ownerEmail(), detail: `Signed by ${sig.name}, ${sig.title}, with the signature adopted ${new Date(sig.adoptedAt).toISOString()} (image SHA-256 ${sig.signatureSha256}).` });
     return { applied: true as const };
+  }
+}
+
+// ---------- sending (S2) ----------
+
+// Send the current approved version: Heston's signature goes on, every client signer gets a link (all at once, or
+// the first in line when they sign one after another), and the links work until the expiry date.
+export const send = mutation({
+  args: { versionId: v.id("wsVersions"), expiresInDays: v.optional(v.number()) },
+  handler: async (ctx, { versionId, expiresInDays }) => {
+    await requireMe(ctx);
+    const ver = await ctx.db.get(versionId);
+    if (!ver) throw new ConvexError("That version doesn't exist.");
+    const doc = (await ctx.db.get(ver.documentId))!;
+    if (doc.status !== "approved" || doc.currentVersion !== ver.number || !ver.approvedAt) throw new ConvexError("Only the current, approved version can be sent.");
+    const days = Math.round(expiresInDays ?? DEFAULT_EXPIRY_DAYS);
+    if (days < 1 || days > 90) throw new ConvexError("Links can last 1 to 90 days.");
+    await applyOwner(ctx, versionId); // refuses if anything changed since approval
+    const clients = ver.signers.filter((x) => x.key !== OWNER_KEY).sort((a, b) => a.order - b.order);
+    if (!clients.length) throw new ConvexError("There's no client signer.");
+    const first = Math.min(...clients.map((c) => c.order));
+    const now = Date.now();
+    for (const c of clients) {
+      const live = ver.signingOrder === "any" || c.order === first;
+      const signingId = await ctx.db.insert("wsSignings", {
+        documentId: doc._id, versionNumber: ver.number, signerKey: c.key, name: c.name, email: c.email.toLowerCase(), title: c.title, order: ver.signingOrder === "any" ? 1 : c.order,
+        token: randomToken(18), status: live ? "sent" : "waiting", ...(live ? { sentAt: now } : {}),
+      });
+      if (live) {
+        await appendEvent(ctx, doc._id, { kind: "sent", actor: OWNER_KEY, versionNumber: ver.number, email: c.email, detail: `Signing link emailed to ${c.name} (${c.email}).` });
+        await ctx.scheduler.runAfter(0, internal.signing.emailInvite, { signingId, kind: "invite" });
+      }
+    }
+    const expiresAt = now + days * 86_400_000;
+    await ctx.db.patch(doc._id, { status: "sent", sentAt: now, sentVersion: ver.number, expiresAt, updatedAt: now });
+    await appendEvent(ctx, doc._id, { kind: "send_settings", actor: OWNER_KEY, versionNumber: ver.number, detail: `Sent version ${ver.number} to ${clients.length} signer${clients.length === 1 ? "" : "s"} (${ver.signingOrder === "any" ? "any order" : "one after another"}); links work until ${new Date(expiresAt).toISOString()}.` });
+    return { sent: clients.length, expiresAt };
+  },
+});
+
+async function sentDoc(ctx: MutationCtx, documentId: Id<"wsDocuments">) {
+  const doc = await ctx.db.get(documentId);
+  if (!doc) throw new ConvexError("That document doesn't exist.");
+  if (doc.status !== "sent") throw new ConvexError("Only a document that's out for signature can do that.");
+  const signings = await ctx.db.query("wsSignings").withIndex("by_document", (q) => q.eq("documentId", documentId).eq("versionNumber", doc.sentVersion!)).collect();
+  return { doc, signings };
+}
+
+// Cancel a sent document: every link stops working at once; signers who were sent a link get a short email.
+export const voidDocument = mutation({
+  args: { documentId: v.id("wsDocuments"), reason: v.optional(v.string()) },
+  handler: async (ctx, { documentId, reason }) => {
+    await requireMe(ctx);
+    const { doc, signings } = await sentDoc(ctx, documentId);
+    const now = Date.now();
+    const why = reason?.trim().slice(0, 300) || undefined;
+    await ctx.db.patch(doc._id, { status: "voided", voidedAt: now, voidReason: why, updatedAt: now });
+    for (const x of signings) {
+      if (x.status === "signed") continue;
+      await ctx.db.patch(x._id, { status: "closed", sessionHash: undefined, sessionExpiresAt: undefined, codeHash: undefined, codeExpiresAt: undefined });
+      if (x.sentAt) await ctx.scheduler.runAfter(0, internal.signing.emailInvite, { signingId: x._id, kind: "voided" });
+    }
+    await appendEvent(ctx, doc._id, { kind: "voided", actor: OWNER_KEY, versionNumber: doc.sentVersion, detail: `Cancelled. Every signing link stopped working.${why ? ` Reason: ${why}` : ""}` });
+    return null;
+  },
+});
+
+export const resend = mutation({
+  args: { documentId: v.id("wsDocuments"), signerKey: v.string() },
+  handler: async (ctx, { documentId, signerKey }) => {
+    await requireMe(ctx);
+    const { doc, signings } = await sentDoc(ctx, documentId);
+    const x = signings.find((y) => y.signerKey === signerKey);
+    if (!x || x.status !== "sent") throw new ConvexError(x?.status === "signed" ? "They've already signed." : "It isn't their turn yet.");
+    if (x.lastEmailAt && Date.now() - x.lastEmailAt < 60_000) throw new ConvexError("An email just went to them. Wait a minute.");
+    await ctx.scheduler.runAfter(0, internal.signing.emailInvite, { signingId: x._id, kind: "reminder" });
+    await appendEvent(ctx, doc._id, { kind: "reminder_sent", actor: OWNER_KEY, versionNumber: doc.sentVersion, email: x.email, detail: `Reminder emailed to ${x.name} (${x.email}).` });
+    return null;
+  },
+});
+
+export const extendExpiry = mutation({
+  args: { documentId: v.id("wsDocuments"), days: v.number() },
+  handler: async (ctx, { documentId, days }) => {
+    await requireMe(ctx);
+    const { doc } = await sentDoc(ctx, documentId);
+    const d = Math.round(days);
+    if (d < 1 || d > 90) throw new ConvexError("1 to 90 days.");
+    const expiresAt = Date.now() + d * 86_400_000;
+    await ctx.db.patch(doc._id, { expiresAt, updatedAt: Date.now() });
+    await appendEvent(ctx, doc._id, { kind: "expiry_changed", actor: OWNER_KEY, versionNumber: doc.sentVersion, detail: `Links now work until ${new Date(expiresAt).toISOString()}.` });
+    return { expiresAt };
   },
 });
 

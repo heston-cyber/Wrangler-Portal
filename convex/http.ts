@@ -6,6 +6,7 @@ import { feed as registerFeed } from "./register";
 import { stop as emailStop } from "./emails";
 import { og } from "./og";
 import { ip as wsS0Ip } from "./wsS0";
+import { api as wsApi, preflight as wsPreflight } from "./signing";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);
@@ -30,6 +31,10 @@ http.route({ path: "/register-feed", method: "GET", handler: registerFeed });
 // Emails (C4): the "stop these emails" link.
 // C8: link previews for share links (JSON tags and the picture), asked for by the Cloudflare Worker and by chat apps.
 http.route({ pathPrefix: "/og/", method: "GET", handler: og });
+
+// Wrangler Sign (S2): the signing page's requests (sign.wranglerportal.com → POST /ws/<op>).
+http.route({ pathPrefix: "/ws/", method: "POST", handler: wsApi });
+http.route({ pathPrefix: "/ws/", method: "OPTIONS", handler: wsPreflight });
 
 // Wrangler Sign Phase S0 (Oct 26, temporary): which IP headers reach the backend.
 http.route({ path: "/ws-s0/ip", method: "GET", handler: wsS0Ip });

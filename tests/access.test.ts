@@ -87,6 +87,8 @@ function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "sign.approve": { versionId: ids.wsVersionId }, "sign.revise": { documentId: ids.docId }, "sign.remove": { documentId: ids.docId },
     "sign.adoptSignature": { name: "N", title: "T", method: "typed", signatureStorageId: ids.storageId, initialsStorageId: ids.storageId },
     "sign.preview": { versionId: ids.wsVersionId },
+    "sign.send": { versionId: ids.wsVersionId }, "sign.voidDocument": { documentId: ids.docId }, "sign.resend": { documentId: ids.docId, signerKey: "client" },
+    "sign.extendExpiry": { documentId: ids.docId, days: 7 },
   };
 }
 
