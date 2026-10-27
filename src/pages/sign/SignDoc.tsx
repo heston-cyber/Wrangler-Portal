@@ -3,7 +3,7 @@
 // can be added, moved, resized, reassigned or deleted by hand. Drafts save as you go. Approving locks the version.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Ban, CalendarClock, Check, Copy, Crosshair, Eye, FilePlus2, FileSignature, History, Lock, Mail, MoreHorizontal, Plus, RefreshCw, ScanSearch, Send, ShieldCheck, ShieldAlert, Trash2, TriangleAlert, UserPlus, X } from "lucide-react";
+import { Archive, Ban, CalendarClock, Check, Copy, Download, ExternalLink, FileCheck2, Receipt, Crosshair, Eye, FilePlus2, FileSignature, History, Lock, Mail, MoreHorizontal, Plus, RefreshCw, ScanSearch, Send, ShieldCheck, ShieldAlert, Trash2, TriangleAlert, UserPlus, X } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Sep, TopBar } from "../../shell/Shell";
@@ -11,6 +11,7 @@ import { linkProps, navigate } from "../../lib/router";
 import { Menu, MenuItem, Modal, Spinner, useToast } from "../../ui/kit";
 import { approvalProblems, KINDS, OWNER_KEY, type Kind, type LayoutBox, type LayoutSigner, type Payment, type Rect } from "../../../convex/lib/wsLayout";
 import { DEFAULT_SIZE, type ScanResult } from "../../sign/markers";
+import { deviceName } from "../../../convex/lib/wsFinal";
 import { findMarkers, openPdf, renderPage, type PdfDoc } from "../../sign/pdf";
 import { central, errText, KIND_LABEL, signerColor, StatusChip, uploadToStorage } from "./common";
 
@@ -234,6 +235,7 @@ function Editor({ data }: { data: Data }) {
             <button className="btn ghost sm" onClick={() => void onPreview()} disabled={busy === "preview"}>{busy === "preview" ? <Spinner /> : <Eye size={14} />}Preview the PDF as it will be signed</button>
           </section>
 
+          {doc.status === "completed" && <FinishedCard data={data} show={show} />}
           {data.signings.length > 0 && <SigningCard data={data} show={show} />}
 
           {/* Details */}
@@ -375,14 +377,10 @@ const EVENT_LABEL: Record<string, string> = {
   opened: "Opened the link", code_sent: "Code emailed", code_failed: "Wrong code", email_verified: "Email confirmed", consent_given: "Agreed to sign electronically",
   page_viewed: "Viewed a page", signature_adopted: "Adopted a signature", signature_changed: "Changed their signature", initialed: "Initialed", initials_removed: "Took initials off",
   signed: "Signed", all_signed: "Everyone signed", email_delivered_to_resend: "Email sent", email_failed: "Email failed",
+  signed_copy_made: "Signed copy made", invoice_drafted: "Stripe draft invoice", copy_emailed: "Signed copy emailed", copy_failed: "Copy email failed", archived: "Archived to Dropbox",
+  pdf_failed: "Signed copy failed", invoice_failed: "Stripe draft failed", copies_failed: "Copies failed", archive_failed: "Archive failed",
 };
-// A short, readable name for the browser that did something (the full string stays in the trail).
-function device(ua: string | null): string | null {
-  if (!ua) return null;
-  const os = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android" : /Mac OS X/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : /Linux/.test(ua) ? "Linux" : null;
-  const br = /Edg\//.test(ua) ? "Edge" : /CriOS|Chrome\//.test(ua) ? "Chrome" : /FxiOS|Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : null;
-  return [br, os].filter(Boolean).join(" on ") || null;
-}
+const device = deviceName;
 const eventLabel = (k: string) => EVENT_LABEL[k] ?? k.replace(/_/g, " ");
 
 // ---------- pages and boxes ----------
@@ -681,6 +679,70 @@ function SigningCard({ data, show }: { data: Data; show: (m: string) => void }) 
             </div>
           </div>
         </Modal>
+      )}
+    </section>
+  );
+}
+
+// ---------- after everyone signs (S3) ----------
+
+const STEP_NAME = { pdf: "signed copy", invoice: "Stripe draft", copies: "emails", archive: "archive" } as const;
+const money = (c: number) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+function FinishedCard({ data, show }: { data: Data; show: (m: string) => void }) {
+  const { doc } = data;
+  const retry = useMutation(api.signDone.retry);
+  const audit = useAction(api.signDone.downloadAudit);
+  const [busy, setBusy] = useState<string | null>(null);
+  const again = async (step: keyof typeof STEP_NAME) => {
+    setBusy(step);
+    try { await retry({ documentId: doc._id, step }); show(`Trying the ${STEP_NAME[step]} again…`); } catch (e) { show(errText(e)); } finally { setBusy(null); }
+  };
+  const getAudit = async () => {
+    setBusy("audit");
+    try {
+      const r = await audit({ documentId: doc._id });
+      const url = URL.createObjectURL(new Blob([r.json], { type: "application/json" }));
+      const a = document.createElement("a"); a.href = url; a.download = r.name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e) { show(errText(e)); } finally { setBusy(null); }
+  };
+  const Retry = ({ step }: { step: keyof typeof STEP_NAME }) => <button className="btn ghost sm" disabled={busy === step} onClick={() => void again(step)}>{busy === step ? <Spinner /> : <RefreshCw size={13} />}Retry</button>;
+  const f = doc.final;
+  return (
+    <section className="ws-card">
+      <div className="ws-cardhead"><span className="label">Signed copy</span>{doc.completedAt && <span className="secondary ws-small">{central(doc.completedAt)}</span>}</div>
+      {f ? (
+        <>
+          <a className="btn primary" href={data.finalUrl ?? undefined} download={f.fileName} target="_blank" rel="noreferrer"><FileCheck2 size={15} />Download the signed PDF</a>
+          <HashLine label="Signed SHA-256" value={f.sha256} />
+          <button className="btn ghost sm" disabled={busy === "audit"} onClick={() => void getAudit()}>{busy === "audit" ? <Spinner /> : <Download size={13} />}Download the audit record (JSON)</button>
+        </>
+      ) : doc.finishError ? (
+        <><p className="caption ws-err"><TriangleAlert size={13} /> The signed copy couldn't be made: {doc.finishError}</p><Retry step="pdf" /></>
+      ) : <p className="caption"><Spinner /> Making the signed copy…</p>}
+      {f && (
+        <ul className="ws-steps">
+          <li>
+            <Receipt size={14} />
+            {doc.invoice?.status === "created" ? <span>Draft invoice {money(doc.invoice.amountCents ?? 0)}{doc.invoice.livemode ? "" : " (test mode)"} · <a href={doc.invoice.url} target="_blank" rel="noreferrer">Review and send in Stripe <ExternalLink size={11} /></a></span>
+              : doc.invoice?.status === "none" ? <span className="secondary">No invoice set for this document.</span>
+              : doc.invoice?.status === "failed" ? <><span className="ws-err">Stripe draft failed: {doc.invoice.error}</span><Retry step="invoice" /></>
+              : <span className="secondary"><Spinner /> Stripe draft…</span>}
+          </li>
+          <li>
+            <Mail size={14} />
+            {doc.copies?.status === "sent" ? <span>Emailed to {doc.copies.sent.length} {doc.copies.sent.length === 1 ? "person" : "people"}: {doc.copies.sent.join(", ")}</span>
+              : doc.copies ? <><span className="ws-err">Emails {doc.copies.status === "partial" ? `sent to ${doc.copies.sent.length}, failed for` : "failed"}: {doc.copies.failed.join("; ") || "see the trail"}</span><Retry step="copies" /></>
+              : <span className="secondary"><Spinner /> Emailing copies…</span>}
+          </li>
+          <li>
+            <Archive size={14} />
+            {doc.archive?.status === "archived" ? <span>In Dropbox › Apps/Wrangler Sign{doc.archive.pdfPath} {doc.archive.verified ? "· checked" : ""}</span>
+              : doc.archive?.status === "waiting" ? <span className="secondary">Waiting for the archive to be connected (<a {...linkProps("/sign")}>Contracts</a>). It's copied as soon as it is.</span>
+              : doc.archive?.status === "failed" ? <><span className="ws-err">Archive failed: {doc.archive.error}</span><Retry step="archive" /></>
+              : <span className="secondary"><Spinner /> Archiving…</span>}
+          </li>
+        </ul>
       )}
     </section>
   );

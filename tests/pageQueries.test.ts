@@ -70,6 +70,7 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "shares.forTarget": { pages: ["owner"], args: () => "skip" },
   // Wrangler Sign (S1): the Contracts pages only render for the owner; the signing page (S2) uses plain HTTP requests, not queries.
   "sign.list": { pages: ["owner"], args: () => "skip" },
+  "wsArchive.status": { pages: ["owner"], args: () => "skip" },
   "sign.get": { pages: ["owner"], args: () => "skip" },
   "sign.ownerSignature": { pages: ["owner"], args: () => "skip" },
 };

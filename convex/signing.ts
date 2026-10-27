@@ -29,8 +29,8 @@ import {
 import { allowedEmails } from "./auth";
 
 export const SIGN_STATEMENT = "By clicking Sign, I agree that my electronic signature and initials on this document are the legal equivalent of my handwritten signature and initials, and that I intend to sign it.";
-const COMPANY = "Wrangler Productions, a DBA of Hill Creative LLC";
-const contact = () => allowedEmails()[0] ?? "heston@wranglerproductions.com";
+export const COMPANY = "Wrangler Productions, a DBA of Hill Creative LLC";
+export const contact = () => allowedEmails()[0] ?? "heston@wranglerproductions.com";
 const MAX_PNG = 400 * 1024;
 
 type Who = { ip?: string; userAgent?: string };
@@ -38,7 +38,7 @@ type Fail = { error: string; code?: string };
 
 // ---------- the HTTP side ----------
 
-function corsHeaders(req: Request): Record<string, string> {
+export function corsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get("origin") ?? "";
   const allowed = new Set([SIGN_SITE(), SITE(), ...(process.env.SIGN_CORS_EXTRA ?? "").split(",").map((s) => s.trim()).filter(Boolean)].map((u) => new URL(u).origin));
   return allowed.has(origin) ? { "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Access-Control-Max-Age": "600", Vary: "Origin" } : { Vary: "Origin" };
@@ -336,16 +336,17 @@ export const sign = internalMutation({
     const now = Date.now();
     await ctx.db.patch(s._id, { status: "signed", signedAt: now, signedDate: centralDate(now), signIp: ip, signUserAgent: userAgent, sessionHash: undefined, sessionExpiresAt: undefined });
     await ev(ctx, s, "signed", { ip, userAgent }, `Signed version ${ver.number} as "${s.adopted.name}" (${s.adopted.method} signature, ${(s.initialed ?? []).length} initial${(s.initialed ?? []).length === 1 ? "" : "s"}) after agreeing: "${SIGN_STATEMENT}" Lock hash ${ver.lockHash}. File SHA-256 ${ver.fileSha256}.`);
-    await ctx.scheduler.runAfter(0, internal.signing.notifyOwner, { signingId: s._id, kind: "signed" });
 
-    // Next in line (one after another), or done.
+    // Next in line (one after another), or done. When done, S3 takes over: the signed copy, the invoice draft, the
+    // copies (Heston's is his "signed by everyone" email) and the archive (convex/signDone.ts).
     const rest = all.filter((x) => x._id !== s._id && x.status !== "signed");
     if (!rest.length) {
       await ctx.db.patch(doc._id, { status: "completed", completedAt: now, updatedAt: now });
       await appendEvent(ctx, doc._id, { kind: "all_signed", actor: "system", versionNumber: ver.number, detail: `Every signer has signed version ${ver.number}.` });
-      await ctx.scheduler.runAfter(0, internal.signing.notifyOwner, { signingId: s._id, kind: "all_signed" });
+      await ctx.scheduler.runAfter(0, internal.signDone.finish, { documentId: doc._id });
       return { ok: true, complete: true };
     }
+    await ctx.scheduler.runAfter(0, internal.signing.notifyOwner, { signingId: s._id, kind: "signed" });
     const waiting = rest.filter((x) => x.status === "waiting");
     if (waiting.length && !rest.some((x) => x.status === "sent")) {
       const next = Math.min(...waiting.map((x) => x.order));
@@ -414,7 +415,8 @@ export const markEmailed = internalMutation({
   },
 });
 
-// Heston hears when someone signs, and when everyone has. (S3 adds the signed PDF to the second one.)
+// Heston hears when someone signs. When everyone has, his copy of the signed PDF is that email (signDone.ts);
+// "all_signed" stays for the rare case the copy can't be made.
 export const notifyOwner = internalAction({
   args: { signingId: v.id("wsSignings"), kind: v.union(v.literal("signed"), v.literal("all_signed")) },
   handler: async (ctx, { signingId, kind }) => {

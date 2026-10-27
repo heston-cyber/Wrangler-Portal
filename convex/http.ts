@@ -7,6 +7,8 @@ import { stop as emailStop } from "./emails";
 import { og } from "./og";
 import { ip as wsS0Ip } from "./wsS0";
 import { api as wsApi, preflight as wsPreflight } from "./signing";
+import { verifyHttp as wsVerify } from "./signDone";
+import { callback as wsDropboxCallback } from "./wsArchive";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);
@@ -35,6 +37,10 @@ http.route({ pathPrefix: "/og/", method: "GET", handler: og });
 // Wrangler Sign (S2): the signing page's requests (sign.wranglerportal.com → POST /ws/<op>).
 http.route({ pathPrefix: "/ws/", method: "POST", handler: wsApi });
 http.route({ pathPrefix: "/ws/", method: "OPTIONS", handler: wsPreflight });
+// S3: the public "is this a real signed copy?" check (a hash in, the document's name out), and the archive's Dropbox.
+http.route({ path: "/ws-verify", method: "POST", handler: wsVerify });
+http.route({ path: "/ws-verify", method: "OPTIONS", handler: wsPreflight });
+http.route({ path: "/ws-dropbox/callback", method: "GET", handler: wsDropboxCallback });
 
 // Wrangler Sign Phase S0 (Oct 26, temporary): which IP headers reach the backend.
 http.route({ path: "/ws-s0/ip", method: "GET", handler: wsS0Ip });

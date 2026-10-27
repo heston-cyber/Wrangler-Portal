@@ -68,6 +68,10 @@ export async function stamp(original: Uint8Array, stamps: Stamp[], certificate: 
   // Form fields stay editable in viewers; flatten them so nothing on a signed copy can be typed over.
   try { const f = doc.getForm(); if (f.getFields().length) f.flatten(); } catch { /* no form */ }
   const helv = await doc.embedFont(StandardFonts.Helvetica);
+  // Helvetica covers Western European text only; anything else (an emoji in a title, Cyrillic in a name) would make
+  // pdf-lib throw, so it's swapped for "?" rather than failing the whole signed copy.
+  const charset = new Set(helv.getCharacterSet());
+  const safe = (t: string) => [...t.replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"')].map((ch) => (charset.has(ch.codePointAt(0)!) ? ch : "?")).join("");
   const pages = doc.getPages();
   const ink = rgb(0.07, 0.12, 0.35);
 
@@ -94,30 +98,54 @@ export async function stamp(original: Uint8Array, stamps: Stamp[], certificate: 
       // On a baseline a quarter of the type size above the box's bottom, where a marker's own text sat.
       const size = Math.max(6, Math.min(11, bh * 0.72));
       const o2 = toUser(p, dx + 1, dyBottom - size * 0.25);
-      p.drawText(s.text, { x: o2.x, y: o2.y, size, font: helv, color: ink, rotate: angle });
+      p.drawText(safe(s.text), { x: o2.x, y: o2.y, size, font: helv, color: ink, rotate: angle });
     }
   }
 
   // The certificate: plain text pages at the end, Letter size.
   const W = 612, H = 792, M = 54, size = 9, lead = 12.5;
-  const wrap = (line: string): string[] => {
+  const wrap = (line: string, indent = 0): string[] => {
     const out: string[] = []; let cur = "";
-    for (const word of line.split(" ")) {
+    const fits = (t: string) => helv.widthOfTextAtSize(t, size) <= W - 2 * M - indent;
+    const words: string[] = [];
+    for (const w of line.split(" ")) {
+      // A word wider than the line (a long browser string) is broken into pieces that fit.
+      let rest = w;
+      while (!fits(rest)) { let n = rest.length - 1; while (n > 1 && !fits(rest.slice(0, n))) n--; words.push(rest.slice(0, n)); rest = rest.slice(n); }
+      words.push(rest);
+    }
+    for (const word of words) {
       const t = cur ? `${cur} ${word}` : word;
-      if (helv.widthOfTextAtSize(t, size) > W - 2 * M && cur) { out.push(cur); cur = word; } else cur = t;
+      if (!fits(t) && cur) { out.push(cur); cur = word; } else cur = t;
     }
     out.push(cur);
     return out;
   };
   let page = doc.addPage([W, H]);
   let y = H - M;
+  // "# Heading" and "## Subheading" lines are drawn in bold; everything else in the body size.
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   for (const raw of certificate) {
-    for (const line of raw === "" ? [""] : wrap(raw)) {
+    const h = /^(#{1,2}) (.*)$/.exec(raw);
+    if (h) {
+      const hs = h[1] === "#" ? 13 : 10;
+      if (y < M + 3 * lead) { page = doc.addPage([W, H]); y = H - M; }
+      if (h[1] === "##" && y < H - M) y -= 4;
+      page.drawText(safe(h[2]), { x: M, y, size: hs, font: bold, color: rgb(0.05, 0.05, 0.05) });
+      y -= hs + 5;
+      continue;
+    }
+    // A line starting with four spaces is indented (an event's detail under the event).
+    const indent = raw.startsWith("    ") ? 14 : 0;
+    for (const line of raw === "" ? [""] : wrap(safe(raw.trim()), indent)) {
       if (y < M) { page = doc.addPage([W, H]); y = H - M; }
-      page.drawText(line, { x: M, y, size, font: helv, color: rgb(0.1, 0.1, 0.1) });
-      y -= lead;
+      page.drawText(line, { x: M + indent, y, size, font: helv, color: indent ? rgb(0.3, 0.3, 0.3) : rgb(0.1, 0.1, 0.1) });
+      y -= raw === "" ? lead / 2 : lead;
     }
   }
+  // Page numbers on the certificate pages ("Certificate 1 of 2"), so a missing page is obvious.
+  const certPages = doc.getPages().slice(pages.length);
+  certPages.forEach((cp, i) => cp.drawText(`Wrangler Sign certificate · page ${i + 1} of ${certPages.length}`, { x: M, y: 30, size: 8, font: helv, color: rgb(0.45, 0.45, 0.45) }));
 
   doc.setModificationDate(FIXED);
   return doc.save({ useObjectStreams: false });

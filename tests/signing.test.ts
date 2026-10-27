@@ -27,6 +27,7 @@ type Mail = { to: string; subject: string; text: string; from: string };
 function stubMail(mails: Mail[]) {
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (url.startsWith("https://api.stripe.com/") || url.includes("dropboxapi.com")) return new Response("{}", { status: 500 });
     if (url === "https://api.resend.com/emails") { const b = JSON.parse(String(init?.body)); mails.push({ to: b.to[0], subject: b.subject, text: b.text, from: b.from }); return new Response(JSON.stringify({ id: "em" }), { status: 200 }); }
     return new Response("{}", { status: 500 });
   });
@@ -224,7 +225,7 @@ describe("T-S2.3 the trail", () => {
     const all = await x.t.run((ctx) => ctx.db.query("wsEvents").collect());
     expect(all.filter((e) => e.actor === "signer:client").every((e) => e.userAgent === UA)).toBe(true);
     expect(d.events.some((e) => e.kind === "all_signed")).toBe(true);
-    expect(x.mails.filter((m) => m.to === "heston@wranglerproductions.com").map((m) => m.subject)).toEqual(expect.arrayContaining(["Jordan Sample signed WS-00001", "Casey Lee signed WS-00001", "Signed by everyone: Service Agreement (WS-00001)"]));
+    expect(x.mails.filter((m) => m.to === "heston@wranglerproductions.com").map((m) => m.subject)).toEqual(expect.arrayContaining(["Jordan Sample signed WS-00001", "Signed: Service Agreement (WS-00001)"]));
   });
 });
 

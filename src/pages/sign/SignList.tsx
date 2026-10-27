@@ -1,7 +1,7 @@
 // Contracts: every Wrangler Sign document, and "New document" (upload a finished PDF). Phase S1, Oct 27.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { FilePlus2, FileSignature, PenLine } from "lucide-react";
+import { Archive, FilePlus2, FileSignature, PenLine } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import { TopBar } from "../../shell/Shell";
 import { linkProps, navigate } from "../../lib/router";
@@ -34,6 +34,19 @@ export default function SignList() {
   const { start, busy, toast } = useNewDocument();
   const [over, setOver] = useState(false);
   const pick = () => input.current?.click();
+  const archive = useQuery(api.wsArchive.status);
+  const connect = useAction(api.wsArchive.authUrl);
+  const [connecting, setConnecting] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  // Back from Dropbox: ?archive=connected or ?archive=error&reason=…
+  useEffect(() => {
+    const q = new URLSearchParams(location.search);
+    const a = q.get("archive");
+    if (!a) return;
+    setNote(a === "connected" ? "Archive connected. Any signed documents not archived yet are being copied now." : `The archive didn't connect: ${q.get("reason") ?? "unknown"}`);
+    history.replaceState(null, "", "/sign");
+  }, []);
+  const onConnect = async () => { setConnecting(true); try { location.href = await connect({}); } catch (e) { setNote(errText(e)); setConnecting(false); } };
 
   return (
     <>
@@ -64,6 +77,15 @@ export default function SignList() {
             </div>
           )}
 
+          {note && <div className="ws-note" role="status"><Archive size={16} /><span>{note}</span></div>}
+          {archive && !archive.connected && (
+            <div className="ws-note" role="status">
+              <Archive size={16} />
+              {archive.configured
+                ? <><span><b>Connect the archive.</b> Signed copies and their audit records are also kept in Dropbox › Apps/Wrangler Sign.</span><button className="btn sm" disabled={connecting} onClick={() => void onConnect()}>{connecting ? <Spinner /> : null}Connect Dropbox</button></>
+                : <span><b>The archive isn't set up yet.</b> Signed copies are kept here and emailed; the Dropbox copy starts once the "Wrangler Sign" Dropbox app's keys are in Convex.</span>}
+            </div>
+          )}
           <div className={`ws-drop${over ? " over" : ""}`} onClick={pick} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") pick(); }}>
             {busy ? <><Spinner size={16} /> Uploading {busy}…</> : <><FilePlus2 size={18} /> Drop a finished PDF here, or click to choose one. Markers like <code>{"{{sign:client}}"}</code> place the boxes for you.</>}
           </div>

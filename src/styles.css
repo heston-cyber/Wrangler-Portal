@@ -1121,3 +1121,14 @@ code.mono, .input.mono, .chip.num, .fname code { font-family: ui-monospace, "SF 
 .ws-signing .ws-signerhead { justify-content: space-between; flex-wrap: wrap; font-size: var(--fs-caption); }
 .btn.danger-text { color: var(--text-accent); }
 .wsx-nowrap { white-space: nowrap; }
+.ws-steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; font-size: var(--fs-caption); }
+.ws-steps li { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; overflow-wrap: anywhere; }
+.ws-steps li > svg { flex: 0 0 auto; margin-top: 3px; color: var(--text-secondary); }
+.ws-steps a { text-decoration: underline; }
+.wsx-drop { width: 100%; padding: 30px 16px; }
+.wsx-result { width: 100%; padding: 12px 14px; border-radius: var(--radius-md); display: grid; gap: 6px; }
+.wsx-result p { margin: 0; }
+.wsx-result.ok { background: color-mix(in srgb, var(--mk-video) 14%, transparent); }
+.wsx-result.ok svg { color: var(--mk-video); vertical-align: -3px; }
+.wsx-result.bad { background: var(--accent-tint); }
+.wsx-result.bad svg { color: var(--text-accent); vertical-align: -3px; }

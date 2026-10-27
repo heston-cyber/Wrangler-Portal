@@ -397,7 +397,31 @@ export default defineSchema({
     voidedAt: v.optional(v.number()),
     voidReason: v.optional(v.string()),
     completedAt: v.optional(v.number()), // every client signer has signed
-  }).index("by_number", ["number"]).index("by_updated", ["updatedAt"]),
+    // S3: after everyone signs. Each step records its own result, so one failing doesn't stop the others and each
+    // can be retried on its own.
+    final: v.optional(v.object({ fileId: v.id("_storage"), sha256: v.string(), bytes: v.number(), fileName: v.string(), at: v.number() })),
+    copies: v.optional(v.object({ status: v.union(v.literal("sent"), v.literal("partial"), v.literal("failed")), at: v.number(), sent: v.array(v.string()), failed: v.array(v.string()) })),
+    invoice: v.optional(v.object({
+      status: v.union(v.literal("created"), v.literal("none"), v.literal("failed")),
+      at: v.number(), id: v.optional(v.string()), url: v.optional(v.string()), amountCents: v.optional(v.number()), livemode: v.optional(v.boolean()), error: v.optional(v.string()),
+    })),
+    archive: v.optional(v.object({
+      status: v.union(v.literal("archived"), v.literal("waiting"), v.literal("failed")),
+      at: v.number(), pdfPath: v.optional(v.string()), auditPath: v.optional(v.string()), verified: v.optional(v.boolean()), error: v.optional(v.string()),
+    })),
+    finishError: v.optional(v.string()), // the signed copy couldn't be made (shown to Heston with a Retry)
+  }).index("by_number", ["number"]).index("by_updated", ["updatedAt"]).index("by_final_sha", ["final.sha256"]),
+  // S3: the archive's own Dropbox app ("Wrangler Sign", App folder), separate from Wrangler Review's.
+  wsDropbox: defineTable({
+    accountId: v.string(),
+    email: v.optional(v.string()),
+    name: v.optional(v.string()),
+    refreshToken: v.string(),
+    accessToken: v.optional(v.string()),
+    accessExpiresAt: v.optional(v.number()),
+    connectedAt: v.number(),
+    lastError: v.optional(v.string()),
+  }),
   // S2: one row per client signer of a sent version. The link is sign.wranglerportal.com/<token>; the email code
   // proves the signer controls the address it was sent to; a session (hash only) lets the page act after that.
   wsSignings: defineTable({

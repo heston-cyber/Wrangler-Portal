@@ -89,6 +89,8 @@ function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "sign.preview": { versionId: ids.wsVersionId },
     "sign.send": { versionId: ids.wsVersionId }, "sign.voidDocument": { documentId: ids.docId }, "sign.resend": { documentId: ids.docId, signerKey: "client" },
     "sign.extendExpiry": { documentId: ids.docId, days: 7 },
+    "signDone.retry": { documentId: ids.docId, step: "copies" }, "signDone.downloadAudit": { documentId: ids.docId },
+    "wsArchive.status": {}, "wsArchive.authUrl": {}, "wsArchive.disconnect": {},
   };
 }
 

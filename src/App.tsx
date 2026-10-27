@@ -22,6 +22,7 @@ const SignDoc = lazy(() => import("./pages/sign/SignDoc"));
 const SignSignature = lazy(() => import("./pages/sign/SignSignature"));
 // S2: the client's signing page. sign.wranglerportal.com/<token>, or /x/<token> on any host (a fallback).
 const SignerApp = lazy(() => import("./pages/signer/SignerApp"));
+const VerifyPage = lazy(() => import("./pages/signer/VerifyPage"));
 const isSignHost = () => /^sign\./i.test(location.hostname);
 
 const Loading = () => <div className="signin"><span className="label">Loading…</span></div>;
@@ -30,6 +31,7 @@ export default function App() {
   const { isLoading, isAuthenticated } = useConvexAuth();
   const { path, search } = useLocation();
   const signer = (isSignHost() ? /^\/(?:x\/)?([A-Za-z0-9_-]{16,64})\/?$/ : /^\/x\/([A-Za-z0-9_-]{16,64})\/?$/).exec(path);
+  if ((isSignHost() && /^\/verify\/?$/.test(path)) || /^\/x\/verify\/?$/.test(path)) return <Suspense fallback={<Loading />}><VerifyPage /></Suspense>;
   if (signer) return <Suspense fallback={<Loading />}><SignerApp key={signer[1]} token={signer[1]} /></Suspense>;
   if (isSignHost()) return <SignHostHome />;
   // A share link (C3) works signed in or out; the page decides what the link shows.
@@ -49,6 +51,7 @@ function SignedIn() {
   const { signOut } = useAuthActions();
   const { path, search } = useLocation();
   const signer = (isSignHost() ? /^\/(?:x\/)?([A-Za-z0-9_-]{16,64})\/?$/ : /^\/x\/([A-Za-z0-9_-]{16,64})\/?$/).exec(path);
+  if ((isSignHost() && /^\/verify\/?$/.test(path)) || /^\/x\/verify\/?$/.test(path)) return <Suspense fallback={<Loading />}><VerifyPage /></Suspense>;
   if (signer) return <Suspense fallback={<Loading />}><SignerApp key={signer[1]} token={signer[1]} /></Suspense>;
   if (isSignHost()) return <SignHostHome />;
   if (me === undefined) return <Loading />;
@@ -90,5 +93,5 @@ function SignedIn() {
 
 // sign.wranglerportal.com without a token: nothing to see.
 function SignHostHome() {
-  return <div className="signin"><div style={{ maxWidth: 380, textAlign: "center", display: "grid", gap: 8 }}><span className="headline">Wrangler Sign</span><span className="caption secondary">Open the signing link from your email to review and sign a document from Wrangler Productions.</span></div></div>;
+  return <div className="signin"><div style={{ maxWidth: 380, textAlign: "center", display: "grid", gap: 8 }}><span className="headline">Wrangler Sign</span><span className="caption secondary">Open the signing link from your email to review and sign a document from Wrangler Productions. To check a signed copy, go to <a href="/verify" style={{ textDecoration: "underline" }}>sign.wranglerportal.com/verify</a>.</span></div></div>;
 }
