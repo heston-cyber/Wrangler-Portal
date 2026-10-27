@@ -179,6 +179,28 @@ export function Modal({ onClose, children, label, width }: { onClose: () => void
   );
 }
 
+// ---------- Confirm: the app's own "are you sure?" (Oct 27) ----------
+// Used instead of the browser's confirm(), which a browser lets you switch off ("prevent this page from creating
+// additional dialogs"); after that every confirm() silently says no (or yes), and the question is gone for good.
+type Ask = { title: string; body?: string; yes?: string; no?: string; danger?: boolean };
+export function useConfirm(): [(a: Ask) => Promise<boolean>, React.ReactNode] {
+  const [q, setQ] = useState<(Ask & { done: (ok: boolean) => void }) | null>(null);
+  const ask = useCallback((a: Ask) => new Promise<boolean>((resolve) => setQ({ ...a, done: (ok) => { setQ(null); resolve(ok); } })), []);
+  const node = q ? (
+    <Modal onClose={() => q.done(false)} label={q.title} width={420}>
+      <div style={{ display: "grid", gap: 14 }}>
+        <h2 className="headline">{q.title}</h2>
+        {q.body && <p className="secondary" style={{ margin: 0 }}>{q.body}</p>}
+        <div className="dfoot">
+          <button className="btn ghost" onClick={() => q.done(false)}>{q.no ?? "Cancel"}</button>
+          <button className={`btn ${q.danger === false ? "primary" : "danger"}`} autoFocus onClick={() => q.done(true)}>{q.yes ?? "Delete"}</button>
+        </div>
+      </div>
+    </Modal>
+  ) : null;
+  return [ask, node];
+}
+
 // ---------- Avatar ----------
 export function Avatar({ name, size }: { name: string | null | undefined; size?: "lg" }) {
   const n = (name || "?").trim();

@@ -7,7 +7,7 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps, navigate } from "../../lib/router";
-import { Spinner, useToast } from "../../ui/kit";
+import { Spinner, useConfirm, useToast } from "../../ui/kit";
 import { central, errText, uploadToStorage } from "./common";
 
 export default function SignNew() {
@@ -21,6 +21,7 @@ export default function SignNew() {
   const builderUpload = useMutation(api.builder.uploadUrl);
   const importInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
   const [toast, show] = useToast();
   const input = useRef<HTMLInputElement>(null);
   const start = async (templateId?: Id<"wsTemplates">) => {
@@ -70,12 +71,13 @@ export default function SignNew() {
                 <td><PencilLine size={14} /> <a {...linkProps(`/sign/b/${b._id}`)} onClick={(e) => e.stopPropagation()}>{b.title}</a></td>
                 <td className="hide-sm secondary">{b.client || "—"}</td>
                 <td className="hide-sm secondary">{central(b.updatedAt)}</td>
-                <td style={{ textAlign: "right" }}><button className="icon-btn" aria-label="Delete draft" onClick={async (e) => { e.stopPropagation(); if (!window.confirm(`Delete the draft "${b.title}"?`)) return; try { await deleteBuild({ buildId: b._id }); } catch (er) { show(errText(er)); } }}><Trash2 size={14} /></button></td>
+                <td style={{ textAlign: "right" }}><button className="icon-btn" aria-label="Delete draft" onClick={async (e) => { e.stopPropagation(); if (!(await confirm({ title: `Delete the draft "${b.title}"?`, body: "Its content is deleted. This can't be undone." }))) return; try { await deleteBuild({ buildId: b._id }); } catch (er) { show(errText(er)); } }}><Trash2 size={14} /></button></td>
               </tr>
             ))}</tbody></table></div>
           </>}
         </div>
       </div>
+      {confirmDialog}
       {toast}
     </>
   );

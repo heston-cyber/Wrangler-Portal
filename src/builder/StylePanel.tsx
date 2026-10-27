@@ -7,7 +7,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { Check, Image as ImageIcon, Laptop, Palette, Star, Trash2, Upload, X } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import { Modal, Spinner } from "../ui/kit";
+import { Modal, Spinner, useConfirm } from "../ui/kit";
 import { BUILTIN_FONTS, type FontRef, type Style } from "../../convex/lib/wsBuilder";
 import { GOOGLE_PICKS, canReadLocalFonts, cssFamily, localFonts, styleOf, type FontRow, type LocalFont } from "./fonts";
 import { errText, uploadToStorage } from "../pages/sign/common";
@@ -20,6 +20,7 @@ export function StylePanel({ style, onChange, fonts, files, show }: { style: Sty
   const uploadUrl = useMutation(api.builder.uploadUrl);
   const checkImage = useAction(api.builder.checkImage);
   const [gallery, setGallery] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
   const [busy, setBusy] = useState<string | null>(null);
   const set = (p: Partial<Style>) => onChange({ ...style, ...p });
   const saved = styles?.saved.find((s) => s.name === style.name);
@@ -95,7 +96,7 @@ export function StylePanel({ style, onChange, fonts, files, show }: { style: Sty
             {styles.saved.length > 0 && <><span className="label">Your styles</span><div className="wsb-gallery">
               {styles.saved.map((s) => <StyleCard key={s._id} s={s.style} files={files} isDefault={s.isDefault} onPick={() => { onChange(s.style); setGallery(false); }}
                 onDefault={() => void setDefault({ styleId: s._id as Id<"wsStyles"> }).then(() => show(`New documents start with "${s.name}"`))}
-                onDelete={() => { if (window.confirm(`Delete the style "${s.name}"? Documents already using it keep their look.`)) void deleteStyle({ styleId: s._id as Id<"wsStyles"> }); }} />)}
+                onDelete={async () => { if (await confirm({ title: `Delete the style "${s.name}"?`, body: "Documents already using it keep their look." })) void deleteStyle({ styleId: s._id as Id<"wsStyles"> }); }} />)}
             </div></>}
             <span className="label">Wrangler's styles</span>
             <div className="wsb-gallery">
@@ -104,6 +105,7 @@ export function StylePanel({ style, onChange, fonts, files, show }: { style: Sty
           </div>
         </Modal>
       )}
+      {confirmDialog}
     </div>
   );
 }
