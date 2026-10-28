@@ -993,3 +993,12 @@ export const debugTrace = internalQuery({
     return { files, versions, scheduled };
   },
 });
+
+// Oct 28 (Phase 0.5d step 4): run the minute job once, by hand, and report only whether it ran (counts, no names).
+export const syncSelfTest = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ ok: boolean; connected: boolean; businesses?: number; changes?: number; error?: string }> => {
+    const r: { connected: boolean; businesses?: number; changes?: number; error?: string } = await ctx.runAction(internal.dropbox.sync, {});
+    return { ok: r.connected && !r.error, connected: r.connected, businesses: r.businesses, changes: r.changes, error: r.error ? "failed" : undefined };
+  },
+});
