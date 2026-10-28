@@ -53,7 +53,6 @@ export const stillsSelfTest = internalAction({
       found: true,
       noReferrer: await st({}),
       appReferrer: await st({ Referer: "https://app.wranglerportal.com/" }),
-      reviewReferrer: await st({ Referer: "https://review.wranglerportal.com/" }),
       unsigned: await (async () => { try { const u = new URL(url); u.search = ""; return (await fetch(u.toString())).status; } catch { return "error"; } })(),
     };
   },
