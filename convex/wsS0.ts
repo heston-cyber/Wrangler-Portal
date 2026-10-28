@@ -7,7 +7,8 @@
 //   wsS0:email      T-S0.4: the stamped PDF as an attachment, from contracts@wranglerportal.com, to the owner list.
 //   wsS0:stripe     T-S0.5: a draft invoice in Stripe TEST mode (STRIPE_SIGN_KEY; refuses a live key).
 //   GET /ws-s0/ip   T-S0.3: shows the caller the IP headers the backend received (to the caller only; not stored).
-import { httpAction, internalAction } from "./_generated/server";
+import { httpAction } from "./_generated/server";
+import { internalAction } from "./lib/functions";
 import { v } from "convex/values";
 import { PDFDocument, StandardFonts } from "@cantoo/pdf-lib";
 import { stamp, inspect, sha256Bytes } from "./lib/wsPdf";

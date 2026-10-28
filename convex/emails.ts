@@ -4,8 +4,7 @@
 //   ownerAlert   clients or guests left notes → one email to Heston per sitting, 10 minutes after the last note
 // Every client email carries an unsubscribe link for that kind; each email is logged by key so it goes out once.
 // Bodies name the video and its project only, never other clients; links carry the share token, never a key.
-import { internalAction } from "./_generated/server";
-import { internalMutation, internalQuery } from "./lib/functions";
+import { internalAction, internalMutation, internalQuery } from "./lib/functions";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
@@ -266,7 +265,9 @@ export const ownerAlert = internalAction({
     if (!d) return { sent: 0, reason: "nothing new" };
     if (Date.now() - d.newest < ALERT_DELAY_MS - 5_000) return { sent: 0, reason: "still writing" };
     const m = alertText(d);
-    const to = alertEmail();
+    // Phase 0.5d step 4: the owner of this video's business (Wrangler keeps ALERT_EMAIL if it's set).
+    const biz = await ctx.runQuery(internal.business.contact, {});
+    const to = (biz.isDefault && process.env.ALERT_EMAIL) || biz.ownerEmail;
     const ok = await deliver(ctx, `alert:${videoId}:${d.noteIds[d.noteIds.length - 1]}`, "alert", to, m.subject, m.text);
     if (ok) await ctx.runMutation(internal.emails.markAlerted, { noteIds: d.noteIds });
     return { sent: ok ? 1 : 0, notes: d.noteIds.length };

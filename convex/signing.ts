@@ -13,8 +13,8 @@
 //   sign      the final, deliberate Sign                                                    (needs the session)
 // Nothing here trusts the page: every rule (consent first, every initial, the signing order, expiry, a voided or
 // replaced document) is checked again on the server, and every step is an event in the hash-chained trail.
-import { httpAction, internalAction, type MutationCtx } from "./_generated/server";
-import { internalMutation, internalQuery } from "./lib/functions";
+import { httpAction, type MutationCtx } from "./_generated/server";
+import { forBusiness, internalAction, internalMutation, internalQuery } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -32,9 +32,11 @@ import {
 import { pngProblem } from "./lib/pngCheck";
 import { allowedEmails } from "./auth";
 import { bump } from "./lib/rate";
+import { businessContact, businessInScope, defaultBusiness } from "./lib/business";
 
 export const SIGN_STATEMENT = "By clicking Sign, I agree that my electronic signature and initials on this document are the legal equivalent of my handwritten signature and initials, and that I intend to sign it.";
 export const COMPANY = "Wrangler Productions, a DBA of Hill Creative LLC";
+/** Wrangler's contact, for code that has no business to ask (kept for the old call sites; Phase 0.5d step 4 reads the business instead). */
 export const contact = () => allowedEmails()[0] ?? "heston@wranglerproductions.com";
 const MAX_PNG = 400 * 1024;
 const LOCKED_FOR_GOOD = "This link is locked after too many wrong codes. Ask Wrangler Productions to send it again.";
@@ -62,6 +64,8 @@ export const api = httpAction(async (ctx, req) => {
   const session = typeof body.session === "string" ? body.session.slice(0, 128) : undefined;
   const who: Who = { ip: callerIp(req.headers), userAgent: (req.headers.get("user-agent") ?? "").slice(0, 300) || undefined };
   if (!token) return json(req, { error: "This link isn't complete." }, 400);
+  // Phase 0.5d step 4: everything this link does happens inside its document's business.
+  ctx = forBusiness(ctx, await ctx.runQuery(internal.signing.businessOfToken, { token }));
   try {
     switch (op) {
       case "open": return json(req, await ctx.runMutation(internal.signing.openLink, { token, session, ...who }));
@@ -70,7 +74,7 @@ export const api = httpAction(async (ctx, req) => {
         if ("error" in r) return json(req, r, 429);
         try {
           await sendEmail({
-            from: SIGN_FROM(), to: r.email, replyTo: contact(), tag: "ws-code",
+            from: SIGN_FROM(), to: r.email, replyTo: (await ctx.runQuery(internal.business.contact, {})).ownerEmail, tag: "ws-code",
             subject: `${r.code} is your code to sign ${r.label}`,
             text: `Your code is ${r.code}\n\nEnter it on the signing page to open "${r.title}" from Wrangler Productions. It works for 10 minutes.\n\nIf you didn't ask for it, ignore this email: nothing happens without the code.\n\nWrangler Productions · sign.wranglerportal.com`,
           });
@@ -157,6 +161,16 @@ const ev = (ctx: MutationCtx, s: Doc<"wsSignings">, kind: string, who: Who, deta
 const whoArgs = { ip: v.optional(v.string()), userAgent: v.optional(v.string()) };
 
 // ---------- the ops ----------
+
+/** The business a signing link belongs to (null if the link doesn't exist; the steps then answer "missing"). */
+export const businessOfToken = internalQuery({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const s = await ctx.db.query("wsSignings").withIndex("by_token", (q) => q.eq("token", token)).unique();
+    if (!s) return null;
+    return s.businessId ?? (await defaultBusiness(ctx))?._id ?? null;
+  },
+});
 
 export const openLink = internalMutation({
   args: { token: v.string(), session: v.optional(v.string()), ...whoArgs },
@@ -270,7 +284,7 @@ export const docFor = internalMutation({
       },
       heston: ver.ownerSignedAt && owner ? { name: owner.name, title: owner.title, signedDate: centralDate(ver.ownerSignedAt), signatureUrl: await ctx.storage.getUrl(owner.signatureFileId), initialsUrl: await ctx.storage.getUrl(owner.initialsFileId) } : null,
       look: await lookOf(ctx, doc),
-      consent: { id: CONSENT_ID, lines: consentText(COMPANY, contact()) },
+      consent: { id: CONSENT_ID, lines: await (async () => { const c = await businessContact(ctx, businessInScope(ctx)); return consentText(c.legalName, c.ownerEmail); })() },
       statement: SIGN_STATEMENT,
       today: centralDate(Date.now()),
     };
@@ -435,7 +449,7 @@ export const emailInvite = internalAction({
       : `Hi ${s.name.split(" ")[0] || "there"},\n\n${kind === "reminder" ? "A reminder: " : ""}Heston Hill at Wrangler Productions sent you "${doc.title}" (${label}) to review and sign.\n\nReview and sign here:\n${signLink(s.token)}\n\nYou'll confirm this email address with a 6-digit code, read the document, add your initials where asked, and sign. It takes a few minutes on a phone or a computer.${until ? `\n\nThe link works until ${until}.` : ""}\n\nQuestions, or would you rather sign on paper? Reply to this email.\n\nWrangler Productions, a DBA of Hill Creative LLC · sign.wranglerportal.com`;
     const subject = kind === "voided" ? `Cancelled: ${doc.title} (${label})` : `${kind === "reminder" ? "Reminder: " : ""}Please sign: ${doc.title} (${label})`;
     try {
-      await sendEmail({ from: SIGN_FROM(), to: s.email, replyTo: contact(), subject, text, tag: `ws-${kind}` });
+      await sendEmail({ from: SIGN_FROM(), to: s.email, replyTo: (await ctx.runQuery(internal.business.contact, {})).ownerEmail, subject, text, tag: `ws-${kind}` });
       await ctx.runMutation(internal.signing.markEmailed, { signingId, kind, ok: true });
     } catch (e) {
       await ctx.runMutation(internal.signing.markEmailed, { signingId, kind, ok: false, error: String((e as Error).message).slice(0, 200) });
@@ -465,14 +479,14 @@ export const notifyOwner = internalAction({
     const link = `${SITE()}/sign/d/${d.doc._id}`;
     if (kind === "locked") {
       const text = `${d.s.name}'s signing link for "${d.doc.title}" (${d.label}) had too many wrong codes, so it's locked for good.\n\nIf that was ${d.s.name.split(" ")[0]} having trouble, cancel the document and send it again for a fresh link. If not, someone else may have the link.\n\nOpen it: ${link}`;
-      try { await sendEmail({ from: SIGN_FROM(), to: contact(), replyTo: null, subject: `Signing link locked: ${d.label}`, text, tag: "ws-owner-locked" }); } catch (e) { console.error("notifyOwner", String((e as Error).message).slice(0, 120)); }
+      try { await sendEmail({ from: SIGN_FROM(), to: (await ctx.runQuery(internal.business.contact, {})).ownerEmail, replyTo: null, subject: `Signing link locked: ${d.label}`, text, tag: "ws-owner-locked" }); } catch (e) { console.error("notifyOwner", String((e as Error).message).slice(0, 120)); }
       return null;
     }
     const left = d.all.filter((x) => x.status !== "signed").map((x) => x.name);
     const text = kind === "all_signed"
       ? `Everyone has signed "${d.doc.title}" (${d.label}).\n\nOpen it: ${link}\n\n(The signed PDF and the copies to everyone come with Phase S3.)`
       : `${d.s.name} signed "${d.doc.title}" (${d.label}).${left.length ? `\n\nStill to sign: ${left.join(", ")}.` : ""}\n\nOpen it: ${link}`;
-    try { await sendEmail({ from: SIGN_FROM(), to: contact(), replyTo: null, subject: kind === "all_signed" ? `Signed by everyone: ${d.doc.title} (${d.label})` : `${d.s.name} signed ${d.label}`, text, tag: `ws-owner-${kind}` }); } catch (e) { console.error("notifyOwner", String((e as Error).message).slice(0, 120)); }
+    try { await sendEmail({ from: SIGN_FROM(), to: (await ctx.runQuery(internal.business.contact, {})).ownerEmail, replyTo: null, subject: kind === "all_signed" ? `Signed by everyone: ${d.doc.title} (${d.label})` : `${d.s.name} signed ${d.label}`, text, tag: `ws-owner-${kind}` }); } catch (e) { console.error("notifyOwner", String((e as Error).message).slice(0, 120)); }
     return null;
   },
 });

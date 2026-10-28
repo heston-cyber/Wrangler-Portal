@@ -2,8 +2,8 @@
 // Wrangler Sign (S4): finding {{sign:client}}-style markers on the backend, for documents Claude uploads through the
 // connector (the site's own upload finds them in the browser). Same code as the page (lib/wsMarkers.ts), with
 // pdf.js running in Node.
-import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
+import { internalAction } from "./lib/functions";
 import { scanMarkers, type ScanResult } from "./lib/wsMarkers";
 import type { PdfLine } from "./lib/wsPdfImport";
 

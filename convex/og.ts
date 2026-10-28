@@ -17,6 +17,8 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { coveredVideos, labelOf, shareState } from "./lib/shareAccess";
 import { signStillUrl, signedThumbUrl } from "./lib/media";
 import { SITE } from "./lib/email";
+import { forBusiness } from "./lib/functions";
+import { defaultBusiness } from "./lib/business";
 
 const SITE_NAME = "Wrangler Review";
 const GENERIC = () => `${SITE()}/brand/og-default.png`;
@@ -67,6 +69,7 @@ function parse(req: Request): { token: string; videoId?: string; wantsImage: boo
 export const og = httpAction(async (ctx, req) => {
   const p = parse(req);
   if (!p) return new Response("Not found", { status: 404 });
+  ctx = forBusiness(ctx, await ctx.runQuery(internal.og.businessOfShare, { token: p.token })); // only that share's business
   const data = await ctx.runQuery(internal.og.forShare, { token: p.token, videoId: p.videoId });
   const cache = data.state === "ok" ? "public, max-age=300" : "public, max-age=60";
   if (!p.wantsImage) {
@@ -85,4 +88,14 @@ export const og = httpAction(async (ctx, req) => {
   } catch {
     return Response.redirect(GENERIC(), 302);
   }
+});
+
+/** The business a share link belongs to (null for an unknown token; the preview then answers "missing"). */
+export const businessOfShare = internalQuery({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const s = await ctx.db.query("shares").withIndex("by_token", (q) => q.eq("token", token)).unique();
+    if (!s) return null;
+    return s.businessId ?? (await defaultBusiness(ctx))?._id ?? null;
+  },
 });

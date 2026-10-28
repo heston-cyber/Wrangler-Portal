@@ -2,8 +2,8 @@
 // B4 (Oct 27): a builder draft rendered to its PDF on the backend, with the same renderer the page uses
 // (src/builder/pdf.tsx, @react-pdf/renderer), so Claude can take a draft to signing through the connector without a
 // browser. The style's Google fonts are fetched first if they aren't stored yet.
-import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
+import { internalAction } from "./lib/functions";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 

@@ -3,6 +3,8 @@
 // server/discover) and older clients that open with `initialize` (2025-03-26 … 2025-11-25). Moved here from mcp.ts
 // unchanged when Wrangler Sign got its own connector (S4, Oct 27).
 import type { ActionCtx } from "../_generated/server";
+import { forBusiness } from "./functions";
+import type { Id } from "../_generated/dataModel";
 
 export const MODERN = ["2026-07-28"];
 export const LEGACY = ["2025-11-25", "2025-06-18", "2025-03-26"];
@@ -26,7 +28,8 @@ export type McpConfig = {
   tools: Tool[];
   callTool: (ctx: ActionCtx, name: string, args: Json) => Promise<ToolResult>;
   /** Is this request's key live? (The key comes from Authorization: Bearer, X-API-Key, or the address.) */
-  authorized: (ctx: ActionCtx, key: string) => Promise<boolean>;
+  // A live key: false, or the business it belongs to (Phase 0.5d step 4: the connector then acts only for it).
+  authorized: (ctx: ActionCtx, key: string) => Promise<false | { businessId: Id<"businesses"> | null }>;
   keyPrefix: string;          // "wr_" or "ws_"
   pathPrefix: string;         // "/mcp" or "/ws-mcp": the key can also ride in the address as <pathPrefix>/<key>
   unauthorized: string;       // what a request without a working key is told
@@ -116,11 +119,13 @@ async function handle(ctx: ActionCtx, req: Request, msg: Rpc, cfg: McpConfig): P
 export async function servePost(ctx: ActionCtx, req: Request, cfg: McpConfig): Promise<Response> {
   const origin = req.headers.get("origin");
   if (origin && !ALLOWED_ORIGINS.some((r) => r.test(origin))) return rpcError(null, -32000, "Origin not allowed", undefined, 403);
-  if (!(await authorized(ctx, req, cfg))) {
+  const who = await authorized(ctx, req, cfg);
+  if (!who) {
     return new Response(JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32001, message: cfg.unauthorized } }), {
       status: 401, headers: { "content-type": "application/json" },
     });
   }
+  ctx = forBusiness(ctx, who.businessId); // every tool call from here on sees only the key's business
   let body: unknown;
   try { body = await req.json(); } catch { return rpcError(null, -32700, "Parse error", undefined, 400); }
 

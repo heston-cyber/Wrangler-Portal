@@ -11,6 +11,8 @@ import { highestVersion, insertVideo, nextFileName, pad5, shortTitleError, short
 import { pickProject, splitJob } from "./lib/dropboxPath";
 import { sha256Hex } from "./connector";
 import { SITE } from "./lib/site";
+import { forBusiness } from "./lib/functions";
+import { defaultBusiness } from "./lib/business";
 
 const clean = (s: string, max = 200) => s.trim().replace(/\s+/g, " ").slice(0, max);
 const site = () => SITE();
@@ -251,7 +253,9 @@ export function feedTable(r: Row[]) {
 export const feed = httpAction(async (ctx, req) => {
   const url = new URL(req.url);
   const key = req.headers.get("x-key") || url.searchParams.get("key") || "";
-  const r = key ? await ctx.runMutation(internal.register.feedRows, { hash: await sha256Hex(key) }) : null;
+  const hash = key ? await sha256Hex(key) : "";
+  if (key) ctx = forBusiness(ctx, await ctx.runQuery(internal.register.businessOfSheetKey, { hash })); // only that key's business
+  const r = key ? await ctx.runMutation(internal.register.feedRows, { hash }) : null;
   if (!r) return new Response(JSON.stringify({ error: "Wrong or missing sheet key. Make a new one in Wrangler Review › Settings › Google Sheet copy." }), { status: 401, headers: { "content-type": "application/json" } });
   return new Response(JSON.stringify({ updated: new Date().toISOString(), columns: FEED_COLUMNS, rows: feedTable(r) }), {
     status: 200, headers: { "content-type": "application/json", "cache-control": "no-store" },
@@ -259,3 +263,13 @@ export const feed = httpAction(async (ctx, req) => {
 });
 
 export type RegisterRow = Row;
+
+/** The business a Google Sheet key belongs to (null for an unknown key; the feed then refuses it). */
+export const businessOfSheetKey = internalQuery({
+  args: { hash: v.string() },
+  handler: async (ctx, { hash }) => {
+    const k = await ctx.db.query("sheetKeys").withIndex("by_hash", (q) => q.eq("hash", hash)).unique();
+    if (!k) return null;
+    return k.businessId ?? (await defaultBusiness(ctx))?._id ?? null;
+  },
+});

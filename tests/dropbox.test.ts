@@ -384,12 +384,12 @@ describe("deleting a version", () => {
       notes: (await ctx.db.query("notes").collect()).map((x) => x.text),
       replies: (await ctx.db.query("replies").collect()).length,
       transcripts: (await ctx.db.query("transcripts").collect()).length,
-      cleanup: (await ctx.db.system.query("_scheduled_functions").collect()).filter((s) => s.name.includes("cleanup")).map((s) => s.args[0]),
+      cleanup: (await ctx.db.system.query("_scheduled_functions").collect()).filter((s) => s.name.includes("cleanup")).map((s) => { const { asBusiness: _b, ...a } = s.args[0]; void _b; return a; }),
     }));
     expect(left).toEqual({ versions: [1, 3], notes: ["copy"], replies: 0, transcripts: 0, cleanup: [{ bunnyGuid: null, stillUrls: [] }] });
     // Deleting the last one using g2 does remove the Bunny video. Numbers carry on from the highest left, so the next one is v2.
     await me.mutation(api.library.deleteVersion, { versionId: v3 });
-    const sched = await t.run(async (ctx) => (await ctx.db.system.query("_scheduled_functions").collect()).filter((s) => s.name.includes("cleanup")).map((s) => s.args[0]));
+    const sched = await t.run(async (ctx) => (await ctx.db.system.query("_scheduled_functions").collect()).filter((s) => s.name.includes("cleanup")).map((s) => { const { asBusiness: _b, ...a } = s.args[0]; void _b; return a; }));
     expect(sched[1]).toEqual({ bunnyGuid: "g2", stillUrls: ["https://cdn.example/stills/a.jpg"] });
     expect((await t.mutation(internal.library.insertVersion, { videoId, bunnyGuid: "g4", fileName: "d.mp4" })).number).toBe(2);
     void v1;

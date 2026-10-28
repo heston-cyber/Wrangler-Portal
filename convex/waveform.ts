@@ -1,8 +1,8 @@
 "use node";
 // Makes a version's waveform once Bunny has its MP4 copies: reads just the sound out of the smallest MP4
 // (range reads, a few MB at a time) and stores peaks for the timeline.
-import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { internalAction } from "./lib/functions";
 import { v } from "convex/values";
 import { peaksFromMp4 } from "./lib/waveformDecode";
 import { signUrl } from "./lib/media";

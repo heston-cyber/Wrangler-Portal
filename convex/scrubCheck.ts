@@ -1,5 +1,5 @@
+import { internalAction } from "./lib/functions";
 // R3 setup check (Oct 22): is the 360p scrub library connected? Statuses only, never keys or names (public CI log).
-import { internalAction } from "./_generated/server";
 
 export const run = internalAction({
   args: {},

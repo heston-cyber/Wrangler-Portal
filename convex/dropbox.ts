@@ -2,8 +2,8 @@
 // Flow: Dropbox tells us something changed (webhook, plus a check every minute) → we list what changed → once a
 // file has stopped changing and is complete, Bunny pulls it through a share link → the link is deleted as soon as
 // Bunny has the file. Tokens stay in the backend; the Settings page only ever sees names, dates and statuses.
-import { action, httpAction, internalAction } from "./_generated/server";
-import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
+import { action, httpAction } from "./_generated/server";
+import { forBusiness, internalAction, internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
@@ -16,6 +16,7 @@ import { highestVersion, insertVideo, parseRegisterName, shortTitleError, shortT
 import { signUrl } from "./lib/media";
 import { NEW_VERSION_DELAY_MS } from "./emails";
 import { SITE, SITE_SLASH } from "./lib/site";
+import { businessFor, defaultBusiness } from "./lib/business";
 
 const API = "https://api.dropboxapi.com/2";
 const SETTLE_MS = 60_000; // a file must sit unchanged this long before we look at it
@@ -138,9 +139,13 @@ export const takeState = internalMutation({
   args: { state: v.string() },
   handler: async (ctx, { state }) => {
     const row = await ctx.db.query("oauthStates").withIndex("by_state", (q) => q.eq("state", state)).unique();
-    if (!row) return false;
+    if (!row) return false as const;
     await ctx.db.delete(row._id);
-    return Date.now() - row.createdAt < 15 * 60_000;
+    if (Date.now() - row.createdAt >= 15 * 60_000) return false as const;
+    // Phase 0.5d step 4: the connection belongs to the business of the owner who started it.
+    const user = await ctx.db.get(row.userId as Id<"users">);
+    const email = (user?.email ?? "").toLowerCase();
+    return { businessId: email ? await businessFor(ctx, email, "owner") : (await defaultBusiness(ctx))?._id ?? null };
   },
 });
 
@@ -178,7 +183,9 @@ export const callback = httpAction(async (ctx, req) => {
   const back = (q: string) => new Response(null, { status: 302, headers: { location: `${site()}/settings?${q}#dropbox` } });
   if (u.searchParams.get("error")) return back(`dropbox=error&reason=${encodeURIComponent(u.searchParams.get("error_description") || u.searchParams.get("error") || "declined")}`);
   const code = u.searchParams.get("code"), state = u.searchParams.get("state");
-  if (!code || !state || !(await ctx.runMutation(internal.dropbox.takeState, { state }))) return back("dropbox=error&reason=expired");
+  const st = code && state ? await ctx.runMutation(internal.dropbox.takeState, { state }) : false;
+  if (!code || !st) return back("dropbox=error&reason=expired");
+  ctx = forBusiness(ctx, st.businessId);
   try {
     const tok = await tokenRequest({ grant_type: "authorization_code", code, redirect_uri: redirectUri() });
     if (!tok.refresh_token) throw new Error("Dropbox didn't send a refresh token");
@@ -429,9 +436,25 @@ export const recordFolders = internalMutation({
 });
 
 // Runs every minute (crons.ts) and whenever Dropbox's webhook fires.
+// Phase 0.5d step 4: with no business given (the cron, the webhook), sync every business that has Dropbox connected,
+// each acting only for itself. With one (Sync now), just that business.
+export const connectedBusinesses = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const def = (await defaultBusiness(ctx))?._id ?? null;
+    return [...new Set((await ctx.db.query("dropbox").collect()).map((d) => d.businessId ?? def).filter((b): b is Id<"businesses"> => !!b))];
+  },
+});
+
 export const sync = internalAction({
   args: {},
-  handler: async (ctx): Promise<{ connected: boolean; changes?: number; due?: number; error?: string }> => {
+  handler: async (ctx): Promise<{ connected: boolean; changes?: number; due?: number; error?: string; businesses?: number }> => {
+    if (!ctx.asBusiness) {
+      const bizs: Id<"businesses">[] = await ctx.runQuery(internal.dropbox.connectedBusinesses, {});
+      let changes = 0;
+      for (const b of bizs) { const r: { changes?: number } = await ctx.runAction(internal.dropbox.sync, { asBusiness: b }); changes += r.changes ?? 0; }
+      return { connected: bizs.length > 0, changes, businesses: bizs.length };
+    }
     const conn = await ctx.runQuery(internal.dropbox.getConnection, {});
     if (!conn) return { connected: false };
     let changes = 0;
@@ -474,8 +497,8 @@ export const sync = internalAction({
 export const syncNow = action({
   args: {},
   handler: async (ctx) => {
-    await ctx.runQuery(internal.users.assertAllowed, {});
-    await ctx.scheduler.runAfter(0, internal.dropbox.sync, {});
+    const me: { businessId: Id<"businesses"> | null } = await ctx.runQuery(internal.users.assertAllowed, {});
+    await ctx.scheduler.runAfter(0, internal.dropbox.sync, me.businessId ? { asBusiness: me.businessId } : {});
   },
 });
 

@@ -4,8 +4,8 @@
 // signers, then approves. Approval locks that version: its file hash, boxes, signers, signing order and invoice are
 // covered by one lock hash. Any change after that is a new version; earlier versions are kept as they were.
 // Sending, signing and completion are Phases S2–S3.
-import { action, internalAction, type ActionCtx } from "./_generated/server";
-import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
+import { action, type ActionCtx } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -15,10 +15,10 @@ import { appendEvent, eventsOf, verifyChain } from "./lib/wsAudit";
 import { approvalProblems, docLabel, lockText, OWNER_KEY, shapeProblems, type LayoutBox, type LayoutSigner } from "./lib/wsLayout";
 import { inspect, sha256Bytes, stamp, type Stamp } from "./lib/wsPdf";
 import { sha256Hex } from "./lib/hash";
-import { allowedEmails } from "./auth";
 import { randomToken } from "./lib/hash";
 import { DEFAULT_EXPIRY_DAYS, cleanLine, signLink } from "./lib/wsSigning";
 import { pngProblem } from "./lib/pngCheck";
+import { businessContact, businessInScope } from "./lib/business";
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
 const MAX_PNG_BYTES = 600 * 1024;
@@ -33,7 +33,8 @@ const boxV = v.object({
 const signerV = v.object({ key: v.string(), name: v.string(), email: v.string(), title: v.optional(v.string()), order: v.number() });
 const paymentV = v.union(v.null(), v.object({ amountCents: v.number(), description: v.string() }));
 
-const ownerEmail = () => allowedEmails()[0] ?? "";
+// Phase 0.5d step 4: the owner of the business this document belongs to.
+const ownerEmailOf = async (ctx: QueryCtx | MutationCtx) => (await businessContact(ctx, businessInScope(ctx))).ownerEmail;
 
 async function currentSignature(ctx: QueryCtx | MutationCtx) {
   const rows = await ctx.db.query("wsOwnerSignatures").withIndex("by_adopted").order("desc").take(5);
@@ -57,8 +58,8 @@ async function loadEditable(ctx: MutationCtx, versionId: Id<"wsVersions">) {
 }
 
 // Heston's own signer row always carries his adopted name and title and his own email, whatever the page sent.
-function withOwner(signers: LayoutSigner[], sig: Doc<"wsOwnerSignatures"> | null): LayoutSigner[] {
-  return signers.map((s) => s.key === OWNER_KEY ? { key: OWNER_KEY, name: sig?.name ?? "Heston Hill", email: ownerEmail(), title: sig?.title ?? "Founder", order: s.order } : { ...s, name: cleanLine(s.name), email: s.email.trim().toLowerCase(), title: cleanLine(s.title) || undefined });
+function withOwner(signers: LayoutSigner[], sig: Doc<"wsOwnerSignatures"> | null, ownerEmail: string): LayoutSigner[] {
+  return signers.map((s) => s.key === OWNER_KEY ? { key: OWNER_KEY, name: sig?.name ?? "Heston Hill", email: ownerEmail, title: sig?.title ?? "Founder", order: s.order } : { ...s, name: cleanLine(s.name), email: s.email.trim().toLowerCase(), title: cleanLine(s.title) || undefined });
 }
 
 // ---------- reading ----------
@@ -109,7 +110,7 @@ async function getCore(ctx: QueryCtx, documentId: Id<"wsDocuments">, versionNumb
       versions: versions.sort((a, b) => b.number - a.number).map((x) => ({ number: x.number, fileName: x.fileName, fileSha256: x.fileSha256, approvedAt: x.approvedAt ?? null, lockHash: x.lockHash ?? null, ownerSignedAt: x.ownerSignedAt ?? null, createdAt: x.createdAt })),
       events: events.map((e) => ({ seq: e.seq, at: e.at, kind: e.kind, actor: e.actor, versionNumber: e.versionNumber ?? null, detail: e.detail ?? null, email: e.email ?? null, ip: e.ip ?? null, userAgent: e.userAgent ?? null })),
       chain: await verifyChain(events),
-      owner: { email: ownerEmail(), name: sig?.name ?? null, title: sig?.title ?? null, adopted: !!sig },
+      owner: { email: (await ownerEmailOf(ctx)), name: sig?.name ?? null, title: sig?.title ?? null, adopted: !!sig },
       signings: doc.sentVersion !== undefined ? (await ctx.db.query("wsSignings").withIndex("by_document", (q) => q.eq("documentId", documentId).eq("versionNumber", doc.sentVersion!)).collect())
         .sort((a, b) => a.order - b.order)
         .map((x) => ({ key: x.signerKey, name: x.name, email: x.email, order: x.order, status: x.status, link: signLink(x.token), sentAt: x.sentAt ?? null, lastEmailAt: x.lastEmailAt ?? null, openedAt: x.openedAt ?? null, verifiedAt: x.verifiedAt ?? null, consentAt: x.consentAt ?? null, signedAt: x.signedAt ?? null, lockedUntil: x.lockedUntil ?? null })) : [],
@@ -123,9 +124,9 @@ export const ownerSignature = query({
   handler: async (ctx) => {
     await requireMe(ctx);
     const sig = await currentSignature(ctx);
-    if (!sig) return { adopted: false as const, email: ownerEmail() };
+    if (!sig) return { adopted: false as const, email: (await ownerEmailOf(ctx)) };
     return {
-      adopted: true as const, email: ownerEmail(), name: sig.name, title: sig.title, method: sig.method, adoptedAt: sig.adoptedAt,
+      adopted: true as const, email: (await ownerEmailOf(ctx)), name: sig.name, title: sig.title, method: sig.method, adoptedAt: sig.adoptedAt,
       signatureUrl: await ctx.storage.getUrl(sig.signatureFileId), initialsUrl: await ctx.storage.getUrl(sig.initialsFileId),
       signatureSha256: sig.signatureSha256,
     };
@@ -220,7 +221,7 @@ type LayoutArgs = { versionId: Id<"wsVersions">; title: string; signers: LayoutS
 async function saveLayoutCore(ctx: MutationCtx, a: LayoutArgs) {
   {
     const { ver, doc } = await loadEditable(ctx, a.versionId);
-    const signers = withOwner(a.signers, await currentSignature(ctx));
+    const signers = withOwner(a.signers, await currentSignature(ctx), await ownerEmailOf(ctx));
     const problems = shapeProblems({ signers, boxes: a.boxes as LayoutBox[], pages: ver.pages.length });
     if (problems.length) throw new ConvexError(problems[0]);
     const title = a.title.trim().slice(0, 120) || doc.title;
@@ -435,7 +436,7 @@ async function applyOwner(ctx: MutationCtx, versionId: Id<"wsVersions">) {
     if (!sig) throw new ConvexError("Adopt your signature first.");
     const now = Date.now();
     await ctx.db.patch(ver._id, { ownerSignedAt: now, ownerSignatureId: sig._id });
-    await appendEvent(ctx, doc._id, { kind: "owner_signed", actor: OWNER_KEY, versionNumber: ver.number, email: ownerEmail(), detail: `Signed by ${sig.name}, ${sig.title}, with the signature adopted ${new Date(sig.adoptedAt).toISOString()} (image SHA-256 ${sig.signatureSha256}).` });
+    await appendEvent(ctx, doc._id, { kind: "owner_signed", actor: OWNER_KEY, versionNumber: ver.number, email: (await ownerEmailOf(ctx)), detail: `Signed by ${sig.name}, ${sig.title}, with the signature adopted ${new Date(sig.adoptedAt).toISOString()} (image SHA-256 ${sig.signatureSha256}).` });
     return { applied: true as const };
   }
 }

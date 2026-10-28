@@ -2,7 +2,8 @@
 // Dual-era: serves 2026-07-28 clients statelessly (per-request _meta, server/discover) and older clients
 // that open with `initialize` (2025-03-26 … 2025-11-25). Every request must carry a connector key
 // (Authorization: Bearer wr_… or X-API-Key: wr_…, or as a last resort in the address: /mcp/wr_…). Replies always answer as plain JSON, never SSE.
-import { httpAction, internalAction } from "./_generated/server";
+import { httpAction } from "./_generated/server";
+import { internalAction } from "./lib/functions";
 import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { sha256Hex } from "./connector";

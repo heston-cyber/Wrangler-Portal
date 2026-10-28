@@ -9,8 +9,8 @@
 //   archive  the signed copy and the trail as JSON into Dropbox › Apps/Wrangler Sign/<year>/ (convex/wsArchive.ts)
 // Plus the public check: sign.wranglerportal.com/verify hashes a PDF in the browser and asks here whether that hash is
 // a completed Wrangler Sign document (the file itself never leaves the person's computer).
-import { action, httpAction, internalAction, type ActionCtx } from "./_generated/server";
-import { internalMutation, internalQuery, mutation } from "./lib/functions";
+import { action, httpAction, type ActionCtx } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, mutation } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -21,7 +21,7 @@ import { sha256Bytes, stamp } from "./lib/wsPdf";
 import { auditExport, b64, certificate, finalStamps, safeFileName, type FinalEvent, type FinalInput, type FinalSigner } from "./lib/wsFinal";
 import { SIGN_FROM, SIGN_SITE, centralDate } from "./lib/wsSigning";
 import { sendEmail, SITE } from "./lib/email";
-import { COMPANY, SIGN_STATEMENT, contact, corsHeaders } from "./signing";
+import { SIGN_STATEMENT, corsHeaders } from "./signing";
 
 export const STEPS = ["pdf", "invoice", "copies", "archive"] as const;
 type Step = (typeof STEPS)[number];
@@ -63,6 +63,7 @@ const toEvents = (es: Doc<"wsEvents">[]): FinalEvent[] => es.map((e) => ({
 
 /** Everything the certificate and the stamps need, with the signature images read from storage. */
 async function finalInput(ctx: ActionCtx, d: Data): Promise<FinalInput> {
+  const biz = await ctx.runQuery(internal.business.contact, {}); // Phase 0.5d step 4: this document's business
   const { doc, ver, signings, owner } = d;
   const clients: FinalSigner[] = [];
   for (const s of signings) {
@@ -81,14 +82,14 @@ async function finalInput(ctx: ActionCtx, d: Data): Promise<FinalInput> {
   if (ownerSigns) {
     if (!owner || !ver.ownerSignedAt) throw new Error("Your signature wasn't applied when this was sent.");
     ownerSigner = {
-      key: OWNER_KEY, name: owner.name, email: contact(), title: owner.title, adoptedName: owner.name, adoptedTitle: owner.title, method: owner.method,
+      key: OWNER_KEY, name: owner.name, email: biz.ownerEmail, title: owner.title, adoptedName: owner.name, adoptedTitle: owner.title, method: owner.method,
       signaturePng: await bytesOf(ctx, owner.signatureFileId), initialsPng: await bytesOf(ctx, owner.initialsFileId), signatureSha256: owner.signatureSha256, initialsSha256: owner.initialsSha256,
       signedAt: ver.ownerSignedAt, signedDate: centralDate(ver.ownerSignedAt), ip: null, userAgent: null, verifiedAt: null, consentAt: null, consentVersion: null,
       adoptedAt: owner.adoptedAt, initialed: [], viewedPages: [],
     };
   }
   return {
-    label: docLabel(doc.number), title: doc.title, company: COMPANY, versionNumber: ver.number, fileName: ver.fileName, fileSha256: ver.fileSha256,
+    label: docLabel(doc.number), title: doc.title, company: biz.legalName, versionNumber: ver.number, fileName: ver.fileName, fileSha256: ver.fileSha256,
     lockHash: ver.lockHash ?? "", pages: ver.pages.length, sentAt: doc.sentAt ?? null, completedAt: doc.completedAt ?? Date.now(), signingOrder: ver.signingOrder,
     owner: ownerSigner, signers: clients, boxes: ver.boxes as LayoutBox[], events: toEvents(d.events), statement: SIGN_STATEMENT, verifyUrl: verifyUrl(),
   };
@@ -234,6 +235,7 @@ export const recordInvoice = internalMutation({
 // ---------- 3. the copies ----------
 
 async function sendCopies(ctx: ActionCtx, d: Data) {
+  const ownerEmail = (await ctx.runQuery(internal.business.contact, {})).ownerEmail;
   const { doc, signings } = d;
   const final = doc.final!;
   const bytes = await bytesOf(ctx, final.fileId);
@@ -246,7 +248,7 @@ async function sendCopies(ctx: ActionCtx, d: Data) {
     ...(owner && d.ver.ownerSignedAt ? [`${owner.name}, ${owner.title}, Wrangler Productions, ${centralDate(d.ver.ownerSignedAt)}`] : []),
   ];
   const already = new Set(doc.copies?.sent ?? []);
-  const people = [...signings.map((s) => ({ email: s.email, name: s.name, owner: false })), { email: contact(), name: "Heston", owner: true }].filter((p, i, a) => a.findIndex((x) => x.email === p.email) === i);
+  const people = [...signings.map((s) => ({ email: s.email, name: s.name, owner: false })), { email: ownerEmail, name: "Heston", owner: true }].filter((p, i, a) => a.findIndex((x) => x.email === p.email) === i);
   const sent: string[] = [], failed: string[] = [];
   for (const p of people) {
     if (already.has(p.email)) continue;
@@ -256,7 +258,7 @@ async function sendCopies(ctx: ActionCtx, d: Data) {
       ? `Everyone has signed "${doc.title}" (${label}). The signed copy is attached, and a copy went to every signer.\n\nSigned by:\n${signedBy.map((x) => `- ${x}`).join("\n")}\n\n${fingerprint}\n\nOpen it: ${SITE()}/sign/d/${doc._id}${doc.invoice?.status === "created" ? `\n\nDraft invoice for ${money(doc.invoice.amountCents ?? 0)}${doc.invoice.livemode ? "" : " (Stripe test mode)"}, ready for you to review and send: ${doc.invoice.url}` : doc.invoice?.status === "failed" ? `\n\nThe Stripe draft invoice couldn't be made: ${doc.invoice.error}. Retry it from the document page.` : ""}`
       : `Hi ${first},\n\nEveryone has signed "${doc.title}" (${label}). Your signed copy is attached.\n\nSigned by:\n${signedBy.map((x) => `- ${x}`).join("\n")}\n\n${fingerprint}\n\nPlease keep this email for your records. Questions? Reply to this email.\n\nWrangler Productions, a DBA of Hill Creative LLC · sign.wranglerportal.com`;
     try {
-      await sendEmail({ from: SIGN_FROM(), to: p.email, replyTo: p.owner ? null : contact(), subject: `Signed: ${doc.title} (${label})`, text, tag: p.owner ? "ws-copy-owner" : "ws-copy", attachments: attachment });
+      await sendEmail({ from: SIGN_FROM(), to: p.email, replyTo: p.owner ? null : ownerEmail, subject: `Signed: ${doc.title} (${label})`, text, tag: p.owner ? "ws-copy-owner" : "ws-copy", attachments: attachment });
       sent.push(p.email);
     } catch (e) { failed.push(`${p.email}: ${errText(e).slice(0, 100)}`); }
   }

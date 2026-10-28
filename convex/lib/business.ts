@@ -50,3 +50,34 @@ export async function businessFor(ctx: QueryCtx | MutationCtx, email: string, ro
   if (live) return live.businessId;
   return (await defaultBusiness(ctx))?._id ?? null;
 }
+
+/**
+ * Who a business is, for documents and emails (Phase 0.5d step 4): its name, legal name and the owner's email.
+ * Wrangler's values are what they always were (the legal name from its record, the owner from ALLOWED_EMAILS).
+ */
+export async function businessContact(ctx: QueryCtx | MutationCtx, businessId?: Id<"businesses"> | null): Promise<{ businessId: Id<"businesses"> | null; isDefault: boolean; name: string; legalName: string; ownerEmail: string }> {
+  const def = await defaultBusiness(ctx);
+  const biz = businessId ? await ctx.db.get(businessId) : def;
+  const isDefault = !biz || (def && biz._id === def._id);
+  const owners = biz ? (await ctx.db.query("memberships").withIndex("by_business_email", (q) => q.eq("businessId", biz._id)).collect()).filter((m) => !m.revokedAt && m.role === "owner").sort((a, b) => a.createdAt - b.createdAt) : [];
+  const ownerEmail = (isDefault ? allowedEmails()[0] : undefined) ?? owners[0]?.email ?? allowedEmails()[0] ?? "heston@wranglerproductions.com";
+  return {
+    businessId: biz?._id ?? null,
+    isDefault: !!isDefault,
+    name: biz?.name ?? DEFAULT.name,
+    legalName: biz?.legalName ?? biz?.name ?? DEFAULT.legalName,
+    ownerEmail,
+  };
+}
+
+/** The business a function is working for: the business it acts for, else the caller's, else the default. */
+export function businessInScope(ctx: unknown): Id<"businesses"> | null {
+  const c = ctx as { asBusiness?: Id<"businesses">; scope?: { owner: Id<"businesses"> | null; pin: Id<"businesses"> | null; members: Set<string> } | null };
+  if (c.asBusiness) return c.asBusiness;
+  const s = c.scope;
+  if (!s) return null;
+  if (s.owner) return s.owner;
+  if (s.pin) return s.pin;
+  if (s.members.size === 1) return [...s.members][0] as Id<"businesses">;
+  return null;
+}

@@ -1,7 +1,8 @@
 "use node";
 // Transcribes a version with ElevenLabs Scribe. Runs in Node (512 MB) because it downloads Bunny's smallest MP4
 // copy of the cut and sends it on. Words come back in seconds and are pinned to frames of the version.
-import { action, internalAction } from "./_generated/server";
+import { action } from "./_generated/server";
+import { internalAction } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { buildTranscript } from "./lib/transcript";

@@ -10,10 +10,11 @@
 // Records outside the scope are simply invisible (a lookup answers null, a list leaves them out), and changing one
 // is refused. Internal functions are trusted server code: they keep plain access and stamp the default business.
 // A record with no businessId (only in tests now: every live record is tagged) counts as the default business's.
-import { customCtx, customMutation, customQuery } from "convex-helpers/server/customFunctions";
+import { customAction, customCtx, customMutation, customQuery } from "convex-helpers/server/customFunctions";
+import { v } from "convex/values";
 import { wrapDatabaseReader, wrapDatabaseWriter, type Rules } from "convex-helpers/server/rowLevelSecurity";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { internalMutation as rawInternalMutation, internalQuery as rawInternalQuery, mutation as rawMutation, query as rawQuery, type MutationCtx, type QueryCtx } from "../_generated/server";
+import { internalAction as rawInternalAction, internalMutation as rawInternalMutation, internalQuery as rawInternalQuery, mutation as rawMutation, query as rawQuery, type ActionCtx, type MutationCtx, type QueryCtx } from "../_generated/server";
 import type { DataModel, Id } from "../_generated/dataModel";
 import { defaultBusiness, ensureDefaultBusiness } from "./business";
 import { allowedEmails } from "./owners";
@@ -52,7 +53,7 @@ export function allowed(scope: Scope, businessId: Id<"businesses"> | undefined |
 }
 
 /** The business a new record made by this caller belongs to. */
-function stampFor(scope: Scope): Id<"businesses"> | null {
+export function stampFor(scope: Scope): Id<"businesses"> | null {
   if (scope.isOwner) return scope.owner;
   if (scope.pin) return scope.pin;
   if (scope.members.size === 1) return [...scope.members][0] as Id<"businesses">;
@@ -93,6 +94,46 @@ async function defaultStamp(ctx: MutationCtx) {
   return (await defaultBusiness(ctx))?._id ?? (await ensureDefaultBusiness(ctx)).businessId;
 }
 
+/** An owner's view of one business: used when trusted server code acts for a business (asBusiness). */
+function ownerScope(biz: Id<"businesses">, defaultBiz: Id<"businesses"> | null): Scope {
+  return { owner: biz, members: new Set(), pin: null, isOwner: true, defaultBiz };
+}
+
+// Step 4: trusted server code (crons, the Claude connectors, signing links) says which business it's acting for by
+// passing `asBusiness`. Every internal function accepts it; inside, that function then sees only that business, and
+// anything it runs or schedules carries the business along.
+const asBusinessArg = { asBusiness: v.optional(v.id("businesses")) };
+const withBiz = (args: unknown, biz: Id<"businesses"> | null | undefined) =>
+  biz ? { ...((args as Record<string, unknown>) ?? {}), asBusiness: biz } : args;
+
+type Scheduler = MutationCtx["scheduler"];
+function carryingScheduler(s: Scheduler, biz: Id<"businesses"> | null | undefined): Scheduler {
+  if (!biz) return s;
+  return new Proxy(s, {
+    get(target, prop, receiver) {
+      if (prop === "runAfter") return ((d: number, f: never, a?: unknown) => target.runAfter(d, f, withBiz(a, biz) as never)) as Scheduler["runAfter"];
+      if (prop === "runAt") return ((d: number | Date, f: never, a?: unknown) => target.runAt(d, f, withBiz(a, biz) as never)) as Scheduler["runAt"];
+      const v = Reflect.get(target, prop, receiver);
+      return typeof v === "function" ? v.bind(target) : v;
+    },
+  });
+}
+
+/** An action context whose runQuery / runMutation / runAction / scheduler all act for this business. */
+export function forBusiness<C extends ActionCtx>(ctx: C, biz: Id<"businesses"> | null | undefined): C {
+  if (!biz) return ctx;
+  return new Proxy(ctx, {
+    get(target, prop, receiver) {
+      if (prop === "runQuery") return ((f: never, a?: unknown) => target.runQuery(f, withBiz(a, biz) as never)) as ActionCtx["runQuery"];
+      if (prop === "runMutation") return ((f: never, a?: unknown) => target.runMutation(f, withBiz(a, biz) as never)) as ActionCtx["runMutation"];
+      if (prop === "runAction") return ((f: never, a?: unknown) => target.runAction(f, withBiz(a, biz) as never)) as ActionCtx["runAction"];
+      if (prop === "scheduler") return carryingScheduler(target.scheduler, biz);
+      const v = Reflect.get(target, prop, receiver);
+      return typeof v === "function" ? v.bind(target) : v;
+    },
+  });
+}
+
 export const query = customQuery(rawQuery, customCtx(async (ctx: QueryCtx) => {
   const scope = await scopeFor(ctx);
   return { db: wrapDatabaseReader(ctx, ctx.db, rulesFor(scope, ctx.db)), scope };
@@ -102,23 +143,41 @@ export const mutation = customMutation(rawMutation, customCtx(async (ctx: Mutati
   if (!(await defaultBusiness(ctx))) await ensureDefaultBusiness(ctx); // first ever write (tests, a fresh deployment)
   const scope = await scopeFor(ctx);
   const guarded = wrapDatabaseWriter(ctx, ctx.db, rulesFor(scope, ctx.db)) as unknown as MutationCtx["db"];
-  return { db: stampingDb(guarded, async () => stampFor(scope) ?? (await defaultStamp(ctx))), scope };
+  const stamp = async () => stampFor(scope) ?? (await defaultStamp(ctx));
+  return { db: stampingDb(guarded, stamp), scope, scheduler: carryingScheduler(ctx.scheduler, stampFor(scope)) };
 }));
 
 // Internal functions. Called from an action on behalf of a signed-in person (Convex passes their sign-in along), they
-// get the same guard as a public function, so an action can't reach another business's records either. Called with
-// no sign-in (scheduled jobs, crons, the Claude connectors and signing links, which check their own keys and
-// tokens), they're trusted server code with plain access, stamping the default business.
-export const internalQuery = customQuery(rawInternalQuery, customCtx(async (ctx: QueryCtx) => {
-  if (!(await ctx.auth.getUserIdentity())) return { db: ctx.db };
-  const scope = await scopeFor(ctx);
-  return { db: wrapDatabaseReader(ctx, ctx.db, rulesFor(scope, ctx.db)) };
-}));
+// get the same guard as a public function. Called with `asBusiness` (trusted server code acting for a business),
+// they see only that business. Called with neither (the old way, still used by a few background jobs), they're
+// trusted server code with plain access, stamping the default business.
+export const internalQuery = customQuery(rawInternalQuery, {
+  args: asBusinessArg,
+  input: async (ctx: QueryCtx, { asBusiness }: { asBusiness?: Id<"businesses"> }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity && !asBusiness) return { ctx: { db: ctx.db, scope: null as Scope | null, asBusiness }, args: {} };
+    const scope = identity ? await scopeFor(ctx) : ownerScope(asBusiness!, (await defaultBusiness(ctx))?._id ?? null);
+    return { ctx: { db: wrapDatabaseReader(ctx, ctx.db, rulesFor(scope, ctx.db)), scope, asBusiness }, args: {} };
+  },
+});
 
-export const internalMutation = customMutation(rawInternalMutation, customCtx(async (ctx: MutationCtx) => {
-  if (!(await ctx.auth.getUserIdentity())) return { db: stampingDb(ctx.db, () => defaultStamp(ctx)) };
-  if (!(await defaultBusiness(ctx))) await ensureDefaultBusiness(ctx);
-  const scope = await scopeFor(ctx);
-  const guarded = wrapDatabaseWriter(ctx, ctx.db, rulesFor(scope, ctx.db)) as unknown as MutationCtx["db"];
-  return { db: stampingDb(guarded, async () => stampFor(scope) ?? (await defaultStamp(ctx))) };
-}));
+export const internalMutation = customMutation(rawInternalMutation, {
+  args: asBusinessArg,
+  input: async (ctx: MutationCtx, { asBusiness }: { asBusiness?: Id<"businesses"> }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity && !asBusiness) return { ctx: { db: stampingDb(ctx.db, () => defaultStamp(ctx)), scheduler: ctx.scheduler, scope: null as Scope | null, asBusiness }, args: {} };
+    if (!(await defaultBusiness(ctx))) await ensureDefaultBusiness(ctx);
+    const scope = identity ? await scopeFor(ctx) : ownerScope(asBusiness!, (await defaultBusiness(ctx))?._id ?? null);
+    const guarded = wrapDatabaseWriter(ctx, ctx.db, rulesFor(scope, ctx.db)) as unknown as MutationCtx["db"];
+    return { ctx: { db: stampingDb(guarded, async () => stampFor(scope) ?? (await defaultStamp(ctx))), scheduler: carryingScheduler(ctx.scheduler, stampFor(scope)), scope: scope as Scope | null, asBusiness }, args: {} };
+  },
+});
+
+export const internalAction = customAction(rawInternalAction, {
+  args: asBusinessArg,
+  input: async (ctx: ActionCtx, { asBusiness }: { asBusiness?: Id<"businesses"> }) => {
+    const s = forBusiness(ctx, asBusiness); // no business: the same context, unchanged
+    // ctx.asBusiness: the business this run acts for (undefined when it acts for none in particular).
+    return { ctx: { runQuery: s.runQuery, runMutation: s.runMutation, runAction: s.runAction, scheduler: s.scheduler, asBusiness }, args: {} };
+  },
+});

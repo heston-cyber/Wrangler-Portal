@@ -12,6 +12,7 @@ import { base64url, sha256Hex } from "./lib/hash";
 import { docLabel, OWNER_KEY } from "./lib/wsLayout";
 import { eventsOf, verifyChain } from "./lib/wsAudit";
 import { deviceName } from "./lib/wsFinal";
+import { defaultBusiness } from "./lib/business";
 
 export const KEY_PREFIX = "ws_";
 
@@ -53,10 +54,11 @@ export const checkKey = internalMutation({
   args: { hash: v.string() },
   handler: async (ctx, { hash }) => {
     const row = await ctx.db.query("wsConnectorKeys").withIndex("by_hash", (q) => q.eq("hash", hash)).unique();
-    if (!row || row.revokedAt) return false;
+    if (!row || row.revokedAt) return false as const;
     const now = Date.now();
     if (!row.lastUsedAt || now - row.lastUsedAt > 60_000) await ctx.db.patch(row._id, { lastUsedAt: now });
-    return true;
+    // Phase 0.5d step 4: the key's business (records made before tagging count as the default business's).
+    return { businessId: row.businessId ?? (await defaultBusiness(ctx))?._id ?? null };
   },
 });
 

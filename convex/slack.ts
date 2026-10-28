@@ -1,6 +1,6 @@
 // Slack alerts through an incoming webhook (Convex env var SLACK_WEBHOOK_URL). Skipped quietly if unset.
-import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { internalAction } from "./lib/functions";
 import { v } from "convex/values";
 import { frameTc } from "./lib/frames";
 import { SITE } from "./lib/site";

@@ -2,8 +2,8 @@
 // Phase R1 (Oct 22): copy the export-format test renders from Dropbox (Apps/Wrangler Review/_tests/r1/) to Bunny
 // Storage (r1-test/) so they can be played from the CDN in Chrome and on a phone. Streams, never buffers the file.
 // Run from CI only; results carry sizes, timings and status codes (the test file names aren't private).
-import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { internalAction } from "./lib/functions";
 import { v } from "convex/values";
 import https from "node:https";
 import { Readable } from "node:stream";

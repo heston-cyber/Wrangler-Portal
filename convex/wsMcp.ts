@@ -3,7 +3,8 @@
 // the audit trail and signed copies. Approving, sending and cancelling each need Heston's OK in chat; the tool takes
 // his words and writes them into the audit trail, and the backend refuses anything out of order (sending an
 // unapproved version, editing an approved one, and so on).
-import { httpAction, internalAction } from "./_generated/server";
+import { httpAction } from "./_generated/server";
+import { internalAction } from "./lib/functions";
 import { v } from "convex/values";
 import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";

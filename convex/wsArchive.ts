@@ -3,8 +3,8 @@
 // Wrangler Review's app can't see it. Every completed document lands there as
 //   <year>/WS-00002 Title (signed).pdf   and   <year>/WS-00002 Title (audit).json
 // Each upload is read back and hashed, so "archived" means the copy in Dropbox matches the signed copy byte for byte.
-import { action, httpAction, internalAction, type ActionCtx } from "./_generated/server";
-import { internalMutation, internalQuery, query } from "./lib/functions";
+import { action, httpAction, type ActionCtx } from "./_generated/server";
+import { forBusiness, internalAction, internalMutation, internalQuery, query } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -66,7 +66,9 @@ export const callback = httpAction(async (ctx, req) => {
   const back = (q: string) => new Response(null, { status: 302, headers: { location: `${SITE()}/sign?${q}` } });
   if (u.searchParams.get("error")) return back(`archive=error&reason=${encodeURIComponent(u.searchParams.get("error_description") || u.searchParams.get("error") || "declined")}`);
   const code = u.searchParams.get("code"), state = u.searchParams.get("state");
-  if (!code || !state || !(await ctx.runMutation(internal.dropbox.takeState, { state }))) return back("archive=error&reason=expired");
+  const st = code && state ? await ctx.runMutation(internal.dropbox.takeState, { state }) : false;
+  if (!code || !st) return back("archive=error&reason=expired");
+  ctx = forBusiness(ctx, st.businessId);
   try {
     const tok = await tokenRequest({ grant_type: "authorization_code", code, redirect_uri: redirectUri() });
     if (!tok.refresh_token) throw new Error("Dropbox didn't send a refresh token");

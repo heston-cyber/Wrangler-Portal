@@ -1,6 +1,7 @@
 // Note stills (the frame, with the drawing burned in). Stored in Bunny Storage once it's set up,
 // otherwise in Convex storage. Either way the note keeps a plain URL.
-import { action, internalAction } from "./_generated/server";
+import { action } from "./_generated/server";
+import { internalAction } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
 import { bunnyCall, bunnyEnv } from "./bunny";

@@ -5,8 +5,7 @@
 //
 // The tokens are links to a test clip, nothing else; the workflow masks them in its log all the same.
 // Run by hand: npx convex run smoke:ensure   (CI: .github/workflows/smoke.yml)
-import { internalAction } from "./_generated/server";
-import { internalMutation, internalQuery } from "./lib/functions";
+import { internalAction, internalMutation, internalQuery } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";

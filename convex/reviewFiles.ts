@@ -2,8 +2,8 @@
 // Render-to-review (R3, Oct 22): a review export goes from Dropbox straight into Bunny Storage, untouched, and is
 // played from there. Streams, never holds the file in memory (Node actions get 512 MB and 10 minutes; a 1 GB file
 // copies in about a minute). Then the scrub library makes a small 360p copy for dragging.
-import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { internalAction } from "./lib/functions";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import https from "node:https";

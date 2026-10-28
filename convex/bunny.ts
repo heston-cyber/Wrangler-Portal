@@ -1,6 +1,6 @@
 // Bunny Stream helpers. Internal only: called by uploads.ts, or from the CLI (CI workflow) for checks.
-import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
+import { internalAction } from "./lib/functions";
 
 const API = "https://video.bunnycdn.com";
 

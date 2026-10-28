@@ -1,6 +1,5 @@
 // Client side T-C0.2 (Oct 23): does an email from review@wranglerportal.com through Resend land in the inbox?
 // Env: RESEND_API_KEY (pasted into the Convex dashboard by Heston), EMAIL_FROM (default below).
-import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
 
 export const send = internalAction({
@@ -32,7 +31,7 @@ export const send = internalAction({
 // comment share to the address (→ the invite email), fires the new-version email, leaves a note as a test client
 // account for that address, replies as Heston (→ the reply email), and runs the owner alert (→ Heston's alert).
 // Everything is tagged so `liveCleanup` removes it. Returns counts and statuses only.
-import { internalMutation, internalQuery } from "./lib/functions";
+import { internalAction, internalMutation, internalQuery } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { reviewStorage } from "./lib/reviewStorage";
 import { allowedEmails } from "./auth";

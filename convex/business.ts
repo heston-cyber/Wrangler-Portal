@@ -1,7 +1,7 @@
 // Wrangler Portal, Phase 0.5d step 1 (Oct 28). Internal only: run by hand through the "Convex run" workflow.
 // Its output is counts only (the repo and its CI logs are public).
 import { internalMutation, internalQuery } from "./lib/functions";
-import { ensureDefaultBusiness, ensureMembership } from "./lib/business";
+import { businessContact, businessInScope, ensureDefaultBusiness, ensureMembership } from "./lib/business";
 import { allowedEmails } from "./lib/owners";
 
 /** Makes the default business, the owners' memberships, and a client membership for every existing client account. */
@@ -37,4 +37,10 @@ export const selfTest = internalQuery({
     }
     return { businesses, owners: live.filter((m) => m.role === "owner").length, clients: live.filter((m) => m.role === "client").length, accountsWithout, ok: businesses >= 1 && accountsWithout === 0 };
   },
+});
+
+/** For actions: who the business they act for is (name, legal name, owner's email). */
+export const contact = internalQuery({
+  args: {},
+  handler: async (ctx) => businessContact(ctx, businessInScope(ctx)),
 });
