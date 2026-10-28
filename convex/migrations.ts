@@ -8,6 +8,7 @@ import { internalMutation } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { BUSINESS_TABLES } from "./lib/tenancy";
 import { defaultBusiness } from "./lib/business";
+import { eventsOf, verifyChain } from "./lib/wsAudit";
 
 const BATCH = 200;
 
@@ -57,5 +58,20 @@ export const tagSelfTest = internalQuery({
       out[table] = { rows: r, missing: m }; rows += r; missing += m;
     }
     return { rows, missing, ok: missing === 0, tables: out };
+  },
+});
+
+/** Wrangler Sign's audit trails: how many documents' hash chains verify (counts only). Run before and after tagging. */
+export const chainSelfTest = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    let documents = 0, intact = 0, events = 0;
+    for await (const d of ctx.db.query("wsDocuments")) {
+      documents++;
+      const evs = await eventsOf(ctx, d._id);
+      events += evs.length;
+      if ((await verifyChain(evs)).ok) intact++;
+    }
+    return { documents, intact, events, ok: intact === documents };
   },
 });
