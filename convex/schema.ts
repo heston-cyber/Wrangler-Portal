@@ -577,7 +577,7 @@ export default defineSchema({
     expiresInDays: v.optional(v.number()),
     reason: v.optional(v.string()),
     said: v.string(),                      // what Claude said Heston told it in chat
-    status: v.union(v.literal("pending"), v.literal("done"), v.literal("declined"), v.literal("expired"), v.literal("replaced"), v.literal("failed")),
+    status: v.union(v.literal("pending"), v.literal("done"), v.literal("declined"), v.literal("expired"), v.literal("replaced"), v.literal("failed"), v.literal("overtaken")),  // overtaken: Heston did it himself with the page's own buttons
     error: v.optional(v.string()),
     createdAt: v.number(),
     decidedAt: v.optional(v.number()),

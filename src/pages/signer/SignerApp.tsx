@@ -8,6 +8,7 @@ import { Modal, Spinner } from "../../ui/kit";
 import { getSession, setSession, ws, type WsResult } from "../../sign/client";
 import { openPdf, renderPage, type PdfDoc } from "../../sign/pdf";
 import { SignaturePad, type PadResult } from "../../sign/SignaturePad";
+import { isLightColour, useThemeOverride } from "../../lib/theme";
 
 type Open = WsResult & { state: string; label?: string; title?: string; from?: string; signer?: string; email?: string; message?: string; verified?: boolean; expiresAt?: number | null; before?: string[] };
 type Box = { id: string; kind: "sign" | "initials" | "name" | "date" | "title"; page: number; x: number; y: number; w: number; h: number; cover: { page: number; x: number; y: number; w: number; h: number } | null; who: "me" | "heston" | "other"; otherName: string | null; otherSigned: boolean | null };
@@ -128,6 +129,8 @@ function Signing({ token, session, onLost, onDone }: { token: string; session: s
     if (!doc?.fileUrl || pdf) return;
     openPdf(doc.fileUrl).then(setPdf, (e) => setErr(`Couldn't open the PDF: ${String(e?.message ?? e)}`));
   }, [doc?.fileUrl, pdf]);
+  // The page's text and cards follow the document's backdrop: light backdrop, light theme; dark backdrop, dark theme.
+  useThemeOverride(doc?.look ? (isLightColour(doc.look.backdrop) ? "light" : "dark") : null);
 
   if (err) return <Frame><Notice icon={<TriangleAlert size={18} />} title="Something went wrong." text={err} /></Frame>;
   if (!doc) return <Frame><p className="caption"><Spinner /> Loading the document…</p></Frame>;

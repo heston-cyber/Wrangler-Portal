@@ -248,6 +248,7 @@ async function approveCore(ctx: MutationCtx, versionId: Id<"wsVersions">, actor:
     const now = Date.now();
     await ctx.db.patch(ver._id, { approvedAt: now, lockHash, updatedAt: now });
     await ctx.db.patch(doc._id, { status: "approved", updatedAt: now });
+    await closeRequests(ctx, doc._id, ["approve"]);
     await appendEvent(ctx, doc._id, { kind: "approved", actor, versionNumber: ver.number, detail: `Version ${ver.number} approved and locked${actor === OWNER_KEY ? "" : " by Claude, on Heston's OK in chat"}. Lock hash ${lockHash}. ${ver.boxes.length} boxes, ${ver.signers.length} signers.` });
     return { lockHash };
   }
@@ -475,6 +476,7 @@ async function sendCore(ctx: MutationCtx, versionId: Id<"wsVersions">, expiresIn
     const expiresAt = now + days * 86_400_000;
     await ctx.db.patch(doc._id, { status: "sent", sentAt: now, sentVersion: ver.number, expiresAt, updatedAt: now });
     await appendEvent(ctx, doc._id, { kind: "send_settings", actor, versionNumber: ver.number, detail: `${actor === OWNER_KEY ? "" : "Sent by Claude, on Heston's OK in chat. "}Sent version ${ver.number} to ${clients.length} signer${clients.length === 1 ? "" : "s"} (${ver.signingOrder === "any" ? "any order" : "one after another"}); links work until ${new Date(expiresAt).toISOString()}.` });
+    await closeRequests(ctx, doc._id, ["approve", "send"]);
     return { sent: clients.length, expiresAt };
   }
 }
@@ -500,6 +502,7 @@ async function voidCore(ctx: MutationCtx, documentId: Id<"wsDocuments">, reason:
     const now = Date.now();
     const why = reason?.trim().slice(0, 300) || undefined;
     await ctx.db.patch(doc._id, { status: "voided", voidedAt: now, voidReason: why, updatedAt: now });
+    await closeRequests(ctx, doc._id, ["approve", "send", "cancel"]);
     for (const x of signings) {
       if (x.status === "signed") continue;
       await ctx.db.patch(x._id, { status: "closed", sessionHash: undefined, sessionExpiresAt: undefined, codeHash: undefined, codeExpiresAt: undefined });
@@ -654,9 +657,23 @@ export const requestAs = internalMutation({
   },
 });
 
+// Final test (Oct 28): Heston approved and sent WS-00005 with the page's own buttons, and Claude's approve request sat
+// there as "pending" with nothing left to confirm. Doing the thing directly now closes any request it answers
+// ("overtaken"), and a request that no longer fits the document's status is never shown as waiting.
+const FITS: Record<"approve" | "send" | "cancel", string[]> = { approve: ["draft"], send: ["approved"], cancel: ["sent"] };
+const stillFits = (what: "approve" | "send" | "cancel", status: string) => FITS[what].includes(status);
+
+async function closeRequests(ctx: MutationCtx, documentId: Id<"wsDocuments">, whats: Array<"approve" | "send" | "cancel">) {
+  const now = Date.now();
+  for (const r of await ctx.db.query("wsRequests").withIndex("by_document", (q) => q.eq("documentId", documentId).eq("status", "pending")).collect()) {
+    if (whats.includes(r.what)) await ctx.db.patch(r._id, { status: "overtaken", decidedAt: now });
+  }
+}
+
 async function pendingOf(ctx: QueryCtx, documentId: Id<"wsDocuments">) {
   const now = Date.now();
-  return (await ctx.db.query("wsRequests").withIndex("by_document", (q) => q.eq("documentId", documentId).eq("status", "pending")).collect()).filter((r) => now - r.createdAt < REQUEST_TTL);
+  const doc = await ctx.db.get(documentId);
+  return (await ctx.db.query("wsRequests").withIndex("by_document", (q) => q.eq("documentId", documentId).eq("status", "pending")).collect()).filter((r) => now - r.createdAt < REQUEST_TTL && !!doc && stillFits(r.what, doc.status));
 }
 
 export const requestsFor = query({
@@ -674,7 +691,7 @@ export const pendingRequests = query({
     const now = Date.now();
     const rows = (await ctx.db.query("wsRequests").withIndex("by_status", (q) => q.eq("status", "pending")).order("desc").take(50)).filter((r) => now - r.createdAt < REQUEST_TTL);
     const out = [];
-    for (const r of rows) { const d = await ctx.db.get(r.documentId); if (d) out.push({ _id: r._id, documentId: r.documentId, label: docLabel(d.number), title: d.title, what: r.what, createdAt: r.createdAt }); }
+    for (const r of rows) { const d = await ctx.db.get(r.documentId); if (d && stillFits(r.what, d.status)) out.push({ _id: r._id, documentId: r.documentId, label: docLabel(d.number), title: d.title, what: r.what, createdAt: r.createdAt }); }
     return out;
   },
 });
@@ -684,7 +701,9 @@ export const requestStatus = internalQuery({
   handler: async (ctx, { documentId }) => {
     const rows = await ctx.db.query("wsRequests").withIndex("by_document", (q) => q.eq("documentId", documentId)).collect();
     const now = Date.now();
-    return rows.sort((a, b) => b.createdAt - a.createdAt).slice(0, 5).map((r) => ({ what: r.what, status: r.status === "pending" && now - r.createdAt >= REQUEST_TTL ? "expired" : r.status, asked: new Date(r.createdAt).toISOString(), decided: r.decidedAt ? new Date(r.decidedAt).toISOString() : null, error: r.error ?? null }));
+    const doc = await ctx.db.get(documentId);
+    const shown = (r: (typeof rows)[number]) => r.status !== "pending" ? r.status : now - r.createdAt >= REQUEST_TTL ? "expired" : doc && !stillFits(r.what, doc.status) ? "overtaken" : "pending";
+    return rows.sort((a, b) => b.createdAt - a.createdAt).slice(0, 5).map((r) => ({ what: r.what, status: shown(r), asked: new Date(r.createdAt).toISOString(), decided: r.decidedAt ? new Date(r.decidedAt).toISOString() : null, error: r.error ?? null }));
   },
 });
 
@@ -703,6 +722,7 @@ export const decideRequest = mutation({
       await appendEvent(ctx, doc._id, { kind: "claude_request_declined", actor: OWNER_KEY, versionNumber: doc.currentVersion, detail: `Heston declined Claude's request to ${WHAT_LABEL[r.what]} this document.` });
       return { done: false };
     }
+    if (!stillFits(r.what, doc.status)) { await ctx.db.patch(r._id, { status: "overtaken", decidedAt: now }); throw new ConvexError(`Nothing to confirm: the document is already ${doc.status}.`); }
     if (doc.currentVersion !== r.versionNumber) throw new ConvexError(`The document has moved on to version ${doc.currentVersion} since Claude asked. Decline this and check it again.`);
     await appendEvent(ctx, doc._id, { kind: "claude_request_confirmed", actor: OWNER_KEY, versionNumber: doc.currentVersion, detail: `Heston confirmed on the site, signed in: ${WHAT_LABEL[r.what]} (asked by Claude).` });
     const ver = await currentVersion(ctx, doc);

@@ -172,6 +172,43 @@ describe("T-S4.2 approve, send and cancel only when Heston confirms on the site"
   });
 });
 
+describe("T-S6 final-test fixes (Oct 28)", () => {
+  test("approving or sending with the page's own buttons closes Claude's request; a stale one can't be confirmed", async () => {
+    const x = await setup();
+    await x.call("create_document", { title: "CO", pdf_base64: await contractPdf(), signers: [{ name: "Dillon Ripley", email: "dillon@example.com" }] });
+    const doc = (await x.t.run((ctx) => ctx.db.query("wsDocuments").first()))!;
+    const ver = (await x.t.run((ctx) => ctx.db.query("wsVersions").first()))!;
+    await x.call("approve_document", { document: "WS-00001", heston_ok: "send final test" });
+    const [req] = await x.me.query(api.sign.requestsFor, { documentId: doc._id });
+    expect(req.what).toBe("approve");
+    // A request left over from before this fix (still "pending" in the database) is hidden once it no longer fits.
+    await x.me.mutation(api.sign.approve, { versionId: ver._id });
+    expect(await x.me.query(api.sign.requestsFor, { documentId: doc._id })).toHaveLength(0);
+    expect(await x.me.query(api.sign.pendingRequests, {})).toHaveLength(0);
+    expect((await x.call("get_document", { document: "WS-00001" })).data.requests.map((r: any) => `${r.what}:${r.status}`)).toEqual(["approve:overtaken"]);
+    await expect(x.me.mutation(api.sign.decideRequest, { requestId: req._id, confirm: true })).rejects.toThrow(/already overtaken|Nothing to confirm/);
+    // A send request, then Heston sends himself: closed as overtaken.
+    await x.call("send_document", { document: "WS-00001", heston_ok: "send it" });
+    await x.me.mutation(api.sign.send, { versionId: ver._id });
+    await x.flush();
+    const rows = await x.t.run((ctx) => ctx.db.query("wsRequests").collect());
+    expect(rows.map((r) => `${r.what}:${r.status}`).sort()).toEqual(["approve:overtaken", "send:overtaken"]);
+  });
+
+  test("a stale pending row from before the fix is shown as overtaken and refused", async () => {
+    const x = await setup();
+    await x.call("create_document", { title: "CO", pdf_base64: await contractPdf(), signers: [{ name: "Dillon Ripley", email: "dillon@example.com" }] });
+    const doc = (await x.t.run((ctx) => ctx.db.query("wsDocuments").first()))!;
+    await x.call("approve_document", { document: "WS-00001", heston_ok: "approve" });
+    const [req] = await x.me.query(api.sign.requestsFor, { documentId: doc._id });
+    // As WS-00005 was: approved behind the request's back, the row still pending.
+    await x.t.run(async (ctx) => { await ctx.db.patch(doc._id, { status: "approved" }); });
+    expect(await x.me.query(api.sign.requestsFor, { documentId: doc._id })).toHaveLength(0);
+    expect((await x.call("get_document", { document: "WS-00001" })).data.requests[0].status).toBe("overtaken");
+    await expect(x.me.mutation(api.sign.decideRequest, { requestId: req._id, confirm: true })).rejects.toThrow(/Nothing to confirm/);
+  });
+});
+
 describe("T-S4.3 reading, and keys", () => {
   test("status and the signed copy read back; missing, wrong, revoked and Review keys are refused", async () => {
     const x = await setup();

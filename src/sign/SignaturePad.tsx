@@ -2,26 +2,47 @@
 // Produces two transparent PNGs, cropped to the ink, in signing-ink navy.
 import { useEffect, useRef, useState } from "react";
 import { getStroke } from "perfect-freehand";
-import "@fontsource/great-vibes/400.css";
+import "@fontsource/la-belle-aurore/400.css";
 
 export const INK = "#121e5a";
-const FONT = '"Great Vibes", cursive';
+// Oct 28 (final test): Heston picked La Belle Aurore for every typed signature and initials (was Great Vibes).
+const FONT = '"La Belle Aurore", cursive';
 
 export type PadResult = { method: "typed" | "drawn"; signature: Blob; initials: Blob; signatureUrl: string; initialsUrl: string };
 
-export const initialsOf = (name: string) => name.trim().split(/\s+/).filter(Boolean).map((w) => w[0]!.toUpperCase()).slice(0, 3).join("");
+// Only words that start with a letter count, so "Heston Hill (Client 1)" gives "HH", not "HH(" (final test, Oct 28).
+export const initialsOf = (name: string) => name.trim().split(/\s+/).filter((w) => /^\p{L}/u.test(w)).map((w) => w[0]!.toUpperCase()).slice(0, 3).join("");
 
 async function typedPng(text: string, px: number): Promise<HTMLCanvasElement> {
   await document.fonts.load(`${px}px ${FONT}`);
   const c = document.createElement("canvas");
   const g = c.getContext("2d")!;
   g.font = `${px}px ${FONT}`;
-  const w = Math.ceil(g.measureText(text).width + px * 0.8);
-  c.width = Math.max(10, w); c.height = Math.ceil(px * 1.6);
+  // Sized from the ink's measured bounds (La Belle Aurore's g and y reach well below a fixed box), with a margin.
+  const m = g.measureText(text);
+  const pad = Math.ceil(px * 0.3);
+  const left = Math.max(0, Math.ceil(m.actualBoundingBoxLeft || 0));
+  const asc = Math.ceil(Math.max(m.actualBoundingBoxAscent || 0, px * 0.8));
+  const desc = Math.ceil(Math.max(m.actualBoundingBoxDescent || 0, px * 0.3));
+  c.width = Math.max(10, Math.ceil(Math.max(m.width, (m.actualBoundingBoxRight || 0)) + left + pad * 2));
+  c.height = asc + desc + pad * 2;
   const g2 = c.getContext("2d")!;
   g2.font = `${px}px ${FONT}`; g2.fillStyle = INK; g2.textBaseline = "alphabetic";
-  g2.fillText(text, px * 0.3, px * 1.1);
+  g2.fillText(text, pad + left, pad + asc);
   return c;
+}
+
+// The server refuses images over 3000 × 1200 (convex/lib/pngCheck.ts); a long typed name in a wide font can pass that,
+// so it's scaled down to fit first.
+function fit(src: HTMLCanvasElement, maxW = 2800, maxH = 1100): HTMLCanvasElement {
+  const k = Math.min(1, maxW / src.width, maxH / src.height);
+  if (k === 1) return src;
+  const out = document.createElement("canvas");
+  out.width = Math.max(1, Math.floor(src.width * k)); out.height = Math.max(1, Math.floor(src.height * k));
+  const g = out.getContext("2d")!;
+  g.imageSmoothingQuality = "high";
+  g.drawImage(src, 0, 0, out.width, out.height);
+  return out;
 }
 
 // Crop a canvas to its ink, with a little padding.
@@ -103,7 +124,7 @@ export function SignaturePad({ name, onResult }: { name: string; onResult: (r: P
         let sig: HTMLCanvasElement, ini: HTMLCanvasElement;
         if (method === "typed") {
           if (!name.trim() || !initials.trim()) { onResult(null); return; }
-          sig = trim(await typedPng(name.trim(), 120)); ini = trim(await typedPng(initials.trim(), 110));
+          sig = fit(trim(await typedPng(name.trim(), 120))); ini = fit(trim(await typedPng(initials.trim(), 110)));
         } else {
           if (!hasInk(sigCanvas.current) || !hasInk(iniCanvas.current)) { onResult(null); return; }
           sig = trim(sigCanvas.current!); ini = trim(iniCanvas.current!);
