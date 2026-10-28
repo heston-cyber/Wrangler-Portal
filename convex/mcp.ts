@@ -9,6 +9,7 @@ import { sha256Hex } from "./connector";
 import { frameTc, isValidTc, nominal, tcToFrames } from "./lib/frames";
 import type { TranscriptFile } from "./lib/transcript";
 import { fail, ok, servePost, serveOther, text, type Content, type Json, type McpConfig, type Tool, type ToolResult } from "./lib/mcpServer";
+import { SITE_SLASH } from "./lib/site";
 
 const SERVER_INFO = { name: "wrangler-review", title: "Wrangler Review", version: "1.0.0" };
 
@@ -122,7 +123,8 @@ function bytesToBase64(bytes: Uint8Array) {
 
 async function fetchImage(url: string): Promise<Content | null> {
   try {
-    const res = await fetch(url);
+    // Bunny's stills zone only answers requests from the site (hotlink protection), like every other backend fetch.
+    const res = await fetch(url, { headers: { Referer: SITE_SLASH() } });
     if (!res.ok) return null;
     const buf = new Uint8Array(await res.arrayBuffer());
     if (!buf.length || buf.length > 4_000_000) return null;
