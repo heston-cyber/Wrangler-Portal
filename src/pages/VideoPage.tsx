@@ -187,15 +187,18 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const player = useFramePlayer(src, fps, version?.frameCountExact ? version.frameCount : null, scrubCopies);
   // Phones (Oct 28, Heston): the keyboard covered the note box. While the box has focus on a narrow screen, the pinned
   // picture lets go (CSS .typing) and the box is scrolled into the part of the screen the keyboard leaves.
+  // Only when the keyboard opens (the viewport shrinks), never on the viewer's own scrolling: a scroll listener here
+  // fought the user and the page couldn't be scrolled back up (Oct 28, Heston's phone).
   const [typing, setTyping] = useState(false);
   useEffect(() => {
     if (!typing || !narrow) return;
     const vv = window.visualViewport;
-    const show = () => textRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-    const t1 = setTimeout(show, 120), t2 = setTimeout(show, 450);
-    vv?.addEventListener("resize", show);
-    vv?.addEventListener("scroll", show);
-    return () => { clearTimeout(t1); clearTimeout(t2); vv?.removeEventListener("resize", show); vv?.removeEventListener("scroll", show); };
+    let lastH = vv?.height ?? window.innerHeight;
+    const show = () => { if (document.activeElement === textRef.current) textRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }); };
+    const onResize = () => { const h = vv?.height ?? window.innerHeight; if (h < lastH - 80) show(); lastH = h; };
+    const t1 = setTimeout(show, 150), t2 = setTimeout(show, 500);
+    vv?.addEventListener("resize", onResize);
+    return () => { clearTimeout(t1); clearTimeout(t2); vv?.removeEventListener("resize", onResize); };
   }, [typing, narrow]);
   // C9: clients and guests report how much they watch (owners don't).
   useWatchBeat(version && ready ? version._id : null, player.videoRef, viewer.share ?? undefined, !owner);
