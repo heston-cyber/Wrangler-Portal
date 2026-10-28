@@ -1,0 +1,30 @@
+name: Tests
+
+# The unit tests, the backend type check and the site build, on every push and pull request.
+# Deploy calls this first (workflow_call), so nothing goes live unless every test passes (Phase 0, Oct 28).
+on:
+  push:
+    branches-ignore: [main]   # main runs it through Deploy, so it isn't run twice
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Unit tests
+        run: npx vitest run
+      - name: Type check (backend)
+        run: npx tsc --noEmit -p convex
+      - name: Type check and build (site)
+        run: npm run build
