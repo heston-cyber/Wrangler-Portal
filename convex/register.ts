@@ -1,7 +1,7 @@
 // The video register (Phase R2, Oct 22): the Register page, New video, file names for the next render,
 // and the read-only feed the Google Sheet copy pulls every 10 minutes.
-import { action, httpAction, internalQuery, query } from "./_generated/server";
-import { internalMutation, mutation } from "./lib/functions";
+import { action, httpAction } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";

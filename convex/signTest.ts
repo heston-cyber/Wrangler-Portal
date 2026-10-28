@@ -4,7 +4,8 @@
 // forms) covers files under it; an unsigned, an expired and a tampered link are refused. Statuses only.
 // Env: BUNNY_SIGN_TEST_KEY (the test zone's token key, pasted into the Convex dashboard by Heston),
 // BUNNY_SIGN_TEST_CDN (e.g. wranglerreviewsigntest.b-cdn.net).
-import { internalAction, internalQuery } from "./_generated/server";
+import { internalAction } from "./_generated/server";
+import { internalQuery } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { signBunnyUrl, streamFolder } from "./lib/bunnySign";
 import { reviewStorage } from "./lib/reviewStorage";

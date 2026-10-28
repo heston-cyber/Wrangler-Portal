@@ -1,8 +1,8 @@
 // Phase R2b live test (Oct 22): a throwaway "Approve final test" video with four versions of the public lab clip,
 // in the "Tests" project, NOT numbered (so no register number is used up). Run from CI; returns counts, numbers
 // and Bunny status codes only. Removed with removeFinalTest when the test is done.
-import { internalAction, internalQuery } from "./_generated/server";
-import { internalMutation } from "./lib/functions";
+import { internalAction } from "./_generated/server";
+import { internalMutation, internalQuery } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";

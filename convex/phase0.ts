@@ -1,5 +1,4 @@
-import { query } from "./_generated/server";
-import { mutation } from "./lib/functions";
+import { mutation, query } from "./lib/functions";
 import { v } from "convex/values";
 import { requireMe } from "./lib/access";
 

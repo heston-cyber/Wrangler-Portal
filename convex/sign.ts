@@ -4,8 +4,8 @@
 // signers, then approves. Approval locks that version: its file hash, boxes, signers, signing order and invoice are
 // covered by one lock hash. Any change after that is a new version; earlier versions are kept as they were.
 // Sending, signing and completion are Phases S2–S3.
-import { action, internalAction, internalQuery, query, type ActionCtx } from "./_generated/server";
-import { internalMutation, mutation } from "./lib/functions";
+import { action, internalAction, type ActionCtx } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -280,7 +280,7 @@ export const revise = mutation({
 export const replaceFile = action({
   args: { documentId: v.id("wsDocuments"), storageId: v.id("_storage"), fileName: v.string() },
   handler: async (ctx, { documentId, storageId, fileName }): Promise<{ versionNumber: number }> => {
-    await ctx.runQuery(internal.users.assertAllowed, {});
+    await ctx.runQuery(internal.users.assertAllowed, { ids: [documentId] });
     const pdf = await readPdf(ctx, storageId);
     return ctx.runMutation(internal.sign.insertReplacement, { documentId, storageId, fileName: fileName.slice(0, 200), sha: pdf.sha, bytes: pdf.bytes.length, pages: pdf.pages });
   },
@@ -562,7 +562,7 @@ export const currentVersionId = internalQuery({
 export const preview = action({
   args: { versionId: v.id("wsVersions") },
   handler: async (ctx, { versionId }): Promise<{ url: string; fileName: string }> => {
-    await ctx.runQuery(internal.users.assertAllowed, {});
+    await ctx.runQuery(internal.users.assertAllowed, { ids: [versionId] });
     return buildPreview(ctx, versionId);
   },
 });

@@ -9,7 +9,8 @@
 // What a preview may show: a link that opens for anyone (no passcode, not invited-only) shows the frame. A passcode
 // or invited link shows the title and the generic Wrangler card, never a frame — the link may be forwarded before
 // the passcode is. Off, expired and unknown links show the generic card with no title.
-import { httpAction, internalQuery } from "./_generated/server";
+import { httpAction } from "./_generated/server";
+import { internalQuery } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";

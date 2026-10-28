@@ -1,7 +1,7 @@
 // The Claude connector's data side: connector keys, and the reads/writes its tools use.
 // Keys are stored only as SHA-256 hashes; the full key is shown once, on the Settings page.
-import { action, internalQuery, query } from "./_generated/server";
-import { internalMutation, mutation } from "./lib/functions";
+import { action } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import type { QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";

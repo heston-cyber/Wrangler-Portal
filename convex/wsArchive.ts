@@ -3,8 +3,8 @@
 // Wrangler Review's app can't see it. Every completed document lands there as
 //   <year>/WS-00002 Title (signed).pdf   and   <year>/WS-00002 Title (audit).json
 // Each upload is read back and hashed, so "archived" means the copy in Dropbox matches the signed copy byte for byte.
-import { action, httpAction, internalAction, internalQuery, query, type ActionCtx } from "./_generated/server";
-import { internalMutation } from "./lib/functions";
+import { action, httpAction, internalAction, type ActionCtx } from "./_generated/server";
+import { internalMutation, internalQuery, query } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";

@@ -1,7 +1,6 @@
 // Settings that follow Heston's account to every device (R2b): which details show next to videos, and in what
 // order; and whether the Approve final button is on. Kept per user.
-import { query } from "./_generated/server";
-import { mutation } from "./lib/functions";
+import { mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { requireMe, viewerOf } from "./lib/access";
 

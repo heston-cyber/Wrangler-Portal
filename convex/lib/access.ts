@@ -24,7 +24,11 @@ export async function viewerOf(ctx: QueryCtx | MutationCtx): Promise<Viewer> {
   const email = (user?.email ?? "").toLowerCase();
   if (!user || !email) return { kind: "nobody" };
   const name = (user.name as string | undefined) || fallbackName(email);
-  // Owner by the allow list (the source of truth), or by a role stamped at sign-up while still on the list.
+  // Owner (Phase 0.5d step 3): an active owner membership in a business, or, for Wrangler, the ALLOWED_EMAILS list
+  // (kept as the bootstrap and backup). Owner memberships are only ever made by internal code.
+  const ownerM = (await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", email)).collect())
+    .filter((m) => !m.revokedAt && m.role === "owner").sort((a, b) => a.createdAt - b.createdAt)[0];
+  if (ownerM) return { kind: "owner", userId, name, email, businessId: ownerM.businessId };
   if (allowedEmails().includes(email)) return { kind: "owner", userId, name, email, businessId: await businessFor(ctx, email, "owner") };
   if (user.role === "client") return { kind: "client", userId, name, email, businessId: await businessFor(ctx, email, "client") };
   return { kind: "nobody" };

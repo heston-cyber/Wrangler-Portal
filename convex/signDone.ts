@@ -9,8 +9,8 @@
 //   archive  the signed copy and the trail as JSON into Dropbox › Apps/Wrangler Sign/<year>/ (convex/wsArchive.ts)
 // Plus the public check: sign.wranglerportal.com/verify hashes a PDF in the browser and asks here whether that hash is
 // a completed Wrangler Sign document (the file itself never leaves the person's computer).
-import { action, httpAction, internalAction, internalQuery, type ActionCtx } from "./_generated/server";
-import { internalMutation, mutation } from "./lib/functions";
+import { action, httpAction, internalAction, type ActionCtx } from "./_generated/server";
+import { internalMutation, internalQuery, mutation } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -290,7 +290,7 @@ export async function auditJson(ctx: ActionCtx, documentId: Id<"wsDocuments">): 
 export const downloadAudit = action({
   args: { documentId: v.id("wsDocuments") },
   handler: async (ctx, { documentId }): Promise<{ json: string; name: string }> => {
-    await ctx.runQuery(internal.users.assertAllowed, {});
+    await ctx.runQuery(internal.users.assertAllowed, { ids: [documentId] });
     try { const r = await auditJson(ctx, documentId); return { json: r.json, name: r.name }; }
     catch (e) { throw new ConvexError(errText(e)); }
   },

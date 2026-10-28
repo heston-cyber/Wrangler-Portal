@@ -13,8 +13,8 @@
 //   sign      the final, deliberate Sign                                                    (needs the session)
 // Nothing here trusts the page: every rule (consent first, every initial, the signing order, expiry, a voided or
 // replaced document) is checked again on the server, and every step is an event in the hash-chained trail.
-import { httpAction, internalAction, internalQuery, type MutationCtx } from "./_generated/server";
-import { internalMutation } from "./lib/functions";
+import { httpAction, internalAction, type MutationCtx } from "./_generated/server";
+import { internalMutation, internalQuery } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";

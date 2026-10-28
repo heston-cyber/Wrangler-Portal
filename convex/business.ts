@@ -1,7 +1,6 @@
 // Wrangler Portal, Phase 0.5d step 1 (Oct 28). Internal only: run by hand through the "Convex run" workflow.
 // Its output is counts only (the repo and its CI logs are public).
-import { internalQuery } from "./_generated/server";
-import { internalMutation } from "./lib/functions";
+import { internalMutation, internalQuery } from "./lib/functions";
 import { ensureDefaultBusiness, ensureMembership } from "./lib/business";
 import { allowedEmails } from "./lib/owners";
 

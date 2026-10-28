@@ -1,6 +1,7 @@
 // Diagnostics for the CI log (public): does every link the player may use for a video answer? Statuses only — no
 // names, no URLs, no tokens.   npx convex run diag:media '{"number": 2}'
-import { internalAction, internalQuery } from "./_generated/server";
+import { internalAction } from "./_generated/server";
+import { internalQuery } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { versionMedia } from "./lib/media";

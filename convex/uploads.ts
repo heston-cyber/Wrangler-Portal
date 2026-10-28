@@ -1,6 +1,7 @@
 // Uploading a new version: the browser sends the file straight to Bunny (resumable TUS upload);
 // the backend creates the Bunny video, signs the upload, then polls Bunny until it's converted.
-import { action, internalAction, internalQuery } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
+import { internalQuery } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
 import { bunnyCall, bunnyEnv, getBunnyVideo, type BunnyVideo } from "./bunny";
@@ -23,7 +24,7 @@ const MAX_POLLS = 720; // 2 hours
 export const startUpload = action({
   args: { videoId: v.id("videos"), fileName: v.string(), fileSize: v.optional(v.number()) },
   handler: async (ctx, a): Promise<{ versionId: Id<"versions">; number: number; libraryId: string; videoId: string; expire: number; signature: string; endpoint: string }> => {
-    const who: { name: string } = await ctx.runQuery(internal.users.assertAllowed, {});
+    const who: { name: string } = await ctx.runQuery(internal.users.assertAllowed, { ids: [a.videoId] });
     const { lib, key } = bunnyEnv();
     const title = a.fileName.slice(0, 200);
     const created = (await bunnyCall(`/library/${lib}/videos`, { method: "POST", body: JSON.stringify({ title }) })) as { guid?: string };
@@ -41,7 +42,7 @@ export const startUpload = action({
 export const uploadFinished = action({
   args: { versionId: v.id("versions") },
   handler: async (ctx, { versionId }) => {
-    await ctx.runQuery(internal.users.assertAllowed, {});
+    await ctx.runQuery(internal.users.assertAllowed, { ids: [versionId] });
     await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { status: "processing", pollCount: 0 } });
     await ctx.scheduler.runAfter(2000, internal.uploads.poll, { versionId });
   },
@@ -50,7 +51,7 @@ export const uploadFinished = action({
 export const uploadFailed = action({
   args: { versionId: v.id("versions"), error: v.string() },
   handler: async (ctx, { versionId, error }) => {
-    await ctx.runQuery(internal.users.assertAllowed, {});
+    await ctx.runQuery(internal.users.assertAllowed, { ids: [versionId] });
     await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { status: "failed", error: error.slice(0, 300) } });
   },
 });

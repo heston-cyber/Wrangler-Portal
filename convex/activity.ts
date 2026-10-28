@@ -1,7 +1,7 @@
 // The Activity page: new videos, new versions and notes, newest first.
 // Notes left in one sitting (same person, same version, no gap over 3 hours) are one entry.
-import { query } from "./_generated/server";
 import { v } from "convex/values";
+import { query } from "./lib/functions";
 import { requireMe } from "./lib/access";
 import type { Doc, Id } from "./_generated/dataModel";
 import { signedThumbUrl } from "./lib/media";

@@ -3,8 +3,8 @@
 // Heston's OK). Output is counts only: the repo and its CI logs are public. Safe to run again: rows that already
 // have a business are left alone, and nothing else on a row changes.
 import { v } from "convex/values";
-import { internalAction, internalQuery } from "./_generated/server";
-import { internalMutation } from "./lib/functions";
+import { internalAction } from "./_generated/server";
+import { internalMutation, internalQuery } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { BUSINESS_TABLES } from "./lib/tenancy";
 import { defaultBusiness } from "./lib/business";

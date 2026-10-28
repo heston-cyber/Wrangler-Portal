@@ -1,8 +1,8 @@
 // Shares (client side C2, Oct 23): the Share button on a client, a project or a video makes a link that lets
 // someone outside see it. Owner functions make and manage shares; `open` and `touch` are what a share link
 // calls (anyone, gated by lib/shareAccess). Share links look like review.wranglerportal.com/s/<token>.
-import { internalAction, internalQuery, query } from "./_generated/server";
-import { internalMutation, mutation } from "./lib/functions";
+import { internalAction } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
