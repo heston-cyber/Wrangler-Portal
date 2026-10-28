@@ -4,7 +4,7 @@ import { internalAction } from "./_generated/server";
 import { internalQuery } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
-import { versionMedia } from "./lib/media";
+import { signStillUrl, versionMedia } from "./lib/media";
 import { videoByNumber } from "./lib/register";
 import { SITE_SLASH } from "./lib/site";
 
@@ -39,5 +39,30 @@ export const media = internalAction({
       out.push({ version: r.number, status: r.status, source: r.source, size: r.size, streamOnly: r.streamOnly, mp4Heights: r.mp4Heights, hls: await head(r.media.hls), file: await head(r.media.file), scrub: await head(r.media.scrub?.mp4 ?? null), thumb: await head(r.media.thumb), mp4 });
     }
     return out;
+  },
+});
+
+// Oct 28: do saved note stills answer from the backend (no referrer), and with the portal's referrers? Statuses only.
+export const stillsSelfTest = internalAction({
+  args: {},
+  handler: async (ctx): Promise<Record<string, unknown>> => {
+    const url: string | null = await ctx.runQuery(internal.diag.oneStillUrl, {});
+    if (!url) return { found: false };
+    const st = async (headers: Record<string, string>) => { try { const r = await fetch(url, { headers }); return r.status; } catch { return "error"; } };
+    return {
+      found: true,
+      noReferrer: await st({}),
+      appReferrer: await st({ Referer: "https://app.wranglerportal.com/" }),
+      reviewReferrer: await st({ Referer: "https://review.wranglerportal.com/" }),
+      unsigned: await (async () => { try { const u = new URL(url); u.search = ""; return (await fetch(u.toString())).status; } catch { return "error"; } })(),
+    };
+  },
+});
+
+export const oneStillUrl = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<string | null> => {
+    for await (const n of ctx.db.query("notes")) if (n.still) return (await signStillUrl(n.still)) ?? null;
+    return null;
   },
 });
