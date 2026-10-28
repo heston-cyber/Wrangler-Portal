@@ -194,7 +194,12 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     if (!typing || !narrow) return;
     const vv = window.visualViewport;
     let lastH = vv?.height ?? window.innerHeight;
-    const show = () => { if (document.activeElement === textRef.current) textRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }); };
+    // Heston (Oct 28): put the timeline at the very top, so the tags, ruler, waveform and the note box all sit above the keyboard.
+    const show = () => {
+      if (document.activeElement !== textRef.current) return;
+      const timeline = rootRef.current?.querySelector<HTMLElement>(".transport");
+      (timeline ?? textRef.current)?.scrollIntoView({ block: "start", behavior: "smooth" });
+    };
     const onResize = () => { const h = vv?.height ?? window.innerHeight; if (h < lastH - 80) show(); lastH = h; };
     const t1 = setTimeout(show, 150), t2 = setTimeout(show, 500);
     vv?.addEventListener("resize", onResize);
