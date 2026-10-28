@@ -2,11 +2,11 @@
 // Produces two transparent PNGs, cropped to the ink, in signing-ink navy.
 import { useEffect, useRef, useState } from "react";
 import { getStroke } from "perfect-freehand";
-import "@fontsource/la-belle-aurore/400.css";
+import "@fontsource/homemade-apple/400.css";
 
 export const INK = "#121e5a";
-// Oct 28 (final test): Heston picked La Belle Aurore for every typed signature and initials (was Great Vibes).
-const FONT = '"La Belle Aurore", cursive';
+// Oct 28 (final test): Heston picked Homemade Apple for every typed signature and initials (was Great Vibes).
+const FONT = '"Homemade Apple", cursive';
 
 export type PadResult = { method: "typed" | "drawn"; signature: Blob; initials: Blob; signatureUrl: string; initialsUrl: string };
 
@@ -18,7 +18,7 @@ async function typedPng(text: string, px: number): Promise<HTMLCanvasElement> {
   const c = document.createElement("canvas");
   const g = c.getContext("2d")!;
   g.font = `${px}px ${FONT}`;
-  // Sized from the ink's measured bounds (La Belle Aurore's g and y reach well below a fixed box), with a margin.
+  // Sized from the ink's measured bounds (the font's ascenders and descenders reach well below a fixed box), with a margin.
   const m = g.measureText(text);
   const pad = Math.ceil(px * 0.3);
   const left = Math.max(0, Math.ceil(m.actualBoundingBoxLeft || 0));

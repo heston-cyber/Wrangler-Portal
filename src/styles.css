@@ -1048,7 +1048,7 @@ code.mono, .input.mono, .chip.num, .fname code { font-family: ui-monospace, "SF 
 .ws-iniimg { max-height: 56px; }
 .ws-pad { display: grid; gap: 12px; }
 .ws-typed { display: grid; gap: 10px; }
-.ws-sigpreview { background: #fff; color: #121e5a; border-radius: var(--radius-md); padding: 10px 20px; font-size: clamp(40px, 9vw, 64px); line-height: 1.5; min-height: 96px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ws-sigpreview { background: #fff; color: #121e5a; border-radius: var(--radius-md); padding: 10px 20px; font-size: clamp(24px, 6vw, 44px); line-height: 1.9; /* Homemade Apple is wide and tall (Oct 28) */ min-height: 96px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .ws-inipreview { background: #fff; color: #121e5a; border-radius: var(--radius-md); padding: 4px 20px; font-size: 44px; line-height: 1.5; width: max-content; min-width: 120px; }
 .ws-faint { color: #b8b5ae; }
 .ws-drawn { display: grid; gap: 10px; }
