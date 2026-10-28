@@ -673,6 +673,9 @@ button.tcpill:hover, .composer .target:hover { background: var(--surface-inset);
 @media (max-width: 820px) {
   .stagecol { display: contents; }
   .pinned { display: block; position: sticky; top: 48px; z-index: 15; background: var(--surface-band); padding: 8px 8px 6px; }
+  /* While typing a note the picture isn't pinned, so the note box can scroll above the keyboard (Oct 28). */
+  .review.typing .pinned { position: static; }
+  .review.typing .topbar { position: static; }
   /* play bar on one row (play, timecode, frame | speed, view), the timeline underneath */
   .transport.rect { grid-template-columns: minmax(0, 1fr); row-gap: 10px; padding: 8px 10px 10px; margin-top: 6px; border-radius: 18px; }
   .transport .thead { flex-wrap: nowrap; gap: 8px; }

@@ -185,6 +185,18 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     return { urls: hs.map((h) => version.media.mp4[h]).filter(Boolean), maxBytes };
   }, [version, ready, narrow, isFile, scrubMp4]);
   const player = useFramePlayer(src, fps, version?.frameCountExact ? version.frameCount : null, scrubCopies);
+  // Phones (Oct 28, Heston): the keyboard covered the note box. While the box has focus on a narrow screen, the pinned
+  // picture lets go (CSS .typing) and the box is scrolled into the part of the screen the keyboard leaves.
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    if (!typing || !narrow) return;
+    const vv = window.visualViewport;
+    const show = () => textRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    const t1 = setTimeout(show, 120), t2 = setTimeout(show, 450);
+    vv?.addEventListener("resize", show);
+    vv?.addEventListener("scroll", show);
+    return () => { clearTimeout(t1); clearTimeout(t2); vv?.removeEventListener("resize", show); vv?.removeEventListener("scroll", show); };
+  }, [typing, narrow]);
   // C9: clients and guests report how much they watch (owners don't).
   useWatchBeat(version && ready ? version._id : null, player.videoRef, viewer.share ?? undefined, !owner);
   const frameCount = player.frameCount ?? version?.frameCount ?? 0;
@@ -648,7 +660,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   );
 
   return (
-    <div className={`review${fs ? " fs" : ""}`} ref={rootRef}>
+    <div className={`review${fs ? " fs" : ""}${typing && narrow ? " typing" : ""}`} ref={rootRef}>
       <TopBar right={
         <>
           {owner && <ViewsChip videoId={data._id} onOpen={() => setDialog("views")} />}
@@ -845,7 +857,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                   </div>
                 )}
                 <div className="cinput">
-                  <textarea ref={textRef} rows={1} value={text} onChange={(e) => setText(e.target.value)} onFocus={() => player.pause()}
+                  <textarea ref={textRef} rows={1} value={text} onChange={(e) => setText(e.target.value)} onFocus={() => { player.pause(); setTyping(true); }} onBlur={() => setTyping(false)}
                     placeholder={drawing ? "Add words to your drawing…" : "Leave a note…"} aria-label="Note"
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void post(); } }} />
                   <button className="send" onClick={() => void post()} disabled={posting || voice.recording || !!voiceBusy || (!text.trim() && !shapes.length && !voiceDraft)} aria-label="Add note" title="Add note (Enter)"><ArrowUp size={18} /></button>
