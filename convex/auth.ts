@@ -5,17 +5,14 @@ import { ConvexError } from "convex/values";
 import { sendEmail, sixDigits } from "./lib/email";
 import type { MutationCtx } from "./_generated/server";
 import { SITE_HOST } from "./lib/site";
+import { allowedEmails } from "./lib/owners";
+import { ensureDefaultBusiness, ensureMembership } from "./lib/business";
 
 // Owners: the emails in ALLOWED_EMAILS (comma-separated Convex env var). Everyone else needs an invite (C1, Oct 23).
 /** Names a client may not use: the owners' names and email local parts ("heston"), lower-case. Security review, Oct 23. */
 export const ownerNames = () => new Set([...allowedEmails().map((e) => e.split("@")[0]), ...(process.env.OWNER_NAMES || "Heston,Heston Hill,Wrangler,Wrangler Productions,Claude").split(",")].map((s) => s.trim().toLowerCase()).filter(Boolean));
 
-export function allowedEmails(): string[] {
-  return (process.env.ALLOWED_EMAILS ?? "")
-    .split(",")
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
-}
+export { allowedEmails };
 
 const CODE_MINUTES = 10;
 
@@ -86,6 +83,10 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         emailVerificationTime: verified ? Date.now() : undefined, lastSignInAt: Date.now(),
       });
       if (invite) await ctx.db.patch(invite._id, { acceptedAt: Date.now(), userId });
+      // Phase 0.5d step 1: the new account's membership in the (default) business.
+      const { businessId } = await ensureDefaultBusiness(ctx);
+      if (!owner) await ensureMembership(ctx, businessId, email, "client", userId);
+      else await ensureMembership(ctx, businessId, email, "owner", userId);
       return userId;
     },
   },

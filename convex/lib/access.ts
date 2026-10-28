@@ -7,10 +7,13 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
 import type { QueryCtx, MutationCtx, ActionCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
-import { allowedEmails } from "../auth";
+import { allowedEmails } from "./owners";
+import { businessFor } from "./business";
 
 export type Me = { userId: Id<"users">; name: string; email: string };
-export type Viewer = { kind: "owner" | "client"; userId: Id<"users">; name: string; email: string } | { kind: "nobody" };
+// businessId (Phase 0.5d step 1): the business they work in or are a client of. Optional until step 3 makes every
+// function use it; null only before the default business has been made.
+export type Viewer = { kind: "owner" | "client"; userId: Id<"users">; name: string; email: string; businessId: Id<"businesses"> | null } | { kind: "nobody" };
 
 const fallbackName = (email: string) => { const local = email.split("@")[0] ?? ""; return local ? local[0].toUpperCase() + local.slice(1) : "Someone"; };
 
@@ -22,8 +25,8 @@ export async function viewerOf(ctx: QueryCtx | MutationCtx): Promise<Viewer> {
   if (!user || !email) return { kind: "nobody" };
   const name = (user.name as string | undefined) || fallbackName(email);
   // Owner by the allow list (the source of truth), or by a role stamped at sign-up while still on the list.
-  if (allowedEmails().includes(email)) return { kind: "owner", userId, name, email };
-  if (user.role === "client") return { kind: "client", userId, name, email };
+  if (allowedEmails().includes(email)) return { kind: "owner", userId, name, email, businessId: await businessFor(ctx, email, "owner") };
+  if (user.role === "client") return { kind: "client", userId, name, email, businessId: await businessFor(ctx, email, "client") };
   return { kind: "nobody" };
 }
 

@@ -34,8 +34,9 @@ jobs:
           FN: ${{ inputs.fn }}
           ARGS: ${{ inputs.args }}
         run: |
-          if ! [[ "$FN" =~ ^[A-Za-z0-9_]+:([A-Za-z0-9_]*[sS]elf[tT]est)$ || "$FN" =~ ^wsS0:[A-Za-z0-9_]+$ ]]; then
-            echo "Not allowed: $FN (only *:selfTest-style functions and wsS0:* run here)"; exit 1
+          # Phase 0.5d (Oct 28): business:bootstrap too (idempotent; returns counts only).
+          if ! [[ "$FN" =~ ^[A-Za-z0-9_]+:([A-Za-z0-9_]*[sS]elf[tT]est)$ || "$FN" =~ ^wsS0:[A-Za-z0-9_]+$ || "$FN" == "business:bootstrap" ]]; then
+            echo "Not allowed: $FN (only *:selfTest-style functions, wsS0:* and business:bootstrap run here)"; exit 1
           fi
           if ! printf '%s' "$ARGS" | jq -e 'type == "object"' > /dev/null; then echo "args must be a JSON object"; exit 1; fi
           export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7C/|}"

@@ -87,6 +87,10 @@ import type * as wsS0 from "../wsS0.js";
 import type * as lib_wsAudit from "../lib/wsAudit.js";
 import type * as lib_wsLayout from "../lib/wsLayout.js";
 import type * as lib_wsPdf from "../lib/wsPdf.js";
+import type * as business from "../business.js";
+import type * as lib_business from "../lib/business.js";
+import type * as lib_owners from "../lib/owners.js";
+import type * as lib_site from "../lib/site.js";
 
 import type {
   ApiFromModules,
@@ -148,6 +152,10 @@ declare const fullApi: ApiFromModules<{
   transcripts: typeof transcripts;
   stillsDb: typeof stillsDb;
   uploads: typeof uploads;
+  business: typeof business;
+  "lib/business": typeof lib_business;
+  "lib/owners": typeof lib_owners;
+  "lib/site": typeof lib_site;
   users: typeof users;
   views: typeof views;
   waveform: typeof waveform;

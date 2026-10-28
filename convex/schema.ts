@@ -608,4 +608,23 @@ export default defineSchema({
     results: v.any(),
     misses: v.any(),
   }),
+
+  // Wrangler Portal, Phase 0.5d step 1 (Oct 28): more than one business. Wrangler Productions is business #1
+  // (slug "wrangler"). A membership ties a person (by email; their account once they have one) to a business with a
+  // role. Step 1 only adds these; nothing reads a business yet except the access helpers, which pass it along.
+  businesses: defineTable({
+    slug: v.string(),               // short, unique, lower-case ("wrangler")
+    name: v.string(),               // "Wrangler Productions"
+    legalName: v.optional(v.string()), // "Wrangler Productions, a DBA of Hill Creative LLC"
+    createdAt: v.number(),
+  }).index("by_slug", ["slug"]),
+
+  memberships: defineTable({
+    businessId: v.id("businesses"),
+    email: v.string(),              // lower-case
+    userId: v.optional(v.id("users")),
+    role: v.union(v.literal("owner"), v.literal("client")),
+    createdAt: v.number(),
+    revokedAt: v.optional(v.number()),
+  }).index("by_email", ["email"]).index("by_business_email", ["businessId", "email"]).index("by_user", ["userId"]),
 });
