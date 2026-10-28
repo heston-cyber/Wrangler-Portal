@@ -7,7 +7,7 @@ name: Cloudflare Worker
 on:
   push:
     branches: [main]
-    paths: ["infra/cloudflare/**", "infra/cloudflare-sign/**", ".github/workflows/cloudflare.yml"]
+    paths: ["infra/cloudflare/**", "infra/cloudflare-sign/**", "infra/cloudflare-redirects/**", ".github/workflows/cloudflare.yml"]
   workflow_dispatch:
 
 permissions:
@@ -34,6 +34,12 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         working-directory: infra/cloudflare-sign
         run: npx --yes wrangler@4 deploy
+      - name: Deploy the forwarding (review. → app., bare domain → app.)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: infra/cloudflare-redirects
+        run: npx --yes wrangler@4 deploy
       - name: Check the signing site answers
         run: |
           sleep 15
@@ -44,6 +50,10 @@ jobs:
         run: |
           sleep 10
           # The smoke test's own share links are fine to open; this just looks for the tags, not the token.
-          code=$(curl -s -o /tmp/page.html -w '%{http_code}' https://review.wranglerportal.com/s/notarealtoken0000)
+          code=$(curl -s -o /tmp/page.html -w '%{http_code}' https://app.wranglerportal.com/s/notarealtoken0000)
           echo "status for a made-up link: $code (Worker answers 200; GitHub alone answers 404)"
           grep -c 'property="og:' /tmp/page.html || true
+      - name: Check old review. links forward
+        run: |
+          curl -s -o /dev/null -D /tmp/r.h https://review.wranglerportal.com/s/notarealtoken0000?x=1 || true
+          grep -i '^HTTP\|^location' /tmp/r.h || true

@@ -9,7 +9,7 @@ import { chromium } from "playwright";
 
 const cfg = JSON.parse(process.env.SMOKE || "{}");
 if (!cfg.tokens) { console.error("SMOKE env is missing (run smoke:run first)"); process.exit(2); }
-const site = (cfg.site || "https://review.wranglerportal.com").replace(/\/$/, "");
+const site = (cfg.site || "https://app.wranglerportal.com").replace(/\/$/, "");
 const T = cfg.tokens;
 const failures = [];
 const passed = [];

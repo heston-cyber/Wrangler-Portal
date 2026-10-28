@@ -4,7 +4,7 @@
 // page), files (/assets/…, /brand/…) pass through. It adds the headers a signing page should have: no framing (so it
 // can't be hidden inside another site), no referrer (the address holds the signer's token), no search indexing, and
 // no caching of the page itself.
-const ORIGIN = "https://review.wranglerportal.com";
+const ORIGIN = "https://app.wranglerportal.com"; // the portal (review. until Oct 28)
 
 export default {
   async fetch(request) {

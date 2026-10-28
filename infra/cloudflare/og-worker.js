@@ -1,5 +1,5 @@
 // Wrangler Review — link previews (C8, Oct 26).
-// Runs on review.wranglerportal.com/s/* in Cloudflare. For a share link it fetches the normal page from GitHub Pages,
+// Runs on app.wranglerportal.com/s/* in Cloudflare (review. until Oct 28; review. now forwards here). For a share link it fetches the normal page from GitHub Pages,
 // asks the backend for that link's preview (title, picture), and writes those tags into <head> before handing the
 // page on — to iMessage, WhatsApp, Slack and ordinary browsers alike. Everything else passes straight through.
 // If the backend doesn't answer, the plain page is served. GitHub answers deep links with a 404 status (it serves

@@ -15,7 +15,7 @@ test("SITE follows the SITE_URL setting and trims trailing slashes", () => {
   expect(SITE_HOST()).toBe("app.wranglerportal.com");
   expect(LAB_CLIP()).toBe("https://app.wranglerportal.com/lab/frametest_23976_h264.mp4");
   delete process.env.SITE_URL;
-  expect(SITE()).toBe("https://review.wranglerportal.com");
+  expect(SITE()).toBe("https://app.wranglerportal.com");
 });
 
 test("no backend code names the review host except lib/site.ts (comments aside)", () => {

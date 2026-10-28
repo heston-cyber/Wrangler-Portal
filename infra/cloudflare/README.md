@@ -1,3 +1,5 @@
+> **Oct 28 (Phase 0.5b):** the portal moved to `app.wranglerportal.com`. This Worker now runs on `app.wranglerportal.com/s/*`; `review.wranglerportal.com` forwards everything to `app.` through `infra/cloudflare-redirects`. The steps below are the original setup, kept for reference.
+
 # Link previews — Cloudflare Worker (C8)
 
 `og-worker.js` runs on `review.wranglerportal.com/s/*`. It serves the normal site page but with the right

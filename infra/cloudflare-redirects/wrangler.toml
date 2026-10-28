@@ -1,0 +1,14 @@
+# Wrangler Portal — forwarding (Phase 0.5b, Oct 28). Deployed by .github/workflows/cloudflare.yml.
+# review.wranglerportal.com moved to app.wranglerportal.com: every old link forwards, path and query kept (301).
+# The bare wranglerportal.com (and www) forward to the app for now (302, temporary) until the product page exists.
+# Routes only run on proxied (orange-cloud) DNS records.
+name = "wrangler-portal-redirects"
+main = "redirect-worker.js"
+compatibility_date = "2026-10-01"
+workers_dev = false
+
+routes = [
+  { pattern = "review.wranglerportal.com/*", zone_name = "wranglerportal.com" },
+  { pattern = "wranglerportal.com/*", zone_name = "wranglerportal.com" },
+  { pattern = "www.wranglerportal.com/*", zone_name = "wranglerportal.com" },
+]
