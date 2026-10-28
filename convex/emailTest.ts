@@ -12,8 +12,8 @@ export const send = internalAction({
     const code = String(Math.floor(100000 + Math.random() * 900000));
     const subject = kind === "code" ? `${code} is your Wrangler Review code` : "Reset your Wrangler Review password";
     const text = kind === "code"
-      ? `Your sign-in code is ${code}. It works for 10 minutes.\n\nIf you didn't ask for it, ignore this email.\n\nWrangler Review · review.wranglerportal.com`
-      : `Someone asked to reset the password for this email on Wrangler Review. Your reset code is ${code}. It works for 10 minutes.\n\nIf that wasn't you, ignore this email and nothing changes.\n\nWrangler Review · review.wranglerportal.com`;
+      ? `Your sign-in code is ${code}. It works for 10 minutes.\n\nIf you didn't ask for it, ignore this email.\n\nWrangler Review · ${SITE_HOST()}`
+      : `Someone asked to reset the password for this email on Wrangler Review. Your reset code is ${code}. It works for 10 minutes.\n\nIf that wasn't you, ignore this email and nothing changes.\n\nWrangler Review · ${SITE_HOST()}`;
     const out: Array<{ to: string; status: number; id?: string; error?: string }> = [];
     for (const addr of to) {
       const r = await fetch("https://api.resend.com/emails", {
@@ -38,6 +38,7 @@ import { reviewStorage } from "./lib/reviewStorage";
 import { allowedEmails } from "./auth";
 import { randomToken } from "./lib/hash";
 import { removeVideoAndFiles } from "./library";
+import { LAB_CLIP, SITE_HOST } from "./lib/site";
 
 const TAG = "C4 Email Test";
 const PATH = "review/_emailtest/frametest_23976_h264.mp4";
@@ -81,7 +82,7 @@ export const liveRun = internalAction({
   handler: async (ctx, { to }): Promise<unknown> => {
     const z = reviewStorage();
     if (!z) return { configured: false };
-    const src = await fetch("https://review.wranglerportal.com/lab/frametest_23976_h264.mp4");
+    const src = await fetch(LAB_CLIP());
     if (!src.ok) return { fetch: src.status };
     const put = await fetch(`https://${z.host}/${z.zone}/${PATH}`, { method: "PUT", headers: { AccessKey: z.password, "content-type": "video/mp4" }, body: new Uint8Array(await src.arrayBuffer()) });
     if (!put.ok) return { write: put.status };

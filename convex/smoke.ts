@@ -15,11 +15,11 @@ import { randomToken } from "./lib/hash";
 import { signUrl } from "./lib/media";
 import { renderFolder } from "./lib/bunnySign";
 import { reviewStorage } from "./lib/reviewStorage";
+import { LAB_CLIP, SITE } from "./lib/site";
 
 export const TITLE = "Smoke test (keep)";
 export const PASSCODE = "smoketest1";
 const PATH = "review/_smoke/frametest_23976_h264.mp4";
-const LAB_CLIP = "https://review.wranglerportal.com/lab/frametest_23976_h264.mp4";
 const DAY = 86_400_000;
 
 type Kind = "comment" | "view" | "pass" | "off" | "expired";
@@ -108,7 +108,7 @@ export const run = internalAction({
       // The clip lives in the review zone under its own path; put it there (from the public lab copy) if it's gone.
       const z = reviewStorage();
       if (clipStatus === 404 && z && clip.storagePath) {
-        const src = await fetch(LAB_CLIP);
+        const src = await fetch(LAB_CLIP());
         if (src.ok) {
           const put = await fetch(`https://${z.host}/${z.zone}/${clip.storagePath}`, { method: "PUT", headers: { AccessKey: z.password, "content-type": "video/mp4" }, body: new Uint8Array(await src.arrayBuffer()) });
           uploaded = put.ok;
@@ -116,6 +116,6 @@ export const run = internalAction({
         }
       }
     }
-    return { ...f, clipStatus, uploaded, site: process.env.SITE_URL || "https://review.wranglerportal.com" };
+    return { ...f, clipStatus, uploaded, site: SITE() };
   },
 });

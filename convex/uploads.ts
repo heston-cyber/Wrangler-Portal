@@ -9,6 +9,7 @@ import { httpRangeReader, mp4FrameCount } from "./lib/mp4";
 import type { Id } from "./_generated/dataModel";
 import { signUrl } from "./lib/media";
 import { NEW_VERSION_DELAY_MS } from "./emails";
+import { SITE_SLASH } from "./lib/site";
 
 async function sha256Hex(text: string) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -158,7 +159,7 @@ const listedHeights = (res: string | null | undefined) =>
 // may never make one for 2160p). Only these go on the version, so the player is never handed a file that isn't there.
 export async function answeringHeights(guid: string, b: Pick<BunnyVideo, "availableResolutions" | "hasMP4Fallback">, known: number[] = []): Promise<number[]> {
   if (!b.hasMP4Fallback) return [];
-  const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
+  const site = SITE_SLASH();
   const out: number[] = [];
   for (const h of MP4_HEIGHTS.filter((h) => listedHeights(b.availableResolutions).includes(h))) {
     if (known.includes(h)) { out.push(h); continue; } // seen already; files don't disappear
@@ -173,7 +174,7 @@ export async function answeringHeights(guid: string, b: Pick<BunnyVideo, "availa
 export async function nextStages(version: { bunnyGuid: string; stages?: Stage[] }, b: BunnyVideo): Promise<Stage[] | null> {
   const prev = version.stages ?? [];
   const last = prev[prev.length - 1];
-  const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
+  const site = SITE_SLASH();
   const mp4 = await answeringHeights(version.bunnyGuid, { ...b, hasMP4Fallback: true }, last?.mp4 ?? []);
   void site;
   const e: Stage = { t: Date.now(), s: b.status, p: b.encodeProgress ?? 0, res: b.availableResolutions || "", mp4 };
@@ -235,7 +236,7 @@ export const countFrames = internalAction({
     for (const h of heights) {
       const url = await signUrl(`https://${streamCdn()}/${row.version.bunnyGuid}/play_${h}p.mp4`);
       try {
-        const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
+        const site = SITE_SLASH();
         const n = await mp4FrameCount(httpRangeReader(url, site));
         if (n) {
           await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { frameCount: n, frameCountFrom: "file" } });

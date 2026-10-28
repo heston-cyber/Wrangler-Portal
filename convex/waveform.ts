@@ -6,6 +6,7 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { peaksFromMp4 } from "./lib/waveformDecode";
 import { signUrl } from "./lib/media";
+import { SITE_SLASH } from "./lib/site";
 
 const streamCdn = () => process.env.BUNNY_STREAM_CDN || "vz-3ba0610b-f90.b-cdn.net";
 
@@ -28,7 +29,7 @@ export const run = internalAction({
     }
     const tries = await ctx.runMutation(internal.waveforms.begin, { versionId });
     try {
-      const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
+      const site = SITE_SLASH();
       // A review render (R3) is read straight from Bunny Storage: only its sound chunks, a few at a time.
       const url = await signUrl(fileUrl ?? `https://${streamCdn()}/${row.version.bunnyGuid}/play_${heights[0]}p.mp4`);
       const read = async (a: number, b: number) => {

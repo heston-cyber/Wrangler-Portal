@@ -11,6 +11,7 @@ import { Readable } from "node:stream";
 import { encPath, reviewStorage } from "./lib/reviewStorage";
 import { signUrl } from "./lib/media";
 import { streamFolder } from "./lib/bunnySign";
+import { SITE } from "./lib/site";
 
 const MAX_COPY_TRIES = 3;
 const SCRUB_POLL_MS = 10_000;
@@ -126,7 +127,7 @@ export const pollScrub = internalAction({
       const has360 = (b.availableResolutions || "").split(",").map((x) => parseInt(x, 10)).includes(360);
       if ((b.status === 3 || b.status === 4) && has360) {
         // Signed since C3 (Oct 23): the scrub zone needs a token too. (Unsigned, this was 403 and every copy "failed".)
-        const mp4 = await fetch(await signUrl(`https://${s.cdn}/${row.version.scrubGuid}/play_360p.mp4`, { folder: streamFolder(row.version.scrubGuid) }), { headers: { Range: "bytes=0-1", Referer: `${process.env.SITE_URL || "https://review.wranglerportal.com"}/` } });
+        const mp4 = await fetch(await signUrl(`https://${s.cdn}/${row.version.scrubGuid}/play_360p.mp4`, { folder: streamFolder(row.version.scrubGuid) }), { headers: { Range: "bytes=0-1", Referer: `${SITE()}/` } });
         await mp4.arrayBuffer();
         if (mp4.status === 206 || mp4.status === 200) {
           const total = (row.version.fileSize ?? 0) + (b.storageSize ?? 0);
@@ -190,7 +191,7 @@ export const check = internalAction({
       const put = await fetch(`https://${z.host}/${z.zone}/${path}`, { method: "PUT", headers: { AccessKey: z.password, "content-type": "video/mp4" }, body });
       out.write = put.status;
       if (put.ok) {
-        const got = await fetch(`https://${z.cdn}/${path}`, { headers: { Range: "bytes=0-99", Origin: "https://review.wranglerportal.com" } });
+        const got = await fetch(`https://${z.cdn}/${path}`, { headers: { Range: "bytes=0-99", Origin: SITE() } });
         const buf = new Uint8Array(await got.arrayBuffer());
         out.cdnRange = got.status;
         out.rangeBytes = buf.length;

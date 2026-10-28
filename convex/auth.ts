@@ -4,6 +4,7 @@ import { Email } from "@convex-dev/auth/providers/Email";
 import { ConvexError } from "convex/values";
 import { sendEmail, sixDigits } from "./lib/email";
 import type { MutationCtx } from "./_generated/server";
+import { SITE_HOST } from "./lib/site";
 
 // Owners: the emails in ALLOWED_EMAILS (comma-separated Convex env var). Everyone else needs an invite (C1, Oct 23).
 /** Names a client may not use: the owners' names and email local parts ("heston"), lower-case. Security review, Oct 23. */
@@ -27,7 +28,7 @@ function codeByEmail(id: string, kind: "verify" | "reset") {
     apiKey: "unused",
     async generateVerificationToken() { return sixDigits(); },
     async sendVerificationRequest({ identifier: email, token }) {
-      const site = "review.wranglerportal.com";
+      const site = SITE_HOST();
       if (kind === "verify") {
         await sendEmail({
           to: email, tag: "code", replyTo: null,

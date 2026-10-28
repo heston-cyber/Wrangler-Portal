@@ -38,7 +38,7 @@ export const json = (body: unknown, status = 200) => new Response(JSON.stringify
 const rpcError = (id: Rpc["id"], code: number, message: string, data?: unknown, status = 200) =>
   json({ jsonrpc: "2.0", id: id ?? null, error: { code, message, ...(data !== undefined ? { data } : {}) } }, status);
 
-export const ALLOWED_ORIGINS = [/^https:\/\/([a-z0-9-]+\.)*claude\.ai$/, /^https:\/\/([a-z0-9-]+\.)*anthropic\.com$/, /^https:\/\/review\.wranglerportal\.com$/];
+export const ALLOWED_ORIGINS = [/^https:\/\/([a-z0-9-]+\.)*claude\.ai$/, /^https:\/\/([a-z0-9-]+\.)*anthropic\.com$/, /^https:\/\/(review|app)\.wranglerportal\.com$/];
 
 function decodeHeader(v: string | null) {
   if (!v) return v;

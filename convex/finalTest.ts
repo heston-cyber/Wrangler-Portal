@@ -6,14 +6,14 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { bunnyCall, bunnyEnv } from "./bunny";
+import { LAB_CLIP } from "./lib/site";
 
 const PROJECT = "Tests";
 const TITLE = "Approve final test";
-const CLIP = "https://review.wranglerportal.com/lab/frametest_23976_h264.mp4";
 
 async function importClip(tag: string): Promise<string> {
   const { lib } = bunnyEnv();
-  const fetched = (await bunnyCall(`/library/${lib}/videos/fetch`, { method: "POST", body: JSON.stringify({ url: CLIP, title: tag }) })) as { id?: string };
+  const fetched = (await bunnyCall(`/library/${lib}/videos/fetch`, { method: "POST", body: JSON.stringify({ url: LAB_CLIP(), title: tag }) })) as { id?: string };
   let guid: string | null = typeof fetched?.id === "string" && fetched.id ? fetched.id : null;
   for (let i = 0; i < 20 && !guid; i++) {
     await new Promise((r) => setTimeout(r, 1500));

@@ -14,6 +14,7 @@ import { directLink, folderPlace, pickProject, placeFor, projectFolderOf, splitJ
 import { highestVersion, insertVideo, parseRegisterName, shortTitleError, shortTitleFrom, videoByNumber } from "./lib/register";
 import { signUrl } from "./lib/media";
 import { NEW_VERSION_DELAY_MS } from "./emails";
+import { SITE, SITE_SLASH } from "./lib/site";
 
 const API = "https://api.dropboxapi.com/2";
 const SETTLE_MS = 60_000; // a file must sit unchanged this long before we look at it
@@ -28,7 +29,7 @@ const MAX_CHECKS = 180; // ~3 hours of "not finished yet" before giving up
 const LINK_SWEEP_MS = 3 * 3600_000; // any share link still around after this gets deleted regardless
 const RECENT_DROPS = 10; // Settings shows at most this many recent drops (Heston, Oct 22)
 
-const site = () => (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/$/, "");
+const site = () => SITE();
 const redirectUri = () => `${(process.env.CONVEX_SITE_URL || "").replace(/\/$/, "")}/dropbox/callback`;
 function appCreds() {
   const key = process.env.DROPBOX_APP_KEY, secret = process.env.DROPBOX_APP_SECRET;
@@ -867,7 +868,7 @@ export const bunnyFetchCheck = internalAction({
     const { lib } = bunnyEnv();
     const src: { guid: string; height: number } | null = await ctx.runQuery(internal.dropbox.anyReadyMp4, {});
     if (!src) return { ok: false, step: "no ready version with an MP4 copy" };
-    const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
+    const site = SITE_SLASH();
     const url = await signUrl(`https://${process.env.BUNNY_STREAM_CDN || "vz-3ba0610b-f90.b-cdn.net"}/${src.guid}/play_${src.height}p.mp4`);
     const tag = `wr-fetch-check-${randomToken(6)}`;
     const steps: string[] = [];

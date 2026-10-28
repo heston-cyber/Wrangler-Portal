@@ -2,7 +2,7 @@
 // go to Heston. RESEND_API_KEY is in the Convex dashboard. Returns the Resend id or throws.
 export const FROM = () => process.env.EMAIL_FROM || "Wrangler Review <review@wranglerportal.com>";
 export const REPLY_TO = () => process.env.EMAIL_REPLY_TO || "heston@wranglerproductions.com";
-export const SITE = () => (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/$/, "");
+export { SITE } from "./site";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 // A plain HTML twin of the text (mail filters trust multipart text+HTML more than text alone): paragraphs kept,

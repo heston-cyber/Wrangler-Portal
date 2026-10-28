@@ -5,6 +5,7 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { versionMedia } from "./lib/media";
 import { videoByNumber } from "./lib/register";
+import { SITE_SLASH } from "./lib/site";
 
 export const versionsOf = internalQuery({
   args: { number: v.number() },
@@ -21,7 +22,7 @@ export const versionsOf = internalQuery({
 export const media = internalAction({
   args: { number: v.number() },
   handler: async (ctx, { number }) => {
-    const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
+    const site = SITE_SLASH();
     const head = async (u: string | null) => {
       if (!u) return null;
       try {

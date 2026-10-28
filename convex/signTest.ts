@@ -9,10 +9,11 @@ import { internal } from "./_generated/api";
 import { signBunnyUrl, streamFolder } from "./lib/bunnySign";
 import { reviewStorage } from "./lib/reviewStorage";
 import { scrubCdn, signUrl, stillsCdn, streamCdn } from "./lib/media";
+import { LAB_CLIP, SITE_SLASH } from "./lib/site";
 
 async function status(url: string, range = true): Promise<number> {
   // The Stream pull zone also checks the referrer (hotlink protection), so the check sends the site's, like a browser.
-  const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
+  const site = SITE_SLASH();
   const r = await fetch(url, { headers: { ...(range ? { Range: "bytes=0-1" } : {}), Referer: site, Origin: new URL(site).origin } });
   await r.arrayBuffer();
   return r.status;
@@ -74,7 +75,7 @@ export const playerLink = internalAction({
     const key = process.env.BUNNY_SIGN_TEST_KEY, cdn = process.env.BUNNY_SIGN_TEST_CDN;
     const z = reviewStorage();
     if (!key || !cdn || !z) return { configured: false };
-    const src = await fetch("https://review.wranglerportal.com/lab/frametest_23976_h264.mp4");
+    const src = await fetch(LAB_CLIP());
     if (!src.ok) return { fetch: src.status };
     const body = new Uint8Array(await src.arrayBuffer());
     const path = "review/_signtest/frametest_23976_h264.mp4";
@@ -113,7 +114,7 @@ export const live = internalAction({
     if (sample.stream) {
       const guid = sample.stream.split("/")[3];
       const master = await signUrl(`https://${streamCdn()}/${guid}/playlist.m3u8`, { folder: streamFolder(guid), directory: true });
-      const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
+      const site = SITE_SLASH();
       const r = await fetch(master, { headers: { Referer: site, Origin: new URL(site).origin } });
       const text = r.ok ? await r.text() : "";
       const variant = text.split("\n").find((l) => l && !l.startsWith("#"));

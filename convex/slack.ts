@@ -3,8 +3,8 @@ import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { frameTc } from "./lib/frames";
+import { SITE } from "./lib/site";
 
-const SITE = process.env.SITE_URL || "https://review.wranglerportal.com";
 
 async function post(payload: unknown) {
   const url = process.env.SLACK_WEBHOOK_URL;
@@ -22,7 +22,7 @@ export const versionReady = internalAction({
     const row = await ctx.runQuery(internal.library.getVersionInternal, { versionId });
     if (!row || !row.video) return;
     if (row.project?.name === "Tests") return; // Claude's test videos never ping Slack
-    const link = `${SITE}/v/${row.video._id}?version=${row.version.number}`;
+    const link = `${SITE()}/v/${row.video._id}?version=${row.version.number}`;
     const where = row.project ? `${row.project.jobNumber ? row.project.jobNumber + " " : ""}${row.project.name} · ` : "";
     await post({
       text: `${where}${row.video.title} v${row.version.number} is ready to review`,
@@ -40,7 +40,7 @@ export const newNotes = internalAction({
     if (!row || !row.video) return;
     const fps = { num: row.version.fpsNum ?? 24000, den: row.version.fpsDen ?? 1001 };
     const tc = (f?: number) => (f === undefined ? "" : frameTc(f, row.version.startTimecode, fps));
-    const link = `${SITE}/v/${row.video._id}?version=${row.version.number}`;
+    const link = `${SITE()}/v/${row.video._id}?version=${row.version.number}`;
     const blocks: unknown[] = [
       { type: "section", text: { type: "mrkdwn", text: `*${notes.length} new note${notes.length === 1 ? "" : "s"}* on *${esc(row.video.title)} v${row.version.number}* · <${link}|Open>` } },
     ];

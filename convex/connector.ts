@@ -13,6 +13,7 @@ import { numberVideo } from "./register";
 
 import { base64url, sha256Hex } from "./lib/hash";
 import { signStillUrl } from "./lib/media";
+import { SITE } from "./lib/site";
 export { sha256Hex };
 
 // ---------- keys ----------
@@ -80,7 +81,7 @@ export const deleteKey = internalMutation({
 
 // ---------- shared helpers for the tools ----------
 
-const site = () => (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/$/, "");
+const site = () => SITE();
 const COLOR_NAMES: Record<string, string> = { "#ff3b30": "red", "#ffd60a": "yellow", "#ffffff": "white", "#30d5ff": "cyan" };
 const pct = (x: number) => Math.round(x * 1000) / 10;
 const kindName = (k: Doc<"notes">["kind"]) => (k === "general" ? "whole_video" : k);

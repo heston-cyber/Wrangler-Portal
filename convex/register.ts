@@ -9,9 +9,10 @@ import type { Id } from "./_generated/dataModel";
 import { highestVersion, insertVideo, nextFileName, pad5, shortTitleError, shortTitleFrom, takeNumber, videoByNumber } from "./lib/register";
 import { pickProject, splitJob } from "./lib/dropboxPath";
 import { sha256Hex } from "./connector";
+import { SITE } from "./lib/site";
 
 const clean = (s: string, max = 200) => s.trim().replace(/\s+/g, " ").slice(0, max);
-const site = () => (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/$/, "");
+const site = () => SITE();
 const iso = (ms: number) => new Date(ms).toISOString();
 
 type Row = {

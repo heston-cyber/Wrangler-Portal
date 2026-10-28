@@ -8,6 +8,7 @@ import { buildTranscript } from "./lib/transcript";
 import { mp4FrameCount } from "./lib/mp4";
 import { shareArg } from "./lib/viewer";
 import { signUrl } from "./lib/media";
+import { SITE_SLASH } from "./lib/site";
 
 const MAX_BYTES = 900_000_000;
 const WAIT_MS = 15_000;
@@ -54,7 +55,7 @@ export const run = internalAction({
     }
     const heights = [...(row.version.mp4Heights ?? [])].sort((a, b) => a - b);
     if (!heights.length) return await waitForMp4("none listed yet");
-    const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
+    const site = SITE_SLASH();
     const url = await signUrl(`https://${streamCdn()}/${row.version.bunnyGuid}/play_${heights[0]}p.mp4`);
     let media: Response;
     try {
@@ -181,7 +182,7 @@ export const voiceSelfTest = internalAction({
     if (!key) return { ok: false, step: "no key" };
     const src: { guid: string; height: number } | null = await ctx.runQuery(internal.dropbox.anyReadyMp4, {});
     if (!src) return { ok: false, step: "no ready version" };
-    const site = (process.env.SITE_URL || "https://review.wranglerportal.com").replace(/\/?$/, "/");
+    const site = SITE_SLASH();
     const media: Response = await fetch(await signUrl(`https://${streamCdn()}/${src.guid}/play_${src.height}p.mp4`), { headers: { Referer: site, Origin: new URL(site).origin } });
     if (!media.ok) return { ok: false, step: `media ${media.status}` };
     const storageId = await ctx.storage.store(new Blob([await media.arrayBuffer()], { type: "audio/mp4" }));
