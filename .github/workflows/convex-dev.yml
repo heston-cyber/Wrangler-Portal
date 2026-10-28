@@ -47,7 +47,7 @@ jobs:
           export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7C/|}"
           export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7c/|}"
           case "$CONVEX_DEPLOY_KEY" in dev:*) echo "key: development";; "") echo "CONVEX_DEV_DEPLOY_KEY is not set"; exit 1;; *) echo "Refused: CONVEX_DEV_DEPLOY_KEY is not a development key"; exit 1;; esac
-          if [ -n "$FN" ] && ! [[ "$FN" =~ ^[A-Za-z0-9_]+:([A-Za-z0-9_]*[sS]elf[tT]est)$ || "$FN" == "business:bootstrap" || "$FN" == "migrations:tagAll" ]]; then
+          if [ -n "$FN" ] && ! [[ "$FN" =~ ^[A-Za-z0-9_]+:([A-Za-z0-9_]*[sS]elf[tT]est)$ || "$FN" == "business:bootstrap" || "$FN" == "migrations:tagAll" || "$FN" == "migrations:linkClients" ]]; then
             echo "Not allowed: $FN"; exit 1
           fi
           if ! printf '%s' "$ARGS" | jq -e 'type == "object"' > /dev/null; then echo "args must be a JSON object"; exit 1; fi
