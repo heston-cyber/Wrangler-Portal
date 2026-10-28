@@ -2,10 +2,7 @@
    Black and ink bands, cream type with grey second halves, signal red as the only accent
    (marker colours excepted: they match Resolve). Industry for headings we write; Saira for everything else. */
 
-/* Industry trial: letters, digits, space , - . only. Anything else falls through to Saira per character. */
-@font-face { font-family: "Industry Trial"; font-weight: 500; font-display: swap; src: url("./assets/fonts/IndustryTest-Medium.otf") format("opentype"); unicode-range: U+0020, U+002C-002E, U+0030-0039, U+0041-005A, U+0061-007A; ascent-override: 95%; descent-override: 25%; line-gap-override: 0%; }
-@font-face { font-family: "Industry Trial"; font-weight: 600; font-display: swap; src: url("./assets/fonts/IndustryTest-Demi.otf") format("opentype"); unicode-range: U+0020, U+002C-002E, U+0030-0039, U+0041-005A, U+0061-007A; ascent-override: 95%; descent-override: 25%; line-gap-override: 0%; }
-@font-face { font-family: "Industry Trial"; font-weight: 700; font-display: swap; src: url("./assets/fonts/IndustryTest-Bold.otf") format("opentype"); unicode-range: U+0020, U+002C-002E, U+0030-0039, U+0041-005A, U+0061-007A; ascent-override: 95%; descent-override: 25%; line-gap-override: 0%; }
+/* Industry comes from Heston's Adobe Fonts web project (hst8uud), linked in index.html (Oct 28; it replaced the trial files). */
 
 :root {
   /* palette */
@@ -44,7 +41,7 @@
   --border-faint: rgba(244, 241, 233, .07);
   --text-faint: var(--wp-grey-600);
   /* type */
-  --font-title: "Industry Trial", "Saira", Helvetica, Arial, sans-serif;
+  --font-title: "industry", "Saira", Helvetica, Arial, sans-serif;
   --font-ui: "Saira", Helvetica, Arial, sans-serif;
   --fs-title: clamp(30px, 3.4vw, 44px);
   --fs-headline: 22px;
