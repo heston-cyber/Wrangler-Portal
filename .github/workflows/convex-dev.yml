@@ -52,4 +52,5 @@ jobs:
           fi
           if ! printf '%s' "$ARGS" | jq -e 'type == "object"' > /dev/null; then echo "args must be a JSON object"; exit 1; fi
           npx convex deploy -y || npx convex dev --once --typecheck disable
+          echo "Settings on dev (names only):"; npx convex env list 2>/dev/null | cut -d= -f1 | sort | tr '\n' ' '; echo
           if [ -n "$FN" ]; then npx convex run "$FN" "$ARGS"; fi
