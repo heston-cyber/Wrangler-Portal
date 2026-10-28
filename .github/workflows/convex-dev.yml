@@ -1,0 +1,55 @@
+name: Convex dev (practice runs)
+
+# Phase 0.5d (Oct 28): deploys the chosen branch's backend to the DEVELOPMENT deployment (Heston's restored copy of
+# live data) and optionally runs one migration or self-test there. Live is never touched by this workflow.
+# Needs the repo secret CONVEX_DEV_DEPLOY_KEY (a dev deploy key from the Convex dashboard). The repo is public, so
+# these logs are public: only functions that return counts run here.
+on:
+  workflow_dispatch:
+    inputs:
+      fn:
+        description: "Function to run after deploying, e.g. migrations:tagAll (blank = deploy only)"
+        required: false
+        default: ""
+      args:
+        description: "JSON arguments"
+        required: false
+        default: "{}"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: convex-dev
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
+
+  dev:
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Deploy the backend to dev, then run
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEV_DEPLOY_KEY }}
+          FN: ${{ inputs.fn }}
+          ARGS: ${{ inputs.args }}
+        run: |
+          export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7C/|}"
+          export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7c/|}"
+          case "$CONVEX_DEPLOY_KEY" in dev:*) echo "key: development";; "") echo "CONVEX_DEV_DEPLOY_KEY is not set"; exit 1;; *) echo "Refused: CONVEX_DEV_DEPLOY_KEY is not a development key"; exit 1;; esac
+          if [ -n "$FN" ] && ! [[ "$FN" =~ ^[A-Za-z0-9_]+:([A-Za-z0-9_]*[sS]elf[tT]est)$ || "$FN" == "business:bootstrap" || "$FN" == "migrations:tagAll" ]]; then
+            echo "Not allowed: $FN"; exit 1
+          fi
+          if ! printf '%s' "$ARGS" | jq -e 'type == "object"' > /dev/null; then echo "args must be a JSON object"; exit 1; fi
+          npx convex deploy -y || npx convex dev --once --typecheck disable
+          if [ -n "$FN" ]; then npx convex run "$FN" "$ARGS"; fi

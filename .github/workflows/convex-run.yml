@@ -34,9 +34,10 @@ jobs:
           FN: ${{ inputs.fn }}
           ARGS: ${{ inputs.args }}
         run: |
-          # Phase 0.5d (Oct 28): business:bootstrap too (idempotent; returns counts only).
-          if ! [[ "$FN" =~ ^[A-Za-z0-9_]+:([A-Za-z0-9_]*[sS]elf[tT]est)$ || "$FN" =~ ^wsS0:[A-Za-z0-9_]+$ || "$FN" == "business:bootstrap" ]]; then
-            echo "Not allowed: $FN (only *:selfTest-style functions, wsS0:* and business:bootstrap run here)"; exit 1
+          # Phase 0.5d (Oct 28): business:bootstrap and migrations:tagAll too (idempotent; counts only). tagAll runs on
+          # live only after it passed on the dev copy (convex-dev.yml) and Heston OK'd it in chat.
+          if ! [[ "$FN" =~ ^[A-Za-z0-9_]+:([A-Za-z0-9_]*[sS]elf[tT]est)$ || "$FN" =~ ^wsS0:[A-Za-z0-9_]+$ || "$FN" == "business:bootstrap" || "$FN" == "migrations:tagAll" ]]; then
+            echo "Not allowed: $FN (only *:selfTest-style functions, wsS0:*, business:bootstrap and migrations:tagAll run here)"; exit 1
           fi
           if ! printf '%s' "$ARGS" | jq -e 'type == "object"' > /dev/null; then echo "args must be a JSON object"; exit 1; fi
           export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7C/|}"
