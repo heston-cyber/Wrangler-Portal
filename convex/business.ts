@@ -1,7 +1,8 @@
 // Wrangler Portal, Phase 0.5d step 1 (Oct 28). Internal only: run by hand through the "Convex run" workflow.
 // Its output is counts only (the repo and its CI logs are public).
 import { internalMutation, internalQuery } from "./lib/functions";
-import { businessContact, businessInScope, ensureDefaultBusiness, ensureMembership } from "./lib/business";
+import { v } from "convex/values";
+import { businessContact, businessInScope, defaultBusiness, ensureDefaultBusiness, ensureMembership } from "./lib/business";
 import { allowedEmails } from "./lib/owners";
 
 /** Makes the default business, the owners' memberships, and a client membership for every existing client account. */
@@ -43,4 +44,13 @@ export const selfTest = internalQuery({
 export const contact = internalQuery({
   args: {},
   handler: async (ctx) => businessContact(ctx, businessInScope(ctx)),
+});
+
+/** Step 6: is this the default business (Wrangler)? Shared integrations (one Stripe key, one Slack webhook) serve only it until each business has its own. Untagged counts as default. */
+export const isDefault = internalQuery({
+  args: { businessId: v.optional(v.union(v.id("businesses"), v.null())) },
+  handler: async (ctx, { businessId }) => {
+    if (!businessId) return true;
+    return (await defaultBusiness(ctx))?._id === businessId;
+  },
 });

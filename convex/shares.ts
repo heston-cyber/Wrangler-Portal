@@ -362,7 +362,8 @@ export const assertCanComment = internalMutation({
   handler: async (ctx, { versionId, share, count }) => {
     const { access } = await accessToVersion(ctx, versionId, share, "comment");
     if (count && access.kind !== "owner") await bump(ctx, count, limitKey(access));
-    return true;
+    // Step 6: the version's business, so the calling action acts for it (asBusiness) from here on.
+    return (await ctx.db.get(versionId))?.businessId ?? null;
   },
 });
 

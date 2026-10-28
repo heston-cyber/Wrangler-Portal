@@ -24,6 +24,7 @@ export type Scope = {
   owner: Id<"businesses"> | null;        // an owner: exactly this business
   members: Set<string>;                   // a client: these businesses
   pin: Id<"businesses"> | null;           // anyone else: the first business they reach
+  only: Id<"businesses"> | null;          // step 6: set once a share or link is resolved; then only its business
   isOwner: boolean;
   defaultBiz: Id<"businesses"> | null;
 };
@@ -31,7 +32,7 @@ export type Scope = {
 /** Who is calling and which businesses they may see. Reads only global tables (users, memberships, businesses). */
 export async function scopeFor(ctx: QueryCtx | MutationCtx): Promise<Scope> {
   const defaultBiz = (await defaultBusiness(ctx))?._id ?? null;
-  const scope: Scope = { owner: null, members: new Set(), pin: null, isOwner: false, defaultBiz };
+  const scope: Scope = { owner: null, members: new Set(), pin: null, only: null, isOwner: false, defaultBiz };
   const userId = await getAuthUserId(ctx);
   const user = userId ? await ctx.db.get(userId) : null;
   const email = (user?.email ?? "").toLowerCase();
@@ -47,17 +48,36 @@ export async function scopeFor(ctx: QueryCtx | MutationCtx): Promise<Scope> {
 export function allowed(scope: Scope, businessId: Id<"businesses"> | undefined | null): boolean {
   const b = businessId ?? scope.defaultBiz;
   if (scope.isOwner) return b === scope.owner;
+  if (scope.only) return b === scope.only;
   if (b && scope.members.has(b)) return true;
   if (scope.pin === null) { scope.pin = b; return true; }
   return b === scope.pin;
 }
 
 /** The business a new record made by this caller belongs to. */
+// Step 6: a non-owner's new record belongs to the share or link they're acting through. With none resolved yet,
+// a client of exactly one business stamps that one; anything else is ambiguous and refused (never the default).
 export function stampFor(scope: Scope): Id<"businesses"> | null {
   if (scope.isOwner) return scope.owner;
+  if (scope.only) return scope.only;
   if (scope.pin) return scope.pin;
   if (scope.members.size === 1) return [...scope.members][0] as Id<"businesses">;
-  return scope.defaultBiz;
+  return null;
+}
+
+/**
+ * Step 6: narrow a non-owner caller to one business, once the share or link they came through is known. After this
+ * the call sees only that business, even when the caller is a client of others too, and anything it writes or
+ * schedules belongs to it. Owners are already scoped to their own business; trusted server code (no scope) is left alone.
+ */
+export function focusBusiness(ctx: object, businessId: Id<"businesses"> | undefined | null) {
+  const scope = (ctx as { scope?: Scope | null }).scope;
+  if (!scope || scope.isOwner) return;
+  const b = businessId ?? scope.defaultBiz;
+  if (!b) return;
+  if (scope.only && scope.only !== b) throw new Error("Already acting for another business.");
+  scope.only = b;
+  scope.pin = scope.pin ?? b;
 }
 
 function rulesFor(scope: Scope, raw: QueryCtx["db"]): Rules<unknown, DataModel> {
@@ -136,7 +156,7 @@ async function defaultStamp(ctx: MutationCtx) {
 
 /** An owner's view of one business: used when trusted server code acts for a business (asBusiness). */
 function ownerScope(biz: Id<"businesses">, defaultBiz: Id<"businesses"> | null): Scope {
-  return { owner: biz, members: new Set(), pin: null, isOwner: true, defaultBiz };
+  return { owner: biz, members: new Set(), pin: null, only: null, isOwner: true, defaultBiz };
 }
 
 // Step 4: trusted server code (crons, the Claude connectors, signing links) says which business it's acting for by
@@ -147,12 +167,16 @@ const withBiz = (args: unknown, biz: Id<"businesses"> | null | undefined) =>
   biz ? { ...((args as Record<string, unknown>) ?? {}), asBusiness: biz } : args;
 
 type Scheduler = MutationCtx["scheduler"];
-function carryingScheduler(s: Scheduler, biz: Id<"businesses"> | null | undefined): Scheduler {
-  if (!biz) return s;
+// Step 6: the business can be decided when the job is scheduled (a function), not when the call starts, so a guest's
+// job belongs to the share they reached during the call.
+type BizSource = Id<"businesses"> | null | undefined | (() => Id<"businesses"> | null | undefined);
+function carryingScheduler(s: Scheduler, src: BizSource): Scheduler {
+  if (!src) return s;
+  const biz = () => (typeof src === "function" ? src() : src);
   return new Proxy(s, {
     get(target, prop, receiver) {
-      if (prop === "runAfter") return ((d: number, f: never, a?: unknown) => target.runAfter(d, f, withBiz(a, biz) as never)) as Scheduler["runAfter"];
-      if (prop === "runAt") return ((d: number | Date, f: never, a?: unknown) => target.runAt(d, f, withBiz(a, biz) as never)) as Scheduler["runAt"];
+      if (prop === "runAfter") return ((d: number, f: never, a?: unknown) => target.runAfter(d, f, withBiz(a, biz()) as never)) as Scheduler["runAfter"];
+      if (prop === "runAt") return ((d: number | Date, f: never, a?: unknown) => target.runAt(d, f, withBiz(a, biz()) as never)) as Scheduler["runAt"];
       const v = Reflect.get(target, prop, receiver);
       return typeof v === "function" ? v.bind(target) : v;
     },
@@ -183,8 +207,13 @@ export const mutation = customMutation(rawMutation, customCtx(async (ctx: Mutati
   if (!(await defaultBusiness(ctx))) await ensureDefaultBusiness(ctx); // first ever write (tests, a fresh deployment)
   const scope = await scopeFor(ctx);
   const guarded = wrapDatabaseWriter(ctx, ctx.db, rulesFor(scope, ctx.db)) as unknown as MutationCtx["db"];
-  const stamp = async () => stampFor(scope) ?? (await defaultStamp(ctx));
-  return { db: stampingDb(guarded, stamp), scope, scheduler: carryingScheduler(ctx.scheduler, stampFor(scope)) };
+  const stamp = async () => {
+    const b = stampFor(scope);
+    if (b) return b;
+    if (scope.isOwner || (!scope.members.size && !scope.pin)) return await defaultStamp(ctx); // nobody, nothing reached yet
+    throw new Error("Which business this belongs to isn't clear.");
+  };
+  return { db: stampingDb(guarded, stamp), scope, scheduler: carryingScheduler(ctx.scheduler, () => stampFor(scope)) };
 }));
 
 // Internal functions. Called from an action on behalf of a signed-in person (Convex passes their sign-in along), they
@@ -209,7 +238,13 @@ export const internalMutation = customMutation(rawInternalMutation, {
     if (!(await defaultBusiness(ctx))) await ensureDefaultBusiness(ctx);
     const scope = identity ? await scopeFor(ctx) : ownerScope(asBusiness!, (await defaultBusiness(ctx))?._id ?? null);
     const guarded = wrapDatabaseWriter(ctx, ctx.db, rulesFor(scope, ctx.db)) as unknown as MutationCtx["db"];
-    return { ctx: { db: stampingDb(guarded, async () => stampFor(scope) ?? (await defaultStamp(ctx))), scheduler: carryingScheduler(ctx.scheduler, stampFor(scope)), scope: scope as Scope | null, asBusiness }, args: {} };
+    const stamp = async () => {
+      const b = stampFor(scope);
+      if (b) return b;
+      if (scope.isOwner || (!scope.members.size && !scope.pin)) return await defaultStamp(ctx);
+      throw new Error("Which business this belongs to isn't clear.");
+    };
+    return { ctx: { db: stampingDb(guarded, stamp), scheduler: carryingScheduler(ctx.scheduler, () => stampFor(scope)), scope: scope as Scope | null, asBusiness }, args: {} };
   },
 });
 

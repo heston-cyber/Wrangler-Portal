@@ -194,6 +194,8 @@ async function makeInvoice(ctx: ActionCtx, d: Data) {
   if (doc.invoice?.status === "created" || doc.invoice?.status === "none") return;
   const pay = ver.payment;
   if (!pay) { await ctx.runMutation(internal.signDone.recordInvoice, { documentId: doc._id, status: "none" }); return; }
+  // Step 6: the one Stripe key is Wrangler's; another business's contract never makes an invoice in it.
+  if (!(await ctx.runQuery(internal.business.isDefault, { businessId: doc.businessId ?? null }))) throw new Error("Stripe isn't set up for this business yet, so no draft invoice was made.");
   const key = process.env.STRIPE_SIGN_KEY;
   if (!key) throw new Error("STRIPE_SIGN_KEY isn't set in Convex.");
   const billTo = signings[0];

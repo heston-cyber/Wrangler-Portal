@@ -6,6 +6,7 @@ import { v, ConvexError } from "convex/values";
 import { requireMe, requireSignedIn } from "./lib/access";
 import { allowedEmails } from "./auth";
 import { prefsByEmail } from "./emails";
+import { businessInScope, ensureMembership } from "./lib/business";
 
 const cleanEmail = (e: string) => e.trim().toLowerCase();
 const valid = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && e.length <= 200;
@@ -15,6 +16,8 @@ export async function ensureInvite(ctx: MutationCtx, rawEmail: string, rawName?:
   const email = cleanEmail(rawEmail);
   if (!valid(email)) throw new ConvexError("Enter a valid email.");
   if (allowedEmails().includes(email)) throw new ConvexError("That's an owner's email; it already has full access.");
+  const ownsOne = (await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", email)).collect()).some((m) => m.role === "owner" && !m.revokedAt);
+  if (ownsOne) throw new ConvexError("That email runs a business here, so it can't be invited as a client.");
   const name = rawName?.trim().replace(/\s+/g, " ").slice(0, 60) || undefined;
   const existing = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()).find((i) => !i.revokedAt);
   if (existing) {
@@ -22,6 +25,10 @@ export async function ensureInvite(ctx: MutationCtx, rawEmail: string, rawName?:
     return { inviteId: existing._id, email, name: existing.name ?? name, already: true };
   }
   const inviteId = await ctx.db.insert("invites", { email, name, createdAt: Date.now() });
+  // Step 6: someone who already has an account (a client of another business) becomes a client of this one too.
+  const biz = businessInScope(ctx);
+  const user = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", email)).unique();
+  if (biz && user) await ensureMembership(ctx, biz, email, "client", user._id);
   return { inviteId, email, name, already: false };
 }
 

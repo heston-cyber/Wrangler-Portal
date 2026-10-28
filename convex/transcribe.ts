@@ -2,7 +2,7 @@
 // Transcribes a version with ElevenLabs Scribe. Runs in Node (512 MB) because it downloads Bunny's smallest MP4
 // copy of the cut and sends it on. Words come back in seconds and are pinned to frames of the version.
 import { action } from "./_generated/server";
-import { internalAction } from "./lib/functions";
+import { forBusiness, internalAction } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { buildTranscript } from "./lib/transcript";
@@ -141,13 +141,13 @@ async function sttFromUrl(key: string, url: string): Promise<{ stt: any; model: 
 export const voiceWords = action({
   args: { storageId: v.id("_storage"), mime: v.string(), versionId: v.optional(v.id("versions")), share: shareArg },
   handler: async (ctx, { storageId, mime, versionId, share }): Promise<{ language: string | null; words: Array<{ text: string; start: number; end: number; type?: string }> }> => {
-    if (versionId) await ctx.runMutation(internal.shares.assertCanComment, { versionId, share, count: "voice" }); else await ctx.runQuery(internal.users.assertAllowed, {});
+    const biz = versionId ? await ctx.runMutation(internal.shares.assertCanComment, { versionId, share, count: "voice" }) : (await ctx.runQuery(internal.users.assertAllowed, {})).businessId;
     const key = process.env.ELEVENLABS_API_KEY;
     if (!key) throw new Error("Transcription isn't set up (no ElevenLabs key).");
     const blob = await ctx.storage.get(storageId);
     // Security review (Oct 27): only a recording (an audio upload) is sent off, never another stored file.
     if (!blob || !/^(audio|video)\//i.test(blob.type)) throw new Error("The recording didn't upload.");
-    await ctx.runMutation(internal.notes.registerVoice, { storageId, versionId });
+    await forBusiness(ctx, biz).runMutation(internal.notes.registerVoice, { storageId, versionId });
     return await sttWords(key, blob, mime);
   },
 });

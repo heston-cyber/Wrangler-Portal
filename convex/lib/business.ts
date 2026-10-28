@@ -72,12 +72,29 @@ export async function businessContact(ctx: QueryCtx | MutationCtx, businessId?: 
 
 /** The business a function is working for: the business it acts for, else the caller's, else the default. */
 export function businessInScope(ctx: unknown): Id<"businesses"> | null {
-  const c = ctx as { asBusiness?: Id<"businesses">; scope?: { owner: Id<"businesses"> | null; pin: Id<"businesses"> | null; members: Set<string> } | null };
+  const c = ctx as { asBusiness?: Id<"businesses">; scope?: { owner: Id<"businesses"> | null; only?: Id<"businesses"> | null; pin: Id<"businesses"> | null; members: Set<string> } | null };
   if (c.asBusiness) return c.asBusiness;
   const s = c.scope;
   if (!s) return null;
   if (s.owner) return s.owner;
+  if (s.only) return s.only;
   if (s.pin) return s.pin;
   if (s.members.size === 1) return [...s.members][0] as Id<"businesses">;
   return null;
+}
+
+/**
+ * Step 6: a client account's memberships come from its invites: one client membership in each business that has a
+ * live invite for this email (an untagged invite, only in tests, counts as the default business's). Run when the
+ * account is made and at every sign-in, so an invite from a second business takes effect too.
+ */
+export async function syncClientMemberships(ctx: MutationCtx, email: string, userId: Id<"users">): Promise<number> {
+  const e = email.trim().toLowerCase();
+  const invites = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", e)).collect()).filter((i) => !i.revokedAt);
+  let made = 0;
+  for (const i of invites) {
+    const biz = i.businessId ?? (await ensureDefaultBusiness(ctx)).businessId;
+    if (await ensureMembership(ctx, biz, e, "client", userId)) made++;
+  }
+  return made;
 }

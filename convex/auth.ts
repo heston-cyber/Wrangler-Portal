@@ -6,7 +6,7 @@ import { sendEmail, sixDigits } from "./lib/email";
 import type { MutationCtx } from "./_generated/server";
 import { SITE_HOST } from "./lib/site";
 import { allowedEmails } from "./lib/owners";
-import { ensureDefaultBusiness, ensureMembership } from "./lib/business";
+import { ensureDefaultBusiness, ensureMembership, syncClientMemberships } from "./lib/business";
 
 // Owners: the emails in ALLOWED_EMAILS (comma-separated Convex env var). Everyone else needs an invite (C1, Oct 23).
 /** Names a client may not use: the owners' names and email local parts ("heston"), lower-case. Security review, Oct 23. */
@@ -72,6 +72,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         if (verified) patch.emailVerificationTime = Date.now();
         if (typeof args.profile.name === "string" && args.profile.name && !(args.existingUserId && !allowedEmails().includes(email) && ownerNames().has(args.profile.name.trim().toLowerCase()))) patch.name = args.profile.name;
         await ctx.db.patch(args.existingUserId, patch);
+        if (!allowedEmails().includes(email)) await syncClientMemberships(ctx, email, args.existingUserId);
         return args.existingUserId;
       }
       const owner = allowedEmails().includes(email);
@@ -83,10 +84,9 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         emailVerificationTime: verified ? Date.now() : undefined, lastSignInAt: Date.now(),
       });
       if (invite) await ctx.db.patch(invite._id, { acceptedAt: Date.now(), userId });
-      // Phase 0.5d step 1: the new account's membership in the (default) business.
-      const { businessId } = await ensureDefaultBusiness(ctx);
-      if (!owner) await ensureMembership(ctx, businessId, email, "client", userId);
-      else await ensureMembership(ctx, businessId, email, "owner", userId);
+      // Step 6: an owner (ALLOWED_EMAILS) belongs to the default business; a client to each business that invited them.
+      if (owner) await ensureMembership(ctx, (await ensureDefaultBusiness(ctx)).businessId, email, "owner", userId);
+      else await syncClientMemberships(ctx, email, userId);
       return userId;
     },
   },

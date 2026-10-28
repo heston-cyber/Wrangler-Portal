@@ -1,7 +1,7 @@
 // Note stills (the frame, with the drawing burned in). Stored in Bunny Storage once it's set up,
 // otherwise in Convex storage. Either way the note keeps a plain URL.
 import { action } from "./_generated/server";
-import { internalAction } from "./lib/functions";
+import { forBusiness, internalAction } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
 import { bunnyCall, bunnyEnv } from "./bunny";
@@ -60,7 +60,7 @@ export const storageCheck = internalAction({
 export const upload = action({
   args: { dataBase64: v.string(), contentType: v.union(v.literal("image/jpeg"), v.literal("image/png")), versionId: v.optional(v.id("versions")), share: shareArg },
   handler: async (ctx, { dataBase64, contentType, versionId, share }): Promise<string> => {
-    if (versionId) await ctx.runMutation(internal.shares.assertCanComment, { versionId, share, count: "stills" }); else await ctx.runQuery(internal.users.assertAllowed, {});
+    const biz = versionId ? await ctx.runMutation(internal.shares.assertCanComment, { versionId, share, count: "stills" }) : (await ctx.runQuery(internal.users.assertAllowed, {})).businessId;
     const bytes = decodeBase64(dataBase64);
     if (bytes.length === 0 || bytes.length > MAX_BYTES) throw new ConvexError("That still is too big.");
     const ext = contentType === "image/png" ? "png" : "jpg";
@@ -77,7 +77,7 @@ export const upload = action({
       return `https://${bs.cdn}/${path}`;
     }
     const storageId = await ctx.storage.store(new Blob([bytes], { type: contentType }));
-    await ctx.runMutation(internal.stillsDb.record, { storageId });
+    await forBusiness(ctx, biz).runMutation(internal.stillsDb.record, { storageId });
     const url = await ctx.storage.getUrl(storageId);
     if (!url) throw new ConvexError("Couldn't save the still.");
     return url;

@@ -22,6 +22,7 @@ export const versionReady = internalAction({
     const row = await ctx.runQuery(internal.library.getVersionInternal, { versionId });
     if (!row || !row.video) return;
     if (row.project?.name === "Tests") return; // Claude's test videos never ping Slack
+    if (!(await ctx.runQuery(internal.business.isDefault, { businessId: row.version.businessId ?? null }))) return; // step 6: the Slack channel is Wrangler's
     const link = `${SITE()}/v/${row.video._id}?version=${row.version.number}`;
     const where = row.project ? `${row.project.jobNumber ? row.project.jobNumber + " " : ""}${row.project.name} · ` : "";
     await post({
@@ -38,6 +39,8 @@ export const newNotes = internalAction({
     if (!notes.length) return;
     const row = await ctx.runQuery(internal.library.getVersionInternal, { versionId });
     if (!row || !row.video) return;
+    // Step 6: the Slack channel is Wrangler's; another business's notes are marked handled and never posted.
+    if (!(await ctx.runQuery(internal.business.isDefault, { businessId: row.version.businessId ?? null }))) { await ctx.runMutation(internal.notes.markNotified, { noteIds: notes.map((n) => n._id) }); return; }
     const fps = { num: row.version.fpsNum ?? 24000, den: row.version.fpsDen ?? 1001 };
     const tc = (f?: number) => (f === undefined ? "" : frameTc(f, row.version.startTimecode, fps));
     const link = `${SITE()}/v/${row.video._id}?version=${row.version.number}`;
