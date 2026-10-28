@@ -72,18 +72,58 @@ function rulesFor(scope: Scope, raw: QueryCtx["db"]): Rules<unknown, DataModel> 
   return rules as Rules<unknown, DataModel>;
 }
 
-/** Wraps a writer so new business records get a businessId. */
+/**
+ * Step 5: the client record a project or share names (matched by name, ignoring case, within the business; made if
+ * there isn't one, marked fromProjects so it doesn't show as a separate "New client"). Returns its id.
+ */
+export async function linkClient(db: MutationCtx["db"], businessId: Id<"businesses"> | null | undefined, name: string): Promise<Id<"clients"> | undefined> {
+  const n = name.trim();
+  if (!n) return undefined;
+  const key = n.toLowerCase();
+  const rows = (await db.query("clients").collect()).filter((c) => !businessId || c.businessId === undefined || c.businessId === businessId);
+  const found = rows.find((c) => c.name.trim().toLowerCase() === key);
+  if (found) return found._id;
+  return await db.insert("clients", { name: n, createdAt: Date.now(), fromProjects: true, ...(businessId ? { businessId } : {}) });
+}
+
+/** Wraps a writer so new business records get a businessId, and projects and shares stay linked to their client. */
 export function stampingDb(db: MutationCtx["db"], businessId: () => Promise<Id<"businesses"> | null>): MutationCtx["db"] {
+  const withClient = async (table: string, doc: Record<string, unknown>, biz: Id<"businesses"> | null | undefined) => {
+    const names = table === "projects" || (table === "shares" && doc.kind === "client");
+    if (!names || !("client" in doc)) return doc;
+    const name = typeof doc.client === "string" ? doc.client : "";
+    return { ...doc, clientId: name.trim() ? await linkClient(db, biz, name) : undefined };
+  };
   const insert = (async (table: string, doc: Record<string, unknown>) => {
-    if (BUSINESS_TABLES.includes(table) && doc.businessId === undefined) {
+    let d = doc;
+    if (BUSINESS_TABLES.includes(table) && d.businessId === undefined) {
       const b = await businessId();
-      if (b) return db.insert(table as never, { ...doc, businessId: b } as never);
+      if (b) d = { ...d, businessId: b };
     }
-    return db.insert(table as never, doc as never);
+    d = await withClient(table, d, d.businessId as Id<"businesses"> | undefined);
+    return db.insert(table as never, d as never);
   }) as MutationCtx["db"]["insert"];
+  const patch = (async (a0: unknown, a1: unknown, a2?: unknown) => {
+    // Both forms: patch(id, value) and patch(table, id, value).
+    const [table, id, value] = a2 === undefined ? [null, a0, a1] : [a0 as string, a1, a2];
+    const v0 = value as Record<string, unknown>;
+    if (v0 && "client" in v0) {
+      const t = table ?? (db.normalizeId("projects", id as string) ? "projects" : db.normalizeId("shares", id as string) ? "shares" : null);
+      if (t === "projects" || t === "shares") {
+        const cur = (await db.get(id as never)) as Record<string, unknown> | null;
+        if (cur) {
+          const next = await withClient(t, { ...cur, ...v0 }, cur.businessId as Id<"businesses"> | undefined);
+          const v1 = "clientId" in next ? { ...v0, clientId: next.clientId } : v0;
+          return table ? db.patch(table as never, id as never, v1 as never) : db.patch(id as never, v1 as never);
+        }
+      }
+    }
+    return table ? db.patch(table as never, id as never, value as never) : db.patch(id as never, value as never);
+  }) as MutationCtx["db"]["patch"];
   return new Proxy(db, {
     get(target, prop, receiver) {
       if (prop === "insert") return insert;
+      if (prop === "patch") return patch;
       const v = Reflect.get(target, prop, receiver);
       return typeof v === "function" ? v.bind(target) : v;
     },

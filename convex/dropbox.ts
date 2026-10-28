@@ -359,7 +359,7 @@ export const recordFolders = internalMutation({
       }
       const all = await ctx.db.query("clients").collect();
       const byName = all.find((c) => norm(c.name) === norm(name));
-      if (byName) { await ctx.db.patch(byName._id, { dropboxFolder: folder }); return byName.name; }
+      if (byName) { await ctx.db.patch(byName._id, { dropboxFolder: folder, fromProjects: undefined }); return byName.name; }
       // The old folder of a renamed client went away in the same batch.
       for (const g of goneLeft) {
         if (!sameLevel(g, folder)) continue;

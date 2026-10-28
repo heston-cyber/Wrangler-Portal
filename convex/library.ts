@@ -71,7 +71,7 @@ export const overview = query({
       })),
       videos: vidsOut,
       // Clients made with "New client" (they show even before they have projects).
-      clients: (await ctx.db.query("clients").collect()).map((c) => c.name).sort((a, b) => a.localeCompare(b)),
+      clients: (await ctx.db.query("clients").collect()).filter((c) => !c.fromProjects).map((c) => c.name).sort((a, b) => a.localeCompare(b)),
     };
   },
 });
@@ -85,10 +85,12 @@ export const createClient = mutation({
     if (!name) throw new ConvexError("Give the client a name.");
     const key = name.toLowerCase();
     if (name.toLowerCase() === "no client") throw new ConvexError("Pick another name.");
-    const made = (await ctx.db.query("clients").collect()).some((c) => c.name.toLowerCase() === key);
+    const rows = (await ctx.db.query("clients").collect()).filter((c) => c.name.toLowerCase() === key);
     const onProjects = (await ctx.db.query("projects").collect()).some((p) => (p.client ?? "").trim().toLowerCase() === key);
-    if (made || onProjects) throw new ConvexError(`There's already a client called ${name}.`);
-    await ctx.db.insert("clients", { name, createdAt: Date.now() });
+    if (rows.some((c) => !c.fromProjects) || onProjects) throw new ConvexError(`There's already a client called ${name}.`);
+    // A record left from a project that's gone (step 5) becomes the client you're making.
+    if (rows[0]) await ctx.db.patch(rows[0]._id, { name, fromProjects: undefined });
+    else await ctx.db.insert("clients", { name, createdAt: Date.now() });
     return name;
   },
 });

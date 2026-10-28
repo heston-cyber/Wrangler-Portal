@@ -39,6 +39,7 @@ export default defineSchema({
     token: v.string(), // the random part of review.wranglerportal.com/s/<token>
     kind: v.union(v.literal("client"), v.literal("project"), v.literal("video")),
     client: v.optional(v.string()),        // kind "client": the client name as filed on its projects
+    clientId: v.optional(v.id("clients")),  // Phase 0.5d step 5: that client's record
     projectId: v.optional(v.id("projects")),
     videoId: v.optional(v.id("videos")),
     access: v.union(v.literal("view"), v.literal("comment")),
@@ -123,6 +124,7 @@ export default defineSchema({
     name: v.string(),
     jobNumber: v.optional(v.string()),
     client: v.optional(v.string()),
+    clientId: v.optional(v.id("clients")), // Phase 0.5d step 5: the client's record (kept in step with `client`)
     createdAt: v.number(),
     // C7: the Dropbox folder that made or matched this project (path_lower, e.g. /clients/floor trader/backrooms).
     // A renamed folder renames the project; a deleted folder only clears this.
@@ -372,6 +374,9 @@ export default defineSchema({
     name: v.string(),
     createdAt: v.number(),
     dropboxFolder: v.optional(v.string()), // C7: /clients/<name> when a folder made or matched it
+    // Phase 0.5d step 5: made automatically because a project or share named this client (not shown as a
+    // "New client" on its own); every client a project names now has a record, and projects link to it by id.
+    fromProjects: v.optional(v.boolean()),
   }).index("by_name", ["name"]).index("by_dropbox_folder", ["dropboxFolder"]),
 
   // Playback problems the browser reported (Oct 21), so they can be diagnosed on devices Claude can't reach.
