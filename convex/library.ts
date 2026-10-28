@@ -1,5 +1,6 @@
 // Projects, videos and versions: what the home page and the video page read.
-import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
+import { query, internalQuery } from "./_generated/server";
+import { mutation, internalMutation } from "./lib/functions";
 import type { MutationCtx } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";

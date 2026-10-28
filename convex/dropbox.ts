@@ -2,7 +2,8 @@
 // Flow: Dropbox tells us something changed (webhook, plus a check every minute) → we list what changed → once a
 // file has stopped changing and is complete, Bunny pulls it through a share link → the link is deleted as soon as
 // Bunny has the file. Tokens stay in the backend; the Settings page only ever sees names, dates and statuses.
-import { action, httpAction, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { action, httpAction, internalAction, internalQuery, query } from "./_generated/server";
+import { internalMutation, mutation } from "./lib/functions";
 import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";

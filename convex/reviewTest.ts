@@ -1,7 +1,8 @@
 // Phase R3 live test (Oct 22): register number 99999 is test-only (Heston, Oct 22), so 00002 stays free for the next
 // real video. The test video lives in the "Tests" project (no Slack). Renders go in Dropbox › Apps › Wrangler Review ›
 // R3 Test. Run from CI: returns statuses, sizes and timings for the test files only.
-import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { internalAction, internalQuery } from "./_generated/server";
+import { internalMutation } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { videoByNumber } from "./lib/register";

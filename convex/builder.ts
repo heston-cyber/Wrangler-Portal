@@ -7,7 +7,8 @@
 //   profile    the business details new documents start with
 // "Continue to signing" takes the PDF the page rendered and turns the build into a Wrangler Sign document (or rebuilds
 // its draft), with boxes placed from the markers the renderer wrote and the signers and deposit from the build.
-import { action, internalAction, internalMutation, internalQuery, mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { action, internalAction, internalQuery, query, type ActionCtx, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { internalMutation, mutation } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";

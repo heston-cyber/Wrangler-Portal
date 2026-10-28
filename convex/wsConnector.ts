@@ -1,7 +1,8 @@
 // Wrangler Sign's Claude connector, data side (Phase S4, Oct 27): its keys (separate from Wrangler Review's, so one
 // can be revoked without the other) and the lookups its tools use. Keys are stored only as SHA-256 hashes; the full
 // key is shown once, on the Contracts page.
-import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { action, internalQuery, query } from "./_generated/server";
+import { internalMutation, mutation } from "./lib/functions";
 import type { QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";

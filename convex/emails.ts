@@ -4,7 +4,8 @@
 //   ownerAlert   clients or guests left notes → one email to Heston per sitting, 10 minutes after the last note
 // Every client email carries an unsubscribe link for that kind; each email is logged by key so it goes out once.
 // Bodies name the video and its project only, never other clients; links carry the share token, never a key.
-import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { internalAction, internalQuery } from "./_generated/server";
+import { internalMutation } from "./lib/functions";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";

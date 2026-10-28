@@ -9,7 +9,8 @@
 //   archive  the signed copy and the trail as JSON into Dropbox › Apps/Wrangler Sign/<year>/ (convex/wsArchive.ts)
 // Plus the public check: sign.wranglerportal.com/verify hashes a PDF in the browser and asks here whether that hash is
 // a completed Wrangler Sign document (the file itself never leaves the person's computer).
-import { action, httpAction, internalAction, internalMutation, internalQuery, mutation, type ActionCtx } from "./_generated/server";
+import { action, httpAction, internalAction, internalQuery, type ActionCtx } from "./_generated/server";
+import { internalMutation, mutation } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";

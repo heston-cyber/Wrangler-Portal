@@ -1,4 +1,5 @@
-import { query, mutation, internalQuery } from "./_generated/server";
+import { query, internalQuery } from "./_generated/server";
+import { mutation } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { requireSignedIn } from "./lib/access";
 import { getAuthUserId } from "@convex-dev/auth/server";

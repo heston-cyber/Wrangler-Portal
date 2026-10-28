@@ -1,5 +1,6 @@
 // Transcript bookkeeping (the ElevenLabs call itself is in transcribe.ts, which runs in Node for the memory).
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internalQuery, query } from "./_generated/server";
+import { internalMutation, mutation } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { requireMe } from "./lib/access";

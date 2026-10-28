@@ -32,7 +32,8 @@ export const send = internalAction({
 // comment share to the address (→ the invite email), fires the new-version email, leaves a note as a test client
 // account for that address, replies as Heston (→ the reply email), and runs the owner alert (→ Heston's alert).
 // Everything is tagged so `liveCleanup` removes it. Returns counts and statuses only.
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalQuery } from "./_generated/server";
+import { internalMutation } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { reviewStorage } from "./lib/reviewStorage";
 import { allowedEmails } from "./auth";

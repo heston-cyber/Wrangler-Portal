@@ -2,7 +2,7 @@
 // Makes a "Connector test" video that plays the same render as a real video, copies that video's notes
 // (with their saved frames and drawings) and adds edge-case notes, so there are 15 notes with known answers.
 // The real video and its notes are left untouched. Logs are public, so it returns ids and counts only.
-import { internalMutation } from "./_generated/server";
+import { internalMutation } from "./lib/functions";
 import { v } from "convex/values";
 
 const TEST_PROJECT = "Tests";

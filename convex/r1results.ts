@@ -1,6 +1,7 @@
 // Phase R1 (Oct 22): the review-format test page posts its numbers here, so tests on Heston's phone reach Claude.
 // No sign-in on that page; the test link's folder key is the password (only its hash is in the code).
-import { internalQuery, mutation } from "./_generated/server";
+import { internalQuery } from "./_generated/server";
+import { mutation } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 
 const KEY_SHA256 = "96fafcb8c881cd492226208ad38beee7a3f4cf3877858529bfe245c298492466";

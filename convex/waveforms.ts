@@ -1,5 +1,6 @@
 // Waveform bookkeeping (the decoding itself is in waveform.ts, which runs in Node).
-import { internalMutation, internalQuery, query } from "./_generated/server";
+import { internalQuery, query } from "./_generated/server";
+import { internalMutation } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";

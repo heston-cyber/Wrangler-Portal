@@ -3,7 +3,8 @@
 // One row per sitting. The owner sees, per video, how many views, by how many people, who got how far; the share
 // activity list reads "watched v2 to the end". Anyone who may view a version may report on it; the owner's own
 // sittings are stored (so the page stays simple) but never counted or listed.
-import { mutation, query } from "./_generated/server";
+import { query } from "./_generated/server";
+import { mutation } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireMe } from "./lib/access";

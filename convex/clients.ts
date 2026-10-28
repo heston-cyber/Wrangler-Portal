@@ -1,6 +1,7 @@
 // Client accounts (client side C1, Oct 23). Owner only: invite an email, see and revoke invites. An invited email
 // can then make an account on the sign-in page; everyone else is refused by auth.ts. Shares (C2) call invite too.
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import { query, type MutationCtx } from "./_generated/server";
+import { mutation } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { requireMe, requireSignedIn } from "./lib/access";
 import { allowedEmails } from "./auth";

@@ -21,6 +21,7 @@ export default defineSchema({
   }).index("email", ["email"]).index("phone", ["phone"]),
   // Emails allowed to make a client account. Made by the owner (the Share dialog in C2, or Settings › Clients).
   invites: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     email: v.string(),            // lower-case
     name: v.optional(v.string()), // what Heston calls them, shown until they set their own
     createdAt: v.number(),
@@ -34,6 +35,7 @@ export default defineSchema({
   // signed-in accounts whose email is on the share (shareMembers) and still invited. Off and expired are refused
   // the moment they happen. What a share covers is computed live (a new video under a shared project is covered).
   shares: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     token: v.string(), // the random part of review.wranglerportal.com/s/<token>
     kind: v.union(v.literal("client"), v.literal("project"), v.literal("video")),
     client: v.optional(v.string()),        // kind "client": the client name as filed on its projects
@@ -57,6 +59,7 @@ export default defineSchema({
 
   // The emails on an invited share.
   shareMembers: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     shareId: v.id("shares"),
     email: v.string(), // lower-case
     addedAt: v.number(),
@@ -65,6 +68,7 @@ export default defineSchema({
 
   // What happened on a share: opened, a video viewed, a note left (C3). `who` is a name or email, or "guest".
   shareActivity: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     shareId: v.id("shares"),
     kind: v.union(v.literal("opened"), v.literal("viewed"), v.literal("note")),
     who: v.string(),
@@ -77,6 +81,7 @@ export default defineSchema({
   // C9 (Oct 26): views. One row per sitting (a page load of a version by one person): how far they got and how much
   // they watched, from the player's heartbeat. The owner's own sittings are kept but never counted.
   views: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     videoId: v.id("videos"),
     versionId: v.id("versions"),
     shareId: v.optional(v.id("shares")),
@@ -95,6 +100,7 @@ export default defineSchema({
   // Emails (client side C4, Oct 23). Each address's "stop these" choices, with the random key its unsubscribe
   // links carry; and a log so each email goes out once (key = what it was about + who got it).
   emailPrefs: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     email: v.string(), // lower-case
     key: v.string(),
     versionsOff: v.optional(v.boolean()),
@@ -113,6 +119,7 @@ export default defineSchema({
   rateLimits: defineTable({ key: v.string(), count: v.number(), hour: v.number() }).index("by_key", ["key"]).index("by_hour", ["hour"]),
 
   projects: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     name: v.string(),
     jobNumber: v.optional(v.string()),
     client: v.optional(v.string()),
@@ -123,6 +130,7 @@ export default defineSchema({
   }).index("by_name", ["name"]).index("by_dropbox_folder", ["dropboxFolder"]),
 
   videos: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     projectId: v.id("projects"),
     title: v.string(),
     // The register (Oct 22): every video made from now on gets a number (never reused) and a short title,
@@ -139,12 +147,13 @@ export default defineSchema({
   userPrefs: defineTable({ userId: v.id("users"), key: v.string(), value: v.any(), updatedAt: v.number() }).index("by_user_key", ["userId", "key"]),
 
   // Counters that only go up (the next video number).
-  counters: defineTable({ key: v.string(), value: v.number() }).index("by_key", ["key"]),
+  counters: defineTable({ businessId: v.optional(v.id("businesses")), key: v.string(), value: v.number() }).index("by_key", ["key"]),
 
   // Read-only keys for the Google Sheet copy of the register. Only the hash is kept.
-  sheetKeys: defineTable({ hash: v.string(), prefix: v.string(), createdAt: v.number(), lastUsedAt: v.optional(v.number()) }).index("by_hash", ["hash"]),
+  sheetKeys: defineTable({ businessId: v.optional(v.id("businesses")), hash: v.string(), prefix: v.string(), createdAt: v.number(), lastUsedAt: v.optional(v.number()) }).index("by_hash", ["hash"]),
 
   versions: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     videoId: v.id("videos"),
     number: v.number(), // 1, 2, 3...
     status: v.union(v.literal("uploading"), v.literal("processing"), v.literal("ready"), v.literal("failed")),
@@ -199,8 +208,9 @@ export default defineSchema({
 
   // Security review (Oct 27): recordings uploaded for voice notes. Only these storage ids can be attached to a note
   // or thrown away from the page, so a guest can't reach any other stored file (Sign PDFs, signatures).
-  voiceUploads: defineTable({ storageId: v.id("_storage"), versionId: v.optional(v.id("versions")), createdAt: v.number() }).index("by_storage", ["storageId"]),
+  voiceUploads: defineTable({ businessId: v.optional(v.id("businesses")), storageId: v.id("_storage"), versionId: v.optional(v.id("versions")), createdAt: v.number() }).index("by_storage", ["storageId"]),
   notes: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     versionId: v.id("versions"),
     videoId: v.id("videos"),
     kind: v.union(v.literal("frame"), v.literal("range"), v.literal("general")),
@@ -242,6 +252,7 @@ export default defineSchema({
     .index("by_video", ["videoId"]),
 
   replies: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     noteId: v.id("notes"),
     text: v.string(),
     authorName: v.string(),
@@ -255,6 +266,7 @@ export default defineSchema({
 
   // When each person last opened each video (Home's "Last opened", the sidebar list).
   opens: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     userId: v.id("users"),
     videoId: v.id("videos"),
     openedAt: v.number(),
@@ -264,6 +276,7 @@ export default defineSchema({
 
   // Keys for the Claude connector. Only a SHA-256 hash is stored; the key itself is shown once.
   connectorKeys: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     hash: v.string(),
     prefix: v.string(), // first characters, to tell keys apart in Settings
     label: v.string(),
@@ -274,6 +287,7 @@ export default defineSchema({
 
   // The connected Dropbox account (one row). Tokens never leave the backend.
   dropbox: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     accountId: v.string(),
     email: v.optional(v.string()),
     name: v.optional(v.string()),
@@ -295,6 +309,7 @@ export default defineSchema({
 
   // Every file seen in the drop folder, by path. A new revision of the same path is a new render.
   dropFiles: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     pathLower: v.string(),
     pathDisplay: v.string(),
     rev: v.string(),
@@ -325,6 +340,7 @@ export default defineSchema({
 
   // What's said in each version, word by word, pinned to frames. The words themselves live in a JSON file in Convex storage.
   transcripts: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     versionId: v.id("versions"),
     status: v.union(v.literal("pending"), v.literal("running"), v.literal("done"), v.literal("failed")),
     storageId: v.optional(v.id("_storage")),
@@ -339,6 +355,7 @@ export default defineSchema({
 
   // Each version's sound as waveform peaks (0–255, `rate` per second), for the timeline. Made from Bunny's smallest MP4.
   waveforms: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     versionId: v.id("versions"),
     status: v.union(v.literal("pending"), v.literal("running"), v.literal("done"), v.literal("none"), v.literal("failed")),
     rate: v.optional(v.number()),
@@ -351,6 +368,7 @@ export default defineSchema({
 
   // Clients made with "New client" before they have any projects. A client with projects is named on its projects.
   clients: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     name: v.string(),
     createdAt: v.number(),
     dropboxFolder: v.optional(v.string()), // C7: /clients/<name> when a folder made or matched it
@@ -377,6 +395,7 @@ export default defineSchema({
 
   // Stills kept in Convex storage until Bunny Storage is set up.
   stillFiles: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     storageId: v.id("_storage"),
     createdAt: v.number(),
   }),
@@ -387,6 +406,7 @@ export default defineSchema({
   // fractions of the page as displayed (see convex/lib/wsPdf.ts). Signer "heston" is Heston himself: his boxes are
   // filled with his adopted signature when the document is sent (S2).
   wsDocuments: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     number: v.number(),                 // WS-00001 …, from counters "wsNumber", never reused
     title: v.string(),
     status: v.union(v.literal("draft"), v.literal("approved"), v.literal("sent"), v.literal("completed"), v.literal("voided")),
@@ -421,6 +441,7 @@ export default defineSchema({
   // fill-in fields and the style); "Continue to signing" renders it to a PDF, which becomes the document's version.
   // Blocks, fields and style are JSON shaped by src/builder/model.ts and checked there and in convex/builder.ts.
   wsBuilds: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     title: v.string(),
     blocks: v.any(),
     fields: v.any(),
@@ -433,6 +454,7 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_updated", ["updatedAt"]).index("by_document", ["documentId"]),
   wsTemplates: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     name: v.string(),
     description: v.optional(v.string()),
     blocks: v.any(),
@@ -442,6 +464,7 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_updated", ["updatedAt"]),
   wsClauses: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     title: v.string(),
     body: v.any(),                          // rich text (the builder's text JSON)
     initials: v.boolean(),                  // ask the client to initial it
@@ -450,9 +473,10 @@ export default defineSchema({
   }).index("by_updated", ["updatedAt"]),
   // Styles, like craft.do's: named looks (fonts, colours, background colour or image, logo, page layout), one marked
   // default for new docs; a doc or template keeps its own copy, so changing a style later doesn't change sent PDFs.
-  wsStyles: defineTable({ name: v.string(), style: v.any(), isDefault: v.boolean(), createdAt: v.number(), updatedAt: v.number() }).index("by_updated", ["updatedAt"]),
-  wsProfile: defineTable({ business: v.any(), updatedAt: v.number() }), // the business details documents start with
+  wsStyles: defineTable({ businessId: v.optional(v.id("businesses")), name: v.string(), style: v.any(), isDefault: v.boolean(), createdAt: v.number(), updatedAt: v.number() }).index("by_updated", ["updatedAt"]),
+  wsProfile: defineTable({ businessId: v.optional(v.id("businesses")), business: v.any(), updatedAt: v.number() }), // the business details documents start with
   wsFonts: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     family: v.string(),
     weight: v.number(),                     // 400, 700 …
     italic: v.boolean(),
@@ -463,6 +487,7 @@ export default defineSchema({
   }).index("by_family", ["family"]),
   // S4: keys for Wrangler Sign's own Claude connector (/ws-mcp), separate from Wrangler Review's. Hash only.
   wsConnectorKeys: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     hash: v.string(),
     prefix: v.string(),
     label: v.string(),
@@ -472,6 +497,7 @@ export default defineSchema({
   }).index("by_hash", ["hash"]),
   // S3: the archive's own Dropbox app ("Wrangler Sign", App folder), separate from Wrangler Review's.
   wsDropbox: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     accountId: v.string(),
     email: v.optional(v.string()),
     name: v.optional(v.string()),
@@ -484,6 +510,7 @@ export default defineSchema({
   // S2: one row per client signer of a sent version. The link is sign.wranglerportal.com/<token>; the email code
   // proves the signer controls the address it was sent to; a session (hash only) lets the page act after that.
   wsSignings: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     documentId: v.id("wsDocuments"),
     versionNumber: v.number(),
     signerKey: v.string(),
@@ -521,6 +548,7 @@ export default defineSchema({
     signUserAgent: v.optional(v.string()),
   }).index("by_token", ["token"]).index("by_document", ["documentId", "versionNumber"]),
   wsVersions: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     documentId: v.id("wsDocuments"),
     number: v.number(),
     fileId: v.id("_storage"),           // the PDF exactly as uploaded; never modified
@@ -571,6 +599,7 @@ export default defineSchema({
   // Security review (Oct 27): what Claude asked to do through the connector (approve, send, cancel). Nothing happens
   // until Heston confirms it on the document page, signed in; a request lasts a day.
   wsRequests: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     documentId: v.id("wsDocuments"),
     what: v.union(v.literal("approve"), v.literal("send"), v.literal("cancel")),
     versionNumber: v.number(),
@@ -584,6 +613,7 @@ export default defineSchema({
   }).index("by_document", ["documentId", "status"]).index("by_status", ["status", "createdAt"]),
   // Heston's adopted signature. A new adoption replaces the old one (replacedAt); old ones are kept for the record.
   wsOwnerSignatures: defineTable({
+    businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     name: v.string(),
     title: v.string(),
     method: v.union(v.literal("typed"), v.literal("drawn")),

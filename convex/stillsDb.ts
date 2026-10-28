@@ -1,4 +1,4 @@
-import { internalMutation } from "./_generated/server";
+import { internalMutation } from "./lib/functions";
 import { v } from "convex/values";
 
 export const record = internalMutation({
