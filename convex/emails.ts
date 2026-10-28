@@ -13,6 +13,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { allowedEmails } from "./auth";
 import { frameTc } from "./lib/frames";
 import { randomToken } from "./lib/hash";
+import { businessInScope, defaultBusiness } from "./lib/business";
 import { REPLY_TO, SITE, sendEmail } from "./lib/email";
 import { clientKey, sameBusiness, shareCovers, shareState } from "./lib/shareAccess";
 
@@ -26,8 +27,17 @@ export const alertEmail = () => process.env.ALERT_EMAIL || allowedEmails()[0] ||
 
 // ---------- preferences and the log ----------
 
+/** Step 6: a person has one prefs row per business; pick the one for the business this call acts for (the default
+ *  business when it acts for none), never another business's. */
+async function prefsRow(ctx: QueryCtx | MutationCtx, email: string) {
+  const rows = await ctx.db.query("emailPrefs").withIndex("by_email", (q) => q.eq("email", email)).collect();
+  const def = (await defaultBusiness(ctx))?._id ?? null;
+  const biz = businessInScope(ctx) ?? def;
+  return rows.find((r) => (r.businessId ?? def) === biz) ?? null;
+}
+
 async function prefsFor(ctx: MutationCtx, email: string) {
-  const row = await ctx.db.query("emailPrefs").withIndex("by_email", (q) => q.eq("email", email)).first(); // one per business; the caller's scope picks it
+  const row = await prefsRow(ctx, email);
   if (row) return row;
   const id = await ctx.db.insert("emailPrefs", { email, key: randomToken(18), updatedAt: Date.now() });
   return (await ctx.db.get(id))!;
@@ -312,7 +322,7 @@ export const stop = httpAction(async (ctx, req) => {
 export async function prefsByEmail(ctx: QueryCtx, emails: string[]) {
   const out = new Map<string, { versionsOff: boolean; repliesOff: boolean }>();
   for (const e of emails) {
-    const p = await ctx.db.query("emailPrefs").withIndex("by_email", (q) => q.eq("email", e)).first();
+    const p = await prefsRow(ctx, e);
     if (p) out.set(e, { versionsOff: !!p.versionsOff, repliesOff: !!p.repliesOff });
   }
   return out;

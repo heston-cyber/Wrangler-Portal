@@ -241,3 +241,14 @@ test("second review 4: re-running bootstrap never makes another business's clien
   const ms = await w.t.run(async (ctx) => (await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", "puppet@evil.example")).collect()).map((m) => m.businessId));
   expect(ms).toEqual([w.B]);
 });
+
+test("final check: an email opt-out is read from the right business's preferences, even with no business given", async () => {
+  const w = await world();
+  await w.t.run(async (ctx) => {
+    await ctx.db.insert("emailPrefs", { businessId: w.A, email: "both@acme.example", key: "kA", versionsOff: true, updatedAt: 0 });
+    await ctx.db.insert("emailPrefs", { businessId: w.B, email: "both@acme.example", key: "kB", updatedAt: 0 });
+  });
+  expect(await w.t.mutation(internal.emails.recipients, { emails: ["both@acme.example"], kind: "versions" })).toEqual([]);
+  expect(await w.t.mutation(internal.emails.recipients, { emails: ["both@acme.example"], kind: "versions", asBusiness: w.A })).toEqual([]);
+  expect(await w.t.mutation(internal.emails.recipients, { emails: ["both@acme.example"], kind: "versions", asBusiness: w.B })).toEqual([{ email: "both@acme.example", key: "kB" }]);
+});
