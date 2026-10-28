@@ -2,7 +2,7 @@
 // Its output is counts only (the repo and its CI logs are public).
 import { internalMutation, internalQuery } from "./lib/functions";
 import { v } from "convex/values";
-import { businessContact, businessInScope, defaultBusiness, ensureDefaultBusiness, ensureMembership } from "./lib/business";
+import { businessContact, businessInScope, defaultBusiness, ensureDefaultBusiness, ensureMembership, syncClientMemberships } from "./lib/business";
 import { allowedEmails } from "./lib/owners";
 
 /** Makes the default business, the owners' memberships, and a client membership for every existing client account. */
@@ -16,7 +16,12 @@ export const bootstrap = internalMutation({
       usersSeen++;
       const email = (u.email ?? "").toLowerCase();
       if (!email || owners.has(email)) continue;
-      if (u.role === "client" && (await ensureMembership(ctx, businessId, email, "client", u._id))) clientsAdded++;
+      // Step 6: a client's memberships come from their invites (each in its own business), never all to the default.
+      // An account with no invite at all (made before invites existed) stays the default business's, as before.
+      if (u.role !== "client") continue;
+      const invited = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()).length > 0;
+      if (invited) clientsAdded += await syncClientMemberships(ctx, email, u._id);
+      else if (await ensureMembership(ctx, businessId, email, "client", u._id)) clientsAdded++;
     }
     return { businessMade: made, ownersAdded, clientsAdded, usersSeen };
   },

@@ -43,8 +43,17 @@ export async function labelOf(ctx: QueryCtx | MutationCtx, s: Share): Promise<{ 
 }
 
 /** Step 6: is this record in the share's business? (Untagged records, only in tests, count as the same.) */
-const sameBusiness = (share: Share, doc: { businessId?: Id<"businesses"> }) =>
+export const sameBusiness = (share: Share, doc: { businessId?: Id<"businesses"> }) =>
   share.businessId === undefined || doc.businessId === undefined || doc.businessId === share.businessId;
+
+/** Does this share cover this video (in this project)? The one rule, for code that scans many shares at once. */
+export function shareCovers(share: Share, vid: Doc<"videos">, project: Doc<"projects"> | null): boolean {
+  if (!sameBusiness(share, vid)) return false;
+  if (share.kind === "video") return share.videoId === vid._id;
+  if (share.kind === "project") return share.projectId === vid.projectId;
+  if (!project || !sameBusiness(share, project)) return false;
+  return share.clientId && project.clientId ? project.clientId === share.clientId : clientKey(project.client) === clientKey(share.client);
+}
 
 /** The projects a share covers (all of a client's, the one project, or the video's project), in the share's business only. */
 export async function coveredProjects(ctx: QueryCtx | MutationCtx, share: Share): Promise<Doc<"projects">[]> {

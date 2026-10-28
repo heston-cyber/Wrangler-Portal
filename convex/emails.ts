@@ -14,7 +14,7 @@ import { allowedEmails } from "./auth";
 import { frameTc } from "./lib/frames";
 import { randomToken } from "./lib/hash";
 import { REPLY_TO, SITE, sendEmail } from "./lib/email";
-import { clientKey, shareState } from "./lib/shareAccess";
+import { clientKey, sameBusiness, shareCovers, shareState } from "./lib/shareAccess";
 
 export const ALERT_DELAY_MS = 10 * 60_000;
 export const NEW_VERSION_DELAY_MS = 60_000;
@@ -27,7 +27,7 @@ export const alertEmail = () => process.env.ALERT_EMAIL || allowedEmails()[0] ||
 // ---------- preferences and the log ----------
 
 async function prefsFor(ctx: MutationCtx, email: string) {
-  const row = await ctx.db.query("emailPrefs").withIndex("by_email", (q) => q.eq("email", email)).unique();
+  const row = await ctx.db.query("emailPrefs").withIndex("by_email", (q) => q.eq("email", email)).first(); // one per business; the caller's scope picks it
   if (row) return row;
   const id = await ctx.db.insert("emailPrefs", { email, key: randomToken(18), updatedAt: Date.now() });
   return (await ctx.db.get(id))!;
@@ -99,13 +99,12 @@ export const newVersionData = internalQuery({
     if (!vid) return null;
     const project = await ctx.db.get(vid.projectId);
     // Invited shares that cover this video, are on, and want these emails.
-    const shares = (await ctx.db.query("shares").collect()).filter((s) => s.who === "invited" && s.emailNewVersions && !shareState(s) &&
-      ((s.kind === "video" && s.videoId === vid._id) || (s.kind === "project" && s.projectId === vid.projectId) || (s.kind === "client" && !!project && clientKey(s.client) === clientKey(project.client))));
+    const shares = (await ctx.db.query("shares").collect()).filter((s) => s.who === "invited" && s.emailNewVersions && !shareState(s) && shareCovers(s, vid, project));
     const people: Array<{ email: string; token: string; name: string | null }> = [];
     for (const s of shares) {
       for (const m of await ctx.db.query("shareMembers").withIndex("by_share", (q) => q.eq("shareId", s._id)).collect()) {
         if (people.some((p) => p.email === m.email)) continue; // one email per person even if several shares cover it
-        const invite = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", m.email)).collect()).find((i) => !i.revokedAt);
+        const invite = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", m.email)).collect()).find((i) => !i.revokedAt && sameBusiness(s, i));
         if (!invite) continue;
         const user = invite.userId ? await ctx.db.get(invite.userId) : null;
         people.push({ email: m.email, token: s.token, name: user?.name ?? invite.name ?? null });
@@ -313,7 +312,7 @@ export const stop = httpAction(async (ctx, req) => {
 export async function prefsByEmail(ctx: QueryCtx, emails: string[]) {
   const out = new Map<string, { versionsOff: boolean; repliesOff: boolean }>();
   for (const e of emails) {
-    const p = await ctx.db.query("emailPrefs").withIndex("by_email", (q) => q.eq("email", e)).unique();
+    const p = await ctx.db.query("emailPrefs").withIndex("by_email", (q) => q.eq("email", e)).first();
     if (p) out.set(e, { versionsOff: !!p.versionsOff, repliesOff: !!p.repliesOff });
   }
   return out;

@@ -14,7 +14,7 @@ import { ensureInvite } from "./clients";
 import { randomToken } from "./lib/hash";
 import { SITE, sendEmail } from "./lib/email";
 import { downloadFor, signedThumbUrl } from "./lib/media";
-import { clientKey, coveredProjects, coveredVideos, gateShare, labelOf, MIN_PASSCODE, passProof, passcodeHash, shareState, showsAllVersions, type Share } from "./lib/shareAccess";
+import { clientKey, coveredProjects, coveredVideos, gateShare, sameBusiness, shareCovers, labelOf, MIN_PASSCODE, passProof, passcodeHash, shareState, showsAllVersions, type Share } from "./lib/shareAccess";
 
 const target = v.object({ kind: v.union(v.literal("client"), v.literal("project"), v.literal("video")), client: v.optional(v.string()), projectId: v.optional(v.id("projects")), videoId: v.optional(v.id("videos")) });
 const settings = { access: v.union(v.literal("view"), v.literal("comment")), allVersions: v.boolean(), downloads: v.boolean(), emailNewVersions: v.boolean(), expiresAt: v.optional(v.number()), passcode: v.optional(v.string()) };
@@ -216,8 +216,7 @@ export const coveringVideo = query({
     const vid = await ctx.db.get(videoId);
     if (!vid) return [];
     const p = await ctx.db.get(vid.projectId);
-    const rows = (await ctx.db.query("shares").collect()).filter((s) =>
-      (s.kind === "video" && s.videoId === videoId) || (s.kind === "project" && s.projectId === vid.projectId) || (s.kind === "client" && !!p && clientKey(s.client) === clientKey(p.client)));
+    const rows = (await ctx.db.query("shares").collect()).filter((s) => shareCovers(s, vid, p));
     const out = [];
     for (const s of rows.sort((a, b) => b.createdAt - a.createdAt || b._creationTime - a._creationTime)) out.push(await publicShare(ctx, s));
     return out;
@@ -333,13 +332,14 @@ export const mine = query({
   handler: async (ctx) => {
     const me = await requireSignedIn(ctx);
     if (me.kind !== "client") return [];
-    const invite = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", me.email)).collect()).find((i) => !i.revokedAt);
-    if (!invite) return [];
+    const invites = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", me.email)).collect()).filter((i) => !i.revokedAt);
+    if (!invites.length) return [];
     const members = await ctx.db.query("shareMembers").withIndex("by_email", (q) => q.eq("email", me.email)).collect();
     const out = [];
     for (const m of members) {
       const s = await ctx.db.get(m.shareId);
       if (!s || shareState(s)) continue;
+      if (!invites.some((i) => sameBusiness(s, i))) continue; // step 6: invited by the share's own business
       const l = await labelOf(ctx, s);
       const projects = await coveredProjects(ctx, s);
       const videos = [];
@@ -427,6 +427,5 @@ export async function sharesCovering(ctx: QueryCtx | MutationCtx, videoId: Id<"v
   const vid = await ctx.db.get(videoId);
   if (!vid) return [];
   const p = await ctx.db.get(vid.projectId);
-  return (await ctx.db.query("shares").collect()).filter((s) => !shareState(s) &&
-    ((s.kind === "video" && s.videoId === videoId) || (s.kind === "project" && s.projectId === vid.projectId) || (s.kind === "client" && !!p && clientKey(s.client) === clientKey(p.client))));
+  return (await ctx.db.query("shares").collect()).filter((s) => !shareState(s) && shareCovers(s, vid, p));
 }

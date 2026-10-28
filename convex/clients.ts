@@ -48,6 +48,10 @@ export const revokeInvite = mutation({
     const inv = await ctx.db.get(inviteId);
     if (!inv || inv.revokedAt) return;
     await ctx.db.patch(inviteId, { revokedAt: Date.now() });
+    // Step 6: and they're no longer a client of this business (other businesses' memberships stay).
+    const biz = inv.businessId ?? businessInScope(ctx);
+    for (const m of await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", inv.email)).collect())
+      if (m.role === "client" && !m.revokedAt && m.businessId === biz) await ctx.db.patch(m._id, { revokedAt: Date.now() });
     // An account they already made keeps its role, but nothing is shared with a revoked email (C2 checks invites).
   },
 });

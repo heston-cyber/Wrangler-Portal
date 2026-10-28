@@ -1,7 +1,7 @@
 // Uploading a new version: the browser sends the file straight to Bunny (resumable TUS upload);
 // the backend creates the Bunny video, signs the upload, then polls Bunny until it's converted.
 import { action } from "./_generated/server";
-import { internalAction, internalQuery } from "./lib/functions";
+import { forBusiness, internalAction, internalQuery } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
 import { bunnyCall, bunnyEnv, getBunnyVideo, type BunnyVideo } from "./bunny";
@@ -42,9 +42,10 @@ export const startUpload = action({
 export const uploadFinished = action({
   args: { versionId: v.id("versions") },
   handler: async (ctx, { versionId }) => {
-    await ctx.runQuery(internal.users.assertAllowed, { ids: [versionId] });
+    const { businessId } = await ctx.runQuery(internal.users.assertAllowed, { ids: [versionId] });
     await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { status: "processing", pollCount: 0 } });
-    await ctx.scheduler.runAfter(2000, internal.uploads.poll, { versionId });
+    // Step 6: the whole pipeline after the upload (poll, new-version emails, transcript, waveform) acts for this business.
+    await forBusiness(ctx, businessId).scheduler.runAfter(2000, internal.uploads.poll, { versionId });
   },
 });
 

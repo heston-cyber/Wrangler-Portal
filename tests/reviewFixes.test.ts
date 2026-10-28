@@ -168,3 +168,76 @@ test("finding 6: a guest's upload check acts for the share's business", async ()
   const row = await w.t.run(async (ctx) => (await ctx.db.query("voiceUploads").collect())[0]);
   expect(row?.businessId).toBe(w.B);
 });
+
+// ---------- second review (Oct 28) ----------
+
+test("second review 1: a browser upload's pipeline acts for its business; new-version emails stay in it", async () => {
+  const w = await world();
+  okFetch();
+  const boss = w.t.withIdentity({ subject: w.bossSub });
+  const heston = w.t.withIdentity({ subject: w.hestonSub });
+  // Wrangler's invited "Acme" share, wanting new-version emails.
+  const ash = await heston.mutation(api.shares.create, { ...share({ kind: "client", client: "Acme" }, "invited"), emailNewVersions: true });
+  await heston.mutation(api.shares.addMember, { shareId: ash.shareId, email: "maya@acme.example" });
+  // B's owner finishes a browser upload: the poll job carries B.
+  await boss.action(api.uploads.uploadFinished, { versionId: w.b.ver });
+  const jobs = await w.t.run(async (ctx) => ctx.db.system.query("_scheduled_functions").collect());
+  const poll = jobs.find((j) => j.name.includes("poll"));
+  expect((poll?.args[0] as { asBusiness?: string })?.asBusiness).toBe(w.B);
+  // Whoever asks, B's new version never reaches Wrangler's client.
+  for (const args of [{ versionId: w.b.ver }, { versionId: w.b.ver, asBusiness: w.B }]) {
+    const d = await w.t.query(internal.emails.newVersionData, args);
+    expect(JSON.stringify(d?.people ?? [])).not.toContain("maya@acme.example");
+  }
+  expect(JSON.stringify((await w.t.query(internal.emails.newVersionData, { versionId: w.a.ver }))?.people)).toContain("maya@acme.example");
+});
+
+test("second review 2: Shared with me lists only shares from businesses that still invite you; revoking ends the membership", async () => {
+  const w = await world();
+  okFetch();
+  const boss = w.t.withIdentity({ subject: w.bossSub });
+  const heston = w.t.withIdentity({ subject: w.hestonSub });
+  const c = w.t.withIdentity({ subject: await client(w.t, "both@acme.example", [w.A, w.B]) });
+  const bsh = await boss.mutation(api.shares.create, share({ kind: "project", projectId: w.b.p }, "invited"));
+  await boss.mutation(api.shares.addMember, { shareId: bsh.shareId, email: "both@acme.example" });
+  const ash = await heston.mutation(api.shares.create, share({ kind: "project", projectId: w.a.p }, "invited"));
+  await heston.mutation(api.shares.addMember, { shareId: ash.shareId, email: "both@acme.example" });
+  expect(JSON.stringify(await c.query(api.shares.mine, {}))).toContain("B PRIVATE CUT");
+  const inv = await w.t.run(async (ctx) => (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", "both@acme.example")).collect()).find((i) => i.businessId === w.B)!._id);
+  await boss.mutation(api.clients.revokeInvite, { inviteId: inv });
+  const mine = JSON.stringify(await c.query(api.shares.mine, {}));
+  expect(mine).not.toContain("B PRIVATE CUT");
+  expect(mine).toContain("A SECRET CUT");
+  const live = await w.t.run(async (ctx) => (await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", "both@acme.example")).collect()).filter((m) => !m.revokedAt).map((m) => m.businessId));
+  expect(live).toEqual([w.A]);
+});
+
+test("second review 3: a signed-in client's stills and voice notes on another business's share belong to it", async () => {
+  const w = await world();
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ id: "x", language_code: "en", words: [{ text: "hi", start: 0, end: 0.5, type: "word" }] }), { status: 200 })));
+  process.env.ELEVENLABS_API_KEY = "el-test";
+  const boss = w.t.withIdentity({ subject: w.bossSub });
+  const sh = await boss.mutation(api.shares.create, share({ kind: "project", projectId: w.b.p }));
+  for (const [email, bizs] of [["onlya@acme.example", [w.A]], ["both@acme.example", [w.A, w.B]]] as const) {
+    const c = w.t.withIdentity({ subject: await client(w.t, email, [...bizs]) });
+    const ref = { token: sh.token, guestName: "C" };
+    await c.action(api.stills.upload, { dataBase64: "AAAA", contentType: "image/jpeg", versionId: w.b.ver, share: ref });
+    const storageId = await w.t.run(async (ctx) => ctx.storage.store(new Blob(["x"], { type: "audio/webm" })));
+    await c.action(api.transcribe.voiceWords, { storageId, mime: "audio/webm", versionId: w.b.ver, share: ref });
+    await c.mutation(api.notes.create, { versionId: w.b.ver, kind: "general", text: "", share: ref, voice: { storageId, mime: "audio/webm", durationMs: 500, played: true, words: [], pointers: [] } });
+  }
+  const tags = await w.t.run(async (ctx) => [...(await ctx.db.query("stillFiles").collect()), ...(await ctx.db.query("voiceUploads").collect())].map((r) => r.businessId));
+  expect(tags.length).toBe(4);
+  expect(tags.every((b) => b === w.B)).toBe(true);
+  delete process.env.ELEVENLABS_API_KEY;
+});
+
+test("second review 4: re-running bootstrap never makes another business's client a Wrangler client", async () => {
+  const w = await world();
+  okFetch();
+  await w.t.withIdentity({ subject: w.bossSub }).mutation(api.clients.invite, { email: "puppet@evil.example" });
+  await w.t.action(api.auth.signIn, { provider: "password", params: { flow: "signUp", email: "puppet@evil.example", password: "longenoughpassword" } });
+  await w.t.mutation(internal.business.bootstrap, {});
+  const ms = await w.t.run(async (ctx) => (await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", "puppet@evil.example")).collect()).map((m) => m.businessId));
+  expect(ms).toEqual([w.B]);
+});
