@@ -2,7 +2,8 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../convex/_generated/api";
 import { useLocation } from "./lib/router";
-import SignIn from "./shell/SignIn";
+import SignIn, { SystemPage } from "./shell/SignIn";
+import { Button } from "./ui/wp";
 import ClientHome from "./modules/clients/ClientHome";
 import Home from "./modules/review/Home";
 import Projects from "./modules/review/Projects";
@@ -37,6 +38,7 @@ const Loading = () => <div className="signin"><span className="label">Loading…
 export default function App() {
   const { isLoading, isAuthenticated } = useConvexAuth();
   const { path, search } = useLocation();
+  if (/^(www\.)?wranglerportal\.com$/i.test(location.hostname)) return <HoldingPage />;
   if (Kit && path.startsWith("/__kit")) return <Suspense fallback={<Loading />}><Kit /></Suspense>;
   const signer = (isSignHost() ? /^\/(?:x\/)?([A-Za-z0-9_-]{16,64})\/?$/ : /^\/x\/([A-Za-z0-9_-]{16,64})\/?$/).exec(path);
   if ((isSignHost() && /^\/verify\/?$/.test(path)) || /^\/x\/verify\/?$/.test(path)) return <Suspense fallback={<Loading />}><VerifyPage /></Suspense>;
@@ -73,14 +75,9 @@ function SignedIn() {
   }
   if (!me || !me.allowed) {
     return (
-      <div className="signin">
-        <div style={{ display: "grid", gap: 14, maxWidth: 380 }}>
-          <span className="eyebrow">Wrangler Review</span>
-          <h1 className="title">Not allowed.</h1>
-          <p className="caption">This account isn't on Wrangler Review's list.</p>
-          <button className="btn" onClick={() => void signOut()}>Sign out</button>
-        </div>
-      </div>
+      <SystemPage icon="lock" eyebrow="Wrangler Review" title="Not allowed." body="This account isn't on Wrangler Review's list.">
+        <Button style={{ alignSelf: "flex-start" }} onClick={() => void signOut()}>Sign out</Button>
+      </SystemPage>
     );
   }
   const params = new URLSearchParams(search);
@@ -114,7 +111,19 @@ function SignedIn() {
   );
 }
 
+// The bare wranglerportal.com (D14, Oct 28): a holding page with Sign in.
+function HoldingPage() {
+  return (
+    <SystemPage title="Wrangler Portal" body="Client sign-in for Wrangler Productions.">
+      <a className="btn primary" href="https://app.wranglerportal.com/" style={{ width: "100%" }}>Sign in</a>
+    </SystemPage>
+  );
+}
+
 // sign.wranglerportal.com without a token: nothing to see.
 function SignHostHome() {
-  return <div className="signin"><div style={{ maxWidth: 380, textAlign: "center", display: "grid", gap: 8 }}><span className="headline">Wrangler Sign</span><span className="caption secondary">Open the signing link from your email to review and sign a document from Wrangler Productions. To check a signed copy, go to <a href="/verify" style={{ textDecoration: "underline" }}>sign.wranglerportal.com/verify</a>.</span></div></div>;
+  return (
+    <SystemPage eyebrow="Wrangler Sign" title="Open the signing link from your email." body={<>Open the signing link from your email to review and sign a document from Wrangler Productions. To check a signed copy, go to <a href="/verify" style={{ textDecoration: "underline" }}>sign.wranglerportal.com/verify</a>.</>} />
+  );
 }
+

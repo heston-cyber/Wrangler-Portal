@@ -1,16 +1,31 @@
-// Sign in, create an account (owners and invited clients), prove the email with a code, reset a password (C1, Oct 23).
-import { useState } from "react";
-import { LIGHTS } from "./lights";
-import { BrandImg } from "../ui/BrandImg";
+// Sign in, set a password (invited clients), prove the email with a code, reset a password (C1, Oct 23).
+// Look: the approved P1 sign-in (Figma "S5 · Client + Share › Sign in", Oct 29). The flow and its checks are
+// unchanged: a code is only asked for when Convex Auth needs one (sign-up, or a first sign-in since verification).
+import { useRef, useState } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvex } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { Icon } from "../ui/Icon";
+import { Button } from "../ui/wp";
+import wpLogo from "../assets/d1/wp-logo.png";
+import corona from "../assets/portal/light-corona.jpg";
 
 type Flow = "signIn" | "signUp" | "code" | "reset" | "resetCode";
 
 const TITLES: Record<Flow, string> = {
-  signIn: "Sign in.", signUp: "Create your account.", code: "Check your email.", reset: "Reset your password.", resetCode: "Set a new password.",
+  signIn: "Sign in", signUp: "Set your password", code: "Sign in", reset: "Reset your password", resetCode: "Reset your password",
 };
+
+/** The sign-in light (12, Eclipse corona) and the glass card, shared by the sign-in and system pages. */
+export function CenterCard({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
+  return (
+    <div className="signin wp-center">
+      <div className="wp-light corona" aria-hidden><i style={{ backgroundImage: `url(${corona})` }} /></div>
+      <div className="wp-centercard glass" style={wide ? { width: "min(560px, 100%)" } : undefined}>{children}</div>
+    </div>
+  );
+}
+export const CardLogo = () => <span className="wp-logo"><span className="rec" aria-hidden /><img src={wpLogo} alt="Wrangler Productions" /></span>;
 
 export default function SignIn({ invitedEmail }: { invitedEmail?: string | null }) {
   const { signIn } = useAuthActions();
@@ -20,6 +35,8 @@ export default function SignIn({ invitedEmail }: { invitedEmail?: string | null 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [code, setCode] = useState("");
+  const pw = useRef(""); // kept only to resend a code; never stored
 
   const explain = (msg: string, f: Flow) => {
     if (/invited/i.test(msg)) return "This email hasn't been invited to Wrangler Review. Ask the person who shared with you to invite it.";
@@ -47,16 +64,17 @@ export default function SignIn({ invitedEmail }: { invitedEmail?: string | null 
       if (flow === "signIn" || flow === "signUp") {
         fd.set("flow", flow);
         fd.set("email", mail);
+        pw.current = String(fd.get("password") ?? "");
         const r = await signIn("password", fd);
         // Email verification turned on (sign-up, or a first sign-in since it was): a code went out.
-        if (!r.signingIn) { setFlow("code"); setNote(`A six-digit code is on its way to ${mail}.`); }
+        if (!r.signingIn) { setCode(""); setFlow("code"); }
       } else if (flow === "code") {
-        await signIn("password", { flow: "email-verification", email: mail, code: String(fd.get("code") ?? "").trim() });
+        await signIn("password", { flow: "email-verification", email: mail, code: code.trim() });
       } else if (flow === "reset") {
         await signIn("password", { flow: "reset", email: mail });
-        setFlow("resetCode"); setNote(`A six-digit code is on its way to ${mail}.`);
+        setFlow("resetCode");
       } else if (flow === "resetCode") {
-        await signIn("password", { flow: "reset-verification", email: mail, code: String(fd.get("code") ?? "").trim(), newPassword: String(fd.get("newPassword") ?? "") });
+        await signIn("password", { flow: "reset-verification", email: mail, code: String(fd.get("code") ?? "").replace(/\D/g, ""), newPassword: String(fd.get("newPassword") ?? "") });
       }
     } catch (err) {
       setError(explain((err as Error).message || "", flow));
@@ -66,61 +84,105 @@ export default function SignIn({ invitedEmail }: { invitedEmail?: string | null 
   }
 
   const go = (f: Flow) => { setFlow(f); setError(null); setNote(null); };
-  const askEmail = flow !== "code" && flow !== "resetCode";
+  async function resend() {
+    setError(null); setNote(null); setBusy(true);
+    try {
+      await signIn("password", { flow: "signIn", email, password: pw.current });
+      setNote("A new code is on its way.");
+    } catch (err) { setError(explain((err as Error).message || "", "code")); }
+    finally { setBusy(false); }
+  }
+  const askEmail = flow === "signIn" || flow === "signUp" || flow === "reset";
+  const invited = flow === "signUp" && !!invitedEmail;
   return (
-    <div className="signin">
-      <div className="d1-light l-cross" style={{ backgroundImage: `url(${LIGHTS.cross})` }} aria-hidden />
-      <form onSubmit={onSubmit}>
-        <BrandImg name="wordmark" className="logo" alt="Wrangler Productions" />
-        <span className="eyebrow">Wrangler Review</span>
-        <h1 className="title" style={{ marginBottom: 6 }}>{TITLES[flow]}</h1>
-        {flow === "signUp" && invitedEmail && <p className="caption" style={{ margin: 0 }}>You've been invited. Set a password for this email to see what's been shared with you.</p>}
-        {note && <p className="caption" style={{ margin: 0 }}>{note}</p>}
+    <CenterCard>
+      <form onSubmit={onSubmit} className="wp-form">
+        <CardLogo />
+        <h1 className="wp-h3">{TITLES[flow]}</h1>
+        {flow === "signUp" && invitedEmail && <p className="wp-body">You've been invited. Set a password for this email to see what's been shared with you.</p>}
+        {flow === "code" && <p className="wp-body">Enter the 6-digit code we emailed to {email}.</p>}
+        {flow === "reset" && <p className="wp-body">We'll email you a code.</p>}
+        {note && <p className="wp-small" role="status">{note}</p>}
 
         {askEmail && (
-          <label className="field">
-            <span className="label">Email</span>
-            <input className="input" id="email" name="email" type="email" autoComplete="email" required defaultValue={email} readOnly={flow === "signUp" && !!invitedEmail} />
-          </label>
+          <div className="wp-field">
+            <label className="wp-field-label" htmlFor="email">Email</label>
+            <div className="wp-lockwrap">
+              <input className="input" id="email" name="email" type="email" autoComplete="email" required defaultValue={email} readOnly={invited} aria-readonly={invited || undefined} />
+              {invited && <Icon name="lock" size={14} className="lock" label="Can't be changed" />}
+            </div>
+          </div>
         )}
         {flow === "signUp" && (
-          <label className="field">
-            <span className="label">Your name <span className="secondary">(shown on your notes)</span></span>
+          <div className="wp-field">
+            <label className="wp-field-label" htmlFor="name">Your name (shown on your notes)</label>
             <input className="input" id="name" name="name" type="text" autoComplete="name" maxLength={60} />
-          </label>
+          </div>
         )}
         {(flow === "signIn" || flow === "signUp") && (
-          <label className="field">
-            <span className="label">Password</span>
-            <input className="input" id="password" name="password" type="password" autoComplete={flow === "signIn" ? "current-password" : "new-password"} minLength={10} required />
-          </label>
+          <div className="wp-field">
+            <label className="wp-field-label" htmlFor="password">Password</label>
+            <input className="input" id="password" name="password" type="password" autoComplete={flow === "signIn" ? "current-password" : "new-password"} minLength={10} required placeholder={flow === "signUp" ? "At least 10 characters" : undefined} />
+          </div>
         )}
-        {(flow === "code" || flow === "resetCode") && (
-          <label className="field">
-            <span className="label">Six-digit code</span>
-            <input className="input" id="code" name="code" inputMode="numeric" pattern="[0-9]{6}" autoComplete="one-time-code" maxLength={6} required autoFocus />
-          </label>
-        )}
+        {flow === "code" && <CodeBoxes value={code} onChange={setCode} />}
         {flow === "resetCode" && (
-          <label className="field">
-            <span className="label">New password</span>
-            <input className="input" id="newPassword" name="newPassword" type="password" autoComplete="new-password" minLength={10} required />
-          </label>
+          <>
+            <div className="wp-field">
+              <label className="wp-field-label" htmlFor="code">6-digit code</label>
+              <input className="input" id="code" name="code" inputMode="numeric" pattern="[0-9 ]{6,7}" autoComplete="one-time-code" maxLength={7} required autoFocus onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
+            </div>
+            <div className="wp-field">
+              <label className="wp-field-label" htmlFor="newPassword">New password</label>
+              <input className="input" id="newPassword" name="newPassword" type="password" autoComplete="new-password" minLength={10} required placeholder="At least 10 characters" />
+            </div>
+          </>
         )}
 
-        {error && <p className="error" role="alert">{error}</p>}
-        <button className="btn primary lg" type="submit" disabled={busy}>
-          {busy ? "One moment…" : flow === "signIn" ? "Sign in" : flow === "signUp" ? "Create account" : flow === "code" ? "Continue" : flow === "reset" ? "Email me a code" : "Set password"}
-        </button>
+        {error && <p className="error" role="alert" style={{ margin: 0 }}>{error}</p>}
+        <Button variant="primary" type="submit" loading={busy} disabled={flow === "code" && code.length !== 6} style={{ width: "100%" }}>
+          {flow === "signIn" ? "Sign in" : flow === "signUp" ? "Send me a code" : flow === "code" ? "Continue" : "Reset"}
+        </Button>
 
         {flow === "signIn" && <>
-          <button className="btn ghost" type="button" onClick={() => go("signUp")}>Create your account</button>
-          <button className="linkbtn" type="button" onClick={() => go("reset")} style={{ justifySelf: "center" }}>Forgot your password?</button>
+          <button className="wp-link" type="button" onClick={() => go("reset")}>Forgot password?</button>
+          <button className="wp-link quiet" type="button" onClick={() => go("signUp")}>First time here? Set your password</button>
         </>}
-        {flow === "signUp" && <button className="btn ghost" type="button" onClick={() => go("signIn")}>I already have one</button>}
-        {(flow === "code" || flow === "resetCode") && <button className="btn ghost" type="button" onClick={() => go(flow === "code" ? "signIn" : "reset")}>Start over</button>}
-        {flow === "reset" && <button className="btn ghost" type="button" onClick={() => go("signIn")}>Back to sign in</button>}
+        {flow === "signUp" && <button className="wp-link" type="button" onClick={() => go("signIn")}>I already have one</button>}
+        {flow === "code" && <button className="wp-link" type="button" disabled={busy || !pw.current} onClick={() => void resend()}>Resend code</button>}
+        {flow === "resetCode" && <button className="wp-link" type="button" onClick={() => go("reset")}>Start over</button>}
+        {flow === "reset" && <button className="wp-link" type="button" onClick={() => go("signIn")}>Back to sign in</button>}
       </form>
+    </CenterCard>
+  );
+}
+
+/** Six boxes over one real field, so paste, autofill and screen readers work as with any code input. */
+function CodeBoxes({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [focus, setFocus] = useState(true);
+  return (
+    <div className="wp-code">
+      <input aria-label="6-digit code" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} autoFocus required value={value}
+        onFocus={() => setFocus(true)} onBlur={() => setFocus(false)} onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 6))} />
+      {Array.from({ length: 6 }, (_, i) => (
+        <span key={i} className={`box${focus && i === Math.min(value.length, 5) ? " on" : ""}`} aria-hidden>{value[i] ?? ""}</span>
+      ))}
     </div>
+  );
+}
+
+/** A system page (P1 / Client / System): the sign-in light, a glass card, an icon, a line or two, buttons. */
+export function SystemPage({ icon, eyebrow, title, body, children }: { icon?: "alert" | "lock"; eyebrow?: string; title: string; body?: React.ReactNode; children?: React.ReactNode }) {
+  return (
+    <CenterCard>
+      <div className="stack">
+        <CardLogo />
+        {icon && <Icon name={icon} size={28} />}
+        {eyebrow && <span className="wp-eyebrow">{eyebrow}</span>}
+        <h1 className="wp-h3">{title}</h1>
+        {body && <p className="wp-body">{body}</p>}
+        {children}
+      </div>
+    </CenterCard>
   );
 }
