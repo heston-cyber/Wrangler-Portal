@@ -148,11 +148,13 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       await ctx.db.patch(b2, { title: "Northline Usage Release", updatedAt: Date.now() - 4 * 86_400_000 });
     });
 
+    const noteIds = await t.run(async (ctx) => (await ctx.db.query("inboxNotes").collect()).map((n) => n._id));
     const OWNER: [string, Record<string, unknown>][] = [
       ["users.me", {}], ["business.brand", {}], ["business.settings", {}], ["library.overview", {}], ["activity.feed", { limit: 100 }], ["activity.recent", {}], ["home.needs", {}],
       ["sign.list", {}], ["builder.listBuilds", {}], ["builder.listTemplates", {}], ["builder.listClauses", {}], ["sign.ownerSignature", {}],
       ["clients.listInvites", {}], ["clients.directory", {}], ["clients.page", { clientId: w.harbor }], ["clients.people", { clientId: w.harbor }],
-      ["inbox.notes", {}], ["inbox.forClient", { clientId: w.harbor }],
+      ["inbox.notes", {}], ["inbox.sent", {}], ["inbox.forClient", { clientId: w.harbor }], ["inbox.noteRecipients#" + w.harbor, { clientId: w.harbor }],
+      ...noteIds.map((id): [string, Record<string, unknown>] => ["inbox.noteDetail#" + id, { noteId: id }]),
       ["library.video", { videoId: w.harbor30.v }], ["notes.forVersion", { versionId: w.harbor30.last }], ["transcripts.forVersion", { versionId: w.harbor30.last }],
       ["waveforms.forVersion", { versionId: w.harbor30.last }], ["views.forVideo", { videoId: w.harbor30.v }], ["shares.coveringVideo", { videoId: w.harbor30.v }], ["connector.listKeys", {}], ["register.sheetKey", {}], ["dropbox.status", {}], ["dropbox.flagged", {}], ["wsConnector.listKeys", {}], ["shares.list", {}],
       ["sign.pendingRequests", {}], ["approvals.forVideo", { videoId: w.harbor30.v }], ["sign.requestsFor", { documentId: w.d1 }],
@@ -181,7 +183,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
     // The PDFs in convex-test storage can't be fetched by a browser: point them at the kit's sample PDF.
     const pdfs = (v: unknown): unknown => JSON.parse(JSON.stringify(v), (k, x) => ((k === "fileUrl" || k === "finalUrl") && typeof x === "string" ? "/kit-pdf/" : x));
     for (const k of Object.keys(owned)) if (k.startsWith("sign.get#")) owned[k] = pdfs(owned[k]);
-    const fixtures = { owner: owned, client: await run(client, CLIENT), ids: { shares: shareTokens, harbor: w.harbor, video: w.harbor30.v, docSent: w.d1, docSigned: w.d2, docDraft: w.d3 } };
+    const fixtures = { owner: owned, client: await run(client, CLIENT), ids: { shares: shareTokens, harbor: w.harbor, video: w.harbor30.v, docSent: w.d1, docSigned: w.d2, docDraft: w.d3, notes: noteIds } };
     writeFileSync(join(__dirname, "..", "src", "dev", "fixtures.json"), JSON.stringify(fixtures, null, 1));
     vi.useRealTimers();
   });

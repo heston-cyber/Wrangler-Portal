@@ -231,14 +231,14 @@ export const page = query({
       }
     }
     const shared = [];
-    for (const [versionId, { at }] of seen) {
+    for (const [versionId, { at, share }] of seen) {
       const r = (await ctx.db.get(versionId as Id<"versions">))!;
       const x = videos.find((y) => y._id === r.videoId)!;
       const approved = (await ctx.db.query("clientApprovals").withIndex("by_version_user", (q) => q.eq("versionId", r._id)).collect()).length > 0;
       const notes = (await ctx.db.query("notes").withIndex("by_version", (q) => q.eq("versionId", r._id)).collect()).filter((n) => n.authorKind === "client" || n.authorKind === "guest" || (!!n.shareId && n.authorKind !== "owner")).length;
       const watched = (await ctx.db.query("views").withIndex("by_version", (q) => q.eq("versionId", r._id)).collect()).some((w) => w.kind !== "owner");
       shared.push({
-        videoId: x._id, projectId: x.projectId, versionId: r._id, number: r.number, title: x.title, fileName: r.fileName ?? null, sharedAt: at,
+        videoId: x._id, projectId: x.projectId, versionId: r._id, token: share.token, invited: share.who === "invited", number: r.number, title: x.title, fileName: r.fileName ?? null, sharedAt: at,
         thumbUrl: (await signStillUrl(r.posterUrl)) ?? (await signedThumbUrl(r)), state: approved ? "approved" : notes ? "notes" : watched ? "watched" : "not_watched", notes,
       } as const);
     }

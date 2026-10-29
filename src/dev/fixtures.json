@@ -1537,6 +1537,7 @@
    "shared": [
     {
      "fileName": "00001_Harbor30_v4.mp4",
+     "invited": true,
      "notes": 3,
      "number": 4,
      "projectId": "000000000000000000010020projects",
@@ -1544,11 +1545,13 @@
      "state": "notes",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
+     "token": "qXJKJfYSACbQZ7LXyYyYog",
      "versionId": "000000000000000000010028versions",
      "videoId": "00000000000000000000010024videos"
     },
     {
      "fileName": "00001_Harbor30_v3.mp4",
+     "invited": true,
      "notes": 0,
      "number": 3,
      "projectId": "000000000000000000010020projects",
@@ -1556,11 +1559,13 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
+     "token": "qXJKJfYSACbQZ7LXyYyYog",
      "versionId": "000000000000000000010027versions",
      "videoId": "00000000000000000000010024videos"
     },
     {
      "fileName": "00001_Harbor30_v2.mp4",
+     "invited": true,
      "notes": 0,
      "number": 2,
      "projectId": "000000000000000000010020projects",
@@ -1568,11 +1573,13 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
+     "token": "qXJKJfYSACbQZ7LXyYyYog",
      "versionId": "000000000000000000010026versions",
      "videoId": "00000000000000000000010024videos"
     },
     {
      "fileName": "00002_Harbor15_v2.mp4",
+     "invited": true,
      "notes": 0,
      "number": 2,
      "projectId": "000000000000000000010020projects",
@@ -1580,11 +1587,13 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
      "title": "Harbor Coffee 15s cutdown",
+     "token": "qXJKJfYSACbQZ7LXyYyYog",
      "versionId": "000000000000000000010032versions",
      "videoId": "00000000000000000000010030videos"
     },
     {
      "fileName": "00001_Harbor30_v1.mp4",
+     "invited": true,
      "notes": 0,
      "number": 1,
      "projectId": "000000000000000000010020projects",
@@ -1592,11 +1601,13 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
+     "token": "qXJKJfYSACbQZ7LXyYyYog",
      "versionId": "000000000000000000010025versions",
      "videoId": "00000000000000000000010024videos"
     },
     {
      "fileName": "00002_Harbor15_v1.mp4",
+     "invited": true,
      "notes": 0,
      "number": 1,
      "projectId": "000000000000000000010020projects",
@@ -1604,6 +1615,7 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
      "title": "Harbor Coffee 15s cutdown",
+     "token": "qXJKJfYSACbQZ7LXyYyYog",
      "versionId": "000000000000000000010031versions",
      "videoId": "00000000000000000000010030videos"
     }
@@ -1666,8 +1678,10 @@
     "clientId": "0000000000000000000010003clients",
     "createdAt": 1793289600000,
     "draftedBy": "claude",
+    "emailThem": true,
     "emailed": 0,
     "link": null,
+    "linkLabel": null,
     "readBy": 0,
     "recipients": 0,
     "said": "tell Harbor the shoot moved to Thursday",
@@ -1675,6 +1689,7 @@
     "status": "draft",
     "text": "Same call time. We'll send the shot list Monday.",
     "title": "Shoot moved to Thursday, Nov 6",
+    "to": null,
     "updatedAt": 1793289600000
    },
    {
@@ -1683,8 +1698,10 @@
     "clientId": "0000000000000000000010003clients",
     "createdAt": 1793289600000,
     "draftedBy": "owner",
+    "emailThem": true,
     "emailed": 0,
     "link": null,
+    "linkLabel": null,
     "readBy": 0,
     "recipients": 0,
     "said": null,
@@ -1692,6 +1709,7 @@
     "status": "draft",
     "text": "The 15s is on its way.",
     "title": "Cutdown ready next week",
+    "to": null,
     "updatedAt": 1793289600000
    },
    {
@@ -1700,8 +1718,10 @@
     "clientId": "0000000000000000000010003clients",
     "createdAt": 1793289600000,
     "draftedBy": "owner",
+    "emailThem": true,
     "emailed": 0,
     "link": null,
+    "linkLabel": null,
     "readBy": 1,
     "recipients": 2,
     "said": null,
@@ -1709,7 +1729,94 @@
     "status": "sent",
     "text": "Same time, same place. We'll start with the counter shots.",
     "title": "Shoot moved to Friday",
+    "to": null,
     "updatedAt": 1793289600000
+   }
+  ],
+  "inbox.sent": [
+   {
+    "at": 1793289600000,
+    "draftedBy": "claude",
+    "emailed": false,
+    "key": "note:0000000000000000010087inboxNotes",
+    "kind": "note",
+    "open": "/sent/new?note=0000000000000000010087inboxNotes",
+    "readBy": 0,
+    "sentTo": 0,
+    "subject": null,
+    "title": "Shoot moved to Thursday, Nov 6",
+    "to": "Harbor Coffee",
+    "type": "draft"
+   },
+   {
+    "at": 1793289600000,
+    "draftedBy": "owner",
+    "emailed": false,
+    "key": "note:0000000000000000010086inboxNotes",
+    "kind": "note",
+    "open": "/sent/new?note=0000000000000000010086inboxNotes",
+    "readBy": 0,
+    "sentTo": 0,
+    "subject": null,
+    "title": "Cutdown ready next week",
+    "to": "Harbor Coffee",
+    "type": "draft"
+   },
+   {
+    "at": 1793289600000,
+    "draftedBy": "owner",
+    "emailed": false,
+    "key": "note:0000000000000000010083inboxNotes",
+    "kind": "note",
+    "open": "/sent/0000000000000000010083inboxNotes",
+    "readBy": 1,
+    "sentTo": 2,
+    "subject": null,
+    "title": "Shoot moved to Friday",
+    "to": "Harbor Coffee (2)",
+    "type": "note"
+   },
+   {
+    "at": 1793289600000,
+    "draftedBy": null,
+    "emailed": false,
+    "key": "kit-reply",
+    "kind": "reply",
+    "open": "/sent",
+    "readBy": 0,
+    "sentTo": 1,
+    "subject": "Harbor Coffee 30s",
+    "title": "Reply on your note",
+    "to": "Maya Brooks",
+    "type": "auto"
+   },
+   {
+    "at": 1793289600000,
+    "draftedBy": null,
+    "emailed": false,
+    "key": "kit-sign",
+    "kind": "to_sign",
+    "open": "/sign/d/d1",
+    "readBy": 0,
+    "sentTo": 1,
+    "subject": "Service Agreement — Harbor Coffee Launch",
+    "title": "Document to sign",
+    "to": "Maya Brooks",
+    "type": "auto"
+   },
+   {
+    "at": 1793289600000,
+    "draftedBy": null,
+    "emailed": false,
+    "key": "kit-v4",
+    "kind": "cut_ready",
+    "open": "/v/00000000000000000000010024videos?version=4",
+    "readBy": 0,
+    "sentTo": 1,
+    "subject": "Harbor Coffee 30s",
+    "title": "New cut ready",
+    "to": "Maya Brooks",
+    "type": "auto"
    }
   ],
   "inbox.forClient": [
@@ -1719,6 +1826,7 @@
     "emailed": false,
     "kind": "reply",
     "link": "/s/x/v/00000000000000000000010024videos",
+    "linkLabel": null,
     "people": [
      {
       "email": "maya@harborcoffee.com",
@@ -1739,6 +1847,7 @@
     "emailed": false,
     "kind": "to_sign",
     "link": "/x/kittokenkittokenkit1",
+    "linkLabel": null,
     "people": [
      {
       "email": "maya@harborcoffee.com",
@@ -1759,6 +1868,7 @@
     "emailed": false,
     "kind": "cut_ready",
     "link": "/s/x/v/00000000000000000000010024videos",
+    "linkLabel": null,
     "people": [
      {
       "email": "maya@harborcoffee.com",
@@ -1779,6 +1889,7 @@
     "emailed": false,
     "kind": "note",
     "link": null,
+    "linkLabel": null,
     "people": [
      {
       "email": "jordan@harborcoffee.com",
@@ -1799,6 +1910,90 @@
     "title": "Shoot moved to Friday"
    }
   ],
+  "inbox.noteRecipients#0000000000000000000010003clients": [
+   {
+    "access": true,
+    "email": "maya@harborcoffee.com",
+    "name": "Maya Brooks"
+   },
+   {
+    "access": true,
+    "email": "jordan@harborcoffee.com",
+    "name": "Jordan Lee"
+   },
+   {
+    "access": false,
+    "email": "sam@harborcoffee.com",
+    "name": "Sam Ortiz"
+   }
+  ],
+  "inbox.noteDetail#0000000000000000010083inboxNotes": {
+   "_id": "0000000000000000010083inboxNotes",
+   "attachment": null,
+   "client": "Harbor Coffee",
+   "clientId": "0000000000000000000010003clients",
+   "createdAt": 1793289600000,
+   "draftedBy": "owner",
+   "emailThem": true,
+   "link": null,
+   "linkLabel": null,
+   "people": [
+    {
+     "email": "jordan@harborcoffee.com",
+     "emailedAt": null,
+     "name": "Jordan Lee",
+     "readAt": null
+    },
+    {
+     "email": "maya@harborcoffee.com",
+     "emailedAt": null,
+     "name": "Maya Brooks",
+     "readAt": 1793217600000
+    }
+   ],
+   "said": null,
+   "sentAt": 1793289600000,
+   "status": "sent",
+   "text": "Same time, same place. We'll start with the counter shots.",
+   "title": "Shoot moved to Friday",
+   "to": null
+  },
+  "inbox.noteDetail#0000000000000000010086inboxNotes": {
+   "_id": "0000000000000000010086inboxNotes",
+   "attachment": null,
+   "client": "Harbor Coffee",
+   "clientId": "0000000000000000000010003clients",
+   "createdAt": 1793289600000,
+   "draftedBy": "owner",
+   "emailThem": true,
+   "link": null,
+   "linkLabel": null,
+   "people": [],
+   "said": null,
+   "sentAt": null,
+   "status": "draft",
+   "text": "The 15s is on its way.",
+   "title": "Cutdown ready next week",
+   "to": null
+  },
+  "inbox.noteDetail#0000000000000000010087inboxNotes": {
+   "_id": "0000000000000000010087inboxNotes",
+   "attachment": null,
+   "client": "Harbor Coffee",
+   "clientId": "0000000000000000000010003clients",
+   "createdAt": 1793289600000,
+   "draftedBy": "claude",
+   "emailThem": true,
+   "link": null,
+   "linkLabel": null,
+   "people": [],
+   "said": "tell Harbor the shoot moved to Thursday",
+   "sentAt": null,
+   "status": "draft",
+   "text": "Same call time. We'll send the shot list Monday.",
+   "title": "Shoot moved to Thursday, Nov 6",
+   "to": null
+  },
   "library.video": {
    "_id": "00000000000000000000010024videos",
    "can": "owner",
@@ -2123,8 +2318,8 @@
     "projectId": null,
     "state": "on",
     "sub": "26127 Harbor Coffee Launch",
-    "token": "rgl9MRyt0dC0qfKZVph-YA",
-    "url": "https://app.wranglerportal.com/s/rgl9MRyt0dC0qfKZVph-YA",
+    "token": "PrChTV8LLXAQ2mvVbCaCMw",
+    "url": "https://app.wranglerportal.com/s/PrChTV8LLXAQ2mvVbCaCMw",
     "videoId": "00000000000000000000010024videos",
     "who": "link"
    },
@@ -2163,8 +2358,8 @@
     "projectId": "000000000000000000010020projects",
     "state": "on",
     "sub": "Harbor Coffee",
-    "token": "zygYkGr4jqyHUWj1Oq3Fvg",
-    "url": "https://app.wranglerportal.com/s/zygYkGr4jqyHUWj1Oq3Fvg",
+    "token": "qXJKJfYSACbQZ7LXyYyYog",
+    "url": "https://app.wranglerportal.com/s/qXJKJfYSACbQZ7LXyYyYog",
     "videoId": null,
     "who": "invited"
    }
@@ -2205,8 +2400,8 @@
     "projectId": null,
     "state": "on",
     "sub": "26127 Harbor Coffee Launch",
-    "token": "rgl9MRyt0dC0qfKZVph-YA",
-    "url": "https://app.wranglerportal.com/s/rgl9MRyt0dC0qfKZVph-YA",
+    "token": "PrChTV8LLXAQ2mvVbCaCMw",
+    "url": "https://app.wranglerportal.com/s/PrChTV8LLXAQ2mvVbCaCMw",
     "videoId": "00000000000000000000010024videos",
     "who": "link"
    },
@@ -2245,8 +2440,8 @@
     "projectId": "000000000000000000010020projects",
     "state": "on",
     "sub": "Harbor Coffee",
-    "token": "zygYkGr4jqyHUWj1Oq3Fvg",
-    "url": "https://app.wranglerportal.com/s/zygYkGr4jqyHUWj1Oq3Fvg",
+    "token": "qXJKJfYSACbQZ7LXyYyYog",
+    "url": "https://app.wranglerportal.com/s/qXJKJfYSACbQZ7LXyYyYog",
     "videoId": null,
     "who": "invited"
    }
@@ -2398,7 +2593,7 @@
        "rows": [
         {
          "description": "Video production (describe the deliverables)",
-         "id": "kfxtjc6u",
+         "id": "ktibpg2e",
          "qty": 1,
          "rate": 0
         }
@@ -3945,7 +4140,7 @@
     "kind": "project",
     "label": "26127 Harbor Coffee Launch",
     "sub": "Harbor Coffee",
-    "token": "zygYkGr4jqyHUWj1Oq3Fvg",
+    "token": "qXJKJfYSACbQZ7LXyYyYog",
     "videos": [
      {
       "_id": "00000000000000000000010030videos",
@@ -3982,6 +4177,7 @@
      "emailed": false,
      "kind": "reply",
      "link": "/s/x/v/00000000000000000000010024videos",
+     "linkLabel": null,
      "read": false,
      "readAt": null,
      "text": "Harbor Coffee 30s · v4",
@@ -3993,6 +4189,7 @@
      "emailed": false,
      "kind": "to_sign",
      "link": "/x/kittokenkittokenkit1",
+     "linkLabel": null,
      "read": false,
      "readAt": null,
      "text": "Service Agreement — Harbor Coffee Launch · WS-00012",
@@ -4004,6 +4201,7 @@
      "emailed": false,
      "kind": "cut_ready",
      "link": "/s/x/v/00000000000000000000010024videos",
+     "linkLabel": null,
      "read": false,
      "readAt": null,
      "text": "Harbor Coffee 30s · v4",
@@ -4015,6 +4213,7 @@
      "emailed": false,
      "kind": "note",
      "link": null,
+     "linkLabel": null,
      "read": true,
      "readAt": 1793217600000,
      "text": "Same time, same place. We'll start with the counter shots.",
@@ -4040,7 +4239,7 @@
     }
    ]
   },
-  "shares.open#zygYkGr4jqyHUWj1Oq3Fvg": {
+  "shares.open#qXJKJfYSACbQZ7LXyYyYog": {
    "access": "comment",
    "allVersions": true,
    "client": "Harbor Coffee",
@@ -4059,7 +4258,7 @@
    ],
    "state": "ok",
    "sub": "Harbor Coffee",
-   "token": "zygYkGr4jqyHUWj1Oq3Fvg",
+   "token": "qXJKJfYSACbQZ7LXyYyYog",
    "videos": [
     {
      "_id": "00000000000000000000010024videos",
@@ -4195,7 +4394,7 @@
    },
    "who": "invited"
   },
-  "shares.open#rgl9MRyt0dC0qfKZVph-YA": {
+  "shares.open#PrChTV8LLXAQ2mvVbCaCMw": {
    "access": "view",
    "allVersions": true,
    "client": "Harbor Coffee",
@@ -4214,7 +4413,7 @@
    ],
    "state": "ok",
    "sub": "26127 Harbor Coffee Launch",
-   "token": "rgl9MRyt0dC0qfKZVph-YA",
+   "token": "PrChTV8LLXAQ2mvVbCaCMw",
    "videos": [
     {
      "_id": "00000000000000000000010024videos",
@@ -4518,13 +4717,18 @@
  },
  "ids": {
   "shares": [
-   "zygYkGr4jqyHUWj1Oq3Fvg",
-   "rgl9MRyt0dC0qfKZVph-YA"
+   "qXJKJfYSACbQZ7LXyYyYog",
+   "PrChTV8LLXAQ2mvVbCaCMw"
   ],
   "harbor": "0000000000000000000010003clients",
   "video": "00000000000000000000010024videos",
   "docSent": "000000000000000010056wsDocuments",
   "docSigned": "000000000000000010058wsDocuments",
-  "docDraft": "000000000000000010060wsDocuments"
+  "docDraft": "000000000000000010060wsDocuments",
+  "notes": [
+   "0000000000000000010083inboxNotes",
+   "0000000000000000010086inboxNotes",
+   "0000000000000000010087inboxNotes"
+  ]
  }
 }

@@ -70,6 +70,9 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "clients.directory": { pages: ["owner"], args: () => "skip" }, // Home and Clients
   "clients.page": { pages: ["owner"], args: () => "skip" }, // client page
   "inbox.forClient": { pages: ["owner"], args: () => "skip" }, // client page › Their Inbox
+  "inbox.noteDetail": { pages: ["owner"], args: () => "skip" }, // Post a note, Sent › note
+  "inbox.noteRecipients": { pages: ["owner"], args: () => "skip" }, // Post a note
+  "inbox.sent": { pages: ["owner"], args: () => "skip" }, // Sent
   "clients.listInvites": { pages: ["owner"], args: () => "skip" },
   "dropbox.status": { pages: ["owner"], args: () => "skip" },
   "dropbox.flagged": { pages: ["owner"], args: () => "skip" },

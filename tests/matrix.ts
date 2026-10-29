@@ -68,7 +68,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     // Phase 1 (Oct 29)
     "inbox.mine": {}, "inbox.unreadCount": {}, "inbox.markRead": { itemId: ids.inboxItemId }, "inbox.markAllRead": {},
     "inbox.forClient": { clientId: ids.clientRecId }, "inbox.noteRecipients": { clientId: ids.clientRecId }, "inbox.notes": {},
-    "inbox.saveNote": { clientId: ids.clientRecId, title: "T", text: "x" }, "inbox.sendNote": { noteId: ids.inboxNoteId }, "inbox.noteDetail": { noteId: ids.inboxNoteId }, "inbox.discardNote": { noteId: ids.inboxNoteId },
+    "inbox.saveNote": { clientId: ids.clientRecId, title: "T", text: "x" }, "inbox.sendNote": { noteId: ids.inboxNoteId }, "inbox.noteDetail": { noteId: ids.inboxNoteId }, "inbox.sent": {}, "inbox.discardNote": { noteId: ids.inboxNoteId },
     "clients.people": { clientId: ids.clientRecId }, "clients.addPerson": { clientId: ids.clientRecId, email: "p@example.com", role: "contact" },
     "clients.updatePerson": { personId: ids.personId, role: "signer" }, "clients.removePerson": { personId: ids.personId }, "clients.invitePerson": { personId: ids.personId },
     "clients.page": { clientId: ids.clientRecId }, "clients.directory": {},

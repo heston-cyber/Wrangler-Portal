@@ -43,6 +43,7 @@ export type Post = {
   title: string;
   text: string;
   link?: string;
+  linkLabel?: string;
   source: InboxSource;
   key: string;               // the event; the person is added to it
   noteId?: Id<"inboxNotes">;
@@ -58,11 +59,11 @@ export async function postToInbox(ctx: MutationCtx, p: Post): Promise<Id<"inboxI
   return await ctx.db.insert("inboxItems", {
     businessId: p.businessId, email, kind: p.kind, title: p.title.slice(0, 160), text: p.text.slice(0, 400),
     source: p.source, key, createdAt: Date.now(),
-    ...(clientId ? { clientId } : {}), ...(p.link ? { link: p.link } : {}), ...(p.noteId ? { noteId: p.noteId } : {}),
+    ...(clientId ? { clientId } : {}), ...(p.link ? { link: p.link } : {}), ...(p.linkLabel ? { linkLabel: p.linkLabel.slice(0, 80) } : {}), ...(p.noteId ? { noteId: p.noteId } : {}),
   });
 }
 
 /** An item as the portal shows it. */
 export function itemView(i: Doc<"inboxItems">) {
-  return { _id: i._id, kind: i.kind, title: i.title, text: i.text, link: i.link ?? null, createdAt: i.createdAt, read: !!i.readAt, readAt: i.readAt ?? null, emailed: !!i.emailedAt };
+  return { _id: i._id, kind: i.kind, title: i.title, text: i.text, link: i.link ?? null, linkLabel: i.linkLabel ?? null, createdAt: i.createdAt, read: !!i.readAt, readAt: i.readAt ?? null, emailed: !!i.emailedAt };
 }

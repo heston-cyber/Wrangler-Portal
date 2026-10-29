@@ -15,6 +15,7 @@ import { shareCovers, shareState, sameBusiness } from "./lib/shareAccess";
 import { signLink } from "./lib/wsSigning";
 import { docLabel } from "./lib/wsLayout";
 import { frameTc } from "./lib/frames";
+import { signedThumbUrl, signStillUrl } from "./lib/media";
 
 const MAX_TITLE = 120, MAX_TEXT = 2000, MAX_LINK = 500;
 const projectLabel = (p: { name: string; jobNumber?: string } | null) => (p ? (p.jobNumber ? `${p.jobNumber} ${p.name}` : p.name) : "");
@@ -122,10 +123,76 @@ export const notes = query({
       out.push({
         _id: n._id, clientId: n.clientId, client: client?.name ?? null, title: n.title, text: n.text, link: n.link ?? null,
         status: n.status, draftedBy: n.draftedBy, said: n.said ?? null, createdAt: n.createdAt, updatedAt: n.updatedAt, sentAt: n.sentAt ?? null,
+        linkLabel: n.linkLabel ?? null, to: n.to ?? null, emailThem: n.emailThem ?? true,
         recipients: n.recipients ?? items.length, readBy: items.filter((i) => i.readAt).length, emailed: items.filter((i) => i.emailedAt).length,
       });
     }
     return out.sort((a, b) => (a.status === "draft" ? 0 : 1) - (b.status === "draft" ? 0 : 1) || (b.sentAt ?? b.updatedAt) - (a.sentAt ?? a.updatedAt));
+  },
+});
+
+/** The Sent list (P1 / Owner / Sent): your notes (drafts first) and the automatic updates the portal posted, one row
+ *  per event, newest first, with who it went to and how many have read it. */
+export const sent = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, { limit }) => {
+    await requireMe(ctx);
+    const max = Math.min(Math.max(limit ?? 100, 1), 300);
+    type Row = {
+      key: string; type: "draft" | "note" | "auto"; kind: string; title: string; subject: string | null; to: string; at: number;
+      sentTo: number; readBy: number; emailed: boolean; draftedBy: "owner" | "claude" | null; open: string;
+    };
+    const out: Row[] = [];
+    const clientName = new Map<string, string | null>();
+    const nameOfClient = async (id: Id<"clients"> | undefined) => {
+      if (!id) return null;
+      if (!clientName.has(id)) clientName.set(id, (await ctx.db.get(id))?.name ?? null);
+      return clientName.get(id)!;
+    };
+    // Drafts (yours and Claude's), then the notes you sent.
+    for (const n of (await ctx.db.query("inboxNotes").order("desc").take(300)).filter((x) => x.status !== "discarded")) {
+      const client = await nameOfClient(n.clientId);
+      const items = n.status === "sent" ? await ctx.db.query("inboxItems").withIndex("by_note", (q) => q.eq("noteId", n._id)).collect() : [];
+      const count = n.status === "sent" ? items.length : (n.to?.length ?? null);
+      out.push({
+        key: `note:${n._id}`, type: n.status === "draft" ? "draft" : "note", kind: "note", title: n.title, subject: null,
+        to: `${client ?? "a client"}${count ? ` (${count})` : ""}`, at: n.sentAt ?? n.updatedAt, sentTo: items.length, readBy: items.filter((i) => i.readAt).length,
+        emailed: items.some((i) => i.emailedAt), draftedBy: n.draftedBy, open: n.status === "draft" ? `/sent/new?note=${n._id}` : `/sent/${n._id}`,
+      });
+    }
+    // Automatic updates: every other Inbox item, grouped by event.
+    const events = new Map<string, { first: Doc<"inboxItems">; people: Doc<"inboxItems">[] }>();
+    for (const r of await ctx.db.query("inboxItems").order("desc").take(1500)) {
+      if (r.kind === "note") continue;
+      const k = eventKey(r.key);
+      const e = events.get(k) ?? { first: r, people: [] };
+      e.people.push(r);
+      events.set(k, e);
+    }
+    for (const [k, { first: r, people }] of events) {
+      let open = "/sent";
+      if (r.source.module === "sign") open = `/sign/d/${r.source.id}`;
+      else if (r.kind === "cut_ready") { const ver = await ctx.db.get(r.source.id as Id<"versions">); if (ver) open = `/v/${ver.videoId}?version=${ver.number}`; }
+      else if (r.kind === "reply") {
+        const rep = await ctx.db.get(r.source.id as Id<"replies">);
+        const note = rep ? await ctx.db.get(rep.noteId) : null;
+        const ver = note ? await ctx.db.get(note.versionId) : null;
+        if (note && ver) open = `/v/${note.videoId}?version=${ver.number}&note=${note._id}`;
+      }
+      const client = await nameOfClient(r.clientId);
+      let to: string;
+      if (people.length > 1 && client) to = `${client} (${people.length})`;
+      else {
+        const p = (await ctx.db.query("clientPeople").withIndex("by_email", (q) => q.eq("email", r.email)).collect()).find((x) => !x.removedAt);
+        const u = p?.name ? null : await ctx.db.query("users").withIndex("email", (q) => q.eq("email", r.email)).unique();
+        to = people.length > 1 ? `${people.length} people` : p?.name ?? (u?.name as string | undefined) ?? r.email;
+      }
+      out.push({
+        key: k, type: "auto", kind: r.kind, title: r.title.replace(/ at \d\d:\d\d:\d\d[:;]\d\d$/, ""), subject: r.text.split(" · ")[0] || null, to,
+        at: Math.min(...people.map((x) => x.createdAt)), sentTo: people.length, readBy: people.filter((x) => x.readAt).length, emailed: people.some((x) => x.emailedAt), draftedBy: null, open,
+      });
+    }
+    return out.sort((a, b) => (a.type === "draft" ? 0 : 1) - (b.type === "draft" ? 0 : 1) || b.at - a.at).slice(0, max);
   },
 });
 
@@ -147,12 +214,26 @@ export const noteDetail = query({
     return {
       _id: n._id, clientId: n.clientId, client: client?.name ?? null, title: n.title, text: n.text, link: n.link ?? null,
       status: n.status, draftedBy: n.draftedBy, said: n.said ?? null, createdAt: n.createdAt, sentAt: n.sentAt ?? null,
+      linkLabel: n.linkLabel ?? null, to: n.to ?? null, emailThem: n.emailThem ?? true, attachment: await attachmentOf(ctx, n.link),
       people: people.sort((a, b) => (a.name ?? a.email).localeCompare(b.name ?? b.email)),
     };
   },
 });
 
-function checkNote(a: { title: string; text: string; link?: string | null }) {
+/** What a note's link points at, for the "Attached cut" row: the video and version (with its picture), or a page. */
+async function attachmentOf(ctx: QueryCtx, link: string | undefined) {
+  if (!link) return null;
+  const m = /\/v\/([^/?]+)\?version=(\d+)/.exec(link);
+  if (m) {
+    const vidId = ctx.db.normalizeId("videos", m[1]);
+    const vid = vidId ? await ctx.db.get(vidId) : null;
+    const ver = vid ? (await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect()).find((x) => x.number === Number(m[2])) : null;
+    if (vid && ver) return { kind: "cut" as const, videoId: vid._id, title: vid.title, number: ver.number, thumbUrl: (await signStillUrl(ver.posterUrl)) ?? (await signedThumbUrl(ver)) };
+  }
+  return { kind: link.startsWith("/documents") ? ("doc" as const) : ("page" as const), videoId: null, title: null, number: null, thumbUrl: null };
+}
+
+function checkNote(a: { title: string; text: string; link?: string | null; linkLabel?: string | null }) {
   const title = a.title.trim().replace(/\s+/g, " ");
   const text = a.text.trim();
   const link = a.link?.trim() || undefined;
@@ -160,24 +241,38 @@ function checkNote(a: { title: string; text: string; link?: string | null }) {
   if (title.length > MAX_TITLE) throw new ConvexError(`Keep the title under ${MAX_TITLE} characters.`);
   if (text.length > MAX_TEXT) throw new ConvexError(`Keep the note under ${MAX_TEXT} characters.`);
   if (link && (link.length > MAX_LINK || !(/^\/(?!\/)/.test(link) || /^https:\/\//.test(link)))) throw new ConvexError("A link must be a page in the portal (starting with /) or an https:// address.");
-  return { title, text, link };
+  const linkLabel = link ? a.linkLabel?.trim().replace(/\s+/g, " ").slice(0, 80) || undefined : undefined;
+  return { title, text, link, linkLabel };
 }
 
 export const saveNote = mutation({
-  args: { noteId: v.optional(v.id("inboxNotes")), clientId: v.id("clients"), title: v.string(), text: v.string(), link: v.optional(v.string()) },
+  args: {
+    noteId: v.optional(v.id("inboxNotes")), clientId: v.id("clients"), title: v.string(), text: v.string(), link: v.optional(v.string()),
+    linkLabel: v.optional(v.string()), to: v.optional(v.array(v.string())), emailThem: v.optional(v.boolean()),
+  },
   handler: async (ctx, a) => {
     await requireMe(ctx);
-    if (!(await ctx.db.get(a.clientId))) throw new ConvexError("That client isn't here.");
+    const client = await ctx.db.get(a.clientId);
+    if (!client) throw new ConvexError("That client isn't here.");
     const n = checkNote(a);
+    let to: string[] | undefined;
+    if (a.to) {
+      const theirs = new Set((await noteAudience(ctx, client)).map((p) => p.email));
+      to = [...new Set(a.to.map((e) => e.trim().toLowerCase()))];
+      if (!to.length) throw new ConvexError("Pick at least one person.");
+      if (to.some((e) => !theirs.has(e))) throw new ConvexError(`Everyone you send to must be one of ${client.name}'s people.`);
+    }
+    const fields = { clientId: a.clientId, title: n.title, text: n.text, link: n.link, linkLabel: n.linkLabel, to, emailThem: a.emailThem ?? true };
     const now = Date.now();
     if (a.noteId) {
       const cur = await ctx.db.get(a.noteId);
       if (!cur) throw new ConvexError("That note isn't here.");
       if (cur.status !== "draft") throw new ConvexError("This note was already sent, so it can't be changed.");
-      await ctx.db.patch(a.noteId, { clientId: a.clientId, title: n.title, text: n.text, link: n.link, updatedAt: now });
+      await ctx.db.patch(a.noteId, { ...fields, updatedAt: now });
       return a.noteId;
     }
-    return await ctx.db.insert("inboxNotes", { clientId: a.clientId, title: n.title, text: n.text, ...(n.link ? { link: n.link } : {}), status: "draft", draftedBy: "owner", createdAt: now, updatedAt: now });
+    const clean = Object.fromEntries(Object.entries(fields).filter(([, x]) => x !== undefined)) as typeof fields;
+    return await ctx.db.insert("inboxNotes", { ...clean, status: "draft", draftedBy: "owner", createdAt: now, updatedAt: now });
   },
 });
 
@@ -192,11 +287,11 @@ export const sendNote = mutation({
     const client = await ctx.db.get(n.clientId);
     if (!client) throw new ConvexError("That client isn't here.");
     const biz = await businessOf(ctx, n);
-    const audience = (await noteAudience(ctx, client)).filter((p) => p.access);
-    if (!biz || !audience.length) throw new ConvexError(`No one at ${client.name} has portal access yet. Invite someone first.`);
+    const audience = (await noteAudience(ctx, client)).filter((p) => p.access && (!n.to || n.to.includes(p.email)));
+    if (!biz || !audience.length) throw new ConvexError(n.to ? "None of the people you picked has portal access yet." : `No one at ${client.name} has portal access yet. Invite someone first.`);
     let posted = 0;
     for (const p of audience) {
-      if (await postToInbox(ctx, { businessId: biz, clientId: client._id, email: p.email, kind: "note", title: n.title, text: n.text, link: n.link, source: { module: "inbox", id: noteId }, key: `note:${noteId}`, noteId })) posted++;
+      if (await postToInbox(ctx, { businessId: biz, clientId: client._id, email: p.email, kind: "note", title: n.title, text: n.text, link: n.link, linkLabel: n.linkLabel, source: { module: "inbox", id: noteId }, key: `note:${noteId}`, noteId })) posted++;
     }
     await ctx.db.patch(noteId, { status: "sent", sentAt: Date.now(), recipients: posted, updatedAt: Date.now() });
     return { sent: posted };

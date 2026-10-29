@@ -297,3 +297,27 @@ describe("back-office Home (Phase 1)", () => {
     expect(recent).toEqual([expect.objectContaining({ what: "watched", who: "Maya Brooks", subject: "Harbor 30s v2", detail: "Harbor Coffee", ref: expect.objectContaining({ version: 2 }) })]);
   });
 });
+
+describe("Post a note (Phase 1)", () => {
+  test("a note to picked people reaches only them, carries its link label, and remembers Also email them", async () => {
+    const w = await world();
+    const noteId = await w.heston.mutation(api.inbox.saveNote, { clientId: w.harbor, title: "Cut is up", text: "Have a look.", link: "/s/tok/v/x?version=2", linkLabel: "Watch Harbor 30s v2", to: ["maya@harbor.example"], emailThem: false });
+    const draft = await w.heston.query(api.inbox.noteDetail, { noteId });
+    expect(draft).toMatchObject({ to: ["maya@harbor.example"], emailThem: false, linkLabel: "Watch Harbor 30s v2", status: "draft" });
+    expect(await w.heston.mutation(api.inbox.sendNote, { noteId })).toEqual({ sent: 1 });
+    const items = await w.t.run(async (ctx) => (await ctx.db.query("inboxItems").collect()).map((i) => [i.email, i.linkLabel]));
+    expect(items).toEqual([["maya@harbor.example", "Watch Harbor 30s v2"]]);
+    expect((await w.mayaC.query(api.inbox.mine, {})).items[0]).toMatchObject({ linkLabel: "Watch Harbor 30s v2" });
+  });
+
+  test("you can only pick the client's own people, and a link label needs a link", async () => {
+    const w = await world();
+    await expect(w.heston.mutation(api.inbox.saveNote, { clientId: w.harbor, title: "x", text: "", to: ["bob@juniper.example"] })).rejects.toThrow(/Harbor Coffee's people/);
+    await expect(w.heston.mutation(api.inbox.saveNote, { clientId: w.harbor, title: "x", text: "", to: [] })).rejects.toThrow(/at least one/);
+    const id = await w.heston.mutation(api.inbox.saveNote, { clientId: w.harbor, title: "x", text: "", linkLabel: "Watch" });
+    expect((await w.heston.query(api.inbox.noteDetail, { noteId: id })).linkLabel).toBeNull();
+    // Picked someone without portal access: nothing to send.
+    const sam = await w.heston.mutation(api.inbox.saveNote, { clientId: w.harbor, title: "x", text: "", to: ["sam@harbor.example"] });
+    await expect(w.heston.mutation(api.inbox.sendNote, { noteId: sam })).rejects.toThrow(/None of the people you picked/);
+  });
+});

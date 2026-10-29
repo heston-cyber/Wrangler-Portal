@@ -700,6 +700,7 @@ export default defineSchema({
     title: v.string(),
     text: v.string(),                  // a short line, shown under the title
     link: v.optional(v.string()),      // a path in the portal or a signing link
+    linkLabel: v.optional(v.string()), // a note's link button ("Watch Harbor Coffee 30s v2")
     source: v.object({ module: v.union(v.literal("review"), v.literal("sign"), v.literal("inbox")), id: v.string() }),
     key: v.string(),
     noteId: v.optional(v.id("inboxNotes")),
@@ -719,6 +720,9 @@ export default defineSchema({
     status: v.union(v.literal("draft"), v.literal("sent"), v.literal("discarded")),
     draftedBy: v.union(v.literal("owner"), v.literal("claude")),
     said: v.optional(v.string()),      // for a Claude draft: what Claude said Heston asked for
+    to: v.optional(v.array(v.string())), // picked people (emails); missing = everyone at the client with portal access
+    emailThem: v.optional(v.boolean()),  // "Also email them" (on by default; the emails arrive with the one-email switch)
+    linkLabel: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
     sentAt: v.optional(v.number()),
