@@ -190,6 +190,12 @@ export function blockSelectionPlugin() {
         const sel = state.selection;
         // On a computer (Craft-style), blocks clicked by their handle are a PickSelection without select mode's circles.
         if (sel instanceof PickSelection && !pickActive(state)) return DecorationSet.create(state.doc, sel.blocks().map((b) => Decoration.node(b.pos, b.pos + b.node.nodeSize, { class: "wsb-bsel" })));
+        // The line(s) you're typing in: the only place the pointer is a text cursor (computers).
+        if (sel instanceof TextSelection) {
+          const a = blockStartAt(state.doc, sel.from), b = blockStartAt(state.doc, Math.max(sel.from, sel.to - 1));
+          const r = a !== null && b !== null ? blockRange(state.doc, a, b) : null;
+          return r ? DecorationSet.create(state.doc, r.blocks().map((x) => Decoration.node(x.pos, x.pos + x.node.nodeSize, { class: "wsb-editing" }))) : null;
+        }
         if (!(sel instanceof BlockSelection)) return null;
         return DecorationSet.create(state.doc, sel.blocks().map((b) => Decoration.node(b.pos, b.pos + b.node.nodeSize, { class: "wsb-bsel" })));
       },

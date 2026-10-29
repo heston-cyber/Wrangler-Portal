@@ -41,10 +41,11 @@ function BlockBar({ editor }: { editor: Editor }) {
   const shown = (ok: boolean) => { if (ok) requestAnimationFrame(() => keepInView(editor)); };
   return (
     <div className="field"><span className="ws-flabel">Block</span><div className="ws-seg wsb-marks">
-      <button aria-label="Move up" title="Move up" onMouseDown={keep} onClick={() => shown(moveBlock(editor, -1, { scroll: false }))}><ArrowUp size={15} /></button>
-      <button aria-label="Move down" title="Move down" onMouseDown={keep} onClick={() => shown(moveBlock(editor, 1, { scroll: false }))}><ArrowDown size={15} /></button>
-      <button aria-label="Duplicate" title="Duplicate" onMouseDown={keep} onClick={() => shown(duplicateBlock(editor))}><Copy size={15} /></button>
-      <button aria-label="Delete" title="Delete" onMouseDown={keep} onClick={() => deleteBlock(editor)}><Trash2 size={15} /></button>
+      {/* Selected blocks (by handle, ⌘-click or a drag) move, copy and delete together. */}
+      <button aria-label="Move up" title="Move up" onMouseDown={keep} onClick={() => shown(picks(editor).length ? movePicked(editor, -1) : moveBlock(editor, -1, { scroll: false }))}><ArrowUp size={15} /></button>
+      <button aria-label="Move down" title="Move down" onMouseDown={keep} onClick={() => shown(picks(editor).length ? movePicked(editor, 1) : moveBlock(editor, 1, { scroll: false }))}><ArrowDown size={15} /></button>
+      <button aria-label="Duplicate" title="Duplicate" onMouseDown={keep} onClick={() => shown(picks(editor).length ? duplicatePicked(editor) > 0 : duplicateBlock(editor))}><Copy size={15} /></button>
+      <button aria-label="Delete" title="Delete" onMouseDown={keep} onClick={() => (picks(editor).length ? deletePicked(editor) : deleteBlock(editor))}><Trash2 size={15} /></button>
     </div></div>
   );
 }

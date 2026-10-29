@@ -1493,3 +1493,13 @@ button.wp-hubcard[aria-busy], button.wp-tplcard[aria-busy] { opacity: 1; }
 .wsb-seppick button:hover .sample { box-shadow: 0 0 0 1px var(--border-strong); }
 .wsb-seppick button.on { color: var(--text-primary); }
 .wsb-seppick button.on .sample { box-shadow: 0 0 0 2px var(--accent); }
+/* Computers (Heston, Oct 29): an arrow over the page; a text cursor only in the line you're typing in */
+@media (pointer: fine) {
+  .wsb-doc { cursor: default; }
+  .wsb-doc.ProseMirror-focused .wsb-editing, .wsb-doc input, .wsb-doc textarea, .wsb-doc [contenteditable="true"] .wsb-editing { cursor: text; }
+}
+.wsb-mvghost { position: fixed; z-index: 70; transform: translate(14px, 10px); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 6px 12px 6px 10px; border-radius: 10px; background: var(--surface-float); color: var(--text-primary); border: 1px solid var(--border-hairline); box-shadow: 0 8px 22px rgba(0,0,0,.35); font-size: 13px; pointer-events: none; display: flex; gap: 8px; align-items: center; }
+.wsb-mvghost .n { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: #e5484d; color: #fff; font: 600 12px/20px var(--font-body); text-align: center; }
+/* The handle and ⋯ reach the line, so the pointer never crosses a gap on the way to them */
+.wsb-handle::after { content: ""; position: absolute; inset: -4px -8px -4px -4px; }
+.wsb-more::after { content: ""; position: absolute; inset: -4px -4px -4px -10px; }
