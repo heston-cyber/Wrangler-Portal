@@ -105,6 +105,8 @@ function NoteCard({ n, here, focused, focusTick, tc, onJump, onCopied, onSeekFra
         <span className="dot" style={{ background: kindColor(n.kind) }} />
         {n.kind === "general" ? "Note" : kindName(n.kind)} · {n.authorName}{n.authorKind === "client" ? " (client)" : ""} · {ago(n.createdAt)}
       </div>
+      {/* Compact (Heston, Oct 29): the timecode and its tags share one line, wrapping when there isn't room. */}
+      <div className="nline">
       {n.kind === "general"
         ? <div className="rbold">Whole video</div>
         : (
@@ -121,6 +123,7 @@ function NoteCard({ n, here, focused, focusTick, tc, onJump, onCopied, onSeekFra
         {n.replies.length > 0 && <span className="rtag">{n.replies.length} {n.replies.length === 1 ? "reply" : "replies"}</span>}
         {n.status === "done" && <span className="rtag">Done</span>}
         {owner && (shared ? <span className="rtag shared"><Eye size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Shared</span> : <span className="rtag"><EyeOff size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Private</span>)}
+      </div>
       </div>
 
       {editing ? (

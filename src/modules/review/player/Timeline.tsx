@@ -48,6 +48,7 @@ function rulerTicks(frameCount: number, nom: number, startFrames: number, width:
   return out;
 }
 
+const MIN_BAR = 22, MAX_BAR = 160;
 const Bars = memo(function Bars({ heights }: { heights: number[] }) {
   return <>{heights.map((h, i) => <i key={i} style={{ height: `${Math.max(8, Math.round(h * 100))}%` }} />)}</>;
 });
@@ -87,6 +88,18 @@ export function Timeline({ clock, frameCount, nom, startFrames, notes, sel, high
   const barCount = Math.max(0, Math.floor((width - 12) / BAR_PITCH));
   const heights = useMemo(() => (peaks && wave?.rate ? barHeights(peaks, wave.rate, n, fps.num, fps.den, barCount) : []), [peaks, wave?.rate, n, fps.num, fps.den, barCount]);
 
+  // The notes bar's height: drag its bottom edge to stretch it (Heston, Oct 29), so stacked ranges spread out and are
+  // easier to pick. Remembered on this device; a double-click on the edge puts it back.
+  const [barH, setBarH] = useState(() => { try { const v = Number(localStorage.getItem("wp.tlNotesH")); return v >= MIN_BAR && v <= MAX_BAR ? v : MIN_BAR; } catch { return MIN_BAR; } });
+  const saveH = (h: number) => { setBarH(h); try { localStorage.setItem("wp.tlNotesH", String(h)); } catch { /* private window */ } };
+  const startResize = (e: React.PointerEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    const y0 = e.clientY, h0 = barH;
+    const move = (m: PointerEvent) => saveH(Math.round(Math.max(MIN_BAR, Math.min(MAX_BAR, h0 + m.clientY - y0))));
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+  };
+
   // Overlapping ranges get their own lanes in the notes bar so none hides another.
   const ranges = notes.filter((x) => x.kind === "range" && x.inFrame !== undefined && x.outFrame !== undefined).sort((a, b) => a.inFrame! - b.inFrame!);
   const laneEnds: number[] = [];
@@ -94,9 +107,15 @@ export function Timeline({ clock, frameCount, nom, startFrames, notes, sel, high
   for (const r of ranges) {
     let lane = laneEnds.findIndex((end) => end < r.inFrame!);
     if (lane === -1) { lane = laneEnds.length; laneEnds.push(r.outFrame!); } else laneEnds[lane] = r.outFrame!;
-    lanes.set(r.id, Math.min(lane, 2));
+    lanes.set(r.id, lane);
   }
   const oneLane = laneEnds.length <= 1;
+  // As many lanes as fit the bar's height (at least 3); each lane gets an even share, 4–14 px.
+  const GAP = 2, room = barH - 6;
+  const maxLanes = Math.max(3, Math.floor((room + GAP) / (4 + GAP)));
+  const laneCount = Math.min(laneEnds.length, maxLanes);
+  const laneH = Math.max(4, Math.min(14, (room - (laneCount - 1) * GAP) / Math.max(1, laneCount)));
+  const laneTop = (id: string) => 3 + Math.min(lanes.get(id) ?? 0, maxLanes - 1) * (laneH + GAP);
 
   // Taps on the notes bar pick the note whose mark is nearest (within 24px), for fingers that land a little off.
   const pickNear = (clientX: number) => {
@@ -117,17 +136,19 @@ export function Timeline({ clock, frameCount, nom, startFrames, notes, sel, high
 
   return (
     <div className={`tl${compact ? " compact" : ""}`} ref={ref}>
-      <div className="tl-notes" aria-label="Notes on the timeline" onPointerDown={(e) => { e.preventDefault(); pickNear(e.clientX); }}>
+      <div className="tl-notes" aria-label="Notes on the timeline" style={{ height: barH, ["--tlh" as string]: `${barH}px` }} onPointerDown={(e) => { e.preventDefault(); pickNear(e.clientX); }}>
         {ranges.map((x) => (
           <div key={x.id} className={`tl-range${x.status === "done" ? " done" : ""}${x.id === activeId ? " active" : ""}`} role="button" aria-label={`Range note ${label(x.inFrame!)} to ${label(x.outFrame!)}`}
             title={`${label(x.inFrame!)} → ${label(x.outFrame!)}${x.text ? ` · ${x.text.slice(0, 80)}` : ""}`}
-            style={{ left: pct(x.inFrame!), width: `max(8px, ${pct(x.outFrame! - x.inFrame! + 1)})`, top: oneLane ? 7 : 3 + 6 * (lanes.get(x.id) ?? 0), height: oneLane ? 8 : 5 }} />
+            style={{ left: pct(x.inFrame!), width: `max(8px, ${pct(x.outFrame! - x.inFrame! + 1)})`, top: oneLane ? Math.round((barH - Math.min(14, barH - 14)) / 2) : laneTop(x.id), height: oneLane ? Math.min(14, barH - 14) : laneH }} />
         ))}
         {notes.filter((x) => x.kind === "frame" && x.inFrame !== undefined).map((x) => (
           <div key={x.id} className={`tl-mark${x.status === "done" ? " done" : ""}${x.id === activeId ? " active" : ""}`} role="button" aria-label={`Note at ${label(x.inFrame!)}`}
             title={`${label(x.inFrame!)}${x.text ? ` · ${x.text.slice(0, 80)}` : ""}`} style={{ left: pct(x.inFrame! + 0.5) }} />
         ))}
         <Head clock={clock} n={n} at={drag?.f} className="tl-notehead" />
+        <span className="tl-notes-grip" role="separator" aria-orientation="horizontal" aria-label="Drag to make the notes bar taller or shorter" title="Drag to resize · double-click to reset"
+          onPointerDown={startResize} onDoubleClick={(e) => { e.stopPropagation(); saveH(MIN_BAR); }} />
       </div>
 
       <div
