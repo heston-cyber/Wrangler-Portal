@@ -1,0 +1,17 @@
+# The Phase 1 preview (Oct 29): preview.wranglerportal.com, the branch build against the DEV backend (a copy of live
+# data), behind a password page. Deployed by .github/workflows/preview.yml. The password is the Worker secret
+# PREVIEW_PASSWORD, which Heston sets in the Cloudflare dashboard; until it's set, the site shows nothing.
+name = "wrangler-preview"
+main = "preview-worker.js"
+compatibility_date = "2026-10-01"
+workers_dev = false
+
+routes = [
+  { pattern = "preview.wranglerportal.com", custom_domain = true },
+]
+
+[assets]
+directory = "../../dist"
+binding = "ASSETS"
+run_worker_first = true
+not_found_handling = "single-page-application"

@@ -13,6 +13,10 @@ export function htmlFromText(text: string): string {
 }
 
 export async function sendEmail(msg: { to: string; subject: string; text: string; html?: string; replyTo?: string | null; tag?: string; unsubscribe?: string; from?: string; attachments?: Array<{ filename: string; content: string }> }): Promise<string> {
+  // The preview (Phase 1, Oct 29): on a deployment with EMAIL_ONLY_TO set (the dev copy of live data), email goes only
+  // to those addresses. Anyone else's email is held: nothing is sent, and the caller sees an ordinary success.
+  const only = (process.env.EMAIL_ONLY_TO ?? "").split(/[,;\s]+/).map((e) => e.trim().toLowerCase()).filter(Boolean);
+  if (only.length && !only.includes(msg.to.trim().toLowerCase())) { console.log(`email held (preview): ${msg.tag ?? "email"}`); return "held"; }
   const key = process.env.RESEND_API_KEY;
   if (!key) throw new Error("Email isn't set up (no Resend key).");
   const body: Record<string, unknown> = { from: msg.from ?? FROM(), to: [msg.to], subject: msg.subject, text: msg.text, html: msg.html ?? htmlFromText(msg.text) };

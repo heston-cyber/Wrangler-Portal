@@ -1,0 +1,64 @@
+name: Preview (Phase 1)
+
+# Oct 29: builds the phase1-backend branch against the DEVELOPMENT backend (a copy of live data) and serves it at
+# preview.wranglerportal.com behind a password page (infra/cloudflare-preview). Live is never touched.
+# Before deploying it sets two settings on dev: EMAIL_ONLY_TO (email goes only to Heston's addresses; everyone else's is
+# held) and SITE_URL (links in emails point at the preview). The repo is public, so nothing here prints values.
+# Needs: CONVEX_DEV_DEPLOY_KEY, CLOUDFLARE_API_TOKEN (secrets); CLOUDFLARE_ACCOUNT_ID, BUNNY_CDN_HOST and, optionally,
+# PREVIEW_EMAILS (variables; comma-separated, default heston@wranglerproductions.com).
+on:
+  push:
+    branches: [phase1-backend]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
+
+  preview:
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VITE_BUNNY_CDN_HOST: ${{ vars.BUNNY_CDN_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Lock dev's email to Heston, point its links at the preview, deploy the backend to dev, build the site
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEV_DEPLOY_KEY }}
+          PREVIEW_EMAILS: ${{ vars.PREVIEW_EMAILS }}
+        run: |
+          export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7C/|}"
+          export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7c/|}"
+          case "$CONVEX_DEPLOY_KEY" in dev:*) echo "key: development";; "") echo "CONVEX_DEV_DEPLOY_KEY is not set"; exit 1;; *) echo "Refused: not a development key"; exit 1;; esac
+          emails="${PREVIEW_EMAILS:-heston@wranglerproductions.com}"
+          npx convex env set EMAIL_ONLY_TO "$emails" > /dev/null && echo "EMAIL_ONLY_TO set"
+          npx convex env set SITE_URL "https://preview.wranglerportal.com" > /dev/null && echo "SITE_URL set"
+          npx convex deploy -y > /dev/null 2>&1 || npx convex dev --once --typecheck disable
+          name="${CONVEX_DEPLOY_KEY#dev:}"; name="${name%%|*}"
+          VITE_CONVEX_URL="https://${name}.convex.cloud" npm run build
+          echo "built: $(ls dist | wc -l) files"
+      - name: Deploy the preview Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: infra/cloudflare-preview
+        run: npx --yes wrangler@4 deploy
+      - name: Check it answers with the password page
+        run: |
+          sleep 15
+          code=$(curl -s -o /dev/null -w '%{http_code}' https://preview.wranglerportal.com/)
+          echo "preview.wranglerportal.com answered $code (401 = password page, 503 = no password set yet)"
+          [ "$code" = "401" ] || [ "$code" = "503" ]

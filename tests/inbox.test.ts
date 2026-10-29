@@ -444,3 +444,17 @@ describe("independent review fixes (Oct 29)", () => {
     expect(bob.access.state).not.toBe("active");
   });
 });
+
+describe("the preview's email guard", () => {
+  test("with EMAIL_ONLY_TO set, only those addresses get email; everyone else's is held without sending", async () => {
+    const { sendEmail } = await import("../convex/lib/email");
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_u: unknown, init?: RequestInit) => { calls.push(JSON.parse(String(init?.body)).to[0]); return new Response(JSON.stringify({ id: "em" }), { status: 200 }); }));
+    process.env.EMAIL_ONLY_TO = "heston@wranglerproductions.com, test@example.com";
+    try {
+      expect(await sendEmail({ to: "maya@harbor.example", subject: "x", text: "y" })).toBe("held");
+      expect(await sendEmail({ to: "Test@Example.com", subject: "x", text: "y" })).toBe("em");
+      expect(calls).toEqual(["Test@Example.com"]);
+    } finally { delete process.env.EMAIL_ONLY_TO; }
+  });
+});
