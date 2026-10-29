@@ -3,6 +3,7 @@
 import { type MutationCtx } from "./_generated/server";
 import { mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
+import { internal } from "./_generated/api";
 import { requireMe, requireSignedIn } from "./lib/access";
 import { allowedEmails } from "./auth";
 import { prefsByEmail } from "./emails";
@@ -170,8 +171,7 @@ export const removePerson = mutation({
   },
 });
 
-/** "Invite to the portal" / "Resend invite": makes (or keeps) their invite. The invite email itself arrives with
- *  the Phase 1 emails (its design is still being approved); until then this records the invite only. */
+/** "Invite to the portal" / "Resend invite": makes (or keeps) their invite and emails them the invite. */
 export const invitePerson = mutation({
   args: { personId: v.id("clientPeople") },
   handler: async (ctx, { personId }) => {
@@ -179,7 +179,9 @@ export const invitePerson = mutation({
     const p = await ctx.db.get(personId);
     if (!p || p.removedAt) throw new ConvexError("That person isn't here.");
     const r = await ensureInvite(ctx, p.email, p.name);
-    return { already: r.already, emailed: false };
+    // Phase 1 step 5: the invite email (one per press; a second press within a minute doesn't send another).
+    await ctx.scheduler.runAfter(0, internal.emails.portalInvite, { email: r.email, sendKey: String(Math.floor(Date.now() / 60_000)) });
+    return { already: r.already, emailed: true };
   },
 });
 

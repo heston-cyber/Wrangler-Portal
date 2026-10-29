@@ -115,10 +115,10 @@ describe("who may make an account", () => {
   test("an owner email and an invited email can; anyone else is refused; a code email goes out through Resend", async () => {
     const { t, ids } = await setup();
     const sent: string[] = [];
-    const mails: Array<{ to: string; subject: string; text: string; from: string }> = [];
+    const mails: Array<{ to: string; subject: string; text: string; from: string; html: string }> = [];
     vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-      if (url === "https://api.resend.com/emails") { const b = JSON.parse(String(init?.body)); sent.push(b.to[0]); mails.push({ to: b.to[0], subject: b.subject, text: b.text, from: b.from }); return new Response(JSON.stringify({ id: "em_1" }), { status: 200 }); }
+      if (url === "https://api.resend.com/emails") { const b = JSON.parse(String(init?.body)); sent.push(b.to[0]); mails.push({ to: b.to[0], subject: b.subject, text: b.text, from: b.from, html: b.html }); return new Response(JSON.stringify({ id: "em_1" }), { status: 200 }); }
       return new Response("{}", { status: 500 });
     });
     const lastCode = () => /\b(\d{6})\b/.exec(mails[mails.length - 1].text)![1];
@@ -131,15 +131,16 @@ describe("who may make an account", () => {
     expect(user).toMatchObject({ role: "client", name: "New Client" });
     const inv = await t.run(async (ctx) => (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", "new.client@example.com")).unique()));
     expect(inv?.acceptedAt).toBeTypeOf("number");
-    expect(mails[0]).toMatchObject({ from: "Wrangler Review <review@wranglerportal.com>" });
-    expect(mails[0].subject).toMatch(/^\d{6} is your Wrangler Review code$/);
+    expect(mails[0]).toMatchObject({ from: "Wrangler Productions <review@wranglerportal.com>" });
+    expect(mails[0].html).toContain('<meta name="color-scheme" content="dark">');
+    expect(mails[0].subject).toMatch(/^\d{6} is your WranglerPortal code$/);
     // A wrong code is refused; the emailed one signs them in.
     await expect(t.action(api.auth.signIn, { provider: "password", params: { flow: "email-verification", email: "new.client@example.com", code: "000000" } })).rejects.toThrow();
     const done = await t.action(api.auth.signIn, { provider: "password", params: { flow: "email-verification", email: "new.client@example.com", code: lastCode() } }) as { tokens?: unknown };
     expect(done.tokens).toBeTruthy();
     // Password reset: a code by email, then a new password that signs in; the old one no longer does.
     await t.action(api.auth.signIn, { provider: "password", params: { flow: "reset", email: "new.client@example.com" } });
-    expect(mails[mails.length - 1].subject).toBe("Reset your Wrangler Review password");
+    expect(mails[mails.length - 1].subject).toBe("Reset your WranglerPortal password");
     const reset = await t.action(api.auth.signIn, { provider: "password", params: { flow: "reset-verification", email: "new.client@example.com", code: lastCode(), newPassword: "anotherlongpassword" } }) as { tokens?: unknown };
     expect(reset.tokens).toBeTruthy();
     await expect(t.action(api.auth.signIn, { provider: "password", params: { flow: "signIn", email: "new.client@example.com", password: "longenoughpassword" } })).rejects.toThrow();

@@ -107,3 +107,12 @@ export async function downloadFor(x: Doc<"versions">): Promise<{ url: string; na
   const name = x.fileName && /\.mp4$/i.test(x.fileName) ? x.fileName : `${(x.fileName || "video").replace(/\.[^.]+$/, "")}_v${x.number}.mp4`;
   return { url, name, bytes: x.fileSize ?? null };
 }
+
+/** A version's picture for an email: signed for 60 days, since an email is opened long after it's sent. */
+export async function emailThumbUrl(v: Doc<"versions">): Promise<string | null> {
+  const expiresAt = Math.floor(Date.now() / 1000) + 60 * 86400;
+  if (v.posterUrl) return await signUrl(v.posterUrl, { expiresAt });
+  const u = thumbUrl(v);
+  if (!u) return null;
+  return await signUrl(u, { folder: isFile(v) ? streamFolder(v.scrubGuid!) : streamFolder(v.bunnyGuid), expiresAt });
+}

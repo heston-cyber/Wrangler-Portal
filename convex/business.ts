@@ -8,6 +8,7 @@ import type { QueryCtx } from "./_generated/server";
 import { businessContact, businessInScope, defaultBusiness, ensureDefaultBusiness, ensureMembership, syncClientMemberships } from "./lib/business";
 import { allowedEmails } from "./lib/owners";
 import { textOn } from "./lib/color";
+import { mailBrandOf } from "./lib/mail";
 
 /** Makes the default business, the owners' memberships, and a client membership for every existing client account. */
 export const bootstrap = internalMutation({
@@ -182,4 +183,10 @@ export const brand = query({
     }
     return out;
   },
+});
+
+/** Phase 1 step 5: the business's look for its emails (the business in scope, else the one named, else the default). */
+export const mailBrand = internalQuery({
+  args: { businessId: v.optional(v.union(v.id("businesses"), v.null())) },
+  handler: async (ctx, { businessId }) => mailBrandOf(ctx, businessId ?? businessInScope(ctx)),
 });

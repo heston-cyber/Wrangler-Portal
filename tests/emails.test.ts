@@ -6,7 +6,8 @@ import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { api, internal } from "../convex/_generated/api";
 import schema from "../convex/schema";
 import type { Id } from "../convex/_generated/dataModel";
-import { alertText } from "../convex/emails";
+import { ownerAlertMail } from "../convex/lib/mails";
+import { brandFrom } from "../convex/lib/mail";
 
 const modules = import.meta.glob("../convex/**/*.ts");
 const SITE_URL = "https://review.wranglerportal.com", CONVEX_SITE = "https://handsome-hummingbird-11.convex.site";
@@ -193,7 +194,7 @@ describe("Heston's alert", () => {
   });
 
   test("the alert text reads well", () => {
-    const m = alertText({ title: "Spot", project: "26201 Launch", rows: [{ version: 2, author: "Maya Chen", text: "Louder", drawing: false, voice: true, when: "01:00:05:00", link: "https://x/1" }] });
+    const m = ownerAlertMail(brandFrom(null, { ownerEmail: "h@x", logoUrl: null, isDefault: true }), { title: "Spot", project: "26201 Launch", rows: [{ version: 2, author: "Maya Chen", text: "Louder", drawing: false, voice: true, when: "01:00:05:00", link: "https://x/1" }] });
     expect(m.subject).toBe("1 new note on Spot from Maya Chen");
     expect(m.text.split("\n")[0]).toBe('1 new note from Maya Chen on "Spot" (26201 Launch).');
     expect(m.text).toContain("v2 · 01:00:05:00 · Maya Chen · voice");

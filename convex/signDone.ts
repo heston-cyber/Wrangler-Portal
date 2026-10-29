@@ -19,6 +19,7 @@ import { appendEvent, eventsOf, verifyChain } from "./lib/wsAudit";
 import { OWNER_KEY, docLabel, type LayoutBox } from "./lib/wsLayout";
 import { sha256Bytes, stamp } from "./lib/wsPdf";
 import { auditExport, b64, certificate, finalStamps, safeFileName, type FinalEvent, type FinalInput, type FinalSigner } from "./lib/wsFinal";
+import { signedCopyMail } from "./lib/mails";
 import { SIGN_FROM, SIGN_SITE, centralDate } from "./lib/wsSigning";
 import { sendEmail, SITE } from "./lib/email";
 import { SIGN_STATEMENT, corsHeaders } from "./signing";
@@ -239,6 +240,7 @@ export const recordInvoice = internalMutation({
 async function sendCopies(ctx: ActionCtx, d: Data) {
   const ownerEmail = (await ctx.runQuery(internal.business.contact, {})).ownerEmail;
   const { doc, signings } = d;
+  const brand = await ctx.runQuery(internal.business.mailBrand, { businessId: doc.businessId ?? null });
   const final = doc.final!;
   const bytes = await bytesOf(ctx, final.fileId);
   if ((await sha256Bytes(bytes)) !== final.sha256) throw new Error("The stored signed copy doesn't match its hash. Stopped: nothing was sent.");
@@ -247,25 +249,28 @@ async function sendCopies(ctx: ActionCtx, d: Data) {
   const owner = d.owner;
   const signedBy = [
     ...signings.map((s) => `${s.adopted?.name ?? s.name}, ${s.signedDate ?? (s.signedAt ? centralDate(s.signedAt) : "")}`),
-    ...(owner && d.ver.ownerSignedAt ? [`${owner.name}, ${owner.title}, Wrangler Productions, ${centralDate(d.ver.ownerSignedAt)}`] : []),
+    ...(owner && d.ver.ownerSignedAt ? [`${owner.name}, ${owner.title}, ${brand.name}, ${centralDate(d.ver.ownerSignedAt)}`] : []),
   ];
   const already = new Set(doc.copies?.sent ?? []);
   const people = [...signings.map((s) => ({ email: s.email, name: s.name, owner: false })), { email: ownerEmail, name: "Heston", owner: true }].filter((p, i, a) => a.findIndex((x) => x.email === p.email) === i);
+  // Phase 1: the Inbox first, so each item can note that its copy was emailed.
+  try { await ctx.runMutation(internal.inbox.onSigned, { documentId: doc._id }); } catch (e) { console.error("inbox", String((e as Error).message).slice(0, 120)); }
   const sent: string[] = [], failed: string[] = [];
   for (const p of people) {
     if (already.has(p.email)) continue;
-    const first = p.name.split(" ")[0] || "there";
-    const fingerprint = `The attached PDF ends with a certificate listing every step. Its SHA-256 fingerprint is:\n${final.sha256}\n\nTo check a copy later, open ${verifyUrl()} and choose the file.`;
-    const text = p.owner
-      ? `Everyone has signed "${doc.title}" (${label}). The signed copy is attached, and a copy went to every signer.\n\nSigned by:\n${signedBy.map((x) => `- ${x}`).join("\n")}\n\n${fingerprint}\n\nOpen it: ${SITE()}/sign/d/${doc._id}${doc.invoice?.status === "created" ? `\n\nDraft invoice for ${money(doc.invoice.amountCents ?? 0)}${doc.invoice.livemode ? "" : " (Stripe test mode)"}, ready for you to review and send: ${doc.invoice.url}` : doc.invoice?.status === "failed" ? `\n\nThe Stripe draft invoice couldn't be made: ${doc.invoice.error}. Retry it from the document page.` : ""}`
-      : `Hi ${first},\n\nEveryone has signed "${doc.title}" (${label}). Your signed copy is attached.\n\nSigned by:\n${signedBy.map((x) => `- ${x}`).join("\n")}\n\n${fingerprint}\n\nPlease keep this email for your records. Questions? Reply to this email.\n\nWrangler Productions, a DBA of Hill Creative LLC · sign.wranglerportal.com`;
+    const m = signedCopyMail(brand, {
+      owner: p.owner, name: p.name, title: doc.title, label, fileName: final.fileName, fileMeta: `PDF · ${Math.max(1, Math.round(bytes.byteLength / 1024))} KB`,
+      signedBy, sha256: final.sha256, verifyUrl: verifyUrl(), link: `${SITE()}/sign/d/${doc._id}`,
+      invoice: !p.owner ? null : doc.invoice?.status === "created" ? { kind: "created", amount: money(doc.invoice.amountCents ?? 0), testMode: !doc.invoice.livemode, url: doc.invoice.url ?? "" }
+        : doc.invoice?.status === "failed" ? { kind: "failed", error: doc.invoice.error ?? "unknown error" } : null,
+    });
     try {
-      await sendEmail({ from: SIGN_FROM(), to: p.email, replyTo: p.owner ? null : ownerEmail, subject: `Signed: ${doc.title} (${label})`, text, tag: p.owner ? "ws-copy-owner" : "ws-copy", attachments: attachment });
+      await sendEmail({ from: m.from, to: p.email, replyTo: p.owner ? null : brand.replyTo, subject: m.subject, text: m.text, html: m.html, tag: p.owner ? "ws-copy-owner" : "ws-copy", attachments: attachment });
       sent.push(p.email);
+      if (!p.owner) await ctx.runMutation(internal.emails.markInboxEmailed, { key: `sign:${doc._id}:signed`, email: p.email });
     } catch (e) { failed.push(`${p.email}: ${errText(e).slice(0, 100)}`); }
   }
   await ctx.runMutation(internal.signDone.recordCopies, { documentId: doc._id, sent, failed, sha256: final.sha256 });
-  try { await ctx.runMutation(internal.inbox.onSigned, { documentId: doc._id }); } catch (e) { console.error("inbox", String((e as Error).message).slice(0, 120)); } // Phase 1: the Inbox
 }
 
 export const recordCopies = internalMutation({

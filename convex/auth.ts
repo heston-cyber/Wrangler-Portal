@@ -2,6 +2,8 @@ import { convexAuth } from "@convex-dev/auth/server";
 import { Password } from "@convex-dev/auth/providers/Password";
 import { Email } from "@convex-dev/auth/providers/Email";
 import { ConvexError } from "convex/values";
+import { brandFrom } from "./lib/mail";
+import { resetMail, signInCodeMail } from "./lib/mails";
 import { sendEmail, sixDigits } from "./lib/email";
 import type { MutationCtx } from "./_generated/server";
 import { SITE_HOST } from "./lib/site";
@@ -25,20 +27,10 @@ function codeByEmail(id: string, kind: "verify" | "reset") {
     apiKey: "unused",
     async generateVerificationToken() { return sixDigits(); },
     async sendVerificationRequest({ identifier: email, token }) {
-      const site = SITE_HOST();
-      if (kind === "verify") {
-        await sendEmail({
-          to: email, tag: "code", replyTo: null,
-          subject: `${token} is your Wrangler Review code`,
-          text: `Your code is ${token}. It works for ${CODE_MINUTES} minutes.\n\nEnter it on the page where you were signing in.\n\nIf you didn't ask for it, ignore this email.\n\nWrangler Review · ${site}`,
-        });
-      } else {
-        await sendEmail({
-          to: email, tag: "reset", replyTo: null,
-          subject: "Reset your Wrangler Review password",
-          text: `Someone asked to reset the password for this email on Wrangler Review. Your reset code is ${token}. It works for ${CODE_MINUTES} minutes.\n\nIf that wasn't you, ignore this email and nothing changes.\n\nWrangler Review · ${site}`,
-        });
-      }
+      // Sign-in happens before we know whose client this is, so these come from the portal's default business.
+      const b = brandFrom({ name: "Wrangler Productions", legalName: "Hill Creative LLC", ownerName: "Heston Hill" }, { ownerEmail: "heston@wranglerproductions.com", logoUrl: null, isDefault: true });
+      const m = kind === "verify" ? signInCodeMail(b, { code: token, minutes: CODE_MINUTES }) : resetMail(b, { code: token, minutes: CODE_MINUTES });
+      await sendEmail({ from: m.from, to: email, tag: kind === "verify" ? "code" : "reset", replyTo: null, subject: m.subject, text: m.text, html: m.html });
     },
   });
 }

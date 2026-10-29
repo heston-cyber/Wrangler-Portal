@@ -24,6 +24,7 @@ import { PRESET_STYLES } from "./lib/wsBuilder";
 import { sha256Bytes } from "./lib/wsPdf";
 import { randomToken, sha256Hex } from "./lib/hash";
 import { sendEmail, SITE, sixDigits } from "./lib/email";
+import { cancelledMail, ownerAllSignedMail, ownerLockedMail, ownerSignedMail, pleaseSignMail, signerCodeMail } from "./lib/mails";
 import {
   CODE_GAP, CODE_PER_HOUR, CODE_TRIES, CODE_TTL, CONSENT_ID, FAILS_BEFORE_LOCK, LOCK_FOR, OPEN_EVENT_GAP, SESSION_TTL,
   SIGN_FROM, SIGN_SITE, callerIp, centralDate, consentText, linkState, maskEmail, signLink,
@@ -73,11 +74,9 @@ export const api = httpAction(async (ctx, req) => {
         const r = await ctx.runMutation(internal.signing.requestCode, { token, ...who });
         if ("error" in r) return json(req, r, 429);
         try {
-          await sendEmail({
-            from: SIGN_FROM(), to: r.email, replyTo: (await ctx.runQuery(internal.business.contact, {})).ownerEmail, tag: "ws-code",
-            subject: `${r.code} is your code to sign ${r.label}`,
-            text: `Your code is ${r.code}\n\nEnter it on the signing page to open "${r.title}" from Wrangler Productions. It works for 10 minutes.\n\nIf you didn't ask for it, ignore this email: nothing happens without the code.\n\nWrangler Productions · sign.wranglerportal.com`,
-          });
+          const b = await ctx.runQuery(internal.business.mailBrand, {});
+          const m = signerCodeMail(b, { code: r.code, title: r.title, label: r.label });
+          await sendEmail({ from: m.from, to: r.email, replyTo: b.replyTo, tag: "ws-code", subject: m.subject, text: m.text, html: m.html });
         } catch (e) {
           await ctx.runMutation(internal.signing.logEvent, { signingId: r.signingId, kind: "code_email_failed", detail: String((e as Error).message).slice(0, 200), ...who });
           return json(req, { error: "The code email couldn't be sent. Try again in a minute." }, 502);
@@ -445,13 +444,14 @@ export const emailInvite = internalAction({
     if (!d) return null;
     const { s, doc, label } = d;
     const until = doc.expiresAt ? centralDate(doc.expiresAt) : null;
-    const text = kind === "voided"
-      ? `Hi ${s.name.split(" ")[0] || "there"},\n\nHeston Hill at Wrangler Productions cancelled "${doc.title}" (${label}). The signing link you were sent no longer works, and there's nothing for you to do.${doc.voidReason ? `\n\nReason: ${doc.voidReason}` : ""}\n\nQuestions? Reply to this email.\n\nWrangler Productions`
-      : `Hi ${s.name.split(" ")[0] || "there"},\n\n${kind === "reminder" ? "A reminder: " : ""}Heston Hill at Wrangler Productions sent you "${doc.title}" (${label}) to review and sign.\n\nReview and sign here:\n${signLink(s.token)}\n\nYou'll confirm this email address with a 6-digit code, read the document, add your initials where asked, and sign. It takes a few minutes on a phone or a computer.${until ? `\n\nThe link works until ${until}.` : ""}\n\nQuestions, or would you rather sign on paper? Reply to this email.\n\nWrangler Productions, a DBA of Hill Creative LLC · sign.wranglerportal.com`;
-    const subject = kind === "voided" ? `Cancelled: ${doc.title} (${label})` : `${kind === "reminder" ? "Reminder: " : ""}Please sign: ${doc.title} (${label})`;
+    const b = await ctx.runQuery(internal.business.mailBrand, { businessId: doc.businessId ?? null });
+    const m = kind === "voided"
+      ? cancelledMail(b, { name: s.name, title: doc.title, label, reason: doc.voidReason ?? null })
+      : pleaseSignMail(b, { name: s.name, title: doc.title, label, link: signLink(s.token), until, reminder: kind === "reminder" });
     try {
-      await sendEmail({ from: SIGN_FROM(), to: s.email, replyTo: (await ctx.runQuery(internal.business.contact, {})).ownerEmail, subject, text, tag: `ws-${kind}` });
+      await sendEmail({ from: m.from, to: s.email, replyTo: b.replyTo, subject: m.subject, text: m.text, html: m.html, tag: `ws-${kind}` });
       await ctx.runMutation(internal.signing.markEmailed, { signingId, kind, ok: true });
+      if (kind !== "reminder") await ctx.runMutation(internal.emails.markInboxEmailed, { key: `sign:${signingId}:${kind === "voided" ? "cancelled" : "to_sign"}`, email: s.email });
     } catch (e) {
       await ctx.runMutation(internal.signing.markEmailed, { signingId, kind, ok: false, error: String((e as Error).message).slice(0, 200) });
     }
@@ -478,16 +478,13 @@ export const notifyOwner = internalAction({
     const d = await ctx.runQuery(internal.signing.emailData, { signingId });
     if (!d) return null;
     const link = `${SITE()}/sign/d/${d.doc._id}`;
-    if (kind === "locked") {
-      const text = `${d.s.name}'s signing link for "${d.doc.title}" (${d.label}) had too many wrong codes, so it's locked for good.\n\nIf that was ${d.s.name.split(" ")[0]} having trouble, cancel the document and send it again for a fresh link. If not, someone else may have the link.\n\nOpen it: ${link}`;
-      try { await sendEmail({ from: SIGN_FROM(), to: (await ctx.runQuery(internal.business.contact, {})).ownerEmail, replyTo: null, subject: `Signing link locked: ${d.label}`, text, tag: "ws-owner-locked" }); } catch (e) { console.error("notifyOwner", String((e as Error).message).slice(0, 120)); }
-      return null;
-    }
+    const b = await ctx.runQuery(internal.business.mailBrand, { businessId: d.doc.businessId ?? null });
+    const to = (await ctx.runQuery(internal.business.contact, {})).ownerEmail;
     const left = d.all.filter((x) => x.status !== "signed").map((x) => x.name);
-    const text = kind === "all_signed"
-      ? `Everyone has signed "${d.doc.title}" (${d.label}).\n\nOpen it: ${link}\n\n(The signed PDF and the copies to everyone come with Phase S3.)`
-      : `${d.s.name} signed "${d.doc.title}" (${d.label}).${left.length ? `\n\nStill to sign: ${left.join(", ")}.` : ""}\n\nOpen it: ${link}`;
-    try { await sendEmail({ from: SIGN_FROM(), to: (await ctx.runQuery(internal.business.contact, {})).ownerEmail, replyTo: null, subject: kind === "all_signed" ? `Signed by everyone: ${d.doc.title} (${d.label})` : `${d.s.name} signed ${d.label}`, text, tag: `ws-owner-${kind}` }); } catch (e) { console.error("notifyOwner", String((e as Error).message).slice(0, 120)); }
+    const m = kind === "locked" ? ownerLockedMail(b, { signer: d.s.name, title: d.doc.title, label: d.label, link })
+      : kind === "all_signed" ? ownerAllSignedMail(b, { title: d.doc.title, label: d.label, link })
+      : ownerSignedMail(b, { signer: d.s.name, title: d.doc.title, label: d.label, left, link });
+    try { await sendEmail({ from: m.from, to, replyTo: null, subject: m.subject, text: m.text, html: m.html, tag: `ws-owner-${kind}` }); } catch (e) { console.error("notifyOwner", String((e as Error).message).slice(0, 120)); }
     return null;
   },
 });

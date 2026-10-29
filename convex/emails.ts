@@ -17,6 +17,9 @@ import { randomToken } from "./lib/hash";
 import { businessInScope, defaultBusiness } from "./lib/business";
 import { REPLY_TO, SITE, sendEmail } from "./lib/email";
 import { clientKey, sameBusiness, shareCovers, shareState } from "./lib/shareAccess";
+import { emailThumbUrl } from "./lib/media";
+import { mailBrandOf } from "./lib/mail";
+import { type Mail, newVersionMail, noteMail, ownerAlertMail, portalInviteMail, replyMail } from "./lib/mails";
 
 export const ALERT_DELAY_MS = 10 * 60_000;
 export const NEW_VERSION_DELAY_MS = 60_000;
@@ -46,12 +49,13 @@ async function prefsFor(ctx: MutationCtx, email: string) {
 
 /** Who may still get which kinds; makes the prefs row (and its unsubscribe key) on first use. */
 export const recipients = internalMutation({
-  args: { emails: v.array(v.string()), kind: v.union(v.literal("versions"), v.literal("replies")) },
+  args: { emails: v.array(v.string()), kind: v.union(v.literal("versions"), v.literal("replies"), v.literal("notes")) },
   handler: async (ctx, { emails, kind }) => {
     const out: Array<{ email: string; key: string }> = [];
     for (const e of [...new Set(emails.map((x) => x.trim().toLowerCase()).filter(Boolean))]) {
       const p = await prefsFor(ctx, e);
-      if (kind === "versions" ? p.versionsOff : p.repliesOff) continue;
+      // Notes stop only when the client has switched everything off (Settings › "Email me when something new arrives").
+      if (kind === "versions" ? p.versionsOff : kind === "replies" ? p.repliesOff : p.versionsOff && p.repliesOff) continue;
       out.push({ email: e, key: p.key });
     }
     return out;
@@ -87,10 +91,10 @@ export const unclaim = internalMutation({
 export const unsubUrl = (key: string, kind: Kind) => `${process.env.CONVEX_SITE_URL ?? ""}/email/stop?k=${encodeURIComponent(key)}&t=${kind}`;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function deliver(ctx: { runMutation: (ref: any, args: any) => Promise<any> }, key: string, kind: string, to: string, subject: string, text: string, unsubscribe?: string): Promise<boolean> {
+async function deliver(ctx: { runMutation: (ref: any, args: any) => Promise<any> }, key: string, kind: string, to: string, m: Mail, unsubscribe?: string, replyTo?: string | null): Promise<boolean> {
   if (!(await ctx.runMutation(internal.emails.claim, { key, kind, to }))) return false;
   try {
-    const id = await sendEmail({ to, subject, text, tag: kind, unsubscribe });
+    const id = await sendEmail({ from: m.from, to, subject: m.subject, text: m.text, html: m.html, tag: kind, unsubscribe, replyTo });
     await ctx.runMutation(internal.emails.sent, { key, resendId: id || "sent" });
     return true;
   } catch (e) {
@@ -121,28 +125,10 @@ export const newVersionData = internalQuery({
         people.push({ email: m.email, token: s.token, name: user?.name ?? invite.name ?? null });
       }
     }
-    return { title: vid.title, number: ver.number, description: ver.description ?? null, project: projectLabel(project), videoId: vid._id, people };
+    return { title: vid.title, number: ver.number, description: ver.description ?? null, project: projectLabel(project), videoId: vid._id, people, businessId: vid.businessId ?? null, thumbUrl: await emailThumbUrl(ver), brand: await mailBrandOf(ctx, vid.businessId) };
   },
 });
 
-export function newVersionText(d: { title: string; number: number; description: string | null; project: string; name: string | null; link: string; unsub: string }) {
-  const lines = [
-    d.name ? `Hi ${d.name.split(" ")[0]},` : "Hi,",
-    ``,
-    `A new cut of "${d.title}" is ready to review on Wrangler Review: version ${d.number}${d.project ? ` (${d.project})` : ""}.`,
-    ...(d.description ? [``, `What changed: ${d.description}`] : []),
-    ``,
-    `Watch it here:`,
-    d.link,
-    ``,
-    `Reply to this email if anything doesn't work.`,
-    ``,
-    `— Wrangler Review`,
-    ``,
-    `Stop emails about new versions: ${d.unsub}`,
-  ];
-  return { subject: `${d.title} v${d.number} is ready to review`, text: lines.join("\n") };
-}
 
 export const newVersion = internalAction({
   args: { versionId: v.id("versions") },
@@ -154,8 +140,8 @@ export const newVersion = internalAction({
     let sent = 0;
     for (const r of ok) {
       const p = d.people.find((x: { email: string }) => x.email === r.email)!;
-      const m = newVersionText({ ...d, name: p.name, link: `${SITE()}/s/${p.token}/v/${d.videoId}?version=${d.number}`, unsub: unsubUrl(r.key, "versions") });
-      if (await deliver(ctx, `version:${versionId}:${r.email}`, "versions", r.email, m.subject, m.text, unsubUrl(r.key, "versions"))) sent++;
+      const m = newVersionMail(d.brand, { ...d, name: p.name, link: `${SITE()}/s/${p.token}/v/${d.videoId}?version=${d.number}`, unsub: unsubUrl(r.key, "versions") });
+      if (await deliver(ctx, `version:${versionId}:${r.email}`, "versions", r.email, m, unsubUrl(r.key, "versions"), d.brand.replyTo)) { sent++; await ctx.runMutation(internal.emails.markInboxEmailed, { key: `version:${versionId}`, email: r.email }); }
     }
     return { sent };
   },
@@ -182,30 +168,12 @@ export const replyData = internalQuery({
     const when = n.kind === "general" ? "the whole video" : n.kind === "range" ? `${frameTc(n.inFrame!, ver.startTimecode, fps)} → ${frameTc(n.outFrame!, ver.startTimecode, fps)}` : frameTc(n.inFrame!, ver.startTimecode, fps);
     return {
       to: author.email.toLowerCase(), name: author.name ?? null, replyAuthor: r.authorName, replyText: r.text, noteText: n.text, when,
-      title: vid.title, number: ver.number, project: projectLabel(project),
+      title: vid.title, number: ver.number, project: projectLabel(project), brand: await mailBrandOf(ctx, vid.businessId),
       link: share && !shareState(share) ? `${SITE()}/s/${share.token}/v/${vid._id}?version=${ver.number}&note=${n._id}` : `${SITE()}/`,
     };
   },
 });
 
-export function replyText(d: { name: string | null; replyAuthor: string; replyText: string; noteText: string; when: string; title: string; number: number; project: string; link: string; unsub: string }) {
-  const lines = [
-    d.name ? `Hi ${d.name.split(" ")[0]},` : "Hi,",
-    ``,
-    `${d.replyAuthor} replied to your note on "${d.title}" v${d.number}${d.project ? ` (${d.project})` : ""}, at ${d.when}:`,
-    ``,
-    `  You: ${d.noteText || "(drawing)"}`,
-    `  ${d.replyAuthor}: ${d.replyText}`,
-    ``,
-    `See it here:`,
-    d.link,
-    ``,
-    `— Wrangler Review`,
-    ``,
-    `Stop emails about replies: ${d.unsub}`,
-  ];
-  return { subject: `${d.replyAuthor} replied on ${d.title}`, text: lines.join("\n") };
-}
 
 export const replyToNote = internalAction({
   args: { replyId: v.id("replies") },
@@ -215,8 +183,10 @@ export const replyToNote = internalAction({
     if (!d) return { sent: 0 };
     const ok: Array<{ email: string; key: string }> = await ctx.runMutation(internal.emails.recipients, { emails: [d.to], kind: "replies" });
     if (!ok.length) return { sent: 0 };
-    const m = replyText({ ...d, unsub: unsubUrl(ok[0].key, "replies") });
-    return { sent: (await deliver(ctx, `reply:${replyId}`, "replies", d.to, m.subject, m.text, unsubUrl(ok[0].key, "replies"))) ? 1 : 0 };
+    const m = replyMail(d.brand, { ...d, unsub: unsubUrl(ok[0].key, "replies") });
+    const sent = await deliver(ctx, `reply:${replyId}`, "replies", d.to, m, unsubUrl(ok[0].key, "replies"), d.brand.replyTo);
+    if (sent) await ctx.runMutation(internal.emails.markInboxEmailed, { key: `reply:${replyId}`, email: d.to });
+    return { sent: sent ? 1 : 0 };
   },
 });
 
@@ -244,7 +214,7 @@ export const alertData = internalQuery({
         link: `${SITE()}/v/${videoId}?version=${ver.number}&note=${n._id}`,
       });
     }
-    return { title: vid.title, project: projectLabel(project), newest, videoId, noteIds: notes.map((n) => n._id), rows };
+    return { title: vid.title, project: projectLabel(project), newest, videoId, noteIds: notes.map((n) => n._id), rows, brand: await mailBrandOf(ctx, vid.businessId) };
   },
 });
 
@@ -253,21 +223,6 @@ export const markAlerted = internalMutation({
   handler: async (ctx, { noteIds }) => { const now = Date.now(); for (const id of noteIds) if (await ctx.db.get(id)) await ctx.db.patch(id, { alertedAt: now }); },
 });
 
-export function alertText(d: { title: string; project: string; rows: Array<{ version: number; author: string; text: string; drawing: boolean; voice: boolean; when: string; link: string }> }) {
-  const who = [...new Set(d.rows.map((r) => r.author))];
-  const lines = [
-    `${d.rows.length} new ${d.rows.length === 1 ? "note" : "notes"} from ${who.join(", ")} on "${d.title}"${d.project ? ` (${d.project})` : ""}.`,
-    ``,
-    ...d.rows.flatMap((r) => [
-      `v${r.version} · ${r.when} · ${r.author}${r.drawing ? " · drawing" : ""}${r.voice ? " · voice" : ""}`,
-      `  ${r.text || "(no words)"}`,
-      `  ${r.link}`,
-      ``,
-    ]),
-    `— Wrangler Review`,
-  ];
-  return { subject: `${d.rows.length} new ${d.rows.length === 1 ? "note" : "notes"} on ${d.title} from ${who[0]}${who.length > 1 ? ` and ${who.length - 1} more` : ""}`, text: lines.join("\n") };
-}
 
 // Runs 10 minutes after each client/guest note. If a newer note landed in the meantime, a later run handles the batch.
 export const ownerAlert = internalAction({
@@ -276,11 +231,11 @@ export const ownerAlert = internalAction({
     const d = await ctx.runQuery(internal.emails.alertData, { videoId });
     if (!d) return { sent: 0, reason: "nothing new" };
     if (Date.now() - d.newest < ALERT_DELAY_MS - 5_000) return { sent: 0, reason: "still writing" };
-    const m = alertText(d);
+    const m = ownerAlertMail(d.brand, d);
     // Phase 0.5d step 4: the owner of this video's business (Wrangler keeps ALERT_EMAIL if it's set).
     const biz = await ctx.runQuery(internal.business.contact, {});
     const to = (biz.isDefault && process.env.ALERT_EMAIL) || biz.ownerEmail;
-    const ok = await deliver(ctx, `alert:${videoId}:${d.noteIds[d.noteIds.length - 1]}`, "alert", to, m.subject, m.text);
+    const ok = await deliver(ctx, `alert:${videoId}:${d.noteIds[d.noteIds.length - 1]}`, "alert", to, m, undefined, null);
     if (ok) await ctx.runMutation(internal.emails.markAlerted, { noteIds: d.noteIds });
     return { sent: ok ? 1 : 0, notes: d.noteIds.length };
   },
@@ -298,10 +253,21 @@ export const setOff = internalMutation({
   },
 });
 
-const page = (title: string, body: string) => `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>
-<body style="margin:0;background:#030104;color:#f3efe8;font:16px/1.5 -apple-system,Helvetica,Arial,sans-serif"><div style="max-width:440px;margin:0 auto;padding:56px 24px">
-<div style="font:600 11px/1 Helvetica,Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#ff1a0e;margin-bottom:14px">Wrangler Review</div>
-<h1 style="font-size:24px;margin:0 0 12px">${title}</h1><p style="margin:0;color:#b8b2aa">${body}</p></div></body>`;
+// The unsubscribe pages (P1 / Client / Unsubscribe: Ask, Done, Bad link): one glass card on the portal's dark page.
+const ICONS = {
+  mail: '<path d="M3 6h18v12H3z M3 6l9 7 9-7" fill="none" stroke="#FF0000" stroke-width="1.5" stroke-linejoin="round"/>',
+  check: '<circle cx="12" cy="12" r="9" fill="none" stroke="#FF0000" stroke-width="1.5"/><path d="M8 12.5l2.7 2.7L16.5 9.5" fill="none" stroke="#FF0000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+  alert: '<path d="M12 3l10 18H2z" fill="none" stroke="#FF0000" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 10v5M12 18v.01" stroke="#FF0000" stroke-width="1.5" stroke-linecap="round"/>',
+};
+const page = (title: string, body: string, icon: keyof typeof ICONS = "mail") => `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} · WranglerPortal</title>
+<body style="margin:0;min-height:100vh;display:flex;flex-direction:column;background:#030104 radial-gradient(120% 70% at 50% -10%,rgba(160,10,0,.55),rgba(3,1,4,0) 70%);color:#F4F1E9;font:15px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Helvetica,Arial,sans-serif">
+<header style="padding:22px 40px;display:flex;align-items:center;gap:12px"><span style="width:12px;height:12px;border-radius:6px;background:#FF0000;box-shadow:0 0 10px rgba(255,0,0,.6)"></span><img src="${SITE()}/brand/wp-logo-email.png" alt="WranglerPortal" height="24" style="height:24px"></header>
+<main style="flex:1;display:flex;align-items:center;justify-content:center;padding:24px 16px">
+<div style="width:100%;max-width:520px;box-sizing:border-box;padding:36px 32px 32px;border-radius:28px;border:1px solid rgba(244,241,233,.75);background:rgba(3,1,4,.34);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);display:flex;flex-direction:column;gap:16px;align-items:flex-start">
+<svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true" style="filter:drop-shadow(0 0 2px rgba(255,0,0,.45))">${ICONS[icon]}</svg>
+<h1 style="margin:0;font:600 24px/26.88px 'Industry','Saira',-apple-system,Helvetica,Arial,sans-serif;letter-spacing:-.24px">${title}</h1>
+<div style="margin:0;color:rgba(244,241,233,.78)">${body}</div></div></main>
+<footer style="padding:18px;text-align:center;font-size:13px;color:rgba(244,241,233,.55)">WranglerPortal</footer></body></html>`;
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -310,15 +276,15 @@ export const stop = httpAction(async (ctx, req) => {
   const u = new URL(req.url);
   const key = u.searchParams.get("k") ?? "", t = u.searchParams.get("t");
   const kind: Kind | null = t === "versions" || t === "replies" ? t : null;
-  const html = (s: string, b: string, status = 200) => new Response(page(s, b), { status, headers: { "content-type": "text/html; charset=utf-8" } });
-  if (!key || !kind || key.length > 64) return html("That link isn't right.", "Use the link at the bottom of the email, whole.", 400);
+  const html = (s: string, b: string, status = 200, icon: keyof typeof ICONS = "mail") => new Response(page(s, b, icon), { status, headers: { "content-type": "text/html; charset=utf-8" } });
+  if (!key || !kind || key.length > 64) return html("That link isn't right.", "Use the link at the bottom of the email, whole.", 400, "alert");
   const what = kind === "versions" ? "new versions" : "replies to your notes";
   if (req.method !== "POST") {
-    return html(`Stop emails about ${what}?`, `<form method="post" action="${esc(u.pathname)}?k=${encodeURIComponent(key)}&amp;t=${kind}" style="margin-top:18px"><button style="font:600 14px Helvetica,Arial,sans-serif;background:#ff1a0e;color:#fff;border:0;border-radius:999px;padding:12px 22px;cursor:pointer">Yes, stop them</button></form><span style="display:block;margin-top:14px;font-size:13px">Emails you ask for yourself (sign-in codes) still arrive.</span>`);
+    return html(`Stop emails about ${what}?`, `<form method="post" action="${esc(u.pathname)}?k=${encodeURIComponent(key)}&amp;t=${kind}" style="margin:0"><button style="font:400 15px/15px 'Industry','Saira',-apple-system,Helvetica,Arial,sans-serif;background:#FF0000;color:#F4F1E9;border:0;border-radius:12px;height:44px;padding:0 20px;cursor:pointer;box-shadow:0 0 3px rgba(255,0,0,.65),0 0 9px rgba(255,0,0,.45),0 0 20px rgba(255,0,0,.25)">Yes, stop them</button></form><span style="display:block;margin-top:16px;font-size:13px;color:rgba(244,241,233,.55)">Emails you ask for yourself (sign-in codes) still arrive.</span>`);
   }
   const email = await ctx.runMutation(internal.emails.setOff, { key, kind, off: true });
-  if (!email) return html("That link isn't right.", "Use the link at the bottom of the email, whole.", 404);
-  return html(`Done. No more emails about ${what}.`, `${esc(email)} won't get them any more. Changed your mind? Reply to any Wrangler Review email.`);
+  if (!email) return html("That link isn't right.", "Use the link at the bottom of the email, whole.", 404, "alert");
+  return html(`Done. No more emails about ${what}.`, `${esc(email)} won't get them any more. Changed your mind? Reply to any WranglerPortal email.`, 200, "check");
 });
 
 /** For Settings › Clients: each invited person's choices. */
@@ -350,5 +316,64 @@ export const setMine = mutation({
     const row = await prefsFor(ctx, me.email);
     await ctx.db.patch(row._id, { versionsOff: !on, repliesOff: !on, updatedAt: Date.now() });
     return null;
+  },
+});
+
+/** The one-email switch (Phase 1 step 5): the Inbox item for the same event notes that its email went out. */
+export const markInboxEmailed = internalMutation({
+  args: { key: v.string(), email: v.string() },
+  handler: async (ctx, { key, email }) => {
+    const item = await ctx.db.query("inboxItems").withIndex("by_key", (q) => q.eq("key", `${key}:${email.toLowerCase()}`)).first();
+    if (item && !item.emailedAt) await ctx.db.patch(item._id, { emailedAt: Date.now() });
+    return null;
+  },
+});
+
+// ---------- a note from the business (Inbox alert layout, from updates@) ----------
+
+export const noteEmailData = internalQuery({
+  args: { noteId: v.id("inboxNotes") },
+  handler: async (ctx, { noteId }) => {
+    const n = await ctx.db.get(noteId);
+    if (!n || n.status !== "sent" || n.emailThem === false) return null;
+    const items = await ctx.db.query("inboxItems").withIndex("by_note", (q) => q.eq("noteId", noteId)).collect();
+    return { title: n.title, text: n.text, link: n.link ?? null, linkLabel: n.linkLabel ?? null, emails: items.map((i) => i.email), brand: await mailBrandOf(ctx, n.businessId) };
+  },
+});
+
+export const noteEmails = internalAction({
+  args: { noteId: v.id("inboxNotes") },
+  handler: async (ctx, { noteId }): Promise<{ sent: number }> => {
+    const d = await ctx.runQuery(internal.emails.noteEmailData, { noteId });
+    if (!d || !d.emails.length) return { sent: 0 };
+    const ok: Array<{ email: string; key: string }> = await ctx.runMutation(internal.emails.recipients, { emails: d.emails, kind: "notes" });
+    const m = noteMail(d.brand, d);
+    let sent = 0;
+    for (const r of ok) {
+      if (await deliver(ctx, `note:${noteId}:${r.email}`, "notes", r.email, m, undefined, d.brand.replyTo)) { sent++; await ctx.runMutation(internal.emails.markInboxEmailed, { key: `note:${noteId}`, email: r.email }); }
+    }
+    return { sent };
+  },
+});
+
+// ---------- "Invite to the portal" from the client page ----------
+
+export const portalInviteData = internalQuery({
+  args: { email: v.string() },
+  handler: async (ctx, { email }) => {
+    const inv = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()).find((i) => !i.revokedAt);
+    if (!inv) return null;
+    const person = (await ctx.db.query("clientPeople").withIndex("by_email", (q) => q.eq("email", email)).collect()).find((p) => !p.removedAt);
+    return { name: person?.name ?? inv.name ?? null, hasAccount: !!inv.acceptedAt, brand: await mailBrandOf(ctx, inv.businessId ?? null) };
+  },
+});
+
+export const portalInvite = internalAction({
+  args: { email: v.string(), sendKey: v.string() },
+  handler: async (ctx, { email, sendKey }): Promise<{ sent: boolean }> => {
+    const d = await ctx.runQuery(internal.emails.portalInviteData, { email });
+    if (!d) return { sent: false };
+    const m = portalInviteMail(d.brand, { name: d.name, email, hasAccount: d.hasAccount });
+    return { sent: await deliver(ctx, `portal-invite:${email}:${sendKey}`, "invite", email, m, undefined, d.brand.replyTo) };
   },
 });

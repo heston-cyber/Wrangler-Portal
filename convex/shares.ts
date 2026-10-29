@@ -14,6 +14,8 @@ import { ensureInvite } from "./clients";
 import { randomToken } from "./lib/hash";
 import { SITE, sendEmail } from "./lib/email";
 import { downloadFor, signedThumbUrl } from "./lib/media";
+import { mailBrandOf, type MailBrand } from "./lib/mail";
+import { shareInviteMail } from "./lib/mails";
 import { clientKey, coveredProjects, coveredVideos, gateShare, sameBusiness, shareCovers, labelOf, MIN_PASSCODE, passProof, passcodeHash, shareState, showsAllVersions, type Share } from "./lib/shareAccess";
 
 const target = v.object({ kind: v.union(v.literal("client"), v.literal("project"), v.literal("video")), client: v.optional(v.string()), projectId: v.optional(v.id("projects")), videoId: v.optional(v.id("videos")) });
@@ -387,7 +389,7 @@ export const inviteEmailData = internalQuery({
     const l = await labelOf(ctx, s);
     const videos = await coveredVideos(ctx, s);
     const user = invite.userId ? await ctx.db.get(invite.userId) : null;
-    return { token: s.token, kind: s.kind, label: l.label, sub: l.sub, access: s.access, hasAccount: invite.acceptedAt !== undefined, name: user?.name ?? invite.name ?? null, videoCount: videos.length, memberId: member._id };
+    return { token: s.token, kind: s.kind, label: l.label, sub: l.sub, access: s.access, hasAccount: invite.acceptedAt !== undefined, name: user?.name ?? invite.name ?? null, videoCount: videos.length, memberId: member._id, brand: await mailBrandOf(ctx, s.businessId) };
   },
 });
 
@@ -396,24 +398,10 @@ export const markEmailed = internalMutation({
   handler: async (ctx, { memberId }) => { if (await ctx.db.get(memberId)) await ctx.db.patch(memberId, { emailedAt: Date.now() }); },
 });
 
-export function inviteEmailText(d: { token: string; kind: string; label: string; sub: string | null; access: string; hasAccount: boolean; name: string | null; videoCount: number }) {
-  const what = d.kind === "client" ? `everything for ${d.label}` : d.kind === "project" ? `the project ${d.label}` : `the video "${d.label}"${d.sub ? ` (${d.sub})` : ""}`;
+/** Email 03 (Phase 1 step 5): the approved share invite. */
+export function inviteEmail(d: { token: string; kind: string; label: string; sub: string | null; access: string; hasAccount: boolean; name: string | null; brand: MailBrand }) {
   const link = `${SITE()}/s/${d.token}`;
-  const lines = [
-    `${d.name ? `Hi ${d.name.split(" ")[0]},` : "Hi,"}`,
-    ``,
-    `Heston at Wrangler Productions shared ${what} with you on Wrangler Review${d.access === "comment" ? ", and you can leave notes on it" : ""}.`,
-    ``,
-    `Open it here:`,
-    link,
-    ``,
-    d.hasAccount ? `Sign in with your Wrangler Review account to see it.` : `It's for this email address only. The first time, you'll create your account (a password, then a six-digit code we send you); after that, just sign in.`,
-    ``,
-    `Reply to this email if anything doesn't work.`,
-    ``,
-    `— Wrangler Review`,
-  ];
-  return { subject: `Heston shared ${d.label} with you on Wrangler Review`, text: lines.join("\n"), link };
+  return { ...shareInviteMail(d.brand, { ...d, link }), link };
 }
 
 export const sendInviteEmail = internalAction({
@@ -421,8 +409,8 @@ export const sendInviteEmail = internalAction({
   handler: async (ctx, { shareId, email }) => {
     const d = await ctx.runQuery(internal.shares.inviteEmailData, { shareId, email });
     if (!d) return { sent: false };
-    const m = inviteEmailText(d);
-    await sendEmail({ to: email, subject: m.subject, text: m.text, tag: "share-invite" });
+    const m = inviteEmail(d);
+    await sendEmail({ from: m.from, to: email, subject: m.subject, text: m.text, html: m.html, replyTo: d.brand.replyTo, tag: "share-invite" });
     await ctx.runMutation(internal.shares.markEmailed, { memberId: d.memberId });
     return { sent: true };
   },

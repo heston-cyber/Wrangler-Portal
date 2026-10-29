@@ -6,6 +6,7 @@
 //   Hooks:  onVersionReady, onReply (Review), onSignInvite, onSigned (Sign). Called where those emails are sent.
 //           They only add Inbox rows; the emails themselves are unchanged until the one-email switch (task 10).
 import { v, ConvexError } from "convex/values";
+import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { requireMe, requireSignedIn } from "./lib/access";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -294,6 +295,7 @@ export const sendNote = mutation({
       if (await postToInbox(ctx, { businessId: biz, clientId: client._id, email: p.email, kind: "note", title: n.title, text: n.text, link: n.link, linkLabel: n.linkLabel, source: { module: "inbox", id: noteId }, key: `note:${noteId}`, noteId })) posted++;
     }
     await ctx.db.patch(noteId, { status: "sent", sentAt: Date.now(), recipients: posted, updatedAt: Date.now() });
+    if (n.emailThem !== false && posted) await ctx.scheduler.runAfter(0, internal.emails.noteEmails, { noteId });
     return { sent: posted };
   },
 });

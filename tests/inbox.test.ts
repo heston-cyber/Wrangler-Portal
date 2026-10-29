@@ -321,3 +321,60 @@ describe("Post a note (Phase 1)", () => {
     await expect(w.heston.mutation(api.inbox.sendNote, { noteId: sam })).rejects.toThrow(/None of the people you picked/);
   });
 });
+
+describe("Phase 1 emails (step 5)", () => {
+  type Sent = { to: string; from: string; subject: string; text: string; html: string; reply_to?: string };
+  const stub = (mails: Sent[]) => vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (url === "https://api.resend.com/emails") { const b = JSON.parse(String(init?.body)); mails.push({ to: b.to[0], from: b.from, subject: b.subject, text: b.text, html: b.html, reply_to: b.reply_to }); return new Response(JSON.stringify({ id: "em" }), { status: 200 }); }
+    return new Response("{}", { status: 500 });
+  }));
+  const settle = async (t: Awaited<ReturnType<typeof world>>["t"]) => { vi.useFakeTimers(); await t.finishAllScheduledFunctions(vi.runAllTimers); vi.useRealTimers(); };
+
+  test("a sent note emails each recipient once from updates@, in the alert layout, and the Inbox shows it was emailed", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const noteId = await w.heston.mutation(api.inbox.saveNote, { clientId: w.harbor, title: "Shoot moved to Friday", text: "Same time, same place.", to: ["maya@harbor.example"] });
+    await w.heston.mutation(api.inbox.sendNote, { noteId });
+    await settle(w.t);
+    const notes = () => mails.filter((m) => m.subject === "Shoot moved to Friday");
+    expect(notes().map((m) => [m.to, m.from])).toEqual([["maya@harbor.example", "Wrangler Productions <updates@wranglerportal.com>"]]);
+    expect(notes()[0].html).toContain("A note from Wrangler Productions");
+    expect(notes()[0].text).toContain("Open in the portal: https://app.wranglerportal.com/inbox");
+    expect(notes()[0].reply_to).toBe("heston@wranglerproductions.com");
+    const detail = await w.heston.query(api.inbox.noteDetail, { noteId });
+    expect(detail.people[0].emailedAt).toBeTypeOf("number");
+    // Run again: nothing more goes out.
+    await w.t.action(internal.emails.noteEmails, { noteId });
+    expect(notes()).toHaveLength(1);
+  });
+
+  test("Also email them off sends nothing; a client who switched emails off gets none", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const quiet = await w.heston.mutation(api.inbox.saveNote, { clientId: w.harbor, title: "Quiet", text: "", emailThem: false });
+    await w.heston.mutation(api.inbox.sendNote, { noteId: quiet });
+    await settle(w.t);
+    expect(mails.filter((m) => m.subject === "Quiet")).toHaveLength(0);
+    await w.mayaC.mutation(api.emails.setMine, { on: false });
+    expect(await w.mayaC.query(api.emails.myPrefs, {})).toEqual({ on: false });
+    const loud = await w.heston.mutation(api.inbox.saveNote, { clientId: w.harbor, title: "Loud", text: "" });
+    await w.heston.mutation(api.inbox.sendNote, { noteId: loud });
+    await settle(w.t);
+    expect(mails.filter((m) => m.subject === "Loud").map((m) => m.to)).toEqual(["jordan@harbor.example"]); // Maya switched off; Jordan (invited) still gets it
+  });
+
+  test("Invite to the portal emails the person the invite", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const sam = await w.t.run(async (ctx) => (await ctx.db.query("clientPeople").collect()).find((p) => p.email === "sam@harbor.example")!._id);
+    expect(await w.heston.mutation(api.clients.invitePerson, { personId: sam })).toEqual({ already: false, emailed: true });
+    await settle(w.t);
+    const inv = mails.filter((m) => m.subject === "Heston invited you to WranglerPortal");
+    expect(inv.map((m) => [m.to, m.from])).toEqual([["sam@harbor.example", "Wrangler Productions <review@wranglerportal.com>"]]);
+    expect(inv[0].text).toContain("https://app.wranglerportal.com/?invited=sam%40harbor.example");
+  });
+});
