@@ -117,6 +117,20 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       await postToInbox(ctx as never, { businessId: w.A, clientId: w.harbor, email: "maya@harborcoffee.com", kind: "reply", title: "Heston replied to your note", text: "“Pulled the logo up two frames.”", link: `/s/x/v/${w.harbor30.v}`, source: { module: "review", id: "n1" }, key: "kit-reply" });
     });
 
+    // Docs: the starter template plus two more, and two drafts still in the builder.
+    await owner.mutation(api.builder.ensureStarter, {});
+    const b1 = await owner.mutation(api.builder.createBuild, {});
+    const b2 = await owner.mutation(api.builder.createBuild, {});
+    await t.run(async (ctx) => {
+      const tpl = (await ctx.db.query("wsTemplates").collect())[0];
+      await ctx.db.patch(tpl._id, { description: "Wrangler's standard agreement" });
+      const { _id: _a, _creationTime: _b, ...rest } = tpl;
+      await ctx.db.insert("wsTemplates", { ...rest, name: "Change Order", description: undefined });
+      await ctx.db.insert("wsTemplates", { ...rest, name: "Usage Release", description: undefined });
+      await ctx.db.patch(b1, { title: "Spirit Days Service Agreement", updatedAt: Date.now() - 2 * 3_600_000 });
+      await ctx.db.patch(b2, { title: "Northline Usage Release", updatedAt: Date.now() - 4 * 86_400_000 });
+    });
+
     const OWNER: [string, Record<string, unknown>][] = [
       ["users.me", {}], ["business.brand", {}], ["business.settings", {}], ["library.overview", {}], ["activity.feed", { limit: 100 }], ["activity.recent", {}],
       ["sign.list", {}], ["builder.listBuilds", {}], ["builder.listTemplates", {}], ["builder.listClauses", {}], ["sign.ownerSignature", {}],

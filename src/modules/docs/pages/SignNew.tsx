@@ -1,14 +1,15 @@
-// Contracts › New document (B1–B3): start blank in the builder, start from a template, continue a draft, or upload a
+// Docs › New document (B1–B3; Phase 1 look Oct 29, frame 90:1495): start blank in the builder, start from a template, continue a draft, or upload a
 // finished PDF (the original way).
 import { useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { FilePen, FilePlus2, FileSignature, FileUp, LayoutTemplate, PencilLine, Trash2 } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { Sep, TopBar } from "../../../shell/Shell";
 import { linkProps, navigate } from "../../../lib/router";
 import { Spinner, useConfirm, useToast } from "../../../ui/kit";
-import { central, errText, uploadToStorage } from "./common";
+import { Icon, type IconName } from "../../../ui/Icon";
+import { ButtonLink, PageHeader, SkeletonRows } from "../../../ui/wp";
+import { central, errText, shortWhen, uploadToStorage } from "./common";
 
 export default function SignNew() {
   const templates = useQuery(api.builder.listTemplates);
@@ -45,37 +46,52 @@ export default function SignNew() {
     } catch (e) { show(errText(e)); setBusy(null); }
   };
   const drafts = (builds ?? []).filter((b) => !b.documentId);
+  const startCard = (key: string, icon: IconName, title: string, text: React.ReactNode, onClick: () => void) => (
+    <button className="wp-hubcard glass start" onClick={onClick} disabled={!!busy} aria-busy={busy === key || undefined}>
+      {busy === key ? <Spinner /> : <Icon name={icon} size={24} />}
+      <span className="ttl">{title}</span>
+      <span className="txt">{text}</span>
+    </button>
+  );
   return (
     <>
-      <TopBar><FileSignature size={15} /><a {...linkProps("/sign")}>Contracts</a><Sep /><span className="here">New document</span></TopBar>
+      <TopBar><a {...linkProps("/sign")}>Docs</a><Sep /><span className="here">New document</span></TopBar>
       <input ref={input} type="file" accept="application/pdf,.pdf" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void upload(f); }} />
       <input ref={importInput} type="file" accept="application/pdf,.pdf" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void importIt(f); }} />
-      <div className="content">
-        <div className="ws-list">
-          <h1 className="headline">New document. <span className="rest">Build it here, start from a template, or bring a finished PDF.</span></h1>
-          <div className="ws-hub">
-            <button className="ws-hubcard" onClick={() => void start()} disabled={!!busy}><span className="ws-hubicon">{busy === "blank" ? <Spinner /> : <FilePlus2 size={22} />}</span><span className="ws-hubtext"><b>Blank document</b><span className="secondary">Start with a title, the parties and a signature block.</span></span></button>
-            <button className="ws-hubcard" onClick={() => input.current?.click()} disabled={!!busy}><span className="ws-hubicon">{busy === "upload" ? <Spinner /> : <FileUp size={22} />}</span><span className="ws-hubtext"><b>Upload a finished PDF</b><span className="secondary">Markers like <code>{"{{sign:client}}"}</code> place the boxes.</span></span></button>
-            <button className="ws-hubcard" onClick={() => importInput.current?.click()} disabled={!!busy}><span className="ws-hubicon">{busy === "import" ? <Spinner /> : <FilePen size={22} />}</span><span className="ws-hubtext"><b>Import a PDF to edit</b><span className="secondary">Its text becomes an editable draft: titles, headings, paragraphs, lists and sections.</span></span></button>
-          </div>
-          <div className="ws-cardhead"><span className="label">From a template</span><a className="btn ghost sm" {...linkProps("/sign/templates")}>Manage templates</a></div>
-          {templates === undefined ? <Spinner /> : templates.length === 0 ? <p className="caption secondary">No templates yet. <a {...linkProps("/sign/templates")}>Open Templates</a> to add the Service Agreement starter.</p> : (
-            <div className="ws-hub">{templates.map((t) => (
-              <button key={t._id} className="ws-hubcard" onClick={() => void start(t._id)} disabled={!!busy}><span className="ws-hubicon">{busy === t._id ? <Spinner /> : <LayoutTemplate size={22} />}</span><span className="ws-hubtext"><b>{t.name}</b><span className="secondary">{t.description || `${t.blocks} blocks`}</span></span></button>
-            ))}</div>
-          )}
-          {drafts.length > 0 && <>
-            <span className="label">Still in the builder</span>
-            <div className="regwrap"><table className="regtable ws-table"><tbody>{drafts.map((b) => (
-              <tr key={b._id} onClick={() => navigate(`/sign/b/${b._id}`)} style={{ cursor: "pointer" }}>
-                <td><PencilLine size={14} /> <a {...linkProps(`/sign/b/${b._id}`)} onClick={(e) => e.stopPropagation()}>{b.title}</a></td>
-                <td className="hide-sm secondary">{b.client || "—"}</td>
-                <td className="hide-sm secondary">{central(b.updatedAt)}</td>
-                <td style={{ textAlign: "right" }}><button className="icon-btn" aria-label="Delete draft" onClick={async (e) => { e.stopPropagation(); if (!(await confirm({ title: `Delete the draft "${b.title}"?`, body: "Its content is deleted. This can't be undone." }))) return; try { await deleteBuild({ buildId: b._id }); } catch (er) { show(errText(er)); } }}><Trash2 size={14} /></button></td>
-              </tr>
-            ))}</tbody></table></div>
-          </>}
+      <div className="wp-page docs">
+        <PageHeader title="New document." sub="Build it here, start from a template, or bring a finished PDF." />
+        <div className="wp-hub">
+          {startCard("blank", "document", "Blank document", "Start with a title, the parties and a signature block.", () => void start())}
+          {startCard("upload", "upload", "Upload a finished PDF", <>Markers like {"{{sign:client}}"} place the boxes.</>, () => input.current?.click())}
+          {startCard("import", "note", "Import a PDF to edit", "Its text becomes an editable draft: titles, headings, paragraphs, lists and sections.", () => importInput.current?.click())}
         </div>
+        <div className="wp-listhead"><span className="wp-eyebrow">From a template</span><ButtonLink variant="ghost" size="sm" to="/sign/templates">Manage templates</ButtonLink></div>
+        {templates === undefined ? <div className="wp-tablecard glass"><SkeletonRows n={1} /></div> : templates.length === 0 ? <p className="wp-small ws-foot">No templates yet. <a className="wp-link" {...linkProps("/sign/templates")}>Open Templates</a> to add the Service Agreement starter.</p> : (
+          <div className="wp-hub">{templates.map((t) => (
+            <button key={t._id} className="wp-tplcard glass" onClick={() => void start(t._id)} disabled={!!busy} aria-busy={busy === t._id || undefined}>
+              {busy === t._id ? <Spinner /> : <Icon name="folder" size={20} />}
+              <span className="ttl">{t.name}</span>
+              <span className="txt">{t.description || `${t.blocks} blocks`}</span>
+            </button>
+          ))}</div>
+        )}
+        {drafts.length > 0 && <>
+          <span className="wp-eyebrow">Still in the builder</span>
+          <div className="wp-tablecard glass">
+            <table className="wp-table ws-table">
+              <colgroup><col /><col className="c-who" /><col className="c-when" /><col className="c-more" /></colgroup>
+              <thead><tr><th scope="col">Draft</th><th scope="col" className="hide-sm">Client</th><th scope="col" className="hide-sm">Updated</th><th aria-label="Actions" /></tr></thead>
+              <tbody>{drafts.map((b) => (
+                <tr key={b._id} onClick={() => navigate(`/sign/b/${b._id}`)} tabIndex={0}>
+                  <td className="ttl"><a {...linkProps(`/sign/b/${b._id}`)} onClick={(e) => e.stopPropagation()}>{b.title}</a></td>
+                  <td className="hide-sm">{b.client || "—"}</td>
+                  <td className="hide-sm" title={central(b.updatedAt)}>{shortWhen(b.updatedAt)}</td>
+                  <td className="ws-more"><button className="icon-btn bare sm" aria-label="Delete draft" title="Delete draft" onClick={async (e) => { e.stopPropagation(); if (!(await confirm({ title: `Delete the draft "${b.title}"?`, body: "Its content is deleted. This can't be undone." }))) return; try { await deleteBuild({ buildId: b._id }); } catch (er) { show(errText(er)); } }}><Icon name="close" size={16} /></button></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </>}
       </div>
       {confirmDialog}
       {toast}
