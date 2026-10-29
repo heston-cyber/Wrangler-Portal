@@ -723,3 +723,25 @@ a.wp-row:hover, button.wp-row:hover, .wp-row.hover { background: var(--surface-b
 }
 .feed .ncard { flex: 0 0 auto; width: max-content; min-width: 150px; max-width: 240px; }
 .feed .rtags { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* the Logo everywhere the old wordmark was (BrandImg "wordmark") */
+.wp-logo.logo { display: inline-flex; gap: 10px; height: auto; }
+.wp-logo.logo img { height: 20px; }
+.crumbs .wp-logo.logo .rec { width: 10px; height: 10px; }
+.watermark { display: none !important; }
+
+/* Video page (P1 / Owner / Review · Video page): the waveform plays in the accent, the open note gets the accent edge */
+.tl-wave .bars.played i { background: var(--accent); }
+.tl-wave { background: rgba(var(--ink), .4); box-shadow: inset 0 0 0 1px var(--border-faint); }
+.tl-head, .tl-head::before { background: var(--text-primary); }
+.side .shead .tabs { gap: 28px; flex-wrap: nowrap; border-bottom: 1px solid var(--border-hairline); flex: 1; }
+.side .shead .tab { padding: 0 0 10px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; margin-bottom: -1px; font-size: var(--fs-text-regular); line-height: var(--lh-regular-medium); color: var(--text-secondary); }
+.side .shead .tab:hover { background: none; color: var(--text-primary); }
+.side .shead .tab[aria-selected="true"] { background: none; border-color: var(--accent); color: var(--text-primary); }
+.side .shead .tab .count { margin-left: 4px; color: var(--text-secondary); }
+.side .shead { align-items: flex-end; gap: 12px; padding: 0 2px 12px; }
+.note { border-radius: 16px; padding: 14px 16px 12px; }
+.note.focus { box-shadow: inset 0 0 0 1px var(--accent-ring), 0 0 18px var(--glow-faint); background: var(--surface-block-hover); }
+.note .rlabel, .composer .rlabel { font: 500 var(--fs-label-small)/var(--lh-label-small) var(--font-title); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-accent); }
+.note .rbold, .composer .rbold { font: 600 18px/22px var(--font-title); color: var(--text-primary); }
+.note .rtag, .composer .rtag, .transport .rtag { border: 1px solid var(--border-strong); background: none; box-shadow: none; border-radius: 6px; padding: 4px 8px; height: auto; font: 400 10px/1.2 var(--font-title); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-muted); }

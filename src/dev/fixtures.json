@@ -1056,22 +1056,310 @@
     "title": "Shoot moved to Friday"
    }
   ],
-  "connector.listKeys": [],
-  "register.sheetKey": null,
-  "dropbox.status": {
-   "configured": false,
-   "connected": false,
-   "connectedAt": null,
-   "email": null,
-   "lastError": null,
-   "lastSyncAt": null,
-   "name": null,
-   "recent": [],
-   "transcripts": false
+  "library.video": {
+   "_id": "00000000000000000000010024videos",
+   "can": "owner",
+   "downloads": true,
+   "final": null,
+   "nextFileName": "00001_Harbor30_v5",
+   "number": 1,
+   "project": {
+    "_id": "000000000000000000010020projects",
+    "jobNumber": "26127",
+    "name": "Harbor Coffee Launch"
+   },
+   "shortTitle": "Harbor30",
+   "title": "Harbor Coffee 30s",
+   "versions": [
+    {
+     "_id": "000000000000000000010025versions",
+     "bunnyGuid": "kit-premiere",
+     "createdAt": 1792843200000,
+     "description": null,
+     "dropboxPath": null,
+     "encodeProgress": 0,
+     "error": null,
+     "fileName": "00001_Harbor30_v1.mp4",
+     "fileSize": null,
+     "fileUrl": null,
+     "fpsDen": 1001,
+     "fpsNum": 24000,
+     "frameCount": 720,
+     "frameCountExact": false,
+     "height": 1080,
+     "media": {
+      "file": null,
+      "hls": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/playlist.m3u8",
+      "mp4": {
+       "720": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/play_720p.mp4",
+       "1080": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/play_1080p.mp4"
+      },
+      "scrub": null,
+      "thumb": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg"
+     },
+     "mp4Heights": [
+      720,
+      1080
+     ],
+     "needsPoster": true,
+     "noteCount": 0,
+     "number": 1,
+     "openCount": 0,
+     "scrub": null,
+     "scrubStatus": null,
+     "source": "stream",
+     "startTimecode": "01:00:00:00",
+     "status": "ready",
+     "storageBytes": null,
+     "streamOnly": false,
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
+     "transcript": null,
+     "uploaderName": null,
+     "width": 1920
+    },
+    {
+     "_id": "000000000000000000010026versions",
+     "bunnyGuid": "kit-premiere",
+     "createdAt": 1792915200000,
+     "description": null,
+     "dropboxPath": null,
+     "encodeProgress": 0,
+     "error": null,
+     "fileName": "00001_Harbor30_v2.mp4",
+     "fileSize": null,
+     "fileUrl": null,
+     "fpsDen": 1001,
+     "fpsNum": 24000,
+     "frameCount": 720,
+     "frameCountExact": false,
+     "height": 1080,
+     "media": {
+      "file": null,
+      "hls": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/playlist.m3u8",
+      "mp4": {
+       "720": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/play_720p.mp4",
+       "1080": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/play_1080p.mp4"
+      },
+      "scrub": null,
+      "thumb": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg"
+     },
+     "mp4Heights": [
+      720,
+      1080
+     ],
+     "needsPoster": true,
+     "noteCount": 0,
+     "number": 2,
+     "openCount": 0,
+     "scrub": null,
+     "scrubStatus": null,
+     "source": "stream",
+     "startTimecode": "01:00:00:00",
+     "status": "ready",
+     "storageBytes": null,
+     "streamOnly": false,
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
+     "transcript": null,
+     "uploaderName": null,
+     "width": 1920
+    },
+    {
+     "_id": "000000000000000000010027versions",
+     "bunnyGuid": "kit-premiere",
+     "createdAt": 1792987200000,
+     "description": null,
+     "dropboxPath": null,
+     "encodeProgress": 0,
+     "error": null,
+     "fileName": "00001_Harbor30_v3.mp4",
+     "fileSize": null,
+     "fileUrl": null,
+     "fpsDen": 1001,
+     "fpsNum": 24000,
+     "frameCount": 720,
+     "frameCountExact": false,
+     "height": 1080,
+     "media": {
+      "file": null,
+      "hls": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/playlist.m3u8",
+      "mp4": {
+       "720": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/play_720p.mp4",
+       "1080": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/play_1080p.mp4"
+      },
+      "scrub": null,
+      "thumb": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg"
+     },
+     "mp4Heights": [
+      720,
+      1080
+     ],
+     "needsPoster": true,
+     "noteCount": 0,
+     "number": 3,
+     "openCount": 0,
+     "scrub": null,
+     "scrubStatus": null,
+     "source": "stream",
+     "startTimecode": "01:00:00:00",
+     "status": "ready",
+     "storageBytes": null,
+     "streamOnly": false,
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
+     "transcript": null,
+     "uploaderName": null,
+     "width": 1920
+    },
+    {
+     "_id": "000000000000000000010028versions",
+     "bunnyGuid": "kit-premiere",
+     "createdAt": 1793059200000,
+     "description": null,
+     "dropboxPath": null,
+     "encodeProgress": 0,
+     "error": null,
+     "fileName": "00001_Harbor30_v4.mp4",
+     "fileSize": null,
+     "fileUrl": null,
+     "fpsDen": 1001,
+     "fpsNum": 24000,
+     "frameCount": 720,
+     "frameCountExact": false,
+     "height": 1080,
+     "media": {
+      "file": null,
+      "hls": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/playlist.m3u8",
+      "mp4": {
+       "720": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/play_720p.mp4",
+       "1080": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/play_1080p.mp4"
+      },
+      "scrub": null,
+      "thumb": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg"
+     },
+     "mp4Heights": [
+      720,
+      1080
+     ],
+     "needsPoster": true,
+     "noteCount": 3,
+     "number": 4,
+     "openCount": 3,
+     "scrub": null,
+     "scrubStatus": null,
+     "source": "stream",
+     "startTimecode": "01:00:00:00",
+     "status": "ready",
+     "storageBytes": null,
+     "streamOnly": false,
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
+     "transcript": null,
+     "uploaderName": null,
+     "width": 1920
+    }
+   ],
+   "viewer": {
+    "kind": "owner",
+    "name": "Heston Hill"
+   }
   },
-  "dropbox.flagged": [],
-  "wsConnector.listKeys": [],
-  "shares.list": [
+  "notes.forVersion": [
+   {
+    "_creationTime": 1793289600000.0469,
+    "_id": "000000000000000000000010048notes",
+    "authorKind": "owner",
+    "authorName": "Maya Brooks",
+    "createdAt": 1793271600000,
+    "inFrame": 120,
+    "kind": "frame",
+    "mine": true,
+    "replies": [],
+    "status": "open",
+    "text": "Pull the logo up two frames.",
+    "updatedAt": 1793271600000,
+    "versionId": "000000000000000000010028versions",
+    "videoId": "00000000000000000000010024videos",
+    "visibility": "shared",
+    "voiceUrl": null
+   },
+   {
+    "_creationTime": 1793289600000.0479,
+    "_id": "000000000000000000000010049notes",
+    "authorKind": "owner",
+    "authorName": "Maya Brooks",
+    "createdAt": 1793271600000,
+    "inFrame": 120,
+    "kind": "frame",
+    "mine": true,
+    "replies": [],
+    "status": "open",
+    "text": "Can the music come in on the cut?",
+    "updatedAt": 1793271600000,
+    "versionId": "000000000000000000010028versions",
+    "videoId": "00000000000000000000010024videos",
+    "visibility": "shared",
+    "voiceUrl": null
+   },
+   {
+    "_creationTime": 1793289600000.0488,
+    "_id": "000000000000000000000010050notes",
+    "authorKind": "owner",
+    "authorName": "Jordan Lee",
+    "createdAt": 1793271600000,
+    "inFrame": 120,
+    "kind": "frame",
+    "mine": true,
+    "replies": [],
+    "status": "open",
+    "text": "Love this shot.",
+    "updatedAt": 1793271600000,
+    "versionId": "000000000000000000010028versions",
+    "videoId": "00000000000000000000010024videos",
+    "visibility": "shared",
+    "voiceUrl": null
+   }
+  ],
+  "transcripts.forVersion": null,
+  "waveforms.forVersion": null,
+  "views.forVideo": {
+   "byVersion": {
+    "1": {
+     "people": 0,
+     "views": 0
+    },
+    "2": {
+     "people": 0,
+     "views": 0
+    },
+    "3": {
+     "people": 0,
+     "views": 0
+    },
+    "4": {
+     "people": 1,
+     "views": 1
+    }
+   },
+   "completed": 1,
+   "last": {
+    "at": 1793278840000,
+    "who": "Maya Brooks"
+   },
+   "people": 1,
+   "rows": [
+    {
+     "completed": true,
+     "kind": "client",
+     "lastAt": 1793278840000,
+     "lengthSec": 30,
+     "maxSec": 30,
+     "startedAt": 1793278800000,
+     "version": 4,
+     "watchedSec": 30,
+     "who": "Maya Brooks"
+    }
+   ],
+   "views": 1
+  },
+  "shares.coveringVideo": [
    {
     "_id": "00000000000000000000010071shares",
     "access": "view",
@@ -1092,8 +1380,8 @@
     "projectId": null,
     "state": "on",
     "sub": "26127 Harbor Coffee Launch",
-    "token": "xqz51gjt0Za5sB1_ES6uzw",
-    "url": "https://app.wranglerportal.com/s/xqz51gjt0Za5sB1_ES6uzw",
+    "token": "j_DzBOzw_c-WPm7XPJAFGA",
+    "url": "https://app.wranglerportal.com/s/j_DzBOzw_c-WPm7XPJAFGA",
     "videoId": "00000000000000000000010024videos",
     "who": "link"
    },
@@ -1132,8 +1420,90 @@
     "projectId": "000000000000000000010020projects",
     "state": "on",
     "sub": "Harbor Coffee",
-    "token": "Si74PoSEI-Dh7DTVWm8g6A",
-    "url": "https://app.wranglerportal.com/s/Si74PoSEI-Dh7DTVWm8g6A",
+    "token": "K7CSHQYwyHw1OtXOb8eyHQ",
+    "url": "https://app.wranglerportal.com/s/K7CSHQYwyHw1OtXOb8eyHQ",
+    "videoId": null,
+    "who": "invited"
+   }
+  ],
+  "connector.listKeys": [],
+  "register.sheetKey": null,
+  "dropbox.status": {
+   "configured": false,
+   "connected": false,
+   "connectedAt": null,
+   "email": null,
+   "lastError": null,
+   "lastSyncAt": null,
+   "name": null,
+   "recent": [],
+   "transcripts": false
+  },
+  "dropbox.flagged": [],
+  "wsConnector.listKeys": [],
+  "shares.list": [
+   {
+    "_id": "00000000000000000000010071shares",
+    "access": "view",
+    "allVersions": true,
+    "client": null,
+    "createdAt": 1793289600000,
+    "downloads": true,
+    "emailNewVersions": true,
+    "expiresAt": null,
+    "gone": false,
+    "hasPasscode": false,
+    "kind": "video",
+    "label": "Harbor Coffee 30s",
+    "lastOpenedAt": null,
+    "offAt": null,
+    "openCount": 0,
+    "people": [],
+    "projectId": null,
+    "state": "on",
+    "sub": "26127 Harbor Coffee Launch",
+    "token": "j_DzBOzw_c-WPm7XPJAFGA",
+    "url": "https://app.wranglerportal.com/s/j_DzBOzw_c-WPm7XPJAFGA",
+    "videoId": "00000000000000000000010024videos",
+    "who": "link"
+   },
+   {
+    "_id": "00000000000000000000010066shares",
+    "access": "comment",
+    "allVersions": true,
+    "client": null,
+    "createdAt": 1793289600000,
+    "downloads": true,
+    "emailNewVersions": true,
+    "expiresAt": null,
+    "gone": false,
+    "hasPasscode": false,
+    "kind": "project",
+    "label": "26127 Harbor Coffee Launch",
+    "lastOpenedAt": null,
+    "offAt": null,
+    "openCount": 0,
+    "people": [
+     {
+      "email": "maya@harborcoffee.com",
+      "emailedAt": null,
+      "hasAccount": true,
+      "invited": true,
+      "name": "Maya Brooks"
+     },
+     {
+      "email": "jordan@harborcoffee.com",
+      "emailedAt": null,
+      "hasAccount": false,
+      "invited": true,
+      "name": "Jordan Lee"
+     }
+    ],
+    "projectId": "000000000000000000010020projects",
+    "state": "on",
+    "sub": "Harbor Coffee",
+    "token": "K7CSHQYwyHw1OtXOb8eyHQ",
+    "url": "https://app.wranglerportal.com/s/K7CSHQYwyHw1OtXOb8eyHQ",
     "videoId": null,
     "who": "invited"
    }
@@ -1169,7 +1539,7 @@
     "kind": "project",
     "label": "26127 Harbor Coffee Launch",
     "sub": "Harbor Coffee",
-    "token": "Si74PoSEI-Dh7DTVWm8g6A",
+    "token": "K7CSHQYwyHw1OtXOb8eyHQ",
     "videos": [
      {
       "_id": "00000000000000000000010030videos",
@@ -1266,6 +1636,7 @@
   }
  },
  "ids": {
-  "harbor": "0000000000000000000010003clients"
+  "harbor": "0000000000000000000010003clients",
+  "video": "00000000000000000000010024videos"
  }
 }

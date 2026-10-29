@@ -121,7 +121,9 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["users.me", {}], ["business.brand", {}], ["business.settings", {}], ["library.overview", {}], ["activity.feed", { limit: 100 }], ["activity.recent", {}],
       ["sign.list", {}], ["builder.listBuilds", {}], ["builder.listTemplates", {}], ["builder.listClauses", {}], ["sign.ownerSignature", {}],
       ["clients.listInvites", {}], ["clients.directory", {}], ["clients.page", { clientId: w.harbor }], ["clients.people", { clientId: w.harbor }],
-      ["inbox.notes", {}], ["inbox.forClient", { clientId: w.harbor }], ["connector.listKeys", {}], ["register.sheetKey", {}], ["dropbox.status", {}], ["dropbox.flagged", {}], ["wsConnector.listKeys", {}], ["shares.list", {}],
+      ["inbox.notes", {}], ["inbox.forClient", { clientId: w.harbor }],
+      ["library.video", { videoId: w.harbor30.v }], ["notes.forVersion", { versionId: w.harbor30.last }], ["transcripts.forVersion", { versionId: w.harbor30.last }],
+      ["waveforms.forVersion", { versionId: w.harbor30.last }], ["views.forVideo", { videoId: w.harbor30.v }], ["shares.coveringVideo", { videoId: w.harbor30.v }], ["connector.listKeys", {}], ["register.sheetKey", {}], ["dropbox.status", {}], ["dropbox.flagged", {}], ["wsConnector.listKeys", {}], ["shares.list", {}],
     ];
     const CLIENT: [string, Record<string, unknown>][] = [["users.me", {}], ["business.brand", {}], ["shares.mine", {}], ["inbox.mine", {}], ["inbox.unreadCount", {}], ["documents.mine", {}]];
     const run = async (as: typeof owner, list: [string, Record<string, unknown>][]) => {
@@ -133,7 +135,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       }
       return out;
     };
-    const fixtures = { owner: await run(owner, OWNER), client: await run(client, CLIENT), ids: { harbor: w.harbor } };
+    const fixtures = { owner: await run(owner, OWNER), client: await run(client, CLIENT), ids: { harbor: w.harbor, video: w.harbor30.v } };
     writeFileSync(join(__dirname, "..", "src", "dev", "fixtures.json"), JSON.stringify(fixtures, null, 1));
     vi.useRealTimers();
   });
