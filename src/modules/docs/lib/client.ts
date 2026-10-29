@@ -6,6 +6,9 @@ export const CONVEX_SITE = cloud.replace(/\.convex\.cloud\/?$/, ".convex.site");
 export type WsResult = Record<string, any> & { error?: string; code?: string };
 
 export async function ws(op: string, body: Record<string, unknown>): Promise<WsResult> {
+  // Dev only: the kit's sample signer (src/dev/signerKit.ts) answers instead of the server.
+  const kit = (globalThis as { __wsKit?: (op: string, body: Record<string, unknown>) => WsResult }).__wsKit;
+  if (kit) return kit(op, body);
   let r: Response;
   try {
     r = await fetch(`${CONVEX_SITE}/ws/${op}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });

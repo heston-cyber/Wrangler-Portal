@@ -1143,3 +1143,73 @@ button.wp-hubcard[aria-busy], button.wp-tplcard[aria-busy] { opacity: 1; }
   .wp-sharelist .vrow > .wp-tag { display: none; }
 }
 .wp-sharelist .wp-light > i { opacity: .55; }
+
+/* ---------- Signing pages (page "S5 · Signing"): the signer's pages on the smear light ---------- */
+.wsx { position: relative; min-height: 100vh; background: var(--surface-base); isolation: isolate; }
+.wsx > .wp-light { z-index: -1; }
+.wsx-top { position: relative; z-index: 2; padding: 24px 40px; border: 0; background: none; gap: 16px; }
+.wsx-top.sticky { position: sticky; top: 0; padding: 14px 40px; background: rgba(var(--ink), .45); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid var(--border-faint); }
+.wsx-top .wp-logo img, .wsx-top img { height: 20px; }
+.wsx-secure { gap: 6px; font: 400 var(--fs-text-small)/var(--lh-small) var(--font-body); color: var(--text-muted); }
+.wsx-doctitle { font: 400 var(--fs-text-small)/var(--lh-small) var(--font-body); color: var(--text-muted); padding-left: 24px; }
+.wsx-doctitle .secondary { color: var(--text-muted); }
+.wsx-bar { width: 72px; height: 3px; border-radius: 2px; background: rgba(var(--paper), .14); overflow: hidden; flex: 0 0 auto; }
+.wsx-bar i { display: block; height: 100%; background: var(--accent); box-shadow: var(--glow-dot); }
+.wsx-progress { font: 500 var(--fs-text-small)/var(--lh-small-medium) var(--font-body); color: var(--text-primary); }
+.wsx-main { position: relative; z-index: 1; width: min(560px, 100%); padding: 40px 16px 48px; align-content: center; }
+.wsx-main.wide { width: min(900px, 100%); align-content: start; padding-top: 24px; }
+.wsx > .wsx-main:not(.wide) { min-height: calc(100vh - 140px); }
+.wsx-card.glass { box-shadow: none; padding: 28px 28px 24px; border-radius: 24px; gap: 14px; }
+.wsx-card.wide { width: min(680px, calc(100vw - 32px)); justify-self: center; }
+.wsx-card .eyebrow { margin-bottom: 0; }
+.wsx-card .headline { font: 600 var(--fs-h3)/var(--lh-h3) var(--font-title); letter-spacing: var(--ls-h3); }
+.wsx-card .caption { margin: 0; font: 400 var(--fs-text-regular)/var(--lh-regular) var(--font-body); color: var(--text-muted); }
+.wsx-card .caption.secondary, .wsx-card .wsx-small { font-size: var(--fs-text-small); line-height: var(--lh-small); color: var(--text-secondary); }
+.wsx-card .caption b { font-weight: 500; color: var(--text-primary); }
+.wsx-card a { color: var(--text-accent); }
+.wsx-ico { width: 40px; height: 40px; background: var(--accent-tint); }
+.wsx-ico.ok { background: var(--status-success-tint); color: var(--text-success); }
+.wsx-ico.ok .wp-icon { color: var(--text-success); }
+.wsx-btns { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.wsx-card .wp-field { width: 100%; }
+.wsx-code { height: 56px; font: 500 26px/1 var(--font-title); letter-spacing: .4em; }
+.wsx-err { font-size: var(--fs-text-small) !important; color: var(--text-accent) !important; align-items: center; }
+.wsx-wait { display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--text-muted); font: 400 var(--fs-text-regular)/var(--lh-regular) var(--font-body); }
+.wsx-consent { background: none; padding: 0; max-height: none; overflow: visible; gap: 12px; }
+.wsx-pdflink { display: flex; align-items: center; gap: 8px; font-size: var(--fs-text-small) !important; }
+.wsx-agree { padding: 14px 16px; border-radius: 12px; background: rgba(var(--paper), .04); box-shadow: inset 0 0 0 1px var(--border-faint); font: 400 var(--fs-text-small)/var(--lh-small) var(--font-body); color: var(--text-primary); width: 100%; box-sizing: border-box; align-items: center; }
+.wsx-agree input { margin-top: 0; }
+.wsx-hint { font: 400 var(--fs-text-regular)/var(--lh-regular) var(--font-body); color: var(--text-muted); }
+.wsx-pages { gap: 28px; }
+.wsx-sheet { background: #f5f5f2; border-radius: 2px; }
+.wsx-look .wsx-sheet { border-radius: 2px; }
+/* boxes: yours blue, Heston's red, someone else's grey and dashed */
+.wsx-box { border-radius: 4px; }
+.wsx-box.mine { --c: #4b7bec; }
+.wsx-box.mine.todo { border: 1.5px solid var(--c); background: rgba(75, 123, 236, .32); box-shadow: 0 0 14px rgba(75, 123, 236, .45); }
+.wsx-box.mine.done { background: rgba(75, 123, 236, .1); box-shadow: inset 0 0 0 1px rgba(75, 123, 236, .45); }
+.wsx-box.mine.auto:not(.done) { border: 1px solid rgba(75, 123, 236, .7); background: rgba(75, 123, 236, .12); }
+.wsx-box.heston { background: rgba(255, 0, 0, .08); box-shadow: inset 0 0 0 1px rgba(214, 0, 0, .55); }
+.wsx-box.other { border: 1px dashed #a3a3a3; background: rgba(0, 0, 0, .025); }
+.wsx-box .wsx-boxlabel, .wsx-box .wsx-kind { font: 500 9px/1.2 var(--font-title); letter-spacing: .06em; text-transform: uppercase; color: #3d63c9; padding: 4px 6px; }
+.wsx-box .wsx-kind { position: absolute; left: 0; top: 0; color: #c41212; }
+.wsx-box.mine.todo .wsx-boxlabel { align-self: center; margin: auto; }
+.wsx-box.other .wsx-boxlabel { color: #6b6b6b; align-self: center; margin: auto; }
+@keyframes wsx-pulse { 50% { box-shadow: 0 0 22px rgba(75, 123, 236, .65); } }
+.wsx-finish { scroll-margin: 90px; }
+.wsx-finish .headline { font-size: var(--fs-h4); line-height: var(--lh-h4); }
+.wsx-todo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.wsx-adopted { background: none; padding: 0; gap: 14px; }
+.wsx-adopted img { height: 56px; background: var(--surface-base); filter: invert(1); mix-blend-mode: screen; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--border-strong); padding: 6px 14px; }
+.wsx-adopted .caption { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; color: var(--text-primary); font-size: var(--fs-text-small); }
+.wsx-foot { position: relative; z-index: 1; font: 400 12px/17px var(--font-body); color: var(--text-secondary); padding: 24px 16px; }
+.wsx-look .wsx-hint, .wsx-look .ws-pagenum { background: none; backdrop-filter: none; -webkit-backdrop-filter: none; padding: 0; }
+@media (max-width: 560px) {
+  .wsx-top { padding: 18px 16px; } .wsx-top.sticky { padding: 10px 12px; }
+  .wsx-doctitle { padding-left: 0; } .wsx-bar { display: none; }
+  .wsx-card.glass { padding: 22px 18px 20px; }
+}
+.wsx > .wp-light > i { opacity: .5; }
+.wsx-card a.btn { color: var(--text-primary); text-decoration: none; }
+.wsx-adopted img { background: transparent; }
+.wsx-box.mine .wsx-kind { color: #3d63c9; }
