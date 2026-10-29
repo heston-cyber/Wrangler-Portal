@@ -146,6 +146,7 @@ export function newVersionText(d: { title: string; number: number; description: 
 export const newVersion = internalAction({
   args: { versionId: v.id("versions") },
   handler: async (ctx, { versionId }): Promise<{ sent: number }> => {
+    try { await ctx.runMutation(internal.inbox.onVersionReady, { versionId }); } catch (e) { console.error("inbox", String((e as Error).message).slice(0, 120)); } // Phase 1: the Inbox (never blocks the email)
     const d = await ctx.runQuery(internal.emails.newVersionData, { versionId });
     if (!d || !d.people.length) return { sent: 0 };
     const ok: Array<{ email: string; key: string }> = await ctx.runMutation(internal.emails.recipients, { emails: d.people.map((p: { email: string }) => p.email), kind: "versions" });
@@ -208,6 +209,7 @@ export function replyText(d: { name: string | null; replyAuthor: string; replyTe
 export const replyToNote = internalAction({
   args: { replyId: v.id("replies") },
   handler: async (ctx, { replyId }): Promise<{ sent: number }> => {
+    try { await ctx.runMutation(internal.inbox.onReply, { replyId }); } catch (e) { console.error("inbox", String((e as Error).message).slice(0, 120)); } // Phase 1: the Inbox (never blocks the email)
     const d = await ctx.runQuery(internal.emails.replyData, { replyId });
     if (!d) return { sent: 0 };
     const ok: Array<{ email: string; key: string }> = await ctx.runMutation(internal.emails.recipients, { emails: [d.to], kind: "replies" });

@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 export const modules = import.meta.glob("../convex/**/*.ts");
 
-export type Ids = { requestId: Id<"wsRequests">; buildId: Id<"wsBuilds">; templateId: Id<"wsTemplates">; clauseId: Id<"wsClauses">; styleId: Id<"wsStyles">; docId: Id<"wsDocuments">; wsVersionId: Id<"wsVersions">; projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage"> };
+export type Ids = { requestId: Id<"wsRequests">; buildId: Id<"wsBuilds">; templateId: Id<"wsTemplates">; clauseId: Id<"wsClauses">; styleId: Id<"wsStyles">; docId: Id<"wsDocuments">; wsVersionId: Id<"wsVersions">; projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage">; clientRecId: Id<"clients">; personId: Id<"clientPeople">; inboxItemId: Id<"inboxItems">; inboxNoteId: Id<"inboxNotes"> };
 
 // Minimal valid arguments for each function, so the access check (not argument validation) is what refuses.
 export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
@@ -65,6 +65,16 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "builder.uploadUrl": {}, "builder.fileUrls": { ids: [ids.storageId] }, "builder.checkImage": { storageId: ids.storageId },
     "builder.listFonts": {}, "builder.addFont": { storageId: ids.storageId, family: "F", weight: 400, italic: false, fileName: "f.ttf", source: "upload" }, "builder.deleteFont": { family: "F" }, "builder.ensureGoogleFont": { family: "Lora" }, "builder.importPdf": { storageId: ids.storageId },
     "wsConnector.createKey": {}, "wsConnector.listKeys": {}, "wsConnector.revokeKey": { keyId: ids.wsKeyId },
+    // Phase 1 (Oct 29)
+    "inbox.mine": {}, "inbox.unreadCount": {}, "inbox.markRead": { itemId: ids.inboxItemId }, "inbox.markAllRead": {},
+    "inbox.forClient": { clientId: ids.clientRecId }, "inbox.noteRecipients": { clientId: ids.clientRecId }, "inbox.notes": {},
+    "inbox.saveNote": { clientId: ids.clientRecId, title: "T", text: "x" }, "inbox.sendNote": { noteId: ids.inboxNoteId }, "inbox.discardNote": { noteId: ids.inboxNoteId },
+    "clients.people": { clientId: ids.clientRecId }, "clients.addPerson": { clientId: ids.clientRecId, email: "p@example.com", role: "contact" },
+    "clients.updatePerson": { personId: ids.personId, role: "signer" }, "clients.removePerson": { personId: ids.personId }, "clients.invitePerson": { personId: ids.personId },
+    "clients.page": { clientId: ids.clientRecId }, "clients.directory": {},
+    "documents.mine": {}, "documents.signedCopy": { documentId: ids.docId },
+    "business.settings": {}, "business.updateSettings": { accent: "#112233" }, "business.logoUploadUrl": {}, "business.setLogo": { storageId: null }, "business.brand": {},
+    "activity.recent": {},
   };
 }
 
@@ -101,12 +111,16 @@ export async function setup() {
     const docId = await ctx.db.insert("wsDocuments", { number: 1, title: "D", status: "draft", currentVersion: 1, createdAt: 0, updatedAt: 0 });
     const wsKeyId = await ctx.db.insert("wsConnectorKeys", { hash: "x", prefix: "ws_x", label: "t", createdAt: 0 });
     const wsVersionId = await ctx.db.insert("wsVersions", { documentId: docId, number: 1, fileId: storageId, fileName: "a.pdf", fileSha256: "0", fileBytes: 1, pages: [{ width: 612, height: 792, rotate: 0 }], signers: [], boxes: [], signingOrder: "any", createdAt: 0, updatedAt: 0 });
+    const clientRecId = await ctx.db.insert("clients", { name: "Harbor", createdAt: 0 });
+    const personId = await ctx.db.insert("clientPeople", { clientId: clientRecId, email: "client@example.com", role: "signer", createdAt: 0 });
+    const inboxItemId = await ctx.db.insert("inboxItems", { clientId: clientRecId, email: "client@example.com", kind: "note", title: "Hello", text: "x", source: { module: "inbox", id: "n" }, key: "note:n:client@example.com", createdAt: 0 });
+    const inboxNoteId = await ctx.db.insert("inboxNotes", { clientId: clientRecId, title: "Hello", text: "x", status: "draft", draftedBy: "owner", createdAt: 0, updatedAt: 0 });
     const requestId = await ctx.db.insert("wsRequests", { documentId: docId, what: "approve", versionNumber: 1, said: "x", status: "pending", createdAt: Date.now() });
     const buildId = await ctx.db.insert("wsBuilds", { title: "B", blocks: [], fields: {}, style: {}, signers: [], createdAt: 0, updatedAt: 0 });
     const templateId = await ctx.db.insert("wsTemplates", { name: "T", blocks: [], fields: {}, style: {}, createdAt: 0, updatedAt: 0 });
     const clauseId = await ctx.db.insert("wsClauses", { title: "C", body: {}, initials: false, createdAt: 0, updatedAt: 0 });
     const styleId = await ctx.db.insert("wsStyles", { name: "S", style: {}, isDefault: false, createdAt: 0, updatedAt: 0 });
-    return { requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
+    return { clientRecId, personId, inboxItemId, inboxNoteId, requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
   });
   return { t, ids };
 }

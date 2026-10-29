@@ -551,7 +551,7 @@ export default defineSchema({
     signedDate: v.optional(v.string()),           // the date written into date boxes, Central time
     signIp: v.optional(v.string()),
     signUserAgent: v.optional(v.string()),
-  }).index("by_token", ["token"]).index("by_document", ["documentId", "versionNumber"]),
+  }).index("by_token", ["token"]).index("by_document", ["documentId", "versionNumber"]).index("by_email", ["email"]), // by_email: Phase 1, the client's Documents
   wsVersions: defineTable({
     businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     documentId: v.id("wsDocuments"),
@@ -652,7 +652,64 @@ export default defineSchema({
     name: v.string(),               // "Wrangler Productions"
     legalName: v.optional(v.string()), // "Wrangler Productions, a DBA of Hill Creative LLC"
     createdAt: v.number(),
+    // Phase 1 (Oct 29): Business settings. The portal, its emails and the signing pages wear these.
+    ownerName: v.optional(v.string()),     // "Heston Hill": who the emails say sent things
+    emailFromName: v.optional(v.string()), // the From name on emails ("Wrangler Productions")
+    replyTo: v.optional(v.string()),       // where clients' replies go (defaults to the owner's email)
+    logoFileId: v.optional(v.id("_storage")), // shown in the portal and on emails
+    accent: v.optional(v.string()),        // #rrggbb
+    background: v.optional(v.string()),    // #rrggbb
+    // Which modules the business uses. Menu items only show when on (and only once something is in them).
+    modules: v.optional(v.object({ review: v.boolean(), docs: v.boolean(), payments: v.boolean() })),
+    updatedAt: v.optional(v.number()),
   }).index("by_slug", ["slug"]),
+
+  // Phase 1 (Oct 29): the people at a client. Each one has a role, and portal access comes from their invite
+  // (invites table): invited on a date, active once they made an account, or not invited.
+  clientPeople: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    clientId: v.id("clients"),
+    email: v.string(),                 // lower-case
+    name: v.optional(v.string()),
+    role: v.union(v.literal("signer"), v.literal("contact")), // "Signs documents" / "Contact"
+    createdAt: v.number(),
+    removedAt: v.optional(v.number()),
+  }).index("by_client", ["clientId"]).index("by_email", ["email"]),
+
+  // Phase 1 (Oct 29): the Inbox. One row per person per event, so each person's read status is their own.
+  // Every module posts through lib/inbox.ts; `key` makes each event post once per person, however often it runs.
+  inboxItems: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    clientId: v.optional(v.id("clients")),
+    email: v.string(),                 // the recipient, lower-case (a person with a live invite in this business)
+    kind: v.union(v.literal("cut_ready"), v.literal("reply"), v.literal("to_sign"), v.literal("signed"), v.literal("cancelled"), v.literal("note")),
+    title: v.string(),
+    text: v.string(),                  // a short line, shown under the title
+    link: v.optional(v.string()),      // a path in the portal or a signing link
+    source: v.object({ module: v.union(v.literal("review"), v.literal("sign"), v.literal("inbox")), id: v.string() }),
+    key: v.string(),
+    noteId: v.optional(v.id("inboxNotes")),
+    createdAt: v.number(),
+    readAt: v.optional(v.number()),
+    emailedAt: v.optional(v.number()),
+  }).index("by_email", ["email", "createdAt"]).index("by_key", ["key"]).index("by_client", ["clientId", "createdAt"]).index("by_note", ["noteId"]),
+
+  // Phase 1 (Oct 29): notes the owner posts to a client's Inbox. A draft (the owner's, or one Claude wrote through
+  // the connector) does nothing until the owner sends it on the site. The Sent list reads this table.
+  inboxNotes: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    clientId: v.id("clients"),
+    title: v.string(),
+    text: v.string(),
+    link: v.optional(v.string()),
+    status: v.union(v.literal("draft"), v.literal("sent"), v.literal("discarded")),
+    draftedBy: v.union(v.literal("owner"), v.literal("claude")),
+    said: v.optional(v.string()),      // for a Claude draft: what Claude said Heston asked for
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    sentAt: v.optional(v.number()),
+    recipients: v.optional(v.number()),
+  }).index("by_status", ["status", "createdAt"]).index("by_client", ["clientId", "createdAt"]),
 
   memberships: defineTable({
     businessId: v.id("businesses"),

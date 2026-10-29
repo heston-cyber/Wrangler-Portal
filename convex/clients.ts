@@ -96,3 +96,139 @@ export const account = query({
     return { email: me.email, name: me.name, kind: me.kind };
   },
 });
+
+// ---------- Phase 1 (Oct 29): a client's people, the client page and the Clients list ----------
+// Each person has a role ("Signs documents" or "Contact"). Portal access comes from their invite: not invited,
+// invited on a date, or active once they've made an account.
+
+type Access = { state: "none" } | { state: "invited"; at: number } | { state: "active"; since: number; lastSignInAt: number | null };
+
+async function accessOf(ctx: { db: MutationCtx["db"] } | { db: import("./_generated/server").QueryCtx["db"] }, email: string): Promise<Access> {
+  const inv = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()).find((i) => !i.revokedAt);
+  if (!inv) return { state: "none" };
+  const user = inv.userId ? await ctx.db.get(inv.userId) : await ctx.db.query("users").withIndex("email", (q) => q.eq("email", email)).unique();
+  if (inv.acceptedAt || user) return { state: "active", since: inv.acceptedAt ?? inv.createdAt, lastSignInAt: (user?.lastSignInAt as number | undefined) ?? null };
+  return { state: "invited", at: inv.createdAt };
+}
+
+const roleArg = v.union(v.literal("signer"), v.literal("contact"));
+
+export const people = query({
+  args: { clientId: v.id("clients") },
+  handler: async (ctx, { clientId }) => {
+    await requireMe(ctx);
+    if (!(await ctx.db.get(clientId))) return [];
+    const rows = (await ctx.db.query("clientPeople").withIndex("by_client", (q) => q.eq("clientId", clientId)).collect()).filter((p) => !p.removedAt);
+    const out = [];
+    for (const p of rows.sort((a, b) => a.createdAt - b.createdAt)) out.push({ _id: p._id, email: p.email, name: p.name ?? null, role: p.role, access: await accessOf(ctx, p.email) });
+    return out;
+  },
+});
+
+export const addPerson = mutation({
+  args: { clientId: v.id("clients"), email: v.string(), name: v.optional(v.string()), role: roleArg },
+  handler: async (ctx, a) => {
+    await requireMe(ctx);
+    if (!(await ctx.db.get(a.clientId))) throw new ConvexError("That client isn't here.");
+    const email = cleanEmail(a.email);
+    if (!valid(email)) throw new ConvexError("Enter a valid email.");
+    if (allowedEmails().includes(email)) throw new ConvexError("That's an owner's email.");
+    const name = a.name?.trim().replace(/\s+/g, " ").slice(0, 60) || undefined;
+    const same = (await ctx.db.query("clientPeople").withIndex("by_client", (q) => q.eq("clientId", a.clientId)).collect()).find((p) => p.email === email);
+    if (same && !same.removedAt) throw new ConvexError("That person is already on this client.");
+    if (same) { await ctx.db.patch(same._id, { removedAt: undefined, name: name ?? same.name, role: a.role }); return same._id; }
+    return await ctx.db.insert("clientPeople", { clientId: a.clientId, email, role: a.role, createdAt: Date.now(), ...(name ? { name } : {}) });
+  },
+});
+
+export const updatePerson = mutation({
+  args: { personId: v.id("clientPeople"), name: v.optional(v.string()), role: v.optional(roleArg) },
+  handler: async (ctx, a) => {
+    await requireMe(ctx);
+    const p = await ctx.db.get(a.personId);
+    if (!p || p.removedAt) throw new ConvexError("That person isn't here.");
+    const patch: Record<string, unknown> = {};
+    if (a.name !== undefined) patch.name = a.name.trim().replace(/\s+/g, " ").slice(0, 60) || undefined;
+    if (a.role) patch.role = a.role;
+    await ctx.db.patch(a.personId, patch as never);
+    return null;
+  },
+});
+
+/** Takes the person off this client. Their portal access is separate (revoke the invite in Settings › Clients). */
+export const removePerson = mutation({
+  args: { personId: v.id("clientPeople") },
+  handler: async (ctx, { personId }) => {
+    await requireMe(ctx);
+    const p = await ctx.db.get(personId);
+    if (!p || p.removedAt) return null;
+    await ctx.db.patch(personId, { removedAt: Date.now() });
+    return null;
+  },
+});
+
+/** "Invite to the portal" / "Resend invite": makes (or keeps) their invite. The invite email itself arrives with
+ *  the Phase 1 emails (its design is still being approved); until then this records the invite only. */
+export const invitePerson = mutation({
+  args: { personId: v.id("clientPeople") },
+  handler: async (ctx, { personId }) => {
+    await requireMe(ctx);
+    const p = await ctx.db.get(personId);
+    if (!p || p.removedAt) throw new ConvexError("That person isn't here.");
+    const r = await ensureInvite(ctx, p.email, p.name);
+    return { already: r.already, emailed: false };
+  },
+});
+
+/** The client page: who they are, their people, what's shared, their documents and Inbox counts. */
+export const page = query({
+  args: { clientId: v.id("clients") },
+  handler: async (ctx, { clientId }) => {
+    await requireMe(ctx);
+    const client = await ctx.db.get(clientId);
+    if (!client) return null;
+    const people = (await ctx.db.query("clientPeople").withIndex("by_client", (q) => q.eq("clientId", clientId)).collect()).filter((p) => !p.removedAt);
+    const projects = (await ctx.db.query("projects").collect()).filter((p) => p.clientId === clientId);
+    const projectIds = new Set(projects.map((p) => p._id as string));
+    const videos = (await ctx.db.query("videos").collect()).filter((x) => projectIds.has(x.projectId));
+    const videoIds = new Set(videos.map((x) => x._id as string));
+    const shares = (await ctx.db.query("shares").collect()).filter((s) =>
+      (s.kind === "client" && s.clientId === clientId) || (s.kind === "project" && !!s.projectId && projectIds.has(s.projectId)) || (s.kind === "video" && !!s.videoId && videoIds.has(s.videoId)));
+    const emails = new Set(people.map((p) => p.email));
+    const docs = new Map<string, { _id: string; number: number; title: string; status: string; sentAt: number | null; completedAt: number | null }>();
+    for (const e of emails) {
+      for (const s of await ctx.db.query("wsSignings").withIndex("by_email", (q) => q.eq("email", e)).collect()) {
+        const d = await ctx.db.get(s.documentId);
+        if (d && !docs.has(d._id)) docs.set(d._id, { _id: d._id, number: d.number, title: d.title, status: d.status, sentAt: d.sentAt ?? null, completedAt: d.completedAt ?? null });
+      }
+    }
+    const items = await ctx.db.query("inboxItems").withIndex("by_client", (q) => q.eq("clientId", clientId)).collect();
+    return {
+      client: { _id: client._id, name: client.name },
+      people: await Promise.all(people.map(async (p) => ({ _id: p._id, email: p.email, name: p.name ?? null, role: p.role, access: await accessOf(ctx, p.email) }))),
+      projects: projects.map((p) => ({ _id: p._id, name: p.name, jobNumber: p.jobNumber ?? null })),
+      shares: shares.map((s) => ({ _id: s._id, kind: s.kind, who: s.who, access: s.access, off: !!s.offAt, expiresAt: s.expiresAt ?? null })),
+      documents: [...docs.values()].sort((a, b) => (b.sentAt ?? 0) - (a.sentAt ?? 0)),
+      inbox: { items: items.length, unread: items.filter((i) => !i.readAt).length },
+    };
+  },
+});
+
+/** The Clients list: each client with its people and what's going on. */
+export const directory = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireMe(ctx);
+    const clients = await ctx.db.query("clients").collect();
+    const people = (await ctx.db.query("clientPeople").collect()).filter((p) => !p.removedAt);
+    const projects = await ctx.db.query("projects").collect();
+    const out = [];
+    for (const c of clients) {
+      const mine = people.filter((p) => p.clientId === c._id);
+      let active = 0;
+      for (const p of mine) if ((await accessOf(ctx, p.email)).state === "active") active++;
+      out.push({ _id: c._id, name: c.name, people: mine.length, active, projects: projects.filter((p) => p.clientId === c._id).length, fromProjects: !!c.fromProjects });
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+  },
+});

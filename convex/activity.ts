@@ -83,3 +83,54 @@ export const feed = query({
     return events.sort((a, b) => b.at - a.at).slice(0, max);
   },
 });
+
+// ---------- Phase 1 (Oct 29): recent activity on the back-office Home ----------
+// One list across Review (opened, watched, notes), Sign (viewed, signed, all signed) and the Inbox (read), newest
+// first: "Maya watched Harbor Coffee 30s v2", "Jordan left 2 notes", "Maya read your note", "WS-00004 signed by Maya".
+const SIGN_KINDS: Record<string, "viewed" | "signed" | "all_signed"> = { link_opened: "viewed", opened: "viewed", viewed: "viewed", signed: "signed", all_signed: "all_signed" };
+
+export const recent = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, { limit }) => {
+    await requireMe(ctx);
+    const max = Math.min(Math.max(limit ?? 20, 1), 100);
+    type Row = { at: number; who: string; what: "opened" | "watched" | "notes" | "read" | "doc_viewed" | "doc_signed" | "doc_all_signed"; label: string; count?: number; ref: { kind: "share" | "video" | "document" | "note"; id: string } };
+    const rows: Row[] = [];
+    const labels = new Map<string, string>();
+    const videoLabel = async (id: Id<"videos">) => {
+      if (labels.has(id)) return labels.get(id)!;
+      const vid = await ctx.db.get(id);
+      const l = vid?.title ?? "a video";
+      labels.set(id, l);
+      return l;
+    };
+    for (const a of await ctx.db.query("shareActivity").withIndex("by_at").order("desc").take(300)) {
+      if (a.kind === "note") continue; // notes come from the notes table, grouped
+      if (a.kind === "viewed" && a.videoId) rows.push({ at: a.at, who: a.who, what: "watched", label: await videoLabel(a.videoId), ref: { kind: "video", id: a.videoId } });
+      else if (a.kind === "opened") { const s = await ctx.db.get(a.shareId); if (s) rows.push({ at: a.at, who: a.who, what: "opened", label: (await labelOf(ctx, s)).label, ref: { kind: "share", id: s._id } }); }
+    }
+    // Client and guest notes, one row per person per video per sitting.
+    const notes = (await ctx.db.query("notes").order("desc").take(500)).filter((n) => n.shareId);
+    const groups = new Map<string, Row>();
+    for (const n of notes) {
+      const k = `${n.authorName}|${n.videoId}|${Math.floor(n.createdAt / SITTING_GAP_MS)}`;
+      const g = groups.get(k);
+      if (g) { g.count = (g.count ?? 1) + 1; continue; }
+      const row: Row = { at: n.createdAt, who: n.authorName, what: "notes", label: await videoLabel(n.videoId), count: 1, ref: { kind: "video", id: n.videoId } };
+      groups.set(k, row); rows.push(row);
+    }
+    for (const e of await ctx.db.query("wsEvents").order("desc").take(400)) {
+      const what = SIGN_KINDS[e.kind];
+      if (!what) continue;
+      const d = await ctx.db.get(e.documentId);
+      if (!d) continue;
+      const signer = e.email ? (await ctx.db.query("wsSignings").withIndex("by_document", (q) => q.eq("documentId", d._id)).collect()).find((s) => s.email === e.email)?.name : undefined;
+      rows.push({ at: e.at, who: signer ?? (e.actor.startsWith("signer:") ? "A signer" : "System"), what: what === "viewed" ? "doc_viewed" : what === "signed" ? "doc_signed" : "doc_all_signed", label: `${`WS-${String(d.number).padStart(5, "0")}`} ${d.title}`, ref: { kind: "document", id: d._id } });
+    }
+    for (const i of (await ctx.db.query("inboxItems").order("desc").take(500)).filter((x) => x.readAt && x.kind === "note")) {
+      const u = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", i.email)).unique();
+      rows.push({ at: i.readAt!, who: (u?.name as string | undefined) ?? i.email, what: "read", label: i.title, ref: { kind: "note", id: i.noteId ?? i._id } });
+    }
+    return rows.sort((a, b) => b.at - a.at).slice(0, max);
+  },
+});

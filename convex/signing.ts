@@ -440,6 +440,7 @@ export const emailData = internalQuery({
 export const emailInvite = internalAction({
   args: { signingId: v.id("wsSignings"), kind: v.union(v.literal("invite"), v.literal("reminder"), v.literal("voided")) },
   handler: async (ctx, { signingId, kind }) => {
+    try { await ctx.runMutation(internal.inbox.onSignInvite, { signingId, kind }); } catch (e) { console.error("inbox", String((e as Error).message).slice(0, 120)); } // Phase 1: the Inbox (never blocks the email)
     const d = await ctx.runQuery(internal.signing.emailData, { signingId });
     if (!d) return null;
     const { s, doc, label } = d;

@@ -265,6 +265,7 @@ async function sendCopies(ctx: ActionCtx, d: Data) {
     } catch (e) { failed.push(`${p.email}: ${errText(e).slice(0, 100)}`); }
   }
   await ctx.runMutation(internal.signDone.recordCopies, { documentId: doc._id, sent, failed, sha256: final.sha256 });
+  try { await ctx.runMutation(internal.inbox.onSigned, { documentId: doc._id }); } catch (e) { console.error("inbox", String((e as Error).message).slice(0, 120)); } // Phase 1: the Inbox
 }
 
 export const recordCopies = internalMutation({
