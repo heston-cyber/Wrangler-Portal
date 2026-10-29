@@ -314,9 +314,10 @@ export const selfTest = internalAction({
       add("header mismatch refused", r.status === 400 && r.j?.error?.code === -32020, `HTTP ${r.status} · code ${r.j?.error?.code}`);
       const call = (name: string, args: Json, id: number) => post({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args, _meta: meta } }, { "mcp-protocol-version": "2026-07-28", "mcp-method": "tools/call", "mcp-name": name });
       r = await call("find_videos", {}, 7);
-      const vids = (r.j?.result?.structuredContent?.items ?? []) as Array<{ video_id?: string }>;
+      const vids = (r.j?.result?.structuredContent?.items ?? []) as Array<{ video_id?: string; versions?: Array<{ status?: string }> }>;
       add("find_videos", r.status === 200 && !r.j?.result?.isError, `HTTP ${r.status} · ${vids.filter((x) => x.video_id).length} videos`);
-      const first = vids.find((x) => x.video_id);
+      // The newest video with a ready render (a newly registered video has none yet, and get_notes rightly says so).
+      const first = vids.find((x) => x.video_id && (x.versions ?? []).some((v) => v.status === "ready"));
       if (first) {
         r = await call("get_notes", { video_id: first.video_id, status: "all" }, 8);
         const sc = r.j?.result?.structuredContent;
