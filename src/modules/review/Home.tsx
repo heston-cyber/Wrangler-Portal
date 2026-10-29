@@ -1,8 +1,7 @@
 // Home: drop a render anywhere on the page to upload it; recent videos and activity underneath.
 import { useState } from "react";
-import { BrandImg } from "../../ui/BrandImg";
 import { useQuery } from "convex/react";
-import { Link2, Plus, Search } from "lucide-react";
+import { Link2 } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import { TopBar, useShell } from "../../shell/Shell";
 import { useUpload } from "../../shell/UploadDialog";
@@ -12,7 +11,8 @@ import { Avatar, Thumb } from "../../ui/kit";
 import { ago, uploadText } from "../../lib/format";
 import { VideoRow, openedMeta } from "./VideoRows";
 import { useLibrarySettings } from "../../lib/details";
-import { House } from "lucide-react";
+import { Icon } from "../../ui/Icon";
+import { Button, IconButton } from "../../ui/wp";
 
 export default function Home() {
   const overview = useQuery(api.library.overview);
@@ -29,45 +29,62 @@ export default function Home() {
   const latest = [...videos].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 8);
   const shownTab = tab === "opened" && opened.length === 0 && overview ? "videos" : tab;
 
+  const rows = shownTab === "opened" ? opened : latest;
   return (
     <>
-      <TopBar><House size={15} /><span className="here">Home</span></TopBar>
-      <div className="content"
+      <TopBar><span className="here">Review</span></TopBar>
+      <div className="wp-page"
         onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setOver(true); } }}
         onDragLeave={(e) => { if (e.currentTarget === e.target) setOver(false); }}
         onDrop={(e) => { e.preventDefault(); setOver(false); const f = e.dataTransfer.files[0]; if (f && isVideoFile(f)) openUpload({ file: f }); }}>
-        <div className="home">
-          <BrandImg name="watermark" className="watermark" hidden />
-          <div className={`hero${over ? " over" : ""}`}>
-            <div className="stack">
-              <span className="eyebrow">Review</span>
-              <h1 className="title">Drop a render here.</h1>
-              <p className="caption" style={{ maxWidth: 420 }}><b>Any format.</b> Bunny converts it, and every note you leave lands frame-exact in Resolve.</p>
-              <button className="btn primary lg" onClick={() => openUpload()}><Plus size={18} />Upload</button>
-              {uploads.map((u) => (
-                <div key={u.key} style={{ width: "min(420px, 80vw)", display: "grid", gap: 6, textAlign: "left" }}>
-                  <span style={{ fontSize: 12.5 }}><b style={{ fontWeight: 500 }}>{u.fileName}</b> <span className="secondary">· {uploadText(u.status, u.sent, u.total, u.error)}</span></span>
-                  <div className="progress"><i style={{ width: `${u.total ? (100 * u.sent) / u.total : 0}%` }} /></div>
+        <section className={`rv-hero glass${over ? " over" : ""}`} aria-label="Upload">
+          <div className="txt">
+            <span className="wp-eyebrow">Review</span>
+            <h1 className="wp-h1">Drop a render here.</h1>
+            <p className="wp-body">Any format. Bunny converts it, and every note you leave lands frame-exact in Resolve.</p>
+          </div>
+          <Button variant="primary" icon="plus" onClick={() => openUpload()}>Upload</Button>
+        </section>
+
+        {uploads.length > 0 && (
+          <section className="wp-card glass" aria-label="Uploads">
+            <div className="wp-rows">
+              {uploads.map((u, i) => (
+                <div key={u.key} style={{ display: "contents" }}>
+                  {i > 0 && <hr className="wp-divider" />}
+                  <div className="rv-upload">
+                    <div className="line"><Icon name="upload" size={16} /><b>{u.fileName}</b><span>{uploadText(u.status, u.sent, u.total, u.error)}</span></div>
+                    <div className="progress"><i style={{ width: `${u.total ? (100 * u.sent) / u.total : 0}%` }} /></div>
+                  </div>
                 </div>
               ))}
             </div>
-          </div>
+          </section>
+        )}
 
-          <div className="recent">
-            <div className="tabs" role="tablist">
-              <button role="tab" className="tab" aria-selected={shownTab === "opened"} onClick={() => setTab("opened")}>Last opened</button>
-              <button role="tab" className="tab" aria-selected={shownTab === "videos"} onClick={() => setTab("videos")}>Videos</button>
-              <button role="tab" className="tab" aria-selected={shownTab === "activity"} onClick={() => setTab("activity")}>Activity</button>
-              <button className="icon-btn" onClick={openSearch} aria-label="Search"><Search size={15} /></button>
+        <section className="wp-card glass" aria-label="Recent">
+          <div className="wp-rows">
+            <div className="rv-recenthead">
+              <div className="wp-utabs" role="tablist" aria-label="Recent">
+                <button role="tab" type="button" className="wp-utab" aria-selected={shownTab === "opened"} onClick={() => setTab("opened")}>Last opened</button>
+                <button role="tab" type="button" className="wp-utab" aria-selected={shownTab === "videos"} onClick={() => setTab("videos")}>Videos</button>
+                <button role="tab" type="button" className="wp-utab" aria-selected={shownTab === "activity"} onClick={() => setTab("activity")}>Activity</button>
+              </div>
+              <span style={{ flex: 1 }} />
+              <IconButton icon="search" label="Search" iconSize={18} className="sm" onClick={openSearch} />
             </div>
-            {overview === undefined ? <p className="caption" style={{ padding: "8px 18px" }}>Loading…</p>
+            <hr className="wp-divider" />
+            {overview === undefined ? <p className="wp-small rv-pad">Loading…</p>
               : shownTab === "activity" ? <RecentActivity />
-              : (shownTab === "opened" ? opened : latest).length === 0 ? <p className="caption" style={{ padding: "8px 18px" }}>No videos yet. Upload your first render above.</p>
-              : (shownTab === "opened" ? opened : latest).map((x) => (
-                <VideoRow key={x._id} x={x} project={projects.get(x.projectId)} fields={lib.fields} projectName={lib.fields.includes("project") ? undefined : pmap.get(x.projectId)} meta={shownTab === "opened" ? openedMeta(x) : undefined} />
+              : rows.length === 0 ? <p className="wp-small rv-pad">No videos yet. Upload your first render above.</p>
+              : rows.map((x, i) => (
+                <div key={x._id} style={{ display: "contents" }}>
+                  {i > 0 && <hr className="wp-divider" />}
+                  <VideoRow x={x} project={projects.get(x.projectId)} fields={lib.fields} projectName={lib.fields.includes("project") ? undefined : pmap.get(x.projectId)} meta={shownTab === "opened" ? openedMeta(x) : undefined} />
+                </div>
               ))}
           </div>
-        </div>
+        </section>
       </div>
     </>
   );
@@ -75,8 +92,8 @@ export default function Home() {
 
 function RecentActivity() {
   const feed = useQuery(api.activity.feed, { limit: 8 });
-  if (feed === undefined) return <p className="caption" style={{ padding: "8px 18px" }}>Loading…</p>;
-  if (feed.length === 0) return <p className="caption" style={{ padding: "8px 18px" }}>Nothing yet.</p>;
+  if (feed === undefined) return <p className="wp-small rv-pad">Loading…</p>;
+  if (feed.length === 0) return <p className="wp-small rv-pad">Nothing yet.</p>;
   return (
     <>
       {feed.map((e, i) => e.type === "share" ? (

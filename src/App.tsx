@@ -30,7 +30,20 @@ const SignConnector = lazy(() => import("./modules/docs/pages/SignConnector"));
 const SignerApp = lazy(() => import("./modules/docs/signer/SignerApp"));
 const VerifyPage = lazy(() => import("./modules/docs/signer/VerifyPage"));
 // Dev only: the component page (never part of the live build).
-const Kit = import.meta.env.DEV || import.meta.env.VITE_KIT === "1" ? lazy(() => import("./dev/Kit")) : null;
+const KIT_ON = import.meta.env.DEV || import.meta.env.VITE_KIT === "1";
+const Kit = KIT_ON ? lazy(() => import("./dev/Kit")) : null;
+const KitApp = KIT_ON ? lazy(() => import("./dev/KitApp")) : null;
+// ?kit=owner or ?kit=client: the real pages with sample data (dev only); ?kit=off ends it.
+function kitSide(): "owner" | "client" | null {
+  if (!KIT_ON) return null;
+  try {
+    const q = new URLSearchParams(location.search).get("kit");
+    if (q === "owner" || q === "client") sessionStorage.setItem("wr.kit", q);
+    if (q === "off") sessionStorage.removeItem("wr.kit");
+    const s = sessionStorage.getItem("wr.kit");
+    return s === "owner" || s === "client" ? s : null;
+  } catch { return null; }
+}
 const isSignHost = () => /^sign\./i.test(location.hostname);
 
 const Loading = () => <div className="signin"><span className="label">Loading…</span></div>;
@@ -40,6 +53,8 @@ export default function App() {
   const { path, search } = useLocation();
   if (/^(www\.)?wranglerportal\.com$/i.test(location.hostname)) return <HoldingPage />;
   if (Kit && path.startsWith("/__kit")) return <Suspense fallback={<Loading />}><Kit /></Suspense>;
+  const kit = kitSide();
+  if (KitApp && kit) return <Suspense fallback={<Loading />}><KitApp side={kit}><SignedIn /></KitApp></Suspense>;
   const signer = (isSignHost() ? /^\/(?:x\/)?([A-Za-z0-9_-]{16,64})\/?$/ : /^\/x\/([A-Za-z0-9_-]{16,64})\/?$/).exec(path);
   if ((isSignHost() && /^\/verify\/?$/.test(path)) || /^\/x\/verify\/?$/.test(path)) return <Suspense fallback={<Loading />}><VerifyPage /></Suspense>;
   if (signer) return <Suspense fallback={<Loading />}><SignerApp key={signer[1]} token={signer[1]} /></Suspense>;

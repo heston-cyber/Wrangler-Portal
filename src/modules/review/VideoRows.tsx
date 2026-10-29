@@ -4,7 +4,8 @@ import { useRef, useState } from "react";
 import type { FunctionReturnType } from "convex/server";
 import { useConvex, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import { Check, CircleCheckBig, Ellipsis, Share2, Trash2, Upload, X } from "lucide-react";
+import { Check, Share2, Trash2, Upload, X } from "lucide-react";
+import { Icon } from "../../ui/Icon";
 import { linkProps, navigate } from "../../lib/router";
 import { Menu, MenuItem, MenuSep, Modal, Spinner, Thumb, useToast } from "../../ui/kit";
 import { ago, transcriptChip } from "../../lib/format";
@@ -20,14 +21,14 @@ const day = (t: number) => new Date(t).toLocaleDateString(undefined, { month: "s
 
 export function FinalBadge({ final }: { final: { version: number; at: number } | null }) {
   if (!final) return null;
-  return <span className="chip final" title={`Approved ${new Date(final.at).toLocaleString()}`}><CircleCheckBig size={12} />Final · v{final.version} · {day(final.at)}</span>;
+  return <span className="wp-status success" title={`Approved ${new Date(final.at).toLocaleString()}`}>Final · v{final.version} · {day(final.at)}</span>;
 }
 
 function Detail({ k, x, p }: { k: FieldKey; x: VideoItem; p: Project | undefined }) {
   const t = fieldText(k, x, p);
   if (!t) return null;
-  if (k === "latest") return <span className="chip">{t}</span>;
-  if (k === "length") return <span className="chip dur">{t}</span>;
+  if (k === "latest") return <span className="dt dt-latest">{t}</span>;
+  if (k === "length") return <span className="dt dt-length">{t}</span>;
   if (k === "status") { const s = statusText(x); return s.tone === "final" ? null : <span className={`chip ${s.tone}`}>{t}</span>; }
   if (k === "notes") return <span className={`dt open${x.openNotes ? " has" : ""}`}>{t}</span>;
   return <span className={`dt dt-${k}`}>{t}</span>;
@@ -58,16 +59,20 @@ export function VideoRow({ x, meta, projectName, project, fields = DEFAULT_FIELD
       {selecting && <SelectBox on={picked} onClick={() => select!.toggle(x._id)} label={`Select ${x.title}`} />}
       <a className="vrow" {...link} aria-selected={selecting ? picked : undefined}>
         <Thumb src={x.latest?.thumbUrl ?? null} />
-        <span className="t">
-          {fields.includes("number") && x.number ? <span className="chip num mono" title="Register number">{pad5(x.number)}</span> : null}
-          <b>{x.title}</b>
-          <FinalBadge final={x.final} />
-          {!fields.includes("status") && (busy || st.tone === "fail") && <span className={`chip ${st.tone}`}>{busy && <Spinner />}{st.text}</span>}
-          {!x.latest && !fields.includes("status") && <span className="chip">No versions</span>}
-          {tr?.busy && <span className="chip warn"><Spinner />{tr.text}</span>}
-          {projectName && <span className="secondary hide-sm pname">{projectName}</span>}
+        {fields.includes("number") && x.number ? <span className="wp-tag mono" title="Register number">{pad5(x.number)}</span> : null}
+        <span className="vtext">
+          <span className="t">
+            <b>{x.title}</b>
+            <FinalBadge final={x.final} />
+            {!fields.includes("status") && (busy || st.tone === "fail") && <span className={`chip ${st.tone}`}>{busy && <Spinner />}{st.text}</span>}
+            {!x.latest && !fields.includes("status") && <span className="chip">No versions</span>}
+            {tr?.busy && <span className="chip warn"><Spinner />{tr.text}</span>}
+          </span>
+          <span className="details">
+            {projectName && <span className="dt pname">{projectName}</span>}
+            {rest.map((k) => <Detail key={k} k={k} x={x} p={project} />)}
+          </span>
         </span>
-        <span className="details">{rest.map((k) => <Detail key={k} k={k} x={x} p={project} />)}</span>
         {meta && <span className="meta">{meta}</span>}
       </a>
       {canApprove && !selecting && <button className={`btn sm approve${x.final ? " done" : ""}`} onClick={() => onApprove!(x)} title="Keep one version and delete the others">{x.final ? `Final v${x.final.version}` : "Approve final"}</button>}
@@ -87,7 +92,7 @@ export function VideoMenu({ x }: { x: VideoItem }) {
   const [toast, show] = useToast();
   return (
     <>
-      <Menu align="end" label="Video options" trigger={(p) => <button {...p} className="icon-btn vmenu" aria-label={`${x.title} options`}><Ellipsis size={15} /></button>}>
+      <Menu align="end" label="Video options" trigger={(p) => <button {...p} className="icon-btn bare vmenu" aria-label={`${x.title} options`}><Icon name="more" size={18} /></button>}>
         <MenuItem icon={<Share2 size={16} />} onSelect={() => setDialog("share")}>Share video…</MenuItem>
         <MenuItem icon={<Upload size={16} />} onSelect={() => fileRef.current?.click()}>Upload a new version</MenuItem>
         <MenuSep />

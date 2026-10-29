@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { BrandImg } from "../../ui/BrandImg";
 import { useMutation, useQuery } from "convex/react";
-import { Building2, ChevronDown, ChevronRight, Clapperboard, Ellipsis, FolderPlus, LayoutGrid, List, ListOrdered, Pencil, Plus, Rows3, Share2, SlidersHorizontal, SquareCheck, Trash2, Upload, X } from "lucide-react";
+import { Building2, FolderPlus, LayoutGrid, List, ListOrdered, Pencil, Rows3, Share2, SquareCheck, Trash2, Upload, X } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Sep, TopBar } from "../../shell/Shell";
@@ -19,6 +19,7 @@ import { FILTERS, SORTS, passes, sorter as sortBy, useLibrarySettings, type Filt
 import { ShowDetails } from "./ShowDetails";
 import { ApproveFinal } from "./ApproveFinal";
 import { ShareDialog, type ShareTarget } from "./Share";
+import { Icon } from "../../ui/Icon";
 
 type GroupBy = "client" | "project" | "activity" | "opened" | "status";
 type SortBy = SortKey;
@@ -122,11 +123,70 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
     finally { setSelBusy(null); }
   }
 
+  // Each client's projects share one card (By client); otherwise each group is its own card.
+  const blocks: { key: string; client: boolean; groups: Group[] }[] = [];
+  for (const g of groups) {
+    if (g.clientHead || group !== "client" || !blocks.length) blocks.push({ key: g.key, client: !!g.clientHead, groups: [g] });
+    else blocks[blocks.length - 1].groups.push(g);
+  }
+  const renderGroup = (g: Group) => g.emptyClient ? (
+            <div className="cempty" key={g.key}>
+              <span className="caption">No projects for {g.emptyClient} yet.</span>
+              <button className="btn sm" onClick={() => openUpload({ newProject: true, client: g.emptyClient })}><FolderPlus size={14} />New project</button>
+            </div>
+          ) : g.clientHead ? (
+            <div className="chead" key={g.key}>
+              <button className="collapse" onClick={() => toggle(g.key)} aria-label={collapsed.has(g.key) ? "Expand" : "Collapse"}><Icon name={collapsed.has(g.key) ? "chevron-right" : "chevron-down"} size={14} /></button>
+              <Icon name="users" size={18} />
+              <span className="ctitle">{g.title}</span>
+              <span className="wp-tag">{g.clientHead.count} {g.clientHead.count === 1 ? "project" : "projects"}</span>
+              {g.title !== NO_CLIENT && (
+                <span className="right">
+                  <button className="icon-btn sm" title={`New project for ${g.title}`} aria-label={`New project for ${g.title}`} onClick={() => openUpload({ newProject: true, client: String(g.title) })}><Icon name="plus" size={18} /></button>
+                  <Menu align="end" label="Client options" trigger={(p) => <button {...p} className="icon-btn sm" aria-label={`${g.title} options`}><Icon name="more" size={18} /></button>}>
+                    <MenuItem icon={<Share2 size={16} />} onSelect={() => setSharing({ target: { kind: "client", client: String(g.title) }, label: String(g.title) })}>Share client…</MenuItem>
+                    <MenuItem icon={<SquareCheck size={16} />} onSelect={() => sel.start()}>Select videos…</MenuItem>
+                    <MenuSep />
+                    <MenuItem icon={<Trash2 size={16} />} danger onSelect={() => setDeletingClient(String(g.title))}>Delete client</MenuItem>
+                  </Menu>
+                </span>
+              )}
+            </div>
+          ) : (
+            <section className={`group${group === "client" ? " nested" : ""}`} key={g.key}>
+              <div className="ghead">
+                <button className="collapse" onClick={() => toggle(g.key)} aria-label={collapsed.has(g.key) ? "Expand" : "Collapse"}><Icon name={collapsed.has(g.key) ? "chevron-right" : "chevron-down"} size={14} /></button>
+                {g.project && <Icon name="folder" size={18} />}
+                {g.project ? <a className="gtitle" {...linkProps(`/projects/${g.project._id}`)}>{g.title}</a> : <span className="gtitle">{g.title}</span>}
+                <span className="wp-tag">{g.items.length}</span>
+                {g.meta && <span className="gmeta">· {g.meta}</span>}
+                {g.project && (
+                  <span className="right">
+                    <button className="icon-btn sm" title="Upload to this project" aria-label="Upload to this project" onClick={() => openUpload({ projectId: g.project!._id })}><Icon name="plus" size={18} /></button>
+                    <Menu align="end" label="Project options" trigger={(p) => <button {...p} className="icon-btn sm" aria-label="Project options"><Icon name="more" size={18} /></button>}>
+                      <MenuItem icon={<Share2 size={16} />} onSelect={() => setSharing({ target: { kind: "project", projectId: g.project!._id }, label: projectLabel(g.project) })}>Share project…</MenuItem>
+                      <MenuItem icon={<SquareCheck size={16} />} onSelect={() => sel.start()}>Select videos…</MenuItem>
+                      <MenuItem icon={<Pencil size={16} />} onSelect={() => setRenaming(g.project!)}>Rename or set client</MenuItem>
+                      <MenuItem icon={<Upload size={16} />} onSelect={() => openUpload({ projectId: g.project!._id })}>Upload a video</MenuItem>
+                      <MenuSep />
+                      <MenuItem icon={<Trash2 size={16} />} danger onSelect={() => setDeletingProject(g.project!)}>Delete project</MenuItem>
+                    </Menu>
+                  </span>
+                )}
+              </div>
+              {!collapsed.has(g.key) && (
+                g.items.length === 0 ? <p className="caption" style={{ padding: "8px 28px" }}>No videos yet.</p>
+                  : view === "grid" ? <div className="grid">{g.items.map((x) => <VideoCard key={x._id} {...rowProps(x)} />)}</div>
+                  : <div style={{ paddingTop: 4 }}>{g.items.map((x) => <VideoRow key={x._id} {...rowProps(x)} />)}</div>
+              )}
+            </section>
+  );
+
   return (
     <>
       <TopBar right={
         <>
-          <Menu align="end" label="View options" trigger={(p) => <button {...p} className="icon-btn md" aria-label="View options" title="View options"><SlidersHorizontal size={16} /></button>}>
+          <Menu align="end" label="View options" trigger={(p) => <button {...p} className="icon-btn" aria-label="View options" title="View options"><Icon name="menu" size={18} /></button>}>
             <div style={{ display: "flex", gap: 4, padding: 4 }}>
               <button className={`btn sm${view === "grid" ? " on" : ""}`} style={{ flex: 1 }} onClick={() => setView("grid")}><LayoutGrid size={14} />Grid</button>
               <button className={`btn sm${view === "list" ? " on" : ""}`} style={{ flex: 1 }} onClick={() => setView("list")}><List size={14} />List</button>
@@ -142,7 +202,7 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
             <MenuItem keepOpen checked={lib.approveFinal} onSelect={() => lib.setApproveFinal(!lib.approveFinal)}>Approve final buttons</MenuItem>
           </Menu>
           {projectId && project && <button className="btn sm" onClick={() => setSharing({ target: { kind: "project", projectId }, label: projectLabel(project) })} title="Share this project"><Share2 size={15} /><span className="hide-sm">Share</span></button>}
-          <Menu align="end" label="Add" trigger={(p) => <button {...p} className="btn primary sm"><Plus size={15} />Add</button>}>
+          <Menu align="end" label="Add" trigger={(p) => <button {...p} className="btn primary sm"><Icon name="plus" size={16} />Add</button>}>
             <MenuItem icon={<ListOrdered size={16} />} onSelect={() => setNewVideo(true)}>New video (gets a number)</MenuItem>
             <MenuItem icon={<Upload size={16} />} onSelect={() => openUpload({ projectId })}>Upload a video</MenuItem>
             <MenuSep />
@@ -151,7 +211,7 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
           </Menu>
         </>
       }>
-        <Clapperboard size={15} />
+        <a {...linkProps("/review")}>Review</a><Sep />
         {projectId ? <><a {...linkProps("/projects")}>Projects</a><Sep /><span className="here">{project ? projectLabel(project) : "…"}</span></> : <span className="here">Projects</span>}
       </TopBar>
 
@@ -159,6 +219,7 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
         onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }}
         onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f && isVideoFile(f)) openUpload({ file: f, projectId }); }}>
         <div className="toolbar">
+          <span className="wp-label pj-grouplabel">Group by</span>
           <div className="tabs" role="tablist" aria-label="Group by">
             {!projectId && <button role="tab" className="tab" aria-selected={group === "client"} onClick={() => setGroup("client")}>Client</button>}
             {!projectId && <button role="tab" className="tab" aria-selected={group === "project"} onClick={() => setGroup("project")}>Project</button>}
@@ -168,7 +229,7 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
           </div>
           {!projectId && clients.length > 1 && (
             <span className="right">
-              <Menu align="end" label="Client" trigger={(p) => <button {...p} className={`btn sm${client ? " on" : ""}`}><Building2 size={14} />{client || "All clients"}<ChevronDown size={14} /></button>}>
+              <Menu align="end" label="Client" trigger={(p) => <button {...p} className={`btn sm${client ? " on" : ""}`}>{client || "All clients"}<Icon name="chevron-down" size={16} /></button>}>
                 <MenuLabel>Show</MenuLabel>
                 <MenuItem checked={!client} onSelect={() => setClient("")}>All clients</MenuItem>
                 <MenuSep />
@@ -192,55 +253,9 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
               <span>No projects yet.</span>
               <button className="btn primary" onClick={() => openUpload({ newProject: true })}><FolderPlus size={16} />New project</button>
             </div>
-          ) : groups.map((g) => g.emptyClient ? (
-            <div className="cempty" key={g.key}>
-              <span className="caption">No projects for {g.emptyClient} yet.</span>
-              <button className="btn sm" onClick={() => openUpload({ newProject: true, client: g.emptyClient })}><FolderPlus size={14} />New project</button>
-            </div>
-          ) : g.clientHead ? (
-            <div className="chead" key={g.key}>
-              <button className="collapse" onClick={() => toggle(g.key)} aria-label={collapsed.has(g.key) ? "Expand" : "Collapse"}>{collapsed.has(g.key) ? <ChevronRight size={15} /> : <ChevronDown size={15} />}</button>
-              <Building2 size={15} />
-              <span className="ctitle">{g.title}</span>
-              <span className="n">{g.clientHead.count} {g.clientHead.count === 1 ? "project" : "projects"}</span>
-              {g.title !== NO_CLIENT && (
-                <span className="right">
-                  <button className="icon-btn" title={`New project for ${g.title}`} aria-label={`New project for ${g.title}`} onClick={() => openUpload({ newProject: true, client: String(g.title) })}><Plus size={15} /></button>
-                  <Menu align="end" label="Client options" trigger={(p) => <button {...p} className="icon-btn" aria-label={`${g.title} options`}><Ellipsis size={15} /></button>}>
-                    <MenuItem icon={<Share2 size={16} />} onSelect={() => setSharing({ target: { kind: "client", client: String(g.title) }, label: String(g.title) })}>Share client…</MenuItem>
-                    <MenuItem icon={<SquareCheck size={16} />} onSelect={() => sel.start()}>Select videos…</MenuItem>
-                    <MenuSep />
-                    <MenuItem icon={<Trash2 size={16} />} danger onSelect={() => setDeletingClient(String(g.title))}>Delete client</MenuItem>
-                  </Menu>
-                </span>
-              )}
-            </div>
-          ) : (
-            <section className={`group${group === "client" ? " nested" : ""}`} key={g.key}>
-              <div className="ghead">
-                <button className="collapse" onClick={() => toggle(g.key)} aria-label={collapsed.has(g.key) ? "Expand" : "Collapse"}>{collapsed.has(g.key) ? <ChevronRight size={14} /> : <ChevronDown size={14} />}</button>
-                {g.project ? <a className="gtitle" {...linkProps(`/projects/${g.project._id}`)}>{g.title}</a> : <span className="gtitle">{g.title}</span>}
-                <span className="n">{g.items.length}</span>
-                {g.meta && <span className="gmeta">· {g.meta}</span>}
-                {g.project && (
-                  <span className="right">
-                    <button className="icon-btn" title="Upload to this project" aria-label="Upload to this project" onClick={() => openUpload({ projectId: g.project!._id })}><Plus size={15} /></button>
-                    <Menu align="end" label="Project options" trigger={(p) => <button {...p} className="icon-btn" aria-label="Project options"><Ellipsis size={15} /></button>}>
-                      <MenuItem icon={<Share2 size={16} />} onSelect={() => setSharing({ target: { kind: "project", projectId: g.project!._id }, label: projectLabel(g.project) })}>Share project…</MenuItem>
-                      <MenuItem icon={<SquareCheck size={16} />} onSelect={() => sel.start()}>Select videos…</MenuItem>
-                      <MenuItem icon={<Pencil size={16} />} onSelect={() => setRenaming(g.project!)}>Rename or set client</MenuItem>
-                      <MenuItem icon={<Upload size={16} />} onSelect={() => openUpload({ projectId: g.project!._id })}>Upload a video</MenuItem>
-                      <MenuSep />
-                      <MenuItem icon={<Trash2 size={16} />} danger onSelect={() => setDeletingProject(g.project!)}>Delete project</MenuItem>
-                    </Menu>
-                  </span>
-                )}
-              </div>
-              {!collapsed.has(g.key) && (
-                g.items.length === 0 ? <p className="caption" style={{ padding: "8px 28px" }}>No videos yet.</p>
-                  : view === "grid" ? <div className="grid">{g.items.map((x) => <VideoCard key={x._id} {...rowProps(x)} />)}</div>
-                  : <div style={{ paddingTop: 4 }}>{g.items.map((x) => <VideoRow key={x._id} {...rowProps(x)} />)}</div>
-              )}
+          ) : blocks.map((b) => (
+            <section key={b.key} className={`wp-card glass pj-block${b.client ? " client" : ""}`}>
+              <div className="wp-rows">{b.groups.map((g, i) => <div key={g.key} style={{ display: "contents" }}>{i > 0 && <hr className="wp-divider" />}{renderGroup(g)}</div>)}</div>
             </section>
           ))}
         {sel.on && (

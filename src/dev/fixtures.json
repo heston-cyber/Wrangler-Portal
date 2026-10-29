@@ -1,0 +1,1271 @@
+{
+ "owner": {
+  "users.me": {
+   "allowed": true,
+   "email": "heston@wranglerproductions.com",
+   "id": "000000000000000000000010001users",
+   "name": "Heston Hill",
+   "role": "owner"
+  },
+  "business.brand": [
+   {
+    "accent": null,
+    "background": null,
+    "businessId": "0000000000000000010000businesses",
+    "logoUrl": null,
+    "modules": {
+     "docs": true,
+     "payments": false,
+     "review": true
+    },
+    "name": "Wrangler Productions"
+   }
+  ],
+  "business.settings": {
+   "accent": null,
+   "accentCheck": null,
+   "background": null,
+   "emailFromName": null,
+   "legalName": "Hill Creative LLC",
+   "logoUrl": null,
+   "modules": {
+    "docs": true,
+    "payments": false,
+    "review": true
+   },
+   "name": "Wrangler Productions",
+   "ownerEmail": "heston@wranglerproductions.com",
+   "ownerName": "Heston Hill",
+   "replyTo": null
+  },
+  "library.overview": {
+   "clients": [
+    "4M LC",
+    "Floor Trader",
+    "Harbor Coffee",
+    "Northline"
+   ],
+   "projects": [
+    {
+     "_id": "000000000000000000010020projects",
+     "client": "Harbor Coffee",
+     "createdAt": 1792252800000,
+     "jobNumber": "26127",
+     "name": "Harbor Coffee Launch",
+     "updatedAt": 1793203200000,
+     "videoCount": 2
+    },
+    {
+     "_id": "000000000000000000010021projects",
+     "client": "Northline",
+     "createdAt": 1790697600000,
+     "jobNumber": "26122",
+     "name": "Spirit Days",
+     "updatedAt": 1792857600000,
+     "videoCount": 1
+    },
+    {
+     "_id": "000000000000000000010022projects",
+     "client": "4M LC",
+     "createdAt": 1792512000000,
+     "jobNumber": "26210",
+     "name": "Arizona",
+     "updatedAt": 1793116800000,
+     "videoCount": 1
+    },
+    {
+     "_id": "000000000000000000010023projects",
+     "client": "Floor Trader",
+     "createdAt": 1793030400000,
+     "jobNumber": "26133",
+     "name": "Backrooms",
+     "updatedAt": 1793246400000,
+     "videoCount": 1
+    }
+   ],
+   "videos": [
+    {
+     "_id": "00000000000000000000010024videos",
+     "createdAt": 1792771200000,
+     "final": null,
+     "firstUploadAt": 1792843200000,
+     "lastOpenedAt": 1793203200000,
+     "latest": {
+      "bunnyGuid": "kit-premiere",
+      "download": {
+       "bytes": null,
+       "name": "00001_Harbor30_v4.mp4",
+       "url": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/play_1080p.mp4"
+      },
+      "encodeProgress": 0,
+      "fpsDen": 1001,
+      "fpsNum": 24000,
+      "frameCount": 720,
+      "height": 1080,
+      "isFile": false,
+      "number": 4,
+      "startTimecode": "01:00:00:00",
+      "status": "ready",
+      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
+      "transcript": null,
+      "width": 1920
+     },
+     "noteCount": 3,
+     "number": 1,
+     "openNotes": 3,
+     "projectId": "000000000000000000010020projects",
+     "shortTitle": "Harbor30",
+     "source": "Browser",
+     "storageBytes": null,
+     "title": "Harbor Coffee 30s",
+     "updatedAt": 1793160000000,
+     "versionCount": 4
+    },
+    {
+     "_id": "00000000000000000000010030videos",
+     "createdAt": 1792944000000,
+     "final": null,
+     "firstUploadAt": 1793016000000,
+     "lastOpenedAt": 1793232000000,
+     "latest": {
+      "bunnyGuid": "kit-bts",
+      "download": {
+       "bytes": null,
+       "name": "00002_Harbor15_v2.mp4",
+       "url": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/play_1080p.mp4"
+      },
+      "encodeProgress": 0,
+      "fpsDen": 1001,
+      "fpsNum": 24000,
+      "frameCount": 720,
+      "height": 1080,
+      "isFile": false,
+      "number": 2,
+      "startTimecode": "01:00:00:00",
+      "status": "ready",
+      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
+      "transcript": null,
+      "width": 1920
+     },
+     "noteCount": 0,
+     "number": 2,
+     "openNotes": 0,
+     "projectId": "000000000000000000010020projects",
+     "shortTitle": "Harbor15",
+     "source": "Browser",
+     "storageBytes": null,
+     "title": "Harbor Coffee 15s cutdown",
+     "updatedAt": 1793203200000,
+     "versionCount": 2
+    },
+    {
+     "_id": "00000000000000000000010034videos",
+     "createdAt": 1791561600000,
+     "final": null,
+     "firstUploadAt": 1791633600000,
+     "lastOpenedAt": 1793001600000,
+     "latest": {
+      "bunnyGuid": "kit-aerial",
+      "download": {
+       "bytes": null,
+       "name": "00003_SpiritDays_v3.mp4",
+       "url": "https://vz-3ba0610b-f90.b-cdn.net/kit-aerial/play_1080p.mp4"
+      },
+      "encodeProgress": 0,
+      "fpsDen": 1001,
+      "fpsNum": 24000,
+      "frameCount": 720,
+      "height": 1080,
+      "isFile": false,
+      "number": 3,
+      "startTimecode": "01:00:00:00",
+      "status": "ready",
+      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-aerial/thumbnail.jpg",
+      "transcript": null,
+      "width": 1920
+     },
+     "noteCount": 1,
+     "number": 3,
+     "openNotes": 0,
+     "projectId": "000000000000000000010021projects",
+     "shortTitle": "SpiritDays",
+     "source": "Browser",
+     "storageBytes": null,
+     "title": "Spirit Days Intro",
+     "updatedAt": 1792857600000,
+     "versionCount": 3
+    },
+    {
+     "_id": "00000000000000000000010039videos",
+     "createdAt": 1792598400000,
+     "final": null,
+     "firstUploadAt": 1792670400000,
+     "lastOpenedAt": 1793174400000,
+     "latest": {
+      "bunnyGuid": "kit-landscape",
+      "download": {
+       "bytes": null,
+       "name": "00004_LCArizona_v4.mp4",
+       "url": "https://vz-3ba0610b-f90.b-cdn.net/kit-landscape/play_1080p.mp4"
+      },
+      "encodeProgress": 0,
+      "fpsDen": 1001,
+      "fpsNum": 24000,
+      "frameCount": 720,
+      "height": 1080,
+      "isFile": false,
+      "number": 4,
+      "startTimecode": "01:00:00:00",
+      "status": "ready",
+      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-landscape/thumbnail.jpg",
+      "transcript": null,
+      "width": 1920
+     },
+     "noteCount": 0,
+     "number": 4,
+     "openNotes": 0,
+     "projectId": "000000000000000000010022projects",
+     "shortTitle": "LCArizona",
+     "source": "Browser",
+     "storageBytes": null,
+     "title": "LC Arizona",
+     "updatedAt": 1793116800000,
+     "versionCount": 4
+    },
+    {
+     "_id": "00000000000000000000010045videos",
+     "createdAt": 1793116800000,
+     "final": null,
+     "firstUploadAt": 1793188800000,
+     "lastOpenedAt": 1793260800000,
+     "latest": {
+      "bunnyGuid": "kit-stadium",
+      "download": {
+       "bytes": null,
+       "name": "00005_Northline_v1.mp4",
+       "url": "https://vz-3ba0610b-f90.b-cdn.net/kit-stadium/play_1080p.mp4"
+      },
+      "encodeProgress": 0,
+      "fpsDen": 1001,
+      "fpsNum": 24000,
+      "frameCount": 720,
+      "height": 1080,
+      "isFile": false,
+      "number": 1,
+      "startTimecode": "01:00:00:00",
+      "status": "ready",
+      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-stadium/thumbnail.jpg",
+      "transcript": null,
+      "width": 1920
+     },
+     "noteCount": 0,
+     "number": 5,
+     "openNotes": 0,
+     "projectId": "000000000000000000010023projects",
+     "shortTitle": "Northline",
+     "source": "Browser",
+     "storageBytes": null,
+     "title": "Northline Teaser",
+     "updatedAt": 1793246400000,
+     "versionCount": 1
+    }
+   ]
+  },
+  "activity.feed": [
+   {
+    "actor": "Jordan Lee",
+    "at": 1793271600000,
+    "notes": [
+     {
+      "_id": "000000000000000000000010050notes",
+      "createdAt": 1793271600000,
+      "hasDrawing": false,
+      "inFrame": 120,
+      "kind": "frame",
+      "outFrame": null,
+      "status": "open",
+      "still": null,
+      "text": "Love this shot."
+     }
+    ],
+    "type": "notes",
+    "version": {
+     "bunnyGuid": "kit-premiere",
+     "fpsDen": 1001,
+     "fpsNum": 24000,
+     "frameCount": 720,
+     "number": 4,
+     "projectName": "Harbor Coffee Launch",
+     "startTimecode": "01:00:00:00",
+     "status": "ready",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
+     "versionId": "000000000000000000010028versions",
+     "videoId": "00000000000000000000010024videos",
+     "videoTitle": "Harbor Coffee 30s"
+    }
+   },
+   {
+    "actor": "Maya Brooks",
+    "at": 1793271600000,
+    "notes": [
+     {
+      "_id": "000000000000000000000010049notes",
+      "createdAt": 1793271600000,
+      "hasDrawing": false,
+      "inFrame": 120,
+      "kind": "frame",
+      "outFrame": null,
+      "status": "open",
+      "still": null,
+      "text": "Can the music come in on the cut?"
+     },
+     {
+      "_id": "000000000000000000000010048notes",
+      "createdAt": 1793271600000,
+      "hasDrawing": false,
+      "inFrame": 120,
+      "kind": "frame",
+      "outFrame": null,
+      "status": "open",
+      "still": null,
+      "text": "Pull the logo up two frames."
+     }
+    ],
+    "type": "notes",
+    "version": {
+     "bunnyGuid": "kit-premiere",
+     "fpsDen": 1001,
+     "fpsNum": 24000,
+     "frameCount": 720,
+     "number": 4,
+     "projectName": "Harbor Coffee Launch",
+     "startTimecode": "01:00:00:00",
+     "status": "ready",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
+     "versionId": "000000000000000000010028versions",
+     "videoId": "00000000000000000000010024videos",
+     "videoTitle": "Harbor Coffee 30s"
+    }
+   },
+   {
+    "actor": null,
+    "at": 1793188800000,
+    "type": "version",
+    "version": {
+     "bunnyGuid": "kit-stadium",
+     "fpsDen": 1001,
+     "fpsNum": 24000,
+     "frameCount": 720,
+     "number": 1,
+     "projectName": "Backrooms",
+     "startTimecode": "01:00:00:00",
+     "status": "ready",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-stadium/thumbnail.jpg",
+     "versionId": "000000000000000000010046versions",
+     "videoId": "00000000000000000000010045videos",
+     "videoTitle": "Northline Teaser"
+    }
+   },
+   {
+    "actor": "Dan Price",
+    "at": 1793116800000,
+    "notes": [
+     {
+      "_id": "000000000000000000000010051notes",
+      "createdAt": 1793116800000,
+      "hasDrawing": false,
+      "inFrame": null,
+      "kind": "general",
+      "outFrame": null,
+      "status": "done",
+      "still": null,
+      "text": "Approved from our side."
+     }
+    ],
+    "type": "notes",
+    "version": {
+     "bunnyGuid": "kit-aerial",
+     "fpsDen": 1001,
+     "fpsNum": 24000,
+     "frameCount": 720,
+     "number": 3,
+     "projectName": "Spirit Days",
+     "startTimecode": "01:00:00:00",
+     "status": "ready",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-aerial/thumbnail.jpg",
+     "versionId": "000000000000000000010037versions",
+     "videoId": "00000000000000000000010034videos",
+     "videoTitle": "Spirit Days Intro"
+    }
+   },
+   {
+    "actor": null,
+    "at": 1793088000000,
+    "type": "version",
+    "version": {
+     "bunnyGuid": "kit-bts",
+     "fpsDen": 1001,
+     "fpsNum": 24000,
+     "frameCount": 720,
+     "number": 2,
+     "projectName": "Harbor Coffee Launch",
+     "startTimecode": "01:00:00:00",
+     "status": "ready",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
+     "versionId": "000000000000000000010032versions",
+     "videoId": "00000000000000000000010030videos",
+     "videoTitle": "Harbor Coffee 15s cutdown"
+    }
+   },
+   {
+    "actor": null,
+    "at": 1793059200000,
+    "type": "version",
+    "version": {
+     "bunnyGuid": "kit-premiere",
+     "fpsDen": 1001,
+     "fpsNum": 24000,
+     "frameCount": 720,
+     "number": 4,
+     "projectName": "Harbor Coffee Launch",
+     "startTimecode": "01:00:00:00",
+     "status": "ready",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
+     "versionId": "000000000000000000010028versions",
+     "videoId": "00000000000000000000010024videos",
+     "videoTitle": "Harbor Coffee 30s"
+    }
+   },
+   {
+    "actor": null,
+    "at": 1793016000000,
+    "type": "version",
+    "version": {
+     "bunnyGuid": "kit-bts",
+     "fpsDen": 1001,
+     "fpsNum": 24000,
+     "frameCount": 720,
+     "number": 1,
+     "projectName": "Harbor Coffee Launch",
+     "startTimecode": "01:00:00:00",
+     "status": "ready",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
+     "versionId": "000000000000000000010031versions",
+     "videoId": "00000000000000000000010030videos",
+     "videoTitle": "Harbor Coffee 15s cutdown"
+    }
+   },
+   {
+    "actor": null,
+    "at": 1792987200000,
+    "type": "version",
+    "version": {
+     "bunnyGuid": "kit-premiere",
+     "fpsDen": 1001,
+     "fpsNum": 24000,
+     "frameCount": 720,
+     "number": 3,
+     "projectName": "Harbor Coffee Launch",
+     "startTimecode": "01:00:00:00",
+     "status": "ready",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
+     "versionId": "000000000000000000010027versions",
+     "videoId": "00000000000000000000010024videos",
+     "videoTitle": "Harbor Coffee 30s"
+    }
+   },
+   {
+    "actor": null,
+    "at": 1792915200000,
+    "type": "version",
+    "version": {
+     "bunnyGuid": "kit-premiere",
+     "fpsDen": 1001,
+     "fpsNum": 24000,
+     "frameCount": 720,
+     "number": 2,
+     "projectName": "Harbor Coffee Launch",
+     "startTimecode": "01:00:00:00",
+     "status": "ready",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
+     "versionId": "000000000000000000010026versions",
+     "videoId": "00000000000000000000010024videos",
+     "videoTitle": "Harbor Coffee 30s"
+    }
+   },
+   {
+    "actor": null,
+    "at": 1792886400000,
+    "type": "version",
+    "version": {
+     "bunnyGuid": "kit-landscape",
+     "fpsDen": 1001,
+     "fpsNum": 24000,
+     "frameCount": 720,
+     "number": 4,
+     "projectName": "Arizona",
+     "startTimecode": "01:00:00:00",
+     "status": "ready",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-landscape/thumbnail.jpg",
+     "versionId": "000000000000000000010043versions",
+     "videoId": "00000000000000000000010039videos",
+     "videoTitle": "LC Arizona"
+    }
+   },
+   {
+    "actor": null,
+    "at": 1792843200000,
+    "type": "version",
+    "version": {
+     "bunnyGuid": "kit-premiere",
+     "fpsDen": 1001,
+     "fpsNum": 24000,
+     "frameCount": 720,
+     "number": 1,
+     "projectName": "Harbor Coffee Launch",
+     "startTimecode": "01:00:00:00",
+     "status": "ready",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
+     "versionId": "000000000000000000010025versions",
+     "videoId": "00000000000000000000010024videos",
+     "videoTitle": "Harbor Coffee 30s"
+    }
+   },
+   {
+    "actor": null,
+    "at": 1792814400000,
+    "type": "version",
+    "version": {
+     "bunnyGuid": "kit-landscape",
+     "fpsDen": 1001,
+     "fpsNum": 24000,
+     "frameCount": 720,
+     "number": 3,
+     "projectName": "Arizona",
+     "startTimecode": "01:00:00:00",
+     "status": "ready",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-landscape/thumbnail.jpg",
+     "versionId": "000000000000000000010042versions",
+     "videoId": "00000000000000000000010039videos",
+     "videoTitle": "LC Arizona"
+    }
+   },
+   {
+    "actor": null,
+    "at": 1792742400000,
+    "type": "version",
+    "version": {
+     "bunnyGuid": "kit-landscape",
+     "fpsDen": 1001,
+     "fpsNum": 24000,
+     "frameCount": 720,
+     "number": 2,
+     "projectName": "Arizona",
+     "startTimecode": "01:00:00:00",
+     "status": "ready",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-landscape/thumbnail.jpg",
+     "versionId": "000000000000000000010041versions",
+     "videoId": "00000000000000000000010039videos",
+     "videoTitle": "LC Arizona"
+    }
+   },
+   {
+    "actor": null,
+    "at": 1792670400000,
+    "type": "version",
+    "version": {
+     "bunnyGuid": "kit-landscape",
+     "fpsDen": 1001,
+     "fpsNum": 24000,
+     "frameCount": 720,
+     "number": 1,
+     "projectName": "Arizona",
+     "startTimecode": "01:00:00:00",
+     "status": "ready",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-landscape/thumbnail.jpg",
+     "versionId": "000000000000000000010040versions",
+     "videoId": "00000000000000000000010039videos",
+     "videoTitle": "LC Arizona"
+    }
+   },
+   {
+    "actor": null,
+    "at": 1791777600000,
+    "type": "version",
+    "version": {
+     "bunnyGuid": "kit-aerial",
+     "fpsDen": 1001,
+     "fpsNum": 24000,
+     "frameCount": 720,
+     "number": 3,
+     "projectName": "Spirit Days",
+     "startTimecode": "01:00:00:00",
+     "status": "ready",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-aerial/thumbnail.jpg",
+     "versionId": "000000000000000000010037versions",
+     "videoId": "00000000000000000000010034videos",
+     "videoTitle": "Spirit Days Intro"
+    }
+   },
+   {
+    "actor": null,
+    "at": 1791705600000,
+    "type": "version",
+    "version": {
+     "bunnyGuid": "kit-aerial",
+     "fpsDen": 1001,
+     "fpsNum": 24000,
+     "frameCount": 720,
+     "number": 2,
+     "projectName": "Spirit Days",
+     "startTimecode": "01:00:00:00",
+     "status": "ready",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-aerial/thumbnail.jpg",
+     "versionId": "000000000000000000010036versions",
+     "videoId": "00000000000000000000010034videos",
+     "videoTitle": "Spirit Days Intro"
+    }
+   },
+   {
+    "actor": null,
+    "at": 1791633600000,
+    "type": "version",
+    "version": {
+     "bunnyGuid": "kit-aerial",
+     "fpsDen": 1001,
+     "fpsNum": 24000,
+     "frameCount": 720,
+     "number": 1,
+     "projectName": "Spirit Days",
+     "startTimecode": "01:00:00:00",
+     "status": "ready",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-aerial/thumbnail.jpg",
+     "versionId": "000000000000000000010035versions",
+     "videoId": "00000000000000000000010034videos",
+     "videoTitle": "Spirit Days Intro"
+    }
+   }
+  ],
+  "activity.recent": [],
+  "sign.list": [
+   {
+    "_id": "000000000000000010060wsDocuments",
+    "amount": null,
+    "approved": false,
+    "buildId": null,
+    "completedAt": null,
+    "createdAt": 1793203200000,
+    "emails": [
+     "hello@floortrader.example"
+    ],
+    "fromBuilder": false,
+    "hidden": false,
+    "label": "WS-00013",
+    "number": 13,
+    "pages": 1,
+    "sentAt": null,
+    "signers": [
+     "Floor Trader"
+    ],
+    "status": "draft",
+    "title": "Service Agreement — Backrooms",
+    "updatedAt": 1793246400000,
+    "version": 1
+   },
+   {
+    "_id": "000000000000000010056wsDocuments",
+    "amount": null,
+    "approved": true,
+    "buildId": null,
+    "completedAt": null,
+    "createdAt": 1793116800000,
+    "emails": [
+     "maya@harborcoffee.com"
+    ],
+    "fromBuilder": false,
+    "hidden": false,
+    "label": "WS-00012",
+    "number": 12,
+    "pages": 1,
+    "sentAt": 1793203200000,
+    "signers": [
+     "Maya Brooks"
+    ],
+    "status": "sent",
+    "title": "Service Agreement — Harbor Coffee Launch",
+    "updatedAt": 1793203200000,
+    "version": 1
+   },
+   {
+    "_id": "000000000000000010058wsDocuments",
+    "amount": null,
+    "approved": true,
+    "buildId": null,
+    "completedAt": 1793095200000,
+    "createdAt": 1792512000000,
+    "emails": [
+     "dan@northline.church"
+    ],
+    "fromBuilder": false,
+    "hidden": false,
+    "label": "WS-00011",
+    "number": 11,
+    "pages": 1,
+    "sentAt": 1792900800000,
+    "signers": [
+     "Dan Price"
+    ],
+    "status": "completed",
+    "title": "Change Order — Spirit Days",
+    "updatedAt": 1792900800000,
+    "version": 1
+   }
+  ],
+  "builder.listBuilds": [],
+  "builder.listTemplates": [],
+  "builder.listClauses": [],
+  "sign.ownerSignature": {
+   "adopted": false,
+   "email": "heston@wranglerproductions.com"
+  },
+  "clients.listInvites": [
+   {
+    "_id": "0000000000000000000010009invites",
+    "acceptedAt": 1791648000000,
+    "createdAt": 1791561600000,
+    "email": "maya@harborcoffee.com",
+    "emails": {
+     "repliesOff": false,
+     "versionsOff": false
+    },
+    "lastSignInAt": null,
+    "name": "Maya Brooks",
+    "revokedAt": null
+   },
+   {
+    "_id": "0000000000000000000010011invites",
+    "acceptedAt": null,
+    "createdAt": 1791561600000,
+    "email": "jordan@harborcoffee.com",
+    "emails": {
+     "repliesOff": false,
+     "versionsOff": false
+    },
+    "lastSignInAt": null,
+    "name": "Jordan Lee",
+    "revokedAt": null
+   },
+   {
+    "_id": "0000000000000000000010016invites",
+    "acceptedAt": 1791648000000,
+    "createdAt": 1791561600000,
+    "email": "dan@northline.church",
+    "emails": {
+     "repliesOff": false,
+     "versionsOff": false
+    },
+    "lastSignInAt": null,
+    "name": "Dan Price",
+    "revokedAt": null
+   },
+   {
+    "_id": "0000000000000000000010018invites",
+    "acceptedAt": null,
+    "createdAt": 1791561600000,
+    "email": "ops@4mlc.com",
+    "emails": {
+     "repliesOff": false,
+     "versionsOff": false
+    },
+    "lastSignInAt": null,
+    "name": "Ana Ruiz",
+    "revokedAt": null
+   }
+  ],
+  "clients.directory": [
+   {
+    "_id": "0000000000000000000010005clients",
+    "active": 0,
+    "fromProjects": false,
+    "name": "4M LC",
+    "people": 1,
+    "projects": 1,
+    "toReview": 0,
+    "toSign": 0
+   },
+   {
+    "_id": "0000000000000000000010006clients",
+    "active": 0,
+    "fromProjects": false,
+    "name": "Floor Trader",
+    "people": 0,
+    "projects": 1,
+    "toReview": 1,
+    "toSign": 0
+   },
+   {
+    "_id": "0000000000000000000010003clients",
+    "active": 1,
+    "fromProjects": false,
+    "name": "Harbor Coffee",
+    "people": 3,
+    "projects": 1,
+    "toReview": 1,
+    "toSign": 1
+   },
+   {
+    "_id": "0000000000000000000010004clients",
+    "active": 1,
+    "fromProjects": false,
+    "name": "Northline",
+    "people": 1,
+    "projects": 1,
+    "toReview": 0,
+    "toSign": 0
+   }
+  ],
+  "clients.page": {
+   "client": {
+    "_id": "0000000000000000000010003clients",
+    "name": "Harbor Coffee"
+   },
+   "documents": [
+    {
+     "_id": "000000000000000010056wsDocuments",
+     "completedAt": null,
+     "number": 12,
+     "sentAt": 1793203200000,
+     "status": "sent",
+     "title": "Service Agreement — Harbor Coffee Launch"
+    }
+   ],
+   "inbox": {
+    "items": 5,
+    "unread": 5
+   },
+   "people": [
+    {
+     "_id": "00000000000000010010clientPeople",
+     "access": {
+      "lastSignInAt": null,
+      "since": 1791648000000,
+      "state": "active"
+     },
+     "email": "maya@harborcoffee.com",
+     "name": "Maya Brooks",
+     "role": "signer"
+    },
+    {
+     "_id": "00000000000000010012clientPeople",
+     "access": {
+      "at": 1791561600000,
+      "state": "invited"
+     },
+     "email": "jordan@harborcoffee.com",
+     "name": "Jordan Lee",
+     "role": "contact"
+    },
+    {
+     "_id": "00000000000000010013clientPeople",
+     "access": {
+      "state": "none"
+     },
+     "email": "sam@harborcoffee.com",
+     "name": "Sam Ortiz",
+     "role": "contact"
+    }
+   ],
+   "projects": [
+    {
+     "_id": "000000000000000000010020projects",
+     "jobNumber": "26127",
+     "name": "Harbor Coffee Launch"
+    }
+   ],
+   "shares": [
+    {
+     "_id": "00000000000000000000010066shares",
+     "access": "comment",
+     "expiresAt": null,
+     "kind": "project",
+     "off": false,
+     "who": "invited"
+    },
+    {
+     "_id": "00000000000000000000010071shares",
+     "access": "view",
+     "expiresAt": null,
+     "kind": "video",
+     "off": false,
+     "who": "link"
+    }
+   ]
+  },
+  "clients.people": [
+   {
+    "_id": "00000000000000010010clientPeople",
+    "access": {
+     "lastSignInAt": null,
+     "since": 1791648000000,
+     "state": "active"
+    },
+    "email": "maya@harborcoffee.com",
+    "name": "Maya Brooks",
+    "role": "signer"
+   },
+   {
+    "_id": "00000000000000010012clientPeople",
+    "access": {
+     "at": 1791561600000,
+     "state": "invited"
+    },
+    "email": "jordan@harborcoffee.com",
+    "name": "Jordan Lee",
+    "role": "contact"
+   },
+   {
+    "_id": "00000000000000010013clientPeople",
+    "access": {
+     "state": "none"
+    },
+    "email": "sam@harborcoffee.com",
+    "name": "Sam Ortiz",
+    "role": "contact"
+   }
+  ],
+  "inbox.notes": [
+   {
+    "_id": "0000000000000000010075inboxNotes",
+    "client": "Harbor Coffee",
+    "clientId": "0000000000000000000010003clients",
+    "createdAt": 1793289600000,
+    "draftedBy": "owner",
+    "emailed": 0,
+    "link": null,
+    "readBy": 0,
+    "recipients": 0,
+    "said": null,
+    "sentAt": null,
+    "status": "draft",
+    "text": "The 15s is on its way.",
+    "title": "Cutdown ready next week",
+    "updatedAt": 1793289600000
+   },
+   {
+    "_id": "0000000000000000010072inboxNotes",
+    "client": "Harbor Coffee",
+    "clientId": "0000000000000000000010003clients",
+    "createdAt": 1793289600000,
+    "draftedBy": "owner",
+    "emailed": 0,
+    "link": null,
+    "readBy": 0,
+    "recipients": 2,
+    "said": null,
+    "sentAt": 1793289600000,
+    "status": "sent",
+    "text": "Same time, same place. We'll start with the counter shots.",
+    "title": "Shoot moved to Friday",
+    "updatedAt": 1793289600000
+   }
+  ],
+  "inbox.forClient": [
+   {
+    "_id": "0000000000000000010078inboxItems",
+    "createdAt": 1793289600000,
+    "emailed": false,
+    "kind": "reply",
+    "link": "/s/x/v/00000000000000000000010024videos",
+    "people": [
+     {
+      "email": "maya@harborcoffee.com",
+      "emailed": false,
+      "readAt": null
+     }
+    ],
+    "read": false,
+    "readAt": null,
+    "readBy": 0,
+    "sentTo": 1,
+    "text": "“Pulled the logo up two frames.”",
+    "title": "Heston replied to your note"
+   },
+   {
+    "_id": "0000000000000000010077inboxItems",
+    "createdAt": 1793289600000,
+    "emailed": false,
+    "kind": "to_sign",
+    "link": "/x/kittokenkittokenkit1",
+    "people": [
+     {
+      "email": "maya@harborcoffee.com",
+      "emailed": false,
+      "readAt": null
+     }
+    ],
+    "read": false,
+    "readAt": null,
+    "readBy": 0,
+    "sentTo": 1,
+    "text": "Sent by Wrangler Productions",
+    "title": "Sign: Service Agreement WS-00012"
+   },
+   {
+    "_id": "0000000000000000010076inboxItems",
+    "createdAt": 1793289600000,
+    "emailed": false,
+    "kind": "cut_ready",
+    "link": "/s/x/v/00000000000000000000010024videos",
+    "people": [
+     {
+      "email": "maya@harborcoffee.com",
+      "emailed": false,
+      "readAt": null
+     }
+    ],
+    "read": false,
+    "readAt": null,
+    "readBy": 0,
+    "sentTo": 1,
+    "text": "26127 Harbor Coffee Launch · ready to review",
+    "title": "New version: Harbor Coffee 30s v4"
+   },
+   {
+    "_id": "0000000000000000010074inboxItems",
+    "createdAt": 1793289600000,
+    "emailed": false,
+    "kind": "note",
+    "link": null,
+    "people": [
+     {
+      "email": "jordan@harborcoffee.com",
+      "emailed": false,
+      "readAt": null
+     },
+     {
+      "email": "maya@harborcoffee.com",
+      "emailed": false,
+      "readAt": null
+     }
+    ],
+    "read": false,
+    "readAt": null,
+    "readBy": 0,
+    "sentTo": 2,
+    "text": "Same time, same place. We'll start with the counter shots.",
+    "title": "Shoot moved to Friday"
+   }
+  ],
+  "connector.listKeys": [],
+  "register.sheetKey": null,
+  "dropbox.status": {
+   "configured": false,
+   "connected": false,
+   "connectedAt": null,
+   "email": null,
+   "lastError": null,
+   "lastSyncAt": null,
+   "name": null,
+   "recent": [],
+   "transcripts": false
+  },
+  "dropbox.flagged": [],
+  "wsConnector.listKeys": [],
+  "shares.list": [
+   {
+    "_id": "00000000000000000000010071shares",
+    "access": "view",
+    "allVersions": true,
+    "client": null,
+    "createdAt": 1793289600000,
+    "downloads": true,
+    "emailNewVersions": true,
+    "expiresAt": null,
+    "gone": false,
+    "hasPasscode": false,
+    "kind": "video",
+    "label": "Harbor Coffee 30s",
+    "lastOpenedAt": null,
+    "offAt": null,
+    "openCount": 0,
+    "people": [],
+    "projectId": null,
+    "state": "on",
+    "sub": "26127 Harbor Coffee Launch",
+    "token": "xqz51gjt0Za5sB1_ES6uzw",
+    "url": "https://app.wranglerportal.com/s/xqz51gjt0Za5sB1_ES6uzw",
+    "videoId": "00000000000000000000010024videos",
+    "who": "link"
+   },
+   {
+    "_id": "00000000000000000000010066shares",
+    "access": "comment",
+    "allVersions": true,
+    "client": null,
+    "createdAt": 1793289600000,
+    "downloads": true,
+    "emailNewVersions": true,
+    "expiresAt": null,
+    "gone": false,
+    "hasPasscode": false,
+    "kind": "project",
+    "label": "26127 Harbor Coffee Launch",
+    "lastOpenedAt": null,
+    "offAt": null,
+    "openCount": 0,
+    "people": [
+     {
+      "email": "maya@harborcoffee.com",
+      "emailedAt": null,
+      "hasAccount": true,
+      "invited": true,
+      "name": "Maya Brooks"
+     },
+     {
+      "email": "jordan@harborcoffee.com",
+      "emailedAt": null,
+      "hasAccount": false,
+      "invited": true,
+      "name": "Jordan Lee"
+     }
+    ],
+    "projectId": "000000000000000000010020projects",
+    "state": "on",
+    "sub": "Harbor Coffee",
+    "token": "Si74PoSEI-Dh7DTVWm8g6A",
+    "url": "https://app.wranglerportal.com/s/Si74PoSEI-Dh7DTVWm8g6A",
+    "videoId": null,
+    "who": "invited"
+   }
+  ]
+ },
+ "client": {
+  "users.me": {
+   "allowed": false,
+   "email": "maya@harborcoffee.com",
+   "id": "000000000000000000000010007users",
+   "name": "Maya Brooks",
+   "role": "client"
+  },
+  "business.brand": [
+   {
+    "accent": null,
+    "background": null,
+    "businessId": "0000000000000000010000businesses",
+    "logoUrl": null,
+    "modules": {
+     "docs": true,
+     "payments": false,
+     "review": true
+    },
+    "name": "Wrangler Productions"
+   }
+  ],
+  "shares.mine": [
+   {
+    "access": "comment",
+    "client": "Harbor Coffee",
+    "createdAt": 1793289600000,
+    "kind": "project",
+    "label": "26127 Harbor Coffee Launch",
+    "sub": "Harbor Coffee",
+    "token": "Si74PoSEI-Dh7DTVWm8g6A",
+    "videos": [
+     {
+      "_id": "00000000000000000000010030videos",
+      "client": "Harbor Coffee",
+      "latest": 2,
+      "number": 2,
+      "project": "26127 Harbor Coffee Launch",
+      "projectId": "000000000000000000010020projects",
+      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
+      "title": "Harbor Coffee 15s cutdown",
+      "updatedAt": 1793203200000,
+      "versions": 2
+     },
+     {
+      "_id": "00000000000000000000010024videos",
+      "client": "Harbor Coffee",
+      "latest": 4,
+      "number": 1,
+      "project": "26127 Harbor Coffee Launch",
+      "projectId": "000000000000000000010020projects",
+      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
+      "title": "Harbor Coffee 30s",
+      "updatedAt": 1793160000000,
+      "versions": 4
+     }
+    ]
+   }
+  ],
+  "inbox.mine": {
+   "items": [
+    {
+     "_id": "0000000000000000010078inboxItems",
+     "createdAt": 1793289600000,
+     "emailed": false,
+     "kind": "reply",
+     "link": "/s/x/v/00000000000000000000010024videos",
+     "read": false,
+     "readAt": null,
+     "text": "“Pulled the logo up two frames.”",
+     "title": "Heston replied to your note"
+    },
+    {
+     "_id": "0000000000000000010077inboxItems",
+     "createdAt": 1793289600000,
+     "emailed": false,
+     "kind": "to_sign",
+     "link": "/x/kittokenkittokenkit1",
+     "read": false,
+     "readAt": null,
+     "text": "Sent by Wrangler Productions",
+     "title": "Sign: Service Agreement WS-00012"
+    },
+    {
+     "_id": "0000000000000000010076inboxItems",
+     "createdAt": 1793289600000,
+     "emailed": false,
+     "kind": "cut_ready",
+     "link": "/s/x/v/00000000000000000000010024videos",
+     "read": false,
+     "readAt": null,
+     "text": "26127 Harbor Coffee Launch · ready to review",
+     "title": "New version: Harbor Coffee 30s v4"
+    },
+    {
+     "_id": "0000000000000000010073inboxItems",
+     "createdAt": 1793289600000,
+     "emailed": false,
+     "kind": "note",
+     "link": null,
+     "read": false,
+     "readAt": null,
+     "text": "Same time, same place. We'll start with the counter shots.",
+     "title": "Shoot moved to Friday"
+    }
+   ],
+   "unread": 4
+  },
+  "inbox.unreadCount": 4,
+  "documents.mine": {
+   "cancelled": [],
+   "signed": [],
+   "toSign": [
+    {
+     "documentId": "000000000000000010056wsDocuments",
+     "expired": false,
+     "expiresAt": null,
+     "label": "WS-00012",
+     "sentAt": 1793203200000,
+     "signUrl": "https://sign.wranglerportal.com/kittokenkittokenkit1",
+     "title": "Service Agreement — Harbor Coffee Launch",
+     "waiting": false
+    }
+   ]
+  }
+ },
+ "ids": {
+  "harbor": "0000000000000000000010003clients"
+ }
+}
