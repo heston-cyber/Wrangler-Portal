@@ -11,7 +11,7 @@ import { internalMutation, internalQuery, mutation, query } from "./lib/function
 import { requireMe, requireSignedIn } from "./lib/access";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { businessOf, hasAccess, itemView, postToInbox } from "./lib/inbox";
+import { businessOf, hasAccess, itemView, myItems, postToInbox } from "./lib/inbox";
 import { shareCovers, shareState, sameBusiness } from "./lib/shareAccess";
 import { signLink } from "./lib/wsSigning";
 import { docLabel } from "./lib/wsLayout";
@@ -29,9 +29,15 @@ export const mine = query({
   handler: async (ctx, { limit }) => {
     const me = await requireSignedIn(ctx);
     if (me.kind !== "client") return { items: [], unread: 0 };
-    const rows = await ctx.db.query("inboxItems").withIndex("by_email", (q) => q.eq("email", me.email)).order("desc").take(Math.min(Math.max(limit ?? 50, 1), 200));
-    const unread = (await ctx.db.query("inboxItems").withIndex("by_email", (q) => q.eq("email", me.email)).collect()).filter((i) => !i.readAt).length;
-    return { items: rows.map(itemView), unread };
+    const all = await myItems(ctx, me.email);
+    const names = new Map<string, string>();
+    const items = [];
+    for (const i of all.slice(0, Math.min(Math.max(limit ?? 50, 1), 200))) {
+      const k = String(i.businessId ?? "");
+      if (!names.has(k)) names.set(k, (i.businessId ? (await ctx.db.get(i.businessId))?.name : null) ?? "Wrangler Productions");
+      items.push({ ...itemView(i), from: names.get(k)! });
+    }
+    return { items, unread: all.filter((i) => !i.readAt).length };
   },
 });
 
@@ -40,7 +46,7 @@ export const unreadCount = query({
   handler: async (ctx) => {
     const me = await requireSignedIn(ctx);
     if (me.kind !== "client") return 0;
-    return (await ctx.db.query("inboxItems").withIndex("by_email", (q) => q.eq("email", me.email)).collect()).filter((i) => !i.readAt).length;
+    return (await myItems(ctx, me.email)).filter((i) => !i.readAt).length;
   },
 });
 
@@ -49,7 +55,7 @@ export const markRead = mutation({
   handler: async (ctx, { itemId }) => {
     const me = await requireSignedIn(ctx);
     const item = await ctx.db.get(itemId);
-    if (!item || item.email !== me.email) throw new ConvexError("Not allowed.");
+    if (!item || item.email !== me.email || !(await myItems(ctx, me.email)).some((i) => i._id === itemId)) throw new ConvexError("Not allowed.");
     if (!item.readAt) await ctx.db.patch(itemId, { readAt: Date.now() });
     return null;
   },
@@ -61,7 +67,7 @@ export const markAllRead = mutation({
     const me = await requireSignedIn(ctx);
     const now = Date.now();
     let n = 0;
-    for (const i of await ctx.db.query("inboxItems").withIndex("by_email", (q) => q.eq("email", me.email)).collect()) {
+    for (const i of await myItems(ctx, me.email)) {
       if (!i.readAt) { await ctx.db.patch(i._id, { readAt: now }); n++; }
     }
     return n;
@@ -72,10 +78,12 @@ export const markAllRead = mutation({
 
 /** "Their Inbox": what this client's people see, one row per event, with who has read it. */
 export const forClient = query({
-  args: { clientId: v.id("clients"), limit: v.optional(v.number()) },
-  handler: async (ctx, { clientId, limit }) => {
+  args: { clientId: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, a) => {
+    const limit = a.limit;
     await requireMe(ctx);
-    if (!(await ctx.db.get(clientId))) return [];
+    const clientId = ctx.db.normalizeId("clients", a.clientId);
+    if (!clientId || !(await ctx.db.get(clientId))) return [];
     const rows = await ctx.db.query("inboxItems").withIndex("by_client", (q) => q.eq("clientId", clientId)).order("desc").take(1000);
     const events = new Map<string, { item: ReturnType<typeof itemView>; people: Array<{ email: string; readAt: number | null; emailed: boolean }> }>();
     for (const r of rows) {
@@ -100,10 +108,11 @@ async function noteAudience(ctx: QueryCtx | MutationCtx, client: Doc<"clients">)
 }
 
 export const noteRecipients = query({
-  args: { clientId: v.id("clients") },
-  handler: async (ctx, { clientId }) => {
+  args: { clientId: v.string() },
+  handler: async (ctx, a) => {
     await requireMe(ctx);
-    const client = await ctx.db.get(clientId);
+    const clientId = ctx.db.normalizeId("clients", a.clientId);
+    const client = clientId ? await ctx.db.get(clientId) : null;
     if (!client) throw new ConvexError("That client isn't here.");
     return await noteAudience(ctx, client);
   },
@@ -199,11 +208,12 @@ export const sent = query({
 
 /** A sent note, opened from the Sent list: its text and each person with Read {date} or not read yet. */
 export const noteDetail = query({
-  args: { noteId: v.id("inboxNotes") },
-  handler: async (ctx, { noteId }) => {
+  args: { noteId: v.string() },
+  handler: async (ctx, a) => {
     await requireMe(ctx);
-    const n = await ctx.db.get(noteId);
-    if (!n || n.status === "discarded") return null;
+    const noteId = ctx.db.normalizeId("inboxNotes", a.noteId);
+    const n = noteId ? await ctx.db.get(noteId) : null;
+    if (!n || !noteId || n.status === "discarded") return null;
     const client = await ctx.db.get(n.clientId);
     const items = await ctx.db.query("inboxItems").withIndex("by_note", (q) => q.eq("noteId", noteId)).collect();
     const people = [];
@@ -241,7 +251,7 @@ function checkNote(a: { title: string; text: string; link?: string | null; linkL
   if (!title) throw new ConvexError("Give the note a title.");
   if (title.length > MAX_TITLE) throw new ConvexError(`Keep the title under ${MAX_TITLE} characters.`);
   if (text.length > MAX_TEXT) throw new ConvexError(`Keep the note under ${MAX_TEXT} characters.`);
-  if (link && (link.length > MAX_LINK || !(/^\/(?!\/)/.test(link) || /^https:\/\//.test(link)))) throw new ConvexError("A link must be a page in the portal (starting with /) or an https:// address.");
+  if (link && (link.length > MAX_LINK || !(/^\/(?![/\\])/.test(link) || /^https:\/\//.test(link)))) throw new ConvexError("A link must be a page in the portal (starting with /) or an https:// address.");
   const linkLabel = link ? a.linkLabel?.trim().replace(/\s+/g, " ").slice(0, 80) || undefined : undefined;
   return { title, text, link, linkLabel };
 }

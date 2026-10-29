@@ -110,7 +110,8 @@ type Access = { state: "none" } | { state: "invited"; at: number } | { state: "a
 async function accessOf(ctx: { db: MutationCtx["db"] } | { db: import("./_generated/server").QueryCtx["db"] }, email: string): Promise<Access> {
   const inv = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()).find((i) => !i.revokedAt);
   if (!inv) return { state: "none" };
-  const user = inv.userId ? await ctx.db.get(inv.userId) : await ctx.db.query("users").withIndex("email", (q) => q.eq("email", email)).unique();
+  // Review (Oct 29): only this invite's own account; never another business's user found by email.
+  const user = inv.userId ? await ctx.db.get(inv.userId) : null;
   if (inv.acceptedAt || user) return { state: "active", since: inv.acceptedAt ?? inv.createdAt, lastSignInAt: (user?.lastSignInAt as number | undefined) ?? null };
   return { state: "invited", at: inv.createdAt };
 }
@@ -188,11 +189,12 @@ export const invitePerson = mutation({
 /** The client page (P1 / Owner / Client page): who they are, their people, projects, what's shared with them (each
  *  version they can see, with Not watched / {n} notes / Approved), their documents and Inbox counts. */
 export const page = query({
-  args: { clientId: v.id("clients") },
-  handler: async (ctx, { clientId }) => {
+  args: { clientId: v.string() }, // a string, so a mistyped address shows "isn't here" rather than an error
+  handler: async (ctx, a) => {
     await requireMe(ctx);
-    const client = await ctx.db.get(clientId);
-    if (!client) return null;
+    const clientId = ctx.db.normalizeId("clients", a.clientId);
+    const client = clientId ? await ctx.db.get(clientId) : null;
+    if (!client || !clientId) return null;
     const people = (await ctx.db.query("clientPeople").withIndex("by_client", (q) => q.eq("clientId", clientId)).collect()).filter((p) => !p.removedAt);
     const projects = (await ctx.db.query("projects").collect()).filter((p) => p.clientId === clientId);
     const projectIds = new Set(projects.map((p) => p._id as string));
@@ -275,7 +277,6 @@ export const page = query({
 /** "{n} to sign · {n} to review": documents waiting on one of their people's signature, and cuts (each video's
  *  latest ready version) that nobody outside the business has watched yet. */
 async function waitingOn(ctx: { db: import("./_generated/server").QueryCtx["db"] }, clientId: import("./_generated/dataModel").Id<"clients">, emails: string[], projectIds: import("./_generated/dataModel").Id<"projects">[]) {
-  void clientId;
   let toSign = 0;
   const seenDocs = new Set<string>();
   for (const e of emails) {
@@ -286,8 +287,15 @@ async function waitingOn(ctx: { db: import("./_generated/server").QueryCtx["db"]
     }
   }
   let toReview = 0;
+  // Review (Oct 29): only cuts a live share actually shows this client.
+  const now = Date.now();
+  const pset = new Set(projectIds.map(String));
+  const live = (await ctx.db.query("shares").collect()).filter((s) => !s.offAt && !(s.expiresAt && s.expiresAt < now)
+    && ((s.kind === "client" && s.clientId === clientId) || (s.kind === "project" && !!s.projectId && pset.has(s.projectId)) || s.kind === "video"));
+  const shown = (vid: { _id: Id<"videos">; projectId: Id<"projects"> }) => live.some((s) => s.kind === "client" || (s.kind === "project" ? s.projectId === vid.projectId : s.videoId === vid._id));
   for (const pid of projectIds) {
     for (const vid of await ctx.db.query("videos").withIndex("by_project", (q) => q.eq("projectId", pid)).collect()) {
+      if (!shown(vid)) continue;
       const latest = (await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect()).filter((x) => x.status === "ready").sort((a, b) => b.number - a.number)[0];
       if (!latest) continue;
       const watched = (await ctx.db.query("views").withIndex("by_version", (q) => q.eq("versionId", latest._id)).collect()).some((x) => x.kind !== "owner");

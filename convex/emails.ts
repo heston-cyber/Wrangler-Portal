@@ -23,7 +23,7 @@ import { type Mail, newVersionMail, noteMail, ownerAlertMail, portalInviteMail, 
 
 export const ALERT_DELAY_MS = 10 * 60_000;
 export const NEW_VERSION_DELAY_MS = 60_000;
-type Kind = "versions" | "replies";
+type Kind = "versions" | "replies" | "notes";
 const projectLabel = (p: { name: string; jobNumber?: string } | null) => (p ? (p.jobNumber ? `${p.jobNumber} ${p.name}` : p.name) : "");
 
 /** Where Heston's own alerts go: ALERT_EMAIL, else the first owner email, else the reply-to address. */
@@ -55,7 +55,7 @@ export const recipients = internalMutation({
     for (const e of [...new Set(emails.map((x) => x.trim().toLowerCase()).filter(Boolean))]) {
       const p = await prefsFor(ctx, e);
       // Notes stop only when the client has switched everything off (Settings › "Email me when something new arrives").
-      if (kind === "versions" ? p.versionsOff : kind === "replies" ? p.repliesOff : p.versionsOff && p.repliesOff) continue;
+      if (kind === "versions" ? p.versionsOff : kind === "replies" ? p.repliesOff : notesOff(p)) continue;
       out.push({ email: e, key: p.key });
     }
     return out;
@@ -244,11 +244,11 @@ export const ownerAlert = internalAction({
 // ---------- unsubscribe (the link in every client email) ----------
 
 export const setOff = internalMutation({
-  args: { key: v.string(), kind: v.union(v.literal("versions"), v.literal("replies")), off: v.boolean() },
+  args: { key: v.string(), kind: v.union(v.literal("versions"), v.literal("replies"), v.literal("notes")), off: v.boolean() },
   handler: async (ctx, { key, kind, off }) => {
     const row = await ctx.db.query("emailPrefs").withIndex("by_key", (q) => q.eq("key", key)).unique();
     if (!row) return null;
-    await ctx.db.patch(row._id, { ...(kind === "versions" ? { versionsOff: off } : { repliesOff: off }), updatedAt: Date.now() });
+    await ctx.db.patch(row._id, { ...(kind === "versions" ? { versionsOff: off } : kind === "replies" ? { repliesOff: off } : { notesOff: off }), updatedAt: Date.now() });
     return row.email;
   },
 });
@@ -275,10 +275,10 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 export const stop = httpAction(async (ctx, req) => {
   const u = new URL(req.url);
   const key = u.searchParams.get("k") ?? "", t = u.searchParams.get("t");
-  const kind: Kind | null = t === "versions" || t === "replies" ? t : null;
+  const kind: Kind | null = t === "versions" || t === "replies" || t === "notes" ? t : null;
   const html = (s: string, b: string, status = 200, icon: keyof typeof ICONS = "mail") => new Response(page(s, b, icon), { status, headers: { "content-type": "text/html; charset=utf-8" } });
   if (!key || !kind || key.length > 64) return html("That link isn't right.", "Use the link at the bottom of the email, whole.", 400, "alert");
-  const what = kind === "versions" ? "new versions" : "replies to your notes";
+  const what = kind === "versions" ? "new versions" : kind === "replies" ? "replies to your notes" : "notes";
   if (req.method !== "POST") {
     return html(`Stop emails about ${what}?`, `<form method="post" action="${esc(u.pathname)}?k=${encodeURIComponent(key)}&amp;t=${kind}" style="margin:0"><button style="font:400 15px/15px 'Industry','Saira',-apple-system,Helvetica,Arial,sans-serif;background:#FF0000;color:#F4F1E9;border:0;border-radius:12px;height:44px;padding:0 20px;cursor:pointer;box-shadow:0 0 3px rgba(255,0,0,.65),0 0 9px rgba(255,0,0,.45),0 0 20px rgba(255,0,0,.25)">Yes, stop them</button></form><span style="display:block;margin-top:16px;font-size:13px;color:rgba(244,241,233,.55)">Emails you ask for yourself (sign-in codes) still arrive.</span>`);
   }
@@ -297,6 +297,9 @@ export async function prefsByEmail(ctx: QueryCtx, emails: string[]) {
   return out;
 }
 
+/** Notes stop when asked for directly, or (rows from before notes had their own switch) when both others are off. */
+const notesOff = (p: { versionsOff?: boolean; repliesOff?: boolean; notesOff?: boolean }) => p.notesOff ?? (!!p.versionsOff && !!p.repliesOff);
+
 // ---------- the client's own choice (Settings › "Email me when something new arrives", Phase 1) ----------
 // One switch for the client: off stops both kinds (new versions and replies); on turns both back on.
 
@@ -304,8 +307,8 @@ export const myPrefs = query({
   args: {},
   handler: async (ctx) => {
     const me = await requireSignedIn(ctx);
-    const p = await prefsRow(ctx, me.email);
-    return { on: !(p?.versionsOff && p?.repliesOff) };
+    const rows = await myPrefRows(ctx, me.email);
+    return { on: !(rows.length && rows.every((p) => p.versionsOff && p.repliesOff && notesOff(p))) };
   },
 });
 
@@ -313,21 +316,33 @@ export const setMine = mutation({
   args: { on: v.boolean() },
   handler: async (ctx, { on }) => {
     const me = await requireSignedIn(ctx);
-    const row = await prefsFor(ctx, me.email);
-    await ctx.db.patch(row._id, { versionsOff: !on, repliesOff: !on, updatedAt: Date.now() });
+    // Review (Oct 29): a client of several businesses has one prefs row per business; the switch sets all of them.
+    const now = Date.now();
+    const have = await myPrefRows(ctx, me.email);
+    for (const biz of await clientBusinesses(ctx, me.email)) {
+      const row = have.find((r) => String(r.businessId ?? "") === biz);
+      if (row) await ctx.db.patch(row._id, { versionsOff: !on, repliesOff: !on, notesOff: !on, updatedAt: now });
+      else await ctx.db.insert("emailPrefs", { businessId: biz as Doc<"businesses">["_id"], email: me.email, key: randomToken(18), versionsOff: !on, repliesOff: !on, notesOff: !on, updatedAt: now });
+    }
     return null;
   },
 });
 
-/** The one-email switch (Phase 1 step 5): the Inbox item for the same event notes that its email went out. */
-export const markInboxEmailed = internalMutation({
-  args: { key: v.string(), email: v.string() },
-  handler: async (ctx, { key, email }) => {
-    const item = await ctx.db.query("inboxItems").withIndex("by_key", (q) => q.eq("key", `${key}:${email.toLowerCase()}`)).first();
-    if (item && !item.emailedAt) await ctx.db.patch(item._id, { emailedAt: Date.now() });
-    return null;
-  },
-});
+/** The businesses this person is a client of (a live invite), as ids. */
+async function clientBusinesses(ctx: QueryCtx | MutationCtx, email: string) {
+  const def = (await defaultBusiness(ctx))?._id ?? null;
+  const out = new Set<string>();
+  for (const i of await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()) if (!i.revokedAt && (i.businessId ?? def)) out.add(String(i.businessId ?? def));
+  return [...out];
+}
+/** This person's prefs rows in those businesses (an untagged row counts as the default business's). */
+async function myPrefRows(ctx: QueryCtx | MutationCtx, email: string) {
+  const def = (await defaultBusiness(ctx))?._id ?? null;
+  const mine = new Set(await clientBusinesses(ctx, email));
+  return (await ctx.db.query("emailPrefs").withIndex("by_email", (q) => q.eq("email", email)).collect())
+    .map((r) => ({ ...r, businessId: (r.businessId ?? def ?? undefined) as typeof r.businessId }))
+    .filter((r) => mine.has(String(r.businessId ?? "")));
+}
 
 // ---------- a note from the business (Inbox alert layout, from updates@) ----------
 
@@ -347,10 +362,10 @@ export const noteEmails = internalAction({
     const d = await ctx.runQuery(internal.emails.noteEmailData, { noteId });
     if (!d || !d.emails.length) return { sent: 0 };
     const ok: Array<{ email: string; key: string }> = await ctx.runMutation(internal.emails.recipients, { emails: d.emails, kind: "notes" });
-    const m = noteMail(d.brand, d);
     let sent = 0;
     for (const r of ok) {
-      if (await deliver(ctx, `note:${noteId}:${r.email}`, "notes", r.email, m, undefined, d.brand.replyTo)) { sent++; await ctx.runMutation(internal.emails.markInboxEmailed, { key: `note:${noteId}`, email: r.email }); }
+      const m = noteMail(d.brand, { ...d, unsub: unsubUrl(r.key, "notes") });
+      if (await deliver(ctx, `note:${noteId}:${r.email}`, "notes", r.email, m, unsubUrl(r.key, "notes"), d.brand.replyTo)) { sent++; await ctx.runMutation(internal.emails.markInboxEmailed, { key: `note:${noteId}`, email: r.email }); }
     }
     return { sent };
   },
@@ -375,5 +390,15 @@ export const portalInvite = internalAction({
     if (!d) return { sent: false };
     const m = portalInviteMail(d.brand, { name: d.name, email, hasAccount: d.hasAccount });
     return { sent: await deliver(ctx, `portal-invite:${email}:${sendKey}`, "invite", email, m, undefined, d.brand.replyTo) };
+  },
+});
+
+/** The one-email switch (Phase 1 step 5): the Inbox item for the same event notes that its email went out. */
+export const markInboxEmailed = internalMutation({
+  args: { key: v.string(), email: v.string() },
+  handler: async (ctx, { key, email }) => {
+    const item = await ctx.db.query("inboxItems").withIndex("by_key", (q) => q.eq("key", `${key}:${email.toLowerCase()}`)).first();
+    if (item && !item.emailedAt) await ctx.db.patch(item._id, { emailedAt: Date.now() });
+    return null;
   },
 });

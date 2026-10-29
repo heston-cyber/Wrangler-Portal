@@ -749,7 +749,7 @@
     "at": 1793289600000,
     "client": "Harbor Coffee",
     "kind": "draft",
-    "noteId": "0000000000000000010087inboxNotes",
+    "noteId": "0000000000000000010088inboxNotes",
     "title": "Shoot moved to Thursday, Nov 6"
    }
   ],
@@ -829,7 +829,7 @@
   ],
   "builder.listBuilds": [
    {
-    "_id": "000000000000000000010106wsBuilds",
+    "_id": "000000000000000000010110wsBuilds",
     "client": "",
     "createdAt": 1793289600000,
     "documentId": null,
@@ -837,7 +837,7 @@
     "updatedAt": 1793282400000
    },
    {
-    "_id": "000000000000000000010107wsBuilds",
+    "_id": "000000000000000000010111wsBuilds",
     "client": "",
     "createdAt": 1793289600000,
     "documentId": null,
@@ -847,7 +847,7 @@
   ],
   "builder.listTemplates": [
    {
-    "_id": "000000000000000010109wsTemplates",
+    "_id": "000000000000000010113wsTemplates",
     "blocks": 23,
     "description": "",
     "name": "Usage Release",
@@ -855,7 +855,7 @@
     "updatedAt": 1793289600000
    },
    {
-    "_id": "000000000000000010108wsTemplates",
+    "_id": "000000000000000010112wsTemplates",
     "blocks": 23,
     "description": "",
     "name": "Change Order",
@@ -863,7 +863,7 @@
     "updatedAt": 1793289600000
    },
    {
-    "_id": "000000000000000010092wsTemplates",
+    "_id": "000000000000000010096wsTemplates",
     "blocks": 23,
     "description": "Wrangler's standard agreement",
     "name": "Service Agreement",
@@ -873,8 +873,8 @@
   ],
   "builder.listClauses": [
    {
-    "_creationTime": 1793289600000.0938,
-    "_id": "00000000000000000010096wsClauses",
+    "_creationTime": 1793289600000.0977,
+    "_id": "00000000000000000010100wsClauses",
     "body": {
      "content": [
       {
@@ -905,8 +905,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.0986,
-    "_id": "00000000000000000010101wsClauses",
+    "_creationTime": 1793289600000.1025,
+    "_id": "00000000000000000010105wsClauses",
     "body": {
      "content": [
       {
@@ -937,8 +937,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.0918,
-    "_id": "00000000000000000010094wsClauses",
+    "_creationTime": 1793289600000.0957,
+    "_id": "00000000000000000010098wsClauses",
     "body": {
      "content": [
       {
@@ -960,8 +960,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.1016,
-    "_id": "00000000000000000010104wsClauses",
+    "_creationTime": 1793289600000.1055,
+    "_id": "00000000000000000010108wsClauses",
     "body": {
      "content": [
       {
@@ -1061,8 +1061,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.0977,
-    "_id": "00000000000000000010100wsClauses",
+    "_creationTime": 1793289600000.1016,
+    "_id": "00000000000000000010104wsClauses",
     "body": {
      "content": [
       {
@@ -1084,8 +1084,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.0996,
-    "_id": "00000000000000000010102wsClauses",
+    "_creationTime": 1793289600000.1035,
+    "_id": "00000000000000000010106wsClauses",
     "body": {
      "content": [
       {
@@ -1107,8 +1107,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.1025,
-    "_id": "00000000000000000010105wsClauses",
+    "_creationTime": 1793289600000.1064,
+    "_id": "00000000000000000010109wsClauses",
     "body": {
      "content": [
       {
@@ -1130,8 +1130,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.0967,
-    "_id": "00000000000000000010099wsClauses",
+    "_creationTime": 1793289600000.1006,
+    "_id": "00000000000000000010103wsClauses",
     "body": {
      "content": [
       {
@@ -1153,8 +1153,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.0957,
-    "_id": "00000000000000000010098wsClauses",
+    "_creationTime": 1793289600000.0996,
+    "_id": "00000000000000000010102wsClauses",
     "body": {
      "content": [
       {
@@ -1185,8 +1185,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.0928,
-    "_id": "00000000000000000010095wsClauses",
+    "_creationTime": 1793289600000.0967,
+    "_id": "00000000000000000010099wsClauses",
     "body": {
      "content": [
       {
@@ -1226,8 +1226,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.0908,
-    "_id": "00000000000000000010093wsClauses",
+    "_creationTime": 1793289600000.0947,
+    "_id": "00000000000000000010097wsClauses",
     "body": {
      "content": [
       {
@@ -1276,8 +1276,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.1006,
-    "_id": "00000000000000000010103wsClauses",
+    "_creationTime": 1793289600000.1045,
+    "_id": "00000000000000000010107wsClauses",
     "body": {
      "content": [
       {
@@ -1317,8 +1317,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.0947,
-    "_id": "00000000000000000010097wsClauses",
+    "_creationTime": 1793289600000.0986,
+    "_id": "00000000000000000010101wsClauses",
     "body": {
      "content": [
       {
@@ -1443,7 +1443,7 @@
     "name": "Floor Trader",
     "people": 0,
     "projects": 1,
-    "toReview": 1,
+    "toReview": 0,
     "toSign": 0
    },
    {
@@ -1545,7 +1545,7 @@
      "state": "notes",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
-     "token": "acmld9O2oADZPSgQ1Ebi1w",
+     "token": "NnUD3kHS4SBqgiJUNipE7Q",
      "versionId": "000000000000000000010028versions",
      "videoId": "00000000000000000000010024videos"
     },
@@ -1559,7 +1559,7 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
-     "token": "acmld9O2oADZPSgQ1Ebi1w",
+     "token": "NnUD3kHS4SBqgiJUNipE7Q",
      "versionId": "000000000000000000010027versions",
      "videoId": "00000000000000000000010024videos"
     },
@@ -1573,7 +1573,7 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
-     "token": "acmld9O2oADZPSgQ1Ebi1w",
+     "token": "NnUD3kHS4SBqgiJUNipE7Q",
      "versionId": "000000000000000000010026versions",
      "videoId": "00000000000000000000010024videos"
     },
@@ -1587,7 +1587,7 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
      "title": "Harbor Coffee 15s cutdown",
-     "token": "acmld9O2oADZPSgQ1Ebi1w",
+     "token": "NnUD3kHS4SBqgiJUNipE7Q",
      "versionId": "000000000000000000010032versions",
      "videoId": "00000000000000000000010030videos"
     },
@@ -1601,7 +1601,7 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
-     "token": "acmld9O2oADZPSgQ1Ebi1w",
+     "token": "NnUD3kHS4SBqgiJUNipE7Q",
      "versionId": "000000000000000000010025versions",
      "videoId": "00000000000000000000010024videos"
     },
@@ -1615,7 +1615,7 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
      "title": "Harbor Coffee 15s cutdown",
-     "token": "acmld9O2oADZPSgQ1Ebi1w",
+     "token": "NnUD3kHS4SBqgiJUNipE7Q",
      "versionId": "000000000000000000010031versions",
      "videoId": "00000000000000000000010030videos"
     }
@@ -1673,7 +1673,7 @@
   ],
   "inbox.notes": [
    {
-    "_id": "0000000000000000010087inboxNotes",
+    "_id": "0000000000000000010088inboxNotes",
     "client": "Harbor Coffee",
     "clientId": "0000000000000000000010003clients",
     "createdAt": 1793289600000,
@@ -1693,7 +1693,7 @@
     "updatedAt": 1793289600000
    },
    {
-    "_id": "0000000000000000010086inboxNotes",
+    "_id": "0000000000000000010087inboxNotes",
     "client": "Harbor Coffee",
     "clientId": "0000000000000000000010003clients",
     "createdAt": 1793289600000,
@@ -1738,9 +1738,9 @@
     "at": 1793289600000,
     "draftedBy": "claude",
     "emailed": false,
-    "key": "note:0000000000000000010087inboxNotes",
+    "key": "note:0000000000000000010088inboxNotes",
     "kind": "note",
-    "open": "/sent/new?note=0000000000000000010087inboxNotes",
+    "open": "/sent/new?note=0000000000000000010088inboxNotes",
     "readBy": 0,
     "sentTo": 0,
     "subject": null,
@@ -1752,9 +1752,9 @@
     "at": 1793289600000,
     "draftedBy": "owner",
     "emailed": false,
-    "key": "note:0000000000000000010086inboxNotes",
+    "key": "note:0000000000000000010087inboxNotes",
     "kind": "note",
-    "open": "/sent/new?note=0000000000000000010086inboxNotes",
+    "open": "/sent/new?note=0000000000000000010087inboxNotes",
     "readBy": 0,
     "sentTo": 0,
     "subject": null,
@@ -1821,7 +1821,7 @@
   ],
   "inbox.forClient": [
    {
-    "_id": "0000000000000000010090inboxItems",
+    "_id": "0000000000000000010091inboxItems",
     "createdAt": 1793289600000,
     "documentId": null,
     "emailed": false,
@@ -1843,7 +1843,7 @@
     "title": "Reply on your note at 01:00:05:00"
    },
    {
-    "_id": "0000000000000000010089inboxItems",
+    "_id": "0000000000000000010090inboxItems",
     "createdAt": 1793289600000,
     "documentId": "d1",
     "emailed": false,
@@ -1865,7 +1865,7 @@
     "title": "Document to sign"
    },
    {
-    "_id": "0000000000000000010088inboxItems",
+    "_id": "0000000000000000010089inboxItems",
     "createdAt": 1793289600000,
     "documentId": null,
     "emailed": false,
@@ -1962,8 +1962,8 @@
    "title": "Shoot moved to Friday",
    "to": null
   },
-  "inbox.noteDetail#0000000000000000010086inboxNotes": {
-   "_id": "0000000000000000010086inboxNotes",
+  "inbox.noteDetail#0000000000000000010087inboxNotes": {
+   "_id": "0000000000000000010087inboxNotes",
    "attachment": null,
    "client": "Harbor Coffee",
    "clientId": "0000000000000000000010003clients",
@@ -1980,8 +1980,8 @@
    "title": "Cutdown ready next week",
    "to": null
   },
-  "inbox.noteDetail#0000000000000000010087inboxNotes": {
-   "_id": "0000000000000000010087inboxNotes",
+  "inbox.noteDetail#0000000000000000010088inboxNotes": {
+   "_id": "0000000000000000010088inboxNotes",
    "attachment": null,
    "client": "Harbor Coffee",
    "clientId": "0000000000000000000010003clients",
@@ -2322,8 +2322,8 @@
     "projectId": null,
     "state": "on",
     "sub": "26127 Harbor Coffee Launch",
-    "token": "u_4u-0Ik-T1k9llKclbKkQ",
-    "url": "https://app.wranglerportal.com/s/u_4u-0Ik-T1k9llKclbKkQ",
+    "token": "8anYd4jVJcZrrwaz0VbIiA",
+    "url": "https://app.wranglerportal.com/s/8anYd4jVJcZrrwaz0VbIiA",
     "videoId": "00000000000000000000010024videos",
     "who": "link"
    },
@@ -2362,8 +2362,8 @@
     "projectId": "000000000000000000010020projects",
     "state": "on",
     "sub": "Harbor Coffee",
-    "token": "acmld9O2oADZPSgQ1Ebi1w",
-    "url": "https://app.wranglerportal.com/s/acmld9O2oADZPSgQ1Ebi1w",
+    "token": "NnUD3kHS4SBqgiJUNipE7Q",
+    "url": "https://app.wranglerportal.com/s/NnUD3kHS4SBqgiJUNipE7Q",
     "videoId": null,
     "who": "invited"
    }
@@ -2404,8 +2404,8 @@
     "projectId": null,
     "state": "on",
     "sub": "26127 Harbor Coffee Launch",
-    "token": "u_4u-0Ik-T1k9llKclbKkQ",
-    "url": "https://app.wranglerportal.com/s/u_4u-0Ik-T1k9llKclbKkQ",
+    "token": "8anYd4jVJcZrrwaz0VbIiA",
+    "url": "https://app.wranglerportal.com/s/8anYd4jVJcZrrwaz0VbIiA",
     "videoId": "00000000000000000000010024videos",
     "who": "link"
    },
@@ -2444,8 +2444,8 @@
     "projectId": "000000000000000000010020projects",
     "state": "on",
     "sub": "Harbor Coffee",
-    "token": "acmld9O2oADZPSgQ1Ebi1w",
-    "url": "https://app.wranglerportal.com/s/acmld9O2oADZPSgQ1Ebi1w",
+    "token": "NnUD3kHS4SBqgiJUNipE7Q",
+    "url": "https://app.wranglerportal.com/s/NnUD3kHS4SBqgiJUNipE7Q",
     "videoId": null,
     "who": "invited"
    }
@@ -2453,9 +2453,9 @@
   "sign.pendingRequests": [],
   "approvals.forVideo": [],
   "sign.requestsFor": [],
-  "builder.getBuild#000000000000000000010106wsBuilds": {
-   "_creationTime": 1793289600000.1035,
-   "_id": "000000000000000000010106wsBuilds",
+  "builder.getBuild#000000000000000000010110wsBuilds": {
+   "_creationTime": 1793289600000.1074,
+   "_id": "000000000000000000010110wsBuilds",
    "blocks": {
     "content": [
      {
@@ -2597,7 +2597,7 @@
        "rows": [
         {
          "description": "Video production (describe the deliverables)",
-         "id": "k53s4fod",
+         "id": "k7xvjg6k",
          "qty": 1,
          "rate": 0
         }
@@ -3387,7 +3387,7 @@
     "separator": "line",
     "text": "#1d1d1f"
    },
-   "templateId": "000000000000000010092wsTemplates",
+   "templateId": "000000000000000010096wsTemplates",
    "title": "Spirit Days Service Agreement",
    "updatedAt": 1793282400000
   },
@@ -4144,7 +4144,7 @@
     "kind": "project",
     "label": "26127 Harbor Coffee Launch",
     "sub": "Harbor Coffee",
-    "token": "acmld9O2oADZPSgQ1Ebi1w",
+    "token": "NnUD3kHS4SBqgiJUNipE7Q",
     "videos": [
      {
       "_id": "00000000000000000000010030videos",
@@ -4178,10 +4178,11 @@
   "inbox.mine": {
    "items": [
     {
-     "_id": "0000000000000000010090inboxItems",
+     "_id": "0000000000000000010091inboxItems",
      "createdAt": 1793289600000,
      "documentId": null,
      "emailed": false,
+     "from": "Wrangler Productions",
      "kind": "reply",
      "link": "/s/x/v/00000000000000000000010024videos",
      "linkLabel": null,
@@ -4191,10 +4192,11 @@
      "title": "Reply on your note at 01:00:05:00"
     },
     {
-     "_id": "0000000000000000010089inboxItems",
+     "_id": "0000000000000000010090inboxItems",
      "createdAt": 1793289600000,
      "documentId": "d1",
      "emailed": false,
+     "from": "Wrangler Productions",
      "kind": "to_sign",
      "link": "/x/kittokenkittokenkit1",
      "linkLabel": null,
@@ -4204,10 +4206,11 @@
      "title": "Document to sign"
     },
     {
-     "_id": "0000000000000000010088inboxItems",
+     "_id": "0000000000000000010089inboxItems",
      "createdAt": 1793289600000,
      "documentId": null,
      "emailed": false,
+     "from": "Wrangler Productions",
      "kind": "cut_ready",
      "link": "/s/x/v/00000000000000000000010024videos",
      "linkLabel": null,
@@ -4221,6 +4224,7 @@
      "createdAt": 1793289600000,
      "documentId": null,
      "emailed": false,
+     "from": "Wrangler Productions",
      "kind": "note",
      "link": null,
      "linkLabel": null,
@@ -4257,7 +4261,7 @@
    "cuts": [
     {
      "lengthSec": 30,
-     "link": "/s/acmld9O2oADZPSgQ1Ebi1w/v/00000000000000000000010024videos?version=4",
+     "link": "/s/NnUD3kHS4SBqgiJUNipE7Q/v/00000000000000000000010024videos?version=4",
      "number": 4,
      "sharedAt": 1793289600000,
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
@@ -4266,7 +4270,7 @@
     },
     {
      "lengthSec": 30,
-     "link": "/s/acmld9O2oADZPSgQ1Ebi1w/v/00000000000000000000010030videos?version=2",
+     "link": "/s/NnUD3kHS4SBqgiJUNipE7Q/v/00000000000000000000010030videos?version=2",
      "number": 2,
      "sharedAt": 1793289600000,
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
@@ -4288,7 +4292,7 @@
   "emails.myPrefs": {
    "on": true
   },
-  "shares.open#acmld9O2oADZPSgQ1Ebi1w": {
+  "shares.open#NnUD3kHS4SBqgiJUNipE7Q": {
    "access": "comment",
    "allVersions": true,
    "client": "Harbor Coffee",
@@ -4307,7 +4311,7 @@
    ],
    "state": "ok",
    "sub": "Harbor Coffee",
-   "token": "acmld9O2oADZPSgQ1Ebi1w",
+   "token": "NnUD3kHS4SBqgiJUNipE7Q",
    "videos": [
     {
      "_id": "00000000000000000000010024videos",
@@ -4443,7 +4447,7 @@
    },
    "who": "invited"
   },
-  "shares.open#u_4u-0Ik-T1k9llKclbKkQ": {
+  "shares.open#8anYd4jVJcZrrwaz0VbIiA": {
    "access": "view",
    "allVersions": true,
    "client": "Harbor Coffee",
@@ -4462,7 +4466,7 @@
    ],
    "state": "ok",
    "sub": "26127 Harbor Coffee Launch",
-   "token": "u_4u-0Ik-T1k9llKclbKkQ",
+   "token": "8anYd4jVJcZrrwaz0VbIiA",
    "videos": [
     {
      "_id": "00000000000000000000010024videos",
@@ -4766,8 +4770,8 @@
  },
  "ids": {
   "shares": [
-   "acmld9O2oADZPSgQ1Ebi1w",
-   "u_4u-0Ik-T1k9llKclbKkQ"
+   "NnUD3kHS4SBqgiJUNipE7Q",
+   "8anYd4jVJcZrrwaz0VbIiA"
   ],
   "harbor": "0000000000000000000010003clients",
   "video": "00000000000000000000010024videos",
@@ -4776,8 +4780,8 @@
   "docDraft": "000000000000000010060wsDocuments",
   "notes": [
    "0000000000000000010083inboxNotes",
-   "0000000000000000010086inboxNotes",
-   "0000000000000000010087inboxNotes"
+   "0000000000000000010087inboxNotes",
+   "0000000000000000010088inboxNotes"
   ]
  }
 }

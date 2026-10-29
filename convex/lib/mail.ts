@@ -71,8 +71,9 @@ export function brandFrom(b: { name?: string; legalName?: string | null; ownerNa
 
 /** "Wrangler Productions <review@wranglerportal.com>": the business's name on one of the portal's sending addresses. */
 export function fromLine(brand: MailBrand, address: "review" | "contracts" | "updates") {
-  const name = brand.fromName.replace(/["<>\r\n]/g, "").trim() || "WranglerPortal";
-  return `${name} <${address}@wranglerportal.com>`;
+  const name = brand.fromName.replace(/["\\<>\r\n]/g, "").trim() || "WranglerPortal";
+  // A plain word-only name goes as is; anything with commas, colons and the like is quoted (RFC 5322).
+  return /^[\p{L}\p{N} &'\-]+$/u.test(name) ? `${name} <${address}@wranglerportal.com>` : `"${name}" <${address}@wranglerportal.com>`;
 }
 
 function blockHtml(b: Block, brand: MailBrand): string {

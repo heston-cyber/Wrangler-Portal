@@ -106,6 +106,7 @@ export default defineSchema({
     key: v.string(),
     versionsOff: v.optional(v.boolean()),
     repliesOff: v.optional(v.boolean()),
+    notesOff: v.optional(v.boolean()), // Phase 1: notes from the business (missing = on unless both others are off)
     updatedAt: v.number(),
   }).index("by_email", ["email"]).index("by_key", ["key"]),
   emailLog: defineTable({

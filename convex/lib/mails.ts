@@ -169,7 +169,7 @@ export function signedCopyMail(b: MailBrand, d: {
 }
 
 // ---------- Inbox alert: a note from the business ----------
-export function noteMail(b: MailBrand, d: { title: string; text: string; link: string | null; linkLabel: string | null }): Mail {
+export function noteMail(b: MailBrand, d: { title: string; text: string; link: string | null; linkLabel: string | null; unsub?: string }): Mail {
   const href = d.link ? (/^https:\/\//.test(d.link) ? d.link : `${SITE()}${d.link}`) : `${SITE()}/inbox`;
   return mk(b, "updates", d.title, [
     { t: "eyebrow", text: `A note from ${b.name}` },
@@ -178,6 +178,7 @@ export function noteMail(b: MailBrand, d: { title: string; text: string; link: s
     { t: "button", label: d.link && d.linkLabel ? d.linkLabel : "Open in the portal", href },
   ], [
     { t: "small", text: `${b.footerName} · Replies go to ${b.replyTo} ·`, link: { label: "Email settings", href: `${SITE()}/settings` } },
+    ...(d.unsub ? [{ t: "small", text: "Stop emails about notes:", link: { label: "unsubscribe", href: d.unsub } } as Block] : []),
     ...(!b.isDefault ? [{ t: "small", text: "Powered by WranglerPortal" } as Block] : []),
   ], d.text.slice(0, 120));
 }

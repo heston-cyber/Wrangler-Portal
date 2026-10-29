@@ -176,9 +176,12 @@ describe("a client's people, the client page, settings", () => {
     await expect(w.boss.mutation(api.clients.addPerson, { clientId: w.harbor, email: "x@y.example", role: "contact" })).rejects.toThrow();
     await expect(w.boss.mutation(api.clients.removePerson, { personId: sam })).resolves.toBeNull(); // invisible to B: nothing happens
     expect((await w.heston.query(api.clients.people, { clientId: w.harbor })).length).toBe(3);
-    // "{n} to sign · {n} to review": Harbor's one cut hasn't been watched by anyone outside the business.
-    const dir = await w.heston.query(api.clients.directory, {});
-    expect(dir.find((c: { name: string }) => c.name === "Harbor Coffee")).toMatchObject({ toSign: 0, toReview: 1, people: 3, active: 1 });
+    // "{n} to sign · {n} to review": Harbor's one cut isn't shared yet, so it isn't theirs to review (review, Oct 29).
+    const harbor = async () => (await w.heston.query(api.clients.directory, {})).find((c: { name: string }) => c.name === "Harbor Coffee");
+    expect(await harbor()).toMatchObject({ toSign: 0, toReview: 0, people: 3, active: 1 });
+    // Shared with them and still unwatched: one to review.
+    await w.heston.mutation(api.shares.create, { target: { kind: "project", projectId: w.p }, access: "view", who: "link", allVersions: true, downloads: false, emailNewVersions: false });
+    expect(await harbor()).toMatchObject({ toReview: 1 });
     expect((await w.boss.query(api.clients.directory, {})).map((c: { name: string }) => c.name)).toEqual(["Juniper"]);
     const page = await w.heston.query(api.clients.page, { clientId: w.harbor });
     expect(page.projects).toHaveLength(1);
@@ -376,5 +379,68 @@ describe("Phase 1 emails (step 5)", () => {
     const inv = mails.filter((m) => m.subject === "Heston invited you to WranglerPortal");
     expect(inv.map((m) => [m.to, m.from])).toEqual([["sam@harbor.example", "Wrangler Productions <review@wranglerportal.com>"]]);
     expect(inv[0].text).toContain("https://app.wranglerportal.com/?invited=sam%40harbor.example");
+  });
+});
+
+describe("independent review fixes (Oct 29)", () => {
+  test("R1: a link share can't approve, even for a signed-in client of another business", async () => {
+    const w = await world();
+    const base = { allVersions: true, downloads: false, emailNewVersions: false };
+    await w.heston.mutation(api.shares.create, { target: { kind: "video", videoId: w.vid }, ...base, access: "comment", who: "link" });
+    const token = await w.t.run(async (ctx) => (await ctx.db.query("shares").collect())[0].token as string);
+    await expect(w.bobC.mutation(api.approvals.approve, { versionId: w.ver, share: { token } })).rejects.toThrow(/Only the people/);
+    await expect(w.mayaC.mutation(api.approvals.approve, { versionId: w.ver, share: { token } })).rejects.toThrow(/Only the people/);
+    expect(await w.heston.query(api.approvals.forVideo, { videoId: w.vid })).toEqual([]);
+  });
+
+  test("R2: a revoked invite takes the person's Inbox with it", async () => {
+    const w = await world();
+    const noteId = await w.heston.mutation(api.inbox.saveNote, { clientId: w.harbor, title: "Secret", text: "Budget is 10k" });
+    await w.heston.mutation(api.inbox.sendNote, { noteId });
+    expect((await w.mayaC.query(api.inbox.mine, {})).items.map((i: { title: string; from: string }) => [i.title, i.from])).toEqual([["Secret", "Wrangler Productions"]]);
+    const inv = await w.t.run(async (ctx) => (await ctx.db.query("invites").collect()).find((i) => i.email === "maya@harbor.example")!._id);
+    await w.heston.mutation(api.clients.revokeInvite, { inviteId: inv });
+    const after = await w.mayaC.query(api.inbox.mine, {}).catch(() => ({ items: [], unread: 0 }));
+    expect(after.items).toEqual([]);
+    expect(await w.mayaC.query(api.inbox.unreadCount, {}).catch(() => 0)).toBe(0);
+  });
+
+  test("R3: the email switch works for a client of two businesses and sets both", async () => {
+    const w = await world();
+    // Bob (a client of B) is also invited by A.
+    await w.t.run(async (ctx) => {
+      const bob = (await ctx.db.query("users").collect()).find((u) => u.email === "bob@juniper.example")!;
+      await ctx.db.insert("invites", { businessId: w.A, email: "bob@juniper.example", createdAt: 9, acceptedAt: 10, userId: bob._id });
+      await ctx.db.insert("memberships", { businessId: w.A, email: "bob@juniper.example", userId: bob._id, role: "client", createdAt: 9 });
+    });
+    await w.bobC.mutation(api.emails.setMine, { on: false });
+    expect(await w.bobC.query(api.emails.myPrefs, {})).toEqual({ on: false });
+    const rows = await w.t.run(async (ctx) => (await ctx.db.query("emailPrefs").collect()).filter((p) => p.email === "bob@juniper.example").map((p) => [p.businessId === w.A ? "A" : p.businessId === w.B ? "B" : "?", p.versionsOff, p.repliesOff, p.notesOff]).sort());
+    expect(rows).toEqual([["A", true, true, true], ["B", true, true, true]]);
+    await w.bobC.mutation(api.emails.setMine, { on: true });
+    expect(await w.bobC.query(api.emails.myPrefs, {})).toEqual({ on: true });
+  });
+
+  test("R4–R8: a comma in the from-name is quoted; notes carry an unsubscribe; a bad id reads as missing; /\\ links are refused", async () => {
+    const { brandFrom, fromLine } = await import("../convex/lib/mail");
+    const { noteMail } = await import("../convex/lib/mails");
+    const b = brandFrom({ name: "Acme, Inc." }, { ownerEmail: "o@acme.example", logoUrl: null, isDefault: false });
+    expect(fromLine(b, "updates")).toBe('"Acme, Inc." <updates@wranglerportal.com>');
+    expect(fromLine(brandFrom({ name: "Juniper & Ash" }, { ownerEmail: "x@y", logoUrl: null, isDefault: false }), "review")).toBe("Juniper & Ash <review@wranglerportal.com>");
+    expect(noteMail(b, { title: "T", text: "", link: null, linkLabel: null, unsub: "https://x/email/stop?k=1&t=notes" }).text).toContain("https://x/email/stop?k=1&t=notes");
+    const w = await world();
+    expect(await w.heston.query(api.clients.page, { clientId: "not-an-id" })).toBeNull();
+    expect(await w.heston.query(api.inbox.noteDetail, { noteId: "nope" })).toBeNull();
+    await expect(w.heston.mutation(api.inbox.saveNote, { clientId: w.harbor, title: "x", text: "", link: "/\\evil.com" })).rejects.toThrow(/A link must be/);
+  });
+
+  test("R7: another business's account isn't shown as active on a client page", async () => {
+    const w = await world();
+    // A adds Bob (who has an account through B) and invites him: invited, not active, no sign-in time from B.
+    const personId = await w.heston.mutation(api.clients.addPerson, { clientId: w.harbor, email: "bob@juniper.example", role: "contact" });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ id: "x" }), { status: 200 })));
+    await w.heston.mutation(api.clients.invitePerson, { personId });
+    const bob = (await w.heston.query(api.clients.people, { clientId: w.harbor })).find((p: { email: string }) => p.email === "bob@juniper.example");
+    expect(bob.access.state).not.toBe("active");
   });
 });

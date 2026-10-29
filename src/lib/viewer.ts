@@ -14,6 +14,8 @@ export type Viewer = {
   home: string;
   /** A guest on a comment link who hasn't given a name yet: the page asks before the first note. */
   needsName: boolean;
+  /** A signed-in client on a share made for them (not a link share): they may approve a version. */
+  canApprove?: boolean;
   setGuestName?: (name: string) => void;
 };
 

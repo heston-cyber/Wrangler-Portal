@@ -28,6 +28,20 @@ export async function hasAccess(ctx: QueryCtx | MutationCtx, businessId: Id<"bus
   return invites.some((i) => !i.revokedAt && (i.businessId ?? def) === businessId);
 }
 
+/** Review (Oct 29): the businesses this email has a live invite from. A person whose invite was revoked keeps
+ *  their account (and its client role), so their own Inbox is filtered by this, not by the role. */
+export async function liveBusinesses(ctx: QueryCtx | MutationCtx, email: string): Promise<Set<string>> {
+  const def = (await defaultBusiness(ctx))?._id ?? null;
+  const invites = await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", clean(email))).collect();
+  return new Set(invites.filter((i) => !i.revokedAt).map((i) => String(i.businessId ?? def)));
+}
+export async function myItems(ctx: QueryCtx | MutationCtx, email: string) {
+  const live = await liveBusinesses(ctx, email);
+  const def = (await defaultBusiness(ctx))?._id ?? null;
+  return (await ctx.db.query("inboxItems").withIndex("by_email", (q) => q.eq("email", email)).order("desc").collect())
+    .filter((i) => live.has(String(i.businessId ?? def)));
+}
+
 /** The client this person belongs to in this business, if they're one of a client's people. */
 export async function clientOfEmail(ctx: QueryCtx | MutationCtx, businessId: Id<"businesses">, email: string): Promise<Id<"clients"> | undefined> {
   const def = (await defaultBusiness(ctx))?._id ?? null;

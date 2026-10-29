@@ -27,7 +27,7 @@ export function useSignedCopy(show: (m: string) => void) {
 function NoteBody({ it, business }: { it: Item; business: string }) {
   return (
     <div className="ci-note">
-      <p className="from">A note from {business} · {Day(it.createdAt)}, {timeOfDay(it.createdAt)}</p>
+      <p className="from">A note from {it.from ?? business} · {Day(it.createdAt)}, {timeOfDay(it.createdAt)}</p>
       {it.text && it.text.split(/\n+/).map((p, i) => <p key={i} className="txt">{p}</p>)}
       {it.link && (/^https:\/\//.test(it.link) ? <a className="btn sm" href={it.link}>{it.linkLabel ?? "Open"}</a> : <ButtonLink size="sm" to={it.link}>{it.linkLabel ?? "Open in the portal"}</ButtonLink>)}
     </div>
@@ -69,7 +69,7 @@ export default function ClientInbox({ itemId }: { itemId: string | null }) {
         <div className="ci-phonenote">
           <a className="wp-setback" {...linkProps("/inbox")}><Icon name="arrow-left" size={20} />Inbox</a>
           <section className="wp-card glass ci-notecard">
-            <span className="wp-eyebrow"><Icon name="mail" size={16} />A note from {business}</span>
+            <span className="wp-eyebrow"><Icon name="mail" size={16} />A note from {open.from ?? business}</span>
             <h1 className="wp-h4">{open.title}</h1>
             <p className="when">{Day(open.createdAt)}, {timeOfDay(open.createdAt)}</p>
             {open.text && open.text.split(/\n+/).map((p, i) => <p key={i} className="txt">{p}</p>)}

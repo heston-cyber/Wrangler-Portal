@@ -1,6 +1,7 @@
 // Client approval (Gate 4, Oct 28; Phase 1): a signed-in client can approve the version on screen. It deletes nothing
 // and is separate from the owner's Approve final. Signed-in clients only (no guests); no email; it shows on the
 // owner's video page (chip and version tag), in Activity and on Home.
+import { sameBusiness } from "./lib/shareAccess";
 import { mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { accessToVersion, accessToVideo, shareArg } from "./lib/viewer";
@@ -11,6 +12,11 @@ export const approve = mutation({
   handler: async (ctx, { versionId, share }) => {
     const { access, version } = await accessToVersion(ctx, versionId, share);
     if (access.kind !== "client") throw new ConvexError(access.kind === "owner" ? "Clients approve versions; use Approve final for your own." : "Sign in to approve.");
+    // Review (Oct 29): only people the share was made for, with a live invite from its own business. A link share
+    // lets any signed-in account watch, including another business's client, so it can't approve.
+    if (access.share.who !== "invited") throw new ConvexError("Only the people this was shared with can approve it.");
+    const invited = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", access.email)).collect()).some((i) => !i.revokedAt && sameBusiness(access.share, i));
+    if (!invited) throw new ConvexError("Only the people this was shared with can approve it.");
     const had = await ctx.db.query("clientApprovals").withIndex("by_version_user", (q) => q.eq("versionId", versionId).eq("userId", access.userId)).unique();
     if (had) return { at: had.at, versionNumber: had.versionNumber };
     const at = Date.now();

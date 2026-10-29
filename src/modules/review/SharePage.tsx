@@ -94,6 +94,7 @@ export default function SharePage({ token, videoId, versionNumber, noteId, inShe
     can: ok.access, kind, name: ok.viewer?.name ?? (guestName || null), downloads: ok.downloads,
     home: isClient && ok.who === "invited" ? "/" : `/s/${token}`,
     needsName: kind === "guest" && ok.access === "comment" && !guestName,
+    canApprove: isClient && ok.who === "invited",
     setGuestName: (n) => { writeGuestName(n); setGuestNameState(n); },
   };
   const single = ok.kind === "video" ? ok.videos[0] ?? null : null;
