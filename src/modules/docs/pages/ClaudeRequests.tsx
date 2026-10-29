@@ -5,7 +5,8 @@ import { useMutation, useQuery } from "convex/react";
 import { Bot, Check, X } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { linkProps } from "../../../lib/router";
+import { Icon } from "../../../ui/Icon";
+import { ButtonLink } from "../../../ui/wp";
 import { Spinner } from "../../../ui/kit";
 import { central, errText } from "./common";
 
@@ -49,9 +50,9 @@ export function ClaudeRequestNotices() {
   return (
     <>
       {reqs.map((r) => (
-        <div key={r._id} className="ws-note" role="status">
-          <Bot size={16} /><span><b>Claude asks to {VERB[r.what]} {r.label}</b> · {r.title}. Waiting for you to confirm.</span>
-          <a className="btn sm" {...linkProps(`/sign/d/${r.documentId}`)}>Review</a>
+        <div key={r._id} className="wp-notice" role="status">
+          <Icon name="alert" size={20} /><span className="txt"><b>Claude asks to {VERB[r.what]} {r.label}</b> · {r.title}. Waiting for you to confirm.</span>
+          <ButtonLink size="sm" to={`/sign/d/${r.documentId}`}>Review</ButtonLink>
         </div>
       ))}
     </>
