@@ -6,7 +6,7 @@ import { NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
 import { Fragment, Slice, type Node as PMNode } from "@tiptap/pm/model";
 import { dropPoint } from "@tiptap/pm/transform";
 import { isAtom, newNodes, sectionClause, type InsertKind, type LineAttrs, type PNode, type TextSize } from "../../../../../convex/lib/wsBuilder";
-import { BlockSelection, PickSelection, blockRange, blockStartAt, pickActive, pickKey, pickStartAt } from "./blockSelection";
+import { BlockSelection, PickSelection, blockRange, blockStartAt, pickActive, pickKey, pickStartAt, unitAt, unitsBetween } from "./blockSelection";
 
 /** The lines (paragraphs) in the selection. */
 export function selectedLines(editor: Editor): PMNode[] {
@@ -215,7 +215,41 @@ export function setPickMode(editor: Editor, on: boolean, at?: number | null) {
   if (on) (document.activeElement as HTMLElement | null)?.blur?.();
 }
 export const isPicking = (editor: Editor | null) => !!editor && !editor.isDestroyed && pickActive(editor.state);
-export const picks = (editor: Editor): number[] => (editor.state.selection instanceof PickSelection ? editor.state.selection.picks : []);
+export const picks = (editor: Editor): number[] => {
+  const s = editor.state.selection;
+  if (s instanceof PickSelection) return s.picks;
+  if (s instanceof BlockSelection) return s.blocks().map((b) => b.pos);
+  return [];
+};
+/** Blocks are selected as blocks (by a handle, Esc, a drag across lines, or select mode). */
+export const blocksSelected = (editor: Editor | null) => !!editor && !editor.isDestroyed && picks(editor).length > 0;
+
+/** Craft on a computer: a click on a block's handle (or its ⋯) selects that block; Shift+click selects every block
+ *  from the last one clicked to this one; ⌘/Ctrl+click adds it, or takes it out. */
+export function clickBlock(editor: Editor, pos: number, how: "one" | "range" | "toggle") {
+  const { doc } = editor.state;
+  const p = unitAt(doc, pos);
+  if (p === null) return;
+  const cur = picks(editor);
+  const inside = (x: number, q: number) => x > q && x < q + doc.nodeAt(q)!.nodeSize; // x is a line inside container q
+  let next: number[];
+  if (how === "toggle") {
+    if (cur.includes(p)) next = cur.filter((x) => x !== p);
+    else if (cur.some((q) => inside(p, q))) next = cur; // its container is selected already
+    else next = [...cur.filter((x) => !inside(x, p)), p];
+  } else if (how === "range" && cur.length) next = unitsBetween(doc, cur[0], p);
+  else next = [p];
+  editor.view.dispatch(editor.state.tr.setSelection(next.length ? new PickSelection(doc, next) : TextSelection.near(doc.resolve(Math.min(p + 1, doc.content.size)))));
+  editor.view.focus();
+}
+/** Back to typing, at the end of the last selected block. */
+export function clearBlocks(editor: Editor) {
+  const ps = picks(editor);
+  const last = ps[ps.length - 1];
+  const { doc } = editor.state;
+  const at = last === undefined ? editor.state.selection.to : last + doc.nodeAt(last)!.nodeSize - 1;
+  editor.view.dispatch(editor.state.tr.setSelection(TextSelection.near(doc.resolve(Math.min(Math.max(at, 0), doc.content.size)), -1)));
+}
 
 /** Tick or untick the block under a tap. */
 export function togglePickAt(editor: Editor, coords: { left: number; top: number }): boolean {
@@ -239,7 +273,7 @@ export function deletePicked(editor: Editor): number {
   const tr = state.tr;
   for (const p of [...ps].sort((a, b) => b - a)) { const n = tr.doc.nodeAt(p); if (n) tr.delete(p, p + n.nodeSize); }
   if (!tr.doc.content.size) tr.insert(0, editor.schema.nodes.paragraph.create({ size: "body" }));
-  tr.setSelection(new PickSelection(tr.doc, []));
+  tr.setSelection(pickActive(state) ? new PickSelection(tr.doc, []) : TextSelection.near(tr.doc.resolve(Math.min(tr.mapping.map(ps[0]), tr.doc.content.size))));
   editor.view.dispatch(tr.scrollIntoView());
   return ps.length;
 }

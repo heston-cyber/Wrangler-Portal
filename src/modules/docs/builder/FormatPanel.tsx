@@ -4,7 +4,7 @@ import { useEffect, useReducer } from "react";
 import type { Editor } from "@tiptap/react";
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight, ArrowDown, ArrowUp, BookmarkPlus, Bold, ClipboardPaste, Copy, Indent, Italic, List, ListOrdered, Outdent,
-  Paintbrush, RemoveFormatting, Scissors, SquareDashed, SlidersHorizontal, Strikethrough, Trash2, Type, Underline, Ungroup, Group, Palette,
+  CopyPlus, Paintbrush, RemoveFormatting, Scissors, SquareDashed, SlidersHorizontal, Strikethrough, Trash2, Type, Underline, Ungroup, Group, Palette,
 } from "lucide-react";
 import { ContextMenu, MenuItem, MenuLabel, MenuSep, MenuSub } from "../../../ui/kit";
 import { TEXT_SIZES, type PNode, type TextSize } from "../../../../convex/lib/wsBuilder";
@@ -12,7 +12,7 @@ import {
   clearFormatting, currentSection, deleteBlock, duplicateBlock, lineAttr, moveBlock, selectedAtom, setAtom, setLines, setSection, setSize, toggleDeco, unwrapSection, wrapInSection,
 } from "./editor/commands";
 import { BlockSelection, PickSelection } from "./editor/blockSelection";
-import { isPicking, toggleListPicked } from "./editor/commands";
+import { canMovePicked, deletePicked, duplicatePicked, isPicking, movePicked, picks, toggleListPicked } from "./editor/commands";
 
 /** Re-render whenever the editor's selection or content changes, so the buttons show what's on. */
 export function useEditorTick(editor: Editor | null) {
@@ -95,7 +95,7 @@ function FormatBody({ editor, accent, onSaveClause }: { editor: Editor; accent: 
   const listOn = (k: "bulletList" | "orderedList") => (pickedKinds ? pickedKinds.size === 1 && pickedKinds.has(k) : editor.isActive(k));
   return (
     <>
-      {picked > 0 && <p className="caption secondary">{picked} block{picked === 1 ? "" : "s"} ticked: changes here apply to all of them.</p>}
+      {picked > 0 && <p className="caption secondary">{picked} block{picked === 1 ? "" : "s"} selected: changes here apply to all of them.</p>}
       {block && <p className="caption secondary">{editor.state.selection instanceof BlockSelection ? (editor.state.selection as BlockSelection).blocks().length : 0} blocks selected. Shift+↑/↓ adds more, Enter goes back to typing.</p>}
       <div className="field"><span className="ws-flabel">Text</span>
         <div className="wsb-sizes">{TEXT_SIZES.map((z, i) => <button key={z.key} className={`wsb-size ${z.key}${size === z.key ? " on" : ""}`} onMouseDown={keep} onClick={() => setSize(editor, z.key)} title={`${z.label} (${z.hint}) · Ctrl+${i + 1}`}>{z.label}</button>)}</div>
@@ -158,12 +158,14 @@ export function QuickMenu({ editor, at, accent, onClose, onMore, onSaveClause }:
   const color = lineAttr(editor, "color", null);
   const deco = lineAttr(editor, "deco", null);
   const sec = currentSection(editor);
-  const block = editor.state.selection instanceof BlockSelection;
+  const block = editor.state.selection instanceof BlockSelection || editor.state.selection instanceof PickSelection;
+  const n = block ? picks(editor).length : 0;
   const clip = (cmd: "copy" | "cut") => { editor.commands.focus(); document.execCommand(cmd); };
   const paste = async () => { try { const t = await navigator.clipboard.readText(); editor.chain().focus().insertContent(t).run(); } catch { editor.commands.focus(); } };
   const sizeHint: Record<TextSize, string> = { title: "H1", subtitle: "H2", heading: "H3", strong: "Bolded", body: "Regular text size", caption: "Fine print" };
   return (
     <ContextMenu at={at} onClose={onClose} label="Format">
+      {block && <MenuLabel>{n} block{n === 1 ? "" : "s"}</MenuLabel>}
       <MenuSub icon={<Type size={15} />} label="Text">
         {TEXT_SIZES.map((z, i) => <MenuItem key={z.key} kbd={`⌃${i + 1}`} checked={size === z.key} onSelect={() => setSize(editor, z.key)}>{z.label} <span className="mhint">({sizeHint[z.key]})</span></MenuItem>)}
       </MenuSub>
@@ -196,7 +198,12 @@ export function QuickMenu({ editor, at, accent, onClose, onMore, onSaveClause }:
       <MenuItem icon={<Scissors size={15} />} kbd="⌘X" onSelect={() => clip("cut")}>Cut</MenuItem>
       <MenuItem icon={<Copy size={15} />} kbd="⌘C" onSelect={() => clip("copy")}>Copy</MenuItem>
       <MenuItem icon={<ClipboardPaste size={15} />} kbd="⌘V" onSelect={() => void paste()}>Paste</MenuItem>
-      {block && <MenuItem icon={<Trash2 size={15} />} danger kbd="⌫" onSelect={() => editor.chain().focus().deleteSelection().run()}>Delete blocks</MenuItem>}
+      {block && <>
+        <MenuItem icon={<CopyPlus size={15} />} onSelect={() => duplicatePicked(editor)}>Duplicate</MenuItem>
+        <MenuItem icon={<ArrowUp size={15} />} disabled={!canMovePicked(editor)} onSelect={() => movePicked(editor, -1)}>Move up</MenuItem>
+        <MenuItem icon={<ArrowDown size={15} />} disabled={!canMovePicked(editor)} onSelect={() => movePicked(editor, 1)}>Move down</MenuItem>
+        <MenuItem icon={<Trash2 size={15} />} danger kbd="⌫" onSelect={() => { deletePicked(editor); editor.commands.focus(); }}>Delete {n === 1 ? "block" : "blocks"}</MenuItem>
+      </>}
       <MenuSep />
       <MenuItem icon={<SlidersHorizontal size={15} />} onSelect={onMore}>More in Format…</MenuItem>
       <MenuLabel>Shift+right-click for the browser's menu</MenuLabel>

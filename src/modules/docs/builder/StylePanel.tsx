@@ -75,7 +75,17 @@ export function StylePanel({ style, onChange, fonts, files, show }: { style: Sty
 
       <span className="label">Separator</span>
       <p className="caption secondary">How Divider blocks look (add one from Insert).</p>
-      <div className="ws-seg">{(["line", "thick", "dots", "none"] as const).map((x) => <button key={x} className={style.separator === x ? "on" : ""} onClick={() => set({ separator: x })}>{x[0].toUpperCase() + x.slice(1)}</button>)}</div>
+      {/* Each choice shows the divider itself, drawn in this document's page, muted and accent colours (Heston, Oct 29). */}
+      <div className="wsb-seppick" role="radiogroup" aria-label="Separator">{(["line", "thick", "dots", "none"] as const).map((x) => (
+        <button key={x} role="radio" aria-checked={style.separator === x} className={style.separator === x ? "on" : ""} onClick={() => set({ separator: x })}>
+          <span className="sample" style={{ background: style.page, ["--wsb-muted" as string]: style.muted, ["--wsb-accent" as string]: style.accent }}>
+            <span className="txt" style={{ background: style.muted }} />
+            <span className={`wsb-sep ${x}`} />
+            <span className="txt" style={{ background: style.muted }} />
+          </span>
+          <span className="nm">{x[0].toUpperCase() + x.slice(1)}</span>
+        </button>
+      ))}</div>
 
       <span className="label">Fonts</span>
       <FontPicker label="Headings" value={style.fonts.heading} fonts={fonts} onChange={(f) => set({ fonts: { ...style.fonts, heading: f } })} show={show} />

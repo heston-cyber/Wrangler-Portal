@@ -7,7 +7,7 @@
 // type, so the browser draws no text highlight; the blocks get a highlight class instead.
 import { Plugin, PluginKey, Selection, SelectionRange, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
-import { Slice, type Node as PMNode, type ResolvedPos } from "@tiptap/pm/model";
+import { Fragment, Slice, type Node as PMNode, type ResolvedPos } from "@tiptap/pm/model";
 import type { Mappable } from "@tiptap/pm/transform";
 
 const CONTAINERS = new Set(["doc", "section"]);
@@ -20,7 +20,9 @@ export function blockDepth($pos: ResolvedPos): number {
 
 export class BlockSelection extends Selection {
   constructor($from: ResolvedPos, $to: ResolvedPos, readonly anchorBlock: number, readonly headBlock: number) {
-    super($from, $to);
+    // The browser's own selection is collapsed at the start, so it paints no text highlight over the blocks (the app's
+    // selection colour would turn their text white); the blocks get the highlight class instead.
+    super($from, $from, [new SelectionRange($from, $to)]);
   }
   visible = false;
   map(doc: PMNode, mapping: Mappable): Selection {
@@ -56,17 +58,18 @@ export class PickSelection extends Selection {
     const ps = [...new Set(picks)].filter((p) => !!doc.nodeAt(p)).sort((a, b) => a - b);
     const ranges = ps.map((p) => new SelectionRange(doc.resolve(p), doc.resolve(p + doc.nodeAt(p)!.nodeSize)));
     if (!ranges.length) { const $s = Selection.atStart(doc).$from; ranges.push(new SelectionRange($s, $s)); }
-    super(ranges[0].$from, ranges[ranges.length - 1].$to, ranges);
+    super(ranges[0].$from, ranges[0].$from, ranges); // collapsed for the browser, like BlockSelection
     this.picks = ps;
   }
   visible = false;
   map(doc: PMNode, mapping: Mappable): Selection {
-    return new PickSelection(doc, this.picks.map((p) => pickStartAt(doc, mapping.map(p, -1))).filter((p): p is number => p !== null));
+    return new PickSelection(doc, this.picks.map((p) => unitAt(doc, mapping.map(p, -1))).filter((p): p is number => p !== null));
   }
   eq(other: Selection): boolean { return other instanceof PickSelection && other.picks.join() === this.picks.join(); }
   toJSON() { return { type: "wspick", picks: this.picks }; }
   static fromJSON(doc: PMNode, json: { picks: number[] }) { return new PickSelection(doc, json.picks ?? []); }
-  content() { return this.$from.doc.slice(this.from, this.to, true); }
+  // Just the ticked blocks (not what lies between them), so copy, cut and drag carry exactly those.
+  content() { const doc = this.$from.doc; return new Slice(Fragment.fromArray(this.picks.map((p) => doc.nodeAt(p)!)), 0, 0); }
   blocks(): Array<{ node: PMNode; pos: number }> { const doc = this.$from.doc; return this.picks.map((pos) => ({ node: doc.nodeAt(pos)!, pos })); }
 }
 try { Selection.jsonID("wspick", PickSelection as unknown as typeof Selection); } catch { /* registered already (hot reload) */ }
@@ -86,6 +89,23 @@ export function pickStartAt(doc: PMNode, pos: number): number | null {
   let best: number | null = null;
   for (const p of all) { if (p <= pos && pos < p + doc.nodeAt(p)!.nodeSize) best = p; }
   return best;
+}
+/** Like pickStartAt, but a container (a clause, a card) picked as a whole stays the container (computers: its handle). */
+export function unitAt(doc: PMNode, pos: number): number | null {
+  const n = pos >= 0 && pos < doc.content.size ? doc.nodeAt(pos) : null;
+  if (n?.type.name === "section" && doc.resolve(pos).parent.type.name === "doc") return pos;
+  return pickStartAt(doc, pos);
+}
+/** Every block from one position to another's block, in page order: a container wholly inside is one block. */
+export function unitsBetween(doc: PMNode, a: number, b: number): number[] {
+  const from = Math.min(a, b), endPos = Math.max(a, b), end = endPos + (doc.nodeAt(endPos)?.nodeSize ?? 1);
+  const out: number[] = [];
+  doc.forEach((n, pos) => {
+    if (pos + n.nodeSize <= from || pos >= end) return;
+    if (n.type.name === "section" && !(pos >= from && pos + n.nodeSize <= end)) n.forEach((c, off) => { const cp = pos + 1 + off; if (cp + c.nodeSize > from && cp < end) out.push(cp); });
+    else out.push(pos);
+  });
+  return out;
 }
 export const pickKey = new PluginKey<{ active: boolean }>("wsPick");
 export const pickActive = (state: EditorState) => !!pickKey.getState(state)?.active;
@@ -168,12 +188,15 @@ export function blockSelectionPlugin() {
     props: {
       decorations(state) {
         const sel = state.selection;
+        // On a computer (Craft-style), blocks clicked by their handle are a PickSelection without select mode's circles.
+        if (sel instanceof PickSelection && !pickActive(state)) return DecorationSet.create(state.doc, sel.blocks().map((b) => Decoration.node(b.pos, b.pos + b.node.nodeSize, { class: "wsb-bsel" })));
         if (!(sel instanceof BlockSelection)) return null;
         return DecorationSet.create(state.doc, sel.blocks().map((b) => Decoration.node(b.pos, b.pos + b.node.nodeSize, { class: "wsb-bsel" })));
       },
       handleKeyDown(view, e) {
         const { state } = view;
         const sel = state.selection;
+        if (sel instanceof PickSelection && !pickActive(state)) return pickKeys(view, sel, e);
         if (e.key === "Escape" && !(sel instanceof BlockSelection)) {
           const b = selectCurrentBlock(state);
           if (b) { view.dispatch(state.tr.setSelection(b)); return true; }
@@ -203,6 +226,26 @@ export function blockSelectionPlugin() {
         view.dispatch(state.tr.setSelection(TextSelection.near(state.doc.resolve(sel.to - 1), -1)));
         return false;
       },
+      // Craft: a drag across lines selects the whole blocks (a drag within one line stays a text selection).
+      handleDOMEvents: {
+        mousedown(view, e) {
+          if (e.button !== 0 || e.detail > 1) return false;
+          const up = () => {
+            window.removeEventListener("mouseup", up);
+            setTimeout(() => {
+              if (view.isDestroyed) return;
+              const s = view.state.selection;
+              if (!(s instanceof TextSelection) || s.empty) return;
+              const a = blockStartAt(view.state.doc, s.from), b = blockStartAt(view.state.doc, s.to - 1);
+              if (a === null || b === null || a === b) return;
+              const r = blockRange(view.state.doc, s.anchor < s.head ? a : b, s.anchor < s.head ? b : a);
+              if (r) view.dispatch(view.state.tr.setSelection(r));
+            }, 0);
+          };
+          window.addEventListener("mouseup", up);
+          return false;
+        },
+      },
       // A drop or paste over selected blocks replaces them, like any selection.
       handlePaste(view, _e, slice: Slice) {
         const sel = view.state.selection;
@@ -212,6 +255,36 @@ export function blockSelectionPlugin() {
       },
     },
   });
+}
+
+/** Keys while blocks are selected by their handles: Esc or Enter goes back to typing, Backspace deletes them, ↑/↓
+ *  moves to the block above or below (Shift adds it), and any other key types at the end of the last one. */
+function pickKeys(view: EditorView, sel: PickSelection, e: KeyboardEvent): boolean {
+  const { state } = view;
+  const ps = sel.picks;
+  const last = ps[ps.length - 1];
+  const toText = (at: number) => view.dispatch(state.tr.setSelection(TextSelection.near(state.doc.resolve(Math.min(at, state.doc.content.size)), -1)));
+  if (last === undefined) return false;
+  const lastEnd = last + state.doc.nodeAt(last)!.nodeSize;
+  if (e.key === "Escape" || e.key === "Enter") { toText(lastEnd - 1); return true; }
+  if (e.key === "Backspace" || e.key === "Delete") {
+    const tr = state.tr;
+    for (const p of [...ps].sort((a, b) => b - a)) { const n = tr.doc.nodeAt(p); if (n) tr.delete(p, p + n.nodeSize); }
+    if (!tr.doc.content.size) tr.insert(0, state.schema.nodes.paragraph.create({ size: "body" }));
+    tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(tr.mapping.map(ps[0]), tr.doc.content.size))));
+    view.dispatch(tr.scrollIntoView());
+    return true;
+  }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    const all = pickableBlocks(state.doc);
+    const i = all.indexOf(e.key === "ArrowDown" ? last : ps[0]) + (e.key === "ArrowDown" ? 1 : -1);
+    if (i < 0 || i >= all.length) return true;
+    view.dispatch(state.tr.setSelection(new PickSelection(state.doc, e.shiftKey ? [...ps, all[i]] : [all[i]])).scrollIntoView());
+    return true;
+  }
+  if (e.metaKey || e.ctrlKey || e.altKey || e.key === "Shift" || e.key.length > 1) return false;
+  toText(lastEnd - 1);
+  return false;
 }
 
 /** Drag in the page's left margin to select a run of blocks (the page wires the mouse events here). */
