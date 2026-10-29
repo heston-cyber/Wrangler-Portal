@@ -27,7 +27,7 @@ export type Block =
   | { t: "title"; text: string }                            // the note's title
   | { t: "button"; label: string; href: string }
   | { t: "link"; href: string; full?: boolean }                             // the address under a button, in the accent
-  | { t: "code"; code: string }                             // six boxes
+  | { t: "code"; code: string }                             // one selectable number in an accent box
   | { t: "image"; src: string; alt: string; href?: string } // a version's picture
   | { t: "quote"; rows: Array<{ who: string; text: string }> } // a note and its reply
   | { t: "card"; meta: string; text: string; href?: string } // one client note in the owner's alert
@@ -85,7 +85,10 @@ function blockHtml(b: Block, brand: MailBrand): string {
     case "title": return `<p style="margin:0;font:600 20px/23.6px ${TITLE};color:${C.primary}">${esc(b.text)}</p>`;
     case "button": return `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-radius:12px;background:${brand.accent}"><a href="${esc(b.href)}" style="display:inline-block;padding:13px 20px;font:400 15px/18px ${TITLE};color:${brand.onAccent};text-decoration:none;border-radius:12px">${esc(b.label)}</a></td></tr></table>`;
     case "link": return `<p style="margin:0;font:400 13px/18.2px ${MONO};word-break:break-all"><a href="${esc(b.href)}" style="color:${brand.accent};text-decoration:none">${esc(b.full ? b.href.replace(/^https?:\/\//, "") : shortLink(b.href))}</a></p>`;
-    case "code": return `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>${[...b.code].map((d) => `<td style="padding:0 8px 0 0"><div style="width:42px;height:50px;line-height:50px;text-align:center;border:1px solid ${C.edge};border-radius:10px;background:${C.block};font:600 22px/50px ${TITLE};color:${C.primary}">${esc(d)}</div></td>`).join("")}</tr></table>`;
+    // Heston (Oct 29): the code as one number in an accent-outlined box, so one click (or a long-press) selects all of it
+    // to copy. Email programs can't run a real Copy button; user-select:all makes a single click select the whole code
+    // where the program allows it, and phones offer it above the keyboard either way.
+    case "code": return `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td style="border:2px solid ${brand.accent};border-radius:12px;background:${C.block};padding:12px 22px"><span style="font:600 28px/34px ${TITLE};letter-spacing:8px;color:${C.primary};-webkit-user-select:all;user-select:all;white-space:nowrap">${esc(b.code)}</span></td></tr></table>`;
     case "image": {
       const img = `<img src="${esc(b.src)}" alt="${esc(b.alt)}" width="520" style="display:block;width:100%;max-width:520px;height:auto;border:0;border-radius:12px">`;
       return b.href ? `<a href="${esc(b.href)}">${img}</a>` : img;
