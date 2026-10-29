@@ -35,6 +35,37 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Copy the email key and the Bunny playback keys from live to dev (values never printed)
+        # Heston, Oct 29: "yes copy the keys". Live is only read here (env get); dev is written. Only what playback and
+        # sending need: no Bunny API, upload or storage keys (dev can't change or delete anything in Bunny), and nothing
+        # for Dropbox, Stripe or Slack. The email key is copied only once dev's email is locked to Heston (EMAIL_ONLY_TO).
+        env:
+          LIVE_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+          DEV_KEY: ${{ secrets.CONVEX_DEV_DEPLOY_KEY }}
+          PREVIEW_EMAILS: ${{ vars.PREVIEW_EMAILS }}
+        run: |
+          fix() { local k="${1//%7C/|}"; echo "${k//%7c/|}"; }
+          LIVE_KEY="$(fix "$LIVE_KEY")"; DEV_KEY="$(fix "$DEV_KEY")"
+          case "$LIVE_KEY" in prod:*) ;; *) echo "Live key missing or not a production key; nothing copied"; exit 0;; esac
+          case "$DEV_KEY" in dev:*) ;; *) echo "Refused: not a development key"; exit 1;; esac
+          # Lock email first, so the email key never lands on an unlocked dev.
+          CONVEX_DEPLOY_KEY="$DEV_KEY" npx convex env set EMAIL_ONLY_TO "${PREVIEW_EMAILS:-heston@wranglerproductions.com}" > /dev/null || exit 1
+          [ -n "$(CONVEX_DEPLOY_KEY="$DEV_KEY" npx convex env get EMAIL_ONLY_TO 2>/dev/null)" ] || { echo "EMAIL_ONLY_TO isn't set on dev; nothing copied"; exit 1; }
+          copied=0; same=0; missing=0
+          for n in RESEND_API_KEY \
+                   BUNNY_STREAM_CDN BUNNY_STREAM_TOKEN_KEY BUNNY_STREAM_LIBRARY_ID \
+                   BUNNY_STILLS_CDN BUNNY_STILLS_TOKEN_KEY \
+                   BUNNY_SCRUB_CDN BUNNY_SCRUB_TOKEN_KEY BUNNY_SCRUB_LIBRARY_ID \
+                   BUNNY_REVIEW_CDN BUNNY_REVIEW_TOKEN_KEY; do
+            v="$(CONVEX_DEPLOY_KEY="$LIVE_KEY" npx convex env get "$n" 2>/dev/null)" || v=""
+            if [ -z "$v" ]; then missing=$((missing+1)); echo "$n: not on live"; continue; fi
+            echo "::add-mask::$v"
+            cur="$(CONVEX_DEPLOY_KEY="$DEV_KEY" npx convex env get "$n" 2>/dev/null)" || cur=""
+            if [ "$cur" = "$v" ]; then same=$((same+1)); echo "$n: already on dev"; continue; fi
+            CONVEX_DEPLOY_KEY="$DEV_KEY" npx convex env set "$n" -- "$v" > /dev/null 2>&1 && { copied=$((copied+1)); echo "$n: copied"; } || echo "$n: couldn't set"
+          done
+          unset v cur
+          echo "copied $copied, already there $same, not on live $missing"
       - name: Lock dev's email to Heston, point its links at the preview, deploy the backend to dev, build the site
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEV_DEPLOY_KEY }}
