@@ -26,7 +26,7 @@ export type Block =
   | { t: "eyebrow"; text: string }                          // "A NOTE FROM WRANGLER PRODUCTIONS" with the mail icon
   | { t: "title"; text: string }                            // the note's title
   | { t: "button"; label: string; href: string }
-  | { t: "link"; href: string }                             // the address under a button, in the accent
+  | { t: "link"; href: string; full?: boolean }                             // the address under a button, in the accent
   | { t: "code"; code: string }                             // six boxes
   | { t: "image"; src: string; alt: string; href?: string } // a version's picture
   | { t: "quote"; rows: Array<{ who: string; text: string }> } // a note and its reply
@@ -84,7 +84,7 @@ function blockHtml(b: Block, brand: MailBrand): string {
     case "eyebrow": return `<p style="margin:0;font:500 12px/15.6px ${TITLE};letter-spacing:.48px;text-transform:uppercase;color:${brand.accent}">&#9993;&nbsp;&nbsp;${esc(b.text)}</p>`;
     case "title": return `<p style="margin:0;font:600 20px/23.6px ${TITLE};color:${C.primary}">${esc(b.text)}</p>`;
     case "button": return `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-radius:12px;background:${brand.accent}"><a href="${esc(b.href)}" style="display:inline-block;padding:13px 20px;font:400 15px/18px ${TITLE};color:${brand.onAccent};text-decoration:none;border-radius:12px">${esc(b.label)}</a></td></tr></table>`;
-    case "link": return `<p style="margin:0;font:400 13px/18.2px ${MONO};word-break:break-all"><a href="${esc(b.href)}" style="color:${brand.accent};text-decoration:none">${esc(shortLink(b.href))}</a></p>`;
+    case "link": return `<p style="margin:0;font:400 13px/18.2px ${MONO};word-break:break-all"><a href="${esc(b.href)}" style="color:${brand.accent};text-decoration:none">${esc(b.full ? b.href.replace(/^https?:\/\//, "") : shortLink(b.href))}</a></p>`;
     case "code": return `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>${[...b.code].map((d) => `<td style="padding:0 8px 0 0"><div style="width:42px;height:50px;line-height:50px;text-align:center;border:1px solid ${C.edge};border-radius:10px;background:${C.block};font:600 22px/50px ${TITLE};color:${C.primary}">${esc(d)}</div></td>`).join("")}</tr></table>`;
     case "image": {
       const img = `<img src="${esc(b.src)}" alt="${esc(b.alt)}" width="520" style="display:block;width:100%;max-width:520px;height:auto;border:0;border-radius:12px">`;

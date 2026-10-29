@@ -42,17 +42,18 @@ export function shareInviteMail(b: MailBrand, d: { kind: string; label: string; 
     { t: "p", text: "Reply to this email if anything doesn't work.", tone: "muted" },
   ], clientFooter(b));
 }
-/** Not drawn yet (flagged to Heston): "Invite to the portal" from the client page, in the share invite's layout. */
+/** 03b Portal invite (drawn Oct 29): "Invite to the portal" / "Resend invite" from the client page. */
 export function portalInviteMail(b: MailBrand, d: { name: string | null; email: string; hasAccount: boolean }): Mail {
-  const link = `${SITE()}/?invited=${encodeURIComponent(d.email)}`;
-  return mk(b, "review", `${b.ownerName ? first(b.ownerName) : b.name} invited you to WranglerPortal`, [
+  const link = `${SITE()}/?invited=${encodeURIComponent(d.email).replace(/%40/g, "@")}`;
+  const who = byline(b);
+  return mk(b, "review", `${who} invited you to WranglerPortal`, [
     hi(d.name),
-    { t: "p", text: `${byline(b)} invited you to WranglerPortal, where you'll find the cuts, documents and notes ${b.name} shares with you.` },
+    { t: "p", text: `${who} invited you to WranglerPortal. It's where you'll find the cuts, documents and notes ${b.name} shares with you.` },
     { t: "p", text: "Open it here:", tone: "muted" },
-    { t: "button", label: "Open WranglerPortal", href: link }, { t: "link", href: link },
-    { t: "p", text: d.hasAccount ? "Sign in with your WranglerPortal account." : "It's for this email address only. The first time, you'll create your account (a password, then a six-digit code we send you); after that, just sign in." },
+    { t: "button", label: d.hasAccount ? "Sign in to WranglerPortal" : "Open WranglerPortal", href: link }, { t: "link", href: link, full: true },
+    { t: "p", text: d.hasAccount ? `Sign in with your WranglerPortal account (${d.email}). Your email is filled in for you.` : "The first time, you'll create your account: a password, then a six-digit code we send you. After that, just sign in.", tone: "muted" },
     { t: "p", text: "Reply to this email if anything doesn't work.", tone: "muted" },
-  ], clientFooter(b));
+  ], b.isDefault ? [{ t: "small", text: "— WranglerPortal" }] : [{ t: "small", text: "Powered by WranglerPortal" }]);
 }
 
 // ---------- 04 · 05: new version, reply to a note ----------

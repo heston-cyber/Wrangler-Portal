@@ -376,9 +376,9 @@ describe("Phase 1 emails (step 5)", () => {
     const sam = await w.t.run(async (ctx) => (await ctx.db.query("clientPeople").collect()).find((p) => p.email === "sam@harbor.example")!._id);
     expect(await w.heston.mutation(api.clients.invitePerson, { personId: sam })).toEqual({ already: false, emailed: true });
     await settle(w.t);
-    const inv = mails.filter((m) => m.subject === "Heston invited you to WranglerPortal");
+    const inv = mails.filter((m) => m.subject === "Heston at Wrangler Productions invited you to WranglerPortal");
     expect(inv.map((m) => [m.to, m.from])).toEqual([["sam@harbor.example", "Wrangler Productions <review@wranglerportal.com>"]]);
-    expect(inv[0].text).toContain("https://app.wranglerportal.com/?invited=sam%40harbor.example");
+    expect(inv[0].text).toContain("Open WranglerPortal: https://app.wranglerportal.com/?invited=sam@harbor.example");
   });
 });
 
