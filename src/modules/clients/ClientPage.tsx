@@ -73,8 +73,8 @@ function AddPerson({ clientId, client, onClose, show }: { clientId: Id<"clients"
           </div>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="close" size={18} /></button>
         </div>
-        <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Maya Brooks" autoFocus />
-        <TextField label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="maya@harborcoffee.com" />
+        <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" autoFocus />
+        <TextField label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" />
         <div className="wp-field"><span className="wp-field-label">Role</span>
           <Segmented label="Role" value={role} onChange={setRole} items={[{ key: "signer", label: "Signs documents" }, { key: "contact", label: "Contact" }]} />
         </div>
@@ -90,8 +90,8 @@ function AddPerson({ clientId, client, onClose, show }: { clientId: Id<"clients"
 }
 function PeopleCard({ page, show, onAdd }: { page: Page; show: (m: string) => void; onAdd: () => void }) {
   return (
-    <Card className="cp-people" label="People" head={<SectionHead label="People" count={page.people.length} action={<Button size="sm" variant="ghost" onClick={onAdd}>Invite</Button>} />}>
-      {page.people.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "users" }} title="No one yet. Add the people who sign documents or get updates." />
+    <Card className="cp-people" label="People" head={<SectionHead label="People" count={page.people.length} action={<Button size="sm" variant="ghost" icon="plus" onClick={onAdd}>Add a person</Button>} />}>
+      {page.people.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "users" }} title="No one yet. Add the people who sign documents or get updates." action={<Button size="sm" onClick={onAdd}>Add a person</Button>} />
         : rows(page.people, (p) => <PersonRow p={p} show={show} />, (p) => p._id)}
     </Card>
   );
@@ -181,7 +181,7 @@ function TheirInbox({ page, events, business, show, onAdd }: { page: Page; event
           <ButtonLink size="sm" to={`/sent/new?client=${page.client._id}`}>Post a note</ButtonLink>
         </div>
         {events === undefined ? <Card label="Their Inbox"><SkeletonRows n={4} /></Card>
-          : !person ? <EmptyState icon="inbox" title="No one here has portal access yet." body="Invite someone from People to give them an Inbox." />
+          : !person ? <EmptyState icon="inbox" title="No one here has portal access yet." body="Use Add a person (People, on Overview) to give someone an Inbox." />
           : mine.length === 0 ? <EmptyState icon="inbox" title="Nothing in their Inbox yet." body={`New cuts, documents and your notes show up here for ${firstName(person.name ?? person.email)}.`} />
           : (
             <Card label={`${person.name ?? person.email}'s Inbox`}>

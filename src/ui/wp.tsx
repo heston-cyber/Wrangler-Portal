@@ -1,6 +1,6 @@
 // The portal's components (Figma "02 · Components"), built on the classes in portal.css. Pages use these instead
 // of raw markup so every screen matches the approved design. Copy on the components comes from the page.
-import { forwardRef, useId } from "react";
+import { forwardRef, useId, useState } from "react";
 import { linkProps } from "../lib/router";
 import { Icon, type IconName } from "./Icon";
 
@@ -172,13 +172,18 @@ export function SectionHead({ label, count, action }: { label: string; count?: n
 }
 export const Divider = () => <hr className="wp-divider" />;
 
+/** A row's picture; a still that fails to load shows the empty frame instead of a broken image. */
+function LeadThumb({ cls, src }: { cls: string; src: string | null }) {
+  const [bad, setBad] = useState<string | null>(null);
+  return src && bad !== src ? <img className={cls} src={src} alt="" loading="lazy" onError={() => setBad(src)} /> : <span className={cls} aria-hidden />;
+}
 type Lead = { icon: IconName } | { thumb: string | null; size?: 96 | 72 | 64 | 56 } | { avatar: string | null; size?: number; two?: boolean } | null;
 function LeadView({ lead }: { lead: Lead }) {
   if (!lead) return null;
   if ("icon" in lead) return <Icon name={lead.icon} size={20} className="lead-icon" />;
   if ("thumb" in lead) {
     const cls = cx("lead-thumb", lead.size && lead.size !== 96 && `t${lead.size}`);
-    return lead.thumb ? <img className={cls} src={lead.thumb} alt="" loading="lazy" /> : <span className={cls} aria-hidden />;
+    return <LeadThumb cls={cls} src={lead.thumb} />;
   }
   return <Avatar name={lead.avatar} size={lead.size ?? 32} two={lead.two} />;
 }
