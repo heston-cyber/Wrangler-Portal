@@ -1,0 +1,46 @@
+<svg viewBox="4.874 4.874 24 24" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+<g>
+<path d="M16.875 6.875L23.875 9.875L26.875 16.875L23.875 23.875L16.875 26.875L9.875 23.875L6.875 16.875L9.875 9.875L16.875 6.875Z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>
+<path d="M19.875 16.875C19.875 18.5319 18.5319 19.875 16.875 19.875C15.2181 19.875 13.875 18.5319 13.875 16.875C13.875 15.2181 15.2181 13.875 16.875 13.875C18.5319 13.875 19.875 15.2181 19.875 16.875Z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>
+<g>
+<path d="M16 6H17.75V7.75H16V6Z" style="fill:var(--icon-ground,#030104)"/>
+<path d="M16 6H17.75V7.75H16V6Z" fill="currentColor" fill-opacity="0.65098"/>
+<path d="M16.375 6.375H17.375V7.375H16.375V6.375Z" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<path d="M23 9H24.75V10.75H23V9Z" style="fill:var(--icon-ground,#030104)"/>
+<path d="M23 9H24.75V10.75H23V9Z" fill="currentColor" fill-opacity="0.65098"/>
+<path d="M23.375 9.375H24.375V10.375H23.375V9.375Z" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<path d="M26 16H27.75V17.75H26V16Z" style="fill:var(--icon-ground,#030104)"/>
+<path d="M26 16H27.75V17.75H26V16Z" fill="currentColor" fill-opacity="0.65098"/>
+<path d="M26.375 16.375H27.375V17.375H26.375V16.375Z" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<path d="M23 23H24.75V24.75H23V23Z" style="fill:var(--icon-ground,#030104)"/>
+<path d="M23 23H24.75V24.75H23V23Z" fill="currentColor" fill-opacity="0.65098"/>
+<path d="M23.375 23.375H24.375V24.375H23.375V23.375Z" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<path d="M16 26H17.75V27.75H16V26Z" style="fill:var(--icon-ground,#030104)"/>
+<path d="M16 26H17.75V27.75H16V26Z" fill="currentColor" fill-opacity="0.65098"/>
+<path d="M16.375 26.375H17.375V27.375H16.375V26.375Z" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<path d="M9 23H10.75V24.75H9V23Z" style="fill:var(--icon-ground,#030104)"/>
+<path d="M9 23H10.75V24.75H9V23Z" fill="currentColor" fill-opacity="0.65098"/>
+<path d="M9.375 23.375H10.375V24.375H9.375V23.375Z" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<path d="M6 16H7.75V17.75H6V16Z" style="fill:var(--icon-ground,#030104)"/>
+<path d="M6 16H7.75V17.75H6V16Z" fill="currentColor" fill-opacity="0.65098"/>
+<path d="M6.375 16.375H7.375V17.375H6.375V16.375Z" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<path d="M9 9H10.75V10.75H9V9Z" style="fill:var(--icon-ground,#030104)"/>
+<path d="M9 9H10.75V10.75H9V9Z" fill="currentColor" fill-opacity="0.65098"/>
+<path d="M9.375 9.375H10.375V10.375H9.375V9.375Z" stroke-width="0.75" stroke="currentColor"/>
+</g>
+</g>
+</svg>

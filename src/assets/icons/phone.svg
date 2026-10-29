@@ -1,0 +1,26 @@
+<svg viewBox="-0.000 3.876 24 24" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+<g>
+<path d="M17 6.875H7V24.875H17V6.875Z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>
+<path d="M10.5 21.875H13.5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>
+<g>
+<path d="M6.125 6H7.875V7.75H6.125V6Z" style="fill:var(--icon-ground,#030104)"/>
+<path d="M6.125 6H7.875V7.75H6.125V6Z" fill="currentColor" fill-opacity="0.65098"/>
+<path d="M6.5 6.375H7.5V7.375H6.5V6.375Z" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<path d="M16.125 6H17.875V7.75H16.125V6Z" style="fill:var(--icon-ground,#030104)"/>
+<path d="M16.125 6H17.875V7.75H16.125V6Z" fill="currentColor" fill-opacity="0.65098"/>
+<path d="M16.5 6.375H17.5V7.375H16.5V6.375Z" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<path d="M16.125 24H17.875V25.75H16.125V24Z" style="fill:var(--icon-ground,#030104)"/>
+<path d="M16.125 24H17.875V25.75H16.125V24Z" fill="currentColor" fill-opacity="0.65098"/>
+<path d="M16.5 24.375H17.5V25.375H16.5V24.375Z" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<path d="M6.125 24H7.875V25.75H6.125V24Z" style="fill:var(--icon-ground,#030104)"/>
+<path d="M6.125 24H7.875V25.75H6.125V24Z" fill="currentColor" fill-opacity="0.65098"/>
+<path d="M6.5 24.375H7.5V25.375H6.5V24.375Z" stroke-width="0.75" stroke="currentColor"/>
+</g>
+</g>
+</svg>

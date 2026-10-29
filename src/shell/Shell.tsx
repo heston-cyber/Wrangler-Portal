@@ -1,109 +1,300 @@
-// The app frame, laid out like Flask: a left sidebar, and an inset main panel with a breadcrumb bar.
-// The review page hides the sidebar and opens it over the page instead.
+// The portal's frame (Figma "03 · Shell", approved Oct 29). Desktop: a 256 px glass sidebar, fixed, with layers:
+// clicking a layer item opens its main page, the chevron opens its layer. Phone: the layers become chips under the
+// top bar and a glass tab bar is fixed at the bottom. The back office and the client side share it; the client side
+// wears its business's look (lib/brand.ts). Work surfaces (the review page) hide the sidebar and open it as a drawer.
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { BrandImg } from "../ui/BrandImg";
 import { useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { Activity, ChevronDown, Clapperboard, FileSignature, House, ListOrdered, LogOut, Menu as MenuIcon, Search, Settings, X } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import { linkProps, navigate, useLocation } from "../lib/router";
 import { useUploads } from "../lib/uploads";
-import { Avatar, Menu, MenuItem, MenuSep, Modal, Thumb } from "../ui/kit";
+import { useBrand, type Brand } from "../lib/brand";
+import { Menu, MenuItem, MenuSep, Modal, Thumb } from "../ui/kit";
+import { Icon, type IconName } from "../ui/Icon";
+import { Avatar, Badge, IconButton } from "../ui/wp";
 import { projectLabel } from "../lib/format";
-import { lightFor } from "./lights";
+import wpLogo from "../assets/d1/wp-logo.png";
+import lightBack from "../assets/portal/light-softblob.jpg";
+import lightClient from "../assets/portal/light-elbow.jpg";
 
-type ShellCtx = { openSidebar: () => void; openSearch: () => void; overlay: boolean };
-const Ctx = createContext<ShellCtx>({ openSidebar: () => {}, openSearch: () => {}, overlay: false });
+export type Side = "owner" | "client";
+type Me = { name: string | null; email: string };
+type ShellCtx = { openSidebar: () => void; openSearch: () => void; overlay: boolean; side: Side };
+const Ctx = createContext<ShellCtx>({ openSidebar: () => {}, openSearch: () => {}, overlay: false, side: "owner" });
 export const useShell = () => useContext(Ctx);
 
-export function Shell({ me, overlay, children }: { me: { name: string | null; email: string }; overlay: boolean; children: React.ReactNode }) {
+// ---------- what goes where ----------
+type Sub = { to: string; label: string; match: (p: string) => boolean };
+type Item = { to: string; label: string; icon: IconName; match: (p: string) => boolean; tab?: (p: string) => boolean; layer?: Sub[]; layerHas?: (p: string) => boolean; badge?: number };
+
+const starts = (p: string, ...pre: string[]) => pre.some((x) => p === x || p.startsWith(x + "/"));
+const OWNER_REVIEW: Sub[] = [
+  { to: "/projects", label: "Projects", match: (p) => starts(p, "/projects") },
+  { to: "/activity", label: "Activity", match: (p) => starts(p, "/activity") },
+];
+const OWNER_DOCS: Sub[] = [
+  { to: "/sign/new", label: "New document", match: (p) => starts(p, "/sign/new", "/sign/b") },
+  { to: "/sign/docs", label: "All docs", match: (p) => starts(p, "/sign/docs", "/sign/d") },
+  { to: "/sign/templates", label: "Templates", match: (p) => starts(p, "/sign/templates") },
+  { to: "/sign/signature", label: "Your signature", match: (p) => starts(p, "/sign/signature") },
+];
+const inReview = (p: string) => starts(p, "/review", "/projects", "/activity", "/v", "/register");
+const inDocs = (p: string) => starts(p, "/sign", "/docs");
+
+function ownerItems(): { main: Item[]; tabs: Item[] } {
+  const home: Item = { to: "/", label: "Home", icon: "home", match: (p) => p === "/" };
+  const clients: Item = { to: "/clients", label: "Clients", icon: "users", match: (p) => starts(p, "/clients") };
+  const review: Item = { to: "/review", label: "Review", icon: "review", match: (p) => p === "/review", tab: inReview, layer: OWNER_REVIEW, layerHas: inReview };
+  const docs: Item = { to: "/sign", label: "Docs", icon: "document", match: (p) => p === "/sign", tab: inDocs, layer: OWNER_DOCS, layerHas: inDocs };
+  const sent: Item = { to: "/sent", label: "Sent", icon: "send", match: (p) => starts(p, "/sent") };
+  const more: Item = { to: "/more", label: "More", icon: "menu", match: (p) => starts(p, "/more", "/sent", "/settings") };
+  return { main: [home, clients, review, docs, sent], tabs: [home, clients, review, docs, more] };
+}
+
+type SharedProject = { to: string; label: string };
+function clientItems(shared: SharedProject[], unread: number): { main: Item[]; tabs: Item[] } {
+  const layer: Sub[] = [...shared.map((s) => ({ to: s.to, label: s.label, match: (p: string) => starts(p, s.to) })), { to: "/review", label: "All shared", match: (p: string) => p === "/review" }];
+  const home: Item = { to: "/", label: "Home", icon: "home", match: (p) => p === "/" };
+  const inbox: Item = { to: "/inbox", label: "Inbox", icon: "inbox", match: (p) => starts(p, "/inbox"), badge: unread };
+  const review: Item = { to: "/review", label: "Review", icon: "review", match: () => false, tab: (p) => starts(p, "/review", "/s"), layer, layerHas: (p) => starts(p, "/review", "/s") };
+  const docs: Item = { to: "/docs", label: "Docs", icon: "document", match: (p) => starts(p, "/docs") };
+  const more: Item = { to: "/more", label: "More", icon: "menu", match: (p) => starts(p, "/more", "/settings") };
+  return { main: [home, inbox, review, docs], tabs: [home, inbox, review, docs, more] };
+}
+
+// ---------- the shell ----------
+export type Recent = { _id: string; title: string; thumb: string | null };
+export function Shell({ me, side = "owner", overlay, light = true, subtitle, children }: {
+  me: Me; side?: Side; overlay: boolean; light?: boolean; subtitle?: string | null; children: React.ReactNode;
+}) {
+  const brands = useQuery(api.business.brand);
+  const brand: Brand | null = brands?.[0] ?? null;
+  useBrand(brand);
+  const mine = useQuery(api.shares.mine, side === "client" ? {} : "skip");
+  const unread = useQuery(api.inbox.unreadCount, side === "client" ? {} : "skip") ?? 0;
+  const overview = useQuery(api.library.overview, side === "owner" ? {} : "skip");
+  const shared = useMemo(() => (mine ?? []).filter((s) => s.kind !== "video").map((s) => ({ to: `/s/${s.token}`, label: s.label })), [mine]);
+  const recent: Recent[] = side === "owner"
+    ? (overview?.videos ?? []).filter((x) => x.lastOpenedAt).sort((a, b) => b.lastOpenedAt! - a.lastOpenedAt!).slice(0, 4).map((x) => ({ _id: x._id, title: x.title, thumb: x.latest?.thumbUrl ?? null }))
+    : [];
+  return (
+    <ShellFrame me={me} side={side} overlay={overlay} light={light} subtitle={subtitle} logo={brand?.logoUrl ?? wpLogo} bizName={brand?.name ?? "Wrangler Productions"}
+      shared={shared} unread={unread} recent={recent} search={side === "owner"}>
+      {children}
+    </ShellFrame>
+  );
+}
+
+/** The frame itself, fed by Shell (or by the dev-only component page with sample data). */
+export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, shared, unread, recent, search: canSearch, children }: {
+  me: Me; side: Side; overlay: boolean; light: boolean; subtitle?: string | null; logo: string; bizName: string;
+  shared: SharedProject[]; unread: number; recent: Recent[]; search: boolean; children: React.ReactNode;
+}) {
   const [drawer, setDrawer] = useState(false);
   const [search, setSearch] = useState(false);
   const { path } = useLocation();
   useEffect(() => setDrawer(false), [path]);
   useEffect(() => {
+    if (!canSearch) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setSearch((s) => !s); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
-  const ctx = useMemo(() => ({ openSidebar: () => setDrawer(true), openSearch: () => setSearch(true), overlay }), [overlay]);
+  }, [canSearch]);
+  const nav = side === "owner" ? ownerItems() : clientItems(shared, unread);
+  const ctx = useMemo(() => ({ openSidebar: () => setDrawer(true), openSearch: () => setSearch(true), overlay, side }), [overlay, side]);
   const showSidebar = !overlay || drawer;
+  const lightSrc = side === "owner" ? lightBack : lightClient;
+  const onSearch = canSearch ? () => setSearch(true) : undefined;
   return (
     <Ctx.Provider value={ctx}>
-      <div className="app">
-        {showSidebar && <Sidebar me={me} className={`${drawer ? "open" : ""}${overlay ? " overlay" : ""}`} onClose={() => setDrawer(false)} onSearch={() => setSearch(true)} />}
-        {drawer && <div className="scrim" onClick={() => setDrawer(false)} style={overlay ? { position: "fixed", inset: 0, zIndex: 79, background: "rgba(3,1,4,.55)" } : undefined} />}
-        <div className="main" style={overlay ? { margin: 0, height: "100%", borderRadius: 0, boxShadow: "none" } : undefined}>
-          {!overlay && lightFor(path) && <div className={`d1-light ${lightFor(path)!.cls}`} style={{ backgroundImage: `url(${lightFor(path)!.src})` }} aria-hidden />}
-          {children}
-        </div>
+      <div className={`wp-shell${overlay ? " overlay" : ""}${side === "client" ? " client-side" : ""}`}>
+        {light && !overlay && <div className={`wp-light ${side === "owner" ? "back" : "client"}`} aria-hidden><i style={{ backgroundImage: `url(${lightSrc})` }} /></div>}
+        {showSidebar && (
+          <Sidebar me={me} side={side} items={nav.main} logo={logo} bizName={bizName} subtitle={subtitle} recent={recent}
+            drawer={overlay && drawer} onClose={() => setDrawer(false)} onSearch={onSearch} />
+        )}
+        {overlay && drawer && <div className="wp-scrim" onClick={() => setDrawer(false)} />}
+        <PhoneTop me={me} side={side} items={nav.tabs} logo={logo} bizName={bizName} onSearch={onSearch} />
+        <div className="main">{children}</div>
+        <TabBar items={nav.tabs} />
       </div>
       {search && <SearchPalette onClose={() => setSearch(false)} />}
     </Ctx.Provider>
   );
 }
 
-function Sidebar({ me, className, onClose, onSearch }: { me: { name: string | null; email: string }; className: string; onClose: () => void; onSearch: () => void }) {
+function Logo({ src, name }: { src: string; name: string }) {
+  return <span className="wp-logo"><span className="rec" aria-hidden /><img src={src} alt={name} /></span>;
+}
+
+function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onClose, onSearch }: {
+  me: Me; side: Side; items: Item[]; logo: string; bizName: string; subtitle?: string | null; recent: Recent[]; drawer: boolean; onClose: () => void; onSearch?: () => void;
+}) {
   const { path } = useLocation();
-  const overview = useQuery(api.library.overview);
   const uploads = useUploads().filter((u) => u.status === "starting" || u.status === "uploading");
   const { signOut } = useAuthActions();
-  const recent = (overview?.videos ?? []).filter((x) => x.lastOpenedAt).sort((a, b) => b.lastOpenedAt! - a.lastOpenedAt!).slice(0, 4);
-  const cur = (p: string) => (p === "/" ? path === "/" : path === p || path.startsWith(p + "/")) ? "page" as const : undefined;
+  // A layer opens by itself on its own pages; the chevron opens or closes it anywhere.
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const isOpen = (it: Item) => open[it.to] ?? !!it.layerHas?.(path);
+  const settingsOn = starts(path, "/settings");
   return (
-    <nav className={`sidebar ${className}`} aria-label="Main">
-      <div className="brandrow">
-        <a {...linkProps("/")} aria-label="Wrangler Review home"><BrandImg name="wordmark" alt="Wrangler Productions" /></a>
-        <span style={{ display: "flex", gap: 2 }}>
-          <button className="icon-btn" onClick={onSearch} aria-label="Search (⌘K)" title="Search (⌘K)"><Search size={16} /></button>
-          {className.includes("open") && <button className="icon-btn" onClick={onClose} aria-label="Close menu"><X size={16} /></button>}
+    <nav className={`wp-side glass${drawer ? " drawer" : ""}`} aria-label="Main">
+      <div className={`wp-brand${side === "client" ? " client" : ""}`}>
+        <a {...linkProps("/")} aria-label={`${bizName} home`}><Logo src={logo} name={bizName} /></a>
+        <span style={{ display: "flex", gap: 4 }}>
+          {onSearch && <IconButton icon="search" label="Search (⌘K)" onClick={onSearch} />}
+          {drawer && <IconButton icon="close" label="Close menu" onClick={onClose} />}
         </span>
       </div>
-      <a className="navitem" aria-current={cur("/")} {...linkProps("/")}><House size={16} />Home</a>
-      <a className="navitem" aria-current={cur("/projects")} {...linkProps("/projects")}><Clapperboard size={16} />Projects</a>
-      <a className="navitem" aria-current={cur("/register")} {...linkProps("/register")}><ListOrdered size={16} />Register</a>
-      <a className="navitem" aria-current={cur("/activity")} {...linkProps("/activity")}><Activity size={16} />Activity</a>
-      <a className="navitem" aria-current={cur("/sign")} {...linkProps("/sign")}><FileSignature size={16} />Contracts</a>
-
-      {recent.length > 0 && <div className="navgroup">Last opened</div>}
-      {recent.map((x) => (
-        <a key={x._id} className="navitem" aria-current={path === `/v/${x._id}` ? "page" : undefined} {...linkProps(`/v/${x._id}`)} title={x.title}>
-          <Thumb src={x.latest?.thumbUrl ?? null} className="thumb-xs" /><span className="t">{x.title}</span>
-        </a>
-      ))}
-
-      <div className="spacer" />
-      {uploads.length > 0 && (
-        <div style={{ display: "grid", gap: 8, padding: "10px 10px 12px" }}>
-          <span className="label">Uploading</span>
-          {uploads.map((u) => (
-            <div key={u.key} style={{ display: "grid", gap: 5 }}>
-              <span style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.fileName}</span>
-              <div className="progress"><i style={{ width: `${u.total ? (100 * u.sent) / u.total : 0}%` }} /></div>
+      <div className="scroll">
+        {items.map((it) => (
+          <div key={it.to} style={{ display: "contents" }}>
+            <div className={`wp-navwrap${it.layer ? " has-layer" : ""}`}>
+              <a className="wp-nav" aria-current={it.match(path) ? "page" : undefined} {...linkProps(it.to)}>
+                <Icon name={it.icon} size={24} />
+                <span className="t">{it.label}</span>
+                {it.badge ? <Badge n={it.badge} label={`${it.badge} unread`} /> : null}
+              </a>
+              {it.layer && (
+                <button type="button" className="layer-toggle" aria-expanded={isOpen(it)} aria-label={`${isOpen(it) ? "Close" : "Open"} the ${it.label} layer`}
+                  onClick={() => setOpen((o) => ({ ...o, [it.to]: !isOpen(it) }))}>
+                  <Icon name={isOpen(it) ? "chevron-down" : "chevron-right"} size={16} />
+                </button>
+              )}
             </div>
-          ))}
+            {it.layer && isOpen(it) && (
+              <>
+                {it.layer.map((s) => (
+                  <a key={s.to} className="wp-sub" aria-current={s.match(path) ? "page" : undefined} {...linkProps(s.to)} title={s.label}><span>{s.label}</span></a>
+                ))}
+                {it.to === "/review" && recent.length > 0 && (
+                  <>
+                    <div className="wp-layerlabel"><span className="wp-label">Last opened</span></div>
+                    {recent.map((x) => (
+                      <a key={x._id} className="wp-recent" aria-current={path === `/v/${x._id}` ? "page" : undefined} {...linkProps(`/v/${x._id}`)} title={x.title}>
+                        <Thumb src={x.thumb} className="th" /><span>{x.title}</span>
+                      </a>
+                    ))}
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+      {uploads.length > 0 && (
+        <div className="wp-upload" aria-live="polite">
+          <span className="wp-label">Uploading</span>
+          {uploads.map((u) => {
+            const pct = u.total ? Math.round((100 * u.sent) / u.total) : 0;
+            return (
+              <div key={u.key} style={{ display: "grid", gap: 6 }}>
+                <span className="f">{u.fileName} · {pct}%</span>
+                <div className="progress" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`Uploading ${u.fileName}`}><i style={{ width: `${pct}%` }} /></div>
+              </div>
+            );
+          })}
         </div>
       )}
+      <a className="wp-nav" aria-current={settingsOn ? "page" : undefined} {...linkProps("/settings")}><Icon name="settings" size={24} /><span className="t">Settings</span></a>
       <Menu side="top" label="Account" trigger={(p) => (
-        <button {...p} className="navitem acct"><Avatar name={me.name || me.email} /><span className="t">{me.name || me.email}</span><ChevronDown size={14} style={{ marginLeft: "auto" }} /></button>
+        <button {...p} className="wp-acct">
+          <Avatar name={me.name || me.email} />
+          <span className="who"><span className="nm">{me.name || me.email}</span>{side === "client" && <span className="sub">{subtitle ?? bizName}</span>}</span>
+          {side === "client" && <Icon name="chevron-down" size={16} />}
+        </button>
       )}>
-        <div className="mlabel">{me.email}</div>
-        <MenuItem icon={<Settings size={16} />} onSelect={() => navigate("/settings")}>Settings</MenuItem>
+        <div className="mlabel" style={{ textTransform: "none", letterSpacing: 0, fontFamily: "var(--font-body)", fontSize: 12 }}>{me.email}</div>
+        <MenuItem icon={<Icon name="settings" size={18} />} onSelect={() => navigate("/settings")}>Settings</MenuItem>
         <MenuSep />
-        <MenuItem icon={<LogOut size={16} />} onSelect={() => void signOut()}>Sign out</MenuItem>
+        <MenuItem icon={<Icon name="sign-out" size={18} />} onSelect={() => void signOut()}>Sign out</MenuItem>
       </Menu>
     </nav>
   );
 }
 
-// The bar at the top of the main panel: breadcrumb on the left, actions on the right.
+// Phones: logo, search and the account; under it the current section's layer as chips.
+function PhoneTop({ me, side, items, logo, bizName, onSearch }: { me: Me; side: Side; items: Item[]; logo: string; bizName: string; onSearch?: () => void }) {
+  const { path } = useLocation();
+  const section = items.find((it) => (it.tab ?? it.match)(path));
+  const chips = section?.layer ? [{ to: section.to, label: section.label, match: section.match }, ...section.layer.filter((s) => !(side === "client" && s.to === "/review"))] : null;
+  // the client's "All shared" is the Review chip itself
+  return (
+    <div className="wp-ptop">
+      <div className="bar">
+        <a {...linkProps("/")} aria-label={`${bizName} home`}><Logo src={logo} name={bizName} /></a>
+        <span className="sp" />
+        {onSearch && <IconButton icon="search" label="Search" iconSize={22} onClick={onSearch} />}
+        <a {...linkProps("/more")} aria-label="Account and more"><Avatar name={me.name || me.email} /></a>
+      </div>
+      {chips && (
+        <nav className="wp-chips" aria-label={`${section!.label} pages`}>
+          {chips.map((c) => <a key={c.to} className="wp-layerchip" aria-current={c.match(path) || (c.to === section!.to && side === "client" && path === "/review") ? "page" : undefined} {...linkProps(c.to)}>{c.label}</a>)}
+        </nav>
+      )}
+    </div>
+  );
+}
+
+function TabBar({ items }: { items: Item[] }) {
+  const { path } = useLocation();
+  return (
+    <nav className="wp-tabbar glass" aria-label="Sections">
+      {items.map((it) => (
+        <a key={it.to} className="wp-tab" aria-current={(it.tab ?? it.match)(path) ? "page" : undefined} {...linkProps(it.to)}>
+          <Icon name={it.icon} size={24} />
+          {it.label}
+          {it.badge ? <Badge n={it.badge} /> : null}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
+/** The More page on phones: what doesn't fit in the tab bar. */
+export function MorePage({ me, side }: { me: Me; side: Side }) {
+  const { signOut } = useAuthActions();
+  const rows: { to?: string; icon: IconName; title: string; sub?: string; onClick?: () => void }[] = side === "owner"
+    ? [
+      { to: "/sent", icon: "send", title: "Sent", sub: "Notes and items you sent" },
+      { to: "/settings", icon: "settings", title: "Settings", sub: "Business, Register, Dropbox, connectors…" },
+      { to: "/settings#account", icon: "user", title: "Account", sub: `${me.name ?? ""}${me.name ? " · " : ""}${me.email}` },
+      { icon: "sign-out", title: "Sign out", onClick: () => void signOut() },
+    ]
+    : [
+      { to: "/settings", icon: "user", title: "Account", sub: `${me.name ?? ""}${me.name ? " · " : ""}${me.email}` },
+      { icon: "sign-out", title: "Sign out", onClick: () => void signOut() },
+    ];
+  return (
+    <>
+      <TopBar><span className="here">More</span></TopBar>
+      <div className="wp-page">
+        <div className="wp-morelist">
+          {rows.map((r, i) => (
+            <div key={r.title} style={{ display: "contents" }}>
+              {i > 0 && <hr className="wp-divider" style={{ background: "var(--border-faint)" }} />}
+              {r.to ? (
+                <a className="wp-row" {...linkProps(r.to)}><Icon name={r.icon} size={22} className="lead-icon" /><span className="txt"><span className="ttl"><span>{r.title}</span></span>{r.sub && <span className="meta">{r.sub}</span>}</span><Icon name="chevron-right" size={16} className="chev" /></a>
+              ) : (
+                <button type="button" className="wp-row" onClick={r.onClick}><Icon name={r.icon} size={22} className="lead-icon" /><span className="txt"><span className="ttl"><span>{r.title}</span></span></span><Icon name="chevron-right" size={16} className="chev" /></button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// The bar at the top of the main area: breadcrumb on the left, actions on the right. On a work surface it also
+// holds the button that opens the sidebar.
 export function TopBar({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
   const { openSidebar, overlay } = useShell();
   return (
     <header className="topbar">
-      <button className={`icon-btn${overlay ? "" : " mobile-only"}`} onClick={openSidebar} aria-label="Open menu"><MenuIcon size={18} /></button>
+      {overlay && <IconButton icon="menu" label="Open menu" onClick={openSidebar} />}
       <div className="crumbs">{children}</div>
       {right && <div className="right">{right}</div>}
     </header>
@@ -138,8 +329,8 @@ function SearchPalette({ onClose }: { onClose: () => void }) {
     <Modal onClose={onClose} label="Search" width={560}>
       <div style={{ display: "grid", gap: 12, margin: -8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 6px" }}>
-          <Search size={18} />
-          <input ref={inputRef} className="input" style={{ background: "transparent", boxShadow: "none", padding: 0, height: 40, fontSize: 16 }}
+          <Icon name="search" size={18} />
+          <input ref={inputRef} className="input" style={{ background: "transparent", border: 0, boxShadow: "none", padding: 0, height: 40, fontSize: 16 }}
             placeholder="Search videos and projects…" value={q}
             onChange={(e) => { setQ(e.target.value); setI(0); }}
             onKeyDown={(e) => {
@@ -160,7 +351,7 @@ function SearchPalette({ onClose }: { onClose: () => void }) {
           {rows.map((r, n) => (<span key={r.key} style={{ display: "contents" }}>
             {tab === "all" && r.kind === "project" && rows[n - 1]?.kind !== "project" && <div className="mlabel" style={{ marginTop: 6 }}>Projects</div>}
             <button className="mitem" style={{ background: n === i ? "var(--surface-block-hover)" : undefined }} onMouseEnter={() => setI(n)} onClick={() => go(r)}>
-              {r.kind === "video" ? <Thumb src={r.thumb ?? null} className="thumb" /> : <span className="thumb ph" style={{ display: "grid" }}><Clapperboard size={14} /></span>}
+              {r.kind === "video" ? <Thumb src={r.thumb ?? null} className="thumb" /> : <span className="thumb ph" style={{ display: "grid" }}><Icon name="folder" size={16} /></span>}
               <span style={{ display: "grid", minWidth: 0 }}>
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title}</span>
                 <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{r.sub}</span>

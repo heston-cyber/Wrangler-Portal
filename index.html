@@ -6,13 +6,8 @@
     <meta name="robots" content="noindex, nofollow" />
     <meta name="theme-color" content="#030104" />
     <script>
-      // Theme before first paint (Settings → Appearance): light, dark, or the device's.
-      try {
-        var p = localStorage.getItem("wr.theme") || "dark";
-        var light = p === "light" || (p === "system" && window.matchMedia("(prefers-color-scheme: light)").matches);
-        document.documentElement.dataset.theme = light ? "light" : "dark";
-        if (light) document.querySelector('meta[name="theme-color"]').setAttribute("content", "#f2efe7");
-      } catch (e) {}
+      // Dark only (Gate 4, Oct 28): the portal has no Appearance setting any more.
+      document.documentElement.dataset.theme = "dark";
     </script>
     <title>Wrangler Review</title>
     <link rel="icon" type="image/png" href="/favicon.png" />

@@ -51,6 +51,9 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "users.me": { pages: ["video", "share", "clientHome", "signin"], args: () => ({}) },
   "shares.open": { pages: ["share"], args: (_i, s) => (s ? { token: s.token, passcode: s.passcode } : "skip") },
   "shares.mine": { pages: ["clientHome"], args: () => ({}) },
+  // The portal shell (Phase 1): the business's look for everyone signed in, and the client's Inbox badge.
+  "business.brand": { pages: ["clientHome"], args: () => ({}) },
+  "inbox.unreadCount": { pages: ["clientHome"], args: () => ({}) },
   "library.video": { pages: ["video"], args: (i, s) => ({ videoId: i.videoId, share: s ?? undefined }) },
   "notes.forVersion": { pages: ["video"], args: (i, s) => ({ versionId: i.versionId, share: s ?? undefined }) },
   "waveforms.forVersion": { pages: ["video"], args: (i, s) => ({ versionId: i.versionId, share: s ?? undefined }) },

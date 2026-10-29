@@ -1,0 +1,37 @@
+<svg viewBox="1.874 2.875 24 24" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+<g>
+<path d="M13.875 6.875V17.875" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>
+<path d="M8.875 12.875L13.875 17.875L18.875 12.875" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>
+<path d="M6.875 21.875H20.875" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>
+<g>
+<path d="M13 6H14.75V7.75H13V6Z" style="fill:var(--icon-ground,#030104)"/>
+<path d="M13 6H14.75V7.75H13V6Z" fill="currentColor" fill-opacity="0.65098"/>
+<path d="M13.375 6.375H14.375V7.375H13.375V6.375Z" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<path d="M8 12H9.75V13.75H8V12Z" style="fill:var(--icon-ground,#030104)"/>
+<path d="M8 12H9.75V13.75H8V12Z" fill="currentColor" fill-opacity="0.65098"/>
+<path d="M8.375 12.375H9.375V13.375H8.375V12.375Z" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<path d="M13 17H14.75V18.75H13V17Z" style="fill:var(--icon-ground,#030104)"/>
+<path d="M13 17H14.75V18.75H13V17Z" fill="currentColor" fill-opacity="0.65098"/>
+<path d="M13.375 17.375H14.375V18.375H13.375V17.375Z" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<path d="M18 12H19.75V13.75H18V12Z" style="fill:var(--icon-ground,#030104)"/>
+<path d="M18 12H19.75V13.75H18V12Z" fill="currentColor" fill-opacity="0.65098"/>
+<path d="M18.375 12.375H19.375V13.375H18.375V12.375Z" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<path d="M6 21H7.75V22.75H6V21Z" style="fill:var(--icon-ground,#030104)"/>
+<path d="M6 21H7.75V22.75H6V21Z" fill="currentColor" fill-opacity="0.65098"/>
+<path d="M6.375 21.375H7.375V22.375H6.375V21.375Z" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<path d="M20 21H21.75V22.75H20V21Z" style="fill:var(--icon-ground,#030104)"/>
+<path d="M20 21H21.75V22.75H20V21Z" fill="currentColor" fill-opacity="0.65098"/>
+<path d="M20.375 21.375H21.375V22.375H20.375V21.375Z" stroke-width="0.75" stroke="currentColor"/>
+</g>
+</g>
+</svg>

@@ -21,7 +21,8 @@ export const resolveTheme = (p: ThemePref): Theme => (p === "system" ? (media?.m
 let override: Theme | null = null;
 
 export function applyTheme() {
-  const t = override ?? resolveTheme(readThemePref());
+  // Dark only (Gate 4, Oct 28: Appearance is removed). Only a page override (the signing page) turns it light.
+  const t = override ?? "dark";
   document.documentElement.dataset.theme = t;
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", t === "light" ? "#f2efe7" : "#030104");
 }

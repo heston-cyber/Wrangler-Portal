@@ -12,7 +12,7 @@ import Settings from "./modules/settings/Settings";
 import VideoPage from "./modules/review/VideoPage";
 import SharePage from "./modules/review/SharePage";
 import { lazy, Suspense } from "react";
-import { Shell } from "./shell/Shell";
+import { MorePage, Shell } from "./shell/Shell";
 import { UploadProvider } from "./shell/UploadDialog";
 import type { Id } from "../convex/_generated/dataModel";
 
@@ -28,6 +28,8 @@ const SignConnector = lazy(() => import("./modules/docs/pages/SignConnector"));
 // S2: the client's signing page. sign.wranglerportal.com/<token>, or /x/<token> on any host (a fallback).
 const SignerApp = lazy(() => import("./modules/docs/signer/SignerApp"));
 const VerifyPage = lazy(() => import("./modules/docs/signer/VerifyPage"));
+// Dev only: the component page (never part of the live build).
+const Kit = import.meta.env.DEV || import.meta.env.VITE_KIT === "1" ? lazy(() => import("./dev/Kit")) : null;
 const isSignHost = () => /^sign\./i.test(location.hostname);
 
 const Loading = () => <div className="signin"><span className="label">Loading…</span></div>;
@@ -35,6 +37,7 @@ const Loading = () => <div className="signin"><span className="label">Loading…
 export default function App() {
   const { isLoading, isAuthenticated } = useConvexAuth();
   const { path, search } = useLocation();
+  if (Kit && path.startsWith("/__kit")) return <Suspense fallback={<Loading />}><Kit /></Suspense>;
   const signer = (isSignHost() ? /^\/(?:x\/)?([A-Za-z0-9_-]{16,64})\/?$/ : /^\/x\/([A-Za-z0-9_-]{16,64})\/?$/).exec(path);
   if ((isSignHost() && /^\/verify\/?$/.test(path)) || /^\/x\/verify\/?$/.test(path)) return <Suspense fallback={<Loading />}><VerifyPage /></Suspense>;
   if (signer) return <Suspense fallback={<Loading />}><SignerApp key={signer[1]} token={signer[1]} /></Suspense>;
@@ -61,7 +64,13 @@ function SignedIn() {
   if (isSignHost()) return <SignHostHome />;
   if (me === undefined) return <Loading />;
   // Clients (C1): their own page, nothing of the owner's side.
-  if (me && !me.allowed && me.role === "client") return <ClientHome me={me} />;
+  if (me && !me.allowed && me.role === "client") {
+    return (
+      <Shell me={me} side="client" overlay={false}>
+        {/^\/more\/?$/.test(path) ? <MorePage me={me} side="client" /> : <ClientHome me={me} />}
+      </Shell>
+    );
+  }
   if (!me || !me.allowed) {
     return (
       <div className="signin">
@@ -94,10 +103,13 @@ function SignedIn() {
   else if (path.startsWith("/activity")) page = <ActivityPage />;
   else if (path.startsWith("/register")) page = <Register />;
   else if (path.startsWith("/settings")) page = <Settings me={me} />;
-  else page = <Home />;
+  else if (/^\/more\/?$/.test(path)) page = <MorePage me={me} side="owner" />;
+  else page = <Home />; // "/" and "/review" (Review's main page) until the new Home lands
+  // Work surfaces get no background light, so nothing competes with the video or the document.
+  const workSurface = Boolean(video) || /^\/sign\/(b|d)\//.test(path) || /^\/sign\/templates\/[^/]+/.test(path);
   return (
     <UploadProvider>
-      <Shell me={me} overlay={Boolean(video)}>{page}</Shell>
+      <Shell me={me} overlay={Boolean(video)} light={!workSurface}>{page}</Shell>
     </UploadProvider>
   );
 }
