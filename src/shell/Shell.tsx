@@ -2,7 +2,7 @@
 // clicking a layer item opens its main page, the chevron opens its layer. Phone: the layers become chips under the
 // top bar and a glass tab bar is fixed at the bottom. The back office and the client side share it; the client side
 // wears its business's look (lib/brand.ts). Work surfaces (the review page) hide the sidebar and open it as a drawer.
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "convex/react";
 import { useSignOutAsk } from "./SignOut";
 import { api } from "../../convex/_generated/api";
@@ -19,8 +19,8 @@ import lightClient from "../assets/portal/light-elbow.jpg";
 
 export type Side = "owner" | "client";
 type Me = { name: string | null; email: string };
-type ShellCtx = { openSidebar: () => void; openSearch: () => void; overlay: boolean; side: Side };
-const Ctx = createContext<ShellCtx>({ openSidebar: () => {}, openSearch: () => {}, overlay: false, side: "owner" });
+type ShellCtx = { openSidebar: () => void; peekSidebar: (on: boolean) => void; openSearch: () => void; overlay: boolean; side: Side };
+const Ctx = createContext<ShellCtx>({ openSidebar: () => {}, peekSidebar: () => {}, openSearch: () => {}, overlay: false, side: "owner" });
 export const useShell = () => useContext(Ctx);
 
 // ---------- what goes where ----------
@@ -90,7 +90,16 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
   me: Me; side: Side; overlay: boolean; light: boolean; subtitle?: string | null; logo: string; bizName: string;
   shared: SharedProject[]; unread: number; recent: Recent[]; search: boolean; children: React.ReactNode;
 }) {
-  const [drawer, setDrawer] = useState(false);
+  // The drawer on work surfaces: "open" from a click (stays until closed); "peek" from hovering the menu button with a
+  // mouse (Heston, Oct 29): it slides out, and slides back once the pointer leaves it.
+  const [drawer, setDrawerState] = useState<false | "peek" | "open">(false);
+  const setDrawer = (on: boolean) => setDrawerState(on ? "open" : false);
+  const peekTimer = useRef<number | null>(null);
+  const peek = useCallback((on: boolean) => {
+    if (peekTimer.current) { clearTimeout(peekTimer.current); peekTimer.current = null; }
+    if (on) { if (matchMedia("(pointer: fine)").matches) setDrawerState((d) => d || "peek"); return; }
+    peekTimer.current = window.setTimeout(() => setDrawerState((d) => (d === "peek" ? false : d)), 280);
+  }, []);
   const [search, setSearch] = useState(false);
   const { path } = useLocation();
   useEffect(() => setDrawer(false), [path]);
@@ -103,7 +112,7 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
     return () => window.removeEventListener("keydown", onKey);
   }, [canSearch]);
   const nav = side === "owner" ? ownerItems() : clientItems(shared, unread);
-  const ctx = useMemo(() => ({ openSidebar: () => setDrawer(true), openSearch: () => setSearch(true), overlay, side }), [overlay, side]);
+  const ctx = useMemo(() => ({ openSidebar: () => setDrawerState("open"), peekSidebar: peek, openSearch: () => setSearch(true), overlay, side }), [overlay, side]);
   const showSidebar = !overlay || drawer;
   const lightSrc = side === "owner" ? lightBack : lightClient;
   const onSearch = canSearch ? () => setSearch(true) : undefined;
@@ -113,7 +122,8 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
         {light && !overlay && <div className={`wp-light ${side === "owner" ? "back" : "client"}`} aria-hidden><i style={{ backgroundImage: `url(${lightSrc})` }} /></div>}
         {showSidebar && (
           <Sidebar me={me} side={side} items={nav.main} logo={logo} bizName={bizName} subtitle={subtitle} recent={recent}
-            drawer={overlay && drawer} onClose={() => setDrawer(false)} onSearch={onSearch} />
+            drawer={overlay && !!drawer} onClose={() => setDrawer(false)} onSearch={onSearch}
+            onHover={overlay && drawer === "peek" ? peek : undefined} />
         )}
         {overlay && drawer && <div className="wp-scrim" onClick={() => setDrawer(false)} />}
         <PhoneTop me={me} side={side} items={nav.tabs} logo={logo} bizName={bizName} onSearch={onSearch} />
@@ -129,8 +139,9 @@ function Logo({ src, name }: { src: string; name: string }) {
   return <span className="wp-logo"><span className="rec" aria-hidden /><img src={src} alt={name} /></span>;
 }
 
-function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onClose, onSearch }: {
+function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onClose, onSearch, onHover }: {
   me: Me; side: Side; items: Item[]; logo: string; bizName: string; subtitle?: string | null; recent: Recent[]; drawer: boolean; onClose: () => void; onSearch?: () => void;
+  onHover?: (on: boolean) => void;
 }) {
   const { path } = useLocation();
   const uploads = useUploads().filter((u) => u.status === "starting" || u.status === "uploading");
@@ -140,7 +151,7 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
   const isOpen = (it: Item) => open[it.to] ?? !!it.layerHas?.(path);
   const settingsOn = starts(path, "/settings");
   return (
-    <nav className={`wp-side glass${drawer ? " drawer" : ""}`} aria-label="Main">
+    <nav className={`wp-side glass${drawer ? " drawer" : ""}`} aria-label="Main" onMouseEnter={onHover && (() => onHover(true))} onMouseLeave={onHover && (() => onHover(false))}>
       <div className={`wp-brand${side === "client" ? " client" : ""}`}>
         <a {...linkProps("/")} aria-label={`${bizName} home`}><Logo src={logo} name={bizName} /></a>
         <span style={{ display: "flex", gap: 4 }}>
@@ -293,10 +304,10 @@ export function MorePage({ me, side }: { me: Me; side: Side }) {
 // The bar at the top of the main area: breadcrumb on the left, actions on the right. On a work surface it also
 // holds the button that opens the sidebar.
 export function TopBar({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
-  const { openSidebar, overlay } = useShell();
+  const { openSidebar, peekSidebar, overlay } = useShell();
   return (
     <header className="topbar">
-      {overlay && <IconButton icon="menu" label="Open menu" onClick={openSidebar} />}
+      {overlay && <IconButton icon="menu" label="Open menu" onClick={openSidebar} onMouseEnter={() => peekSidebar(true)} onMouseLeave={() => peekSidebar(false)} />}
       <div className="crumbs">{children}</div>
       {right && <div className="right">{right}</div>}
     </header>
