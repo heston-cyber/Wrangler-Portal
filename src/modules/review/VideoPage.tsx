@@ -30,6 +30,7 @@ import { mapWords, playedRange, pointersFrom, transcriptText, type Pointer, type
 import { secondsText } from "./notes/NotesPanel";
 import { Sep, TopBar } from "../../shell/Shell";
 import { Menu, MenuItem, MenuLabel, MenuSep, Modal, Spinner, useIsNarrow, useToast } from "../../ui/kit";
+import { Button, DialogHeader } from "../../ui/wp";
 import { FileName, copyText } from "./Register";
 import { shortTitleFrom } from "../../../convex/lib/register";
 import { FinalBadge } from "./VideoRows";
@@ -134,6 +135,12 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const uploads = useUploads(data._id);
   const notes = useQuery(api.notes.forVersion, version ? { versionId: version._id, ...shareArgs } : "skip") as NoteRow[] | undefined;
   const wave = useQuery(api.waveforms.forVersion, version ? { versionId: version._id, ...shareArgs } : "skip") as Wave | undefined;
+  // Client approval (Phase 1): the owner sees who approved which version; a signed-in client sees their own.
+  const approvals = useQuery(api.approvals.forVideo, owner || viewer.kind === "client" ? { videoId: data._id, ...shareArgs } : "skip");
+  const approveIt = useMutation(api.approvals.approve);
+  const [approving, setApproving] = useState(false);
+  const verApprovals = (approvals ?? []).filter((a) => a.versionNumber === version?.number);
+  const myApproval = viewer.kind === "client" ? verApprovals.find((a) => a.mine) ?? null : null;
   const [sharedNotes, setSharedNotes] = useState(() => readFlag("wr.shareNotes")); // the owner's Shared switch on the note box
   const [composerOpen, setComposerOpen] = useState(true); // the note box folds down to a pill (Heston, Oct 23); open on every load
   const createNote = useMutation(api.notes.create);
@@ -674,6 +681,9 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           {owner && <ViewsChip videoId={data._id} onOpen={() => setDialog("views")} />}
           {owner && <button className={`btn sm${covering?.some((s) => s.state === "on") ? " on" : ""}`} onClick={() => setDialog("share")} title={covering?.length ? `Shared: ${covering.filter((s) => s.state === "on").length} live ${covering.filter((s) => s.state === "on").length === 1 ? "link" : "links"}` : "Share this video"}><Share2 size={15} /><span className="hide-sm">Share</span></button>}
           {owner && <button className="btn sm hide-sm" onClick={downloadEdl} disabled={!notes?.length} title="Download the notes as Resolve markers (EDL)"><Download size={15} />Resolve markers</button>}
+          {viewer.kind === "client" && version && (myApproval
+            ? <Button size="sm" disabled title={`You approved v${version.number}`}>Approved ✓</Button>
+            : <Button variant="primary" size="sm" onClick={() => setApproving(true)}>Approve v{version.number}</Button>)}
           {!owner && canDownload && <button className="btn sm" onClick={() => void downloadFile()} disabled={!!dl} title="Download this version">{dl ? <Spinner /> : <Download size={15} />}<span className="hide-sm">{dl ? (dl.pct ? `${dl.pct}%` : "Downloading…") : "Download"}</span></button>}
           {!noNotes && <button className={`icon-btn md${panel ? " on" : ""}`} onClick={openPanel} aria-label={panel ? "Hide panel" : "Show panel"} title={panel ? "Hide panel" : "Show panel"}><PanelRight size={16} /></button>}
         </>
@@ -687,6 +697,8 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
         {data.number && <span className="chip num mono" title="Register number">{String(data.number).padStart(5, "0")}</span>}
         <span className="here">{data.title}</span>
         <FinalBadge final={data.final} />
+        {owner && verApprovals.length > 0 && <span className="wp-status success hide-sm" title={verApprovals.map((a) => `${a.name} · ${new Date(a.at).toLocaleString()}`).join("\n")}>Approved by {verApprovals.map((a) => a.name).join(", ")} · v{version!.number}</span>}
+        {myApproval && <span className="wp-status success hide-sm" title={new Date(myApproval.at).toLocaleString()}>Approved by you · {new Date(myApproval.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>}
         {version && (noNotes ? <span className="chip" title="Version">v{version.number}</span> : <button className="chip" onClick={() => setPanel("versions")} title="Versions">v{version.number}{data.versions.length > 1 ? ` of ${data.versions.length}` : ""}</button>)}
         {st && <span className={`chip ${st.tone}`}>{st.busy && <Spinner />}{st.text}</span>}
         {tr?.busy && <span className="chip warn"><Spinner />{tr.text}</span>}
@@ -916,7 +928,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                           <FileName name={`${data.nextFileName}.mp4`} show={showToast} />
                         </div>
                       )}
-                      <VersionsList videoId={data._id} versions={data.versions} current={version?.number ?? null} uploads={uploads} owner={owner} open={(n) => navigate(owner ? `/v/${data._id}?version=${n}` : `${viewer.home}/v/${data._id}?version=${n}`)} />
+                      <VersionsList videoId={data._id} versions={data.versions} current={version?.number ?? null} uploads={uploads} owner={owner} approvals={approvals ?? undefined} open={(n) => navigate(owner ? `/v/${data._id}?version=${n}` : `${viewer.home}/v/${data._id}?version=${n}`)} />
                     </>
                   : version ? <TranscriptList versionId={version._id} clock={player.clock} tc={tc} onSeek={(f) => void player.seekToFrame(f)} /> : null}
             </div>
@@ -931,6 +943,16 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       {dialog === "keys" && <ShortcutsDialog onClose={() => setDialog(null)} />}
       {dialog === "share" && <ShareDialog target={{ kind: "video", videoId: data._id }} label={data.title} onClose={() => setDialog(null)} show={showToast} />}
       {dialog === "views" && <ViewsDialog videoId={data._id} title={data.title} onClose={() => setDialog(null)} />}
+      {approving && version && (
+        <Modal onClose={() => setApproving(false)} label={`Approve v${version.number}`} width={460}>
+          <DialogHeader title={`Approve v${version.number} of ${data.title}?`} body="Wrangler Productions will see that you've approved this version." onClose={() => setApproving(false)} />
+          <p className="wp-small" style={{ margin: "12px 0 0", color: "var(--text-muted)" }}>Notes you've left stay as they are. You can still leave notes after approving.</p>
+          <div className="dfoot">
+            <Button variant="ghost" onClick={() => setApproving(false)}>Cancel</Button>
+            <Button variant="primary" onClick={async () => { try { await approveIt({ versionId: version._id, ...shareArgs }); setApproving(false); showToast(`Approved v${version.number}`); } catch (e) { showToast(String((e as Error).message).replace(/^.*ConvexError: /s, "").split("\n")[0]); } }}>Approve v{version.number}</Button>
+          </div>
+        </Modal>
+      )}
       {dialog === "final" && <ApproveFinal videoId={data._id} title={data.title} onClose={() => setDialog(null)} onDone={(m) => showToast(m)} />}
       {dialog === "register" && <AddToRegister videoId={data._id} title={data.title} onClose={() => setDialog(null)} onDone={(m) => showToast(m)} />}
       {toast}

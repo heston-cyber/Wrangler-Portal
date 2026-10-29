@@ -12,7 +12,8 @@ import { Menu, MenuItem, Modal, Spinner } from "../../../ui/kit";
 type VideoData = NonNullable<FunctionReturnType<typeof api.library.video>>;
 export type Version = VideoData["versions"][number];
 
-export function VersionsList({ videoId, versions, current, uploads, owner = true, open }: { videoId: string; versions: Version[]; current: number | null; uploads: UploadState[]; owner?: boolean; open?: (n: number) => void }) {
+export type ApprovalTag = { versionNumber: number; name: string; at: number; mine: boolean };
+export function VersionsList({ videoId, versions, current, uploads, owner = true, open, approvals }: { videoId: string; versions: Version[]; current: number | null; uploads: UploadState[]; owner?: boolean; open?: (n: number) => void; approvals?: ApprovalTag[] }) {
   const active = uploads.filter((u) => u.status !== "done");
   return (
     <div className="vlist">
@@ -23,13 +24,13 @@ export function VersionsList({ videoId, versions, current, uploads, owner = true
           <div className="progress"><i style={{ width: `${u.total ? (100 * u.sent) / u.total : 0}%` }} /></div>
         </div>
       ))}
-      {[...versions].reverse().map((v) => <VersionItem key={v._id} videoId={videoId} v={v} current={v.number === current} owner={owner} openIt={open} />)}
+      {[...versions].reverse().map((v) => <VersionItem approvals={(approvals ?? []).filter((a) => a.versionNumber === v.number)} key={v._id} videoId={videoId} v={v} current={v.number === current} owner={owner} openIt={open} />)}
       {versions.length === 0 && active.length === 0 && <p className="caption" style={{ padding: 12 }}>{owner ? "No versions yet. Use + to upload the first one." : "No versions yet."}</p>}
     </div>
   );
 }
 
-function VersionItem({ videoId, v, current, owner, openIt }: { videoId: string; v: Version; current: boolean; owner: boolean; openIt?: (n: number) => void }) {
+function VersionItem({ videoId, v, current, owner, openIt, approvals }: { videoId: string; v: Version; current: boolean; owner: boolean; openIt?: (n: number) => void; approvals: ApprovalTag[] }) {
   const save = useMutation(api.library.setVersionDescription);
   const remove = useMutation(api.library.deleteVersion);
   const [confirming, setConfirming] = useState(false);
@@ -53,6 +54,7 @@ function VersionItem({ videoId, v, current, owner, openIt }: { videoId: string; 
         </span>
       </div>
       <div className="rbold" title={v.fileName}>v{v.number}</div>
+      {approvals.map((a) => <div key={a.name + a.at}><span className="wp-status success" title={new Date(a.at).toLocaleString()}>{a.mine ? "Approved by you" : `Approved by ${a.name}`} · {new Date(a.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span></div>)}
       <div className="rtags">
         {st && <span className="rtag">{st.busy && <Spinner />}{st.text}</span>}
         {tr && <span className="rtag">{tr.busy && <Spinner />}{tr.text}</span>}

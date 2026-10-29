@@ -75,6 +75,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "documents.mine": {}, "documents.signedCopy": { documentId: ids.docId },
     "business.settings": {}, "business.updateSettings": { accent: "#112233" }, "business.logoUploadUrl": {}, "business.setLogo": { storageId: null }, "business.brand": {},
     "activity.recent": {},
+    "approvals.approve": { versionId: ids.versionId }, "approvals.forVideo": { videoId: ids.videoId },
   };
 }
 

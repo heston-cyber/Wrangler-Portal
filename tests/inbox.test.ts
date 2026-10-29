@@ -215,3 +215,44 @@ describe("a client's people, the client page, settings", () => {
     expect(await w.t.run(async (ctx) => [await ctx.storage.getUrl(dark), await ctx.storage.getUrl(light)])).toEqual([expect.any(String), null]);
   });
 });
+
+describe("client approval (Phase 1)", () => {
+  async function shared() {
+    const w = await world();
+    const base = { allVersions: true, downloads: true, emailNewVersions: false };
+    await w.heston.mutation(api.shares.create, { target: { kind: "project", projectId: w.p }, ...base, access: "comment", who: "invited", emails: ["maya@harbor.example"] });
+    const link = await w.heston.mutation(api.shares.create, { target: { kind: "video", videoId: w.vid }, ...base, access: "comment", who: "link" });
+    const tokens = await w.t.run(async (ctx) => (await ctx.db.query("shares").collect()).map((x) => ({ token: (x as unknown as { token: string }).token, who: x.who })));
+    return { ...w, invited: tokens.find((x) => x.who === "invited")!.token, link: tokens.find((x) => x.who === "link")!.token, linkUrl: link };
+  }
+
+  test("a signed-in client approves the version on screen; the owner sees it, in Activity too; approving twice keeps the first", async () => {
+    const w = await shared();
+    const share = { token: w.invited };
+    const first = await w.mayaC.mutation(api.approvals.approve, { versionId: w.ver, share });
+    expect(first.versionNumber).toBe(2);
+    const again = await w.mayaC.mutation(api.approvals.approve, { versionId: w.ver, share });
+    expect(again.at).toBe(first.at);
+    const owner = await w.heston.query(api.approvals.forVideo, { videoId: w.vid });
+    expect(owner).toEqual([expect.objectContaining({ versionNumber: 2, name: "Maya Brooks", email: "maya@harbor.example", mine: false })]);
+    const mine = await w.mayaC.query(api.approvals.forVideo, { videoId: w.vid, share });
+    expect(mine).toEqual([expect.objectContaining({ versionNumber: 2, email: null, mine: true })]);
+    const feed = await w.heston.query(api.activity.feed, {});
+    expect(feed.some((e: { type: string; actor: string }) => e.type === "approval" && e.actor === "Maya Brooks")).toBe(true);
+    const recent = await w.heston.query(api.activity.recent, {});
+    expect(recent.some((r: { what: string; label: string }) => r.what === "approved" && r.label === "v2 of Harbor 30s")).toBe(true);
+    // It deletes nothing and doesn't touch the owner's Approve final.
+    expect(await w.t.run(async (ctx) => [(await ctx.db.get(w.vid))?.final ?? null, (await ctx.db.get(w.ver))?._id])).toEqual([null, w.ver]);
+  });
+
+  test("guests, the owner and other businesses can't approve, and guests see no approvals", async () => {
+    const w = await shared();
+    await w.mayaC.mutation(api.approvals.approve, { versionId: w.ver, share: { token: w.invited } });
+    await expect(w.t.mutation(api.approvals.approve, { versionId: w.ver, share: { token: w.link, guestName: "Pat" } })).rejects.toThrow(/Sign in to approve/);
+    expect(await w.t.query(api.approvals.forVideo, { videoId: w.vid, share: { token: w.link } })).toEqual([]);
+    await expect(w.heston.mutation(api.approvals.approve, { versionId: w.ver })).rejects.toThrow(/Approve final/);
+    await expect(w.bobC.mutation(api.approvals.approve, { versionId: w.ver, share: { token: w.invited } })).rejects.toThrow();
+    // Another business's owner: their scope holds none of A's approvals.
+    expect(await w.boss.query(api.approvals.forVideo, { videoId: w.vid }).catch(() => [])).toEqual([]);
+  });
+});

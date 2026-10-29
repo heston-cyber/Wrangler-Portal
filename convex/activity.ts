@@ -37,7 +37,8 @@ export const feed = query({
     type Event =
       | { type: "version"; at: number; actor: string | null; version: VersionInfo }
       | { type: "notes"; at: number; actor: string; version: VersionInfo; notes: NoteCard[] }
-      | { type: "share"; at: number; actor: string; kind: "opened" | "viewed"; share: { _id: Id<"shares">; label: string; shareKind: Doc<"shares">["kind"] }; videoId: Id<"videos"> | null; videoTitle: string | null };
+      | { type: "share"; at: number; actor: string; kind: "opened" | "viewed"; share: { _id: Id<"shares">; label: string; shareKind: Doc<"shares">["kind"] }; videoId: Id<"videos"> | null; videoTitle: string | null }
+      | { type: "approval"; at: number; actor: string; version: VersionInfo };
     type NoteCard = { _id: Id<"notes">; kind: Doc<"notes">["kind"]; inFrame: number | null; outFrame: number | null; text: string; hasDrawing: boolean; still: string | null; status: Doc<"notes">["status"]; createdAt: number };
     const events: Event[] = [];
 
@@ -78,6 +79,11 @@ export const feed = query({
       const vid = a.videoId ? videos.get(a.videoId) : null;
       events.push({ type: "share", at: a.at, actor: a.who, kind: a.kind, share: { _id: a.shareId, ...l }, videoId: a.videoId ?? null, videoTitle: vid?.title ?? null });
     }
+    // Client approvals (Phase 1): "{name} approved v{n} of {video}".
+    for (const a of await ctx.db.query("clientApprovals").withIndex("by_at").order("desc").take(300)) {
+      const i = info.get(a.versionId);
+      if (i) events.push({ type: "approval", at: a.at, actor: a.name, version: i });
+    }
     // Inside a sitting, show notes in timeline order.
     for (const e of events) if (e.type === "notes") e.notes.sort((a, b) => (a.inFrame ?? -1) - (b.inFrame ?? -1) || a.createdAt - b.createdAt);
     return events.sort((a, b) => b.at - a.at).slice(0, max);
@@ -94,7 +100,7 @@ export const recent = query({
   handler: async (ctx, { limit }) => {
     await requireMe(ctx);
     const max = Math.min(Math.max(limit ?? 20, 1), 100);
-    type Row = { at: number; who: string; what: "opened" | "watched" | "notes" | "read" | "doc_viewed" | "doc_signed" | "doc_all_signed"; label: string; count?: number; ref: { kind: "share" | "video" | "document" | "note"; id: string } };
+    type Row = { at: number; who: string; what: "opened" | "watched" | "notes" | "read" | "approved" | "doc_viewed" | "doc_signed" | "doc_all_signed"; label: string; count?: number; ref: { kind: "share" | "video" | "document" | "note"; id: string } };
     const rows: Row[] = [];
     const labels = new Map<string, string>();
     const videoLabel = async (id: Id<"videos">) => {
@@ -108,6 +114,9 @@ export const recent = query({
       if (a.kind === "note") continue; // notes come from the notes table, grouped
       if (a.kind === "viewed" && a.videoId) rows.push({ at: a.at, who: a.who, what: "watched", label: await videoLabel(a.videoId), ref: { kind: "video", id: a.videoId } });
       else if (a.kind === "opened") { const s = await ctx.db.get(a.shareId); if (s) rows.push({ at: a.at, who: a.who, what: "opened", label: (await labelOf(ctx, s)).label, ref: { kind: "share", id: s._id } }); }
+    }
+    for (const a of await ctx.db.query("clientApprovals").withIndex("by_at").order("desc").take(200)) {
+      rows.push({ at: a.at, who: a.name, what: "approved", label: `v${a.versionNumber} of ${await videoLabel(a.videoId)}`, ref: { kind: "video", id: a.videoId } });
     }
     // Client and guest notes, one row per person per video per sitting.
     const notes = (await ctx.db.query("notes").order("desc").take(500)).filter((n) => n.shareId);

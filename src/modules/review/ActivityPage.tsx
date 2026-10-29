@@ -17,7 +17,7 @@ export default function ActivityPage() {
   const [who, setWho] = useState<string | null>(null);
   const people = [...new Set((feed ?? []).map((e) => e.actor).filter(Boolean) as string[])];
   const rows = (feed ?? []).filter((e) =>
-    (e.type === "share" ? show.shares : e.type === "notes" ? show.notes : e.version.number === 1 ? show.videos : show.versions) && (!who || e.actor === who));
+    (e.type === "share" ? show.shares : e.type === "notes" ? show.notes : e.type === "approval" ? true : e.version.number === 1 ? show.videos : show.versions) && (!who || e.actor === who));
 
   return (
     <>
@@ -57,6 +57,22 @@ export default function ActivityPage() {
                           {e.kind === "viewed" && <span className="secondary">through the link for</span>}
                           <a className="v" {...linkProps("/settings/shares")}><Link2 size={14} /> {e.share.label}</a>
                           <span className="secondary">· shared {e.share.shareKind}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                if (e.type === "approval") {
+                  const v = e.version;
+                  return (
+                    <div className="event" key={i}>
+                      <div className="when">{ago(e.at)}</div>
+                      <div>
+                        <div className="ehead">
+                          <Avatar name={e.actor} />
+                          <b>{e.actor}</b>approved<span className="chip">v{v.number}</span>of
+                          <a className="v" {...linkProps(`/v/${v.videoId}?version=${v.number}`)}><Thumb src={v.thumbUrl} /> {v.videoTitle}</a>
+                          {v.projectName && <span className="secondary">· {v.projectName}</span>}
                         </div>
                       </div>
                     </div>

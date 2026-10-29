@@ -52,7 +52,10 @@ export default function App() {
   if (/^(www\.)?wranglerportal\.com$/i.test(location.hostname)) return <HoldingPage />;
   if (Kit && path.startsWith("/__kit")) return <Suspense fallback={<Loading />}><Kit /></Suspense>;
   const kit = kitSide();
-  if (KitApp && kit) return <Suspense fallback={<Loading />}><KitApp side={kit}><SignedIn /></KitApp></Suspense>;
+  if (KitApp && kit) {
+    const sh = /^\/s\/([^/]+)(?:\/v\/([^/]+))?\/?$/.exec(path);
+    return <Suspense fallback={<Loading />}><KitApp side={kit}>{sh ? <SharePage token={sh[1]} videoId={(sh[2] as Id<"videos"> | undefined) ?? null} versionNumber={null} noteId={null} /> : <SignedIn />}</KitApp></Suspense>;
+  }
   const signer = (isSignHost() ? /^\/(?:x\/)?([A-Za-z0-9_-]{16,64})\/?$/ : /^\/x\/([A-Za-z0-9_-]{16,64})\/?$/).exec(path);
   if ((isSignHost() && /^\/verify\/?$/.test(path)) || /^\/x\/verify\/?$/.test(path)) return <Suspense fallback={<Loading />}><VerifyPage /></Suspense>;
   if (signer) return <Suspense fallback={<Loading />}><SignerApp key={signer[1]} token={signer[1]} /></Suspense>;

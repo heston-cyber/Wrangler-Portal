@@ -27,7 +27,7 @@ export function CenterCard({ children, wide }: { children: React.ReactNode; wide
 }
 export const CardLogo = () => <span className="wp-logo"><span className="rec" aria-hidden /><img src={wpLogo} alt="Wrangler Productions" /></span>;
 
-export default function SignIn({ invitedEmail }: { invitedEmail?: string | null }) {
+export default function SignIn({ invitedEmail, note: lead }: { invitedEmail?: string | null; note?: React.ReactNode }) {
   const { signIn } = useAuthActions();
   const convex = useConvex();
   const [flow, setFlow] = useState<Flow>(invitedEmail ? "signUp" : "signIn");
@@ -98,6 +98,7 @@ export default function SignIn({ invitedEmail }: { invitedEmail?: string | null 
     <CenterCard>
       <form onSubmit={onSubmit} className="wp-form">
         <CardLogo />
+        {lead && <p className="wp-cardnote">{lead}</p>}
         <h1 className="wp-h3">{TITLES[flow]}</h1>
         {flow === "signUp" && invitedEmail && <p className="wp-body">You've been invited. Set a password for this email to see what's been shared with you.</p>}
         {flow === "code" && <p className="wp-body">Enter the 6-digit code we emailed to {email}.</p>}

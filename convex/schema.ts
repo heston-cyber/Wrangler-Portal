@@ -679,6 +679,19 @@ export default defineSchema({
 
   // Phase 1 (Oct 29): the Inbox. One row per person per event, so each person's read status is their own.
   // Every module posts through lib/inbox.ts; `key` makes each event post once per person, however often it runs.
+  // Client approval (Phase 1): a signed-in client approved a version through a share. Deletes nothing; separate from
+  // the owner's Approve final (videos.final).
+  clientApprovals: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    videoId: v.id("videos"),
+    versionId: v.id("versions"),
+    versionNumber: v.number(),
+    userId: v.id("users"),
+    name: v.string(),
+    email: v.string(),
+    shareId: v.id("shares"),
+    at: v.number(),
+  }).index("by_video", ["videoId", "at"]).index("by_version_user", ["versionId", "userId"]).index("by_at", ["at"]),
   inboxItems: defineTable({
     businessId: v.optional(v.id("businesses")),
     clientId: v.optional(v.id("clients")),
