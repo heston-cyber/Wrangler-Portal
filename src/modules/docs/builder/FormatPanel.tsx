@@ -207,7 +207,6 @@ export function QuickMenu({ editor, at, accent, onClose, onMore, onSaveClause }:
       </>}
       <MenuSep />
       <MenuItem icon={<SlidersHorizontal size={15} />} onSelect={onMore}>More in Format…</MenuItem>
-      <MenuLabel>Shift+right-click for the browser's menu</MenuLabel>
     </ContextMenu>
   );
 }

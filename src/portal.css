@@ -1503,3 +1503,11 @@ button.wp-hubcard[aria-busy], button.wp-tplcard[aria-busy] { opacity: 1; }
 /* The handle and ⋯ reach the line, so the pointer never crosses a gap on the way to them */
 .wsb-handle::after { content: ""; position: absolute; inset: -4px -8px -4px -4px; }
 .wsb-more::after { content: ""; position: absolute; inset: -4px -4px -4px -10px; }
+/* Pop-up menus, smaller (Heston, Oct 29): tighter rows, smaller text and icons */
+.menu { min-width: 170px; padding: 4px; border-radius: 11px; }
+.menu .sep { margin: 4px 2px; }
+.menu .mlabel { padding: 5px 8px 3px; font-size: 10px; }
+.mitem { gap: 8px; padding: 3px 8px; border-radius: 7px; font-size: 12.5px; line-height: 18px; min-height: 26px; }
+.mitem .wp-icon, .mitem > svg, .mitem .lucide { width: 15px; height: 15px; flex: none; }
+.mitem .kbd { font-size: 11px; height: 16px; min-width: 0; padding: 0 2px; }
+.mitem .mhint { font-size: 11px; }
