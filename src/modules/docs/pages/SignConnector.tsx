@@ -1,20 +1,17 @@
-// Contracts › Claude connector (Wrangler Sign, Phase S4): its own address and keys, separate from Wrangler Review's.
+// Settings › Claude connectors, the Wrangler Sign half (Phase S4): its own address and keys, separate from Wrangler Review's.
 import { useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Copy, FileSignature, KeyRound, Plus, X } from "lucide-react";
+import { Copy, KeyRound, Plus, X } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { Sep, TopBar } from "../../../shell/Shell";
-import { linkProps } from "../../../lib/router";
-import { Modal, useToast } from "../../../ui/kit";
+import { Modal } from "../../../ui/kit";
 import { ago } from "../../../lib/format";
 import { copy, KeyLine } from "../../settings/Settings";
 import { CONVEX_SITE } from "../lib/client";
 
 export const WS_MCP_URL = `${CONVEX_SITE}/ws-mcp`;
 
-export default function SignConnector() {
-  const [toast, show] = useToast();
+export function SignConnectorPanel({ show }: { show: (m: string) => void }) {
   const keys = useQuery(api.wsConnector.listKeys, {});
   const createKey = useAction(api.wsConnector.createKey);
   const revokeKey = useMutation(api.wsConnector.revokeKey);
@@ -29,12 +26,9 @@ export default function SignConnector() {
   };
   return (
     <>
-      <TopBar><FileSignature size={15} /><a {...linkProps("/sign")}>Contracts</a><Sep /><span className="here">Claude connector</span></TopBar>
-      <div className="content">
-        <div className="ws-list">
-          <div style={{ display: "grid", gap: 8 }}>
+          <div className="wp-setsub" id="sign">
             <span className="eyebrow">Wrangler Sign</span>
-            <h1 className="headline">Claude sets up your contracts. <span className="rest">It uploads a contract you wrote together, places the boxes and shows you a preview. It approves, sends or cancels only when you say so in the chat.</span></h1>
+            <p>Claude sets up your contracts. It uploads a contract you wrote together, places the boxes and shows you a preview. It approves, sends or cancels only when you say so in the chat.</p>
           </div>
           <div className="panel">
             <div className="prow">
@@ -63,8 +57,6 @@ export default function SignConnector() {
               <li>In a chat, turn it on from <b>+ › Connectors</b>, then try: “What contracts are out for signature?”</li>
             </ol>
           </div>
-        </div>
-      </div>
       {made && (
         <Modal onClose={() => setMade(null)} label="Your connector key" width={560}>
           <div style={{ display: "grid", gap: 18 }}>
@@ -85,7 +77,6 @@ export default function SignConnector() {
           </div>
         </Modal>
       )}
-      {toast}
     </>
   );
 }

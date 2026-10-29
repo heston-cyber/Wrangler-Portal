@@ -657,6 +657,7 @@ export default defineSchema({
     emailFromName: v.optional(v.string()), // the From name on emails ("Wrangler Productions")
     replyTo: v.optional(v.string()),       // where clients' replies go (defaults to the owner's email)
     logoFileId: v.optional(v.id("_storage")), // shown in the portal and on emails
+    logoLightFileId: v.optional(v.id("_storage")), // the same logo for light backgrounds (emails, PDFs); Settings › Business, Oct 29
     accent: v.optional(v.string()),        // #rrggbb
     background: v.optional(v.string()),    // #rrggbb
     // Which modules the business uses. Menu items only show when on (and only once something is in them).

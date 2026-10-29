@@ -38,7 +38,7 @@ const OWNER_DOCS: Sub[] = [
   { to: "/sign/templates", label: "Templates", match: (p) => starts(p, "/sign/templates") },
   { to: "/sign/signature", label: "Your signature", match: (p) => starts(p, "/sign/signature") },
 ];
-const inReview = (p: string) => starts(p, "/review", "/projects", "/activity", "/v", "/register");
+const inReview = (p: string) => starts(p, "/review", "/projects", "/activity", "/v");
 const inDocs = (p: string) => starts(p, "/sign", "/docs");
 
 function ownerItems(): { main: Item[]; tabs: Item[] } {
@@ -260,11 +260,11 @@ export function MorePage({ me, side }: { me: Me; side: Side }) {
     ? [
       { to: "/sent", icon: "send", title: "Sent", sub: "Notes and items you sent" },
       { to: "/settings", icon: "settings", title: "Settings", sub: "Business, Register, Dropbox, connectors…" },
-      { to: "/settings#account", icon: "user", title: "Account", sub: `${me.name ?? ""}${me.name ? " · " : ""}${me.email}` },
+      { to: "/settings/account", icon: "user", title: "Account", sub: `${me.name ?? ""}${me.name ? " · " : ""}${me.email}` },
       { icon: "sign-out", title: "Sign out", onClick: () => void signOut() },
     ]
     : [
-      { to: "/settings", icon: "user", title: "Account", sub: `${me.name ?? ""}${me.name ? " · " : ""}${me.email}` },
+      { to: "/settings/account", icon: "user", title: "Account", sub: `${me.name ?? ""}${me.name ? " · " : ""}${me.email}` },
       { icon: "sign-out", title: "Sign out", onClick: () => void signOut() },
     ];
   return (

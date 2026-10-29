@@ -8,7 +8,6 @@ import ClientHome from "./modules/clients/ClientHome";
 import Home from "./modules/review/Home";
 import Projects from "./modules/review/Projects";
 import ActivityPage from "./modules/review/ActivityPage";
-import Register from "./modules/review/Register";
 import Settings from "./modules/settings/Settings";
 import VideoPage from "./modules/review/VideoPage";
 import SharePage from "./modules/review/SharePage";
@@ -25,7 +24,6 @@ const SignTemplates = lazy(() => import("./modules/docs/pages/SignTemplates"));
 const Builder = lazy(() => import("./modules/docs/builder/Builder"));
 const SignDoc = lazy(() => import("./modules/docs/pages/SignDoc"));
 const SignSignature = lazy(() => import("./modules/docs/pages/SignSignature"));
-const SignConnector = lazy(() => import("./modules/docs/pages/SignConnector"));
 // S2: the client's signing page. sign.wranglerportal.com/<token>, or /x/<token> on any host (a fallback).
 const SignerApp = lazy(() => import("./modules/docs/signer/SignerApp"));
 const VerifyPage = lazy(() => import("./modules/docs/signer/VerifyPage"));
@@ -105,7 +103,7 @@ function SignedIn() {
   else if (path.startsWith("/projects")) page = <Projects key="all" />;
   else if (signDoc) page = <Suspense fallback={<Loading />}><SignDoc key={signDoc[1]} documentId={signDoc[1] as Id<"wsDocuments">} versionNumber={Number(params.get("v")) || null} /></Suspense>;
   else if (path.startsWith("/sign/signature")) page = <Suspense fallback={<Loading />}><SignSignature /></Suspense>;
-  else if (path.startsWith("/sign/connector")) page = <Suspense fallback={<Loading />}><SignConnector /></Suspense>;
+  else if (path.startsWith("/sign/connector")) page = <Settings me={me} />; // now Settings › Claude connectors
   else if (/^\/sign\/docs\/?$/.test(path)) page = <Suspense fallback={<Loading />}><SignDocs /></Suspense>;
   else if (/^\/sign\/new\/?$/.test(path)) page = <Suspense fallback={<Loading />}><SignNew /></Suspense>;
   else if (/^\/sign\/b\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3] as Id<"wsBuilds">; page = <Suspense fallback={<Loading />}><Builder key={id} mode={{ kind: "build", buildId: id }} /></Suspense>; }
@@ -113,7 +111,7 @@ function SignedIn() {
   else if (/^\/sign\/templates\/?$/.test(path)) page = <Suspense fallback={<Loading />}><SignTemplates /></Suspense>;
   else if (path.startsWith("/sign")) page = <Suspense fallback={<Loading />}><SignHome /></Suspense>;
   else if (path.startsWith("/activity")) page = <ActivityPage />;
-  else if (path.startsWith("/register")) page = <Register />;
+  else if (path.startsWith("/register")) page = <Settings me={me} />; // now Settings › Register
   else if (path.startsWith("/settings")) page = <Settings me={me} />;
   else if (/^\/more\/?$/.test(path)) page = <MorePage me={me} side="owner" />;
   else page = <Home />; // "/" and "/review" (Review's main page) until the new Home lands

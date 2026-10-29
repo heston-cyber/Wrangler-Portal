@@ -1,13 +1,21 @@
-// Settings: your profile, the Dropbox drop folder, and the Claude connector (keys + setup). Labels and members come with later phases.
-import { useState } from "react";
+// Settings (Phase 1 look, Oct 29: page "S5 · Settings"): a section menu and one section at a time. Business, Account,
+// Register, Dropbox drop folder, Claude connectors, Google Sheet copy, Clients and Shares. Appearance is gone (dark only).
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { Copy, KeyRound, Monitor, Moon, Plus, Settings as SettingsIcon, Sheet, Sun, X } from "lucide-react";
-import { useTheme, type ThemePref } from "../../lib/theme";
+import { Copy, KeyRound, Plus, Sheet, X } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { TopBar } from "../../shell/Shell";
 import { Avatar, Modal, useToast } from "../../ui/kit";
+import { Button, Toggle } from "../../ui/wp";
+import { Icon } from "../../ui/Icon";
+import { useLocation } from "../../lib/router";
+import { SectionMenu, sectionOf, SettingsFrame, SetHead, type SectionKey } from "./Frame";
+import { SignConnectorPanel } from "../docs/pages/SignConnector";
+import Register from "../review/Register";
+import wpLogo from "../../assets/d1/wp-logo.png";
+import lightElbow from "../../assets/portal/light-elbow.jpg";
 import { ago } from "../../lib/format";
 import { DropboxSettings } from "./DropboxSettings";
 import { ClientsSettings } from "../clients/Clients";
@@ -49,84 +57,198 @@ function setUp() {
 `;
 }
 
-// Light / Dark / System, kept per browser (this device only).
-function Appearance() {
-  const { pref, setPref } = useTheme();
-  const opts: Array<{ v: ThemePref; label: string; icon: React.ReactNode }> = [
-    { v: "light", label: "Light", icon: <Sun size={15} /> },
-    { v: "dark", label: "Dark", icon: <Moon size={15} /> },
-    { v: "system", label: "System", icon: <Monitor size={15} /> },
-  ];
-  return (
-    <div className="panel">
-      <div className="prow">
-        <span className="pl">Appearance <span className="secondary" style={{ display: "block", fontSize: 12.5 }}>System follows this device's light or dark setting.</span></span>
-        <span className="pr">
-          <span className="seg" role="radiogroup" aria-label="Appearance">
-            {opts.map((o) => (
-              <button key={o.v} role="radio" aria-checked={pref === o.v} className={`segbtn${pref === o.v ? " on" : ""}`} onClick={() => setPref(o.v)}>{o.icon}{o.label}</button>
-            ))}
-          </span>
-        </span>
-      </div>
-    </div>
-  );
-}
-
 export async function copy(text: string, show: (m: string) => void, what = "Copied") {
   try { await navigator.clipboard.writeText(text); show(what); }
   catch { show("Couldn't copy. Select the text and copy it yourself."); }
 }
 
 export default function Settings({ me }: { me: { name: string | null; email: string } }) {
+  const { path, search } = useLocation();
+  const [toast, show] = useToast();
+  const section = sectionOf(path, search, location.hash);
+  // Old addresses (#claude, /register, /sign/connector, Dropbox's ?dropbox=…) move to the section's own address.
+  useEffect(() => {
+    if (!section || path === `/settings/${section}`) return;
+    history.replaceState(null, "", `/settings/${section}${search}`);
+    window.dispatchEvent(new Event("wr:navigate"));
+  }, [section, path, search]);
+  const narrow = useNarrow();
+  // /settings: the section list on a phone; the Business section on a computer.
+  if (!section && narrow) {
+    return (
+      <>
+        <TopBar><span className="here">Settings</span></TopBar>
+        <div className="wp-page wp-set"><SectionMenu active={null} list /></div>
+      </>
+    );
+  }
+  const key: SectionKey = section ?? "business";
+  if (key === "register") return <Register />;
+  return (
+    <SettingsFrame section={key}>
+      {key === "business" && <BusinessSection show={show} />}
+      {key === "account" && <AccountSection me={me} show={show} />}
+      {key === "dropbox" && <DropboxSettings show={show} />}
+      {key === "connectors" && <>
+        <SetHead eyebrow="Claude connectors" title="Claude reads your notes and sets up your contracts." sub="Two connectors, each with its own keys." />
+        <Connector show={show} />
+        <SignConnectorPanel show={show} />
+      </>}
+      {key === "sheet" && <SheetCopy show={show} />}
+      {key === "clients" && <ClientsSettings show={show} />}
+      {key === "shares" && <SharesSettings show={show} />}
+      {toast}
+    </SettingsFrame>
+  );
+}
+
+function useNarrow() {
+  const q = "(max-width: 820px)";
+  const [n, setN] = useState(() => typeof matchMedia === "function" && matchMedia(q).matches);
+  useEffect(() => {
+    if (typeof matchMedia !== "function") return;
+    const m = matchMedia(q); const on = () => setN(m.matches);
+    m.addEventListener("change", on); return () => m.removeEventListener("change", on);
+  }, []);
+  return n;
+}
+
+function AccountSection({ me, show }: { me: { name: string | null; email: string }; show: (m: string) => void }) {
   const setName = useMutation(api.users.setName);
   const { signOut } = useAuthActions();
   const [name, setN] = useState(me.name ?? "");
-  const [toast, show] = useToast();
   const changed = name.trim() !== (me.name ?? "") && name.trim().length > 0;
   return (
     <>
-      <TopBar><SettingsIcon size={15} /><span className="here">Settings</span></TopBar>
-      <div className="content">
-        <div className="settings">
-          <div style={{ display: "grid", gap: 8 }}>
-            <span className="eyebrow">Account</span>
-            <h1 className="headline">Your profile. <span className="rest">The name here goes on every note and reply you leave.</span></h1>
+      <SetHead eyebrow="Account" title="Your profile." sub="The name here goes on every note and reply you leave." />
+      <div className="panel">
+        <div className="prow">
+          <span className="pl">Name</span>
+          <span className="pr">
+            <input className="input" value={name} onChange={(e) => setN(e.target.value)} placeholder="Heston" aria-label="Name" />
+            <Button size="sm" disabled={!changed} onClick={async () => { await setName({ name }); show("Name saved"); }}>Save</Button>
+          </span>
+        </div>
+        <div className="prow"><span className="pl">Email</span><span className="pr secondary">{me.email}</span></div>
+        <div className="prow"><span className="pl">Picture</span><span className="pr"><Avatar name={name || me.email} size="lg" /></span></div>
+      </div>
+      <div className="panel">
+        <div className="prow">
+          <span className="pl">Sign out <span className="psub">Ends this session on this device.</span></span>
+          <span className="pr"><Button size="sm" onClick={() => void signOut()}>Sign out</Button></span>
+        </div>
+      </div>
+    </>
+  );
+}
+
+type Biz = { name: string; legalName: string; emailFromName: string; replyTo: string; accent: string; background: string; modules: { review: boolean; docs: boolean; payments: boolean } };
+
+function BusinessSection({ show }: { show: (m: string) => void }) {
+  const cur = useQuery(api.business.settings, {});
+  const save = useMutation(api.business.updateSettings);
+  const uploadUrl = useMutation(api.business.logoUploadUrl);
+  const setLogo = useMutation(api.business.setLogo);
+  const [f, setF] = useState<Biz | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (cur && !f) setF({ name: cur.name, legalName: cur.legalName ?? "", emailFromName: cur.emailFromName ?? "", replyTo: cur.replyTo ?? "", accent: cur.accent ?? "", background: cur.background ?? "", modules: cur.modules });
+  }, [cur, f]);
+  const dirty = useMemo(() => !!(cur && f) && (f.name !== cur.name || f.legalName !== (cur.legalName ?? "") || f.emailFromName !== (cur.emailFromName ?? "") || f.replyTo !== (cur.replyTo ?? "") || f.accent.toUpperCase() !== (cur.accent ?? "") || f.background.toUpperCase() !== (cur.background ?? "") || JSON.stringify(f.modules) !== JSON.stringify(cur.modules)), [cur, f]);
+  if (!cur || !f) return <SetHead eyebrow="Business" title="Your business." sub="How your portal looks to clients and what it sends as." />;
+  const set = (p: Partial<Biz>) => setF({ ...f, ...p });
+  const onSave = async () => {
+    setBusy("save"); setErr(null);
+    try {
+      await save({ name: f.name, legalName: f.legalName || null, emailFromName: f.emailFromName || null, replyTo: f.replyTo || null, accent: f.accent || null, background: f.background || null, modules: f.modules });
+      show("Saved");
+    } catch (e) { setErr((e as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]); }
+    finally { setBusy(null); }
+  };
+  const field = (label: string, k: "name" | "legalName" | "emailFromName" | "replyTo", type = "text", ph = "") => (
+    <label className="wp-field"><span className="wp-field-label">{label}</span><input className="input" type={type} value={f[k]} placeholder={ph} onChange={(e) => set({ [k]: e.target.value } as Partial<Biz>)} /></label>
+  );
+  const hex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v);
+  return (
+    <>
+      <SetHead eyebrow="Business" title="Your business." sub="How your portal looks to clients and what it sends as." />
+      <div className="wp-bizgrid">
+        <div className="wp-biz glass">
+          {field("Business name", "name")}
+          {field("Legal name", "legalName")}
+          {field("Email from-name", "emailFromName", "text", f.name)}
+          {field("Reply-to", "replyTo", "email", cur.ownerEmail ?? "")}
+          <div className="wp-biz2">
+            <LogoSlot label="Logo · on dark" url={cur.logoUrl} light={false} busy={busy === "dark"} onPick={async (file) => { setBusy("dark"); try { await uploadLogo(file, "dark"); } finally { setBusy(null); } }} onClear={() => void setLogo({ storageId: null })} />
+            <LogoSlot label="Logo · on light" url={cur.logoLightUrl} light busy={busy === "light"} onPick={async (file) => { setBusy("light"); try { await uploadLogo(file, "light"); } finally { setBusy(null); } }} onClear={() => void setLogo({ storageId: null, which: "light" })} />
           </div>
-          <div className="panel">
-            <div className="prow">
-              <span className="pl">Name</span>
-              <span className="pr">
-                <input className="input sm" value={name} onChange={(e) => setN(e.target.value)} placeholder="Heston" aria-label="Name" />
-                {changed && <button className="btn primary sm" onClick={async () => { await setName({ name }); show("Name saved"); }}>Save</button>}
-              </span>
-            </div>
-            <div className="prow"><span className="pl">Email</span><span className="pr secondary">{me.email}</span></div>
-            <div className="prow"><span className="pl">Picture</span><span className="pr"><Avatar name={name || me.email} size="lg" /></span></div>
+          <div className="wp-biz2">
+            <ColourField label="Accent colour" value={f.accent} fallback="#FF0000" onChange={(v) => set({ accent: v })} />
+            <ColourField label="Background colour" value={f.background} fallback="#030104" onChange={(v) => set({ background: v })} />
           </div>
-
-          <Appearance />
-
-          <DropboxSettings show={show} />
-
-          <Connector show={show} />
-
-          <SheetCopy show={show} />
-
-          <ClientsSettings show={show} />
-
-          <SharesSettings show={show} />
-
-          <div className="panel">
-            <div className="prow">
-              <span className="pl">Sign out <span className="secondary" style={{ display: "block", fontSize: 12.5 }}>Ends this session on this device.</span></span>
-              <span className="pr"><button className="btn sm" onClick={() => void signOut()}>Sign out</button></span>
-            </div>
+          {cur.accentCheck && !cur.accentCheck.ok && f.accent.toUpperCase() === cur.accent && <p className="wp-warnline"><Icon name="alert" size={14} plain />Text on this colour may be hard to read.</p>}
+          <span className="wp-eyebrow">Modules</span>
+          <ModRow label="Review" checked={f.modules.review} onChange={(v) => set({ modules: { ...f.modules, review: v } })} />
+          <ModRow label="Docs" checked={f.modules.docs} onChange={(v) => set({ modules: { ...f.modules, docs: v } })} />
+          <ModRow label="Inbox" checked disabled onChange={() => {}} />
+          <ModRow label="Projects (Phase 2)" checked={false} disabled onChange={() => {}} />
+          <ModRow label="Invoices (Phase 2)" checked={f.modules.payments} disabled onChange={() => {}} />
+          {err && <p className="wp-errline">{err}</p>}
+          <div><Button variant="primary" loading={busy === "save"} disabled={!dirty || !f.name.trim() || (!!f.accent && !hex(f.accent)) || (!!f.background && !hex(f.background))} onClick={() => void onSave()}>Save</Button></div>
+        </div>
+        <div className="wp-bizprev">
+          <span className="wp-label">Preview · client Home</span>
+          <div className="frame" style={{ ["--pv-accent" as string]: hex(f.accent) ? f.accent : "var(--accent)", ["--pv-bg" as string]: hex(f.background) ? f.background : "var(--surface-base)" }} aria-hidden>
+            <img className="light" src={lightElbow} alt="" />
+            <span className="side"><span className="logo">{cur.logoUrl ? <img src={cur.logoUrl} alt="" /> : <><i className="rec" /><img src={wpLogo} alt="" /></>}</span></span>
+            <span className="main"><b>Two things need you.</b><i /><i /><i /></span>
           </div>
         </div>
       </div>
-      {toast}
     </>
+  );
+
+  async function uploadLogo(file: File, which: "dark" | "light") {
+    if (!/^image\/(png|jpeg|svg\+xml|webp)$/.test(file.type) || file.size > 1_000_000) { show("Use a PNG, JPG, SVG or WebP image under 1 MB."); return; }
+    try {
+      const r = await fetch(await uploadUrl({}), { method: "POST", headers: { "Content-Type": file.type }, body: file });
+      if (!r.ok) throw new Error(`Upload failed (${r.status}).`);
+      const { storageId } = (await r.json()) as { storageId: Id<"_storage"> };
+      await setLogo({ storageId, which });
+      show("Logo saved");
+    } catch (e) { show((e as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]); }
+  }
+}
+
+function ModRow({ label, checked, disabled, onChange }: { label: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void }) {
+  return <label className="wp-modrow"><span>{label}</span><Toggle label={label} checked={checked} disabled={disabled} onChange={onChange} /></label>;
+}
+
+function LogoSlot({ label, url, light, busy, onPick, onClear }: { label: string; url: string | null; light: boolean; busy: boolean; onPick: (f: File) => void; onClear: () => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <div className="wp-field">
+      <span className="wp-field-label">{label}</span>
+      <button type="button" className={`wp-logoslot${light ? " light" : ""}`} onClick={() => input.current?.click()} aria-label={`${label}: ${url ? "change" : "upload"}`} aria-busy={busy || undefined}>
+        {url ? <img src={url} alt="" /> : <span className="wp-logo"><span className="rec" /><img src={wpLogo} alt="" /></span>}
+      </button>
+      {url && <button type="button" className="wp-link sm" onClick={onClear}>Remove</button>}
+      <input ref={input} type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) onPick(file); }} />
+    </div>
+  );
+}
+
+function ColourField({ label, value, fallback, onChange }: { label: string; value: string; fallback: string; onChange: (v: string) => void }) {
+  const ok = /^#[0-9a-fA-F]{6}$/.test(value);
+  return (
+    <label className="wp-field">
+      <span className="wp-field-label">{label}</span>
+      <span className="wp-colour input">
+        <input type="color" value={ok ? value : fallback} onChange={(e) => onChange(e.target.value.toUpperCase())} aria-label={`${label} picker`} />
+        <input className="hex" value={value} placeholder={fallback} maxLength={7} onChange={(e) => onChange(e.target.value.trim())} aria-label={label} aria-invalid={value !== "" && !ok ? true : undefined} />
+      </span>
+    </label>
   );
 }
 
@@ -147,9 +269,9 @@ function Connector({ show }: { show: (m: string) => void }) {
 
   return (
     <>
-      <div style={{ display: "grid", gap: 8 }} id="claude">
-        <span className="eyebrow">Claude connector</span>
-        <h1 className="headline">Claude reads your notes. <span className="rest">Connect once, then tell Claude you left notes, in any chat on your desktop or phone.</span></h1>
+      <div className="wp-setsub" id="claude">
+        <span className="eyebrow">Wrangler Review</span>
+        <p>Claude reads your notes. Connect once, then tell Claude you left notes, in any chat on your desktop or phone.</p>
       </div>
 
       <div className="panel">
@@ -252,10 +374,7 @@ function SheetCopy({ show }: { show: (m: string) => void }) {
   };
   return (
     <>
-      <div style={{ display: "grid", gap: 8 }} id="sheet">
-        <span className="eyebrow">Google Sheet copy</span>
-        <h1 className="headline">The register in a Google Sheet. <span className="rest">A copy that refreshes itself every 10 minutes. Changes happen here, not in the sheet.</span></h1>
-      </div>
+      <SetHead eyebrow="Google Sheet copy" title="The register in a Google Sheet." sub="A copy that refreshes itself every 10 minutes. Changes happen here, not in the sheet." />
       <div className="panel">
         <div className="prow">
           <span className="pl">

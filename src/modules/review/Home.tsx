@@ -97,7 +97,7 @@ function RecentActivity() {
   return (
     <>
       {feed.map((e, i) => e.type === "share" ? (
-        <a key={i} className="vrow" style={{ gridTemplateColumns: "52px minmax(0,1fr) auto" }} {...linkProps("/settings#shares")}>
+        <a key={i} className="vrow" style={{ gridTemplateColumns: "52px minmax(0,1fr) auto" }} {...linkProps("/settings/shares")}>
           <span className="thumb ph" aria-hidden><Link2 size={14} /></span>
           <span className="t" style={{ gap: 6 }}>
             <Avatar name={e.actor} />

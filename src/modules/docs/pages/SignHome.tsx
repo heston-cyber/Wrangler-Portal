@@ -32,7 +32,7 @@ export default function SignHome() {
   return (
     <>
       <TopBar right={<>
-        <ButtonLink variant="ghost" size="sm" className="hide-sm" to="/sign/connector">Claude connector</ButtonLink>
+        <ButtonLink variant="ghost" size="sm" className="hide-sm" to="/settings/connectors">Claude connector</ButtonLink>
         <ButtonLink variant="ghost" size="sm" className="hide-sm" to="/sign/signature">Your signature</ButtonLink>
       </>}>
         <span className="here">Docs</span>

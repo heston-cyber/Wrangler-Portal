@@ -5,7 +5,9 @@ import { Check, Copy, ListOrdered, Plus, RotateCw, Rows3, Search, TriangleAlert,
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { shortTitleError, shortTitleFrom } from "../../../convex/lib/register";
-import { TopBar } from "../../shell/Shell";
+import { SettingsFrame, SetHead } from "../settings/Frame";
+import { Icon } from "../../ui/Icon";
+import { Button, EmptyState } from "../../ui/wp";
 import { linkProps, navigate } from "../../lib/router";
 import { Modal, useToast } from "../../ui/kit";
 import { ago } from "../../lib/format";
@@ -52,37 +54,26 @@ export default function Register() {
 
   return (
     <>
-      <TopBar right={
+      <SettingsFrame section="register" right={
         <>
-          <button className="icon-btn md" onClick={() => setDetails(true)} aria-label="Show details" title="Show details"><Rows3 size={16} /></button>
-          <button className="btn primary sm" onClick={() => setAdding(true)}><Plus size={15} />New video</button>
+          <button className="icon-btn sm" onClick={() => setDetails(true)} aria-label="Show details" title="Show details"><Icon name="menu" size={18} /></button>
+          <Button variant="primary" size="sm" icon="plus" onClick={() => setAdding(true)}>New video</Button>
         </>
       }>
-        <ListOrdered size={15} /><span className="here">Register</span>
-      </TopBar>
-      <div className="content">
         <div className="register">
-          <div className="reghead">
-            <div style={{ display: "grid", gap: 6 }}>
-              <span className="eyebrow">Every video, numbered</span>
-              <h1 className="headline">The register. <span className="rest">Render each version with the name under Next render. It's also the Resolve timeline name.</span></h1>
-            </div>
-            <label className="regsearch">
-              <Search size={15} />
-              <input className="input sm" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a number, title or project" aria-label="Find in the register" />
-            </label>
-          </div>
+          <SetHead eyebrow="Every video, numbered" title="The register." sub="Render each version with the name under Next render. It's also the Resolve timeline name." />
+          <label className="ws-search regsearch">
+            <Icon name="search" size={16} />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a number, title or project" aria-label="Find in the register" />
+          </label>
 
           <FlaggedDrops show={show} videos={numbered.map((x) => { const p = pmap.get(x.projectId); return { videoId: x._id, numberText: pad5(x.number!), title: x.title, project: p?.name ?? "", client: p?.client?.trim() || null, latest: x.latest?.number ?? null }; })} />
 
           {overview === undefined ? null : numbered.length === 0 ? (
-            <div className="empty">
-              <span>No numbered videos yet. New video gives out the next number.</span>
-              <button className="btn primary" onClick={() => setAdding(true)}><Plus size={15} />New video</button>
-            </div>
+            <EmptyState icon="register" title="No numbered videos yet." body="New video gives out the next number." actions={<Button variant="primary" icon="plus" onClick={() => setAdding(true)}>New video</Button>} />
           ) : (
-            <div className="regwrap">
-              <table className="regtable">
+            <div className="wp-tablecard glass regcard">
+              <table className="regtable wp-regtable">
                 <thead>
                   <tr>
                     <th scope="col">No.</th>
@@ -122,7 +113,7 @@ export default function Register() {
             <p className="caption secondary regnote">{unnumbered === 1 ? "1 video from before numbering isn't in the register." : `${unnumbered} videos from before numbering aren't in the register.`} They're still on the <a {...linkProps("/projects")}>Projects</a> page; add one from its page (⋯ › Add to the register).</p>
           )}
         </div>
-      </div>
+      </SettingsFrame>
       {adding && <NewVideo onClose={() => setAdding(false)} show={show} />}
       {details && <ShowDetails fields={lib.fields} onChange={lib.setFields} onClose={() => setDetails(false)} />}
       {approving && <ApproveFinal videoId={approving._id} title={approving.title} onClose={() => setApproving(null)} onDone={show} />}

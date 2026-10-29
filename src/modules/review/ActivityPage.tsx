@@ -55,7 +55,7 @@ export default function ActivityPage() {
                           {e.kind === "opened" ? <>opened the shared link for</> : <>watched</>}
                           {e.kind === "viewed" && e.videoId ? <a className="v" {...linkProps(`/v/${e.videoId}`)}>{e.videoTitle ?? "a video"}</a> : null}
                           {e.kind === "viewed" && <span className="secondary">through the link for</span>}
-                          <a className="v" {...linkProps("/settings#shares")}><Link2 size={14} /> {e.share.label}</a>
+                          <a className="v" {...linkProps("/settings/shares")}><Link2 size={14} /> {e.share.label}</a>
                           <span className="secondary">· shared {e.share.shareKind}</span>
                         </div>
                       </div>

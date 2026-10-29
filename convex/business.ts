@@ -83,7 +83,8 @@ async function settingsOf(ctx: QueryCtx, b: Doc<"businesses">) {
   return {
     name: b.name, legalName: b.legalName ?? null, ownerName: b.ownerName ?? null, emailFromName: b.emailFromName ?? null,
     replyTo: b.replyTo ?? null, ownerEmail: c.ownerEmail, accent: b.accent ?? null, background: b.background ?? null,
-    logoUrl: b.logoFileId ? await ctx.storage.getUrl(b.logoFileId) : null, modules: b.modules ?? DEFAULT_MODULES,
+    logoUrl: b.logoFileId ? await ctx.storage.getUrl(b.logoFileId) : null,
+    logoLightUrl: b.logoLightFileId ? await ctx.storage.getUrl(b.logoLightFileId) : null, modules: b.modules ?? DEFAULT_MODULES,
     // Settings shows a small warning when no text colour reaches 4.5:1 on the accent (Heston, Oct 29).
     accentCheck: b.accent ? (({ ratio, ok }) => ({ ratio: Math.round(ratio * 100) / 100, ok }))(textOn(b.accent)) : null,
   };
@@ -144,9 +145,10 @@ export const logoUploadUrl = mutation({
   handler: async (ctx) => { await requireMe(ctx); ownBusiness(ctx); return await ctx.storage.generateUploadUrl(); },
 });
 
+/** The logo for dark backgrounds (the portal), or with which: "light", the one for light backgrounds (emails, PDFs). */
 export const setLogo = mutation({
-  args: { storageId: v.union(v.id("_storage"), v.null()) },
-  handler: async (ctx, { storageId }) => {
+  args: { storageId: v.union(v.id("_storage"), v.null()), which: v.optional(v.union(v.literal("dark"), v.literal("light"))) },
+  handler: async (ctx, { storageId, which }) => {
     await requireMe(ctx);
     const id = ownBusiness(ctx);
     const b = await ctx.db.get(id);
@@ -157,8 +159,10 @@ export const setLogo = mutation({
         throw new ConvexError("Use a PNG, JPG, SVG or WebP image under 1 MB.");
       }
     }
-    if (b.logoFileId && b.logoFileId !== storageId) await ctx.storage.delete(b.logoFileId);
-    await ctx.db.patch(id, { logoFileId: storageId ?? undefined, updatedAt: Date.now() });
+    const field = which === "light" ? "logoLightFileId" : "logoFileId";
+    const old = b[field];
+    if (old && old !== storageId) await ctx.storage.delete(old);
+    await ctx.db.patch(id, { [field]: storageId ?? undefined, updatedAt: Date.now() });
     return null;
   },
 });

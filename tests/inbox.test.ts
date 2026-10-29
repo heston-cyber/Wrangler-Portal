@@ -197,4 +197,21 @@ describe("a client's people, the client page, settings", () => {
     expect((await w.bobC.query(api.business.brand, {})).map((b: { name: string }) => b.name)).toEqual(["Juniper & Ash"]);
     expect((await w.mayaC.query(api.business.brand, {})).map((b: { name: string }) => b.name)).toEqual(["Wrangler Productions"]);
   });
+
+  test("The dark and light logos are kept apart, and clearing one deletes only its file", async () => {
+    const w = await world();
+    // convex-test's storage has no content type, so the files are attached directly; setLogo's type check is the live one.
+    const [dark, light] = await w.t.run(async (ctx) => {
+      const d = await ctx.storage.store(new Blob([new Uint8Array([1])], { type: "image/png" }));
+      const l = await ctx.storage.store(new Blob([new Uint8Array([2])], { type: "image/png" }));
+      await ctx.db.patch(w.A, { logoFileId: d, logoLightFileId: l });
+      return [d, l];
+    });
+    let s = await w.heston.query(api.business.settings, {});
+    expect(s.logoUrl).toBeTruthy(); expect(s.logoLightUrl).toBeTruthy();
+    await w.heston.mutation(api.business.setLogo, { storageId: null, which: "light" });
+    s = await w.heston.query(api.business.settings, {});
+    expect(s.logoUrl).toBeTruthy(); expect(s.logoLightUrl).toBeNull();
+    expect(await w.t.run(async (ctx) => [await ctx.storage.getUrl(dark), await ctx.storage.getUrl(light)])).toEqual([expect.any(String), null]);
+  });
 });

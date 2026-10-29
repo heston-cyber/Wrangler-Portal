@@ -62,6 +62,7 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "shares.coveringVideo": { pages: ["owner"], args: () => "skip" }, // VideoPage skips it unless the owner is looking
   "views.forVideo": { pages: ["owner"], args: () => "skip" }, // the Views chip only renders for the owner
   "library.overview": { pages: ["owner"], args: () => "skip" },
+  "business.settings": { pages: ["owner"], args: () => "skip" }, // Settings › Business (owner only)
   "activity.feed": { pages: ["owner"], args: () => "skip" },
   "clients.listInvites": { pages: ["owner"], args: () => "skip" },
   "dropbox.status": { pages: ["owner"], args: () => "skip" },

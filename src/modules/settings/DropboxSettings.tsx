@@ -30,7 +30,7 @@ export function DropboxSettings({ show }: { show: (m: string) => void }) {
     const r = q.get("dropbox");
     if (!r) return;
     show(r === "connected" ? "Dropbox connected" : `Dropbox didn't connect: ${q.get("reason") ?? "unknown reason"}`);
-    history.replaceState(null, "", "/settings#dropbox");
+    history.replaceState(null, "", "/settings/dropbox"); window.dispatchEvent(new Event("wr:navigate"));
     document.getElementById("dropbox")?.scrollIntoView({ block: "start" });
   }, [show]);
 
