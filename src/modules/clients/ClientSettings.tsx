@@ -11,6 +11,8 @@ export default function ClientSettings({ me }: { me: { name: string | null; emai
   const { signOut, signIn } = useAuthActions();
   const setName = useMutation(api.users.setName);
   const prefs = useQuery(api.emails.myPrefs, {});
+  const brands = useQuery(api.business.brand);
+  const business = brands?.[0]?.name ?? "Wrangler Productions";
   const setPrefs = useMutation(api.emails.setMine);
   const [name, setN] = useState(me.name ?? "");
   const [resetSent, setResetSent] = useState(false);
@@ -35,7 +37,7 @@ export default function ClientSettings({ me }: { me: { name: string | null; emai
             <span className="v"><Button size="sm" disabled={resetSent} onClick={async () => { try { await signIn("password", { flow: "reset", email: me.email }); setResetSent(true); } catch { show("Couldn't send the code. Try again in a minute."); } }}>Email me a code</Button></span>
           </div>
           <div className="r">
-            <span className="l"><b>Email me when something new arrives</b><span>New cuts, replies to your notes and documents to sign.</span></span>
+            <span className="l"><b>Email me when something new arrives</b><span>{`New cuts, replies to your notes and notes from ${business}. Documents to sign always arrive by email.`}</span></span>
             <span className="v"><Toggle label="Email me when something new arrives" checked={prefs?.on ?? true} disabled={prefs === undefined} onChange={async (on) => { await setPrefs({ on }); show(on ? "Emails on." : "Emails off."); }} /></span>
           </div>
           <div className="r"><span className="l"><b>Sign out</b></span><span className="v"><Button size="sm" onClick={() => void signOut()}>Sign out</Button></span></div>
