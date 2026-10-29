@@ -5,6 +5,7 @@ name = "wrangler-preview"
 main = "preview-worker.js"
 compatibility_date = "2026-10-01"
 workers_dev = false
+keep_vars = true # a password added in the dashboard (as text or a secret) survives every redeploy
 
 routes = [
   { pattern = "preview.wranglerportal.com", custom_domain = true },

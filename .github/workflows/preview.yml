@@ -46,6 +46,19 @@ jobs:
           emails="${PREVIEW_EMAILS:-heston@wranglerproductions.com}"
           npx convex env set EMAIL_ONLY_TO "$emails" > /dev/null && echo "EMAIL_ONLY_TO set"
           npx convex env set SITE_URL "https://preview.wranglerportal.com" > /dev/null && echo "SITE_URL set"
+          # Sign-in needs a key pair on dev (JWT_PRIVATE_KEY + JWKS). The restore from backup left JWKS missing, so make a
+          # fresh pair when it's absent. Dev only; never printed. Existing dev sign-ins end, which is fine on a copy.
+          if ! npx convex env get JWKS > /dev/null 2>&1 || [ -z "$(npx convex env get JWKS 2>/dev/null)" ]; then
+            node -e '
+              const { generateKeyPairSync } = require("crypto");
+              const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+              const pem = privateKey.export({ type: "pkcs8", format: "pem" }).trimEnd().replace(/\n/g, " ");
+              const jwk = publicKey.export({ format: "jwk" });
+              require("fs").writeFileSync(process.env.RUNNER_TEMP + "/k", pem);
+              require("fs").writeFileSync(process.env.RUNNER_TEMP + "/j", JSON.stringify({ keys: [{ use: "sig", alg: "RS256", ...jwk }] }));'
+            npx convex env set JWT_PRIVATE_KEY -- "$(cat "$RUNNER_TEMP/k")" > /dev/null && npx convex env set JWKS -- "$(cat "$RUNNER_TEMP/j")" > /dev/null && echo "sign-in keys made on dev"
+            rm -f "$RUNNER_TEMP/k" "$RUNNER_TEMP/j"
+          else echo "sign-in keys: present"; fi
           npx convex deploy -y > /dev/null 2>&1 || npx convex dev --once --typecheck disable
           name="${CONVEX_DEPLOY_KEY#dev:}"; name="${name%%|*}"
           VITE_CONVEX_URL="https://${name}.convex.cloud" npm run build
