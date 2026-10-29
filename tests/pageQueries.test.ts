@@ -68,6 +68,8 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "activity.recent": { pages: ["owner"], args: () => "skip" }, // back-office Home
   "home.needs": { pages: ["owner"], args: () => "skip" }, // back-office Home
   "clients.directory": { pages: ["owner"], args: () => "skip" }, // Home and Clients
+  "clients.page": { pages: ["owner"], args: () => "skip" }, // client page
+  "inbox.forClient": { pages: ["owner"], args: () => "skip" }, // client page › Their Inbox
   "clients.listInvites": { pages: ["owner"], args: () => "skip" },
   "dropbox.status": { pages: ["owner"], args: () => "skip" },
   "dropbox.flagged": { pages: ["owner"], args: () => "skip" },

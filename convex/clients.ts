@@ -7,6 +7,9 @@ import { requireMe, requireSignedIn } from "./lib/access";
 import { allowedEmails } from "./auth";
 import { prefsByEmail } from "./emails";
 import { businessInScope, ensureMembership } from "./lib/business";
+import type { Doc, Id } from "./_generated/dataModel";
+import { signedThumbUrl, signStillUrl } from "./lib/media";
+import { docLabel } from "./lib/wsLayout";
 
 const cleanEmail = (e: string) => e.trim().toLowerCase();
 const valid = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && e.length <= 200;
@@ -180,7 +183,8 @@ export const invitePerson = mutation({
   },
 });
 
-/** The client page: who they are, their people, what's shared, their documents and Inbox counts. */
+/** The client page (P1 / Owner / Client page): who they are, their people, projects, what's shared with them (each
+ *  version they can see, with Not watched / {n} notes / Approved), their documents and Inbox counts. */
 export const page = query({
   args: { clientId: v.id("clients") },
   handler: async (ctx, { clientId }) => {
@@ -195,19 +199,71 @@ export const page = query({
     const shares = (await ctx.db.query("shares").collect()).filter((s) =>
       (s.kind === "client" && s.clientId === clientId) || (s.kind === "project" && !!s.projectId && projectIds.has(s.projectId)) || (s.kind === "video" && !!s.videoId && videoIds.has(s.videoId)));
     const emails = new Set(people.map((p) => p.email));
-    const docs = new Map<string, { _id: string; number: number; title: string; status: string; sentAt: number | null; completedAt: number | null }>();
+    const now = Date.now();
+
+    // Versions per video, ready only, newest first.
+    const versionsOf = new Map<string, Doc<"versions">[]>();
+    for (const x of videos) versionsOf.set(x._id, (await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", x._id)).collect()).filter((r) => r.status === "ready").sort((a, b) => b.number - a.number));
+
+    const projectRows = [];
+    for (const p of projects.sort((a, b) => b.createdAt - a.createdAt)) {
+      const mine = videos.filter((x) => x.projectId === p._id);
+      const latest = mine.map((x) => versionsOf.get(x._id)?.[0]).filter(Boolean).sort((a, b) => b!.createdAt - a!.createdAt)[0];
+      projectRows.push({
+        _id: p._id, name: p.name, jobNumber: p.jobNumber ?? null, videos: mine.length,
+        updatedAt: Math.max(p.createdAt, ...mine.map((x) => x.updatedAt)), thumbUrl: latest ? (await signStillUrl(latest.posterUrl)) ?? (await signedThumbUrl(latest)) : null,
+        shared: shares.some((s) => !s.offAt && (s.kind === "client" || (s.kind === "project" && s.projectId === p._id) || (s.kind === "video" && mine.some((x) => x._id === s.videoId)))),
+      });
+    }
+
+    // What's shared with them: each version a live share lets them see.
+    const live = shares.filter((s) => !s.offAt && !(s.expiresAt && s.expiresAt < now));
+    const seen = new Map<string, { share: (typeof shares)[number]; at: number }>();
+    for (const s of live) {
+      const covered = videos.filter((x) => s.kind === "client" || (s.kind === "project" ? x.projectId === s.projectId : x._id === s.videoId));
+      for (const x of covered) {
+        const vs = versionsOf.get(x._id) ?? [];
+        for (const r of s.allVersions ? vs : vs.slice(0, 1)) {
+          const at = Math.max(s.createdAt, r.createdAt);
+          const cur = seen.get(r._id);
+          if (!cur || at < cur.at) seen.set(r._id, { share: s, at });
+        }
+      }
+    }
+    const shared = [];
+    for (const [versionId, { at }] of seen) {
+      const r = (await ctx.db.get(versionId as Id<"versions">))!;
+      const x = videos.find((y) => y._id === r.videoId)!;
+      const approved = (await ctx.db.query("clientApprovals").withIndex("by_version_user", (q) => q.eq("versionId", r._id)).collect()).length > 0;
+      const notes = (await ctx.db.query("notes").withIndex("by_version", (q) => q.eq("versionId", r._id)).collect()).filter((n) => n.authorKind === "client" || n.authorKind === "guest" || (!!n.shareId && n.authorKind !== "owner")).length;
+      const watched = (await ctx.db.query("views").withIndex("by_version", (q) => q.eq("versionId", r._id)).collect()).some((w) => w.kind !== "owner");
+      shared.push({
+        videoId: x._id, projectId: x.projectId, versionId: r._id, number: r.number, title: x.title, fileName: r.fileName ?? null, sharedAt: at,
+        thumbUrl: (await signStillUrl(r.posterUrl)) ?? (await signedThumbUrl(r)), state: approved ? "approved" : notes ? "notes" : watched ? "watched" : "not_watched", notes,
+      } as const);
+    }
+    shared.sort((a, b) => b.sharedAt - a.sharedAt || b.number - a.number);
+
+    // Their documents: anything sent through Sign to one of their people.
+    const docs = new Map<string, { _id: Id<"wsDocuments">; number: number; label: string; title: string; status: string; sentAt: number | null; completedAt: number | null; voidedAt: number | null; waitingOn: string[] }>();
     for (const e of emails) {
-      for (const s of await ctx.db.query("wsSignings").withIndex("by_email", (q) => q.eq("email", e)).collect()) {
-        const d = await ctx.db.get(s.documentId);
-        if (d && !docs.has(d._id)) docs.set(d._id, { _id: d._id, number: d.number, title: d.title, status: d.status, sentAt: d.sentAt ?? null, completedAt: d.completedAt ?? null });
+      for (const sg of await ctx.db.query("wsSignings").withIndex("by_email", (q) => q.eq("email", e)).collect()) {
+        const d = await ctx.db.get(sg.documentId);
+        if (!d || docs.has(d._id) || d.status === "draft" || d.status === "approved") continue;
+        const all = (await ctx.db.query("wsSignings").withIndex("by_document", (q) => q.eq("documentId", d._id)).collect()).filter((x) => x.versionNumber === d.sentVersion);
+        docs.set(d._id, {
+          _id: d._id, number: d.number, label: docLabel(d.number), title: d.title, status: d.status, sentAt: d.sentAt ?? null, completedAt: d.completedAt ?? null, voidedAt: d.voidedAt ?? null,
+          waitingOn: d.status === "sent" ? all.filter((x) => x.status === "sent" && emails.has(x.email)).map((x) => x.name) : [],
+        });
       }
     }
     const items = await ctx.db.query("inboxItems").withIndex("by_client", (q) => q.eq("clientId", clientId)).collect();
     return {
       client: { _id: client._id, name: client.name },
-      people: await Promise.all(people.map(async (p) => ({ _id: p._id, email: p.email, name: p.name ?? null, role: p.role, access: await accessOf(ctx, p.email) }))),
-      projects: projects.map((p) => ({ _id: p._id, name: p.name, jobNumber: p.jobNumber ?? null })),
+      people: await Promise.all(people.sort((a, b) => a.createdAt - b.createdAt).map(async (p) => ({ _id: p._id, email: p.email, name: p.name ?? null, role: p.role, access: await accessOf(ctx, p.email) }))),
+      projects: projectRows,
       shares: shares.map((s) => ({ _id: s._id, kind: s.kind, who: s.who, access: s.access, off: !!s.offAt, expiresAt: s.expiresAt ?? null })),
+      shared,
       documents: [...docs.values()].sort((a, b) => (b.sentAt ?? 0) - (a.sentAt ?? 0)),
       inbox: { items: items.length, unread: items.filter((i) => !i.readAt).length },
     };

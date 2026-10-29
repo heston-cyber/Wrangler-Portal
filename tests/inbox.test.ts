@@ -143,7 +143,7 @@ describe("hooks", () => {
     expect(await w.t.mutation(internal.inbox.onSignInvite, { signingId: ids.maya, kind: "reminder" })).toBe(0);
     expect(await w.t.mutation(internal.inbox.onSignInvite, { signingId: ids.stranger, kind: "invite" })).toBe(0);
     const toSign = (await w.mayaC.query(api.inbox.mine, {})).items[0];
-    expect(toSign).toMatchObject({ kind: "to_sign", title: "Please sign: Service Agreement" });
+    expect(toSign).toMatchObject({ kind: "to_sign", title: "Document to sign", text: "Service Agreement · WS-00007" });
     expect(toSign.link).toMatch(/\/tok-client$/);
     // Documents: it's in To sign, with the signing link.
     const docs = await w.mayaC.query(api.documents.mine, {});

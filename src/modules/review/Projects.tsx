@@ -396,7 +396,7 @@ function DeleteClient({ client, projects, vids, onClose, onDone }: { client: str
 }
 
 // "New client": just a name. It shows on the Projects page (grouped by client) with a + to add its first project.
-function NewClient({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+export function NewClient({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const create = useMutation(api.library.createClient);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);

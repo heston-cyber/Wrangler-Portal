@@ -128,9 +128,9 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
     await t.run(async (ctx) => { for (const i of await ctx.db.query("inboxItems").collect()) if (i.kind === "note" && i.email === "maya@harborcoffee.com") await ctx.db.patch(i._id, { readAt: now - 20 * HOUR }); });
     await t.run(async (ctx) => {
       const { postToInbox } = await import("../convex/lib/inbox");
-      await postToInbox(ctx as never, { businessId: w.A, clientId: w.harbor, email: "maya@harborcoffee.com", kind: "cut_ready", title: "New version: Harbor Coffee 30s v4", text: "26127 Harbor Coffee Launch · ready to review", link: `/s/x/v/${w.harbor30.v}`, source: { module: "review", id: w.harbor30.last }, key: "kit-v4" });
-      await postToInbox(ctx as never, { businessId: w.A, clientId: w.harbor, email: "maya@harborcoffee.com", kind: "to_sign", title: "Sign: Service Agreement WS-00012", text: "Sent by Wrangler Productions", link: "/x/kittokenkittokenkit1", source: { module: "sign", id: "d1" }, key: "kit-sign" });
-      await postToInbox(ctx as never, { businessId: w.A, clientId: w.harbor, email: "maya@harborcoffee.com", kind: "reply", title: "Heston replied to your note", text: "“Pulled the logo up two frames.”", link: `/s/x/v/${w.harbor30.v}`, source: { module: "review", id: "n1" }, key: "kit-reply" });
+      await postToInbox(ctx as never, { businessId: w.A, clientId: w.harbor, email: "maya@harborcoffee.com", kind: "cut_ready", title: "New cut ready", text: "Harbor Coffee 30s · v4", link: `/s/x/v/${w.harbor30.v}`, source: { module: "review", id: w.harbor30.last }, key: "kit-v4" });
+      await postToInbox(ctx as never, { businessId: w.A, clientId: w.harbor, email: "maya@harborcoffee.com", kind: "to_sign", title: "Document to sign", text: "Service Agreement — Harbor Coffee Launch · WS-00012", link: "/x/kittokenkittokenkit1", source: { module: "sign", id: "d1" }, key: "kit-sign" });
+      await postToInbox(ctx as never, { businessId: w.A, clientId: w.harbor, email: "maya@harborcoffee.com", kind: "reply", title: "Reply on your note at 01:00:05:00", text: "Harbor Coffee 30s · v4", link: `/s/x/v/${w.harbor30.v}`, source: { module: "review", id: "n1" }, key: "kit-reply" });
     });
 
     // Docs: the starter template plus two more, and two drafts still in the builder.

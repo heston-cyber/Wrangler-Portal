@@ -7,6 +7,8 @@ import { Button } from "./ui/wp";
 import ClientHome from "./modules/clients/ClientHome";
 import Home from "./modules/review/Home";
 import OwnerHome from "./modules/home/OwnerHome";
+import ClientsPage from "./modules/clients/ClientsPage";
+import ClientPage, { type ClientTab } from "./modules/clients/ClientPage";
 import Projects from "./modules/review/Projects";
 import ActivityPage from "./modules/review/ActivityPage";
 import Settings from "./modules/settings/Settings";
@@ -101,6 +103,7 @@ function SignedIn() {
   const video = /^\/v\/([^/]+)\/?$/.exec(path);
   const project = /^\/projects\/([^/]+)\/?$/.exec(path);
   const signDoc = /^\/sign\/d\/([^/]+)\/?$/.exec(path);
+  const clientRec = /^\/clients\/([^/]+)\/?$/.exec(path);
   let page: React.ReactNode;
   if (video) page = <VideoPage key={video[1]} videoId={video[1] as Id<"videos">} versionNumber={Number(params.get("version")) || null} noteId={params.get("note")} />;
   else if (project) page = <Projects key={project[1]} projectId={project[1] as Id<"projects">} />;
@@ -114,6 +117,8 @@ function SignedIn() {
   else if (/^\/sign\/templates\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3] as Id<"wsTemplates">; page = <Suspense fallback={<Loading />}><Builder key={id} mode={{ kind: "template", templateId: id }} /></Suspense>; }
   else if (/^\/sign\/templates\/?$/.test(path)) page = <Suspense fallback={<Loading />}><SignTemplates /></Suspense>;
   else if (path.startsWith("/sign")) page = <Suspense fallback={<Loading />}><SignHome /></Suspense>;
+  else if (/^\/clients\/?$/.test(path)) page = <ClientsPage />;
+  else if (clientRec) { const t = params.get("tab"); page = <ClientPage key={clientRec[1]} clientId={clientRec[1] as Id<"clients">} tab={(["projects", "shared", "documents", "inbox"].includes(t ?? "") ? t : "overview") as ClientTab} />; }
   else if (path.startsWith("/activity")) page = <ActivityPage />;
   else if (path.startsWith("/register")) page = <Settings me={me} />; // now Settings › Register
   else if (path.startsWith("/settings")) page = <Settings me={me} />;

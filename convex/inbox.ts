@@ -14,6 +14,7 @@ import { businessOf, hasAccess, itemView, postToInbox } from "./lib/inbox";
 import { shareCovers, shareState, sameBusiness } from "./lib/shareAccess";
 import { signLink } from "./lib/wsSigning";
 import { docLabel } from "./lib/wsLayout";
+import { frameTc } from "./lib/frames";
 
 const MAX_TITLE = 120, MAX_TEXT = 2000, MAX_LINK = 500;
 const projectLabel = (p: { name: string; jobNumber?: string } | null) => (p ? (p.jobNumber ? `${p.jobNumber} ${p.name}` : p.name) : "");
@@ -278,7 +279,7 @@ export const onVersionReady = internalMutation({
       for (const m of await ctx.db.query("shareMembers").withIndex("by_share", (q) => q.eq("shareId", s._id)).collect()) {
         if (await postToInbox(ctx, {
           businessId: biz, clientId: project?.clientId, email: m.email, kind: "cut_ready",
-          title: `${vid.title} v${ver.number} is ready`, text: projectLabel(project) || "A new version to review",
+          title: "New cut ready", text: `${vid.title} · v${ver.number}`,
           link: `/s/${s.token}/v/${vid._id}?version=${ver.number}`, source: { module: "review", id: versionId }, key: `version:${versionId}`,
         })) n++;
       }
@@ -308,7 +309,8 @@ export const onReply = internalMutation({
     const link = share && !shareState(share) && sameBusiness(share, vid) ? `/s/${share.token}/v/${vid._id}?version=${ver.number}&note=${note._id}` : undefined;
     const id = await postToInbox(ctx, {
       businessId: biz, clientId: project?.clientId, email: author.email, kind: "reply",
-      title: `${r.authorName} replied to your note`, text: `${vid.title} v${ver.number}: ${r.text}`.slice(0, 400),
+      title: note.kind === "general" || note.inFrame === undefined ? "Reply on your note" : `Reply on your note at ${frameTc(note.inFrame, ver.startTimecode, { num: ver.fpsNum ?? 24, den: ver.fpsDen ?? 1 })}`,
+      text: `${vid.title} · v${ver.number}`,
       link, source: { module: "review", id: replyId }, key: `reply:${replyId}`,
     });
     return id ? 1 : 0;
@@ -330,8 +332,8 @@ export const onSignInvite = internalMutation({
     if (!biz) return 0;
     const label = docLabel(doc.number);
     const id = await postToInbox(ctx, kind === "invite"
-      ? { businessId: biz, email: s.email, kind: "to_sign", title: `Please sign: ${doc.title}`, text: label, link: signLink(s.token), source: { module: "sign", id: s.documentId }, key: `sign:${signingId}:to_sign` }
-      : { businessId: biz, email: s.email, kind: "cancelled", title: `Cancelled: ${doc.title}`, text: doc.voidReason ? `${label} · ${doc.voidReason}` : label, source: { module: "sign", id: s.documentId }, key: `sign:${signingId}:cancelled` });
+      ? { businessId: biz, email: s.email, kind: "to_sign", title: "Document to sign", text: `${doc.title} · ${label}`, link: signLink(s.token), source: { module: "sign", id: s.documentId }, key: `sign:${signingId}:to_sign` }
+      : { businessId: biz, email: s.email, kind: "cancelled", title: "Document cancelled", text: `${doc.title} · ${label}`, link: "/documents?tab=cancelled", source: { module: "sign", id: s.documentId }, key: `sign:${signingId}:cancelled` });
     return id ? 1 : 0;
   },
 });
@@ -347,7 +349,7 @@ export const onSigned = internalMutation({
     const signings = (await ctx.db.query("wsSignings").withIndex("by_document", (q) => q.eq("documentId", documentId)).collect()).filter((s) => s.versionNumber === doc.sentVersion && s.status === "signed");
     let n = 0;
     for (const s of signings) {
-      if (await postToInbox(ctx, { businessId: biz, email: s.email, kind: "signed", title: `Signed: ${doc.title}`, text: `${docLabel(doc.number)} · your signed copy is ready`, link: "/documents", source: { module: "sign", id: documentId }, key: `sign:${documentId}:signed` })) n++;
+      if (await postToInbox(ctx, { businessId: biz, email: s.email, kind: "signed", title: "Signed copy ready", text: `${doc.title} · ${docLabel(doc.number)}`, link: "/documents?tab=signed", source: { module: "sign", id: documentId }, key: `sign:${documentId}:signed` })) n++;
     }
     return n;
   },

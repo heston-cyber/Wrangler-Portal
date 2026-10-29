@@ -1476,10 +1476,15 @@
     {
      "_id": "000000000000000010056wsDocuments",
      "completedAt": null,
+     "label": "WS-00012",
      "number": 12,
      "sentAt": 1793203200000,
      "status": "sent",
-     "title": "Service Agreement — Harbor Coffee Launch"
+     "title": "Service Agreement — Harbor Coffee Launch",
+     "voidedAt": null,
+     "waitingOn": [
+      "Maya Brooks"
+     ]
     }
    ],
    "inbox": {
@@ -1522,7 +1527,85 @@
     {
      "_id": "000000000000000000010020projects",
      "jobNumber": "26127",
-     "name": "Harbor Coffee Launch"
+     "name": "Harbor Coffee Launch",
+     "shared": true,
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
+     "updatedAt": 1793203200000,
+     "videos": 2
+    }
+   ],
+   "shared": [
+    {
+     "fileName": "00001_Harbor30_v4.mp4",
+     "notes": 3,
+     "number": 4,
+     "projectId": "000000000000000000010020projects",
+     "sharedAt": 1793289600000,
+     "state": "notes",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
+     "title": "Harbor Coffee 30s",
+     "versionId": "000000000000000000010028versions",
+     "videoId": "00000000000000000000010024videos"
+    },
+    {
+     "fileName": "00001_Harbor30_v3.mp4",
+     "notes": 0,
+     "number": 3,
+     "projectId": "000000000000000000010020projects",
+     "sharedAt": 1793289600000,
+     "state": "not_watched",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
+     "title": "Harbor Coffee 30s",
+     "versionId": "000000000000000000010027versions",
+     "videoId": "00000000000000000000010024videos"
+    },
+    {
+     "fileName": "00001_Harbor30_v2.mp4",
+     "notes": 0,
+     "number": 2,
+     "projectId": "000000000000000000010020projects",
+     "sharedAt": 1793289600000,
+     "state": "not_watched",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
+     "title": "Harbor Coffee 30s",
+     "versionId": "000000000000000000010026versions",
+     "videoId": "00000000000000000000010024videos"
+    },
+    {
+     "fileName": "00002_Harbor15_v2.mp4",
+     "notes": 0,
+     "number": 2,
+     "projectId": "000000000000000000010020projects",
+     "sharedAt": 1793289600000,
+     "state": "not_watched",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
+     "title": "Harbor Coffee 15s cutdown",
+     "versionId": "000000000000000000010032versions",
+     "videoId": "00000000000000000000010030videos"
+    },
+    {
+     "fileName": "00001_Harbor30_v1.mp4",
+     "notes": 0,
+     "number": 1,
+     "projectId": "000000000000000000010020projects",
+     "sharedAt": 1793289600000,
+     "state": "not_watched",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
+     "title": "Harbor Coffee 30s",
+     "versionId": "000000000000000000010025versions",
+     "videoId": "00000000000000000000010024videos"
+    },
+    {
+     "fileName": "00002_Harbor15_v1.mp4",
+     "notes": 0,
+     "number": 1,
+     "projectId": "000000000000000000010020projects",
+     "sharedAt": 1793289600000,
+     "state": "not_watched",
+     "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
+     "title": "Harbor Coffee 15s cutdown",
+     "versionId": "000000000000000000010031versions",
+     "videoId": "00000000000000000000010030videos"
     }
    ],
    "shares": [
@@ -1647,8 +1730,8 @@
     "readAt": null,
     "readBy": 0,
     "sentTo": 1,
-    "text": "“Pulled the logo up two frames.”",
-    "title": "Heston replied to your note"
+    "text": "Harbor Coffee 30s · v4",
+    "title": "Reply on your note at 01:00:05:00"
    },
    {
     "_id": "0000000000000000010089inboxItems",
@@ -1667,8 +1750,8 @@
     "readAt": null,
     "readBy": 0,
     "sentTo": 1,
-    "text": "Sent by Wrangler Productions",
-    "title": "Sign: Service Agreement WS-00012"
+    "text": "Service Agreement — Harbor Coffee Launch · WS-00012",
+    "title": "Document to sign"
    },
    {
     "_id": "0000000000000000010088inboxItems",
@@ -1687,8 +1770,8 @@
     "readAt": null,
     "readBy": 0,
     "sentTo": 1,
-    "text": "26127 Harbor Coffee Launch · ready to review",
-    "title": "New version: Harbor Coffee 30s v4"
+    "text": "Harbor Coffee 30s · v4",
+    "title": "New cut ready"
    },
    {
     "_id": "0000000000000000010085inboxItems",
@@ -2040,8 +2123,8 @@
     "projectId": null,
     "state": "on",
     "sub": "26127 Harbor Coffee Launch",
-    "token": "tG-wWj6mnT8FkQC7oOhAog",
-    "url": "https://app.wranglerportal.com/s/tG-wWj6mnT8FkQC7oOhAog",
+    "token": "rgl9MRyt0dC0qfKZVph-YA",
+    "url": "https://app.wranglerportal.com/s/rgl9MRyt0dC0qfKZVph-YA",
     "videoId": "00000000000000000000010024videos",
     "who": "link"
    },
@@ -2080,8 +2163,8 @@
     "projectId": "000000000000000000010020projects",
     "state": "on",
     "sub": "Harbor Coffee",
-    "token": "UAewjs9ZnGFAF3Q_njC3bA",
-    "url": "https://app.wranglerportal.com/s/UAewjs9ZnGFAF3Q_njC3bA",
+    "token": "zygYkGr4jqyHUWj1Oq3Fvg",
+    "url": "https://app.wranglerportal.com/s/zygYkGr4jqyHUWj1Oq3Fvg",
     "videoId": null,
     "who": "invited"
    }
@@ -2122,8 +2205,8 @@
     "projectId": null,
     "state": "on",
     "sub": "26127 Harbor Coffee Launch",
-    "token": "tG-wWj6mnT8FkQC7oOhAog",
-    "url": "https://app.wranglerportal.com/s/tG-wWj6mnT8FkQC7oOhAog",
+    "token": "rgl9MRyt0dC0qfKZVph-YA",
+    "url": "https://app.wranglerportal.com/s/rgl9MRyt0dC0qfKZVph-YA",
     "videoId": "00000000000000000000010024videos",
     "who": "link"
    },
@@ -2162,8 +2245,8 @@
     "projectId": "000000000000000000010020projects",
     "state": "on",
     "sub": "Harbor Coffee",
-    "token": "UAewjs9ZnGFAF3Q_njC3bA",
-    "url": "https://app.wranglerportal.com/s/UAewjs9ZnGFAF3Q_njC3bA",
+    "token": "zygYkGr4jqyHUWj1Oq3Fvg",
+    "url": "https://app.wranglerportal.com/s/zygYkGr4jqyHUWj1Oq3Fvg",
     "videoId": null,
     "who": "invited"
    }
@@ -2315,7 +2398,7 @@
        "rows": [
         {
          "description": "Video production (describe the deliverables)",
-         "id": "kiokn3gg",
+         "id": "kfxtjc6u",
          "qty": 1,
          "rate": 0
         }
@@ -3862,7 +3945,7 @@
     "kind": "project",
     "label": "26127 Harbor Coffee Launch",
     "sub": "Harbor Coffee",
-    "token": "UAewjs9ZnGFAF3Q_njC3bA",
+    "token": "zygYkGr4jqyHUWj1Oq3Fvg",
     "videos": [
      {
       "_id": "00000000000000000000010030videos",
@@ -3901,8 +3984,8 @@
      "link": "/s/x/v/00000000000000000000010024videos",
      "read": false,
      "readAt": null,
-     "text": "“Pulled the logo up two frames.”",
-     "title": "Heston replied to your note"
+     "text": "Harbor Coffee 30s · v4",
+     "title": "Reply on your note at 01:00:05:00"
     },
     {
      "_id": "0000000000000000010089inboxItems",
@@ -3912,8 +3995,8 @@
      "link": "/x/kittokenkittokenkit1",
      "read": false,
      "readAt": null,
-     "text": "Sent by Wrangler Productions",
-     "title": "Sign: Service Agreement WS-00012"
+     "text": "Service Agreement — Harbor Coffee Launch · WS-00012",
+     "title": "Document to sign"
     },
     {
      "_id": "0000000000000000010088inboxItems",
@@ -3923,8 +4006,8 @@
      "link": "/s/x/v/00000000000000000000010024videos",
      "read": false,
      "readAt": null,
-     "text": "26127 Harbor Coffee Launch · ready to review",
-     "title": "New version: Harbor Coffee 30s v4"
+     "text": "Harbor Coffee 30s · v4",
+     "title": "New cut ready"
     },
     {
      "_id": "0000000000000000010084inboxItems",
@@ -3957,7 +4040,7 @@
     }
    ]
   },
-  "shares.open#UAewjs9ZnGFAF3Q_njC3bA": {
+  "shares.open#zygYkGr4jqyHUWj1Oq3Fvg": {
    "access": "comment",
    "allVersions": true,
    "client": "Harbor Coffee",
@@ -3976,7 +4059,7 @@
    ],
    "state": "ok",
    "sub": "Harbor Coffee",
-   "token": "UAewjs9ZnGFAF3Q_njC3bA",
+   "token": "zygYkGr4jqyHUWj1Oq3Fvg",
    "videos": [
     {
      "_id": "00000000000000000000010024videos",
@@ -4112,7 +4195,7 @@
    },
    "who": "invited"
   },
-  "shares.open#tG-wWj6mnT8FkQC7oOhAog": {
+  "shares.open#rgl9MRyt0dC0qfKZVph-YA": {
    "access": "view",
    "allVersions": true,
    "client": "Harbor Coffee",
@@ -4131,7 +4214,7 @@
    ],
    "state": "ok",
    "sub": "26127 Harbor Coffee Launch",
-   "token": "tG-wWj6mnT8FkQC7oOhAog",
+   "token": "rgl9MRyt0dC0qfKZVph-YA",
    "videos": [
     {
      "_id": "00000000000000000000010024videos",
@@ -4435,8 +4518,8 @@
  },
  "ids": {
   "shares": [
-   "UAewjs9ZnGFAF3Q_njC3bA",
-   "tG-wWj6mnT8FkQC7oOhAog"
+   "zygYkGr4jqyHUWj1Oq3Fvg",
+   "rgl9MRyt0dC0qfKZVph-YA"
   ],
   "harbor": "0000000000000000000010003clients",
   "video": "00000000000000000000010024videos",
