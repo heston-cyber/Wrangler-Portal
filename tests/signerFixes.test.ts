@@ -1,6 +1,6 @@
 // Final test (Oct 28): fixes found while Heston signed WS-00005 as two clients.
 import { describe, expect, test } from "vitest";
-import { initialsOf } from "../src/sign/SignaturePad";
+import { initialsOf } from "../src/modules/docs/lib/SignaturePad";
 import { isLightColour } from "../src/lib/theme";
 
 describe("T-S6 signer page fixes", () => {

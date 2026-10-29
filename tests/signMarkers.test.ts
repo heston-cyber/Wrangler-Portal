@@ -5,7 +5,7 @@
 // the stamped PDF's drawing operations are read back to check where each image ended up.
 import { describe, expect, test } from "vitest";
 import { PDFDocument, StandardFonts, degrees } from "@cantoo/pdf-lib";
-import { scanMarkers } from "../src/sign/markers";
+import { scanMarkers } from "../src/modules/docs/lib/markers";
 import { stamp, type Stamp } from "../convex/lib/wsPdf";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -1,0 +1,196 @@
+// The timeline under the picture (Option C, Oct 21): a notes bar, a timecode ruler, and the cut's waveform.
+// Click or drag the ruler or waveform to move the playhead; Shift-drag to mark a range.
+// While dragging, the playhead follows the finger at once and the picture catches up (onScrub); letting go lands exactly (onSeek).
+// Notes sit on their own bar on top in Resolve's colours (blue frame, yellow range); tapping it picks the nearest note.
+import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { useFrame, type FrameClock } from "./useFramePlayer";
+import { barHeights } from "../../../../convex/lib/peaks";
+
+export type BarNote = { id: string; kind: "frame" | "range" | "general"; inFrame?: number; outFrame?: number; status: "open" | "done"; text?: string };
+export type Wave = { status: "pending" | "running" | "done" | "none" | "failed"; rate: number | null; peaks: ArrayBuffer | null } | null;
+
+const STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600]; // seconds between ticks
+const BAR_PITCH = 6; // px per waveform bar (2px bar, 4px gap)
+
+function useWidth<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [w, setW] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setW(el.clientWidth));
+    ro.observe(el);
+    setW(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, w] as const;
+}
+
+type Tick = { x: number; kind: 0 | 1 | 2; text?: string };
+
+// Ticks on whole timecode seconds: small ones a few px apart, taller ones in between, labelled ones with room for a timecode.
+function rulerTicks(frameCount: number, nom: number, startFrames: number, width: number, compact: boolean, label: (f: number) => string): Tick[] {
+  if (!width || frameCount < 2) return [];
+  const pxPerSec = (width / frameCount) * nom;
+  const minor = STEPS.find((s) => s * pxPerSec >= 7) ?? 3600;
+  const major = STEPS.find((s) => s * pxPerSec >= (compact ? 64 : 104) && s % minor === 0) ?? 3600;
+  const mid = STEPS.find((s) => s > minor && s < major && major % s === 0 && s % minor === 0 && s * pxPerSec >= 28);
+  const step = minor * nom;
+  const first = (step - (startFrames % step)) % step;
+  const out: Tick[] = [];
+  const labelRoom = compact ? 34 : 70;
+  for (let f = first; f < frameCount; f += step) {
+    const sec = Math.round((startFrames + f) / nom);
+    const x = (f / frameCount) * width;
+    const kind = sec % major === 0 ? 2 : mid && sec % mid === 0 ? 1 : 0;
+    out.push({ x, kind, text: kind === 2 && x < width - labelRoom ? label(f) : undefined });
+  }
+  return out;
+}
+
+const Bars = memo(function Bars({ heights }: { heights: number[] }) {
+  return <>{heights.map((h, i) => <i key={i} style={{ height: `${Math.max(8, Math.round(h * 100))}%` }} />)}</>;
+});
+
+export function Timeline({ clock, frameCount, nom, startFrames, notes, sel, highlight, activeId, onSeek, onScrub, onSelect, onPick, label, wave, fps, compact }: {
+  clock: FrameClock;
+  frameCount: number;
+  nom: number; // nominal frames per second (24 for 23.976)
+  startFrames: number; // frame 0's timecode, in frames
+  notes: BarNote[];
+  sel: { a: number; b: number } | null;
+  highlight?: { a: number; b: number } | null;
+  activeId?: string | null;
+  onSeek: (f: number) => void; // exact jump, when the finger or mouse lets go
+  onScrub: (f: number, first: boolean) => void; // quick follow while dragging
+  onPick: (id: string) => void;
+  onSelect: (a: number, b: number) => void;
+  label: (f: number) => string;
+  wave: Wave | undefined;
+  fps: { num: number; den: number };
+  compact?: boolean;
+}) {
+  const n = Math.max(1, frameCount);
+  const [ref, width] = useWidth<HTMLDivElement>();
+  const [drag, setDrag] = useState<{ start: number; range: boolean; f: number } | null>(null);
+  const [hover, setHover] = useState<number | null>(null);
+  const pct = (f: number) => `${(100 * f) / n}%`;
+  const at = (clientX: number) => {
+    const r = ref.current!.getBoundingClientRect();
+    return Math.max(0, Math.min(n - 1, Math.floor(((clientX - r.left) / r.width) * n)));
+  };
+
+  const short = (f: number) => label(f).slice(3, 8); // mm:ss on phones
+  const ticks = useMemo(() => rulerTicks(n, nom, startFrames, width, !!compact, compact ? short : label), [n, nom, startFrames, width, compact, label]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const peaks = useMemo(() => (wave?.status === "done" && wave.peaks ? new Uint8Array(wave.peaks) : null), [wave]);
+  const barCount = Math.max(0, Math.floor((width - 12) / BAR_PITCH));
+  const heights = useMemo(() => (peaks && wave?.rate ? barHeights(peaks, wave.rate, n, fps.num, fps.den, barCount) : []), [peaks, wave?.rate, n, fps.num, fps.den, barCount]);
+
+  // Overlapping ranges get their own lanes in the notes bar so none hides another.
+  const ranges = notes.filter((x) => x.kind === "range" && x.inFrame !== undefined && x.outFrame !== undefined).sort((a, b) => a.inFrame! - b.inFrame!);
+  const laneEnds: number[] = [];
+  const lanes = new Map<string, number>();
+  for (const r of ranges) {
+    let lane = laneEnds.findIndex((end) => end < r.inFrame!);
+    if (lane === -1) { lane = laneEnds.length; laneEnds.push(r.outFrame!); } else laneEnds[lane] = r.outFrame!;
+    lanes.set(r.id, Math.min(lane, 2));
+  }
+  const oneLane = laneEnds.length <= 1;
+
+  // Taps on the notes bar pick the note whose mark is nearest (within 24px), for fingers that land a little off.
+  const pickNear = (clientX: number) => {
+    const r = ref.current!.getBoundingClientRect();
+    const x = clientX - r.left;
+    const px = (f: number) => (f / n) * r.width;
+    let best: { id: string; d: number } | null = null;
+    for (const m of notes) {
+      if (m.inFrame === undefined || m.kind === "general") continue;
+      const a = px(m.inFrame), b = m.kind === "range" && m.outFrame !== undefined ? px(m.outFrame + 1) : px(m.inFrame + 0.5);
+      const d = m.kind === "range" ? (x < a ? a - x : x > b ? x - b : 0) : Math.abs(x - b);
+      if (!best || d < best.d) best = { id: m.id, d };
+    }
+    if (best && best.d <= 24) onPick(best.id);
+  };
+
+  const waveNote = !wave || wave.status === "pending" || wave.status === "running" ? "Making the waveform…" : wave.status === "none" ? "No audio" : wave.status === "failed" ? "No waveform" : null;
+
+  return (
+    <div className={`tl${compact ? " compact" : ""}`} ref={ref}>
+      <div className="tl-notes" aria-label="Notes on the timeline" onPointerDown={(e) => { e.preventDefault(); pickNear(e.clientX); }}>
+        {ranges.map((x) => (
+          <div key={x.id} className={`tl-range${x.status === "done" ? " done" : ""}${x.id === activeId ? " active" : ""}`} role="button" aria-label={`Range note ${label(x.inFrame!)} to ${label(x.outFrame!)}`}
+            title={`${label(x.inFrame!)} → ${label(x.outFrame!)}${x.text ? ` · ${x.text.slice(0, 80)}` : ""}`}
+            style={{ left: pct(x.inFrame!), width: `max(8px, ${pct(x.outFrame! - x.inFrame! + 1)})`, top: oneLane ? 7 : 3 + 6 * (lanes.get(x.id) ?? 0), height: oneLane ? 8 : 5 }} />
+        ))}
+        {notes.filter((x) => x.kind === "frame" && x.inFrame !== undefined).map((x) => (
+          <div key={x.id} className={`tl-mark${x.status === "done" ? " done" : ""}${x.id === activeId ? " active" : ""}`} role="button" aria-label={`Note at ${label(x.inFrame!)}`}
+            title={`${label(x.inFrame!)}${x.text ? ` · ${x.text.slice(0, 80)}` : ""}`} style={{ left: pct(x.inFrame! + 0.5) }} />
+        ))}
+        <Head clock={clock} n={n} at={drag?.f} className="tl-notehead" />
+      </div>
+
+      <div
+        className="tl-scrub"
+        role="slider"
+        aria-label="Timeline"
+        aria-valuemin={0}
+        aria-valuemax={n - 1}
+        aria-valuetext={label(clock.get())}
+        tabIndex={-1}
+        onPointerDown={(e) => {
+          (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+          const f = at(e.clientX);
+          setDrag({ start: f, range: e.shiftKey, f });
+          setHover(f);
+          if (e.shiftKey) onSelect(f, f);
+          onScrub(f, true);
+        }}
+        onPointerMove={(e) => {
+          const f = at(e.clientX);
+          if (e.pointerType === "mouse" || drag) { if (f !== hover) setHover(f); }
+          if (!drag || f === drag.f) return;
+          setDrag({ ...drag, f });
+          if (drag.range) onSelect(Math.min(drag.start, f), Math.max(drag.start, f));
+          onScrub(f, false);
+        }}
+        onPointerUp={(e) => { if (drag) onSeek(drag.f); setDrag(null); if (e.pointerType !== "mouse") setHover(null); }}
+        onPointerCancel={() => { if (drag) onSeek(drag.f); setDrag(null); setHover(null); }}
+        onPointerLeave={() => { if (!drag) setHover(null); }}
+      >
+        <div className="tl-ruler">
+          {ticks.map((t, i) => <span key={i} className={`tk k${t.kind}`} style={{ left: t.x }} />)}
+          {ticks.filter((t) => t.text).map((t, i) => <span key={`l${i}`} className="tl-label" style={{ left: t.x }}>{t.text}</span>)}
+          {sel && <><span className="tl-dia" style={{ left: pct(sel.a) }} /><span className="tl-dia" style={{ left: pct(sel.b + 1) }} /></>}
+        </div>
+        <div className="tl-wave">
+          {heights.length > 0 ? (
+            <>
+              <div className="bars"><Bars heights={heights} /></div>
+              <Played clock={clock} n={n} at={drag?.f}><div className="bars played"><Bars heights={heights} /></div></Played>
+            </>
+          ) : (
+            <><span className="flat" />{waveNote && <span className="wnote">{waveNote}</span>}</>
+          )}
+          {highlight && <div className="tl-hl" style={{ left: pct(highlight.a), width: `max(3px, ${pct(highlight.b - highlight.a + 1)})` }} />}
+          {sel && <div className="tl-sel" style={{ left: pct(sel.a), width: `max(3px, ${pct(sel.b - sel.a + 1)})` }} />}
+        </div>
+        {hover !== null && <><div className="tl-hover" style={{ left: pct(hover + 0.5) }} /><div className="tl-tip" style={{ left: `clamp(40px, ${pct(hover + 0.5)}, calc(100% - 40px))` }}>{label(hover)}</div></>}
+        <Head clock={clock} n={n} at={drag?.f} className="tl-head" />
+      </div>
+    </div>
+  );
+}
+
+// Per-frame pieces re-render alone, not the whole timeline.
+// `at` (while dragging) shows where the finger is, ahead of the picture.
+function Head({ clock, n, className, at }: { clock: FrameClock; n: number; className: string; at?: number }) {
+  const live = useFrame(clock);
+  const f = at ?? live;
+  return <div className={className} style={{ left: `${(100 * (f + 0.5)) / n}%` }} />;
+}
+function Played({ clock, n, children, at }: { clock: FrameClock; n: number; children: React.ReactNode; at?: number }) {
+  const live = useFrame(clock);
+  const f = at ?? live;
+  return <div className="tl-played" style={{ clipPath: `inset(0 ${100 - (100 * (f + 0.5)) / n}% 0 0)` }}>{children}</div>;
+}

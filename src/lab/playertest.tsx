@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../convex/_generated/api";
-import { useFramePlayer } from "../player/useFramePlayer";
+import { useFramePlayer } from "../modules/review/player/useFramePlayer";
 
 const q = new URLSearchParams(location.search);
 const SRC = q.get("src") || "https://wrangler-review-stills.b-cdn.net/review/kn74vazj0ds7ftgwzhwg9b0wm18gr1d6/d4fd1a337e0c1a27/99999_R3Test_v3.mp4";

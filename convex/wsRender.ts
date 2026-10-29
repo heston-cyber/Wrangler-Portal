@@ -19,7 +19,7 @@ export const renderBuild = internalAction({
     }
     const React = await import("react");
     const { renderToBuffer } = await import("@react-pdf/renderer");
-    const { DocPdf } = await import("../src/builder/pdf");
+    const { DocPdf } = await import("../src/modules/docs/builder/pdf");
     const el = React.createElement(DocPdf, { d: inp.d, assets: { fonts: inp.fonts, files: inp.files }, label: inp.label });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const buf = await renderToBuffer(el as any);

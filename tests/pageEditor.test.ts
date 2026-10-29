@@ -13,11 +13,11 @@ import { afterEach, describe, expect, test } from "vitest";
 import { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { TextSelection } from "@tiptap/pm/state";
-import { BlockSelect, headlessNodes } from "../src/builder/editor/schema";
-import { BlockSelection, PickSelection, pickableBlocks } from "../src/builder/editor/blockSelection";
+import { BlockSelect, headlessNodes } from "../src/modules/docs/builder/editor/schema";
+import { BlockSelection, PickSelection, pickableBlocks } from "../src/modules/docs/builder/editor/blockSelection";
 import {
   canMovePicked, currentSection, deletePicked, duplicatePicked, insertKind, isPicking, lineAttr, movePicked, picks, pickAll, setLines, setPickMode, toggleListPicked, unwrapSection, wrapInSection,
-} from "../src/builder/editor/commands";
+} from "../src/modules/docs/builder/editor/commands";
 import { serviceAgreementBlocks, serviceAgreementPage } from "../convex/lib/wsStarter";
 import {
   buildProblems, emptyFields, line, migrate, nodesOf, pageOf, section, sectionClause, clauseSection, signerKeys, textOf, totals,

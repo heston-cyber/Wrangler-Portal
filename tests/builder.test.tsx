@@ -11,11 +11,11 @@ import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { api } from "../convex/_generated/api";
 import schema from "../convex/schema";
-import { DocPdf } from "../src/builder/pdf";
+import { DocPdf } from "../src/modules/docs/builder/pdf";
 import { serviceAgreementPage } from "../convex/lib/wsStarter";
 import { DEFAULT_STYLE, PRESET_STYLES, buildProblems, emptyFields, line, plainText, rich, textOf, type BuildDoc, type PNode } from "../convex/lib/wsBuilder";
 import { scanMarkers } from "../convex/lib/wsMarkers";
-import { DEFAULT_QUERY, countByStatus, filterDocs, readQuery, writeQuery, type DocRow } from "../src/sign/docFilter";
+import { DEFAULT_QUERY, countByStatus, filterDocs, readQuery, writeQuery, type DocRow } from "../src/modules/docs/lib/docFilter";
 
 const modules = import.meta.glob("../convex/**/*.ts");
 beforeAll(() => { process.env.ALLOWED_EMAILS = "heston@wranglerproductions.com"; process.env.RESEND_API_KEY = "re_test"; process.env.SITE_URL = "https://review.wranglerportal.com"; });
