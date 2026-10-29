@@ -45,7 +45,9 @@ export default {
       const to = next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/";
       return new Response(null, { status: 303, headers: { location: to, "set-cookie": `${COOKIE}=${want}; Path=/; Max-Age=${DAYS * 86400}; HttpOnly; Secure; SameSite=Lax`, ...SEC } });
     }
-    if (!same(cookieOf(request), want)) return page("Type the preview password.");
+    // The logo images emails load (/brand/*.png|svg) are public: an email can't carry the preview cookie. Images only.
+    const publicImage = request.method === "GET" && /^\/brand\/[\w.-]+\.(png|svg|jpg)$/.test(url.pathname);
+    if (!publicImage && !same(cookieOf(request), want)) return page("Type the preview password.");
     const res = await env.ASSETS.fetch(request);
     const out = new Response(res.body, res);
     for (const [k, v] of Object.entries(SEC)) out.headers.set(k, v);

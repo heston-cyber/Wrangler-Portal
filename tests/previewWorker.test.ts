@@ -23,4 +23,10 @@ describe("preview Worker", () => {
     expect(page.headers.get("x-robots-tag")).toBe("noindex, nofollow");
     expect((await worker.fetch(post("correct horse battery", "/docs?tab=signed"), env)).headers.get("location")).toBe("/docs?tab=signed");
   });
+  test("emails' logo images load without the cookie; nothing else does", async () => {
+    expect((await worker.fetch(new Request("https://p/brand/wp-logo-email.png"), env)).status).toBe(200);
+    expect((await worker.fetch(new Request("https://p/brand/x.html"), env)).status).toBe(401);
+    expect((await worker.fetch(new Request("https://p/brand/../index.html"), env)).status).toBe(401);
+    expect((await worker.fetch(new Request("https://p/brand/wp-logo-email.png", { method: "POST" }), env)).status).toBe(401);
+  });
 }, 10_000);
