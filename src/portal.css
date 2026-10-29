@@ -683,3 +683,43 @@ a.wp-row:hover, button.wp-row:hover, .wp-row.hover { background: var(--surface-b
 .content > .pj-block + .pj-block { margin-top: 20px; }
 .pj-block .chead .ctitle { text-transform: none; letter-spacing: 0; }
 @media (max-width: 820px) { .content:has(> .pj-block) { padding: 0 16px 24px; } }
+
+/* Activity (P1 / Owner / Review · Activity): one glass card, a row per event, compact note and version cards */
+.content:has(> .feed) { padding: 0 48px 48px; }
+.content > .toolbar:has(+ .feed) { margin-bottom: 20px; }
+.tab .avatar { width: 20px; height: 20px; flex-basis: 20px; font-size: 10px; }
+.feed.wp-card { padding: 0; display: block; gap: 0; }
+.feed .event { grid-template-columns: 56px minmax(0, 1fr); gap: 16px; padding: 14px 20px; }
+.feed .event + .event { border-top: 1px solid var(--border-hairline); }
+.feed .event .when { padding-top: 6px; font-size: var(--fs-text-small); color: var(--text-secondary); }
+.feed .event .when::after { display: none; }
+.feed .ehead { min-height: 30px; padding: 0; border-radius: 0; background: none; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; font-size: var(--fs-text-small); line-height: var(--lh-small); gap: 8px; color: var(--text-secondary); }
+.feed .ehead .avatar { width: 24px; height: 24px; flex-basis: 24px; font-size: 10px; }
+.feed .ehead b { font-weight: 500; color: var(--text-primary); }
+.feed .ehead a.v { font-weight: 500; }
+.feed .ehead .thumb { width: 32px; height: 18px; border-radius: 4px; }
+.feed .ehead .chip { border: 1px solid var(--border-strong); background: none; padding: 3px 7px; border-radius: 6px; font: 400 11px/1 var(--font-title); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-muted); }
+.feed .ebody { padding: 10px 0 0 32px; }
+.feed .ncards { gap: 10px; padding-bottom: 0; }
+.feed .ncard { flex: 0 0 150px; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--surface-block); box-shadow: inset 0 0 0 1px var(--border-faint); font-size: var(--fs-text-small); }
+.feed .ncard:hover { box-shadow: inset 0 0 0 1px var(--border-strong); }
+.feed .ncard .rrow { display: flex; align-items: center; }
+.feed .ncard .rlabel, .feed .card .rlabel { display: inline-flex; align-items: center; gap: 6px; font: 500 var(--fs-label-small)/var(--lh-label-small) var(--font-title); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-accent); }
+.feed .ncard .rlabel .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent) !important; box-shadow: var(--glow-dot); }
+.feed .ncard .right { margin-left: auto; color: var(--accent); display: none; }
+.feed .ncard .rbold { font: 500 var(--fs-text-small)/var(--lh-small-medium) var(--font-body); color: var(--text-primary); }
+.feed .ncard .rbold .out { margin-left: 4px; }
+.feed .ncard .nt { font-size: var(--fs-text-small); line-height: var(--lh-small); color: var(--text-muted); -webkit-line-clamp: 4; }
+.feed .rtag { display: inline-flex; padding: 4px 8px; border: 1px solid var(--border-strong); border-radius: 6px; background: none; box-shadow: none; font: 400 10px/1.2 var(--font-title); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-muted); height: auto; }
+.feed .ebody .card.rect { width: auto; max-width: 260px; display: flex; gap: 12px; align-items: center; padding: 8px 12px 8px 8px; border-radius: 12px; background: var(--surface-block); box-shadow: inset 0 0 0 1px var(--border-faint); }
+.feed .ebody .card.rect .media { flex: 0 0 75px; width: 75px; height: 42px; border-radius: 6px; overflow: hidden; aspect-ratio: auto; }
+.feed .ebody .card.rect .media img, .feed .ebody .card.rect .media .ph { width: 100%; height: 100%; object-fit: cover; }
+.feed .ebody .card.rect .cbody { padding: 0; display: grid; gap: 3px; }
+.feed .ebody .card.rect .ctitle { font: 500 14px/19px var(--font-body); color: var(--text-primary); }
+@media (max-width: 720px) {
+  .content:has(> .feed) { padding: 0 16px 24px; }
+  .feed .event { grid-template-columns: 1fr; gap: 4px; padding: 12px 14px; }
+  .feed .ebody { padding-left: 0; }
+}
+.feed .ncard { flex: 0 0 auto; width: max-content; min-width: 150px; max-width: 240px; }
+.feed .rtags { display: flex; flex-wrap: wrap; gap: 6px; }

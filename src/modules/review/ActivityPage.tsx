@@ -2,9 +2,10 @@
 import { useState } from "react";
 import { BrandImg } from "../../ui/BrandImg";
 import { useQuery } from "convex/react";
-import { Activity, ArrowUpRight, Link2, SlidersHorizontal } from "lucide-react";
+import { ArrowUpRight, Link2 } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
-import { TopBar } from "../../shell/Shell";
+import { Sep, TopBar } from "../../shell/Shell";
+import { Icon } from "../../ui/Icon";
 import { linkProps } from "../../lib/router";
 import { Avatar, Menu, MenuItem, MenuLabel, Thumb } from "../../ui/kit";
 import { ago, lengthText } from "../../lib/format";
@@ -21,7 +22,7 @@ export default function ActivityPage() {
   return (
     <>
       <TopBar right={
-        <Menu align="end" label="Show" trigger={(p) => <button {...p} className="icon-btn md" aria-label="Filter activity" title="Filter"><SlidersHorizontal size={16} /></button>}>
+        <Menu align="end" label="Show" trigger={(p) => <button {...p} className="icon-btn" aria-label="Filter activity" title="Filter"><Icon name="menu" size={18} /></button>}>
           <MenuLabel>Show</MenuLabel>
           <MenuItem keepOpen checked={show.videos} onSelect={() => setShow({ ...show, videos: !show.videos })}>New videos</MenuItem>
           <MenuItem keepOpen checked={show.versions} onSelect={() => setShow({ ...show, versions: !show.versions })}>New versions</MenuItem>
@@ -29,7 +30,7 @@ export default function ActivityPage() {
           <MenuItem keepOpen checked={show.shares} onSelect={() => setShow({ ...show, shares: !show.shares })}>Shared links opened</MenuItem>
         </Menu>
       }>
-        <Activity size={15} /><span className="here">Activity</span>
+        <a {...linkProps("/review")}>Review</a><Sep /><span className="here">Activity</span>
       </TopBar>
       <div className="content">
         <div className="toolbar">
@@ -41,7 +42,7 @@ export default function ActivityPage() {
         {feed === undefined ? <p className="caption" style={{ padding: "8px 24px" }}>Loading…</p>
           : rows.length === 0 ? <div className="empty"><BrandImg name="spark" /><span>Nothing here yet.</span></div>
           : (
-            <div className="feed">
+            <div className="feed wp-card glass">
               {rows.map((e, i) => {
                 if (e.type === "share") {
                   return (
