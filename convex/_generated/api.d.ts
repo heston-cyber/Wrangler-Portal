@@ -10,6 +10,7 @@
 
 import type * as activity from "../activity.js";
 import type * as approvals from "../approvals.js";
+import type * as home from "../home.js";
 import type * as auth from "../auth.js";
 import type * as bunny from "../bunny.js";
 import type * as clients from "../clients.js";
@@ -108,6 +109,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   activity: typeof activity;
   approvals: typeof approvals;
+  home: typeof home;
   auth: typeof auth;
   bunny: typeof bunny;
   clients: typeof clients;

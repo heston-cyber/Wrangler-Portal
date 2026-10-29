@@ -6,6 +6,8 @@ import { requireMe } from "./lib/access";
 import type { Doc, Id } from "./_generated/dataModel";
 import { signedThumbUrl } from "./lib/media";
 import { labelOf } from "./lib/shareAccess";
+import { docLabel } from "./lib/wsLayout";
+import { docClient } from "./home";
 
 const SITTING_GAP_MS = 3 * 3600_000;
 
@@ -100,23 +102,44 @@ export const recent = query({
   handler: async (ctx, { limit }) => {
     await requireMe(ctx);
     const max = Math.min(Math.max(limit ?? 20, 1), 100);
-    type Row = { at: number; who: string; what: "opened" | "watched" | "notes" | "read" | "approved" | "doc_viewed" | "doc_signed" | "doc_all_signed"; label: string; count?: number; ref: { kind: "share" | "video" | "document" | "note"; id: string } };
-    const rows: Row[] = [];
-    const labels = new Map<string, string>();
-    const videoLabel = async (id: Id<"videos">) => {
-      if (labels.has(id)) return labels.get(id)!;
-      const vid = await ctx.db.get(id);
-      const l = vid?.title ?? "a video";
-      labels.set(id, l);
-      return l;
+    // label: the old one-line subject (kept for the connector and tests). subject + detail: the two lines on Home.
+    type Row = {
+      at: number; who: string; what: "opened" | "watched" | "notes" | "read" | "approved" | "doc_viewed" | "doc_signed" | "doc_all_signed";
+      label: string; subject: string; detail: string | null; count?: number; ref: { kind: "share" | "video" | "document" | "note"; id: string; version?: number };
     };
+    const rows: Row[] = [];
+    const vids = new Map<string, { title: string; client: string | null }>();
+    const videoOf = async (id: Id<"videos">) => {
+      if (vids.has(id)) return vids.get(id)!;
+      const vid = await ctx.db.get(id);
+      const proj = vid ? await ctx.db.get(vid.projectId) : null;
+      const client = proj?.clientId ? (await ctx.db.get(proj.clientId))?.name ?? proj.client ?? null : proj?.client ?? null;
+      const r = { title: vid?.title ?? "a video", client };
+      vids.set(id, r);
+      return r;
+    };
+    // Watched: one row per person per version, from the player's sittings (owner sittings never count).
+    const seen = new Set<string>();
+    for (const w of await ctx.db.query("views").order("desc").take(400)) {
+      if (w.kind === "owner" || w.watchedSec < 1) continue;
+      const k = `${w.whoKey}|${w.versionId}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const ver = await ctx.db.get(w.versionId);
+      const vid = await videoOf(w.videoId);
+      const n = ver?.number ?? null;
+      rows.push({ at: w.lastAt, who: w.who, what: "watched", label: vid.title, subject: n ? `${vid.title} v${n}` : vid.title, detail: vid.client, ref: { kind: "video", id: w.videoId, ...(n ? { version: n } : {}) } });
+    }
     for (const a of await ctx.db.query("shareActivity").withIndex("by_at").order("desc").take(300)) {
-      if (a.kind === "note") continue; // notes come from the notes table, grouped
-      if (a.kind === "viewed" && a.videoId) rows.push({ at: a.at, who: a.who, what: "watched", label: await videoLabel(a.videoId), ref: { kind: "video", id: a.videoId } });
-      else if (a.kind === "opened") { const s = await ctx.db.get(a.shareId); if (s) rows.push({ at: a.at, who: a.who, what: "opened", label: (await labelOf(ctx, s)).label, ref: { kind: "share", id: s._id } }); }
+      if (a.kind !== "opened") continue; // notes come from the notes table, grouped; watching from views
+      const s = await ctx.db.get(a.shareId);
+      if (!s) continue;
+      const l = (await labelOf(ctx, s)).label;
+      rows.push({ at: a.at, who: a.who, what: "opened", label: l, subject: l, detail: null, ref: { kind: "share", id: s._id } });
     }
     for (const a of await ctx.db.query("clientApprovals").withIndex("by_at").order("desc").take(200)) {
-      rows.push({ at: a.at, who: a.name, what: "approved", label: `v${a.versionNumber} of ${await videoLabel(a.videoId)}`, ref: { kind: "video", id: a.videoId } });
+      const vid = await videoOf(a.videoId);
+      rows.push({ at: a.at, who: a.name, what: "approved", label: `v${a.versionNumber} of ${vid.title}`, subject: `${vid.title} v${a.versionNumber}`, detail: vid.client, ref: { kind: "video", id: a.videoId, version: a.versionNumber } });
     }
     // Client and guest notes, one row per person per video per sitting.
     const notes = (await ctx.db.query("notes").order("desc").take(500)).filter((n) => n.shareId);
@@ -125,20 +148,30 @@ export const recent = query({
       const k = `${n.authorName}|${n.videoId}|${Math.floor(n.createdAt / SITTING_GAP_MS)}`;
       const g = groups.get(k);
       if (g) { g.count = (g.count ?? 1) + 1; continue; }
-      const row: Row = { at: n.createdAt, who: n.authorName, what: "notes", label: await videoLabel(n.videoId), count: 1, ref: { kind: "video", id: n.videoId } };
+      const vid = await videoOf(n.videoId);
+      const ver = await ctx.db.get(n.versionId);
+      const row: Row = { at: n.createdAt, who: n.authorName, what: "notes", label: vid.title, subject: vid.title, detail: ver ? `${vid.title} · v${ver.number}` : vid.title, count: 1, ref: { kind: "video", id: n.videoId, ...(ver ? { version: ver.number } : {}) } };
       groups.set(k, row); rows.push(row);
     }
+    const docClients = new Map<string, string | null>();
     for (const e of await ctx.db.query("wsEvents").order("desc").take(400)) {
       const what = SIGN_KINDS[e.kind];
       if (!what) continue;
       const d = await ctx.db.get(e.documentId);
       if (!d) continue;
-      const signer = e.email ? (await ctx.db.query("wsSignings").withIndex("by_document", (q) => q.eq("documentId", d._id)).collect()).find((s) => s.email === e.email)?.name : undefined;
-      rows.push({ at: e.at, who: signer ?? (e.actor.startsWith("signer:") ? "A signer" : "System"), what: what === "viewed" ? "doc_viewed" : what === "signed" ? "doc_signed" : "doc_all_signed", label: `${`WS-${String(d.number).padStart(5, "0")}`} ${d.title}`, ref: { kind: "document", id: d._id } });
+      const signings = await ctx.db.query("wsSignings").withIndex("by_document", (q) => q.eq("documentId", d._id)).collect();
+      const signer = e.email ? signings.find((s) => s.email === e.email)?.name : undefined;
+      if (!docClients.has(d._id)) docClients.set(d._id, await docClient(ctx, signings.map((s) => s.email)));
+      const client = docClients.get(d._id) ?? null;
+      const label = docLabel(d.number);
+      rows.push({
+        at: e.at, who: signer ?? (e.actor.startsWith("signer:") ? "A signer" : "System"), what: what === "viewed" ? "doc_viewed" : what === "signed" ? "doc_signed" : "doc_all_signed",
+        label: `${label} ${d.title}`, subject: label, detail: client ? `${d.title} · ${client}` : d.title, ref: { kind: "document", id: d._id },
+      });
     }
     for (const i of (await ctx.db.query("inboxItems").order("desc").take(500)).filter((x) => x.readAt && x.kind === "note")) {
       const u = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", i.email)).unique();
-      rows.push({ at: i.readAt!, who: (u?.name as string | undefined) ?? i.email, what: "read", label: i.title, ref: { kind: "note", id: i.noteId ?? i._id } });
+      rows.push({ at: i.readAt!, who: (u?.name as string | undefined) ?? i.email, what: "read", label: i.title, subject: i.title, detail: i.title, ref: { kind: "note", id: i.noteId ?? i._id } });
     }
     return rows.sort((a, b) => b.at - a.at).slice(0, max);
   },

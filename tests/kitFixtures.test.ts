@@ -81,7 +81,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       const az = await vid(p3, "LC Arizona", "LCArizona", 4, 8 * DAY, "landscape");
       await vid(p4, "Northline Teaser", "Northline", 1, 2 * DAY, "stadium");
       for (const [text, who] of [["Pull the logo up two frames.", "Maya Brooks"], ["Can the music come in on the cut?", "Maya Brooks"], ["Love this shot.", "Jordan Lee"]] as const)
-        await ctx.db.insert("notes", { businessId: A, versionId: harbor30.last, videoId: harbor30.v, kind: "frame", inFrame: 120, text, status: "open", authorName: who, visibility: "shared", createdAt: now - 5 * HOUR, updatedAt: now - 5 * HOUR } as never);
+        await ctx.db.insert("notes", { businessId: A, versionId: harbor30.last, videoId: harbor30.v, kind: "frame", inFrame: 120, text, status: "open", authorName: who, authorKind: "client", visibility: "shared", createdAt: now - 5 * HOUR, updatedAt: now - 5 * HOUR } as never);
       await ctx.db.insert("notes", { businessId: A, versionId: spirit.last, videoId: spirit.v, kind: "general", text: "Approved from our side.", status: "done", authorName: "Dan Price", visibility: "shared", createdAt: now - 2 * DAY, updatedAt: now - 2 * DAY } as never);
       for (const [vv, who, ago] of [[harbor30, "Maya Brooks", 3 * HOUR], [az, "Ana Ruiz", 26 * HOUR], [spirit, "Dan Price", 2 * DAY]] as const)
         await ctx.db.insert("views", { businessId: A, videoId: vv.v, versionId: vv.last, session: `s-${who}`, kind: "client", who, whoKey: who, startedAt: now - ago, lastAt: now - ago + 40_000, watchedSec: 30, maxSec: 30, lengthSec: 30, completed: true });
@@ -124,6 +124,8 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
     const note = await owner.mutation(api.inbox.saveNote, { clientId: w.harbor, title: "Shoot moved to Friday", text: "Same time, same place. We'll start with the counter shots." });
     await owner.mutation(api.inbox.sendNote, { noteId: note });
     await owner.mutation(api.inbox.saveNote, { clientId: w.harbor, title: "Cutdown ready next week", text: "The 15s is on its way." });
+    await t.mutation((anyApi as never as { inbox: { draftNoteAs: never } }).inbox.draftNoteAs, { clientId: w.harbor, title: "Shoot moved to Thursday, Nov 6", text: "Same call time. We'll send the shot list Monday.", said: "tell Harbor the shoot moved to Thursday", asBusiness: w.A } as never);
+    await t.run(async (ctx) => { for (const i of await ctx.db.query("inboxItems").collect()) if (i.kind === "note" && i.email === "maya@harborcoffee.com") await ctx.db.patch(i._id, { readAt: now - 20 * HOUR }); });
     await t.run(async (ctx) => {
       const { postToInbox } = await import("../convex/lib/inbox");
       await postToInbox(ctx as never, { businessId: w.A, clientId: w.harbor, email: "maya@harborcoffee.com", kind: "cut_ready", title: "New version: Harbor Coffee 30s v4", text: "26127 Harbor Coffee Launch · ready to review", link: `/s/x/v/${w.harbor30.v}`, source: { module: "review", id: w.harbor30.last }, key: "kit-v4" });
@@ -147,7 +149,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
     });
 
     const OWNER: [string, Record<string, unknown>][] = [
-      ["users.me", {}], ["business.brand", {}], ["business.settings", {}], ["library.overview", {}], ["activity.feed", { limit: 100 }], ["activity.recent", {}],
+      ["users.me", {}], ["business.brand", {}], ["business.settings", {}], ["library.overview", {}], ["activity.feed", { limit: 100 }], ["activity.recent", {}], ["home.needs", {}],
       ["sign.list", {}], ["builder.listBuilds", {}], ["builder.listTemplates", {}], ["builder.listClauses", {}], ["sign.ownerSignature", {}],
       ["clients.listInvites", {}], ["clients.directory", {}], ["clients.page", { clientId: w.harbor }], ["clients.people", { clientId: w.harbor }],
       ["inbox.notes", {}], ["inbox.forClient", { clientId: w.harbor }],

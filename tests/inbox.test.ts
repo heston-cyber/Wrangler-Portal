@@ -256,3 +256,44 @@ describe("client approval (Phase 1)", () => {
     expect(await w.boss.query(api.approvals.forVideo, { videoId: w.vid }).catch(() => [])).toEqual([]);
   });
 });
+
+describe("back-office Home (Phase 1)", () => {
+  test("Needs you today: open client notes with no reply, documents waiting on a client, Claude's drafts; replied and done notes drop off", async () => {
+    const w = await world();
+    const ids = await w.t.run(async (ctx) => {
+      const share = await ctx.db.insert("shares", { businessId: w.A, token: "tok-needs-0000000001", kind: "video", videoId: w.vid, access: "comment", who: "link", allVersions: true, downloads: false, emailNewVersions: false, createdAt: 0, createdBy: w.maya } as never);
+      const note = (text: string, at: number, extra: object = {}) => ctx.db.insert("notes", { businessId: w.A, versionId: w.ver, videoId: w.vid, kind: "general", text, status: "open", authorName: "Maya Brooks", authorKind: "client", shareId: share, visibility: "shared", createdAt: at, updatedAt: at, ...extra } as never);
+      await note("one", 100); await note("two", 110);
+      const replied = await note("three", 120);
+      await ctx.db.insert("replies", { businessId: w.A, noteId: replied, text: "On it.", authorName: "Heston", createdAt: 130 } as never);
+      await note("four", 140, { status: "done" });
+      await ctx.db.insert("notes", { businessId: w.A, versionId: w.ver, videoId: w.vid, kind: "general", text: "mine", status: "open", authorName: "Heston", authorKind: "owner", createdAt: 150, updatedAt: 150 } as never);
+      const doc = await ctx.db.insert("wsDocuments", { businessId: w.A, number: 6, title: "Change order", status: "sent", currentVersion: 1, sentVersion: 1, sentAt: 200, createdAt: 0, updatedAt: 0 });
+      await ctx.db.insert("wsSignings", { businessId: w.A, documentId: doc, versionNumber: 1, signerKey: "client", name: "Maya Brooks", email: "maya@harbor.example", order: 1, token: "tok-co", status: "sent" } as never);
+      await ctx.db.insert("wsSignings", { businessId: w.A, documentId: doc, versionNumber: 1, signerKey: "heston", name: "Heston", email: "heston@wranglerproductions.com", order: 2, token: "tok-h", status: "sent" } as never);
+      return { doc };
+    });
+    await w.t.mutation(internal.inbox.draftNoteAs, { clientId: w.harbor, title: "Shoot moved", text: "Thursday.", said: "tell Harbor", asBusiness: w.A });
+    const needs = await w.heston.query(api.home.needs, {});
+    expect(needs.map((n: { kind: string }) => n.kind)).toEqual(["notes", "doc", "draft"]);
+    expect(needs[0]).toMatchObject({ who: "Maya Brooks", count: 2, video: "Harbor 30s", version: 2 });
+    expect(needs[1]).toMatchObject({ label: "WS-00006", title: "Change order", waitingOn: ["Maya Brooks"], signerKey: "client", client: "Harbor Coffee" });
+    expect(needs[2]).toMatchObject({ title: "Shoot moved", client: "Harbor Coffee" });
+    // Another business sees none of it, and clients can't ask.
+    expect(await w.boss.query(api.home.needs, {})).toEqual([]);
+    await expect(w.mayaC.query(api.home.needs, {})).rejects.toThrow();
+    // Signed: the document drops off.
+    await w.t.run(async (ctx) => { for (const s of await ctx.db.query("wsSignings").collect()) if (s.signerKey === "client") await ctx.db.patch(s._id, { status: "signed" } as never); });
+    expect((await w.heston.query(api.home.needs, {})).map((n: { kind: string }) => n.kind)).toEqual(["notes", "draft"]);
+  });
+
+  test("Recent activity gives each row its two lines: watched with the version and client, notes with the version", async () => {
+    const w = await world();
+    await w.t.run(async (ctx) => {
+      await ctx.db.insert("views", { businessId: w.A, videoId: w.vid, versionId: w.ver, session: "s1", kind: "client", who: "Maya Brooks", whoKey: "u1", startedAt: 1000, lastAt: 1100, watchedSec: 20, maxSec: 20, lengthSec: 30, completed: false } as never);
+      await ctx.db.insert("views", { businessId: w.A, videoId: w.vid, versionId: w.ver, session: "s0", kind: "owner", who: "Heston", whoKey: "u0", startedAt: 1000, lastAt: 1200, watchedSec: 20, maxSec: 20, lengthSec: 30, completed: false } as never);
+    });
+    const recent = await w.heston.query(api.activity.recent, {});
+    expect(recent).toEqual([expect.objectContaining({ what: "watched", who: "Maya Brooks", subject: "Harbor 30s v2", detail: "Harbor Coffee", ref: expect.objectContaining({ version: 2 }) })]);
+  });
+});

@@ -632,7 +632,7 @@ export const deletePreview = internalMutation({
 // The connector can't approve, send or cancel on its own: it leaves a request, and Heston confirms or declines it
 // on the document page while signed in. So text slipped into a PDF, an email or a signer's name can't get a
 // contract sent with his signature on it, whatever it persuades Claude to type.
-const REQUEST_TTL = 24 * 3600_000;
+export const REQUEST_TTL = 24 * 3600_000;
 const WHAT_LABEL = { approve: "approve", send: "send", cancel: "cancel" } as const;
 
 export const requestAs = internalMutation({
@@ -663,7 +663,7 @@ export const requestAs = internalMutation({
 // there as "pending" with nothing left to confirm. Doing the thing directly now closes any request it answers
 // ("overtaken"), and a request that no longer fits the document's status is never shown as waiting.
 const FITS: Record<"approve" | "send" | "cancel", string[]> = { approve: ["draft"], send: ["approved"], cancel: ["sent"] };
-const stillFits = (what: "approve" | "send" | "cancel", status: string) => FITS[what].includes(status);
+export const stillFits = (what: "approve" | "send" | "cancel", status: string) => FITS[what].includes(status);
 
 async function closeRequests(ctx: MutationCtx, documentId: Id<"wsDocuments">, whats: Array<"approve" | "send" | "cancel">) {
   const now = Date.now();

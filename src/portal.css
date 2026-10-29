@@ -1247,3 +1247,25 @@ button.wp-hubcard[aria-busy], button.wp-tplcard[aria-busy] { opacity: 1; }
 .dialog .segbtn.on, .dialog .ws-seg button.on { background: var(--surface-block-hover); color: var(--text-primary); border-radius: 9px; }
 .dialog input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px; }
 .dialog .sharegrid > .label { font: 400 var(--fs-text-regular)/var(--lh-regular) var(--font-body); text-transform: none; letter-spacing: 0; color: var(--text-primary); }
+
+/* ---------- Phase 1 · back-office Home (P1 / Owner / Home) ---------- */
+.wp-page.notop { padding-top: 36px; }
+.wp-rowwrap { display: contents; }
+.wp-row.ilead { gap: 22px; padding-left: 26px; }
+.wp-row.quiet .ttl > span { white-space: normal; font-weight: 400; font-size: var(--fs-text-small); color: var(--text-muted); }
+.wp-row .ph-only { display: none; }
+.wp-row .ttl > span > .pc-only, .wp-row .ttl > span > .ph-only { overflow: hidden; text-overflow: ellipsis; }
+.wp-homecols { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 24px; align-items: start; }
+.wp-homecols > .col { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.wp-home .wp-row.inbox .ttl > span { white-space: normal; }
+@media (max-width: 1180px) { .wp-homecols { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 820px) {
+  .wp-page.notop { padding-top: 0; }
+  .wp-home { gap: 18px; }
+  .wp-homecols, .wp-homecols > .col { gap: 18px; }
+  .wp-home .wp-homeclients { display: none; }
+  .wp-home .col.right .wp-rowwrap:nth-child(n + 5) { display: none; } /* head + three rows */
+  .wp-row .pc-only { display: none; }
+  .wp-row .ph-only { display: inline; }
+  .wp-row.ilead { gap: 16px; padding-left: 20px; }
+}

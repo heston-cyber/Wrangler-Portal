@@ -140,9 +140,15 @@ export function Badge({ n, label }: { n: number; label?: string }) {
   return <span className="wp-badge" aria-label={label ?? `${n} unread`}>{n > 99 ? "99+" : n}</span>;
 }
 export const UnreadDot = ({ label = "Unread" }: { label?: string }) => <span className="wp-dot" role="img" aria-label={label} />;
-export function Avatar({ name, size = 32 }: { name: string | null | undefined; size?: number }) {
-  const n = (name || "?").trim();
-  return <span className="avatar" style={{ width: size, height: size, flexBasis: size, fontSize: size >= 30 ? 12 : 11 }} aria-hidden>{n[0]?.toUpperCase() ?? "?"}</span>;
+/** "Maya Brooks" → "MB" (two), "M" (one). Email addresses use the part before the @. */
+export function initials(name: string | null | undefined, two = false) {
+  const words = (name || "?").trim().replace(/@.*/, "").split(/[\s._-]+/).filter((w) => /[\p{L}\p{N}]/u.test(w));
+  const first = (w: string | undefined) => [...(w ?? "")].find((c) => /[\p{L}\p{N}]/u.test(c))?.toUpperCase() ?? "";
+  if (!words.length) return "?";
+  return two && words.length > 1 ? first(words[0]) + first(words[words.length - 1]) : first(words[0]) || "?";
+}
+export function Avatar({ name, size = 32, two }: { name: string | null | undefined; size?: number; two?: boolean }) {
+  return <span className="avatar" style={{ width: size, height: size, flexBasis: size, fontSize: size >= 30 ? 12 : 11 }} aria-hidden>{initials(name, two)}</span>;
 }
 
 // ---------- Cards and lists ----------
@@ -166,7 +172,7 @@ export function SectionHead({ label, count, action }: { label: string; count?: n
 }
 export const Divider = () => <hr className="wp-divider" />;
 
-type Lead = { icon: IconName } | { thumb: string | null; size?: 96 | 72 | 64 | 56 } | { avatar: string | null; size?: number } | null;
+type Lead = { icon: IconName } | { thumb: string | null; size?: 96 | 72 | 64 | 56 } | { avatar: string | null; size?: number; two?: boolean } | null;
 function LeadView({ lead }: { lead: Lead }) {
   if (!lead) return null;
   if ("icon" in lead) return <Icon name={lead.icon} size={20} className="lead-icon" />;
@@ -174,7 +180,7 @@ function LeadView({ lead }: { lead: Lead }) {
     const cls = cx("lead-thumb", lead.size && lead.size !== 96 && `t${lead.size}`);
     return lead.thumb ? <img className={cls} src={lead.thumb} alt="" loading="lazy" /> : <span className={cls} aria-hidden />;
   }
-  return <Avatar name={lead.avatar} size={lead.size ?? 32} />;
+  return <Avatar name={lead.avatar} size={lead.size ?? 32} two={lead.two} />;
 }
 
 /** List row. Give it `to` (a link), `onClick` (a button), or neither (static). */

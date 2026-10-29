@@ -6,6 +6,7 @@ import SignIn, { SystemPage } from "./shell/SignIn";
 import { Button } from "./ui/wp";
 import ClientHome from "./modules/clients/ClientHome";
 import Home from "./modules/review/Home";
+import OwnerHome from "./modules/home/OwnerHome";
 import Projects from "./modules/review/Projects";
 import ActivityPage from "./modules/review/ActivityPage";
 import Settings from "./modules/settings/Settings";
@@ -117,7 +118,8 @@ function SignedIn() {
   else if (path.startsWith("/register")) page = <Settings me={me} />; // now Settings › Register
   else if (path.startsWith("/settings")) page = <Settings me={me} />;
   else if (/^\/more\/?$/.test(path)) page = <MorePage me={me} side="owner" />;
-  else page = <Home />; // "/" and "/review" (Review's main page) until the new Home lands
+  else if (/^\/review\/?$/.test(path)) page = <Home />; // Review's main page
+  else page = <OwnerHome />; // "/": the back-office Home
   // Work surfaces get no background light, so nothing competes with the video or the document.
   const workSurface = Boolean(video) || /^\/sign\/(b|d)\//.test(path) || /^\/sign\/templates\/[^/]+/.test(path);
   return (
