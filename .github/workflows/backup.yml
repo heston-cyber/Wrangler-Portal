@@ -1,0 +1,100 @@
+name: Weekly backup to Bunny
+
+# Wrangler Portal D19 (Oct 29): a weekly copy of the database and its stored files, kept off Convex.
+# 1. `npx convex export --include-file-storage` makes a ZIP of every table plus the _storage files.
+# 2. The ZIP is encrypted (AES-256, a passphrase only Heston holds), so the copy is useless to anyone without it.
+# 3. It goes to a PRIVATE Bunny storage zone (no pull zone, so it can't be fetched from the web) under
+#    convex/<prod|dev>/YYYY-MM-DD.zip.enc, and the upload is checked by size.
+# 4. Only the newest KEEP copies stay; older ones are deleted from that folder.
+# The repo is public, so these logs are public: they print dates, sizes and counts only. Never names or data.
+# How to restore: docs/BACKUPS.md.
+#
+# Repo secrets: CONVEX_DEPLOY_KEY (live) · CONVEX_DEV_DEPLOY_KEY (practice) · BUNNY_BACKUP_ZONE ·
+# BUNNY_BACKUP_PASSWORD (the zone's FTP & API password) · BUNNY_BACKUP_HOST (e.g. ny.storage.bunnycdn.com) ·
+# BACKUP_PASSPHRASE (long, random, kept in Heston's password manager: without it the backups can't be opened).
+on:
+  schedule:
+    - cron: "43 8 * * 0" # Sundays 3:43 am Oklahoma City (CDT); 2:43 am in winter
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which deployment: dev (practice) or prod (live)"
+        required: true
+        default: dev
+        type: choice
+        options: [dev, prod]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+env:
+  KEEP: "12" # weekly copies kept, about three months
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Export, encrypt, upload, check, prune
+        env:
+          TARGET: ${{ github.event_name == 'schedule' && 'prod' || inputs.target }}
+          PROD_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+          DEV_KEY: ${{ secrets.CONVEX_DEV_DEPLOY_KEY }}
+          ZONE: ${{ secrets.BUNNY_BACKUP_ZONE }}
+          ZONE_PASSWORD: ${{ secrets.BUNNY_BACKUP_PASSWORD }}
+          HOST: ${{ secrets.BUNNY_BACKUP_HOST }}
+          PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          for n in ZONE ZONE_PASSWORD HOST PASSPHRASE; do [ -n "${!n}" ] || { echo "Missing secret for $n"; exit 1; }; done
+          [ "${#PASSPHRASE}" -ge 24 ] || { echo "BACKUP_PASSPHRASE must be at least 24 characters"; exit 1; }
+          case "$TARGET" in
+            prod) KEY="$PROD_KEY"; want="prod:";;
+            dev)  KEY="$DEV_KEY";  want="dev:";;
+            *) echo "Unknown target"; exit 1;;
+          esac
+          KEY="${KEY//%7C/|}"; KEY="${KEY//%7c/|}"
+          case "$KEY" in "$want"*) echo "target: $TARGET";; "") echo "No deploy key for $TARGET"; exit 1;; *) echo "Refused: the key isn't a $TARGET key"; exit 1;; esac
+          export CONVEX_DEPLOY_KEY="$KEY"
+
+          work="$(mktemp -d)"; zip="$work/backup.zip"; enc="$work/backup.zip.enc"
+          npx convex export --include-file-storage --path "$zip" > "$work/export.log" 2>&1 || { echo "Export failed:"; tail -n 5 "$work/export.log" | sed -E 's/[A-Za-z0-9_-]{24,}/<redacted>/g'; exit 1; }
+          zip_bytes=$(stat -c %s "$zip")
+          tables=$(unzip -Z1 "$zip" | grep -c '/documents.jsonl$' || true)
+          files=$(unzip -Z1 "$zip" | grep -c '^_storage/' || true)
+          echo "export: $zip_bytes bytes · $tables tables · $files stored files"
+          [ "$tables" -gt 0 ] || { echo "Export has no tables"; exit 1; }
+
+          openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt -in "$zip" -out "$enc" -pass env:PASSPHRASE
+          rm -f "$zip"
+          # Prove the copy opens with the passphrase, and the whole archive is intact, before trusting it.
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in "$enc" -out "$work/check.zip" -pass env:PASSPHRASE || { echo "Encrypted copy didn't decrypt"; exit 1; }
+          unzip -tq "$work/check.zip" > /dev/null || { echo "Decrypted copy isn't a sound ZIP"; exit 1; }
+          rm -f "$work/check.zip"
+          enc_bytes=$(stat -c %s "$enc")
+
+          day="$(date -u +%F)"; dir="convex/$TARGET"; name="$day.zip.enc"
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --fail-with-body -X PUT -H "AccessKey: $ZONE_PASSWORD" -H "Content-Type: application/octet-stream" --data-binary @"$enc" "https://$HOST/$ZONE/$dir/$name" || true)
+          [ "$code" = "201" ] || { echo "Upload failed: HTTP $code"; exit 1; }
+
+          list=$(curl -sS --fail -H "AccessKey: $ZONE_PASSWORD" -H "Accept: application/json" "https://$HOST/$ZONE/$dir/")
+          stored=$(printf '%s' "$list" | jq -r --arg n "$name" '.[] | select(.ObjectName == $n) | .Length')
+          [ "$stored" = "$enc_bytes" ] || { echo "Uploaded size doesn't match ($stored vs $enc_bytes)"; exit 1; }
+          echo "uploaded: $dir/$name · $enc_bytes bytes · checked"
+
+          old=$(printf '%s' "$list" | jq -r '[.[] | select(.IsDirectory == false and (.ObjectName | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}\\.zip\\.enc$")))] | sort_by(.ObjectName) | reverse | .[(env.KEEP|tonumber):] | .[].ObjectName')
+          removed=0
+          for f in $old; do curl -sS --fail -o /dev/null -X DELETE -H "AccessKey: $ZONE_PASSWORD" "https://$HOST/$ZONE/$dir/$f" && removed=$((removed+1)); done
+          kept=$(printf '%s' "$list" | jq '[.[] | select(.IsDirectory == false)] | length')
+          echo "kept: $((kept - removed)) copies · removed: $removed older"
+          rm -rf "$work"
