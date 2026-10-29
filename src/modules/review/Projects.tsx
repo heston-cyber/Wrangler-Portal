@@ -1,5 +1,6 @@
 // Projects (Flask's Assets page): every video, grouped and sorted, as a list or a grid.
 // /projects shows everything; /projects/:id shows one project.
+import { Button, ButtonLink, EmptyState } from "../../ui/wp";
 import { useState } from "react";
 import { BrandImg } from "../../ui/BrandImg";
 import { useMutation, useQuery } from "convex/react";
@@ -240,19 +241,11 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
         </div>
 
         {overview === undefined ? <p className="caption" style={{ padding: "8px 24px" }}>Loading…</p>
-          : projectId && !project ? <div className="empty">This project doesn't exist any more. <a className="btn" {...linkProps("/projects")}>All projects</a></div>
+          : projectId && !project ? <EmptyState icon="folder" title="This project doesn't exist any more." actions={<ButtonLink to="/projects">All projects</ButtonLink>} />
           : vids.length === 0 && group !== "project" && group !== "client" ? (
-            <div className="empty">
-              <BrandImg name="spark" />
-              <span>{projectId ? "No videos in this project yet." : "No videos yet."} Drop a render anywhere on this page.</span>
-              <button className="btn primary" onClick={() => openUpload({ projectId })}><Upload size={16} />Upload</button>
-            </div>
+            <EmptyState icon="video" title={projectId ? "No videos in this project yet." : "No videos yet."} body="Drop a render anywhere on this page." actions={<Button variant="primary" icon="upload" onClick={() => openUpload({ projectId })}>Upload</Button>} />
           ) : groups.length === 0 ? (
-            <div className="empty">
-              <BrandImg name="spark" />
-              <span>No projects yet.</span>
-              <button className="btn primary" onClick={() => openUpload({ newProject: true })}><FolderPlus size={16} />New project</button>
-            </div>
+            <EmptyState icon="folder" title="No projects yet." actions={<Button variant="primary" icon="plus" onClick={() => openUpload({ newProject: true })}>New project</Button>} />
           ) : blocks.map((b) => (
             <section key={b.key} className={`wp-card glass pj-block${b.client ? " client" : ""}`}>
               <div className="wp-rows">{b.groups.map((g, i) => <div key={g.key} style={{ display: "contents" }}>{i > 0 && <hr className="wp-divider" />}{renderGroup(g)}</div>)}</div>

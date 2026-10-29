@@ -1,4 +1,5 @@
 // The Notes tab of the review page's side panel.
+import { EmptyState } from "../../../ui/wp";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { BrandImg } from "../../../ui/BrandImg";
 import { useMutation } from "convex/react";
@@ -47,10 +48,7 @@ export function NotesList({ notes, clock, tc, filter, onJump, focusId, focusTick
   if (notes === undefined) return <p className="caption" style={{ padding: 12 }}>Loading notes…</p>;
   if (shown.length === 0) {
     return (
-      <div className="empty" style={{ padding: "40px 16px" }}>
-        <BrandImg name="spark" />
-        <span>{list.length === 0 ? <>No notes yet. <br />Pause on a frame and write below, press D to draw, or I and O to mark a range.</> : "No notes match this filter."}</span>
-      </div>
+      <EmptyState icon="note" title={list.length === 0 ? "No notes yet." : "No notes match this filter."} body={list.length === 0 ? "Pause on a frame and write below, press D to draw, or I and O to mark a range." : undefined} />
     );
   }
   return <>{shown.map((n) => <NoteCard key={n._id} n={n} here={hereSet.has(n._id)} focused={focusId === n._id} focusTick={focusTick} tc={tc} onJump={onJump} onCopied={onCopied} onSeekFrame={onSeekFrame} />)}</>;

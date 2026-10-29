@@ -1,4 +1,5 @@
 // Activity: uploads, new versions and notes, newest first. Notes from one sitting sit in one row of cards.
+import { EmptyState } from "../../ui/wp";
 import { useState } from "react";
 import { BrandImg } from "../../ui/BrandImg";
 import { useQuery } from "convex/react";
@@ -40,7 +41,7 @@ export default function ActivityPage() {
           </div>
         </div>
         {feed === undefined ? <p className="caption" style={{ padding: "8px 24px" }}>Loading…</p>
-          : rows.length === 0 ? <div className="empty"><BrandImg name="spark" /><span>Nothing here yet.</span></div>
+          : rows.length === 0 ? <EmptyState icon="activity" title="Nothing here yet." />
           : (
             <div className="feed wp-card glass">
               {rows.map((e, i) => {

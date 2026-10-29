@@ -30,7 +30,7 @@ import { mapWords, playedRange, pointersFrom, transcriptText, type Pointer, type
 import { secondsText } from "./notes/NotesPanel";
 import { Sep, TopBar } from "../../shell/Shell";
 import { Menu, MenuItem, MenuLabel, MenuSep, Modal, Spinner, useIsNarrow, useToast } from "../../ui/kit";
-import { Button, DialogHeader } from "../../ui/wp";
+import { Button, ButtonLink, DialogHeader, EmptyState } from "../../ui/wp";
 import { FileName, copyText } from "./Register";
 import { shortTitleFrom } from "../../../convex/lib/register";
 import { FinalBadge } from "./VideoRows";
@@ -58,7 +58,7 @@ export default function VideoPage({ videoId, versionNumber, noteId }: { videoId:
     return (
       <>
         <TopBar><a {...linkProps(viewer.home)}>Home</a></TopBar>
-        <div className="content"><div className="empty">This video doesn't exist any more. <a className="btn" {...linkProps(viewer.can === "owner" ? "/projects" : viewer.home)}>{viewer.can === "owner" ? "All projects" : "Back"}</a></div></div>
+        <div className="wp-page"><EmptyState icon="video" title="This video doesn't exist any more." actions={<ButtonLink to={viewer.can === "owner" ? "/projects" : viewer.home}>{viewer.can === "owner" ? "All projects" : "Back"}</ButtonLink>} /></div>
       </>
     );
   }
