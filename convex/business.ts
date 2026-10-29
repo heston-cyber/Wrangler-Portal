@@ -7,6 +7,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { businessContact, businessInScope, defaultBusiness, ensureDefaultBusiness, ensureMembership, syncClientMemberships } from "./lib/business";
 import { allowedEmails } from "./lib/owners";
+import { textOn } from "./lib/color";
 
 /** Makes the default business, the owners' memberships, and a client membership for every existing client account. */
 export const bootstrap = internalMutation({
@@ -83,6 +84,8 @@ async function settingsOf(ctx: QueryCtx, b: Doc<"businesses">) {
     name: b.name, legalName: b.legalName ?? null, ownerName: b.ownerName ?? null, emailFromName: b.emailFromName ?? null,
     replyTo: b.replyTo ?? null, ownerEmail: c.ownerEmail, accent: b.accent ?? null, background: b.background ?? null,
     logoUrl: b.logoFileId ? await ctx.storage.getUrl(b.logoFileId) : null, modules: b.modules ?? DEFAULT_MODULES,
+    // Settings shows a small warning when no text colour reaches 4.5:1 on the accent (Heston, Oct 29).
+    accentCheck: b.accent ? (({ ratio, ok }) => ({ ratio: Math.round(ratio * 100) / 100, ok }))(textOn(b.accent)) : null,
   };
 }
 
