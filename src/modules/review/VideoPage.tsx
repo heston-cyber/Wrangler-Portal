@@ -678,23 +678,23 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     <div className={`review${fs ? " fs" : ""}${typing && narrow ? " typing" : ""}`} ref={rootRef}>
       <TopBar right={
         <>
-          {owner && <ViewsChip videoId={data._id} onOpen={() => setDialog("views")} />}
+          {owner && <span className="hide-sm" style={{ display: "contents" }}><ViewsChip videoId={data._id} onOpen={() => setDialog("views")} /></span>}
           {owner && <button className={`btn sm${covering?.some((s) => s.state === "on") ? " on" : ""}`} onClick={() => setDialog("share")} title={covering?.length ? `Shared: ${covering.filter((s) => s.state === "on").length} live ${covering.filter((s) => s.state === "on").length === 1 ? "link" : "links"}` : "Share this video"}><Share2 size={15} /><span className="hide-sm">Share</span></button>}
           {owner && <button className="btn sm hide-sm" onClick={downloadEdl} disabled={!notes?.length} title="Download the notes as Resolve markers (EDL)"><Download size={15} />Resolve markers</button>}
           {viewer.kind === "client" && version && (viewer.canApprove || myApproval) && (myApproval
             ? <Button size="sm" disabled title={`You approved v${version.number}`}>Approved ✓</Button>
             : <Button variant="primary" size="sm" onClick={() => setApproving(true)}>Approve v{version.number}</Button>)}
           {!owner && canDownload && <button className="btn sm" onClick={() => void downloadFile()} disabled={!!dl} title="Download this version">{dl ? <Spinner /> : <Download size={15} />}<span className="hide-sm">{dl ? (dl.pct ? `${dl.pct}%` : "Downloading…") : "Download"}</span></button>}
-          {!noNotes && <button className={`icon-btn md${panel ? " on" : ""}`} onClick={openPanel} aria-label={panel ? "Hide panel" : "Show panel"} title={panel ? "Hide panel" : "Show panel"}><PanelRight size={16} /></button>}
+          {!noNotes && <button className={`icon-btn md hide-sm${panel ? " on" : ""}`} onClick={openPanel} aria-label={panel ? "Hide panel" : "Show panel"} title={panel ? "Hide panel" : "Show panel"}><PanelRight size={16} /></button>}
         </>
       }>
-        <a {...linkProps(viewer.home)} aria-label="Home" style={{ display: "flex" }}><BrandImg name="wordmark" className="logo" alt="Wrangler Productions" /></a>
-        <Sep />
+        <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps(viewer.home)} aria-label="Home" style={{ display: "flex" }}><BrandImg name="wordmark" className="logo" alt="Wrangler Productions" /></a>
+        <Sep /></span>
         {owner && <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps("/projects")}>Projects</a><Sep /></span>}
         {data.project && (owner
           ? <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps(`/projects/${data.project._id}`)}>{projectLabel(data.project)}</a><Sep /></span>
           : <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps(viewer.home)}>{projectLabel(data.project)}</a><Sep /></span>)}
-        {data.number && <span className="chip num mono" title="Register number">{String(data.number).padStart(5, "0")}</span>}
+        {data.number && <span className="chip num mono hide-sm" title="Register number">{String(data.number).padStart(5, "0")}</span>}
         <span className="here">{data.title}</span>
         <FinalBadge final={data.final} />
         {owner && verApprovals.length > 0 && <span className="wp-status success hide-sm" title={verApprovals.map((a) => `${a.name} · ${new Date(a.at).toLocaleString()}`).join("\n")}>Approved by {verApprovals.map((a) => a.name).join(", ")} · v{version!.number}</span>}
