@@ -29,24 +29,26 @@ import {
 import { marginSelect, pickableBlocks } from "./editor/blockSelection";
 import { touchDragger, type TouchDragView } from "./touchDrag";
 import { errText, uploadToStorage } from "../pages/common";
+import { Icon } from "../../../ui/Icon";
+import { Button, IconButton, SkeletonRows, EmptyState, ButtonLink, StatusChip as Chip } from "../../../ui/wp";
 
 type Mode = { kind: "build"; buildId: Id<"wsBuilds"> } | { kind: "template"; templateId: Id<"wsTemplates"> };
 type Tab = "insert" | "format" | "style" | "details";
 type Meta = { name: string; description: string };
 
 const INSERT: Array<{ kind: InsertKind; icon: React.ReactNode; hint: string }> = [
-  { kind: "title", icon: <Heading1 size={16} />, hint: "The document's title (Ctrl+1)" },
-  { kind: "heading", icon: <Heading size={16} />, hint: "A section heading (Ctrl+3)" },
-  { kind: "text", icon: <Type size={16} />, hint: "A line of text (Ctrl+5)" },
-  { kind: "section", icon: <ScrollText size={16} />, hint: "A container of lines: a clause, with optional initials" },
-  { kind: "card", icon: <PanelTop size={16} />, hint: "A tinted container of lines" },
-  { kind: "parties", icon: <Users size={16} />, hint: "You and the client" },
-  { kind: "items", icon: <List size={16} />, hint: "Services with qty, rate, total" },
-  { kind: "payment", icon: <Receipt size={16} />, hint: "Deposit and balance (sets the Stripe draft)" },
-  { kind: "signatures", icon: <PenLine size={16} />, hint: "Signature, name, title and date lines" },
-  { kind: "divider", icon: <Minus size={16} />, hint: "A line between sections" },
-  { kind: "pagebreak", icon: <SeparatorHorizontal size={16} />, hint: "Start a new page" },
-  { kind: "spacer", icon: <Space size={16} />, hint: "Some empty space" },
+  { kind: "title", icon: <Icon name="document" size={18} />, hint: "The document's title (Ctrl+1)" },
+  { kind: "heading", icon: <Icon name="document" size={18} />, hint: "A section heading (Ctrl+3)" },
+  { kind: "text", icon: <Icon name="note" size={18} />, hint: "A line of text (Ctrl+5)" },
+  { kind: "section", icon: <Icon name="note" size={18} />, hint: "A container of lines: a clause, with optional initials" },
+  { kind: "card", icon: <Icon name="folder" size={18} />, hint: "A tinted container of lines" },
+  { kind: "parties", icon: <Icon name="users" size={18} />, hint: "You and the client" },
+  { kind: "items", icon: <Icon name="invoice" size={18} />, hint: "Services with qty, rate, total" },
+  { kind: "payment", icon: <Icon name="invoice" size={18} />, hint: "Deposit and balance (sets the Stripe draft)" },
+  { kind: "signatures", icon: <Icon name="sign" size={18} />, hint: "Signature, name, title and date lines" },
+  { kind: "divider", icon: <Icon name="minus" size={18} />, hint: "A line between sections" },
+  { kind: "pagebreak", icon: <Icon name="document" size={18} />, hint: "Start a new page" },
+  { kind: "spacer", icon: <Icon name="plus" size={18} />, hint: "Some empty space" },
 ];
 
 export default function Builder({ mode }: { mode: Mode }) {
@@ -277,8 +279,8 @@ export default function Builder({ mode }: { mode: Mode }) {
   const missingKey = doc ? missingFields(doc.page, doc.fields).sort().join(",") : "";
   const missing = useMemo(() => new Set(missingKey ? missingKey.split(",") : []), [missingKey]);
 
-  if (!doc) return <><TopBar><FileSignature size={15} /><a {...linkProps("/sign")}>Contracts</a></TopBar><div className="content"><p className="caption" style={{ padding: 24 }}><Spinner /> Loading…</p></div></>;
-  if (mode.kind === "build" && build === null) return <><TopBar><FileSignature size={15} /><a {...linkProps("/sign")}>Contracts</a></TopBar><div className="content"><div className="empty">This document doesn't exist.</div></div></>;
+  if (!doc) return <><TopBar><a {...linkProps("/sign")}>Docs</a></TopBar><div className="wp-page docs"><div className="wp-tablecard glass"><SkeletonRows n={3} /></div></div></>;
+  if (mode.kind === "build" && build === null) return <><TopBar><a {...linkProps("/sign")}>Docs</a></TopBar><div className="wp-page docs"><EmptyState icon="document" title="This document doesn't exist." actions={<ButtonLink to="/sign/docs">All docs</ButtonLink>} /></div></>;
 
   const st = doc.style;
   const values = fieldValues(doc.fields, doc.page);
@@ -337,17 +339,17 @@ export default function Builder({ mode }: { mode: Mode }) {
     <BuilderCtx.Provider value={{ doc, values, px, onDetails: () => setTab("details"), onSaveClause: (sec) => void onSaveClause(sec) }}>
       <TopBar right={<>
         <span className="wsb-undo">
-          <button className="icon-btn" aria-label="Undo" title={`Undo (${mac ? "⌘Z" : "Ctrl+Z"})`} disabled={!hist.current.past.length} onClick={() => step("undo")}><Undo2 size={16} /></button>
-          <button className="icon-btn" aria-label="Redo" title={`Redo (${mac ? "⇧⌘Z" : "Ctrl+Shift+Z"})`} disabled={!hist.current.future.length} onClick={() => step("redo")}><Redo2 size={16} /></button>
+          <button className="icon-btn sm" aria-label="Undo" title={`Undo (${mac ? "⌘Z" : "Ctrl+Z"})`} disabled={!hist.current.past.length} onClick={() => step("undo")}><Icon name="arrow-left" size={18} /></button>
+          <button className="icon-btn sm" aria-label="Redo" title={`Redo (${mac ? "⇧⌘Z" : "Ctrl+Shift+Z"})`} disabled={!hist.current.future.length} onClick={() => step("redo")}><Icon name="arrow-right" size={18} /></button>
         </span>
-        <span className={`ws-save hide-sm ${saveState}`}>{saveState === "saving" ? <><Spinner /> Saving</> : saveState === "error" ? <><TriangleAlert size={14} /> Not saved</> : <><Check size={14} /> Saved</>}</span>
-        <button className="btn ghost sm hide-sm" onClick={() => void onPreview()} disabled={busy === "preview"}>{busy === "preview" ? <Spinner /> : <Eye size={15} />}Preview PDF</button>
+        <span className={`ws-save hide-sm ${saveState}`}>{saveState === "saving" ? <><Spinner /> Saving</> : saveState === "error" ? <><Icon name="alert" size={14} /> Not saved</> : <><Icon name="check" size={14} plain /> Saved</>}</span>
+        <Button variant="ghost" size="sm" className="hide-sm" loading={busy === "preview"} onClick={() => void onPreview()}>Preview PDF</Button>
         {mode.kind === "build" ? <>
-          <button className="btn ghost sm hide-sm" onClick={() => setAsTemplate(true)}><BookmarkPlus size={15} />Save as template</button>
-          <button className="btn primary sm" disabled={busy === "continue" || !!sent} onClick={() => void onContinue()} title={sent ? "It's out for signature or signed" : undefined}>{busy === "continue" ? <Spinner /> : <Send size={15} />}{build?.document ? "Update the PDF" : "Continue to signing"}</button>
-        </> : <button className="btn primary sm" disabled={busy === "use"} onClick={() => void onUseTemplate()}>{busy === "use" ? <Spinner /> : <Plus size={15} />}New document from this</button>}
+          <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setAsTemplate(true)}>Save as template</Button>
+          <Button variant="primary" size="sm" loading={busy === "continue"} disabled={!!sent} onClick={() => void onContinue()} title={sent ? "It's out for signature or signed" : undefined}>{build?.document ? "Update the PDF" : "Continue to signing"}</Button>
+        </> : <Button variant="primary" size="sm" loading={busy === "use"} onClick={() => void onUseTemplate()}>New document from this</Button>}
       </>}>
-        <FileSignature size={15} /><a {...linkProps("/sign")}>Contracts</a><Sep />
+        <a {...linkProps("/sign")}>Docs</a><Sep />
         {mode.kind === "template" ? <><a {...linkProps("/sign/templates")}>Templates</a><Sep /></> : null}
         <span className="here">{mode.kind === "template" ? meta.name || doc.title : doc.title}{build?.document ? ` · ${build.document.label}` : ""}</span>
       </TopBar>
@@ -361,7 +363,7 @@ export default function Builder({ mode }: { mode: Mode }) {
 
         {/* The page */}
         <div className="wsb-stage" ref={stageRef}>
-          {sent && <div className="ws-banner"><TriangleAlert size={15} /> {build!.document!.label} is {build!.document!.status === "sent" ? "out for signature" : "signed"}. Changes here won't reach it; cancel it first to send a new version.</div>}
+          {sent && <div className="wp-notice ws-banner"><Icon name="lock" size={20} /><span className="txt">{build!.document!.label} is {build!.document!.status === "sent" ? "out for signature" : "signed"}. Changes here won't reach it; cancel it first to send a new version.</span></div>}
           <div className={`wsb-page${picking ? " wsb-picking" : ""}`}
             // Select mode: a tap ticks the block under it; nothing else on the page reacts (no typing, no fields).
             onMouseDownCapture={(e) => { if (picking) { e.preventDefault(); e.stopPropagation(); } }}
@@ -394,14 +396,14 @@ export default function Builder({ mode }: { mode: Mode }) {
         </div>
 
         {/* The panel */}
-        <aside className={`wsb-panel${sheet ? " open" : ""}`}>
-          <div className="tabs" role="tablist">
+        <aside className={`wsb-panel glass${sheet ? " open" : ""}`}>
+          <div className="tabs wsb-tabs" role="tablist">
             {(["insert", "format", "style", "details"] as Tab[]).map((k) => <button key={k} className="tab" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>{k[0].toUpperCase() + k.slice(1)}</button>)}
-            <button className="icon-btn wsb-sheetclose" aria-label="Close" onClick={() => setSheet(false)}><X size={18} /></button>
+            <IconButton icon="close" label="Close" className="wsb-sheetclose" onClick={() => setSheet(false)} />
           </div>
           {tab === "insert" && (
             <div className="wsb-pane">
-              <span className="ws-flabel">{phone ? "Tap to add after the cursor, or press and hold to drag onto the page" : "Drag onto the page (or into a container), or click to add after the cursor"}</span>
+              <span className="wsb-hint">{phone ? "Tap to add after the cursor, or press and hold to drag onto the page" : "Drag onto the page (or into a container), or click to add after the cursor"}</span>
               {INSERT.map((x) => <button key={x.kind} className="wsb-insert" draggable onDragStart={(e) => dragNodes(e, newNodes(x.kind))} onDragEnd={() => endInsertDrag(editor)} {...touch.item(() => newNodes(x.kind), INSERT_LABEL[x.kind])} onClick={() => { if (touch.justDropped()) return; if (editor) insertKind(editor, x.kind); if (phone) setSheet(false); }}>{x.icon}<span><b>{INSERT_LABEL[x.kind]}</b><span className="secondary">{x.hint}</span></span></button>)}
               <ClauseLibrary clauses={clauses} onInsert={(c) => { if (touch.justDropped()) return; if (editor) insertNodes(editor, [clauseSection(c)]); if (phone) setSheet(false); }} onDragStart={(e, c) => dragNodes(e, [clauseSection(c)])} onDragEnd={() => endInsertDrag(editor)} touchProps={(c) => touch.item(() => [clauseSection(c)], c.title)} />
             </div>
@@ -473,10 +475,10 @@ function ClauseLibrary({ clauses, onInsert, onDragStart, onDragEnd, touchProps }
   const list = (clauses ?? []).filter((c) => !q || c.title.toLowerCase().includes(q.toLowerCase()));
   return (
     <div className="wsb-lib">
-      <div className="ws-cardhead"><span className="label">Clause library</span><a className="btn ghost sm" {...linkProps("/sign/templates?tab=clauses")}>Manage</a></div>
-      <input className="input sm" placeholder="Search clauses" value={q} onChange={(e) => setQ(e.target.value)} />
-      {clauses === undefined ? <Spinner /> : list.length === 0 ? <p className="caption secondary">{clauses.length ? "No clause matches." : "No saved clauses yet. Save one from any clause block."}</p>
-        : list.map((c) => <button key={c._id} className="wsb-libitem" draggable onDragStart={(e) => onDragStart(e, c)} onDragEnd={onDragEnd} {...touchProps(c)} onClick={() => onInsert(c)} title="Drag onto the page, or click to add"><ScrollText size={14} /><span>{c.title}</span>{c.initials && <span className="chip">initials</span>}</button>)}
+      <div className="wp-listhead"><span className="wp-eyebrow">Clause library</span><ButtonLink variant="ghost" size="sm" to="/sign/templates?tab=clauses">Manage</ButtonLink></div>
+      <label className="ws-search"><Icon name="search" size={16} /><input placeholder="Search clauses" aria-label="Search clauses" value={q} onChange={(e) => setQ(e.target.value)} /></label>
+      {clauses === undefined ? <Spinner /> : list.length === 0 ? <p className="wsb-hint">{clauses.length ? "No clause matches." : "No saved clauses yet. Save one from any clause block."}</p>
+        : list.map((c) => <button key={c._id} className="wsb-libitem" draggable onDragStart={(e) => onDragStart(e, c)} onDragEnd={onDragEnd} {...touchProps(c)} onClick={() => onInsert(c)} title="Drag onto the page, or click to add"><span>{c.title}</span>{c.initials && <Chip>Initials</Chip>}</button>)}
     </div>
   );
 }

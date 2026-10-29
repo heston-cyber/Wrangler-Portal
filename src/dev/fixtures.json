@@ -1928,8 +1928,8 @@
     "projectId": null,
     "state": "on",
     "sub": "26127 Harbor Coffee Launch",
-    "token": "BEKi4BF01AVvcLeR0MhCeQ",
-    "url": "https://app.wranglerportal.com/s/BEKi4BF01AVvcLeR0MhCeQ",
+    "token": "sekWUFh9v2ssDDuf8xUcCQ",
+    "url": "https://app.wranglerportal.com/s/sekWUFh9v2ssDDuf8xUcCQ",
     "videoId": "00000000000000000000010024videos",
     "who": "link"
    },
@@ -1968,8 +1968,8 @@
     "projectId": "000000000000000000010020projects",
     "state": "on",
     "sub": "Harbor Coffee",
-    "token": "YHhY1DR7Z5jMSkq-3QuhpA",
-    "url": "https://app.wranglerportal.com/s/YHhY1DR7Z5jMSkq-3QuhpA",
+    "token": "9bfDOBxqNK4zxj2VKeC7dg",
+    "url": "https://app.wranglerportal.com/s/9bfDOBxqNK4zxj2VKeC7dg",
     "videoId": null,
     "who": "invited"
    }
@@ -2010,8 +2010,8 @@
     "projectId": null,
     "state": "on",
     "sub": "26127 Harbor Coffee Launch",
-    "token": "BEKi4BF01AVvcLeR0MhCeQ",
-    "url": "https://app.wranglerportal.com/s/BEKi4BF01AVvcLeR0MhCeQ",
+    "token": "sekWUFh9v2ssDDuf8xUcCQ",
+    "url": "https://app.wranglerportal.com/s/sekWUFh9v2ssDDuf8xUcCQ",
     "videoId": "00000000000000000000010024videos",
     "who": "link"
    },
@@ -2050,14 +2050,1117 @@
     "projectId": "000000000000000000010020projects",
     "state": "on",
     "sub": "Harbor Coffee",
-    "token": "YHhY1DR7Z5jMSkq-3QuhpA",
-    "url": "https://app.wranglerportal.com/s/YHhY1DR7Z5jMSkq-3QuhpA",
+    "token": "9bfDOBxqNK4zxj2VKeC7dg",
+    "url": "https://app.wranglerportal.com/s/9bfDOBxqNK4zxj2VKeC7dg",
     "videoId": null,
     "who": "invited"
    }
   ],
   "sign.pendingRequests": [],
   "sign.requestsFor": [],
+  "builder.getBuild#000000000000000000010105wsBuilds": {
+   "_creationTime": 1793289600000.1025,
+   "_id": "000000000000000000010105wsBuilds",
+   "blocks": {
+    "content": [
+     {
+      "attrs": {
+       "size": "title"
+      },
+      "content": [
+       {
+        "text": "Service Agreement",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "subtitle"
+      },
+      "content": [
+       {
+        "text": "{project}",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Parties",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {},
+      "type": "parties"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "This Service Agreement (\"Agreement\") is entered into by and between Wrangler Productions, a DBA of Hill Creative LLC (hereinafter referred to as \"COMPANY\"), and {client.name} (hereinafter referred to as \"CLIENT\") as of {date}. This Agreement represents the entire understanding between the two parties and supersedes all prior agreements. Any amendments must be in writing and signed by both parties. If any provision of this Agreement is deemed invalid, it will not affect the enforceability of the remaining provisions. A waiver of any provision does not constitute a waiver of any other provision.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "clauseId": null,
+       "initials": true,
+       "look": "plain"
+      },
+      "content": [
+       {
+        "attrs": {
+         "size": "heading"
+        },
+        "content": [
+         {
+          "text": "Scope of work & deliverables",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "The COMPANY agrees to provide the following services and deliverables:",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "Deliverable:",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "Timeline:",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "Any changes to the scope of work must be agreed upon in writing by both parties.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       }
+      ],
+      "type": "section"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Services & pricing",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "rows": [
+        {
+         "description": "Video production (describe the deliverables)",
+         "id": "kwuz0pga",
+         "qty": 1,
+         "rate": 0
+        }
+       ]
+      },
+      "type": "items"
+     },
+     {
+      "attrs": {
+       "clauseId": null,
+       "initials": false,
+       "look": "plain"
+      },
+      "content": [
+       {
+        "attrs": {
+         "size": "heading"
+        },
+        "content": [
+         {
+          "text": "Confidentiality",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "Both parties agree to maintain confidentiality regarding each other's business processes, documents, and workflows. This obligation applies to all employees, contractors, and third parties and persists indefinitely, even after the termination of this Agreement.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       }
+      ],
+      "type": "section"
+     },
+     {
+      "attrs": {
+       "clauseId": null,
+       "initials": false,
+       "look": "plain"
+      },
+      "content": [
+       {
+        "attrs": {
+         "size": "heading"
+        },
+        "content": [
+         {
+          "text": "Payment terms",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "Total Project Budget: {total} USD",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "Payment Structure: A {deposit.percent} deposit ({deposit}) is due upon signing this Agreement. The remaining {balance.percent} balance ({balance}) is due upon delivery of the services and deliverables.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "Payment Method: Payments will be processed via Stripe Invoice.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "Late Payments: Payments not received within 3 days of the due date will incur a $100 late fee for every day the payment is delayed beyond the grace period.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "depositPct": 25,
+         "initials": true,
+         "invoiceDeposit": true
+        },
+        "type": "payment"
+       }
+      ],
+      "type": "section"
+     },
+     {
+      "attrs": {
+       "clauseId": null,
+       "initials": true,
+       "look": "plain"
+      },
+      "content": [
+       {
+        "attrs": {
+         "size": "heading"
+        },
+        "content": [
+         {
+          "text": "Ownership & use",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "The CLIENT obtains ownership of the final video upon full payment.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "The COMPANY retains ownership of all raw data files. Raw data may be provided to the CLIENT upon mutual agreement and discussion.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "The COMPANY reserves the right to use the raw footage and the final video & photo deliverables for marketing, promotional, and portfolio purposes.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       }
+      ],
+      "type": "section"
+     },
+     {
+      "attrs": {
+       "clauseId": null,
+       "initials": false,
+       "look": "plain"
+      },
+      "content": [
+       {
+        "attrs": {
+         "size": "heading"
+        },
+        "content": [
+         {
+          "text": "Cancellation policy",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "If the CLIENT cancels the project before work begins, the deposit will be refunded minus a $100 administrative fee.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "If the CLIENT cancels the project after work has begun, the deposit will not be refunded, and additional charges for work completed may apply.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       }
+      ],
+      "type": "section"
+     },
+     {
+      "attrs": {
+       "clauseId": null,
+       "initials": true,
+       "look": "plain"
+      },
+      "content": [
+       {
+        "attrs": {
+         "size": "heading"
+        },
+        "content": [
+         {
+          "text": "Travel & expenses",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "The CLIENT agrees to reimburse the COMPANY for all travel-related expenses incurred in connection with the performance of services under this Agreement.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "Travel-related expenses include, but are not limited to, mileage (billed at the standard IRS mileage rate), flights, lodging, meals, car rentals, and other transportation costs such as taxis, rideshares, parking, and tolls.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "For any project requiring travel outside the state of Oklahoma, a $500 out-of-state travel fee will be added to the project cost. This fee is separate from and does not include any of the aforementioned travel-related expenses, which will be billed separately.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "If travel-related expenses are not prepaid or otherwise directly covered by the CLIENT, they will be billed separately by the COMPANY. The CLIENT will be provided with an itemized invoice for all travel-related expenses, along with receipts where applicable.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       }
+      ],
+      "type": "section"
+     },
+     {
+      "attrs": {
+       "clauseId": null,
+       "initials": false,
+       "look": "plain"
+      },
+      "content": [
+       {
+        "attrs": {
+         "size": "heading"
+        },
+        "content": [
+         {
+          "text": "Liability",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "The COMPANY shall not be liable for any damages, losses, or claims arising out of or related to the services provided under this Agreement, except in cases of gross negligence or willful misconduct.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "The COMPANY’s total liability for any claim arising out of or relating to this Agreement shall not exceed the total amount paid by the CLIENT under this Agreement. Under no circumstances shall the COMPANY be liable for any indirect, incidental, or consequential damages.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       }
+      ],
+      "type": "section"
+     },
+     {
+      "attrs": {
+       "clauseId": null,
+       "initials": false,
+       "look": "plain"
+      },
+      "content": [
+       {
+        "attrs": {
+         "size": "heading"
+        },
+        "content": [
+         {
+          "text": "Governing law",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "This Agreement shall be governed by and construed in accordance with the laws of Oklahoma City, Oklahoma. Any lawsuits or legal actions arising from this Agreement shall be filed and resolved exclusively in an Oklahoma County court.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       }
+      ],
+      "type": "section"
+     },
+     {
+      "attrs": {
+       "clauseId": null,
+       "initials": false,
+       "look": "plain"
+      },
+      "content": [
+       {
+        "attrs": {
+         "size": "heading"
+        },
+        "content": [
+         {
+          "text": "Entire agreement",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "This Agreement constitutes the entire agreement between the parties and supersedes all prior agreements, understandings, or representations.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       }
+      ],
+      "type": "section"
+     },
+     {
+      "attrs": {
+       "clauseId": null,
+       "initials": false,
+       "look": "plain"
+      },
+      "content": [
+       {
+        "attrs": {
+         "size": "heading"
+        },
+        "content": [
+         {
+          "text": "Client responsibilities",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "The CLIENT agrees to provide all necessary information, materials, and approvals in a timely manner to facilitate the COMPANY's work.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "Delays caused by the CLIENT in providing required materials or approvals may result in an adjustment to the project timeline or additional fees.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       }
+      ],
+      "type": "section"
+     },
+     {
+      "attrs": {
+       "clauseId": null,
+       "initials": false,
+       "look": "plain"
+      },
+      "content": [
+       {
+        "attrs": {
+         "size": "heading"
+        },
+        "content": [
+         {
+          "text": "Equipment damage",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "If the COMPANY’s equipment is damaged due to CLIENT negligence or unsafe working conditions provided by the CLIENT, the CLIENT agrees to reimburse the COMPANY for the cost of repair or replacement.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       }
+      ],
+      "type": "section"
+     },
+     {
+      "attrs": {
+       "clauseId": null,
+       "initials": false,
+       "look": "plain"
+      },
+      "content": [
+       {
+        "attrs": {
+         "size": "heading"
+        },
+        "content": [
+         {
+          "text": "Subcontractor disclosure & indemnification",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "The CLIENT acknowledges and agrees that the COMPANY may engage subcontractors, freelancers, or third-party service providers to assist in the completion of the project.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "The COMPANY retains full responsibility for the quality of work and deliverables, regardless of whether the work is performed by the COMPANY or its subcontractors.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "The CLIENT agrees to indemnify and hold harmless the COMPANY from any claims, damages, or losses arising from the actions or omissions of subcontractors, except in cases of gross negligence or willful misconduct by the COMPANY.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       }
+      ],
+      "type": "section"
+     },
+     {
+      "attrs": {
+       "clauseId": null,
+       "initials": true,
+       "look": "plain"
+      },
+      "content": [
+       {
+        "attrs": {
+         "size": "heading"
+        },
+        "content": [
+         {
+          "text": "Data & revisions",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "Data Retention: Raw data will be deleted 7 days after delivery unless:",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "content": [
+         {
+          "content": [
+           {
+            "attrs": {
+             "size": "body"
+            },
+            "content": [
+             {
+              "text": "Stored for $100/year, or",
+              "type": "text"
+             }
+            ],
+            "type": "paragraph"
+           }
+          ],
+          "type": "listItem"
+         },
+         {
+          "content": [
+           {
+            "attrs": {
+             "size": "body"
+            },
+            "content": [
+             {
+              "text": "Offloaded to an external drive provided to the CLIENT.",
+              "type": "text"
+             }
+            ],
+            "type": "paragraph"
+           }
+          ],
+          "type": "listItem"
+         }
+        ],
+        "type": "bulletList"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "PICK ONE: your CONTRACT.md has two different revisions terms. Delete the one you don't want, and this line.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "Revisions: Two rounds of revisions are included in the project. Additional revisions will be charged at $75 per round.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "Revisions: One round of revisions is included in the project. Additional revisions will be charged at $100 per round.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "If the CLIENT identifies a change that was part of the included revision round but was not executed correctly by the COMPANY, those changes will be made at no additional cost as they fall under the first round of revisions and are considered a COMPANY mistake.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "Approval & Delivery: Approval of the video requires payment in full before an un-watermarked version is delivered.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       }
+      ],
+      "type": "section"
+     },
+     {
+      "attrs": {
+       "clauseId": null,
+       "initials": false,
+       "look": "plain"
+      },
+      "content": [
+       {
+        "attrs": {
+         "size": "heading"
+        },
+        "content": [
+         {
+          "text": "Force majeure",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       },
+       {
+        "attrs": {
+         "size": "body"
+        },
+        "content": [
+         {
+          "text": "Neither party shall be held liable for failure or delay in performing obligations under this Agreement if such failure or delay is due to causes beyond their reasonable control, including but not limited to acts of God, natural disasters, government restrictions, pandemics, labor strikes, or power outages. In such cases, both parties will work to reschedule or adjust deliverables as necessary.",
+          "type": "text"
+         }
+        ],
+        "type": "paragraph"
+       }
+      ],
+      "type": "section"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Signatures",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "showDate": true,
+       "showTitle": true,
+       "signers": [
+        "heston",
+        "client"
+       ]
+      },
+      "type": "signatures"
+     }
+    ],
+    "type": "doc"
+   },
+   "businessId": "0000000000000000010000businesses",
+   "createdAt": 1793289600000,
+   "document": null,
+   "fields": {
+    "business": {
+     "address": "Oklahoma City, OK",
+     "contact": "Heston Hill",
+     "email": "heston@wranglerproductions.com",
+     "legalName": "Hill Creative LLC",
+     "name": "Wrangler Productions",
+     "phone": "",
+     "title": "Founder"
+    },
+    "client": {
+     "address": "",
+     "company": "",
+     "email": "",
+     "name": "",
+     "phone": ""
+    },
+    "custom": [],
+    "date": "2026-10-29",
+    "project": ""
+   },
+   "signers": [],
+   "style": {
+    "accent": "#d60000",
+    "backdrop": "#e9e7e2",
+    "baseSize": 10.5,
+    "cover": null,
+    "fonts": {
+     "body": {
+      "family": "Inter",
+      "source": "google"
+     },
+     "heading": {
+      "family": "Inter",
+      "source": "google"
+     }
+    },
+    "footer": true,
+    "heading": "#111111",
+    "logo": null,
+    "margin": 60,
+    "muted": "#6b6862",
+    "name": "Wrangler",
+    "page": "#ffffff",
+    "pageSize": "LETTER",
+    "separator": "line",
+    "text": "#1d1d1f"
+   },
+   "templateId": "000000000000000010091wsTemplates",
+   "title": "Spirit Days Service Agreement",
+   "updatedAt": 1793282400000
+  },
+  "builder.getProfile": {
+   "address": "Oklahoma City, OK",
+   "contact": "Heston Hill",
+   "email": "heston@wranglerproductions.com",
+   "legalName": "Hill Creative LLC",
+   "name": "Wrangler Productions",
+   "phone": "",
+   "title": "Founder"
+  },
+  "builder.listFonts": [],
+  "builder.listStyles": {
+   "presets": [
+    {
+     "index": 0,
+     "isDefault": true,
+     "style": {
+      "accent": "#d60000",
+      "backdrop": "#e9e7e2",
+      "baseSize": 10.5,
+      "cover": null,
+      "fonts": {
+       "body": {
+        "family": "Inter",
+        "source": "google"
+       },
+       "heading": {
+        "family": "Inter",
+        "source": "google"
+       }
+      },
+      "footer": true,
+      "heading": "#111111",
+      "logo": null,
+      "margin": 60,
+      "muted": "#6b6862",
+      "name": "Wrangler",
+      "page": "#ffffff",
+      "pageSize": "LETTER",
+      "separator": "line",
+      "text": "#1d1d1f"
+     }
+    },
+    {
+     "index": 1,
+     "isDefault": false,
+     "style": {
+      "accent": "#1f3a5f",
+      "backdrop": "#e9e7e2",
+      "baseSize": 10.5,
+      "cover": null,
+      "fonts": {
+       "body": {
+        "family": "Lora",
+        "source": "google"
+       },
+       "heading": {
+        "family": "Lora",
+        "source": "google"
+       }
+      },
+      "footer": true,
+      "heading": "#1f3a5f",
+      "logo": null,
+      "margin": 60,
+      "muted": "#6b6862",
+      "name": "Classic",
+      "page": "#ffffff",
+      "pageSize": "LETTER",
+      "separator": "thick",
+      "text": "#1d1d1f"
+     }
+    },
+    {
+     "index": 2,
+     "isDefault": false,
+     "style": {
+      "accent": "#a5662f",
+      "backdrop": "#d9cbb3",
+      "baseSize": 10.5,
+      "cover": null,
+      "fonts": {
+       "body": {
+        "family": "Inter",
+        "source": "google"
+       },
+       "heading": {
+        "family": "Lora",
+        "source": "google"
+       }
+      },
+      "footer": true,
+      "heading": "#2b231c",
+      "logo": null,
+      "margin": 60,
+      "muted": "#857766",
+      "name": "Sand",
+      "page": "#fbf6ec",
+      "pageSize": "LETTER",
+      "separator": "line",
+      "text": "#3a3128"
+     }
+    },
+    {
+     "index": 3,
+     "isDefault": false,
+     "style": {
+      "accent": "#111111",
+      "backdrop": "#d4d4d4",
+      "baseSize": 10.5,
+      "cover": null,
+      "fonts": {
+       "body": {
+        "family": "Inter",
+        "source": "google"
+       },
+       "heading": {
+        "family": "JetBrains Mono",
+        "source": "google"
+       }
+      },
+      "footer": true,
+      "heading": "#111111",
+      "logo": null,
+      "margin": 60,
+      "muted": "#6b6862",
+      "name": "Mono",
+      "page": "#ffffff",
+      "pageSize": "LETTER",
+      "separator": "dots",
+      "text": "#1d1d1f"
+     }
+    },
+    {
+     "index": 4,
+     "isDefault": false,
+     "style": {
+      "accent": "#ff3b30",
+      "backdrop": "#0b0b0d",
+      "baseSize": 10.5,
+      "cover": null,
+      "fonts": {
+       "body": {
+        "family": "Nunito",
+        "source": "google"
+       },
+       "heading": {
+        "family": "Nunito",
+        "source": "google"
+       }
+      },
+      "footer": true,
+      "heading": "#ffffff",
+      "logo": null,
+      "margin": 60,
+      "muted": "#9a968e",
+      "name": "Night",
+      "page": "#16161a",
+      "pageSize": "LETTER",
+      "separator": "line",
+      "text": "#e9e6df"
+     }
+    }
+   ],
+   "saved": []
+  },
   "sign.get#000000000000000010056wsDocuments": {
    "chain": {
     "count": 5,
@@ -2646,7 +3749,7 @@
     "kind": "project",
     "label": "26127 Harbor Coffee Launch",
     "sub": "Harbor Coffee",
-    "token": "YHhY1DR7Z5jMSkq-3QuhpA",
+    "token": "9bfDOBxqNK4zxj2VKeC7dg",
     "videos": [
      {
       "_id": "00000000000000000000010030videos",

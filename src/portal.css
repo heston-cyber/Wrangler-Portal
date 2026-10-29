@@ -978,3 +978,44 @@ button.wp-hubcard[aria-busy], button.wp-tplcard[aria-busy] { opacity: 1; }
   .content.ws-doc { padding: 0 16px 24px; grid-template-columns: minmax(0, 1fr); }
   .ws-side { padding: 0; }
 }
+
+/* ---------- Builder (P1 / Owner / Docs · Builder 94:2560): the chrome; the page and its editor stay as they were ---------- */
+.content.wsb { grid-template-columns: 200px minmax(0, 1fr) 330px; gap: 0 20px; padding: 0 24px 24px 36px; }
+.wsb-outline { padding: 12px 0; gap: 2px; }
+.wsb-outline .label { font: 500 var(--fs-label-small)/var(--lh-label-small) var(--font-title); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-secondary); padding: 0 8px 8px; }
+.wsb-oitem { font: 400 var(--fs-text-small)/var(--lh-small) var(--font-body); padding: 6px 8px; border-radius: 8px; }
+.wsb-oitem.sub { font-size: var(--fs-text-small); padding-left: 20px; }
+.wsb-oitem.on { background: rgba(var(--paper), .07); }
+.wsb-oitem:hover { background: rgba(var(--paper), .05); }
+.wsb-stage { border-radius: 16px; min-height: calc(100vh - 110px); }
+.wsb-panel.glass { position: sticky; top: 0; max-height: calc(100vh - 110px); border: 0; border-radius: 24px; padding: 16px 16px 24px; gap: 12px; box-shadow: none; }
+.wsb-panel > .wsb-tabs { display: flex; gap: 28px; border-bottom: 1px solid var(--border-hairline); padding: 0; margin-bottom: 4px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.wsb-panel > .wsb-tabs .tab { padding: 0 0 10px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; margin-bottom: -1px; font: 500 var(--fs-text-regular)/var(--lh-regular-medium) var(--font-body); color: var(--text-secondary); box-shadow: none; }
+.wsb-panel > .wsb-tabs .tab:hover { background: none; color: var(--text-primary); }
+.wsb-panel > .wsb-tabs .tab[aria-selected="true"] { background: none; color: var(--text-primary); border-bottom-color: var(--accent); }
+.wsb-hint { font: 400 var(--fs-text-small)/var(--lh-small) var(--font-body); color: var(--text-secondary); margin: 0; }
+.wsb-insert { gap: 14px; align-items: center; padding: 12px 14px; border-radius: 12px; background: rgba(var(--paper), .025); box-shadow: inset 0 0 0 1px var(--border-faint); }
+.wsb-insert:hover { background: rgba(var(--paper), .06); }
+.wsb-insert span { font: 500 var(--fs-text-small)/var(--lh-small-medium) var(--font-body); gap: 2px; }
+.wsb-insert b { font-weight: 500; }
+.wsb-insert .secondary { font: 400 var(--fs-text-small)/var(--lh-small) var(--font-body); color: var(--text-secondary); }
+.wsb-lib { gap: 10px; margin-top: 12px; }
+.wsb-libitem { justify-content: space-between; padding: 10px 12px; border-radius: 10px; background: rgba(var(--paper), .025); box-shadow: inset 0 0 0 1px var(--border-faint); font: 500 var(--fs-text-small)/var(--lh-small-medium) var(--font-body); }
+.wsb-libitem:hover { background: rgba(var(--paper), .06); }
+.wsb-undo { gap: 8px; margin-right: 8px; }
+.wsb-undo .icon-btn { width: 36px; height: 36px; }
+/* the format and style panels: their labels and controls in the portal's type */
+.wsb-panel .ws-flabel { font: 500 var(--fs-text-small)/var(--lh-small-medium) var(--font-body); color: var(--text-muted); }
+.wsb-panel .label { font: 500 var(--fs-label-small)/var(--lh-label-small) var(--font-title); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-accent); }
+.wsb-panel .lucide { color: var(--accent); }
+@media (max-width: 1100px) { .content.wsb { grid-template-columns: minmax(0, 1fr) 320px; padding: 0 16px 24px; } }
+@media (max-width: 760px) {
+  .content.wsb { grid-template-columns: 1fr; padding: 0; }
+  .wsb-panel.glass { position: fixed; border-radius: 24px 24px 0 0; max-height: none; }
+  .wsb-stage { border-radius: 0; }
+}
+.wsb-panel { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.wsb-panel .wsb-pane { grid-template-columns: minmax(0, 1fr); }
+.wsb-panel .wsb-insert, .wsb-panel .wsb-libitem { min-width: 0; }
+.wsb-panel .icon-btn.wsb-sheetclose { display: none; }
+@media (max-width: 760px) { .wsb-panel .icon-btn.wsb-sheetclose { display: grid; margin-left: auto; } }

@@ -133,7 +133,8 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
 
     // Docs: the starter template plus two more, and two drafts still in the builder.
     await owner.mutation(api.builder.ensureStarter, {});
-    const b1 = await owner.mutation(api.builder.createBuild, {});
+    const starter = (await owner.query(api.builder.listTemplates, {}))[0];
+    const b1 = await owner.mutation(api.builder.createBuild, { templateId: starter._id });
     const b2 = await owner.mutation(api.builder.createBuild, {});
     await t.run(async (ctx) => {
       const tpl = (await ctx.db.query("wsTemplates").collect())[0];
@@ -153,6 +154,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["library.video", { videoId: w.harbor30.v }], ["notes.forVersion", { versionId: w.harbor30.last }], ["transcripts.forVersion", { versionId: w.harbor30.last }],
       ["waveforms.forVersion", { versionId: w.harbor30.last }], ["views.forVideo", { videoId: w.harbor30.v }], ["shares.coveringVideo", { videoId: w.harbor30.v }], ["connector.listKeys", {}], ["register.sheetKey", {}], ["dropbox.status", {}], ["dropbox.flagged", {}], ["wsConnector.listKeys", {}], ["shares.list", {}],
       ["sign.pendingRequests", {}], ["sign.requestsFor", { documentId: w.d1 }],
+["builder.getBuild#" + b1, { buildId: b1 }], ["builder.getProfile", {}], ["builder.listFonts", {}], ["builder.listStyles", {}],
       ["sign.get#" + w.d1, { documentId: w.d1 }], ["sign.get#" + w.d2, { documentId: w.d2 }], ["sign.get#" + w.d3, { documentId: w.d3 }],
     ];
     const CLIENT: [string, Record<string, unknown>][] = [["users.me", {}], ["business.brand", {}], ["shares.mine", {}], ["inbox.mine", {}], ["inbox.unreadCount", {}], ["documents.mine", {}]];
