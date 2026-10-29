@@ -6,3 +6,4 @@ dist/
 dist-mock
 dist-demo
 smoke-*.png
+.notes/
