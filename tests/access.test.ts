@@ -46,7 +46,8 @@ const KEYED = new Set(["r1results.report"]);
 // Functions any signed-in account may call (owner or client), never a stranger.
 const SIGNED_IN = new Set(["users.setName", "clients.account", "shares.mine",
   // Phase 1: a client's own Inbox, Documents and their businesses' look
-  "inbox.mine", "inbox.unreadCount", "inbox.markRead", "inbox.markAllRead", "documents.mine", "business.brand"]);
+  "inbox.mine", "inbox.unreadCount", "inbox.markRead", "inbox.markAllRead", "documents.mine", "business.brand",
+  "portal.waiting", "emails.myPrefs", "emails.setMine"]);
 
 import { argsFor, call, publicFunctions, setup } from "./matrix";
 const denied = (e: unknown) => /Sign in first|Not allowed/.test(String((e as Error).message ?? e));

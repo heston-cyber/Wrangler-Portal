@@ -347,7 +347,13 @@ export const mine = query({
         const ready = (await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect()).filter((x) => x.status === "ready").sort((a, b) => b.number - a.number);
         if (!ready.length) continue;
         const p = projects.find((x) => x._id === vid.projectId);
-        videos.push({ _id: vid._id, title: vid.title, number: vid.number ?? null, projectId: vid.projectId, project: p ? projectLabelOf(p) : null, client: p?.client ?? null, updatedAt: vid.updatedAt, latest: ready[0].number, versions: showsAllVersions(s) ? ready.length : 1, thumbUrl: await signedThumbUrl(ready[0]) });
+        // Phase 1: where I am with the latest cut ("Approved" / "Notes sent" / "Not watched").
+        const last = ready[0];
+        const approved = (await ctx.db.query("clientApprovals").withIndex("by_version_user", (q) => q.eq("versionId", last._id).eq("userId", me.userId)).first()) !== null;
+        const noted = !approved && (await ctx.db.query("notes").withIndex("by_version", (q) => q.eq("versionId", last._id)).collect()).some((n) => n.authorId === me.userId);
+        const watched = approved || noted || (await ctx.db.query("views").withIndex("by_version", (q) => q.eq("versionId", last._id)).collect()).some((w) => w.whoKey.endsWith(`:u:${me.userId}`) && w.watchedSec >= 1);
+        const state = approved ? "approved" : noted ? "notes" : watched ? "watched" : "not_watched";
+        videos.push({ _id: vid._id, title: vid.title, number: vid.number ?? null, projectId: vid.projectId, project: p ? projectLabelOf(p) : null, client: p?.client ?? null, updatedAt: vid.updatedAt, latest: last.number, versions: showsAllVersions(s) ? ready.length : 1, thumbUrl: await signedThumbUrl(last), state: state as "approved" | "notes" | "watched" | "not_watched" });
       }
       out.push({ token: s.token, kind: s.kind, label: l.label, sub: l.sub, access: s.access, client: s.kind === "client" ? s.client ?? null : (projects[0]?.client ?? null), createdAt: s.createdAt, videos: videos.sort((a, b) => b.updatedAt - a.updatedAt) });
     }

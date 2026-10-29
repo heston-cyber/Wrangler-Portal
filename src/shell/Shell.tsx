@@ -264,7 +264,7 @@ export function MorePage({ me, side }: { me: Me; side: Side }) {
       { icon: "sign-out", title: "Sign out", onClick: () => void signOut() },
     ]
     : [
-      { to: "/settings/account", icon: "user", title: "Account", sub: `${me.name ?? ""}${me.name ? " · " : ""}${me.email}` },
+      { to: "/settings", icon: "settings", title: "Settings", sub: `${me.name ?? ""}${me.name ? " · " : ""}${me.email}` },
       { icon: "sign-out", title: "Sign out", onClick: () => void signOut() },
     ];
   return (

@@ -162,7 +162,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["sign.get#" + w.d1, { documentId: w.d1 }], ["sign.get#" + w.d2, { documentId: w.d2 }], ["sign.get#" + w.d3, { documentId: w.d3 }],
     ];
     const shareTokens = await t.run(async (ctx) => (await ctx.db.query("shares").collect()).map((x) => (x as unknown as { token: string }).token));
-    const CLIENT: [string, Record<string, unknown>][] = [["users.me", {}], ["business.brand", {}], ["shares.mine", {}], ["inbox.mine", {}], ["inbox.unreadCount", {}], ["documents.mine", {}],
+    const CLIENT: [string, Record<string, unknown>][] = [["users.me", {}], ["business.brand", {}], ["shares.mine", {}], ["inbox.mine", {}], ["inbox.unreadCount", {}], ["documents.mine", {}], ["portal.waiting", {}], ["emails.myPrefs", {}],
       ...shareTokens.map((tok): [string, Record<string, unknown>] => ["shares.open#" + tok, { token: tok }]),
       // The share video page for Harbor Coffee 30s (through the project share), as a signed-in client.
       ["library.video#" + w.harbor30.v, { videoId: w.harbor30.v, share: { token: shareTokens[0] } }],

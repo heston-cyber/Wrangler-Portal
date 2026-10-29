@@ -1393,3 +1393,59 @@ button.wp-hubcard[aria-busy], button.wp-tplcard[aria-busy] { opacity: 1; }
   .sn > .wp-setback { display: inline-flex; }
   .sn .wp-h2 { font-size: var(--fs-h3); line-height: var(--lh-h3); }
 }
+
+/* ---------- Phase 1 · the client side (P1 / Client: Home, Inbox, Documents, Review, Settings) ---------- */
+.ch, .ci, .cdocs, .crv, .cset { gap: 20px; }
+.ch .ph-only, .ci .ph-only, .cdocs .ph-only, .crv .ph-only { display: none; }
+.wp-row.ch-doc { padding-left: 20px; gap: 16px; }
+.ci-main { display: flex; flex-direction: column; gap: 20px; }
+.wp-row.ch-doc .lead-icon { margin: 0 38px; }
+.ci-bar { display: flex; align-items: center; gap: 12px; }
+.ci-bar .sp { flex: 1; }
+.ci-row { display: block; cursor: pointer; }
+.ci-row:hover .wp-row { background: var(--surface-block-hover); }
+.ci-row:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: -2px; }
+.wp-rowwrap.open .ci-row .wp-row, .wp-rowwrap.open .ci-note { background: var(--accent-tint); }
+.ci-note { display: grid; gap: 12px; justify-items: start; padding: 4px 20px 18px 54px; }
+.ci-note .from { margin: 0; font-size: var(--fs-text-small); color: var(--text-secondary); }
+.ci-note .txt { margin: 0; font-size: var(--fs-text-regular); line-height: var(--lh-regular); color: var(--text-primary); }
+.ci-foot { margin-top: -4px; }
+.ci-phonenote { display: none; }
+.cdocs-tabs .wp-utabs { border-bottom: 1px solid var(--border-hairline); }
+.crv-sub { display: flex; align-items: center; gap: 12px; padding: 0 20px 12px; font-size: var(--fs-text-small); color: var(--text-secondary); }
+.crv-sub span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crv-sub a { color: var(--text-accent); text-decoration: underline; text-underline-offset: 3px; }
+.crv .wp-row .go { color: var(--accent); width: 16px; height: 16px; }
+.cset-rows { display: flex; flex-direction: column; }
+.cset-rows .r { display: flex; align-items: center; gap: 20px; padding: 14px 16px 14px 20px; min-height: 56px; }
+.cset-rows .r + .r { border-top: 1px solid var(--border-faint); }
+.cset-rows .l { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.cset-rows .l b { font-weight: 500; font-size: var(--fs-text-regular); line-height: var(--lh-regular-medium); color: var(--text-primary); }
+.cset-rows .l span { font-size: var(--fs-text-small); line-height: var(--lh-small); color: var(--text-secondary); }
+.cset-rows .v { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.cset-rows .v .input { width: 260px; height: 40px; }
+@media (max-width: 820px) {
+  .ch .pc-only, .ci .pc-only, .cdocs .pc-only, .crv .pc-only { display: none; }
+  .ch .ph-only, .ci .ph-only, .cdocs .ph-only, .crv .ph-only { display: inline; }
+  .wp-page.notop.ch, .wp-page.notop.ci, .wp-page.notop.cdocs { padding-top: 0; }
+  .wp-row.ch-doc .lead-icon { margin: 0 22px; }
+  .ch .wp-row .lead-thumb, .crv .wp-row .lead-thumb { width: 64px; height: 36px; }
+  .ci.opened .ci-main { display: none; }
+  .ci.opened .ci-phonenote { display: flex; flex-direction: column; gap: 16px; }
+  .ci-phonenote .wp-setback { display: inline-flex; }
+  .ci-notecard { display: flex; flex-direction: column; gap: 12px; padding: 18px 20px 20px; }
+  .ci-notecard .wp-eyebrow { display: inline-flex; align-items: center; gap: 10px; }
+  .ci-notecard .when { margin: 0; font-size: var(--fs-text-small); color: var(--text-secondary); }
+  .ci-notecard .txt { margin: 0; font-size: var(--fs-text-regular); line-height: var(--lh-regular); }
+  .ci-notecard .btn { width: 100%; }
+  .wp-shell:not(.overlay) .main:has(.ci.opened) .wp-ptop { }
+  .cdocs-tabs .wp-utabs { border-bottom: 1px solid var(--border-hairline); }
+  .cset-rows .r { flex-wrap: wrap; gap: 10px; }
+  .cset-rows .v { width: 100%; }
+  .cset-rows .v .input { flex: 1; width: auto; }
+  .cset-rows .r:has(.wp-toggle) .v, .cset-rows .r:last-child .v { width: auto; }
+}
+/* a share link opened by a signed-in client, inside their portal */
+.wp-sharelist.inshell { min-height: 0; background: transparent; overflow-y: auto; flex: 1; }
+.wp-sharelist.inshell .inner { width: 100%; max-width: none; }
+@media (max-width: 820px) { .wp-sharelist.inshell { padding: 0 16px 24px; overflow: visible; } }

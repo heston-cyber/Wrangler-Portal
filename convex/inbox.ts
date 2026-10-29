@@ -230,7 +230,7 @@ async function attachmentOf(ctx: QueryCtx, link: string | undefined) {
     const ver = vid ? (await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect()).find((x) => x.number === Number(m[2])) : null;
     if (vid && ver) return { kind: "cut" as const, videoId: vid._id, title: vid.title, number: ver.number, thumbUrl: (await signStillUrl(ver.posterUrl)) ?? (await signedThumbUrl(ver)) };
   }
-  return { kind: link.startsWith("/documents") ? ("doc" as const) : ("page" as const), videoId: null, title: null, number: null, thumbUrl: null };
+  return { kind: link.startsWith("/docs") ? ("doc" as const) : ("page" as const), videoId: null, title: null, number: null, thumbUrl: null };
 }
 
 function checkNote(a: { title: string; text: string; link?: string | null; linkLabel?: string | null }) {
@@ -428,7 +428,7 @@ export const onSignInvite = internalMutation({
     const label = docLabel(doc.number);
     const id = await postToInbox(ctx, kind === "invite"
       ? { businessId: biz, email: s.email, kind: "to_sign", title: "Document to sign", text: `${doc.title} · ${label}`, link: signLink(s.token), source: { module: "sign", id: s.documentId }, key: `sign:${signingId}:to_sign` }
-      : { businessId: biz, email: s.email, kind: "cancelled", title: "Document cancelled", text: `${doc.title} · ${label}`, link: "/documents?tab=cancelled", source: { module: "sign", id: s.documentId }, key: `sign:${signingId}:cancelled` });
+      : { businessId: biz, email: s.email, kind: "cancelled", title: "Document cancelled", text: `${doc.title} · ${label}`, link: "/docs?tab=cancelled", source: { module: "sign", id: s.documentId }, key: `sign:${signingId}:cancelled` });
     return id ? 1 : 0;
   },
 });
@@ -444,7 +444,7 @@ export const onSigned = internalMutation({
     const signings = (await ctx.db.query("wsSignings").withIndex("by_document", (q) => q.eq("documentId", documentId)).collect()).filter((s) => s.versionNumber === doc.sentVersion && s.status === "signed");
     let n = 0;
     for (const s of signings) {
-      if (await postToInbox(ctx, { businessId: biz, email: s.email, kind: "signed", title: "Signed copy ready", text: `${doc.title} · ${docLabel(doc.number)}`, link: "/documents?tab=signed", source: { module: "sign", id: documentId }, key: `sign:${documentId}:signed` })) n++;
+      if (await postToInbox(ctx, { businessId: biz, email: s.email, kind: "signed", title: "Signed copy ready", text: `${doc.title} · ${docLabel(doc.number)}`, link: "/docs?tab=signed", source: { module: "sign", id: documentId }, key: `sign:${documentId}:signed` })) n++;
     }
     return n;
   },

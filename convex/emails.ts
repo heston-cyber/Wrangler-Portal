@@ -4,7 +4,8 @@
 //   ownerAlert   clients or guests left notes → one email to Heston per sitting, 10 minutes after the last note
 // Every client email carries an unsubscribe link for that kind; each email is logged by key so it goes out once.
 // Bodies name the video and its project only, never other clients; links carry the share token, never a key.
-import { internalAction, internalMutation, internalQuery } from "./lib/functions";
+import { internalAction, internalMutation, internalQuery, mutation, query } from "./lib/functions";
+import { requireSignedIn } from "./lib/access";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
@@ -329,3 +330,25 @@ export async function prefsByEmail(ctx: QueryCtx, emails: string[]) {
   }
   return out;
 }
+
+// ---------- the client's own choice (Settings › "Email me when something new arrives", Phase 1) ----------
+// One switch for the client: off stops both kinds (new versions and replies); on turns both back on.
+
+export const myPrefs = query({
+  args: {},
+  handler: async (ctx) => {
+    const me = await requireSignedIn(ctx);
+    const p = await prefsRow(ctx, me.email);
+    return { on: !(p?.versionsOff && p?.repliesOff) };
+  },
+});
+
+export const setMine = mutation({
+  args: { on: v.boolean() },
+  handler: async (ctx, { on }) => {
+    const me = await requireSignedIn(ctx);
+    const row = await prefsFor(ctx, me.email);
+    await ctx.db.patch(row._id, { versionsOff: !on, repliesOff: !on, updatedAt: Date.now() });
+    return null;
+  },
+});

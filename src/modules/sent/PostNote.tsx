@@ -85,7 +85,7 @@ function AttachPicker({ kind, clientId, onPick, onClose }: { kind: "cut" | "doc"
               : (page?.documents.length ? page.documents.map((d, i) => (
                 <div key={d._id} className="wp-rowwrap">{i > 0 && <Divider />}
                   <ListRow className="ilead" lead={{ icon: "document" }} title={`${d.label} · ${d.title}`} meta={d.status === "completed" ? "Signed" : d.status === "voided" ? "Cancelled" : "To sign"}
-                    onClick={() => onPick({ link: `/documents${d.status === "completed" ? "?tab=signed" : d.status === "voided" ? "?tab=cancelled" : ""}`, label: `Open ${d.title}`, box: `${d.label} · ${d.title}`, icon: "document" })} />
+                    onClick={() => onPick({ link: `/docs${d.status === "completed" ? "?tab=signed" : d.status === "voided" ? "?tab=cancelled" : ""}`, label: `Open ${d.title}`, box: `${d.label} · ${d.title}`, icon: "document" })} />
                 </div>)) : <ListRow className="ilead quiet" lead={{ icon: "document" }} title="No documents sent to them yet." />)}
           </div>
         </div>

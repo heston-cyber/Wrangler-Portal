@@ -72,7 +72,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "clients.people": { clientId: ids.clientRecId }, "clients.addPerson": { clientId: ids.clientRecId, email: "p@example.com", role: "contact" },
     "clients.updatePerson": { personId: ids.personId, role: "signer" }, "clients.removePerson": { personId: ids.personId }, "clients.invitePerson": { personId: ids.personId },
     "clients.page": { clientId: ids.clientRecId }, "clients.directory": {},
-    "documents.mine": {}, "documents.signedCopy": { documentId: ids.docId },
+    "documents.mine": {}, "portal.waiting": {}, "emails.myPrefs": {}, "emails.setMine": { on: true }, "documents.signedCopy": { documentId: ids.docId },
     "business.settings": {}, "business.updateSettings": { accent: "#112233" }, "business.logoUploadUrl": {}, "business.setLogo": { storageId: null }, "business.brand": {},
     "activity.recent": {}, "home.needs": {},
     "approvals.approve": { versionId: ids.versionId }, "approvals.forVideo": { videoId: ids.videoId },

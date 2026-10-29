@@ -65,5 +65,5 @@ export async function postToInbox(ctx: MutationCtx, p: Post): Promise<Id<"inboxI
 
 /** An item as the portal shows it. */
 export function itemView(i: Doc<"inboxItems">) {
-  return { _id: i._id, kind: i.kind, title: i.title, text: i.text, link: i.link ?? null, linkLabel: i.linkLabel ?? null, createdAt: i.createdAt, read: !!i.readAt, readAt: i.readAt ?? null, emailed: !!i.emailedAt };
+  return { _id: i._id, kind: i.kind, title: i.title, text: i.text, link: i.link ?? null, linkLabel: i.linkLabel ?? null, documentId: i.source.module === "sign" ? i.source.id : null, createdAt: i.createdAt, read: !!i.readAt, readAt: i.readAt ?? null, emailed: !!i.emailedAt };
 }

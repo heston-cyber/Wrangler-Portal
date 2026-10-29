@@ -22,7 +22,7 @@ import VideoPage from "./VideoPage";
 
 type OpenResult = NonNullable<ReturnType<typeof useQuery<typeof api.shares.open>>>;
 
-export default function SharePage({ token, videoId, versionNumber, noteId }: { token: string; videoId: Id<"videos"> | null; versionNumber: number | null; noteId: string | null }) {
+export default function SharePage({ token, videoId, versionNumber, noteId, inShell }: { token: string; videoId: Id<"videos"> | null; versionNumber: number | null; noteId: string | null; inShell?: boolean }) {
   // After a right passcode the page keeps a proof from `unlock` (never the passcode); `open` takes the proof.
   const [passcode, setPasscode] = useState<string | undefined>(() => readPasscode(token));
   const [typed, setTyped] = useState("");
@@ -101,7 +101,7 @@ export default function SharePage({ token, videoId, versionNumber, noteId }: { t
   if (openId) {
     return (
       <ViewerCtx.Provider value={viewer}>
-        <div className="sharewrap"><VideoPage key={openId} videoId={openId} versionNumber={versionNumber} noteId={noteId} /></div>
+        <div className={inShell ? "sharewrap inshell" : "sharewrap"}><VideoPage key={openId} videoId={openId} versionNumber={versionNumber} noteId={noteId} /></div>
       </ViewerCtx.Provider>
     );
   }
@@ -112,13 +112,13 @@ export default function SharePage({ token, videoId, versionNumber, noteId }: { t
   const filesOf = (vs: typeof ok.videos) => vs.map((v) => latestOf(v)?.download).filter((d): d is { url: string; name: string; bytes: number | null } => !!d);
   const sizeOf = (fs: Array<{ bytes: number | null }>) => (fs.every((f) => f.bytes) ? bytesText(fs.reduce((a, f) => a + (f.bytes ?? 0), 0)) : null);
   return (
-    <div className="sharelist wp-sharelist">
-      <div className="wp-light client" aria-hidden><i style={{ backgroundImage: `url(${elbow})` }} /></div>
+    <div className={`sharelist wp-sharelist${inShell ? " inshell" : ""}`}>
+      {!inShell && <div className="wp-light client" aria-hidden><i style={{ backgroundImage: `url(${elbow})` }} /></div>}
       <div className="inner">
-        <div className="shead">
+        {!inShell && <div className="shead">
           <a {...linkProps(viewer.home)} aria-label="Home" className="wp-homelink"><BrandImg name="wordmark" className="logo" alt="Wrangler Productions" /></a>
           {isClient && <ButtonLink size="sm" to="/">Shared with me</ButtonLink>}
-        </div>
+        </div>}
         <div className="wp-sharehead">
           <div className="txt">
             <span className="wp-eyebrow">{ok.kind === "client" ? "Shared with you" : ok.client ?? "Shared with you"}</span>

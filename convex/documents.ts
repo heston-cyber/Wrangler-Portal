@@ -23,7 +23,9 @@ export const mine = query({
       const d = await ctx.db.get(s.documentId);
       if (!d || d.status === "draft" || d.status === "approved") continue; // never sent: not theirs to see yet
       if (s.versionNumber !== d.sentVersion && d.status !== "voided") continue; // an older version they were sent
-      const row = { documentId: d._id, label: docLabel(d.number), title: d.title, sentAt: d.sentAt ?? null };
+      const ver = (await ctx.db.query("wsVersions").withIndex("by_document", (q) => q.eq("documentId", d._id)).collect()).find((x) => x.number === s.versionNumber);
+      const all = (await ctx.db.query("wsSignings").withIndex("by_document", (q) => q.eq("documentId", d._id)).collect()).filter((x) => x.versionNumber === s.versionNumber);
+      const row = { documentId: d._id, label: docLabel(d.number), title: d.title, sentAt: d.sentAt ?? null, pages: ver?.pages.length ?? null, signers: all.filter((x) => x.status === "signed").map((x) => x.name) };
       if (d.status === "voided") cancelled.push({ ...row, cancelledAt: d.voidedAt ?? null, reason: d.voidReason ?? null });
       else if (d.status === "completed") signed.push({ ...row, signedAt: s.signedAt ?? null, completedAt: d.completedAt ?? null, hasCopy: !!d.final });
       else if (s.status === "signed") signed.push({ ...row, signedAt: s.signedAt ?? null, completedAt: null, hasCopy: false }); // waiting on others

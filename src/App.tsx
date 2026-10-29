@@ -5,6 +5,10 @@ import { useLocation } from "./lib/router";
 import SignIn, { SystemPage } from "./shell/SignIn";
 import { Button } from "./ui/wp";
 import ClientHome from "./modules/clients/ClientHome";
+import ClientInbox from "./modules/clients/ClientInbox";
+import ClientDocuments, { type DocTab } from "./modules/clients/ClientDocuments";
+import ClientReview from "./modules/clients/ClientReview";
+import ClientSettings from "./modules/clients/ClientSettings";
 import Home from "./modules/review/Home";
 import OwnerHome from "./modules/home/OwnerHome";
 import ClientsPage from "./modules/clients/ClientsPage";
@@ -59,7 +63,7 @@ export default function App() {
   const kit = kitSide();
   if (KitApp && kit) {
     const sh = /^\/s\/([^/]+)(?:\/v\/([^/]+))?\/?$/.exec(path);
-    return <Suspense fallback={<Loading />}><KitApp side={kit}>{sh ? <SharePage token={sh[1]} videoId={(sh[2] as Id<"videos"> | undefined) ?? null} versionNumber={null} noteId={null} /> : <SignedIn />}</KitApp></Suspense>;
+    return <Suspense fallback={<Loading />}><KitApp side={kit}>{sh ? <ShareForMember video={!!sh[2]} page={(inShell) => <SharePage inShell={inShell} token={sh[1]} videoId={(sh[2] as Id<"videos"> | undefined) ?? null} versionNumber={null} noteId={null} />} /> : <SignedIn />}</KitApp></Suspense>;
   }
   const signer = (isSignHost() ? /^\/(?:x\/)?([A-Za-z0-9_-]{16,64})\/?$/ : /^\/x\/([A-Za-z0-9_-]{16,64})\/?$/).exec(path);
   if ((isSignHost() && /^\/verify\/?$/.test(path)) || /^\/x\/verify\/?$/.test(path)) return <Suspense fallback={<Loading />}><VerifyPage /></Suspense>;
@@ -70,7 +74,8 @@ export default function App() {
   if (share) {
     if (isLoading) return <Loading />;
     const params = new URLSearchParams(search);
-    return <SharePage key={share[1]} token={share[1]} videoId={(share[2] as Id<"videos"> | undefined) ?? null} versionNumber={Number(params.get("version")) || null} noteId={params.get("note")} />;
+    const page = (inShell: boolean) => <SharePage key={share[1]} inShell={inShell} token={share[1]} videoId={(share[2] as Id<"videos"> | undefined) ?? null} versionNumber={Number(params.get("version")) || null} noteId={params.get("note")} />;
+    return isAuthenticated ? <ShareForMember video={!!share[2]} page={page} /> : page(false);
   }
   if (isLoading) return <Loading />;
   if (!isAuthenticated) return <SignIn invitedEmail={new URLSearchParams(location.search).get("invited")} />;
@@ -89,9 +94,7 @@ function SignedIn() {
   // Clients (C1): their own page, nothing of the owner's side.
   if (me && !me.allowed && me.role === "client") {
     return (
-      <Shell me={me} side="client" overlay={false}>
-        {/^\/more\/?$/.test(path) ? <MorePage me={me} side="client" /> : <ClientHome me={me} />}
-      </Shell>
+      <ClientShell me={me} />
     );
   }
   if (!me || !me.allowed) {
@@ -138,6 +141,34 @@ function SignedIn() {
       <Shell me={me} overlay={Boolean(video)} light={!workSurface}>{page}</Shell>
     </UploadProvider>
   );
+}
+
+type MeRow = NonNullable<ReturnType<typeof useQuery<typeof api.users.me>>>;
+function ClientShell({ me, overlay = false, children }: { me: MeRow; overlay?: boolean; children?: React.ReactNode }) {
+  const mine = useQuery(api.shares.mine, {});
+  const client = (mine ?? []).find((s) => s.client)?.client ?? null;
+  return <Shell me={me} side="client" overlay={overlay} subtitle={client}>{children ?? <ClientRoutes me={me} />}</Shell>;
+}
+
+// A share link opened by a signed-in client: inside their portal (P1 / Client / Review › project); the video page
+// fills the screen with the menu button (overlay). Owners and guests see the share page on its own, as before.
+function ShareForMember({ video, page }: { video: boolean; page: (inShell: boolean) => React.ReactNode }) {
+  const me = useQuery(api.users.me);
+  if (me === undefined) return <Loading />;
+  if (me && !me.allowed && me.role === "client") return <ClientShell me={me} overlay={video}>{page(true)}</ClientShell>;
+  return <>{page(false)}</>;
+}
+
+// The client side (P1 / Client): Home, Inbox, Review, Docs, Settings, and More on phones.
+function ClientRoutes({ me }: { me: { name: string | null; email: string } }) {
+  const { path, search } = useLocation();
+  const params = new URLSearchParams(search);
+  if (/^\/more\/?$/.test(path)) return <MorePage me={me as never} side="client" />;
+  if (/^\/inbox\/?$/.test(path)) return <ClientInbox itemId={params.get("item")} />;
+  if (/^\/(docs|documents)\/?$/.test(path)) { const t = params.get("tab"); return <ClientDocuments tab={(t === "signed" || t === "cancelled" ? t : "to_sign") as DocTab} />; }
+  if (/^\/review\/?$/.test(path)) return <ClientReview me={me} />;
+  if (path.startsWith("/settings")) return <ClientSettings me={me} />;
+  return <ClientHome />;
 }
 
 // The bare wranglerportal.com (D14, Oct 28): a holding page with Sign in.
