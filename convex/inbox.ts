@@ -128,6 +128,29 @@ export const notes = query({
   },
 });
 
+/** A sent note, opened from the Sent list: its text and each person with Read {date} or not read yet. */
+export const noteDetail = query({
+  args: { noteId: v.id("inboxNotes") },
+  handler: async (ctx, { noteId }) => {
+    await requireMe(ctx);
+    const n = await ctx.db.get(noteId);
+    if (!n || n.status === "discarded") return null;
+    const client = await ctx.db.get(n.clientId);
+    const items = await ctx.db.query("inboxItems").withIndex("by_note", (q) => q.eq("noteId", noteId)).collect();
+    const people = [];
+    for (const i of items) {
+      const person = (await ctx.db.query("clientPeople").withIndex("by_email", (q) => q.eq("email", i.email)).collect()).find((p) => p.clientId === n.clientId);
+      const user = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", i.email)).unique();
+      people.push({ email: i.email, name: person?.name ?? (user?.name as string | undefined) ?? null, readAt: i.readAt ?? null, emailedAt: i.emailedAt ?? null });
+    }
+    return {
+      _id: n._id, clientId: n.clientId, client: client?.name ?? null, title: n.title, text: n.text, link: n.link ?? null,
+      status: n.status, draftedBy: n.draftedBy, said: n.said ?? null, createdAt: n.createdAt, sentAt: n.sentAt ?? null,
+      people: people.sort((a, b) => (a.name ?? a.email).localeCompare(b.name ?? b.email)),
+    };
+  },
+});
+
 function checkNote(a: { title: string; text: string; link?: string | null }) {
   const title = a.title.trim().replace(/\s+/g, " ");
   const text = a.text.trim();

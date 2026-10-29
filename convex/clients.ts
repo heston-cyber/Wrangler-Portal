@@ -214,6 +214,31 @@ export const page = query({
   },
 });
 
+/** "{n} to sign · {n} to review": documents waiting on one of their people's signature, and cuts (each video's
+ *  latest ready version) that nobody outside the business has watched yet. */
+async function waitingOn(ctx: { db: import("./_generated/server").QueryCtx["db"] }, clientId: import("./_generated/dataModel").Id<"clients">, emails: string[], projectIds: import("./_generated/dataModel").Id<"projects">[]) {
+  void clientId;
+  let toSign = 0;
+  const seenDocs = new Set<string>();
+  for (const e of emails) {
+    for (const s of await ctx.db.query("wsSignings").withIndex("by_email", (q) => q.eq("email", e)).collect()) {
+      if (s.status !== "sent" || seenDocs.has(s.documentId)) continue;
+      const d = await ctx.db.get(s.documentId);
+      if (d && d.status === "sent" && d.sentVersion === s.versionNumber && !(d.expiresAt && d.expiresAt < Date.now())) { seenDocs.add(s.documentId); toSign++; }
+    }
+  }
+  let toReview = 0;
+  for (const pid of projectIds) {
+    for (const vid of await ctx.db.query("videos").withIndex("by_project", (q) => q.eq("projectId", pid)).collect()) {
+      const latest = (await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect()).filter((x) => x.status === "ready").sort((a, b) => b.number - a.number)[0];
+      if (!latest) continue;
+      const watched = (await ctx.db.query("views").withIndex("by_version", (q) => q.eq("versionId", latest._id)).collect()).some((x) => x.kind !== "owner");
+      if (!watched) toReview++;
+    }
+  }
+  return { toSign, toReview };
+}
+
 /** The Clients list: each client with its people and what's going on. */
 export const directory = query({
   args: {},
@@ -227,7 +252,8 @@ export const directory = query({
       const mine = people.filter((p) => p.clientId === c._id);
       let active = 0;
       for (const p of mine) if ((await accessOf(ctx, p.email)).state === "active") active++;
-      out.push({ _id: c._id, name: c.name, people: mine.length, active, projects: projects.filter((p) => p.clientId === c._id).length, fromProjects: !!c.fromProjects });
+      const w = await waitingOn(ctx, c._id, mine.map((p) => p.email), projects.filter((p) => p.clientId === c._id).map((p) => p._id));
+      out.push({ _id: c._id, name: c.name, people: mine.length, active, projects: projects.filter((p) => p.clientId === c._id).length, fromProjects: !!c.fromProjects, toSign: w.toSign, toReview: w.toReview });
     }
     return out.sort((a, b) => a.name.localeCompare(b.name));
   },

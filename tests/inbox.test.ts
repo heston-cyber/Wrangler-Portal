@@ -72,6 +72,9 @@ describe("owner notes", () => {
     expect(sent[0]).toMatchObject({ status: "sent", recipients: 2, readBy: 1 });
     const theirs = await w.heston.query(api.inbox.forClient, { clientId: w.harbor });
     expect(theirs[0]).toMatchObject({ sentTo: 2, readBy: 1 });
+    const detail = await w.heston.query(api.inbox.noteDetail, { noteId });
+    expect(detail.people.map((p: { email: string; readAt: number | null }) => [p.email, !!p.readAt])).toEqual([["jordan@harbor.example", false], ["maya@harbor.example", true]]);
+    expect(await w.boss.query(api.inbox.noteDetail, { noteId })).toBeNull();
     // Sam (not invited) has nothing.
     const sam = await w.t.run(async (ctx) => (await ctx.db.query("inboxItems").collect()).filter((i) => i.email === "sam@harbor.example").length);
     expect(sam).toBe(0);
@@ -173,6 +176,10 @@ describe("a client's people, the client page, settings", () => {
     await expect(w.boss.mutation(api.clients.addPerson, { clientId: w.harbor, email: "x@y.example", role: "contact" })).rejects.toThrow();
     await expect(w.boss.mutation(api.clients.removePerson, { personId: sam })).resolves.toBeNull(); // invisible to B: nothing happens
     expect((await w.heston.query(api.clients.people, { clientId: w.harbor })).length).toBe(3);
+    // "{n} to sign · {n} to review": Harbor's one cut hasn't been watched by anyone outside the business.
+    const dir = await w.heston.query(api.clients.directory, {});
+    expect(dir.find((c: { name: string }) => c.name === "Harbor Coffee")).toMatchObject({ toSign: 0, toReview: 1, people: 3, active: 1 });
+    expect((await w.boss.query(api.clients.directory, {})).map((c: { name: string }) => c.name)).toEqual(["Juniper"]);
     const page = await w.heston.query(api.clients.page, { clientId: w.harbor });
     expect(page.projects).toHaveLength(1);
     expect(await w.boss.query(api.clients.page, { clientId: w.harbor })).toBeNull();
