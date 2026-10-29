@@ -3,7 +3,6 @@
 // can be added, moved, resized, reassigned or deleted by hand. Drafts save as you go. Approving locks the version.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Pencil, Archive, Ban, CalendarClock, Check, Copy, Download, ExternalLink, FileCheck2, Receipt, Crosshair, Eye, FilePlus2, FileSignature, History, Lock, Mail, MoreHorizontal, Plus, RefreshCw, ScanSearch, Send, ShieldCheck, ShieldAlert, Trash2, TriangleAlert, UserPlus, X } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { Sep, TopBar } from "../../../shell/Shell";
@@ -14,6 +13,11 @@ import { DEFAULT_SIZE, applyScan, type ScanResult } from "../lib/markers";
 import { deviceName } from "../../../../convex/lib/wsFinal";
 import { findMarkers, openPdf, renderPage, type PdfDoc } from "../lib/pdf";
 import { central, errText, KIND_LABEL, signerColor, StatusChip, uploadToStorage } from "./common";
+import { Icon } from "../../../ui/Icon";
+import { Button, ButtonLink, IconButton, SkeletonRows, StatusChip as Chip, EmptyState } from "../../../ui/wp";
+
+// "Oct 28" (Chicago), with the year when it isn't this year: the short dates on chips. The full time is in the tooltip.
+const day = (t: number) => { const tz = "America/Chicago"; const y = (x: number) => new Date(x).toLocaleDateString("en-US", { timeZone: tz, year: "numeric" }); return new Date(t).toLocaleDateString("en-US", { timeZone: tz, month: "short", day: "numeric", ...(y(t) === y(Date.now()) ? {} : { year: "numeric" }) }); };
 import { ClaudeRequests } from "./ClaudeRequests";
 
 type Data = NonNullable<ReturnType<typeof useGetDoc>>;
@@ -26,8 +30,8 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), h
 
 export default function SignDoc({ documentId, versionNumber }: { documentId: Id<"wsDocuments">; versionNumber: number | null }) {
   const data = useGetDoc(documentId, versionNumber);
-  if (data === undefined) return <><TopBar><FileSignature size={15} /><a {...linkProps("/sign")}>Contracts</a></TopBar><div className="content"><p className="caption" style={{ padding: 24 }}>Loading…</p></div></>;
-  if (data === null) return <><TopBar><FileSignature size={15} /><a {...linkProps("/sign")}>Contracts</a></TopBar><div className="content"><div className="empty">This document doesn't exist (or was deleted).</div></div></>;
+  if (data === undefined) return <><TopBar><a {...linkProps("/sign")}>Docs</a></TopBar><div className="wp-page docs"><div className="wp-tablecard glass"><SkeletonRows n={3} /></div></div></>;
+  if (data === null) return <><TopBar><a {...linkProps("/sign")}>Docs</a></TopBar><div className="wp-page docs"><EmptyState icon="document" title="This document doesn't exist (or was deleted)." actions={<ButtonLink to="/sign/docs">All docs</ButtonLink>} /></div></>;
   return <Editor key={data.version._id} data={data} />;
 }
 
@@ -200,28 +204,28 @@ function Editor({ data }: { data: Data }) {
   return (
     <>
       <TopBar right={<>
-        {editable && <span className={`ws-save ${saveState}`}>{saveState === "saving" ? <><Spinner /> Saving</> : saveState === "error" ? <><TriangleAlert size={14} /> Not saved</> : <><Check size={14} /> Saved</>}</span>}
-        {doc.buildId && doc.status !== "sent" && doc.status !== "completed" && <a className="btn ghost sm" {...linkProps(`/sign/b/${doc.buildId}`)}><Pencil size={14} />Edit in builder</a>}
+        {editable && <span className={`ws-save ${saveState}`}>{saveState === "saving" ? <><Spinner /> Saving</> : saveState === "error" ? <><Icon name="alert" size={14} /> Not saved</> : <><Icon name="check" size={14} plain /> Saved</>}</span>}
+        {doc.buildId && doc.status !== "sent" && doc.status !== "completed" && <ButtonLink variant="ghost" size="sm" className="hide-sm" to={`/sign/b/${doc.buildId}`}>Edit in builder</ButtonLink>}
         <StatusChip status={doc.status} />
-        <Menu align="end" label="Document" trigger={(p) => <button {...p} className="icon-btn" aria-label="More"><MoreHorizontal size={18} /></button>}>
-          <MenuItem icon={<Eye size={16} />} onSelect={() => void onPreview()}>Preview the PDF</MenuItem>
-          {(doc.status === "draft" || doc.status === "approved") && <MenuItem icon={<FilePlus2 size={16} />} onSelect={() => fileInput.current?.click()}>Replace the PDF (new version)…</MenuItem>}
-          {(doc.status === "draft" || doc.status === "approved") && <MenuItem icon={<Trash2 size={16} />} danger onSelect={() => setConfirmDelete(true)}>Delete document</MenuItem>}
+        <Menu align="end" label="Document" trigger={(p) => <button {...p} className="icon-btn sm" aria-label="More"><Icon name="more" size={18} /></button>}>
+          <MenuItem icon={<Icon name="eye" size={16} />} onSelect={() => void onPreview()}>Preview the PDF</MenuItem>
+          {(doc.status === "draft" || doc.status === "approved") && <MenuItem icon={<Icon name="upload" size={16} />} onSelect={() => fileInput.current?.click()}>Replace the PDF (new version)…</MenuItem>}
+          {(doc.status === "draft" || doc.status === "approved") && <MenuItem icon={<Icon name="close" size={16} />} danger onSelect={() => setConfirmDelete(true)}>Delete document</MenuItem>}
         </Menu>
       </>}>
-        <FileSignature size={15} /><a {...linkProps("/sign")}>Contracts</a><Sep /><span className="here">{doc.label} · {layout.title}</span>
+        <a {...linkProps("/sign")}>Docs</a><Sep /><span className="here">{doc.label} · {layout.title}</span>
       </TopBar>
       <input ref={fileInput} type="file" accept="application/pdf,.pdf" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void onReplace(f); }} />
 
       <div className="content ws-doc">
         <div className="ws-pages" onClick={(e) => { if (e.target === e.currentTarget) setSelected(null); }}>
           <ClaudeRequests documentId={doc._id} label={doc.label} />
-          {viewingOld && <div className="ws-banner"><History size={15} /> You're looking at version {version.number}, an older version. <a {...linkProps(`/sign/d/${doc._id}`)}>Open the current one</a></div>}
-          {!editable && version.approvedAt && version.isCurrent && !signedAvailable && <div className="ws-banner ok"><Lock size={15} /> {doc.status === "sent" ? `Version ${version.number} is out for signature. To change anything, cancel signing, then make a new version.` : doc.status === "completed" ? `Version ${version.number} is signed by everyone.` : `Version ${version.number} is approved and locked. To change anything, make a new version.`}</div>}
-          {placing && <div className="ws-banner place"><Crosshair size={15} /> Click on a page to place the {KIND_LABEL[placing.kind].toLowerCase()} box for {nameOf(layout.signers, placing.signer)}. <button className="btn ghost sm" onClick={() => setPlacing(null)}>Cancel</button></div>}
-          {pdfError && <div className="ws-banner bad"><TriangleAlert size={15} /> Couldn't open the PDF: {pdfError}</div>}
-          {!pdf && !pdfError && <p className="caption" style={{ padding: 24 }}><Spinner /> Opening the PDF…</p>}
-          {signedAvailable && <div className="ws-banner ok"><FileCheck2 size={15} /> {showSigned ? "You're looking at the signed copy, with its certificate at the end." : "You're looking at the original with its boxes."} <button className="btn ghost sm" onClick={() => { setPdf(null); setShowOriginal(!showOriginal); }}>{showSigned ? "Show the original" : "Show the signed copy"}</button></div>}
+          {viewingOld && <div className="wp-notice ws-banner"><Icon name="clock" size={20} /><span className="txt">You're looking at version {version.number}, an older version.</span><ButtonLink size="sm" to={`/sign/d/${doc._id}`}>Open the current one</ButtonLink></div>}
+          {!editable && version.approvedAt && version.isCurrent && !signedAvailable && <div className="wp-notice ws-banner"><Icon name="lock" size={20} /><span className="txt">{doc.status === "sent" ? `Version ${version.number} is out for signature. To change anything, cancel signing, then make a new version.` : doc.status === "completed" ? `Version ${version.number} is signed by everyone.` : `Version ${version.number} is approved and locked. To change anything, make a new version.`}</span></div>}
+          {placing && <div className="wp-notice ws-banner"><Icon name="info" size={20} /><span className="txt">Click on a page to place the {KIND_LABEL[placing.kind].toLowerCase()} box for {nameOf(layout.signers, placing.signer)}.</span><Button size="sm" onClick={() => setPlacing(null)}>Cancel</Button></div>}
+          {pdfError && <div className="wp-notice ws-banner"><Icon name="alert" size={20} /><span className="txt">Couldn't open the PDF: {pdfError}</span></div>}
+          {!pdf && !pdfError && <p className="wp-small ws-opening"><Spinner /> Opening the PDF…</p>}
+          {signedAvailable && <div className="wp-notice ws-banner"><Icon name="check-circle" size={20} /><span className="txt">{showSigned ? "You're looking at the signed copy, with its certificate at the end." : "You're looking at the original with its boxes."}</span><Button size="sm" onClick={() => { setPdf(null); setShowOriginal(!showOriginal); }}>{showSigned ? "Show the original" : "Show the signed copy"}</Button></div>}
           {pdf && (!showSigned || signedPages) && <PagesView pdf={pdf} pages={showSigned ? signedPages! : version.pages} boxes={showSigned ? [] : layout.boxes} signerKeys={signerKeys} signers={layout.signers} editable={editable} selected={selected} placing={!!placing}
             onSelect={setSelected} onPlace={addBoxAt}
             onChange={(id, r) => setLayout((l) => ({ ...l, boxes: l.boxes.map((b) => (b.id === id ? { ...b, ...r } : b)) }))} />}
@@ -229,52 +233,50 @@ function Editor({ data }: { data: Data }) {
 
         <aside className="ws-side">
           {/* Status and the main action */}
-          <section className="ws-card">
-            <div className="ws-cardhead"><span className="label">Version {version.number}{viewingOld ? " (older)" : ""}</span><span className="secondary ws-small">{version.fileName}</span></div>
+          <section className="ws-card glass">
+            <span className="label">Version {version.number}{viewingOld ? " (older)" : ""}</span><span className="ws-file">{version.fileName}</span>
             {editable ? (
               <>
                 {problems.length > 0 ? (
-                  <ul className="ws-problems">{problems.map((p) => <li key={p}><TriangleAlert size={13} />{p}</li>)}</ul>
-                ) : <p className="caption ws-ready"><Check size={14} /> Ready to approve.</p>}
+                  <ul className="ws-problems">{problems.map((p) => <li key={p}><Icon name="alert" size={16} />{p}</li>)}</ul>
+                ) : <p className="ws-ready"><Icon name="check-circle" size={16} plain /> Ready to approve.</p>}
                 {saveError && <p className="caption ws-err">{saveError}</p>}
-                <button className="btn primary" disabled={problems.length > 0 || dirty || saveState !== "saved" || busy === "approve"} onClick={() => void onApprove()}>
-                  {busy === "approve" ? <Spinner /> : <Lock size={15} />}Approve and lock
-                </button>
-                <p className="caption secondary">Approving locks this version: the file, the boxes, the signers and the invoice. Then you send it.</p>
+                <div><Button variant="primary" loading={busy === "approve"} disabled={problems.length > 0 || dirty || saveState !== "saved"} onClick={() => void onApprove()}>Approve and lock</Button></div>
+                <p className="wp-small ws-hint">Approving locks this version: the file, the boxes, the signers and the invoice. Then you send it.</p>
               </>
             ) : version.approvedAt ? (
               <>
-                <p className="caption"><Lock size={13} /> Approved {central(version.approvedAt)}</p>
+                <p className="ws-line"><Icon name="lock" size={16} /> Approved {central(version.approvedAt)}</p>
                 <HashLine label="Lock hash" value={version.lockHash ?? ""} />
                 <HashLine label="File SHA-256" value={version.fileSha256} />
-                {version.isCurrent && doc.status === "approved" && <button className="btn primary" onClick={() => setSending(true)}><Send size={15} />Send for signature…</button>}
-                {version.isCurrent && (doc.status === "approved" || doc.status === "voided") && <button className="btn" disabled={busy === "revise"} onClick={() => void onRevise()}>{busy === "revise" ? <Spinner /> : <RefreshCw size={15} />}Make changes (new version)</button>}
+                {version.isCurrent && doc.status === "approved" && <div><Button variant="primary" icon="send" onClick={() => setSending(true)}>Send for signature…</Button></div>}
+                {version.isCurrent && (doc.status === "approved" || doc.status === "voided") && <div><Button loading={busy === "revise"} onClick={() => void onRevise()}>Make changes (new version)</Button></div>}
               </>
-            ) : <p className="caption secondary">This version was never approved.</p>}
-            <button className="btn ghost sm" onClick={() => void onPreview()} disabled={busy === "preview"}>{busy === "preview" ? <Spinner /> : <Eye size={14} />}Preview the PDF as it will be signed</button>
+            ) : <p className="wp-small ws-hint">This version was never approved.</p>}
+            <div><Button variant="ghost" size="sm" loading={busy === "preview"} onClick={() => void onPreview()}>Preview the PDF as it will be signed</Button></div>
           </section>
 
           {doc.status === "completed" && <FinishedCard data={data} show={show} />}
           {data.signings.length > 0 && <SigningCard data={data} show={show} />}
 
           {/* Details */}
-          <section className="ws-card">
+          <section className="ws-card glass">
             <span className="label">Details</span>
-            <label className="field"><span className="ws-flabel">Title</span>
-              <input className="input sm" value={layout.title} disabled={!editable} maxLength={120} onChange={(e) => setLayout((l) => ({ ...l, title: e.target.value }))} />
+            <label className="wp-field"><span className="wp-field-label">Title</span>
+              <input className="input" value={layout.title} disabled={!editable} maxLength={120} onChange={(e) => setLayout((l) => ({ ...l, title: e.target.value }))} />
             </label>
-            <div className="field"><span className="ws-flabel">Signing order</span>
-              <div className="ws-seg">
-                <button type="button" className={layout.signingOrder === "any" ? "on" : ""} disabled={!editable} onClick={() => setLayout((l) => ({ ...l, signingOrder: "any" }))}>Any order</button>
-                <button type="button" className={layout.signingOrder === "sequence" ? "on" : ""} disabled={!editable} onClick={() => setLayout((l) => ({ ...l, signingOrder: "sequence" }))}>One after another</button>
+            <div className="wp-field ws-orderrow"><span className="wp-field-label">Signing order</span>
+              <div className="wp-seg">
+                <button type="button" aria-pressed={layout.signingOrder === "any"} className={layout.signingOrder === "any" ? "on" : ""} disabled={!editable} onClick={() => setLayout((l) => ({ ...l, signingOrder: "any" }))}>Any order</button>
+                <button type="button" aria-pressed={layout.signingOrder === "sequence"} className={layout.signingOrder === "sequence" ? "on" : ""} disabled={!editable} onClick={() => setLayout((l) => ({ ...l, signingOrder: "sequence" }))}>One after another</button>
               </div>
             </div>
             <InvoiceField payment={layout.payment} title={layout.title} editable={editable} onChange={(p) => setLayout((l) => ({ ...l, payment: p }))} />
           </section>
 
           {/* Signers */}
-          <section className="ws-card">
-            <div className="ws-cardhead"><span className="label">Signers</span></div>
+          <section className="ws-card glass">
+            <span className="label">Signers</span>
             <OwnerRow present={signerKeys.includes(OWNER_KEY)} editable={editable} boxes={layout.boxes.filter((b) => b.signer === OWNER_KEY).length} name={sig && sig.adopted ? `${sig.name}, ${sig.title}` : null}
               onToggle={(on) => setLayout((l) => on ? { ...l, signers: [{ key: OWNER_KEY, name: "", email: "", order: 1 }, ...l.signers] } : { ...l, signers: l.signers.filter((s) => s.key !== OWNER_KEY), boxes: l.boxes.filter((b) => b.signer !== OWNER_KEY) })} />
             {layout.signers.filter((s) => s.key !== OWNER_KEY).map((s, i) => (
@@ -288,52 +290,51 @@ function Editor({ data }: { data: Data }) {
                   return { ...l, signers: [...l.signers.filter((x) => x.key === OWNER_KEY), ...clients] };
                 })} />
             ))}
-            {editable && layout.signers.length < 10 && <button className="btn ghost sm" onClick={() => setLayout((l) => ({ ...l, signers: [...l.signers, { key: nextClientKey(l.signers), name: "", email: "", order: 1 }] }))}><UserPlus size={14} />Add a client signer</button>}
+            {editable && layout.signers.length < 10 && <div><Button variant="ghost" size="sm" onClick={() => setLayout((l) => ({ ...l, signers: [...l.signers, { key: nextClientKey(l.signers), name: "", email: "", order: 1 }] }))}>Add a client signer</Button></div>}
           </section>
 
           {/* Boxes */}
-          <section className="ws-card">
-            <div className="ws-cardhead"><span className="label">Boxes</span><span className="secondary ws-small">{layout.boxes.length} on {new Set(layout.boxes.map((b) => b.page)).size} page{new Set(layout.boxes.map((b) => b.page)).size === 1 ? "" : "s"}</span></div>
-            {scan && <p className="caption secondary">{scan.textPages === 0 ? "This PDF has no text (a scan?), so markers can't be found. Place the boxes by hand." : scan.markers.length ? `Found ${scan.markers.length} marker${scan.markers.length === 1 ? "" : "s"}.` : "No markers found. Place the boxes by hand, or add markers like {{sign:client}} to the document."}{checkBoxes ? ` ${checkBoxes} sit on sideways text: check where they landed.` : ""}</p>}
+          <section className="ws-card glass">
+            <span className="label">Boxes · {layout.boxes.length} on {new Set(layout.boxes.map((b) => b.page)).size} page{new Set(layout.boxes.map((b) => b.page)).size === 1 ? "" : "s"}</span>
+            {scan && <p className="wp-small ws-hint">{scan.textPages === 0 ? "This PDF has no text (a scan?), so markers can't be found. Place the boxes by hand." : scan.markers.length ? `Found ${scan.markers.length} marker${scan.markers.length === 1 ? "" : "s"}.` : "No markers found. Place the boxes by hand, or add markers like {{sign:client}} to the document."}{checkBoxes ? ` ${checkBoxes} sit on sideways text: check where they landed.` : ""}</p>}
             {editable && <AddBox signers={layout.signers} onPlace={(signer, kind) => { setPlacing({ signer, kind }); setSelected(null); }} />}
             {editable && sel && (
               <div className="ws-selbox">
-                <span className="ws-flabel">Selected box · page {sel.page + 1}{sel.fromMarker ? " · from a marker" : ""}</span>
+                <span className="ws-sublabel">Selected box · page {sel.page + 1}{sel.fromMarker ? " · from a marker" : ""}</span>
                 <div className="ws-row2">
-                  <select className="input sm" value={sel.signer} onChange={(e) => setLayout((l) => ({ ...l, boxes: l.boxes.map((b) => (b.id === sel.id ? { ...b, signer: e.target.value } : b)) }))}>
+                  <select className="input" value={sel.signer} onChange={(e) => setLayout((l) => ({ ...l, boxes: l.boxes.map((b) => (b.id === sel.id ? { ...b, signer: e.target.value } : b)) }))}>
                     {layout.signers.map((s) => <option key={s.key} value={s.key}>{nameOf(layout.signers, s.key)}</option>)}
                   </select>
-                  <select className="input sm" value={sel.kind} onChange={(e) => setLayout((l) => ({ ...l, boxes: l.boxes.map((b) => (b.id === sel.id ? { ...b, kind: e.target.value as Kind } : b)) }))}>
+                  <select className="input" value={sel.kind} onChange={(e) => setLayout((l) => ({ ...l, boxes: l.boxes.map((b) => (b.id === sel.id ? { ...b, kind: e.target.value as Kind } : b)) }))}>
                     {KINDS.map((k) => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}
                   </select>
                 </div>
-                <button className="btn danger sm" onClick={() => { setLayout((l) => ({ ...l, boxes: l.boxes.filter((b) => b.id !== sel.id) })); setSelected(null); }}><Trash2 size={14} />Delete box</button>
-                <span className="caption secondary">Drag to move, drag the corner to resize, arrow keys to nudge.</span>
+                <div><Button size="sm" onClick={() => { setLayout((l) => ({ ...l, boxes: l.boxes.filter((b) => b.id !== sel.id) })); setSelected(null); }}>Delete box</Button></div>
+                <span className="wp-small ws-hint">Drag to move, drag the corner to resize, arrow keys to nudge.</span>
               </div>
             )}
-            {editable && <button className="btn ghost sm" disabled={!pdf || scanning} onClick={() => void runScan(true)}>{scanning ? <Spinner /> : <ScanSearch size={14} />}Find markers again</button>}
-            {editable && <p className="caption secondary">Markers: <code>{"{{sign:client}}"}</code> <code>{"{{initials:client}}"}</code> <code>{"{{name:client}}"}</code> <code>{"{{date:client}}"}</code> <code>{"{{title:client}}"}</code>. Use <code>heston</code> for you, and <code>client2</code> … for more signers.</p>}
+            {editable && <div><Button variant="ghost" size="sm" loading={scanning} disabled={!pdf} onClick={() => void runScan(true)}>Find markers again</Button></div>}
+            {editable && <p className="wp-small ws-hint">Markers: <code>{"{{sign:client}}"}</code> <code>{"{{initials:client}}"}</code> <code>{"{{name:client}}"}</code> <code>{"{{date:client}}"}</code> <code>{"{{title:client}}"}</code>. Use <code>heston</code> for you, and <code>client2</code> … for more signers.</p>}
           </section>
 
           {/* Versions */}
-          <section className="ws-card">
+          <section className="ws-card glass">
             <span className="label">Versions</span>
             {data.versions.map((x) => (
               <a key={x.number} className={`ws-ver${x.number === version.number ? " on" : ""}`} {...linkProps(x.number === doc.currentVersion ? `/sign/d/${doc._id}` : `/sign/d/${doc._id}?v=${x.number}`)}>
-                <b>v{x.number}</b><span className="secondary">{x.approvedAt ? `approved ${central(x.approvedAt)}` : x.number === doc.currentVersion ? "draft" : "never approved"}</span>
-                {x.number === doc.currentVersion && <span className="chip fill">current</span>}
+                <b>v{x.number}</b><span className="secondary" title={x.approvedAt ? central(x.approvedAt) : undefined}>{x.approvedAt ? `approved ${day(x.approvedAt)}` : x.number === doc.currentVersion ? "draft" : "never approved"}</span>
+                {x.number === doc.currentVersion && <Chip>Current</Chip>}
               </a>
             ))}
           </section>
 
           {/* Audit trail */}
-          <section className="ws-card">
-            <div className="ws-cardhead"><span className="label">Audit trail</span>
-              {data.chain.ok ? <span className="ws-chain ok"><ShieldCheck size={14} />Intact · {data.chain.count}</span> : <span className="ws-chain bad"><ShieldAlert size={14} />Broken at {data.chain.atSeq}: {data.chain.reason}</span>}
-            </div>
+          <section className="ws-card glass">
+            <span className="label">Audit trail</span>
+            {data.chain.ok ? <span className="ws-chain"><Icon name="lock" size={16} />Intact · {data.chain.count}<Chip tone="success">Intact</Chip></span> : <span className="ws-chain bad"><Icon name="alert" size={16} />Broken at {data.chain.atSeq}: {data.chain.reason}</span>}
             <ol className="ws-events">
               {[...data.events].reverse().map((e) => (
-                <li key={e.seq}><span className="secondary ws-small">{central(e.at)} · {e.actor === OWNER_KEY ? "You" : e.actor}</span><span>{eventLabel(e.kind)}{e.versionNumber ? ` (v${e.versionNumber})` : ""}</span>{e.detail && <span className="secondary ws-small ws-detail">{e.detail}</span>}{(e.ip || e.userAgent) && <span className="secondary ws-small ws-detail" title={e.userAgent ?? undefined}>{[e.ip ? `IP ${e.ip}` : null, device(e.userAgent)].filter(Boolean).join(" · ")}</span>}</li>
+                <li key={e.seq}><span className="when">{central(e.at)} · {e.actor === OWNER_KEY ? "You" : e.actor}</span><span className="what">{eventLabel(e.kind)}{e.versionNumber ? ` (v${e.versionNumber})` : ""}</span>{e.detail && <span className="secondary ws-small ws-detail">{e.detail}</span>}{(e.ip || e.userAgent) && <span className="secondary ws-small ws-detail" title={e.userAgent ?? undefined}>{[e.ip ? `IP ${e.ip}` : null, device(e.userAgent)].filter(Boolean).join(" · ")}</span>}</li>
               ))}
             </ol>
           </section>
@@ -347,7 +348,7 @@ function Editor({ data }: { data: Data }) {
             <p className="caption">Every version, the PDF and its trail are removed. It was never sent, so nobody else has it.</p>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button className="btn ghost" onClick={() => setConfirmDelete(false)}>Cancel</button>
-              <button className="btn danger" onClick={() => void onDelete()}><Trash2 size={15} />Delete</button>
+              <button className="btn danger" onClick={() => void onDelete()}>Delete</button>
             </div>
           </div>
         </Modal>
@@ -481,7 +482,7 @@ function OwnerRow({ present, editable, boxes, name, onToggle }: { present: boole
     <div className="ws-signer owner" style={{ ["--c" as string]: "var(--accent)" }}>
       <label className="ws-ownertoggle">
         <input type="checkbox" checked={present} disabled={!editable} onChange={(e) => onToggle(e.target.checked)} />
-        <span><b>You sign this too</b><br /><span className="secondary ws-small">{name ? `${name} · signed when you send` : <>No signature yet · <a {...linkProps("/sign/signature")}>adopt one</a></>}{present ? ` · ${boxes} box${boxes === 1 ? "" : "es"}` : ""}</span></span>
+        <span><b>You sign this too</b><br /><span className="ws-sub">{name ? `${name} · signed when you send` : <>No signature yet · <a {...linkProps("/sign/signature")}>adopt one</a></>}{present ? ` · ${boxes} box${boxes === 1 ? "" : "es"}` : ""}</span></span>
       </label>
     </div>
   );
@@ -495,16 +496,17 @@ function SignerRow({ s, n, sequence, color, editable, boxes, onChange, onRemove,
     <div className="ws-signer" style={{ ["--c" as string]: color }}>
       <div className="ws-signerhead">
         <span className="ws-dot" aria-hidden />
-        <span className="mono ws-small">{sequence ? `${n}. ` : ""}{s.key}</span>
-        <span className="secondary ws-small">{boxes} box{boxes === 1 ? "" : "es"}</span>
-        {editable && <span style={{ marginLeft: "auto", display: "flex", gap: 2 }}>
-          {sequence && <><button className="icon-btn" aria-label="Sign earlier" onClick={() => onMove(-1)}>↑</button><button className="icon-btn" aria-label="Sign later" onClick={() => onMove(1)}>↓</button></>}
-          <button className="icon-btn" aria-label={`Remove ${s.key}`} title={boxes ? "Remove (and its boxes)" : "Remove"} onClick={onRemove}><X size={14} /></button>
+        <span className="key">{sequence ? `${n}. ` : ""}{s.key}</span>
+        <span className="sp" />
+        <span className="ws-sub">{boxes} box{boxes === 1 ? "" : "es"}</span>
+        {editable && <span style={{ display: "flex", gap: 2 }}>
+          {sequence && <><IconButton icon="arrow-up" label="Sign earlier" bare className="sm" iconSize={16} onClick={() => onMove(-1)} /><IconButton icon="arrow-down" label="Sign later" bare className="sm" iconSize={16} onClick={() => onMove(1)} /></>}
+          <IconButton icon="close" label={`Remove ${s.key}`} title={boxes ? "Remove (and its boxes)" : "Remove"} bare className="sm" iconSize={16} onClick={onRemove} />
         </span>}
       </div>
-      <input className="input sm" placeholder="Full name" value={s.name} disabled={!editable} maxLength={120} onChange={(e) => onChange({ name: e.target.value })} />
-      <input className="input sm" placeholder="Email" type="email" value={s.email} disabled={!editable} maxLength={200} onChange={(e) => onChange({ email: e.target.value })} />
-      <input className="input sm" placeholder="Title (optional, e.g. for a company)" value={s.title ?? ""} disabled={!editable} maxLength={120} onChange={(e) => onChange({ title: e.target.value || undefined })} />
+      <label className="wp-field"><span className="wp-field-label">Full name</span><input className="input" placeholder="Full name" value={s.name} disabled={!editable} maxLength={120} onChange={(e) => onChange({ name: e.target.value })} /></label>
+      <label className="wp-field"><span className="wp-field-label">Email</span><input className="input" placeholder="Email" type="email" value={s.email} disabled={!editable} maxLength={200} onChange={(e) => onChange({ email: e.target.value })} /></label>
+      <label className="wp-field"><span className="wp-field-label">Title (optional, e.g. for a company)</span><input className="input" value={s.title ?? ""} disabled={!editable} maxLength={120} onChange={(e) => onChange({ title: e.target.value || undefined })} /></label>
     </div>
   );
 }
@@ -515,12 +517,11 @@ function AddBox({ signers, onPlace }: { signers: LayoutSigner[]; onPlace: (signe
   useEffect(() => { if (!signers.some((s) => s.key === signer) && signers[0]) setSigner(signers[0].key); }, [signers, signer]);
   return (
     <div className="ws-add">
-      <span className="ws-flabel">Add a box</span>
       <div className="ws-row2">
-        <select className="input sm" value={signer} onChange={(e) => setSigner(e.target.value)}>{signers.map((s) => <option key={s.key} value={s.key}>{nameOf(signers, s.key)}</option>)}</select>
-        <select className="input sm" value={kind} onChange={(e) => setKind(e.target.value as Kind)}>{KINDS.map((k) => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}</select>
+        <select className="input" aria-label="Who signs it" value={signer} onChange={(e) => setSigner(e.target.value)}>{signers.map((s) => <option key={s.key} value={s.key}>{nameOf(signers, s.key)}</option>)}</select>
+        <select className="input" aria-label="What kind of box" value={kind} onChange={(e) => setKind(e.target.value as Kind)}>{KINDS.map((k) => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}</select>
       </div>
-      <button className="btn sm" onClick={() => onPlace(signer, kind)} disabled={!signers.length}><Plus size={14} />Place it on a page</button>
+      <div><Button size="sm" onClick={() => onPlace(signer, kind)} disabled={!signers.length}>Place it on a page</Button></div>
     </div>
   );
 }
@@ -533,15 +534,15 @@ function InvoiceField({ payment, title, editable, onChange }: { payment: Payment
     if (payment && Number.isFinite(n) && n !== payment.amountCents) onChange({ ...payment, amountCents: n });
   };
   return (
-    <div className="field">
+    <div className="ws-invoice">
       <label className="ws-ownertoggle">
         <input type="checkbox" checked={!!payment} disabled={!editable} onChange={(e) => onChange(e.target.checked ? { amountCents: 0, description: `Deposit — ${title}`.slice(0, 200) } : null)} />
-        <span><b>Draft a Stripe invoice when it's signed</b><br /><span className="secondary ws-small">Created as a draft in Stripe. Nothing is sent until you send it.</span></span>
+        <span><b>Draft a Stripe invoice when it's signed</b><br /><span className="ws-sub">Created as a draft in Stripe. Nothing is sent until you send it.</span></span>
       </label>
       {payment && (
         <div className="ws-row2">
-          <input className="input sm" inputMode="decimal" placeholder="Amount ($)" value={amount} disabled={!editable} onChange={(e) => setAmount(e.target.value)} onBlur={(e) => commit(e.target.value)} aria-label="Invoice amount in dollars" />
-          <input className="input sm" placeholder="Description" value={payment.description} disabled={!editable} maxLength={200} onChange={(e) => onChange({ ...payment, description: e.target.value })} aria-label="Invoice description" />
+          <label className="wp-field"><span className="wp-field-label">Amount ($)</span><input className="input" inputMode="decimal" placeholder="Amount ($)" value={amount} disabled={!editable} onChange={(e) => setAmount(e.target.value)} onBlur={(e) => commit(e.target.value)} aria-label="Invoice amount in dollars" /></label>
+          <label className="wp-field"><span className="wp-field-label">Description</span><input className="input" placeholder="Description" value={payment.description} disabled={!editable} maxLength={200} onChange={(e) => onChange({ ...payment, description: e.target.value })} aria-label="Invoice description" /></label>
         </div>
       )}
     </div>
@@ -554,7 +555,7 @@ function HashLine({ label, value }: { label: string; value: string }) {
     <div className="ws-hash">
       <span className="ws-flabel">{label}</span>
       <code className="mono" title={value}>{value.slice(0, 16)}…{value.slice(-8)}</code>
-      <button className="icon-btn" aria-label={`Copy ${label}`} onClick={() => { void navigator.clipboard.writeText(value).then(() => show("Copied")); }}><Copy size={13} /></button>
+      <IconButton icon="document" label={`Copy ${label}`} bare className="sm" iconSize={16} onClick={() => { void navigator.clipboard.writeText(value).then(() => show("Copied")); }} />
       {toast}
     </div>
   );
@@ -588,30 +589,32 @@ function SendDialog({ data, onClose, onSent }: { data: SendData; onClose: () => 
               <span className="secondary ws-small" style={{ marginLeft: "auto" }}>{v.signingOrder === "sequence" ? (i === 0 ? "gets it now" : `after ${clients[i - 1].name.split(" ")[0]}`) : "gets it now"}</span></li>
           ))}
         </ol>
-        {ownerSigns && <p className="caption"><FileSignature size={13} /> Your adopted signature goes on your boxes now, dated today.</p>}
+        {ownerSigns && <p className="caption"><Icon name="sign" size={14} /> Your adopted signature goes on your boxes now, dated today.</p>}
         <label className="field"><span className="ws-flabel">Links work for</span>
           <span style={{ display: "flex", gap: 8, alignItems: "center" }}><input className="input sm" type="number" min={1} max={90} value={days} onChange={(e) => setDays(Math.max(1, Math.min(90, Number(e.target.value) || 1)))} style={{ width: 80 }} /><span className="caption secondary">days, until {until}</span></span>
         </label>
         <p className="caption secondary">Each signer gets an email from contracts@wranglerportal.com with their own link. They confirm their email with a code, agree to sign electronically, then sign. Replies come to you.</p>
-        {err && <p className="caption ws-err"><TriangleAlert size={13} /> {err}</p>}
+        {err && <p className="caption ws-err"><Icon name="alert" size={14} /> {err}</p>}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button className="btn ghost" onClick={onClose}>Cancel</button>
-          <button className="btn primary" disabled={busy} onClick={() => void go()}>{busy ? <Spinner /> : <Send size={15} />}Sign and send</button>
+          <Button variant="primary" icon="send" loading={busy} onClick={() => void go()}>Sign and send</Button>
         </div>
       </div>
     </Modal>
   );
 }
 
-function signingStep(x: Data["signings"][number], now: number): { text: string; cls: string } {
-  if (x.status === "signed") return { text: `Signed ${central(x.signedAt!)}`, cls: "done" };
-  if (x.status === "closed") return { text: "Link cancelled", cls: "void" };
-  if (x.status === "waiting") return { text: "Waiting for their turn", cls: "" };
-  if (x.lockedUntil && x.lockedUntil > now) return { text: "Locked: too many wrong codes", cls: "void" };
-  if (x.consentAt) return { text: "Agreed, signing", cls: "sent" };
-  if (x.verifiedAt) return { text: "Confirmed their email", cls: "sent" };
-  if (x.openedAt) return { text: `Opened ${central(x.openedAt)}`, cls: "sent" };
-  return { text: `Emailed ${central(x.lastEmailAt ?? x.sentAt ?? now)}`, cls: "sent" };
+type Tone = "accent" | "success" | "neutral" | "danger";
+function signingStep(x: Data["signings"][number], now: number): { text: string; tone: Tone; at?: number } {
+  if (x.status === "signed") return { text: `Signed ${day(x.signedAt!)}`, tone: "success", at: x.signedAt! };
+  if (x.status === "closed") return { text: "Link cancelled", tone: "danger" };
+  if (x.status === "waiting") return { text: "Waiting for their turn", tone: "neutral" };
+  if (x.lockedUntil && x.lockedUntil > now) return { text: "Locked: too many wrong codes", tone: "danger" };
+  if (x.consentAt) return { text: "Agreed, signing", tone: "accent" };
+  if (x.verifiedAt) return { text: "Confirmed their email", tone: "accent" };
+  if (x.openedAt) return { text: `Opened ${day(x.openedAt)}`, tone: "accent", at: x.openedAt };
+  const at = x.lastEmailAt ?? x.sentAt ?? now;
+  return { text: `Emailed ${day(at)}`, tone: "accent", at };
 }
 
 function SigningCard({ data, show }: { data: Data; show: (m: string) => void }) {
@@ -630,31 +633,30 @@ function SigningCard({ data, show }: { data: Data; show: (m: string) => void }) 
   const copy = async (link: string) => { try { await navigator.clipboard.writeText(link); show("Link copied. It only works for that signer, after they confirm their email."); } catch { show(link); } };
   const run = async (key: string, f: () => Promise<unknown>, ok: string) => { setBusy(key); try { await f(); show(ok); } catch (e) { show(errText(e)); } finally { setBusy(null); } };
   return (
-    <section className="ws-card">
-      <div className="ws-cardhead"><span className="label">Signing · v{doc.sentVersion}</span>
-        <span className="secondary ws-small">{doc.status === "completed" && doc.completedAt ? `done ${central(doc.completedAt)}` : doc.status === "voided" ? "cancelled" : expired ? "expired" : doc.expiresAt ? `until ${new Date(doc.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}</span>
-      </div>
-      {doc.status === "voided" && <p className="caption ws-err"><Ban size={13} /> Cancelled {doc.voidedAt ? central(doc.voidedAt) : ""}{doc.voidReason ? `: ${doc.voidReason}` : "."} Make a new version to send it again.</p>}
-      {expired && <p className="caption ws-err"><CalendarClock size={13} /> The links have expired. Extend them to let signers finish.</p>}
+    <section className="ws-card glass">
+      <span className="label">Signing · v{doc.sentVersion}{doc.status === "completed" && doc.completedAt ? ` · done ${day(doc.completedAt)}` : doc.status === "voided" ? " · cancelled" : expired ? " · expired" : doc.expiresAt ? ` · until ${new Date(doc.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}</span>
+      {doc.status === "voided" && <p className="caption ws-err"><Icon name="alert" size={14} /> Cancelled {doc.voidedAt ? central(doc.voidedAt) : ""}{doc.voidReason ? `: ${doc.voidReason}` : "."} Make a new version to send it again.</p>}
+      {expired && <p className="caption ws-err"><Icon name="calendar" size={14} /> The links have expired. Extend them to let signers finish.</p>}
       {data.signings.map((x) => {
         const st = signingStep(x, now);
         return (
           <div key={x.key} className="ws-signing">
-            <div className="ws-signerhead"><b>{x.name}</b><span className={`chip ws-chip ${st.cls}`}>{st.text}</span></div>
-            <span className="secondary ws-small">{x.email}</span>
+            <div className="ws-signerhead"><b>{x.name}</b><span title={st.at ? central(st.at) : undefined}><Chip tone={st.tone}>{st.text}</Chip></span></div>
+            {doc.status !== "completed" && <span className="ws-sub">{x.email}</span>}
             {live && x.status === "sent" && (
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <button className="btn ghost sm" onClick={() => void copy(x.link)}><Copy size={13} />Copy link</button>
-                <button className="btn ghost sm" disabled={busy === x.key} onClick={() => void run(x.key, () => resend({ documentId: doc._id, signerKey: x.key }), `Reminder sent to ${x.name}.`)}>{busy === x.key ? <Spinner /> : <Mail size={13} />}Send reminder</button>
+              <div className="ws-btnrow">
+                <Button size="sm" onClick={() => void copy(x.link)}>Copy link</Button>
+                <Button size="sm" loading={busy === x.key} onClick={() => void run(x.key, () => resend({ documentId: doc._id, signerKey: x.key }), `Reminder sent to ${x.name}.`)}>Send reminder</Button>
               </div>
             )}
           </div>
         );
       })}
       {live && (
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          <button className="btn ghost sm" onClick={() => setExtending(true)}><CalendarClock size={13} />{expired ? "Extend the links" : "Change expiry"}</button>
-          <button className="btn ghost sm danger-text" onClick={() => setVoiding(true)}><Ban size={13} />Cancel signing…</button>
+        <div className="ws-btnrow end">
+          <Button variant="ghost" size="sm" onClick={() => setExtending(true)}>{expired ? "Extend the links" : "Change expiry"}</Button>
+          <span className="sp" />
+          <Button size="sm" onClick={() => setVoiding(true)}>Cancel signing…</Button>
         </div>
       )}
       {extending && (
@@ -677,7 +679,7 @@ function SigningCard({ data, show }: { data: Data; show: (m: string) => void }) 
             <label className="field"><span className="ws-flabel">Reason (optional, shown in the email)</span><input className="input sm" value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Updated the dates" /></label>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button className="btn ghost" onClick={() => setVoiding(false)}>Keep it</button>
-              <button className="btn danger" disabled={busy === "void"} onClick={() => void run("void", async () => { await voidDoc({ documentId: doc._id, reason: reason.trim() || undefined }); setVoiding(false); }, "Cancelled. The links no longer work.")}><Ban size={15} />Cancel signing</button>
+              <button className="btn danger" disabled={busy === "void"} onClick={() => void run("void", async () => { await voidDoc({ documentId: doc._id, reason: reason.trim() || undefined }); setVoiding(false); }, "Cancelled. The links no longer work.")}>Cancel signing</button>
             </div>
           </div>
         </Modal>
@@ -708,39 +710,40 @@ function FinishedCard({ data, show }: { data: Data; show: (m: string) => void })
       const a = document.createElement("a"); a.href = url; a.download = r.name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (e) { show(errText(e)); } finally { setBusy(null); }
   };
-  const Retry = ({ step }: { step: keyof typeof STEP_NAME }) => <button className="btn ghost sm" disabled={busy === step} onClick={() => void again(step)}>{busy === step ? <Spinner /> : <RefreshCw size={13} />}Retry</button>;
+  const Retry = ({ step }: { step: keyof typeof STEP_NAME }) => <Button variant="ghost" size="sm" loading={busy === step} onClick={() => void again(step)}>Retry</Button>;
+  const Done = () => <Icon name="check" size={16} className="ok" />;
   const f = doc.final;
   return (
-    <section className="ws-card">
-      <div className="ws-cardhead"><span className="label">Signed copy</span>{doc.completedAt && <span className="secondary ws-small">{central(doc.completedAt)}</span>}</div>
+    <section className="ws-card glass">
+      <span className="label" title={doc.completedAt ? central(doc.completedAt) : undefined}>Signed copy{doc.completedAt ? ` · ${new Date(doc.completedAt).toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", year: "numeric" })}` : ""}</span>
       {f ? (
         <>
-          <a className="btn primary" href={data.finalUrl ?? undefined} download={f.fileName} target="_blank" rel="noreferrer"><FileCheck2 size={15} />Download the signed PDF</a>
+          <div><a className="btn primary" href={data.finalUrl ?? undefined} download={f.fileName} target="_blank" rel="noreferrer">Download the signed PDF</a></div>
           <HashLine label="SHA-256" value={f.sha256} />
-          <button className="btn ghost sm" disabled={busy === "audit"} onClick={() => void getAudit()}>{busy === "audit" ? <Spinner /> : <Download size={13} />}Download the audit record (JSON)</button>
+          <div><Button variant="ghost" size="sm" loading={busy === "audit"} onClick={() => void getAudit()}>Download the audit record (JSON)</Button></div>
         </>
       ) : doc.finishError ? (
-        <><p className="caption ws-err"><TriangleAlert size={13} /> The signed copy couldn't be made: {doc.finishError}</p><Retry step="pdf" /></>
+        <><p className="caption ws-err"><Icon name="alert" size={14} /> The signed copy couldn't be made: {doc.finishError}</p><Retry step="pdf" /></>
       ) : <p className="caption"><Spinner /> Making the signed copy…</p>}
       {f && (
         <ul className="ws-steps">
           <li>
-            <Receipt size={14} />
-            {doc.invoice?.status === "created" ? <span>Draft invoice {money(doc.invoice.amountCents ?? 0)}{doc.invoice.livemode ? "" : " (test mode)"} · <a href={doc.invoice.url} target="_blank" rel="noreferrer">Review and send in Stripe <ExternalLink size={11} /></a></span>
+            <Icon name="invoice" size={16} />
+            {doc.invoice?.status === "created" ? <><span>Draft invoice {money(doc.invoice.amountCents ?? 0)}{doc.invoice.livemode ? "" : " (test mode)"}<br /><a className="ws-sub" href={doc.invoice.url} target="_blank" rel="noreferrer">Review and send in Stripe <Icon name="arrow-up-right" size={11} plain /></a></span><Done /></>
               : doc.invoice?.status === "none" ? <span className="secondary">No invoice set for this document.</span>
               : doc.invoice?.status === "failed" ? <><span className="ws-err">Stripe draft failed: {doc.invoice.error}</span><Retry step="invoice" /></>
               : <span className="secondary"><Spinner /> Stripe draft…</span>}
           </li>
           <li>
-            <Mail size={14} />
-            {doc.copies?.status === "sent" ? <span>Emailed to {doc.copies.sent.length} {doc.copies.sent.length === 1 ? "person" : "people"}: {doc.copies.sent.join(", ")}</span>
+            <Icon name="mail" size={16} />
+            {doc.copies?.status === "sent" ? <><span>Emailed to {doc.copies.sent.length} {doc.copies.sent.length === 1 ? "person" : "people"}<br /><span className="ws-sub">{doc.copies.sent.join(", ")}</span></span><Done /></>
               : doc.copies ? <><span className="ws-err">Emails {doc.copies.status === "partial" ? `sent to ${doc.copies.sent.length}, failed for` : "failed"}: {doc.copies.failed.join("; ") || "see the trail"}</span><Retry step="copies" /></>
               : <span className="secondary"><Spinner /> Emailing copies…</span>}
           </li>
           <li>
-            <Archive size={14} />
-            {doc.archive?.status === "archived" ? <span>In Dropbox › Apps/Wrangler Sign{doc.archive.pdfPath} {doc.archive.verified ? "· checked" : ""}</span>
-              : doc.archive?.status === "waiting" ? <span className="secondary">Waiting for the archive to be connected (<a {...linkProps("/sign")}>Contracts</a>). It's copied as soon as it is.</span>
+            <Icon name="folder" size={16} />
+            {doc.archive?.status === "archived" ? <><span>In Dropbox › Apps/Wrangler Sign{doc.archive.pdfPath}{doc.archive.verified ? <><br /><span className="ws-sub">checked</span></> : ""}</span><Done /></>
+              : doc.archive?.status === "waiting" ? <span className="secondary">Waiting for the archive to be connected (<a {...linkProps("/sign")}>Docs</a>). It's copied as soon as it is.</span>
               : doc.archive?.status === "failed" ? <><span className="ws-err">Archive failed: {doc.archive.error}</span><Retry step="archive" /></>
               : <span className="secondary"><Spinner /> Archiving…</span>}
           </li>

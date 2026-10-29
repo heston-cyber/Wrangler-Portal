@@ -646,7 +646,18 @@
     }
    }
   ],
-  "activity.recent": [],
+  "activity.recent": [
+   {
+    "at": 1793289600000,
+    "label": "WS-00012 Service Agreement — Harbor Coffee Launch",
+    "ref": {
+     "id": "000000000000000010056wsDocuments",
+     "kind": "document"
+    },
+    "what": "doc_viewed",
+    "who": "Maya Brooks"
+   }
+  ],
   "sign.list": [
    {
     "_id": "000000000000000010060wsDocuments",
@@ -662,7 +673,7 @@
     "hidden": false,
     "label": "WS-00013",
     "number": 13,
-    "pages": 1,
+    "pages": 2,
     "sentAt": null,
     "signers": [
      "Floor Trader"
@@ -686,7 +697,7 @@
     "hidden": false,
     "label": "WS-00012",
     "number": 12,
-    "pages": 1,
+    "pages": 2,
     "sentAt": 1793203200000,
     "signers": [
      "Maya Brooks"
@@ -710,7 +721,7 @@
     "hidden": false,
     "label": "WS-00011",
     "number": 11,
-    "pages": 1,
+    "pages": 2,
     "sentAt": 1792900800000,
     "signers": [
      "Dan Price"
@@ -723,7 +734,7 @@
   ],
   "builder.listBuilds": [
    {
-    "_id": "000000000000000000010094wsBuilds",
+    "_id": "000000000000000000010105wsBuilds",
     "client": "",
     "createdAt": 1793289600000,
     "documentId": null,
@@ -731,7 +742,7 @@
     "updatedAt": 1793282400000
    },
    {
-    "_id": "000000000000000000010095wsBuilds",
+    "_id": "000000000000000000010106wsBuilds",
     "client": "",
     "createdAt": 1793289600000,
     "documentId": null,
@@ -741,7 +752,7 @@
   ],
   "builder.listTemplates": [
    {
-    "_id": "000000000000000010097wsTemplates",
+    "_id": "000000000000000010108wsTemplates",
     "blocks": 23,
     "description": "",
     "name": "Usage Release",
@@ -749,7 +760,7 @@
     "updatedAt": 1793289600000
    },
    {
-    "_id": "000000000000000010096wsTemplates",
+    "_id": "000000000000000010107wsTemplates",
     "blocks": 23,
     "description": "",
     "name": "Change Order",
@@ -757,7 +768,7 @@
     "updatedAt": 1793289600000
    },
    {
-    "_id": "000000000000000010080wsTemplates",
+    "_id": "000000000000000010091wsTemplates",
     "blocks": 23,
     "description": "Wrangler's standard agreement",
     "name": "Service Agreement",
@@ -767,8 +778,8 @@
   ],
   "builder.listClauses": [
    {
-    "_creationTime": 1793289600000.082,
-    "_id": "00000000000000000010084wsClauses",
+    "_creationTime": 1793289600000.0928,
+    "_id": "00000000000000000010095wsClauses",
     "body": {
      "content": [
       {
@@ -799,8 +810,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.087,
-    "_id": "00000000000000000010089wsClauses",
+    "_creationTime": 1793289600000.0977,
+    "_id": "00000000000000000010100wsClauses",
     "body": {
      "content": [
       {
@@ -831,8 +842,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.08,
-    "_id": "00000000000000000010082wsClauses",
+    "_creationTime": 1793289600000.0908,
+    "_id": "00000000000000000010093wsClauses",
     "body": {
      "content": [
       {
@@ -854,8 +865,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.0898,
-    "_id": "00000000000000000010092wsClauses",
+    "_creationTime": 1793289600000.1006,
+    "_id": "00000000000000000010103wsClauses",
     "body": {
      "content": [
       {
@@ -955,8 +966,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.086,
-    "_id": "00000000000000000010088wsClauses",
+    "_creationTime": 1793289600000.0967,
+    "_id": "00000000000000000010099wsClauses",
     "body": {
      "content": [
       {
@@ -978,8 +989,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.088,
-    "_id": "00000000000000000010090wsClauses",
+    "_creationTime": 1793289600000.0986,
+    "_id": "00000000000000000010101wsClauses",
     "body": {
      "content": [
       {
@@ -1001,8 +1012,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.0908,
-    "_id": "00000000000000000010093wsClauses",
+    "_creationTime": 1793289600000.1016,
+    "_id": "00000000000000000010104wsClauses",
     "body": {
      "content": [
       {
@@ -1024,8 +1035,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.085,
-    "_id": "00000000000000000010087wsClauses",
+    "_creationTime": 1793289600000.0957,
+    "_id": "00000000000000000010098wsClauses",
     "body": {
      "content": [
       {
@@ -1047,8 +1058,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.084,
-    "_id": "00000000000000000010086wsClauses",
+    "_creationTime": 1793289600000.0947,
+    "_id": "00000000000000000010097wsClauses",
     "body": {
      "content": [
       {
@@ -1079,8 +1090,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.081,
-    "_id": "00000000000000000010083wsClauses",
+    "_creationTime": 1793289600000.0918,
+    "_id": "00000000000000000010094wsClauses",
     "body": {
      "content": [
       {
@@ -1120,8 +1131,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.079,
-    "_id": "00000000000000000010081wsClauses",
+    "_creationTime": 1793289600000.0898,
+    "_id": "00000000000000000010092wsClauses",
     "body": {
      "content": [
       {
@@ -1170,8 +1181,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.0889,
-    "_id": "00000000000000000010091wsClauses",
+    "_creationTime": 1793289600000.0996,
+    "_id": "00000000000000000010102wsClauses",
     "body": {
      "content": [
       {
@@ -1211,8 +1222,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.083,
-    "_id": "00000000000000000010085wsClauses",
+    "_creationTime": 1793289600000.0938,
+    "_id": "00000000000000000010096wsClauses",
     "body": {
      "content": [
       {
@@ -1421,7 +1432,7 @@
    ],
    "shares": [
     {
-     "_id": "00000000000000000000010066shares",
+     "_id": "00000000000000000000010077shares",
      "access": "comment",
      "expiresAt": null,
      "kind": "project",
@@ -1429,7 +1440,7 @@
      "who": "invited"
     },
     {
-     "_id": "00000000000000000000010071shares",
+     "_id": "00000000000000000000010082shares",
      "access": "view",
      "expiresAt": null,
      "kind": "video",
@@ -1472,7 +1483,7 @@
   ],
   "inbox.notes": [
    {
-    "_id": "0000000000000000010075inboxNotes",
+    "_id": "0000000000000000010086inboxNotes",
     "client": "Harbor Coffee",
     "clientId": "0000000000000000000010003clients",
     "createdAt": 1793289600000,
@@ -1489,7 +1500,7 @@
     "updatedAt": 1793289600000
    },
    {
-    "_id": "0000000000000000010072inboxNotes",
+    "_id": "0000000000000000010083inboxNotes",
     "client": "Harbor Coffee",
     "clientId": "0000000000000000000010003clients",
     "createdAt": 1793289600000,
@@ -1508,7 +1519,7 @@
   ],
   "inbox.forClient": [
    {
-    "_id": "0000000000000000010078inboxItems",
+    "_id": "0000000000000000010089inboxItems",
     "createdAt": 1793289600000,
     "emailed": false,
     "kind": "reply",
@@ -1528,7 +1539,7 @@
     "title": "Heston replied to your note"
    },
    {
-    "_id": "0000000000000000010077inboxItems",
+    "_id": "0000000000000000010088inboxItems",
     "createdAt": 1793289600000,
     "emailed": false,
     "kind": "to_sign",
@@ -1548,7 +1559,7 @@
     "title": "Sign: Service Agreement WS-00012"
    },
    {
-    "_id": "0000000000000000010076inboxItems",
+    "_id": "0000000000000000010087inboxItems",
     "createdAt": 1793289600000,
     "emailed": false,
     "kind": "cut_ready",
@@ -1568,7 +1579,7 @@
     "title": "New version: Harbor Coffee 30s v4"
    },
    {
-    "_id": "0000000000000000010074inboxItems",
+    "_id": "0000000000000000010085inboxItems",
     "createdAt": 1793289600000,
     "emailed": false,
     "kind": "note",
@@ -1898,7 +1909,7 @@
   },
   "shares.coveringVideo": [
    {
-    "_id": "00000000000000000000010071shares",
+    "_id": "00000000000000000000010082shares",
     "access": "view",
     "allVersions": true,
     "client": null,
@@ -1917,13 +1928,13 @@
     "projectId": null,
     "state": "on",
     "sub": "26127 Harbor Coffee Launch",
-    "token": "1Tdd41izJYDuqptjwDagMw",
-    "url": "https://app.wranglerportal.com/s/1Tdd41izJYDuqptjwDagMw",
+    "token": "BEKi4BF01AVvcLeR0MhCeQ",
+    "url": "https://app.wranglerportal.com/s/BEKi4BF01AVvcLeR0MhCeQ",
     "videoId": "00000000000000000000010024videos",
     "who": "link"
    },
    {
-    "_id": "00000000000000000000010066shares",
+    "_id": "00000000000000000000010077shares",
     "access": "comment",
     "allVersions": true,
     "client": null,
@@ -1957,8 +1968,8 @@
     "projectId": "000000000000000000010020projects",
     "state": "on",
     "sub": "Harbor Coffee",
-    "token": "3VlFEjUfuhcEYp6CJ4wmew",
-    "url": "https://app.wranglerportal.com/s/3VlFEjUfuhcEYp6CJ4wmew",
+    "token": "YHhY1DR7Z5jMSkq-3QuhpA",
+    "url": "https://app.wranglerportal.com/s/YHhY1DR7Z5jMSkq-3QuhpA",
     "videoId": null,
     "who": "invited"
    }
@@ -1980,7 +1991,7 @@
   "wsConnector.listKeys": [],
   "shares.list": [
    {
-    "_id": "00000000000000000000010071shares",
+    "_id": "00000000000000000000010082shares",
     "access": "view",
     "allVersions": true,
     "client": null,
@@ -1999,13 +2010,13 @@
     "projectId": null,
     "state": "on",
     "sub": "26127 Harbor Coffee Launch",
-    "token": "1Tdd41izJYDuqptjwDagMw",
-    "url": "https://app.wranglerportal.com/s/1Tdd41izJYDuqptjwDagMw",
+    "token": "BEKi4BF01AVvcLeR0MhCeQ",
+    "url": "https://app.wranglerportal.com/s/BEKi4BF01AVvcLeR0MhCeQ",
     "videoId": "00000000000000000000010024videos",
     "who": "link"
    },
    {
-    "_id": "00000000000000000000010066shares",
+    "_id": "00000000000000000000010077shares",
     "access": "comment",
     "allVersions": true,
     "client": null,
@@ -2039,12 +2050,571 @@
     "projectId": "000000000000000000010020projects",
     "state": "on",
     "sub": "Harbor Coffee",
-    "token": "3VlFEjUfuhcEYp6CJ4wmew",
-    "url": "https://app.wranglerportal.com/s/3VlFEjUfuhcEYp6CJ4wmew",
+    "token": "YHhY1DR7Z5jMSkq-3QuhpA",
+    "url": "https://app.wranglerportal.com/s/YHhY1DR7Z5jMSkq-3QuhpA",
     "videoId": null,
     "who": "invited"
    }
-  ]
+  ],
+  "sign.pendingRequests": [],
+  "sign.requestsFor": [],
+  "sign.get#000000000000000010056wsDocuments": {
+   "chain": {
+    "count": 5,
+    "ok": true
+   },
+   "doc": {
+    "_creationTime": 1793289600000.0547,
+    "_id": "000000000000000010056wsDocuments",
+    "businessId": "0000000000000000010000businesses",
+    "createdAt": 1793116800000,
+    "currentVersion": 1,
+    "label": "WS-00012",
+    "number": 12,
+    "sentAt": 1793203200000,
+    "sentVersion": 1,
+    "status": "sent",
+    "title": "Service Agreement — Harbor Coffee Launch",
+    "updatedAt": 1793203200000
+   },
+   "events": [
+    {
+     "actor": "heston",
+     "at": 1793289600000,
+     "detail": "Uploaded (2 pages)",
+     "email": null,
+     "ip": null,
+     "kind": "created",
+     "seq": 1,
+     "userAgent": null,
+     "versionNumber": 1
+    },
+    {
+     "actor": "heston",
+     "at": 1793289600000,
+     "detail": "Version 1 approved and locked.",
+     "email": null,
+     "ip": null,
+     "kind": "approved",
+     "seq": 2,
+     "userAgent": null,
+     "versionNumber": 1
+    },
+    {
+     "actor": "heston",
+     "at": 1793289600000,
+     "detail": null,
+     "email": null,
+     "ip": null,
+     "kind": "owner_signed",
+     "seq": 3,
+     "userAgent": null,
+     "versionNumber": 1
+    },
+    {
+     "actor": "heston",
+     "at": 1793289600000,
+     "detail": null,
+     "email": "maya@harborcoffee.com",
+     "ip": null,
+     "kind": "sent",
+     "seq": 4,
+     "userAgent": null,
+     "versionNumber": 1
+    },
+    {
+     "actor": "signer:client",
+     "at": 1793289600000,
+     "detail": null,
+     "email": "maya@harborcoffee.com",
+     "ip": "198.51.100.4",
+     "kind": "opened",
+     "seq": 5,
+     "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari",
+     "versionNumber": 1
+    }
+   ],
+   "finalUrl": null,
+   "owner": {
+    "adopted": false,
+    "email": "heston@wranglerproductions.com",
+    "name": null,
+    "title": null
+   },
+   "problems": [
+    "Adopt your signature first (Contracts › Your signature)."
+   ],
+   "signings": [
+    {
+     "consentAt": null,
+     "email": "maya@harborcoffee.com",
+     "key": "client",
+     "lastEmailAt": null,
+     "link": "https://sign.wranglerportal.com/kittokenkittokenkit1",
+     "lockedUntil": null,
+     "name": "Maya Brooks",
+     "openedAt": 1793278800000,
+     "order": 1,
+     "sentAt": 1793203200000,
+     "signedAt": null,
+     "status": "sent",
+     "verifiedAt": null
+    },
+    {
+     "consentAt": null,
+     "email": "heston@wranglerproductions.com",
+     "key": "heston",
+     "lastEmailAt": null,
+     "link": "https://sign.wranglerportal.com/kittokenkittokenkit3",
+     "lockedUntil": null,
+     "name": "Heston Hill",
+     "openedAt": null,
+     "order": 1,
+     "sentAt": 1793203200000,
+     "signedAt": 1793203200000,
+     "status": "signed",
+     "verifiedAt": null
+    }
+   ],
+   "version": {
+    "_creationTime": 1793289600000.0557,
+    "_id": "0000000000000000010057wsVersions",
+    "approvedAt": 1793203200000,
+    "boxes": [
+     {
+      "fromMarker": true,
+      "h": 0.06,
+      "id": "b1",
+      "kind": "sign",
+      "page": 1,
+      "signer": "client",
+      "w": 0.32,
+      "x": 0.12,
+      "y": 0.68
+     },
+     {
+      "fromMarker": true,
+      "h": 0.05,
+      "id": "b2",
+      "kind": "date",
+      "page": 1,
+      "signer": "client",
+      "w": 0.32,
+      "x": 0.12,
+      "y": 0.76
+     },
+     {
+      "fromMarker": true,
+      "h": 0.06,
+      "id": "b3",
+      "kind": "sign",
+      "page": 1,
+      "signer": "heston",
+      "w": 0.32,
+      "x": 0.56,
+      "y": 0.68
+     },
+     {
+      "fromMarker": true,
+      "h": 0.05,
+      "id": "b4",
+      "kind": "date",
+      "page": 1,
+      "signer": "heston",
+      "w": 0.32,
+      "x": 0.56,
+      "y": 0.76
+     }
+    ],
+    "businessId": "0000000000000000010000businesses",
+    "createdAt": 1793116800000,
+    "documentId": "000000000000000010056wsDocuments",
+    "editable": false,
+    "fileBytes": 12,
+    "fileId": "000000000000000000010055_storage",
+    "fileName": "WS-00012.pdf",
+    "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "fileUrl": "/kit-pdf/",
+    "isCurrent": true,
+    "number": 1,
+    "pages": [
+     {
+      "height": 792,
+      "rotate": 0,
+      "width": 612
+     },
+     {
+      "height": 792,
+      "rotate": 0,
+      "width": 612
+     }
+    ],
+    "signers": [
+     {
+      "email": "heston@wranglerproductions.com",
+      "key": "heston",
+      "name": "Heston Hill",
+      "order": 1
+     },
+     {
+      "email": "maya@harborcoffee.com",
+      "key": "client",
+      "name": "Maya Brooks",
+      "order": 1
+     }
+    ],
+    "signingOrder": "any",
+    "updatedAt": 1793116800000
+   },
+   "versions": [
+    {
+     "approvedAt": 1793203200000,
+     "createdAt": 1793116800000,
+     "fileName": "WS-00012.pdf",
+     "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+     "lockHash": null,
+     "number": 1,
+     "ownerSignedAt": null
+    }
+   ]
+  },
+  "sign.get#000000000000000010058wsDocuments": {
+   "chain": {
+    "count": 4,
+    "ok": true
+   },
+   "doc": {
+    "_creationTime": 1793289600000.0566,
+    "_id": "000000000000000010058wsDocuments",
+    "businessId": "0000000000000000010000businesses",
+    "completedAt": 1793095200000,
+    "createdAt": 1792512000000,
+    "currentVersion": 1,
+    "label": "WS-00011",
+    "number": 11,
+    "sentAt": 1792900800000,
+    "sentVersion": 1,
+    "status": "completed",
+    "title": "Change Order — Spirit Days",
+    "updatedAt": 1792900800000
+   },
+   "events": [
+    {
+     "actor": "heston",
+     "at": 1793289600000,
+     "detail": "Uploaded (2 pages)",
+     "email": null,
+     "ip": null,
+     "kind": "created",
+     "seq": 1,
+     "userAgent": null,
+     "versionNumber": 1
+    },
+    {
+     "actor": "heston",
+     "at": 1793289600000,
+     "detail": "Version 1 approved and locked.",
+     "email": null,
+     "ip": null,
+     "kind": "approved",
+     "seq": 2,
+     "userAgent": null,
+     "versionNumber": 1
+    },
+    {
+     "actor": "heston",
+     "at": 1793289600000,
+     "detail": null,
+     "email": null,
+     "ip": null,
+     "kind": "owner_signed",
+     "seq": 3,
+     "userAgent": null,
+     "versionNumber": 1
+    },
+    {
+     "actor": "heston",
+     "at": 1793289600000,
+     "detail": null,
+     "email": "maya@harborcoffee.com",
+     "ip": null,
+     "kind": "sent",
+     "seq": 4,
+     "userAgent": null,
+     "versionNumber": 1
+    }
+   ],
+   "finalUrl": null,
+   "owner": {
+    "adopted": false,
+    "email": "heston@wranglerproductions.com",
+    "name": null,
+    "title": null
+   },
+   "problems": [
+    "Adopt your signature first (Contracts › Your signature)."
+   ],
+   "signings": [
+    {
+     "consentAt": null,
+     "email": "dan@northline.church",
+     "key": "client",
+     "lastEmailAt": null,
+     "link": "https://sign.wranglerportal.com/kittokenkittokenkit2",
+     "lockedUntil": null,
+     "name": "Dan Price",
+     "openedAt": null,
+     "order": 1,
+     "sentAt": 1792771200000,
+     "signedAt": 1792857600000,
+     "status": "signed",
+     "verifiedAt": null
+    }
+   ],
+   "version": {
+    "_creationTime": 1793289600000.0576,
+    "_id": "0000000000000000010059wsVersions",
+    "approvedAt": 1792900800000,
+    "boxes": [
+     {
+      "fromMarker": true,
+      "h": 0.06,
+      "id": "b1",
+      "kind": "sign",
+      "page": 1,
+      "signer": "client",
+      "w": 0.32,
+      "x": 0.12,
+      "y": 0.68
+     },
+     {
+      "fromMarker": true,
+      "h": 0.05,
+      "id": "b2",
+      "kind": "date",
+      "page": 1,
+      "signer": "client",
+      "w": 0.32,
+      "x": 0.12,
+      "y": 0.76
+     },
+     {
+      "fromMarker": true,
+      "h": 0.06,
+      "id": "b3",
+      "kind": "sign",
+      "page": 1,
+      "signer": "heston",
+      "w": 0.32,
+      "x": 0.56,
+      "y": 0.68
+     },
+     {
+      "fromMarker": true,
+      "h": 0.05,
+      "id": "b4",
+      "kind": "date",
+      "page": 1,
+      "signer": "heston",
+      "w": 0.32,
+      "x": 0.56,
+      "y": 0.76
+     }
+    ],
+    "businessId": "0000000000000000010000businesses",
+    "createdAt": 1792512000000,
+    "documentId": "000000000000000010058wsDocuments",
+    "editable": false,
+    "fileBytes": 12,
+    "fileId": "000000000000000000010055_storage",
+    "fileName": "WS-00011.pdf",
+    "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "fileUrl": "/kit-pdf/",
+    "isCurrent": true,
+    "number": 1,
+    "pages": [
+     {
+      "height": 792,
+      "rotate": 0,
+      "width": 612
+     },
+     {
+      "height": 792,
+      "rotate": 0,
+      "width": 612
+     }
+    ],
+    "signers": [
+     {
+      "email": "heston@wranglerproductions.com",
+      "key": "heston",
+      "name": "Heston Hill",
+      "order": 1
+     },
+     {
+      "email": "dan@northline.church",
+      "key": "client",
+      "name": "Dan Price",
+      "order": 1
+     }
+    ],
+    "signingOrder": "any",
+    "updatedAt": 1792512000000
+   },
+   "versions": [
+    {
+     "approvedAt": 1792900800000,
+     "createdAt": 1792512000000,
+     "fileName": "WS-00011.pdf",
+     "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+     "lockHash": null,
+     "number": 1,
+     "ownerSignedAt": null
+    }
+   ]
+  },
+  "sign.get#000000000000000010060wsDocuments": {
+   "chain": {
+    "count": 1,
+    "ok": true
+   },
+   "doc": {
+    "_creationTime": 1793289600000.0586,
+    "_id": "000000000000000010060wsDocuments",
+    "businessId": "0000000000000000010000businesses",
+    "createdAt": 1793203200000,
+    "currentVersion": 1,
+    "label": "WS-00013",
+    "number": 13,
+    "status": "draft",
+    "title": "Service Agreement — Backrooms",
+    "updatedAt": 1793246400000
+   },
+   "events": [
+    {
+     "actor": "heston",
+     "at": 1793289600000,
+     "detail": "Uploaded (2 pages)",
+     "email": null,
+     "ip": "203.0.113.8",
+     "kind": "created",
+     "seq": 1,
+     "userAgent": "Mozilla/5.0 (Macintosh) Chrome",
+     "versionNumber": 1
+    }
+   ],
+   "finalUrl": null,
+   "owner": {
+    "adopted": false,
+    "email": "heston@wranglerproductions.com",
+    "name": null,
+    "title": null
+   },
+   "problems": [
+    "Adopt your signature first (Contracts › Your signature)."
+   ],
+   "signings": [],
+   "version": {
+    "_creationTime": 1793289600000.0596,
+    "_id": "0000000000000000010061wsVersions",
+    "boxes": [
+     {
+      "fromMarker": true,
+      "h": 0.06,
+      "id": "b1",
+      "kind": "sign",
+      "page": 1,
+      "signer": "client",
+      "w": 0.32,
+      "x": 0.12,
+      "y": 0.68
+     },
+     {
+      "fromMarker": true,
+      "h": 0.05,
+      "id": "b2",
+      "kind": "date",
+      "page": 1,
+      "signer": "client",
+      "w": 0.32,
+      "x": 0.12,
+      "y": 0.76
+     },
+     {
+      "fromMarker": true,
+      "h": 0.06,
+      "id": "b3",
+      "kind": "sign",
+      "page": 1,
+      "signer": "heston",
+      "w": 0.32,
+      "x": 0.56,
+      "y": 0.68
+     },
+     {
+      "fromMarker": true,
+      "h": 0.05,
+      "id": "b4",
+      "kind": "date",
+      "page": 1,
+      "signer": "heston",
+      "w": 0.32,
+      "x": 0.56,
+      "y": 0.76
+     }
+    ],
+    "businessId": "0000000000000000010000businesses",
+    "createdAt": 1793203200000,
+    "documentId": "000000000000000010060wsDocuments",
+    "editable": true,
+    "fileBytes": 12,
+    "fileId": "000000000000000000010055_storage",
+    "fileName": "WS-00013.pdf",
+    "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "fileUrl": "/kit-pdf/",
+    "isCurrent": true,
+    "number": 1,
+    "pages": [
+     {
+      "height": 792,
+      "rotate": 0,
+      "width": 612
+     },
+     {
+      "height": 792,
+      "rotate": 0,
+      "width": 612
+     }
+    ],
+    "signers": [
+     {
+      "email": "heston@wranglerproductions.com",
+      "key": "heston",
+      "name": "Heston Hill",
+      "order": 1
+     },
+     {
+      "email": "hello@floortrader.example",
+      "key": "client",
+      "name": "Floor Trader",
+      "order": 1
+     }
+    ],
+    "signingOrder": "any",
+    "updatedAt": 1793203200000
+   },
+   "versions": [
+    {
+     "approvedAt": null,
+     "createdAt": 1793203200000,
+     "fileName": "WS-00013.pdf",
+     "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+     "lockHash": null,
+     "number": 1,
+     "ownerSignedAt": null
+    }
+   ]
+  }
  },
  "client": {
   "users.me": {
@@ -2076,7 +2646,7 @@
     "kind": "project",
     "label": "26127 Harbor Coffee Launch",
     "sub": "Harbor Coffee",
-    "token": "3VlFEjUfuhcEYp6CJ4wmew",
+    "token": "YHhY1DR7Z5jMSkq-3QuhpA",
     "videos": [
      {
       "_id": "00000000000000000000010030videos",
@@ -2108,7 +2678,7 @@
   "inbox.mine": {
    "items": [
     {
-     "_id": "0000000000000000010078inboxItems",
+     "_id": "0000000000000000010089inboxItems",
      "createdAt": 1793289600000,
      "emailed": false,
      "kind": "reply",
@@ -2119,7 +2689,7 @@
      "title": "Heston replied to your note"
     },
     {
-     "_id": "0000000000000000010077inboxItems",
+     "_id": "0000000000000000010088inboxItems",
      "createdAt": 1793289600000,
      "emailed": false,
      "kind": "to_sign",
@@ -2130,7 +2700,7 @@
      "title": "Sign: Service Agreement WS-00012"
     },
     {
-     "_id": "0000000000000000010076inboxItems",
+     "_id": "0000000000000000010087inboxItems",
      "createdAt": 1793289600000,
      "emailed": false,
      "kind": "cut_ready",
@@ -2141,7 +2711,7 @@
      "title": "New version: Harbor Coffee 30s v4"
     },
     {
-     "_id": "0000000000000000010073inboxItems",
+     "_id": "0000000000000000010084inboxItems",
      "createdAt": 1793289600000,
      "emailed": false,
      "kind": "note",
@@ -2174,6 +2744,9 @@
  },
  "ids": {
   "harbor": "0000000000000000000010003clients",
-  "video": "00000000000000000000010024videos"
+  "video": "00000000000000000000010024videos",
+  "docSent": "000000000000000010056wsDocuments",
+  "docSigned": "000000000000000010058wsDocuments",
+  "docDraft": "000000000000000010060wsDocuments"
  }
 }

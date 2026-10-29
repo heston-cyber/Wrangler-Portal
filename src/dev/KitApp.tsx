@@ -10,8 +10,9 @@ import aerial from "./stills/aerial.jpg";
 import premiere from "./stills/premiere.jpg";
 import bts from "./stills/bts.jpg";
 import landscape from "./stills/landscape.jpg";
+import pdf from "./stills/sample.pdf?url";
 
-const STILLS: Record<string, string> = { stadium, aerial, premiere, bts, landscape };
+const STILLS: Record<string, string> = { stadium, aerial, premiere, bts, landscape, pdf };
 type Side = "owner" | "client";
 
 // Point every sample thumbnail at a local still.
@@ -22,18 +23,21 @@ function localStills<T>(v: T): T {
 
 function mockClient(side: Side) {
   const data = localStills((fixtures as unknown as Record<Side, Record<string, unknown>>)[side]);
-  const answer = (name: string) => {
+  // A sample made for particular arguments is stored as "module.fn#<first argument>" (e.g. one per document).
+  const answer = (name: string, args?: Record<string, unknown>) => {
     const key = name.replace(":", ".").replace(/\//g, ".");
+    const first = args && Object.values(args)[0];
+    if (typeof first === "string" && `${key}#${first}` in data) return data[`${key}#${first}`];
     if (key in data) return data[key];
     console.info(`[kit] no sample for ${key}`);
     return null;
   };
   return {
-    watchQuery: (query: unknown) => {
+    watchQuery: (query: unknown, args?: Record<string, unknown>) => {
       const name = getFunctionName(query as never);
-      return { onUpdate: () => () => {}, localQueryResult: () => answer(name), localQueryLogs: () => undefined, journal: () => undefined };
+      return { onUpdate: () => () => {}, localQueryResult: () => answer(name, args), localQueryLogs: () => undefined, journal: () => undefined };
     },
-    query: async (query: unknown) => answer(getFunctionName(query as never)),
+    query: async (query: unknown, args?: Record<string, unknown>) => answer(getFunctionName(query as never), args),
     mutation: async () => null,
     action: async () => null,
     connectionState: () => ({ hasInflightRequests: false, isWebSocketConnected: true, timeOfOldestInflightRequest: null, hasEverConnected: true, connectionCount: 1, connectionRetries: 0, inflightMutations: 0, inflightActions: 0 }),

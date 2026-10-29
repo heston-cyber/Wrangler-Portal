@@ -90,16 +90,30 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       const pdf = await ctx.storage.store(new Blob(["%PDF-1.4 kit"], { type: "application/pdf" }));
       const doc = async (number: number, title: string, status: "sent" | "completed" | "draft", age: number, signer: [string, string]) => {
         const documentId = await ctx.db.insert("wsDocuments", { businessId: A, number, title, status, currentVersion: 1, createdAt: now - age, updatedAt: now - age / 2, ...(status !== "draft" ? { sentAt: now - age / 2, sentVersion: 1 } : {}), ...(status === "completed" ? { completedAt: now - age / 4 } : {}) } as never);
-        await ctx.db.insert("wsVersions", { businessId: A, documentId, number: 1, fileId: pdf, fileName: `WS-${String(number).padStart(5, "0")}.pdf`, fileSha256: "0".repeat(64), fileBytes: 12, pages: [{ width: 612, height: 792, rotate: 0 }],
-          signers: [{ key: "client", name: signer[0], email: signer[1], order: 1 }], boxes: [], signingOrder: "any", ...(status !== "draft" ? { approvedAt: now - age / 2 } : {}), createdAt: now - age, updatedAt: now - age } as never);
+        await ctx.db.insert("wsVersions", { businessId: A, documentId, number: 1, fileId: pdf, fileName: `WS-${String(number).padStart(5, "0")}.pdf`, fileSha256: "0".repeat(64), fileBytes: 12, pages: [{ width: 612, height: 792, rotate: 0 }, { width: 612, height: 792, rotate: 0 }],
+          signers: [{ key: "heston", name: "Heston Hill", email: "heston@wranglerproductions.com", order: 1 }, { key: "client", name: signer[0], email: signer[1], order: 1 }],
+          boxes: [
+            { id: "b1", signer: "client", kind: "sign", page: 1, x: 0.12, y: 0.68, w: 0.32, h: 0.06, fromMarker: true }, { id: "b2", signer: "client", kind: "date", page: 1, x: 0.12, y: 0.76, w: 0.32, h: 0.05, fromMarker: true },
+            { id: "b3", signer: "heston", kind: "sign", page: 1, x: 0.56, y: 0.68, w: 0.32, h: 0.06, fromMarker: true }, { id: "b4", signer: "heston", kind: "date", page: 1, x: 0.56, y: 0.76, w: 0.32, h: 0.05, fromMarker: true },
+          ],
+          signingOrder: "any", ...(status !== "draft" ? { approvedAt: now - age / 2 } : {}), createdAt: now - age, updatedAt: now - age } as never);
         return documentId;
       };
       const d1 = await doc(12, "Service Agreement — Harbor Coffee Launch", "sent", 2 * DAY, ["Maya Brooks", "maya@harborcoffee.com"]);
       const d2 = await doc(11, "Change Order — Spirit Days", "completed", 9 * DAY, ["Dan Price", "dan@northline.church"]);
-      await doc(13, "Service Agreement — Backrooms", "draft", 1 * DAY, ["Floor Trader", "hello@floortrader.example"]);
-      await ctx.db.insert("wsSignings", { businessId: A, documentId: d1, versionNumber: 1, signerKey: "client", name: "Maya Brooks", email: "maya@harborcoffee.com", order: 1, token: "kittokenkittokenkit1", status: "sent", sentAt: now - DAY } as never);
+      const d3 = await doc(13, "Service Agreement — Backrooms", "draft", 1 * DAY, ["Floor Trader", "hello@floortrader.example"]);
+      await ctx.db.insert("wsSignings", { businessId: A, documentId: d1, versionNumber: 1, signerKey: "client", name: "Maya Brooks", email: "maya@harborcoffee.com", order: 1, token: "kittokenkittokenkit1", status: "sent", sentAt: now - DAY, openedAt: now - 3 * HOUR } as never);
+      await ctx.db.insert("wsSignings", { businessId: A, documentId: d1, versionNumber: 1, signerKey: "heston", name: "Heston Hill", email: "heston@wranglerproductions.com", order: 1, token: "kittokenkittokenkit3", status: "signed", sentAt: now - DAY, signedAt: now - DAY } as never);
       await ctx.db.insert("wsSignings", { businessId: A, documentId: d2, versionNumber: 1, signerKey: "client", name: "Dan Price", email: "dan@northline.church", order: 1, token: "kittokenkittokenkit2", status: "signed", sentAt: now - 6 * DAY, signedAt: now - 5 * DAY } as never);
-      return { A, harbor, heston, maya, p1, harbor30, hestonSub: await sess(heston), mayaSub: await sess(maya) };
+      // Audit trails through the real chain, so they read "Intact".
+      const { appendEvent } = await import("../convex/lib/wsAudit");
+      for (const [d, sent] of [[d1, true], [d2, true]] as const) {
+        await appendEvent(ctx as never, d, { kind: "created", actor: "heston", versionNumber: 1, detail: "Uploaded (2 pages)" });
+        if (sent) { await appendEvent(ctx as never, d, { kind: "approved", actor: "heston", versionNumber: 1, detail: "Version 1 approved and locked." }); await appendEvent(ctx as never, d, { kind: "owner_signed", actor: "heston", versionNumber: 1 }); await appendEvent(ctx as never, d, { kind: "sent", actor: "heston", versionNumber: 1, email: "maya@harborcoffee.com" }); }
+      }
+      await appendEvent(ctx as never, d1, { kind: "opened", actor: "signer:client", versionNumber: 1, email: "maya@harborcoffee.com", ip: "198.51.100.4", userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari" });
+      await appendEvent(ctx as never, d3, { kind: "created", actor: "heston", versionNumber: 1, detail: "Uploaded (2 pages)", ip: "203.0.113.8", userAgent: "Mozilla/5.0 (Macintosh) Chrome" });
+      return { A, harbor, heston, maya, p1, harbor30, d1, d2, d3, hestonSub: await sess(heston), mayaSub: await sess(maya) };
     });
     const owner = t.withIdentity({ subject: w.hestonSub });
     const client = t.withIdentity({ subject: w.mayaSub });
@@ -138,18 +152,24 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["inbox.notes", {}], ["inbox.forClient", { clientId: w.harbor }],
       ["library.video", { videoId: w.harbor30.v }], ["notes.forVersion", { versionId: w.harbor30.last }], ["transcripts.forVersion", { versionId: w.harbor30.last }],
       ["waveforms.forVersion", { versionId: w.harbor30.last }], ["views.forVideo", { videoId: w.harbor30.v }], ["shares.coveringVideo", { videoId: w.harbor30.v }], ["connector.listKeys", {}], ["register.sheetKey", {}], ["dropbox.status", {}], ["dropbox.flagged", {}], ["wsConnector.listKeys", {}], ["shares.list", {}],
+      ["sign.pendingRequests", {}], ["sign.requestsFor", { documentId: w.d1 }],
+      ["sign.get#" + w.d1, { documentId: w.d1 }], ["sign.get#" + w.d2, { documentId: w.d2 }], ["sign.get#" + w.d3, { documentId: w.d3 }],
     ];
     const CLIENT: [string, Record<string, unknown>][] = [["users.me", {}], ["business.brand", {}], ["shares.mine", {}], ["inbox.mine", {}], ["inbox.unreadCount", {}], ["documents.mine", {}]];
     const run = async (as: typeof owner, list: [string, Record<string, unknown>][]) => {
       const out: Record<string, unknown> = {};
       for (const [key, args] of list) {
-        const [m, f] = key.split(".");
+        const [m, f] = key.split("#")[0].split(".");
         try { out[key] = await as.query((api as never)[m][f], args as never); }
         catch (e) { out[key] = null; console.warn(`kit: ${key} refused: ${(e as Error).message.slice(0, 120)}`); }
       }
       return out;
     };
-    const fixtures = { owner: await run(owner, OWNER), client: await run(client, CLIENT), ids: { harbor: w.harbor, video: w.harbor30.v } };
+    const owned = await run(owner, OWNER);
+    // The PDFs in convex-test storage can't be fetched by a browser: point them at the kit's sample PDF.
+    const pdfs = (v: unknown): unknown => JSON.parse(JSON.stringify(v), (k, x) => ((k === "fileUrl" || k === "finalUrl") && typeof x === "string" ? "/kit-pdf/" : x));
+    for (const k of Object.keys(owned)) if (k.startsWith("sign.get#")) owned[k] = pdfs(owned[k]);
+    const fixtures = { owner: owned, client: await run(client, CLIENT), ids: { harbor: w.harbor, video: w.harbor30.v, docSent: w.d1, docSigned: w.d2, docDraft: w.d3 } };
     writeFileSync(join(__dirname, "..", "src", "dev", "fixtures.json"), JSON.stringify(fixtures, null, 1));
     vi.useRealTimers();
   });
