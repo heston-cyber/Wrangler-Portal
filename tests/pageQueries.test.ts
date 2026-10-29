@@ -65,6 +65,9 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "approvals.forVideo": { pages: ["video"], args: (i, s) => ({ videoId: i.videoId, share: s ?? undefined }) }, // client approval (Phase 1)
   "business.settings": { pages: ["owner"], args: () => "skip" }, // Settings › Business (owner only)
   "activity.feed": { pages: ["owner"], args: () => "skip" },
+  "activity.recent": { pages: ["owner"], args: () => "skip" }, // back-office Home
+  "home.needs": { pages: ["owner"], args: () => "skip" }, // back-office Home
+  "clients.directory": { pages: ["owner"], args: () => "skip" }, // Home and Clients
   "clients.listInvites": { pages: ["owner"], args: () => "skip" },
   "dropbox.status": { pages: ["owner"], args: () => "skip" },
   "dropbox.flagged": { pages: ["owner"], args: () => "skip" },
