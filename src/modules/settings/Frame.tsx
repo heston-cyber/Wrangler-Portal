@@ -1,6 +1,6 @@
 // Settings' frame (P1 / Owner / Settings, page "S5 · Settings"): the breadcrumb, the section menu on the left and the
 // section on the right. On phones the menu is its own page (/settings) and each section has a back link to it.
-import { useAuthActions } from "@convex-dev/auth/react";
+import { useSignOutAsk } from "../../shell/SignOut";
 import { Sep, TopBar } from "../../shell/Shell";
 import { Icon, type IconName } from "../../ui/Icon";
 import { linkProps } from "../../lib/router";
@@ -32,7 +32,7 @@ export function sectionOf(path: string, search: string, hash: string): SectionKe
 }
 
 export function SectionMenu({ active, list }: { active: SectionKey | null; list?: boolean }) {
-  const { signOut } = useAuthActions();
+  const [signOut, signOutDialog] = useSignOutAsk();
   return (
     <nav className={`wp-setmenu glass${list ? " list" : ""}`} aria-label="Settings">
       {SECTIONS.map((s) => (
@@ -40,7 +40,8 @@ export function SectionMenu({ active, list }: { active: SectionKey | null; list?
           <Icon name={s.icon} size={16} /><span>{s.label}</span>{list && <Icon name="chevron-right" size={16} className="go" />}
         </a>
       ))}
-      <button type="button" className="item" onClick={() => void signOut()}><Icon name="sign-out" size={16} /><span>Sign out</span></button>
+      <button type="button" className="item" onClick={signOut}><Icon name="sign-out" size={16} /><span>Sign out</span></button>
+      {signOutDialog}
     </nav>
   );
 }

@@ -343,6 +343,7 @@ export default function Builder({ mode }: { mode: Mode }) {
           <button className="icon-btn sm" aria-label="Redo" title={`Redo (${mac ? "⇧⌘Z" : "Ctrl+Shift+Z"})`} disabled={!hist.current.future.length} onClick={() => step("redo")}><Icon name="arrow-right" size={18} /></button>
         </span>
         <span className={`ws-save hide-sm ${saveState}`}>{saveState === "saving" ? <><Spinner /> Saving</> : saveState === "error" ? <><Icon name="alert" size={14} /> Not saved</> : <><Icon name="check" size={14} plain /> Saved</>}</span>
+        <Button variant="ghost" size="sm" className="wsb-selbtn" icon="check-circle" onClick={() => (picking ? endPick() : startPick())} title="Tick blocks to move, style, duplicate or delete them together (Esc to finish)">{picking ? "Done" : "Select"}</Button>
         <Button variant="ghost" size="sm" className="hide-sm" loading={busy === "preview"} onClick={() => void onPreview()}>Preview PDF</Button>
         {mode.kind === "build" ? <>
           <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setAsTemplate(true)}>Save as template</Button>
@@ -425,15 +426,17 @@ export default function Builder({ mode }: { mode: Mode }) {
           <button onMouseDown={(e) => e.preventDefault()} onClick={() => startPick()}><CircleCheck size={18} /><span>Select</span></button>
         </nav>
       )}
-      {/* Select mode (phones): what's ticked, the actions for it, and the ✓ to finish. */}
+      {/* Select mode (phones, and the Select button on a computer): what's ticked, the actions for it, and the ✓ to finish. */}
       {picking && editor && <>
         <button className="wsb-pickdone" aria-label="Done selecting" onClick={endPick}><Check size={24} strokeWidth={3} /></button>
         <div className="wsb-pickcount" role="status">{ticked ? `${ticked} selected` : "Tap blocks to select them"}</div>
         <nav className="wsb-phonebar wsb-pickbar" aria-label="Selected blocks">
+          <span className="wsb-pickn" role="status">{ticked ? `${ticked} selected` : "Click blocks to select them"}</span>
           <button disabled={!ticked} onClick={() => { setTab("format"); setActions(false); setSheet(!(sheet && tab === "format")); }} className={sheet && tab === "format" ? "on" : ""}><Type size={18} /><span>Style</span></button>
           <button onClick={() => { insertAfterPicked(editor); setTab("insert"); setActions(false); setSheet(true); }}><Plus size={18} /><span>+ Content</span></button>
           <button className={actions ? "on" : ""} onClick={() => { setSheet(false); setActions(!actions); }}><Ellipsis size={18} /><span>Actions</span></button>
           <button className="danger" disabled={!ticked} onClick={() => { const n = deletePicked(editor); setSheet(false); setActions(false); show(`Deleted ${n} block${n === 1 ? "" : "s"}. Undo brings ${n === 1 ? "it" : "them"} back.`); }}><Trash2 size={18} /><span>Delete</span></button>
+          <button className="wsb-pickfin" onClick={endPick}><Check size={18} /><span>Done</span></button>
         </nav>
         {actions && (
           <div className="wsb-pickactions" role="menu">

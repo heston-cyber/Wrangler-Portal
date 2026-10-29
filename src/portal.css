@@ -1449,3 +1449,21 @@ button.wp-hubcard[aria-busy], button.wp-tplcard[aria-busy] { opacity: 1; }
 .wp-sharelist.inshell { min-height: 0; background: transparent; overflow-y: auto; flex: 1; }
 .wp-sharelist.inshell .inner { width: 100%; max-width: none; }
 @media (max-width: 820px) { .wp-sharelist.inshell { padding: 0 16px 24px; overflow: visible; } }
+
+/* Builder select mode on a computer (Heston, Oct 29): the Select button in the top bar; a floating bar at the bottom */
+.wsb-pickn, .wsb-pickfin { display: none; }
+@media (max-width: 760px) { .wsb-selbtn { display: none !important; } }
+@media (min-width: 761px) {
+  .wsb-pickdone, .wsb-pickcount { display: none !important; }
+  .wsb-pickbar.wsb-phonebar {
+    display: flex; position: fixed; z-index: 61; left: 50%; bottom: 24px; transform: translateX(-50%); gap: 4px; align-items: center;
+    padding: 6px; border-radius: 16px; border: 1px solid var(--border-hairline); box-shadow: var(--shadow-float); background: var(--surface-float); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  }
+  .wsb-pickbar button { display: flex; align-items: center; gap: 8px; border: 0; background: transparent; color: var(--text-primary); font: 400 13px/1 var(--font-title); padding: 10px 12px; border-radius: 10px; cursor: pointer; white-space: nowrap; }
+  .wsb-pickbar button:hover:not(:disabled) { background: var(--surface-block-hover); }
+  .wsb-pickbar button.on { background: var(--accent-tint); }
+  .wsb-pickbar .wsb-pickn { display: inline; padding: 0 12px 0 10px; font-size: var(--fs-text-small); color: var(--text-secondary); white-space: nowrap; }
+  .wsb-pickbar .wsb-pickfin { display: flex; background: var(--accent); color: var(--on-accent); margin-left: 4px; }
+  .wsb-pickbar .wsb-pickfin:hover { background: var(--accent); filter: brightness(1.1); }
+  .wsb-pickactions { left: 50%; right: auto; transform: translateX(-50%); bottom: 84px; }
+}

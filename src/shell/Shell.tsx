@@ -4,7 +4,7 @@
 // wears its business's look (lib/brand.ts). Work surfaces (the review page) hide the sidebar and open it as a drawer.
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "convex/react";
-import { useAuthActions } from "@convex-dev/auth/react";
+import { useSignOutAsk } from "./SignOut";
 import { api } from "../../convex/_generated/api";
 import { linkProps, navigate, useLocation } from "../lib/router";
 import { useUploads } from "../lib/uploads";
@@ -134,7 +134,7 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
 }) {
   const { path } = useLocation();
   const uploads = useUploads().filter((u) => u.status === "starting" || u.status === "uploading");
-  const { signOut } = useAuthActions();
+  const [signOut, signOutDialog] = useSignOutAsk();
   // A layer opens by itself on its own pages; the chevron opens or closes it anywhere.
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const isOpen = (it: Item) => open[it.to] ?? !!it.layerHas?.(path);
@@ -209,8 +209,9 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
         <div className="mlabel" style={{ textTransform: "none", letterSpacing: 0, fontFamily: "var(--font-body)", fontSize: 12 }}>{me.email}</div>
         <MenuItem icon={<Icon name="settings" size={18} />} onSelect={() => navigate("/settings")}>Settings</MenuItem>
         <MenuSep />
-        <MenuItem icon={<Icon name="sign-out" size={18} />} onSelect={() => void signOut()}>Sign out</MenuItem>
+        <MenuItem icon={<Icon name="sign-out" size={18} />} onSelect={signOut}>Sign out</MenuItem>
       </Menu>
+      {signOutDialog}
     </nav>
   );
 }
@@ -255,20 +256,21 @@ function TabBar({ items }: { items: Item[] }) {
 
 /** The More page on phones: what doesn't fit in the tab bar. */
 export function MorePage({ me, side }: { me: Me; side: Side }) {
-  const { signOut } = useAuthActions();
+  const [signOut, signOutDialog] = useSignOutAsk();
   const rows: { to?: string; icon: IconName; title: string; sub?: string; onClick?: () => void }[] = side === "owner"
     ? [
       { to: "/sent", icon: "send", title: "Sent", sub: "Notes and items you sent" },
       { to: "/settings", icon: "settings", title: "Settings", sub: "Business, Register, Dropbox, connectors…" },
       { to: "/settings/account", icon: "user", title: "Account", sub: `${me.name ?? ""}${me.name ? " · " : ""}${me.email}` },
-      { icon: "sign-out", title: "Sign out", onClick: () => void signOut() },
+      { icon: "sign-out", title: "Sign out", onClick: signOut },
     ]
     : [
       { to: "/settings", icon: "settings", title: "Settings", sub: `${me.name ?? ""}${me.name ? " · " : ""}${me.email}` },
-      { icon: "sign-out", title: "Sign out", onClick: () => void signOut() },
+      { icon: "sign-out", title: "Sign out", onClick: signOut },
     ];
   return (
     <>
+      {signOutDialog}
       <TopBar><span className="here">More</span></TopBar>
       <div className="wp-page">
         <div className="wp-morelist">

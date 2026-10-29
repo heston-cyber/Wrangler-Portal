@@ -6,9 +6,11 @@ import { api } from "../../../convex/_generated/api";
 import { Button, Toggle } from "../../ui/wp";
 import { useToast } from "../../ui/kit";
 import { TopBar } from "../../shell/Shell";
+import { useSignOutAsk } from "../../shell/SignOut";
 
 export default function ClientSettings({ me }: { me: { name: string | null; email: string } }) {
-  const { signOut, signIn } = useAuthActions();
+  const { signIn } = useAuthActions();
+  const [signOut, signOutDialog] = useSignOutAsk();
   const setName = useMutation(api.users.setName);
   const prefs = useQuery(api.emails.myPrefs, {});
   const brands = useQuery(api.business.brand);
@@ -40,7 +42,7 @@ export default function ClientSettings({ me }: { me: { name: string | null; emai
             <span className="l"><b>Email me when something new arrives</b><span>{`New cuts, replies to your notes and notes from ${business}. Documents to sign always arrive by email.`}</span></span>
             <span className="v"><Toggle label="Email me when something new arrives" checked={prefs?.on ?? true} disabled={prefs === undefined} onChange={async (on) => { await setPrefs({ on }); show(on ? "Emails on." : "Emails off."); }} /></span>
           </div>
-          <div className="r"><span className="l"><b>Sign out</b></span><span className="v"><Button size="sm" onClick={() => void signOut()}>Sign out</Button></span></div>
+          <div className="r"><span className="l"><b>Sign out</b></span><span className="v"><Button size="sm" onClick={signOut}>Sign out</Button></span></div>{signOutDialog}
         </section>
       </div>
       {toast}

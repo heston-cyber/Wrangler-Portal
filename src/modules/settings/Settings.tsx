@@ -2,7 +2,7 @@
 // Register, Dropbox drop folder, Claude connectors, Google Sheet copy, Clients and Shares. Appearance is gone (dark only).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { useAuthActions } from "@convex-dev/auth/react";
+import { useSignOutAsk } from "../../shell/SignOut";
 import { Copy, KeyRound, Plus, Sheet, X } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -115,7 +115,7 @@ function useNarrow() {
 
 function AccountSection({ me, show }: { me: { name: string | null; email: string }; show: (m: string) => void }) {
   const setName = useMutation(api.users.setName);
-  const { signOut } = useAuthActions();
+  const [signOut, signOutDialog] = useSignOutAsk();
   const [name, setN] = useState(me.name ?? "");
   const changed = name.trim() !== (me.name ?? "") && name.trim().length > 0;
   return (
@@ -135,9 +135,10 @@ function AccountSection({ me, show }: { me: { name: string | null; email: string
       <div className="panel">
         <div className="prow">
           <span className="pl">Sign out <span className="psub">Ends this session on this device.</span></span>
-          <span className="pr"><Button size="sm" onClick={() => void signOut()}>Sign out</Button></span>
+          <span className="pr"><Button size="sm" onClick={signOut}>Sign out</Button></span>
         </div>
       </div>
+      {signOutDialog}
     </>
   );
 }
