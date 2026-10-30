@@ -84,12 +84,16 @@ export type StripeStatus = "pending" | "needs_info" | "connected" | "disconnecte
 /** What the Settings page shows, from a Stripe account object. */
 export function accountState(a: StripeResult) {
   const charges = !!a.charges_enabled, payouts = !!a.payouts_enabled, submitted = !!a.details_submitted;
-  const due = ((a.requirements?.currently_due as string[] | undefined) ?? []).length + ((a.requirements?.past_due as string[] | undefined) ?? []).length;
+  const dueList = [...new Set([...((a.requirements?.past_due as string[] | undefined) ?? []), ...((a.requirements?.currently_due as string[] | undefined) ?? [])])];
+  const due = dueList.length;
+  const pending = ((a.requirements?.pending_verification as string[] | undefined) ?? []).length;
   const bank = (a.external_accounts?.data as Array<{ last4?: string }> | undefined)?.[0]?.last4 ?? null;
   const status: StripeStatus = charges && submitted && due === 0 ? "connected" : submitted || due > 0 ? "needs_info" : "pending";
   return {
     status, chargesEnabled: charges, payoutsEnabled: payouts, detailsSubmitted: submitted,
     displayName: (a.business_profile?.name as string | undefined) || (a.settings?.dashboard?.display_name as string | undefined) || null,
     bankLast4: bank, livemode: !!a.livemode,
+    // What Stripe is still asking for (field names), why payments are off, and whether it's only checking.
+    due: dueList.slice(0, 20), disabledReason: (a.requirements?.disabled_reason as string | undefined) ?? null, verifying: pending > 0,
   };
 }

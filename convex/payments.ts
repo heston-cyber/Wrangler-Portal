@@ -34,7 +34,7 @@ export const settings = query({
       platform: { ready: !!platformKey(), mode: keyMode(platformKey()) },
       stripe: s ? {
         status: s.status, displayName: s.displayName ?? null, chargesEnabled: s.chargesEnabled, payoutsEnabled: s.payoutsEnabled,
-        bankLast4: s.bankLast4 ?? null, livemode: s.livemode, connectedAt: s.connectedAt ?? null, disconnectedAt: s.disconnectedAt ?? null, checkedAt: s.checkedAt,
+        bankLast4: s.bankLast4 ?? null, livemode: s.livemode, due: s.due ?? [], disabledReason: s.disabledReason ?? null, verifying: !!s.verifying, connectedAt: s.connectedAt ?? null, disconnectedAt: s.disconnectedAt ?? null, checkedAt: s.checkedAt,
       } : null,
       openInvoices: 0, // Part B step 2 counts them
     };
@@ -133,6 +133,7 @@ export const saveAccount = internalMutation({
         chargesEnabled: st.chargesEnabled, payoutsEnabled: st.payoutsEnabled, detailsSubmitted: st.detailsSubmitted,
         ...((st.displayName ?? b.stripe?.displayName) ? { displayName: st.displayName ?? b.stripe?.displayName } : {}),
         ...((st.bankLast4 ?? b.stripe?.bankLast4) ? { bankLast4: st.bankLast4 ?? b.stripe?.bankLast4 } : {}), livemode: st.livemode,
+        due: st.due, ...(st.disabledReason ? { disabledReason: st.disabledReason } : {}), verifying: st.verifying,
         startedAt: b.stripe?.startedAt ?? now,
         ...(status === "connected" ? { connectedAt: b.stripe?.status === "connected" ? b.stripe.connectedAt ?? now : now } : b.stripe?.connectedAt ? { connectedAt: b.stripe.connectedAt } : {}),
         ...(status === "disconnected" && b.stripe?.disconnectedAt ? { disconnectedAt: b.stripe.disconnectedAt } : {}),

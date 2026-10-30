@@ -11,6 +11,19 @@ import { useLocation } from "../../lib/router";
 import { SetHead } from "./Frame";
 
 const err = (e: unknown) => String((e as Error).message ?? e).replace(/^.*ConvexError: /, "").split("\n")[0];
+// Stripe's field names for what it still needs, in words.
+const FIELD: Record<string, string> = {
+  "business_profile.url": "business website", "business_profile.mcc": "business category", "business_profile.product_description": "what the business sells",
+  "business_profile.support_phone": "support phone number", "business_type": "business type", "external_account": "payout bank account",
+  "tos_acceptance.date": "accepting Stripe's terms", "tos_acceptance.ip": "accepting Stripe's terms",
+  "company.tax_id": "company tax ID (EIN)", "company.name": "company name", "company.address.line1": "company address", "company.phone": "company phone",
+  "representative.verification.document": "ID document", "individual.verification.document": "ID document",
+  "individual.id_number": "full SSN", "individual.ssn_last_4": "last 4 of SSN", "individual.dob.day": "date of birth", "individual.address.line1": "home address",
+  "owners_provided": "confirming the owners", "directors_provided": "confirming the directors", "executives_provided": "confirming the executives",
+};
+const words = (f: string) => FIELD[f] ?? f.replace(/^(individual|representative|company|business_profile)\./, (m) => ({ "individual.": "your ", "representative.": "representative's ", "company.": "company ", "business_profile.": "business " } as Record<string, string>)[m] ?? "").replace(/[._]/g, " ");
+const dueText = (due: string[]) => [...new Set(due.map(words))].slice(0, 6).join(", ");
+
 const day = (t: number) => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 export function PaymentsSettings({ show }: { show: (m: string) => void }) {
@@ -116,7 +129,9 @@ export function PaymentsSettings({ show }: { show: (m: string) => void }) {
       {(st.status === "needs_info" || st.status === "pending") && (
         <div className="wp-notice warn pay-banner">
           <Icon name="alert" size={20} />
-          <span className="txt"><b>Stripe needs a few more details.</b><br />Clients can't pay until you finish setting up on Stripe. It usually takes a few minutes.</span>
+          <span className="txt">{st.due.length === 0 && st.verifying
+            ? <><b>Stripe is checking your details.</b><br />Clients can't pay until it's done. It usually takes a few minutes; Check again in a bit.</>
+            : <><b>Stripe needs a few more details.</b><br />Clients can't pay until you finish setting up on Stripe.{st.due.length > 0 && <> Stripe is asking for: <b className="pay-due">{dueText(st.due)}</b>.</>}</>}</span>
           <Button variant="ghost" iconEnd="chevron-right" onClick={() => void check()} loading={busy === "check"}>Check again</Button>
           <Button variant="primary" onClick={() => void go()} loading={busy === "connect"}>Finish on Stripe</Button>
         </div>

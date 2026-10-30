@@ -700,6 +700,7 @@ export default defineSchema({
       status: v.union(v.literal("pending"), v.literal("needs_info"), v.literal("connected"), v.literal("disconnected")),
       chargesEnabled: v.boolean(), payoutsEnabled: v.boolean(), detailsSubmitted: v.boolean(),
       displayName: v.optional(v.string()), bankLast4: v.optional(v.string()), livemode: v.boolean(),
+      due: v.optional(v.array(v.string())), disabledReason: v.optional(v.string()), verifying: v.optional(v.boolean()),
       startedAt: v.number(), connectedAt: v.optional(v.number()), disconnectedAt: v.optional(v.number()), checkedAt: v.number(),
     })),
   }).index("by_slug", ["slug"]).index("by_stripe_account", ["stripe.accountId"]),
