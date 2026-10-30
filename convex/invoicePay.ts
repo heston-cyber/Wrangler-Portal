@@ -22,6 +22,7 @@ import { businessOf, clientOfEmail, hasAccess, postToInbox } from "./lib/inbox";
 import { mailBrandOf } from "./lib/mail";
 import { invoiceMail } from "./lib/mails";
 import { sendEmail } from "./lib/email";
+import { afterPayments } from "./invoiceReminders";
 
 const label = (p: { name: string; jobNumber?: string }) => (p.jobNumber ? `${p.jobNumber} ${p.name}` : p.name);
 const TOKEN = /^[A-Za-z0-9_-]{16,64}$/;
@@ -248,6 +249,9 @@ export const applyPayments = internalMutation({
       ...(newFail ? { lastFailure: failure! } : {}),
       history: history.slice(-60), updatedAt: now,
     });
+    // Step 4: a receipt and "Payment received" for each new payment; the failed-payment email for a new failure.
+    const isNewFailure = newFail && (!i.lastFailure || Math.abs(failure!.at - i.lastFailure.at) >= 10 * 60_000 || i.lastFailure.message === "A payment attempt failed");
+    await afterPayments(ctx, i, payments, isNewFailure ? failure : null);
     return null;
   },
 });

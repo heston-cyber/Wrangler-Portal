@@ -701,7 +701,16 @@ export default defineSchema({
       chargesEnabled: v.boolean(), payoutsEnabled: v.boolean(), detailsSubmitted: v.boolean(),
       displayName: v.optional(v.string()), bankLast4: v.optional(v.string()), livemode: v.boolean(),
       due: v.optional(v.array(v.string())), disabledReason: v.optional(v.string()), verifying: v.optional(v.boolean()),
+      methods: v.optional(v.array(v.string())),           // what clients can pay with: card, us_bank_account, link
       startedAt: v.number(), connectedAt: v.optional(v.number()), disconnectedAt: v.optional(v.number()), checkedAt: v.number(),
+    })),
+    // Phase 2 Part B step 4 (D51): automatic invoice reminders, off until the owner turns them on (that's their OK).
+    reminders: v.optional(v.object({
+      on: v.boolean(),
+      beforeDays: v.number(),   // days before the due date (0 = none before)
+      afterDays: v.number(),    // the first overdue reminder, days after the due date (0 = on the day)
+      everyDays: v.number(),    // then every n days while overdue
+      stopAfter: v.number(),    // at most this many overdue reminders
     })),
   }).index("by_slug", ["slug"]).index("by_stripe_account", ["stripe.accountId"]),
 
@@ -729,6 +738,8 @@ export default defineSchema({
     // Step 3: the client's link to their invoice page (/i/<token>, in the invoice email) and the payments Stripe has
     // on the invoice (method shown as "Visa •••• 4242" or "Bank •••• 6789"; never full numbers).
     payToken: v.optional(v.string()),
+    // Step 4: reminders sent (by hand or automatically), so the next one is worked out from what already went.
+    reminders: v.optional(v.array(v.object({ at: v.number(), kind: v.union(v.literal("before"), v.literal("overdue")), auto: v.boolean() }))),
     payments: v.optional(v.array(v.object({ id: v.string(), at: v.number(), method: v.string(), cents: v.number(), status: v.union(v.literal("paid"), v.literal("processing"), v.literal("failed")) }))),
     refundedCents: v.optional(v.number()),
     disputed: v.optional(v.object({ at: v.number(), status: v.string() })),

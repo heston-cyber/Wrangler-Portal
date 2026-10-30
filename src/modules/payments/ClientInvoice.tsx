@@ -120,7 +120,7 @@ function PayCard({ inv, token }: { inv: Inv; token: string }) {
     <section className="inv-pay" aria-label="Receipt">
       <span className="wp-eyebrow">Receipt</span>
       <div className="amt"><span className="lbl">Paid in full</span><b>{money(inv.totalCents)}</b><small>{[inv.paidAt ? `Paid ${dateLong(new Date(inv.paidAt).toISOString().slice(0, 10))}` : null, lastPaid?.method].filter(Boolean).join(" · ")}</small></div>
-      <Banner tone="success" icon="check-circle" title="Thank you. Your payment went through." />
+      <Banner tone="success" icon="check-circle" title="Thank you. Your payment went through." text={`A receipt was emailed to ${inv.billTo.email}.`} />
       <p className="inv-legal">Receipt from {inv.business.legalName && inv.business.legalName !== inv.business.name ? `${inv.business.name}, a DBA of ${inv.business.legalName.replace(/^.*?a DBA of\s*/i, "")}` : inv.business.name}{inv.business.email ? ` · ${inv.business.email}` : ""}</p>
     </section>
   );

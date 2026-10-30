@@ -89,6 +89,12 @@ export async function signForTest(payload: string, secret: string, t = Math.floo
 export type StripeStatus = "pending" | "needs_info" | "connected" | "disconnected";
 
 /** What the Settings page shows, from a Stripe account object. */
+/** The ways a client can pay this account's invoices (card covers Apple Pay and Google Pay). */
+export function methodsOf(a: StripeResult): string[] {
+  const caps = (a.capabilities ?? {}) as Record<string, string>;
+  return ["card", ...(caps.us_bank_account_ach_payments === "active" ? ["us_bank_account"] : []), ...(caps.link_payments === "active" ? ["link"] : [])];
+}
+
 export function accountState(a: StripeResult) {
   const charges = !!a.charges_enabled, payouts = !!a.payouts_enabled, submitted = !!a.details_submitted;
   const dueList = [...new Set([...((a.requirements?.past_due as string[] | undefined) ?? []), ...((a.requirements?.currently_due as string[] | undefined) ?? [])])];
@@ -102,5 +108,6 @@ export function accountState(a: StripeResult) {
     bankLast4: bank, livemode: !!a.livemode,
     // What Stripe is still asking for (field names), why payments are off, and whether it's only checking.
     due: dueList.slice(0, 20), disabledReason: (a.requirements?.disabled_reason as string | undefined) ?? null, verifying: pending > 0,
+    methods: methodsOf(a),
   };
 }

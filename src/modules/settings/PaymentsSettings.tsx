@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import { Button, SkeletonRows, StatusChip } from "../../ui/wp";
+import { Button, SkeletonRows, StatusChip, Toggle } from "../../ui/wp";
 import { Icon } from "../../ui/Icon";
 import { Modal } from "../../ui/kit";
 import { useLocation } from "../../lib/router";
@@ -23,6 +23,43 @@ const FIELD: Record<string, string> = {
 };
 const words = (f: string) => FIELD[f] ?? f.replace(/^(individual|representative|company|business_profile)\./, (m) => ({ "individual.": "your ", "representative.": "representative's ", "company.": "company ", "business_profile.": "business " } as Record<string, string>)[m] ?? "").replace(/[._]/g, " ");
 const dueText = (due: string[]) => [...new Set(due.map(words))].slice(0, 6).join(", ");
+
+const methodsText = (m: string[] | null) => {
+  const list = m ?? ["card"];
+  return ["Card, Apple Pay, Google Pay", ...(list.includes("us_bank_account") ? ["US bank account"] : []), ...(list.includes("link") ? ["Link"] : [])].join(", ");
+};
+const days = (n: number) => `${n} day${n === 1 ? "" : "s"}`;
+
+/** D51 (frames 256:7029 off, 256:7306 on): automatic reminders, off by default. */
+function Reminders({ r, show }: { r: { on: boolean; beforeDays: number; afterDays: number; everyDays: number; stopAfter: number }; show: (m: string) => void }) {
+  const save = useMutation(api.invoiceReminders.setReminders);
+  const set = (patch: Partial<typeof r>) => void save({ ...r, ...patch }).then(
+    () => show(patch.on === true ? "Automatic reminders are on." : patch.on === false ? "Automatic reminders are off." : "Saved."), (e) => show(err(e)));
+  const pick = (label: string, value: number, opts: number[], fmt: (n: number) => string, key: keyof typeof r, hint?: string) => (
+    <label className="wp-field"><span className="wp-field-label">{label}</span>
+      <select className="input" value={value} onChange={(e) => set({ [key]: Number(e.target.value) } as Partial<typeof r>)}>{opts.map((n) => <option key={n} value={n}>{fmt(n)}</option>)}</select>
+      {hint && <span className="wp-field-hint">{hint}</span>}
+    </label>
+  );
+  return (
+    <div className="panel pay-card">
+      <span className="wp-eyebrow">Automatic reminders</span>
+      <div className="pay-switch">
+        <span><b>Send reminders automatically</b><small>Off by default. You can always send one by hand from an invoice.</small></span>
+        <Toggle label="Send reminders automatically" checked={r.on} onChange={(on) => set({ on })} />
+      </div>
+      {r.on && <>
+        <div className="pay-grid">
+          {pick("Before the due date", r.beforeDays, [0, 1, 2, 3, 5, 7, 14], (n) => (n ? days(n) : "None"), "beforeDays", "0 = no reminder before")}
+          {pick("On or after the due date", r.afterDays, [0, 1, 2, 3, 7], (n) => (n ? `${days(n)} after` : "On the due date"), "afterDays")}
+          {pick("While overdue, every", r.everyDays, [3, 5, 7, 14, 30], days, "everyDays")}
+          {pick("Stop after", r.stopAfter, [1, 2, 3, 4, 5, 6], (n) => `${n} overdue reminder${n === 1 ? "" : "s"}`, "stopAfter", "Or when the invoice is paid or voided")}
+        </div>
+        <p className="secondary pay-note">Reminders use the “Reminder · before due” and “Reminder · overdue” emails. Each invoice shows its next reminder date. None go while a bank payment is clearing.</p>
+      </>}
+    </div>
+  );
+}
 
 const day = (t: number) => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
@@ -148,12 +185,13 @@ export function PaymentsSettings({ show }: { show: (m: string) => void }) {
         <div className="panel pay-card">
           <span className="wp-eyebrow">How clients pay</span>
           <dl className="pay-rows">
-            <dt>Methods</dt><dd>Card, Apple Pay, Google Pay, US bank account, Link</dd>
+            <dt>Methods</dt><dd>{methodsText(st.methods)}</dd>
           </dl>
           <p className="secondary pay-note">Apple Pay and Google Pay show only on devices that support them. Turn methods on or off in your Stripe dashboard.</p>
           <dl className="pay-rows"><dt>Emails</dt><dd>Invoices, reminders and receipts send from the portal</dd></dl>
         </div>
       )}
+      {st.status === "connected" && <Reminders r={s.reminders} show={show} />}
       {asking && (
         <Modal onClose={() => setAsking(false)} label="Disconnect Stripe" width={560}>
           <div style={{ display: "grid", gap: 18 }}>

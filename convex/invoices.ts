@@ -14,6 +14,7 @@ import { invoicePrefix } from "./lib/invoiceNumber";
 import { stripeCall, StripeError, type StripeResult } from "./lib/stripeApi";
 import { openDelivery } from "./projects";
 import { announceSent } from "./invoicePay";
+import { nextReminder } from "./invoiceReminders";
 
 const DAY = 86_400_000;
 const MIN_CENTS = 50; // Stripe's smallest card charge in USD
@@ -98,6 +99,13 @@ export const get = query({
       clientId: i.clientId ?? null, projectId: i.projectId ?? null, history: i.history, refundedCents: i.refundedCents ?? 0, disputed: i.disputed ?? null,
       stripe: i.stripe ? { invoiceId: i.stripe.invoiceId, hostedUrl: i.stripe.hostedUrl ?? null, pdfUrl: i.stripe.pdfUrl ?? null, livemode: i.stripe.livemode } : null,
       business: biz ? { name: biz.name, legalName: biz.legalName ?? null, prefix: invoicePrefix(biz.name), logoUrl: biz.logoFileId ? await ctx.storage.getUrl(biz.logoFileId) : null } : null,
+      // Step 4: "Last reminder: … · next: … (automatic)" under the actions.
+      reminders: {
+        last: (i.reminders ?? []).length ? Math.max(...(i.reminders ?? []).map((r) => r.at)) : null,
+        next: biz?.stripe?.status === "connected" && i.payToken ? nextReminder(i, biz.reminders)?.at ?? null : null,
+        auto: !!biz?.reminders?.on,
+        canSend: i.status === "open" && !i.processing && i.amountRemainingCents > 0,
+      },
     };
   },
 });
@@ -371,7 +379,8 @@ export const applyStripeInvoice = internalMutation({
       status,
       totalCents: Number(s.total ?? i.totalCents), amountPaidCents: paid, amountRemainingCents: Number(s.amount_remaining ?? i.amountRemainingCents),
       ...(status === "paid" || paid > i.amountPaidCents ? { processing: false } : {}),
-      ...(eventType === "invoice.payment_failed" ? { lastFailure: { at: now, message: "A payment attempt failed" }, processing: false } : {}),
+      // Keep a reason the portal already read from Stripe for this same attempt (within ten minutes).
+      ...(eventType === "invoice.payment_failed" ? { lastFailure: i.lastFailure && now - i.lastFailure.at < 10 * 60_000 ? i.lastFailure : { at: now, message: "A payment attempt failed" }, processing: false } : {}),
       ...(status === "paid" && !i.paidAt ? { paidAt: now } : {}),
       ...(status === "void" && !i.voidedAt ? { voidedAt: now } : {}),
       stripe: { ...i.stripe!, number: s.number ?? i.stripe!.number, hostedUrl: s.hosted_invoice_url ?? i.stripe!.hostedUrl, pdfUrl: s.invoice_pdf ?? i.stripe!.pdfUrl },

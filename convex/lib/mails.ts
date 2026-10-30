@@ -203,3 +203,51 @@ export function invoiceMail(b: MailBrand, d: { name: string; number: string; tit
     ...(!b.isDefault ? [{ t: "small", text: "Powered by WranglerPortal" } as Block] : []),
   ], `${usd(d.amountCents)} due ${longDate(d.dueDate)}`);
 }
+
+// ---------- 09 · 10 · 11 · 12: reminders, receipt, payment failed (Phase 2 Part B, step 4) ----------
+const signoff = (b: MailBrand): Block[] => [
+  { t: "small", text: first(b.ownerName) ? `— ${first(b.ownerName)}, ${b.name}` : `— ${b.name}` },
+  { t: "small", text: `${b.footerName} · ${b.replyTo}` },
+  ...(!b.isDefault ? [{ t: "small", text: "Powered by WranglerPortal" } as Block] : []),
+];
+const at = (ms: number) => new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+export function reminderMail(b: MailBrand, d: { kind: "before" | "overdue"; name: string; number: string; title: string; amountCents: number; dueDate: string; link: string }): Mail {
+  const due = longDate(d.dueDate);
+  if (d.kind === "before") return mk(b, "updates", `Reminder: invoice ${d.number} from ${b.name} is due ${due}`, [
+    hi(d.name),
+    { t: "p", text: `A quick reminder that invoice ${d.number} is due on ${due}.` },
+    { t: "sums", rows: [{ label: "Amount due", value: usd(d.amountCents), big: true }, { label: "Due", value: due }, { label: "Invoice", value: `${d.number} · ${d.title}` }] },
+    { t: "p", text: "If you’ve already paid, thank you. You can ignore this." },
+    { t: "button", label: "View and pay", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `${usd(d.amountCents)} due ${due}`);
+  return mk(b, "updates", `Invoice ${d.number} from ${b.name} is overdue`, [
+    hi(d.name),
+    { t: "p", text: `Invoice ${d.number} was due on ${due} and is still open.` },
+    { t: "sums", rows: [{ label: "Amount due", value: usd(d.amountCents), big: true }, { label: "Was due", value: due }, { label: "Invoice", value: `${d.number} · ${d.title}` }] },
+    { t: "p", text: "If you’ve already paid, thank you. You can ignore this. If something’s wrong with the invoice, just reply." },
+    { t: "button", label: "View and pay", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `${usd(d.amountCents)} was due ${due}`);
+}
+
+export function receiptMail(b: MailBrand, d: { name: string; number: string; title: string; paidCents: number; paidAt: number; method: string; amountCents: number; link: string }): Mail {
+  return mk(b, "updates", `Receipt from ${b.name}: ${usd(d.paidCents)} paid`, [
+    hi(d.name),
+    { t: "p", text: "Thank you. We received your payment." },
+    { t: "sums", rows: [{ label: "Amount paid", value: usd(d.paidCents), big: true }, { label: "Paid", value: at(d.paidAt) }, { label: "Method", value: d.method }, { label: "Invoice", value: `${d.number} · ${d.title}` }, { label: "Amount remaining", value: usd(d.amountCents) }] },
+    { t: "p", text: "Keep this email as your receipt. The receipt PDF is on the invoice page." },
+    { t: "button", label: "View receipt", href: d.link }, { t: "link", href: d.link },
+  ], [...signoff(b), { t: "small", text: `Payment processed by Stripe for ${b.footerName}.` }], `${usd(d.paidCents)} paid · ${d.number}`);
+}
+
+export function paymentFailedMail(b: MailBrand, d: { name: string; number: string; title: string; amountCents: number; dueDate: string; message: string; link: string }): Mail {
+  // Stripe's reason when it's a card decline ("Your card was declined."), in the design's words.
+  const declined = /declin/i.test(d.message);
+  return mk(b, "updates", `Payment didn’t go through: invoice ${d.number} from ${b.name}`, [
+    hi(d.name),
+    { t: "p", text: declined ? "Your card was declined, so nothing was charged." : `Your payment didn’t go through, so nothing was charged.${d.message && !/payment attempt failed/i.test(d.message) ? ` Stripe said: ${d.message.replace(/\.$/, "")}.` : ""}` },
+    { t: "sums", rows: [{ label: "Amount due", value: usd(d.amountCents), big: true }, { label: "Due", value: longDate(d.dueDate) }, { label: "Invoice", value: `${d.number} · ${d.title}` }] },
+    { t: "p", text: "You can try again, or use a different card or your bank account." },
+    { t: "button", label: "Try again", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `Nothing was charged · ${d.number}`);
+}

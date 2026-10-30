@@ -12,6 +12,7 @@ import { businessInScope } from "./lib/business";
 import { SITE } from "./lib/site";
 import { invoicePrefix } from "./lib/invoiceNumber";
 import { openCount } from "./invoices";
+import { REMINDER_DEFAULTS } from "./invoiceReminders";
 import { accountState, keyMode, platformKey, stripeCall, stripeSignatureOk, StripeError, type StripeResult } from "./lib/stripeApi";
 
 function ownBusiness(ctx: unknown): Id<"businesses"> {
@@ -36,7 +37,9 @@ export const settings = query({
       stripe: s ? {
         status: s.status, displayName: s.displayName ?? null, chargesEnabled: s.chargesEnabled, payoutsEnabled: s.payoutsEnabled,
         bankLast4: s.bankLast4 ?? null, livemode: s.livemode, due: s.due ?? [], disabledReason: s.disabledReason ?? null, verifying: !!s.verifying, connectedAt: s.connectedAt ?? null, disconnectedAt: s.disconnectedAt ?? null, checkedAt: s.checkedAt,
+        methods: s.methods ?? null,
       } : null,
+      reminders: b.reminders ?? REMINDER_DEFAULTS, // D51: off until the owner turns them on
       openInvoices: await openCount(ctx),
     };
   },
@@ -135,6 +138,8 @@ export const saveAccount = internalMutation({
         ...((st.displayName ?? b.stripe?.displayName) ? { displayName: st.displayName ?? b.stripe?.displayName } : {}),
         ...((st.bankLast4 ?? b.stripe?.bankLast4) ? { bankLast4: st.bankLast4 ?? b.stripe?.bankLast4 } : {}), livemode: st.livemode,
         due: st.due, ...(st.disabledReason ? { disabledReason: st.disabledReason } : {}), verifying: st.verifying,
+        // account.updated events may leave capabilities out; keep what was known then.
+        methods: (account as StripeResult).capabilities ? st.methods : b.stripe?.methods ?? st.methods,
         startedAt: b.stripe?.startedAt ?? now,
         ...(status === "connected" ? { connectedAt: b.stripe?.status === "connected" ? b.stripe.connectedAt ?? now : now } : b.stripe?.connectedAt ? { connectedAt: b.stripe.connectedAt } : {}),
         ...(status === "disconnected" && b.stripe?.disconnectedAt ? { disconnectedAt: b.stripe.disconnectedAt } : {}),

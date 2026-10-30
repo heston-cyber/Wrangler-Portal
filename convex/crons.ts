@@ -7,4 +7,6 @@ const crons = cronJobs();
 crons.interval("dropbox drop folder", { minutes: 1 }, internal.dropbox.sync, {});
 // Bunny storage per version, for the "Storage" detail and Approve final (R2b).
 crons.interval("bunny storage sizes", { hours: 12 }, internal.uploads.refreshStorage, {});
+// Phase 2 Part B step 4 (D51): automatic invoice reminders, for businesses that turned them on.
+crons.interval("invoice reminders", { hours: 1 }, internal.invoiceReminders.runDue, {});
 export default crons;

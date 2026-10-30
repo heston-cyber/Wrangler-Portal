@@ -22,7 +22,7 @@ const HIST: Record<string, { icon: IconName; text: (d?: string) => string }> = {
   email_held: { icon: "mail", text: (d) => `Email held by the preview${d ? ` (${d} isn't on its list)` : ""}` },
   processing: { icon: "clock", text: (d) => `Bank payment started${d ? ` · ${d}` : ""}` },
   viewed: { icon: "eye", text: (d) => `Viewed${d ? ` by ${d}` : ""}` },
-  reminder: { icon: "bell", text: () => "Reminder sent" },
+  reminder: { icon: "bell", text: (d) => `Reminder sent${d ? ` · ${d}` : ""}` },
   part_paid: { icon: "check-circle", text: (d) => `Partly paid${d ? ` · ${d}` : ""}` },
   paid: { icon: "check-circle", text: () => "Paid in full" },
   failed: { icon: "alert", text: (d) => `Payment failed${d && d !== "A payment attempt failed" ? ` · ${d}` : ""}` },
@@ -36,6 +36,14 @@ export default function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
   const i = useQuery(api.invoices.get, { invoiceId });
   const voidIt = useAction(api.invoices.voidInvoice);
   const clientLink = useMutation(api.invoicePay.ownerLink);
+  const remind = useMutation(api.invoiceReminders.sendReminder);
+  const [reminding, setReminding] = useState(false);
+  const sendReminder = async () => {
+    setReminding(true);
+    try { const r = await remind({ invoiceId: invoiceId as Id<"invoices"> }); show(`Reminder sent to ${r.name}.`); }
+    catch (e) { show(errText(e)); }
+    setReminding(false);
+  };
   const openClientPage = async () => {
     const w = window.open("", "_blank"); // opened now, while the click still counts, so it isn't blocked
     try { const url = await clientLink({ invoiceId: invoiceId as Id<"invoices"> }); if (w) w.location.href = url; else window.location.href = url; }
@@ -69,11 +77,16 @@ export default function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
           <div className="col right">
             <Card label="Actions" head={<SectionHead label="Actions" />}>
               <div className="inv-actions">
-                {i.stripe?.pdfUrl && <a className="btn" href={i.stripe.pdfUrl} target="_blank" rel="noopener noreferrer"><Icon name="download" size={16} />Download PDF</a>}
+                {i.reminders.canSend && <Button onClick={() => void sendReminder()} loading={reminding}>Send reminder</Button>}
+                {i.stripe?.pdfUrl && <a className={i.reminders.canSend ? "btn ghost" : "btn"} href={i.stripe.pdfUrl} target="_blank" rel="noopener noreferrer"><Icon name="download" size={16} />Download PDF</a>}
                 <Button variant="ghost" iconEnd="external" onClick={() => void openClientPage()}>Client's invoice page</Button>
                 {stripeLink && <a className="btn ghost" href={stripeLink} target="_blank" rel="noopener noreferrer">Open in Stripe<Icon name="external" size={14} className="end" /></a>}
                 {canVoid && <Button variant="ghost" onClick={() => setAsking(true)}>Void invoice</Button>}
               </div>
+              {i.reminders.canSend && <p className="inv-remline">{[
+                i.reminders.last ? `Last reminder: ${when(i.reminders.last)}` : null,
+                i.reminders.auto ? (i.reminders.next ? `next: ${dateShort(i.reminders.next)} (automatic)` : "no more automatic reminders") : "Automatic reminders are off",
+              ].filter(Boolean).join(" · ")}</p>}
               {(i.refundedCents > 0 || i.disputed) && <p className="inv-flag">{i.refundedCents > 0 && <>Refunded {money(i.refundedCents)}. </>}{i.disputed && <>Disputed ({i.disputed.status}). Respond in Stripe.</>}</p>}
             </Card>
             <Card label="History" head={<SectionHead label="History" />}>

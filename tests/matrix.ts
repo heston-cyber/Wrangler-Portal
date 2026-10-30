@@ -89,6 +89,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "invoices.send": { invoiceId: ids.invoiceId }, "invoices.voidInvoice": { invoiceId: ids.invoiceId },
     "invoicePay.page": { token: "nope-nope-nope-nope" }, "invoicePay.mine": {}, "invoicePay.markViewed": { token: "nope-nope-nope-nope" },
     "invoicePay.start": { token: "nope-nope-nope-nope" }, "invoicePay.refresh": { token: "nope-nope-nope-nope" }, "invoicePay.ownerLink": { invoiceId: ids.invoiceId },
+    "invoiceReminders.setReminders": { on: true, beforeDays: 3, afterDays: 1, everyDays: 7, stopAfter: 3 }, "invoiceReminders.sendReminder": { invoiceId: ids.invoiceId },
   };
 }
 
