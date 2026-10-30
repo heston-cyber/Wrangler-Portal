@@ -45,6 +45,11 @@ export function SelectBox({ on, onClick, label }: { on: boolean; onClick: () => 
   return <button type="button" className={`selbox${on ? " on" : ""}`} role="checkbox" aria-checked={on} aria-label={label} onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClick(); }}>{on && <Check size={13} />}</button>;
 }
 
+export function RoundChip({ n, of }: { n: number; of: number }) {
+  const state = n < of ? "within" : n === of ? "last" : "over";
+  return <span className={`wp-status ${state === "last" ? "warning" : "neutral"} vround`} title={state === "over" ? "Past the rounds included: a change order" : `Round ${n} of the ${of} included`}>{state === "over" ? `Round ${n} · change order` : `Round ${n} of ${of}`}</span>;
+}
+
 export function VideoRow({ x, meta, projectName, project, fields = DEFAULT_FIELDS, onApprove, select }: RowProps) {
   const st = statusText(x);
   const busy = x.latest && x.latest.status !== "ready";
@@ -74,6 +79,8 @@ export function VideoRow({ x, meta, projectName, project, fields = DEFAULT_FIELD
           </span>
         </span>
         {meta && <span className="meta">{meta}</span>}
+        {/* Phase 2: each version is a round (D23); "Round 2 of 2", the last included one in amber, past them a change order. */}
+        {x.latest && project?.roundsIncluded ? <RoundChip n={x.latest.number} of={project.roundsIncluded} /> : null}
       </a>
       {canApprove && !selecting && <button className={`btn sm approve${x.final ? " done" : ""}`} onClick={() => onApprove!(x)} title="Keep one version and delete the others">{x.final ? `Final v${x.final.version}` : "Approve final"}</button>}
       {!selecting && <VideoMenu x={x} />}

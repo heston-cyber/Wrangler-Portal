@@ -148,6 +148,12 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       await ctx.db.patch(b2, { title: "Northline Usage Release", updatedAt: Date.now() - 4 * 86_400_000 });
     });
 
+    // Phase 2 Part A: the Harbor Coffee Launch hub (stage, next step, dates, rounds, a final file).
+    await owner.mutation(api.projects.setStage, { projectId: w.p1, stage: "polish", post: true, note: "Notes on Harbor Coffee 30s by Nov 4." });
+    await owner.mutation(api.projects.setNextStep, { projectId: w.p1, text: "Notes on Harbor Coffee 30s v4 from Maya by Nov 4." });
+    await owner.mutation(api.projects.setKeyDates, { projectId: w.p1, dates: [{ label: "Kickoff", date: "2026-10-06" }, { label: "Shoot", date: "2026-10-14" }, { label: "First cut", date: "2026-10-21" }, { label: "Final due", date: "2026-11-07" }] });
+    await owner.mutation(api.projects.addDeliveryFile, { projectId: w.p1, file: { kind: "dropbox", path: "/clients/harbor coffee/launch/final/harborcoffee_30s_final.mov", name: "HarborCoffee_30s_FINAL.mov", size: 4_200_000_000 } });
+    await owner.mutation(api.projects.addDeliveryFile, { projectId: w.p1, file: { kind: "version", versionId: w.harbor30.last } });
     const noteIds = await t.run(async (ctx) => (await ctx.db.query("inboxNotes").collect()).map((n) => n._id));
     const OWNER: [string, Record<string, unknown>][] = [
       ["users.me", {}], ["business.brand", {}], ["business.settings", {}], ["library.overview", {}], ["activity.feed", { limit: 100 }], ["activity.recent", {}], ["home.needs", {}],
@@ -160,6 +166,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["sign.pendingRequests", {}], ["approvals.forVideo", { videoId: w.harbor30.v }], ["sign.requestsFor", { documentId: w.d1 }],
 ["builder.getBuild#" + b1, { buildId: b1 }], ["builder.getProfile", {}], ["builder.listFonts", {}], ["builder.listStyles", {}],
       ["sign.get#" + w.d1, { documentId: w.d1 }], ["sign.get#" + w.d2, { documentId: w.d2 }], ["sign.get#" + w.d3, { documentId: w.d3 }],
+      ["projects.page#" + w.p1, { projectId: w.p1 }], ["projects.nextRound#" + w.harbor30.v, { videoId: w.harbor30.v }],
     ];
     const shareTokens = await t.run(async (ctx) => (await ctx.db.query("shares").collect()).map((x) => (x as unknown as { token: string }).token));
     const CLIENT: [string, Record<string, unknown>][] = [["users.me", {}], ["business.brand", {}], ["shares.mine", {}], ["inbox.mine", {}], ["inbox.unreadCount", {}], ["documents.mine", {}], ["portal.waiting", {}], ["emails.myPrefs", {}],
@@ -169,7 +176,8 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["notes.forVersion#" + w.harbor30.last, { versionId: w.harbor30.last, share: { token: shareTokens[0] } }],
       ["waveforms.forVersion#" + w.harbor30.last, { versionId: w.harbor30.last, share: { token: shareTokens[0] } }],
       ["transcripts.forVersion#" + w.harbor30.last, { versionId: w.harbor30.last, share: { token: shareTokens[0] } }],
-      ["approvals.forVideo#" + w.harbor30.v, { videoId: w.harbor30.v, share: { token: shareTokens[0] } }]];
+      ["approvals.forVideo#" + w.harbor30.v, { videoId: w.harbor30.v, share: { token: shareTokens[0] } }],
+      ["projects.mine", {}], ["projects.forClient#" + w.p1, { projectId: w.p1 }]];
     const run = async (as: typeof owner, list: [string, Record<string, unknown>][]) => {
       const out: Record<string, unknown> = {};
       for (const [key, args] of list) {

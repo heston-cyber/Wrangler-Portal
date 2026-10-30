@@ -85,7 +85,7 @@ export const page = query({
       const open = latest ? (await ctx.db.query("notes").withIndex("by_version", (q) => q.eq("versionId", latest._id)).collect()).filter((n) => n.status === "open").length : 0;
       videos.push({
         _id: vid._id, number: vid.number ?? null, title: vid.title, updatedAt: vid.updatedAt,
-        latest: latest && { number: latest.number, status: latest.status, versions: vs.length },
+        latest: latest && { versionId: latest._id, number: latest.number, status: latest.status, versions: vs.length },
         round: latest ? roundOf(latest.number, r.included) : null,
         openNotes: open, final: vid.final ? { version: vid.final.version } : null,
         thumbUrl: latest ? (await signStillUrl(latest.posterUrl)) ?? (await signedThumbUrl(latest)) : null,

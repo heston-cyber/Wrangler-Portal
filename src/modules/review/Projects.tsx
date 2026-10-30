@@ -33,7 +33,8 @@ function usePref<T extends string>(key: string, fallback: T): [T, (v: T) => void
   return [v, (n: T) => { setV(n); try { localStorage.setItem(key, n); } catch { /* ignore */ } }];
 }
 
-export default function Projects({ projectId }: { projectId?: Id<"projects"> }) {
+// embedded (Phase 2): inside the project page's Cuts tab, which has its own top bar.
+export default function Projects({ projectId, embedded }: { projectId?: Id<"projects">; embedded?: boolean }) {
   const overview = useQuery(api.library.overview);
   const { openUpload } = useUpload();
   const [groupPref, setGroup] = usePref<GroupBy>("wr.groupBy", "project");
@@ -183,9 +184,7 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
             </section>
   );
 
-  return (
-    <>
-      <TopBar right={
+  const topRight = (
         <>
           <Menu align="end" label="View options" trigger={(p) => <button {...p} className="icon-btn" aria-label="View options" title="View options"><Icon name="menu" size={18} /></button>}>
             <div style={{ display: "flex", gap: 4, padding: 4 }}>
@@ -202,7 +201,7 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
             <MenuItem icon={<Rows3 size={16} />} onSelect={() => setShowDetails(true)}>Show details…</MenuItem>
             <MenuItem keepOpen checked={lib.approveFinal} onSelect={() => lib.setApproveFinal(!lib.approveFinal)}>Approve final buttons</MenuItem>
           </Menu>
-          {projectId && project && <button className="btn sm" onClick={() => setSharing({ target: { kind: "project", projectId }, label: projectLabel(project) })} title="Share this project"><Share2 size={15} /><span className="hide-sm">Share</span></button>}
+          {projectId && project && !embedded && <button className="btn sm" onClick={() => setSharing({ target: { kind: "project", projectId }, label: projectLabel(project) })} title="Share this project"><Share2 size={15} /><span className="hide-sm">Share</span></button>}
           <Menu align="end" label="Add" trigger={(p) => <button {...p} className="btn primary sm"><Icon name="plus" size={16} />Add</button>}>
             <MenuItem icon={<ListOrdered size={16} />} onSelect={() => setNewVideo(true)}>New video (gets a number)</MenuItem>
             <MenuItem icon={<Upload size={16} />} onSelect={() => openUpload({ projectId })}>Upload a video</MenuItem>
@@ -211,10 +210,13 @@ export default function Projects({ projectId }: { projectId?: Id<"projects"> }) 
             {!projectId && <MenuItem icon={<Building2 size={16} />} onSelect={() => setNewClient(true)}>New client</MenuItem>}
           </Menu>
         </>
-      }>
+  );
+  return (
+    <>
+      {embedded ? <div className="pj-cutsbar">{topRight}</div> : <TopBar right={topRight}>
         <a {...linkProps("/review")}>Review</a><Sep />
         {projectId ? <><a {...linkProps("/projects")}>Projects</a><Sep /><span className="here">{project ? projectLabel(project) : "…"}</span></> : <span className="here">Projects</span>}
-      </TopBar>
+      </TopBar>}
 
       <div className="content"
         onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }}

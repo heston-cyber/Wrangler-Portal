@@ -16,6 +16,7 @@ import ClientPage, { type ClientTab } from "./modules/clients/ClientPage";
 import PostNote from "./modules/sent/PostNote";
 import SentPage, { SentNote } from "./modules/sent/SentPage";
 import Projects from "./modules/review/Projects";
+import ProjectPage, { type ProjectTab } from "./modules/projects/ProjectPage";
 import ActivityPage from "./modules/review/ActivityPage";
 import Settings from "./modules/settings/Settings";
 import VideoPage from "./modules/review/VideoPage";
@@ -112,7 +113,7 @@ function SignedIn() {
   const sentNote = /^\/sent\/([^/]+)\/?$/.exec(path);
   let page: React.ReactNode;
   if (video) page = <VideoPage key={video[1]} videoId={video[1] as Id<"videos">} versionNumber={Number(params.get("version")) || null} noteId={params.get("note")} />;
-  else if (project) page = <Projects key={project[1]} projectId={project[1] as Id<"projects">} />;
+  else if (project) { const t = params.get("tab"); page = <Suspense fallback={<Loading />}><ProjectPage key={project[1]} projectId={project[1] as Id<"projects">} tab={(["cuts", "documents", "delivery"].includes(t ?? "") ? t : "overview") as ProjectTab} /></Suspense>; }
   else if (path.startsWith("/projects")) page = <Projects key="all" />;
   else if (signDoc) page = <Suspense fallback={<Loading />}><SignDoc key={signDoc[1]} documentId={signDoc[1] as Id<"wsDocuments">} versionNumber={Number(params.get("v")) || null} /></Suspense>;
   else if (path.startsWith("/sign/signature")) page = <Suspense fallback={<Loading />}><SignSignature /></Suspense>;
