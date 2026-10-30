@@ -3,6 +3,7 @@
 // While dragging, the playhead follows the finger at once and the picture catches up (onScrub); letting go lands exactly (onSeek).
 // Notes sit on their own bar on top in Resolve's colours (blue frame, yellow range); tapping it picks the nearest note.
 import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useFrame, type FrameClock } from "./useFramePlayer";
 import { barHeights } from "../../../../convex/lib/peaks";
 
@@ -91,13 +92,19 @@ export function Timeline({ clock, frameCount, nom, startFrames, notes, sel, high
   // The notes bar's height: drag its bottom edge to stretch it (Heston, Oct 29), so stacked ranges spread out and are
   // easier to pick. Remembered on this device; a double-click on the edge puts it back.
   const barRef = useRef(MIN_BAR);
+  // The resize grip lives on the top edge of the box the timeline sits in (the review page's transport).
+  const [gripHost, setGripHost] = useState<HTMLElement | null>(null);
+  useEffect(() => { setGripHost(ref.current?.closest<HTMLElement>(".transport") ?? null); }, [ref]);
   // Until it's been dragged, the bar grows on its own to give each track about 8 px (up to 80 px).
   const [userH, setUserH] = useState<number | null>(() => { try { const v = Number(localStorage.getItem("wp.tlNotesH")); return v >= MIN_BAR && v <= MAX_BAR ? v : null; } catch { return null; } });
   const saveH = (h: number | null) => { setUserH(h); try { if (h === null) localStorage.removeItem("wp.tlNotesH"); else localStorage.setItem("wp.tlNotesH", String(h)); } catch { /* private window */ } };
-  const startResize = (e: React.PointerEvent) => {
+  const startResize = (e: React.PointerEvent, dir: 1 | -1 = -1) => {
     e.preventDefault(); e.stopPropagation();
     const y0 = e.clientY, h0 = barRef.current;
-    const move = (m: PointerEvent) => saveH(Math.round(Math.max(MIN_BAR, Math.min(MAX_BAR, h0 + m.clientY - y0))));
+    // The grip is the timeline box's top edge, so dragging up makes the bar taller.
+    // Computers: the grip is the timeline box's top edge, so dragging up makes it taller (dir -1). Phones keep the
+    // grip under the notes bar, where dragging down makes it taller (dir 1; Heston: "the mobile resizer is fine").
+    const move = (m: PointerEvent) => saveH(Math.round(Math.max(MIN_BAR, Math.min(MAX_BAR, h0 + dir * (m.clientY - y0)))));
     const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
   };
@@ -131,25 +138,35 @@ export function Timeline({ clock, frameCount, nom, startFrames, notes, sel, high
   const laneTop = (id: string) => oneLane ? Math.round((barH - laneH) / 2) : 3 + Math.min(lanes.get(id) ?? 0, maxLanes - 1) * (laneH + GAP);
 
   // Taps on the notes bar pick the note whose mark is nearest (within 24px), for fingers that land a little off.
-  const pickNear = (clientX: number) => {
+  // With stacked tracks, the track under the pointer counts too: a note on that track wins over one above or below it.
+  const pickNear = (clientX: number, clientY: number, barTop: number) => {
     const r = ref.current!.getBoundingClientRect();
-    const x = clientX - r.left;
+    const x = clientX - r.left, y = clientY - barTop;
     const px = (f: number) => (f / n) * r.width;
     let best: { id: string; d: number } | null = null;
     for (const m of notes) {
       if (m.inFrame === undefined || m.kind === "general") continue;
       const a = px(m.inFrame), b = m.kind === "range" && m.outFrame !== undefined ? px(m.outFrame + 1) : px(m.inFrame + 0.5);
-      const d = m.kind === "range" ? (x < a ? a - x : x > b ? x - b : 0) : Math.abs(x - b);
+      const dx = m.kind === "range" ? (x < a ? a - x : x > b ? x - b : 0) : Math.abs(x - b);
+      if (dx > 24) continue;
+      const top = laneTop(m.id), dy = y < top - GAP / 2 ? top - GAP / 2 - y : y > top + laneH + GAP / 2 ? y - (top + laneH + GAP / 2) : 0;
+      const d = dx + dy * 4;
       if (!best || d < best.d) best = { id: m.id, d };
     }
-    if (best && best.d <= 24) onPick(best.id);
+    if (best) onPick(best.id);
   };
 
   const waveNote = !wave || wave.status === "pending" || wave.status === "running" ? "Making the waveform…" : wave.status === "none" ? "No audio" : wave.status === "failed" ? "No waveform" : null;
 
+  const grip = gripHost && createPortal(
+    <span className="tl-grip" role="separator" aria-orientation="horizontal" aria-label="Drag up or down to resize the notes bar" title="Drag to resize the notes bar · double-click to reset"
+      onPointerDown={startResize} onDoubleClick={(e) => { e.stopPropagation(); saveH(null); }} />,
+    gripHost,
+  );
   return (
     <div className={`tl${compact ? " compact" : ""}`} ref={ref}>
-      <div className="tl-notes" aria-label="Notes on the timeline" style={{ height: barH, ["--tlh" as string]: `${barH}px` }} onPointerDown={(e) => { e.preventDefault(); pickNear(e.clientX); }}>
+      {grip}
+      <div className="tl-notes" aria-label="Notes on the timeline" style={{ height: barH, ["--tlh" as string]: `${barH}px` }} onPointerDown={(e) => { e.preventDefault(); pickNear(e.clientX, e.clientY, e.currentTarget.getBoundingClientRect().top); }}>
         {ranges.map((x) => (
           <div key={x.id} className={`tl-range${x.status === "done" ? " done" : ""}${x.id === activeId ? " active" : ""}`} role="button" aria-label={`Range note ${label(x.inFrame!)} to ${label(x.outFrame!)}`}
             title={`${label(x.inFrame!)} → ${label(x.outFrame!)}${x.text ? ` · ${x.text.slice(0, 80)}` : ""}`}
@@ -160,8 +177,8 @@ export function Timeline({ clock, frameCount, nom, startFrames, notes, sel, high
             title={`${label(x.inFrame!)}${x.text ? ` · ${x.text.slice(0, 80)}` : ""}`} style={{ left: pct(x.inFrame! + 0.5), top: laneTop(x.id), height: laneH }} />
         ))}
         <Head clock={clock} n={n} at={drag?.f} className="tl-notehead" />
-        <span className="tl-notes-grip" role="separator" aria-orientation="horizontal" aria-label="Drag to make the notes bar taller or shorter" title="Drag to resize · double-click to reset"
-          onPointerDown={startResize} onDoubleClick={(e) => { e.stopPropagation(); saveH(null); }} />
+        <span className="tl-notes-grip" role="separator" aria-orientation="horizontal" aria-label="Drag to make the notes bar taller or shorter" title="Drag to resize · double-tap to reset"
+          onPointerDown={(e) => startResize(e, 1)} onDoubleClick={(e) => { e.stopPropagation(); saveH(null); }} />
       </div>
 
       <div
