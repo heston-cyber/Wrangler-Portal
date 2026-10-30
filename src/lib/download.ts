@@ -58,7 +58,7 @@ export async function downloadOne(url: string, name: string, total: number | nul
 }
 
 /** Saves several files as one zip. Each entry is stored as it is (no compression). */
-export async function downloadZip(files: Array<{ url: string; name: string; bytes: number | null }>, zipName: string, onProgress: (p: Progress) => void): Promise<boolean> {
+export async function downloadZip(files: Array<{ url: string | (() => Promise<string>); name: string; bytes: number | null }>, zipName: string, onProgress: (p: Progress) => void): Promise<boolean> {
   let sink: Sink;
   try { sink = await openSink(safeName(zipName), "application/zip"); } catch (e) { if ((e as Error).name === "AbortError") return false; throw e; }
   const total = files.every((f) => f.bytes) ? files.reduce((a, f) => a + (f.bytes ?? 0), 0) : 0;
@@ -78,7 +78,7 @@ export async function downloadZip(files: Array<{ url: string; name: string; byte
       seen.add(name.toLowerCase());
       const entry = new ZipPassThrough(name);
       zip.add(entry);
-      const got = await pump(f.url, async (c) => { entry.push(c); await written; }, (n) => onProgress({ done: before + n, total, file: f.name, files: i + 1, ofFiles: files.length }));
+      const got = await pump(typeof f.url === "string" ? f.url : await f.url(), async (c) => { entry.push(c); await written; }, (n) => onProgress({ done: before + n, total, file: f.name, files: i + 1, ofFiles: files.length }));
       entry.push(new Uint8Array(0), true);
       before += got;
       if (failed) throw failed;

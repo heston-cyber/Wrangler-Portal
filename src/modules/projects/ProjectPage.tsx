@@ -13,7 +13,7 @@ import { linkProps, navigate } from "../../lib/router";
 import { ShareDialog } from "../review/Share";
 import { errText } from "../docs/pages/common";
 import Projects from "../review/Projects";
-import { StageBar, STAGES, stageName, type Stage, dateText, bytes } from "./common";
+import { StageBar, STAGES, stageName, type Stage, dateText, bytes, openFileLink } from "./common";
 
 type Page = NonNullable<ReturnType<typeof useQuery<typeof api.projects.page>>>;
 export type ProjectTab = "overview" | "cuts" | "documents" | "delivery";
@@ -324,7 +324,7 @@ function Delivery({ page, show, onAddFiles }: { page: Page; show: (m: string) =>
             <ListRow key={f._id} lead={{ icon: "video" }} title={f.name} meta={f.note ?? undefined}
               trailing={f.size ? <span className="secondary">{bytes(f.size)}</span> : undefined}
               action={<span className="pj-filebtns">
-                <button type="button" className="icon-btn" aria-label={`Download ${f.name}`} title="Download (your copy)" onClick={() => void link({ fileId: f._id }).then((r) => window.open(r.url, "_blank", "noopener")).catch((e) => show(errText(e)))}><Icon name="download" size={16} /></button>
+                <button type="button" className="icon-btn" aria-label={`Download ${f.name}`} title="Download (your copy)" onClick={() => void openFileLink(() => link({ fileId: f._id }), (e) => show(errText(e)))}><Icon name="download" size={16} /></button>
                 <button type="button" className="icon-btn" aria-label={`Remove ${f.name}`} title="Remove" onClick={() => void remove({ fileId: f._id })}><Icon name="close" size={16} /></button>
               </span>} />
           ))}

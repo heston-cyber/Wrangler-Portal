@@ -39,22 +39,31 @@ async function ownedProject(ctx: QueryCtx | MutationCtx, raw: string) {
   return p;
 }
 
-/** The people at the project's client who have portal access (a live invite in this business). */
+/** Who hears about this project (stage moves, final files): the invited members of live project or client shares that
+ *  cover it, with a live invite in its business. The same people who can open its project page (myProjects). */
 async function portalPeople(ctx: QueryCtx | MutationCtx, p: Doc<"projects">) {
-  if (!p.clientId) return [];
   const biz = await businessOf(ctx, p);
-  const rows = (await ctx.db.query("clientPeople").withIndex("by_client", (q) => q.eq("clientId", p.clientId!)).collect()).filter((r) => !r.removedAt);
-  const out = [];
-  for (const r of rows) if (biz && (await hasAccess(ctx, biz, r.email))) out.push(r);
+  if (!biz) return [];
+  const shares = (await ctx.db.query("shares").collect()).filter((s) => s.who === "invited" && s.kind !== "video" && !shareState(s) && sameBusiness(s, p));
+  const seen = new Set<string>();
+  const out: Array<{ email: string }> = [];
+  for (const s of shares) {
+    if (!(await coveredProjects(ctx, s)).some((x) => x._id === p._id)) continue;
+    for (const m of await ctx.db.query("shareMembers").withIndex("by_share", (q) => q.eq("shareId", s._id)).collect()) {
+      const e = m.email.toLowerCase();
+      if (seen.has(e) || !(await hasAccess(ctx, biz, m.email))) continue;
+      seen.add(e); out.push({ email: m.email });
+    }
+  }
   return out;
 }
 
-async function clientDocs(ctx: QueryCtx | MutationCtx, emails: Set<string>) {
+async function clientDocs(ctx: QueryCtx | MutationCtx, emails: Set<string>, businessId: Id<"businesses"> | undefined) {
   const docs = new Map<string, { _id: Id<"wsDocuments">; label: string; title: string; status: string; sentAt: number | null; completedAt: number | null }>();
   for (const e of emails) {
     for (const sg of await ctx.db.query("wsSignings").withIndex("by_email", (q) => q.eq("email", e)).collect()) {
       const d = await ctx.db.get(sg.documentId);
-      if (!d || docs.has(d._id) || d.status === "draft" || d.status === "approved" || d.hiddenAt) continue;
+      if (!d || docs.has(d._id) || (businessId && d.businessId !== businessId) || d.status === "draft" || d.status === "approved" || d.hiddenAt) continue;
       docs.set(d._id, { _id: d._id, label: docLabel(d.number), title: d.title, status: d.status, sentAt: d.sentAt ?? null, completedAt: d.completedAt ?? null });
     }
   }
@@ -99,7 +108,7 @@ export const page = query({
       stage: (p.stage ?? "discovery") as Stage, nextStep: p.nextStep ?? null, keyDates: p.keyDates ?? [],
       rounds: { included: r.included, from: r.from, project: p.rounds ?? null, client: r.clientRounds, business: r.businessRounds },
       videos,
-      documents: await clientDocs(ctx, new Set(people.map((x) => x.email))),
+      documents: await clientDocs(ctx, new Set(people.map((x) => x.email)), p.businessId),
       people: people.map((x) => ({ _id: x._id, name: x.name ?? null, email: x.email, role: x.role })),
       delivery: { ...deliveryState(p), files: await filesOf(ctx, p._id) },
       dropbox: !!p.dropboxFolder,
@@ -278,23 +287,25 @@ export const folderOf = internalQuery({
 
 // ---------- the client side ----------
 
-/** The projects a signed-in client can see: those their live share invites cover. */
+/** The projects a signed-in client can see: those a live project or client share they're invited to covers. A share
+ *  of one video doesn't open its project page (stage, documents, final files); it adds that video to a project page
+ *  the person can already see. */
 async function myProjects(ctx: QueryCtx, email: string) {
+  type Row = { project: Doc<"projects">; videos: Map<string, { video: Doc<"videos">; token: string }> };
+  const out = new Map<string, Row>();
   const invites = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()).filter((i) => !i.revokedAt);
-  if (!invites.length) return new Map<string, { project: Doc<"projects">; videos: Map<string, { video: Doc<"videos">; token: string }> }>();
-  const out = new Map<string, { project: Doc<"projects">; videos: Map<string, { video: Doc<"videos">; token: string }> }>();
+  if (!invites.length) return out;
+  const live = [];
   for (const m of await ctx.db.query("shareMembers").withIndex("by_email", (q) => q.eq("email", email)).collect()) {
     const s = await ctx.db.get(m.shareId);
-    if (!s || shareState(s) || !invites.some((i) => sameBusiness(s, i))) continue;
-    const projects = await coveredProjects(ctx, s);
+    if (s && !shareState(s) && invites.some((i) => sameBusiness(s, i))) live.push(s);
+  }
+  for (const s of live) if (s.kind !== "video") for (const p of await coveredProjects(ctx, s)) if (!out.has(p._id)) out.set(p._id, { project: p, videos: new Map() });
+  for (const s of live) {
     for (const vid of await coveredVideos(ctx, s)) {
-      const p = projects.find((x) => x._id === vid.projectId) ?? (await ctx.db.get(vid.projectId));
-      if (!p) continue;
-      const row = out.get(p._id) ?? { project: p, videos: new Map() };
-      if (!row.videos.has(vid._id)) row.videos.set(vid._id, { video: vid, token: s.token });
-      out.set(p._id, row);
+      const row = out.get(vid.projectId);
+      if (row && !row.videos.has(vid._id)) row.videos.set(vid._id, { video: vid, token: s.token });
     }
-    for (const p of projects) if (!out.has(p._id)) out.set(p._id, { project: p, videos: new Map() });
   }
   return out;
 }
@@ -342,7 +353,7 @@ export const forClient = query({
       _id: p._id, label: label(p), business: biz?.name ?? null,
       stage: (p.stage ?? "discovery") as Stage, nextStep: p.nextStep ?? null, keyDates: p.keyDates ?? [],
       rounds: r.included, videos,
-      documents: await clientDocs(ctx, new Set([me.email])),
+      documents: await clientDocs(ctx, new Set([me.email]), p.businessId),
       delivery: { open: d.open, expiresAt: d.open ? d.expiresAt : null, expired: !!d.unlockedAt && !d.open, files: d.open ? await filesOf(ctx, p._id) : [], count: (await filesOf(ctx, p._id)).length },
     };
   },
@@ -359,7 +370,9 @@ export const deliveryLink = action({
     }
     const url: string | null = await ctx.runQuery(internal.projects.versionFileUrl, { versionId: f.versionId!, until: f.until });
     if (!url) throw new ConvexError("That file isn't available.");
-    return { url, name: f.name };
+    // The site's copy may be the render as uploaded (a .mov, say) rather than an MP4: name it by what it is.
+    const ext = /\.(mp4|mov|m4v|mxf)$/i.exec(new URL(url).pathname)?.[1]?.toLowerCase();
+    return { url, name: ext ? f.name.replace(/\.[^.]+$/, `.${ext}`) : f.name };
   },
 });
 export const canDownload = internalQuery({

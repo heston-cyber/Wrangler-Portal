@@ -157,4 +157,20 @@ describe("the client's projects and final files", () => {
     expect(await w.mayaC.query(api.projects.mine, {})).toEqual([]);
     expect(await w.mayaC.query(api.projects.forClient, { projectId: w.p })).toBeNull();
   });
+
+  test("a share of one video doesn't open its project; stage news goes only to the people a project share covers", async () => {
+    const w = await world();
+    // Dan gets a view-only share of the one video: he sees no project page and hears nothing about the project.
+    await w.t.run(async (ctx) => {
+      const s = await ctx.db.insert("shares", { businessId: w.A, token: "tok-video-0000000001", kind: "video", videoId: w.vid, access: "view", who: "invited", allVersions: true, downloads: false, emailNewVersions: false, createdAt: 0, createdBy: (await ctx.db.query("users").first())!._id } as never);
+      await ctx.db.insert("shareMembers", { businessId: w.A, shareId: s, email: "dan@harbor.example", addedAt: 0 });
+    });
+    expect(await w.danC.query(api.projects.mine, {})).toEqual([]);
+    expect(await w.danC.query(api.projects.forClient, { projectId: w.p })).toBeNull();
+    // Maya's share covers only Launch: moving the other Harbor job posts to nobody.
+    expect(await w.heston.mutation(api.projects.setStage, { projectId: w.other, stage: "polish", post: true })).toEqual({ posted: 0 });
+    expect(await w.heston.mutation(api.projects.setStage, { projectId: w.p, stage: "polish", post: true })).toEqual({ posted: 1 });
+    const to = await w.t.run(async (ctx) => (await ctx.db.query("inboxItems").collect()).map((i) => i.email));
+    expect(to).toEqual(["maya@harbor.example"]);
+  });
 });

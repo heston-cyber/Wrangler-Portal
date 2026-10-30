@@ -182,6 +182,7 @@ export const sent = query({
     for (const [k, { first: r, people }] of events) {
       let open = "/sent";
       if (r.source.module === "sign") open = `/sign/d/${r.source.id}`;
+      else if (r.source.module === "projects") open = `/projects/${r.source.id}${r.kind === "final_files" ? "?tab=delivery" : ""}`;
       else if (r.kind === "cut_ready") { const ver = await ctx.db.get(r.source.id as Id<"versions">); if (ver) open = `/v/${ver.videoId}?version=${ver.number}`; }
       else if (r.kind === "reply") {
         const rep = await ctx.db.get(r.source.id as Id<"replies">);

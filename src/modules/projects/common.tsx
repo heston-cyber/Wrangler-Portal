@@ -31,3 +31,17 @@ export function StageBar({ stage, onPick }: { stage: Stage; onPick?: (s: Stage) 
     </ol>
   );
 }
+
+/** Opens a final file's download link in a new tab. The tab opens inside the click (so a popup blocker lets it
+ *  through) and goes to the file once its link arrives; the browser streams it to disk, whatever its size. */
+export async function openFileLink(get: () => Promise<{ url: string }>, onError: (e: unknown) => void) {
+  const tab = window.open("about:blank", "_blank");
+  try {
+    const { url } = await get();
+    if (tab) tab.location.href = url; else window.location.href = url;
+  } catch (e) { tab?.close(); onError(e); }
+}
+
+/** "Download all" streams every file into one zip, which only works without filling memory where the browser can
+ *  save straight to disk (Chrome and Edge on a computer). */
+export const canZip = () => typeof window !== "undefined" && "showSaveFilePicker" in window;

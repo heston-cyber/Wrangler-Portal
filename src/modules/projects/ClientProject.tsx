@@ -11,10 +11,10 @@ import { Icon } from "../../ui/Icon";
 import { useToast } from "../../ui/kit";
 import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps, navigate } from "../../lib/router";
-import { downloadOne, downloadZip } from "../../lib/download";
+import { downloadZip } from "../../lib/download";
 import { errText } from "../docs/pages/common";
 import { useSignedCopy } from "../clients/ClientInbox";
-import { StageBar, stageName, dateText, bytes, STAGES } from "./common";
+import { StageBar, stageName, dateText, bytes, STAGES, openFileLink, canZip } from "./common";
 
 type Data = NonNullable<ReturnType<typeof useQuery<typeof api.projects.forClient>>>;
 export type ClientProjectTab = "overview" | "videos" | "documents";
@@ -57,25 +57,12 @@ function FinalFiles({ d, show, wide }: { d: Data; show: (m: string) => void; wid
   const link = useAction(api.projects.deliveryLink);
   const [busy, setBusy] = useState<string | null>(null);
   const business = d.business ?? "the studio";
-  const one = async (f: Data["delivery"]["files"][number]) => {
-    setBusy(f._id);
-    let url: string | null = null;
-    try {
-      const r = await link({ fileId: f._id as Id<"deliveryFiles"> });
-      url = r.url;
-      const ok = await downloadOne(r.url, r.name, f.size ?? null, () => {});
-      if (ok) show("Downloaded.");
-    } catch (e) {
-      if (url) { window.open(url, "_blank", "noopener"); show("Opened the file in a new tab; save it from there."); }
-      else show(errText(e));
-    }
-    setBusy(null);
-  };
+  const one = (f: Data["delivery"]["files"][number]) => void openFileLink(() => link({ fileId: f._id as Id<"deliveryFiles"> }), (e) => show(errText(e)));
   const all = async () => {
     setBusy("all");
     try {
-      const files = [];
-      for (const f of d.delivery.files) { const r = await link({ fileId: f._id as Id<"deliveryFiles"> }); files.push({ url: r.url, name: r.name, bytes: f.size ?? null }); }
+      // Each link is fetched just before its file, after the save box, so the click still counts and no link goes stale.
+      const files = d.delivery.files.map((f) => ({ url: async () => (await link({ fileId: f._id as Id<"deliveryFiles"> })).url, name: f.name, bytes: f.size ?? null }));
       const ok = await downloadZip(files, `${d.label} final files.zip`, () => {});
       if (ok) show("Downloaded.");
     } catch (e) { show(`${errText(e)} Try the files one at a time.`); }
@@ -92,12 +79,12 @@ function FinalFiles({ d, show, wide }: { d: Data; show: (m: string) => void; wid
   }
   return (
     <div className={`cpj-finalwrap${wide ? " wide" : ""}`}>
-      <Card className="cpj-final open" label="Final files" head={<SectionHead label="Final files" count={d.delivery.files.length} action={d.delivery.files.length > 1 ? <Button size="sm" variant="primary" onClick={() => void all()} disabled={!!busy}>{busy === "all" ? "Downloading…" : "Download all"}</Button> : undefined} />}>
+      <Card className="cpj-final open" label="Final files" head={<SectionHead label="Final files" count={d.delivery.files.length} action={d.delivery.files.length > 1 && canZip() ? <Button size="sm" variant="primary" onClick={() => void all()} disabled={!!busy}>{busy === "all" ? "Downloading…" : "Download all"}</Button> : undefined} />}>
         {d.delivery.files.map((f, i) => (
           <div key={f._id} className="wp-rowwrap">{i > 0 && <Divider />}
             <ListRow className="ilead" lead={{ icon: "video" }} title={f.name}
               meta={[f.size ? bytes(f.size) : null, f.kind === "dropbox" ? "Dropbox link" : null].filter(Boolean).join(" · ") || undefined}
-              action={<Button size="sm" onClick={() => void one(f)} disabled={!!busy}>{busy === f._id ? "Downloading…" : "Download"}</Button>} />
+              action={<Button size="sm" onClick={() => one(f)} disabled={busy === "all"}>Download</Button>} />
           </div>
         ))}
       </Card>

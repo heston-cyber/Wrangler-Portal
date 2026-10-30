@@ -239,7 +239,7 @@ function RoundsAndWatermark({ cur, show }: { cur: BizSettings; show: (m: string)
         <span className="wp-eyebrow">Revision rounds</span>
         <div className="prow"><span className="pl">Default</span><span className="pr">{rounds === null ? <><span>{cur.roundsDefault} {cur.roundsDefault === 1 ? "round" : "rounds"} per video</span><button type="button" className="linkbtn" onClick={() => setRounds(String(cur.roundsDefault))}>Change</button></> : (
           <><input className="input sm" type="number" min={1} max={20} value={rounds} onChange={(e) => setRounds(e.target.value)} aria-label="Rounds per video" autoFocus style={{ width: 80 }} />
-            <Button size="sm" variant="primary" onClick={async () => { const n = Number(rounds); if (!Number.isFinite(n) || n < 1) { show("1 or more."); return; } await save({ roundsDefault: n }); setRounds(null); show("Saved."); }}>Save</Button>
+            <Button size="sm" variant="primary" onClick={async () => { const n = Number(rounds); if (!Number.isFinite(n) || n < 1) { show("1 or more."); return; } try { await save({ roundsDefault: n }); setRounds(null); show("Saved."); } catch (e) { show(String((e as Error).message).replace(/^.*ConvexError: /, "").split("\n")[0]); } }}>Save</Button>
             <Button size="sm" variant="ghost" onClick={() => setRounds(null)}>Cancel</Button></>
         )}</span></div>
         <div className="prow"><span className="pl">How it counts</span><span className="pr">Each version you upload is a round: v1 is round 1, v2 is round 2.</span></div>
