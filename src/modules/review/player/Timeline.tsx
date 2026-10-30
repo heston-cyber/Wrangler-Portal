@@ -90,32 +90,45 @@ export function Timeline({ clock, frameCount, nom, startFrames, notes, sel, high
 
   // The notes bar's height: drag its bottom edge to stretch it (Heston, Oct 29), so stacked ranges spread out and are
   // easier to pick. Remembered on this device; a double-click on the edge puts it back.
-  const [barH, setBarH] = useState(() => { try { const v = Number(localStorage.getItem("wp.tlNotesH")); return v >= MIN_BAR && v <= MAX_BAR ? v : MIN_BAR; } catch { return MIN_BAR; } });
-  const saveH = (h: number) => { setBarH(h); try { localStorage.setItem("wp.tlNotesH", String(h)); } catch { /* private window */ } };
+  const barRef = useRef(MIN_BAR);
+  // Until it's been dragged, the bar grows on its own to give each track about 8 px (up to 80 px).
+  const [userH, setUserH] = useState<number | null>(() => { try { const v = Number(localStorage.getItem("wp.tlNotesH")); return v >= MIN_BAR && v <= MAX_BAR ? v : null; } catch { return null; } });
+  const saveH = (h: number | null) => { setUserH(h); try { if (h === null) localStorage.removeItem("wp.tlNotesH"); else localStorage.setItem("wp.tlNotesH", String(h)); } catch { /* private window */ } };
   const startResize = (e: React.PointerEvent) => {
     e.preventDefault(); e.stopPropagation();
-    const y0 = e.clientY, h0 = barH;
+    const y0 = e.clientY, h0 = barRef.current;
     const move = (m: PointerEvent) => saveH(Math.round(Math.max(MIN_BAR, Math.min(MAX_BAR, h0 + m.clientY - y0))));
     const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
   };
 
-  // Overlapping ranges get their own lanes in the notes bar so none hides another.
-  const ranges = notes.filter((x) => x.kind === "range" && x.inFrame !== undefined && x.outFrame !== undefined).sort((a, b) => a.inFrame! - b.inFrame!);
+  // Tracks, like clips in Resolve (Heston, Oct 29): every frame and range note sits on a track; notes that would touch
+  // or overlap on screen go on the next track up, so none hides another. Whole-video notes aren't on the timeline.
+  const ranges = notes.filter((x) => x.kind === "range" && x.inFrame !== undefined && x.outFrame !== undefined);
+  const marks = notes.filter((x) => x.kind === "frame" && x.inFrame !== undefined);
+  const fpp = n / Math.max(1, width); // frames per pixel
+  const spanOf = (x: BarNote) => {
+    const a = x.inFrame!;
+    const minEnd = a + Math.ceil((x.kind === "range" ? 8 : 6) * fpp);
+    return { a, b: Math.max(x.kind === "range" ? x.outFrame! : a, minEnd) + Math.ceil(2 * fpp) }; // 2 px breathing room
+  };
+  const placed = [...ranges, ...marks].map((x) => ({ x, ...spanOf(x) })).sort((p, q) => p.a - q.a || q.b - p.b);
   const laneEnds: number[] = [];
   const lanes = new Map<string, number>();
-  for (const r of ranges) {
-    let lane = laneEnds.findIndex((end) => end < r.inFrame!);
-    if (lane === -1) { lane = laneEnds.length; laneEnds.push(r.outFrame!); } else laneEnds[lane] = r.outFrame!;
-    lanes.set(r.id, lane);
+  for (const p of placed) {
+    let lane = laneEnds.findIndex((end) => end < p.a);
+    if (lane === -1) { lane = laneEnds.length; laneEnds.push(p.b); } else laneEnds[lane] = p.b;
+    lanes.set(p.x.id, lane);
   }
   const oneLane = laneEnds.length <= 1;
-  // As many lanes as fit the bar's height (at least 3); each lane gets an even share, 4–14 px.
+  const barH = userH ?? Math.max(MIN_BAR, Math.min(80, laneEnds.length * 10 + 4));
+  barRef.current = barH;
+  // As many tracks as fit the bar's height (at least 3); each gets an even share, 4–14 px. Stretch the bar for more.
   const GAP = 2, room = barH - 6;
   const maxLanes = Math.max(3, Math.floor((room + GAP) / (4 + GAP)));
   const laneCount = Math.min(laneEnds.length, maxLanes);
-  const laneH = Math.max(4, Math.min(14, (room - (laneCount - 1) * GAP) / Math.max(1, laneCount)));
-  const laneTop = (id: string) => 3 + Math.min(lanes.get(id) ?? 0, maxLanes - 1) * (laneH + GAP);
+  const laneH = oneLane ? Math.min(14, barH - 8) : Math.max(4, Math.min(14, (room - (laneCount - 1) * GAP) / Math.max(1, laneCount)));
+  const laneTop = (id: string) => oneLane ? Math.round((barH - laneH) / 2) : 3 + Math.min(lanes.get(id) ?? 0, maxLanes - 1) * (laneH + GAP);
 
   // Taps on the notes bar pick the note whose mark is nearest (within 24px), for fingers that land a little off.
   const pickNear = (clientX: number) => {
@@ -140,15 +153,15 @@ export function Timeline({ clock, frameCount, nom, startFrames, notes, sel, high
         {ranges.map((x) => (
           <div key={x.id} className={`tl-range${x.status === "done" ? " done" : ""}${x.id === activeId ? " active" : ""}`} role="button" aria-label={`Range note ${label(x.inFrame!)} to ${label(x.outFrame!)}`}
             title={`${label(x.inFrame!)} → ${label(x.outFrame!)}${x.text ? ` · ${x.text.slice(0, 80)}` : ""}`}
-            style={{ left: pct(x.inFrame!), width: `max(8px, ${pct(x.outFrame! - x.inFrame! + 1)})`, top: oneLane ? Math.round((barH - Math.min(14, barH - 14)) / 2) : laneTop(x.id), height: oneLane ? Math.min(14, barH - 14) : laneH }} />
+            style={{ left: pct(x.inFrame!), width: `max(8px, ${pct(x.outFrame! - x.inFrame! + 1)})`, top: laneTop(x.id), height: laneH }} />
         ))}
-        {notes.filter((x) => x.kind === "frame" && x.inFrame !== undefined).map((x) => (
+        {marks.map((x) => (
           <div key={x.id} className={`tl-mark${x.status === "done" ? " done" : ""}${x.id === activeId ? " active" : ""}`} role="button" aria-label={`Note at ${label(x.inFrame!)}`}
-            title={`${label(x.inFrame!)}${x.text ? ` · ${x.text.slice(0, 80)}` : ""}`} style={{ left: pct(x.inFrame! + 0.5) }} />
+            title={`${label(x.inFrame!)}${x.text ? ` · ${x.text.slice(0, 80)}` : ""}`} style={{ left: pct(x.inFrame! + 0.5), top: laneTop(x.id), height: laneH }} />
         ))}
         <Head clock={clock} n={n} at={drag?.f} className="tl-notehead" />
         <span className="tl-notes-grip" role="separator" aria-orientation="horizontal" aria-label="Drag to make the notes bar taller or shorter" title="Drag to resize · double-click to reset"
-          onPointerDown={startResize} onDoubleClick={(e) => { e.stopPropagation(); saveH(MIN_BAR); }} />
+          onPointerDown={startResize} onDoubleClick={(e) => { e.stopPropagation(); saveH(null); }} />
       </div>
 
       <div

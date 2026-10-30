@@ -153,11 +153,11 @@ function NoteCard({ n, here, focused, focusTick, tc, onJump, onCopied, onSeekFra
         </div>
       )}
 
-      {(n.still || n.stillIn || n.stillOut) && (
+      {/* Heston (Oct 29): plain frame stills stay in the backend (Claude reads them); the card shows a still only when
+          it carries a drawing. */}
+      {n.drawing && n.still && (
         <div className="nstill">
-          {n.still && <a href={n.still} target="_blank" rel="noreferrer"><img src={n.still} alt="Frame with drawing" loading="lazy" /></a>}
-          {n.kind === "range" && n.stillIn && n.stillIn !== n.still && <a href={n.stillIn} target="_blank" rel="noreferrer"><img src={n.stillIn} alt="First frame" loading="lazy" /></a>}
-          {n.kind === "range" && n.stillOut && <a href={n.stillOut} target="_blank" rel="noreferrer"><img src={n.stillOut} alt="Last frame" loading="lazy" /></a>}
+          <a href={n.still} target="_blank" rel="noreferrer"><img src={n.still} alt="Frame with drawing" loading="lazy" /></a>
         </div>
       )}
 

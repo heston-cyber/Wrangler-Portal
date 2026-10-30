@@ -1558,8 +1558,7 @@ button.wp-hubcard[aria-busy], button.wp-tplcard[aria-busy] { opacity: 1; }
 .note .reply { padding-top: 4px; font-size: 12.5px; }
 @media (max-width: 820px) { .note { padding: 9px 11px 7px; } }
 /* The notes bar on the timeline stretches (drag its bottom edge) */
-.tl-notes .tl-mark { top: 4px; height: calc(var(--tlh, 22px) - 8px); }
-.tl-notes .tl-mark.active { top: 2px; height: calc(var(--tlh, 22px) - 4px); }
+.tl-notes .tl-mark.active { width: 5px; margin-left: -2.5px; }
 .tl-notes-grip { position: absolute; left: 0; right: 0; bottom: -7px; height: 10px; cursor: ns-resize; z-index: 3; touch-action: none; display: grid; place-items: center; }
 .tl-notes-grip::after { content: ""; width: 32px; height: 3px; border-radius: 2px; background: color-mix(in srgb, var(--text-primary) 22%, transparent); transition: background var(--dur-fast); }
 .tl-notes:hover .tl-notes-grip::after, .tl-notes-grip:active::after { background: var(--accent); }
