@@ -222,6 +222,7 @@ export const video = query({
       roundsIncluded: (await roundsFor(ctx, project)).included,
       // D24: clients and guests see the business's watermark over review copies unless it's off for this client.
       watermark: owner ? null : await watermarkFor(ctx, project),
+      businessName: project?.businessId ? (await ctx.db.get(project.businessId))?.name ?? null : null,
     };
   },
 });

@@ -9,7 +9,8 @@ import { Icon } from "../../ui/Icon";
 import { linkProps, navigate } from "../../lib/router";
 import { Menu, MenuItem, MenuSep, Modal, Spinner, Thumb, useToast } from "../../ui/kit";
 import { ago, transcriptChip } from "../../lib/format";
-import { isVideoFile, startUpload } from "../../lib/uploads";
+import { isVideoFile } from "../../lib/uploads";
+import { useRoundGate } from "../projects/RoundGate";
 import { ShareDialog } from "./Share";
 import { DEFAULT_FIELDS, fieldText, pad5, statusText, type FieldKey } from "../../lib/details";
 
@@ -97,8 +98,10 @@ export function VideoMenu({ x }: { x: VideoItem }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, show] = useToast();
+  const [uploadVersion, roundGate] = useRoundGate();
   return (
     <>
+      {roundGate}
       <Menu align="end" label="Video options" trigger={(p) => <button {...p} className="icon-btn bare vmenu" aria-label={`${x.title} options`}><Icon name="more" size={18} /></button>}>
         <MenuItem icon={<Share2 size={16} />} onSelect={() => setDialog("share")}>Share video…</MenuItem>
         <MenuItem icon={<Upload size={16} />} onSelect={() => fileRef.current?.click()}>Upload a new version</MenuItem>
@@ -106,7 +109,7 @@ export function VideoMenu({ x }: { x: VideoItem }) {
         <MenuItem icon={<Trash2 size={16} />} danger onSelect={() => setDialog("delete")}>Delete video</MenuItem>
       </Menu>
       <input ref={fileRef} type="file" hidden accept="video/*,.mov,.mp4,.m4v,.mxf,.mkv"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f && isVideoFile(f)) { void startUpload(convex, x._id, f); navigate(`/v/${x._id}`); } e.target.value = ""; }} />
+        onChange={(e) => { const f = e.target.files?.[0]; if (f && isVideoFile(f)) { void uploadVersion(x._id, f, () => navigate(`/v/${x._id}`)); } e.target.value = ""; }} />
       {dialog === "share" && <ShareDialog target={{ kind: "video", videoId: x._id }} label={x.title} onClose={() => setDialog(null)} show={show} />}
       {dialog === "delete" && (
         <Modal onClose={() => setDialog(null)} label="Delete video" width={480}>

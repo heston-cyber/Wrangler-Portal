@@ -5,7 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { BrandImg } from "../../ui/BrandImg";
 import { useConvex, useMutation, useQuery } from "convex/react";
 import {
-  ArrowUp, Brush, Check, ChevronDown, ChevronUp, Circle, CircleCheckBig, Copy, Download, ListOrdered, Ellipsis, EyeOff, Eye, Keyboard, Maximize, Minimize, MoveUpRight, PanelRight, Pause, Pencil, Play,
+  AlertTriangle, ArrowUp, Brush, Check, ChevronDown, ChevronUp, Circle, CircleCheckBig, Copy, Download, ListOrdered, Ellipsis, EyeOff, Eye, Keyboard, Maximize, Minimize, MoveUpRight, PanelRight, Pause, Pencil, Play,
   Crosshair, Film, Mic, Plus, Settings, Share2, SlidersHorizontal, Square, Timer, Undo2, Upload, Volume2, VolumeX, X,
 } from "lucide-react";
 import type { FunctionReturnType } from "convex/server";
@@ -14,7 +14,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { frameTc, frameDuration, fpsValue, isValidTc, nominal, tcToFrames, type Fps } from "../../../convex/lib/frames";
 import { DEMO } from "../../config";
 import { linkProps, navigate } from "../../lib/router";
-import { isVideoFile, startUpload, useUploads } from "../../lib/uploads";
+import { isVideoFile, useUploads } from "../../lib/uploads";
 import { markersEdl } from "../../lib/edl";
 import { enterPageFullscreen, enterVideoFullscreen, exitPageFullscreen, fullscreenElement, fullscreenMode, onFullscreenChange } from "../../lib/fullscreen";
 import { clockText, projectLabel, statusChip, transcriptChip } from "../../lib/format";
@@ -42,6 +42,9 @@ import { downloadOne } from "../../lib/download";
 import { makePoster } from "./player/poster";
 import { useWatchBeat } from "./player/useWatchBeat";
 import { ViewsChip, ViewsDialog } from "./Views";
+import { RoundChip } from "./VideoRows";
+import { Watermark } from "./player/Watermark";
+import { useRoundGate } from "../projects/RoundGate";
 
 export default function VideoPage({ videoId, versionNumber, noteId }: { videoId: Id<"videos">; versionNumber: number | null; noteId: string | null }) {
   const viewer = useViewer();
@@ -133,6 +136,12 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const owner = viewer.can === "owner";
   const canComment = viewer.can !== "view";
   const uploads = useUploads(data._id);
+  // Phase 2 Part A: "Round n of N" for the owner and the client (not guests); the client's last-included notice.
+  const isLatest = !!version && version.number === data.versions[data.versions.length - 1]?.number;
+  const showRound = !!version && (owner || viewer.kind === "client");
+  const lastKey = version ? `wp.lastround.${version._id}` : "";
+  const [lastSeen, setLastSeen] = useState(() => readFlag(lastKey));
+  const lastNotice = !owner && viewer.kind === "client" && isLatest && !!version && version.number === data.roundsIncluded && !lastSeen;
   const notes = useQuery(api.notes.forVersion, version ? { versionId: version._id, ...shareArgs } : "skip") as NoteRow[] | undefined;
   const wave = useQuery(api.waveforms.forVersion, version ? { versionId: version._id, ...shareArgs } : "skip") as Wave | undefined;
   // Client approval (Phase 1): the owner sees who approved which version; a signed-in client sees their own.
@@ -146,6 +155,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const createNote = useMutation(api.notes.create);
   const reportFrameCount = useMutation(api.library.reportFrameCount);
   const [toast, showToast] = useToast();
+  const [uploadVersion, roundGate] = useRoundGate();
 
   const fps: Fps = useMemo(() => ({ num: version?.fpsNum ?? 24000, den: version?.fpsDen ?? 1001 }), [version?.fpsNum, version?.fpsDen]);
   const startTc = version?.startTimecode ?? "01:00:00:00";
@@ -678,6 +688,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     <div className={`review${fs ? " fs" : ""}${typing && narrow ? " typing" : ""}`} ref={rootRef}>
       <TopBar right={
         <>
+          {showRound && <span className="hide-sm" style={{ display: "contents" }}><RoundChip n={version!.number} of={data.roundsIncluded} /></span>}
           {owner && <span className="hide-sm" style={{ display: "contents" }}><ViewsChip videoId={data._id} onOpen={() => setDialog("views")} /></span>}
           {owner && <button className={`btn sm${covering?.some((s) => s.state === "on") ? " on" : ""}`} onClick={() => setDialog("share")} title={covering?.length ? `Shared: ${covering.filter((s) => s.state === "on").length} live ${covering.filter((s) => s.state === "on").length === 1 ? "link" : "links"}` : "Share this video"}><Share2 size={15} /><span className="hide-sm">Share</span></button>}
           {owner && <button className="btn sm hide-sm" onClick={downloadEdl} disabled={!notes?.length} title="Download the notes as Resolve markers (EDL)"><Download size={15} />Resolve markers</button>}
@@ -724,7 +735,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
         )}
       </TopBar>
       <input ref={fileRef} type="file" hidden accept="video/*,.mov,.mp4,.m4v,.mxf,.mkv"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f && isVideoFile(f)) { void startUpload(convex, data._id, f); setPanel("versions"); showToast("Uploading a new version…"); } e.target.value = ""; }} />
+        onChange={(e) => { const f = e.target.files?.[0]; if (f && isVideoFile(f)) { void uploadVersion(data._id, f, () => { setPanel("versions"); showToast("Uploading a new version…"); }); } e.target.value = ""; }} />
 
       <div className="rbody">
         <div className="stagecol">
@@ -745,6 +756,15 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                   </>
                 );
               }}</AtFrame>
+              {data.watermark && version && ready && <Watermark look={data.watermark} />}
+              {lastNotice && (
+                <div className="vlast" role="status">
+                  <AlertTriangle size={18} />
+                  <div className="ph-only"><b>Last round included.</b><span>Changes after this version need a change order.</span></div>
+                  <div className="pc-only"><b>This is the last round included in this project.</b><span>Leave your notes as usual. More changes after this version need a change order, which {data.businessName ?? "the studio"} will send you to sign.</span></div>
+                  <button type="button" className="icon-btn bare sm" onClick={() => { writeFlag(lastKey); setLastSeen(true); }} aria-label="Dismiss"><X size={16} /></button>
+                </div>
+              )}
               {!version && (
                 <div className="stage-msg"><div style={{ display: "grid", gap: 12, justifyItems: "center" }}>
                   <span>{owner ? "No versions yet." : "Nothing to play yet."}</span>
@@ -956,6 +976,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       {dialog === "final" && <ApproveFinal videoId={data._id} title={data.title} onClose={() => setDialog(null)} onDone={(m) => showToast(m)} />}
       {dialog === "register" && <AddToRegister videoId={data._id} title={data.title} onClose={() => setDialog(null)} onDone={(m) => showToast(m)} />}
       {toast}
+      {roundGate}
     </div>
   );
 }
