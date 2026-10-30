@@ -19,8 +19,16 @@ jobs:
   tests:
     uses: ./.github/workflows/tests.yml
 
-  build:
+  # Oct 29 (Phase 1 go-live): an encrypted copy of the live database and files goes to Bunny before anything deploys.
+  backup:
     needs: tests
+    uses: ./.github/workflows/backup.yml
+    with:
+      target: prod
+    secrets: inherit
+
+  build:
+    needs: [tests, backup]
     runs-on: ubuntu-latest
     env:
       CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
@@ -49,6 +57,10 @@ jobs:
           export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7C/|}"
           export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7c/|}"
           npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name VITE_CONVEX_URL
+          # Names only (the repo is public). Live must never carry the preview's email lock.
+          names="$(npx convex env list 2>/dev/null | cut -d= -f1 | sort | tr '\n' ' ')"
+          echo "Settings on live (names only): $names"
+          case " $names " in *" EMAIL_ONLY_TO "*) echo "::warning::EMAIL_ONLY_TO is set on live: client emails are being held";; esac
       - name: Build the site only (no backend key yet)
         if: ${{ env.CONVEX_DEPLOY_KEY == '' }}
         run: npm run build

@@ -15,6 +15,12 @@ name: Weekly backup to Bunny
 on:
   schedule:
     - cron: "43 8 * * 0" # Sundays 3:43 am Oklahoma City (CDT); 2:43 am in winter
+  # Oct 29: Deploy calls this for prod before every live deploy, so there's always a copy from just before it.
+  workflow_call:
+    inputs:
+      target:
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       target:
