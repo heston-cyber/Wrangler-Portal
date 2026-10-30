@@ -264,6 +264,7 @@ export const page = query({
     const items = await ctx.db.query("inboxItems").withIndex("by_client", (q) => q.eq("clientId", clientId)).collect();
     return {
       client: { _id: client._id, name: client.name },
+      settings: { rounds: client.rounds ?? null, watermarkOff: !!client.watermarkOff, businessRounds: (client.businessId ? (await ctx.db.get(client.businessId))?.roundsDefault : undefined) ?? 2 },
       people: await Promise.all(people.sort((a, b) => a.createdAt - b.createdAt).map(async (p) => ({ _id: p._id, email: p.email, name: p.name ?? null, role: p.role, access: await accessOf(ctx, p.email) }))),
       projects: projectRows,
       shares: shares.map((s) => ({ _id: s._id, kind: s.kind, who: s.who, access: s.access, off: !!s.offAt, expiresAt: s.expiresAt ?? null })),
@@ -271,6 +272,23 @@ export const page = query({
       documents: [...docs.values()].sort((a, b) => (b.sentAt ?? 0) - (a.sentAt ?? 0)),
       inbox: { items: items.length, unread: items.filter((i) => !i.readAt).length },
     };
+  },
+});
+
+/** Phase 2 Part A: a client's rounds per video (null: the business's) and whether their review copies skip the
+ *  watermark (D24: watermarked unless switched off here). */
+export const setSettings = mutation({
+  args: { clientId: v.string(), rounds: v.optional(v.union(v.number(), v.null())), watermarkOff: v.optional(v.boolean()) },
+  handler: async (ctx, a) => {
+    await requireMe(ctx);
+    const id = ctx.db.normalizeId("clients", a.clientId);
+    const c = id ? await ctx.db.get(id) : null;
+    if (!c) throw new ConvexError("This client doesn't exist any more.");
+    const patch: Partial<Doc<"clients">> = {};
+    if (a.rounds !== undefined) patch.rounds = a.rounds === null ? undefined : Math.max(1, Math.min(20, Math.round(a.rounds)));
+    if (a.watermarkOff !== undefined) patch.watermarkOff = a.watermarkOff || undefined;
+    await ctx.db.patch(c._id, patch);
+    return null;
   },
 });
 

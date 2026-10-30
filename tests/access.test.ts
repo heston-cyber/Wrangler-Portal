@@ -47,7 +47,9 @@ const KEYED = new Set(["r1results.report"]);
 const SIGNED_IN = new Set(["users.setName", "clients.account", "shares.mine",
   // Phase 1: a client's own Inbox, Documents and their businesses' look
   "inbox.mine", "inbox.unreadCount", "inbox.markRead", "inbox.markAllRead", "documents.mine", "business.brand",
-  "portal.waiting", "emails.myPrefs", "emails.setMine"]);
+  "portal.waiting", "emails.myPrefs", "emails.setMine",
+  // Phase 2 Part A: a client's projects (only those their share invites cover) and the final files' links (only once open)
+  "projects.mine", "projects.forClient", "projects.deliveryLink"]);
 
 import { argsFor, call, publicFunctions, setup } from "./matrix";
 const denied = (e: unknown) => /Sign in first|Not allowed/.test(String((e as Error).message ?? e));

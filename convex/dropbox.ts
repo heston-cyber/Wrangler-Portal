@@ -267,6 +267,27 @@ async function accessToken(ctx: ActionCtx, force = false): Promise<string> {
 // For backend-only Node actions that stream files (never returned to a client or logged).
 export const freshToken = internalAction({ args: {}, handler: async (ctx): Promise<string> => accessToken(ctx) });
 
+// Phase 2 Part A (Oct 29): final files. The files in a project's folder (and its subfolders), to pick from; and a
+// short-lived download link for one of them (Dropbox's temporary link, about 4 hours, made on each click).
+const DELIVERABLE = /\.(mov|mp4|m4v|mxf|zip|wav|mp3|aif|aiff|png|jpg|jpeg|tif|tiff|pdf|srt|vtt)$/i;
+export const listFolder = internalAction({
+  args: { path: v.string() },
+  handler: async (ctx, { path }): Promise<{ path: string; name: string; size: number }[]> => {
+    const out: { path: string; name: string; size: number }[] = [];
+    let r = await dbx(ctx, "/files/list_folder", { path, recursive: true, limit: 500 });
+    for (let page = 0; page < 6; page++) {
+      for (const e of r.entries ?? []) if (e[".tag"] === "file" && DELIVERABLE.test(e.name)) out.push({ path: e.path_lower, name: e.name, size: e.size });
+      if (!r.has_more || out.length >= 300) break;
+      r = await dbx(ctx, "/files/list_folder/continue", { cursor: r.cursor });
+    }
+    return out.sort((a, b) => a.path.localeCompare(b.path)).slice(0, 300);
+  },
+});
+export const temporaryLink = internalAction({
+  args: { path: v.string() },
+  handler: async (ctx, { path }): Promise<string> => (await dbx(ctx, "/files/get_temporary_link", { path })).link as string,
+});
+
 async function dbx(ctx: ActionCtx, path: string, body: unknown): Promise<any> {
   let r = await rawCall(await accessToken(ctx), path, body);
   if (r.status === 401) r = await rawCall(await accessToken(ctx, true), path, body);

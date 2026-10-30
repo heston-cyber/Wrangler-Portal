@@ -130,7 +130,29 @@ export default defineSchema({
     // C7: the Dropbox folder that made or matched this project (path_lower, e.g. /clients/floor trader/backrooms).
     // A renamed folder renames the project; a deleted folder only clears this.
     dropboxFolder: v.optional(v.string()),
-  }).index("by_name", ["name"]).index("by_dropbox_folder", ["dropboxFolder"]),
+    // Phase 2 Part A (Oct 29): the project hub. Stage is the Wrangler Way (Discovery → Delivery); missing = Discovery.
+    stage: v.optional(v.union(v.literal("discovery"), v.literal("strategy"), v.literal("production"), v.literal("polish"), v.literal("delivery"))),
+    nextStep: v.optional(v.string()),
+    keyDates: v.optional(v.array(v.object({ label: v.string(), date: v.string() }))), // date: YYYY-MM-DD
+    rounds: v.optional(v.number()),              // rounds per video on this project (missing: the client's, then the business's)
+    deliveryUnlockedAt: v.optional(v.number()),  // final files open to the client from here (Part B: when the final invoice is paid)
+    deliveryLinkDays: v.optional(v.number()),    // how long download links work after unlock (missing: 7)
+    updatedAt: v.optional(v.number()),
+  }).index("by_name", ["name"]).index("by_dropbox_folder", ["dropboxFolder"]).index("by_client", ["clientId"]),
+
+  // Phase 2 Part A (Oct 29): the final files of a project. Locked until the project's delivery is unlocked; then each
+  // opens as a link that expires. A file is either in Dropbox (by path) or a version on the site.
+  deliveryFiles: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    projectId: v.id("projects"),
+    name: v.string(),
+    size: v.optional(v.number()),
+    kind: v.union(v.literal("dropbox"), v.literal("version")),
+    dropboxPath: v.optional(v.string()),   // path_lower
+    versionId: v.optional(v.id("versions")),
+    note: v.optional(v.string()),          // "ProRes 422 HQ", "From the site"
+    createdAt: v.number(),
+  }).index("by_project", ["projectId", "createdAt"]),
 
   videos: defineTable({
     businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
@@ -378,6 +400,8 @@ export default defineSchema({
     // Phase 0.5d step 5: made automatically because a project or share named this client (not shown as a
     // "New client" on its own); every client a project names now has a record, and projects link to it by id.
     fromProjects: v.optional(v.boolean()),
+    rounds: v.optional(v.number()),          // Phase 2: rounds per video for this client's projects (missing: the business's)
+    watermarkOff: v.optional(v.boolean()),   // Phase 2 (D24): review copies are watermarked unless switched off here
   }).index("by_name", ["name"]).index("by_dropbox_folder", ["dropboxFolder"]),
 
   // Playback problems the browser reported (Oct 21), so they can be diagnosed on devices Claude can't reach.
@@ -662,8 +686,12 @@ export default defineSchema({
     accent: v.optional(v.string()),        // #rrggbb
     background: v.optional(v.string()),    // #rrggbb
     // Which modules the business uses. Menu items only show when on (and only once something is in them).
-    modules: v.optional(v.object({ review: v.boolean(), docs: v.boolean(), payments: v.boolean() })),
+    modules: v.optional(v.object({ review: v.boolean(), docs: v.boolean(), payments: v.boolean(), projects: v.optional(v.boolean()) })),
     updatedAt: v.optional(v.number()),
+    // Phase 2 Part A (Oct 29): revision rounds (each version is a round, D23; default 2, D23b) and the watermark look
+    // on review copies (D24: on for every client unless switched off on the client).
+    roundsDefault: v.optional(v.number()),
+    watermark: v.optional(v.object({ corner: v.union(v.literal("tl"), v.literal("tr"), v.literal("bl"), v.literal("br")), size: v.union(v.literal("small"), v.literal("large")), opacity: v.number() })),
   }).index("by_slug", ["slug"]),
 
   // Phase 1 (Oct 29): the people at a client. Each one has a role, and portal access comes from their invite
@@ -697,12 +725,12 @@ export default defineSchema({
     businessId: v.optional(v.id("businesses")),
     clientId: v.optional(v.id("clients")),
     email: v.string(),                 // the recipient, lower-case (a person with a live invite in this business)
-    kind: v.union(v.literal("cut_ready"), v.literal("reply"), v.literal("to_sign"), v.literal("signed"), v.literal("cancelled"), v.literal("note")),
+    kind: v.union(v.literal("cut_ready"), v.literal("reply"), v.literal("to_sign"), v.literal("signed"), v.literal("cancelled"), v.literal("note"), v.literal("stage"), v.literal("final_files")),
     title: v.string(),
     text: v.string(),                  // a short line, shown under the title
     link: v.optional(v.string()),      // a path in the portal or a signing link
     linkLabel: v.optional(v.string()), // a note's link button ("Watch Harbor Coffee 30s v2")
-    source: v.object({ module: v.union(v.literal("review"), v.literal("sign"), v.literal("inbox")), id: v.string() }),
+    source: v.object({ module: v.union(v.literal("review"), v.literal("sign"), v.literal("inbox"), v.literal("projects")), id: v.string() }),
     key: v.string(),
     noteId: v.optional(v.id("inboxNotes")),
     createdAt: v.number(),

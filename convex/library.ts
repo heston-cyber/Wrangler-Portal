@@ -1,6 +1,6 @@
 // Projects, videos and versions: what the home page and the video page read.
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
-import type { MutationCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import { requireMe } from "./lib/access";
@@ -10,6 +10,7 @@ import { insertVideo, nextFileName } from "./lib/register";
 import { downloadFor, signStillUrl, signedThumbUrl, versionMedia } from "./lib/media";
 import { stillOk } from "./lib/stillOk";
 import { accessToVideo, accessToVersion, shareArg, versionShown } from "./lib/viewer";
+import { roundsFor } from "./lib/rounds";
 
 const clean = (s: string, max = 200) => s.trim().replace(/\s+/g, " ").slice(0, max);
 
@@ -64,11 +65,13 @@ export const overview = query({
       });
     }
     return {
-      projects: projects.map((p) => ({
+      projects: await Promise.all(projects.map(async (p) => ({
         _id: p._id, name: p.name, jobNumber: p.jobNumber ?? null, client: p.client ?? null, createdAt: p.createdAt,
+        roundsIncluded: (await roundsFor(ctx, p)).included, // Phase 2: "Round n of N" on each video row
+        stage: p.stage ?? null,
         videoCount: videos.filter((x) => x.projectId === p._id).length,
         updatedAt: Math.max(p.createdAt, ...videos.filter((x) => x.projectId === p._id).map((x) => x.updatedAt)),
-      })),
+      }))),
       videos: vidsOut,
       // Clients made with "New client" (they show even before they have projects).
       clients: (await ctx.db.query("clients").collect()).filter((c) => !c.fromProjects).map((c) => c.name).sort((a, b) => a.localeCompare(b)),
@@ -215,9 +218,22 @@ export const video = query({
       can: access.can,
       viewer: access.kind === "owner" ? { kind: "owner" as const, name: access.name } : access.kind === "client" ? { kind: "client" as const, name: access.name } : { kind: "guest" as const, name: access.name },
       downloads: owner || !!access.share?.downloads,
+      // Phase 2 Part A: each version is a round (D23); the project includes this many per video.
+      roundsIncluded: (await roundsFor(ctx, project)).included,
+      // D24: clients and guests see the business's watermark over review copies unless it's off for this client.
+      watermark: owner ? null : await watermarkFor(ctx, project),
     };
   },
 });
+
+async function watermarkFor(ctx: QueryCtx, project: Doc<"projects"> | null) {
+  if (!project) return null;
+  const client = project.clientId ? await ctx.db.get(project.clientId) : null;
+  if (client?.watermarkOff) return null;
+  const biz = project.businessId ? await ctx.db.get(project.businessId) : null;
+  const w = biz?.watermark ?? { corner: "br" as const, size: "small" as const, opacity: 0.35 };
+  return { ...w, logoUrl: biz?.logoFileId ? await ctx.storage.getUrl(biz.logoFileId) : null };
+}
 
 export async function publicVersion(x: Doc<"versions">) {
   const media = await versionMedia(x);

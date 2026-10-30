@@ -1,6 +1,6 @@
 name: Preview (Phase 1)
 
-# Oct 29: builds the phase1-backend branch against the DEVELOPMENT backend (a copy of live data) and serves it at
+# Oct 29: builds the phase2 branch (phase1-backend until Phase 1 went live) against the DEVELOPMENT backend (a copy of live data) and serves it at
 # preview.wranglerportal.com behind a password page (infra/cloudflare-preview). Live is never touched.
 # Before deploying it sets two settings on dev: EMAIL_ONLY_TO (email goes only to Heston's addresses; everyone else's is
 # held) and SITE_URL (links in emails point at the preview). The repo is public, so nothing here prints values.
@@ -8,7 +8,7 @@ name: Preview (Phase 1)
 # PREVIEW_EMAILS (variables; comma-separated, default heston@wranglerproductions.com).
 on:
   push:
-    branches: [phase1-backend]
+    branches: [phase2]
   workflow_dispatch:
 
 permissions:

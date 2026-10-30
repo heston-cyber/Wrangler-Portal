@@ -71,7 +71,8 @@ export const isDefault = internalQuery({
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const DEFAULT_MODULES = { review: true, docs: true, payments: false };
+const DEFAULT_MODULES = { review: true, docs: true, payments: false, projects: true };
+const WATERMARK_DEFAULT = { corner: "br" as const, size: "small" as const, opacity: 0.35 };
 
 function ownBusiness(ctx: unknown): Id<"businesses"> {
   const id = businessInScope(ctx);
@@ -85,7 +86,9 @@ async function settingsOf(ctx: QueryCtx, b: Doc<"businesses">) {
     name: b.name, legalName: b.legalName ?? null, ownerName: b.ownerName ?? null, emailFromName: b.emailFromName ?? null,
     replyTo: b.replyTo ?? null, ownerEmail: c.ownerEmail, accent: b.accent ?? null, background: b.background ?? null,
     logoUrl: b.logoFileId ? await ctx.storage.getUrl(b.logoFileId) : null,
-    logoLightUrl: b.logoLightFileId ? await ctx.storage.getUrl(b.logoLightFileId) : null, modules: b.modules ?? DEFAULT_MODULES,
+    logoLightUrl: b.logoLightFileId ? await ctx.storage.getUrl(b.logoLightFileId) : null, modules: { ...DEFAULT_MODULES, ...(b.modules ?? {}) },
+    // Phase 2 Part A: revision rounds (D23b: 2) and the watermark look on review copies (D24).
+    roundsDefault: b.roundsDefault ?? 2, watermark: b.watermark ?? WATERMARK_DEFAULT,
     // Settings shows a small warning when no text colour reaches 4.5:1 on the accent (Heston, Oct 29).
     accentCheck: b.accent ? (({ ratio, ok }) => ({ ratio: Math.round(ratio * 100) / 100, ok }))(textOn(b.accent)) : null,
   };
@@ -107,7 +110,9 @@ export const updateSettings = mutation({
     name: v.optional(v.string()), legalName: v.optional(v.union(v.string(), v.null())), ownerName: v.optional(v.union(v.string(), v.null())),
     emailFromName: v.optional(v.union(v.string(), v.null())), replyTo: v.optional(v.union(v.string(), v.null())),
     accent: v.optional(v.union(v.string(), v.null())), background: v.optional(v.union(v.string(), v.null())),
-    modules: v.optional(v.object({ review: v.boolean(), docs: v.boolean(), payments: v.boolean() })),
+    modules: v.optional(v.object({ review: v.boolean(), docs: v.boolean(), payments: v.boolean(), projects: v.optional(v.boolean()) })),
+    roundsDefault: v.optional(v.number()),
+    watermark: v.optional(v.object({ corner: v.union(v.literal("tl"), v.literal("tr"), v.literal("bl"), v.literal("br")), size: v.union(v.literal("small"), v.literal("large")), opacity: v.number() })),
   },
   handler: async (ctx, a) => {
     await requireMe(ctx);
@@ -136,6 +141,8 @@ export const updateSettings = mutation({
       patch[k] = c ? c.toUpperCase() : undefined;
     }
     if (a.modules) patch.modules = a.modules;
+    if (a.roundsDefault !== undefined) patch.roundsDefault = Math.max(1, Math.min(20, Math.round(a.roundsDefault)));
+    if (a.watermark) patch.watermark = { ...a.watermark, opacity: Math.max(0.05, Math.min(1, Math.round(a.watermark.opacity * 100) / 100)) };
     await ctx.db.patch(id, patch as never);
     return null;
   },
@@ -179,7 +186,7 @@ export const brand = query({
     for (const id of ids) {
       const b = id ? await ctx.db.get(id as Id<"businesses">) : null;
       if (!b) continue;
-      out.push({ businessId: b._id, name: b.name, accent: b.accent ?? null, background: b.background ?? null, logoUrl: b.logoFileId ? await ctx.storage.getUrl(b.logoFileId) : null, modules: b.modules ?? DEFAULT_MODULES });
+      out.push({ businessId: b._id, name: b.name, accent: b.accent ?? null, background: b.background ?? null, logoUrl: b.logoFileId ? await ctx.storage.getUrl(b.logoFileId) : null, modules: { ...DEFAULT_MODULES, ...(b.modules ?? {}) } });
     }
     return out;
   },

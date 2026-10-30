@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 export const modules = import.meta.glob("../convex/**/*.ts");
 
-export type Ids = { requestId: Id<"wsRequests">; buildId: Id<"wsBuilds">; templateId: Id<"wsTemplates">; clauseId: Id<"wsClauses">; styleId: Id<"wsStyles">; docId: Id<"wsDocuments">; wsVersionId: Id<"wsVersions">; projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage">; clientRecId: Id<"clients">; personId: Id<"clientPeople">; inboxItemId: Id<"inboxItems">; inboxNoteId: Id<"inboxNotes"> };
+export type Ids = { requestId: Id<"wsRequests">; buildId: Id<"wsBuilds">; templateId: Id<"wsTemplates">; clauseId: Id<"wsClauses">; styleId: Id<"wsStyles">; docId: Id<"wsDocuments">; wsVersionId: Id<"wsVersions">; projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage">; clientRecId: Id<"clients">; personId: Id<"clientPeople">; inboxItemId: Id<"inboxItems">; inboxNoteId: Id<"inboxNotes">; deliveryFileId: Id<"deliveryFiles"> };
 
 // Minimal valid arguments for each function, so the access check (not argument validation) is what refuses.
 export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
@@ -76,6 +76,13 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "business.settings": {}, "business.updateSettings": { accent: "#112233" }, "business.logoUploadUrl": {}, "business.setLogo": { storageId: null }, "business.brand": {},
     "activity.recent": {}, "home.needs": {},
     "approvals.approve": { versionId: ids.versionId }, "approvals.forVideo": { videoId: ids.videoId },
+    // Phase 2 Part A (Oct 29)
+    "clients.setSettings": { clientId: ids.clientRecId, rounds: 3 },
+    "projects.page": { projectId: ids.projectId }, "projects.setStage": { projectId: ids.projectId, stage: "polish", post: false }, "projects.setNextStep": { projectId: ids.projectId, text: "x" },
+    "projects.setKeyDates": { projectId: ids.projectId, dates: [] }, "projects.setRounds": { projectId: ids.projectId, rounds: 2 }, "projects.nextRound": { videoId: ids.videoId },
+    "projects.addDeliveryFile": { projectId: ids.projectId, file: { kind: "version", versionId: ids.versionId } }, "projects.removeDeliveryFile": { fileId: ids.deliveryFileId },
+    "projects.setDelivery": { projectId: ids.projectId, unlocked: false }, "projects.dropboxFiles": { projectId: ids.projectId },
+    "projects.mine": {}, "projects.forClient": { projectId: ids.projectId }, "projects.deliveryLink": { fileId: ids.deliveryFileId },
   };
 }
 
@@ -121,7 +128,8 @@ export async function setup() {
     const templateId = await ctx.db.insert("wsTemplates", { name: "T", blocks: [], fields: {}, style: {}, createdAt: 0, updatedAt: 0 });
     const clauseId = await ctx.db.insert("wsClauses", { title: "C", body: {}, initials: false, createdAt: 0, updatedAt: 0 });
     const styleId = await ctx.db.insert("wsStyles", { name: "S", style: {}, isDefault: false, createdAt: 0, updatedAt: 0 });
-    return { clientRecId, personId, inboxItemId, inboxNoteId, requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
+    const deliveryFileId = await ctx.db.insert("deliveryFiles", { projectId, name: "F.mov", kind: "dropbox", dropboxPath: "/f.mov", createdAt: 0 });
+    return { deliveryFileId, clientRecId, personId, inboxItemId, inboxNoteId, requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
   });
   return { t, ids };
 }
