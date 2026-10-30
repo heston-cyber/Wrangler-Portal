@@ -125,6 +125,13 @@ describe("the Connect webhook", () => {
     expect(await post(replay, await signForTest(replay, SECRET))).toBe(200);
     expect((await w.heston.query(api.payments.settings, {})).stripe.status).toBe("connected");
 
+    // A new payout bank: the portal reads the account again and shows the new last four.
+    fakeStripe({ ...READY, external_accounts: { data: [{ last4: "5253" }] } });
+    const bank = JSON.stringify({ id: "evt_4", type: "account.external_account.created", account: "acct_123", livemode: false, data: { object: { id: "ba_1", last4: "5253" } } });
+    expect(await post(bank, await signForTest(bank, SECRET))).toBe(200);
+    vi.useFakeTimers(); await w.t.finishAllScheduledFunctions(vi.runAllTimers); vi.useRealTimers();
+    expect((await w.heston.query(api.payments.settings, {})).stripe.bankLast4).toBe("5253");
+
     // The business removes the portal inside Stripe: shown as disconnected.
     const gone = JSON.stringify({ id: "evt_3", type: "account.application.deauthorized", account: "acct_123", livemode: false, data: { object: { id: "ca_x" } } });
     expect(await post(gone, await signForTest(gone, SECRET))).toBe(200);

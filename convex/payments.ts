@@ -3,7 +3,7 @@
 // keeps its full Stripe Dashboard). The portal keeps a mirror of the account's state, refreshed from Stripe on return
 // from onboarding, on "Check again" and by the Connect webhook (account.updated).
 import { action, httpAction } from "./_generated/server";
-import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
+import { internalAction, internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -105,6 +105,15 @@ export const refresh = action({
   },
 });
 
+/** Re-reads a business's account from Stripe (from the webhook, so no one is signed in). */
+export const refreshFor = internalAction({
+  args: { businessId: v.id("businesses"), accountId: v.string() },
+  handler: async (ctx, { businessId, accountId }) => {
+    const a = await stripeCall("GET", `accounts/${accountId}?expand[]=external_accounts`);
+    await ctx.runMutation(internal.payments.saveAccount, { businessId, account: a });
+  },
+});
+
 /** Writes Stripe's account state onto the business. A business that disconnected stays disconnected until it
  *  connects again (connect() passes started). Returns the status. */
 export const saveAccount = internalMutation({
@@ -195,6 +204,11 @@ export const connectWebhook = httpAction(async (ctx, req) => {
   if (ev.type === "account.updated" && ev.account) {
     const businessId = await ctx.runQuery(internal.payments.businessOfAccount, { accountId: ev.account });
     if (businessId) await ctx.runMutation(internal.payments.saveAccount, { businessId, account: ev.data?.object ?? {} });
+  }
+  // A new or changed payout bank: read the account again so Settings shows the right last four digits.
+  if ((ev.type === "account.external_account.created" || ev.type === "account.external_account.updated") && ev.account) {
+    const businessId = await ctx.runQuery(internal.payments.businessOfAccount, { accountId: ev.account });
+    if (businessId) await ctx.scheduler.runAfter(0, internal.payments.refreshFor, { businessId, accountId: ev.account });
   }
   // The business removed the portal from inside its own Stripe dashboard: the portal can't act for it any more.
   if (ev.type === "account.application.deauthorized" && ev.account) {
