@@ -184,6 +184,11 @@ export const markRemoved = internalMutation({
 
 // ---------- the Connect webhook ----------
 
+export const seenEvent = internalQuery({
+  args: { eventId: v.string() },
+  handler: async (ctx, { eventId }) => !!(await ctx.db.query("stripeEvents").withIndex("by_event", (q) => q.eq("eventId", eventId)).first()),
+});
+
 export const recordEvent = internalMutation({
   args: { eventId: v.string(), type: v.string(), account: v.optional(v.string()), livemode: v.boolean() },
   handler: async (ctx, a) => {
@@ -206,8 +211,9 @@ export const connectWebhook = httpAction(async (ctx, req) => {
   if (!secret || !(await stripeSignatureOk(body, req.headers.get("stripe-signature"), secret))) return new Response("bad signature", { status: 400 });
   let ev: StripeResult;
   try { ev = JSON.parse(body); } catch { return new Response("bad body", { status: 400 }); }
-  const fresh = await ctx.runMutation(internal.payments.recordEvent, { eventId: String(ev.id), type: String(ev.type), account: ev.account ?? undefined, livemode: !!ev.livemode });
-  if (!fresh) return new Response("already handled", { status: 200 });
+  // Review fix (Oct 30): the event is recorded as handled only once it has been handled, so if anything below fails
+  // (a 500), Stripe's retry does the work instead of being told "already handled". Every step below is safe to repeat.
+  if (await ctx.runQuery(internal.payments.seenEvent, { eventId: String(ev.id) })) return new Response("already handled", { status: 200 });
   if (ev.type === "account.updated" && ev.account) {
     const businessId = await ctx.runQuery(internal.payments.businessOfAccount, { accountId: ev.account });
     if (businessId) await ctx.runMutation(internal.payments.saveAccount, { businessId, account: ev.data?.object ?? {} });
@@ -216,13 +222,14 @@ export const connectWebhook = httpAction(async (ctx, req) => {
   const INVOICE_EVENTS = ["invoice.finalized", "invoice.updated", "invoice.paid", "invoice.payment_failed", "invoice.voided", "invoice.marked_uncollectible", "invoice.payment_succeeded", "invoice.overdue"];
   if (INVOICE_EVENTS.includes(ev.type) && ev.account && ev.data?.object) {
     const mine = await ctx.runMutation(internal.invoices.applyStripeInvoice, { accountId: ev.account, invoice: ev.data.object, eventType: ev.type });
-    // Step 3: a payment came, failed or changed: read the invoice's payments back (method, processing, the reason).
-    if (mine && ["invoice.paid", "invoice.payment_failed", "invoice.payment_succeeded", "invoice.updated"].includes(ev.type)) {
+    // Then read the invoice and its payments back from Stripe itself (method, processing, the reason), so an old or
+    // out-of-order payload never has the last word.
+    if (mine) {
       await ctx.scheduler.runAfter(0, internal.invoicePay.sync, { accountId: ev.account, stripeId: String(ev.data.object.id) });
     }
   }
   // Step 4c: refunds and disputes, onto the invoice they belong to.
-  if ((ev.type === "charge.refunded" || ev.type === "charge.refund.updated" || ev.type.startsWith("charge.dispute.")) && ev.account && ev.data?.object) {
+  if ((ev.type === "charge.refunded" || ev.type === "charge.dispute.created" || ev.type === "charge.dispute.closed") && ev.account && ev.data?.object) {
     await ctx.runMutation(internal.invoicePay.applyChargeEvent, { accountId: ev.account, type: ev.type, object: ev.data.object });
   }
   if (ev.type === "invoice.deleted" && ev.account && ev.data?.object?.id) {
@@ -238,5 +245,6 @@ export const connectWebhook = httpAction(async (ctx, req) => {
     const businessId = await ctx.runQuery(internal.payments.businessOfAccount, { accountId: ev.account });
     if (businessId) await ctx.runMutation(internal.payments.markRemoved, { businessId });
   }
+  await ctx.runMutation(internal.payments.recordEvent, { eventId: String(ev.id), type: String(ev.type), account: ev.account ?? undefined, livemode: !!ev.livemode });
   return new Response("ok", { status: 200 });
 });

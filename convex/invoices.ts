@@ -31,7 +31,9 @@ function ownBusiness(ctx: unknown): Id<"businesses"> {
 export function totals(i: { lines: Array<{ qty: number; unitCents: number }>; discountCents?: number; taxPercent?: number }) {
   const subtotal = i.lines.reduce((s, l) => s + Math.round(l.qty * l.unitCents), 0);
   const discount = Math.min(Math.max(0, i.discountCents ?? 0), subtotal);
-  const tax = Math.round(((subtotal - discount) * Math.max(0, i.taxPercent ?? 0)) / 100);
+  // Stripe works tax out on each line (the discount is its own negative line) and rounds each, so the portal does too.
+  const pct = Math.max(0, i.taxPercent ?? 0) / 100;
+  const tax = pct ? i.lines.reduce((t, l) => t + Math.round(Math.round(l.qty * l.unitCents) * pct), 0) - (discount ? Math.round(discount * pct) : 0) : 0;
   return { subtotal, discount, tax, total: subtotal - discount + tax };
 }
 
@@ -286,14 +288,16 @@ export const claimForSend = internalMutation({
     const me = await requireMe(ctx);
     const i = await ctx.db.get(invoiceId);
     if (!i) throw new ConvexError("That invoice isn't here.");
-    if (i.status !== "draft") throw new ConvexError(i.status === "sending" ? "It's already being sent." : "This invoice has already been sent.");
+    // A send that stopped partway (more than 5 minutes in "sending") can be tried again; send() then checks what's in Stripe.
+    const stuck = i.status === "sending" && Date.now() - i.updatedAt > 5 * 60_000;
+    if (i.status !== "draft" && !stuck) throw new ConvexError(i.status === "sending" ? "It's already being sent." : "This invoice has already been sent.");
     const biz = await ctx.db.get(ownBusiness(ctx));
     if (!biz?.stripe || biz.stripe.status !== "connected") throw new ConvexError("Connect Stripe first (Settings › Payments).");
     if (!i.lines.length || i.lines.some((l) => !l.description)) throw new ConvexError("Every line needs a description.");
     if (!EMAIL.test(i.billTo.email)) throw new ConvexError("The bill-to email doesn't look right.");
     const t = totals(i);
     if (t.total < MIN_CENTS) throw new ConvexError("The total must be at least $0.50.");
-    if (new Date(`${i.dueDate}T23:59:59`).getTime() < Date.now()) throw new ConvexError("The due date has passed. Pick a later one.");
+    if (dueMoment(i.dueDate) < Date.now() + 10 * 60_000) throw new ConvexError("The due date has passed. Pick a later one.");
     // D52: the business's next number, kept if a send fails and is tried again.
     let number = i.number;
     if (!number) {
@@ -303,9 +307,10 @@ export const claimForSend = internalMutation({
       if (row) await ctx.db.patch(row._id, { value: next }); else await ctx.db.insert("counters", { key, value: next });
       number = `${invoicePrefix(biz.name)}-${String(next).padStart(4, "0")}`;
     }
-    await ctx.db.patch(i._id, { status: "sending", number, totalCents: t.total, amountRemainingCents: t.total, sendError: undefined, updatedAt: Date.now() });
-    const earlier = (await ctx.db.query("invoices").collect()).find((x) => x.stripe?.accountId === biz.stripe!.accountId && x.billTo.email === i.billTo.email && x.stripe?.customerId);
-    return { invoice: { ...i, number }, totals: t, accountId: biz.stripe.accountId, customerId: earlier?.stripe?.customerId ?? null, by: me.name ?? me.email, business: biz.name };
+    const attempt = (i.sendAttempt ?? 0) + 1;
+    await ctx.db.patch(i._id, { status: "sending", number, totalCents: t.total, amountRemainingCents: t.total, sendError: undefined, sendAttempt: attempt, updatedAt: Date.now() });
+    const earlier = (await ctx.db.query("invoices").withIndex("by_bill_email", (q) => q.eq("billTo.email", i.billTo.email)).collect()).find((x) => x.stripe?.accountId === biz.stripe!.accountId && x.stripe?.customerId);
+    return { invoice: { ...i, number }, totals: t, accountId: biz.stripe.accountId, customerId: i.pending?.customerId ?? earlier?.stripe?.customerId ?? null, pending: i.pending ?? null, attempt, by: me.name ?? me.email, business: biz.name };
   },
 });
 
@@ -329,11 +334,21 @@ export const recordSent = internalMutation({
   },
 });
 
+/** What a send has made in Stripe so far (so a failure can clean up and a retry can pick up). */
+export const recordPending = internalMutation({
+  args: { invoiceId: v.id("invoices"), pending: v.object({ customerId: v.optional(v.string()), draftId: v.optional(v.string()), taxRateId: v.optional(v.string()) }) },
+  handler: async (ctx, { invoiceId, pending }) => {
+    const i = await ctx.db.get(invoiceId);
+    if (i) await ctx.db.patch(invoiceId, { pending: { ...(i.pending ?? {}), ...pending }, updatedAt: Date.now() });
+    return null;
+  },
+});
+
 export const recordSendFailed = internalMutation({
   args: { invoiceId: v.id("invoices"), message: v.string() },
   handler: async (ctx, { invoiceId, message }) => {
     const i = await ctx.db.get(invoiceId);
-    if (i?.status === "sending") await ctx.db.patch(invoiceId, { status: "draft", sendError: message.slice(0, 300), updatedAt: Date.now() });
+    if (i?.status === "sending") await ctx.db.patch(invoiceId, { status: "draft", sendError: message.slice(0, 300), pending: i.pending?.customerId ? { customerId: i.pending.customerId } : undefined, updatedAt: Date.now() });
   },
 });
 
@@ -342,55 +357,84 @@ export const recordSendFailed = internalMutation({
 export const send = action({
   args: { invoiceId: v.id("invoices") },
   handler: async (ctx, { invoiceId }): Promise<{ number: string }> => {
-    const c = await ctx.runMutation(internal.invoices.claimForSend, { invoiceId });
+    const c = await ctx.runQuery(internal.invoices.sendGuard, { invoiceId }).then(() => ctx.runMutation(internal.invoices.claimForSend, { invoiceId }));
     const i = c.invoice as Doc<"invoices"> & { number: string };
     const account = c.accountId as string;
     const meta = { portal_invoice: invoiceId, portal_business: i.businessId ?? "" };
+    const k = (what: string) => `wp-${what}-${invoiceId}-a${c.attempt}`; // a new attempt never replays an old one
+    let finalized: StripeResult | null = null;
+    let customerId: string | null = c.customerId as string | null;
+    let draftId: string | null = (c.pending as { draftId?: string } | null)?.draftId ?? null;
     try {
-      const customerId = (c.customerId as string | null) ?? (await stripeCall("POST", "customers", {
-        account, idem: `wp-cust-${invoiceId}`,
-        form: { name: i.billTo.company ? `${i.billTo.name} (${i.billTo.company})` : i.billTo.name, email: i.billTo.email, metadata: meta },
-      })).id as string;
-      const due = Math.floor(new Date(`${i.dueDate}T18:00:00Z`).getTime() / 1000);
-      // How the client can pay on the portal's page: card (with Apple Pay and Google Pay), plus US bank account (D25)
-      // and Link where the business's Stripe account has them switched on.
-      const methods = ["card"];
-      try {
-        const caps = ((await stripeCall("GET", `accounts/${account}`)).capabilities ?? {}) as Record<string, string>;
-        if (caps.us_bank_account_ach_payments === "active") methods.push("us_bank_account");
-        if (caps.link_payments === "active") methods.push("link");
-      } catch { /* card only */ }
-      let taxRate: string | null = null;
-      if (i.taxPercent) taxRate = (await stripeCall("POST", "tax_rates", { account, idem: `wp-tax-${invoiceId}`, form: { display_name: "Tax", percentage: i.taxPercent, inclusive: false } })).id as string;
-      const inv = await stripeCall("POST", "invoices", {
-        account, idem: `wp-inv-${invoiceId}`,
-        form: {
-          customer: customerId, collection_method: "send_invoice", due_date: due, auto_advance: false, pending_invoice_items_behavior: "exclude",
-          ...(i.memo ? { description: i.memo } : {}), metadata: { ...meta, portal_kind: i.kind, portal_title: i.title },
-          ...(taxRate ? { default_tax_rates: [taxRate] } : {}),
-          payment_settings: { payment_method_types: methods },
-        },
-      });
-      // One invoice item per line (the amount carries the quantity; the portal's own page shows qty and unit price).
-      for (const [n, l] of i.lines.entries()) {
-        const amount = Math.round(l.qty * l.unitCents);
-        const desc = l.qty === 1 ? l.description : `${l.description} (${l.qty} × $${(l.unitCents / 100).toFixed(2)})`;
-        await stripeCall("POST", "invoiceitems", { account, idem: `wp-item-${invoiceId}-${n}`, form: { customer: customerId, invoice: inv.id, amount, currency: "usd", description: desc } });
+      // A send that stopped partway: Stripe may already hold it (even finalized). Pick that up instead of starting over.
+      if (draftId) {
+        const prev = await stripeCall("GET", `invoices/${draftId}`, { account }).catch(() => null);
+        if (prev && prev.status && prev.status !== "draft" && prev.status !== "void") finalized = prev;
+        else if (prev?.status === "draft") { await stripeCall("DELETE", `invoices/${draftId}`, { account }).catch(() => null); draftId = null; }
+        else draftId = null;
       }
-      if (i.discountCents) await stripeCall("POST", "invoiceitems", { account, idem: `wp-disc-${invoiceId}`, form: { customer: customerId, invoice: inv.id, amount: -Math.min(i.discountCents, c.totals.subtotal), currency: "usd", description: "Discount" } });
-      await stripeCall("POST", `invoices/${inv.id}`, { account, form: { number: i.number } });
-      const check = await stripeCall("GET", `invoices/${inv.id}`, { account });
-      if (Number(check.total) !== c.totals.total) throw new StripeError(`Stripe's total (${check.total}) doesn't match the portal's (${c.totals.total}). Nothing was sent; the Stripe draft was left for you to check.`, 0, "mismatch");
-      const done = await stripeCall("POST", `invoices/${inv.id}/finalize`, { account, form: { auto_advance: false } });
-      await ctx.runMutation(internal.invoices.recordSent, { invoiceId, by: c.by, stripe: { accountId: account, customerId, invoice: done } });
-      return { number: i.number };
+      if (!finalized) {
+        customerId = customerId ?? (await stripeCall("POST", "customers", {
+          account, idem: k("cust"),
+          form: { name: i.billTo.company ? `${i.billTo.name} (${i.billTo.company})` : i.billTo.name, email: i.billTo.email, metadata: meta },
+        })).id as string;
+        await ctx.runMutation(internal.invoices.recordPending, { invoiceId, pending: { customerId } });
+        const due = Math.floor(dueMoment(i.dueDate) / 1000);
+        // How the client can pay on the portal's page: card (with Apple Pay and Google Pay), plus US bank account (D25)
+        // and Link where the business's Stripe account has them switched on.
+        const methods = ["card"];
+        try {
+          const caps = ((await stripeCall("GET", `accounts/${account}`)).capabilities ?? {}) as Record<string, string>;
+          if (caps.us_bank_account_ach_payments === "active") methods.push("us_bank_account");
+          if (caps.link_payments === "active") methods.push("link");
+        } catch { /* card only */ }
+        let taxRate: string | null = null;
+        if (i.taxPercent) taxRate = (await stripeCall("POST", "tax_rates", { account, idem: k("tax"), form: { display_name: "Tax", percentage: i.taxPercent, inclusive: false } })).id as string;
+        const inv = await stripeCall("POST", "invoices", {
+          account, idem: k("inv"),
+          form: {
+            customer: customerId, collection_method: "send_invoice", due_date: due, auto_advance: false, pending_invoice_items_behavior: "exclude",
+            ...(i.memo ? { description: i.memo } : {}), metadata: { ...meta, portal_kind: i.kind, portal_title: i.title },
+            ...(taxRate ? { default_tax_rates: [taxRate] } : {}),
+            payment_settings: { payment_method_types: methods },
+          },
+        });
+        draftId = inv.id as string;
+        await ctx.runMutation(internal.invoices.recordPending, { invoiceId, pending: { draftId } });
+        // One invoice item per line (the amount carries the quantity; the portal's own page shows qty and unit price).
+        for (const [n, l] of i.lines.entries()) {
+          const amount = Math.round(l.qty * l.unitCents);
+          const desc = l.qty === 1 ? l.description : `${l.description} (${l.qty} × $${(l.unitCents / 100).toFixed(2)})`;
+          await stripeCall("POST", "invoiceitems", { account, idem: k(`item${n}`), form: { customer: customerId, invoice: inv.id, amount, currency: "usd", description: desc } });
+        }
+        if (i.discountCents) await stripeCall("POST", "invoiceitems", { account, idem: k("disc"), form: { customer: customerId, invoice: inv.id, amount: -Math.min(i.discountCents, c.totals.subtotal), currency: "usd", description: "Discount" } });
+        await stripeCall("POST", `invoices/${inv.id}`, { account, form: { number: i.number } });
+        const check = await stripeCall("GET", `invoices/${inv.id}`, { account });
+        if (Number(check.total) !== c.totals.total) throw new StripeError(`Stripe's total (${check.total}) doesn't match the portal's (${c.totals.total}). Nothing was sent.`, 0, "mismatch");
+        finalized = await stripeCall("POST", `invoices/${inv.id}/finalize`, { account, form: { auto_advance: false } });
+      }
     } catch (e) {
+      // Nothing went out: remove the Stripe draft so a retry starts clean (the number stays the portal's).
+      if (draftId) await stripeCall("DELETE", `invoices/${draftId}`, { account }).catch(() => null);
       const message = e instanceof StripeError ? e.message : "Couldn't reach Stripe. Nothing was sent; try again.";
       await ctx.runMutation(internal.invoices.recordSendFailed, { invoiceId, message });
       throw new ConvexError(message);
     }
+    // Finalized in Stripe: from here the invoice IS sent, whatever happens next. If saving fails, it stays "sending"
+    // and pressing Send again (after a few minutes) picks the finalized invoice up rather than making another.
+    await ctx.runMutation(internal.invoices.recordSent, { invoiceId, by: c.by, stripe: { accountId: account, customerId: customerId ?? finalized!.customer, invoice: finalized } });
+    return { number: i.number };
   },
 });
+
+/** Owner only, before anything is claimed (so a refused caller never touches the counter). */
+export const sendGuard = internalQuery({
+  args: { invoiceId: v.id("invoices") },
+  handler: async (ctx) => { await requireMe(ctx); return null; },
+});
+
+/** The moment an invoice falls due: the end of its due date, US Central time (Stripe needs a time in the future). */
+export function dueMoment(iso: string) { return Date.parse(`${iso}T23:59:00-06:00`); }
 
 // ---------- the deposit from a signed contract (step 4c) ----------
 
@@ -413,7 +457,7 @@ export const draftFromContract = internalMutation({
     const doc = await ctx.db.get(a.documentId);
     if (!doc) throw new ConvexError("That document isn't here.");
     const key = `contract:${a.documentId}:v${a.versionNumber}`;
-    const existing = (await ctx.db.query("invoices").withIndex("by_bill_email", (q) => q.eq("billTo.email", a.billTo.email.toLowerCase())).collect()).find((i) => i.fromContract === key);
+    const existing = (await ctx.db.query("invoices").withIndex("by_bill_email", (q) => q.eq("billTo.email", a.billTo.email.trim().toLowerCase())).collect()).find((i) => i.fromContract === key);
     if (existing) return { invoiceId: existing._id, made: false };
     const biz = doc.businessId ?? null;
     const email = a.billTo.email.trim().toLowerCase();
@@ -478,17 +522,22 @@ export const applyStripeInvoice = internalMutation({
     const i = await byStripe(ctx, accountId, String(s.id));
     if (!i) return null;
     const now = Date.now();
-    const status = (["open", "paid", "void", "uncollectible"].includes(s.status) ? s.status : i.status) as Doc<"invoices">["status"];
-    const paid = Number(s.amount_paid ?? i.amountPaidCents);
+    // Review fix (Oct 30): never backwards. An old or out-of-order payload (Stripe retries late) can't take a paid,
+    // void or uncollectible invoice back to open, and the amount paid never goes down.
+    const FINAL = ["paid", "void", "uncollectible"];
+    const incoming = (["open", "paid", "void", "uncollectible"].includes(s.status) ? s.status : i.status) as Doc<"invoices">["status"];
+    const status = FINAL.includes(i.status) && incoming === "open" ? i.status : incoming;
+    const paid = Math.max(i.amountPaidCents, Number(s.amount_paid ?? i.amountPaidCents));
+    const stale = status !== incoming || paid !== Number(s.amount_paid ?? paid);
     const history = [...i.history];
     if (status === "paid" && i.status !== "paid") history.push({ kind: "paid", at: now, detail: "Paid in full" });
     else if (status === "open" && paid > i.amountPaidCents) history.push({ kind: "part_paid", at: now, detail: `$${((paid - i.amountPaidCents) / 100).toFixed(2)} paid` });
     if (status === "void" && i.status !== "void") history.push({ kind: "voided", at: now });
     if (status === "uncollectible" && i.status !== "uncollectible") history.push({ kind: "uncollectible", at: now });
-    if (eventType === "invoice.payment_failed") history.push({ kind: "failed", at: now, detail: "A payment attempt failed" });
+    // (A failed attempt goes into the history when its payments are read back, with Stripe's reason: invoicePay.sync.)
     await ctx.db.patch(i._id, {
       status,
-      totalCents: Number(s.total ?? i.totalCents), amountPaidCents: paid, amountRemainingCents: Number(s.amount_remaining ?? i.amountRemainingCents),
+      totalCents: Number(s.total ?? i.totalCents), amountPaidCents: paid, amountRemainingCents: stale ? i.amountRemainingCents : Number(s.amount_remaining ?? i.amountRemainingCents),
       ...(status === "paid" || paid > i.amountPaidCents ? { processing: false } : {}),
       // Keep a reason the portal already read from Stripe for this same attempt (within ten minutes).
       ...(eventType === "invoice.payment_failed" ? { lastFailure: i.lastFailure && now - i.lastFailure.at < 10 * 60_000 ? i.lastFailure : { at: now, message: "A payment attempt failed" }, processing: false } : {}),

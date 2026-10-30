@@ -5,7 +5,7 @@ import type { Id } from "../convex/_generated/dataModel";
 import { nextReminder, REMINDER_DEFAULTS } from "../convex/invoiceReminders";
 import { paymentFailedMail, receiptMail, reminderMail } from "../convex/lib/mails";
 import { brandFrom } from "../convex/lib/mail";
-import { fakeStripe, sent, world } from "./payHarness";
+import { fakeStripe, sent, world, refreshNow } from "./payHarness";
 
 const api = anyApi;
 const internal = anyApi;
@@ -116,8 +116,8 @@ describe("after a payment", () => {
     const { id, token } = await sent(w);
     await w.t.finishAllScheduledFunctions(vi.runAllTimers);
     fakeStripe({ payments: [paid("pi_1", 450000)], invoiceStatus: "paid" });
-    await w.t.action(api.invoicePay.refresh, { token });
-    await w.t.action(api.invoicePay.refresh, { token }); // again: nothing new
+    await refreshNow(w, token);
+    await refreshNow(w, token); // again: nothing new
     await w.t.finishAllScheduledFunctions(vi.runAllTimers);
     const items = await w.t.run(async (ctx) => (await ctx.db.query("inboxItems").collect()).filter((i) => i.kind === "payment"));
     expect(items).toEqual([expect.objectContaining({ email: "maya@harbor.example", title: "Payment received · $4,500.00", linkLabel: "View receipt", link: `/i/${token}` })]);
@@ -136,7 +136,7 @@ describe("after a payment", () => {
     const failed = { status: "open", payment: { type: "payment_intent", payment_intent: { id: "pi_f", status: "requires_payment_method", amount: 450000, created: t0,
       last_payment_error: { message: "Your card was declined.", payment_method: { type: "card", card: { brand: "visa", last4: "0002" }, created: t0 } } } } };
     fakeStripe({ payments: [failed] });
-    await w.t.action(api.invoicePay.refresh, { token });
+    await refreshNow(w, token);
     await w.t.finishAllScheduledFunctions(vi.runAllTimers);
     let keys = await w.t.run(async (ctx) => (await ctx.db.query("emailLog").collect()).map((r) => r.key));
     expect(keys.filter((k) => k.startsWith("failed:"))).toHaveLength(1);
@@ -146,9 +146,9 @@ describe("after a payment", () => {
     const failed2 = { ...failed, payment: { type: "payment_intent", payment_intent: { ...failed.payment.payment_intent, id: "pi_g", created: t1, last_payment_error: { ...failed.payment.payment_intent.last_payment_error, payment_method: { type: "card", card: { brand: "visa", last4: "0002" }, created: t1 } } } } };
     vi.setSystemTime(t1 * 1000 + 1000);
     fakeStripe({ payments: [failed2] });
-    await w.t.action(api.invoicePay.refresh, { token });
+    await refreshNow(w, token);
     fakeStripe({ payments: [failed2, { ...paid("pi_h", 450000), status_transitions: { paid_at: t1 + 60 } }], invoiceStatus: "paid" });
-    await w.t.action(api.invoicePay.refresh, { token });
+    await refreshNow(w, token);
     await w.t.finishAllScheduledFunctions(vi.runAllTimers);
     keys = await w.t.run(async (ctx) => (await ctx.db.query("emailLog").collect()).map((r) => r.key));
     expect(keys.filter((k) => k.startsWith("failed:"))).toHaveLength(1);

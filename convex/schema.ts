@@ -736,11 +736,16 @@ export default defineSchema({
     // What Stripe says about the money, kept from the webhook (cents).
     totalCents: v.number(), amountPaidCents: v.number(), amountRemainingCents: v.number(),
     processing: v.optional(v.boolean()),                // a bank payment is on its way
-    lastFailure: v.optional(v.object({ at: v.number(), message: v.string() })),
+    lastFailure: v.optional(v.object({ at: v.number(), message: v.string(), key: v.optional(v.string()) })), // key: "<payment intent>:<charge>"
     // Step 3: the client's link to their invoice page (/i/<token>, in the invoice email) and the payments Stripe has
     // on the invoice (method shown as "Visa •••• 4242" or "Bank •••• 6789"; never full numbers).
     fromContract: v.optional(v.string()),                // "contract:<document>:v<n>": the deposit drafted when a contract was signed
     payToken: v.optional(v.string()),
+    // Review fixes (Oct 30): a send in progress keeps what it has made in Stripe so far, so a failed send cleans up
+    // and a retry neither duplicates nor gets stuck; syncedAt spaces out reads from Stripe.
+    sendAttempt: v.optional(v.number()),
+    pending: v.optional(v.object({ customerId: v.optional(v.string()), draftId: v.optional(v.string()), taxRateId: v.optional(v.string()) })),
+    syncedAt: v.optional(v.number()),
     // Step 4: reminders sent (by hand or automatically), so the next one is worked out from what already went.
     reminders: v.optional(v.array(v.object({ at: v.number(), kind: v.union(v.literal("before"), v.literal("overdue")), auto: v.boolean() }))),
     payments: v.optional(v.array(v.object({ id: v.string(), at: v.number(), method: v.string(), cents: v.number(), status: v.union(v.literal("paid"), v.literal("processing"), v.literal("failed")), refundedCents: v.optional(v.number()) }))),

@@ -14,7 +14,9 @@ export const newId = () => Math.random().toString(36).slice(2, 10);
 export function totals(i: { lines: Array<{ qty: number; unitCents: number }>; discountCents?: number; taxPercent?: number }) {
   const subtotal = i.lines.reduce((s, l) => s + Math.round(l.qty * l.unitCents), 0);
   const discount = Math.min(Math.max(0, i.discountCents ?? 0), subtotal);
-  const tax = Math.round(((subtotal - discount) * Math.max(0, i.taxPercent ?? 0)) / 100);
+  // Stripe works tax out on each line (the discount is its own negative line) and rounds each, so the portal does too.
+  const pct = Math.max(0, i.taxPercent ?? 0) / 100;
+  const tax = pct ? i.lines.reduce((t, l) => t + Math.round(Math.round(l.qty * l.unitCents) * pct), 0) - (discount ? Math.round(discount * pct) : 0) : 0;
   return { subtotal, discount, tax, total: subtotal - discount + tax };
 }
 

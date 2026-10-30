@@ -17,6 +17,7 @@ import { mailBrandOf } from "./lib/mail";
 import { paymentFailedMail, receiptMail, reminderMail } from "./lib/mails";
 import { sendEmail } from "./lib/email";
 import { payLink } from "./invoicePay";
+import { keyMode, platformKey } from "./lib/stripeApi";
 
 const DAY = 86_400_000;
 export type ReminderSettings = NonNullable<Doc<"businesses">["reminders"]>;
@@ -89,6 +90,8 @@ export const sendReminder = mutation({
     if (!i || i.status === "draft" || i.status === "sending") throw new ConvexError("Send the invoice first.");
     if (i.status !== "open" || i.amountRemainingCents <= 0) throw new ConvexError("There's nothing left to pay on this invoice.");
     if (i.processing) throw new ConvexError("A bank payment is on its way, so there's nothing to remind them about.");
+    const biz = i.businessId ? await ctx.db.get(i.businessId) : null;
+    if (biz?.stripe?.status !== "connected") throw new ConvexError("Stripe isn't connected, so they couldn't pay it. Connect Stripe first (Settings › Payments).");
     if (!i.payToken) throw new ConvexError("This invoice has no link yet. Open \"Client's invoice page\" once, then try again.");
     const last = Math.max(0, ...(i.reminders ?? []).map((r) => r.at));
     if (Date.now() - last < 10 * 60_000) throw new ConvexError("A reminder went out a few minutes ago.");
@@ -107,11 +110,15 @@ export const runDue = internalMutation({
   handler: async (ctx) => {
     const now = Date.now();
     let sent = 0;
-    for (const b of await ctx.db.query("businesses").collect()) {
-      if (!b.reminders?.on) continue;
-      if (b.stripe?.status !== "connected") continue; // they couldn't pay it here anyway
-      for (const i of await ctx.db.query("invoices").collect()) {
-        if ((i.businessId ?? null) !== b._id || i.status !== "open" || !i.payToken) continue;
+    const live = keyMode(platformKey()) === "live";
+    const on = (await ctx.db.query("businesses").collect()).filter((b) => b.reminders?.on && b.stripe?.status === "connected"); // they couldn't pay otherwise
+    if (!on.length) return { sent };
+    const open = (await ctx.db.query("invoices").collect()).filter((i) => i.status === "open" && i.payToken);
+    for (const b of on) {
+      if (!b.reminders) continue;
+      for (const i of open) {
+        if ((i.businessId ?? null) !== b._id) continue;
+        if (!!i.stripe?.livemode !== live) continue; // a test-mode invoice never gets reminders once the portal is live (or the reverse)
         const next = nextReminder(i, b.reminders, now);
         if (!next || next.at > now) continue;
         const detail = next.kind === "before" ? `${b.reminders.beforeDays} day${b.reminders.beforeDays === 1 ? "" : "s"} before due · automatic` : "overdue · automatic";
@@ -132,7 +139,7 @@ export const mailData = internalQuery({
     if (!i || !i.payToken) return null;
     const project = i.projectId ? await ctx.db.get(i.projectId) : null;
     return {
-      invoice: { status: i.status, processing: !!i.processing, lastFailureAt: i.lastFailure?.at ?? null, payments: i.payments ?? [] },
+      invoice: { status: i.status, processing: !!i.processing, lastFailureKey: i.lastFailure?.key ?? null, payments: i.payments ?? [], livemode: i.stripe?.livemode ?? false },
       to: i.billTo.email, name: i.billTo.name, number: i.number ?? "", title: i.title, project: project ? label(project) : null,
       amountCents: i.amountRemainingCents, totalCents: i.totalCents, dueDate: i.dueDate, link: payLink(i.payToken),
       brand: await mailBrandOf(ctx, i.businessId ?? null),
@@ -180,13 +187,13 @@ export const sendReceipt = internalAction({
 
 /** Email 12, 15 minutes after a failed attempt, unless they've since paid or a bank payment is clearing. */
 export const sendFailed = internalAction({
-  args: { invoiceId: v.id("invoices"), failureAt: v.number(), message: v.string() },
-  handler: async (ctx, { invoiceId, failureAt, message }): Promise<string> => {
+  args: { invoiceId: v.id("invoices"), failureKey: v.string(), failureAt: v.number(), message: v.string() },
+  handler: async (ctx, { invoiceId, failureKey, failureAt, message }): Promise<string> => {
     const d = await ctx.runQuery(internal.invoiceReminders.mailData, { invoiceId });
     if (!d || d.invoice.status !== "open" || d.invoice.processing) return "skipped";
-    if (d.invoice.lastFailureAt !== failureAt) return "skipped"; // a later attempt replaced it
-    if (d.invoice.payments.some((p) => p.status !== "failed" && p.at > failureAt)) return "skipped";
-    const r = await deliverOnce(ctx, `failed:${invoiceId}:${failureAt}`, "payment-failed", d.to, paymentFailedMail(d.brand, { ...d, message }), d.brand.replyTo);
+    if (d.invoice.lastFailureKey !== failureKey) return "skipped"; // a later attempt replaced it
+    if (d.invoice.payments.some((p) => p.status !== "failed" && p.at > failureAt - 60_000)) return "skipped";
+    const r = await deliverOnce(ctx, `failed:${invoiceId}:${failureKey}`, "payment-failed", d.to, paymentFailedMail(d.brand, { ...d, message }), d.brand.replyTo);
     if (r === "held") await ctx.runMutation(internal.invoicePay.noteEmailed, { invoiceId, to: d.to, held: true });
     return r;
   },
@@ -194,7 +201,7 @@ export const sendFailed = internalAction({
 
 /** Called when the portal learns of new payments (invoicePay.applyPayments): receipt and Inbox for each new one,
  *  and the failed-payment email for a new failure. */
-export async function afterPayments(ctx: MutationCtx, before: Doc<"invoices">, payments: NonNullable<Doc<"invoices">["payments"]>, newFailure: { at: number; message: string } | null) {
+export async function afterPayments(ctx: MutationCtx, before: Doc<"invoices">, payments: NonNullable<Doc<"invoices">["payments"]>, newFailure: { at: number; message: string; key: string } | null) {
   const wasPaid = new Set((before.payments ?? []).filter((p) => p.status === "paid").map((p) => p.id));
   const biz = await businessOf(ctx, before);
   for (const p of payments.filter((x) => x.status === "paid" && !wasPaid.has(x.id))) {
@@ -206,5 +213,5 @@ export async function afterPayments(ctx: MutationCtx, before: Doc<"invoices">, p
       source: { module: "payments", id: before._id }, key: `payment:${before._id}:${p.id}`,
     });
   }
-  if (newFailure) await ctx.scheduler.runAfter(15 * 60_000, internal.invoiceReminders.sendFailed, { invoiceId: before._id, failureAt: newFailure.at, message: newFailure.message });
+  if (newFailure) await ctx.scheduler.runAfter(15 * 60_000, internal.invoiceReminders.sendFailed, { invoiceId: before._id, failureKey: newFailure.key, failureAt: newFailure.at, message: newFailure.message });
 }

@@ -3,7 +3,7 @@ import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { anyApi } from "convex/server";
 import type { Id } from "../convex/_generated/dataModel";
 import { signForTest } from "../convex/lib/stripeApi";
-import { fakeStripe, sent, world } from "./payHarness";
+import { fakeStripe, sent, world, refreshNow } from "./payHarness";
 
 const api = anyApi;
 const internal = anyApi;
@@ -47,7 +47,7 @@ describe("refunds and disputes", () => {
     const { id, token } = await sent(w);
     const paid = { status: "paid", amount_paid: 450000, status_transitions: { paid_at: Math.floor(Date.now() / 1000) }, payment: { type: "payment_intent", payment_intent: { id: "pi_1", status: "succeeded", amount: 450000, payment_method: { type: "card", card: { brand: "visa", last4: "4242" } } } } };
     fakeStripe({ payments: [paid], invoiceStatus: "paid" });
-    await w.t.action(api.invoicePay.refresh, { token });
+    await refreshNow(w, token);
     await w.t.finishAllScheduledFunctions(vi.runAllTimers);
     const post = async (evId: string, type: string, account: string, obj: Record<string, unknown>) => {
       const body = JSON.stringify({ id: evId, type, account, livemode: false, data: { object: obj } });

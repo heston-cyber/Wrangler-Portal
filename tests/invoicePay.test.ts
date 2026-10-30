@@ -3,7 +3,7 @@
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { anyApi } from "convex/server";
 import type { Id } from "../convex/_generated/dataModel";
-import { due, fakeStripe, sent, world } from "./payHarness";
+import { due, fakeStripe, sent, world, refreshNow } from "./payHarness";
 import { methodLabel, paymentsFrom } from "../convex/invoicePay";
 import { invoiceMail } from "../convex/lib/mails";
 import { brandFrom } from "../convex/lib/mail";
@@ -120,19 +120,19 @@ describe("paying", () => {
     const failed = { status: "open", amount_requested: 450000, created: 1_790_000_000, payment: { type: "payment_intent", payment_intent: { id: "pi_1", status: "requires_payment_method", amount: 450000, created: 1_790_000_000,
       last_payment_error: { message: "Your card was declined.", payment_method: { type: "card", card: { brand: "visa", last4: "0002" }, created: 1_790_000_100 } } } } };
     fakeStripe({ payments: [failed] });
-    await w.t.action(api.invoicePay.refresh, { token });
+    await refreshNow(w, token);
     let page = await w.t.query(api.invoicePay.page, { token });
     expect(page).toMatchObject({ status: "failed", lastFailure: "Your card was declined.", canPay: true, payments: [] });
 
     const clearing = { status: "open", amount_requested: 450000, created: 1_790_000_200, payment: { type: "payment_intent", payment_intent: { id: "pi_1", status: "processing", amount: 450000, created: 1_790_000_200, payment_method: { type: "us_bank_account", us_bank_account: { last4: "6789" } } } } };
     fakeStripe({ payments: [clearing] });
-    await w.t.action(api.invoicePay.refresh, { token });
+    await refreshNow(w, token);
     page = await w.t.query(api.invoicePay.page, { token });
     expect(page).toMatchObject({ status: "processing", canPay: false, payments: [expect.objectContaining({ method: "Bank •••• 6789", status: "processing", cents: 450000 })] });
 
     const paid = { ...clearing, status: "paid", amount_paid: 450000, status_transitions: { paid_at: 1_790_100_000 }, payment: { type: "payment_intent", payment_intent: { ...clearing.payment.payment_intent, status: "succeeded" } } };
     fakeStripe({ payments: [paid], invoiceStatus: "paid" });
-    await w.t.action(api.invoicePay.refresh, { token });
+    await refreshNow(w, token);
     page = await w.t.query(api.invoicePay.page, { token });
     expect(page).toMatchObject({ status: "paid", canPay: false, amountRemainingCents: 0, payments: [expect.objectContaining({ status: "paid", method: "Bank •••• 6789" })] });
     const inv = await w.heston.query(api.invoices.get, { invoiceId: id });

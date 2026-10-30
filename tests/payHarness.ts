@@ -10,7 +10,7 @@ const api = anyApi;
 const modules = import.meta.glob("../convex/**/*.ts");
 
 export type Call = { method: string; path: string; query: string; account: string | null };
-export function fakeStripe(opts: { payments?: unknown[]; invoiceStatus?: string } = {}) {
+export function fakeStripe(opts: { payments?: unknown[]; invoiceStatus?: string; totalOverride?: number } = {}) {
   const calls: Call[] = [];
   let total = 0;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
@@ -27,7 +27,7 @@ export function fakeStripe(opts: { payments?: unknown[]; invoiceStatus?: string 
     if (/^invoices\/in_1/.test(path)) {
       const status = path.endsWith("/finalize") ? "open" : opts.invoiceStatus ?? "open";
       if (!total) total = 450000; // a fresh stand-in (after Send) answers for the invoice made earlier
-      return ok({ id: "in_1", status, number: "WRNGLR-0001", total, amount_paid: status === "paid" ? total : 0, amount_remaining: status === "paid" ? 0 : total, livemode: false,
+      return ok({ id: "in_1", status, number: "WRNGLR-0001", total: opts.totalOverride ?? total, amount_paid: status === "paid" ? total : 0, amount_remaining: status === "paid" ? 0 : total, livemode: false,
         hosted_invoice_url: "https://invoice.stripe.com/i/in_1", invoice_pdf: "https://pay.stripe.com/in_1.pdf",
         ...(query.includes("confirmation_secret") ? { confirmation_secret: { client_secret: "pi_1_secret_abc", type: "payment_intent" } } : {}) });
     }
@@ -77,3 +77,10 @@ export async function sent(w: Awaited<ReturnType<typeof world>>) {
   return { id: id as Id<"invoices">, token };
 }
 
+
+/** "Refresh" on the invoice page, as if a few seconds had passed since the last one (refresh reads Stripe at most
+ *  once every few seconds per invoice). */
+export async function refreshNow(w: Awaited<ReturnType<typeof world>>, token: string) {
+  await w.t.run(async (ctx) => { for (const i of await ctx.db.query("invoices").collect()) if (i.syncedAt) await ctx.db.patch(i._id, { syncedAt: 0 }); });
+  await w.t.action(api.invoicePay.refresh, { token });
+}

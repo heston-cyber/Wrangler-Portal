@@ -7,7 +7,7 @@
 //     back from Stripe: paid, processing (a bank payment clearing) or failed, each with "Visa •••• 4242".
 //   - Send (the owner's confirm) emails the invoice (email 08) and posts "Invoice to pay" to the person's Inbox.
 import { action } from "./_generated/server";
-import { internalAction, internalMutation, internalQuery, mutation, query, focusBusiness } from "./lib/functions";
+import { internalAction, internalMutation, internalQuery, mutation, query, focusBusiness, forBusiness } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -143,7 +143,7 @@ export const payTarget = internalQuery({
     if (!i || !i.stripe) return null;
     const biz = i.businessId ? await ctx.db.get(i.businessId) : null;
     return {
-      invoiceId: i._id, accountId: i.stripe.accountId, stripeId: i.stripe.invoiceId, businessId: i.businessId ?? null,
+      invoiceId: i._id, accountId: i.stripe.accountId, stripeId: i.stripe.invoiceId, businessId: i.businessId ?? null, syncedAt: i.syncedAt ?? 0,
       open: i.status === "open" && !i.processing && i.amountRemainingCents > 0,
       connected: biz?.stripe?.status === "connected" && biz.stripe.accountId === i.stripe.accountId,
     };
@@ -180,7 +180,10 @@ export const refresh = action({
   handler: async (ctx, { token }): Promise<null> => {
     const t = await ctx.runQuery(internal.invoicePay.payTarget, { token });
     if (!t) return null;
-    await ctx.runAction(internal.invoicePay.sync, { accountId: t.accountId, stripeId: t.stripeId });
+    // Anyone with the link can press this: at most one read from Stripe every few seconds per invoice.
+    if (Date.now() - t.syncedAt < 4000) return null;
+    // Run as the invoice's own business, so a client of several businesses isn't left ambiguous.
+    await forBusiness(ctx, t.businessId).runAction(internal.invoicePay.sync, { accountId: t.accountId, stripeId: t.stripeId });
     return null;
   },
 });
@@ -196,9 +199,10 @@ export function methodLabel(pm: StripeResult | null | undefined): string {
 }
 
 /** One invoice's payments, as the portal keeps them: paid, processing or failed (an attempt that wasn't charged). */
-export function paymentsFrom(list: StripeResult[]): { payments: NonNullable<Doc<"invoices">["payments"]>; failure: { at: number; message: string } | null; processing: boolean } {
+export type Failure = { at: number; message: string; key: string };
+export function paymentsFrom(list: StripeResult[]): { payments: NonNullable<Doc<"invoices">["payments"]>; failure: Failure | null; processing: boolean } {
   const payments: NonNullable<Doc<"invoices">["payments"]> = [];
-  let failure: { at: number; message: string } | null = null;
+  let failure: Failure | null = null;
   for (const ip of list) {
     const pi = ip.payment?.payment_intent;
     if (!pi || typeof pi !== "object") continue;
@@ -207,9 +211,13 @@ export function paymentsFrom(list: StripeResult[]): { payments: NonNullable<Doc<
     if (ip.status === "paid" || pi.status === "succeeded") payments.push({ id: String(pi.id), at, method, cents: Number(ip.amount_paid ?? pi.amount_received ?? pi.amount ?? 0), status: "paid" });
     else if (pi.status === "processing") payments.push({ id: String(pi.id), at, method, cents: Number(pi.amount ?? ip.amount_requested ?? 0), status: "processing" });
     else if (pi.last_payment_error) {
-      const when = Number(pi.last_payment_error.payment_method?.created ?? pi.created ?? 0) * 1000;
+      // Each failed attempt is its own charge: the payment and charge ids name it (a bank payment fails days after it
+      // started, so no timestamp on the payment says when it failed).
+      const charge = typeof pi.latest_charge === "object" && pi.latest_charge ? pi.latest_charge : null;
+      const when = Number(charge?.created ?? pi.last_payment_error.payment_method?.created ?? pi.created ?? 0) * 1000;
       payments.push({ id: String(pi.id), at: when, method, cents: Number(pi.amount ?? 0), status: "failed" });
-      if (!failure || when > failure.at) failure = { at: when, message: String(pi.last_payment_error.message ?? "The payment didn't go through.").slice(0, 200) };
+      const key = `${pi.id}:${charge?.id ?? pi.last_payment_error.charge ?? "pm"}`;
+      if (!failure || when >= failure.at) failure = { at: when, key, message: String(charge?.failure_message ?? pi.last_payment_error.message ?? "The payment didn't go through.").slice(0, 200) };
     }
   }
   payments.sort((a, b) => a.at - b.at);
@@ -222,7 +230,7 @@ export const sync = internalAction({
   args: { accountId: v.string(), stripeId: v.string() },
   handler: async (ctx, { accountId, stripeId }): Promise<null> => {
     const inv = await stripeCall("GET", `invoices/${stripeId}`, { account: accountId });
-    const list = await stripeCall("GET", "invoice_payments", { account: accountId, form: { invoice: stripeId, limit: 20, expand: ["data.payment.payment_intent.payment_method"] } });
+    const list = await stripeCall("GET", "invoice_payments", { account: accountId, form: { invoice: stripeId, limit: 20, expand: ["data.payment.payment_intent.payment_method", "data.payment.payment_intent.latest_charge"] } });
     await ctx.runMutation(internal.invoices.applyStripeInvoice, { accountId, invoice: inv });
     await ctx.runMutation(internal.invoicePay.applyPayments, { accountId, stripeId, ...paymentsFrom((list.data ?? []) as StripeResult[]) });
     return null;
@@ -242,7 +250,7 @@ export const applyChargeEvent = internalMutation({
     if (!i) return null;
     const now = Date.now();
     const money = (c: number) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    if (type === "charge.refunded" || type === "charge.refund.updated") {
+    if (type === "charge.refunded") {
       const refunded = Number(o.amount_refunded ?? 0);
       const payments = (i.payments ?? []).map((p) => (p.id === pi ? { ...p, refundedCents: refunded } : p));
       const total = payments.reduce((s, p) => s + (p.refundedCents ?? 0), 0);
@@ -269,24 +277,23 @@ export const applyPayments = internalMutation({
     const i = await ctx.db.query("invoices").withIndex("by_stripe", (q) => q.eq("stripe.invoiceId", a.stripeId)).first();
     if (!i || i.stripe?.accountId !== a.accountId) return null;
     const payments = a.payments as NonNullable<Doc<"invoices">["payments"]>;
-    const failure = a.failure as { at: number; message: string } | null;
+    const failure = a.failure as Failure | null;
     const now = Date.now();
     const history = [...i.history];
-    // A failed attempt: Stripe's reason replaces the webhook's general one (same attempt, within ten minutes), and the
-    // owner's history notes it once.
-    const TEN = 10 * 60_000;
-    const newFail = !!failure && i.status === "open" && (!i.lastFailure || failure.at >= i.lastFailure.at - TEN);
-    if (newFail && !history.some((h) => h.kind === "failed" && Math.abs(h.at - failure!.at) < TEN)) history.push({ kind: "failed", at: failure!.at || now, detail: failure!.message });
+    // A failed attempt is new when its payment/charge isn't the one already recorded (the webhook's general "a payment
+    // attempt failed" has no key, so it's replaced by Stripe's reason). Its time is when the portal learned of it.
+    const newFail = !!failure && i.status === "open" && failure.key !== i.lastFailure?.key;
+    const recorded = newFail ? { at: i.lastFailure && !i.lastFailure.key && now - i.lastFailure.at < 10 * 60_000 ? i.lastFailure.at : now, message: failure!.message, key: failure!.key } : null;
+    if (recorded) history.push({ kind: "failed", at: recorded.at, detail: recorded.message });
     const startedProcessing = a.processing && !i.processing && i.status === "open";
     if (startedProcessing) history.push({ kind: "processing", at: now, detail: payments.find((p) => p.status === "processing")?.method });
     await ctx.db.patch(i._id, {
       payments, processing: i.status === "paid" ? false : a.processing,
-      ...(newFail ? { lastFailure: failure! } : {}),
-      history: history.slice(-60), updatedAt: now,
+      ...(recorded ? { lastFailure: recorded } : {}),
+      history: history.slice(-60), syncedAt: now, updatedAt: now,
     });
     // Step 4: a receipt and "Payment received" for each new payment; the failed-payment email for a new failure.
-    const isNewFailure = newFail && (!i.lastFailure || Math.abs(failure!.at - i.lastFailure.at) >= 10 * 60_000 || i.lastFailure.message === "A payment attempt failed");
-    await afterPayments(ctx, i, payments, isNewFailure ? failure : null);
+    await afterPayments(ctx, i, payments, recorded);
     return null;
   },
 });
