@@ -149,9 +149,11 @@ export default function Builder({ mode }: { mode: Mode }) {
         const vTop = vv ? vv.offsetTop : 0, vBottom = vv ? vv.offsetTop + vv.height : innerHeight;
         const top = Math.max(vTop, document.querySelector(".topbar, header")?.getBoundingClientRect().bottom ?? 0) + 12;
         const bar = document.querySelector(".wsb-phonebar")?.getBoundingClientRect();
-        const bottom = Math.min(vBottom, bar && bar.height && bar.top > vTop + 100 ? bar.top : vBottom) - 20;
         let c: { top: number; bottom: number };
         try { c = editor.view.coordsAtPos(editor.state.selection.head); } catch { return; }
+        // Two lines' worth of room between the line you're typing and the keyboard (Heston, Oct 29).
+        const line = Math.max(18, Math.min(48, c.bottom - c.top));
+        const bottom = Math.min(vBottom, bar && bar.height && bar.top > vTop + 100 ? bar.top : vBottom) - (2 * line + 8);
         let delta = 0;
         if (c.bottom > bottom) delta = c.bottom - bottom;
         else if (c.top < top) delta = c.top - top;
