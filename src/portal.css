@@ -1866,3 +1866,20 @@ button.wp-hubcard[aria-busy], button.wp-tplcard[aria-busy] { opacity: 1; }
 .inv-remline { margin: 0; padding: 0 20px 18px; color: var(--text-secondary); font-size: var(--fs-text-small); text-align: center; }
 .inv-pay-pdfs { display: flex; gap: 10px; flex-wrap: wrap; }
 button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; font-size: var(--fs-text-small); padding: 0; }
+/* ---------- Payments › Overview (281:8360) ---------- */
+.pov-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.pov-stat { display: grid; gap: 6px; padding: 20px; border-radius: var(--radius-card); border: 1px solid var(--border-hairline); background: color-mix(in srgb, var(--surface-block) 72%, transparent); }
+.pov-stat .lbl { font: 500 11px/1.4 var(--font-title); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-secondary); }
+.pov-stat b { font: 600 26px/1.15 var(--font-title); color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.pov-stat .sub { color: var(--text-muted); font-size: var(--fs-text-small); }
+.pov-stat .go { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--accent); font-size: var(--fs-text-small); text-decoration: none; }
+.pov-stat .go:hover { text-decoration: underline; }
+.pov-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 420px); gap: 24px; align-items: start; }
+.pov-cols > .col { display: grid; gap: 20px; min-width: 0; }
+.pov-paid { display: grid; grid-template-columns: 1fr auto; margin: 0; padding: 4px 20px 6px; }
+.pov-paid dt, .pov-paid dd { margin: 0; padding: 11px 0; color: var(--text-secondary); font-size: var(--fs-text-small); }
+.pov-paid dd { text-align: right; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.pov-paid .big { color: var(--text-primary); font-size: var(--fs-text-regular); }
+.pov-note { margin: 0; padding: 0 20px 18px; font-size: var(--fs-text-small); }
+@media (max-width: 1100px) { .pov-cols { grid-template-columns: 1fr; } }
+@media (max-width: 820px) { .pov-stats { grid-template-columns: 1fr 1fr; gap: 10px; } .pov-stat { padding: 14px 16px; } .pov-stat b { font-size: 22px; } .pov-stat .go { display: none; } }

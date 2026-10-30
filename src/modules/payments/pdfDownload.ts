@@ -20,7 +20,7 @@ const longIso = (iso: string) => long(Date.parse(`${iso}T12:00:00`));
 
 /** The PDF's data from what the invoice pages already have. */
 export function pdfData(kind: "invoice" | "receipt", i: {
-  business: { name: string; legalName: string | null; email?: string | null; logoLightUrl?: string | null } | null;
+  business: { name: string; legalName: string | null; email?: string | null; logoLightUrl?: string | null; address?: string | null; privacyUrl?: string | null } | null;
   number: string | null; sentAt: number | null; createdAt?: number; dueDate: string; billTo: { name: string; email: string; company?: string }; project: string | null;
   lines: PdfData["lines"]; discountCents: number; taxPercent: number; totalCents: number; amountPaidCents: number; memo: string; paidAt: number | null;
   payments: Array<{ at: number; method: string; cents: number; status: string }>; payUrl: string | null;
@@ -28,7 +28,7 @@ export function pdfData(kind: "invoice" | "receipt", i: {
   const paid = i.payments.filter((p) => p.status === "paid");
   const last = paid[paid.length - 1];
   return {
-    kind, business: { name: i.business?.name ?? "", legalName: i.business?.legalName ?? null, email: i.business?.email ?? null, logoLightUrl: i.business?.logoLightUrl ?? null },
+    kind, business: { name: i.business?.name ?? "", legalName: i.business?.legalName ?? null, email: i.business?.email ?? null, logoLightUrl: i.business?.logoLightUrl ?? null, address: i.business?.address ?? null, privacyUrl: i.business?.privacyUrl ?? null },
     number: i.number ?? "", issued: long(i.sentAt ?? i.createdAt ?? Date.now()), due: longIso(i.dueDate),
     paidOn: i.paidAt ? long(i.paidAt) : last ? long(last.at) : null, method: last?.method ?? null,
     billTo: i.billTo, project: i.project, lines: i.lines, discountCents: i.discountCents, taxPercent: i.taxPercent,

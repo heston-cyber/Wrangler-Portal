@@ -185,6 +185,8 @@ export function noteMail(b: MailBrand, d: { title: string; text: string; link: s
 }
 
 // ---------- 08 · Invoice sent (Phase 2 Part B, step 3) ----------
+/** "Wrangler Productions, a DBA of Hill Creative LLC · {address} · {email} · Privacy policy" (as drawn on 08–12). */
+const moneyFooter = (b: MailBrand): Block => ({ t: "small", text: [b.footerName, b.address, b.replyTo].filter(Boolean).join(" · ") + (b.privacyUrl ? " ·" : ""), ...(b.privacyUrl ? { link: { label: "Privacy policy", href: b.privacyUrl } } : {}) });
 const usd = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const longDate = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
@@ -199,7 +201,7 @@ export function invoiceMail(b: MailBrand, d: { name: string; number: string; tit
     { t: "button", label: "View and pay", href: d.link }, { t: "link", href: d.link },
   ], [
     { t: "small", text: owner ? `— ${owner}, ${b.name}` : `— ${b.name}` },
-    { t: "small", text: `${b.footerName} · ${b.replyTo}` },
+    moneyFooter(b),
     ...(!b.isDefault ? [{ t: "small", text: "Powered by WranglerPortal" } as Block] : []),
   ], `${usd(d.amountCents)} due ${longDate(d.dueDate)}`);
 }
@@ -207,7 +209,7 @@ export function invoiceMail(b: MailBrand, d: { name: string; number: string; tit
 // ---------- 09 · 10 · 11 · 12: reminders, receipt, payment failed (Phase 2 Part B, step 4) ----------
 const signoff = (b: MailBrand): Block[] => [
   { t: "small", text: first(b.ownerName) ? `— ${first(b.ownerName)}, ${b.name}` : `— ${b.name}` },
-  { t: "small", text: `${b.footerName} · ${b.replyTo}` },
+  moneyFooter(b),
   ...(!b.isDefault ? [{ t: "small", text: "Powered by WranglerPortal" } as Block] : []),
 ];
 const at = (ms: number) => new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });

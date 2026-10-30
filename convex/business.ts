@@ -84,7 +84,7 @@ async function settingsOf(ctx: QueryCtx, b: Doc<"businesses">) {
   const c = await businessContact(ctx, b._id);
   return {
     name: b.name, legalName: b.legalName ?? null, ownerName: b.ownerName ?? null, emailFromName: b.emailFromName ?? null,
-    replyTo: b.replyTo ?? null, ownerEmail: c.ownerEmail, accent: b.accent ?? null, background: b.background ?? null,
+    replyTo: b.replyTo ?? null, address: b.address ?? null, privacyUrl: b.privacyUrl ?? null, ownerEmail: c.ownerEmail, accent: b.accent ?? null, background: b.background ?? null,
     logoUrl: b.logoFileId ? await ctx.storage.getUrl(b.logoFileId) : null,
     logoLightUrl: b.logoLightFileId ? await ctx.storage.getUrl(b.logoLightFileId) : null, modules: { ...DEFAULT_MODULES, ...(b.modules ?? {}) },
     // Phase 2 Part A: revision rounds (D23b: 2) and the watermark look on review copies (D24).
@@ -109,6 +109,7 @@ export const updateSettings = mutation({
   args: {
     name: v.optional(v.string()), legalName: v.optional(v.union(v.string(), v.null())), ownerName: v.optional(v.union(v.string(), v.null())),
     emailFromName: v.optional(v.union(v.string(), v.null())), replyTo: v.optional(v.union(v.string(), v.null())),
+    address: v.optional(v.union(v.string(), v.null())), privacyUrl: v.optional(v.union(v.string(), v.null())),
     accent: v.optional(v.union(v.string(), v.null())), background: v.optional(v.union(v.string(), v.null())),
     modules: v.optional(v.object({ review: v.boolean(), docs: v.boolean(), payments: v.boolean(), projects: v.optional(v.boolean()) })),
     roundsDefault: v.optional(v.number()),
@@ -130,6 +131,12 @@ export const updateSettings = mutation({
     text("legalName", a.legalName, 160);
     text("ownerName", a.ownerName, 80);
     text("emailFromName", a.emailFromName, 80);
+    text("address", a.address, 200);
+    if (a.privacyUrl !== undefined) {
+      const u = (a.privacyUrl ?? "").trim();
+      if (u && !/^https:\/\/[^\s]+\.[^\s]+$/i.test(u)) throw new ConvexError("The privacy policy link should start with https://");
+      patch.privacyUrl = u || undefined;
+    }
     if (a.replyTo !== undefined) {
       const e = (a.replyTo ?? "").trim().toLowerCase();
       if (e && !EMAIL.test(e)) throw new ConvexError("Enter a valid reply-to email.");

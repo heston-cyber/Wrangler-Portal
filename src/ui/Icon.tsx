@@ -7,7 +7,7 @@ for (const [path, raw] of Object.entries(files)) SVG[path.slice(path.lastIndexOf
 
 export type IconName =
   | "activity" | "alert" | "arrow-down" | "arrow-left" | "arrow-right" | "arrow-up-right" | "arrow-up" | "bell" | "calendar"
-  | "check-circle" | "check" | "chevron-down" | "chevron-right" | "clock" | "close" | "document" | "download" | "external"
+  | "check-circle" | "check" | "chevron-down" | "chevron-right" | "clock" | "close" | "document" | "download" | "edit" | "external"
   | "eye" | "folder" | "globe" | "home" | "inbox" | "info" | "invoice" | "lock" | "mail" | "map-pin" | "menu" | "minus"
   | "more" | "note" | "pause" | "phone" | "play" | "plus" | "quote" | "register" | "review" | "search" | "send"
   | "settings" | "sign-out" | "sign" | "stage" | "upload" | "user" | "users" | "video";

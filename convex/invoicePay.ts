@@ -69,10 +69,10 @@ async function clientView(ctx: QueryCtx, i: Doc<"invoices">) {
     pdfUrl: i.stripe?.pdfUrl ?? null,
     testMode: i.stripe ? !i.stripe.livemode : false,
     business: biz ? {
-      name: biz.name, legalName: biz.legalName ?? null, prefix: invoicePrefix(biz.name), email: biz.replyTo ?? null,
+      name: biz.name, legalName: biz.legalName ?? null, prefix: invoicePrefix(biz.name), email: biz.replyTo ?? null, address: biz.address ?? null, privacyUrl: biz.privacyUrl ?? null,
       logoUrl: biz.logoFileId ? await ctx.storage.getUrl(biz.logoFileId) : null,
       logoLightUrl: biz.logoLightFileId ? await ctx.storage.getUrl(biz.logoLightFileId) : null, // for the PDFs
-    } : { name: "", legalName: null, prefix: "", email: null, logoUrl: null, logoLightUrl: null },
+    } : { name: "", legalName: null, prefix: "", email: null, address: null, privacyUrl: null, logoUrl: null, logoLightUrl: null },
   };
 }
 export type ClientInvoice = Awaited<ReturnType<typeof clientView>>;

@@ -1599,7 +1599,7 @@
      "state": "notes",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
-     "token": "txv-dt-iZRdShJw8w_iRcQ",
+     "token": "793zn8IM9jIQuHHNY98Odw",
      "versionId": "000000000000000000010028versions",
      "videoId": "00000000000000000000010024videos"
     },
@@ -1613,7 +1613,7 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
-     "token": "txv-dt-iZRdShJw8w_iRcQ",
+     "token": "793zn8IM9jIQuHHNY98Odw",
      "versionId": "000000000000000000010027versions",
      "videoId": "00000000000000000000010024videos"
     },
@@ -1627,7 +1627,7 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
-     "token": "txv-dt-iZRdShJw8w_iRcQ",
+     "token": "793zn8IM9jIQuHHNY98Odw",
      "versionId": "000000000000000000010026versions",
      "videoId": "00000000000000000000010024videos"
     },
@@ -1641,7 +1641,7 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
      "title": "Harbor Coffee 15s cutdown",
-     "token": "txv-dt-iZRdShJw8w_iRcQ",
+     "token": "793zn8IM9jIQuHHNY98Odw",
      "versionId": "000000000000000000010032versions",
      "videoId": "00000000000000000000010030videos"
     },
@@ -1655,7 +1655,7 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
-     "token": "txv-dt-iZRdShJw8w_iRcQ",
+     "token": "793zn8IM9jIQuHHNY98Odw",
      "versionId": "000000000000000000010025versions",
      "videoId": "00000000000000000000010024videos"
     },
@@ -1669,7 +1669,7 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
      "title": "Harbor Coffee 15s cutdown",
-     "token": "txv-dt-iZRdShJw8w_iRcQ",
+     "token": "793zn8IM9jIQuHHNY98Odw",
      "versionId": "000000000000000000010031versions",
      "videoId": "00000000000000000000010030videos"
     }
@@ -2420,8 +2420,8 @@
     "projectId": null,
     "state": "on",
     "sub": "26127 Harbor Coffee Launch",
-    "token": "FyIraRC6vAx7iExmW8IiFg",
-    "url": "https://app.wranglerportal.com/s/FyIraRC6vAx7iExmW8IiFg",
+    "token": "AZwr7TsZxAI8sGrC-RgxHA",
+    "url": "https://app.wranglerportal.com/s/AZwr7TsZxAI8sGrC-RgxHA",
     "videoId": "00000000000000000000010024videos",
     "who": "link"
    },
@@ -2460,8 +2460,8 @@
     "projectId": "000000000000000000010020projects",
     "state": "on",
     "sub": "Harbor Coffee",
-    "token": "txv-dt-iZRdShJw8w_iRcQ",
-    "url": "https://app.wranglerportal.com/s/txv-dt-iZRdShJw8w_iRcQ",
+    "token": "793zn8IM9jIQuHHNY98Odw",
+    "url": "https://app.wranglerportal.com/s/793zn8IM9jIQuHHNY98Odw",
     "videoId": null,
     "who": "invited"
    }
@@ -2502,8 +2502,8 @@
     "projectId": null,
     "state": "on",
     "sub": "26127 Harbor Coffee Launch",
-    "token": "FyIraRC6vAx7iExmW8IiFg",
-    "url": "https://app.wranglerportal.com/s/FyIraRC6vAx7iExmW8IiFg",
+    "token": "AZwr7TsZxAI8sGrC-RgxHA",
+    "url": "https://app.wranglerportal.com/s/AZwr7TsZxAI8sGrC-RgxHA",
     "videoId": "00000000000000000000010024videos",
     "who": "link"
    },
@@ -2542,8 +2542,8 @@
     "projectId": "000000000000000000010020projects",
     "state": "on",
     "sub": "Harbor Coffee",
-    "token": "txv-dt-iZRdShJw8w_iRcQ",
-    "url": "https://app.wranglerportal.com/s/txv-dt-iZRdShJw8w_iRcQ",
+    "token": "793zn8IM9jIQuHHNY98Odw",
+    "url": "https://app.wranglerportal.com/s/793zn8IM9jIQuHHNY98Odw",
     "videoId": null,
     "who": "invited"
    }
@@ -2695,7 +2695,7 @@
        "rows": [
         {
          "description": "Video production (describe the deliverables)",
-         "id": "kcz29jj9",
+         "id": "kpy76370",
          "qty": 1,
          "rate": 0
         }
@@ -4483,6 +4483,68 @@
     "viewedAt": null
    }
   ],
+  "invoices.overview": {
+   "activity": [
+    {
+     "at": 1793203200000,
+     "invoiceId": "000000000000000000010119invoices",
+     "kind": "sent",
+     "meta": "Harbor Coffee · WRNGLR-0002",
+     "title": "Invoice sent"
+    },
+    {
+     "at": 1792684800000,
+     "invoiceId": "000000000000000000010118invoices",
+     "kind": "paid",
+     "meta": "Harbor Coffee · WRNGLR-0001 · Visa •••• 4242",
+     "title": "Payment received · $3,000.00"
+    },
+    {
+     "at": 1792641600000,
+     "invoiceId": "000000000000000000010118invoices",
+     "kind": "viewed",
+     "meta": "Harbor Coffee · WRNGLR-0001",
+     "title": "Invoice viewed"
+    },
+    {
+     "at": 1792598400000,
+     "invoiceId": "000000000000000000010118invoices",
+     "kind": "sent",
+     "meta": "Harbor Coffee · WRNGLR-0001",
+     "title": "Invoice sent"
+    }
+   ],
+   "due": {
+    "cents": 45000,
+    "n": 1
+   },
+   "invoices": 4,
+   "needs": [
+    {
+     "_id": "000000000000000000010120invoices",
+     "at": 1792598400000,
+     "cents": 1020000,
+     "client": "Harbor Coffee",
+     "detail": "Draft",
+     "kind": "draft",
+     "title": "Final invoice"
+    }
+   ],
+   "onItsWay": {
+    "cents": 120000,
+    "n": 1
+   },
+   "overdue": {
+    "cents": 0,
+    "n": 0
+   },
+   "paid": {
+    "lastMonth": 0,
+    "month": 300000,
+    "year": 300000
+   },
+   "stripe": "connected"
+  },
   "invoices.options": {
    "business": {
     "legalName": "Hill Creative LLC",
@@ -4703,7 +4765,9 @@
     "name": "Maya Brooks"
    },
    "business": {
+    "email": null,
     "legalName": "Hill Creative LLC",
+    "logoLightUrl": null,
     "logoUrl": null,
     "name": "Wrangler Productions",
     "prefix": "WRNGLR"
@@ -4753,6 +4817,16 @@
    "memo": "",
    "number": "WRNGLR-0001",
    "paidAt": 1792684800000,
+   "payToken": "kitpaidtoken000000001",
+   "payments": [
+    {
+     "at": 1792684800000,
+     "cents": 300000,
+     "id": "pi_k1",
+     "method": "Visa •••• 4242",
+     "status": "paid"
+    }
+   ],
    "project": {
     "_id": "000000000000000000010020projects",
     "label": "26127 Harbor Coffee Launch"
@@ -4796,7 +4870,9 @@
     "name": "Maya Brooks"
    },
    "business": {
+    "email": null,
     "legalName": "Hill Creative LLC",
+    "logoLightUrl": null,
     "logoUrl": null,
     "name": "Wrangler Productions",
     "prefix": "WRNGLR"
@@ -4836,6 +4912,8 @@
    "memo": "Thanks, Maya.",
    "number": "WRNGLR-0002",
    "paidAt": null,
+   "payToken": "kitduetoken0000000002",
+   "payments": [],
    "project": {
     "_id": "000000000000000000010020projects",
     "label": "26127 Harbor Coffee Launch"
@@ -4879,7 +4957,9 @@
     "name": "Maya Brooks"
    },
    "business": {
+    "email": null,
     "legalName": "Hill Creative LLC",
+    "logoLightUrl": null,
     "logoUrl": null,
     "name": "Wrangler Productions",
     "prefix": "WRNGLR"
@@ -4919,6 +4999,8 @@
    "memo": "Thank you, Maya. Final files unlock as soon as this is paid.",
    "number": null,
    "paidAt": null,
+   "payToken": null,
+   "payments": [],
    "project": {
     "_id": "000000000000000000010020projects",
     "label": "26127 Harbor Coffee Launch"
@@ -4979,7 +5061,7 @@
     "kind": "project",
     "label": "26127 Harbor Coffee Launch",
     "sub": "Harbor Coffee",
-    "token": "txv-dt-iZRdShJw8w_iRcQ",
+    "token": "793zn8IM9jIQuHHNY98Odw",
     "videos": [
      {
       "_id": "00000000000000000000010030videos",
@@ -5110,7 +5192,7 @@
    "cuts": [
     {
      "lengthSec": 30,
-     "link": "/s/txv-dt-iZRdShJw8w_iRcQ/v/00000000000000000000010024videos?version=4",
+     "link": "/s/793zn8IM9jIQuHHNY98Odw/v/00000000000000000000010024videos?version=4",
      "number": 4,
      "sharedAt": 1793289600000,
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
@@ -5119,7 +5201,7 @@
     },
     {
      "lengthSec": 30,
-     "link": "/s/txv-dt-iZRdShJw8w_iRcQ/v/00000000000000000000010030videos?version=2",
+     "link": "/s/793zn8IM9jIQuHHNY98Odw/v/00000000000000000000010030videos?version=2",
      "number": 2,
      "sharedAt": 1793289600000,
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
@@ -5141,7 +5223,7 @@
   "emails.myPrefs": {
    "on": true
   },
-  "shares.open#txv-dt-iZRdShJw8w_iRcQ": {
+  "shares.open#793zn8IM9jIQuHHNY98Odw": {
    "access": "comment",
    "allVersions": true,
    "client": "Harbor Coffee",
@@ -5160,7 +5242,7 @@
    ],
    "state": "ok",
    "sub": "Harbor Coffee",
-   "token": "txv-dt-iZRdShJw8w_iRcQ",
+   "token": "793zn8IM9jIQuHHNY98Odw",
    "videos": [
     {
      "_id": "00000000000000000000010024videos",
@@ -5296,7 +5378,7 @@
    },
    "who": "invited"
   },
-  "shares.open#FyIraRC6vAx7iExmW8IiFg": {
+  "shares.open#AZwr7TsZxAI8sGrC-RgxHA": {
    "access": "view",
    "allVersions": true,
    "client": "Harbor Coffee",
@@ -5315,7 +5397,7 @@
    ],
    "state": "ok",
    "sub": "26127 Harbor Coffee Launch",
-   "token": "FyIraRC6vAx7iExmW8IiFg",
+   "token": "AZwr7TsZxAI8sGrC-RgxHA",
    "videos": [
     {
      "_id": "00000000000000000000010024videos",
@@ -5690,7 +5772,7 @@
      },
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
      "title": "Harbor Coffee 15s cutdown",
-     "token": "txv-dt-iZRdShJw8w_iRcQ",
+     "token": "793zn8IM9jIQuHHNY98Odw",
      "updatedAt": 1793203200000,
      "version": 2
     },
@@ -5706,7 +5788,7 @@
      },
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
-     "token": "txv-dt-iZRdShJw8w_iRcQ",
+     "token": "793zn8IM9jIQuHHNY98Odw",
      "updatedAt": 1793160000000,
      "version": 4
     }
@@ -5767,6 +5849,7 @@
    "business": {
     "email": null,
     "legalName": "Hill Creative LLC",
+    "logoLightUrl": null,
     "logoUrl": null,
     "name": "Wrangler Productions",
     "prefix": "WRNGLR"
@@ -5820,6 +5903,7 @@
    "business": {
     "email": null,
     "legalName": "Hill Creative LLC",
+    "logoLightUrl": null,
     "logoUrl": null,
     "name": "Wrangler Productions",
     "prefix": "WRNGLR"
@@ -5865,6 +5949,7 @@
    "business": {
     "email": null,
     "legalName": "Hill Creative LLC",
+    "logoLightUrl": null,
     "logoUrl": null,
     "name": "Wrangler Productions",
     "prefix": "WRNGLR"
@@ -5915,8 +6000,8 @@
    "paid": "000000000000000000010118invoices"
   },
   "shares": [
-   "txv-dt-iZRdShJw8w_iRcQ",
-   "FyIraRC6vAx7iExmW8IiFg"
+   "793zn8IM9jIQuHHNY98Odw",
+   "AZwr7TsZxAI8sGrC-RgxHA"
   ],
   "harbor": "0000000000000000000010003clients",
   "video": "00000000000000000000010024videos",

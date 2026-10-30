@@ -31,6 +31,7 @@ import type { Id } from "../convex/_generated/dataModel";
 const InvoicesPage = lazy(() => import("./modules/payments/InvoicesPage"));
 const InvoiceEditor = lazy(() => import("./modules/payments/InvoiceEditor"));
 const InvoiceDetail = lazy(() => import("./modules/payments/InvoiceDetail"));
+const PaymentsOverview = lazy(() => import("./modules/payments/PaymentsOverview"));
 const ClientInvoice = lazy(() => import("./modules/payments/ClientInvoice"));
 const ClientInvoices = lazy(() => import("./modules/payments/ClientInvoices"));
 // Wrangler Sign (S1): its own chunk, so pdf.js only loads on those pages.
@@ -136,7 +137,8 @@ function SignedIn() {
   else if (path.startsWith("/projects")) page = <Projects key="all" />;
   else if (/^\/payments\/invoices\/new\/?$/.test(path)) page = <Suspense fallback={<Loading />}><InvoiceEditor key={search} clientId={params.get("client")} projectId={params.get("project")} /></Suspense>;
   else if (/^\/payments\/invoices\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><InvoiceDetail key={id} invoiceId={id} /></Suspense>; }
-  else if (/^\/payments(\/invoices)?\/?$/.test(path)) page = <Suspense fallback={<Loading />}><InvoicesPage /></Suspense>;
+  else if (/^\/payments\/invoices\/?$/.test(path)) page = <Suspense fallback={<Loading />}><InvoicesPage key={search} /></Suspense>;
+  else if (/^\/payments\/?$/.test(path)) page = <Suspense fallback={<Loading />}><PaymentsOverview /></Suspense>;
   else if (signDoc) page = <Suspense fallback={<Loading />}><SignDoc key={signDoc[1]} documentId={signDoc[1] as Id<"wsDocuments">} versionNumber={Number(params.get("v")) || null} /></Suspense>;
   else if (path.startsWith("/sign/signature")) page = <Suspense fallback={<Loading />}><SignSignature /></Suspense>;
   else if (path.startsWith("/sign/connector")) page = <Settings me={me} />; // now Settings › Claude connectors

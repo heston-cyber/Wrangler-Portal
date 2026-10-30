@@ -105,7 +105,7 @@ function Clauses({ show }: { show: (m: string) => void }) {
               <Icon name="note" size={16} /><span className="ttl">{c.title}</span>{c.initials && <StatusChip>Client initials</StatusChip>}
               <span className="sp" />
               <span className="wst-actions">
-                <Button variant="ghost" size="sm" onClick={() => setEditing(c)} iconEnd="chevron-right">Edit</Button>
+                <Button variant="ghost" size="sm" onClick={() => setEditing(c)} iconEnd="edit">Edit</Button>
                 <Button variant="ghost" size="sm" onClick={async () => { await duplicate({ clauseId: c._id }); show(`Duplicated "${c.title}"`); }}>Duplicate</Button>
                 <Button variant="ghost" size="sm" onClick={() => setDeleting(c)}>Delete</Button>
               </span>

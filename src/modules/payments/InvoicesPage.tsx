@@ -59,7 +59,8 @@ function Group({ label, rows, max }: { label: string; rows: Row[]; max?: number 
 export default function InvoicesPage() {
   const rows = useQuery(api.invoices.list, {});
   const pay = useQuery(api.payments.settings, {});
-  const [filter, setFilter] = useState<Filter>("all");
+  // Opened from the Overview's numbers: ?show=due|processing|paid|drafts|failed.
+  const [filter, setFilter] = useState<Filter>(() => { const q = new URLSearchParams(location.search).get("show"); return (["all", "drafts", "due", "processing", "failed", "paid"].includes(q ?? "") ? q : "all") as Filter; });
   const by = (ss: InvoiceStatus[]) => (rows ?? []).filter((r) => ss.includes(r.status as InvoiceStatus));
   const groups = {
     failed: by(["failed"]), drafts: by(["draft", "sending"]), due: by(["overdue", "partly_paid", "due"]),

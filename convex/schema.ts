@@ -681,6 +681,8 @@ export default defineSchema({
     ownerName: v.optional(v.string()),     // "Heston Hill": who the emails say sent things
     emailFromName: v.optional(v.string()), // the From name on emails ("Wrangler Productions")
     replyTo: v.optional(v.string()),       // where clients' replies go (defaults to the owner's email)
+    address: v.optional(v.string()),       // Oct 30: shown on invoices, receipts and email footers (Stripe requires it on receipts)
+    privacyUrl: v.optional(v.string()),    // the privacy policy link, same places
     logoFileId: v.optional(v.id("_storage")), // shown in the portal and on emails
     logoLightFileId: v.optional(v.id("_storage")), // the same logo for light backgrounds (emails, PDFs); Settings › Business, Oct 29
     accent: v.optional(v.string()),        // #rrggbb

@@ -250,7 +250,7 @@ function Overview({ page, onMove, onRounds, onNext, onDates, postDefault, setPos
             {page.client && <Checkbox checked={postDefault} onChange={setPostDefault} label={`Post stage moves to ${client}'s Inbox`} hint={next ? `They see "Stage moved to ${stageName(next)}" with your note.` : "They see the new stage with your note."} />}
           </div>
         </Card>
-        <Card className="pj-next" label="Next step" head={<SectionHead label="Next step" action={<Button size="sm" variant="ghost" onClick={onNext} iconEnd="chevron-right">Edit</Button>} />}>
+        <Card className="pj-next" label="Next step" head={<SectionHead label="Next step" action={<Button size="sm" variant="ghost" onClick={onNext} iconEnd="edit">Edit</Button>} />}>
           <p className="pj-nexttext">{page.nextStep || <span className="secondary">No next step yet.</span>}</p>
         </Card>
         <Card className="pj-cuts" label="Cuts" head={<SectionHead label="Cuts" count={page.videos.length} action={<Button size="sm" variant="ghost" onClick={() => goTab("cuts")} iconEnd="arrow-right">Open Cuts</Button>} />}>
@@ -264,11 +264,11 @@ function Overview({ page, onMove, onRounds, onNext, onDates, postDefault, setPos
         </Card>
       </div>
       <div className="col right">
-        <Card className="pj-dates-card" label="Key dates" head={<SectionHead label="Key dates" action={<Button size="sm" variant="ghost" onClick={onDates} iconEnd="chevron-right">Edit</Button>} />}>
+        <Card className="pj-dates-card" label="Key dates" head={<SectionHead label="Key dates" action={<Button size="sm" variant="ghost" onClick={onDates} iconEnd="edit">Edit</Button>} />}>
           {page.keyDates.length === 0 ? <p className="pj-pad secondary">No dates yet.</p>
             : <dl className="cp-see">{page.keyDates.map((d) => <div key={d.label + d.date} style={{ display: "contents" }}><dt>{d.label}</dt><dd>{dateText(d.date)}</dd></div>)}</dl>}
         </Card>
-        <Card className="pj-rounds" label="Revision rounds" head={<SectionHead label="Revision rounds" action={<Button size="sm" variant="ghost" onClick={onRounds} iconEnd="chevron-right">Change</Button>} />}>
+        <Card className="pj-rounds" label="Revision rounds" head={<SectionHead label="Revision rounds" action={<Button size="sm" variant="ghost" onClick={onRounds} iconEnd="edit">Change</Button>} />}>
           <dl className="cp-see"><dt>Included</dt><dd>{page.rounds.off ? "Off" : `${plural(page.rounds.included, "round", "rounds")} per video`}</dd><dt>From</dt><dd>{from}</dd></dl>
         </Card>
         <Card className="pj-docs" label="Documents" head={<SectionHead label="Documents" count={page.documents.length} />}>
@@ -335,7 +335,7 @@ function Delivery({ page, show, onAddFiles }: { page: Page; show: (m: string) =>
       <Card label="Links" head={<SectionHead label="Links" />}>
         <dl className="cp-see pj-links">
           <dt>Link lasts</dt>
-          <dd>{days === null ? <>{plural(d.linkDays, "day", "days")} after unlock <button type="button" className="linkbtn" onClick={() => setDays(String(d.linkDays))}>Change<Icon name="chevron-right" size={14} /></button></> : (
+          <dd>{days === null ? <>{plural(d.linkDays, "day", "days")} after unlock <button type="button" className="linkbtn" onClick={() => setDays(String(d.linkDays))}>Change<Icon name="edit" size={14} /></button></> : (
             <span className="pj-days"><input className="input sm" type="number" min={1} max={90} value={days} onChange={(e) => setDays(e.target.value)} aria-label="Days" autoFocus /> days
               <Button size="sm" variant="primary" onClick={() => void setDelivery({ projectId: page._id, linkDays: Number(days) || 7 }).then(() => { setDays(null); show("Saved."); })}>Save</Button>
               <Button size="sm" variant="ghost" onClick={() => setDays(null)}>Cancel</Button></span>

@@ -6,7 +6,7 @@ import { totals, type Line } from "./common";
 
 export type PdfData = {
   kind: "invoice" | "receipt";
-  business: { name: string; legalName: string | null; email: string | null; logoLightUrl: string | null };
+  business: { name: string; legalName: string | null; email: string | null; logoLightUrl: string | null; address?: string | null; privacyUrl?: string | null };
   number: string; issued: string; due: string; paidOn?: string | null; method?: string | null;
   billTo: { name: string; email: string; company?: string }; project?: string | null;
   lines: Line[]; discountCents?: number; taxPercent?: number; totalCents: number; amountPaidCents: number;
@@ -123,7 +123,7 @@ export function InvoicePdf({ d, size }: { d: PdfData; size: "LETTER" | "A4" }) {
         <View style={s.foot} fixed>
           <View style={{ gap: 3 }}>
             <Text>{d.business.name}{legal ? `, ${legal}` : ""}</Text>
-            {d.business.email ? <Text>{d.business.email}</Text> : null}
+            {[d.business.address, d.business.email, d.business.privacyUrl ? `Privacy policy: ${d.business.privacyUrl.replace(/^https?:\/\//, "")}` : null].filter(Boolean).length ? <Text>{[d.business.address, d.business.email, d.business.privacyUrl ? `Privacy policy: ${d.business.privacyUrl.replace(/^https?:\/\//, "")}` : null].filter(Boolean).join(" · ")}</Text> : null}
             {receipt ? <Text>Payment processed by Stripe.</Text> : null}
           </View>
           <Text render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />

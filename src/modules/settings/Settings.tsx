@@ -147,7 +147,7 @@ function AccountSection({ me, show }: { me: { name: string | null; email: string
   );
 }
 
-type Biz = { name: string; legalName: string; emailFromName: string; replyTo: string; accent: string; background: string; modules: { review: boolean; docs: boolean; payments: boolean; projects?: boolean } };
+type Biz = { name: string; legalName: string; emailFromName: string; replyTo: string; address: string; privacyUrl: string; accent: string; background: string; modules: { review: boolean; docs: boolean; payments: boolean; projects?: boolean } };
 
 function BusinessSection({ show }: { show: (m: string) => void }) {
   const cur = useQuery(api.business.settings, {});
@@ -158,20 +158,20 @@ function BusinessSection({ show }: { show: (m: string) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
-    if (cur && !f) setF({ name: cur.name, legalName: cur.legalName ?? "", emailFromName: cur.emailFromName ?? "", replyTo: cur.replyTo ?? "", accent: cur.accent ?? "", background: cur.background ?? "", modules: cur.modules });
+    if (cur && !f) setF({ name: cur.name, legalName: cur.legalName ?? "", emailFromName: cur.emailFromName ?? "", replyTo: cur.replyTo ?? "", address: cur.address ?? "", privacyUrl: cur.privacyUrl ?? "", accent: cur.accent ?? "", background: cur.background ?? "", modules: cur.modules });
   }, [cur, f]);
-  const dirty = useMemo(() => !!(cur && f) && (f.name !== cur.name || f.legalName !== (cur.legalName ?? "") || f.emailFromName !== (cur.emailFromName ?? "") || f.replyTo !== (cur.replyTo ?? "") || f.accent.toUpperCase() !== (cur.accent ?? "") || f.background.toUpperCase() !== (cur.background ?? "") || JSON.stringify(f.modules) !== JSON.stringify(cur.modules)), [cur, f]);
+  const dirty = useMemo(() => !!(cur && f) && (f.name !== cur.name || f.legalName !== (cur.legalName ?? "") || f.emailFromName !== (cur.emailFromName ?? "") || f.replyTo !== (cur.replyTo ?? "") || f.address !== (cur.address ?? "") || f.privacyUrl !== (cur.privacyUrl ?? "") || f.accent.toUpperCase() !== (cur.accent ?? "") || f.background.toUpperCase() !== (cur.background ?? "") || JSON.stringify(f.modules) !== JSON.stringify(cur.modules)), [cur, f]);
   if (!cur || !f) return <SetHead eyebrow="Business" title="Your business." sub="How your portal looks to clients and what it sends as." />;
   const set = (p: Partial<Biz>) => setF({ ...f, ...p });
   const onSave = async () => {
     setBusy("save"); setErr(null);
     try {
-      await save({ name: f.name, legalName: f.legalName || null, emailFromName: f.emailFromName || null, replyTo: f.replyTo || null, accent: f.accent || null, background: f.background || null, modules: f.modules });
+      await save({ name: f.name, legalName: f.legalName || null, emailFromName: f.emailFromName || null, replyTo: f.replyTo || null, address: f.address || null, privacyUrl: f.privacyUrl || null, accent: f.accent || null, background: f.background || null, modules: f.modules });
       show("Saved");
     } catch (e) { setErr((e as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]); }
     finally { setBusy(null); }
   };
-  const field = (label: string, k: "name" | "legalName" | "emailFromName" | "replyTo", type = "text", ph = "") => (
+  const field = (label: string, k: "name" | "legalName" | "emailFromName" | "replyTo" | "address" | "privacyUrl", type = "text", ph = "") => (
     <label className="wp-field"><span className="wp-field-label">{label}</span><input className="input" type={type} value={f[k]} placeholder={ph} onChange={(e) => set({ [k]: e.target.value } as Partial<Biz>)} /></label>
   );
   const hex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v);
@@ -184,6 +184,9 @@ function BusinessSection({ show }: { show: (m: string) => void }) {
           {field("Legal name", "legalName")}
           {field("Email from-name", "emailFromName", "text", f.name)}
           {field("Reply-to", "replyTo", "email", cur.ownerEmail ?? "")}
+          {field("Business address", "address", "text", "Street, city, state ZIP")}
+          {field("Privacy policy link", "privacyUrl", "url", "https://")}
+          <p className="wp-field-hint" style={{ margin: "-6px 0 0" }}>Shown on invoices, receipts and email footers. Stripe requires both on receipts.</p>
           <div className="wp-biz2">
             <LogoSlot label="Logo · on dark" url={cur.logoUrl} light={false} busy={busy === "dark"} onPick={async (file) => { setBusy("dark"); try { await uploadLogo(file, "dark"); } finally { setBusy(null); } }} onClear={() => void setLogo({ storageId: null })} />
             <LogoSlot label="Logo · on light" url={cur.logoLightUrl} light busy={busy === "light"} onPick={async (file) => { setBusy("light"); try { await uploadLogo(file, "light"); } finally { setBusy(null); } }} onClear={() => void setLogo({ storageId: null, which: "light" })} />
@@ -241,7 +244,7 @@ function RoundsAndWatermark({ cur, show }: { cur: BizSettings; show: (m: string)
         <span className="wp-eyebrow">Revision rounds</span>
         <div className="prow"><span className="pl">Use them</span><span className="pr"><Toggle label="Revision rounds" checked={!cur.roundsOff} onChange={(on) => void save({ roundsOff: !on }).then(() => show(on ? "Revision rounds are on." : "Revision rounds are off."), (e) => show(String((e as Error).message)))} /><span className="wmtxt">{cur.roundsOff ? "Off · no round chips, last-round notices or change-order prompts" : "On · each version counts as a round"}</span></span></div>
         {!cur.roundsOff && <>
-        <div className="prow"><span className="pl">Default</span><span className="pr">{rounds === null ? <><span>{cur.roundsDefault} {cur.roundsDefault === 1 ? "round" : "rounds"} per video</span><button type="button" className="linkbtn" onClick={() => setRounds(String(cur.roundsDefault))}>Change<Icon name="chevron-right" size={14} /></button></> : (
+        <div className="prow"><span className="pl">Default</span><span className="pr">{rounds === null ? <><span>{cur.roundsDefault} {cur.roundsDefault === 1 ? "round" : "rounds"} per video</span><button type="button" className="linkbtn" onClick={() => setRounds(String(cur.roundsDefault))}>Change<Icon name="edit" size={14} /></button></> : (
           <><input className="input sm" type="number" min={1} max={20} value={rounds} onChange={(e) => setRounds(e.target.value)} aria-label="Rounds per video" autoFocus style={{ width: 80 }} />
             <Button size="sm" variant="primary" onClick={async () => { const n = Number(rounds); if (!Number.isFinite(n) || n < 1) { show("1 or more."); return; } try { await save({ roundsDefault: n }); setRounds(null); show("Saved."); } catch (e) { show(String((e as Error).message).replace(/^.*ConvexError: /, "").split("\n")[0]); } }}>Save</Button>
             <Button size="sm" variant="ghost" onClick={() => setRounds(null)}>Cancel</Button></>

@@ -38,7 +38,7 @@ const OWNER_DOCS: Sub[] = [
   { to: "/sign/templates", label: "Templates", match: (p) => starts(p, "/sign/templates") },
   { to: "/sign/signature", label: "Your signature", match: (p) => starts(p, "/sign/signature") },
 ];
-const OWNER_PAYMENTS: Sub[] = [{ to: "/payments/invoices", label: "Invoices", match: (p) => starts(p, "/payments/invoices") }];
+const OWNER_PAYMENTS: Sub[] = [{ to: "/payments", label: "Overview", match: (p) => p === "/payments" }, { to: "/payments/invoices", label: "Invoices", match: (p) => starts(p, "/payments/invoices") }];
 const inPayments = (p: string) => starts(p, "/payments");
 const inReview = (p: string) => starts(p, "/review", "/projects", "/activity", "/v");
 const inDocs = (p: string) => starts(p, "/sign", "/docs");
@@ -51,7 +51,7 @@ function ownerItems(payments = false): { main: Item[]; tabs: Item[] } {
   const sent: Item = { to: "/sent", label: "Sent", icon: "send", match: (p) => starts(p, "/sent") };
   const more: Item = { to: "/more", label: "More", icon: "menu", match: (p) => starts(p, "/more", "/sent", "/settings", "/payments") };
   // Phase 2 Part B: Payments › Invoices once the business has connected Stripe (D45).
-  const pay: Item = { to: "/payments/invoices", label: "Payments", icon: "invoice", match: (p) => p === "/payments", tab: inPayments, layer: OWNER_PAYMENTS, layerHas: inPayments };
+  const pay: Item = { to: "/payments", label: "Payments", icon: "invoice", match: () => false, tab: inPayments, layer: OWNER_PAYMENTS, layerHas: inPayments };
   return { main: payments ? [home, clients, review, docs, pay, sent] : [home, clients, review, docs, sent], tabs: [home, clients, review, docs, more] };
 }
 
@@ -288,7 +288,7 @@ export function MorePage({ me, side }: { me: Me; side: Side }) {
   // Phones: Payments lives here (the tab bar has five places).
   const pay = useQuery(api.payments.settings, side === "owner" ? {} : "skip");
   const billed = useQuery(api.invoicePay.mine, side === "client" ? {} : "skip");
-  const payRow = side === "owner" ? (pay?.stripe ? [{ to: "/payments/invoices", icon: "invoice" as IconName, title: "Payments", sub: "Invoices" }] : [])
+  const payRow = side === "owner" ? (pay?.stripe ? [{ to: "/payments", icon: "invoice" as IconName, title: "Payments", sub: "Overview and invoices" }] : [])
     : (billed?.length ? [{ to: "/payments/invoices", icon: "invoice" as IconName, title: "Payments", sub: "Your invoices" }] : []);
   const rows: { to?: string; icon: IconName; title: string; sub?: string; onClick?: () => void }[] = side === "owner"
     ? [

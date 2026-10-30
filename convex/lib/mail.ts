@@ -18,6 +18,8 @@ export type MailBrand = {
   logoUrl: string;         // the logo on dark (hosted)
   isDefault: boolean;      // Wrangler: no "Powered by" line
   ownerName: string | null; // "Heston Hill": who "shared" and "sent" things in client emails
+  address?: string | null;  // Oct 30: on invoice and receipt emails
+  privacyUrl?: string | null;
 };
 
 export type Block =
@@ -54,7 +56,7 @@ export function shortLink(href: string) {
 }
 
 /** The brand for a business row (or the default when there is none). */
-export function brandFrom(b: { name?: string; legalName?: string | null; ownerName?: string | null; emailFromName?: string | null; replyTo?: string | null; accent?: string | null } | null, opts: { ownerEmail: string; logoUrl: string | null; isDefault: boolean }): MailBrand {
+export function brandFrom(b: { name?: string; legalName?: string | null; ownerName?: string | null; emailFromName?: string | null; replyTo?: string | null; accent?: string | null; address?: string | null; privacyUrl?: string | null } | null, opts: { ownerEmail: string; logoUrl: string | null; isDefault: boolean }): MailBrand {
   const name = b?.name ?? "Wrangler Productions";
   const legal = b?.legalName?.trim();
   const accent = b?.accent ?? "#FF0000";
@@ -67,6 +69,7 @@ export function brandFrom(b: { name?: string; legalName?: string | null; ownerNa
     replyTo: b?.replyTo?.trim() || opts.ownerEmail, accent, onAccent,
     logoUrl: opts.logoUrl ?? `${SITE()}/brand/wp-logo-email.png`, isDefault: opts.isDefault,
     ownerName: b?.ownerName?.trim() || (opts.isDefault ? "Heston Hill" : null),
+    address: b?.address?.trim() || null, privacyUrl: b?.privacyUrl?.trim() || null,
   };
 }
 

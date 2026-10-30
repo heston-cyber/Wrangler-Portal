@@ -136,7 +136,7 @@ function PayCard({ inv, token }: { inv: Inv; token: string }) {
         <PdfButton inv={inv} kind="receipt" className="btn">Download receipt</PdfButton>
         <PdfButton inv={inv} kind="invoice" className="btn ghost">Download PDF</PdfButton>
       </div>
-      <p className="inv-legal">Receipt from {inv.business.legalName && inv.business.legalName !== inv.business.name ? `${inv.business.name}, a DBA of ${inv.business.legalName.replace(/^.*?a DBA of\s*/i, "")}` : inv.business.name}{inv.business.email ? ` · ${inv.business.email}` : ""}</p>
+      <p className="inv-legal">Receipt from {[inv.business.legalName && inv.business.legalName !== inv.business.name ? `${inv.business.name}, a DBA of ${inv.business.legalName.replace(/^.*?a DBA of\s*/i, "")}` : inv.business.name, inv.business.email, inv.business.address].filter(Boolean).join(" · ")}{inv.business.privacyUrl && <> · <a href={inv.business.privacyUrl} target="_blank" rel="noopener noreferrer">Privacy policy</a></>}</p>
     </section>
   );
   if (s === "void" || s === "uncollectible") return (

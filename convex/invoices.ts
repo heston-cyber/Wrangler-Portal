@@ -72,6 +72,72 @@ export const list = query({
   },
 });
 
+/** Payments › Overview (frames 281:8360 …): the four numbers, what needs the owner, paid totals and recent activity.
+ *  Amounts are what Stripe reported (the portal's copy); refunds are taken off what was paid. */
+export const overview = query({
+  args: { tzOffsetMin: v.optional(v.number()) },
+  handler: async (ctx, { tzOffsetMin = 0 }) => {
+    await requireMe(ctx);
+    const biz = await ctx.db.get(ownBusiness(ctx));
+    const all = await ctx.db.query("invoices").withIndex("by_updated").order("desc").take(1000);
+    const now = Date.now();
+    // Month and year boundaries in the owner's own time zone (the page passes its offset).
+    const local = new Date(now - tzOffsetMin * 60_000);
+    const startOf = (y: number, m: number) => Date.UTC(y, m, 1) + tzOffsetMin * 60_000;
+    const thisMonth = startOf(local.getUTCFullYear(), local.getUTCMonth());
+    const lastMonth = startOf(local.getUTCFullYear(), local.getUTCMonth() - 1);
+    const thisYear = startOf(local.getUTCFullYear(), 0);
+    const sum = { due: 0, dueN: 0, overdue: 0, overdueN: 0, way: 0, wayN: 0, month: 0, year: 0, last: 0 };
+    const needs: Array<{ _id: string; kind: "draft" | "failed"; title: string; client: string | null; at: number; cents: number; detail: string }> = [];
+    const activity: Array<{ invoiceId: string; kind: string; at: number; title: string; meta: string }> = [];
+    const clientName = new Map<string, string | null>();
+    const nameOf = async (i: Doc<"invoices">) => {
+      if (!i.clientId) return i.billTo.company ?? i.billTo.name ?? null;
+      if (!clientName.has(i.clientId)) clientName.set(i.clientId, (await ctx.db.get(i.clientId))?.name ?? null);
+      return clientName.get(i.clientId) ?? null;
+    };
+    const usd = (c: number) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    for (const i of all) {
+      const st = displayStatus(i, now);
+      const client = await nameOf(i);
+      if (st === "due" || st === "partly_paid" || st === "failed") { sum.due += i.amountRemainingCents; sum.dueN++; }
+      if (st === "overdue") { sum.overdue += i.amountRemainingCents; sum.overdueN++; }
+      if (st === "processing") { sum.way += (i.payments ?? []).filter((p) => p.status === "processing").reduce((t, p) => t + p.cents, 0) || i.amountRemainingCents; sum.wayN++; }
+      // Paid: each payment on the day it was paid, less what was refunded; an invoice paid before the portal kept
+      // payments counts its amount paid on the day it was paid.
+      const paid = (i.payments ?? []).filter((p) => p.status === "paid");
+      const parts = paid.length ? paid.map((p) => ({ at: p.at, cents: p.cents - (p.refundedCents ?? 0) })) : i.amountPaidCents > 0 ? [{ at: i.paidAt ?? i.updatedAt, cents: i.amountPaidCents - (i.refundedCents ?? 0) }] : [];
+      for (const p of parts) {
+        if (p.at >= thisMonth) sum.month += p.cents;
+        if (p.at >= thisYear) sum.year += p.cents;
+        if (p.at >= lastMonth && p.at < thisMonth) sum.last += p.cents;
+      }
+      if (st === "draft") needs.push({ _id: i._id, kind: "draft", title: i.title, client, at: i.createdAt, cents: i.totalCents, detail: "Draft" });
+      if (st === "failed") needs.push({ _id: i._id, kind: "failed", title: i.title, client, at: i.lastFailure?.at ?? i.updatedAt, cents: i.amountRemainingCents, detail: /declin/i.test(i.lastFailure?.message ?? "") ? "Card declined" : "Payment failed" });
+      const number = i.number ?? i.stripe?.number ?? "";
+      for (const h of i.history) {
+        const meta = (extra?: string | null) => [client, number || null, extra ?? null].filter(Boolean).join(" · ");
+        if (h.kind === "paid" || h.kind === "part_paid") {
+          const p = [...paid].reverse().find((x) => Math.abs(x.at - h.at) < 3 * 86_400_000);
+          activity.push({ invoiceId: i._id, kind: "paid", at: h.at, title: `Payment received · ${usd(p?.cents ?? (h.kind === "paid" ? i.totalCents : i.amountPaidCents))}`, meta: meta(p?.method) });
+        } else if (h.kind === "viewed") activity.push({ invoiceId: i._id, kind: "viewed", at: h.at, title: "Invoice viewed", meta: meta() });
+        else if (h.kind === "sent") activity.push({ invoiceId: i._id, kind: "sent", at: h.at, title: "Invoice sent", meta: meta() });
+        else if (h.kind === "processing") activity.push({ invoiceId: i._id, kind: "processing", at: h.at, title: "Bank payment started", meta: meta() });
+        else if (h.kind === "failed") activity.push({ invoiceId: i._id, kind: "failed", at: h.at, title: "Payment failed", meta: meta() });
+        else if (h.kind === "refunded") activity.push({ invoiceId: i._id, kind: "refunded", at: h.at, title: h.detail ?? "Refunded", meta: meta() });
+      }
+    }
+    activity.sort((a, b) => b.at - a.at);
+    needs.sort((a, b) => (a.kind === b.kind ? b.at - a.at : a.kind === "draft" ? -1 : 1));
+    return {
+      stripe: biz?.stripe ? biz.stripe.status : null, invoices: all.length,
+      due: { cents: sum.due, n: sum.dueN }, overdue: { cents: sum.overdue, n: sum.overdueN }, onItsWay: { cents: sum.way, n: sum.wayN },
+      paid: { month: sum.month, year: sum.year, lastMonth: sum.last },
+      needs: needs.slice(0, 8), activity: activity.slice(0, 6),
+    };
+  },
+});
+
 /** A project's Invoices tab. */
 export const forProject = query({
   args: { projectId: v.string() },
@@ -99,7 +165,7 @@ export const get = query({
       clientId: i.clientId ?? null, projectId: i.projectId ?? null, history: i.history, refundedCents: i.refundedCents ?? 0, disputed: i.disputed ?? null,
       stripe: i.stripe ? { invoiceId: i.stripe.invoiceId, hostedUrl: i.stripe.hostedUrl ?? null, pdfUrl: i.stripe.pdfUrl ?? null, livemode: i.stripe.livemode } : null,
       business: biz ? {
-        name: biz.name, legalName: biz.legalName ?? null, prefix: invoicePrefix(biz.name), email: biz.replyTo ?? null,
+        name: biz.name, legalName: biz.legalName ?? null, prefix: invoicePrefix(biz.name), email: biz.replyTo ?? null, address: biz.address ?? null, privacyUrl: biz.privacyUrl ?? null,
         logoUrl: biz.logoFileId ? await ctx.storage.getUrl(biz.logoFileId) : null, logoLightUrl: biz.logoLightFileId ? await ctx.storage.getUrl(biz.logoLightFileId) : null,
       } : null,
       payToken: i.payToken ?? null, payments: (i.payments ?? []).filter((p) => p.status !== "failed"),

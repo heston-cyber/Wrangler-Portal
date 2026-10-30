@@ -27,7 +27,7 @@ export const InvoiceChip = ({ status }: { status: InvoiceStatus }) => <StatusChi
 
 /** The invoice as the client sees it: on the New invoice preview, the owner's invoice page, the client's page. */
 export function InvoicePaper({ business, number, issued, due, billTo, project, lines, discountCents, taxPercent, amountPaidCents = 0, memo, payments }: {
-  business: { name: string; legalName: string | null; logoUrl?: string | null; email?: string | null }; number: string; issued: string; due: string;
+  business: { name: string; legalName: string | null; logoUrl?: string | null; email?: string | null; address?: string | null; privacyUrl?: string | null }; number: string; issued: string; due: string;
   billTo: { name: string; email: string; company?: string }; project?: string | null; lines: Line[]; discountCents?: number; taxPercent?: number;
   amountPaidCents?: number; memo?: string; payments?: Array<{ at: string; method: string; cents: number }>;
 }) {
@@ -62,7 +62,7 @@ export function InvoicePaper({ business, number, issued, due, billTo, project, l
       )}
       <footer className="inv-foot">
         {memo && <p className="memo">{memo}</p>}
-        <p className="legal">{business.name}{business.legalName ? `, ${legal}` : ""}{business.email ? ` · ${business.email}` : ""}</p>
+        <p className="legal">{[`${business.name}${business.legalName ? `, ${legal}` : ""}`, business.email, business.address].filter(Boolean).join(" · ")}{business.privacyUrl && <> · <a href={business.privacyUrl} target="_blank" rel="noopener noreferrer">Privacy policy</a></>}</p>
       </footer>
     </article>
   );
