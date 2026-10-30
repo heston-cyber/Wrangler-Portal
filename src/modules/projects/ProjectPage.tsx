@@ -279,8 +279,8 @@ function Overview({ page, onMove, onRounds, onNext, onDates, postDefault, setPos
           <button type="button" className="pj-lockline" onClick={() => goTab("delivery")}>
             <Icon name={page.delivery.open ? "download" : "lock"} size={18} />
             <span>{page.delivery.open ? `Open for ${client} until ${new Date(page.delivery.expiresAt!).toLocaleDateString("en-US", { month: "short", day: "numeric" })}.`
-              : page.delivery.files.length ? `${plural(page.delivery.files.length, "file", "files")} ready. They unlock for ${client} when the final invoice is paid.`
-              : `Final files unlock for ${client} when the final invoice is paid.`}</span>
+              : page.delivery.files.length ? `${plural(page.delivery.files.length, "file", "files")} ready. ${client} can download them once you unlock them.`
+              : `Add the final files, then unlock them for ${client}.`}</span>
           </button>
         </Card>
         <Card className="pj-people" label="People" head={<SectionHead label="People" count={page.people.length} action={page.client ? <ButtonLink size="sm" variant="ghost" to={`/clients/${page.client._id}`}>Open client</ButtonLink> : undefined} />}>
@@ -310,8 +310,8 @@ function Delivery({ page, show, onAddFiles }: { page: Page; show: (m: string) =>
       <section className={`wp-notice pj-lock${d.open ? " open" : ""}`}>
         <Icon name={d.open ? "download" : "lock"} size={20} />
         <div className="txt">
-          <b>{d.open ? `Open for ${client} until ${until}` : d.unlockedAt ? `The links for ${client} expired on ${until}` : `Locked for ${client} until the final invoice is paid`}</b>
-          <span>{d.open ? "They download each file from their project page. Links work until the date above." : "Review copies keep their watermark. When the final invoice is paid, the files below unlock as expiring download links."}</span>
+          <b>{d.open ? `Open for ${client} until ${until}` : d.unlockedAt ? `The links for ${client} expired on ${until}` : `Locked for ${client}`}</b>
+          <span>{d.open ? "They download each file from their project page. Links work until the date above." : "Unlock when you're ready: they get expiring download links to the files below. Once Payments is set up, a paid final invoice unlocks them by itself."}</span>
         </div>
         <span className="acts">
           {d.open ? <Button size="sm" onClick={() => void setDelivery({ projectId: page._id, unlocked: false }).then(() => show("Locked again."))}>Lock again</Button>

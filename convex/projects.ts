@@ -308,6 +308,7 @@ export const mine = query({
     const out = [];
     for (const { project: p } of (await myProjects(ctx, me.email)).values()) {
       const biz = p.businessId ? await ctx.db.get(p.businessId) : null;
+      if (biz?.modules?.projects === false) continue; // the owner switched project pages off (Settings › Business)
       out.push({ _id: p._id, label: label(p), stage: (p.stage ?? "discovery") as Stage, nextStep: p.nextStep ?? null, business: biz?.name ?? null, updatedAt: p.updatedAt ?? p.createdAt, delivery: deliveryState(p).open });
     }
     return out.sort((a, b) => b.updatedAt - a.updatedAt);
@@ -324,6 +325,7 @@ export const forClient = query({
     const row = id ? (await myProjects(ctx, me.email)).get(id) : undefined;
     if (!row) return null;
     const p = row.project;
+    if (p.businessId && (await ctx.db.get(p.businessId))?.modules?.projects === false) return null;
     const r = await roundsFor(ctx, p);
     const videos = [];
     for (const { video: vid, token } of row.videos.values()) {

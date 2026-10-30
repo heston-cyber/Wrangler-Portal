@@ -8,6 +8,7 @@ import ClientHome from "./modules/clients/ClientHome";
 import ClientInbox from "./modules/clients/ClientInbox";
 import ClientDocuments, { type DocTab } from "./modules/clients/ClientDocuments";
 import ClientReview from "./modules/clients/ClientReview";
+import ClientProject, { type ClientProjectTab } from "./modules/projects/ClientProject";
 import ClientSettings from "./modules/clients/ClientSettings";
 import Home from "./modules/review/Home";
 import OwnerHome from "./modules/home/OwnerHome";
@@ -168,6 +169,8 @@ function ClientRoutes({ me }: { me: { name: string | null; email: string } }) {
   if (/^\/inbox\/?$/.test(path)) return <ClientInbox itemId={params.get("item")} />;
   if (/^\/(docs|documents)\/?$/.test(path)) { const t = params.get("tab"); return <ClientDocuments tab={(t === "signed" || t === "cancelled" ? t : "to_sign") as DocTab} />; }
   if (/^\/review\/?$/.test(path)) return <ClientReview me={me} />;
+  const proj = /^\/projects\/([^/]+)\/?$/.exec(path);
+  if (proj) { const t = params.get("tab"); return <ClientProject key={proj[1]} projectId={proj[1]} tab={(t === "videos" || t === "documents" ? t : "overview") as ClientProjectTab} />; }
   if (path.startsWith("/settings")) return <ClientSettings me={me} />;
   return <ClientHome />;
 }

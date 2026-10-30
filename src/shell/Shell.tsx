@@ -56,7 +56,7 @@ function clientItems(shared: SharedProject[], unread: number): { main: Item[]; t
   const layer: Sub[] = [...shared.map((s) => ({ to: s.to, label: s.label, match: (p: string) => starts(p, s.to) })), { to: "/review", label: "All shared", match: (p: string) => p === "/review" }];
   const home: Item = { to: "/", label: "Home", icon: "home", match: (p) => p === "/" };
   const inbox: Item = { to: "/inbox", label: "Inbox", icon: "inbox", match: (p) => starts(p, "/inbox"), badge: unread };
-  const review: Item = { to: "/review", label: "Review", icon: "review", match: () => false, tab: (p) => starts(p, "/review", "/s"), layer, layerHas: (p) => starts(p, "/review", "/s") };
+  const review: Item = { to: "/review", label: "Review", icon: "review", match: () => false, tab: (p) => starts(p, "/review", "/s", "/projects"), layer, layerHas: (p) => starts(p, "/review", "/s", "/projects") };
   const docs: Item = { to: "/docs", label: "Docs", icon: "document", match: (p) => starts(p, "/docs") };
   const more: Item = { to: "/more", label: "More", icon: "menu", match: (p) => starts(p, "/more", "/settings") };
   return { main: [home, inbox, review, docs], tabs: [home, inbox, review, docs, more] };
@@ -73,7 +73,14 @@ export function Shell({ me, side = "owner", overlay, light = true, subtitle, chi
   const mine = useQuery(api.shares.mine, side === "client" ? {} : "skip");
   const unread = useQuery(api.inbox.unreadCount, side === "client" ? {} : "skip") ?? 0;
   const overview = useQuery(api.library.overview, side === "owner" ? {} : "skip");
-  const shared = useMemo(() => (mine ?? []).filter((s) => s.kind !== "video").map((s) => ({ to: `/s/${s.token}`, label: s.label })), [mine]);
+  // Phase 2: the client's Review layer lists their projects (each opens its project page), then any other shared
+  // collection that isn't one of those projects.
+  const myProjects = useQuery(api.projects.mine, side === "client" ? {} : "skip");
+  const shared = useMemo(() => {
+    const projects = (myProjects ?? []).map((p) => ({ to: `/projects/${p._id}`, label: p.label }));
+    const labels = new Set(projects.map((p) => p.label));
+    return [...projects, ...(mine ?? []).filter((s) => s.kind !== "video" && !labels.has(s.label)).map((s) => ({ to: `/s/${s.token}`, label: s.label }))];
+  }, [mine, myProjects]);
   const recent: Recent[] = side === "owner"
     ? (overview?.videos ?? []).filter((x) => x.lastOpenedAt).sort((a, b) => b.lastOpenedAt! - a.lastOpenedAt!).slice(0, 4).map((x) => ({ _id: x._id, title: x.title, thumb: x.latest?.thumbUrl ?? null }))
     : [];

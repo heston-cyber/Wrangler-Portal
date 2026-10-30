@@ -1669,3 +1669,25 @@ button.wp-hubcard[aria-busy], button.wp-tplcard[aria-busy] { opacity: 1; }
 .vlast > .ph-only { display: none; }
 @media (max-width: 820px) { .vlast > .pc-only { display: none; } .vlast > .ph-only { display: grid; } }
 .dialog .dfoot .btn.outline { border-color: var(--border-strong, rgba(255,255,255,.4)) !important; }
+/* Phase 2 Part A: the client's project page and Home's project card. */
+.cpj-overview { display: flex; flex-direction: column; gap: 20px; }
+.cpj-next { margin: 0; font-size: var(--fs-text-regular); line-height: var(--lh-regular); color: var(--text-primary); }
+.cpj-last { color: var(--status-warning, #f5b400); }
+.pj-lockline.static { cursor: default; margin: 0; }
+.cpj-finalwrap { display: grid; gap: 12px; }
+.cpj-expires { margin: 0; padding: 0 4px; font-size: var(--fs-text-small); }
+.ch-projname { font: 600 20px/1.25 var(--font-title); color: var(--text-primary); text-decoration: none; }
+.ch-project .pj-stagebody { padding-top: 0; }
+@media (max-width: 820px) {
+  .cpj .wp-stagebar .nm { display: none; }
+  .cpj .pj-stageph, .ch-project .pj-stageph { display: block; }
+  .ch-project .wp-stagebar .nm { display: none; }
+  .cpj .wp-homecols { display: flex; flex-direction: column; gap: 20px; }
+  .cpj .wp-homecols > .col { display: contents; }
+}
+@media (max-width: 820px) {
+  .wp-shell:not(.overlay) .main:has(.wp-page.cpj) > .topbar { display: none; }
+  .wp-shell.client-side .cpj .wp-setback { display: none; }
+  .cpj .wp-homecols { align-items: stretch; }
+  .cpj .wp-card { min-width: 0; width: 100%; box-sizing: border-box; }
+}

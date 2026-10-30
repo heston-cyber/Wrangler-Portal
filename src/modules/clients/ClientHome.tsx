@@ -2,9 +2,11 @@
 // newest of their Inbox.
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import { linkProps } from "../../lib/router";
 import { ButtonLink, Card, Divider, InboxItem, ListRow, PageHeader, SectionHead, SkeletonRows, StatusChip } from "../../ui/wp";
 import { INBOX_ICON, Day, dayWord, monthDay, type InboxKind } from "../inbox/common";
 import { clockText } from "../../lib/format";
+import { StageBar, STAGES, stageName } from "../projects/common";
 
 const WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
 function headline(n: number) {
@@ -16,6 +18,8 @@ function headline(n: number) {
 export default function ClientHome() {
   const waiting = useQuery(api.portal.waiting);
   const inbox = useQuery(api.inbox.mine, { limit: 3 });
+  const projects = useQuery(api.projects.mine, {});
+  const project = projects?.[0];
   const n = waiting ? waiting.cuts.length + waiting.docs.length : 0;
   return (
     <div className="wp-page notop ch">
@@ -44,6 +48,19 @@ export default function ClientHome() {
             ))}
           </>}
       </Card>
+      {project && (
+        <Card className="ch-project" label="Your project" head={<SectionHead label={projects!.length > 1 ? "Your projects" : "Your project"} count={projects!.length > 1 ? projects!.length : undefined} action={<ButtonLink size="sm" variant="ghost" to={`/projects/${project._id}`}><span className="pc-only">Open project</span><span className="ph-only">Open</span></ButtonLink>} />}>
+          <div className="pj-stagebody">
+            <a className="ch-projname" {...linkProps(`/projects/${project._id}`)}>{project.label}</a>
+            <StageBar stage={project.stage} />
+            <span className="pj-stageph">{stageName(project.stage)} · stage {STAGES.indexOf(project.stage) + 1} of 5</span>
+            {project.delivery ? <p className="cpj-next">Your final files are ready to download.</p> : project.nextStep && <p className="cpj-next">Next step: {project.nextStep}</p>}
+          </div>
+          {projects!.length > 1 && projects!.slice(1, 4).map((p) => (
+            <div key={p._id} className="wp-rowwrap"><Divider /><ListRow to={`/projects/${p._id}`} title={p.label} meta={p.stage[0].toUpperCase() + p.stage.slice(1)} chevron /></div>
+          ))}
+        </Card>
+      )}
       <Card label="Inbox" head={<SectionHead label="Inbox" count={inbox?.items.length || undefined} action={<ButtonLink size="sm" variant="ghost" to="/inbox"><span className="pc-only">Open Inbox</span><span className="ph-only">Open</span></ButtonLink>} />}>
         {inbox === undefined ? <SkeletonRows n={3} />
           : inbox.items.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "inbox" }} title="Nothing new yet. Cuts, documents and notes will show up here." />

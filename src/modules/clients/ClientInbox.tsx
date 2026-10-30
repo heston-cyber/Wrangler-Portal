@@ -55,6 +55,8 @@ export default function ClientInbox({ itemId }: { itemId: string | null }) {
   const action = (it: Item) => {
     if (it.kind === "cut_ready" && it.link) return <ButtonLink size="sm" to={it.link}>Review</ButtonLink>;
     if (it.kind === "to_sign" && it.link) return <a className="btn sm" href={it.link} onClick={(e) => { e.stopPropagation(); read(it); }}>Sign</a>;
+    if (it.kind === "stage" && it.link) return <ButtonLink size="sm" to={it.link}>Open</ButtonLink>;
+    if (it.kind === "final_files" && it.link) return <ButtonLink size="sm" variant="primary" to={it.link}>Download</ButtonLink>;
     if (it.kind === "signed" && it.documentId) return <Button size="sm" onClick={(e) => { e.stopPropagation(); read(it); void download(it.documentId!); }}>Download</Button>;
     return undefined;
   };
