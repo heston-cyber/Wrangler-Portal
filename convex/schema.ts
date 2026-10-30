@@ -737,12 +737,13 @@ export default defineSchema({
     lastFailure: v.optional(v.object({ at: v.number(), message: v.string() })),
     // Step 3: the client's link to their invoice page (/i/<token>, in the invoice email) and the payments Stripe has
     // on the invoice (method shown as "Visa •••• 4242" or "Bank •••• 6789"; never full numbers).
+    fromContract: v.optional(v.string()),                // "contract:<document>:v<n>": the deposit drafted when a contract was signed
     payToken: v.optional(v.string()),
     // Step 4: reminders sent (by hand or automatically), so the next one is worked out from what already went.
     reminders: v.optional(v.array(v.object({ at: v.number(), kind: v.union(v.literal("before"), v.literal("overdue")), auto: v.boolean() }))),
-    payments: v.optional(v.array(v.object({ id: v.string(), at: v.number(), method: v.string(), cents: v.number(), status: v.union(v.literal("paid"), v.literal("processing"), v.literal("failed")) }))),
+    payments: v.optional(v.array(v.object({ id: v.string(), at: v.number(), method: v.string(), cents: v.number(), status: v.union(v.literal("paid"), v.literal("processing"), v.literal("failed")), refundedCents: v.optional(v.number()) }))),
     refundedCents: v.optional(v.number()),
-    disputed: v.optional(v.object({ at: v.number(), status: v.string() })),
+    disputed: v.optional(v.object({ at: v.number(), status: v.string(), cents: v.optional(v.number()), reason: v.optional(v.string()) })),
     stripe: v.optional(v.object({
       accountId: v.string(), invoiceId: v.string(), customerId: v.string(),
       number: v.optional(v.string()), hostedUrl: v.optional(v.string()), pdfUrl: v.optional(v.string()), livemode: v.boolean(),

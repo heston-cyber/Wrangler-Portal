@@ -229,6 +229,40 @@ export const sync = internalAction({
   },
 });
 
+/** Refunds and disputes (charge.refunded, charge.dispute.*): matched to the invoice by the payment they belong to.
+ *  The portal only records them; refunds are made, and disputes answered, in Stripe. */
+export const applyChargeEvent = internalMutation({
+  args: { accountId: v.string(), type: v.string(), object: v.any() },
+  handler: async (ctx, { accountId, type, object }) => {
+    const o = object as StripeResult;
+    const pi = String(o.payment_intent ?? "");
+    if (!pi) return null;
+    // Small tables per business; the payment intent id is only on the invoice's own payments list.
+    const i = (await ctx.db.query("invoices").collect()).find((x) => x.stripe?.accountId === accountId && (x.payments ?? []).some((p) => p.id === pi));
+    if (!i) return null;
+    const now = Date.now();
+    const money = (c: number) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    if (type === "charge.refunded" || type === "charge.refund.updated") {
+      const refunded = Number(o.amount_refunded ?? 0);
+      const payments = (i.payments ?? []).map((p) => (p.id === pi ? { ...p, refundedCents: refunded } : p));
+      const total = payments.reduce((s, p) => s + (p.refundedCents ?? 0), 0);
+      if (total === (i.refundedCents ?? 0)) return null;
+      await ctx.db.patch(i._id, { payments, refundedCents: total, history: [...i.history, { kind: "refunded", at: now, detail: `${money(total - (i.refundedCents ?? 0))} refunded in Stripe` }].slice(-60), updatedAt: now });
+      return null;
+    }
+    if (type.startsWith("charge.dispute.")) {
+      const status = String(o.status ?? "needs_response");
+      const closed = type === "charge.dispute.closed";
+      await ctx.db.patch(i._id, {
+        disputed: { at: now, status, cents: Number(o.amount ?? 0), ...(o.reason ? { reason: String(o.reason) } : {}) },
+        history: [...i.history, { kind: closed ? "dispute_closed" : "disputed", at: now, detail: closed ? (status === "won" ? "Dispute won" : status === "lost" ? "Dispute lost" : `Dispute ${status}`) : `${money(Number(o.amount ?? 0))} disputed${o.reason ? ` (${String(o.reason).replace(/_/g, " ")})` : ""}. Respond in Stripe.` }].slice(-60),
+        updatedAt: now,
+      });
+    }
+    return null;
+  },
+});
+
 export const applyPayments = internalMutation({
   args: { accountId: v.string(), stripeId: v.string(), payments: v.any(), failure: v.any(), processing: v.boolean() },
   handler: async (ctx, a) => {

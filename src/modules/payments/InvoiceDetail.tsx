@@ -29,6 +29,9 @@ const HIST: Record<string, { icon: IconName; text: (d?: string) => string }> = {
   failed: { icon: "alert", text: (d) => `Payment failed${d && d !== "A payment attempt failed" ? ` · ${d}` : ""}` },
   voided: { icon: "close", text: () => "Voided" },
   uncollectible: { icon: "close", text: () => "Marked uncollectible" },
+  refunded: { icon: "arrow-left", text: (d) => d ?? "Refunded" },
+  disputed: { icon: "alert", text: (d) => `Disputed${d ? ` · ${d}` : ""}` },
+  dispute_closed: { icon: "info", text: (d) => d ?? "Dispute closed" },
   delivery_opened: { icon: "download", text: () => "Final files opened for the client" },
   delivery_waiting: { icon: "lock", text: () => "No final files added yet" },
 };

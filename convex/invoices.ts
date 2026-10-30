@@ -326,6 +326,47 @@ export const send = action({
   },
 });
 
+// ---------- the deposit from a signed contract (step 4c) ----------
+
+/** Is this business's Stripe connected to the portal? (Then a signed contract's amount becomes a portal draft.) */
+export const connectedFor = internalQuery({
+  args: { businessId: v.optional(v.id("businesses")) },
+  handler: async (ctx, { businessId }) => {
+    const b = businessId ? await ctx.db.get(businessId) : null;
+    return !!b?.stripe && b.stripe.status !== "disconnected";
+  },
+});
+
+/** A contract everyone signed, with an amount set (Wrangler Sign, S3): a DRAFT invoice in the portal, for the owner
+ *  to check and send (D46). One per document version, however often it runs. The project is left for the owner to
+ *  pick; the client is the one the signer belongs to. */
+export const draftFromContract = internalMutation({
+  args: { documentId: v.id("wsDocuments"), versionNumber: v.number(), label: v.string(), docTitle: v.string(), amountCents: v.number(), description: v.string(),
+    billTo: v.object({ name: v.string(), email: v.string() }), dueDays: v.number() },
+  handler: async (ctx, a) => {
+    const doc = await ctx.db.get(a.documentId);
+    if (!doc) throw new ConvexError("That document isn't here.");
+    const key = `contract:${a.documentId}:v${a.versionNumber}`;
+    const existing = (await ctx.db.query("invoices").withIndex("by_bill_email", (q) => q.eq("billTo.email", a.billTo.email.toLowerCase())).collect()).find((i) => i.fromContract === key);
+    if (existing) return { invoiceId: existing._id, made: false };
+    const biz = doc.businessId ?? null;
+    const email = a.billTo.email.trim().toLowerCase();
+    const person = (await ctx.db.query("clientPeople").withIndex("by_email", (q) => q.eq("email", email)).collect()).find((p) => !p.removedAt && (p.businessId ?? null) === biz);
+    const now = Date.now();
+    const due = new Date(now + Math.max(0, a.dueDays) * DAY);
+    const dueDate = `${due.getUTCFullYear()}-${String(due.getUTCMonth() + 1).padStart(2, "0")}-${String(due.getUTCDate()).padStart(2, "0")}`;
+    const lines = [{ id: "deposit", description: `${a.description} · ${a.docTitle}`.slice(0, 300), qty: 1, unitCents: Math.round(a.amountCents) }];
+    const invoiceId = await ctx.db.insert("invoices", {
+      ...(biz ? { businessId: biz } : {}), ...(person?.clientId ? { clientId: person.clientId } : {}),
+      kind: /deposit/i.test(a.description) ? "deposit" : "other", title: `${a.description} · ${a.label}`.slice(0, 120),
+      billTo: { name: a.billTo.name.trim() || email, email }, lines, dueDate, status: "draft",
+      totalCents: lines[0].unitCents, amountPaidCents: 0, amountRemainingCents: lines[0].unitCents,
+      fromContract: key, history: [{ kind: "created", at: now, detail: `from ${a.label} (signed)` }], createdAt: now, updatedAt: now,
+    });
+    return { invoiceId, made: true };
+  },
+});
+
 // ---------- voiding ----------
 
 export const voidTarget = internalQuery({

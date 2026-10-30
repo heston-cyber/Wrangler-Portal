@@ -195,6 +195,19 @@ async function makeInvoice(ctx: ActionCtx, d: Data) {
   if (doc.invoice?.status === "created" || doc.invoice?.status === "none") return;
   const pay = ver.payment;
   if (!pay) { await ctx.runMutation(internal.signDone.recordInvoice, { documentId: doc._id, status: "none" }); return; }
+  // Phase 2 Part B step 4c (D45): a business whose Stripe is connected to the portal gets a DRAFT invoice in the
+  // portal instead (Payments › Invoices), which the owner checks and sends (D46). Nothing is sent or charged here.
+  if (await ctx.runQuery(internal.invoices.connectedFor, { businessId: doc.businessId ?? undefined })) {
+    const billTo = signings[0];
+    if (!billTo) throw new Error("No client to bill.");
+    const label = docLabel(doc.number);
+    const r = await ctx.runMutation(internal.invoices.draftFromContract, {
+      documentId: doc._id, versionNumber: ver.number, label, docTitle: doc.title, amountCents: pay.amountCents, description: pay.description,
+      billTo: { name: billTo.name, email: billTo.email }, dueDays: Math.max(0, Number(process.env.WS_INVOICE_DUE_DAYS ?? 3) || 0),
+    });
+    await ctx.runMutation(internal.signDone.recordInvoice, { documentId: doc._id, status: "created", id: r.invoiceId, url: `${SITE()}/payments/invoices/${r.invoiceId}`, amountCents: pay.amountCents, livemode: true, billTo: `${billTo.name} (${billTo.email})`, portal: true });
+    return;
+  }
   // Step 6: the one Stripe key is Wrangler's; another business's contract never makes an invoice in it.
   if (!(await ctx.runQuery(internal.business.isDefault, { businessId: doc.businessId ?? null }))) throw new Error("Stripe isn't set up for this business yet, so no draft invoice was made.");
   const key = process.env.STRIPE_SIGN_KEY;
@@ -225,12 +238,14 @@ async function makeInvoice(ctx: ActionCtx, d: Data) {
 }
 
 export const recordInvoice = internalMutation({
-  args: { documentId: v.id("wsDocuments"), status: v.union(v.literal("created"), v.literal("none")), id: v.optional(v.string()), url: v.optional(v.string()), amountCents: v.optional(v.number()), livemode: v.optional(v.boolean()), billTo: v.optional(v.string()) },
+  args: { documentId: v.id("wsDocuments"), status: v.union(v.literal("created"), v.literal("none")), id: v.optional(v.string()), url: v.optional(v.string()), amountCents: v.optional(v.number()), livemode: v.optional(v.boolean()), billTo: v.optional(v.string()), portal: v.optional(v.boolean()) },
   handler: async (ctx, a) => {
     const doc = (await ctx.db.get(a.documentId))!;
     if (doc.invoice?.status === "created") return null;
     await ctx.db.patch(a.documentId, { invoice: { status: a.status, at: Date.now(), ...(a.id ? { id: a.id, url: a.url, amountCents: a.amountCents, livemode: a.livemode } : {}) } });
-    if (a.status === "created") await appendEvent(ctx, a.documentId, { kind: "invoice_drafted", actor: "system", versionNumber: doc.sentVersion, detail: `Draft invoice ${a.id} for ${money(a.amountCents ?? 0)} to ${a.billTo} created in Stripe${a.livemode ? "" : " (test mode)"}. Not finalized or sent.` });
+    if (a.status === "created") await appendEvent(ctx, a.documentId, { kind: "invoice_drafted", actor: "system", versionNumber: doc.sentVersion, detail: a.portal
+      ? `Draft invoice for ${money(a.amountCents ?? 0)} to ${a.billTo} made in Payments › Invoices. Not sent.`
+      : `Draft invoice ${a.id} for ${money(a.amountCents ?? 0)} to ${a.billTo} created in Stripe${a.livemode ? "" : " (test mode)"}. Not finalized or sent.` });
     return null;
   },
 });

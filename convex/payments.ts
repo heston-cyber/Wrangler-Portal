@@ -221,6 +221,10 @@ export const connectWebhook = httpAction(async (ctx, req) => {
       await ctx.scheduler.runAfter(0, internal.invoicePay.sync, { accountId: ev.account, stripeId: String(ev.data.object.id) });
     }
   }
+  // Step 4c: refunds and disputes, onto the invoice they belong to.
+  if ((ev.type === "charge.refunded" || ev.type === "charge.refund.updated" || ev.type.startsWith("charge.dispute.")) && ev.account && ev.data?.object) {
+    await ctx.runMutation(internal.invoicePay.applyChargeEvent, { accountId: ev.account, type: ev.type, object: ev.data.object });
+  }
   if (ev.type === "invoice.deleted" && ev.account && ev.data?.object?.id) {
     await ctx.runMutation(internal.invoices.stripeInvoiceDeleted, { accountId: ev.account, stripeId: String(ev.data.object.id) });
   }
