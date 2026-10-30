@@ -79,6 +79,7 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "invoices.list": { pages: ["owner"], args: () => "skip" }, // Payments › Invoices
   "invoices.overview": { pages: ["owner"], args: () => "skip" }, // Payments › Overview
   "invoices.forProject": { pages: ["owner"], args: () => "skip" }, // project page › Invoices
+  "invoices.finalOptions": { pages: ["owner"], args: () => "skip" }, // project page › Invoices (final from a contract)
   "invoices.get": { pages: ["owner"], args: () => "skip" }, // one invoice
   "invoices.options": { pages: ["owner"], args: () => "skip" }, // New invoice
   "activity.feed": { pages: ["owner"], args: () => "skip" },

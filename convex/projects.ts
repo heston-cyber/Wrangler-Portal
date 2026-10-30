@@ -58,7 +58,7 @@ async function portalPeople(ctx: QueryCtx | MutationCtx, p: Doc<"projects">) {
   return out;
 }
 
-async function clientDocs(ctx: QueryCtx | MutationCtx, emails: Set<string>, businessId: Id<"businesses"> | undefined) {
+export async function clientDocs(ctx: QueryCtx | MutationCtx, emails: Set<string>, businessId: Id<"businesses"> | undefined) {
   const docs = new Map<string, { _id: Id<"wsDocuments">; label: string; title: string; status: string; sentAt: number | null; completedAt: number | null }>();
   for (const e of emails) {
     for (const sg of await ctx.db.query("wsSignings").withIndex("by_email", (q) => q.eq("email", e)).collect()) {

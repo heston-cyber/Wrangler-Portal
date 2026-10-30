@@ -1,13 +1,17 @@
 // Phase 2 Part B, step 2: Payments › Invoices (frame 226:5220): every invoice in groups (Needs attention, Drafts, Due,
 // On its way, Paid, Closed), filter pills, New invoice. Also the rows a project's Invoices tab shows (231:6304).
 import { useState } from "react";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../convex/_generated/api";
-import { ButtonLink, Card, Divider, EmptyState, ListRow, PageHeader, PillTabs, SectionHead, SkeletonRows } from "../../ui/wp";
+import { Button, ButtonLink, Card, Divider, EmptyState, ListRow, PageHeader, PillTabs, SectionHead, SkeletonRows } from "../../ui/wp";
 import { Icon } from "../../ui/Icon";
 import { TopBar, Sep } from "../../shell/Shell";
 import { InvoiceChip, dateShort, money, type InvoiceStatus } from "./common";
+import { useToast } from "../../ui/kit";
+import { navigate } from "../../lib/router";
+import { errText } from "../docs/pages/common";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 export type Row = FunctionReturnType<typeof api.invoices.list>[number];
 type Filter = "all" | "drafts" | "due" | "processing" | "failed" | "paid";
@@ -105,7 +109,40 @@ export function ProjectInvoices({ projectId, clientId }: { projectId: string; cl
           : rows.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "invoice" }} title="No invoices on this project yet." />
           : rows.map((r, i) => <div key={r._id} className="wp-rowwrap">{i > 0 && <Divider />}<InvoiceRow r={r} withClient={false} /></div>)}
       </Card>
+      <FinalFromContracts projectId={projectId} />
       <p className="secondary inv-note">Drafts never send themselves. "Review and send" asks for your OK first.</p>
     </>
+  );
+}
+
+/** The plan's final invoice: for each signed contract of this client with a balance after the deposit, a button that
+ *  drafts it (the total less the deposit). Nothing is drafted or sent on its own. */
+function FinalFromContracts({ projectId }: { projectId: string }) {
+  const opts = useQuery(api.invoices.finalOptions, { projectId });
+  const draft = useMutation(api.invoices.draftFinal);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [toast, show] = useToast();
+  if (!opts || opts.length === 0) return null;
+  const go = async (documentId: string) => {
+    setBusy(documentId);
+    try {
+      const id = await draft({ projectId: projectId as Id<"projects">, documentId: documentId as Id<"wsDocuments"> });
+      navigate(`/payments/invoices/${id}`);
+    } catch (e) { show(errText(e)); setBusy(null); }
+  };
+  return (
+    <Card label="Final invoice" head={<SectionHead label="Final invoice from a signed contract" />}>
+      {opts.map((o, i) => (
+        <div key={o.documentId} className="wp-rowwrap">
+          {i > 0 && <Divider />}
+          <ListRow lead={{ icon: "invoice" }} title={`${o.label} · ${o.title}`}
+            meta={`${money(o.totalCents)} total, less the ${money(o.depositCents)} deposit · balance ${money(o.balanceCents)}`}
+            action={o.invoiceId
+              ? <ButtonLink size="sm" variant="ghost" to={`/payments/invoices/${o.invoiceId}`}>Open final invoice</ButtonLink>
+              : <Button size="sm" loading={busy === o.documentId} disabled={!!busy} onClick={() => go(o.documentId)}>Draft final invoice</Button>} />
+        </div>
+      ))}
+      {toast}
+    </Card>
   );
 }

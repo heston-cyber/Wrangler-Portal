@@ -39,6 +39,40 @@ describe("a signed contract's deposit", () => {
   });
 });
 
+describe("the final invoice from a signed contract", () => {
+  test("Project › Invoices offers the balance of each signed builder contract; Draft makes one draft, billed to the signer", async () => {
+    const w = await world();
+    const page = { type: "doc", content: [
+      { type: "items", attrs: { rows: [{ qty: 1, rate: 9000 }, { qty: 2, rate: 1500 }] } },
+      { type: "payment", attrs: { depositPct: 25, invoiceDeposit: true } },
+    ] };
+    const doc = await w.t.run(async (ctx) => {
+      const d = await ctx.db.insert("wsDocuments", { businessId: w.A, number: 18, title: "Service Agreement", status: "completed", currentVersion: 1, sentVersion: 1, sentAt: 5, createdAt: 0, updatedAt: 0 });
+      const b = await ctx.db.insert("wsBuilds", { businessId: w.A, title: "Service Agreement", blocks: page, fields: {}, style: {}, signers: [], documentId: d, createdAt: 0, updatedAt: 0 });
+      await ctx.db.patch(d, { buildId: b });
+      await ctx.db.insert("wsSignings", { businessId: w.A, documentId: d, versionNumber: 1, signerKey: "client", name: "Maya Brooks", email: "maya@harbor.example", order: 0, token: "t1", status: "signed" });
+      // A contract still out for signing isn't offered.
+      const out = await ctx.db.insert("wsDocuments", { businessId: w.A, number: 19, title: "Change order", status: "sent", currentVersion: 1, sentVersion: 1, sentAt: 6, createdAt: 0, updatedAt: 0 });
+      await ctx.db.insert("wsSignings", { businessId: w.A, documentId: out, versionNumber: 1, signerKey: "client", name: "Maya Brooks", email: "maya@harbor.example", order: 0, token: "t2", status: "sent" });
+      return d;
+    });
+    const opts = await w.heston.query(api.invoices.finalOptions, { projectId: w.p });
+    expect(opts).toEqual([expect.objectContaining({ documentId: doc, label: "WS-00018", totalCents: 1200000, depositCents: 300000, balanceCents: 900000, invoiceId: null })]);
+    const id = await w.heston.mutation(api.invoices.draftFinal, { projectId: w.p, documentId: doc });
+    expect(await w.heston.mutation(api.invoices.draftFinal, { projectId: w.p, documentId: doc })).toBe(id); // one per contract
+    const inv = await w.heston.query(api.invoices.get, { invoiceId: id });
+    expect(inv).toMatchObject({ status: "draft", kind: "final", title: "Final invoice · WS-00018", totalCents: 900000, clientId: w.harbor, projectId: w.p,
+      billTo: { name: "Maya Brooks", email: "maya@harbor.example" }, memo: "Contract total $12,000.00, less the $3,000.00 deposit (WS-00018).",
+      lines: [{ description: "Balance · Service Agreement", qty: 1, unitCents: 900000 }] });
+    expect((await w.heston.query(api.invoices.finalOptions, { projectId: w.p }))[0].invoiceId).toBe(id);
+    // Another business's owner gets nothing and can't draft it.
+    expect(await w.boss.query(api.invoices.finalOptions, { projectId: w.p })).toEqual([]);
+    await expect(w.boss.mutation(api.invoices.draftFinal, { projectId: w.p, documentId: doc })).rejects.toThrow();
+    // A client can't.
+    await expect(w.maya.mutation(api.invoices.draftFinal, { projectId: w.p, documentId: doc })).rejects.toThrow();
+  });
+});
+
 describe("refunds and disputes", () => {
   test("recorded on the invoice the payment belongs to; another account's event changes nothing", async () => {
     vi.useFakeTimers();

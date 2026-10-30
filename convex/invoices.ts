@@ -12,7 +12,8 @@ import { requireMe } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import { invoicePrefix } from "./lib/invoiceNumber";
 import { stripeCall, StripeError, type StripeResult } from "./lib/stripeApi";
-import { openDelivery } from "./projects";
+import { clientDocs, openDelivery } from "./projects";
+import { pageOf, totals as builderTotals } from "./lib/wsBuilder";
 import { announceSent } from "./invoicePay";
 import { nextReminder } from "./invoiceReminders";
 
@@ -474,6 +475,67 @@ export const draftFromContract = internalMutation({
       fromContract: key, history: [{ kind: "created", at: now, detail: `from ${a.label} (signed)` }], createdAt: now, updatedAt: now,
     });
     return { invoiceId, made: true };
+  },
+});
+
+// ---------- the final invoice from a signed contract (Phase 2, the plan's "Final invoice") ----------
+
+/** Signed contracts of this project's client that have a balance left after the deposit (made in the builder, so the
+ *  portal knows their total), and whether a final invoice has been drafted from each. */
+async function finalCandidates(ctx: QueryCtx | MutationCtx, projectId: Id<"projects">) {
+  const p = await ctx.db.get(projectId);
+  if (!p?.clientId) return { project: p, rows: [] as Array<{ documentId: Id<"wsDocuments">; label: string; title: string; totalCents: number; depositCents: number; balanceCents: number; invoiceId: Id<"invoices"> | null; billTo: { name: string; email: string } | null }> };
+  const people = (await ctx.db.query("clientPeople").withIndex("by_client", (q) => q.eq("clientId", p.clientId!)).collect()).filter((x) => !x.removedAt);
+  const docs = (await clientDocs(ctx, new Set(people.map((x) => x.email)), p.businessId)).filter((d) => d.status === "completed");
+  const mine = await ctx.db.query("invoices").withIndex("by_client", (q) => q.eq("clientId", p.clientId!)).collect();
+  const rows = [];
+  for (const d of docs) {
+    const doc = await ctx.db.get(d._id);
+    const build = doc?.buildId ? await ctx.db.get(doc.buildId) : await ctx.db.query("wsBuilds").withIndex("by_document", (q) => q.eq("documentId", d._id)).first();
+    if (!build) continue; // an uploaded PDF: the portal doesn't know its total
+    const t = builderTotals(pageOf(build.blocks));
+    const totalCents = Math.round(t.total * 100), depositCents = Math.round(t.deposit * 100), balanceCents = totalCents - depositCents;
+    if (balanceCents <= 0) continue;
+    const signer = doc?.sentVersion !== undefined ? (await ctx.db.query("wsSignings").withIndex("by_document", (q) => q.eq("documentId", d._id).eq("versionNumber", doc.sentVersion!)).collect()).sort((a, b) => a.order - b.order)[0] : null;
+    const existing = mine.find((i) => i.fromContract === `final:${d._id}` && i.status !== "void");
+    rows.push({ documentId: d._id, label: d.label, title: d.title, totalCents, depositCents, balanceCents, invoiceId: existing?._id ?? null, billTo: signer ? { name: signer.name, email: signer.email } : null });
+  }
+  return { project: p, rows };
+}
+
+/** Project › Invoices: "Draft final invoice" for each signed contract with a balance. */
+export const finalOptions = query({
+  args: { projectId: v.string() },
+  handler: async (ctx, { projectId }) => {
+    await requireMe(ctx);
+    const id = ctx.db.normalizeId("projects", projectId);
+    return id ? (await finalCandidates(ctx, id)).rows : [];
+  },
+});
+
+/** Drafts the final invoice for one signed contract: its balance (the total less the deposit), billed to the person
+ *  who signed it. A draft only; the owner checks and sends it (D46). One per contract. */
+export const draftFinal = mutation({
+  args: { projectId: v.id("projects"), documentId: v.id("wsDocuments") },
+  handler: async (ctx, { projectId, documentId }) => {
+    await requireMe(ctx);
+    const { project, rows } = await finalCandidates(ctx, projectId);
+    const r = rows.find((x) => x.documentId === documentId);
+    if (!project || !r) throw new ConvexError("That contract has no balance left to invoice on this project.");
+    if (r.invoiceId) return r.invoiceId;
+    if (!r.billTo) throw new ConvexError("That contract has no client signer to bill.");
+    const usd = (c: number) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const now = Date.now();
+    const due = new Date(now + 7 * DAY);
+    const dueDate = `${due.getUTCFullYear()}-${String(due.getUTCMonth() + 1).padStart(2, "0")}-${String(due.getUTCDate()).padStart(2, "0")}`;
+    return await ctx.db.insert("invoices", {
+      ...(project.businessId ? { businessId: project.businessId } : {}), clientId: project.clientId, projectId,
+      kind: "final", title: `Final invoice · ${r.label}`, billTo: { name: r.billTo.name, email: r.billTo.email.trim().toLowerCase() },
+      lines: [{ id: "balance", description: `Balance · ${r.title}`.slice(0, 300), qty: 1, unitCents: r.balanceCents }],
+      memo: `Contract total ${usd(r.totalCents)}, less the ${usd(r.depositCents)} deposit (${r.label}).`,
+      dueDate, status: "draft", totalCents: r.balanceCents, amountPaidCents: 0, amountRemainingCents: r.balanceCents,
+      fromContract: `final:${documentId}`, history: [{ kind: "created", at: now, detail: `final invoice from ${r.label}` }], createdAt: now, updatedAt: now,
+    });
   },
 });
 
