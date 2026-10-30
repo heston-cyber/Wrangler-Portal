@@ -154,6 +154,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const [composerOpen, setComposerOpen] = useState(true); // the note box folds down to a pill (Heston, Oct 23); open on every load
   const createNote = useMutation(api.notes.create);
   const reportFrameCount = useMutation(api.library.reportFrameCount);
+  const retryCopy = useMutation(api.library.retryCopy);
   const [toast, showToast] = useToast();
   const [uploadVersion, roundGate] = useRoundGate();
 
@@ -771,7 +772,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                   {owner && <button className="btn primary" onClick={newVersion}><Upload size={16} />Upload the first version</button>}
                 </div></div>
               )}
-              {version && !ready && <div className="stage-msg">{st?.busy && <Spinner size={16} />}{version.status === "failed" ? `This version failed: ${version.error ?? "unknown error"}` : isFile ? `v${version.number} · ${st?.text ?? ""}. It plays here in about a minute.` : `v${version.number} · ${st?.text ?? ""}. It plays here when Bunny is done.`}</div>}
+              {version && !ready && <div className="stage-msg">{st?.busy && <Spinner size={16} />}{version.status === "failed" ? <>{`This version failed: ${version.error ?? "unknown error"}`}{owner && version.dropboxPath && /copy the render/i.test(version.error ?? "") && <button className="btn sm" style={{ marginLeft: 12 }} onClick={() => void retryCopy({ versionId: version._id }).catch(() => undefined)}>Try again</button>}</> : isFile ? `v${version.number} · ${st?.text ?? ""}. It plays here in about a minute.` : `v${version.number} · ${st?.text ?? ""}. It plays here when Bunny is done.`}</div>}
               {player.error && <div className="stage-msg">{player.error}</div>}
             </div>
           </div>
