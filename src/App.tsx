@@ -27,6 +27,10 @@ import { MorePage, Shell } from "./shell/Shell";
 import { UploadProvider } from "./shell/UploadDialog";
 import type { Id } from "../convex/_generated/dataModel";
 
+// Payments (Phase 2 Part B): its own chunk.
+const InvoicesPage = lazy(() => import("./modules/payments/InvoicesPage"));
+const InvoiceEditor = lazy(() => import("./modules/payments/InvoiceEditor"));
+const InvoiceDetail = lazy(() => import("./modules/payments/InvoiceDetail"));
 // Wrangler Sign (S1): its own chunk, so pdf.js only loads on those pages.
 const SignHome = lazy(() => import("./modules/docs/pages/SignHome"));
 const SignDocs = lazy(() => import("./modules/docs/pages/SignDocs"));
@@ -114,8 +118,11 @@ function SignedIn() {
   const sentNote = /^\/sent\/([^/]+)\/?$/.exec(path);
   let page: React.ReactNode;
   if (video) page = <VideoPage key={video[1]} videoId={video[1] as Id<"videos">} versionNumber={Number(params.get("version")) || null} noteId={params.get("note")} />;
-  else if (project) { const t = params.get("tab"); page = <Suspense fallback={<Loading />}><ProjectPage key={project[1]} projectId={project[1] as Id<"projects">} tab={(["cuts", "documents", "delivery"].includes(t ?? "") ? t : "overview") as ProjectTab} /></Suspense>; }
+  else if (project) { const t = params.get("tab"); page = <Suspense fallback={<Loading />}><ProjectPage key={project[1]} projectId={project[1] as Id<"projects">} tab={(["cuts", "documents", "invoices", "delivery"].includes(t ?? "") ? t : "overview") as ProjectTab} /></Suspense>; }
   else if (path.startsWith("/projects")) page = <Projects key="all" />;
+  else if (/^\/payments\/invoices\/new\/?$/.test(path)) page = <Suspense fallback={<Loading />}><InvoiceEditor key={search} clientId={params.get("client")} projectId={params.get("project")} /></Suspense>;
+  else if (/^\/payments\/invoices\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><InvoiceDetail key={id} invoiceId={id} /></Suspense>; }
+  else if (/^\/payments(\/invoices)?\/?$/.test(path)) page = <Suspense fallback={<Loading />}><InvoicesPage /></Suspense>;
   else if (signDoc) page = <Suspense fallback={<Loading />}><SignDoc key={signDoc[1]} documentId={signDoc[1] as Id<"wsDocuments">} versionNumber={Number(params.get("v")) || null} /></Suspense>;
   else if (path.startsWith("/sign/signature")) page = <Suspense fallback={<Loading />}><SignSignature /></Suspense>;
   else if (path.startsWith("/sign/connector")) page = <Settings me={me} />; // now Settings › Claude connectors

@@ -38,17 +38,21 @@ const OWNER_DOCS: Sub[] = [
   { to: "/sign/templates", label: "Templates", match: (p) => starts(p, "/sign/templates") },
   { to: "/sign/signature", label: "Your signature", match: (p) => starts(p, "/sign/signature") },
 ];
+const OWNER_PAYMENTS: Sub[] = [{ to: "/payments/invoices", label: "Invoices", match: (p) => starts(p, "/payments/invoices") }];
+const inPayments = (p: string) => starts(p, "/payments");
 const inReview = (p: string) => starts(p, "/review", "/projects", "/activity", "/v");
 const inDocs = (p: string) => starts(p, "/sign", "/docs");
 
-function ownerItems(): { main: Item[]; tabs: Item[] } {
+function ownerItems(payments = false): { main: Item[]; tabs: Item[] } {
   const home: Item = { to: "/", label: "Home", icon: "home", match: (p) => p === "/" };
   const clients: Item = { to: "/clients", label: "Clients", icon: "users", match: (p) => starts(p, "/clients") };
   const review: Item = { to: "/review", label: "Review", icon: "review", match: (p) => p === "/review", tab: inReview, layer: OWNER_REVIEW, layerHas: inReview };
   const docs: Item = { to: "/sign", label: "Docs", icon: "document", match: (p) => p === "/sign", tab: inDocs, layer: OWNER_DOCS, layerHas: inDocs };
   const sent: Item = { to: "/sent", label: "Sent", icon: "send", match: (p) => starts(p, "/sent") };
-  const more: Item = { to: "/more", label: "More", icon: "menu", match: (p) => starts(p, "/more", "/sent", "/settings") };
-  return { main: [home, clients, review, docs, sent], tabs: [home, clients, review, docs, more] };
+  const more: Item = { to: "/more", label: "More", icon: "menu", match: (p) => starts(p, "/more", "/sent", "/settings", "/payments") };
+  // Phase 2 Part B: Payments › Invoices once the business has connected Stripe (D45).
+  const pay: Item = { to: "/payments/invoices", label: "Payments", icon: "invoice", match: (p) => p === "/payments", tab: inPayments, layer: OWNER_PAYMENTS, layerHas: inPayments };
+  return { main: payments ? [home, clients, review, docs, pay, sent] : [home, clients, review, docs, sent], tabs: [home, clients, review, docs, more] };
 }
 
 type SharedProject = { to: string; label: string };
@@ -73,6 +77,7 @@ export function Shell({ me, side = "owner", overlay, light = true, subtitle, chi
   const mine = useQuery(api.shares.mine, side === "client" ? {} : "skip");
   const unread = useQuery(api.inbox.unreadCount, side === "client" ? {} : "skip") ?? 0;
   const overview = useQuery(api.library.overview, side === "owner" ? {} : "skip");
+  const pay = useQuery(api.payments.settings, side === "owner" ? {} : "skip");
   // Phase 2: the client's Review layer lists their projects (each opens its project page), then any other shared
   // collection that isn't one of those projects.
   const myProjects = useQuery(api.projects.mine, side === "client" ? {} : "skip");
@@ -86,16 +91,16 @@ export function Shell({ me, side = "owner", overlay, light = true, subtitle, chi
     : [];
   return (
     <ShellFrame me={me} side={side} overlay={overlay} light={light} subtitle={subtitle} logo={brand?.logoUrl ?? wpLogo} bizName={brand?.name ?? "Wrangler Productions"}
-      shared={shared} unread={unread} recent={recent} search={side === "owner"}>
+      shared={shared} unread={unread} recent={recent} search={side === "owner"} payments={!!pay?.stripe}>
       {children}
     </ShellFrame>
   );
 }
 
 /** The frame itself, fed by Shell (or by the dev-only component page with sample data). */
-export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, shared, unread, recent, search: canSearch, children }: {
+export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, shared, unread, recent, search: canSearch, payments, children }: {
   me: Me; side: Side; overlay: boolean; light: boolean; subtitle?: string | null; logo: string; bizName: string;
-  shared: SharedProject[]; unread: number; recent: Recent[]; search: boolean; children: React.ReactNode;
+  shared: SharedProject[]; unread: number; recent: Recent[]; search: boolean; payments?: boolean; children: React.ReactNode;
 }) {
   // The drawer on work surfaces: "open" from a click (stays until closed); "peek" from hovering the menu button with a
   // mouse (Heston, Oct 29): it slides out, and slides back once the pointer leaves it.
@@ -118,7 +123,7 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [canSearch]);
-  const nav = side === "owner" ? ownerItems() : clientItems(shared, unread);
+  const nav = side === "owner" ? ownerItems(payments) : clientItems(shared, unread);
   const ctx = useMemo(() => ({ openSidebar: () => setDrawerState("open"), peekSidebar: peek, openSearch: () => setSearch(true), overlay, side }), [overlay, side]);
   const showSidebar = !overlay || drawer;
   const lightSrc = side === "owner" ? lightBack : lightClient;

@@ -11,6 +11,7 @@ import { requireMe } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import { SITE } from "./lib/site";
 import { invoicePrefix } from "./lib/invoiceNumber";
+import { openCount } from "./invoices";
 import { accountState, keyMode, platformKey, stripeCall, stripeSignatureOk, StripeError, type StripeResult } from "./lib/stripeApi";
 
 function ownBusiness(ctx: unknown): Id<"businesses"> {
@@ -36,7 +37,7 @@ export const settings = query({
         status: s.status, displayName: s.displayName ?? null, chargesEnabled: s.chargesEnabled, payoutsEnabled: s.payoutsEnabled,
         bankLast4: s.bankLast4 ?? null, livemode: s.livemode, due: s.due ?? [], disabledReason: s.disabledReason ?? null, verifying: !!s.verifying, connectedAt: s.connectedAt ?? null, disconnectedAt: s.disconnectedAt ?? null, checkedAt: s.checkedAt,
       } : null,
-      openInvoices: 0, // Part B step 2 counts them
+      openInvoices: await openCount(ctx),
     };
   },
 });
@@ -205,6 +206,14 @@ export const connectWebhook = httpAction(async (ctx, req) => {
   if (ev.type === "account.updated" && ev.account) {
     const businessId = await ctx.runQuery(internal.payments.businessOfAccount, { accountId: ev.account });
     if (businessId) await ctx.runMutation(internal.payments.saveAccount, { businessId, account: ev.data?.object ?? {} });
+  }
+  // Invoices: Stripe's status and amounts onto the portal's copy.
+  const INVOICE_EVENTS = ["invoice.finalized", "invoice.updated", "invoice.paid", "invoice.payment_failed", "invoice.voided", "invoice.marked_uncollectible", "invoice.payment_succeeded", "invoice.overdue"];
+  if (INVOICE_EVENTS.includes(ev.type) && ev.account && ev.data?.object) {
+    await ctx.runMutation(internal.invoices.applyStripeInvoice, { accountId: ev.account, invoice: ev.data.object, eventType: ev.type });
+  }
+  if (ev.type === "invoice.deleted" && ev.account && ev.data?.object?.id) {
+    await ctx.runMutation(internal.invoices.stripeInvoiceDeleted, { accountId: ev.account, stripeId: String(ev.data.object.id) });
   }
   // A new or changed payout bank: read the account again so Settings shows the right last four digits.
   if ((ev.type === "account.external_account.created" || ev.type === "account.external_account.updated") && ev.account) {

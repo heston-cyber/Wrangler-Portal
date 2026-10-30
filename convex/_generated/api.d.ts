@@ -12,6 +12,7 @@ import type * as activity from "../activity.js";
 import type * as approvals from "../approvals.js";
 import type * as home from "../home.js";
 import type * as portal from "../portal.js";
+import type * as invoices from "../invoices.js";
 import type * as payments from "../payments.js";
 import type * as projects from "../projects.js";
 import type * as auth from "../auth.js";
@@ -114,6 +115,7 @@ declare const fullApi: ApiFromModules<{
   approvals: typeof approvals;
   home: typeof home;
   portal: typeof portal;
+  invoices: typeof invoices;
   payments: typeof payments;
   projects: typeof projects;
   auth: typeof auth;

@@ -255,20 +255,30 @@ export const setDelivery = mutation({
     if (a.unlocked === true) {
       const files = await ctx.db.query("deliveryFiles").withIndex("by_project", (q) => q.eq("projectId", p._id)).first();
       if (!files) throw new ConvexError("Add the final files first.");
-      const now = Date.now();
-      patch.deliveryUnlockedAt = now;
-      const biz = await businessOf(ctx, p);
-      if (biz) for (const person of await portalPeople(ctx, p)) {
-        if (await postToInbox(ctx, {
-          businessId: biz, clientId: p.clientId, email: person.email, kind: "final_files", title: "Final files ready", text: label(p),
-          link: `/projects/${p._id}`, linkLabel: "Download", source: { module: "projects", id: p._id }, key: `final:${p._id}:${now}`,
-        })) posted++;
-      }
     }
     await ctx.db.patch(p._id, patch);
+    if (a.unlocked === true) posted = (await openDelivery(ctx, p)) ?? 0;
     return { posted };
   },
 });
+
+/** Opens the final files for the client (the owner's Unlock, or a paid final invoice): the links start now, and the
+ *  project's people get "Final files ready". Returns how many were told, or null when there are no files to open. */
+export async function openDelivery(ctx: MutationCtx, p: Doc<"projects">): Promise<number | null> {
+  const files = await ctx.db.query("deliveryFiles").withIndex("by_project", (q) => q.eq("projectId", p._id)).first();
+  if (!files) return null;
+  const now = Date.now();
+  await ctx.db.patch(p._id, { deliveryUnlockedAt: now, updatedAt: now });
+  let posted = 0;
+  const biz = await businessOf(ctx, p);
+  if (biz) for (const person of await portalPeople(ctx, p)) {
+    if (await postToInbox(ctx, {
+      businessId: biz, clientId: p.clientId, email: person.email, kind: "final_files", title: "Final files ready", text: label(p),
+      link: `/projects/${p._id}`, linkLabel: "Download", source: { module: "projects", id: p._id }, key: `final:${p._id}:${now}`,
+    })) posted++;
+  }
+  return posted;
+}
 
 /** Files in the project's Dropbox folder, to pick final files from. */
 export const dropboxFiles = action({

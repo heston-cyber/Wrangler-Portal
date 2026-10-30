@@ -1721,3 +1721,99 @@ button.wp-hubcard[aria-busy], button.wp-tplcard[aria-busy] { opacity: 1; }
 .wp-notice.warn { background: color-mix(in srgb, var(--status-warning, #f5b400) 10%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--status-warning, #f5b400) 55%, transparent); }
 .wp-notice.warn > .wp-icon { color: var(--status-warning, #f5b400); }
 @media (max-width: 820px) { .pay-banner { flex-wrap: wrap; } .pay-rows dd { text-align: left; } }
+/* Settings: a section whose top bar has buttons (Register) keeps the same bar height as the others, so the section
+   menu doesn't jump when switching (Heston, Oct 30). The buttons overhang into the bar's padding instead. */
+.topbar:has(+ .wp-page .wp-setmenu) .right { margin-block: -12px; }
+/* ---------- Phase 2 Part B: invoices (S5 · Phase 2: 226:5220 list, 226:6016 new, 230:5785 detail) ---------- */
+.inv-list, .inv-edit, .inv-detail { gap: 20px; }
+.inv-row .inv-amt { font: 500 var(--fs-text-regular)/1 var(--font-body); color: var(--text-primary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.inv-more { display: inline-flex; align-items: center; gap: 6px; margin: 4px 20px 16px; border: 0; background: none; color: var(--text-primary); font-size: var(--fs-text-small); cursor: pointer; }
+.inv-note { margin: 0; font-size: var(--fs-text-small); }
+.inv-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 540px); gap: 24px; align-items: start; }
+.inv-detail .inv-cols { grid-template-columns: minmax(0, 1fr) 400px; }
+.inv-cols > .col { display: grid; gap: 20px; min-width: 0; }
+.inv-cols > .col.right { position: sticky; top: 20px; }
+.inv-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.inv-form { display: grid; gap: 16px; padding: 4px 20px 20px; }
+.inv-form .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.inv-lines-edit { display: grid; gap: 14px; padding: 4px 20px 8px; }
+.inv-line { display: grid; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid var(--border-faint); }
+.inv-line .top { display: flex; gap: 10px; align-items: center; }
+.inv-line .top .input { flex: 1; }
+.inv-line .nums { display: grid; grid-template-columns: 90px 180px 1fr; gap: 12px; align-items: end; }
+.inv-line .nums label, .inv-line .nums .amt { display: grid; gap: 6px; }
+.inv-line .nums .amt { text-align: right; }
+.inv-line .nums .amt b { font: 500 var(--fs-text-regular)/44px var(--font-body); font-variant-numeric: tabular-nums; }
+.inv-line .label, .inv-lines-edit .label { font-size: var(--fs-text-small); color: var(--text-secondary); }
+.inv-money { position: relative; display: block; }
+.inv-money > span { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none; }
+.inv-money > .input { padding-left: 26px; width: 100%; box-sizing: border-box; font-variant-numeric: tabular-nums; }
+.inv-add { justify-self: start; color: var(--accent); }
+.inv-edit-sums { display: grid; grid-template-columns: 1fr auto; gap: 0; margin: 0; padding: 8px 20px 20px; border-top: 1px solid var(--border-hairline); }
+.inv-edit-sums dt, .inv-edit-sums dd { margin: 0; padding: 9px 0; font-size: var(--fs-text-small); color: var(--text-secondary); display: flex; align-items: center; }
+.inv-edit-sums dd { justify-content: flex-end; color: var(--text-primary); }
+.inv-edit-sums .tot { font: 600 var(--fs-text-regular)/1.3 var(--font-title); color: var(--text-primary); }
+.inv-edit-sums .inline { display: inline-flex; align-items: center; gap: 6px; }
+.inv-edit-sums .inline .inv-money { width: 130px; }
+.inv-delete { justify-self: start; }
+.inv-preview-lbl { display: flex; align-items: center; gap: 8px; }
+/* the invoice "paper": what the client sees */
+.inv-paper { border-radius: var(--radius-card); border: 1px solid var(--border-hairline); background: color-mix(in srgb, var(--surface-block) 70%, transparent); overflow: hidden; font-size: var(--fs-text-small); color: var(--text-primary); }
+.inv-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 22px 24px; border-bottom: 1px solid var(--border-hairline); }
+.inv-top .who { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.inv-top .who .logo { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.inv-top .who .logo img { height: 26px; width: auto; display: block; }
+.inv-top .who .logo .rec { width: 10px; height: 10px; border-radius: 50%; background: #ff0000; }
+.inv-top .who > span:last-child { display: grid; gap: 2px; }
+.inv-top .who b { font: 500 var(--fs-text-regular)/1.3 var(--font-body); }
+.inv-top .who small, .inv-top .num span { color: var(--text-secondary); font-size: 12px; }
+.inv-top .num { display: grid; gap: 4px; text-align: right; }
+.inv-top .num span { text-transform: uppercase; letter-spacing: var(--ls-label); }
+.inv-top .num b { font: 500 var(--fs-text-regular)/1.3 var(--font-body); letter-spacing: .02em; }
+.inv-meta { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 16px 20px; margin: 0; padding: 18px 24px; border-bottom: 1px solid var(--border-hairline); }
+.inv-meta dt { font: 500 11px/1.4 var(--font-title); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-secondary); margin-bottom: 4px; }
+.inv-meta dd { margin: 0; line-height: 1.55; }
+.inv-meta .proj { grid-column: 1 / -1; }
+.inv-lines { width: 100%; border-collapse: collapse; }
+.inv-lines th { font: 500 11px/1.4 var(--font-title); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-secondary); text-align: right; padding: 12px 24px 8px; }
+.inv-lines td { padding: 12px 24px; text-align: right; border-top: 1px solid var(--border-faint); font-variant-numeric: tabular-nums; vertical-align: top; }
+.inv-lines th:first-child, .inv-lines td:first-child { text-align: left; width: 50%; }
+.inv-sums { display: grid; grid-template-columns: 1fr auto; margin: 0 0 0 auto; width: min(320px, 60%); padding: 8px 24px 18px; border-top: 1px solid var(--border-hairline); }
+.inv-sums dt, .inv-sums dd { margin: 0; padding: 7px 0; color: var(--text-secondary); }
+.inv-sums dd { text-align: right; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.inv-sums .tot { font: 600 var(--fs-text-regular)/1.3 var(--font-title); color: var(--text-primary); border-top: 1px solid var(--border-hairline); padding-top: 12px; }
+.inv-sums .rem { font: 600 var(--fs-text-regular)/1.3 var(--font-title); color: var(--text-primary); }
+.inv-sums dd.rem { font-size: 20px; }
+.inv-pays { display: grid; gap: 8px; padding: 14px 24px; border-top: 1px solid var(--border-hairline); }
+.inv-pays .lbl { font: 500 11px/1.4 var(--font-title); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-secondary); }
+.inv-pays > div { display: grid; grid-template-columns: 1fr auto auto; gap: 16px; }
+.inv-foot { padding: 16px 24px 20px; border-top: 1px solid var(--border-hairline); display: grid; gap: 6px; }
+.inv-foot p { margin: 0; }
+.inv-foot .legal { color: var(--text-secondary); font-size: 12px; }
+/* detail page */
+.inv-actions { display: grid; gap: 8px; padding: 4px 20px 18px; }
+.inv-actions .btn { justify-content: center; }
+.inv-flag { margin: 0; padding: 0 20px 18px; color: var(--status-warning, #f5b400); font-size: var(--fs-text-small); }
+.inv-hist { list-style: none; margin: 0; padding: 4px 20px 20px; display: grid; gap: 16px; }
+.inv-hist li { display: flex; gap: 12px; align-items: flex-start; }
+.inv-hist li .wp-icon { color: var(--accent); flex: 0 0 auto; margin-top: 2px; }
+.inv-hist li span { display: grid; gap: 2px; }
+.inv-hist li b { font-weight: 500; font-size: var(--fs-text-small); }
+.inv-hist li small { color: var(--text-secondary); font-size: 12px; }
+@media (max-width: 1100px) { .inv-cols, .inv-detail .inv-cols { grid-template-columns: 1fr; } .inv-cols > .col.right { position: static; } }
+@media (max-width: 820px) {
+  .inv-form .row2 { grid-template-columns: 1fr; }
+  .inv-line .nums { grid-template-columns: 70px 1fr; } .inv-line .nums .amt { grid-column: 1 / -1; text-align: left; }
+  .inv-meta { grid-template-columns: 1fr 1fr; } .inv-meta .bill { grid-column: 1 / -1; }
+  .inv-lines th:nth-child(2), .inv-lines td:nth-child(2), .inv-lines th:nth-child(3), .inv-lines td:nth-child(3) { display: none; }
+  .inv-sums { width: auto; margin: 0; }
+  .inv-head { flex-wrap: wrap; }
+}
+/* Invoice rows on a phone: the title and detail get the whole first line; amount, status and action sit under them. */
+@media (max-width: 640px) {
+  .wp-row.inv-row { flex-wrap: wrap; row-gap: 10px; }
+  .wp-row.inv-row .txt { flex: 1 1 calc(100% - 40px); }
+  .wp-row.inv-row .trail { margin-left: 36px; margin-right: auto; }
+  .wp-row.inv-row .txt .ttl > span, .wp-row.inv-row .txt .meta { white-space: normal; }
+  .wp-row.inv-row > .btn { margin-left: 36px; }
+}

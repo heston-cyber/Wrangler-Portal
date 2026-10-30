@@ -705,6 +705,40 @@ export default defineSchema({
     })),
   }).index("by_slug", ["slug"]).index("by_stripe_account", ["stripe.accountId"]),
 
+  // Phase 2 Part B, step 2: invoices. A draft lives only in the portal; Send (the owner's confirm) makes it in the
+  // business's own Stripe account, gives it its number (D52) and finalizes it. From then on Stripe holds the money
+  // and the webhook keeps this copy in step: open, processing, paid, partly paid, failed, void, uncollectible.
+  invoices: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    clientId: v.optional(v.id("clients")),
+    projectId: v.optional(v.id("projects")),
+    kind: v.union(v.literal("deposit"), v.literal("final"), v.literal("other")),
+    title: v.string(),                                   // "Final invoice", "Deposit · WS-00018", "Extra shoot day"
+    number: v.optional(v.string()),                      // D52: WRNGLR-0042, given when it's first sent
+    billTo: v.object({ name: v.string(), email: v.string(), company: v.optional(v.string()) }),
+    lines: v.array(v.object({ id: v.string(), description: v.string(), qty: v.number(), unitCents: v.number() })),
+    discountCents: v.optional(v.number()),
+    taxPercent: v.optional(v.number()),                 // e.g. 8.25
+    dueDate: v.string(),                                // YYYY-MM-DD
+    memo: v.optional(v.string()),
+    status: v.union(v.literal("draft"), v.literal("sending"), v.literal("open"), v.literal("paid"), v.literal("void"), v.literal("uncollectible")),
+    // What Stripe says about the money, kept from the webhook (cents).
+    totalCents: v.number(), amountPaidCents: v.number(), amountRemainingCents: v.number(),
+    processing: v.optional(v.boolean()),                // a bank payment is on its way
+    lastFailure: v.optional(v.object({ at: v.number(), message: v.string() })),
+    refundedCents: v.optional(v.number()),
+    disputed: v.optional(v.object({ at: v.number(), status: v.string() })),
+    stripe: v.optional(v.object({
+      accountId: v.string(), invoiceId: v.string(), customerId: v.string(),
+      number: v.optional(v.string()), hostedUrl: v.optional(v.string()), pdfUrl: v.optional(v.string()), livemode: v.boolean(),
+    })),
+    sendError: v.optional(v.string()),
+    history: v.array(v.object({ kind: v.string(), at: v.number(), by: v.optional(v.string()), detail: v.optional(v.string()) })),
+    createdBy: v.optional(v.string()),
+    sentAt: v.optional(v.number()), viewedAt: v.optional(v.number()), paidAt: v.optional(v.number()), voidedAt: v.optional(v.number()),
+    createdAt: v.number(), updatedAt: v.number(),
+  }).index("by_project", ["projectId"]).index("by_client", ["clientId"]).index("by_stripe", ["stripe.invoiceId"]).index("by_updated", ["updatedAt"]),
+
   // Phase 2 Part B: every Stripe webhook event, once (a repeat delivery changes nothing).
   stripeEvents: defineTable({
     eventId: v.string(), type: v.string(), account: v.optional(v.string()), livemode: v.boolean(), receivedAt: v.number(),
@@ -741,12 +775,12 @@ export default defineSchema({
     businessId: v.optional(v.id("businesses")),
     clientId: v.optional(v.id("clients")),
     email: v.string(),                 // the recipient, lower-case (a person with a live invite in this business)
-    kind: v.union(v.literal("cut_ready"), v.literal("reply"), v.literal("to_sign"), v.literal("signed"), v.literal("cancelled"), v.literal("note"), v.literal("stage"), v.literal("final_files")),
+    kind: v.union(v.literal("cut_ready"), v.literal("reply"), v.literal("to_sign"), v.literal("signed"), v.literal("cancelled"), v.literal("note"), v.literal("stage"), v.literal("final_files"), v.literal("invoice"), v.literal("payment")),
     title: v.string(),
     text: v.string(),                  // a short line, shown under the title
     link: v.optional(v.string()),      // a path in the portal or a signing link
     linkLabel: v.optional(v.string()), // a note's link button ("Watch Harbor Coffee 30s v2")
-    source: v.object({ module: v.union(v.literal("review"), v.literal("sign"), v.literal("inbox"), v.literal("projects")), id: v.string() }),
+    source: v.object({ module: v.union(v.literal("review"), v.literal("sign"), v.literal("inbox"), v.literal("projects"), v.literal("payments")), id: v.string() }),
     key: v.string(),
     noteId: v.optional(v.id("inboxNotes")),
     createdAt: v.number(),

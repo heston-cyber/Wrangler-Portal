@@ -155,6 +155,23 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
     await owner.mutation(api.projects.setKeyDates, { projectId: w.p1, dates: [{ label: "Kickoff", date: "2026-10-06" }, { label: "Shoot", date: "2026-10-14" }, { label: "First cut", date: "2026-10-21" }, { label: "Final due", date: "2026-11-07" }] });
     await owner.mutation(api.projects.addDeliveryFile, { projectId: w.p1, file: { kind: "dropbox", path: "/clients/harbor coffee/launch/final/harborcoffee_30s_final.mov", name: "HarborCoffee_30s_FINAL.mov", size: 4_200_000_000 } });
     await owner.mutation(api.projects.addDeliveryFile, { projectId: w.p1, file: { kind: "version", versionId: w.harbor30.last } });
+    // Phase 2 Part B: Stripe connected, and invoices in every state (made directly: the kit has no Stripe).
+    const invIds = await t.run(async (ctx) => {
+      await ctx.db.patch(w.A, { stripe: { accountId: "acct_kit", status: "connected", chargesEnabled: true, payoutsEnabled: true, detailsSubmitted: true, displayName: "Wrangler Productions", bankLast4: "6789", livemode: false, startedAt: now - 9 * DAY, connectedAt: now - 9 * DAY, checkedAt: now } });
+      const base = { businessId: w.A, clientId: w.harbor, projectId: w.p1, billTo: { name: "Maya Brooks", email: "maya@harborcoffee.com", company: "Harbor Coffee" } };
+      const mk = async (o: Record<string, unknown>, lines: Array<[string, number, number]>, extra: Record<string, unknown> = {}) => {
+        const ls = lines.map(([d, q, c], n) => ({ id: `l${n}`, description: d, qty: q, unitCents: c }));
+        const total = ls.reduce((s2, l) => s2 + l.qty * l.unitCents, 0);
+        const { age, ...rest } = o as { age?: number };
+        return ctx.db.insert("invoices", { ...base, history: [{ kind: "created", at: now - 8 * DAY, by: "Heston Hill" }], createdAt: now - 8 * DAY, updatedAt: now - (age ?? 0), totalCents: total, amountPaidCents: 0, amountRemainingCents: total, ...rest, lines: ls, ...extra } as never);
+      };
+      const paid = await mk({ kind: "deposit", title: "Deposit · WS-00012", number: "WRNGLR-0001", status: "paid", dueDate: "2026-10-24", sentAt: now - 8 * DAY, paidAt: now - 7 * DAY, age: 7 * DAY, stripe: { accountId: "acct_kit", invoiceId: "in_kit1", customerId: "cus_kit", number: "WRNGLR-0001", livemode: false, pdfUrl: "/kit-pdf/" } }, [["Deposit (25%) · 26127 Harbor Coffee Launch", 1, 300000]], { amountPaidCents: 300000, amountRemainingCents: 0, history: [{ kind: "created", at: now - 8 * DAY, by: "Heston Hill" }, { kind: "sent", at: now - 8 * DAY, by: "Heston Hill", detail: "maya@harborcoffee.com" }, { kind: "viewed", at: now - 7.5 * DAY, detail: "Maya Brooks" }, { kind: "paid", at: now - 7 * DAY, detail: "Paid in full" }] });
+      const due = await mk({ kind: "other", title: "Change order WS-00014", number: "WRNGLR-0002", status: "open", dueDate: "2026-11-28", sentAt: now - DAY, age: DAY, stripe: { accountId: "acct_kit", invoiceId: "in_kit2", customerId: "cus_kit", number: "WRNGLR-0002", livemode: false, pdfUrl: "/kit-pdf/", hostedUrl: "https://invoice.stripe.com/kit" } }, [["Change order WS-00014 · extra revision round", 1, 45000]], { memo: "Thanks, Maya.", history: [{ kind: "created", at: now - 2 * DAY, by: "Heston Hill" }, { kind: "sent", at: now - DAY, by: "Heston Hill", detail: "maya@harborcoffee.com" }] });
+      const draft = await mk({ kind: "final", title: "Final invoice", status: "draft", dueDate: "2026-11-21", age: 3 * HOUR }, [["Final payment · 26127 Harbor Coffee Launch", 1, 900000], ["Extra shoot day", 1, 120000]], { memo: "Thank you, Maya. Final files unlock as soon as this is paid." });
+      await mk({ kind: "other", title: "Extra shoot day", number: "WRNGLR-0003", status: "open", dueDate: "2026-11-20", sentAt: now - 3 * DAY, processing: true, age: 2 * DAY }, [["Extra shoot day · Nov 14", 1, 120000]]);
+      await ctx.db.insert("counters", { businessId: w.A, key: "invoiceSeq", value: 3 });
+      return { paid, due, draft };
+    });
     const noteIds = await t.run(async (ctx) => (await ctx.db.query("inboxNotes").collect()).map((n) => n._id));
     const OWNER: [string, Record<string, unknown>][] = [
       ["users.me", {}], ["business.brand", {}], ["business.settings", {}], ["payments.settings", {}], ["library.overview", {}], ["activity.feed", { limit: 100 }], ["activity.recent", {}], ["home.needs", {}],
@@ -168,6 +185,8 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
 ["builder.getBuild#" + b1, { buildId: b1 }], ["builder.getProfile", {}], ["builder.listFonts", {}], ["builder.listStyles", {}],
       ["sign.get#" + w.d1, { documentId: w.d1 }], ["sign.get#" + w.d2, { documentId: w.d2 }], ["sign.get#" + w.d3, { documentId: w.d3 }],
       ["projects.page#" + w.p1, { projectId: w.p1 }], ["projects.nextRound#" + w.harbor30.v, { videoId: w.harbor30.v }],
+      ["invoices.list", {}], ["invoices.options", {}], ["invoices.forProject#" + w.p1, { projectId: w.p1 }],
+      ["invoices.get#" + invIds.paid, { invoiceId: invIds.paid }], ["invoices.get#" + invIds.due, { invoiceId: invIds.due }], ["invoices.get#" + invIds.draft, { invoiceId: invIds.draft }],
     ];
     const shareTokens = await t.run(async (ctx) => (await ctx.db.query("shares").collect()).map((x) => (x as unknown as { token: string }).token));
     const CLIENT: [string, Record<string, unknown>][] = [["users.me", {}], ["business.brand", {}], ["shares.mine", {}], ["inbox.mine", {}], ["inbox.unreadCount", {}], ["documents.mine", {}], ["portal.waiting", {}], ["emails.myPrefs", {}],
@@ -192,7 +211,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
     // The PDFs in convex-test storage can't be fetched by a browser: point them at the kit's sample PDF.
     const pdfs = (v: unknown): unknown => JSON.parse(JSON.stringify(v), (k, x) => ((k === "fileUrl" || k === "finalUrl") && typeof x === "string" ? "/kit-pdf/" : x));
     for (const k of Object.keys(owned)) if (k.startsWith("sign.get#")) owned[k] = pdfs(owned[k]);
-    const fixtures = { owner: owned, client: await run(client, CLIENT), ids: { shares: shareTokens, harbor: w.harbor, video: w.harbor30.v, docSent: w.d1, docSigned: w.d2, docDraft: w.d3, notes: noteIds } };
+    const fixtures = { owner: owned, client: await run(client, CLIENT), ids: { invoices: invIds, shares: shareTokens, harbor: w.harbor, video: w.harbor30.v, docSent: w.d1, docSigned: w.d2, docDraft: w.d3, notes: noteIds } };
     writeFileSync(join(__dirname, "..", "src", "dev", "fixtures.json"), JSON.stringify(fixtures, null, 1));
     vi.useRealTimers();
   });

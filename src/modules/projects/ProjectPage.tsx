@@ -13,10 +13,11 @@ import { linkProps, navigate } from "../../lib/router";
 import { ShareDialog } from "../review/Share";
 import { errText } from "../docs/pages/common";
 import Projects from "../review/Projects";
+import { ProjectInvoices } from "../payments/InvoicesPage";
 import { StageBar, STAGES, stageName, type Stage, dateText, bytes, openFileLink } from "./common";
 
 type Page = NonNullable<ReturnType<typeof useQuery<typeof api.projects.page>>>;
-export type ProjectTab = "overview" | "cuts" | "documents" | "delivery";
+export type ProjectTab = "overview" | "cuts" | "documents" | "invoices" | "delivery";
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 function cutChip(v: Page["videos"][number]) {
@@ -367,6 +368,8 @@ export default function ProjectPage({ projectId, tab }: { projectId: Id<"project
   const [moving, setMoving] = useState<Stage | null>(null);
   const [dialog, setDialog] = useState<"rounds" | "next" | "dates" | "files" | "share" | null>(null);
   const [postDefault, setPostDefault] = useState(true);
+  const pay = useQuery(api.payments.settings, {});
+  const payOn = !!pay?.stripe; // Phase 2 Part B: the Invoices tab once Stripe is connected
   const setTab = (k: ProjectTab) => navigate(`/projects/${projectId}${k === "overview" ? "" : `?tab=${k}`}`);
   if (page === undefined) return <><TopBar><a {...linkProps("/projects")}>Projects</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
   if (page === null) return <><TopBar><a {...linkProps("/projects")}>Projects</a></TopBar><div className="wp-page"><EmptyState icon="folder" title="This project doesn't exist any more." actions={<ButtonLink to="/projects">All projects</ButtonLink>} /></div></>;
@@ -397,12 +400,14 @@ export default function ProjectPage({ projectId, tab }: { projectId: Id<"project
         <div className="ws-tabs cp-tabs">
           <Tabs label="Project" value={tab} onChange={setTab} items={[
             { key: "overview", label: "Overview" }, { key: "cuts", label: "Cuts", count: page.videos.length },
-            { key: "documents", label: "Documents", count: page.documents.length }, { key: "delivery", label: "Delivery" },
+            { key: "documents", label: "Documents", count: page.documents.length },
+            ...(payOn ? [{ key: "invoices" as ProjectTab, label: "Invoices" }] : []), { key: "delivery", label: "Delivery" },
           ]} />
         </div>
         {tab === "overview" && <Overview page={page} onMove={setMoving} onRounds={() => setDialog("rounds")} onNext={() => setDialog("next")} onDates={() => setDialog("dates")} postDefault={postDefault} setPostDefault={setPostDefault} goTab={setTab} onAddFiles={() => setDialog("files")} />}
         {tab === "cuts" && <div className="pj-cutsTab"><Projects projectId={projectId} embedded /></div>}
         {tab === "documents" && <Documents page={page} />}
+        {tab === "invoices" && <ProjectInvoices projectId={projectId} clientId={page.client?._id ?? null} />}
         {tab === "delivery" && <Delivery page={page} show={show} onAddFiles={() => setDialog("files")} />}
       </div>
       {moving && <MoveStage page={page} to={moving} post={postDefault} onClose={() => setMoving(null)} show={show} />}
