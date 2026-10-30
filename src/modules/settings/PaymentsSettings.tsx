@@ -186,6 +186,7 @@ export function PaymentsSettings({ show }: { show: (m: string) => void }) {
           <span className="wp-eyebrow">How clients pay</span>
           <dl className="pay-rows">
             <dt>Methods</dt><dd>{methodsText(st.methods)}</dd>
+            {st.wallets && <><dt>Wallets</dt><dd>{st.wallets.ok ? `Apple Pay, Google Pay and Link set up for ${st.wallets.site}` : `Not set up for ${st.wallets.site} yet${st.wallets.error ? ` (${st.wallets.error})` : ""}. Card and bank payments still work.`}</dd></>}
           </dl>
           <p className="secondary pay-note">Apple Pay and Google Pay show only on devices that support them. Turn methods on or off in your Stripe dashboard.</p>
           <dl className="pay-rows"><dt>Emails</dt><dd>Invoices, reminders and receipts send from the portal</dd></dl>

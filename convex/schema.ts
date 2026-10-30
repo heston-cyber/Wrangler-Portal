@@ -704,6 +704,9 @@ export default defineSchema({
       displayName: v.optional(v.string()), bankLast4: v.optional(v.string()), livemode: v.boolean(),
       due: v.optional(v.array(v.string())), disabledReason: v.optional(v.string()), verifying: v.optional(v.boolean()),
       methods: v.optional(v.array(v.string())),           // what clients can pay with: card, us_bank_account, link
+      // Apple Pay, Google Pay and Link in the portal's Pay page need the portal's address registered on the business's
+      // own account (direct charges). Done once per address, when the account is connected or on the first Pay.
+      domain: v.optional(v.object({ name: v.string(), at: v.number(), ok: v.boolean(), applePay: v.optional(v.string()), error: v.optional(v.string()) })),
       startedAt: v.number(), connectedAt: v.optional(v.number()), disconnectedAt: v.optional(v.number()), checkedAt: v.number(),
     })),
     // Phase 2 Part B step 4 (D51): automatic invoice reminders, off until the owner turns them on (that's their OK).

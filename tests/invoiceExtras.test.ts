@@ -73,6 +73,41 @@ describe("the final invoice from a signed contract", () => {
   });
 });
 
+describe("Apple Pay, Google Pay and Link", () => {
+  test("the portal's address is registered on the business's own account at the first Pay, once; Settings shows it", async () => {
+    process.env.STRIPE_PUBLISHABLE_KEY = "pk_test_platform";
+    const w = await world();
+    fakeStripe();
+    const { token } = await sent(w);
+    const calls = fakeStripe();
+    await w.t.action(api.invoicePay.start, { token });
+    const reg = calls.filter((c) => c.path === "payment_method_domains");
+    expect(reg.map((c) => `${c.method} ${c.account}`)).toEqual(["GET acct_A", "POST acct_A"]);
+    expect(reg[0].query).toContain("domain_name=app.wranglerportal.com");
+    expect((await w.heston.query(api.payments.settings, {})).stripe.wallets).toEqual({ ok: true, site: "app.wranglerportal.com", error: null });
+    const again = fakeStripe();
+    await w.t.action(api.invoicePay.start, { token });
+    expect(again.some((c) => c.path === "payment_method_domains")).toBe(false);
+    delete process.env.STRIPE_PUBLISHABLE_KEY;
+  });
+
+  test("if Stripe refuses (for example the key lacks the permission), Pay still works and Settings says why", async () => {
+    process.env.STRIPE_PUBLISHABLE_KEY = "pk_test_platform";
+    const w = await world();
+    fakeStripe();
+    const { token } = await sent(w);
+    const real = fakeStripe();
+    void real;
+    const inner = globalThis.fetch;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => url.includes("payment_method_domains")
+      ? new Response(JSON.stringify({ error: { message: "The provided key does not have the required permissions." } }), { status: 403 })
+      : inner(url, init)));
+    await expect(w.t.action(api.invoicePay.start, { token })).resolves.toMatchObject({ clientSecret: "pi_1_secret_abc" });
+    expect((await w.heston.query(api.payments.settings, {})).stripe.wallets).toMatchObject({ ok: false, error: expect.stringMatching(/permissions/) });
+    delete process.env.STRIPE_PUBLISHABLE_KEY;
+  });
+});
+
 describe("refunds and disputes", () => {
   test("recorded on the invoice the payment belongs to; another account's event changes nothing", async () => {
     vi.useFakeTimers();

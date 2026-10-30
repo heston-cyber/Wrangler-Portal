@@ -24,6 +24,7 @@ export function fakeStripe(opts: { payments?: unknown[]; invoiceStatus?: string;
     if (path === "invoices") return ok({ id: "in_1", status: "draft" });
     if (path === "invoiceitems") { total += Number(form.amount); return ok({ id: "ii" }); }
     if (path === "invoice_payments") return ok({ data: opts.payments ?? [] });
+    if (path === "payment_method_domains") return ok(init.method === "POST" ? { id: "pmd_1", domain_name: form.domain_name, enabled: true, apple_pay: { status: "active" } } : { data: [] });
     if (/^invoices\/in_1/.test(path)) {
       const status = path.endsWith("/finalize") ? "open" : opts.invoiceStatus ?? "open";
       if (!total) total = 450000; // a fresh stand-in (after Send) answers for the invoice made earlier

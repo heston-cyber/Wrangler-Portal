@@ -6,3 +6,6 @@ export const SITE_SLASH = () => `${SITE()}/`;
 export const SITE_HOST = () => new URL(SITE()).host;
 // The lab's frame-test clip, served by the site itself.
 export const LAB_CLIP = () => `${SITE()}/lab/frametest_23976_h264.mp4`;
+
+/** The portal's own address without the scheme (what Stripe registers for Apple Pay, Google Pay and Link). */
+export const siteHost = () => new URL(SITE()).hostname;

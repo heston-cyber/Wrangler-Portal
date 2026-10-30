@@ -9,7 +9,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireMe } from "./lib/access";
 import { businessInScope } from "./lib/business";
-import { SITE } from "./lib/site";
+import { SITE, siteHost } from "./lib/site";
 import { invoicePrefix } from "./lib/invoiceNumber";
 import { openCount } from "./invoices";
 import { REMINDER_DEFAULTS } from "./invoiceReminders";
@@ -38,6 +38,8 @@ export const settings = query({
         status: s.status, displayName: s.displayName ?? null, chargesEnabled: s.chargesEnabled, payoutsEnabled: s.payoutsEnabled,
         bankLast4: s.bankLast4 ?? null, livemode: s.livemode, due: s.due ?? [], disabledReason: s.disabledReason ?? null, verifying: !!s.verifying, connectedAt: s.connectedAt ?? null, disconnectedAt: s.disconnectedAt ?? null, checkedAt: s.checkedAt,
         methods: s.methods ?? null,
+        // Apple Pay, Google Pay and Link on this site: null until tried.
+        wallets: s.domain && s.domain.name === siteHost() ? { ok: s.domain.ok, site: s.domain.name, error: s.domain.error ?? null } : null,
       } : null,
       reminders: b.reminders ?? REMINDER_DEFAULTS, // D51: off until the owner turns them on
       openInvoices: await openCount(ctx),
@@ -140,6 +142,7 @@ export const saveAccount = internalMutation({
         due: st.due, ...(st.disabledReason ? { disabledReason: st.disabledReason } : {}), verifying: st.verifying,
         // account.updated events may leave capabilities out; keep what was known then.
         methods: (account as StripeResult).capabilities ? st.methods : b.stripe?.methods ?? st.methods,
+        ...(b.stripe?.domain && b.stripe.accountId === a.id ? { domain: b.stripe.domain } : {}),
         startedAt: b.stripe?.startedAt ?? now,
         ...(status === "connected" ? { connectedAt: b.stripe?.status === "connected" ? b.stripe.connectedAt ?? now : now } : b.stripe?.connectedAt ? { connectedAt: b.stripe.connectedAt } : {}),
         ...(status === "disconnected" && b.stripe?.disconnectedAt ? { disconnectedAt: b.stripe.disconnectedAt } : {}),
@@ -147,7 +150,41 @@ export const saveAccount = internalMutation({
       },
       updatedAt: now,
     });
+    const d = b.stripe?.accountId === a.id ? b.stripe?.domain : undefined;
+    if (status === "connected" && !(d?.ok && d.name === siteHost())) await ctx.scheduler.runAfter(0, internal.payments.ensureDomain, { businessId, accountId: a.id as string });
     return status;
+  },
+});
+
+// ---------- Apple Pay, Google Pay and Link on the portal's Pay page ----------
+
+/** Registers the portal's address on the business's connected account (direct charges: the account that takes the
+ *  payment registers the domain; Stripe handles Apple's merchant validation). Safe to repeat; never throws. */
+export const ensureDomain = internalAction({
+  args: { businessId: v.id("businesses"), accountId: v.string() },
+  handler: async (ctx, { businessId, accountId }) => {
+    const name = siteHost();
+    try {
+      const list = await stripeCall("GET", "payment_method_domains", { account: accountId, form: { domain_name: name, limit: 1 } });
+      let d = (list.data as StripeResult[] | undefined)?.[0];
+      if (!d) d = await stripeCall("POST", "payment_method_domains", { account: accountId, idem: `wp-pmd-${accountId}-${name}`, form: { domain_name: name, enabled: true } });
+      else if (!d.enabled) d = await stripeCall("POST", `payment_method_domains/${d.id}`, { account: accountId, form: { enabled: true } });
+      const applePay = d.apple_pay?.status ? String(d.apple_pay.status) : undefined;
+      const err = d.apple_pay?.status_details?.error_message ? String(d.apple_pay.status_details.error_message) : undefined;
+      await ctx.runMutation(internal.payments.noteDomain, { businessId, accountId, domain: { name, at: Date.now(), ok: !!d.enabled, ...(applePay ? { applePay } : {}), ...(err ? { error: err } : {}) } });
+    } catch (e) {
+      const error = e instanceof StripeError ? e.message : "Couldn't reach Stripe.";
+      await ctx.runMutation(internal.payments.noteDomain, { businessId, accountId, domain: { name, at: Date.now(), ok: false, error } });
+    }
+  },
+});
+
+export const noteDomain = internalMutation({
+  args: { businessId: v.id("businesses"), accountId: v.string(), domain: v.object({ name: v.string(), at: v.number(), ok: v.boolean(), applePay: v.optional(v.string()), error: v.optional(v.string()) }) },
+  handler: async (ctx, { businessId, accountId, domain }) => {
+    const b = await ctx.db.get(businessId);
+    if (!b?.stripe || b.stripe.accountId !== accountId) return;
+    await ctx.db.patch(businessId, { stripe: { ...b.stripe, domain } });
   },
 });
 

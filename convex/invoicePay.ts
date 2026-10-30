@@ -16,7 +16,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { displayStatus, totals } from "./invoices";
 import { invoicePrefix } from "./lib/invoiceNumber";
 import { randomToken } from "./lib/hash";
-import { SITE } from "./lib/site";
+import { SITE, siteHost } from "./lib/site";
 import { stripeCall, StripeError, type StripeResult } from "./lib/stripeApi";
 import { businessOf, clientOfEmail, hasAccess, postToInbox } from "./lib/inbox";
 import { mailBrandOf } from "./lib/mail";
@@ -146,6 +146,7 @@ export const payTarget = internalQuery({
       invoiceId: i._id, accountId: i.stripe.accountId, stripeId: i.stripe.invoiceId, businessId: i.businessId ?? null, syncedAt: i.syncedAt ?? 0,
       open: i.status === "open" && !i.processing && i.amountRemainingCents > 0,
       connected: biz?.stripe?.status === "connected" && biz.stripe.accountId === i.stripe.accountId,
+      walletsReady: !!(biz?.stripe?.domain?.ok && biz.stripe.domain.name === siteHost()),
     };
   },
 });
@@ -161,6 +162,9 @@ export const start = action({
     if (!t.open) throw new ConvexError("There's nothing to pay on this invoice.");
     const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY ?? "";
     if (!/^pk_(test|live)_/.test(publishableKey)) throw new ConvexError("Paying in the portal isn't switched on yet. Use \"Pay on Stripe instead\".");
+    // A business connected before this was added: register the portal's address now, so Apple Pay, Google Pay and
+    // Link can show. It never throws; card and bank payments work either way.
+    if (!t.walletsReady && t.businessId) await ctx.runAction(internal.payments.ensureDomain, { businessId: t.businessId, accountId: t.accountId });
     try {
       const inv = await stripeCall("GET", `invoices/${t.stripeId}`, { account: t.accountId, form: { expand: ["confirmation_secret"] } });
       if (inv.status !== "open") throw new ConvexError("There's nothing to pay on this invoice.");
