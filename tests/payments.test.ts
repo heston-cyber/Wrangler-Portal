@@ -125,6 +125,11 @@ describe("the Connect webhook", () => {
     expect(await post(replay, await signForTest(replay, SECRET))).toBe(200);
     expect((await w.heston.query(api.payments.settings, {})).stripe.status).toBe("connected");
 
+    // The business removes the portal inside Stripe: shown as disconnected.
+    const gone = JSON.stringify({ id: "evt_3", type: "account.application.deauthorized", account: "acct_123", livemode: false, data: { object: { id: "ca_x" } } });
+    expect(await post(gone, await signForTest(gone, SECRET))).toBe(200);
+    expect((await w.heston.query(api.payments.settings, {})).stripe.status).toBe("disconnected");
+
     const stranger = ev("evt_2", "acct_999", { ...READY, id: "acct_999" });
     expect(await post(stranger, await signForTest(stranger, SECRET))).toBe(200);
     expect((await w.boss.query(api.payments.settings, {})).stripe).toBeNull();

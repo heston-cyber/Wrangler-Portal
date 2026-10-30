@@ -157,6 +157,15 @@ export const disconnect = mutation({
   },
 });
 
+/** Stripe says the business removed the portal's access (account.application.deauthorized): shown as disconnected. */
+export const markRemoved = internalMutation({
+  args: { businessId: v.id("businesses") },
+  handler: async (ctx, { businessId }) => {
+    const b = await ctx.db.get(businessId);
+    if (b?.stripe && b.stripe.status !== "disconnected") await ctx.db.patch(businessId, { stripe: { ...b.stripe, status: "disconnected", chargesEnabled: false, disconnectedAt: Date.now() }, updatedAt: Date.now() });
+  },
+});
+
 // ---------- the Connect webhook ----------
 
 export const recordEvent = internalMutation({
@@ -186,6 +195,11 @@ export const connectWebhook = httpAction(async (ctx, req) => {
   if (ev.type === "account.updated" && ev.account) {
     const businessId = await ctx.runQuery(internal.payments.businessOfAccount, { accountId: ev.account });
     if (businessId) await ctx.runMutation(internal.payments.saveAccount, { businessId, account: ev.data?.object ?? {} });
+  }
+  // The business removed the portal from inside its own Stripe dashboard: the portal can't act for it any more.
+  if (ev.type === "account.application.deauthorized" && ev.account) {
+    const businessId = await ctx.runQuery(internal.payments.businessOfAccount, { accountId: ev.account });
+    if (businessId) await ctx.runMutation(internal.payments.markRemoved, { businessId });
   }
   return new Response("ok", { status: 200 });
 });
