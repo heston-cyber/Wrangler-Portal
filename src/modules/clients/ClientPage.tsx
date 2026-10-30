@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { Avatar, Button, ButtonLink, Card, Checkbox, Divider, EmptyState, InboxItem, ListRow, SectionHead, Segmented, SkeletonRows, StatusChip, Tabs, TextField } from "../../ui/wp";
+import { Avatar, Button, ButtonLink, Card, Checkbox, Divider, EmptyState, InboxItem, ListRow, SectionHead, Segmented, SkeletonRows, StatusChip, Tabs, TextField, Toggle } from "../../ui/wp";
 import { Icon } from "../../ui/Icon";
 import { Modal, useToast } from "../../ui/kit";
 import { Sep, TopBar } from "../../shell/Shell";
@@ -18,7 +18,7 @@ type Person = Page["people"][number];
 type Shared = Page["shared"][number];
 type Doc = Page["documents"][number];
 type Event = NonNullable<ReturnType<typeof useQuery<typeof api.inbox.forClient>>>[number];
-export type ClientTab = "overview" | "projects" | "shared" | "documents" | "inbox";
+export type ClientTab = "overview" | "projects" | "shared" | "documents" | "inbox" | "settings";
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const ROLE = { signer: "Signs documents", contact: "Contact" } as const;
@@ -207,6 +207,35 @@ function TheirInbox({ page, events, business, show, onAdd }: { page: Page; event
   );
 }
 
+// ---------- Settings tab (Phase 2 Part A, frame 145:1521) ----------
+function ClientSettings({ clientId, name, settings, show }: { clientId: Id<"clients">; name: string; settings: { rounds: number | null; watermarkOff: boolean; businessRounds: number }; show: (m: string) => void }) {
+  const save = useMutation(api.clients.setSettings);
+  const [mode, setMode] = useState<"default" | "custom">(settings.rounds ? "custom" : "default");
+  const [n, setN] = useState(String(settings.rounds ?? settings.businessRounds));
+  const err = (e: unknown) => show((e as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]);
+  const pick = (k: "default" | "custom") => { setMode(k); if (k === "default" && settings.rounds) void save({ clientId, rounds: null }).then(() => show("Back to the business default."), err); };
+  const saveN = () => { const v = Number(n); if (!Number.isFinite(v) || v < 1) { show("1 or more."); return; } void save({ clientId, rounds: v }).then(() => show("Saved."), err); };
+  const on = !settings.watermarkOff;
+  return (
+    <div className="wp-bizextra cp-settings">
+      <div className="panel">
+        <span className="wp-eyebrow">Revision rounds</span>
+        <div className="prow"><span className="pl">Rounds per video</span><span className="pr">
+          <Segmented label="Rounds per video" value={mode} onChange={pick} items={[{ key: "default", label: `Business default (${settings.businessRounds})` }, { key: "custom", label: "Custom" }]} />
+          {mode === "custom" && <><input className="input sm" type="number" min={1} max={20} value={n} onChange={(e) => setN(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") saveN(); }} aria-label="Rounds per video for this client" style={{ width: 80 }} />
+            {Number(n) !== settings.rounds && <Button size="sm" variant="primary" onClick={saveN}>Save</Button>}</>}
+        </span></div>
+        <div className="prow"><span className="pl">Projects</span><span className="pr">A project can still set its own.</span></div>
+      </div>
+      <div className="panel">
+        <span className="wp-eyebrow">Watermark</span>
+        <div className="prow"><span className="pl">Review copies</span><span className="pr"><Toggle label="Watermark" checked={on} onChange={(v) => void save({ clientId, watermarkOff: !v }).catch(err)} /><span className="wmtxt">{on ? `On · ${name} sees your watermark on review copies` : `Off · review copies for ${name} have no watermark`}</span></span></div>
+        <div className="prow"><span className="pl">Look</span><span className="pr">Set in Settings › Business<a className="linkbtn" {...linkProps("/settings/business")}>Open</a></span></div>
+      </div>
+    </div>
+  );
+}
+
 // ---------- the page ----------
 export default function ClientPage({ clientId, tab: tabParam }: { clientId: Id<"clients">; tab: ClientTab }) {
   const page = useQuery(api.clients.page, { clientId });
@@ -246,7 +275,7 @@ export default function ClientPage({ clientId, tab: tabParam }: { clientId: Id<"
           <Tabs label="Client" value={tab} onChange={setTab} items={[
             { key: "overview", label: "Overview" }, { key: "projects", label: "Projects", count: page.projects.length },
             { key: "shared", label: "Shared", count: page.shared.length }, { key: "documents", label: "Documents", count: page.documents.length },
-            { key: "inbox", label: "Their Inbox" },
+            { key: "inbox", label: "Their Inbox" }, { key: "settings", label: "Settings" },
           ]} />
         </div>
         {tab === "overview" && (
@@ -266,6 +295,7 @@ export default function ClientPage({ clientId, tab: tabParam }: { clientId: Id<"
         {tab === "shared" && <Card label="Shared with them"><SharedRows page={page} /></Card>}
         {tab === "documents" && <Card label="Documents"><DocRows page={page} /></Card>}
         {tab === "inbox" && <TheirInbox page={page} events={events} business={business} show={show} onAdd={() => setAdding(true)} />}
+        {tab === "settings" && <ClientSettings clientId={clientId} name={name} settings={page.settings} show={show} />}
       </div>
       {sharing && <ShareDialog target={{ kind: "client", client: name }} label={name} onClose={() => setSharing(false)} show={show} />}
       {adding && <AddPerson clientId={clientId} client={name} onClose={() => setAdding(false)} show={show} />}

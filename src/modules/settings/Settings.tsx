@@ -8,7 +8,9 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { TopBar } from "../../shell/Shell";
 import { Avatar, Modal, useToast } from "../../ui/kit";
-import { Button, Toggle } from "../../ui/wp";
+import { Button, Segmented, Toggle } from "../../ui/wp";
+import { Watermark } from "../review/player/Watermark";
+import lightArcs from "../../assets/d1/light-arcs.jpg";
 import { Icon } from "../../ui/Icon";
 import { useLocation } from "../../lib/router";
 import { SectionMenu, sectionOf, SettingsFrame, SetHead, type SectionKey } from "./Frame";
@@ -143,7 +145,7 @@ function AccountSection({ me, show }: { me: { name: string | null; email: string
   );
 }
 
-type Biz = { name: string; legalName: string; emailFromName: string; replyTo: string; accent: string; background: string; modules: { review: boolean; docs: boolean; payments: boolean } };
+type Biz = { name: string; legalName: string; emailFromName: string; replyTo: string; accent: string; background: string; modules: { review: boolean; docs: boolean; payments: boolean; projects?: boolean } };
 
 function BusinessSection({ show }: { show: (m: string) => void }) {
   const cur = useQuery(api.business.settings, {});
@@ -193,7 +195,7 @@ function BusinessSection({ show }: { show: (m: string) => void }) {
           <ModRow label="Review" checked={f.modules.review} onChange={(v) => set({ modules: { ...f.modules, review: v } })} />
           <ModRow label="Docs" checked={f.modules.docs} onChange={(v) => set({ modules: { ...f.modules, docs: v } })} />
           <ModRow label="Inbox" checked disabled onChange={() => {}} />
-          <ModRow label="Projects (Phase 2)" checked={false} disabled onChange={() => {}} />
+          <ModRow label="Projects" checked={f.modules.projects !== false} onChange={(v) => set({ modules: { ...f.modules, projects: v } })} />
           <ModRow label="Invoices (Phase 2)" checked={f.modules.payments} disabled onChange={() => {}} />
           {err && <p className="wp-errline">{err}</p>}
           <div><Button variant="primary" loading={busy === "save"} disabled={!dirty || !f.name.trim() || (!!f.accent && !hex(f.accent)) || (!!f.background && !hex(f.background))} onClick={() => void onSave()}>Save</Button></div>
@@ -207,6 +209,7 @@ function BusinessSection({ show }: { show: (m: string) => void }) {
           </div>
         </div>
       </div>
+      <RoundsAndWatermark cur={cur} show={show} />
     </>
   );
 
@@ -220,6 +223,39 @@ function BusinessSection({ show }: { show: (m: string) => void }) {
       show("Logo saved");
     } catch (e) { show((e as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]); }
   }
+}
+
+type BizSettings = NonNullable<ReturnType<typeof useQuery<typeof api.business.settings>>>;
+/** Phase 2 Part A (S5 · Phase 2 › Settings · Business / Rounds + watermark): revision rounds (each version is a
+ *  round, D23; default 2, D23b) and the watermark on review copies (D24: on for every client, off per client). */
+function RoundsAndWatermark({ cur, show }: { cur: BizSettings; show: (m: string) => void }) {
+  const save = useMutation(api.business.updateSettings);
+  const [rounds, setRounds] = useState<string | null>(null);
+  const w = cur.watermark;
+  const setW = (p: Partial<typeof w>) => void save({ watermark: { ...w, ...p } }).catch((e) => show(String((e as Error).message)));
+  return (
+    <div className="wp-bizextra">
+      <div className="panel">
+        <span className="wp-eyebrow">Revision rounds</span>
+        <div className="prow"><span className="pl">Default</span><span className="pr">{rounds === null ? <><span>{cur.roundsDefault} {cur.roundsDefault === 1 ? "round" : "rounds"} per video</span><button type="button" className="linkbtn" onClick={() => setRounds(String(cur.roundsDefault))}>Change</button></> : (
+          <><input className="input sm" type="number" min={1} max={20} value={rounds} onChange={(e) => setRounds(e.target.value)} aria-label="Rounds per video" autoFocus style={{ width: 80 }} />
+            <Button size="sm" variant="primary" onClick={async () => { const n = Number(rounds); if (!Number.isFinite(n) || n < 1) { show("1 or more."); return; } await save({ roundsDefault: n }); setRounds(null); show("Saved."); }}>Save</Button>
+            <Button size="sm" variant="ghost" onClick={() => setRounds(null)}>Cancel</Button></>
+        )}</span></div>
+        <div className="prow"><span className="pl">How it counts</span><span className="pr">Each version you upload is a round: v1 is round 1, v2 is round 2.</span></div>
+        <div className="prow"><span className="pl">Per client</span><span className="pr">Change it on a client, or on one project.</span></div>
+      </div>
+      <div className="panel">
+        <span className="wp-eyebrow">Watermark on review copies</span>
+        <div className="prow"><span className="pl">Use it</span><span className="pr">On for every client. Switch it off on a client's page (Settings tab).</span></div>
+        <div className="prow"><span className="pl">Logo</span><span className="pr">{cur.logoUrl ? "Logo · on dark (above)" : "The WP mark, until you upload a logo above"}</span></div>
+        <div className="prow"><span className="pl">Corner</span><span className="pr"><Segmented label="Corner" value={w.corner} onChange={(c) => setW({ corner: c })} items={[{ key: "tl", label: "Top left" }, { key: "tr", label: "Top right" }, { key: "bl", label: "Bottom left" }, { key: "br", label: "Bottom right" }]} /></span></div>
+        <div className="prow"><span className="pl">Size</span><span className="pr"><Segmented label="Size" value={w.size} onChange={(z) => setW({ size: z })} items={[{ key: "small", label: "Small" }, { key: "large", label: "Large" }]} /></span></div>
+        <div className="prow"><span className="pl">Opacity</span><span className="pr wp-opacity"><input type="range" min={5} max={100} step={5} defaultValue={Math.round(w.opacity * 100)} aria-label="Opacity" onChange={(e) => { const el = e.currentTarget.nextElementSibling; if (el) el.textContent = `${e.currentTarget.value}%`; }} onPointerUp={(e) => setW({ opacity: Number(e.currentTarget.value) / 100 })} onKeyUp={(e) => setW({ opacity: Number(e.currentTarget.value) / 100 })} /><span>{Math.round(w.opacity * 100)}%</span></span></div>
+        <div className="wp-wmsample"><img src={lightArcs} alt="" /><Watermark look={{ ...w, logoUrl: cur.logoUrl }} /></div>
+      </div>
+    </div>
+  );
 }
 
 function ModRow({ label, checked, disabled, onChange }: { label: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void }) {
