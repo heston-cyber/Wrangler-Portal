@@ -342,6 +342,20 @@ export const versionsForHeights = internalQuery({
   },
 });
 
+/** "Try again" on a version whose copy from Dropbox failed (owner only): copies the render again from Dropbox. */
+export const retryCopy = mutation({
+  args: { versionId: v.id("versions") },
+  handler: async (ctx, { versionId }) => {
+    await requireMe(ctx);
+    const ver = await ctx.db.get(versionId);
+    if (!ver) throw new ConvexError("That version isn't here.");
+    if (ver.status !== "failed" || !ver.dropboxPath || !ver.storagePath) throw new ConvexError("Only a render that failed to copy from Dropbox can be tried again.");
+    await ctx.db.patch(versionId, { status: "processing", error: undefined, copyError: undefined });
+    await ctx.scheduler.runAfter(0, internal.reviewFiles.copy, { versionId, dropboxPath: ver.dropboxPath, size: ver.storageBytes ?? 0, attempt: 0 });
+    return null;
+  },
+});
+
 export const patchVersion = internalMutation({
   args: { versionId: v.id("versions"), patch: v.any() },
   handler: async (ctx, { versionId, patch }) => {
