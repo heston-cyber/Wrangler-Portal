@@ -1530,7 +1530,7 @@ button.wp-hubcard[aria-busy], button.wp-tplcard[aria-busy] { opacity: 1; }
    solid (the page doesn't show through), with its tabs always visible at the top of the sheet. */
 @media (max-width: 760px) {
   .wsb-panel.glass {
-    top: auto; bottom: calc(58px + env(safe-area-inset-bottom, 0px)); height: min(56dvh, 480px); overflow-y: auto;
+    top: auto; bottom: calc(58px + env(safe-area-inset-bottom, 0px)); height: min(42dvh, 360px); overflow-y: auto;
     padding: 0 16px 24px; background: #141114; background-image: none; backdrop-filter: none; -webkit-backdrop-filter: none;
     border-top: 1px solid var(--border-hairline); box-shadow: 0 -12px 32px rgba(0,0,0,.5);
   }

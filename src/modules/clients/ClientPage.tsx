@@ -91,7 +91,7 @@ function AddPerson({ clientId, client, onClose, show }: { clientId: Id<"clients"
 function PeopleCard({ page, show, onAdd }: { page: Page; show: (m: string) => void; onAdd: () => void }) {
   return (
     <Card className="cp-people" label="People" head={<SectionHead label="People" count={page.people.length} action={<Button size="sm" variant="ghost" icon="plus" onClick={onAdd}>Add a person</Button>} />}>
-      {page.people.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "users" }} title="No one yet. Add the people who sign documents or get updates." action={<Button size="sm" onClick={onAdd}>Add a person</Button>} />
+      {page.people.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "users" }} title="No one yet. Add the people who sign documents or get updates." />
         : rows(page.people, (p) => <PersonRow p={p} show={show} />, (p) => p._id)}
     </Card>
   );
