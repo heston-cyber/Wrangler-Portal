@@ -693,7 +693,21 @@ export default defineSchema({
     roundsDefault: v.optional(v.number()),
     roundsOff: v.optional(v.boolean()), // revision rounds switched off for the whole business
     watermark: v.optional(v.object({ corner: v.union(v.literal("tl"), v.literal("tr"), v.literal("bl"), v.literal("br")), size: v.union(v.literal("small"), v.literal("large")), opacity: v.number() })),
-  }).index("by_slug", ["slug"]),
+    // Phase 2 Part B (D45): the business's own Stripe account, connected to the portal's platform account. Money goes
+    // straight to it; the portal only mirrors what Stripe holds.
+    stripe: v.optional(v.object({
+      accountId: v.string(),
+      status: v.union(v.literal("pending"), v.literal("needs_info"), v.literal("connected"), v.literal("disconnected")),
+      chargesEnabled: v.boolean(), payoutsEnabled: v.boolean(), detailsSubmitted: v.boolean(),
+      displayName: v.optional(v.string()), bankLast4: v.optional(v.string()), livemode: v.boolean(),
+      startedAt: v.number(), connectedAt: v.optional(v.number()), disconnectedAt: v.optional(v.number()), checkedAt: v.number(),
+    })),
+  }).index("by_slug", ["slug"]).index("by_stripe_account", ["stripe.accountId"]),
+
+  // Phase 2 Part B: every Stripe webhook event, once (a repeat delivery changes nothing).
+  stripeEvents: defineTable({
+    eventId: v.string(), type: v.string(), account: v.optional(v.string()), livemode: v.boolean(), receivedAt: v.number(),
+  }).index("by_event", ["eventId"]),
 
   // Phase 1 (Oct 29): the people at a client. Each one has a role, and portal access comes from their invite
   // (invites table): invited on a date, active once they made an account, or not invited.

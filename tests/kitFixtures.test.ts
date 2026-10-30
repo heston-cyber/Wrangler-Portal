@@ -20,6 +20,7 @@ beforeAll(() => {
   process.env.RESEND_API_KEY = "re_test";
   process.env.SITE_URL = "https://app.wranglerportal.com";
   process.env.CONVEX_SITE_URL = "https://x.convex.site";
+  process.env.STRIPE_PLATFORM_KEY = "sk_test_kit";
   process.env.BUNNY_STREAM_LIBRARY_ID = "785477";
   process.env.BUNNY_STREAM_API_KEY = "bunny-test";
   process.env.BUNNY_STILLS_CDN = "stills.example";
@@ -156,7 +157,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
     await owner.mutation(api.projects.addDeliveryFile, { projectId: w.p1, file: { kind: "version", versionId: w.harbor30.last } });
     const noteIds = await t.run(async (ctx) => (await ctx.db.query("inboxNotes").collect()).map((n) => n._id));
     const OWNER: [string, Record<string, unknown>][] = [
-      ["users.me", {}], ["business.brand", {}], ["business.settings", {}], ["library.overview", {}], ["activity.feed", { limit: 100 }], ["activity.recent", {}], ["home.needs", {}],
+      ["users.me", {}], ["business.brand", {}], ["business.settings", {}], ["payments.settings", {}], ["library.overview", {}], ["activity.feed", { limit: 100 }], ["activity.recent", {}], ["home.needs", {}],
       ["sign.list", {}], ["builder.listBuilds", {}], ["builder.listTemplates", {}], ["builder.listClauses", {}], ["sign.ownerSignature", {}],
       ["clients.listInvites", {}], ["clients.directory", {}], ["clients.page", { clientId: w.harbor }], ["clients.people", { clientId: w.harbor }],
       ["inbox.notes", {}], ["inbox.sent", {}], ["inbox.forClient", { clientId: w.harbor }], ["inbox.noteRecipients#" + w.harbor, { clientId: w.harbor }],

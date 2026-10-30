@@ -20,6 +20,7 @@ import wpLogo from "../../assets/d1/wp-logo.png";
 import lightElbow from "../../assets/portal/light-elbow.jpg";
 import { ago } from "../../lib/format";
 import { DropboxSettings } from "./DropboxSettings";
+import { PaymentsSettings } from "./PaymentsSettings";
 import { ClientsSettings } from "../clients/Clients";
 import { SharesSettings } from "../review/Share";
 
@@ -89,6 +90,7 @@ export default function Settings({ me }: { me: { name: string | null; email: str
   return (
     <SettingsFrame section={key}>
       {key === "business" && <BusinessSection show={show} />}
+      {key === "payments" && <PaymentsSettings show={show} />}
       {key === "account" && <AccountSection me={me} show={show} />}
       {key === "dropbox" && <DropboxSettings show={show} />}
       {key === "connectors" && <>

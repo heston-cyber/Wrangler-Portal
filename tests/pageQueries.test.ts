@@ -72,6 +72,7 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "library.overview": { pages: ["owner"], args: () => "skip" },
   "approvals.forVideo": { pages: ["video"], args: (i, s) => ({ videoId: i.videoId, share: s ?? undefined }) }, // client approval (Phase 1)
   "business.settings": { pages: ["owner"], args: () => "skip" }, // Settings › Business (owner only)
+  "payments.settings": { pages: ["owner"], args: () => "skip" }, // Settings › Payments (owner only)
   "activity.feed": { pages: ["owner"], args: () => "skip" },
   "activity.recent": { pages: ["owner"], args: () => "skip" }, // back-office Home
   "home.needs": { pages: ["owner"], args: () => "skip" }, // back-office Home

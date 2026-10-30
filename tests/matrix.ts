@@ -83,6 +83,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "projects.addDeliveryFile": { projectId: ids.projectId, file: { kind: "version", versionId: ids.versionId } }, "projects.removeDeliveryFile": { fileId: ids.deliveryFileId },
     "projects.setDelivery": { projectId: ids.projectId, unlocked: false }, "projects.dropboxFiles": { projectId: ids.projectId },
     "projects.mine": {}, "projects.forClient": { projectId: ids.projectId }, "projects.deliveryLink": { fileId: ids.deliveryFileId },
+    "payments.settings": {}, "payments.connect": {}, "payments.refresh": {}, "payments.disconnect": {},
   };
 }
 
