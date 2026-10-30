@@ -67,9 +67,10 @@ function MoveStage({ page, to, post: post0, onClose, show }: { page: Page; to: S
 function RoundsDialog({ page, onClose, show }: { page: Page; onClose: () => void; show: (m: string) => void }) {
   const setRounds = useMutation(api.projects.setRounds);
   const inherited = page.rounds.client ?? page.rounds.business;
-  const fromName = page.rounds.client ? `${page.client?.name ?? "the client"}'s setting` : "your business setting";
-  const [mode, setMode] = useState<"inherit" | "custom">(page.rounds.project ? "custom" : "inherit");
-  const [n, setN] = useState(String(page.rounds.project ?? inherited));
+  const inheritedText = inherited === 0 ? "off" : String(inherited);
+  const fromName = page.rounds.client !== null ? `${page.client?.name ?? "the client"}'s setting` : "your business setting";
+  const [mode, setMode] = useState<"inherit" | "custom" | "off">(page.rounds.project === 0 ? "off" : page.rounds.project ? "custom" : "inherit");
+  const [n, setN] = useState(String(page.rounds.project || inherited || 2));
   const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null);
   return (
     <Modal onClose={onClose} label="Rounds included" width={560}>
@@ -78,8 +79,8 @@ function RoundsDialog({ page, onClose, show }: { page: Page; onClose: () => void
         try {
           const num = Number(n);
           if (mode === "custom" && (!Number.isFinite(num) || num < 1)) throw new Error("Rounds per video: 1 or more.");
-          await setRounds({ projectId: page._id, rounds: mode === "custom" ? num : null });
-          show(mode === "custom" ? `${plural(Math.round(num), "round", "rounds")} per video on this project.` : `Back to ${fromName} (${inherited}).`);
+          await setRounds({ projectId: page._id, rounds: mode === "custom" ? num : mode === "off" ? 0 : null });
+          show(mode === "custom" ? `${plural(Math.round(num), "round", "rounds")} per video on this project.` : mode === "off" ? "Rounds are off for this project." : `Back to ${fromName} (${inheritedText}).`);
           onClose();
         } catch (err) { setError(errText(err)); setBusy(false); }
       }}>
@@ -87,12 +88,13 @@ function RoundsDialog({ page, onClose, show }: { page: Page; onClose: () => void
           <div style={{ display: "grid", gap: 6 }}>
             <span className="eyebrow">{page.label}</span>
             <h2 className="headline">Rounds included.</h2>
-            <p className="secondary" style={{ margin: 0 }}>Each version is a round. Starts from {fromName}.</p>
+            <p className="secondary" style={{ margin: 0 }}>{page.rounds.businessOff ? "Rounds are off for your whole business (Settings › Business)." : `Each version is a round. Starts from ${fromName}.`}</p>
           </div>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="close" size={18} /></button>
         </div>
-        <Segmented label="Rounds" value={mode} onChange={setMode} items={[{ key: "inherit", label: `Use ${page.rounds.client ? "client" : "business"} setting (${inherited})` }, { key: "custom", label: "Custom" }]} />
+        <Segmented label="Rounds" value={mode} onChange={setMode} items={[{ key: "inherit", label: `Use ${page.rounds.client !== null ? "client" : "business"} setting (${inheritedText})` }, { key: "custom", label: "Custom" }, { key: "off", label: "Off" }]} />
         {mode === "custom" && <TextField label="Rounds per video" type="number" min={1} max={20} value={n} onChange={(e) => setN(e.target.value)} autoFocus />}
+        {mode === "off" && <p className="secondary" style={{ margin: 0 }}>No round chips, no last-round notice and no change-order prompt on this project.</p>}
         {error && <p className="error" role="alert">{error}</p>}
         <div className="dfoot">
           <button className="btn ghost" type="button" onClick={onClose}>Cancel</button>
@@ -247,10 +249,10 @@ function Overview({ page, onMove, onRounds, onNext, onDates, postDefault, setPos
             {page.client && <Checkbox checked={postDefault} onChange={setPostDefault} label={`Post stage moves to ${client}'s Inbox`} hint={next ? `They see "Stage moved to ${stageName(next)}" with your note.` : "They see the new stage with your note."} />}
           </div>
         </Card>
-        <Card className="pj-next" label="Next step" head={<SectionHead label="Next step" action={<Button size="sm" variant="ghost" onClick={onNext}>Edit</Button>} />}>
+        <Card className="pj-next" label="Next step" head={<SectionHead label="Next step" action={<Button size="sm" variant="ghost" onClick={onNext} iconEnd="chevron-right">Edit</Button>} />}>
           <p className="pj-nexttext">{page.nextStep || <span className="secondary">No next step yet.</span>}</p>
         </Card>
-        <Card className="pj-cuts" label="Cuts" head={<SectionHead label="Cuts" count={page.videos.length} action={<Button size="sm" variant="ghost" onClick={() => goTab("cuts")}>Open Cuts</Button>} />}>
+        <Card className="pj-cuts" label="Cuts" head={<SectionHead label="Cuts" count={page.videos.length} action={<Button size="sm" variant="ghost" onClick={() => goTab("cuts")} iconEnd="arrow-right">Open Cuts</Button>} />}>
           {page.videos.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "video" }} title="No cuts yet." />
             : page.videos.slice(0, 6).map((v) => (
               <ListRow key={v._id} to={`/v/${v._id}`} lead={{ thumb: v.thumbUrl, size: 64 }} chevron
@@ -261,12 +263,12 @@ function Overview({ page, onMove, onRounds, onNext, onDates, postDefault, setPos
         </Card>
       </div>
       <div className="col right">
-        <Card className="pj-dates-card" label="Key dates" head={<SectionHead label="Key dates" action={<Button size="sm" variant="ghost" onClick={onDates}>Edit</Button>} />}>
+        <Card className="pj-dates-card" label="Key dates" head={<SectionHead label="Key dates" action={<Button size="sm" variant="ghost" onClick={onDates} iconEnd="chevron-right">Edit</Button>} />}>
           {page.keyDates.length === 0 ? <p className="pj-pad secondary">No dates yet.</p>
             : <dl className="cp-see">{page.keyDates.map((d) => <div key={d.label + d.date} style={{ display: "contents" }}><dt>{d.label}</dt><dd>{dateText(d.date)}</dd></div>)}</dl>}
         </Card>
-        <Card className="pj-rounds" label="Revision rounds" head={<SectionHead label="Revision rounds" action={<Button size="sm" variant="ghost" onClick={onRounds}>Change</Button>} />}>
-          <dl className="cp-see"><dt>Included</dt><dd>{plural(page.rounds.included, "round", "rounds")} per video</dd><dt>From</dt><dd>{from}</dd></dl>
+        <Card className="pj-rounds" label="Revision rounds" head={<SectionHead label="Revision rounds" action={<Button size="sm" variant="ghost" onClick={onRounds} iconEnd="chevron-right">Change</Button>} />}>
+          <dl className="cp-see"><dt>Included</dt><dd>{page.rounds.off ? "Off" : `${plural(page.rounds.included, "round", "rounds")} per video`}</dd><dt>From</dt><dd>{from}</dd></dl>
         </Card>
         <Card className="pj-docs" label="Documents" head={<SectionHead label="Documents" count={page.documents.length} />}>
           {page.documents.length === 0 ? <p className="pj-pad secondary">No documents sent to {client} yet.</p>
@@ -332,7 +334,7 @@ function Delivery({ page, show, onAddFiles }: { page: Page; show: (m: string) =>
       <Card label="Links" head={<SectionHead label="Links" />}>
         <dl className="cp-see pj-links">
           <dt>Link lasts</dt>
-          <dd>{days === null ? <>{plural(d.linkDays, "day", "days")} after unlock <button type="button" className="linkbtn" onClick={() => setDays(String(d.linkDays))}>Change</button></> : (
+          <dd>{days === null ? <>{plural(d.linkDays, "day", "days")} after unlock <button type="button" className="linkbtn" onClick={() => setDays(String(d.linkDays))}>Change<Icon name="chevron-right" size={14} /></button></> : (
             <span className="pj-days"><input className="input sm" type="number" min={1} max={90} value={days} onChange={(e) => setDays(e.target.value)} aria-label="Days" autoFocus /> days
               <Button size="sm" variant="primary" onClick={() => void setDelivery({ projectId: page._id, linkDays: Number(days) || 7 }).then(() => { setDays(null); show("Saved."); })}>Save</Button>
               <Button size="sm" variant="ghost" onClick={() => setDays(null)}>Cancel</Button></span>
@@ -389,7 +391,7 @@ export default function ProjectPage({ projectId, tab }: { projectId: Id<"project
           <div className="tags pc-only">
             <span className="wp-tag">{plural(page.videos.length, "video", "videos")}</span>
             <span className="wp-tag">{stageName(page.stage)}</span>
-            <span className="wp-tag">{plural(page.rounds.included, "round", "rounds")} per video</span>
+            {!page.rounds.off && <span className="wp-tag">{plural(page.rounds.included, "round", "rounds")} per video</span>}
           </div>
         </header>
         <div className="ws-tabs cp-tabs">

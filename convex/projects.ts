@@ -95,7 +95,7 @@ export const page = query({
       videos.push({
         _id: vid._id, number: vid.number ?? null, title: vid.title, updatedAt: vid.updatedAt,
         latest: latest && { versionId: latest._id, number: latest.number, status: latest.status, versions: vs.length },
-        round: latest ? roundOf(latest.number, r.included) : null,
+        round: latest && !r.off ? roundOf(latest.number, r.included) : null,
         openNotes: open, final: vid.final ? { version: vid.final.version } : null,
         thumbUrl: latest ? (await signStillUrl(latest.posterUrl)) ?? (await signedThumbUrl(latest)) : null,
       });
@@ -106,7 +106,7 @@ export const page = query({
       _id: p._id, name: p.name, jobNumber: p.jobNumber ?? null, label: label(p),
       client: client ? { _id: client._id, name: client.name, watermarkOff: !!client.watermarkOff } : null,
       stage: (p.stage ?? "discovery") as Stage, nextStep: p.nextStep ?? null, keyDates: p.keyDates ?? [],
-      rounds: { included: r.included, from: r.from, project: p.rounds ?? null, client: r.clientRounds, business: r.businessRounds },
+      rounds: { included: r.included, off: r.off, from: r.from, project: p.rounds ?? null, client: r.clientRounds, business: r.businessRounds, businessOff: r.businessOff },
       videos,
       documents: await clientDocs(ctx, new Set(people.map((x) => x.email)), p.businessId),
       people: people.map((x) => ({ _id: x._id, name: x.name ?? null, email: x.email, role: x.role })),
@@ -194,7 +194,7 @@ export const nextRound = query({
     const vs = await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", videoId)).collect();
     const next = vs.reduce((m, x) => Math.max(m, x.number), 0) + 1;
     const client = p?.clientId ? await ctx.db.get(p.clientId) : null;
-    return { next, included: r.included, over: next > r.included, project: p ? label(p) : null, projectId: p?._id ?? null, client: client?.name ?? null, video: vid.title };
+    return { next, included: r.included, over: !r.off && next > r.included, project: p ? label(p) : null, projectId: p?._id ?? null, client: client?.name ?? null, video: vid.title };
   },
 });
 
@@ -344,7 +344,7 @@ export const forClient = query({
       const last = ready[0];
       if (!last) continue;
       const approved = (await ctx.db.query("clientApprovals").withIndex("by_version_user", (q) => q.eq("versionId", last._id).eq("userId", me.userId)).first()) !== null;
-      videos.push({ _id: vid._id, title: vid.title, token, version: last.number, round: roundOf(last.number, r.included), approved, final: !!vid.final, thumbUrl: (await signStillUrl(last.posterUrl)) ?? (await signedThumbUrl(last)), updatedAt: vid.updatedAt });
+      videos.push({ _id: vid._id, title: vid.title, token, version: last.number, round: r.off ? null : roundOf(last.number, r.included), approved, final: !!vid.final, thumbUrl: (await signStillUrl(last.posterUrl)) ?? (await signedThumbUrl(last)), updatedAt: vid.updatedAt });
     }
     videos.sort((a, b) => b.updatedAt - a.updatedAt);
     const d = deliveryState(p);
@@ -352,7 +352,7 @@ export const forClient = query({
     return {
       _id: p._id, label: label(p), business: biz?.name ?? null,
       stage: (p.stage ?? "discovery") as Stage, nextStep: p.nextStep ?? null, keyDates: p.keyDates ?? [],
-      rounds: r.included, videos,
+      rounds: r.off ? null : r.included, videos,
       documents: await clientDocs(ctx, new Set([me.email]), p.businessId),
       delivery: { open: d.open, expiresAt: d.open ? d.expiresAt : null, expired: !!d.unlockedAt && !d.open, files: d.open ? await filesOf(ctx, p._id) : [], count: (await filesOf(ctx, p._id)).length },
     };

@@ -102,7 +102,7 @@ function Verify({ token, open, onVerified }: { token: string; open: Open; onVeri
               onChange={(e) => { const c = e.target.value.replace(/\D/g, "").slice(0, 6); setCode(c); if (c.length === 6) void check(c); }} />
           </label>
           <div className="wsx-btns"><Button variant="primary" loading={busy} disabled={code.length !== 6} onClick={() => void check()}>Continue</Button>
-          <Button variant="ghost" size="sm" disabled={busy} onClick={() => void ask()}>Send another code</Button></div>
+          <Button variant="ghost" size="sm" disabled={busy} onClick={() => void ask()} icon="mail">Send another code</Button></div>
         </>
       )}
       {err && <p className="caption wsx-err"><Icon name="alert" size={14} /> {err}</p>}
@@ -199,7 +199,7 @@ function Signing({ token, session, onLost, onDone }: { token: string; session: s
         <section id="wsx-finish" className="wsx-card glass wsx-finish">
           <h2 className="headline">Sign</h2>
           {todo.length ? (
-            <p className="caption wsx-todo"><Icon name="alert" size={16} /> {todo[0] === "adopt" ? "Adopt your signature first." : `${todo.length} initial box${todo.length === 1 ? "" : "es"} still to do.`} <Button variant="ghost" size="sm" onClick={next}>Take me there</Button></p>
+            <p className="caption wsx-todo"><Icon name="alert" size={16} /> {todo[0] === "adopt" ? "Adopt your signature first." : `${todo.length} initial box${todo.length === 1 ? "" : "es"} still to do.`} <Button variant="ghost" size="sm" onClick={next} iconEnd="arrow-right">Take me there</Button></p>
           ) : (
             <>
               {doc.me.adopted && <div className="wsx-adopted"><img src={doc.me.adopted.signatureUrl} alt="Your signature" /><span className="caption">{doc.me.adopted.name}{doc.me.adopted.title ? `, ${doc.me.adopted.title}` : ""} · {doc.today}<button className="wp-link sm" onClick={() => setAdopting(true)}>Change</button></span></div>}

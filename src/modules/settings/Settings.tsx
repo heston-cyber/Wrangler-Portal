@@ -237,13 +237,16 @@ function RoundsAndWatermark({ cur, show }: { cur: BizSettings; show: (m: string)
     <div className="wp-bizextra">
       <div className="panel">
         <span className="wp-eyebrow">Revision rounds</span>
-        <div className="prow"><span className="pl">Default</span><span className="pr">{rounds === null ? <><span>{cur.roundsDefault} {cur.roundsDefault === 1 ? "round" : "rounds"} per video</span><button type="button" className="linkbtn" onClick={() => setRounds(String(cur.roundsDefault))}>Change</button></> : (
+        <div className="prow"><span className="pl">Use them</span><span className="pr"><Toggle label="Revision rounds" checked={!cur.roundsOff} onChange={(on) => void save({ roundsOff: !on }).then(() => show(on ? "Revision rounds are on." : "Revision rounds are off."), (e) => show(String((e as Error).message)))} /><span className="wmtxt">{cur.roundsOff ? "Off · no round chips, last-round notices or change-order prompts" : "On · each version counts as a round"}</span></span></div>
+        {!cur.roundsOff && <>
+        <div className="prow"><span className="pl">Default</span><span className="pr">{rounds === null ? <><span>{cur.roundsDefault} {cur.roundsDefault === 1 ? "round" : "rounds"} per video</span><button type="button" className="linkbtn" onClick={() => setRounds(String(cur.roundsDefault))}>Change<Icon name="chevron-right" size={14} /></button></> : (
           <><input className="input sm" type="number" min={1} max={20} value={rounds} onChange={(e) => setRounds(e.target.value)} aria-label="Rounds per video" autoFocus style={{ width: 80 }} />
             <Button size="sm" variant="primary" onClick={async () => { const n = Number(rounds); if (!Number.isFinite(n) || n < 1) { show("1 or more."); return; } try { await save({ roundsDefault: n }); setRounds(null); show("Saved."); } catch (e) { show(String((e as Error).message).replace(/^.*ConvexError: /, "").split("\n")[0]); } }}>Save</Button>
             <Button size="sm" variant="ghost" onClick={() => setRounds(null)}>Cancel</Button></>
         )}</span></div>
         <div className="prow"><span className="pl">How it counts</span><span className="pr">Each version you upload is a round: v1 is round 1, v2 is round 2.</span></div>
-        <div className="prow"><span className="pl">Per client</span><span className="pr">Change it on a client, or on one project.</span></div>
+        <div className="prow"><span className="pl">Per client</span><span className="pr">Change it, or switch it off, on a client or on one project.</span></div>
+        </>}
       </div>
       <div className="panel">
         <span className="wp-eyebrow">Watermark on review copies</span>

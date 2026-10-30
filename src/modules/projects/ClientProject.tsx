@@ -32,7 +32,7 @@ function Videos({ d, max }: { d: Data; max?: number }) {
   return <>{list.map((v, i) => (
     <div key={v._id} className="wp-rowwrap">{i > 0 && <Divider />}
       <ListRow to={`/s/${v.token}/v/${v._id}`} lead={{ thumb: v.thumbUrl, size: 72 }} title={v.title}
-        meta={<>{v.approved ? `Approved v${v.version}` : `v${v.version}`} · <span className={v.round.state === "last" ? "cpj-last" : undefined}>{v.round.label}</span></>}
+        meta={<>{v.approved ? `Approved v${v.version}` : `v${v.version}`}{v.round && <> · <span className={v.round.state === "last" ? "cpj-last" : undefined}>{v.round.label}</span></>}</>}
         chip={<span className="pc-only">{videoChip(v)}</span>} action={<Icon name="arrow-right" size={16} className="go" />} />
     </div>
   ))}</>;
@@ -102,7 +102,7 @@ export default function ClientProject({ projectId, tab }: { projectId: string; t
   const at = STAGES.indexOf(d.stage);
   const tags = d.delivery.open
     ? [stageName(d.stage)]
-    : [`${d.videos.length} ${d.videos.length === 1 ? "video" : "videos"}`, `${d.rounds} ${d.rounds === 1 ? "round" : "rounds"} per video`];
+    : [`${d.videos.length} ${d.videos.length === 1 ? "video" : "videos"}`, ...(d.rounds ? [`${d.rounds} ${d.rounds === 1 ? "round" : "rounds"} per video`] : [])];
   return (
     <>
       <TopBar><a {...linkProps("/review")}>Review</a><Sep /><span className="here">{d.label}</span></TopBar>

@@ -156,7 +156,7 @@ function readLine(e: Event, names: Map<string, string>) {
 }
 function InboxSummary({ events, names, onOpen }: { events: Event[] | undefined; names: Map<string, string>; onOpen: () => void }) {
   return (
-    <Card className="cp-inbox" label="Their Inbox" head={<SectionHead label="Their Inbox" count={events?.length || undefined} action={<Button size="sm" variant="ghost" onClick={onOpen}>Open</Button>} />}>
+    <Card className="cp-inbox" label="Their Inbox" head={<SectionHead label="Their Inbox" count={events?.length || undefined} action={<Button size="sm" variant="ghost" onClick={onOpen} iconEnd="arrow-right">Open</Button>} />}>
       {events === undefined ? <SkeletonRows n={3} /> : events.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "inbox" }} title="Nothing in their Inbox yet." />
         : rows(events.slice(0, 3), (e) => <InboxItem icon={INBOX_ICON[e.kind as InboxKind]} title={e.title} detail={readLine(e, names)} />, (e) => e._id)}
     </Card>
@@ -208,29 +208,36 @@ function TheirInbox({ page, events, business, show, onAdd }: { page: Page; event
 }
 
 // ---------- Settings tab (Phase 2 Part A, frame 145:1521) ----------
-function ClientSettings({ clientId, name, settings, show }: { clientId: Id<"clients">; name: string; settings: { rounds: number | null; watermarkOff: boolean; businessRounds: number }; show: (m: string) => void }) {
+function ClientSettings({ clientId, name, settings, show }: { clientId: Id<"clients">; name: string; settings: { rounds: number | null; watermarkOff: boolean; businessRounds: number; businessRoundsOff: boolean }; show: (m: string) => void }) {
   const save = useMutation(api.clients.setSettings);
-  const [mode, setMode] = useState<"default" | "custom">(settings.rounds ? "custom" : "default");
-  const [n, setN] = useState(String(settings.rounds ?? settings.businessRounds));
+  type Mode = "default" | "custom" | "off";
+  const [mode, setMode] = useState<Mode>(settings.rounds === 0 ? "off" : settings.rounds ? "custom" : "default");
+  const [n, setN] = useState(String(settings.rounds || settings.businessRounds));
   const err = (e: unknown) => show((e as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]);
-  const pick = (k: "default" | "custom") => { setMode(k); if (k === "default" && settings.rounds) void save({ clientId, rounds: null }).then(() => show("Back to the business default."), err); };
+  const pick = (k: Mode) => {
+    setMode(k);
+    if (k === "default" && settings.rounds !== null) void save({ clientId, rounds: null }).then(() => show("Back to the business default."), err);
+    if (k === "off" && settings.rounds !== 0) void save({ clientId, rounds: 0 }).then(() => show(`Rounds are off for ${name}.`), err);
+  };
   const saveN = () => { const v = Number(n); if (!Number.isFinite(v) || v < 1) { show("1 or more."); return; } void save({ clientId, rounds: v }).then(() => show("Saved."), err); };
   const on = !settings.watermarkOff;
   return (
     <div className="wp-bizextra cp-settings">
       <div className="panel">
         <span className="wp-eyebrow">Revision rounds</span>
-        <div className="prow"><span className="pl">Rounds per video</span><span className="pr">
-          <Segmented label="Rounds per video" value={mode} onChange={pick} items={[{ key: "default", label: `Business default (${settings.businessRounds})` }, { key: "custom", label: "Custom" }]} />
+        {settings.businessRoundsOff
+          ? <div className="prow"><span className="pl">Rounds per video</span><span className="pr">Off for your whole business.<a className="linkbtn" {...linkProps("/settings/business")}>Settings › Business<Icon name="arrow-right" size={14} /></a></span></div>
+          : <div className="prow"><span className="pl">Rounds per video</span><span className="pr">
+          <Segmented label="Rounds per video" value={mode} onChange={pick} items={[{ key: "default", label: `Business default (${settings.businessRounds})` }, { key: "custom", label: "Custom" }, { key: "off", label: "Off" }]} />
           {mode === "custom" && <><input className="input sm" type="number" min={1} max={20} value={n} onChange={(e) => setN(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") saveN(); }} aria-label="Rounds per video for this client" style={{ width: 80 }} />
             {Number(n) !== settings.rounds && <Button size="sm" variant="primary" onClick={saveN}>Save</Button>}</>}
-        </span></div>
+        </span></div>}
         <div className="prow"><span className="pl">Projects</span><span className="pr">A project can still set its own.</span></div>
       </div>
       <div className="panel">
         <span className="wp-eyebrow">Watermark</span>
         <div className="prow"><span className="pl">Review copies</span><span className="pr"><Toggle label="Watermark" checked={on} onChange={(v) => void save({ clientId, watermarkOff: !v }).catch(err)} /><span className="wmtxt">{on ? `On · ${name} sees your watermark on review copies` : `Off · review copies for ${name} have no watermark`}</span></span></div>
-        <div className="prow"><span className="pl">Look</span><span className="pr">Set in Settings › Business<a className="linkbtn" {...linkProps("/settings/business")}>Open</a></span></div>
+        <div className="prow"><span className="pl">Look</span><span className="pr">Set in Settings › Business<a className="linkbtn" {...linkProps("/settings/business")}>Open<Icon name="arrow-right" size={14} /></a></span></div>
       </div>
     </div>
   );
@@ -281,9 +288,9 @@ export default function ClientPage({ clientId, tab: tabParam }: { clientId: Id<"
         {tab === "overview" && (
           <div className="wp-homecols cp-overview">
             <div className="col">
-              <Card className="cp-projects" label="Projects" head={<SectionHead label="Projects" count={page.projects.length} action={<ButtonLink size="sm" variant="ghost" to="/projects">New project</ButtonLink>} />}><ProjectRows page={page} max={4} /></Card>
-              <Card className="cp-shared" label="Shared with them" head={<SectionHead label="Shared with them" count={page.shared.length} action={<Button size="sm" variant="ghost" onClick={() => setSharing(true)}>Share a cut</Button>} />}><SharedRows page={page} max={5} /></Card>
-              <Card className="cp-docs" label="Documents" head={<SectionHead label="Documents" count={page.documents.length} action={<ButtonLink size="sm" variant="ghost" to="/sign/new">New document</ButtonLink>} />}><DocRows page={page} max={5} /></Card>
+              <Card className="cp-projects" label="Projects" head={<SectionHead label="Projects" count={page.projects.length} action={<ButtonLink size="sm" variant="ghost" to="/projects" icon="plus">New project</ButtonLink>} />}><ProjectRows page={page} max={4} /></Card>
+              <Card className="cp-shared" label="Shared with them" head={<SectionHead label="Shared with them" count={page.shared.length} action={<Button size="sm" variant="ghost" onClick={() => setSharing(true)} iconEnd="chevron-right">Share a cut</Button>} />}><SharedRows page={page} max={5} /></Card>
+              <Card className="cp-docs" label="Documents" head={<SectionHead label="Documents" count={page.documents.length} action={<ButtonLink size="sm" variant="ghost" to="/sign/new" icon="plus">New document</ButtonLink>} />}><DocRows page={page} max={5} /></Card>
             </div>
             <div className="col right">
               <PeopleCard page={page} show={show} onAdd={() => setAdding(true)} />

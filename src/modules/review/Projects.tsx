@@ -159,7 +159,7 @@ export default function Projects({ projectId, embedded }: { projectId?: Id<"proj
               <div className="ghead">
                 <button className="collapse" onClick={() => toggle(g.key)} aria-label={collapsed.has(g.key) ? "Expand" : "Collapse"}><Icon name={collapsed.has(g.key) ? "chevron-right" : "chevron-down"} size={14} /></button>
                 {g.project && <Icon name="folder" size={18} />}
-                {g.project ? <a className="gtitle" {...linkProps(`/projects/${g.project._id}`)}>{g.title}</a> : <span className="gtitle">{g.title}</span>}
+                {g.project ? <a className="gtitle" {...linkProps(`/projects/${g.project._id}`)} title="Open the project page">{g.title}<Icon name="arrow-right" size={14} className="go" /></a> : <span className="gtitle">{g.title}</span>}
                 <span className="wp-tag">{g.items.length}</span>
                 {g.meta && <span className="gmeta">· {g.meta}</span>}
                 {g.project && (

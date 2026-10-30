@@ -97,6 +97,35 @@ describe("revision rounds", () => {
     // The video page knows the rounds too.
     expect((await w.heston.query(api.library.video, { videoId: w.vid })).roundsIncluded).toBe(4);
   });
+
+  test("rounds can be switched off on a project, a client or the whole business: no chips, no change-order prompt", async () => {
+    const w = await world();
+    const off = async () => {
+      expect((await w.heston.query(api.projects.nextRound, { videoId: w.vid })).over).toBe(false);
+      expect((await w.heston.query(api.library.video, { videoId: w.vid })).roundsIncluded).toBeNull();
+      const pg = await w.heston.query(api.projects.page, { projectId: w.p });
+      expect(pg.rounds.off).toBe(true);
+      expect(pg.videos[0].round).toBeNull();
+      const c = await w.mayaC.query(api.projects.forClient, { projectId: w.p });
+      expect(c.rounds).toBeNull();
+      expect(c.videos[0]?.round ?? null).toBeNull();
+    };
+    await w.heston.mutation(api.projects.setRounds, { projectId: w.p, rounds: 0 });
+    await off();
+    await w.heston.mutation(api.projects.setRounds, { projectId: w.p, rounds: null });
+    await w.heston.mutation(api.clients.setSettings, { clientId: w.harbor, rounds: 0 });
+    await off();
+    // A project can still turn rounds back on for itself.
+    await w.heston.mutation(api.projects.setRounds, { projectId: w.p, rounds: 3 });
+    expect((await w.heston.query(api.projects.nextRound, { videoId: w.vid }))).toMatchObject({ included: 3, over: false });
+    await w.heston.mutation(api.projects.setRounds, { projectId: w.p, rounds: null });
+    await w.heston.mutation(api.clients.setSettings, { clientId: w.harbor, rounds: null });
+    await w.heston.mutation(api.business.updateSettings, { roundsOff: true });
+    await off();
+    expect((await w.heston.query(api.business.settings, {})).roundsOff).toBe(true);
+    await w.heston.mutation(api.business.updateSettings, { roundsOff: false });
+    expect((await w.heston.query(api.projects.nextRound, { videoId: w.vid })).over).toBe(true);
+  });
 });
 
 describe("watermark", () => {

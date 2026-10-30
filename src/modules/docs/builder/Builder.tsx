@@ -350,9 +350,9 @@ export default function Builder({ mode }: { mode: Mode }) {
           <button className="icon-btn sm" aria-label="Redo" title={`Redo (${mac ? "⇧⌘Z" : "Ctrl+Shift+Z"})`} disabled={!hist.current.future.length} onClick={() => step("redo")}><Icon name="arrow-right" size={18} /></button>
         </span>
         <span className={`ws-save hide-sm ${saveState}`}>{saveState === "saving" ? <><Spinner /> Saving</> : saveState === "error" ? <><Icon name="alert" size={14} /> Not saved</> : <><Icon name="check" size={14} plain /> Saved</>}</span>
-        <Button variant="ghost" size="sm" className="hide-sm" loading={busy === "preview"} onClick={() => void onPreview()}>Preview PDF</Button>
+        <Button variant="ghost" size="sm" className="hide-sm" loading={busy === "preview"} onClick={() => void onPreview()} iconEnd="external">Preview PDF</Button>
         {mode.kind === "build" ? <>
-          <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setAsTemplate(true)}>Save as template</Button>
+          <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setAsTemplate(true)} iconEnd="chevron-right">Save as template</Button>
           <Button variant="primary" size="sm" loading={busy === "continue"} disabled={!!sent} onClick={() => void onContinue()} title={sent ? "It's out for signature or signed" : undefined}>{build?.document ? "Update the PDF" : "Continue to signing"}</Button>
         </> : <Button variant="primary" size="sm" loading={busy === "use"} onClick={() => void onUseTemplate()}>New document from this</Button>}
       </>}>

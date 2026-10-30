@@ -67,7 +67,7 @@ export const overview = query({
     return {
       projects: await Promise.all(projects.map(async (p) => ({
         _id: p._id, name: p.name, jobNumber: p.jobNumber ?? null, client: p.client ?? null, createdAt: p.createdAt,
-        roundsIncluded: (await roundsFor(ctx, p)).included, // Phase 2: "Round n of N" on each video row
+        roundsIncluded: await includedOrNull(ctx, p), // Phase 2: "Round n of N" on each video row
         stage: p.stage ?? null,
         videoCount: videos.filter((x) => x.projectId === p._id).length,
         updatedAt: Math.max(p.createdAt, ...videos.filter((x) => x.projectId === p._id).map((x) => x.updatedAt)),
@@ -219,13 +219,16 @@ export const video = query({
       viewer: access.kind === "owner" ? { kind: "owner" as const, name: access.name } : access.kind === "client" ? { kind: "client" as const, name: access.name } : { kind: "guest" as const, name: access.name },
       downloads: owner || !!access.share?.downloads,
       // Phase 2 Part A: each version is a round (D23); the project includes this many per video.
-      roundsIncluded: (await roundsFor(ctx, project)).included,
+      roundsIncluded: await includedOrNull(ctx, project), // null when rounds are off
       // D24: clients and guests see the business's watermark over review copies unless it's off for this client.
       watermark: owner ? null : await watermarkFor(ctx, project),
       businessName: project?.businessId ? (await ctx.db.get(project.businessId))?.name ?? null : null,
     };
   },
 });
+
+/** Rounds per video, or null when rounds are switched off (no chips, no notice). */
+async function includedOrNull(ctx: QueryCtx, project: Doc<"projects"> | null) { const r = await roundsFor(ctx, project); return r.off ? null : r.included; }
 
 async function watermarkFor(ctx: QueryCtx, project: Doc<"projects"> | null) {
   if (!project) return null;

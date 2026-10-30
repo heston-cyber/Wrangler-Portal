@@ -1691,3 +1691,11 @@ button.wp-hubcard[aria-busy], button.wp-tplcard[aria-busy] { opacity: 1; }
   .cpj .wp-homecols { align-items: stretch; }
   .cpj .wp-card { min-width: 0; width: 100%; box-sizing: border-box; }
 }
+.btn .wp-icon.end { width: 14px; height: 14px; margin-left: -2px; }
+/* Text-only links carry an icon from the design set (Heston, Oct 29). */
+.linkbtn { display: inline-flex; align-items: center; gap: 4px; }
+.linkbtn .wp-icon { width: 14px; height: 14px; }
+.pj-block .ghead .gtitle { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.pj-block .ghead .gtitle .go { color: var(--accent); width: 14px; height: 14px; transition: transform .15s ease; }
+.pj-block .ghead .gtitle:hover { text-decoration: underline; text-underline-offset: 3px; }
+.pj-block .ghead .gtitle:hover .go { transform: translateX(2px); }

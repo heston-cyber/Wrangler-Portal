@@ -9,24 +9,29 @@ const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).jo
 // ---------- Button ----------
 type ButtonStyle = "primary" | "secondary" | "ghost" | "danger";
 type ButtonProps = Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "style"> & {
-  variant?: ButtonStyle; size?: "md" | "sm"; loading?: boolean; icon?: IconName; style?: React.CSSProperties;
+  variant?: ButtonStyle; size?: "md" | "sm"; loading?: boolean; icon?: IconName; iconEnd?: IconName; style?: React.CSSProperties;
 };
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({ variant = "secondary", size = "md", loading, icon, className, children, disabled, type = "button", ...rest }, ref) {
+// Heston (Oct 29): a button that is only words gets an icon, so it reads as clickable. Pass icon (before the words)
+// or iconEnd (after); a ghost ButtonLink gets the arrow by itself.
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({ variant = "secondary", size = "md", loading, icon, iconEnd, className, children, disabled, type = "button", ...rest }, ref) {
   return (
     <button ref={ref} type={type} className={cx("btn", variant !== "secondary" && variant, size === "sm" && "sm", loading && "loading", className)}
       disabled={disabled || loading} aria-busy={loading || undefined} {...rest}>
       {icon && <Icon name={icon} size={size === "sm" ? 16 : 18} />}
       {children}
+      {iconEnd && <Icon name={iconEnd} size={size === "sm" ? 14 : 16} className="end" />}
       {loading && <span className="wp-spin" aria-hidden />}
     </button>
   );
 });
 
 /** A link that looks like a button (goes through the app's router). */
-export function ButtonLink({ to, variant = "secondary", size = "md", icon, children, className }: { to: string; variant?: ButtonStyle; size?: "md" | "sm"; icon?: IconName; children: React.ReactNode; className?: string }) {
+export function ButtonLink({ to, variant = "secondary", size = "md", icon, iconEnd, children, className }: { to: string; variant?: ButtonStyle; size?: "md" | "sm"; icon?: IconName; iconEnd?: IconName | false; children: React.ReactNode; className?: string }) {
+  const end = iconEnd === false ? null : iconEnd ?? (variant === "ghost" && !icon ? "arrow-right" : null);
   return (
     <a {...linkProps(to)} className={cx("btn", variant !== "secondary" && variant, size === "sm" && "sm", className)}>
       {icon && <Icon name={icon} size={size === "sm" ? 16 : 18} />}{children}
+      {end && <Icon name={end} size={size === "sm" ? 14 : 16} className="end" />}
     </a>
   );
 }

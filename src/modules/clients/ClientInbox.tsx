@@ -85,7 +85,7 @@ export default function ClientInbox({ itemId }: { itemId: string | null }) {
         <div className="ci-bar">
           <PillTabs label="Show" value={tab} onChange={setTab} items={[{ key: "unread", label: "Unread", count: data?.unread ?? 0 }, { key: "all", label: "All" }]} />
           <span className="sp" />
-          {(data?.unread ?? 0) > 0 && <Button size="sm" variant="ghost" onClick={async () => { const n = await markAll({}); show(`Marked ${n} as read.`); }}>Mark all read</Button>}
+          {(data?.unread ?? 0) > 0 && <Button size="sm" variant="ghost" onClick={async () => { const n = await markAll({}); show(`Marked ${n} as read.`); }} icon="check">Mark all read</Button>}
         </div>
         {data === undefined ? <Card label="Inbox"><SkeletonRows n={5} /></Card>
           : list.length === 0 ? <EmptyState icon="inbox" title={tab === "unread" && items.length ? "Nothing unread." : "Nothing new yet."} body={tab === "unread" && items.length ? "You've read everything here." : "Cuts, documents and notes will show up here."} />

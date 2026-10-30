@@ -253,7 +253,7 @@ function Editor({ data }: { data: Data }) {
                 {version.isCurrent && (doc.status === "approved" || doc.status === "voided") && <div><Button loading={busy === "revise"} onClick={() => void onRevise()}>Make changes (new version)</Button></div>}
               </>
             ) : <p className="wp-small ws-hint">This version was never approved.</p>}
-            <div><Button variant="ghost" size="sm" loading={busy === "preview"} onClick={() => void onPreview()}>Preview the PDF as it will be signed</Button></div>
+            <div><Button variant="ghost" size="sm" loading={busy === "preview"} onClick={() => void onPreview()} iconEnd="external">Preview the PDF as it will be signed</Button></div>
           </section>
 
           {doc.status === "completed" && <FinishedCard data={data} show={show} />}
@@ -290,7 +290,7 @@ function Editor({ data }: { data: Data }) {
                   return { ...l, signers: [...l.signers.filter((x) => x.key === OWNER_KEY), ...clients] };
                 })} />
             ))}
-            {editable && layout.signers.length < 10 && <div><Button variant="ghost" size="sm" onClick={() => setLayout((l) => ({ ...l, signers: [...l.signers, { key: nextClientKey(l.signers), name: "", email: "", order: 1 }] }))}>Add a client signer</Button></div>}
+            {editable && layout.signers.length < 10 && <div><Button variant="ghost" size="sm" onClick={() => setLayout((l) => ({ ...l, signers: [...l.signers, { key: nextClientKey(l.signers), name: "", email: "", order: 1 }] }))} icon="plus">Add a client signer</Button></div>}
           </section>
 
           {/* Boxes */}
@@ -313,7 +313,7 @@ function Editor({ data }: { data: Data }) {
                 <span className="wp-small ws-hint">Drag to move, drag the corner to resize, arrow keys to nudge.</span>
               </div>
             )}
-            {editable && <div><Button variant="ghost" size="sm" loading={scanning} disabled={!pdf} onClick={() => void runScan(true)}>Find markers again</Button></div>}
+            {editable && <div><Button variant="ghost" size="sm" loading={scanning} disabled={!pdf} onClick={() => void runScan(true)} iconEnd="chevron-right">Find markers again</Button></div>}
             {editable && <p className="wp-small ws-hint">Markers: <code>{"{{sign:client}}"}</code> <code>{"{{initials:client}}"}</code> <code>{"{{name:client}}"}</code> <code>{"{{date:client}}"}</code> <code>{"{{title:client}}"}</code>. Use <code>heston</code> for you, and <code>client2</code> … for more signers.</p>}
           </section>
 
@@ -720,7 +720,7 @@ function FinishedCard({ data, show }: { data: Data; show: (m: string) => void })
         <>
           <div><a className="btn primary" href={data.finalUrl ?? undefined} download={f.fileName} target="_blank" rel="noreferrer">Download the signed PDF</a></div>
           <HashLine label="SHA-256" value={f.sha256} />
-          <div><Button variant="ghost" size="sm" loading={busy === "audit"} onClick={() => void getAudit()}>Download the audit record (JSON)</Button></div>
+          <div><Button variant="ghost" size="sm" loading={busy === "audit"} onClick={() => void getAudit()} iconEnd="download">Download the audit record (JSON)</Button></div>
         </>
       ) : doc.finishError ? (
         <><p className="caption ws-err"><Icon name="alert" size={14} /> The signed copy couldn't be made: {doc.finishError}</p><Retry step="pdf" /></>

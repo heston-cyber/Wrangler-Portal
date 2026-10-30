@@ -88,7 +88,7 @@ async function settingsOf(ctx: QueryCtx, b: Doc<"businesses">) {
     logoUrl: b.logoFileId ? await ctx.storage.getUrl(b.logoFileId) : null,
     logoLightUrl: b.logoLightFileId ? await ctx.storage.getUrl(b.logoLightFileId) : null, modules: { ...DEFAULT_MODULES, ...(b.modules ?? {}) },
     // Phase 2 Part A: revision rounds (D23b: 2) and the watermark look on review copies (D24).
-    roundsDefault: b.roundsDefault ?? 2, watermark: b.watermark ?? WATERMARK_DEFAULT,
+    roundsDefault: b.roundsDefault ?? 2, roundsOff: !!b.roundsOff, watermark: b.watermark ?? WATERMARK_DEFAULT,
     // Settings shows a small warning when no text colour reaches 4.5:1 on the accent (Heston, Oct 29).
     accentCheck: b.accent ? (({ ratio, ok }) => ({ ratio: Math.round(ratio * 100) / 100, ok }))(textOn(b.accent)) : null,
   };
@@ -112,6 +112,7 @@ export const updateSettings = mutation({
     accent: v.optional(v.union(v.string(), v.null())), background: v.optional(v.union(v.string(), v.null())),
     modules: v.optional(v.object({ review: v.boolean(), docs: v.boolean(), payments: v.boolean(), projects: v.optional(v.boolean()) })),
     roundsDefault: v.optional(v.number()),
+    roundsOff: v.optional(v.boolean()),
     watermark: v.optional(v.object({ corner: v.union(v.literal("tl"), v.literal("tr"), v.literal("bl"), v.literal("br")), size: v.union(v.literal("small"), v.literal("large")), opacity: v.number() })),
   },
   handler: async (ctx, a) => {
@@ -141,6 +142,7 @@ export const updateSettings = mutation({
       patch[k] = c ? c.toUpperCase() : undefined;
     }
     if (a.modules) patch.modules = a.modules;
+    if (a.roundsOff !== undefined) patch.roundsOff = a.roundsOff || undefined;
     if (a.roundsDefault !== undefined) patch.roundsDefault = Math.max(1, Math.min(20, Math.round(a.roundsDefault)));
     if (a.watermark) patch.watermark = { ...a.watermark, opacity: Math.max(0.05, Math.min(1, Math.round(a.watermark.opacity * 100) / 100)) };
     await ctx.db.patch(id, patch as never);

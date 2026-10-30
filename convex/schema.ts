@@ -691,6 +691,7 @@ export default defineSchema({
     // Phase 2 Part A (Oct 29): revision rounds (each version is a round, D23; default 2, D23b) and the watermark look
     // on review copies (D24: on for every client unless switched off on the client).
     roundsDefault: v.optional(v.number()),
+    roundsOff: v.optional(v.boolean()), // revision rounds switched off for the whole business
     watermark: v.optional(v.object({ corner: v.union(v.literal("tl"), v.literal("tr"), v.literal("bl"), v.literal("br")), size: v.union(v.literal("small"), v.literal("large")), opacity: v.number() })),
   }).index("by_slug", ["slug"]),
 

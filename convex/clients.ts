@@ -2,6 +2,7 @@
 // can then make an account on the sign-in page; everyone else is refused by auth.ts. Shares (C2) call invite too.
 import { type MutationCtx } from "./_generated/server";
 import { mutation, query } from "./lib/functions";
+import { clampRounds } from "./lib/rounds";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import { requireMe, requireSignedIn } from "./lib/access";
@@ -264,7 +265,7 @@ export const page = query({
     const items = await ctx.db.query("inboxItems").withIndex("by_client", (q) => q.eq("clientId", clientId)).collect();
     return {
       client: { _id: client._id, name: client.name },
-      settings: { rounds: client.rounds ?? null, watermarkOff: !!client.watermarkOff, businessRounds: (client.businessId ? (await ctx.db.get(client.businessId))?.roundsDefault : undefined) ?? 2 },
+      settings: await (async () => { const b = client.businessId ? await ctx.db.get(client.businessId) : null; return { rounds: client.rounds ?? null, watermarkOff: !!client.watermarkOff, businessRounds: b?.roundsDefault ?? 2, businessRoundsOff: !!b?.roundsOff }; })(),
       people: await Promise.all(people.sort((a, b) => a.createdAt - b.createdAt).map(async (p) => ({ _id: p._id, email: p.email, name: p.name ?? null, role: p.role, access: await accessOf(ctx, p.email) }))),
       projects: projectRows,
       shares: shares.map((s) => ({ _id: s._id, kind: s.kind, who: s.who, access: s.access, off: !!s.offAt, expiresAt: s.expiresAt ?? null })),
@@ -285,7 +286,7 @@ export const setSettings = mutation({
     const c = id ? await ctx.db.get(id) : null;
     if (!c) throw new ConvexError("This client doesn't exist any more.");
     const patch: Partial<Doc<"clients">> = {};
-    if (a.rounds !== undefined) patch.rounds = a.rounds === null ? undefined : Math.max(1, Math.min(20, Math.round(a.rounds)));
+    if (a.rounds !== undefined) patch.rounds = a.rounds === null ? undefined : clampRounds(a.rounds); // 0 = no rounds for this client
     if (a.watermarkOff !== undefined) patch.watermarkOff = a.watermarkOff || undefined;
     await ctx.db.patch(c._id, patch);
     return null;

@@ -138,7 +138,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const uploads = useUploads(data._id);
   // Phase 2 Part A: "Round n of N" for the owner and the client (not guests); the client's last-included notice.
   const isLatest = !!version && version.number === data.versions[data.versions.length - 1]?.number;
-  const showRound = !!version && (owner || viewer.kind === "client");
+  const showRound = !!version && data.roundsIncluded !== null && (owner || viewer.kind === "client");
   const lastKey = version ? `wp.lastround.${version._id}` : "";
   const [lastSeen, setLastSeen] = useState(() => readFlag(lastKey));
   const lastNotice = !owner && viewer.kind === "client" && isLatest && !!version && version.number === data.roundsIncluded && !lastSeen;
@@ -688,7 +688,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     <div className={`review${fs ? " fs" : ""}${typing && narrow ? " typing" : ""}`} ref={rootRef}>
       <TopBar right={
         <>
-          {showRound && <span className="hide-sm" style={{ display: "contents" }}><RoundChip n={version!.number} of={data.roundsIncluded} /></span>}
+          {showRound && <span className="hide-sm" style={{ display: "contents" }}><RoundChip n={version!.number} of={data.roundsIncluded!} /></span>}
           {owner && <span className="hide-sm" style={{ display: "contents" }}><ViewsChip videoId={data._id} onOpen={() => setDialog("views")} /></span>}
           {owner && <button className={`btn sm${covering?.some((s) => s.state === "on") ? " on" : ""}`} onClick={() => setDialog("share")} title={covering?.length ? `Shared: ${covering.filter((s) => s.state === "on").length} live ${covering.filter((s) => s.state === "on").length === 1 ? "link" : "links"}` : "Share this video"}><Share2 size={15} /><span className="hide-sm">Share</span></button>}
           {owner && <button className="btn sm hide-sm" onClick={downloadEdl} disabled={!notes?.length} title="Download the notes as Resolve markers (EDL)"><Download size={15} />Resolve markers</button>}
