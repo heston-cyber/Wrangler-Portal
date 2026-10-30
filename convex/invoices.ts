@@ -487,6 +487,7 @@ export const voidTarget = internalQuery({
     if (!i) throw new ConvexError("That invoice isn't here.");
     if (i.status !== "open") throw new ConvexError(i.status === "draft" ? "A draft isn't sent; delete it instead." : "Only an unpaid invoice can be voided.");
     if (i.amountPaidCents > 0) throw new ConvexError("Part of this invoice is paid, so it can't be voided. Refund in Stripe first.");
+    if (i.processing) throw new ConvexError("A bank payment is on its way, so it can't be voided now. Wait for it to clear or fail.");
     return { accountId: i.stripe!.accountId, stripeId: i.stripe!.invoiceId };
   },
 });
