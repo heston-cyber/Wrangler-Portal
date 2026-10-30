@@ -99,14 +99,14 @@ export function PaymentsSettings({ show }: { show: (m: string) => void }) {
       <span className="wp-eyebrow">Stripe account {testTag}</span>
       <dl className="pay-rows">
         <dt>Account</dt><dd>{name}</dd>
-        <dt>Status</dt><dd>{st.status === "connected" ? <StatusChip tone="success">Connected</StatusChip> : st.status === "disconnected" ? <StatusChip tone="neutral">Disconnected</StatusChip> : <StatusChip tone="warning">Needs info</StatusChip>}</dd>
+        <dt>Status</dt><dd>{st.status === "connected" ? <StatusChip tone="success">Connected</StatusChip> : st.status === "disconnected" ? <StatusChip tone="neutral">Disconnected</StatusChip> : st.due.length === 0 && st.verifying ? <StatusChip tone="warning">Checking</StatusChip> : <StatusChip tone="warning">Needs info</StatusChip>}</dd>
         {st.status === "connected" && <>
           <dt>Payouts</dt><dd>{st.payoutsEnabled ? `On${st.bankLast4 ? ` · to bank •••• ${st.bankLast4}` : ""}` : "Paused by Stripe"}</dd>
           {st.connectedAt && <><dt>Connected</dt><dd>{day(st.connectedAt)}</dd></>}
           <dt>Invoice numbers</dt><dd>{s.invoicePrefix}-0001 · one running count</dd>
         </>}
         {(st.status === "needs_info" || st.status === "pending") && <>
-          <dt>Payouts</dt><dd>Paused until setup is finished</dd>
+          <dt>Payouts</dt><dd>{st.due.length === 0 && st.verifying ? "Paused until Stripe has checked your details" : "Paused until setup is finished"}</dd>
           <dt>Payments</dt><dd>Off</dd>
         </>}
         {st.status === "disconnected" && <>
