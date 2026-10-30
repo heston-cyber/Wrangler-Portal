@@ -152,5 +152,9 @@ describe("the client's projects and final files", () => {
     // Another business can't touch the files.
     await expect(w.boss.mutation(api.projects.removeDeliveryFile, { fileId })).resolves.toBeNull();
     expect((await w.heston.query(api.projects.page, { projectId: w.p })).delivery.files).toHaveLength(2);
+    // With project pages switched off (Settings › Business), the client sees none.
+    await w.heston.mutation(api.business.updateSettings, { modules: { review: true, docs: true, payments: false, projects: false } });
+    expect(await w.mayaC.query(api.projects.mine, {})).toEqual([]);
+    expect(await w.mayaC.query(api.projects.forClient, { projectId: w.p })).toBeNull();
   });
 });

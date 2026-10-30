@@ -43,7 +43,7 @@ function queriesInSource(): Map<string, Set<string>> {
 }
 
 type Share = { token: string; passcode?: string; guestKey?: string; guestName?: string };
-type Ids = { videoId: Id<"videos">; versionId: Id<"versions"> };
+type Ids = { videoId: Id<"videos">; versionId: Id<"versions">; projectId?: Id<"projects"> };
 // Which page fires each query, and how. "owner" pages never render for a client or a guest (App.tsx routes them to
 // ClientHome or the share page), so their queries aren't fired for them; the access suite covers their refusals.
 type Page = "video" | "share" | "clientHome" | "signin" | "owner";
@@ -56,6 +56,10 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "inbox.unreadCount": { pages: ["clientHome"], args: () => ({}) },
   "inbox.mine": { pages: ["clientHome"], args: () => ({ limit: 3 }) }, // client Home and Inbox
   "portal.waiting": { pages: ["clientHome"], args: () => ({}) },
+  // Phase 2 Part A: the client's projects (Home's card, the Review layer) and one project's page (null for anyone else).
+  "projects.mine": { pages: ["clientHome"], args: () => ({}) },
+  "projects.forClient": { pages: ["clientHome"], args: (i) => ({ projectId: i.projectId ?? "nope" }) },
+  "projects.page": { pages: ["owner"], args: () => "skip" }, // the owner's project page
   "documents.mine": { pages: ["clientHome"], args: () => ({}) },
   "emails.myPrefs": { pages: ["clientHome"], args: () => ({}) }, // client Settings
   "library.video": { pages: ["video"], args: (i, s) => ({ videoId: i.videoId, share: s ?? undefined }) },
