@@ -90,6 +90,7 @@ export function PaymentsSettings({ show }: { show: (m: string) => void }) {
         {st.status === "connected" && <>
           <dt>Payouts</dt><dd>{st.payoutsEnabled ? `On${st.bankLast4 ? ` · to bank •••• ${st.bankLast4}` : ""}` : "Paused by Stripe"}</dd>
           {st.connectedAt && <><dt>Connected</dt><dd>{day(st.connectedAt)}</dd></>}
+          <dt>Invoice numbers</dt><dd>{s.invoicePrefix}-0001 · one running count</dd>
         </>}
         {(st.status === "needs_info" || st.status === "pending") && <>
           <dt>Payouts</dt><dd>Paused until setup is finished</dd>

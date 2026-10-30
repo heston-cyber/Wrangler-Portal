@@ -10,6 +10,7 @@ import type { Id } from "./_generated/dataModel";
 import { requireMe } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import { SITE } from "./lib/site";
+import { invoicePrefix } from "./lib/invoiceNumber";
 import { accountState, keyMode, platformKey, stripeCall, stripeSignatureOk, StripeError, type StripeResult } from "./lib/stripeApi";
 
 function ownBusiness(ctx: unknown): Id<"businesses"> {
@@ -28,6 +29,7 @@ export const settings = query({
     const s = b.stripe;
     return {
       business: b.name,
+      invoicePrefix: invoicePrefix(b.name), // D52
       // The portal's own Stripe account is set up (its key is in Convex), and in which mode.
       platform: { ready: !!platformKey(), mode: keyMode(platformKey()) },
       stripe: s ? {

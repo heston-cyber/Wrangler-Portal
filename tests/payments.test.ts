@@ -142,3 +142,14 @@ describe("helpers", () => {
     expect(accountState(READY).status).toBe("connected");
   });
 });
+
+describe("invoice number prefix (D52)", () => {
+  test("business name, vowels out, first 6", async () => {
+    const { invoicePrefix } = await import("../convex/lib/invoiceNumber");
+    expect(invoicePrefix("Wrangler Productions")).toBe("WRNGLR");
+    expect(invoicePrefix("Juniper & Ash")).toBe("JNPRSH");
+    expect(invoicePrefix("Joy Coffee")).toBe("JYCFF");
+    expect(invoicePrefix("Aeiou")).toBe("A");
+    expect(invoicePrefix("Studio 54 Films")).toBe("STD54F");
+  });
+});
