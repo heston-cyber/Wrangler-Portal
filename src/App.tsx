@@ -31,6 +31,8 @@ import type { Id } from "../convex/_generated/dataModel";
 const InvoicesPage = lazy(() => import("./modules/payments/InvoicesPage"));
 const InvoiceEditor = lazy(() => import("./modules/payments/InvoiceEditor"));
 const InvoiceDetail = lazy(() => import("./modules/payments/InvoiceDetail"));
+const ClientInvoice = lazy(() => import("./modules/payments/ClientInvoice"));
+const ClientInvoices = lazy(() => import("./modules/payments/ClientInvoices"));
 // Wrangler Sign (S1): its own chunk, so pdf.js only loads on those pages.
 const SignHome = lazy(() => import("./modules/docs/pages/SignHome"));
 const SignDocs = lazy(() => import("./modules/docs/pages/SignDocs"));
@@ -69,6 +71,11 @@ export default function App() {
   const kit = kitSide();
   if (KitApp && kit) {
     const sh = /^\/s\/([^/]+)(?:\/v\/([^/]+))?\/?$/.exec(path);
+    const inv = /^\/i\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
+    if (inv) {
+      const page = (inShell: boolean) => <Suspense fallback={<Loading />}><ClientInvoice token={inv[1]} inShell={inShell} /></Suspense>;
+      return <Suspense fallback={<Loading />}><KitApp side={kit}>{new URLSearchParams(search).has("out") ? page(false) : <ShareForMember video={false} page={page} />}</KitApp></Suspense>;
+    }
     return <Suspense fallback={<Loading />}><KitApp side={kit}>{sh ? <ShareForMember video={!!sh[2]} page={(inShell) => <SharePage inShell={inShell} token={sh[1]} videoId={(sh[2] as Id<"videos"> | undefined) ?? null} versionNumber={null} noteId={null} />} /> : <SignedIn />}</KitApp></Suspense>;
   }
   const signer = (isSignHost() ? /^\/(?:x\/)?([A-Za-z0-9_-]{16,64})\/?$/ : /^\/x\/([A-Za-z0-9_-]{16,64})\/?$/).exec(path);
@@ -82,6 +89,13 @@ export default function App() {
     const params = new URLSearchParams(search);
     const page = (inShell: boolean) => <SharePage key={share[1]} inShell={inShell} token={share[1]} videoId={(share[2] as Id<"videos"> | undefined) ?? null} versionNumber={Number(params.get("version")) || null} noteId={params.get("note")} />;
     return isAuthenticated ? <ShareForMember video={!!share[2]} page={page} /> : page(false);
+  }
+  // An invoice link (Part B step 3, the "View and pay" button in email 08) works signed in or out too.
+  const invoice = /^\/i\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
+  if (invoice) {
+    if (isLoading) return <Loading />;
+    const page = (inShell: boolean) => <Suspense fallback={<Loading />}><ClientInvoice key={invoice[1]} token={invoice[1]} inShell={inShell} /></Suspense>;
+    return isAuthenticated ? <ShareForMember video={false} page={page} /> : page(false);
   }
   if (isLoading) return <Loading />;
   if (!isAuthenticated) return <SignIn invitedEmail={new URLSearchParams(location.search).get("invited")} />;
@@ -176,6 +190,7 @@ function ClientRoutes({ me }: { me: { name: string | null; email: string } }) {
   if (/^\/inbox\/?$/.test(path)) return <ClientInbox itemId={params.get("item")} />;
   if (/^\/(docs|documents)\/?$/.test(path)) { const t = params.get("tab"); return <ClientDocuments tab={(t === "signed" || t === "cancelled" ? t : "to_sign") as DocTab} />; }
   if (/^\/review\/?$/.test(path)) return <ClientReview me={me} />;
+  if (/^\/payments(\/invoices)?\/?$/.test(path)) return <Suspense fallback={<Loading />}><ClientInvoices /></Suspense>;
   const proj = /^\/projects\/([^/]+)\/?$/.exec(path);
   if (proj) { const t = params.get("tab"); return <ClientProject key={proj[1]} projectId={proj[1]} tab={(t === "videos" || t === "documents" ? t : "overview") as ClientProjectTab} />; }
   if (path.startsWith("/settings")) return <ClientSettings me={me} />;

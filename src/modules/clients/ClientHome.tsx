@@ -7,6 +7,7 @@ import { ButtonLink, Card, Divider, InboxItem, ListRow, PageHeader, SectionHead,
 import { INBOX_ICON, Day, dayWord, monthDay, type InboxKind } from "../inbox/common";
 import { clockText } from "../../lib/format";
 import { StageBar, STAGES, stageName } from "../projects/common";
+import { money } from "../payments/common";
 
 const WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
 function headline(n: number) {
@@ -19,8 +20,11 @@ export default function ClientHome() {
   const waiting = useQuery(api.portal.waiting);
   const inbox = useQuery(api.inbox.mine, { limit: 3 });
   const projects = useQuery(api.projects.mine, {});
+  const billed = useQuery(api.invoicePay.mine, {});
   const project = projects?.[0];
-  const n = waiting ? waiting.cuts.length + waiting.docs.length : 0;
+  // Part B step 3: invoices still to pay join what's waiting (frame 150:1219: Pay opens the invoice page).
+  const toPay = (billed ?? []).filter((b) => ["due", "overdue", "partly_paid", "failed"].includes(b.status));
+  const n = waiting ? waiting.cuts.length + waiting.docs.length + toPay.length : 0;
   return (
     <div className="wp-page notop ch">
       <PageHeader title={waiting === undefined ? " " : headline(n)} sub={waiting === undefined ? " " : n ? "Everything else is up to date." : "New cuts and documents will show up here."} />
@@ -44,6 +48,15 @@ export default function ClientHome() {
                   meta={<><span className="pc-only">Sent {d.sentAt ? monthDay(d.sentAt) : ""}{d.pages ? ` · ${d.pages} page${d.pages === 1 ? "" : "s"}` : ""}</span><span className="ph-only">{d.label} · sent {d.sentAt ? monthDay(d.sentAt) : ""}</span></>}
                   chip={<span className="pc-only"><StatusChip tone="warning">To sign</StatusChip></span>}
                   action={<a className="btn primary sm" href={d.signUrl}>Sign</a>} />
+              </div>
+            ))}
+            {toPay.map((b, i) => (
+              <div key={b.token} className="wp-rowwrap">{(i > 0 || waiting.cuts.length + waiting.docs.length > 0) && <Divider />}
+                <ListRow className="ilead ch-doc" lead={{ icon: "invoice" }}
+                  title={<><span className="pc-only">{b.title} · {b.number}</span><span className="ph-only">{b.title}</span></>}
+                  meta={`${money(b.amountRemainingCents)} · ${b.status === "overdue" ? "was due" : "due"} ${monthDay(new Date(`${b.dueDate}T12:00:00`).getTime())}`}
+                  chip={<span className="pc-only"><StatusChip tone={b.status === "due" ? "warning" : "accent"}>{b.status === "overdue" ? "Overdue" : b.status === "failed" ? "Payment failed" : b.status === "partly_paid" ? "Partly paid" : "Due"}</StatusChip></span>}
+                  action={<ButtonLink size="sm" variant="primary" to={`/i/${b.token}`} iconEnd={false}>Pay</ButtonLink>} />
               </div>
             ))}
           </>}

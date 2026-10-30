@@ -25,11 +25,12 @@ function fakeStripe(opts: { totalOverride?: number } = {}) {
   const invoices = new Map<string, { id: string; total: number; status: string; number?: string; customer: string }>();
   vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
     const h = (init.headers ?? {}) as Record<string, string>;
-    const path = url.replace("https://api.stripe.com/v1/", "");
+    const path = url.replace("https://api.stripe.com/v1/", "").replace(/\?.*$/, "");
     const form = Object.fromEntries(new URLSearchParams(String(init.body ?? "")));
     calls.push({ method: init.method ?? "GET", path, form, account: h["Stripe-Account"] ?? null });
     const ok = (o: unknown) => new Response(JSON.stringify(o));
     if (path === "customers") return ok({ id: "cus_1" });
+    if (path === "accounts/acct_A") return ok({ id: "acct_A", capabilities: { card_payments: "active", us_bank_account_ach_payments: "active", link_payments: "inactive" } });
     if (path === "tax_rates") return ok({ id: "txr_1" });
     if (path === "invoices") { const inv = { id: `in_${invoices.size + 1}`, total: 0, status: "draft", customer: form.customer }; invoices.set(inv.id, inv); return ok(inv); }
     if (path === "invoiceitems") { const inv = invoices.get(form.invoice)!; inv.total += Number(form.amount); return ok({ id: "ii" }); }
@@ -93,14 +94,17 @@ describe("drafts and sending", () => {
     expect(inv).toMatchObject({ status: "draft", totalCents: 500000, number: null, billTo: { email: "maya@harbor.example" } });
 
     expect(await w.heston.action(api.invoices.send, { invoiceId: id })).toEqual({ number: "WRNGLR-0001" });
-    expect(calls.every((c) => c.account === "acct_A")).toBe(true); // everything on the connected account
+    // Everything on the connected account (reading which payment methods it has is the platform reading the account).
+    expect(calls.filter((c) => !c.path.startsWith("accounts/")).every((c) => c.account === "acct_A")).toBe(true);
     expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual([
-      "POST customers", "POST invoices", "POST invoiceitems", "POST invoiceitems", "POST invoices/in_1", "GET invoices/in_1", "POST invoices/in_1/finalize",
+      "POST customers", "GET accounts/acct_A", "POST invoices", "POST invoiceitems", "POST invoiceitems", "POST invoices/in_1", "GET invoices/in_1", "POST invoices/in_1/finalize",
     ]);
-    const create = calls[1].form;
-    expect(create).toMatchObject({ collection_method: "send_invoice", auto_advance: "false", description: "Thank you, Maya.", "metadata[portal_invoice]": id });
-    expect(calls[3].form).toMatchObject({ amount: "50000", description: "Extra round (2 × $250.00)" });
-    expect(calls[4].form).toEqual({ number: "WRNGLR-0001" });
+    const create = calls[2].form;
+    expect(create).toMatchObject({ collection_method: "send_invoice", auto_advance: "false", description: "Thank you, Maya.", "metadata[portal_invoice]": id,
+      "payment_settings[payment_method_types][0]": "card", "payment_settings[payment_method_types][1]": "us_bank_account" });
+    expect(create["payment_settings[payment_method_types][2]"]).toBeUndefined(); // Link isn't switched on for this account
+    expect(calls[4].form).toMatchObject({ amount: "50000", description: "Extra round (2 × $250.00)" });
+    expect(calls[5].form).toEqual({ number: "WRNGLR-0001" });
     expect(calls.some((c) => /\/send$/.test(c.path))).toBe(false); // Stripe's own email stays off
     inv = await w.heston.query(api.invoices.get, { invoiceId: id });
     expect(inv).toMatchObject({ status: "due", number: "WRNGLR-0001", stripe: { invoiceId: "in_1", hostedUrl: "https://invoice.stripe.com/in_1" } });

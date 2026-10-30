@@ -1,7 +1,7 @@
 // Phase 2 Part B, step 2 (D45, D46): invoices, owner side. A draft lives only in the portal. Send is the owner's
 // confirm (D46: nothing sends without it): the portal then makes the invoice in the business's own Stripe account
 // (its connected account), gives it the business's next number (D52) and finalizes it. Stripe holds the money from
-// then on; the Connect webhook keeps this copy in step. The client's page, the Pay form and the emails come next.
+// then on; the Connect webhook keeps this copy in step. The client's page, Pay and the email: invoicePay.ts.
 import { action } from "./_generated/server";
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
@@ -13,6 +13,7 @@ import { businessInScope } from "./lib/business";
 import { invoicePrefix } from "./lib/invoiceNumber";
 import { stripeCall, StripeError, type StripeResult } from "./lib/stripeApi";
 import { openDelivery } from "./projects";
+import { announceSent } from "./invoicePay";
 
 const DAY = 86_400_000;
 const MIN_CENTS = 50; // Stripe's smallest card charge in USD
@@ -244,6 +245,9 @@ export const recordSent = internalMutation({
       sentAt: now, updatedAt: now,
       history: [...i.history, { kind: "sent", at: now, by, detail: i.billTo.email }],
     });
+    // Step 3: the client's link, their Inbox item and the invoice email (08).
+    const sent = await ctx.db.get(invoiceId);
+    if (sent && sent.status === "open") await announceSent(ctx, sent);
   },
 });
 
@@ -256,7 +260,7 @@ export const recordSendFailed = internalMutation({
 });
 
 /** Send (after the owner confirms in the dialog): makes the invoice in the business's Stripe account and finalizes it.
- *  Stripe's own emails stay off: the portal sends its own (next step). */
+ *  Stripe's own emails stay off: the portal sends its own (email 08, from recordSent). */
 export const send = action({
   args: { invoiceId: v.id("invoices") },
   handler: async (ctx, { invoiceId }): Promise<{ number: string }> => {
@@ -270,6 +274,14 @@ export const send = action({
         form: { name: i.billTo.company ? `${i.billTo.name} (${i.billTo.company})` : i.billTo.name, email: i.billTo.email, metadata: meta },
       })).id as string;
       const due = Math.floor(new Date(`${i.dueDate}T18:00:00Z`).getTime() / 1000);
+      // How the client can pay on the portal's page: card (with Apple Pay and Google Pay), plus US bank account (D25)
+      // and Link where the business's Stripe account has them switched on.
+      const methods = ["card"];
+      try {
+        const caps = ((await stripeCall("GET", `accounts/${account}`)).capabilities ?? {}) as Record<string, string>;
+        if (caps.us_bank_account_ach_payments === "active") methods.push("us_bank_account");
+        if (caps.link_payments === "active") methods.push("link");
+      } catch { /* card only */ }
       let taxRate: string | null = null;
       if (i.taxPercent) taxRate = (await stripeCall("POST", "tax_rates", { account, idem: `wp-tax-${invoiceId}`, form: { display_name: "Tax", percentage: i.taxPercent, inclusive: false } })).id as string;
       const inv = await stripeCall("POST", "invoices", {
@@ -278,6 +290,7 @@ export const send = action({
           customer: customerId, collection_method: "send_invoice", due_date: due, auto_advance: false, pending_invoice_items_behavior: "exclude",
           ...(i.memo ? { description: i.memo } : {}), metadata: { ...meta, portal_kind: i.kind, portal_title: i.title },
           ...(taxRate ? { default_tax_rates: [taxRate] } : {}),
+          payment_settings: { payment_method_types: methods },
         },
       });
       // One invoice item per line (the amount carries the quantity; the portal's own page shows qty and unit price).

@@ -200,7 +200,7 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
               <dt><b>Due now</b></dt><dd><b>{money(t.total)}</b></dd>
               <dt>Due date</dt><dd>{dateLong(d.dueDate)}</dd>
             </dl>
-            <p className="secondary" style={{ margin: 0, fontSize: "var(--fs-text-small)" }}>The email with a "View and pay" button and their Pay page come with the next build step; until then it's made in Stripe and shows here.</p>
+            <p className="secondary" style={{ margin: 0, fontSize: "var(--fs-text-small)" }}>The portal emails it to {d.billTo.email} from {opts.business?.name ?? "your business"}, with a “View and pay” button.</p>
             <div className="dfoot">
               <Button variant="ghost" onClick={() => setAsking(false)}>Cancel</Button>
               <Button variant="primary" onClick={() => void doSend()} loading={busy === "send"}>Send invoice</Button>

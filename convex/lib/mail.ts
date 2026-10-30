@@ -35,6 +35,7 @@ export type Block =
   | { t: "file"; name: string; meta: string }               // the attached PDF
   | { t: "list"; items: string[] }                          // "Signed by:" names, with accent dots
   | { t: "mono"; text: string }                             // a fingerprint, in the accent
+  | { t: "sums"; rows: Array<{ label: string; value: string; big?: boolean }> } // an invoice's amount, due date and number
   | { t: "divider" };
 
 const C = { bg: "#030104", edge: "#2A2829", primary: "#F4F1E9", muted: "#C6C3BC", secondary: "#8D8A86", block: "#0F0D10" };
@@ -103,6 +104,10 @@ function blockHtml(b: Block, brand: MailBrand): string {
       <td style="padding:14px 16px 14px 0;vertical-align:middle"><p style="margin:0;font:500 14px/20px ${FONT};color:${C.primary};word-break:break-all">${esc(b.name)}</p><p style="margin:0;font:400 12px/16px ${FONT};color:${C.secondary}">${esc(b.meta)}</p></td></tr></table>`;
     case "list": return `<table role="presentation" cellpadding="0" cellspacing="0" border="0">${b.items.map((x) => `<tr><td style="padding:0 10px 10px 0;vertical-align:top"><div style="width:6px;height:6px;margin-top:8px;border-radius:3px;background:${brand.accent}"></div></td><td style="padding:0 0 10px;font:400 15px/22.5px ${FONT};color:${C.primary}">${esc(x)}</td></tr>`).join("")}</table>`;
     case "mono": return `<p style="margin:0;font:400 13px/18.2px ${MONO};color:${brand.accent};word-break:break-all">${esc(b.text)}</p>`;
+    case "sums": return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${C.block};border:1px solid ${C.edge};border-radius:12px"><tr><td style="padding:16px 20px">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${b.rows.map((r, i) => `<tr>
+        <td style="padding:${i ? "8px" : "0"} 0 0;font:400 ${r.big ? "16px/22px" : "13px/18px"} ${FONT};color:${r.big ? C.muted : C.secondary}">${esc(r.label)}</td>
+        <td align="right" style="padding:${i ? "8px" : "0"} 0 0;font:${r.big ? `600 20px/24px ${TITLE}` : `400 13px/18px ${FONT}`};color:${r.big ? C.primary : C.muted}">${esc(r.value)}</td></tr>`).join("")}</table></td></tr></table>`;
     case "divider": return `<div style="height:1px;line-height:1px;font-size:1px;background:${C.edge}">&nbsp;</div>`;
   }
 }
@@ -123,6 +128,7 @@ function blockText(b: Block): string {
     case "file": return `Attached: ${b.name} (${b.meta})`;
     case "list": return b.items.map((x) => `- ${x}`).join("\n");
     case "mono": return b.text;
+    case "sums": return b.rows.map((r) => `${r.label}: ${r.value}`).join("\n");
     case "divider": return "";
   }
 }

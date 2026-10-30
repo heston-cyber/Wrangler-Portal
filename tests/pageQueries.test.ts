@@ -58,6 +58,9 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "portal.waiting": { pages: ["clientHome"], args: () => ({}) },
   // Phase 2 Part A: the client's projects (Home's card, the Review layer) and one project's page (null for anyone else).
   "projects.mine": { pages: ["clientHome"], args: () => ({}) },
+  // Phase 2 Part B step 3: a client's invoices (Home's To pay rows, the Payments menu) and the invoice link's page.
+  "invoicePay.mine": { pages: ["clientHome"], args: () => ({}) },
+  "invoicePay.page": { pages: ["share"], args: () => ({ token: "not-a-real-token-xx" }) },
   "projects.forClient": { pages: ["clientHome"], args: (i) => ({ projectId: i.projectId ?? "nope" }) },
   "projects.page": { pages: ["owner"], args: () => "skip" }, // the owner's project page
   "documents.mine": { pages: ["clientHome"], args: () => ({}) },

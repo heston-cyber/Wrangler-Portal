@@ -210,7 +210,11 @@ export const connectWebhook = httpAction(async (ctx, req) => {
   // Invoices: Stripe's status and amounts onto the portal's copy.
   const INVOICE_EVENTS = ["invoice.finalized", "invoice.updated", "invoice.paid", "invoice.payment_failed", "invoice.voided", "invoice.marked_uncollectible", "invoice.payment_succeeded", "invoice.overdue"];
   if (INVOICE_EVENTS.includes(ev.type) && ev.account && ev.data?.object) {
-    await ctx.runMutation(internal.invoices.applyStripeInvoice, { accountId: ev.account, invoice: ev.data.object, eventType: ev.type });
+    const mine = await ctx.runMutation(internal.invoices.applyStripeInvoice, { accountId: ev.account, invoice: ev.data.object, eventType: ev.type });
+    // Step 3: a payment came, failed or changed: read the invoice's payments back (method, processing, the reason).
+    if (mine && ["invoice.paid", "invoice.payment_failed", "invoice.payment_succeeded", "invoice.updated"].includes(ev.type)) {
+      await ctx.scheduler.runAfter(0, internal.invoicePay.sync, { accountId: ev.account, stripeId: String(ev.data.object.id) });
+    }
   }
   if (ev.type === "invoice.deleted" && ev.account && ev.data?.object?.id) {
     await ctx.runMutation(internal.invoices.stripeInvoiceDeleted, { accountId: ev.account, stripeId: String(ev.data.object.id) });

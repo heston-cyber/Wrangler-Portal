@@ -40,6 +40,12 @@ const OPEN: Record<string, string> = {
   "shares.unlock": "the passcode box on a share link: rate-limited; a missing token answers 'missing'",
   "clients.canSignUp": "the sign-up page's pre-check: says only whether an email is invited",
   "prefs.mine": "the owner's display settings: the video page asks whoever is looking; anyone but the owner gets {}",
+  // Phase 2 Part B step 3: the invoice link (/i/<token>) from email 08 works without an account, like a share link.
+  "invoicePay.page": "an invoice link: answers only for a sent invoice's own long random token (tested in invoicePay.test.ts)",
+  "invoicePay.markViewed": "the same link: records the first view of that invoice only; a missing token does nothing",
+  "invoicePay.start": "Pay on the same link: returns Stripe's payment secret for that invoice only; a missing token is refused",
+  "invoicePay.refresh": "the same link: re-reads that invoice from Stripe; a missing token does nothing",
+  "invoicePay.mine": "a client's invoices, found by their own email; anyone else gets []",
 };
 // Functions with their own gate (a key in the arguments): refused with the wrong key, whoever calls.
 const KEYED = new Set(["r1results.report"]);

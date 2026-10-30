@@ -2,7 +2,7 @@
 // the editor instead. Actions: Download PDF and Open in Stripe (Stripe's for now; the portal's own PDF and Send
 // reminder come with the emails), Void. History: what happened, newest last.
 import { useState } from "react";
-import { useAction, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { api } from "../../../convex/_generated/api";
 import { Button, Card, SectionHead, SkeletonRows } from "../../ui/wp";
@@ -18,11 +18,14 @@ const when = (t: number) => `${new Date(t).toLocaleDateString("en-US", { month: 
 const HIST: Record<string, { icon: IconName; text: (d?: string) => string }> = {
   created: { icon: "document", text: () => "Created" },
   sent: { icon: "send", text: (d) => `Sent${d ? ` to ${d}` : ""}` },
+  emailed: { icon: "mail", text: (d) => `Emailed${d ? ` to ${d}` : ""}` },
+  email_held: { icon: "mail", text: (d) => `Email held by the preview${d ? ` (${d} isn't on its list)` : ""}` },
+  processing: { icon: "clock", text: (d) => `Bank payment started${d ? ` · ${d}` : ""}` },
   viewed: { icon: "eye", text: (d) => `Viewed${d ? ` by ${d}` : ""}` },
   reminder: { icon: "bell", text: () => "Reminder sent" },
   part_paid: { icon: "check-circle", text: (d) => `Partly paid${d ? ` · ${d}` : ""}` },
   paid: { icon: "check-circle", text: () => "Paid in full" },
-  failed: { icon: "alert", text: () => "Payment failed" },
+  failed: { icon: "alert", text: (d) => `Payment failed${d && d !== "A payment attempt failed" ? ` · ${d}` : ""}` },
   voided: { icon: "close", text: () => "Voided" },
   uncollectible: { icon: "close", text: () => "Marked uncollectible" },
   delivery_opened: { icon: "download", text: () => "Final files opened for the client" },
@@ -32,6 +35,12 @@ const HIST: Record<string, { icon: IconName; text: (d?: string) => string }> = {
 export default function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
   const i = useQuery(api.invoices.get, { invoiceId });
   const voidIt = useAction(api.invoices.voidInvoice);
+  const clientLink = useMutation(api.invoicePay.ownerLink);
+  const openClientPage = async () => {
+    const w = window.open("", "_blank"); // opened now, while the click still counts, so it isn't blocked
+    try { const url = await clientLink({ invoiceId: invoiceId as Id<"invoices"> }); if (w) w.location.href = url; else window.location.href = url; }
+    catch (e) { w?.close(); show(errText(e)); }
+  };
   const [toast, show] = useToast();
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -61,7 +70,7 @@ export default function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
             <Card label="Actions" head={<SectionHead label="Actions" />}>
               <div className="inv-actions">
                 {i.stripe?.pdfUrl && <a className="btn" href={i.stripe.pdfUrl} target="_blank" rel="noopener noreferrer"><Icon name="download" size={16} />Download PDF</a>}
-                {i.stripe?.hostedUrl && s !== "void" && <a className="btn ghost" href={i.stripe.hostedUrl} target="_blank" rel="noopener noreferrer">Stripe's pay page<Icon name="external" size={14} className="end" /></a>}
+                <Button variant="ghost" iconEnd="external" onClick={() => void openClientPage()}>Client's invoice page</Button>
                 {stripeLink && <a className="btn ghost" href={stripeLink} target="_blank" rel="noopener noreferrer">Open in Stripe<Icon name="external" size={14} className="end" /></a>}
                 {canVoid && <Button variant="ghost" onClick={() => setAsking(true)}>Void invoice</Button>}
               </div>

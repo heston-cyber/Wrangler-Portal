@@ -87,6 +87,8 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "invoices.list": {}, "invoices.forProject": { projectId: ids.projectId }, "invoices.get": { invoiceId: ids.invoiceId }, "invoices.options": {},
     "invoices.saveDraft": { kind: "other", title: "T", billTo: { name: "A", email: "a@b.co" }, lines: [], dueDate: "2030-01-01" }, "invoices.deleteDraft": { invoiceId: ids.invoiceId },
     "invoices.send": { invoiceId: ids.invoiceId }, "invoices.voidInvoice": { invoiceId: ids.invoiceId },
+    "invoicePay.page": { token: "nope-nope-nope-nope" }, "invoicePay.mine": {}, "invoicePay.markViewed": { token: "nope-nope-nope-nope" },
+    "invoicePay.start": { token: "nope-nope-nope-nope" }, "invoicePay.refresh": { token: "nope-nope-nope-nope" }, "invoicePay.ownerLink": { invoiceId: ids.invoiceId },
   };
 }
 

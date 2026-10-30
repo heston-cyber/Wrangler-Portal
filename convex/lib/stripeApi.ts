@@ -23,6 +23,8 @@ export function formOf(obj: Record<string, unknown>, prefix = "", out: Record<st
   return out;
 }
 
+export const STRIPE_VERSION = "2025-05-28.basil";
+
 export class StripeError extends Error {
   constructor(message: string, readonly status: number, readonly code: string | null) { super(message); }
 }
@@ -30,11 +32,16 @@ export class StripeError extends Error {
 export async function stripeCall(method: "GET" | "POST" | "DELETE", path: string, opts: { form?: Record<string, unknown>; account?: string; idem?: string; key?: string } = {}): Promise<StripeResult> {
   const key = opts.key ?? platformKey();
   if (!key) throw new StripeError("Payments aren't set up on the portal yet (no platform Stripe key).", 0, "no_key");
-  const body = opts.form ? new URLSearchParams(formOf(opts.form)).toString() : undefined;
-  const r = await fetch(`https://api.stripe.com/v1/${path}`, {
+  const params = opts.form ? new URLSearchParams(formOf(opts.form)).toString() : undefined;
+  // GET carries its fields (expand[], filters) in the address; POST in the body.
+  const body = method === "GET" ? undefined : params;
+  const url = `https://api.stripe.com/v1/${path}${method === "GET" && params ? `${path.includes("?") ? "&" : "?"}${params}` : ""}`;
+  const r = await fetch(url, {
     method,
     headers: {
       Authorization: `Bearer ${key}`,
+      // The same version the Connect webhook destination sends (Invoice Payments and confirmation_secret are basil's).
+      "Stripe-Version": STRIPE_VERSION,
       ...(body ? { "content-type": "application/x-www-form-urlencoded" } : {}),
       ...(opts.account ? { "Stripe-Account": opts.account } : {}),
       ...(opts.idem ? { "Idempotency-Key": opts.idem } : {}),

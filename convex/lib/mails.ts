@@ -183,3 +183,23 @@ export function noteMail(b: MailBrand, d: { title: string; text: string; link: s
     ...(!b.isDefault ? [{ t: "small", text: "Powered by WranglerPortal" } as Block] : []),
   ], d.text.slice(0, 120));
 }
+
+// ---------- 08 · Invoice sent (Phase 2 Part B, step 3) ----------
+const usd = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const longDate = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+export function invoiceMail(b: MailBrand, d: { name: string; number: string; title: string; project: string | null; amountCents: number; dueDate: string; memo: string | null; link: string }): Mail {
+  const owner = first(b.ownerName);
+  return mk(b, "updates", `Invoice ${d.number} from ${b.name}: ${usd(d.amountCents)} due ${longDate(d.dueDate)}`, [
+    hi(d.name),
+    { t: "p", text: d.project ? `Here’s invoice ${d.number} for ${d.project}.` : `Here’s invoice ${d.number}.` },
+    { t: "sums", rows: [{ label: "Amount due", value: usd(d.amountCents), big: true }, { label: "Due", value: longDate(d.dueDate) }, { label: "Invoice", value: `${d.number} · ${d.title}` }] },
+    ...(d.memo ? [{ t: "p", text: d.memo, tone: "muted" } as Block] : []),
+    { t: "p", text: "You can pay by card or bank account on the invoice page. The PDF is there too." },
+    { t: "button", label: "View and pay", href: d.link }, { t: "link", href: d.link },
+  ], [
+    { t: "small", text: owner ? `— ${owner}, ${b.name}` : `— ${b.name}` },
+    { t: "small", text: `${b.footerName} · ${b.replyTo}` },
+    ...(!b.isDefault ? [{ t: "small", text: "Powered by WranglerPortal" } as Block] : []),
+  ], `${usd(d.amountCents)} due ${longDate(d.dueDate)}`);
+}

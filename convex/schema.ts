@@ -726,6 +726,10 @@ export default defineSchema({
     totalCents: v.number(), amountPaidCents: v.number(), amountRemainingCents: v.number(),
     processing: v.optional(v.boolean()),                // a bank payment is on its way
     lastFailure: v.optional(v.object({ at: v.number(), message: v.string() })),
+    // Step 3: the client's link to their invoice page (/i/<token>, in the invoice email) and the payments Stripe has
+    // on the invoice (method shown as "Visa •••• 4242" or "Bank •••• 6789"; never full numbers).
+    payToken: v.optional(v.string()),
+    payments: v.optional(v.array(v.object({ id: v.string(), at: v.number(), method: v.string(), cents: v.number(), status: v.union(v.literal("paid"), v.literal("processing"), v.literal("failed")) }))),
     refundedCents: v.optional(v.number()),
     disputed: v.optional(v.object({ at: v.number(), status: v.string() })),
     stripe: v.optional(v.object({
@@ -737,7 +741,7 @@ export default defineSchema({
     createdBy: v.optional(v.string()),
     sentAt: v.optional(v.number()), viewedAt: v.optional(v.number()), paidAt: v.optional(v.number()), voidedAt: v.optional(v.number()),
     createdAt: v.number(), updatedAt: v.number(),
-  }).index("by_project", ["projectId"]).index("by_client", ["clientId"]).index("by_stripe", ["stripe.invoiceId"]).index("by_updated", ["updatedAt"]),
+  }).index("by_project", ["projectId"]).index("by_client", ["clientId"]).index("by_stripe", ["stripe.invoiceId"]).index("by_updated", ["updatedAt"]).index("by_pay_token", ["payToken"]).index("by_bill_email", ["billTo.email"]),
 
   // Phase 2 Part B: every Stripe webhook event, once (a repeat delivery changes nothing).
   stripeEvents: defineTable({
