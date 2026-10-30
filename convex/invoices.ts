@@ -98,7 +98,11 @@ export const get = query({
       lines: i.lines, discountCents: i.discountCents ?? 0, taxPercent: i.taxPercent ?? 0, memo: i.memo ?? "", totals: totals(i),
       clientId: i.clientId ?? null, projectId: i.projectId ?? null, history: i.history, refundedCents: i.refundedCents ?? 0, disputed: i.disputed ?? null,
       stripe: i.stripe ? { invoiceId: i.stripe.invoiceId, hostedUrl: i.stripe.hostedUrl ?? null, pdfUrl: i.stripe.pdfUrl ?? null, livemode: i.stripe.livemode } : null,
-      business: biz ? { name: biz.name, legalName: biz.legalName ?? null, prefix: invoicePrefix(biz.name), logoUrl: biz.logoFileId ? await ctx.storage.getUrl(biz.logoFileId) : null } : null,
+      business: biz ? {
+        name: biz.name, legalName: biz.legalName ?? null, prefix: invoicePrefix(biz.name), email: biz.replyTo ?? null,
+        logoUrl: biz.logoFileId ? await ctx.storage.getUrl(biz.logoFileId) : null, logoLightUrl: biz.logoLightFileId ? await ctx.storage.getUrl(biz.logoLightFileId) : null,
+      } : null,
+      payToken: i.payToken ?? null, payments: (i.payments ?? []).filter((p) => p.status !== "failed"),
       // Step 4: "Last reminder: … · next: … (automatic)" under the actions.
       reminders: {
         last: (i.reminders ?? []).length ? Math.max(...(i.reminders ?? []).map((r) => r.at)) : null,

@@ -15,6 +15,17 @@ import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps } from "../../lib/router";
 import { InvoiceChip, InvoicePaper, dateLong, dateShort, money, type InvoiceStatus } from "./common";
 import lightClient from "../../assets/portal/light-elbow.jpg";
+import { downloadPdf, pdfData } from "./pdfDownload";
+
+const pdfOf = (inv: Inv, kind: "invoice" | "receipt") => pdfData(kind, {
+  business: inv.business, number: inv.number, sentAt: inv.sentAt, dueDate: inv.dueDate, billTo: inv.billTo, project: inv.project, lines: inv.lines,
+  discountCents: inv.discountCents, taxPercent: inv.taxPercent, totalCents: inv.totalCents, amountPaidCents: inv.amountPaidCents, memo: inv.memo,
+  paidAt: inv.paidAt, payments: inv.payments, payUrl: `${location.origin}/i/${inv.token}`,
+});
+function PdfButton({ inv, kind, className, children }: { inv: Inv; kind: "invoice" | "receipt"; className: string; children: React.ReactNode }) {
+  const [busy, setBusy] = useState(false);
+  return <button type="button" className={className} disabled={busy} onClick={async () => { setBusy(true); try { await downloadPdf(pdfOf(inv, kind)); } finally { setBusy(false); } }}>{children}{busy && <span className="wp-spin" aria-hidden />}</button>;
+}
 
 const errText = (e: unknown) => {
   const d = (e as { data?: unknown })?.data;
@@ -92,7 +103,7 @@ export default function ClientInvoice({ token, inShell }: { token: string; inShe
         </div>
         <div className="col right">
           <PayCard inv={inv} token={token} />
-          {inv.pdfUrl && <a className="inv-pdf" href={inv.pdfUrl} target="_blank" rel="noopener noreferrer">Download PDF<Icon name="download" size={14} /></a>}
+          {inv.status !== "paid" && <PdfButton inv={inv} kind="invoice" className="inv-pdf">Download PDF<Icon name="download" size={14} /></PdfButton>}
         </div>
       </div>
     </Frame>
@@ -121,6 +132,10 @@ function PayCard({ inv, token }: { inv: Inv; token: string }) {
       <span className="wp-eyebrow">Receipt</span>
       <div className="amt"><span className="lbl">Paid in full</span><b>{money(inv.totalCents)}</b><small>{[inv.paidAt ? `Paid ${dateLong(new Date(inv.paidAt).toISOString().slice(0, 10))}` : null, lastPaid?.method].filter(Boolean).join(" · ")}</small></div>
       <Banner tone="success" icon="check-circle" title="Thank you. Your payment went through." text={`A receipt was emailed to ${inv.billTo.email}.`} />
+      <div className="inv-pay-pdfs">
+        <PdfButton inv={inv} kind="receipt" className="btn">Download receipt</PdfButton>
+        <PdfButton inv={inv} kind="invoice" className="btn ghost">Download PDF</PdfButton>
+      </div>
       <p className="inv-legal">Receipt from {inv.business.legalName && inv.business.legalName !== inv.business.name ? `${inv.business.name}, a DBA of ${inv.business.legalName.replace(/^.*?a DBA of\s*/i, "")}` : inv.business.name}{inv.business.email ? ` · ${inv.business.email}` : ""}</p>
     </section>
   );

@@ -12,6 +12,7 @@ import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps } from "../../lib/router";
 import { errText } from "../docs/pages/common";
 import InvoiceEditor from "./InvoiceEditor";
+import { downloadPdf, pdfData } from "./pdfDownload";
 import { InvoiceChip, InvoicePaper, dateLong, dateShort, money, type InvoiceStatus } from "./common";
 
 const when = (t: number) => `${new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} · ${new Date(t).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
@@ -38,6 +39,19 @@ export default function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
   const clientLink = useMutation(api.invoicePay.ownerLink);
   const remind = useMutation(api.invoiceReminders.sendReminder);
   const [reminding, setReminding] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState<null | "invoice" | "receipt">(null);
+  const pdf = async (kind: "invoice" | "receipt") => {
+    if (!i) return;
+    setPdfBusy(kind);
+    try {
+      await downloadPdf(pdfData(kind, {
+        business: i.business, number: i.number, sentAt: i.sentAt, createdAt: i.createdAt, dueDate: i.dueDate, billTo: i.billTo, project: i.project?.label ?? null,
+        lines: i.lines, discountCents: i.discountCents, taxPercent: i.taxPercent, totalCents: i.totalCents, amountPaidCents: i.amountPaidCents, memo: i.memo,
+        paidAt: i.paidAt, payments: i.payments, payUrl: i.payToken ? `${location.origin}/i/${i.payToken}` : null,
+      }));
+    } catch (e) { show(errText(e)); }
+    setPdfBusy(null);
+  };
   const sendReminder = async () => {
     setReminding(true);
     try { const r = await remind({ invoiceId: invoiceId as Id<"invoices"> }); show(`Reminder sent to ${r.name}.`); }
@@ -78,7 +92,8 @@ export default function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
             <Card label="Actions" head={<SectionHead label="Actions" />}>
               <div className="inv-actions">
                 {i.reminders.canSend && <Button onClick={() => void sendReminder()} loading={reminding}>Send reminder</Button>}
-                {i.stripe?.pdfUrl && <a className={i.reminders.canSend ? "btn ghost" : "btn"} href={i.stripe.pdfUrl} target="_blank" rel="noopener noreferrer"><Icon name="download" size={16} />Download PDF</a>}
+                <Button variant={i.reminders.canSend ? "ghost" : "secondary"} icon="download" loading={pdfBusy === "invoice"} onClick={() => void pdf("invoice")}>Download PDF</Button>
+                {i.status === "paid" && <Button variant="ghost" icon="download" loading={pdfBusy === "receipt"} onClick={() => void pdf("receipt")}>Download receipt</Button>}
                 <Button variant="ghost" iconEnd="external" onClick={() => void openClientPage()}>Client's invoice page</Button>
                 {stripeLink && <a className="btn ghost" href={stripeLink} target="_blank" rel="noopener noreferrer">Open in Stripe<Icon name="external" size={14} className="end" /></a>}
                 {canVoid && <Button variant="ghost" onClick={() => setAsking(true)}>Void invoice</Button>}

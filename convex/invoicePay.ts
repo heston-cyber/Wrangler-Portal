@@ -71,7 +71,8 @@ async function clientView(ctx: QueryCtx, i: Doc<"invoices">) {
     business: biz ? {
       name: biz.name, legalName: biz.legalName ?? null, prefix: invoicePrefix(biz.name), email: biz.replyTo ?? null,
       logoUrl: biz.logoFileId ? await ctx.storage.getUrl(biz.logoFileId) : null,
-    } : { name: "", legalName: null, prefix: "", email: null, logoUrl: null },
+      logoLightUrl: biz.logoLightFileId ? await ctx.storage.getUrl(biz.logoLightFileId) : null, // for the PDFs
+    } : { name: "", legalName: null, prefix: "", email: null, logoUrl: null, logoLightUrl: null },
   };
 }
 export type ClientInvoice = Awaited<ReturnType<typeof clientView>>;
