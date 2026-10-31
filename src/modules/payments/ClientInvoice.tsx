@@ -27,7 +27,7 @@ function PdfButton({ inv, kind, className, children }: { inv: Inv; kind: "invoic
   return <button type="button" className={className} disabled={busy} onClick={async () => { setBusy(true); try { await downloadPdf(pdfOf(inv, kind)); } finally { setBusy(false); } }}>{children}{busy && <span className="wp-spin" aria-hidden />}</button>;
 }
 
-const errText = (e: unknown) => {
+export const errText = (e: unknown) => {
   const d = (e as { data?: unknown })?.data;
   if (typeof d === "string") return d;
   const m = e instanceof Error ? e.message : String(e);
@@ -36,13 +36,13 @@ const errText = (e: unknown) => {
 
 // Stripe.js loads once per connected account (each business's own Stripe account).
 const stripes = new Map<string, Promise<Stripe | null>>();
-const stripeFor = (pk: string, account: string) => {
+export const stripeFor = (pk: string, account: string) => {
   const k = `${pk}|${account}`;
   if (!stripes.has(k)) stripes.set(k, loadStripe(pk, { stripeAccount: account }));
   return stripes.get(k)!;
 };
 
-function appearance(): Appearance {
+export function appearance(): Appearance {
   const css = getComputedStyle(document.documentElement);
   const accent = css.getPropertyValue("--accent").trim() || "#ff0000";
   return {
@@ -110,7 +110,7 @@ export default function ClientInvoice({ token, inShell }: { token: string; inShe
   );
 }
 
-function Frame({ inShell, bar, brand, children }: { inShell: boolean; bar: React.ReactNode; brand?: Inv["business"] | null; children: React.ReactNode }) {
+export function Frame({ inShell, bar, brand, children }: { inShell: boolean; bar: React.ReactNode; brand?: { name: string; logoUrl: string | null } | null; children: React.ReactNode }) {
   if (inShell) return <>{bar}<div className="wp-page inv-detail">{children}</div></>;
   return (
     <div className="inv-public">
@@ -168,7 +168,7 @@ function PayCard({ inv, token }: { inv: Inv; token: string }) {
   );
 }
 
-function Banner({ tone, icon, title, text }: { tone: "success" | "danger" | "neutral"; icon: "check-circle" | "alert" | "info" | "clock"; title: string; text?: string }) {
+export function Banner({ tone, icon, title, text }: { tone: "success" | "danger" | "neutral"; icon: "check-circle" | "alert" | "info" | "clock"; title: string; text?: string }) {
   return <div className={`inv-banner ${tone}`} role={tone === "danger" ? "alert" : undefined}><Icon name={icon} size={20} /><span><b>{title}</b>{text && <small>{text}</small>}</span></div>;
 }
 

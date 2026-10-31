@@ -32,6 +32,13 @@ const InvoicesPage = lazy(() => import("./modules/payments/InvoicesPage"));
 const InvoiceEditor = lazy(() => import("./modules/payments/InvoiceEditor"));
 const InvoiceDetail = lazy(() => import("./modules/payments/InvoiceDetail"));
 const PaymentsOverview = lazy(() => import("./modules/payments/PaymentsOverview"));
+const PlansPage = lazy(() => import("./modules/payments/PlansPage"));
+const SubscriptionsPage = lazy(() => import("./modules/payments/SubscriptionsPage"));
+const StartSubscription = lazy(() => import("./modules/payments/SubscriptionsPage").then((m) => ({ default: m.StartSubscription })));
+const SubscriptionDetail = lazy(() => import("./modules/payments/SubscriptionsPage").then((m) => ({ default: m.SubscriptionDetail })));
+const ClientSubscription = lazy(() => import("./modules/payments/ClientSubscription"));
+const ClientSubscriptions = lazy(() => import("./modules/payments/ClientSubscription").then((m) => ({ default: m.ClientSubscriptions })));
+const PlanEditor = lazy(() => import("./modules/payments/PlansPage").then((m) => ({ default: m.PlanEditor })));
 const ClientInvoice = lazy(() => import("./modules/payments/ClientInvoice"));
 const ClientInvoices = lazy(() => import("./modules/payments/ClientInvoices"));
 // Wrangler Sign (S1): its own chunk, so pdf.js only loads on those pages.
@@ -91,6 +98,13 @@ export default function App() {
     const page = (inShell: boolean) => <SharePage key={share[1]} inShell={inShell} token={share[1]} videoId={(share[2] as Id<"videos"> | undefined) ?? null} versionNumber={Number(params.get("version")) || null} noteId={params.get("note")} />;
     return isAuthenticated ? <ShareForMember video={!!share[2]} page={page} /> : page(false);
   }
+  // Phase 2b: a subscription link (email 13's "Add payment method") works signed in or out too.
+  const subLink = /^\/sub\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
+  if (subLink) {
+    if (isLoading) return <Loading />;
+    const page = (inShell: boolean) => <Suspense fallback={<Loading />}><ClientSubscription key={subLink[1]} token={subLink[1]} inShell={inShell} /></Suspense>;
+    return isAuthenticated ? <ShareForMember video={false} page={page} /> : page(false);
+  }
   // An invoice link (Part B step 3, the "View and pay" button in email 08) works signed in or out too.
   const invoice = /^\/i\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
   if (invoice) {
@@ -139,6 +153,12 @@ function SignedIn() {
   else if (/^\/payments\/invoices\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><InvoiceDetail key={id} invoiceId={id} /></Suspense>; }
   else if (/^\/payments\/invoices\/?$/.test(path)) page = <Suspense fallback={<Loading />}><InvoicesPage key={search} /></Suspense>;
   else if (/^\/payments\/?$/.test(path)) page = <Suspense fallback={<Loading />}><PaymentsOverview /></Suspense>;
+  else if (/^\/payments\/subscriptions\/?$/.test(path)) page = <Suspense fallback={<Loading />}><SubscriptionsPage /></Suspense>;
+  else if (/^\/payments\/subscriptions\/new\/?$/.test(path)) page = <Suspense fallback={<Loading />}><StartSubscription key={search} clientId={params.get("client")} /></Suspense>;
+  else if (/^\/payments\/subscriptions\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><SubscriptionDetail key={id} subscriptionId={id} /></Suspense>; }
+  else if (/^\/payments\/plans\/?$/.test(path)) page = <Suspense fallback={<Loading />}><PlansPage /></Suspense>;
+  else if (/^\/payments\/plans\/new\/?$/.test(path)) page = <Suspense fallback={<Loading />}><PlanEditor key="new" /></Suspense>;
+  else if (/^\/payments\/plans\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><PlanEditor key={id} planId={id} /></Suspense>; }
   else if (signDoc) page = <Suspense fallback={<Loading />}><SignDoc key={signDoc[1]} documentId={signDoc[1] as Id<"wsDocuments">} versionNumber={Number(params.get("v")) || null} /></Suspense>;
   else if (path.startsWith("/sign/signature")) page = <Suspense fallback={<Loading />}><SignSignature /></Suspense>;
   else if (path.startsWith("/sign/connector")) page = <Settings me={me} />; // now Settings › Claude connectors
@@ -193,6 +213,7 @@ function ClientRoutes({ me }: { me: { name: string | null; email: string } }) {
   if (/^\/(docs|documents)\/?$/.test(path)) { const t = params.get("tab"); return <ClientDocuments tab={(t === "signed" || t === "cancelled" ? t : "to_sign") as DocTab} />; }
   if (/^\/review\/?$/.test(path)) return <ClientReview me={me} />;
   if (/^\/payments(\/invoices)?\/?$/.test(path)) return <Suspense fallback={<Loading />}><ClientInvoices /></Suspense>;
+  if (/^\/payments\/subscriptions\/?$/.test(path)) return <Suspense fallback={<Loading />}><ClientSubscriptions /></Suspense>;
   const proj = /^\/projects\/([^/]+)\/?$/.exec(path);
   if (proj) { const t = params.get("tab"); return <ClientProject key={proj[1]} projectId={proj[1]} tab={(t === "videos" || t === "documents" ? t : "overview") as ClientProjectTab} />; }
   if (path.startsWith("/settings")) return <ClientSettings me={me} />;

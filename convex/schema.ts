@@ -719,6 +719,58 @@ export default defineSchema({
     })),
   }).index("by_slug", ["slug"]).index("by_stripe_account", ["stripe.accountId"]),
 
+  // Phase 2b (Oct 30): plans. A plan is a price the owner reuses for subscriptions; it lives as a product with a price
+  // in the business's own Stripe account (direct charges). Changing the price makes a new Stripe price; subscriptions
+  // already on the old one keep it (as drawn: "changing a plan's price later doesn't change subscriptions").
+  plans: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    name: v.string(),
+    description: v.optional(v.string()),
+    amountCents: v.number(),
+    interval: v.union(v.literal("day"), v.literal("week"), v.literal("month"), v.literal("year")),
+    intervalCount: v.number(),
+    stripe: v.object({ accountId: v.string(), productId: v.string(), priceId: v.string(), livemode: v.boolean() }),
+    archivedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_price", ["stripe.priceId"]),
+
+  // Phase 2b: subscriptions, the portal's copy of each one in the business's Stripe (kept in step by Stripe's events).
+  subscriptions: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    clientId: v.optional(v.id("clients")),
+    projectId: v.optional(v.id("projects")),
+    planId: v.id("plans"),
+    priceId: v.string(),                // the Stripe price as it was when the owner started it
+    planName: v.string(),
+    planDescription: v.optional(v.string()),
+    amountCents: v.number(),
+    interval: v.union(v.literal("day"), v.literal("week"), v.literal("month"), v.literal("year")),
+    intervalCount: v.number(),
+    billTo: v.object({ name: v.string(), email: v.string() }),
+    // incomplete: waiting on the first payment; scheduled: starts on a later date
+    status: v.union(v.literal("starting"), v.literal("scheduled"), v.literal("incomplete"), v.literal("trialing"), v.literal("active"), v.literal("past_due"),
+      v.literal("paused"), v.literal("unpaid"), v.literal("canceled"), v.literal("incomplete_expired")),
+    startDate: v.string(),              // yyyy-mm-dd, as the owner picked it
+    trialDays: v.optional(v.number()),
+    firstInvoice: v.union(v.literal("now"), v.literal("start")),
+    payToken: v.string(),               // the client's page for this subscription (/sub/<token>), with or without an account
+    stripe: v.optional(v.object({ accountId: v.string(), customerId: v.string(), subscriptionId: v.optional(v.string()), scheduleId: v.optional(v.string()), livemode: v.boolean() })),
+    currentPeriodStart: v.optional(v.number()),
+    currentPeriodEnd: v.optional(v.number()),
+    trialEnd: v.optional(v.number()),
+    cancelAtPeriodEnd: v.optional(v.boolean()),
+    canceledAt: v.optional(v.number()),
+    pause: v.optional(v.object({ at: v.number(), resumesAt: v.optional(v.number()) })),
+    method: v.optional(v.string()),     // "Visa •••• 4242"
+    lastFailure: v.optional(v.object({ at: v.number(), message: v.string(), invoice: v.optional(v.string()) })),
+    history: v.array(v.object({ kind: v.string(), at: v.number(), by: v.optional(v.string()), detail: v.optional(v.string()) })),
+    createdBy: v.optional(v.string()),
+    syncedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_stripe_sub", ["stripe.subscriptionId"]).index("by_pay_token", ["payToken"]).index("by_client", ["clientId"]).index("by_bill_email", ["billTo.email"]),
+
   // Phase 2 Part B, step 2: invoices. A draft lives only in the portal; Send (the owner's confirm) makes it in the
   // business's own Stripe account, gives it its number (D52) and finalizes it. From then on Stripe holds the money
   // and the webhook keeps this copy in step: open, processing, paid, partly paid, failed, void, uncollectible.
@@ -726,7 +778,8 @@ export default defineSchema({
     businessId: v.optional(v.id("businesses")),
     clientId: v.optional(v.id("clients")),
     projectId: v.optional(v.id("projects")),
-    kind: v.union(v.literal("deposit"), v.literal("final"), v.literal("other")),
+    kind: v.union(v.literal("deposit"), v.literal("final"), v.literal("other"), v.literal("subscription")),
+    subscriptionId: v.optional(v.id("subscriptions")), // Phase 2b: an invoice Stripe made for a subscription (charged automatically)
     title: v.string(),                                   // "Final invoice", "Deposit · WS-00018", "Extra shoot day"
     number: v.optional(v.string()),                      // D52: WRNGLR-0042, given when it's first sent
     billTo: v.object({ name: v.string(), email: v.string(), company: v.optional(v.string()) }),
@@ -801,7 +854,7 @@ export default defineSchema({
     businessId: v.optional(v.id("businesses")),
     clientId: v.optional(v.id("clients")),
     email: v.string(),                 // the recipient, lower-case (a person with a live invite in this business)
-    kind: v.union(v.literal("cut_ready"), v.literal("reply"), v.literal("to_sign"), v.literal("signed"), v.literal("cancelled"), v.literal("note"), v.literal("stage"), v.literal("final_files"), v.literal("invoice"), v.literal("payment")),
+    kind: v.union(v.literal("cut_ready"), v.literal("reply"), v.literal("to_sign"), v.literal("signed"), v.literal("cancelled"), v.literal("note"), v.literal("stage"), v.literal("final_files"), v.literal("invoice"), v.literal("payment"), v.literal("subscription")),
     title: v.string(),
     text: v.string(),                  // a short line, shown under the title
     link: v.optional(v.string()),      // a path in the portal or a signing link

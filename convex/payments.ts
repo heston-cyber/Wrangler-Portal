@@ -263,7 +263,14 @@ export const connectWebhook = httpAction(async (ctx, req) => {
     // out-of-order payload never has the last word.
     if (mine) {
       await ctx.scheduler.runAfter(0, internal.invoicePay.sync, { accountId: ev.account, stripeId: String(ev.data.object.id) });
+    } else if (ev.data.object.parent?.subscription_details?.subscription || ev.data.object.subscription) {
+      // Phase 2b: an invoice Stripe made for a subscription: mirror it into Payments › Invoices (read from Stripe).
+      await ctx.scheduler.runAfter(0, internal.subscriptions.importInvoice, { accountId: ev.account, stripeId: String(ev.data.object.id) });
     }
+  }
+  // Phase 2b: a subscription changed (started, renewed, past due, paused, cancelled): read it back from Stripe.
+  if (ev.type.startsWith("customer.subscription.") && ev.account && ev.data?.object?.id) {
+    await ctx.scheduler.runAfter(0, internal.subscriptions.sync, { accountId: ev.account, subscriptionId: String(ev.data.object.id) });
   }
   // Step 4c: refunds and disputes, onto the invoice they belong to.
   if ((ev.type === "charge.refunded" || ev.type === "charge.dispute.created" || ev.type === "charge.dispute.closed") && ev.account && ev.data?.object) {

@@ -1,4 +1,5 @@
 // Phase 2 Part B: pieces shared by the invoice list, the New invoice form and the invoice page (S5 · Phase 2).
+import { useEffect, useState } from "react";
 import { StatusChip } from "../../ui/wp";
 import { BrandImg } from "../../ui/BrandImg";
 
@@ -68,4 +69,13 @@ export function InvoicePaper({ business, number, issued, due, billTo, project, l
       </footer>
     </article>
   );
+}
+
+const centsOf = (s: string) => { const n = Number(s.replace(/[$,\s]/g, "")); return Number.isFinite(n) ? Math.round(n * 100) : 0; };
+const dollarsOf = (c: number) => (c ? (c / 100).toFixed(2) : "");
+/** A dollar amount field that holds cents. */
+export function MoneyInput({ value, onChange, label, placeholder = "0.00" }: { value: number; onChange: (c: number) => void; label: string; placeholder?: string }) {
+  const [text, setText] = useState(dollarsOf(value));
+  useEffect(() => { if (centsOf(text) !== value) setText(dollarsOf(value)); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [value]);
+  return <span className="inv-money"><span>$</span><input className="input" inputMode="decimal" aria-label={label} value={text} placeholder={placeholder} onChange={(e) => { setText(e.target.value); onChange(centsOf(e.target.value)); }} onBlur={() => setText(dollarsOf(value))} /></span>;
 }

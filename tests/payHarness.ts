@@ -9,21 +9,33 @@ import type { Id } from "../convex/_generated/dataModel";
 const api = anyApi;
 const modules = import.meta.glob("../convex/**/*.ts");
 
-export type Call = { method: string; path: string; query: string; account: string | null };
-export function fakeStripe(opts: { payments?: unknown[]; invoiceStatus?: string; totalOverride?: number } = {}) {
+export type Call = { method: string; path: string; query: string; account: string | null; form: Record<string, string> };
+export function fakeStripe(opts: { payments?: unknown[]; invoiceStatus?: string; totalOverride?: number; sub?: Record<string, unknown>; subInvoice?: Record<string, unknown>; payError?: string } = {}) {
   const calls: Call[] = [];
   let total = 0;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
     const h = (init.headers ?? {}) as Record<string, string>;
     const [path, query = ""] = url.replace("https://api.stripe.com/v1/", "").split("?");
     const form = Object.fromEntries(new URLSearchParams(String(init.body ?? "")));
-    calls.push({ method: init.method ?? "GET", path, query: decodeURIComponent(query), account: h["Stripe-Account"] ?? null });
+    calls.push({ method: init.method ?? "GET", path, query: decodeURIComponent(query), account: h["Stripe-Account"] ?? null, form });
     const ok = (o: unknown) => new Response(JSON.stringify(o));
     if (path === "customers") return ok({ id: "cus_1" });
+    if (/^customers\//.test(path)) return ok({ id: path.split("/")[1] });
+    if (path === "setup_intents") return ok({ id: "seti_1", client_secret: "seti_1_secret_x" });
+    if (/^setup_intents\//.test(path)) return ok({ id: "seti_1", status: "succeeded", customer: "cus_1", metadata: { portal_subscription: opts.sub?.portal ?? "" }, payment_method: { id: "pm_1", type: "card", card: { brand: "visa", last4: "4242" } } });
+    if (path === "subscriptions" || /^subscriptions\//.test(path)) return ok({ id: "sub_1", status: "active", items: { data: [{ current_period_start: 1_790_000_000, current_period_end: 1_792_592_000 }] }, latest_invoice: "in_s1", metadata: { portal_subscription: opts.sub?.portal ?? "" }, ...opts.sub });
+    if (path === "invoices" && (init.method ?? "GET") === "GET") return ok({ data: opts.subInvoice ? [{ id: "in_s1" }] : [] });
+    if (/^invoices\/in_s1\/pay/.test(path)) return opts.payError ? new Response(JSON.stringify({ error: { message: opts.payError } }), { status: 402 }) : ok({ id: "in_s1", status: "paid" });
+    if (/^invoices\/in_s1/.test(path)) return ok({ id: "in_s1", status: "open", total: 250000, amount_paid: 0, amount_remaining: 250000, number: "WRNGLR-0007", created: 1_790_000_000, livemode: false,
+      parent: { subscription_details: { subscription: "sub_1" } }, lines: { data: [{ description: "1 × Monthly retainer", quantity: 1, amount: 250000 }] }, ...opts.subInvoice });
     if (path === "accounts/acct_A") return ok({ id: "acct_A", capabilities: { card_payments: "active" } });
     if (path === "invoices") return ok({ id: "in_1", status: "draft" });
     if (path === "invoiceitems") { total += Number(form.amount); return ok({ id: "ii" }); }
     if (path === "invoice_payments") return ok({ data: opts.payments ?? [] });
+    if (path === "products") return ok({ id: `prod_${calls.filter((c) => c.path === "products").length - 1}` });
+    if (/^products\//.test(path)) return ok({ id: path.split("/")[1] });
+    if (path === "prices") return ok({ id: `price_${calls.filter((c) => c.path === "prices").length - 1}`, unit_amount: Number(form.unit_amount) });
+    if (/^prices\//.test(path)) return ok({ id: path.split("/")[1] });
     if (path === "payment_method_domains") return ok(init.method === "POST" ? { id: "pmd_1", domain_name: form.domain_name, enabled: true, apple_pay: { status: "active" } } : { data: [] });
     if (/^invoices\/in_1/.test(path)) {
       const status = path.endsWith("/finalize") ? "open" : opts.invoiceStatus ?? "open";

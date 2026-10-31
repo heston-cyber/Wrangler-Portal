@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 export const modules = import.meta.glob("../convex/**/*.ts");
 
-export type Ids = { requestId: Id<"wsRequests">; buildId: Id<"wsBuilds">; templateId: Id<"wsTemplates">; clauseId: Id<"wsClauses">; styleId: Id<"wsStyles">; docId: Id<"wsDocuments">; wsVersionId: Id<"wsVersions">; projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage">; clientRecId: Id<"clients">; personId: Id<"clientPeople">; inboxItemId: Id<"inboxItems">; inboxNoteId: Id<"inboxNotes">; deliveryFileId: Id<"deliveryFiles">; invoiceId: Id<"invoices"> };
+export type Ids = { requestId: Id<"wsRequests">; buildId: Id<"wsBuilds">; templateId: Id<"wsTemplates">; clauseId: Id<"wsClauses">; styleId: Id<"wsStyles">; docId: Id<"wsDocuments">; wsVersionId: Id<"wsVersions">; projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage">; clientRecId: Id<"clients">; personId: Id<"clientPeople">; inboxItemId: Id<"inboxItems">; inboxNoteId: Id<"inboxNotes">; deliveryFileId: Id<"deliveryFiles">; invoiceId: Id<"invoices">; planId: Id<"plans"> };
 
 // Minimal valid arguments for each function, so the access check (not argument validation) is what refuses.
 export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
@@ -86,6 +86,10 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "payments.settings": {}, "payments.connect": {}, "payments.refresh": {}, "payments.disconnect": {},
     "invoices.list": {}, "invoices.overview": {}, "invoices.finalOptions": { projectId: ids.projectId }, "invoices.draftFinal": { projectId: ids.projectId, documentId: ids.docId }, "invoices.forProject": { projectId: ids.projectId }, "invoices.get": { invoiceId: ids.invoiceId }, "invoices.options": {},
     "invoices.saveDraft": { kind: "other", title: "T", billTo: { name: "A", email: "a@b.co" }, lines: [], dueDate: "2030-01-01" }, "invoices.deleteDraft": { invoiceId: ids.invoiceId },
+    "subscriptions.start": { clientId: ids.clientRecId, planId: ids.planId, billTo: { name: "A", email: "a@b.co" }, startDate: "2030-01-01", firstInvoice: "now", postInbox: false },
+    "subscriptions.list": {}, "subscriptions.get": { subscriptionId: "nope" }, "subscriptions.page": { token: "nope-nope-nope-nope" }, "subscriptions.mine": {},
+    "subscriptions.setupStart": { token: "nope-nope-nope-nope" }, "subscriptions.setupDone": { token: "nope-nope-nope-nope", setupIntentId: "seti_x" },
+    "plans.list": {}, "plans.get": { planId: ids.planId }, "plans.save": { name: "P", amountCents: 1000, interval: "month", intervalCount: 1 }, "plans.setArchived": { planId: ids.planId, archived: true },
     "invoices.send": { invoiceId: ids.invoiceId }, "invoices.voidInvoice": { invoiceId: ids.invoiceId },
     "invoicePay.page": { token: "nope-nope-nope-nope" }, "invoicePay.mine": {}, "invoicePay.markViewed": { token: "nope-nope-nope-nope" },
     "invoicePay.start": { token: "nope-nope-nope-nope" }, "invoicePay.refresh": { token: "nope-nope-nope-nope" }, "invoicePay.ownerLink": { invoiceId: ids.invoiceId },
@@ -137,7 +141,8 @@ export async function setup() {
     const styleId = await ctx.db.insert("wsStyles", { name: "S", style: {}, isDefault: false, createdAt: 0, updatedAt: 0 });
     const deliveryFileId = await ctx.db.insert("deliveryFiles", { projectId, name: "F.mov", kind: "dropbox", dropboxPath: "/f.mov", createdAt: 0 });
     const invoiceId = await ctx.db.insert("invoices", { projectId, kind: "other", title: "T", billTo: { name: "A", email: "a@b.co" }, lines: [], dueDate: "2030-01-01", status: "draft", totalCents: 0, amountPaidCents: 0, amountRemainingCents: 0, history: [], createdAt: 0, updatedAt: 0 });
-    return { invoiceId, deliveryFileId, clientRecId, personId, inboxItemId, inboxNoteId, requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
+    const planId = await ctx.db.insert("plans", { name: "P", amountCents: 1000, interval: "month", intervalCount: 1, stripe: { accountId: "acct_x", productId: "prod_x", priceId: "price_x", livemode: false }, createdAt: 0, updatedAt: 0 });
+    return { planId, invoiceId, deliveryFileId, clientRecId, personId, inboxItemId, inboxNoteId, requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
   });
   return { t, ids };
 }

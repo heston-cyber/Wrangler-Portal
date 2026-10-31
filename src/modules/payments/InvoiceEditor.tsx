@@ -11,7 +11,7 @@ import { Modal, useToast } from "../../ui/kit";
 import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps, navigate } from "../../lib/router";
 import { errText } from "../docs/pages/common";
-import { InvoicePaper, dateLong, isoIn, money, newId, totals, type Line } from "./common";
+import { InvoicePaper, MoneyInput, dateLong, isoIn, money, newId, totals, type Line } from "./common";
 
 type Kind = "deposit" | "final" | "other";
 type Draft = {
@@ -20,14 +20,7 @@ type Draft = {
   lines: Line[]; discountCents?: number; taxPercent?: number; dueDate: string; memo: string;
 };
 const TITLE: Record<Kind, string> = { deposit: "Deposit", final: "Final invoice", other: "" };
-const cents = (s: string) => { const n = Number(s.replace(/[$,\s]/g, "")); return Number.isFinite(n) ? Math.round(n * 100) : 0; };
-const dollars = (c: number) => (c ? (c / 100).toFixed(2) : "");
 
-function MoneyInput({ value, onChange, label }: { value: number; onChange: (c: number) => void; label: string }) {
-  const [text, setText] = useState(dollars(value));
-  useEffect(() => { if (cents(text) !== value) setText(dollars(value)); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [value]);
-  return <span className="inv-money"><span>$</span><input className="input" inputMode="decimal" aria-label={label} value={text} placeholder="0.00" onChange={(e) => { setText(e.target.value); onChange(cents(e.target.value)); }} onBlur={() => setText(dollars(value))} /></span>;
-}
 
 export default function InvoiceEditor({ invoiceId, clientId: initClient, projectId: initProject }: { invoiceId?: string; clientId?: string | null; projectId?: string | null }) {
   const opts = useQuery(api.invoices.options, {});
@@ -45,7 +38,7 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
     if (d || !opts || (invoiceId && existing === undefined)) return;
     if (invoiceId && existing) {
       if (existing.status !== "draft" && existing.status !== "sending") { navigate(`/payments/invoices/${invoiceId}`); return; }
-      setD({ clientId: existing.clientId ?? "", projectId: existing.projectId ?? "", person: existing.billTo.email, kind: existing.kind, title: existing.title, billTo: existing.billTo, lines: existing.lines, discountCents: existing.discountCents || undefined, taxPercent: existing.taxPercent || undefined, dueDate: existing.dueDate, memo: existing.memo });
+      setD({ clientId: existing.clientId ?? "", projectId: existing.projectId ?? "", person: existing.billTo.email, kind: (existing.kind === "subscription" ? "other" : existing.kind), title: existing.title, billTo: existing.billTo, lines: existing.lines, discountCents: existing.discountCents || undefined, taxPercent: existing.taxPercent || undefined, dueDate: existing.dueDate, memo: existing.memo });
       return;
     }
     const client = opts.clients.find((c) => c._id === initClient) ?? opts.clients.find((c) => c.projects.some((p) => p._id === initProject)) ?? null;

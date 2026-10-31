@@ -38,7 +38,8 @@ const OWNER_DOCS: Sub[] = [
   { to: "/sign/templates", label: "Templates", match: (p) => starts(p, "/sign/templates") },
   { to: "/sign/signature", label: "Your signature", match: (p) => starts(p, "/sign/signature") },
 ];
-const OWNER_PAYMENTS: Sub[] = [{ to: "/payments", label: "Overview", match: (p) => p === "/payments" }, { to: "/payments/invoices", label: "Invoices", match: (p) => starts(p, "/payments/invoices") }];
+const OWNER_PAYMENTS: Sub[] = [{ to: "/payments", label: "Overview", match: (p) => p === "/payments" }, { to: "/payments/invoices", label: "Invoices", match: (p) => starts(p, "/payments/invoices") },
+  { to: "/payments/subscriptions", label: "Subscriptions", match: (p) => starts(p, "/payments/subscriptions") }, { to: "/payments/plans", label: "Plans", match: (p) => starts(p, "/payments/plans") }];
 const inPayments = (p: string) => starts(p, "/payments");
 const inReview = (p: string) => starts(p, "/review", "/projects", "/activity", "/v");
 const inDocs = (p: string) => starts(p, "/sign", "/docs");
@@ -56,16 +57,17 @@ function ownerItems(payments = false): { main: Item[]; tabs: Item[] } {
 }
 
 type SharedProject = { to: string; label: string };
-const CLIENT_PAYMENTS: Sub[] = [{ to: "/payments/invoices", label: "Invoices", match: (p) => starts(p, "/payments/invoices", "/i") }];
+const CLIENT_PAYMENTS: Sub[] = [{ to: "/payments/invoices", label: "Invoices", match: (p) => starts(p, "/payments/invoices", "/i") },
+  { to: "/payments/subscriptions", label: "Subscriptions", match: (p) => starts(p, "/payments/subscriptions", "/sub") }];
 function clientItems(shared: SharedProject[], unread: number, payments = false): { main: Item[]; tabs: Item[] } {
   const layer: Sub[] = [...shared.map((s) => ({ to: s.to, label: s.label, match: (p: string) => starts(p, s.to) })), { to: "/review", label: "All shared", match: (p: string) => p === "/review" }];
   const home: Item = { to: "/", label: "Home", icon: "home", match: (p) => p === "/" };
   const inbox: Item = { to: "/inbox", label: "Inbox", icon: "inbox", match: (p) => starts(p, "/inbox"), badge: unread };
   const review: Item = { to: "/review", label: "Review", icon: "review", match: () => false, tab: (p) => starts(p, "/review", "/s", "/projects"), layer, layerHas: (p) => starts(p, "/review", "/s", "/projects") };
   const docs: Item = { to: "/docs", label: "Docs", icon: "document", match: (p) => starts(p, "/docs") };
-  const more: Item = { to: "/more", label: "More", icon: "menu", match: (p) => starts(p, "/more", "/settings", "/payments", "/i") };
-  // Part B step 3: Payments › Invoices once something has been billed to them.
-  const inPay = (p: string) => starts(p, "/payments", "/i");
+  const more: Item = { to: "/more", label: "More", icon: "menu", match: (p) => starts(p, "/more", "/settings", "/payments", "/i", "/sub") };
+  // Part B step 3: Payments › Invoices once something has been billed to them (2b: or a subscription started for them).
+  const inPay = (p: string) => starts(p, "/payments", "/i", "/sub");
   const pay: Item = { to: "/payments/invoices", label: "Payments", icon: "invoice", match: (p) => p === "/payments", tab: inPay, layer: CLIENT_PAYMENTS, layerHas: inPay };
   return { main: payments ? [home, inbox, review, docs, pay] : [home, inbox, review, docs], tabs: [home, inbox, review, docs, more] };
 }
@@ -83,6 +85,7 @@ export function Shell({ me, side = "owner", overlay, light = true, subtitle, chi
   const overview = useQuery(api.library.overview, side === "owner" ? {} : "skip");
   const pay = useQuery(api.payments.settings, side === "owner" ? {} : "skip");
   const billed = useQuery(api.invoicePay.mine, side === "client" ? {} : "skip");
+  const subs = useQuery(api.subscriptions.mine, side === "client" ? {} : "skip");
   // Phase 2: the client's Review layer lists their projects (each opens its project page), then any other shared
   // collection that isn't one of those projects.
   const myProjects = useQuery(api.projects.mine, side === "client" ? {} : "skip");
@@ -96,7 +99,7 @@ export function Shell({ me, side = "owner", overlay, light = true, subtitle, chi
     : [];
   return (
     <ShellFrame me={me} side={side} overlay={overlay} light={light} subtitle={subtitle} logo={brand?.logoUrl ?? wpLogo} bizName={brand?.name ?? "Wrangler Productions"}
-      shared={shared} unread={unread} recent={recent} search={side === "owner"} payments={side === "owner" ? !!pay?.stripe : !!billed?.length}>
+      shared={shared} unread={unread} recent={recent} search={side === "owner"} payments={side === "owner" ? !!pay?.stripe : !!billed?.length || !!subs?.length}>
       {children}
     </ShellFrame>
   );
@@ -288,8 +291,10 @@ export function MorePage({ me, side }: { me: Me; side: Side }) {
   // Phones: Payments lives here (the tab bar has five places).
   const pay = useQuery(api.payments.settings, side === "owner" ? {} : "skip");
   const billed = useQuery(api.invoicePay.mine, side === "client" ? {} : "skip");
-  const payRow = side === "owner" ? (pay?.stripe ? [{ to: "/payments", icon: "invoice" as IconName, title: "Payments", sub: "Overview and invoices" }] : [])
-    : (billed?.length ? [{ to: "/payments/invoices", icon: "invoice" as IconName, title: "Payments", sub: "Your invoices" }] : []);
+  const subs = useQuery(api.subscriptions.mine, side === "client" ? {} : "skip");
+  const payRow = side === "owner" ? (pay?.stripe ? [{ to: "/payments", icon: "invoice" as IconName, title: "Payments", sub: "Overview, invoices and subscriptions" }] : [])
+    : [...(billed?.length ? [{ to: "/payments/invoices", icon: "invoice" as IconName, title: "Payments", sub: "Your invoices" }] : []),
+      ...(subs?.length ? [{ to: "/payments/subscriptions", icon: "activity" as IconName, title: "Subscriptions", sub: "Your plans" }] : [])];
   const rows: { to?: string; icon: IconName; title: string; sub?: string; onClick?: () => void }[] = side === "owner"
     ? [
       ...payRow,

@@ -46,6 +46,11 @@ const OPEN: Record<string, string> = {
   "invoicePay.start": "Pay on the same link: returns Stripe's payment secret for that invoice only; a missing token is refused",
   "invoicePay.refresh": "the same link: re-reads that invoice from Stripe; a missing token does nothing",
   "invoicePay.mine": "a client's invoices, found by their own email; anyone else gets []",
+  // Phase 2b: the subscription link (/sub/<token>) from email 13 works without an account, like the invoice link.
+  "subscriptions.page": "a subscription link: answers only for that subscription's own long random token (tested in subscriptions.test.ts)",
+  "subscriptions.setupStart": "the same link: a SetupIntent for that subscription's customer only; a missing token is refused",
+  "subscriptions.setupDone": "the same link: checks the SetupIntent is that subscription's own before using it; a missing token is refused",
+  "subscriptions.mine": "a client's subscriptions, found by their own email; anyone else gets []",
 };
 // Functions with their own gate (a key in the arguments): refused with the wrong key, whoever calls.
 const KEYED = new Set(["r1results.report"]);

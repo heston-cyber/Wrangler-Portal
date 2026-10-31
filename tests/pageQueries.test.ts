@@ -78,6 +78,12 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "payments.settings": { pages: ["owner"], args: () => "skip" }, // Settings › Payments (owner only)
   "invoices.list": { pages: ["owner"], args: () => "skip" }, // Payments › Invoices
   "invoices.overview": { pages: ["owner"], args: () => "skip" }, // Payments › Overview
+  "plans.list": { pages: ["owner"], args: () => "skip" }, // Payments › Plans
+  "subscriptions.list": { pages: ["owner"], args: () => "skip" }, // Payments › Subscriptions
+  "subscriptions.get": { pages: ["owner"], args: () => "skip" }, // a subscription
+  "subscriptions.page": { pages: ["share"], args: () => ({ token: "not-a-real-token-xx" }) }, // /sub/<token>, the client's page (with or without an account)
+  "subscriptions.mine": { pages: ["clientHome"], args: () => ({}) }, // the client's Payments › Subscriptions
+  "plans.get": { pages: ["owner"], args: () => "skip" }, // a plan
   "invoices.forProject": { pages: ["owner"], args: () => "skip" }, // project page › Invoices
   "invoices.finalOptions": { pages: ["owner"], args: () => "skip" }, // project page › Invoices (final from a contract)
   "invoices.get": { pages: ["owner"], args: () => "skip" }, // one invoice

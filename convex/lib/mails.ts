@@ -253,3 +253,56 @@ export function paymentFailedMail(b: MailBrand, d: { name: string; number: strin
     { t: "button", label: "Try again", href: d.link }, { t: "link", href: d.link },
   ], signoff(b), `Nothing was charged · ${d.number}`);
 }
+
+// ---------- 13 · 14 · 15 · 16 · 17: subscriptions (Phase 2b) ----------
+const periodWords = (every: string) => every.replace(/^\/ /, "every ");
+
+export function subscriptionStartedMail(b: MailBrand, d: { name: string; plan: string; price: string; every: string; starts: string; firstCharge: string; description: string | null; link: string }): Mail {
+  return mk(b, "updates", `${b.name} started your ${d.plan} plan`, [
+    hi(d.name),
+    { t: "p", text: `${b.name} set up ${d.plan} for you: ${d.price} ${periodWords(d.every)}.` },
+    { t: "sums", rows: [{ label: "Price", value: `${d.price} ${d.every}`, big: true }, { label: "Starts", value: d.starts }, { label: "First charge", value: d.firstCharge }] },
+    ...(d.description ? [{ t: "p", text: d.description, tone: "muted" } as Block] : []),
+    { t: "p", text: "Add a card or bank account to get it going. Nothing is charged until you do; after that it’s charged automatically each period, and you get a receipt each time." },
+    { t: "button", label: "Add payment method", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `Add a payment method for ${d.plan}`);
+}
+
+export function upcomingChargeMail(b: MailBrand, d: { name: string; plan: string; amountCents: number; on: string; method: string | null; link: string }): Mail {
+  return mk(b, "updates", `Your ${d.plan} plan renews on ${d.on}`, [
+    hi(d.name),
+    { t: "p", text: `A heads-up: ${usd(d.amountCents)} for ${d.plan} will be charged on ${d.on}${d.method ? ` to ${d.method}` : ""}.` },
+    { t: "sums", rows: [{ label: "Amount", value: usd(d.amountCents), big: true }, { label: "Charged on", value: d.on }, ...(d.method ? [{ label: "Payment method", value: d.method }] : [])] },
+    { t: "p", text: "Nothing to do if that’s all right. To use a different card or bank account, update it on your subscription page." },
+    { t: "button", label: "View subscription", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `${usd(d.amountCents)} on ${d.on}`);
+}
+
+export function subscriptionFailedMail(b: MailBrand, d: { name: string; plan: string; amountCents: number; reason: string; nextTry: string | null; link: string }): Mail {
+  return mk(b, "updates", `Your payment for ${d.plan} didn’t go through`, [
+    hi(d.name),
+    { t: "p", text: `We tried to charge ${usd(d.amountCents)} for ${d.plan}, and it didn’t go through.` },
+    { t: "sums", rows: [{ label: "Amount", value: usd(d.amountCents), big: true }, { label: "Reason", value: d.reason }, ...(d.nextTry ? [{ label: "Next try", value: d.nextTry }] : [])] },
+    { t: "p", text: "Update your card or bank account so your plan keeps going. Saving a new one tries the payment again straight away." },
+    { t: "button", label: "Update payment method", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `${usd(d.amountCents)} for ${d.plan} didn’t go through`);
+}
+
+export function subscriptionCancelledMail(b: MailBrand, d: { name: string; plan: string; ends: string; ended: boolean; link: string }): Mail {
+  return mk(b, "updates", d.ended ? `Your ${d.plan} plan has ended` : `Your ${d.plan} plan will end on ${d.ends}`, [
+    hi(d.name),
+    { t: "p", text: d.ended ? `${b.name} cancelled ${d.plan}. There are no more charges.` : `${b.name} cancelled ${d.plan}. It runs until ${d.ends}, and there are no charges after that.` },
+    { t: "p", text: "Your past invoices and receipts stay on your subscription page. Questions? Just reply." },
+    { t: "button", label: "View subscription", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), d.ended ? `${d.plan} has ended` : `${d.plan} ends ${d.ends}`);
+}
+
+/** 17 · to the owner (D61), in the alert layout. */
+export function ownerSubscriptionFailedMail(b: MailBrand, d: { client: string; plan: string; amountCents: number; reason: string; nextTry: string | null; link: string }): Mail {
+  return mk(b, "updates", `Payment failed: ${d.client} · ${d.plan}`, [
+    { t: "p", text: `${d.client}’s ${usd(d.amountCents)} payment for ${d.plan} didn’t go through.` },
+    { t: "sums", rows: [{ label: "Reason", value: d.reason }, ...(d.nextTry ? [{ label: "Stripe tries again", value: d.nextTry }] : [{ label: "Stripe tries again", value: "No more tries" }])] },
+    { t: "p", text: "They’ve been emailed a link to update their payment method." },
+    { t: "button", label: "Open the subscription", href: d.link }, { t: "link", href: d.link },
+  ], [{ t: "small", text: "WranglerPortal" }], `${d.client}: ${usd(d.amountCents)} didn’t go through`);
+}
