@@ -24,6 +24,30 @@ function Stat({ label, cents, sub, to, link }: { label: string; cents: number; s
   );
 }
 
+/** Phase 2b: the Recurring card (active subscriptions, monthly recurring, past due, the next charges). */
+export function Recurring({ withPastDue = false }: { withPastDue?: boolean }) {
+  const subs = useQuery(api.subscriptions.list, {});
+  if (!subs || subs.rows.length === 0) return null;
+  const late = withPastDue ? subs.rows.filter((r) => r.status === "past_due") : [];
+  const next = subs.rows.filter((r) => r.nextCharge && ["active", "trialing", "scheduled"].includes(r.status)).sort((a, b) => a.nextCharge! - b.nextCharge!).slice(0, 4);
+  return (
+    <Card label="Recurring" head={<SectionHead label="Recurring" action={<ButtonLink size="sm" variant="ghost" to="/payments/subscriptions">Subscriptions</ButtonLink>} />}>
+      <dl className="pov-paid">
+        <dt className="big">Monthly recurring</dt><dd className="big">{money(subs.numbers.monthlyCents)}</dd>
+        <dt>Active subscriptions</dt><dd>{subs.numbers.active}</dd>
+        <dt>Past due</dt><dd>{subs.numbers.pastDue}</dd>
+      </dl>
+      {late.map((r) => <div key={r._id} className="wp-rowwrap"><Divider />
+        <ListRow className="ilead" lead={{ icon: "alert" }} title={[r.client, r.plan].filter(Boolean).join(" · ")} meta={`${money(r.amountCents)} · payment failed${r.lastFailure ? ` ${dateShort(r.lastFailure.at)}` : ""}`}
+          chip={<StatusChip tone="danger">Past due</StatusChip>} action={<ButtonLink size="sm" to={`/payments/subscriptions/${r._id}`} iconEnd={false}>Open</ButtonLink>} />
+      </div>)}
+      {next.map((r, i) => <div key={r._id} className="wp-rowwrap">{(i > 0 || late.length > 0) && <Divider />}
+        <ListRow className="ilead" lead={{ icon: "activity" }} to={`/payments/subscriptions/${r._id}`} title={[r.client, r.plan].filter(Boolean).join(" · ")} meta={`${money(r.amountCents)} · ${dateShort(r.nextCharge!)}`} />
+      </div>)}
+    </Card>
+  );
+}
+
 export default function PaymentsOverview() {
   const o = useQuery(api.invoices.overview, { tzOffsetMin: new Date().getTimezoneOffset() });
   const off = o?.stripe === "disconnected";
@@ -81,6 +105,7 @@ export default function PaymentsOverview() {
                   </dl>
                   <p className="secondary pov-note">In US dollars, from Stripe. Refunds are taken off.</p>
                 </Card>
+                <Recurring />
               </div>
             </div>
           </>}

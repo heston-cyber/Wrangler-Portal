@@ -24,7 +24,10 @@ import { SITE } from "./lib/site";
 import { stripeCall, StripeError, type StripeResult } from "./lib/stripeApi";
 import { businessOf, clientOfEmail, hasAccess, postToInbox } from "./lib/inbox";
 import { mailBrandOf } from "./lib/mail";
-import { subscriptionStartedMail } from "./lib/mails";
+import { ownerSubscriptionFailedMail, subscriptionCancelledMail, subscriptionFailedMail, subscriptionStartedMail, upcomingChargeMail } from "./lib/mails";
+import { deliverOnce } from "./invoiceReminders";
+import { mutation } from "./lib/functions";
+import { keyMode, platformKey } from "./lib/stripeApi";
 import { sendEmail } from "./lib/email";
 import { everyLabel, monthlyCents, priceLabel, usd, type Interval } from "./plans";
 import { methodLabel } from "./invoicePay";
@@ -553,6 +556,299 @@ export const importInvoice = internalAction({
     await ctx.scheduler.runAfter(0, internal.invoicePay.sync, { accountId, stripeId });
     await ctx.scheduler.runAfter(0, internal.subscriptions.sync, { accountId, subscriptionId: String(subId) });
     return null;
+  },
+});
+
+
+// ---------- the owner's changes (step 4): change plan, pause, resume, cancel ----------
+
+export const changeTarget = internalQuery({
+  args: { subscriptionId: v.id("subscriptions"), planId: v.optional(v.id("plans")) },
+  handler: async (ctx, { subscriptionId, planId }) => {
+    const me = await requireMe(ctx);
+    const s = await ctx.db.get(subscriptionId);
+    if (!s || !s.stripe) throw new ConvexError("That subscription isn't here.");
+    const b = s.businessId ? await ctx.db.get(s.businessId) : null;
+    if (b?.stripe?.status !== "connected" || b.stripe.accountId !== s.stripe.accountId) throw new ConvexError("Connect Stripe first (Settings › Payments).");
+    const plan = planId ? await ctx.db.get(planId) : null;
+    if (planId && (!plan || plan.archivedAt || plan.stripe.accountId !== s.stripe.accountId)) throw new ConvexError("Pick an active plan.");
+    return { s, plan, by: me.name ?? me.email };
+  },
+});
+
+async function itemOf(account: string, subId: string) {
+  const sub = await stripeCall("GET", `subscriptions/${subId}`, { account });
+  const item = (sub.items?.data as StripeResult[] | undefined)?.[0];
+  if (!item) throw new ConvexError("Stripe didn't return this subscription's plan.");
+  return { sub, itemId: String(item.id) };
+}
+const stripeMsg = (e: unknown) => new ConvexError(e instanceof StripeError ? e.message.replace(/^Stripe: /, "") : "Couldn't reach Stripe. Try again in a minute.");
+
+/** Change plan…: Stripe's proration, shown as "Next invoice ({date})" before the owner confirms. */
+export const changePreview = action({
+  args: { subscriptionId: v.id("subscriptions"), planId: v.id("plans") },
+  handler: async (ctx, { subscriptionId, planId }): Promise<{ amountCents: number; at: number | null }> => {
+    const t = await ctx.runQuery(internal.subscriptions.changeTarget, { subscriptionId, planId });
+    const s = t.s;
+    if (!s.stripe?.subscriptionId) return { amountCents: t.plan!.amountCents, at: null };
+    try {
+      const { itemId } = await itemOf(s.stripe.accountId, s.stripe.subscriptionId);
+      const inv = await stripeCall("POST", "invoices/create_preview", {
+        account: s.stripe.accountId,
+        form: { customer: s.stripe.customerId, subscription: s.stripe.subscriptionId, subscription_details: { items: [{ id: itemId, price: t.plan!.stripe.priceId }], proration_behavior: "create_prorations" } },
+      });
+      const at = inv.next_payment_attempt ?? inv.period_end ?? null;
+      return { amountCents: Number(inv.amount_due ?? inv.total ?? 0), at: at ? Number(at) * 1000 : null };
+    } catch (e) { throw stripeMsg(e); }
+  },
+});
+
+export const noteChange = internalMutation({
+  args: { subscriptionId: v.id("subscriptions"), kind: v.string(), by: v.string(), detail: v.optional(v.string()), plan: v.optional(v.id("plans")), canceledNow: v.optional(v.boolean()) },
+  handler: async (ctx, { subscriptionId, kind, by, detail, plan, canceledNow }) => {
+    const s = await ctx.db.get(subscriptionId);
+    if (!s) return;
+    const now = Date.now();
+    const p = plan ? await ctx.db.get(plan) : null;
+    await ctx.db.patch(subscriptionId, {
+      ...(p ? { planId: p._id, priceId: p.stripe.priceId, planName: p.name, planDescription: p.description, amountCents: p.amountCents, interval: p.interval, intervalCount: p.intervalCount } : {}),
+      ...(canceledNow ? { status: "canceled" as const, canceledAt: now } : {}),
+      history: [...s.history, { kind, at: now, by, ...(detail ? { detail } : {}) }].slice(-80), updatedAt: now,
+    });
+  },
+});
+
+export const changePlan = action({
+  args: { subscriptionId: v.id("subscriptions"), planId: v.id("plans") },
+  handler: async (ctx, { subscriptionId, planId }): Promise<null> => {
+    const t = await ctx.runQuery(internal.subscriptions.changeTarget, { subscriptionId, planId });
+    const s = t.s, plan = t.plan!;
+    if (s.stripe?.subscriptionId) {
+      try {
+        const { itemId } = await itemOf(s.stripe.accountId, s.stripe.subscriptionId);
+        await stripeCall("POST", `subscriptions/${s.stripe.subscriptionId}`, { account: s.stripe.accountId, form: { items: [{ id: itemId, price: plan.stripe.priceId }], proration_behavior: "create_prorations", description: plan.name } });
+      } catch (e) { throw stripeMsg(e); }
+    }
+    await ctx.runMutation(internal.subscriptions.noteChange, { subscriptionId, kind: "plan_changed", by: t.by, detail: `${s.planName} → ${plan.name}`, plan: plan._id });
+    if (s.stripe?.subscriptionId) await ctx.runAction(internal.subscriptions.sync, { accountId: s.stripe.accountId, subscriptionId: s.stripe.subscriptionId });
+    return null;
+  },
+});
+
+/** Pause…: invoices made while paused are voided (build answer 15), so the client never sees a bill for a paused period. */
+export const pause = action({
+  args: { subscriptionId: v.id("subscriptions"), resumeOn: v.optional(v.string()) },
+  handler: async (ctx, { subscriptionId, resumeOn }): Promise<null> => {
+    const t = await ctx.runQuery(internal.subscriptions.changeTarget, { subscriptionId });
+    const s = t.s;
+    if (!s.stripe?.subscriptionId) throw new ConvexError("It hasn't started yet: nothing to pause.");
+    const resumes = resumeOn ? startMoment(resumeOn) : null;
+    if (resumes !== null && (Number.isNaN(resumes) || resumes < Date.now())) throw new ConvexError("Pick a resume date in the future.");
+    try {
+      await stripeCall("POST", `subscriptions/${s.stripe.subscriptionId}`, { account: s.stripe.accountId, form: { pause_collection: { behavior: "void", ...(resumes ? { resumes_at: Math.floor(resumes / 1000) } : {}) } } });
+    } catch (e) { throw stripeMsg(e); }
+    await ctx.runMutation(internal.subscriptions.noteChange, { subscriptionId, kind: "paused", by: t.by, detail: resumeOn ? `until ${dateWords(resumes!)}` : undefined });
+    await ctx.runAction(internal.subscriptions.sync, { accountId: s.stripe.accountId, subscriptionId: s.stripe.subscriptionId });
+    return null;
+  },
+});
+
+/** Resume…: lifts a pause, or takes back a cancel at the period's end ("Keep it"). */
+export const resume = action({
+  args: { subscriptionId: v.id("subscriptions") },
+  handler: async (ctx, { subscriptionId }): Promise<null> => {
+    const t = await ctx.runQuery(internal.subscriptions.changeTarget, { subscriptionId });
+    const s = t.s;
+    if (!s.stripe?.subscriptionId) throw new ConvexError("It hasn't started yet.");
+    try {
+      await stripeCall("POST", `subscriptions/${s.stripe.subscriptionId}`, { account: s.stripe.accountId, form: s.pause ? { pause_collection: "" } : { cancel_at_period_end: false } });
+    } catch (e) { throw stripeMsg(e); }
+    await ctx.runMutation(internal.subscriptions.noteChange, { subscriptionId, kind: "resumed", by: t.by, detail: s.pause ? undefined : "won't end after all" });
+    await ctx.runAction(internal.subscriptions.sync, { accountId: s.stripe.accountId, subscriptionId: s.stripe.subscriptionId });
+    return null;
+  },
+});
+
+/** Cancel subscription…: at the end of the period (no more charges), or now. Email 16 tells the client. */
+export const cancel = action({
+  args: { subscriptionId: v.id("subscriptions"), when: v.union(v.literal("period_end"), v.literal("now")) },
+  handler: async (ctx, { subscriptionId, when }): Promise<null> => {
+    const t = await ctx.runQuery(internal.subscriptions.changeTarget, { subscriptionId });
+    const s = t.s;
+    const now = when === "now" || !s.stripe?.subscriptionId;
+    try {
+      if (s.stripe?.subscriptionId) {
+        if (now) await stripeCall("DELETE", `subscriptions/${s.stripe.subscriptionId}`, { account: s.stripe.accountId });
+        else await stripeCall("POST", `subscriptions/${s.stripe.subscriptionId}`, { account: s.stripe.accountId, form: { cancel_at_period_end: true } });
+      }
+    } catch (e) { throw stripeMsg(e); }
+    await ctx.runMutation(internal.subscriptions.noteChange, { subscriptionId, kind: now ? "canceled" : "ending", by: t.by, canceledNow: now });
+    if (s.stripe?.subscriptionId) await ctx.runAction(internal.subscriptions.sync, { accountId: s.stripe.accountId, subscriptionId: s.stripe.subscriptionId });
+    if (s.stripe?.subscriptionId || s.history.some((h) => h.kind === "emailed")) await ctx.scheduler.runAfter(0, internal.subscriptions.sendCancelled, { subscriptionId });
+    return null;
+  },
+});
+
+export const cancelledData = internalQuery({
+  args: { subscriptionId: v.id("subscriptions") },
+  handler: async (ctx, { subscriptionId }) => {
+    const s = await ctx.db.get(subscriptionId);
+    if (!s) return null;
+    const st = showStatus(s);
+    if (st !== "canceled" && st !== "ending") return null;
+    return { to: s.billTo.email, name: s.billTo.name, plan: s.planName, ended: st === "canceled", ends: s.currentPeriodEnd ? dateWords(s.currentPeriodEnd) : "", link: subLink(s.payToken), brand: await mailBrandOf(ctx, s.businessId ?? null) };
+  },
+});
+
+export const sendCancelled = internalAction({
+  args: { subscriptionId: v.id("subscriptions") },
+  handler: async (ctx, { subscriptionId }): Promise<string> => {
+    const d = await ctx.runQuery(internal.subscriptions.cancelledData, { subscriptionId });
+    if (!d) return "skipped";
+    const r = await deliverOnce(ctx, `sub-cancelled:${subscriptionId}`, "subscription-cancelled", d.to, subscriptionCancelledMail(d.brand, d), d.brand.replyTo);
+    if (r !== "already") await ctx.runMutation(internal.subscriptions.note, { subscriptionId, kind: r === "held" ? "email_held" : "emailed", detail: "cancellation" });
+    return r;
+  },
+});
+
+// ---------- D64: what happens when the last retry fails ----------
+
+/** Settings › Payments: the business's choice. */
+export const setFailRule = mutation({
+  args: { rule: v.union(v.literal("past_due"), v.literal("cancel")) },
+  handler: async (ctx, { rule }) => {
+    await requireMe(ctx);
+    const id = businessInScope(ctx);
+    if (!id) throw new ConvexError("Not allowed.");
+    await ctx.db.patch(id, { subFailRule: rule });
+    return null;
+  },
+});
+
+/** A client's Settings tab: use the business's choice, or override it for this client. */
+export const setClientFailRule = mutation({
+  args: { clientId: v.id("clients"), rule: v.union(v.literal("business"), v.literal("past_due"), v.literal("cancel")) },
+  handler: async (ctx, { clientId, rule }) => {
+    await requireMe(ctx);
+    const c = await ctx.db.get(clientId);
+    if (!c) throw new ConvexError("That client isn't here.");
+    await ctx.db.patch(clientId, { subFailRule: rule === "business" ? undefined : rule });
+    return null;
+  },
+});
+
+export const failRules = query({
+  args: { clientId: v.optional(v.id("clients")) },
+  handler: async (ctx, { clientId }) => {
+    await requireMe(ctx);
+    const id = businessInScope(ctx);
+    const b = id ? await ctx.db.get(id) : null;
+    const c = clientId ? await ctx.db.get(clientId) : null;
+    return { business: b?.subFailRule ?? "past_due", client: c?.subFailRule ?? "business" };
+  },
+});
+
+// ---------- a failed charge: emails 15 and 17, the Inbox, and D64 ----------
+
+export const failedData = internalQuery({
+  args: { invoiceId: v.id("invoices") },
+  handler: async (ctx, { invoiceId }) => {
+    const i = await ctx.db.get(invoiceId);
+    if (!i || i.kind !== "subscription" || !i.subscriptionId || !i.stripe) return null;
+    const s = await ctx.db.get(i.subscriptionId);
+    if (!s) return null;
+    const b = s.businessId ? await ctx.db.get(s.businessId) : null;
+    const client = s.clientId ? await ctx.db.get(s.clientId) : null;
+    const owner = s.businessId ? (await ctx.db.query("memberships").collect()).filter((m) => m.businessId === s.businessId && m.role === "owner" && !m.revokedAt).sort((a, c) => a.createdAt - c.createdAt)[0]?.email ?? null : null;
+    return {
+      invoice: { status: i.status, processing: !!i.processing, lastFailureKey: i.lastFailure?.key ?? null, amountCents: i.amountRemainingCents, stripeId: i.stripe.invoiceId, accountId: i.stripe.accountId, paidSince: (i.payments ?? []).filter((p) => p.status !== "failed").map((p) => p.at) },
+      sub: s, client: client?.name ?? s.billTo.name, owner, rule: client?.subFailRule ?? b?.subFailRule ?? "past_due",
+      brand: await mailBrandOf(ctx, s.businessId ?? null),
+    };
+  },
+});
+
+export const markFailed = internalMutation({
+  args: { subscriptionId: v.id("subscriptions"), at: v.number(), message: v.string(), invoice: v.string(), final: v.boolean() },
+  handler: async (ctx, { subscriptionId, at, message, invoice, final }) => {
+    const s = await ctx.db.get(subscriptionId);
+    if (!s) return;
+    await ctx.db.patch(subscriptionId, { lastFailure: { at, message, invoice }, history: [...s.history, { kind: "past_due", at: Date.now(), detail: final ? `${message} (last try)` : message }].slice(-80), updatedAt: Date.now() });
+    if (s.businessId) await postToInbox(ctx, {
+      businessId: s.businessId, clientId: s.clientId, email: s.billTo.email, kind: "payment", key: `subfailed:${subscriptionId}:${invoice}:${at}`,
+      title: `Payment failed · ${s.planName}`, text: "Update your card so your plan keeps going.", link: `/sub/${s.payToken}`, linkLabel: "Update your card", source: { module: "payments", id: subscriptionId },
+    });
+  },
+});
+
+export const onFailed = internalAction({
+  args: { invoiceId: v.id("invoices"), failureKey: v.string(), failureAt: v.number(), message: v.string() },
+  handler: async (ctx, { invoiceId, failureKey, failureAt, message }): Promise<string> => {
+    const d = await ctx.runQuery(internal.subscriptions.failedData, { invoiceId });
+    if (!d || d.invoice.status !== "open" || d.invoice.processing) return "skipped";
+    if (d.invoice.lastFailureKey !== failureKey) return "skipped"; // a later attempt replaced it
+    if (d.invoice.paidSince.some((at) => at > failureAt - 60_000)) return "skipped";
+    let next: number | null = null;
+    try { const inv = await stripeCall("GET", `invoices/${d.invoice.stripeId}`, { account: d.invoice.accountId }); next = inv.next_payment_attempt ? Number(inv.next_payment_attempt) * 1000 : null; } catch { next = null; }
+    const s = d.sub;
+    await ctx.runMutation(internal.subscriptions.markFailed, { subscriptionId: s._id, at: failureAt, message, invoice: d.invoice.stripeId, final: next === null });
+    const link = subLink(s.payToken);
+    await deliverOnce(ctx, `subfailed:${invoiceId}:${failureKey}`, "subscription-failed", s.billTo.email,
+      subscriptionFailedMail(d.brand, { name: s.billTo.name, plan: s.planName, amountCents: d.invoice.amountCents, reason: message, nextTry: next ? dateWords(next) : null, link }), d.brand.replyTo);
+    if (d.owner) await deliverOnce(ctx, `subfailed-owner:${invoiceId}:${failureKey}`, "subscription-failed-owner", d.owner,
+      ownerSubscriptionFailedMail(d.brand, { client: d.client, plan: s.planName, amountCents: d.invoice.amountCents, reason: message, nextTry: next ? dateWords(next) : null, link: `${SITE()}/payments/subscriptions/${s._id}` }), d.brand.replyTo);
+    // D64: after Stripe's last try, the owner's choice for this client (or the business's): keep it past due, or cancel.
+    if (next === null && d.rule === "cancel" && s.stripe?.subscriptionId) {
+      try { await stripeCall("DELETE", `subscriptions/${s.stripe.subscriptionId}`, { account: s.stripe.accountId }); } catch { return "sent"; }
+      await ctx.runMutation(internal.subscriptions.noteChange, { subscriptionId: s._id, kind: "canceled", by: "Portal", detail: "after the last retry failed (your setting)", canceledNow: true });
+      await ctx.scheduler.runAfter(0, internal.subscriptions.sendCancelled, { subscriptionId: s._id });
+    }
+    return "sent";
+  },
+});
+
+// ---------- email 14 (D62): 7 days before each charge ----------
+
+export const upcomingDue = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const live = keyMode(platformKey()) === "live";
+    const out = [];
+    for (const s of await ctx.db.query("subscriptions").collect()) {
+      if (!!s.stripe?.livemode !== live || !s.stripe?.subscriptionId) continue;
+      const st = showStatus(s, now);
+      if (!["active", "trialing", "scheduled"].includes(st)) continue;
+      const at = nextCharge(s, now);
+      if (!at || at - now > 7 * DAY || at - now <= 6 * DAY) continue;
+      // Short periods (a week or less) would get the email right after the last charge; skip those.
+      if ((s.interval === "day") || (s.interval === "week" && s.intervalCount < 3)) continue;
+      out.push({ id: s._id, at });
+    }
+    return out;
+  },
+});
+
+export const upcomingData = internalQuery({
+  args: { subscriptionId: v.id("subscriptions") },
+  handler: async (ctx, { subscriptionId }) => {
+    const s = await ctx.db.get(subscriptionId);
+    if (!s) return null;
+    return { to: s.billTo.email, name: s.billTo.name, plan: s.planName, amountCents: s.amountCents, method: s.method ?? null, link: subLink(s.payToken), brand: await mailBrandOf(ctx, s.businessId ?? null) };
+  },
+});
+
+export const runUpcoming = internalAction({
+  args: {},
+  handler: async (ctx): Promise<number> => {
+    let sent = 0;
+    for (const u of await ctx.runQuery(internal.subscriptions.upcomingDue, {})) {
+      const d = await ctx.runQuery(internal.subscriptions.upcomingData, { subscriptionId: u.id });
+      if (!d) continue;
+      const r = await deliverOnce(ctx, `sub-upcoming:${u.id}:${Math.round(u.at / 60_000)}`, "subscription-upcoming", d.to, upcomingChargeMail(d.brand, { ...d, on: dateWords(u.at) }), d.brand.replyTo);
+      if (r !== "already") { sent++; await ctx.runMutation(internal.subscriptions.note, { subscriptionId: u.id, kind: r === "held" ? "email_held" : "upcoming_emailed", detail: dateWords(u.at) }); }
+    }
+    return sent;
   },
 });
 

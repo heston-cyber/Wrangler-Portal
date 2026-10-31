@@ -19,11 +19,13 @@ export function fakeStripe(opts: { payments?: unknown[]; invoiceStatus?: string;
     const form = Object.fromEntries(new URLSearchParams(String(init.body ?? "")));
     calls.push({ method: init.method ?? "GET", path, query: decodeURIComponent(query), account: h["Stripe-Account"] ?? null, form });
     const ok = (o: unknown) => new Response(JSON.stringify(o));
+    if (String(url).startsWith("https://api.resend.com")) return ok({ id: "re_sent" }); // emails the preview list allows
     if (path === "customers") return ok({ id: "cus_1" });
     if (/^customers\//.test(path)) return ok({ id: path.split("/")[1] });
     if (path === "setup_intents") return ok({ id: "seti_1", client_secret: "seti_1_secret_x" });
     if (/^setup_intents\//.test(path)) return ok({ id: "seti_1", status: "succeeded", customer: "cus_1", metadata: { portal_subscription: opts.sub?.portal ?? "" }, payment_method: { id: "pm_1", type: "card", card: { brand: "visa", last4: "4242" } } });
     if (path === "subscriptions" || /^subscriptions\//.test(path)) return ok({ id: "sub_1", status: "active", items: { data: [{ current_period_start: 1_790_000_000, current_period_end: 1_792_592_000 }] }, latest_invoice: "in_s1", metadata: { portal_subscription: opts.sub?.portal ?? "" }, ...opts.sub });
+    if (path === "invoices/create_preview") return ok({ amount_due: 312500, next_payment_attempt: 1_792_592_000 });
     if (path === "invoices" && (init.method ?? "GET") === "GET") return ok({ data: opts.subInvoice ? [{ id: "in_s1" }] : [] });
     if (/^invoices\/in_s1\/pay/.test(path)) return opts.payError ? new Response(JSON.stringify({ error: { message: opts.payError } }), { status: 402 }) : ok({ id: "in_s1", status: "paid" });
     if (/^invoices\/in_s1/.test(path)) return ok({ id: "in_s1", status: "open", total: 250000, amount_paid: 0, amount_remaining: 250000, number: "WRNGLR-0007", created: 1_790_000_000, livemode: false,

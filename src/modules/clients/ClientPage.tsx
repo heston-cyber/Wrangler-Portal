@@ -239,6 +239,27 @@ function ClientSettings({ clientId, name, settings, show }: { clientId: Id<"clie
         <div className="prow"><span className="pl">Review copies</span><span className="pr"><Toggle label="Watermark" checked={on} onChange={(v) => void save({ clientId, watermarkOff: !v }).catch(err)} /><span className="wmtxt">{on ? `On · ${name} sees your watermark on review copies` : `Off · review copies for ${name} have no watermark`}</span></span></div>
         <div className="prow"><span className="pl">Look</span><span className="pr">Set in Settings › Business<a className="linkbtn" {...linkProps("/settings/business")}>Open<Icon name="arrow-right" size={14} /></a></span></div>
       </div>
+      <SubFailRow clientId={clientId} name={name} show={show} />
+    </div>
+  );
+}
+
+/** Phase 2b (D64): what happens to this client's subscriptions when Stripe's last retry fails. */
+function SubFailRow({ clientId, name, show }: { clientId: Id<"clients">; name: string; show: (m: string) => void }) {
+  const rules = useQuery(api.subscriptions.failRules, { clientId });
+  const pay = useQuery(api.payments.settings, {});
+  const save = useMutation(api.subscriptions.setClientFailRule);
+  if (!rules || !pay?.stripe) return null;
+  type R = "business" | "past_due" | "cancel";
+  const biz = rules.business === "cancel" ? "Cancel" : "Keep past due";
+  return (
+    <div className="panel">
+      <span className="wp-eyebrow">Subscriptions</span>
+      <div className="prow"><span className="pl">When a payment fails for good</span><span className="pr">
+        <Segmented<R> label="When a subscription payment fails for good" value={rules.client as R} onChange={(k) => void save({ clientId, rule: k }).then(() => show(k === "business" ? "Back to the business setting." : `Saved for ${name}.`), (e) => show(errText(e)))}
+          items={[{ key: "business", label: `Business setting (${biz})` }, { key: "past_due", label: "Keep past due" }, { key: "cancel", label: "Cancel it" }]} />
+      </span></div>
+      <div className="prow"><span className="pl">Means</span><span className="pr">After Stripe's last retry. Past due waits for you; Cancel ends the subscription and emails {name}.</span></div>
     </div>
   );
 }

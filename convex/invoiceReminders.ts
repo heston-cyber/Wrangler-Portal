@@ -90,6 +90,7 @@ export const sendReminder = mutation({
     if (!i || i.status === "draft" || i.status === "sending") throw new ConvexError("Send the invoice first.");
     if (i.status !== "open" || i.amountRemainingCents <= 0) throw new ConvexError("There's nothing left to pay on this invoice.");
     if (i.processing) throw new ConvexError("A bank payment is on its way, so there's nothing to remind them about.");
+    if (i.kind === "subscription") throw new ConvexError("Stripe charges this one automatically; the client was emailed when it failed. Their subscription page has Update payment method.");
     const biz = i.businessId ? await ctx.db.get(i.businessId) : null;
     if (biz?.stripe?.status !== "connected") throw new ConvexError("Stripe isn't connected, so they couldn't pay it. Connect Stripe first (Settings › Payments).");
     if (!i.payToken) throw new ConvexError("This invoice has no link yet. Open \"Client's invoice page\" once, then try again.");
@@ -113,7 +114,7 @@ export const runDue = internalMutation({
     const live = keyMode(platformKey()) === "live";
     const on = (await ctx.db.query("businesses").collect()).filter((b) => b.reminders?.on && b.stripe?.status === "connected"); // they couldn't pay otherwise
     if (!on.length) return { sent };
-    const open = (await ctx.db.query("invoices").collect()).filter((i) => i.status === "open" && i.payToken);
+    const open = (await ctx.db.query("invoices").collect()).filter((i) => i.status === "open" && i.payToken && i.kind !== "subscription"); // 2b: Stripe charges those itself
     for (const b of on) {
       if (!b.reminders) continue;
       for (const i of open) {
@@ -148,7 +149,7 @@ export const mailData = internalQuery({
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function deliverOnce(ctx: { runMutation: (ref: any, args: any) => Promise<any> }, key: string, kind: string, to: string, m: { from: string; subject: string; text: string; html: string }, replyTo: string) {
+export async function deliverOnce(ctx: { runMutation: (ref: any, args: any) => Promise<any> }, key: string, kind: string, to: string, m: { from: string; subject: string; text: string; html: string }, replyTo: string) {
   if (!(await ctx.runMutation(internal.invoicePay.claimEmail, { key, to }))) return "already";
   try {
     const id = await sendEmail({ from: m.from, to, subject: m.subject, text: m.text, html: m.html, tag: kind, replyTo });
@@ -213,5 +214,7 @@ export async function afterPayments(ctx: MutationCtx, before: Doc<"invoices">, p
       source: { module: "payments", id: before._id }, key: `payment:${before._id}:${p.id}`,
     });
   }
-  if (newFailure) await ctx.scheduler.runAfter(15 * 60_000, internal.invoiceReminders.sendFailed, { invoiceId: before._id, failureKey: newFailure.key, failureAt: newFailure.at, message: newFailure.message });
+  // Phase 2b: a subscription's charge failing has its own emails (15 to the client, 17 to the owner) and D64.
+  if (newFailure && before.kind === "subscription") await ctx.scheduler.runAfter(15 * 60_000, internal.subscriptions.onFailed, { invoiceId: before._id, failureKey: newFailure.key, failureAt: newFailure.at, message: newFailure.message });
+  else if (newFailure) await ctx.scheduler.runAfter(15 * 60_000, internal.invoiceReminders.sendFailed, { invoiceId: before._id, failureKey: newFailure.key, failureAt: newFailure.at, message: newFailure.message });
 }

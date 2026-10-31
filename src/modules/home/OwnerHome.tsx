@@ -1,6 +1,6 @@
 // The back-office Home (P1 / Owner / Home, page "S5 · Phase 1"): what needs you today, your clients, and recent
 // activity across Review, Docs and the Inbox.
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -8,6 +8,9 @@ import { Button, ButtonLink, Card, Divider, InboxItem, ListRow, PageHeader, Sect
 import type { IconName } from "../../ui/Icon";
 import { useToast } from "../../ui/kit";
 import { errText } from "../docs/pages/common";
+
+// Phase 2b: monthly recurring and any past-due subscription (loaded with the Payments code).
+const Recurring = lazy(() => import("../payments/PaymentsOverview").then((m) => ({ default: m.Recurring })));
 
 const TZ = "America/Chicago";
 const WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
@@ -151,6 +154,7 @@ export default function OwnerHome() {
                 </div>
               ))}
           </Card>
+          <Suspense fallback={null}><Recurring withPastDue /></Suspense>
         </div>
       </div>
       {toast}

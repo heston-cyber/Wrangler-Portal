@@ -402,6 +402,7 @@ export default defineSchema({
     fromProjects: v.optional(v.boolean()),
     rounds: v.optional(v.number()),          // Phase 2: rounds per video for this client's projects (missing: the business's)
     watermarkOff: v.optional(v.boolean()),   // Phase 2 (D24): review copies are watermarked unless switched off here
+    subFailRule: v.optional(v.union(v.literal("past_due"), v.literal("cancel"))), // Phase 2b (D64): overrides the business's choice
   }).index("by_name", ["name"]).index("by_dropbox_folder", ["dropboxFolder"]),
 
   // Playback problems the browser reported (Oct 21), so they can be diagnosed on devices Claude can't reach.
@@ -709,6 +710,8 @@ export default defineSchema({
       domain: v.optional(v.object({ name: v.string(), at: v.number(), ok: v.boolean(), applePay: v.optional(v.string()), error: v.optional(v.string()) })),
       startedAt: v.number(), connectedAt: v.optional(v.number()), disconnectedAt: v.optional(v.number()), checkedAt: v.number(),
     })),
+    // Phase 2b (D64): when Stripe's last retry of a subscription payment fails: keep it past due (default) or cancel it.
+    subFailRule: v.optional(v.union(v.literal("past_due"), v.literal("cancel"))),
     // Phase 2 Part B step 4 (D51): automatic invoice reminders, off until the owner turns them on (that's their OK).
     reminders: v.optional(v.object({
       on: v.boolean(),

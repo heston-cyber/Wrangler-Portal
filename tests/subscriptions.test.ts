@@ -174,3 +174,129 @@ describe("starting a subscription", () => {
     delete process.env.STRIPE_PUBLISHABLE_KEY;
   });
 });
+
+async function running(w: Awaited<ReturnType<typeof world>>, extra: Record<string, unknown> = {}) {
+  process.env.STRIPE_PUBLISHABLE_KEY = "pk_test_platform";
+  const planId = await withPlan(w);
+  fakeStripe();
+  const id = await w.heston.action(api.subscriptions.start, { clientId: w.harbor, planId, billTo: { name: "Maya Brooks", email: "maya@harbor.example" }, startDate: today(), firstInvoice: "now", postInbox: false, ...extra });
+  const token = (await w.heston.query(api.subscriptions.get, { subscriptionId: id })).link.split("/sub/")[1];
+  fakeStripe({ sub: { portal: id } });
+  await w.t.action(api.subscriptions.setupDone, { token, setupIntentId: "seti_1" });
+  delete process.env.STRIPE_PUBLISHABLE_KEY;
+  return { id, token, planId };
+}
+
+describe("the owner's changes", () => {
+  test("change plan: Stripe's proration is shown first, then the item's price changes and the portal's copy follows", async () => {
+    const w = await world();
+    const { id } = await running(w);
+    fakeStripe();
+    const bigger = await w.heston.action(api.plans.save, { name: "Retainer plus", amountCents: 400000, interval: "month", intervalCount: 1 });
+    const calls = fakeStripe({ sub: { portal: id, items: { data: [{ id: "si_1", current_period_start: 1_790_000_000, current_period_end: 1_792_592_000 }] } } });
+    expect(await w.heston.action(api.subscriptions.changePreview, { subscriptionId: id, planId: bigger })).toEqual({ amountCents: 312500, at: 1_792_592_000_000 });
+    await w.heston.action(api.subscriptions.changePlan, { subscriptionId: id, planId: bigger });
+    const upd = calls.find((c) => c.method === "POST" && c.path === "subscriptions/sub_1")!;
+    expect(upd.form).toMatchObject({ "items[0][id]": "si_1", "items[0][price]": "price_0", proration_behavior: "create_prorations" });
+    expect(await w.heston.query(api.subscriptions.get, { subscriptionId: id })).toMatchObject({ plan: "Retainer plus", price: "$4,000.00 / month" });
+  });
+
+  test("pause voids while paused; resume lifts it; cancel at period end then keep it; cancel now (email 16 once)", async () => {
+    vi.useFakeTimers();
+    const w = await world();
+    const { id } = await running(w);
+    let calls = fakeStripe({ sub: { portal: id, pause_collection: { behavior: "void" } } });
+    await w.heston.action(api.subscriptions.pause, { subscriptionId: id });
+    expect(calls.find((c) => c.method === "POST" && c.path === "subscriptions/sub_1")!.form).toEqual({ "pause_collection[behavior]": "void" });
+    expect((await w.heston.query(api.subscriptions.get, { subscriptionId: id })).status).toBe("paused");
+    calls = fakeStripe({ sub: { portal: id } });
+    await w.heston.action(api.subscriptions.resume, { subscriptionId: id });
+    expect(calls.find((c) => c.method === "POST" && c.path === "subscriptions/sub_1")!.form).toEqual({ pause_collection: "" });
+    expect((await w.heston.query(api.subscriptions.get, { subscriptionId: id })).status).toBe("active");
+    calls = fakeStripe({ sub: { portal: id, cancel_at_period_end: true } });
+    await w.heston.action(api.subscriptions.cancel, { subscriptionId: id, when: "period_end" });
+    expect(calls.find((c) => c.method === "POST" && c.path === "subscriptions/sub_1")!.form).toEqual({ cancel_at_period_end: "true" });
+    expect((await w.heston.query(api.subscriptions.get, { subscriptionId: id })).status).toBe("ending");
+    fakeStripe({ sub: { portal: id } });
+    await w.heston.action(api.subscriptions.resume, { subscriptionId: id });
+    expect((await w.heston.query(api.subscriptions.get, { subscriptionId: id })).status).toBe("active");
+    calls = fakeStripe({ sub: { portal: id, status: "canceled", canceled_at: 1_791_000_000 } });
+    await w.heston.action(api.subscriptions.cancel, { subscriptionId: id, when: "now" });
+    expect(calls.some((c) => c.method === "DELETE" && c.path === "subscriptions/sub_1")).toBe(true);
+    await w.t.finishAllScheduledFunctions(vi.runAllTimers);
+    expect((await w.heston.query(api.subscriptions.get, { subscriptionId: id })).status).toBe("canceled");
+    expect(await w.t.run(async (ctx) => (await ctx.db.query("emailLog").collect()).filter((r) => r.key.startsWith("sub-cancelled:")).length)).toBe(1);
+    await expect(w.maya.action(api.subscriptions.cancel, { subscriptionId: id, when: "now" })).rejects.toThrow();
+  });
+
+  test("a waiting subscription (no card yet) can be cancelled without Stripe", async () => {
+    const w = await world();
+    const planId = await withPlan(w);
+    fakeStripe();
+    const id = await w.heston.action(api.subscriptions.start, { clientId: w.harbor, planId, billTo: { name: "Maya", email: "maya@harbor.example" }, startDate: today(), firstInvoice: "now", postInbox: false });
+    const calls = fakeStripe();
+    await w.heston.action(api.subscriptions.cancel, { subscriptionId: id, when: "period_end" });
+    expect(calls.filter((c) => c.path.startsWith("subscriptions"))).toEqual([]);
+    expect((await w.heston.query(api.subscriptions.get, { subscriptionId: id })).status).toBe("canceled");
+  });
+});
+
+describe("failed charges and D64", () => {
+  async function failedInvoice(w: Awaited<ReturnType<typeof world>>, id: string) {
+    fakeStripe({ sub: { portal: id }, subInvoice: {} });
+    await w.t.action(anyApi.subscriptions.importInvoice, { accountId: "acct_A", stripeId: "in_s1" });
+    return await w.t.run(async (ctx) => {
+      const i = (await ctx.db.query("invoices").collect()).find((x) => x.kind === "subscription")!;
+      await ctx.db.patch(i._id, { lastFailure: { at: Date.now(), message: "Your card was declined.", key: "pi_9:ch_9" } });
+      return i._id;
+    });
+  }
+
+  test("emails 15 (client) and 17 (owner), the Inbox item, and past due; Stripe keeps trying, so it stays", async () => {
+    const w = await world();
+    const { id } = await running(w);
+    const inv = await failedInvoice(w, id);
+    fakeStripe({ sub: { portal: id }, subInvoice: { next_payment_attempt: 1_793_000_000 } });
+    expect(await w.t.action(anyApi.subscriptions.onFailed, { invoiceId: inv, failureKey: "pi_9:ch_9", failureAt: Date.now(), message: "Your card was declined." })).toBe("sent");
+    const keys = await w.t.run(async (ctx) => (await ctx.db.query("emailLog").collect()).map((r) => `${r.key.split(":")[0]} ${r.to}`));
+    expect(keys).toEqual(expect.arrayContaining(["subfailed maya@harbor.example", "subfailed-owner heston@wranglerproductions.com"]));
+    expect(await w.t.run(async (ctx) => (await ctx.db.query("inboxItems").collect()).map((r) => r.title))).toContain("Payment failed · Monthly retainer");
+    expect((await w.heston.query(api.subscriptions.get, { subscriptionId: id })).lastFailure).toMatchObject({ message: "Your card was declined." });
+    // Run again: nothing new.
+    await w.t.action(anyApi.subscriptions.onFailed, { invoiceId: inv, failureKey: "pi_9:ch_9", failureAt: Date.now(), message: "Your card was declined." });
+    expect(await w.t.run(async (ctx) => (await ctx.db.query("emailLog").collect()).filter((r) => r.key.startsWith("subfailed")).length)).toBe(2);
+  });
+
+  test("after the last try: the business's choice, overridden per client (cancel), and only then", async () => {
+    vi.useFakeTimers();
+    const w = await world();
+    const { id } = await running(w);
+    await w.heston.mutation(api.subscriptions.setFailRule, { rule: "past_due" });
+    await w.heston.mutation(api.subscriptions.setClientFailRule, { clientId: w.harbor, rule: "cancel" });
+    expect(await w.heston.query(api.subscriptions.failRules, { clientId: w.harbor })).toEqual({ business: "past_due", client: "cancel" });
+    const inv = await failedInvoice(w, id);
+    const calls = fakeStripe({ sub: { portal: id, status: "canceled" }, subInvoice: { next_payment_attempt: null } });
+    await w.t.action(anyApi.subscriptions.onFailed, { invoiceId: inv, failureKey: "pi_9:ch_9", failureAt: Date.now(), message: "Your card was declined." });
+    expect(calls.some((c) => c.method === "DELETE" && c.path === "subscriptions/sub_1")).toBe(true);
+    await w.t.finishAllScheduledFunctions(vi.runAllTimers);
+    expect((await w.heston.query(api.subscriptions.get, { subscriptionId: id })).status).toBe("canceled");
+    // Back to the business setting (keep past due): no cancel.
+    await w.heston.mutation(api.subscriptions.setClientFailRule, { clientId: w.harbor, rule: "business" });
+    expect(await w.heston.query(api.subscriptions.failRules, { clientId: w.harbor })).toEqual({ business: "past_due", client: "business" });
+  });
+});
+
+describe("email 14 (D62) and the reminders", () => {
+  test("sent once, 7 days before the next charge; never for a waiting or ended subscription", async () => {
+    const w = await world();
+    const { id } = await running(w);
+    const now = Date.now();
+    await w.t.run(async (ctx) => { await ctx.db.patch(id, { currentPeriodEnd: now + 6.5 * 86_400_000 }); });
+    expect(await w.t.action(anyApi.subscriptions.runUpcoming, {})).toBe(1);
+    expect(await w.t.action(anyApi.subscriptions.runUpcoming, {})).toBe(0);
+    await w.t.run(async (ctx) => { await ctx.db.patch(id, { currentPeriodEnd: now + 9 * 86_400_000 }); });
+    expect(await w.t.action(anyApi.subscriptions.runUpcoming, {})).toBe(0);
+    await w.t.run(async (ctx) => { await ctx.db.patch(id, { currentPeriodEnd: now + 6.5 * 86_400_000, status: "canceled" }); });
+    expect(await w.t.action(anyApi.subscriptions.runUpcoming, {})).toBe(0);
+  });
+});

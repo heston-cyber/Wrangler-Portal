@@ -31,6 +31,25 @@ const methodsText = (m: string[] | null) => {
 const days = (n: number) => `${n} day${n === 1 ? "" : "s"}`;
 
 /** D51 (frames 256:7029 off, 256:7306 on): automatic reminders, off by default. */
+/** Phase 2b (D64): when Stripe's last retry of a subscription payment fails. A client's Settings tab can override it. */
+function SubFail({ show }: { show: (m: string) => void }) {
+  const rules = useQuery(api.subscriptions.failRules, {});
+  const save = useMutation(api.subscriptions.setFailRule);
+  if (!rules) return null;
+  const set = (rule: "past_due" | "cancel") => void save({ rule }).then(() => show("Saved."), (e) => show(err(e)));
+  return (
+    <div className="panel pay-card">
+      <span className="wp-eyebrow">Subscriptions</span>
+      <label className="wp-field"><span className="wp-field-label">When a subscription payment fails for good</span>
+        <select className="input" value={rules.business} onChange={(e) => set(e.target.value as "past_due" | "cancel")}>
+          <option value="past_due">Keep it past due (you decide what happens)</option>
+          <option value="cancel">Cancel the subscription</option>
+        </select></label>
+      <p className="secondary pay-note">After Stripe's last retry. Each client's Settings tab can set it differently. In your Stripe account, set Billing › Revenue recovery to leave the subscription as it is, so the portal applies this.</p>
+    </div>
+  );
+}
+
 function Reminders({ r, show }: { r: { on: boolean; beforeDays: number; afterDays: number; everyDays: number; stopAfter: number }; show: (m: string) => void }) {
   const save = useMutation(api.invoiceReminders.setReminders);
   const set = (patch: Partial<typeof r>) => void save({ ...r, ...patch }).then(
@@ -193,6 +212,7 @@ export function PaymentsSettings({ show }: { show: (m: string) => void }) {
         </div>
       )}
       {st.status === "connected" && <Reminders r={s.reminders} show={show} />}
+      {st.status === "connected" && <SubFail show={show} />}
       {asking && (
         <Modal onClose={() => setAsking(false)} label="Disconnect Stripe" width={560}>
           <div style={{ display: "grid", gap: 18 }}>
