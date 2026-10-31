@@ -73,7 +73,12 @@ export function showStatus(s: Doc<"subscriptions">, now = Date.now()): ShowStatu
 export function nextCharge(s: Doc<"subscriptions">, now = Date.now()): number | null {
   const st = showStatus(s, now);
   if (st === "canceled" || st === "ending" || st === "paused") return null;
-  if (st === "waiting") return s.firstInvoice === "now" || startMoment(s.startDate) <= now ? null : startMoment(s.startDate);
+  if (st === "waiting") {
+    const starts = Math.max(startMoment(s.startDate), now);
+    if (s.trialDays) return starts + s.trialDays * DAY; // review fix: the trial's end, not the start date
+    return s.firstInvoice === "now" || startMoment(s.startDate) <= now ? null : startMoment(s.startDate);
+  }
+  if (st === "past_due") return s.lastFailure?.nextTry ?? null; // when Stripe tries again (none after the last try)
   if (s.trialEnd && s.trialEnd > now) return s.trialEnd;
   return s.currentPeriodEnd ?? null;
 }
@@ -152,6 +157,10 @@ export const start = action({
     const trialDays = a.trialDays ? Math.floor(a.trialDays) : 0;
     if (trialDays < 0 || trialDays > 730) throw new ConvexError("A trial can be up to 730 days.");
     const firstInvoice = trialDays ? "start" : a.firstInvoice; // a free trial always charges at its end
+    // Review fix: Stripe allows the first charge at most 730 days out.
+    const starts = Math.max(startMoment(a.startDate), Date.now());
+    const firstAt = trialDays ? starts + trialDays * DAY : firstInvoice === "now" && starts > Date.now() + 10 * 60_000 ? addInterval(starts, t.plan.interval, t.plan.intervalCount) : starts;
+    if (firstAt > Date.now() + 729 * DAY) throw new ConvexError("Stripe can't wait that long for the first charge (2 years at most). Pick an earlier start or a shorter trial.");
     let customerId = t.customerId;
     try {
       if (!customerId) {
@@ -354,6 +363,7 @@ export const payTarget = internalQuery({
       subscription: s, businessId: s.businessId ?? null, accountId: s.stripe.accountId, customerId: s.stripe.customerId,
       connected: biz?.stripe?.status === "connected" && biz.stripe.accountId === s.stripe.accountId, methods: biz?.stripe?.methods ?? ["card"],
       productId: (await ctx.db.get(s.planId))?.stripe.productId ?? null,
+      planArchived: !!(await ctx.db.get(s.planId))?.archivedAt,
     };
   },
 });
@@ -366,6 +376,7 @@ export const setupStart = action({
     if (!t) throw new ConvexError("This subscription isn't here.");
     if (!t.connected) throw new ConvexError(`This can't be set up here right now. Reply to the email from the business.`);
     if (showStatus(t.subscription) === "canceled") throw new ConvexError("This subscription has ended.");
+    if (!t.subscription.stripe?.subscriptionId && t.planArchived) throw new ConvexError("This plan isn't offered any more. Reply to the email from the business.");
     const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY ?? "";
     if (!/^pk_(test|live)_/.test(publishableKey)) throw new ConvexError("Saving a payment method in the portal isn't switched on yet.");
     if (t.businessId) await ctx.runAction(internal.payments.ensureDomain, { businessId: t.businessId, accountId: t.accountId }).catch(() => null);
@@ -391,6 +402,10 @@ export const setupDone = action({
     if (!/^seti_[A-Za-z0-9]+$/.test(setupIntentId)) throw new ConvexError("That didn't come back from Stripe.");
     const s = t.subscription;
     const account = t.accountId;
+    // Review fixes: never start or charge a subscription that was cancelled, or for a business no longer connected.
+    if (showStatus(s) === "canceled") throw new ConvexError("This subscription has ended. Nothing was charged.");
+    if (!t.connected) throw new ConvexError("This can't be set up here right now. Reply to the email from the business.");
+    if (!s.stripe?.subscriptionId && t.planArchived) throw new ConvexError("This plan isn't offered any more. Reply to the email from the business.");
     try {
       const si = await stripeCall("GET", `setup_intents/${setupIntentId}`, { account, form: { expand: ["payment_method"] } });
       if (si.customer !== t.customerId || si.metadata?.portal_subscription !== s._id) throw new ConvexError("That payment method isn't for this subscription.");
@@ -400,7 +415,12 @@ export const setupDone = action({
       await stripeCall("POST", `customers/${t.customerId}`, { account, form: { invoice_settings: { default_payment_method: pm.id } } });
       await ctx.runMutation(internal.subscriptions.note, { subscriptionId: s._id, kind: "method", detail: method });
       if (!s.stripe?.subscriptionId) {
-        const sub = await stripeCall("POST", "subscriptions", { account, idem: `wp-sub-${s._id}-${setupIntentId}`, form: subscriptionForm(s, pm.id as string, t.productId) });
+        // Review fix: claim the row first, so two saves at once can't make two subscriptions in Stripe.
+        const claim = await ctx.runMutation(internal.subscriptions.claimStart, { subscriptionId: s._id });
+        if (claim !== "ok") throw new ConvexError(claim === "busy" ? "It's being set up already. Refresh in a moment." : "This subscription has ended. Nothing was charged.");
+        let sub: StripeResult;
+        try { sub = await stripeCall("POST", "subscriptions", { account, idem: `wp-sub-${s._id}`, form: subscriptionForm(s, pm.id as string, t.productId) }); }
+        catch (e) { await ctx.runMutation(internal.subscriptions.releaseStart, { subscriptionId: s._id }); throw e; }
         await ctx.runMutation(internal.subscriptions.applyStripe, { accountId: account, object: sub, method });
         const st = String(sub.status);
         if (st === "incomplete") return { ok: false, message: await failureOf(account, sub) };
@@ -421,6 +441,25 @@ export const setupDone = action({
       if (e instanceof ConvexError) throw e;
       throw new ConvexError(e instanceof StripeError ? e.message.replace(/^Stripe: /, "") : "Couldn't reach Stripe. Try again.");
     }
+  },
+});
+
+export const claimStart = internalMutation({
+  args: { subscriptionId: v.id("subscriptions") },
+  handler: async (ctx, { subscriptionId }) => {
+    const s = await ctx.db.get(subscriptionId);
+    if (!s || s.stripe?.subscriptionId) return "busy";
+    if (s.status === "canceled" || s.status === "incomplete_expired") return "ended";
+    if (s.status === "starting" && s.claimAt && Date.now() - s.claimAt < 2 * 60_000) return "busy";
+    await ctx.db.patch(subscriptionId, { status: "starting", claimAt: Date.now() });
+    return "ok";
+  },
+});
+export const releaseStart = internalMutation({
+  args: { subscriptionId: v.id("subscriptions") },
+  handler: async (ctx, { subscriptionId }) => {
+    const s = await ctx.db.get(subscriptionId);
+    if (s && s.status === "starting" && !s.stripe?.subscriptionId) await ctx.db.patch(subscriptionId, { status: "incomplete", claimAt: undefined });
   },
 });
 
@@ -477,7 +516,9 @@ export const applyStripe = internalMutation({
     const before = showStatus(s, now);
     const next: Doc<"subscriptions"> = {
       ...s, status, currentPeriodStart: ps, currentPeriodEnd: pe, trialEnd: o.trial_end ? Number(o.trial_end) * 1000 : undefined,
-      cancelAtPeriodEnd: !!o.cancel_at_period_end, canceledAt: o.canceled_at ? Number(o.canceled_at) * 1000 : s.canceledAt, pause,
+      cancelAtPeriodEnd: !!o.cancel_at_period_end, pause,
+      // Review fix: when it actually ended (a cancel at the period's end isn't an end yet).
+      canceledAt: status === "canceled" ? Number(o.ended_at ?? o.canceled_at ?? 0) * 1000 || s.canceledAt || now : undefined,
     };
     const after = showStatus(next, now);
     const history = [...s.history];
@@ -500,8 +541,26 @@ export const sync = internalAction({
   handler: async (ctx, { accountId, subscriptionId }): Promise<null> => {
     const o = await stripeCall("GET", `subscriptions/${subscriptionId}`, { account: accountId, form: { expand: ["default_payment_method"] } });
     const pm = typeof o.default_payment_method === "object" && o.default_payment_method ? methodLabel(o.default_payment_method) : undefined;
-    await ctx.runMutation(internal.subscriptions.applyStripe, { accountId, object: o, method: pm });
+    const linked = await ctx.runMutation(internal.subscriptions.applyStripe, { accountId, object: o, method: pm });
+    // Review fix: a second Stripe subscription for a row already linked to another one would charge with no record
+    // in the portal. Cancel it in Stripe and note it.
+    if (!linked && typeof o.metadata?.portal_subscription === "string" && o.status !== "canceled") {
+      const orphan = await ctx.runQuery(internal.subscriptions.isOrphan, { accountId, rowId: o.metadata.portal_subscription, subscriptionId });
+      if (orphan) {
+        await stripeCall("DELETE", `subscriptions/${subscriptionId}`, { account: accountId, form: { prorate: false } }).catch(() => null);
+        await ctx.runMutation(internal.subscriptions.note, { subscriptionId: orphan, kind: "duplicate_cancelled", detail: subscriptionId });
+      }
+    }
     return null;
+  },
+});
+
+export const isOrphan = internalQuery({
+  args: { accountId: v.string(), rowId: v.string(), subscriptionId: v.string() },
+  handler: async (ctx, { accountId, rowId, subscriptionId }) => {
+    const id = ctx.db.normalizeId("subscriptions", rowId);
+    const s = id ? await ctx.db.get(id) : null;
+    return s && s.stripe?.accountId === accountId && s.stripe.subscriptionId && s.stripe.subscriptionId !== subscriptionId ? s._id : null;
   },
 });
 
@@ -549,6 +608,10 @@ export const importInvoice = internalAction({
     const o = await stripeCall("GET", `invoices/${stripeId}`, { account: accountId });
     const subId = o.parent?.subscription_details?.subscription ?? o.subscription;
     if (!subId || o.status === "draft" || Number(o.total ?? 0) === 0) return null; // $0 invoices (trials, a later start) aren't shown
+    if (o.status === "void" && !Number(o.amount_paid ?? 0)) { // review fix: a paused period's voided bill never reaches the client
+      await ctx.runMutation(internal.invoices.applyStripeInvoice, { accountId, invoice: o });
+      return null;
+    }
     const t = await ctx.runQuery(internal.subscriptions.mirrorTarget, { accountId, subscriptionId: String(subId), stripeId });
     if (!t) return null;
     if (!t.have) await ctx.runMutation(internal.subscriptions.insertMirror, { subscriptionId: t.subscriptionId, invoice: o });
@@ -769,29 +832,38 @@ export const failedData = internalQuery({
 });
 
 export const markFailed = internalMutation({
-  args: { subscriptionId: v.id("subscriptions"), at: v.number(), message: v.string(), invoice: v.string(), final: v.boolean() },
-  handler: async (ctx, { subscriptionId, at, message, invoice, final }) => {
+  args: { subscriptionId: v.id("subscriptions"), at: v.number(), message: v.string(), invoice: v.string(), final: v.boolean(), nextTry: v.optional(v.number()) },
+  handler: async (ctx, { subscriptionId, at, message, invoice, final, nextTry }) => {
     const s = await ctx.db.get(subscriptionId);
     if (!s) return;
-    await ctx.db.patch(subscriptionId, { lastFailure: { at, message, invoice }, history: [...s.history, { kind: "past_due", at: Date.now(), detail: final ? `${message} (last try)` : message }].slice(-80), updatedAt: Date.now() });
+    await ctx.db.patch(subscriptionId, { lastFailure: { at, message, invoice, ...(nextTry ? { nextTry } : {}) }, history: [...s.history, { kind: "past_due", at: Date.now(), detail: final ? `${message} (last try)` : message }].slice(-80), updatedAt: Date.now() });
     if (s.businessId) await postToInbox(ctx, {
-      businessId: s.businessId, clientId: s.clientId, email: s.billTo.email, kind: "payment", key: `subfailed:${subscriptionId}:${invoice}:${at}`,
+      businessId: s.businessId, clientId: s.clientId, email: s.billTo.email, kind: "subscription", key: `subfailed:${subscriptionId}:${invoice}:${at}`,
       title: `Payment failed · ${s.planName}`, text: "Update your card so your plan keeps going.", link: `/sub/${s.payToken}`, linkLabel: "Update your card", source: { module: "payments", id: subscriptionId },
     });
   },
 });
 
 export const onFailed = internalAction({
-  args: { invoiceId: v.id("invoices"), failureKey: v.string(), failureAt: v.number(), message: v.string() },
-  handler: async (ctx, { invoiceId, failureKey, failureAt, message }): Promise<string> => {
+  args: { invoiceId: v.id("invoices"), failureKey: v.string(), failureAt: v.number(), message: v.string(), attempt: v.optional(v.number()) },
+  handler: async (ctx, { invoiceId, failureKey, failureAt, message, attempt = 0 }): Promise<string> => {
     const d = await ctx.runQuery(internal.subscriptions.failedData, { invoiceId });
     if (!d || d.invoice.status !== "open" || d.invoice.processing) return "skipped";
     if (d.invoice.lastFailureKey !== failureKey) return "skipped"; // a later attempt replaced it
     if (d.invoice.paidSince.some((at) => at > failureAt - 60_000)) return "skipped";
-    let next: number | null = null;
-    try { const inv = await stripeCall("GET", `invoices/${d.invoice.stripeId}`, { account: d.invoice.accountId }); next = inv.next_payment_attempt ? Number(inv.next_payment_attempt) * 1000 : null; } catch { next = null; }
+    let inv: StripeResult;
+    try { inv = await stripeCall("GET", `invoices/${d.invoice.stripeId}`, { account: d.invoice.accountId }); }
+    catch {
+      // Review fix: Stripe not answering is never "the last try". Try again in 10 minutes (at most 6 times).
+      if (attempt < 6) await ctx.scheduler.runAfter(10 * 60_000, internal.subscriptions.onFailed, { invoiceId, failureKey, failureAt, message, attempt: attempt + 1 });
+      return "retry";
+    }
     const s = d.sub;
-    await ctx.runMutation(internal.subscriptions.markFailed, { subscriptionId: s._id, at: failureAt, message, invoice: d.invoice.stripeId, final: next === null });
+    // Review fix: the very first charge (made when the client saved their card) isn't retried by Stripe, and the client
+    // saw the reason on the page; no "last try", no emails, and D64 doesn't apply.
+    if (inv.billing_reason === "subscription_create" || s.status === "incomplete" || s.status === "starting") return "first-charge";
+    const next: number | null = inv.next_payment_attempt ? Number(inv.next_payment_attempt) * 1000 : null;
+    await ctx.runMutation(internal.subscriptions.markFailed, { subscriptionId: s._id, at: failureAt, message, invoice: d.invoice.stripeId, final: next === null, nextTry: next ?? undefined });
     const link = subLink(s.payToken);
     await deliverOnce(ctx, `subfailed:${invoiceId}:${failureKey}`, "subscription-failed", s.billTo.email,
       subscriptionFailedMail(d.brand, { name: s.billTo.name, plan: s.planName, amountCents: d.invoice.amountCents, reason: message, nextTry: next ? dateWords(next) : null, link }), d.brand.replyTo);

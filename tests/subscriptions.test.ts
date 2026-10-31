@@ -300,3 +300,64 @@ describe("email 14 (D62) and the reminders", () => {
     expect(await w.t.action(anyApi.subscriptions.runUpcoming, {})).toBe(0);
   });
 });
+
+describe("review fixes (Oct 30)", () => {
+  test("1: a cancelled subscription can't be started by saving a card; 2: two saves at once make one Stripe subscription", async () => {
+    process.env.STRIPE_PUBLISHABLE_KEY = "pk_test_platform";
+    const w = await world();
+    const planId = await withPlan(w);
+    fakeStripe();
+    const a = await w.heston.action(api.subscriptions.start, { clientId: w.harbor, planId, billTo: { name: "Maya", email: "maya@harbor.example" }, startDate: today(), firstInvoice: "now", postInbox: false });
+    const tokA = (await w.heston.query(api.subscriptions.get, { subscriptionId: a })).link.split("/sub/")[1];
+    await w.heston.action(api.subscriptions.cancel, { subscriptionId: a, when: "now" });
+    const calls = fakeStripe({ sub: { portal: a } });
+    await expect(w.t.action(api.subscriptions.setupDone, { token: tokA, setupIntentId: "seti_1" })).rejects.toThrow(/ended/);
+    expect(calls.some((c) => c.method === "POST" && c.path === "subscriptions")).toBe(false);
+    fakeStripe();
+    const b = await w.heston.action(api.subscriptions.start, { clientId: w.harbor, planId, billTo: { name: "Maya", email: "maya@harbor.example" }, startDate: today(), firstInvoice: "now", postInbox: false });
+    expect(await w.t.mutation(anyApi.subscriptions.claimStart, { subscriptionId: b })).toBe("ok");
+    const tokB = (await w.heston.query(api.subscriptions.get, { subscriptionId: b })).link.split("/sub/")[1];
+    const second = fakeStripe({ sub: { portal: b } });
+    await expect(w.t.action(api.subscriptions.setupDone, { token: tokB, setupIntentId: "seti_1" })).rejects.toThrow(/being set up/);
+    expect(second.some((c) => c.method === "POST" && c.path === "subscriptions")).toBe(false);
+    delete process.env.STRIPE_PUBLISHABLE_KEY;
+  });
+
+  test("3: Stripe not answering is never the last try (no D64 cancel); 4: the first charge's failure sends nothing", async () => {
+    const w = await world();
+    const { id } = await running(w);
+    await w.heston.mutation(api.subscriptions.setFailRule, { rule: "cancel" });
+    fakeStripe({ sub: { portal: id }, subInvoice: {} });
+    await w.t.action(anyApi.subscriptions.importInvoice, { accountId: "acct_A", stripeId: "in_s1" });
+    const inv = await w.t.run(async (ctx) => {
+      const i = (await ctx.db.query("invoices").collect()).find((x) => x.kind === "subscription")!;
+      await ctx.db.patch(i._id, { lastFailure: { at: Date.now(), message: "Declined.", key: "k1" } });
+      return i._id;
+    });
+    const down = fakeStripe();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 503 })));
+    expect(await w.t.action(anyApi.subscriptions.onFailed, { invoiceId: inv, failureKey: "k1", failureAt: Date.now(), message: "Declined." })).toBe("retry");
+    expect(down.some((c) => c.method === "DELETE")).toBe(false);
+    fakeStripe({ sub: { portal: id }, subInvoice: { billing_reason: "subscription_create", next_payment_attempt: null } });
+    expect(await w.t.action(anyApi.subscriptions.onFailed, { invoiceId: inv, failureKey: "k1", failureAt: Date.now(), message: "Declined." })).toBe("first-charge");
+    expect(await w.t.run(async (ctx) => (await ctx.db.query("emailLog").collect()).filter((r) => r.key.startsWith("subfailed")).length)).toBe(0);
+  });
+
+  test("6: a first charge more than 2 years out is refused at start; 7: a waiting trial shows its end as the first charge", async () => {
+    const w = await world();
+    const planId = await withPlan(w);
+    fakeStripe();
+    await expect(w.heston.action(api.subscriptions.start, { clientId: w.harbor, planId, billTo: { name: "Maya", email: "maya@harbor.example" }, startDate: inDays(300), trialDays: 700, firstInvoice: "start", postInbox: false })).rejects.toThrow(/2 years/);
+    const id = await w.heston.action(api.subscriptions.start, { clientId: w.harbor, planId, billTo: { name: "Maya", email: "maya@harbor.example" }, startDate: today(), trialDays: 14, firstInvoice: "start", postInbox: false });
+    const s = await w.heston.query(api.subscriptions.get, { subscriptionId: id });
+    expect(s.nextCharge).toBeGreaterThan(Date.now() + 13.9 * 86_400_000);
+  });
+
+  test("10: a paused period's voided bill (nothing paid) isn't mirrored to the client", async () => {
+    const w = await world();
+    const { id } = await running(w);
+    fakeStripe({ sub: { portal: id }, subInvoice: { status: "void", amount_paid: 0 } });
+    await w.t.action(anyApi.subscriptions.importInvoice, { accountId: "acct_A", stripeId: "in_s1" });
+    expect((await w.heston.query(api.invoices.list, {})).filter((i: { kind: string }) => i.kind === "subscription")).toEqual([]);
+  });
+});

@@ -102,6 +102,11 @@ export const saveTarget = internalQuery({
   },
 });
 
+export const waitingOn = internalQuery({
+  args: { priceId: v.string() },
+  handler: async (ctx, { priceId }) => (await ctx.db.query("subscriptions").collect()).some((x) => x.priceId === priceId && !x.stripe?.subscriptionId && x.status !== "canceled"),
+});
+
 export const store = internalMutation({
   args: {
     planId: v.optional(v.id("plans")), name: v.string(), description: v.optional(v.string()), amountCents: v.number(), interval: intervalV, intervalCount: v.number(),
@@ -141,8 +146,9 @@ export const save = action({
           account, form: { product: productId, currency: "usd", unit_amount: a.amountCents, recurring: { interval: a.interval, interval_count: a.intervalCount }, metadata: { portal_business: t.businessId } },
         });
         await stripeCall("POST", `products/${productId}`, { account, form: { default_price: price.id } });
-        // The old price stays usable by subscriptions already on it; it just can't start new ones.
-        if (priceId) await stripeCall("POST", `prices/${priceId}`, { account, form: { active: false } }).catch(() => null);
+        // The old price stays usable by subscriptions already on it; it just can't start new ones. Review fix: one still
+        // waiting on the client's card would start on it, so it stays active until those have started.
+        if (priceId && !(await ctx.runQuery(internal.plans.waitingOn, { priceId }))) await stripeCall("POST", `prices/${priceId}`, { account, form: { active: false } }).catch(() => null);
         priceId = price.id as string;
       }
       return await ctx.runMutation(internal.plans.store, {

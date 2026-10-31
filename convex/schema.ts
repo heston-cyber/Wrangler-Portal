@@ -766,10 +766,11 @@ export default defineSchema({
     canceledAt: v.optional(v.number()),
     pause: v.optional(v.object({ at: v.number(), resumesAt: v.optional(v.number()) })),
     method: v.optional(v.string()),     // "Visa •••• 4242"
-    lastFailure: v.optional(v.object({ at: v.number(), message: v.string(), invoice: v.optional(v.string()) })),
+    lastFailure: v.optional(v.object({ at: v.number(), message: v.string(), invoice: v.optional(v.string()), nextTry: v.optional(v.number()) })),
     history: v.array(v.object({ kind: v.string(), at: v.number(), by: v.optional(v.string()), detail: v.optional(v.string()) })),
     createdBy: v.optional(v.string()),
     syncedAt: v.optional(v.number()),
+    claimAt: v.optional(v.number()),    // review fix: one start in Stripe at a time (status "starting" while it's being made)
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_stripe_sub", ["stripe.subscriptionId"]).index("by_pay_token", ["payToken"]).index("by_client", ["clientId"]).index("by_bill_email", ["billTo.email"]),
