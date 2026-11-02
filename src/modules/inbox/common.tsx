@@ -1,8 +1,8 @@
 // Shared by the client's Inbox, Their Inbox on the client page and Sent: icons, times and read lines.
 import type { IconName } from "../../ui/Icon";
 
-export type InboxKind = "cut_ready" | "reply" | "to_sign" | "signed" | "cancelled" | "note" | "stage" | "final_files" | "invoice" | "payment";
-export const INBOX_ICON: Record<InboxKind, IconName> = { cut_ready: "video", reply: "note", to_sign: "sign", signed: "check-circle", cancelled: "close", note: "mail", stage: "activity", final_files: "download", invoice: "invoice", payment: "check-circle" };
+export type InboxKind = "cut_ready" | "reply" | "to_sign" | "signed" | "cancelled" | "note" | "stage" | "final_files" | "invoice" | "payment" | "shoot" | "files" | "brief";
+export const INBOX_ICON: Record<InboxKind, IconName> = { cut_ready: "video", reply: "note", to_sign: "sign", signed: "check-circle", cancelled: "close", note: "mail", stage: "activity", final_files: "download", invoice: "invoice", payment: "check-circle", shoot: "calendar", files: "upload", brief: "note" };
 
 const TZ = "America/Chicago";
 const DAY = 86_400_000;

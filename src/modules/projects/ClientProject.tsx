@@ -15,6 +15,7 @@ import { downloadZip } from "../../lib/download";
 import { errText } from "../docs/pages/common";
 import { useSignedCopy } from "../clients/ClientInbox";
 import { StageBar, stageName, dateText, bytes, STAGES, openFileLink, canZip } from "./common";
+import { ComingUpShoots, useComingUpCount } from "./Shoots";
 
 type Data = NonNullable<ReturnType<typeof useQuery<typeof api.projects.forClient>>>;
 export type ClientProjectTab = "overview" | "videos" | "documents";
@@ -95,6 +96,7 @@ function FinalFiles({ d, show, wide }: { d: Data; show: (m: string) => void; wid
 
 export default function ClientProject({ projectId, tab }: { projectId: string; tab: ClientProjectTab }) {
   const d = useQuery(api.projects.forClient, { projectId });
+  const coming = useComingUpCount(projectId);
   const [toast, show] = useToast();
   const setTab = (k: ClientProjectTab) => navigate(`/projects/${projectId}${k === "overview" ? "" : `?tab=${k}`}`);
   if (d === undefined) return <><TopBar><a {...linkProps("/review")}>Review</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
@@ -130,6 +132,7 @@ export default function ClientProject({ projectId, tab }: { projectId: string; t
             {d.delivery.open && <FinalFiles d={d} show={show} wide />}
             <div className="wp-homecols">
               <div className="col">
+                {coming > 0 && <Card className="cpj-coming" label="Coming up" head={<SectionHead label="Coming up" count={coming} />}><ComingUpShoots projectId={projectId} /></Card>}
                 <Card className="cpj-videos" label="Videos" head={<SectionHead label="Videos" count={d.videos.length} />}><Videos d={d} max={6} /></Card>
               </div>
               <div className="col right">

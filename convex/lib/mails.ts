@@ -548,3 +548,40 @@ export function vendorPayoutReturnedMail(b: MailBrand, d: { name: string; number
     { t: "button", label: "Check your direct deposit", href: d.link }, { t: "link", href: d.link },
   ], vendorFoot(b), `${d.number} · ${usd(d.cents)}`);
 }
+
+// ---------- Phase 4 (frames 742:2564, 742:2590): 29 · Shoot scheduled, 30 · Shoot moved; and the owner's note when a
+// client confirms (no frame: the owner-alert layout of 26). ----------
+export const clock = (hhmm: string) => { const [h, m] = hhmm.split(":").map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
+export const shootDay = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
+export function shootMail(b: MailBrand, d: { name: string | null; project: string; date: string; call: string; location: string; moved: null | { date: string; call: string; location: string }; link: string }): Mail {
+  if (!d.moved) return mk(b, "updates", `Your shoot for ${d.project} is set: ${shootDay(d.date)}`, [
+    hi(d.name),
+    { t: "p", text: `Your shoot for ${d.project} is set.` },
+    { t: "sums", rows: [{ label: "Date", value: shootDay(d.date), big: true }, { label: "Call", value: clock(d.call) }, { label: "Where", value: d.location }] },
+    { t: "p", text: "What to prepare is on the shoot page.", tone: "muted" },
+    { t: "p", text: "Please confirm it in your portal." },
+    { t: "button", label: "Confirm the shoot", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `${shootDay(d.date)} · ${clock(d.call)} call`);
+  const m = d.moved;
+  const sameDay = m.date === d.date, sameCall = m.call === d.call, samePlace = m.location === d.location;
+  return mk(b, "updates", `Your shoot for ${d.project} has moved: ${shootDay(d.date)}`, [
+    hi(d.name),
+    { t: "p", text: `Your shoot for ${d.project} has moved.` },
+    { t: "sums", rows: [
+      { label: sameDay ? "Date" : "New date", value: shootDay(d.date), big: true },
+      ...(sameDay ? [] : [{ label: "Was", value: shootDay(m.date) }]),
+      ...(sameCall ? [] : [{ label: "Call", value: `${clock(d.call)} (was ${clock(m.call)})` }]),
+      { label: "Where", value: samePlace ? `${d.location} (same)` : `${d.location} (was ${m.location})` },
+    ] },
+    ...(sameCall ? [{ t: "p", text: `Same call time: ${clock(d.call)}.`, tone: "muted" } as Block] : []),
+    { t: "p", text: sameDay ? "Please confirm it again in your portal." : "Please confirm the new date in your portal." },
+    { t: "button", label: sameDay ? "Confirm the shoot" : "Confirm the new date", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `Now ${shootDay(d.date)} · ${clock(d.call)} call`);
+}
+export function ownerShootConfirmedMail(b: MailBrand, d: { who: string; project: string; date: string; call: string; link: string }): Mail {
+  return mk(b, "updates", `${d.who} confirmed the shoot: ${d.project}`, [
+    { t: "eyebrow", text: `${d.who} confirmed the shoot` },
+    { t: "title", text: `${shootDay(d.date)} · ${clock(d.call)} call · ${d.project}` },
+    { t: "button", label: "Open the project", href: d.link },
+  ], ownerFoot("a client confirms a shoot"), `${shootDay(d.date)} · ${d.project}`);
+}

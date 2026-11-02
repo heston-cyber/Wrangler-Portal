@@ -31,6 +31,7 @@ export const NOTICES: Notice[] = [
   { key: "vendor_invoices", side: "owner", group: "Vendors", label: "A vendor sends an invoice", kinds: ["vendor_invoice"] },
   { key: "vendor_w9", side: "owner", group: "Vendors", label: "A vendor uploads a W-9", kinds: ["vendor_w9"] },
   { key: "vendor_payouts", side: "owner", group: "Vendors", label: "A vendor payment through Stripe goes out, fails or comes back", kinds: ["vendor_payout_posted", "vendor_payout_failed"] },
+  { key: "shoot_confirmed", side: "owner", group: "Shoots and files", label: "A client confirms a shoot", kinds: ["shoot_confirmed"] },
   { key: "owner_codes", side: "owner", group: "Your account", label: "Sign-in codes and password resets", kinds: ["code", "reset"], always: true },
 
   // ---------- to a vendor ----------
@@ -48,6 +49,7 @@ export const NOTICES: Notice[] = [
   { key: "invoice_reminders", side: "client", group: "Payments", label: "Reminders before an invoice is due", hint: "Overdue notices, and reminders the business sends by hand, still arrive.", kinds: ["invoice-reminder-before"] },
   { key: "subscription_upcoming", side: "client", group: "Payments", label: "A subscription charge is coming up", kinds: ["subscription-upcoming"] },
   { key: "client_bills", side: "client", group: "Payments", label: "Invoices, receipts, overdue notices and failed payments", kinds: ["invoice", "invoice-reminder-overdue", "invoice-reminder-manual", "receipt", "payment-failed", "subscription", "subscription-failed", "subscription-cancelled"], always: true },
+  { key: "client_shoots", side: "client", group: "Shoots and files", label: "Shoots scheduled or moved, and files asked for", hint: "They ask you to confirm or upload, so they always arrive.", kinds: ["shoot", "file_request"], always: true },
   { key: "client_docs", side: "client", group: "Documents", label: "Quotes, proposals, documents to sign and signed copies", kinds: ["quote", "proposal", "ws-sign", "ws-reminder", "ws-cancelled", "ws-copy", "ws-code"], always: true },
   { key: "client_access", side: "client", group: "Your account", label: "Invites, shared links and sign-in codes", kinds: ["invite", "share-invite", "code", "reset"], always: true },
 ];

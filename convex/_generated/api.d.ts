@@ -36,6 +36,7 @@ import type * as auth from "../auth.js";
 import type * as bunny from "../bunny.js";
 import type * as clients from "../clients.js";
 import type * as shares from "../shares.js";
+import type * as shoots from "../shoots.js";
 import type * as emails from "../emails.js";
 import type * as lib_shareAccess from "../lib/shareAccess.js";
 import type * as lib_hash from "../lib/hash.js";
@@ -156,6 +157,7 @@ declare const fullApi: ApiFromModules<{
   bunny: typeof bunny;
   clients: typeof clients;
   shares: typeof shares;
+  shoots: typeof shoots;
   emails: typeof emails;
   "lib/shareAccess": typeof lib_shareAccess;
   "lib/hash": typeof lib_hash;

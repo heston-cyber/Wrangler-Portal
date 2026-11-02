@@ -131,6 +131,9 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "vendorPortal.notifications": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only)
   "vendorPayments.totals1099": { pages: ["owner"], args: () => "skip" }, // Vendors › Payments › 1099
   "vendorPayments.get": { pages: ["owner"], args: () => "skip" }, // a vendor invoice
+  "shoots.forProject": { pages: ["owner"], args: () => "skip" }, // project Overview › Shoots (Phase 4)
+  "shoots.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Coming up
+  "shoots.page": { pages: ["clientHome"], args: () => ({ shootId: "nope" }) }, // /shoots/<id>, the client's shoot page
   "vendorPayouts.status": { pages: ["owner"], args: () => "skip" }, // Settings › Payments › Vendor payouts; a vendor invoice (Nov 2)
   "vendorPayouts.forInvoice": { pages: ["owner"], args: () => "skip" }, // a vendor invoice: Pay in portal (Nov 2)
   "vendorPayouts.mine": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only): Settings › Direct deposit

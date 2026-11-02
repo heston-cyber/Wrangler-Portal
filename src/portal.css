@@ -2407,3 +2407,20 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 .prow.ntf-row { flex-wrap: nowrap; }
 .prow.ntf-row .pr { width: auto; margin-left: auto; }
 @media (max-width: 560px) { .prow.ntf-row { flex-wrap: nowrap; } .prow.ntf-row .pr { width: auto; margin-left: auto; } }
+
+/* ---------- Phase 4 · shoots (741:2529 dialog, 738:9111 / 738:9492 client page) ---------- */
+.sh-times { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.sh-cancel { margin-right: auto; color: var(--accent); }
+.sh-head .sh-sub { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.sh-maps { display: inline-flex; align-items: center; gap: 6px; padding: 0 20px 18px; color: var(--accent); font-size: var(--fs-text-small); }
+.sh-checks { display: grid; gap: 10px; padding: 4px 20px 18px; }
+.sh-askbody { display: grid; gap: 12px; padding: 4px 20px 20px; }
+.sh-askbody p { margin: 0; }
+.sh-askbody .btn { width: 100%; justify-content: center; }
+.sh-done { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--text-success) 60%, transparent); border-radius: 14px; background: var(--status-success-tint); font-size: var(--fs-text-small); }
+.sh-done > svg { color: var(--text-success); flex: none; margin-top: 2px; }
+.sh-done b { font-weight: 500; }
+.sh-moved { color: var(--text-warning); }
+@media (max-width: 720px) { .sh-times { grid-column: 1 / -1; } }
+.sh-page .cp-see { grid-template-columns: auto 1fr; }
+.sh-page .cp-see dd { text-align: right; }

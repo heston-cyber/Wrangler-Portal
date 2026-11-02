@@ -172,6 +172,10 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       await ctx.db.insert("counters", { businessId: w.A, key: "invoiceSeq", value: 3 });
       return { paid, due, draft };
     });
+    // Phase 4: a shoot on the Harbor Coffee Launch (in four days), not confirmed yet.
+    const inDays = (n: number) => new Date(now + n * DAY).toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+    const { shootId } = await owner.mutation(api.shoots.schedule, { projectId: w.p1, date: inDays(4), call: "07:00", wrap: "17:00", location: "Harbor Coffee, 412 Main St.", parking: "Behind the shop",
+      prepare: ["Shop open and lights on by 7:00", "Two baristas on shift for B-roll", "Menu boards up to date", "Signed releases from anyone on camera"], withOwner: true, bookingIds: [], calendar: true }) as { shootId: string };
     const noteIds = await t.run(async (ctx) => (await ctx.db.query("inboxNotes").collect()).map((n) => n._id));
     const OWNER: [string, Record<string, unknown>][] = [
       ["users.me", {}], ["business.brand", {}], ["business.settings", {}], ["payments.settings", {}], ["library.overview", {}], ["activity.feed", { limit: 100 }], ["activity.recent", {}], ["home.needs", {}],
@@ -184,7 +188,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["sign.pendingRequests", {}], ["approvals.forVideo", { videoId: w.harbor30.v }], ["sign.requestsFor", { documentId: w.d1 }],
 ["builder.getBuild#" + b1, { buildId: b1 }], ["builder.getProfile", {}], ["builder.listFonts", {}], ["builder.listStyles", {}],
       ["sign.get#" + w.d1, { documentId: w.d1 }], ["sign.get#" + w.d2, { documentId: w.d2 }], ["sign.get#" + w.d3, { documentId: w.d3 }],
-      ["projects.page#" + w.p1, { projectId: w.p1 }], ["projects.nextRound#" + w.harbor30.v, { videoId: w.harbor30.v }],
+      ["projects.page#" + w.p1, { projectId: w.p1 }], ["shoots.forProject#" + w.p1, { projectId: w.p1 }], ["projects.nextRound#" + w.harbor30.v, { videoId: w.harbor30.v }],
       ["invoices.list", {}], ["invoices.overview", { tzOffsetMin: 300 }], ["invoices.options", {}], ["invoices.forProject#" + w.p1, { projectId: w.p1 }],
       ["invoices.get#" + invIds.paid, { invoiceId: invIds.paid }], ["invoices.get#" + invIds.due, { invoiceId: invIds.due }], ["invoices.get#" + invIds.draft, { invoiceId: invIds.draft }],
     ];
@@ -197,7 +201,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["waveforms.forVersion#" + w.harbor30.last, { versionId: w.harbor30.last, share: { token: shareTokens[0] } }],
       ["transcripts.forVersion#" + w.harbor30.last, { versionId: w.harbor30.last, share: { token: shareTokens[0] } }],
       ["approvals.forVideo#" + w.harbor30.v, { videoId: w.harbor30.v, share: { token: shareTokens[0] } }],
-      ["projects.mine", {}], ["projects.forClient#" + w.p1, { projectId: w.p1 }],
+      ["projects.mine", {}], ["projects.forClient#" + w.p1, { projectId: w.p1 }], ["shoots.forClientProject#" + w.p1, { projectId: w.p1 }], ["shoots.page#" + shootId, { shootId }],
       ["invoicePay.mine", {}], ...["kitpaidtoken000000001", "kitduetoken0000000002", "kitproctoken000000003"].map((tok): [string, Record<string, unknown>] => ["invoicePay.page#" + tok, { token: tok }])];
     const run = async (as: typeof owner, list: [string, Record<string, unknown>][]) => {
       const out: Record<string, unknown> = {};
@@ -212,7 +216,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
     // The PDFs in convex-test storage can't be fetched by a browser: point them at the kit's sample PDF.
     const pdfs = (v: unknown): unknown => JSON.parse(JSON.stringify(v), (k, x) => ((k === "fileUrl" || k === "finalUrl") && typeof x === "string" ? "/kit-pdf/" : x));
     for (const k of Object.keys(owned)) if (k.startsWith("sign.get#")) owned[k] = pdfs(owned[k]);
-    const fixtures = { owner: owned, client: await run(client, CLIENT), ids: { invoices: invIds, shares: shareTokens, harbor: w.harbor, video: w.harbor30.v, docSent: w.d1, docSigned: w.d2, docDraft: w.d3, notes: noteIds } };
+    const fixtures = { owner: owned, client: await run(client, CLIENT), ids: { invoices: invIds, shares: shareTokens, harbor: w.harbor, video: w.harbor30.v, docSent: w.d1, docSigned: w.d2, docDraft: w.d3, notes: noteIds, shoot: shootId, project: w.p1 } };
     writeFileSync(join(__dirname, "..", "src", "dev", "fixtures.json"), JSON.stringify(fixtures, null, 1));
     vi.useRealTimers();
   });

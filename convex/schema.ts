@@ -1134,16 +1134,38 @@ export default defineSchema({
     shareId: v.id("shares"),
     at: v.number(),
   }).index("by_video", ["videoId", "at"]).index("by_version_user", ["versionId", "userId"]).index("by_at", ["at"]),
+  // Phase 4 (Nov 2): shoots on a project (frames S5 · Phase 4). The client confirms one in their portal; moving its date,
+  // call time or place clears the confirmation and asks again (email 30). Times are the business's local wall clock.
+  shoots: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    projectId: v.id("projects"),
+    date: v.string(),                         // YYYY-MM-DD
+    call: v.string(),                         // HH:MM, 24-hour
+    wrap: v.optional(v.string()),             // HH:MM
+    location: v.string(),
+    parking: v.optional(v.string()),
+    prepare: v.array(v.string()),             // "what to prepare", one line each
+    crew: v.array(v.object({ name: v.string(), role: v.string(), vendorId: v.optional(v.id("vendors")), bookingId: v.optional(v.id("vendorBookings")), owner: v.optional(v.boolean()) })),
+    status: v.union(v.literal("scheduled"), v.literal("cancelled")),
+    confirmed: v.optional(v.object({ name: v.string(), email: v.string(), at: v.number() })),
+    moved: v.optional(v.object({ date: v.string(), call: v.string(), location: v.string(), at: v.number() })), // what it was before the last move
+    calendar: v.optional(v.boolean()),        // "Add to {calendar}" was ticked (the event itself arrives with Settings › Calendar)
+    calendarEvent: v.optional(v.object({ id: v.string(), calendarId: v.string() })),
+    history: v.array(v.object({ at: v.number(), text: v.string() })),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_project", ["projectId", "date"]).index("by_date", ["date"]),
+
   inboxItems: defineTable({
     businessId: v.optional(v.id("businesses")),
     clientId: v.optional(v.id("clients")),
     email: v.string(),                 // the recipient, lower-case (a person with a live invite in this business)
-    kind: v.union(v.literal("cut_ready"), v.literal("reply"), v.literal("to_sign"), v.literal("signed"), v.literal("cancelled"), v.literal("note"), v.literal("stage"), v.literal("final_files"), v.literal("invoice"), v.literal("payment"), v.literal("subscription")),
+    kind: v.union(v.literal("cut_ready"), v.literal("reply"), v.literal("to_sign"), v.literal("signed"), v.literal("cancelled"), v.literal("note"), v.literal("stage"), v.literal("final_files"), v.literal("invoice"), v.literal("payment"), v.literal("subscription"), v.literal("shoot"), v.literal("files"), v.literal("brief")),
     title: v.string(),
     text: v.string(),                  // a short line, shown under the title
     link: v.optional(v.string()),      // a path in the portal or a signing link
     linkLabel: v.optional(v.string()), // a note's link button ("Watch Harbor Coffee 30s v2")
-    source: v.object({ module: v.union(v.literal("review"), v.literal("sign"), v.literal("inbox"), v.literal("projects"), v.literal("payments")), id: v.string() }),
+    source: v.object({ module: v.union(v.literal("review"), v.literal("sign"), v.literal("inbox"), v.literal("projects"), v.literal("payments"), v.literal("schedule")), id: v.string() }),
     key: v.string(),
     noteId: v.optional(v.id("inboxNotes")),
     createdAt: v.number(),

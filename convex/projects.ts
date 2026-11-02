@@ -42,7 +42,7 @@ async function ownedProject(ctx: QueryCtx | MutationCtx, raw: string) {
 
 /** Who hears about this project (stage moves, final files): the invited members of live project or client shares that
  *  cover it, with a live invite in its business. The same people who can open its project page (myProjects). */
-async function portalPeople(ctx: QueryCtx | MutationCtx, p: Doc<"projects">) {
+export async function portalPeople(ctx: QueryCtx | MutationCtx, p: Doc<"projects">) {
   const biz = await businessOf(ctx, p);
   if (!biz) return [];
   const shares = (await ctx.db.query("shares").collect()).filter((s) => s.who === "invited" && s.kind !== "video" && !shareState(s) && sameBusiness(s, p));
@@ -303,7 +303,7 @@ export const folderOf = internalQuery({
 /** The projects a signed-in client can see: those a live project or client share they're invited to covers. A share
  *  of one video doesn't open its project page (stage, documents, final files); it adds that video to a project page
  *  the person can already see. */
-async function myProjects(ctx: QueryCtx, email: string) {
+export async function myProjects(ctx: QueryCtx, email: string) {
   type Row = { project: Doc<"projects">; videos: Map<string, { video: Doc<"videos">; token: string }> };
   const out = new Map<string, Row>();
   const invites = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()).filter((i) => !i.revokedAt);
