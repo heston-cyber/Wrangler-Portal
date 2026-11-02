@@ -11,4 +11,6 @@ crons.interval("bunny storage sizes", { hours: 12 }, internal.uploads.refreshSto
 crons.interval("invoice reminders", { hours: 1 }, internal.invoiceReminders.runDue, {});
 // Phase 2b (D62): the upcoming-charge email, 7 days before each subscription charge.
 crons.interval("subscription upcoming charges", { hours: 1 }, internal.subscriptions.runUpcoming, {});
+// Pay in portal (Nov 2): vendor payouts still on their way (or recently posted, in case the bank returns one).
+crons.interval("vendor payouts", { minutes: 15 }, internal.vendorPayouts.poll, {});
 export default crons;

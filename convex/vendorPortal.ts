@@ -36,7 +36,7 @@ async function myBusinesses(ctx: Ctx) {
 }
 
 /** Acts for one of the vendor's businesses: focuses the call on it and returns their vendor record there. */
-async function asVendor(ctx: Ctx, businessId?: Id<"businesses"> | null) {
+export async function asVendor(ctx: Ctx, businessId?: Id<"businesses"> | null) {
   const me = await vendorIn(ctx, businessId);
   if (!me) throw new ConvexError("Not allowed.");
   return me;
@@ -365,6 +365,8 @@ async function invRow(ctx: Ctx, x: Doc<"vendorInvoices">) {
     amount: x.mode === "hours" ? `${Math.round(qty * 100) / 100} ${x.rate.unit === "day" ? (qty === 1 ? "day" : "days") : "h"}` : `${x.lines.length} line${x.lines.length === 1 ? "" : "s"}`,
     sentAt: x.sentAt ?? null, approvedAt: x.approvedAt ?? null, paidAt: x.paidAt ?? null, paidMethod: x.paidMethod ?? null, updatedAt: x.updatedAt,
     paidOn: paidDay(x), paidCents: x.status === "paid" ? paidAmount(x) : null, declinedAt: x.declinedAt ?? null, declineReason: x.declineReason ?? null, // step 5
+    // Nov 2, Pay in portal: on its way to their bank through Stripe.
+    onTheWay: x.status === "approved" && x.payout && ["starting", "unknown", "processing"].includes(x.payout.status) ? { expectedArrival: x.payout.expectedArrival ?? null } : null,
   };
 }
 

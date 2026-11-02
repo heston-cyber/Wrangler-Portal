@@ -3,7 +3,7 @@
 // (734:4809, D93, D103). Approving and marking invoices paid is the owner's (step 5, convex/vendorPayments.ts); an
 // invoice the owner declines comes back here to fix and send again.
 import { useContext, useEffect, useRef, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { TopBar, Sep } from "../../shell/Shell";
@@ -60,7 +60,7 @@ export function VendorInvoices() {
     <>
       <TopBar><span className="here">Invoices</span></TopBar>
       <div className="wp-page">
-        <PageHeader eyebrow={owner?.business} title="Invoices." sub={`Paid outside the portal for now; ${ownerFirst} marks each one paid.`} actions={<ButtonLink variant="primary" to="/vendor/invoices/new">Send an invoice</ButtonLink>} />
+        <PageHeader eyebrow={owner?.business} title="Invoices." sub={`${ownerFirst} marks each one paid when it's paid.`} actions={<ButtonLink variant="primary" to="/vendor/invoices/new">Send an invoice</ButtonLink>} />
         {rows.length === 0 ? <EmptyState icon="invoice" title="No invoices yet." body="Send an invoice for a booking you've accepted: hours at the agreed rate, or line items." actions={<ButtonLink variant="primary" to="/vendor/invoices/new">Send an invoice</ButtonLink>} /> : <>
           <PillTabs label="Show" value={pill} onChange={setPill} items={[{ key: "all", label: "All", count: count("all") }, ...(count("draft") ? [{ key: "draft" as Pill, label: "Draft", count: count("draft") }] : []), ...(count("declined") ? [{ key: "declined" as Pill, label: "Declined", count: count("declined") }] : []), { key: "sent", label: "Sent", count: count("sent") }, { key: "approved", label: "Approved", count: count("approved") }, { key: "paid", label: "Paid", count: count("paid") }]} />
           <Card label="Invoices">{shown.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "invoice" }} title="None here." /> : shown.map(rowOf)}</Card>
@@ -200,7 +200,8 @@ export function VendorInvoice({ invoiceId }: { invoiceId: string }) {
   if (x.status === "declined" && fix) return <InvoiceEditor invoiceId={x._id} onCancel={() => setFix(false)} />;
   const ownerFirst = x.owner.split(" ")[0];
   const where = x.status === "paid" ? `${ownerFirst} marked it paid${x.paidOn ? ` on ${dayShort(x.paidOn)}` : ""}${x.paidMethod ? ` (${x.paidMethod})` : ""}${x.paidCents !== null && x.paidCents !== x.totalCents ? `: ${money(x.paidCents)}` : ""}. It counts toward your ${(x.paidOn ?? "").slice(0, 4)} total with ${x.business}.`
-    : x.status === "declined" ? `${ownerFirst} declined it ${x.declinedAt ? dateShort(x.declinedAt) : ""}: ${x.declineReason ?? "no reason given"}. Fix it and send it again.` : x.status === "approved" ? `${ownerFirst} approved it ${x.approvedAt ? dateShort(x.approvedAt) : ""}. You'll get an email when it's paid.` : `Sent ${x.sentAt ? dateShort(x.sentAt) : ""}. Waiting for ${ownerFirst} to approve it.`;
+    : x.status === "declined" ? `${ownerFirst} declined it ${x.declinedAt ? dateShort(x.declinedAt) : ""}: ${x.declineReason ?? "no reason given"}. Fix it and send it again.` : x.status === "approved" && x.onTheWay ? `${ownerFirst} is paying it by direct deposit${x.onTheWay.expectedArrival ? `. Expected in your bank ${dayShort(x.onTheWay.expectedArrival)}` : ""}. You'll get an email when it's sent.`
+    : x.status === "approved" ? `${ownerFirst} approved it ${x.approvedAt ? dateShort(x.approvedAt) : ""}. You'll get an email when it's paid.` : `Sent ${x.sentAt ? dateShort(x.sentAt) : ""}. Waiting for ${ownerFirst} to approve it.`;
   return (
     <>
       <TopBar><a {...linkProps("/vendor/invoices")}>Invoices</a><Sep /><span className="here">{x.number}</span></TopBar>
@@ -274,12 +275,13 @@ export function VendorSettings() {
                 <div className="wide">{input("Portfolio", "portfolio", "text", "yoursite.com")}</div>
               </div>
             </Card>
+            <DirectDeposit businessId={s.businessId} business={s.business} hasBusiness={!!s.businessName} show={show} />
             <Card label="How you get paid" head={<SectionHead label="How you get paid" />}>
               <div className="vd-pad vi-for">
                 <div className="wp-field"><span className="wp-field-label">Method</span>
                   <div className="qz-chips">{PAY_METHODS.map((m) => <button key={m} type="button" className={`qz-chip${d.payMethod === m ? " on" : ""}`} aria-pressed={d.payMethod === m} onClick={() => set({ payMethod: m })}>{m}</button>)}</div></div>
                 <label className="wp-field"><span className="wp-field-label">Note (optional)</span><input className="input" value={d.payNote} placeholder="e.g. Zelle to my phone number, or who checks are made out to" onChange={(e) => set({ payNote: e.target.value })} /></label>
-                <p className="wp-small secondary">Leave out bank account and routing numbers: {s.business} asks for those directly. Paid outside the portal for now.</p>
+                <p className="wp-small secondary">Leave bank account and routing numbers out of this note. For direct deposit, use the Direct deposit card, when {s.business} offers it.</p>
               </div>
             </Card>
           </div>
@@ -305,6 +307,44 @@ export function VendorSettings() {
       </div>
       {toast}
     </>
+  );
+}
+
+// ---------- Direct deposit (Nov 2, Pay in portal; no frame: the W-9 card's pattern) ----------
+
+function DirectDeposit({ businessId, business, hasBusiness, show }: { businessId: Id<"businesses">; business: string; hasBusiness: boolean; show: (t: string) => void }) {
+  const m = useQuery(api.vendorPayouts.mine, { businessId });
+  const link = useAction(api.vendorPayouts.setupLink);
+  const refresh = useAction(api.vendorPayouts.refreshMine);
+  const [busy, setBusy] = useState(false);
+  const [as, setAs] = useState<"individual" | "company">(hasBusiness ? "company" : "individual");
+  const asked = useRef(false);
+  // Back from Stripe's form (?payouts=<business>), or set up but not finished: ask Stripe once where it stands.
+  useEffect(() => {
+    if (!m?.on || asked.current) return;
+    const back = new URLSearchParams(location.search).get("payouts");
+    if (!back && m.state !== "started") return;
+    asked.current = true;
+    if (back) history.replaceState(null, "", "/settings");
+    void refresh({ businessId }).then((r) => { if (back) show(r.state === "ready" ? "Direct deposit is set up." : r.state === "started" ? "Stripe still needs a few details. Press Finish setting up." : "Stripe didn't answer. Check again in a minute."); }, () => {});
+  }, [m?.on, m?.state, businessId, refresh, show]);
+  if (!m?.on) return null;
+  const open = async () => {
+    setBusy(true);
+    try { const r = await link({ businessId, ...(m.state === "none" ? { as } : {}) }); window.location.assign(r.url); } catch (e) { show(errText(e)); setBusy(false); }
+  };
+  return (
+    <Card label="Direct deposit" head={<SectionHead label="Direct deposit" />}>
+      <div className="vd-pad vi-for">
+        {m.state === "ready" && <div className="vd-row"><span>{m.bankName ? `${m.bankName} ` : "Bank "}{m.last4 ? `••••${m.last4}` : ""}</span><StatusChip tone="success">Ready</StatusChip></div>}
+        {m.state === "started" && <div className="vd-row"><span>Started, not finished</span><StatusChip tone="warning">Needs details</StatusChip></div>}
+        {m.state === "none" && <div className="vd-row"><span>Not set up</span><StatusChip tone="neutral">Off</StatusChip></div>}
+        {m.state === "none" && <div className="wp-field"><span className="wp-field-label">Paid as</span>
+          <div className="qz-chips">{([["individual", "Myself"], ["company", "My company (LLC, corp)"]] as const).map(([k, l]) => <button key={k} type="button" className={`qz-chip${as === k ? " on" : ""}`} aria-pressed={as === k} onClick={() => setAs(k)}>{l}</button>)}</div></div>}
+        <Button variant={m.state === "ready" ? undefined : "primary"} loading={busy} onClick={() => void open()}>{m.state === "ready" ? "Update bank details" : m.state === "started" ? "Finish setting up" : "Set up direct deposit"}</Button>
+        <p className="wp-small secondary">{business} can pay your approved invoices straight to your bank. You enter your bank on Stripe's secure form; the portal and {business} only see its last 4 digits.</p>
+      </div>
+    </Card>
   );
 }
 

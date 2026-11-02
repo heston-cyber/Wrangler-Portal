@@ -131,6 +131,9 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "vendorPortal.notifications": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only)
   "vendorPayments.totals1099": { pages: ["owner"], args: () => "skip" }, // Vendors › Payments › 1099
   "vendorPayments.get": { pages: ["owner"], args: () => "skip" }, // a vendor invoice
+  "vendorPayouts.status": { pages: ["owner"], args: () => "skip" }, // Settings › Payments › Vendor payouts; a vendor invoice (Nov 2)
+  "vendorPayouts.forInvoice": { pages: ["owner"], args: () => "skip" }, // a vendor invoice: Pay in portal (Nov 2)
+  "vendorPayouts.mine": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only): Settings › Direct deposit
   "proposals.page": { pages: ["share"], args: () => ({ token: "x".repeat(24) }) }, // /p/<token>, no account (D73)
   "brandKit.get": { pages: ["owner"], args: () => "skip" }, // Settings › Brand kit, a company's Brand kit tab (Phase 3b)
   "subscriptions.get": { pages: ["owner"], args: () => "skip" }, // a subscription
