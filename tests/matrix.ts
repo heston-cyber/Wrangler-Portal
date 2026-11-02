@@ -126,7 +126,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "fileRequests.forProject": { projectId: "nope" }, "fileRequests.create": { projectId: ids.projectId, title: "X", due: "2030-01-02", remind: false }, "fileRequests.setStatus": { requestId: ids.fileRequestId, status: "closed" },
     "briefs.settings": {}, "briefs.saveSettings": { questionnaire: { steps: [] } }, "briefs.resetSettings": {}, "briefs.forProject": { projectId: "nope" }, "briefs.send": { projectId: ids.projectId },
     "briefs.remind": { briefId: ids.briefId }, "briefs.forEstimate": { briefId: "nope" }, "briefs.forClientProject": { projectId: "nope" }, "briefs.page": { briefId: "nope" },
-    "briefs.save": { briefId: ids.briefId, answers: {}, step: 0 }, "briefs.submit": { briefId: ids.briefId, answers: {} },
+    "briefs.save": { briefId: ids.briefId, changes: {}, step: 0 }, "briefs.submit": { briefId: ids.briefId, changes: {} },
     "fileRequests.forClientProject": { projectId: "nope" }, "fileRequests.page": { requestId: "nope" }, "fileRequests.start": { requestId: ids.fileRequestId, name: "x.pdf", size: 10 }, "fileRequests.finishDirect": { uploadId: ids.fileUploadId },
     "shoots.forProject": { projectId: "nope" }, "shoots.schedule": { projectId: ids.projectId, ...{ date: "2030-01-02", call: "07:00", location: "X", prepare: [], withOwner: true, bookingIds: [], calendar: false } }, "shoots.update": { shootId: ids.shootId, ...{ date: "2030-01-02", call: "07:00", location: "X", prepare: [], withOwner: true, bookingIds: [], calendar: false } }, "shoots.cancel": { shootId: ids.shootId },
     "shoots.forClientProject": { projectId: "nope" }, "shoots.page": { shootId: "nope" }, "shoots.confirm": { shootId: ids.shootId },

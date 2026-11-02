@@ -65,14 +65,14 @@ describe("kickoff brief", () => {
     const page = await w.maya.query(api.briefs.page, { briefId });
     expect(page.questions.steps.map((x: { title: string }) => x.title)).toEqual(["Project", "Brand", "Dates"]);
     // Saved as they go (unknown keys and oversized answers are dropped or cut).
-    await w.maya.mutation(api.briefs.save, { briefId, answers: { ...ANSWERS, nope: "x", ready: "not a date" }, step: 1 });
+    await w.maya.mutation(api.briefs.save, { briefId, changes: { ...ANSWERS, nope: "x", ready: "not a date" }, step: 1 });
     const saved = await w.maya.query(api.briefs.page, { briefId });
     expect(saved.answers).toEqual(ANSWERS);
     expect(saved.step).toBe(1);
     expect((await w.heston.query(api.briefs.forProject, { projectId: w.p })).brief).toMatchObject({ status: "sent", startedAt: expect.any(Number) });
     // Required questions first.
-    await expect(w.maya.mutation(api.briefs.submit, { briefId, answers: ANSWERS })).rejects.toThrow(/When does it need to be ready/);
-    await w.maya.mutation(api.briefs.submit, { briefId, answers: { ...ANSWERS, feel: ["Warm", "community"], ready: "2026-11-20" } });
+    await expect(w.maya.mutation(api.briefs.submit, { briefId, changes: ANSWERS })).rejects.toThrow(/When does it need to be ready/);
+    await w.maya.mutation(api.briefs.submit, { briefId, changes: { ...ANSWERS, feel: ["Warm", "community"], ready: "2026-11-20" } });
     await settle(w);
     const owner = await w.heston.query(api.briefs.forProject, { projectId: w.p });
     expect(owner.brief).toMatchObject({ status: "submitted", by: "Maya Brooks", submits: 1 });
@@ -87,11 +87,22 @@ describe("kickoff brief", () => {
     expect(await w.jo.query(api.briefs.forClientProject, { projectId: w.p })).toMatchObject({ status: "submitted" });
     await expect(w.heston.mutation(api.briefs.remind, { briefId })).rejects.toThrow(/already sent it back/);
 
-    // Changed later: the owner hears once per sitting.
-    await w.jo.mutation(api.briefs.submit, { briefId, answers: { ...ANSWERS, ready: "2026-11-21" } });
+    // Once it's back, changes only come through Send changes (which checks the required answers).
+    await expect(w.jo.mutation(api.briefs.save, { briefId, changes: { goal: "" }, step: 0 })).rejects.toThrow(/sent back/);
+    await expect(w.jo.mutation(api.briefs.submit, { briefId, changes: { goal: "" } })).rejects.toThrow(/What's the film for/);
+    // Changed later, twice: the owner hears once, 10 minutes after the last change, with the answers as they ended up.
+    await w.jo.mutation(api.briefs.submit, { briefId, changes: { ready: "2026-11-21" } });
+    await w.maya.mutation(api.briefs.submit, { briefId, changes: { audience: "Regulars" } });
     await settle(w);
-    expect(s.mails.filter((m) => m.to === "heston@wranglerproductions.com")).toHaveLength(1); // within 10 minutes of the last
-    expect((await w.heston.query(api.briefs.forProject, { projectId: w.p })).brief).toMatchObject({ by: "Maya Brooks", updatedBy: "Jo", submits: 2 });
+    // The 10-minute runs (convex-test doesn't reach them in settle): each one, as the scheduler would.
+    const runs = await w.t.run(async (ctx) => (await ctx.db.system.query("_scheduled_functions").collect()).filter((j) => j.name === "briefs:mailOwner" && j.state.kind === "pending").map((j) => j.args[0] as { briefId: Id<"briefs">; n: number }));
+    expect(runs.map((r) => r.n).sort()).toEqual([2, 3]);
+    for (const r of runs) await w.t.action(anyApi.briefs.mailOwner, r);
+    const later = s.mails.filter((m) => m.to === "heston@wranglerproductions.com");
+    expect(later.map((m) => m.subject)).toEqual(["Maya Brooks answered the kickoff brief: 26127 Launch", "Maya Brooks changed the kickoff brief: 26127 Launch"]);
+    expect(later[1].text).toContain("Regulars");
+    expect(later[1].text).toContain("Nov 21, 2026");
+    expect((await w.heston.query(api.briefs.forProject, { projectId: w.p })).brief).toMatchObject({ by: "Maya Brooks", updatedBy: "Maya Brooks", submits: 3 });
 
     // Start an estimate from it.
     const est = await w.heston.query(api.briefs.forEstimate, { briefId });
@@ -108,7 +119,7 @@ describe("kickoff brief", () => {
     await settle(w);
     await expect(w.heston.mutation(api.briefs.remind, { briefId })).rejects.toThrow(/today/);
     await w.t.run(async (ctx) => { await ctx.db.patch(briefId, { sentAt: Date.now() - 25 * 3_600_000 }); });
-    expect((await w.heston.query(api.briefs.forProject, { projectId: w.p })).brief.canRemind).toBe(true);
+    expect((await w.heston.query(api.briefs.forProject, { projectId: w.p })).brief.remindAt).toBeLessThan(Date.now());
     await w.heston.mutation(api.briefs.remind, { briefId });
     await settle(w);
     expect(s.mails.filter((m) => m.subject === "Reminder: the kickoff brief for 26127 Launch").map((m) => m.to)).toEqual(["maya@harbor.example"]);
@@ -149,8 +160,8 @@ describe("kickoff brief", () => {
     for (const who of [w.jo, w.sam]) {
       expect(await who.query(api.briefs.page, { briefId })).toBeNull();
       expect(await who.query(api.briefs.forClientProject, { projectId: w.p })).toBeNull();
-      await expect(who.mutation(api.briefs.save, { briefId, answers: ANSWERS, step: 0 })).rejects.toThrow(/isn't here/);
-      await expect(who.mutation(api.briefs.submit, { briefId, answers: ANSWERS })).rejects.toThrow(/isn't here/);
+      await expect(who.mutation(api.briefs.save, { briefId, changes: ANSWERS, step: 0 })).rejects.toThrow(/isn't here/);
+      await expect(who.mutation(api.briefs.submit, { briefId, changes: ANSWERS })).rejects.toThrow(/isn't here/);
       await expect(who.query(api.briefs.forProject, { projectId: w.p })).rejects.toThrow(/Not allowed/);
     }
     expect(await w.boss.query(api.briefs.forProject, { projectId: w.p })).toBeNull();
@@ -161,10 +172,38 @@ describe("kickoff brief", () => {
     expect(await w.heston.query(api.briefs.page, { briefId })).toBeNull();
   });
 
+  test("two people answering at once keep each other's answers; a client of two businesses can send it back", async () => {
+    const w = await world();
+    const s = fake();
+    await share(w, ["maya@harbor.example", "jo@harbor.example"]);
+    await w.t.run(async (ctx) => {
+      const B = (await ctx.db.query("businesses").collect()).find((b) => b.slug === "other")!._id;
+      const maya = (await ctx.db.query("users").collect()).find((u) => u.email === "maya@harbor.example")!._id;
+      await ctx.db.insert("memberships", { businessId: B, email: "maya@harbor.example", userId: maya, role: "client", createdAt: 0 });
+      await ctx.db.insert("invites", { businessId: B, email: "maya@harbor.example", createdAt: 0, acceptedAt: 0, userId: maya });
+    });
+    const { briefId } = await w.heston.mutation(api.briefs.send, { projectId: w.p }) as { briefId: Id<"briefs"> };
+    await w.maya.mutation(api.briefs.save, { briefId, changes: { goal: ANSWERS.goal, audience: ANSWERS.audience }, step: 0 });
+    await w.jo.mutation(api.briefs.save, { briefId, changes: { ready: "2026-11-20" }, step: 2 });
+    await w.maya.mutation(api.briefs.save, { briefId, changes: { audience: null }, step: 1 }); // cleared
+    expect((await w.jo.query(api.briefs.page, { briefId })).answers).toEqual({ goal: ANSWERS.goal, ready: "2026-11-20" });
+    await w.maya.mutation(api.briefs.submit, { briefId, changes: {} });
+    await settle(w);
+    expect(s.mails.filter((m) => m.to === "heston@wranglerproductions.com").map((m) => m.subject)).toEqual(["Maya Brooks answered the kickoff brief: 26127 Launch"]);
+  });
+
+  test("a required choice needs something to pick", async () => {
+    const w = await world();
+    fake();
+    await expect(w.heston.mutation(api.briefs.saveSettings, { questionnaire: { steps: [{ id: "a", title: "A", heading: "A", sub: "", questions: [{ id: "x", label: "Pick", type: "select", required: true, options: [] }] }] } })).rejects.toThrow(/nothing to pick/);
+  });
+
   test("answers keep their shape", () => {
     const qn = cleanQuestionnaire(KICKOFF_BRIEF, "kickoff");
     expect(qn).toEqual(KICKOFF_BRIEF);
-    expect(cleanAnswers(qn, { where: ["Instagram", "", 3], refs: ["https://a.example", 5], colors: ["#FF0000"], ready: "2026-02-30x", launch: "2026-11-20", goal: "x".repeat(5000) }))
-      .toEqual({ where: ["Instagram"], refs: ["https://a.example"], colors: ["#FF0000"], launch: "2026-11-20", goal: "x".repeat(4000) });
+    expect(cleanAnswers(qn, { where: ["Instagram", "", 3, "Instagram", "Radio"], refs: ["https://a.example", 5], colors: ["#ff0000", "#"], ready: "2026-02-30x", launch: "2026-11-20", goal: "x".repeat(5000) }))
+      .toEqual({ where: ["Instagram", "Radio"], refs: ["https://a.example"], colors: ["#FF0000"], launch: "2026-11-20", goal: "x".repeat(4000) }); // "Other" is on for where
+    const strict = { steps: [{ id: "s", title: "S", heading: "S", sub: "", questions: [{ id: "pick", label: "Pick", type: "select" as const, options: ["A", "B"] }, { id: "many", label: "Many", type: "multi" as const, options: ["A"] }, { id: "r", label: "R", type: "daterange" as const }] }] };
+    expect(cleanAnswers(strict, { pick: "C", many: ["A", "Z"], r: { start: "2026-11-10", end: "2026-11-01" } })).toEqual({ many: ["A"], r: { start: "2026-11-10" } });
   });
 });

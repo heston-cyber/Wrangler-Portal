@@ -78,7 +78,7 @@ function BriefDialog({ b, estimate, onClose, show }: { b: B; estimate: string; o
             <dl className="crm-dl">{s.answers.map((x) => <Fragment key={x.question}><dt>{x.question}</dt><dd>{x.answer}</dd></Fragment>)}</dl></section>
         )) : <p className="secondary">Nothing yet.</p>}
         <div className="dfoot">
-          {!back && <Button loading={busy} disabled={!b.canRemind} title={b.canRemind ? undefined : "One reminder a day"} onClick={async () => {
+          {!back && <Button loading={busy} disabled={Date.now() < b.remindAt} title={Date.now() < b.remindAt ? "One reminder a day" : undefined} onClick={async () => {
             setBusy(true);
             try { await remind({ briefId: b._id }); show("Reminder sent."); onClose(); } catch (e) { show(errText(e)); setBusy(false); }
           }}>Send a reminder</Button>}
@@ -121,17 +121,30 @@ export function ClientBriefPage({ briefId, preview }: { briefId?: string; previe
   const top = useRef<HTMLDivElement | null>(null);
   const aRef = useRef<Answers | null>(null);
   aRef.current = a;
+  // Only the questions this page changed go up (review, Nov 2): two people answering at once don't overwrite each
+  // other, and what the other one saves shows up here for the questions this page hasn't touched.
+  const touched = useRef<Set<string>>(new Set());
+  const changesOf = (x: Answers) => Object.fromEntries([...touched.current].map((k) => [k, x[k] ?? null]));
   useEffect(() => { if (d && a === null) { setA((d.answers ?? {}) as Answers); setStep(d.status === "sent" ? Math.min(d.step, d.questions.steps.length) : 0); } }, [d, a]);
+  const serverAnswers = JSON.stringify(d?.answers ?? null);
+  useEffect(() => {
+    if (!d || editing) return;
+    setA((prev) => (prev === null ? prev : { ...(d.answers as Answers), ...Object.fromEntries([...touched.current].map((k) => [k, prev[k]])) }));
+  }, [serverAnswers]); // eslint-disable-line react-hooks/exhaustive-deps
   const submitted = d?.status === "submitted";
   const live = !preview && !!d && !submitted; // saves as they type; once it's back, changes wait for Send changes
   useEffect(() => {
     if (!dirty || !a || !live) return;
     const t = setTimeout(async () => {
-      const sent = a;
-      try { setSavedAt(await save({ briefId: d!._id, answers: sent, step })); if (aRef.current === sent) setDirty(false); } catch (e) { show(errText(e)); }
+      const changes = changesOf(a);
+      try {
+        setSavedAt(await save({ briefId: d!._id, changes, step }));
+        for (const [k, val] of Object.entries(changes)) if (JSON.stringify(aRef.current?.[k] ?? null) === JSON.stringify(val)) touched.current.delete(k);
+        setDirty(touched.current.size > 0);
+      } catch (e) { show(errText(e)); setDirty(false); }
     }, 700);
     return () => clearTimeout(t);
-  }, [a, dirty, step]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [a, dirty, step, live]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const qn = (preview ? set?.questionnaire : d?.questions) as Questionnaire | undefined;
   const crumbs = preview ? <><a {...linkProps("/settings/brief")}>Settings</a><Sep /><a {...linkProps("/settings/brief/questions")}>Kickoff brief</a><Sep /><span className="here">Preview</span></>
@@ -163,9 +176,9 @@ export function ClientBriefPage({ briefId, preview }: { briefId?: string; previe
           <div className="qz-cols">
             <div className="col">
               <section className="qz-card glass qz-review" aria-label="Your answers">
-                <div className="qz-rhead"><span className="wp-eyebrow">Your answers</span><button type="button" className="btn ghost sm" onClick={() => { setA((d!.answers ?? {}) as Answers); setEditing(true); setStep(0); setErr(null); }}>Edit</button></div>
+                <div className="qz-rhead"><span className="wp-eyebrow">Your answers</span><button type="button" className="btn ghost sm" onClick={() => { touched.current.clear(); setA((d!.answers ?? {}) as Answers); setEditing(true); setStep(0); setErr(null); }}>Edit</button></div>
                 <dl className="crm-dl br-answers">
-                  {steps.flatMap((s) => s.questions).map((x) => [x.label, answerText(x, a[x.id])] as const).filter(([, v]) => v).map(([k, v]) => <Fragment key={k}><dt>{k}</dt><dd>{v}</dd></Fragment>)}
+                  {steps.flatMap((s) => s.questions).map((x) => [x.label, answerText(x, (d!.answers as Answers)[x.id])] as const).filter(([, v]) => v).map(([k, v]) => <Fragment key={k}><dt>{k}</dt><dd>{v}</dd></Fragment>)}
                 </dl>
                 {d!.updatedAt && <p className="wp-small secondary">Last changed {monthDay(d!.updatedAt)}{d!.updatedBy ? ` by ${d!.updatedBy}` : ""}.</p>}
               </section>
@@ -179,7 +192,7 @@ export function ClientBriefPage({ briefId, preview }: { briefId?: string; previe
   }
 
   const cur: Step | null = step < reviewAt ? steps[step] : null;
-  const setAns = (id: string, v: unknown) => { setA({ ...a, [id]: v }); setDirty(true); setErr(null); };
+  const setAns = (id: string, v: unknown) => { touched.current.add(id); setA({ ...a, [id]: v }); setDirty(true); setErr(null); };
   const go = (n: number) => { setStep(n); if (live) setDirty(true); setErr(null); top.current?.scrollIntoView({ block: "start" }); };
   const missing = (s: Step) => s.questions.filter((x) => x.required && blank(a[x.id]));
   const next = () => {
@@ -187,14 +200,14 @@ export function ClientBriefPage({ briefId, preview }: { briefId?: string; previe
     go(step + 1);
   };
   const later = async () => {
-    try { if (live && dirty) { await save({ briefId: d!._id, answers: a, step }); setDirty(false); } navigate(`/projects/${d!.project._id}`); } catch (e) { show(errText(e)); }
+    try { if (live && dirty) { await save({ briefId: d!._id, changes: changesOf(a), step }); touched.current.clear(); setDirty(false); } navigate(`/projects/${d!.project._id}`); } catch (e) { show(errText(e)); }
   };
   const done = async () => {
     if (preview || !d) return;
     const firstMissing = steps.findIndex((s) => missing(s).length);
     if (firstMissing >= 0) { go(firstMissing); setErr(`Answer ${missing(steps[firstMissing]).map((x) => `"${x.label}"`).join(", ")} first.`); return; }
     setBusy(true);
-    try { await submit({ briefId: d._id, answers: a }); setDirty(false); setEditing(false); show(submitted ? `Changes sent to ${owner}.` : `Sent to ${owner}.`); window.scrollTo({ top: 0 }); } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
+    try { await submit({ briefId: d._id, changes: changesOf(a) }); touched.current.clear(); setDirty(false); setEditing(false); show(submitted ? `Changes sent to ${owner}.` : `Sent to ${owner}.`); window.scrollTo({ top: 0 }); } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
   };
   return (
     <>
@@ -236,7 +249,7 @@ export function ClientBriefPage({ briefId, preview }: { briefId?: string; previe
             {err && <p className="error" role="alert">{err}</p>}
             <div className="qz-foot">
               {live && <button type="button" className="btn ghost" onClick={() => void later()}>Save and finish later</button>}
-              {editing && <button type="button" className="btn ghost" onClick={() => { setEditing(false); setA((d!.answers ?? {}) as Answers); setErr(null); }}>Cancel changes</button>}
+              {editing && <button type="button" className="btn ghost" onClick={() => { touched.current.clear(); setEditing(false); setA((d!.answers ?? {}) as Answers); setErr(null); }}>Cancel changes</button>}
               <span className="sp" />
               {step > 0 && <button type="button" className="btn" onClick={() => go(step - 1)}>Back</button>}
               {cur ? <Button variant="primary" onClick={next}>{step === reviewAt - 1 ? "Review answers" : "Next"}</Button>

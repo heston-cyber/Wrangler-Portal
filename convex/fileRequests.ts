@@ -279,7 +279,8 @@ export const finishDirect = action({
       await ctx.runMutation(internal.fileRequests.failUpload, { uploadId });
       throw new ConvexError("The file Dropbox got isn't the size it should be. Try it again.");
     }
-    return await ctx.runMutation(internal.fileRequests.complete, { uploadId, path: String(r.json.path_display), name: String(r.json.name) });
+    // Acting for the request's business: a client of more than one business still gets the owner's email lined up.
+    return await forBusiness(ctx, u.businessId).runMutation(internal.fileRequests.complete, { uploadId, path: String(r.json.path_display), name: String(r.json.name) });
   },
 });
 export const mineUpload = internalQuery({

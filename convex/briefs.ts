@@ -6,7 +6,7 @@
 //   - The client answers it step by step (740:1671), saving as they go; Review sends it back (740:2074). They can
 //     change it afterwards. The owner gets an email each time it comes back (switchable), sees the answers on the card,
 //     and can start an estimate from them.
-import { internalAction, internalQuery, mutation, query } from "./lib/functions";
+import { focusBusiness, internalAction, internalQuery, mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
@@ -25,7 +25,7 @@ import { answerList, cleanQuestionnaire, type Answers, type Question, type Quest
 
 type Ctx = QueryCtx | MutationCtx;
 const REMIND_GAP = 20 * 3_600_000;       // one reminder a day at most
-const QUIET_CHANGES = 10 * 60_000;       // changes sent back within 10 minutes of the last don't email the owner again
+const QUIET_CHANGES = 10 * 60_000;       // changes sent back: one owner email, 10 minutes after the last
 
 async function ownerBiz(ctx: Ctx) {
   const me = await requireMe(ctx);
@@ -52,17 +52,18 @@ export function cleanAnswers(qn: Questionnaire, raw: unknown): Answers {
     if (x === undefined || x === null || x === "") continue;
     let val: unknown;
     switch (qq.type) {
-      case "short": case "select": val = str(x, qq.type === "short" ? 500 : 120); break;
+      case "short": val = str(x, 500); break;
+      case "select": { const w = str(x, 120); val = w !== undefined && (qq.other || (qq.options ?? []).includes(w)) ? w : undefined; break; }
       case "long": val = str(x, 4000); break;
-      case "multi": val = Array.isArray(x) ? x.map((w) => str(w, 80)).filter((w): w is string => !!w && !!w.trim()).slice(0, 30) : undefined; break;
+      case "multi": val = Array.isArray(x) ? [...new Set(x.map((w) => str(w, 80)).filter((w): w is string => !!w && !!w.trim() && (!!qq.other || (qq.options ?? []).includes(w))))].slice(0, 30) : undefined; break;
       case "link": val = qq.multiple ? (Array.isArray(x) ? x.map((u) => str(u, 500)).filter((u): u is string => u !== undefined).slice(0, 20) : undefined) : str(x, 500); break;
-      case "colors": val = Array.isArray(x) ? x.map((c) => str(c, 9)).filter((c): c is string => c !== undefined).slice(0, 12) : undefined; break;
+      case "colors": val = Array.isArray(x) ? x.filter((c): c is string => typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c)).map((c) => c.toUpperCase()).slice(0, 12) : undefined; break;
       case "date": val = isDay(x) ? x : undefined; break;
-      case "daterange": { const r = x as { start?: unknown; end?: unknown }; val = r && typeof r === "object" ? { ...(isDay(r.start) ? { start: r.start } : {}), ...(isDay(r.end) ? { end: r.end } : {}) } : undefined; break; }
+      case "daterange": { const r = x as { start?: unknown; end?: unknown }; val = r && typeof r === "object" && isDay(r.start) ? { start: r.start, ...(isDay(r.end) && r.end >= r.start ? { end: r.end } : {}) } : undefined; break; }
       case "money": case "number": val = typeof x === "number" && Number.isFinite(x) && x >= 0 && x < 1e12 ? x : undefined; break;
       default: val = undefined;
     }
-    if (val !== undefined) out[qq.id] = val;
+    if (val !== undefined && !(Array.isArray(val) && !val.length)) out[qq.id] = val;
   }
   if (JSON.stringify(out).length > 40_000) throw new ConvexError("Those answers are too long.");
   return out;
@@ -88,6 +89,9 @@ export const saveSettings = mutation({
     let qn: Questionnaire;
     try { qn = cleanQuestionnaire(a.questionnaire, "kickoff"); } catch (e) { throw new ConvexError((e as Error).message); }
     if (!questionsIn(qn)) throw new ConvexError("A brief needs at least one question.");
+    for (const s of qn.steps) for (const qq of s.questions) {
+      if (qq.required && (qq.type === "select" || qq.type === "multi") && !(qq.options ?? []).some((o) => o.trim()) && !qq.other) throw new ConvexError(`"${qq.label}" is required but has nothing to pick. Add options, or allow "Other".`);
+    }
     await ctx.db.patch(b._id, { kickoff: qn });
     return null;
   },
@@ -131,7 +135,7 @@ export const forProject = query({
         _id: r._id, status: r.status, sentAt: r.sentAt, remindedAt: r.remindedAt ?? null, startedAt: r.startedAt ?? null, submittedAt: r.submittedAt ?? null,
         by: await nameOf(ctx, r.submittedBy), updatedBy: await nameOf(ctx, r.updatedBy), submits: r.submits, updatedAt: r.updatedAt,
         answers: answerList(qn, r.answers as Answers), questions: questionsIn(qn),
-        canRemind: r.status === "sent" && Date.now() - (r.remindedAt ?? r.sentAt) > REMIND_GAP,
+        remindAt: (r.remindedAt ?? r.sentAt) + REMIND_GAP + 1, // a query doesn't re-run as time passes: the page compares
       },
     };
   },
@@ -202,6 +206,8 @@ async function clientBrief(ctx: Ctx, briefId: string) {
   const id = ctx.db.normalizeId("briefs", briefId);
   const r = id ? await ctx.db.get(id) : null;
   if (!r) return null;
+  // A client of more than one business acts for this brief's (so what it schedules, like the owner's email, has a home).
+  focusBusiness(ctx, r.businessId);
   const row = (await myProjects(ctx as QueryCtx, me.email)).get(r.projectId);
   if (!row) return null;
   const b = row.project.businessId ? await ctx.db.get(row.project.businessId) : null;
@@ -236,13 +242,22 @@ export const page = query({
   },
 });
 
+/** The answers a page changed since its last save, laid over what's saved (two people answering at once don't
+ *  overwrite each other's questions). A cleared answer comes as "" or null. */
+function merged(qn: Questionnaire, saved: unknown, changes: unknown): Answers {
+  const c = (changes && typeof changes === "object" ? changes : {}) as Record<string, unknown>;
+  return cleanAnswers(qn, { ...(saved as Answers), ...c });
+}
+
 export const save = mutation({
-  args: { briefId: v.string(), answers: v.any(), step: v.number() },
+  args: { briefId: v.string(), changes: v.any(), step: v.number() },
   handler: async (ctx, a) => {
     const c = await clientBrief(ctx, a.briefId);
     if (!c) throw new ConvexError("This brief isn't here any more.");
+    // Once it's back, changes wait for Send changes (submit), which checks the required answers and tells the owner.
+    if (c.r.status !== "sent") throw new ConvexError("It's been sent back. Open it again to change it.");
     const qn = c.r.questions as Questionnaire;
-    const answers = cleanAnswers(qn, a.answers);
+    const answers = merged(qn, c.r.answers, a.changes);
     const now = Date.now();
     await ctx.db.patch(c.r._id, {
       answers, step: Math.max(0, Math.min(qn.steps.length, Math.floor(a.step) || 0)), updatedAt: now, updatedBy: c.me.email,
@@ -253,25 +268,25 @@ export const save = mutation({
 });
 
 export const submit = mutation({
-  args: { briefId: v.string(), answers: v.any() },
+  args: { briefId: v.string(), changes: v.any() },
   handler: async (ctx, a) => {
     const c = await clientBrief(ctx, a.briefId);
     if (!c) throw new ConvexError("This brief isn't here any more.");
     const qn = c.r.questions as Questionnaire;
-    const answers = cleanAnswers(qn, a.answers);
+    const answers = merged(qn, c.r.answers, a.changes);
     const gaps = missing(qn, answers);
     if (gaps.length) throw new ConvexError(`Answer "${gaps[0].label.replace(/\?$/, "")}" first.`);
     const now = Date.now();
     const changed = c.r.status === "submitted";
     const submits = c.r.submits + 1;
-    const last = c.r.history.filter((h) => h.text.startsWith("Sent back") || h.text.startsWith("Changed")).pop()?.at ?? 0;
     await ctx.db.patch(c.r._id, {
       answers, status: "submitted", step: qn.steps.length, submits, updatedAt: now, updatedBy: c.me.email,
       ...(changed ? {} : { submittedAt: now, submittedBy: c.me.email }), startedAt: c.r.startedAt ?? now,
       history: [...c.r.history, { at: now, text: `${changed ? "Changed" : "Sent back"} by ${c.me.email}` }],
     });
-    // One email per sitting: a change sent back within 10 minutes of the last one doesn't email again.
-    if (!changed || now - last > QUIET_CHANGES) await ctx.scheduler.runAfter(0, internal.briefs.mailOwner, { briefId: c.r._id, n: submits });
+    // The first time it comes back, the owner hears now. Changes after: one email 10 minutes after the last one, with
+    // the answers as they ended up (an earlier run sees a later submit and stands down).
+    await ctx.scheduler.runAfter(changed ? QUIET_CHANGES : 0, internal.briefs.mailOwner, { briefId: c.r._id, n: submits });
     return { changed };
   },
 });
@@ -313,7 +328,7 @@ export const mailOwner = internalAction({
   args: { briefId: v.id("briefs"), n: v.number() },
   handler: async (ctx, { briefId, n }) => {
     const d = await ctx.runQuery(internal.briefs.mailData, { briefId });
-    if (!d?.owner) return;
+    if (!d?.owner || d.r.submits !== n) return;
     await deliverOnce(ctx, `brief-answered:${briefId}:${n}`, "brief_answered", d.owner, ownerBriefMail(d.brand, {
       who: d.by ?? "The client", project: d.project, changed: n > 1, answers: d.answers, link: `${SITE()}/projects/${d.projectId}`,
     }), d.brand.replyTo, d.biz);

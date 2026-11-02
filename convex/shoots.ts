@@ -6,7 +6,7 @@
 //     (what to prepare, who's coming) just save.
 //   - Cancelling takes it off the client's pages with an Inbox line (no email: no frame for one).
 //   - "Add to {calendar}" is saved now; the event is made once Settings › Calendar is connected (a later step).
-import { internalAction, internalQuery, mutation, query } from "./lib/functions";
+import { focusBusiness, internalAction, internalQuery, mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -229,6 +229,7 @@ export const confirm = mutation({
     const me = await requireSignedIn(ctx);
     if (me.kind !== "client") throw new ConvexError("Not allowed.");
     const s = await ctx.db.get(shootId);
+    if (s) focusBusiness(ctx, s.businessId); // a client of more than one business acts for this shoot's (review, Nov 2)
     if (!s || s.status !== "scheduled" || !(await myProjects(ctx as unknown as QueryCtx, me.email)).has(s.projectId)) throw new ConvexError("This shoot isn't here any more.");
     if (s.confirmed) return { already: true };
     if (s.date < todayCentral()) throw new ConvexError("That shoot has passed.");
