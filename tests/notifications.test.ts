@@ -47,7 +47,7 @@ async function setup(w: W) {
   return { a, b, A, B, jordan: w.t.withIdentity({ subject: sub }), book };
 }
 
-describe("notifications", () => {
+describe("T3c.6 notifications", () => {
   test("the list: every email kind the code sends is in it, once per side; always-sent ones can't be switched", async () => {
     for (const side of ["owner", "vendor", "client"] as const) {
       const kinds = NOTICES.filter((n) => n.side === side).flatMap((n) => n.kinds);
