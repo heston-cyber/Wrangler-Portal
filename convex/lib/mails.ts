@@ -515,15 +515,16 @@ export function vendorInvoiceDeclinedMail(b: MailBrand, d: { name: string; numbe
 }
 
 // ---------- Nov 2: Pay in portal (vendorPayouts.ts). Layouts of their siblings (owner alerts like 26; vendor like 27). ----------
-export function ownerPayoutMail(b: MailBrand, d: { what: "posted" | "failed"; vendor: string; number: string; project: string; cents: number; reason: string | null; link: string }): Mail {
+export function ownerPayoutMail(b: MailBrand, d: { what: "posted" | "failed" | "returned"; vendor: string; number: string; project: string; cents: number; reason: string | null; link: string }): Mail {
   if (d.what === "posted") return mk(b, "updates", `Paid ${d.vendor} ${usd(d.cents)}: invoice ${d.number}`, [
     { t: "eyebrow", text: `Your payment to ${d.vendor} went out` },
     { t: "sums", rows: [{ label: "Paid", value: usd(d.cents), big: true }, { label: "Method", value: "Direct deposit (Stripe)" }, { label: "Invoice", value: `${d.number} · ${d.project}` }] },
     { t: "p", text: "It left your Stripe balance. The invoice is marked paid and they've been told." },
     { t: "button", label: "Open the invoice", href: d.link },
   ], ownerFoot("a vendor payment goes out through Stripe"), `${usd(d.cents)} · ${d.number}`);
-  return mk(b, "updates", `Payment to ${d.vendor} didn't go through: invoice ${d.number}`, [
-    { t: "eyebrow", text: `Your payment to ${d.vendor} didn't go through` },
+  const back = d.what === "returned";
+  return mk(b, "updates", back ? `Payment to ${d.vendor} came back: invoice ${d.number}` : `Payment to ${d.vendor} didn't go through: invoice ${d.number}`, [
+    { t: "eyebrow", text: back ? `Your payment to ${d.vendor} came back from their bank` : `Your payment to ${d.vendor} didn't go through` },
     { t: "title", text: `${usd(d.cents)} · ${d.number} · ${d.project}` },
     ...(d.reason ? [{ t: "box", text: `Stripe says: ${d.reason}` } as Block] : []),
     { t: "p", text: "The money is back in your Stripe balance and the invoice is back to Approved. Ask them to check their direct deposit, then pay it again, or pay another way and mark it paid." },
@@ -538,4 +539,12 @@ export function vendorPayoutSetupMail(b: MailBrand, d: { name: string; link: str
     { t: "p", text: "Set it up once in your portal's Settings. You'll enter your bank details on Stripe's secure form; they never pass through the portal or email." },
     { t: "button", label: "Set up direct deposit", href: d.link }, { t: "link", href: d.link },
   ], vendorFoot(b));
+}
+export function vendorPayoutReturnedMail(b: MailBrand, d: { name: string; number: string; project: string; cents: number; reason: string | null; link: string }): Mail {
+  return mk(b, "updates", `Your payment for invoice ${d.number} came back`, [
+    hi(d.name),
+    { t: "p", text: `${b.name}'s direct deposit of ${usd(d.cents)} for invoice ${d.number} came back from your bank${d.reason ? ` (${d.reason})` : ""}, so it isn't paid yet.` },
+    { t: "p", text: "Check your bank details in your portal's Settings › Direct deposit. Your invoice is back to Approved and will be paid again." },
+    { t: "button", label: "Check your direct deposit", href: d.link }, { t: "link", href: d.link },
+  ], vendorFoot(b), `${d.number} · ${usd(d.cents)}`);
 }

@@ -155,8 +155,11 @@ export function VendorInvoicePage({ invoiceId }: { invoiceId: string }) {
       <div className="wp-page">
         <PageHeader eyebrow={`Vendor invoice · ${x.vendor.name}`} title={`${x.number}.`} sub={`${x.project.label} · ${money(x.totalCents)}`} actions={<VendorInvoiceChip status={x.status} />} />
         {x.status === "approved" && !paying(po) && <div className="wp-notice vpay-note"><Icon name="info" size={20} /><span className="txt"><b>Approved and in the Ledger</b><br />{po?.on ? `Pay ${first} in the portal, or pay your usual way and press Mark paid.` : `Pay ${first} your usual way, then press Mark paid.`}</span></div>}
-        {x.status === "approved" && paying(po) && <div className="wp-notice vpay-note"><Icon name="clock" size={20} /><span className="txt"><b>Paying {first} through Stripe</b><br />{money(x.totalCents)} by direct deposit{po!.vendor.last4 ? ` to ••••${po!.vendor.last4}` : ""}{po!.payout!.expectedArrival ? `, expected ${dateShort(po!.payout!.expectedArrival)}` : ""}. It's marked paid when Stripe sends it; the portal checks every 15 minutes.</span></div>}
-        {x.status === "approved" && po?.payout && failedOut(po.payout.status) && <div className="wp-notice warn vpay-note"><Icon name="alert" size={20} /><span className="txt"><b>The last Stripe payment didn't go through</b><br />{po.payout.reason ? `Stripe says: ${po.payout.reason}. ` : ""}Nothing left your Stripe balance (or it came back). Pay it again, or pay another way and press Mark paid.</span></div>}
+        {x.status === "approved" && po?.payout?.status === "processing" && <div className="wp-notice vpay-note"><Icon name="clock" size={20} /><span className="txt"><b>Paying {first} through Stripe</b><br />{money(x.totalCents)} by direct deposit{po.vendor.last4 ? ` to ••••${po.vendor.last4}` : ""}{po.payout.expectedArrival ? `, expected ${dateShort(po.payout.expectedArrival)}` : ""}. It's marked paid when Stripe sends it; the portal checks every 15 minutes.</span></div>}
+        {x.status === "approved" && (po?.payout?.status === "starting" || po?.payout?.status === "unknown") && <div className={`wp-notice vpay-note${po.payout.stale ? " warn" : ""}`}><Icon name={po.payout.stale ? "alert" : "clock"} size={20} /><span className="txt"><b>Waiting for Stripe to confirm</b><br />{po.payout.stale
+          ? "Stripe hasn't confirmed this payment for a day. Look for it in your Stripe dashboard (Balances, Outbound payments) before doing anything else. If it isn't there, press Nothing went out."
+          : "The payment was sent, but Stripe's answer didn't arrive. The portal asks Stripe again (with the same request, so it can't be paid twice). Don't pay another way until this clears."}</span></div>}
+        {x.status === "approved" && po?.payout && failedOut(po.payout.status) && <div className="wp-notice warn vpay-note"><Icon name="alert" size={20} /><span className="txt"><b>{po.payout.status === "refused" ? "Stripe didn't take the payment" : po.payout.status === "returned" ? "The Stripe payment came back" : "The Stripe payment didn't go through"}</b><br />{po.payout.reason ? `${po.payout.status === "refused" ? "" : "Stripe says: "}${po.payout.reason}${/[.!?]$/.test(po.payout.reason) ? "" : "."} ` : ""}{po.payout.status === "refused" ? "Nothing left your Stripe balance." : "The money is back in your Stripe balance."} Pay it again, or pay another way and press Mark paid.</span></div>}
         {x.status === "declined" && <div className="wp-notice warn vpay-note"><Icon name="alert" size={20} /><span className="txt"><b>You declined it</b><br />“{x.declineReason}” {first} got an email with your reason and can fix it and send it again from their portal.</span>{ask && <a className="btn sm" href={ask}>Email {first}</a>}</div>}
         <div className="wp-homecols">
           <div className="col">
@@ -208,7 +211,7 @@ export function VendorInvoicePage({ invoiceId }: { invoiceId: string }) {
         </div>
       </div>
       {dialog === "paid" && <MarkPaid invoiceId={x._id} number={x.number} vendor={x.vendor.name} totalCents={x.totalCents} payMethod={x.vendor.payMethod?.method ?? null} onClose={() => setDialog(null)} onDone={() => show(`Marked paid. ${first} gets an email.`)} />}
-      {dialog === "pay" && po && <PayDialog invoiceId={x._id} number={x.number} vendor={x.vendor.name} totalCents={x.totalCents} last4={po.vendor.last4} bankName={po.vendor.bankName} test={po.mode === "test"} onClose={() => setDialog(null)} onDone={(when) => show(`Sent to Stripe.${when ? ` Expected in ${first}'s bank ${dateShort(when)}.` : ""}`)} />}
+      {dialog === "pay" && po && <PayDialog invoiceId={x._id} number={x.number} vendor={x.vendor.name} totalCents={x.totalCents} last4={po.vendor.last4} bankName={po.vendor.bankName} test={po.mode === "test"} onClose={() => setDialog(null)} onDone={(r) => show(r.state === "unknown" ? "Sent, but Stripe's answer didn't arrive. The portal is checking with Stripe." : r.state === "paid" ? "Stripe sent it. It's marked paid." : r.state === "failed" ? "Stripe couldn't send it. See the note above." : `Sent to Stripe.${r.expectedArrival ? ` Expected in ${first}'s bank ${dateShort(r.expectedArrival)}.` : ""}`)} />}
       {dialog === "decline" && <DeclineInvoice invoiceId={x._id} number={x.number} vendor={x.vendor.name} onClose={() => setDialog(null)} onDone={() => show("Declined.")} />}
       {toast}
     </>
@@ -217,16 +220,18 @@ export function VendorInvoicePage({ invoiceId }: { invoiceId: string }) {
 
 // ---------- Pay in portal (Nov 2; no frames: built from the Mark paid dialog and the Actions card) ----------
 
-type PayoutView = { on: boolean; mode: string | null; vendor: { state: "none" | "started" | "ready"; last4: string | null; bankName: string | null }; payout: { status: string; expectedArrival: string | null; receiptUrl: string | null; reason: string | null; startedAt: number } | null } | null | undefined;
-const paying = (po: PayoutView) => !!po?.payout && (po.payout.status === "starting" || po.payout.status === "processing");
-const failedOut = (s: string) => s === "failed" || s === "returned" || s === "canceled";
+type PayoutView = { on: boolean; mode: string | null; vendor: { state: "none" | "started" | "ready"; last4: string | null; bankName: string | null }; payout: { status: string; expectedArrival: string | null; receiptUrl: string | null; reason: string | null; startedAt: number; stale: boolean } | null } | null | undefined;
+const paying = (po: PayoutView) => !!po?.payout && ["starting", "unknown", "processing"].includes(po.payout.status);
+const failedOut = (s: string) => ["failed", "returned", "canceled", "refused"].includes(s);
 
 function PayActions({ invoiceId, vendorId, first, totalCents, po, onPay, onMark, show }: { invoiceId: Id<"vendorInvoices">; vendorId: Id<"vendors">; first: string; totalCents: number; po: PayoutView; onPay: () => void; onMark: () => void; show: (t: string) => void }) {
   const check = useAction(api.vendorPayouts.checkNow);
   const askSetup = useMutation(api.vendorPayouts.askSetup);
+  const nothing = useMutation(api.vendorPayouts.nothingWentOut);
   const [busy, setBusy] = useState(false);
   if (paying(po)) return <>
-    <Button loading={busy} onClick={async () => { setBusy(true); try { const r = await check({ invoiceId }); show(r === "paid" ? "Stripe sent it. It's marked paid." : r === "failed" ? "It didn't go through. See the note above." : r === "unreachable" ? "Stripe didn't answer. Try again in a minute." : "Still on its way."); } catch (e) { show(errText(e)); } finally { setBusy(false); } }}>Check with Stripe now</Button>
+    <Button loading={busy} onClick={async () => { setBusy(true); try { const r = await check({ invoiceId }); show(r === "paid" ? "Stripe sent it. It's marked paid." : r === "failed" || r === "refused" ? "It didn't go through. See the note above." : r === "unreachable" || r === "unknown" ? "Stripe didn't answer. The portal keeps asking." : "Still on its way."); } catch (e) { show(errText(e)); } finally { setBusy(false); } }}>Check with Stripe now</Button>
+    {po?.payout?.stale && <Button variant="ghost" onClick={async () => { try { await nothing({ invoiceId }); show("Noted. You can pay it again."); } catch (e) { show(errText(e)); } }}>Nothing went out</Button>}
     <p className="wp-small secondary">Mark paid is off while Stripe is paying it.</p>
   </>;
   const ready = !!po?.on && po.vendor.state === "ready";
@@ -242,7 +247,7 @@ function PayActions({ invoiceId, vendorId, first, totalCents, po, onPay, onMark,
   </>;
 }
 
-function PayDialog({ invoiceId, number, vendor, totalCents, last4, bankName, test, onClose, onDone }: { invoiceId: Id<"vendorInvoices">; number: string; vendor: string; totalCents: number; last4: string | null; bankName: string | null; test: boolean; onClose: () => void; onDone: (expected: string | null) => void }) {
+function PayDialog({ invoiceId, number, vendor, totalCents, last4, bankName, test, onClose, onDone }: { invoiceId: Id<"vendorInvoices">; number: string; vendor: string; totalCents: number; last4: string | null; bankName: string | null; test: boolean; onClose: () => void; onDone: (r: { state: string; expectedArrival: string | null }) => void }) {
   const pay = useAction(api.vendorPayouts.pay);
   const balanceOf = useAction(api.vendorPayouts.balance);
   const first = firstOf(vendor);
@@ -265,7 +270,7 @@ function PayDialog({ invoiceId, number, vendor, totalCents, last4, bankName, tes
         {err && <p className="error" role="alert">{err}</p>}
         <div className="dfoot">
           <button className="btn ghost" type="button" onClick={onClose}>Cancel</button>
-          <Button variant="primary" loading={busy} disabled={bal === null || short} onClick={async () => { setBusy(true); setErr(null); try { const r = await pay({ invoiceId }); onClose(); onDone(r.expectedArrival); } catch (e) { setErr(errText(e)); setBusy(false); } }}>Pay {money(totalCents)}</Button>
+          <Button variant="primary" loading={busy} disabled={bal === null || short} onClick={async () => { setBusy(true); setErr(null); try { const r = await pay({ invoiceId, ...(last4 ? { last4 } : {}) }); onClose(); onDone(r); } catch (e) { setErr(errText(e)); setBusy(false); } }}>Pay {money(totalCents)}</Button>
         </div>
       </div>
     </Modal>

@@ -366,7 +366,7 @@ async function invRow(ctx: Ctx, x: Doc<"vendorInvoices">) {
     sentAt: x.sentAt ?? null, approvedAt: x.approvedAt ?? null, paidAt: x.paidAt ?? null, paidMethod: x.paidMethod ?? null, updatedAt: x.updatedAt,
     paidOn: paidDay(x), paidCents: x.status === "paid" ? paidAmount(x) : null, declinedAt: x.declinedAt ?? null, declineReason: x.declineReason ?? null, // step 5
     // Nov 2, Pay in portal: on its way to their bank through Stripe.
-    onTheWay: x.status === "approved" && x.payout && (x.payout.status === "starting" || x.payout.status === "processing") ? { expectedArrival: x.payout.expectedArrival ?? null } : null,
+    onTheWay: x.status === "approved" && x.payout && ["starting", "unknown", "processing"].includes(x.payout.status) ? { expectedArrival: x.payout.expectedArrival ?? null } : null,
   };
 }
 

@@ -964,10 +964,12 @@ export default defineSchema({
     paidMethod: v.optional(v.string()),
     paidRef: v.optional(v.string()),                      // "Confirmation 000000" (optional)
     history: v.optional(v.array(v.object({ at: v.number(), text: v.string() }))),
-    // Pay in portal (Nov 2): the Stripe payout for this invoice. "starting" while the request is out; then Stripe's own
-    // status. Posted → the invoice is paid; failed / returned / canceled → back to approved, with the reason.
+    // Pay in portal (Nov 2): the Stripe payout for this invoice (states in vendorPayouts.ts: starting, unknown,
+    // processing, posted, failed, returned, canceled, refused). Posted → paid; failed / returned / canceled → approved.
     payout: v.optional(v.object({ id: v.optional(v.string()), status: v.string(), attempt: v.number(), mode: v.string(), startedAt: v.number(), by: v.optional(v.string()),
-      expectedArrival: v.optional(v.string()), receiptUrl: v.optional(v.string()), reason: v.optional(v.string()), checkedAt: v.optional(v.number()) })),
+      expectedArrival: v.optional(v.string()), receiptUrl: v.optional(v.string()), reason: v.optional(v.string()), checkedAt: v.optional(v.number()),
+      // the exact request sent to Stripe (re-sent with the same idempotency key when its answer is lost)
+      request: v.optional(v.object({ key: v.string(), cents: v.number(), recipient: v.string(), payoutMethod: v.string(), financialAccount: v.string(), last4: v.optional(v.string()), description: v.string() })) })),
     seenAt: v.optional(v.number()),                       // the owner opened it (the Home alert stays until approved)
     createdAt: v.number(),
     updatedAt: v.number(),

@@ -275,7 +275,7 @@ export function VendorSettings() {
                 <div className="wide">{input("Portfolio", "portfolio", "text", "yoursite.com")}</div>
               </div>
             </Card>
-            <DirectDeposit businessId={s.businessId} business={s.business} show={show} />
+            <DirectDeposit businessId={s.businessId} business={s.business} hasBusiness={!!s.businessName} show={show} />
             <Card label="How you get paid" head={<SectionHead label="How you get paid" />}>
               <div className="vd-pad vi-for">
                 <div className="wp-field"><span className="wp-field-label">Method</span>
@@ -312,11 +312,12 @@ export function VendorSettings() {
 
 // ---------- Direct deposit (Nov 2, Pay in portal; no frame: the W-9 card's pattern) ----------
 
-function DirectDeposit({ businessId, business, show }: { businessId: Id<"businesses">; business: string; show: (t: string) => void }) {
+function DirectDeposit({ businessId, business, hasBusiness, show }: { businessId: Id<"businesses">; business: string; hasBusiness: boolean; show: (t: string) => void }) {
   const m = useQuery(api.vendorPayouts.mine, { businessId });
   const link = useAction(api.vendorPayouts.setupLink);
   const refresh = useAction(api.vendorPayouts.refreshMine);
   const [busy, setBusy] = useState(false);
+  const [as, setAs] = useState<"individual" | "company">(hasBusiness ? "company" : "individual");
   const asked = useRef(false);
   // Back from Stripe's form (?payouts=<business>), or set up but not finished: ask Stripe once where it stands.
   useEffect(() => {
@@ -330,7 +331,7 @@ function DirectDeposit({ businessId, business, show }: { businessId: Id<"busines
   if (!m?.on) return null;
   const open = async () => {
     setBusy(true);
-    try { const r = await link({ businessId }); window.location.assign(r.url); } catch (e) { show(errText(e)); setBusy(false); }
+    try { const r = await link({ businessId, ...(m.state === "none" ? { as } : {}) }); window.location.assign(r.url); } catch (e) { show(errText(e)); setBusy(false); }
   };
   return (
     <Card label="Direct deposit" head={<SectionHead label="Direct deposit" />}>
@@ -338,6 +339,8 @@ function DirectDeposit({ businessId, business, show }: { businessId: Id<"busines
         {m.state === "ready" && <div className="vd-row"><span>{m.bankName ? `${m.bankName} ` : "Bank "}{m.last4 ? `••••${m.last4}` : ""}</span><StatusChip tone="success">Ready</StatusChip></div>}
         {m.state === "started" && <div className="vd-row"><span>Started, not finished</span><StatusChip tone="warning">Needs details</StatusChip></div>}
         {m.state === "none" && <div className="vd-row"><span>Not set up</span><StatusChip tone="neutral">Off</StatusChip></div>}
+        {m.state === "none" && <div className="wp-field"><span className="wp-field-label">Paid as</span>
+          <div className="qz-chips">{([["individual", "Myself"], ["company", "My company (LLC, corp)"]] as const).map(([k, l]) => <button key={k} type="button" className={`qz-chip${as === k ? " on" : ""}`} aria-pressed={as === k} onClick={() => setAs(k)}>{l}</button>)}</div></div>}
         <Button variant={m.state === "ready" ? undefined : "primary"} loading={busy} onClick={() => void open()}>{m.state === "ready" ? "Update bank details" : m.state === "started" ? "Finish setting up" : "Set up direct deposit"}</Button>
         <p className="wp-small secondary">{business} can pay your approved invoices straight to your bank. You enter your bank on Stripe's secure form; the portal and {business} only see its last 4 digits.</p>
       </div>

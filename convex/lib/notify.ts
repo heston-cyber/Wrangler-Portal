@@ -30,13 +30,13 @@ export const NOTICES: Notice[] = [
   { key: "briefing_read", side: "owner", group: "Vendors", label: "A vendor reads a briefing", kinds: ["briefing_read"] },
   { key: "vendor_invoices", side: "owner", group: "Vendors", label: "A vendor sends an invoice", kinds: ["vendor_invoice"] },
   { key: "vendor_w9", side: "owner", group: "Vendors", label: "A vendor uploads a W-9", kinds: ["vendor_w9"] },
-  { key: "vendor_payouts", side: "owner", group: "Vendors", label: "A vendor payment through Stripe goes out or fails", kinds: ["vendor_payout_posted", "vendor_payout_failed"] },
+  { key: "vendor_payouts", side: "owner", group: "Vendors", label: "A vendor payment through Stripe goes out, fails or comes back", kinds: ["vendor_payout_posted", "vendor_payout_failed"] },
   { key: "owner_codes", side: "owner", group: "Your account", label: "Sign-in codes and password resets", kinds: ["code", "reset"], always: true },
 
   // ---------- to a vendor ----------
   { key: "bookings", side: "vendor", group: "Bookings", label: "A new booking, or a booking is cancelled", kinds: ["booking_offer", "booking_cancelled"] },
   { key: "briefings", side: "vendor", group: "Briefings", label: "A briefing is sent to you", kinds: ["briefing"] },
-  { key: "invoice_updates", side: "vendor", group: "Invoices", label: "Your invoice is approved, declined or paid", kinds: ["vendor_invoice_approved", "vendor_invoice_declined", "vendor_invoice_paid"] },
+  { key: "invoice_updates", side: "vendor", group: "Invoices", label: "Your invoice is approved, declined or paid", kinds: ["vendor_invoice_approved", "vendor_invoice_declined", "vendor_invoice_paid", "vendor_payout_returned"] },
   { key: "vendor_payout_setup", side: "vendor", group: "Your account", label: "A business asks you to set up direct deposit", kinds: ["vendor_payout_setup"], always: true },
   { key: "vendor_invite", side: "vendor", group: "Your account", label: "Invites from a business", kinds: ["vendor_invite"], always: true },
   { key: "vendor_codes", side: "vendor", group: "Your account", label: "Sign-in codes and password resets", kinds: ["code", "reset"], always: true },

@@ -43,21 +43,28 @@ export async function payoutsCall(method: "GET" | "POST", path: string, opts: { 
 /** The business's USD financial account and what's available to pay out now. */
 export async function financialAccount(): Promise<{ id: string; availableCents: number } | null> {
   const r = await payoutsCall("GET", "money_management/financial_accounts");
-  const fa = (r.data ?? []).find((x: V2) => x.status !== "closed" && (x.balance?.available?.usd || (x.storage?.holds_currencies ?? []).includes("usd"))) ?? (r.data ?? [])[0];
+  const open = (r.data ?? []).filter((x: V2) => x.status !== "closed");
+  const fa = open.find((x: V2) => x.balance?.available?.usd || (x.storage?.holds_currencies ?? []).includes("usd")) ?? open[0];
   if (!fa) return null;
   return { id: fa.id, availableCents: Number(fa.balance?.available?.usd?.value ?? 0) };
 }
 
 /** A vendor's recipient account: is ACH active, and which bank account will it go to. */
 export async function recipientState(recipientId: string): Promise<{ ready: boolean; needsInfo: boolean; payoutMethodId: string | null; last4: string | null; bankName: string | null }> {
-  const acct = await payoutsCall("GET", `core/accounts/${recipientId}`, { query: [["include", "configuration.recipient"], ["include", "requirements"]] });
+  // Not checked against a live sandbox yet (Heston's sandbox run): v2 lists use include[0]=…; if Stripe ignores these,
+  // the recipient settings come back empty and the vendor never shows ready (fails safe, pays nothing).
+  const acct = await payoutsCall("GET", `core/accounts/${recipientId}`, { query: [["include[0]", "configuration.recipient"], ["include[1]", "requirements"], ["include[2]", "defaults"]] });
   const ach = acct.configuration?.recipient?.capabilities?.bank_accounts?.ach?.status ?? null;
   const pms = await payoutsCall("GET", "money_management/payout_methods", { context: recipientId });
-  const bank = (pms.data ?? []).find((m: V2) => m.type === "bank_account" && m.usage_status?.payments !== "invalid") ?? null;
+  // The recipient's default for USD, else their only usable bank account. A method Stripe marks anything but
+  // eligible (requires_action, invalid) is never paid to.
+  const usable = (pms.data ?? []).filter((m: V2) => m.type === "bank_account" && (m.usage_status?.payments === undefined || m.usage_status.payments === "eligible"));
+  const def = acct.defaults?.payout_methods?.usd ?? acct.configuration?.recipient?.default_outbound_destination?.id ?? null;
+  const bank = (def ? usable.find((m: V2) => m.id === def) : null) ?? (usable.length === 1 ? usable[0] : null);
   const restricted = (acct.requirements?.entries ?? []).some((e: V2) => (e.impact?.restricts_capabilities ?? []).length > 0);
   return {
     ready: ach === "active" && !!bank,
-    needsInfo: restricted || !bank,
+    needsInfo: restricted || !bank, // several accounts and no default: they pick one on Stripe's form
     payoutMethodId: bank?.id ?? null,
     last4: bank?.bank_account?.last4 ?? null,
     bankName: bank?.bank_account?.bank_name ?? null,

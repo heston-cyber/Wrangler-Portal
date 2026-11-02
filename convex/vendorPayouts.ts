@@ -17,13 +17,12 @@ import { PayoutsError, financialAccount, payoutsCall, payoutsKey, payoutsMode, r
 import { todayCentral } from "./lib/bookings";
 import { label } from "./lib/bookingRows";
 import { mailBrandOf } from "./lib/mail";
-import { ownerPayoutMail, vendorInvoicePaidMail, vendorPayoutSetupMail } from "./lib/mails";
+import { ownerPayoutMail, vendorInvoicePaidMail, vendorPayoutReturnedMail, vendorPayoutSetupMail } from "./lib/mails";
 import { deliverOnce } from "./invoiceReminders";
 import { SITE } from "./lib/site";
 import { asVendor } from "./vendorPortal";
 
 type Ctx = QueryCtx | MutationCtx;
-const err = (e: unknown) => (e instanceof PayoutsError || e instanceof ConvexError ? e : new ConvexError("Stripe didn't answer. Try again in a minute."));
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e)).replace(/^Stripe: /, "");
 
 /** Pay in portal works for this business: the default business, with a key set. */
@@ -83,49 +82,104 @@ export const forInvoice = query({
     return {
       on: await enabledFor(ctx, biz), mode: payoutsMode(),
       vendor: vendor ? vendorView(vendor) : { state: "none" as const, last4: null, bankName: null },
-      payout: x.payout ? { status: x.payout.status, expectedArrival: x.payout.expectedArrival ?? null, receiptUrl: x.payout.receiptUrl ?? null, reason: x.payout.reason ?? null, startedAt: x.payout.startedAt } : null,
+      payout: x.payout ? { status: x.payout.status, expectedArrival: x.payout.expectedArrival ?? null, receiptUrl: x.payout.receiptUrl ?? null, reason: x.payout.reason ?? null, startedAt: x.payout.startedAt, stale: x.payout.status === "unknown" && Date.now() - x.payout.startedAt > 23 * 3_600_000 } : null,
     };
   },
 });
 
 // ---------- pay ----------
+// Each Pay press is one attempt with its own Stripe idempotency key. The exact request is saved on the invoice
+// before it's sent, so when Stripe's answer is lost (a timeout, a 5xx) the portal sends the identical request again
+// with the same key: Stripe then returns the original payment, or makes it once. Only a payment known to have
+// failed, been returned or canceled, or a request Stripe plainly refused, opens a new attempt.
+//   starting   → claimed; the request may not be saved yet
+//   unknown    → sent, but Stripe's answer was lost (re-sent with the same key until it answers)
+//   processing → Stripe has it · posted → paid · failed / returned / canceled → back to approved
+//   refused    → nothing was sent, or Stripe refused it outright (nothing left the balance)
+const OPEN = ["starting", "unknown", "processing"];
+const REPLAY_FOR = 23 * 3_600_000;      // re-send with the same key only well inside Stripe's idempotency window
+const STARTING_GRACE = 2 * 60_000;      // a Pay still running
+const NEVER_SENT = 10 * 60_000;         // claimed, no request saved: the Pay action died before sending anything
+const RETURN_WINDOW = 30 * 86_400_000;  // an ACH payout can come back days after it posted
 
-/** Pay the invoice total to the vendor's bank. Claims the invoice first, so a double press pays once. */
+const cerr = (e: unknown) => (e instanceof ConvexError ? e : new ConvexError(e instanceof PayoutsError ? msg(e) : "Stripe didn't answer. Try again in a minute."));
+/** Stripe plainly refused (nothing was made), as opposed to an answer we didn't get. */
+const definite = (e: unknown) => e instanceof ConvexError || (e instanceof PayoutsError && (e.status === 0 || (e.status >= 400 && e.status < 500 && ![408, 409, 429].includes(e.status))));
+const usd = (c: number) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const shortDay = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
+
+type Req = { key: string; cents: number; recipient: string; payoutMethod: string; financialAccount: string; last4?: string; description: string };
+type Ran = { state: string; expectedArrival: string | null };
+type RunCtx = { runMutation: (f: any, a: any) => Promise<any> };
+
+/** Pay the invoice total to the vendor's bank. `last4` is the bank the owner saw in the dialog. */
 export const pay = action({
-  args: { invoiceId: v.id("vendorInvoices") },
-  handler: async (ctx, { invoiceId }): Promise<{ expectedArrival: string | null }> => {
+  args: { invoiceId: v.id("vendorInvoices"), last4: v.optional(v.string()) },
+  handler: async (ctx, { invoiceId, last4 }): Promise<Ran> => {
     const c = await ctx.runMutation(internal.vendorPayouts.claim, { invoiceId });
+    let req: Req;
     try {
-      // The vendor's bank as Stripe has it now (they may have changed it since).
+      // The vendor's bank as Stripe has it now (they may have changed it since the page loaded).
       const st = await recipientState(c.recipientId);
       if (!st.ready || !st.payoutMethodId) {
         await ctx.runMutation(internal.vendorPayouts.saveRecipient, { vendorId: c.vendorId, ready: false, needsInfo: st.needsInfo, payoutMethodId: st.payoutMethodId ?? undefined, last4: st.last4 ?? undefined, bankName: st.bankName ?? undefined });
-        throw new ConvexError(`${c.first}'s direct deposit isn't ready at Stripe yet. Ask them to finish it in their portal's Settings.`);
+        throw new ConvexError(`${c.first}'s direct deposit isn't ready at Stripe. Ask them to finish it in their portal's Settings.`);
+      }
+      if (last4 !== undefined && st.last4 !== last4) {
+        await ctx.runMutation(internal.vendorPayouts.saveRecipient, { vendorId: c.vendorId, ready: true, payoutMethodId: st.payoutMethodId, last4: st.last4 ?? undefined, bankName: st.bankName ?? undefined });
+        throw new ConvexError(`${c.first}'s bank changed to ${st.bankName ? `${st.bankName} ` : ""}••••${st.last4 ?? "?"}. Check it, then press Pay again.`);
       }
       const fa = await financialAccount();
       if (!fa) throw new ConvexError("There's no Stripe balance to pay from. Turn on Global Payouts in Stripe.");
       if (fa.availableCents < c.cents) throw new ConvexError(`Your Stripe balance has ${usd(fa.availableCents)}; this needs ${usd(c.cents)}. Add funds in Stripe first.`);
-      const obp = await payoutsCall("POST", "money_management/outbound_payments", {
-        idem: `wp-vinv-${invoiceId}-${c.attempt}`,
-        body: {
-          from: { financial_account: fa.id, currency: "usd" },
-          to: { recipient: c.recipientId, payout_method: st.payoutMethodId, currency: "usd" },
-          amount: { value: c.cents, currency: "usd" },
-          description: `Invoice ${c.number}`.slice(0, 100),
-          metadata: { portal_vendor_invoice: String(invoiceId) },
-        },
-      });
-      const expected = obp.expected_arrival_date ? String(obp.expected_arrival_date).slice(0, 10) : null;
-      await ctx.runMutation(internal.vendorPayouts.started, { invoiceId, id: String(obp.id), status: String(obp.status ?? "processing"), expectedArrival: expected ?? undefined, receiptUrl: obp.receipt_url ?? undefined, last4: st.last4 ?? undefined });
-      if (obp.status && obp.status !== "processing") await ctx.runAction(internal.vendorPayouts.check, { invoiceId });
-      return { expectedArrival: expected };
+      req = { key: c.key, cents: c.cents, recipient: c.recipientId, payoutMethod: st.payoutMethodId, financialAccount: fa.id, description: `Invoice ${c.number}`.slice(0, 100), ...(st.last4 ? { last4: st.last4 } : {}) };
+      await ctx.runMutation(internal.vendorPayouts.saveRequest, { invoiceId, attempt: c.attempt, request: req });
     } catch (e) {
-      await ctx.runMutation(internal.vendorPayouts.unclaim, { invoiceId, reason: msg(e) });
-      throw err(e);
+      // Nothing was sent to Stripe yet.
+      await ctx.runMutation(internal.vendorPayouts.refuse, { invoiceId, attempt: c.attempt, reason: msg(e) });
+      throw cerr(e);
     }
+    const r = await send(ctx, invoiceId, c.attempt, req);
+    if (r.state === "refused") throw new ConvexError((await ctx.runQuery(internal.vendorPayouts.reasonOf, { invoiceId })) ?? "Stripe refused it.");
+    return r;
   },
 });
-const usd = (c: number) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/** Send (or re-send, with the same key) one attempt's saved request, and record what Stripe says. */
+async function send(ctx: RunCtx, invoiceId: Id<"vendorInvoices">, attempt: number, req: Req): Promise<Ran> {
+  let obp;
+  try {
+    obp = await payoutsCall("POST", "money_management/outbound_payments", {
+      idem: req.key,
+      body: {
+        from: { financial_account: req.financialAccount, currency: "usd" },
+        to: { recipient: req.recipient, payout_method: req.payoutMethod, currency: "usd" },
+        amount: { value: req.cents, currency: "usd" },
+        description: req.description,
+        metadata: { portal_vendor_invoice: String(invoiceId), portal_attempt: String(attempt) },
+      },
+    });
+  } catch (e) {
+    if (definite(e)) { await ctx.runMutation(internal.vendorPayouts.refuse, { invoiceId, attempt, reason: msg(e) }); return { state: "refused", expectedArrival: null }; }
+    await ctx.runMutation(internal.vendorPayouts.markUnknown, { invoiceId, attempt });
+    return { state: "unknown", expectedArrival: null };
+  }
+  const id = String(obp?.id ?? "");
+  if (!/^obp_/.test(id)) { await ctx.runMutation(internal.vendorPayouts.markUnknown, { invoiceId, attempt }); return { state: "unknown", expectedArrival: null }; }
+  const expected = obp.expected_arrival_date ? String(obp.expected_arrival_date).slice(0, 10) : null;
+  await ctx.runMutation(internal.vendorPayouts.started, { invoiceId, attempt, id, expectedArrival: expected ?? undefined, receiptUrl: obp.receipt_url ?? undefined });
+  const state = String(obp.status ?? "processing");
+  if (state !== "processing") return { state: await apply(ctx, invoiceId, attempt, obp), expectedArrival: expected };
+  return { state, expectedArrival: expected };
+}
+
+/** Record a payment object Stripe returned (from Pay, a re-send, or a check). */
+async function apply(ctx: RunCtx, invoiceId: Id<"vendorInvoices">, attempt: number, obp: Record<string, any>): Promise<string> {
+  const status = String(obp.status ?? "processing");
+  const reason = obp.status_details?.[status]?.reason ?? null;
+  const postedAt = obp.status_transitions?.posted_at ? Date.parse(obp.status_transitions.posted_at) : Date.now();
+  return await ctx.runMutation(internal.vendorPayouts.record, { invoiceId, attempt, id: String(obp.id), status, reason: reason ? String(reason).replace(/_/g, " ") : undefined, postedOn: todayCentral(Number.isFinite(postedAt) ? postedAt : Date.now()), receiptUrl: obp.receipt_url ?? undefined });
+}
 
 export const claim = internalMutation({
   args: { invoiceId: v.id("vendorInvoices") },
@@ -135,82 +189,135 @@ export const claim = internalMutation({
     const x = await ctx.db.get(invoiceId);
     if (!x || x.status === "draft") throw new ConvexError("That invoice isn't here.");
     if (x.status !== "approved") throw new ConvexError(x.status === "paid" ? "It's already paid." : "Approve it first.");
-    if (x.payout && (x.payout.status === "starting" || x.payout.status === "processing")) throw new ConvexError("It's already being paid.");
+    if (x.payout && (OPEN.includes(x.payout.status) || x.payout.status === "posted")) throw new ConvexError("It's already being paid.");
     const vendor = await ctx.db.get(x.vendorId);
     if (!vendor || !vendor.payout || vendor.payout.mode !== payoutsMode()) throw new ConvexError(`${(vendor?.name ?? "The vendor").split(" ")[0]} hasn't set up direct deposit yet.`);
     const attempt = (x.payout?.attempt ?? 0) + 1;
     const now = Date.now();
+    const key = `wp-vinv-${invoiceId}-${attempt}`;
     await ctx.db.patch(invoiceId, { payout: { status: "starting", attempt, mode: payoutsMode() ?? "test", startedAt: now, by: me.name ?? me.email }, updatedAt: now });
-    return { vendorId: vendor._id, recipientId: vendor.payout.recipientId, cents: x.totalCents, number: x.number, attempt, first: vendor.name.split(" ")[0] };
+    return { vendorId: vendor._id, recipientId: vendor.payout.recipientId, cents: x.totalCents, number: x.number, attempt, key, first: vendor.name.split(" ")[0] };
   },
 });
-export const unclaim = internalMutation({
-  args: { invoiceId: v.id("vendorInvoices"), reason: v.string() },
-  handler: async (ctx, { invoiceId, reason }) => {
+const isAttempt = (x: Doc<"vendorInvoices"> | null, attempt: number) => !!x?.payout && x.payout.attempt === attempt;
+const reqV = v.object({ key: v.string(), cents: v.number(), recipient: v.string(), payoutMethod: v.string(), financialAccount: v.string(), last4: v.optional(v.string()), description: v.string() });
+export const saveRequest = internalMutation({
+  args: { invoiceId: v.id("vendorInvoices"), attempt: v.number(), request: reqV },
+  handler: async (ctx, { invoiceId, attempt, request }) => {
     const x = await ctx.db.get(invoiceId);
-    if (!x?.payout || x.payout.status !== "starting") return;
-    await ctx.db.patch(invoiceId, { payout: { ...x.payout, status: "failed", reason: reason.slice(0, 300) }, updatedAt: Date.now() });
+    if (!isAttempt(x, attempt) || x!.payout!.status !== "starting") throw new ConvexError("This payment changed while it was starting. Reload the page.");
+    await ctx.db.patch(invoiceId, { payout: { ...x!.payout!, request }, updatedAt: Date.now() });
   },
+});
+export const refuse = internalMutation({
+  args: { invoiceId: v.id("vendorInvoices"), attempt: v.number(), reason: v.string() },
+  handler: async (ctx, { invoiceId, attempt, reason }) => {
+    const x = await ctx.db.get(invoiceId);
+    if (!isAttempt(x, attempt) || !["starting", "unknown"].includes(x!.payout!.status)) return;
+    const now = Date.now();
+    await ctx.db.patch(invoiceId, { payout: { ...x!.payout!, status: "refused", reason: reason.slice(0, 300), checkedAt: now },
+      ...(x!.payout!.request ? { history: [...(x!.history ?? []), { at: now, text: `Stripe refused the payment: ${reason.slice(0, 200)}. Nothing left your Stripe balance.` }] } : {}), updatedAt: now });
+  },
+});
+export const markUnknown = internalMutation({
+  args: { invoiceId: v.id("vendorInvoices"), attempt: v.number() },
+  handler: async (ctx, { invoiceId, attempt }) => {
+    const x = await ctx.db.get(invoiceId);
+    if (!isAttempt(x, attempt) || !["starting", "unknown"].includes(x!.payout!.status)) return;
+    const now = Date.now();
+    const first = x!.payout!.status === "starting";
+    await ctx.db.patch(invoiceId, { payout: { ...x!.payout!, status: "unknown", checkedAt: now },
+      ...(first ? { history: [...(x!.history ?? []), { at: now, text: "Sent to Stripe, but Stripe's answer didn't arrive. The portal is asking again." }] } : {}), updatedAt: now });
+  },
+});
+export const reasonOf = internalQuery({
+  args: { invoiceId: v.id("vendorInvoices") },
+  handler: async (ctx, { invoiceId }) => (await ctx.db.get(invoiceId))?.payout?.reason ?? null,
 });
 export const started = internalMutation({
-  args: { invoiceId: v.id("vendorInvoices"), id: v.string(), status: v.string(), expectedArrival: v.optional(v.string()), receiptUrl: v.optional(v.string()), last4: v.optional(v.string()) },
+  args: { invoiceId: v.id("vendorInvoices"), attempt: v.number(), id: v.string(), expectedArrival: v.optional(v.string()), receiptUrl: v.optional(v.string()) },
   handler: async (ctx, a) => {
     const x = await ctx.db.get(a.invoiceId);
-    if (!x?.payout) return;
+    if (!isAttempt(x, a.attempt)) return;
+    const p = x!.payout!;
+    if (!["starting", "unknown"].includes(p.status)) return; // already recorded (a re-send answered first)
     const now = Date.now();
+    const l4 = p.request?.last4;
     await ctx.db.patch(a.invoiceId, {
-      payout: { ...x.payout, id: a.id, status: a.status, ...(a.expectedArrival ? { expectedArrival: a.expectedArrival } : {}), ...(a.receiptUrl ? { receiptUrl: a.receiptUrl } : {}), checkedAt: now },
-      history: [...(x.history ?? []), { at: now, text: `Paying through Stripe (ACH${a.last4 ? ` to ••••${a.last4}` : ""})${a.expectedArrival ? ` · expected ${shortDay(a.expectedArrival)}` : ""}` }], updatedAt: now,
+      payout: { ...p, id: a.id, status: "processing", ...(a.expectedArrival ? { expectedArrival: a.expectedArrival } : {}), ...(a.receiptUrl ? { receiptUrl: a.receiptUrl } : {}), checkedAt: now },
+      history: [...(x!.history ?? []), { at: now, text: `Paying through Stripe (ACH${l4 ? ` to ••••${l4}` : ""})${a.expectedArrival ? ` · expected ${shortDay(a.expectedArrival)}` : ""}` }], updatedAt: now,
     });
   },
 });
-const shortDay = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
 
 // ---------- following the payout ----------
 
-/** Ask Stripe where one payout stands, and record it. */
+/** Ask Stripe where one payout stands (re-sending a request whose answer was lost), and record it. */
 export const check = internalAction({
   args: { invoiceId: v.id("vendorInvoices") },
   handler: async (ctx, { invoiceId }): Promise<string> => {
     const d = await ctx.runQuery(internal.vendorPayouts.payoutOf, { invoiceId });
-    if (!d?.id) return "none";
+    if (!d) return "none";
+    const age = Date.now() - d.startedAt;
+    if (d.status === "starting" || d.status === "unknown") {
+      if (!d.request) {
+        if (age < NEVER_SENT) return "same";
+        await ctx.runMutation(internal.vendorPayouts.refuse, { invoiceId, attempt: d.attempt, reason: "It didn't start: nothing was sent to Stripe. Press Pay again." });
+        return "refused";
+      }
+      if (d.status === "starting" && age < STARTING_GRACE) return "same";
+      if (age > REPLAY_FOR) return "unknown";
+      try { return (await send(ctx, invoiceId, d.attempt, d.request)).state; } catch { return "unreachable"; }
+    }
     let obp;
     try { obp = await payoutsCall("GET", `money_management/outbound_payments/${d.id}`); } catch { return "unreachable"; }
-    const status = String(obp.status ?? "processing");
-    const reason = obp.status_details?.[status]?.reason ?? null;
-    const postedAt = obp.status_transitions?.posted_at ? Date.parse(obp.status_transitions.posted_at) : Date.now();
-    const r = await ctx.runMutation(internal.vendorPayouts.record, { invoiceId, status, reason: reason ? String(reason).replace(/_/g, " ") : undefined, postedOn: todayCentral(postedAt), receiptUrl: obp.receipt_url ?? undefined });
-    if (r === "paid") { await ctx.runAction(internal.vendorPayouts.mailVendorPaid, { invoiceId }); await ctx.runAction(internal.vendorPayouts.mailOwner, { invoiceId, what: "posted" }); }
-    if (r === "failed") await ctx.runAction(internal.vendorPayouts.mailOwner, { invoiceId, what: "failed" });
-    return r;
+    if (String(obp.id) !== d.id) return "unreachable";
+    return await apply(ctx, invoiceId, d.attempt, obp);
   },
 });
 export const payoutOf = internalQuery({
   args: { invoiceId: v.id("vendorInvoices") },
   handler: async (ctx, { invoiceId }) => {
     const x = await ctx.db.get(invoiceId);
-    return x?.payout?.id && following(x) ? { id: x.payout.id } : null;
+    if (!x?.payout || !following(x)) return null;
+    const p = x.payout;
+    return { id: p.id ?? null, attempt: p.attempt, status: p.status, startedAt: p.startedAt, request: p.request ?? null };
   },
 });
 export const record = internalMutation({
-  args: { invoiceId: v.id("vendorInvoices"), status: v.string(), reason: v.optional(v.string()), postedOn: v.string(), receiptUrl: v.optional(v.string()) },
-  handler: async (ctx, a): Promise<"paid" | "failed" | "same"> => {
+  args: { invoiceId: v.id("vendorInvoices"), attempt: v.number(), id: v.string(), status: v.string(), reason: v.optional(v.string()), postedOn: v.string(), receiptUrl: v.optional(v.string()) },
+  handler: async (ctx, a): Promise<string> => {
     const x = await ctx.db.get(a.invoiceId);
-    if (!x?.payout) return "same";
+    // Only the attempt and payment it was asked about (a slow check can't overwrite a newer attempt).
+    if (!isAttempt(x, a.attempt) || x!.payout!.id !== a.id) return "stale";
+    const p = x!.payout!;
     const now = Date.now();
-    const payout = { ...x.payout, status: a.status, checkedAt: now, ...(a.receiptUrl ? { receiptUrl: a.receiptUrl } : {}), ...(a.reason ? { reason: a.reason } : {}) };
-    if (a.status === "posted" && x.status === "approved") {
-      await ctx.db.patch(a.invoiceId, {
-        status: "paid", paidAt: now, paidOn: a.postedOn, paidCents: x.totalCents, paidMethod: "Direct deposit (Stripe)", paidRef: x.payout.id ? `Stripe ${x.payout.id.slice(0, 16)}…` : undefined, payout,
-        history: [...(x.history ?? []), { at: now, text: "Paid through Stripe · it left your Stripe balance" }], updatedAt: now,
-      });
-      return "paid";
+    const payout = { ...p, status: a.status, checkedAt: now, ...(a.receiptUrl ? { receiptUrl: a.receiptUrl } : {}), ...(a.reason ? { reason: a.reason } : {}) };
+    const mail = async (what: "posted" | "failed" | "returned") => {
+      await ctx.scheduler.runAfter(0, internal.vendorPayouts.mailOwner, { invoiceId: a.invoiceId, what });
+      if (what === "posted") await ctx.scheduler.runAfter(0, internal.vendorPayouts.mailVendorPaid, { invoiceId: a.invoiceId });
+      if (what === "returned") await ctx.scheduler.runAfter(0, internal.vendorPayouts.mailVendorReturned, { invoiceId: a.invoiceId });
+    };
+    if (a.status === "posted") {
+      if (x!.status === "approved") {
+        await ctx.db.patch(a.invoiceId, {
+          status: "paid", paidAt: now, paidOn: a.postedOn, paidCents: p.request?.cents ?? x!.totalCents, paidMethod: "Direct deposit (Stripe)", paidRef: `Stripe ${a.id.slice(0, 16)}…`, payout,
+          history: [...(x!.history ?? []), { at: now, text: "Paid through Stripe · it left your Stripe balance" }], updatedAt: now,
+        });
+        await mail("posted");
+        return "paid";
+      }
+      await ctx.db.patch(a.invoiceId, { payout, updatedAt: now });
+      return "same";
     }
-    if ((a.status === "failed" || a.status === "returned" || a.status === "canceled") && x.payout.status !== a.status) {
+    if (a.status === "failed" || a.status === "returned" || a.status === "canceled") {
+      if (p.status === a.status) { await ctx.db.patch(a.invoiceId, { payout, updatedAt: now }); return "same"; }
       // A returned payout can come after posted: the invoice goes back to approved so it can be paid again.
-      const back = x.status === "paid" && a.status === "returned"
-        ? { status: "approved" as const, paidAt: undefined, paidOn: undefined, paidCents: undefined, paidMethod: undefined, paidRef: undefined } : {};
-      await ctx.db.patch(a.invoiceId, { ...back, payout, history: [...(x.history ?? []), { at: now, text: `Stripe payout ${a.status}${a.reason ? `: ${a.reason}` : ""}. The money is back in your Stripe balance.` }], updatedAt: now });
+      const wasPaid = x!.status === "paid" && x!.paidMethod === "Direct deposit (Stripe)";
+      const back = wasPaid ? { status: "approved" as const, paidAt: undefined, paidOn: undefined, paidCents: undefined, paidMethod: undefined, paidRef: undefined } : {};
+      const said = a.status === "returned" ? "came back" : a.status === "canceled" ? "was canceled" : "failed";
+      await ctx.db.patch(a.invoiceId, { ...back, payout, history: [...(x!.history ?? []), { at: now, text: `The Stripe payment ${said}${a.reason ? `: ${a.reason}` : ""}. The money is back in your Stripe balance.` }], updatedAt: now });
+      await mail(wasPaid ? "returned" : "failed");
       return "failed";
     }
     await ctx.db.patch(a.invoiceId, { payout, updatedAt: now });
@@ -218,13 +325,13 @@ export const record = internalMutation({
   },
 });
 
-/** Every 15 minutes: the payouts still on their way. */
+/** Every 15 minutes: the payouts still on their way (and answers that got lost). */
 export const poll = internalAction({
   args: {},
   handler: async (ctx): Promise<number> => {
     if (!payoutsKey()) return 0;
     const ids: Array<Id<"vendorInvoices">> = await ctx.runQuery(internal.vendorPayouts.inFlight, {});
-    for (const id of ids) await ctx.runAction(internal.vendorPayouts.check, { invoiceId: id });
+    for (const id of ids) { try { await ctx.runAction(internal.vendorPayouts.check, { invoiceId: id }); } catch { /* the next round tries again */ } }
     return ids.length;
   },
 });
@@ -232,24 +339,39 @@ export const inFlight = internalQuery({
   args: {},
   handler: async (ctx) => {
     const rows = [...await ctx.db.query("vendorInvoices").withIndex("by_status", (q) => q.eq("status", "approved")).collect(), ...await ctx.db.query("vendorInvoices").withIndex("by_status", (q) => q.eq("status", "paid")).collect()];
-    return rows.filter((x) => x.payout?.id && following(x)).map((x) => x._id);
+    return rows.filter(following).map((x) => x._id);
   },
 });
-/** Still worth asking Stripe about: on its way, or posted in the last 10 days (an ACH payout can still be returned). */
-const RETURN_WINDOW = 10 * 86_400_000;
+/** Still worth asking Stripe about: on its way (or its answer lost), or posted recently (it can still come back).
+ *  Only payouts made with the key in use now (a test payout isn't asked about with a live key). */
 function following(x: Doc<"vendorInvoices">) {
   const p = x.payout;
-  if (!p?.id) return false;
-  if (p.status === "processing") return x.status === "approved";
-  if (p.status === "posted") return x.status === "paid" && Date.now() - (x.paidAt ?? 0) < RETURN_WINDOW;
+  if (!p || p.mode !== payoutsMode()) return false;
+  if (p.status === "starting" || p.status === "unknown") return x.status === "approved";
+  if (p.status === "processing") return x.status === "approved" && !!p.id;
+  if (p.status === "posted") return x.status === "paid" && !!p.id && Date.now() - (x.paidAt ?? 0) < RETURN_WINDOW;
   return false;
 }
-/** "Check now" on the invoice page. */
+/** "Check with Stripe now" on the invoice page. */
 export const checkNow = action({
   args: { invoiceId: v.id("vendorInvoices") },
   handler: async (ctx, { invoiceId }): Promise<string> => {
     await ctx.runQuery(internal.vendorPayouts.ownerCheck, {});
     return await ctx.runAction(internal.vendorPayouts.check, { invoiceId });
+  },
+});
+/** After a day with no answer from Stripe the portal stops re-sending. The owner checks Stripe's dashboard and says
+ *  nothing went out, which lets them pay again (or mark it paid another way). */
+export const nothingWentOut = mutation({
+  args: { invoiceId: v.id("vendorInvoices") },
+  handler: async (ctx, { invoiceId }) => {
+    await ownerBiz(ctx);
+    const x = await ctx.db.get(invoiceId);
+    const p = x?.payout;
+    if (!x || !p || p.status !== "unknown" || Date.now() - p.startedAt < REPLAY_FOR) throw new ConvexError("Only for a payment Stripe hasn't answered about for a day.");
+    const now = Date.now();
+    await ctx.db.patch(invoiceId, { payout: { ...p, status: "refused", reason: "You checked Stripe: nothing went out.", checkedAt: now }, history: [...(x.history ?? []), { at: now, text: "You checked Stripe: that payment didn't go out." }], updatedAt: now });
+    return null;
   },
 });
 
@@ -266,8 +388,8 @@ export const mine = query({
 
 /** Stripe's own form for their bank details (made the first time, or to update them). Opens straight away. */
 export const setupLink = action({
-  args: { businessId: v.id("businesses") },
-  handler: async (ctx, { businessId }): Promise<{ url: string }> => {
+  args: { businessId: v.id("businesses"), as: v.optional(v.union(v.literal("individual"), v.literal("company"))) },
+  handler: async (ctx, { businessId, as }): Promise<{ url: string }> => {
     const v0 = await ctx.runQuery(internal.vendorPayouts.vendorFor, { businessId });
     if (!v0.on) throw new ConvexError(`Direct deposit isn't available from ${v0.business} yet.`);
     try {
@@ -277,7 +399,7 @@ export const setupLink = action({
           idem: `wp-vendor-${v0.vendorId}-${payoutsMode()}`,
           body: {
             contact_email: v0.email, display_name: v0.name.slice(0, 100),
-            identity: { country: "us", entity_type: v0.businessName ? "company" : "individual" },
+            identity: { country: "us", entity_type: as ?? "individual" },
             configuration: { recipient: { capabilities: { bank_accounts: { ach: { requested: true } } } } },
             metadata: { portal_vendor: String(v0.vendorId) },
           },
@@ -290,7 +412,7 @@ export const setupLink = action({
         body: { account: recipientId, use_case: { type: v0.ready ? "account_update" : "account_onboarding", [v0.ready ? "account_update" : "account_onboarding"]: { configurations: ["recipient"], return_url: back, refresh_url: back } } },
       });
       return { url: String(link.url) };
-    } catch (e) { throw err(e); }
+    } catch (e) { throw cerr(e); }
   },
 });
 export const vendorFor = internalQuery({
@@ -366,12 +488,22 @@ export const mailVendorPaid = internalAction({
   },
 });
 export const mailOwner = internalAction({
-  args: { invoiceId: v.id("vendorInvoices"), what: v.union(v.literal("posted"), v.literal("failed")) },
+  args: { invoiceId: v.id("vendorInvoices"), what: v.union(v.literal("posted"), v.literal("failed"), v.literal("returned")) },
   handler: async (ctx, { invoiceId, what }) => {
     const d = await ctx.runQuery(internal.vendorPayouts.mailInfo, { invoiceId });
     if (!d?.x || !d.owner) return;
-    await deliverOnce(ctx, `vendor-payout-${what}:${invoiceId}:${d.x.payout?.attempt ?? 0}`, `vendor_payout_${what}`, d.owner, ownerPayoutMail(d.brand, {
+    await deliverOnce(ctx, `vendor-payout-${what}:${invoiceId}:${d.x.payout?.attempt ?? 0}`, what === "posted" ? "vendor_payout_posted" : "vendor_payout_failed", d.owner, ownerPayoutMail(d.brand, {
       what, vendor: d.vendor.name, number: d.x.number, project: d.project, cents: d.x.totalCents, reason: d.x.payout?.reason ?? null, link: `${SITE()}/vendors/payments/${invoiceId}`,
+    }), d.brand.replyTo, d.biz);
+  },
+});
+export const mailVendorReturned = internalAction({
+  args: { invoiceId: v.id("vendorInvoices") },
+  handler: async (ctx, { invoiceId }) => {
+    const d = await ctx.runQuery(internal.vendorPayouts.mailInfo, { invoiceId });
+    if (!d?.x || d.vendor.archived) return;
+    await deliverOnce(ctx, `vendor-payout-returned-to-vendor:${invoiceId}:${d.x.payout?.attempt ?? 0}`, "vendor_payout_returned", d.vendor.email, vendorPayoutReturnedMail(d.brand, {
+      name: d.vendor.name, number: d.x.number, project: d.projectName, cents: d.x.totalCents, reason: d.x.payout?.reason ?? null, link: `${SITE()}/settings`,
     }), d.brand.replyTo, d.biz);
   },
 });
