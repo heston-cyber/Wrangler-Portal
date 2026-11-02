@@ -121,7 +121,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "vendorPortal.settings": {}, "vendorPortal.saveDetails": { businessId: ids.businessId, name: "V" }, "vendorPortal.w9UploadUrl": { businessId: ids.businessId },
     "vendorPortal.setW9": { businessId: ids.businessId, storageId: ids.storageId, name: "w9.pdf" }, "vendors.invoices": { vendorId: "nope" },
     "vendorPayments.list": {}, "vendorPayments.totals1099": {}, "vendorPayments.get": { invoiceId: "nope" }, "vendorPayments.approve": { invoiceId: ids.vendorInvoiceId },
-    "vendorPayments.decline": { invoiceId: ids.vendorInvoiceId, reason: "No" }, "vendorPayments.markPaid": { invoiceId: ids.vendorInvoiceId, paidOn: "2026-01-02", cents: 100, method: "ACH" }, "proposals.setDeck": { proposalId: ids.proposalId, kit: "business" },
+    "vendorPayments.decline": { invoiceId: ids.vendorInvoiceId, reason: "No" }, "vendorPayments.markPaid": { invoiceId: ids.vendorInvoiceId, paidOn: "2026-01-02", method: "ACH" }, "proposals.setDeck": { proposalId: ids.proposalId, kit: "business" },
     "brandKit.get": {}, "brandKit.save": { colors: [], fonts: {}, links: [], tone: [] }, "brandKit.uploadUrl": {}, "brandKit.addFile": { storageId: ids.storageId, name: "x.pdf" }, "brandKit.removeFile": { fileId: ids.storageId },
     "crm.rates": {}, "crm.saveRates": { rates: {} }, "crm.board": {}, "crm.addDeal": { title: "X" }, "crm.moveDeal": { dealId: ids.dealId, stage: "quoted" }, "crm.closeDeal": { dealId: ids.dealId },
     "crm.deal": { dealId: "nope" }, "crm.companies": {}, "crm.company": { clientId: "nope" }, "crm.contact": { personId: "nope" }, "crm.followUps": {},

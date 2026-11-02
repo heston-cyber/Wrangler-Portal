@@ -181,7 +181,7 @@ describe("T3c.6 notifications", () => {
     await w.heston.mutation(api.vendorPayments.approve, { invoiceId: inv });
     const entry = (await w.heston.query(api.crm.ledger, { projectId: w.p })).entries.find((e: { note: string | null }) => e.note?.startsWith("Invoice "));
     await expect(w.heston.mutation(api.crm.entryAction, { entryId: entry._id, action: "remove" })).rejects.toThrow(/approved vendor invoice/);
-    await expect(w.heston.mutation(api.vendorPayments.markPaid, { invoiceId: inv, paidOn: "2026-01-02", cents: 100_000, method: "ACH", reference: "acct 12345678" })).rejects.toThrow(/account numbers/);
+    await expect(w.heston.mutation(api.vendorPayments.markPaid, { invoiceId: inv, paidOn: "2026-01-02", method: "ACH", reference: "acct 12345678" })).rejects.toThrow(/account numbers/);
     // Off the list: Wrangler leaves their portal (the other business stays); back on the list: it returns.
     await w.heston.mutation(api.vendors.archive, { vendorId: a, archived: true });
     expect((await jordan.query(api.vendorPortal.businesses, {})).list.map((b: { businessId: string }) => b.businessId)).toEqual([B]);

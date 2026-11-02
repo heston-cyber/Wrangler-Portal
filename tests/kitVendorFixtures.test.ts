@@ -43,7 +43,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures (Phase 3c)", () => {
     const inv3 = await jordan.mutation(api.vendorPortal.saveInvoice, { bookingId: k1, mode: "lines", hours: [], lines: [{ description: "Gimbal rental", cents: 12_500 }, { description: "Mileage", cents: 4_350 }], number: "JE-013", send: true }) as Id<"vendorInvoices">;
     await w.heston.mutation(api.vendorPayments.approve, { invoiceId: inv2 });
     await w.heston.mutation(api.vendorPayments.approve, { invoiceId: inv3 });
-    await w.heston.mutation(api.vendorPayments.markPaid, { invoiceId: inv3, paidOn: todayCentral(), cents: 16_850, method: "Zelle", reference: "Conf 88213" });
+    await w.heston.mutation(api.vendorPayments.markPaid, { invoiceId: inv3, paidOn: todayCentral(), method: "Zelle", reference: "Conf 88213" });
     await jordan.mutation(api.vendorPortal.saveDetails, { businessId: w.A, name: "Jordan Ellis", businessName: "Ellis Films LLC", phone: "405-555-0142", address: "1200 NW 16th St\nOklahoma City, OK 73106", portfolio: "ellisfilms.com", payMethod: "ACH", payNote: "Bank of Example · account ending 0000" });
     await w.heston.mutation(api.notifications.setOwner, { key: "briefing_read", on: false });
     await jordan.mutation(api.vendorPortal.setNotification, { businessId: w.A, key: "briefings", on: false });

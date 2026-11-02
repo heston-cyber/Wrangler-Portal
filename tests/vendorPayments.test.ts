@@ -61,7 +61,7 @@ describe("vendor payments", () => {
     const page = await w.heston.query(api.vendorPayments.get, { invoiceId: inv });
     expect(page).toMatchObject({ status: "sent", to: "Wrangler Productions", booking: { role: "Shooter", expectedCents: 200_000 } });
     expect(page.lines).toEqual([{ label: "Nov 6 · shoot", qty: 1, rateCents: 100_000, cents: 100_000 }, { label: "Nov 7 · shoot", qty: 1, rateCents: 100_000, cents: 100_000 }]);
-    await expect(w.heston.mutation(api.vendorPayments.markPaid, { invoiceId: inv, paidOn: todayCentral(), cents: 200_000, method: "ACH" })).rejects.toThrow(/Approve it first/);
+    await expect(w.heston.mutation(api.vendorPayments.markPaid, { invoiceId: inv, paidOn: todayCentral(), method: "ACH" })).rejects.toThrow(/Approve it first/);
 
     // Approve: an actual cost in the Ledger, the expected one gone; email 27; the Home alert clears.
     await w.heston.mutation(api.vendorPayments.approve, { invoiceId: inv });
@@ -82,12 +82,11 @@ describe("vendor payments", () => {
 
     // Mark paid: checked, recorded, email 28, the 1099 total.
     const today = todayCentral();
-    await expect(w.heston.mutation(api.vendorPayments.markPaid, { invoiceId: inv, paidOn: "2999-01-01", cents: 200_000, method: "ACH" })).rejects.toThrow(/future/);
-    await expect(w.heston.mutation(api.vendorPayments.markPaid, { invoiceId: inv, paidOn: today, cents: 200_000, method: "Venmo" })).rejects.toThrow(/how you paid/);
-    await expect(w.heston.mutation(api.vendorPayments.markPaid, { invoiceId: inv, paidOn: today, cents: 0, method: "ACH" })).rejects.toThrow(/amount/);
-    await expect(w.heston.mutation(api.vendorPayments.markPaid, { invoiceId: inv, paidOn: today, cents: 200_000, method: "ACH", reference: "acct 1234 5678 9012 3456" })).rejects.toThrow(/account numbers/);
-    await w.heston.mutation(api.vendorPayments.markPaid, { invoiceId: inv, paidOn: today, cents: 200_000, method: "Zelle", reference: "Conf 88213" });
-    await expect(w.heston.mutation(api.vendorPayments.markPaid, { invoiceId: inv, paidOn: today, cents: 200_000, method: "ACH" })).rejects.toThrow(/already marked paid/);
+    await expect(w.heston.mutation(api.vendorPayments.markPaid, { invoiceId: inv, paidOn: "2999-01-01", method: "ACH" })).rejects.toThrow(/future/);
+    await expect(w.heston.mutation(api.vendorPayments.markPaid, { invoiceId: inv, paidOn: today, method: "Venmo" })).rejects.toThrow(/how you paid/);
+    await expect(w.heston.mutation(api.vendorPayments.markPaid, { invoiceId: inv, paidOn: today, method: "ACH", reference: "acct 1234 5678 9012 3456" })).rejects.toThrow(/account numbers/);
+    await w.heston.mutation(api.vendorPayments.markPaid, { invoiceId: inv, paidOn: today, method: "Zelle", reference: "Conf 88213" });
+    await expect(w.heston.mutation(api.vendorPayments.markPaid, { invoiceId: inv, paidOn: today, method: "ACH" })).rejects.toThrow(/already marked paid/);
     await settle(w);
     const m28 = mails.find((m) => m.subject === "Invoice JE-014 paid")!;
     expect(m28.to).toBe(JORDAN);

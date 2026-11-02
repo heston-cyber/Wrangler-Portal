@@ -165,9 +165,11 @@ export const decline = mutation({
   },
 });
 
-/** Mark paid (732:3190): records how they were paid outside the portal. Email 28 to the vendor. */
+/** Mark paid (732:3190): records how they were paid outside the portal. Email 28 to the vendor. The amount is the
+ *  invoice total, always (Heston, Nov 2: locked, so the invoice, the Ledger and the 1099 match; a wrong number is
+ *  declined and resent instead). */
 export const markPaid = mutation({
-  args: { invoiceId: v.id("vendorInvoices"), paidOn: v.string(), cents: v.number(), method: v.string(), reference: v.optional(v.string()) },
+  args: { invoiceId: v.id("vendorInvoices"), paidOn: v.string(), method: v.string(), reference: v.optional(v.string()) },
   handler: async (ctx, a) => {
     await ownerBiz(ctx);
     const x = await ctx.db.get(a.invoiceId);
@@ -175,13 +177,12 @@ export const markPaid = mutation({
     if (x.status !== "approved") throw new ConvexError(x.status === "paid" ? "It's already marked paid." : "Approve it first.");
     if (!isDate(a.paidOn)) throw new ConvexError("Pick the day you paid.");
     if (a.paidOn > todayCentral()) throw new ConvexError("The paid date can't be in the future.");
-    if (!(Number.isInteger(a.cents) && a.cents > 0 && a.cents <= 100_000_000)) throw new ConvexError("Add the amount you paid.");
     if (!PAY_METHODS.includes(a.method)) throw new ConvexError("Pick how you paid.");
     const ref = clip(a.reference, 80);
     if (looksLikeAccount(ref)) throw new ConvexError("Leave account numbers out. A short confirmation number, or its last 4 digits, is enough.");
     const now = Date.now();
     await ctx.db.patch(a.invoiceId, {
-      status: "paid", paidAt: now, paidOn: a.paidOn, paidCents: a.cents, paidMethod: a.method, ...(ref ? { paidRef: ref } : {}),
+      status: "paid", paidAt: now, paidOn: a.paidOn, paidCents: x.totalCents, paidMethod: a.method, ...(ref ? { paidRef: ref } : {}),
       history: [...(x.history ?? []), { at: now, text: `Marked paid · ${a.method} · ${new Date(`${a.paidOn}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" })}` }], updatedAt: now,
     });
     await ctx.scheduler.runAfter(0, internal.vendorPayments.mailPaid, { invoiceId: a.invoiceId });

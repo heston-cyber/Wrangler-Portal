@@ -11,7 +11,7 @@ import { Modal, useToast } from "../../ui/kit";
 import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps, navigate, useLocation } from "../../lib/router";
 import { errText } from "../docs/pages/common";
-import { MoneyInput, dateShort, money } from "../payments/common";
+import { dateShort, money } from "../payments/common";
 import { PAY_METHODS, dateRange, shortRange, todayCentral } from "../../../convex/lib/bookings";
 import { rateText } from "./Bookings";
 
@@ -221,7 +221,6 @@ function MarkPaid({ invoiceId, number, vendor, totalCents, payMethod, onClose, o
   const first = firstOf(vendor);
   const today = todayCentral();
   const [on, setOn] = useState(today);
-  const [cents, setCents] = useState(totalCents);
   const [method, setMethod] = useState<string>(payMethod && PAY_METHODS.includes(payMethod) ? payMethod : PAY_METHODS[0]);
   const [ref, setRef] = useState("");
   const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
@@ -231,16 +230,16 @@ function MarkPaid({ invoiceId, number, vendor, totalCents, payMethod, onClose, o
         <DialogHeader eyebrow={`${number} · ${vendor}`} title="Mark paid." body={`Record how you paid ${first}. This doesn’t move any money.`} onClose={onClose} />
         <div className="vpay-two">
           <label className="wp-field"><span className="wp-field-label">Paid on</span><input className="input" type="date" value={on} max={today} onChange={(e) => setOn(e.target.value)} /></label>
-          <div className="wp-field"><span className="wp-field-label">Amount</span><MoneyInput label="Amount" value={cents} onChange={setCents} /></div>
+          <div className="wp-field"><span className="wp-field-label">Amount</span><input className="input" value={money(totalCents)} readOnly aria-readonly="true" tabIndex={-1} /></div>
         </div>
         <div className="wp-field"><span className="wp-field-label">How</span>
           <div className="qz-chips">{PAY_METHODS.map((m) => <button key={m} type="button" className={`qz-chip${method === m ? " on" : ""}`} aria-pressed={method === m} onClick={() => setMethod(m)}>{m}</button>)}</div></div>
         <label className="wp-field"><span className="wp-field-label">Reference (optional)</span><input className="input" value={ref} placeholder="Confirmation 000000" onChange={(e) => setRef(e.target.value)} /></label>
-        <p className="wp-small secondary">{first} gets an email that it’s paid. It counts toward their 1099 total for {on.slice(0, 4) || today.slice(0, 4)}.{cents !== totalCents && cents > 0 ? ` The invoice was ${money(totalCents)}.` : ""}</p>
+        <p className="wp-small secondary">{first} gets an email that it’s paid. It counts toward their 1099 total for {on.slice(0, 4) || today.slice(0, 4)}. The amount is the invoice total; if that's wrong, decline it so {first} can fix it.</p>
         {err && <p className="error" role="alert">{err}</p>}
         <div className="dfoot">
           <button className="btn ghost" type="button" onClick={onClose}>Cancel</button>
-          <Button variant="primary" loading={busy} onClick={async () => { setBusy(true); setErr(null); try { await mark({ invoiceId, paidOn: on, cents, method, ...(ref.trim() ? { reference: ref } : {}) }); onClose(); onDone(); } catch (e) { setErr(errText(e)); setBusy(false); } }}>Mark paid</Button>
+          <Button variant="primary" loading={busy} onClick={async () => { setBusy(true); setErr(null); try { await mark({ invoiceId, paidOn: on, method, ...(ref.trim() ? { reference: ref } : {}) }); onClose(); onDone(); } catch (e) { setErr(errText(e)); setBusy(false); } }}>Mark paid</Button>
         </div>
       </div>
     </Modal>
