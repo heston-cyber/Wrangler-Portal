@@ -411,3 +411,25 @@ export function vendorInviteMail(b: MailBrand, d: { name: string; email: string;
     { t: "p", text: "Reply to this email if anything doesn't work.", tone: "muted" },
   ], b.isDefault ? [{ t: "small", text: "— WranglerPortal" }] : [{ t: "small", text: "Powered by WranglerPortal" }]);
 }
+
+// ---------- to the owner when a vendor accepts a booking (Heston, Nov 2; the alert layout, like 22) ----------
+export function ownerBookingAcceptedMail(b: MailBrand, d: { vendor: string; role: string; project: string; start: string; end: string; rateCents: number; unit: "day" | "hour"; link: string }): Mail {
+  return mk(b, "updates", `${d.vendor} accepted the booking: ${d.project}`, [
+    { t: "eyebrow", text: `${d.vendor} accepted the booking` },
+    { t: "title", text: `${d.project} · ${d.role} · ${dateRange(d.start, d.end)}` },
+    { t: "p", text: `At ${dollars(d.rateCents)} / ${d.unit}. It's on the project's Crew card. Send them the briefing when it's ready.` },
+    { t: "button", label: "Open the booking", href: d.link },
+  ], [{ t: "small", text: "Sent to you when a vendor accepts a booking · WranglerPortal" }], `${d.vendor} · ${d.role} · ${dateRange(d.start, d.end)}`);
+}
+
+// ---------- 26: to the owner when a vendor sends an invoice (S5 · Phase 3c 735:5243) ----------
+export function ownerVendorInvoiceMail(b: MailBrand, d: { vendor: string; number: string; project: string; role: string; amount: string; totalCents: number; expectedCents: number | null; link: string }): Mail {
+  const first = d.vendor.trim().split(/\s+/)[0] || d.vendor;
+  const vs = d.expectedCents === null ? "" : d.totalCents === d.expectedCents ? "It matches the agreed rate on the booking. " : `It's ${d.totalCents > d.expectedCents ? "more" : "less"} than the booking's expected ${usd(d.expectedCents)}. `;
+  return mk(b, "updates", `${d.vendor} sent invoice ${d.number}`, [
+    { t: "eyebrow", text: `${d.vendor} sent invoice ${d.number}` },
+    { t: "title", text: `${d.project} · ${d.role}${d.amount ? `, ${d.amount}` : ""} · ${usd(d.totalCents)}` },
+    { t: "p", text: `${vs}Approve it to add it to the Ledger, then mark it paid when you pay ${first}.` },
+    { t: "button", label: "Review it", href: d.link },
+  ], [{ t: "small", text: "Sent to you when a vendor sends an invoice · WranglerPortal" }], `${d.project} · ${usd(d.totalCents)}`);
+}

@@ -6,12 +6,19 @@
 // Who may call: a signed-in vendor login (users.role "vendor") with a live vendor membership in the business, whose
 // vendor record there is still on the list. Owners and clients are refused here, and vendors are refused everywhere
 // else (requireMe, requireSignedIn).
-import { focusBusiness, mutation, query } from "./lib/functions";
+import { focusBusiness, internalAction, internalQuery, mutation, query } from "./lib/functions";
+import { internal } from "./_generated/api";
+import { randomToken } from "./lib/hash";
+import { businessContact } from "./lib/business";
+import { mailBrandOf } from "./lib/mail";
+import { ownerBookingAcceptedMail, ownerVendorInvoiceMail } from "./lib/mails";
+import { deliverOnce } from "./invoiceReminders";
+import { SITE } from "./lib/site";
 import { v, ConvexError } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { bookingState, daysIn, expectedCents, todayCentral, type BookingState } from "./lib/bookings";
+import { PAY_METHODS, bookingState, daysIn, expectedCents, todayCentral, type BookingState } from "./lib/bookings";
 import { label } from "./lib/bookingRows";
 
 type Ctx = QueryCtx | MutationCtx;
@@ -163,9 +170,15 @@ async function openOffer(ctx: MutationCtx, bookingId: Id<"vendorBookings">) {
 export const accept = mutation({
   args: { bookingId: v.id("vendorBookings") },
   handler: async (ctx, { bookingId }) => {
-    await openOffer(ctx, bookingId);
+    const x = await openOffer(ctx, bookingId);
     const now = Date.now();
     await ctx.db.patch(bookingId, { status: "accepted", answeredAt: now, updatedAt: now });
+    // D93, D103: a booked editor can comment on the project's cuts from now until 30 days after the booking's last day.
+    if (isEditing(x.role)) {
+      const shareId = await editorShare(ctx, x);
+      if (shareId) await ctx.db.patch(bookingId, { reviewShareId: shareId });
+    }
+    await ctx.scheduler.runAfter(0, internal.vendorPortal.mailAccepted, { bookingId }); // Heston, Nov 2: email the owner
     return null;
   },
 });
@@ -222,6 +235,253 @@ export const markRead = mutation({
     if (r.x.readAt) return null;
     const now = Date.now();
     await ctx.db.patch(r.x._id, { readAt: now, updatedAt: now, history: [...r.x.history, { kind: "read", at: now, by: r.me.vendor.name }].slice(-60) });
+    return null;
+  },
+});
+
+// ---------- the owner's email when a vendor accepts (Heston, Nov 2) ----------
+
+export const acceptedData = internalQuery({
+  args: { bookingId: v.id("vendorBookings") },
+  handler: async (ctx, { bookingId }) => {
+    const x = await ctx.db.get(bookingId);
+    if (!x || x.status !== "accepted") return null;
+    const vendor = await ctx.db.get(x.vendorId);
+    const p = await ctx.db.get(x.projectId);
+    if (!vendor || !p) return null;
+    const c = await businessContact(ctx, x.businessId ?? null);
+    return { owner: c.ownerEmail, vendor: vendor.name, x, project: label(p), brand: await mailBrandOf(ctx, x.businessId ?? null), link: `${SITE()}/vendors/bookings/${x._id}` };
+  },
+});
+export const mailAccepted = internalAction({
+  args: { bookingId: v.id("vendorBookings") },
+  handler: async (ctx, { bookingId }) => {
+    const d = await ctx.runQuery(internal.vendorPortal.acceptedData, { bookingId });
+    if (!d?.owner) return;
+    await deliverOnce(ctx, `booking-accepted:${bookingId}`, "booking_accepted", d.owner, ownerBookingAcceptedMail(d.brand, {
+      vendor: d.vendor, role: d.x.role, project: d.project, start: d.x.start, end: d.x.end, rateCents: d.x.rate.cents, unit: d.x.rate.unit, link: d.link,
+    }), d.brand.replyTo);
+  },
+});
+
+// ---------- Review access for booked editors (D93, D103) ----------
+
+const isEditing = (role: string) => /edit|colou?r|post|motion|graphic/i.test(role);
+const DAY = 86_400_000;
+/** The access ends 30 days after the booking's last day (end of that day, Central). */
+export const reviewUntil = (end: string) => Date.parse(`${end}T23:59:59-06:00`) + 30 * DAY;
+
+/** A comment link to the project's cuts, kept in the vendor's portal (never emailed), ending with D103. Made as the
+ *  business's owner, like any share; it shows in Settings › Shares, where it can be extended or switched off. */
+async function editorShare(ctx: MutationCtx, x: Doc<"vendorBookings">) {
+  const biz = x.businessId;
+  if (!biz || !(await ctx.db.get(x.projectId))) return null;
+  const owner = (await ctx.db.query("memberships").collect()).filter((m) => m.businessId === biz && m.role === "owner" && !m.revokedAt && m.userId).sort((a, b) => a.createdAt - b.createdAt)[0];
+  if (!owner?.userId) return null;
+  let token = randomToken(16);
+  while (await ctx.db.query("shares").withIndex("by_token", (q) => q.eq("token", token)).unique()) token = randomToken(16);
+  return ctx.db.insert("shares", {
+    token, kind: "project", projectId: x.projectId, access: "comment", who: "link", allVersions: true, downloads: false, emailNewVersions: false,
+    expiresAt: reviewUntil(x.end), createdAt: Date.now(), createdBy: owner.userId,
+  });
+}
+
+/** The projects a booked editor can open in Review (734:4809). */
+export const reviews = query({
+  args: { businessId: v.optional(v.id("businesses")) },
+  handler: async (ctx, { businessId }) => {
+    const { biz, vendor } = await asVendor(ctx, businessId);
+    const now = Date.now();
+    const out = [];
+    for (const x of await myBookings(ctx, vendor._id)) {
+      if (x.status !== "accepted" || !x.reviewShareId) continue;
+      const sh = await ctx.db.get(x.reviewShareId);
+      if (!sh || sh.offAt || (sh.expiresAt && sh.expiresAt <= now)) continue;
+      const p = await ctx.db.get(x.projectId);
+      out.push({ bookingId: x._id, project: p ? label(p) : "A project", role: x.role, start: x.start, end: x.end, token: sh.token, expiresAt: sh.expiresAt ?? null });
+    }
+    return { businessId: biz, rows: out };
+  },
+});
+
+// ---------- Invoices (734:3527, 734:3958) ----------
+
+const invTotal = (mode: "hours" | "lines", hours: Array<{ qty: number }>, lines: Array<{ cents: number }>, rateCents: number) =>
+  mode === "hours" ? Math.round(hours.reduce((t, h) => t + h.qty, 0) * rateCents) : lines.reduce((t, l) => t + l.cents, 0);
+
+async function invRow(ctx: Ctx, x: Doc<"vendorInvoices">) {
+  const k = await ctx.db.get(x.bookingId);
+  const p = await ctx.db.get(x.projectId);
+  const qty = x.hours.reduce((t, h) => t + h.qty, 0);
+  return {
+    _id: x._id, number: x.number, status: x.status, project: p ? label(p) : "A project", projectName: p?.name ?? "A project", role: k?.role ?? "",
+    mode: x.mode, hours: x.hours, lines: x.lines, rate: x.rate, totalCents: x.totalCents, note: x.note ?? null, bookingId: x.bookingId,
+    amount: x.mode === "hours" ? `${Math.round(qty * 100) / 100} ${x.rate.unit === "day" ? (qty === 1 ? "day" : "days") : "h"}` : `${x.lines.length} line${x.lines.length === 1 ? "" : "s"}`,
+    sentAt: x.sentAt ?? null, approvedAt: x.approvedAt ?? null, paidAt: x.paidAt ?? null, paidMethod: x.paidMethod ?? null, updatedAt: x.updatedAt,
+  };
+}
+
+export const invoices = query({
+  args: { businessId: v.optional(v.id("businesses")) },
+  handler: async (ctx, { businessId }) => {
+    const { biz, vendor } = await asVendor(ctx, businessId);
+    const rows = (await ctx.db.query("vendorInvoices").withIndex("by_vendor", (q) => q.eq("vendorId", vendor._id)).collect()).sort((a, b) => b.updatedAt - a.updatedAt);
+    const out = [];
+    for (const x of rows) out.push(await invRow(ctx, x));
+    return { businessId: biz, rows: out };
+  },
+});
+
+/** What Send an invoice needs: the bookings it can be for (accepted, or done), with their agreed rates. */
+export const invoiceForm = query({
+  args: { businessId: v.optional(v.id("businesses")), invoiceId: v.optional(v.string()) },
+  handler: async (ctx, { businessId, invoiceId }) => {
+    const id = invoiceId ? ctx.db.normalizeId("vendorInvoices", invoiceId) : null;
+    const inv = id ? await ctx.db.get(id) : null;
+    const { biz, vendor } = await asVendor(ctx, inv?.businessId ?? businessId);
+    if (inv && inv.vendorId !== vendor._id) return null;
+    const bookings = [];
+    for (const x of await myBookings(ctx, vendor._id)) {
+      if (x.status !== "accepted") continue;
+      const p = await ctx.db.get(x.projectId);
+      bookings.push({ _id: x._id, label: `${p ? label(p) : "A project"} · ${x.role}`, start: x.start, end: x.end, rate: x.rate, hours: x.hours ?? null, expectedCents: expectedCents(x) });
+    }
+    const count = (await ctx.db.query("vendorInvoices").withIndex("by_vendor", (q) => q.eq("vendorId", vendor._id)).collect()).length;
+    return { businessId: biz, ...(await ownerOf(ctx, biz)), bookings, nextNumber: `INV-${String(count + 1).padStart(4, "0")}`, invoice: inv ? await invRow(ctx, inv) : null };
+  },
+});
+
+export const invoice = query({
+  args: { invoiceId: v.string() },
+  handler: async (ctx, { invoiceId }) => {
+    const id = ctx.db.normalizeId("vendorInvoices", invoiceId);
+    const x = id ? await ctx.db.get(id) : null;
+    const me = await mine(ctx, x, (vid) => x!.vendorId === vid);
+    if (!me || !x) return null;
+    return { businessId: me.biz, ...(await ownerOf(ctx, me.biz)), ...(await invRow(ctx, x)) };
+  },
+});
+
+/** Save a draft, or send it (email 26 and the owner's Home alert). A sent invoice can't change. */
+export const saveInvoice = mutation({
+  args: {
+    invoiceId: v.optional(v.id("vendorInvoices")), bookingId: v.id("vendorBookings"), mode: v.union(v.literal("hours"), v.literal("lines")),
+    hours: v.array(v.object({ label: v.string(), qty: v.number() })), lines: v.array(v.object({ description: v.string(), cents: v.number() })),
+    number: v.optional(v.string()), note: v.optional(v.string()), send: v.boolean(),
+  },
+  handler: async (ctx, a) => {
+    const k = await ctx.db.get(a.bookingId);
+    const me = await mine(ctx, k, (vid) => k!.vendorId === vid);
+    if (!me || !k) throw new ConvexError("That booking isn't here.");
+    if (k.status !== "accepted") throw new ConvexError("Invoices are for bookings you've accepted.");
+    const prev = a.invoiceId ? await ctx.db.get(a.invoiceId) : null;
+    if (a.invoiceId && (!prev || prev.vendorId !== me.vendor._id)) throw new ConvexError("That invoice isn't here.");
+    if (prev && prev.status !== "draft") throw new ConvexError("It's been sent, so it can't change.");
+    const hours = a.mode === "hours" ? a.hours.slice(0, 60).map((h) => ({ label: h.label.trim().slice(0, 80), qty: Math.round(Number(h.qty) * 100) / 100 })).filter((h) => h.qty !== 0 || h.label) : [];
+    const lines = a.mode === "lines" ? a.lines.slice(0, 60).map((l) => ({ description: l.description.trim().slice(0, 200), cents: Math.round(Number(l.cents)) })).filter((l) => l.cents !== 0 || l.description) : [];
+    if (hours.some((h) => !(h.qty > 0 && h.qty <= 1000))) throw new ConvexError(`Each ${k.rate.unit === "day" ? "line needs its days" : "line needs its hours"}, more than 0.`);
+    if (lines.some((l) => !(l.cents > 0 && l.cents <= 10_000_000) || !l.description)) throw new ConvexError("Each line needs what it's for and an amount.");
+    const totalCents = invTotal(a.mode, hours, lines, k.rate.cents);
+    if (a.send && totalCents <= 0) throw new ConvexError(a.mode === "hours" ? "Add the hours you worked." : "Add a line.");
+    if (totalCents > 100_000_000) throw new ConvexError("That total is too large.");
+    const count = (await ctx.db.query("vendorInvoices").withIndex("by_vendor", (q) => q.eq("vendorId", me.vendor._id)).collect()).length;
+    const number = (a.number ?? "").trim().slice(0, 30) || prev?.number || `INV-${String(count + 1).padStart(4, "0")}`;
+    const now = Date.now();
+    const body = { bookingId: k._id, projectId: k.projectId, number, mode: a.mode, hours, lines, rate: k.rate, totalCents, note: (a.note ?? "").trim().slice(0, 1000) || undefined, updatedAt: now,
+      ...(a.send ? { status: "sent" as const, sentAt: now } : {}) };
+    const id = prev ? (await ctx.db.patch(prev._id, body), prev._id) : await ctx.db.insert("vendorInvoices", { vendorId: me.vendor._id, status: "draft", createdAt: now, ...body });
+    if (a.send) await ctx.scheduler.runAfter(0, internal.vendorPortal.mailInvoice, { invoiceId: id });
+    return id;
+  },
+});
+
+export const deleteInvoice = mutation({
+  args: { invoiceId: v.id("vendorInvoices") },
+  handler: async (ctx, { invoiceId }) => {
+    const x = await ctx.db.get(invoiceId);
+    const me = await mine(ctx, x, (vid) => x!.vendorId === vid);
+    if (!me || !x) return null;
+    if (x.status !== "draft") throw new ConvexError("A sent invoice stays.");
+    await ctx.db.delete(invoiceId);
+    return null;
+  },
+});
+
+export const invoiceMailData = internalQuery({
+  args: { invoiceId: v.id("vendorInvoices") },
+  handler: async (ctx, { invoiceId }) => {
+    const x = await ctx.db.get(invoiceId);
+    if (!x || x.status !== "sent") return null;
+    const vendor = await ctx.db.get(x.vendorId);
+    const k = await ctx.db.get(x.bookingId);
+    if (!vendor || !k) return null;
+    const c = await businessContact(ctx, x.businessId ?? null);
+    const row = await invRow(ctx, x);
+    return { owner: c.ownerEmail, vendor: vendor.name, row, expectedCents: x.mode === "hours" ? expectedCents(k) : null, brand: await mailBrandOf(ctx, x.businessId ?? null), link: `${SITE()}/vendors/${vendor._id}` };
+  },
+});
+export const mailInvoice = internalAction({
+  args: { invoiceId: v.id("vendorInvoices") },
+  handler: async (ctx, { invoiceId }) => {
+    const d = await ctx.runQuery(internal.vendorPortal.invoiceMailData, { invoiceId });
+    if (!d?.owner) return;
+    await deliverOnce(ctx, `vendor-invoice:${invoiceId}`, "vendor_invoice", d.owner, ownerVendorInvoiceMail(d.brand, {
+      vendor: d.vendor, number: d.row.number, project: d.row.project, role: d.row.role, amount: d.row.mode === "hours" ? d.row.amount : "", totalCents: d.row.totalCents, expectedCents: d.expectedCents, link: d.link,
+    }), d.brand.replyTo);
+  },
+});
+
+// ---------- Settings: their details, W-9 (D100), how they're paid (D101) (734:4386) ----------
+
+export const settings = query({
+  args: { businessId: v.optional(v.id("businesses")) },
+  handler: async (ctx, { businessId }) => {
+    const { biz, vendor, email } = await asVendor(ctx, businessId);
+    return {
+      businessId: biz, ...(await ownerOf(ctx, biz)), email, name: vendor.name, businessName: vendor.businessName ?? "", phone: vendor.phone ?? "", address: vendor.address ?? "", portfolio: vendor.portfolio ?? "",
+      roles: vendor.roles, w9: vendor.w9 ? { name: vendor.w9.name, uploadedAt: vendor.w9.uploadedAt, url: await ctx.storage.getUrl(vendor.w9.fileId) } : null,
+      payMethod: vendor.payMethod ?? null,
+    };
+  },
+});
+
+const clip = (s: string | undefined, n: number) => (s ?? "").trim().slice(0, n);
+export const saveDetails = mutation({
+  args: { businessId: v.id("businesses"), name: v.string(), businessName: v.optional(v.string()), phone: v.optional(v.string()), address: v.optional(v.string()), portfolio: v.optional(v.string()),
+    payMethod: v.optional(v.string()), payNote: v.optional(v.string()) },
+  handler: async (ctx, a) => {
+    const { vendor } = await asVendor(ctx, a.businessId);
+    if (!a.name.trim()) throw new ConvexError("Add your name.");
+    const note = clip(a.payNote, 300);
+    // D101: the method and a note only. A long run of digits looks like an account or routing number: refused.
+    if (/\d[\d\s-]{6,}\d/.test(note)) throw new ConvexError("Leave out account and routing numbers. Say how you like to be paid; the business asks for the rest.");
+    if (a.payMethod && !PAY_METHODS.includes(a.payMethod)) throw new ConvexError("Pick how you get paid.");
+    await ctx.db.patch(vendor._id, {
+      name: clip(a.name, 120), businessName: clip(a.businessName, 120) || undefined, phone: clip(a.phone, 40) || undefined, address: clip(a.address, 300) || undefined,
+      portfolio: clip(a.portfolio, 300) || undefined, ...(a.payMethod ? { payMethod: { method: a.payMethod, ...(note ? { note } : {}) } } : {}), updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const w9UploadUrl = mutation({
+  args: { businessId: v.id("businesses") },
+  handler: async (ctx, { businessId }) => { await asVendor(ctx, businessId); return ctx.storage.generateUploadUrl(); },
+});
+
+/** D100: one W-9 per business; replacing it drops the old file. */
+export const setW9 = mutation({
+  args: { businessId: v.id("businesses"), storageId: v.id("_storage"), name: v.string() },
+  handler: async (ctx, a) => {
+    const { vendor } = await asVendor(ctx, a.businessId);
+    const file = await ctx.db.system.get(a.storageId);
+    const fresh = file && Date.now() - file._creationTime < 30 * 60_000;
+    if (!file || !fresh) throw new ConvexError("The W-9 didn't upload. Try again.");
+    const pdf = file.contentType ? file.contentType === "application/pdf" : /\.pdf$/i.test(a.name.trim());
+    if (!pdf || file.size > 10 * 1024 * 1024) throw new ConvexError("Upload the W-9 as a PDF, up to 10 MB.");
+    const old = vendor.w9?.fileId;
+    await ctx.db.patch(vendor._id, { w9: { fileId: a.storageId, name: clip(a.name, 120) || "W-9.pdf", uploadedAt: Date.now() }, updatedAt: Date.now() });
+    if (old && old !== a.storageId) await ctx.storage.delete(old).catch(() => null);
     return null;
   },
 });

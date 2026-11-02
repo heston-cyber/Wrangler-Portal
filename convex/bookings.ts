@@ -147,6 +147,7 @@ export const cancel = mutation({
     if (x.status !== "offered" && x.status !== "accepted") throw new ConvexError(x.status === "declined" ? "They already declined it." : "It's already cancelled.");
     const now = Date.now();
     await ctx.db.patch(bookingId, { status: "cancelled", cancelledAt: now, updatedAt: now });
+    if (x.reviewShareId) { const sh = await ctx.db.get(x.reviewShareId); if (sh && !sh.offAt) await ctx.db.patch(sh._id, { offAt: now }); } // a booked editor's Review access ends
     return null;
   },
 });

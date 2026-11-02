@@ -5,7 +5,7 @@ import { Fragment, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { Avatar, Button, ButtonLink, Card, Checkbox, DialogHeader, Divider, EmptyState, ListRow, PageHeader, PillTabs, SectionHead, SkeletonRows, StatusChip } from "../../ui/wp";
+import { Avatar, Button, ButtonLink, Card, Checkbox, DialogHeader, Divider, EmptyState, ListRow, PageHeader, PillTabs, SectionHead, SkeletonRows, StatusChip, type Tone } from "../../ui/wp";
 import { Icon } from "../../ui/Icon";
 import { Modal, useConfirm, useToast } from "../../ui/kit";
 import { Sep, TopBar } from "../../shell/Shell";
@@ -126,7 +126,7 @@ export function VendorPage({ vendorId }: { vendorId: string }) {
   if (x === null) return <><TopBar><a {...linkProps("/vendors")}>Vendors</a></TopBar><div className="wp-page"><EmptyState icon="user" title="This vendor isn't here." actions={<ButtonLink to="/vendors">All vendors</ButtonLink>} /></div></>;
   const first = x.name.split(" ")[0];
   const t = x.totals;
-  const details: Array<[string, React.ReactNode]> = ([["Email", x.email], ["Phone", x.phone], ["Based in", x.basedIn], ["Portfolio", x.portfolio ? <a href={/^https?:\/\//.test(x.portfolio) ? x.portfolio : `https://${x.portfolio}`} target="_blank" rel="noopener noreferrer">{x.portfolio.replace(/^https?:\/\//, "")}</a> : null]] as Array<[string, React.ReactNode]>).filter(([, v]) => v);
+  const details: Array<[string, React.ReactNode]> = ([["Email", x.email], ["Business", x.businessName], ["Phone", x.phone], ["Based in", x.basedIn], ["Mailing address", x.address], ["Paid by", x.payMethod ? `${x.payMethod.method}${x.payMethod.note ? ` · ${x.payMethod.note}` : ""}` : null], ["Portfolio", x.portfolio ? <a href={/^https?:\/\//.test(x.portfolio) ? x.portfolio : `https://${x.portfolio}`} target="_blank" rel="noopener noreferrer">{x.portfolio.replace(/^https?:\/\//, "")}</a> : null]] as Array<[string, React.ReactNode]>).filter(([, v]) => v);
   return (
     <>
       <TopBar><a {...linkProps("/vendors")}>Vendors</a><Sep /><a {...linkProps("/vendors")}>All vendors</a><Sep /><span className="here">{x.name}</span></TopBar>
@@ -150,7 +150,7 @@ export function VendorPage({ vendorId }: { vendorId: string }) {
           <div className="col">
             <VendorBookings vendorId={x._id} first={first} />
             <VendorBriefings vendorId={x._id} first={first} />
-            <Card label="Invoices and payments" head={<SectionHead label="Invoices and payments" count={0} />}><ListRow className="ilead quiet" lead={{ icon: "invoice" }} title={`Nothing from ${first} yet.`} /></Card>
+            <VendorInvoices vendorId={x._id} first={first} />
           </div>
           <div className="col right">
             <Card label="Rates" head={<SectionHead label="Rates" action={<button type="button" className="btn ghost sm" onClick={() => setEditing(true)}>Edit</button>} />}>
@@ -182,5 +182,20 @@ export function VendorPage({ vendorId }: { vendorId: string }) {
       {briefing && <NewBriefing vendorId={x._id} onClose={() => setBriefing(false)} />}
       {confirmNode}{toast}
     </>
+  );
+}
+
+// Step 4: the invoices a vendor has sent (Approve and Mark paid come in step 5).
+const INV_CHIP: Record<string, [Tone, string]> = { sent: ["warning", "To approve"], approved: ["danger", "Approved"], paid: ["success", "Paid"] };
+function VendorInvoices({ vendorId, first }: { vendorId: Id<"vendors">; first: string }) {
+  const rows = useQuery(api.vendors.invoices, { vendorId });
+  return (
+    <Card label="Invoices and payments" head={<SectionHead label="Invoices and payments" count={rows?.length ?? 0} />}>
+      {rows === undefined ? <SkeletonRows n={2} /> : !rows || rows.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "invoice" }} title={`Nothing from ${first} yet.`} />
+        : rows.map((x, i) => <div key={x._id} className="wp-rowwrap">{i > 0 && <Divider />}
+          <ListRow className="ilead" lead={{ icon: "invoice" }} title={x.number} meta={[x.project, x.paidAt ? `paid ${new Date(x.paidAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : x.sentAt ? `sent ${new Date(x.sentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : null].filter(Boolean).join(" · ")}
+            trailing={money(x.totalCents)} chip={<StatusChip tone={INV_CHIP[x.status]?.[0] ?? "neutral"}>{INV_CHIP[x.status]?.[1] ?? x.status}</StatusChip>} /></div>)}
+      {rows && rows.some((x) => x.status === "sent") && <p className="wp-small secondary vd-pad">Approving and marking invoices paid arrives in the next build step.</p>}
+    </Card>
   );
 }

@@ -131,3 +131,78 @@ describe("the vendor side", () => {
     expect((await jordan.query(api.users.me, {})).role).toBe("vendor");
   });
 });
+
+describe("the vendor side, part 2", () => {
+  test("accepting emails the owner; an editor gets Review access until 30 days after the last day; cancelling ends it", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const { kA, jordan } = await twoBusinesses(w);
+    await jordan.mutation(api.vendorPortal.accept, { bookingId: kA });
+    await settle(w);
+    expect(mails.filter((m) => m.to === "heston@wranglerproductions.com").map((m) => m.subject)).toEqual(["Jordan Ellis accepted the booking: 26127 Launch"]);
+    expect((await jordan.query(api.vendorPortal.reviews, {})).rows).toEqual([]); // a shooter: no Review access
+    // An editing booking: a comment link to the project's cuts, in their portal, ending 30 days after the last day.
+    const a = (await w.heston.query(api.vendors.list, {}))[0]._id;
+    const kE = await w.heston.mutation(api.bookings.create, { vendorId: a, projectId: w.p, role: "Editor", start: "2030-11-08", end: "2030-11-14", cents: 9_000, unit: "hour", hours: 30 }) as Id<"vendorBookings">;
+    await jordan.mutation(api.vendorPortal.accept, { bookingId: kE });
+    const r = (await jordan.query(api.vendorPortal.reviews, {})).rows;
+    expect(r).toEqual([expect.objectContaining({ project: "26127 Launch", role: "Editor", token: expect.any(String) })]);
+    expect(r[0].expiresAt).toBe(Date.parse("2030-11-14T23:59:59-06:00") + 30 * 86_400_000);
+    const sh = await w.t.run((ctx) => ctx.db.query("shares").withIndex("by_token", (q) => q.eq("token", r[0].token)).unique());
+    expect(sh).toMatchObject({ kind: "project", projectId: w.p, access: "comment", who: "link", downloads: false, emailNewVersions: false });
+    await w.heston.mutation(api.bookings.cancel, { bookingId: kE });
+    expect((await jordan.query(api.vendorPortal.reviews, {})).rows).toEqual([]);
+    expect((await w.t.run((ctx) => ctx.db.get(sh!._id)))!.offAt).toBeTypeOf("number");
+  });
+
+  test("T3c.4 invoices: hours × the agreed rate or line items, a draft, then sent (email 26, the owner's Home alert, the vendor page)", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const { a, kA, jordan } = await twoBusinesses(w);
+    await expect(jordan.mutation(api.vendorPortal.saveInvoice, { bookingId: kA, mode: "hours", hours: [{ label: "Nov 6", qty: 1 }], lines: [], send: true })).rejects.toThrow(/accepted/);
+    await jordan.mutation(api.vendorPortal.accept, { bookingId: kA });
+    const form = await jordan.query(api.vendorPortal.invoiceForm, {});
+    expect(form.bookings).toEqual([expect.objectContaining({ _id: kA, label: "26127 Launch · Shooter", rate: { cents: 100_000, unit: "day" }, expectedCents: 200_000 })]);
+    expect(form.nextNumber).toBe("INV-0001");
+    const draft = await jordan.mutation(api.vendorPortal.saveInvoice, { bookingId: kA, mode: "hours", hours: [{ label: "Nov 6 · shoot", qty: 1 }], lines: [], number: "JE-014", send: false }) as Id<"vendorInvoices">;
+    expect(await w.heston.query(api.vendors.invoices, { vendorId: a })).toEqual([]); // drafts are theirs only
+    await expect(jordan.mutation(api.vendorPortal.saveInvoice, { invoiceId: draft, bookingId: kA, mode: "hours", hours: [{ label: "x", qty: 0 }], lines: [], send: true })).rejects.toThrow(/more than 0/);
+    await jordan.mutation(api.vendorPortal.saveInvoice, { invoiceId: draft, bookingId: kA, mode: "hours", hours: [{ label: "Nov 6 · shoot", qty: 1 }, { label: "Nov 7 · shoot", qty: 1 }], lines: [], number: "JE-014", note: "Thanks!", send: true });
+    await settle(w);
+    const m = mails.find((x) => x.subject === "Jordan Ellis sent invoice JE-014")!;
+    expect(m.to).toBe("heston@wranglerproductions.com");
+    expect(m.text).toContain("26127 Launch · Shooter, 2 days · $2,000.00");
+    expect(m.text).toContain("It matches the agreed rate on the booking.");
+    expect(await jordan.query(api.vendorPortal.invoice, { invoiceId: draft })).toMatchObject({ status: "sent", totalCents: 200_000, amount: "2 days" });
+    await expect(jordan.mutation(api.vendorPortal.saveInvoice, { invoiceId: draft, bookingId: kA, mode: "lines", hours: [], lines: [{ description: "x", cents: 1 }], send: false })).rejects.toThrow(/can't change/);
+    await expect(jordan.mutation(api.vendorPortal.deleteInvoice, { invoiceId: draft })).rejects.toThrow(/stays/);
+    const needs = await w.heston.query(api.home.needs, {});
+    expect(needs[0]).toMatchObject({ kind: "vendorInvoice", vendor: "Jordan Ellis", number: "JE-014", totalCents: 200_000 });
+    expect(await w.heston.query(api.vendors.invoices, { vendorId: a })).toEqual([expect.objectContaining({ number: "JE-014", status: "sent", totalCents: 200_000 })]);
+    expect((await w.heston.query(api.vendors.get, { vendorId: a })).totals).toMatchObject({ waitingCents: 200_000, waitingCount: 1 });
+    // Line items: a different total says so; another business never sees it.
+    await jordan.mutation(api.vendorPortal.saveInvoice, { bookingId: kA, mode: "lines", hours: [], lines: [{ description: "Extra drive", cents: 15_000 }], send: true });
+    await settle(w);
+    expect(mails.some((x) => x.text.includes("less than the booking's expected $2,000.00"))).toBe(false); // line items: no rate comparison
+    expect((await w.boss.query(api.home.needs, {})).filter((n: { kind: string }) => n.kind === "vendorInvoice")).toEqual([]);
+  });
+
+  test("Settings: details, a PDF W-9 per business (D100), the payment method and a note, never bank numbers (D101)", async () => {
+    const w = await world();
+    stub([]);
+    const { a, jordan } = await twoBusinesses(w);
+    const [A, B] = (await jordan.query(api.vendorPortal.businesses, {})).list.map((b: { businessId: string }) => b.businessId);
+    await jordan.mutation(api.vendorPortal.saveDetails, { businessId: A, name: "Jordan Ellis", businessName: "Ellis Films", address: "1 Main St, OKC", payMethod: "ACH", payNote: "Send a remittance email" });
+    await expect(jordan.mutation(api.vendorPortal.saveDetails, { businessId: A, name: "Jordan Ellis", payMethod: "ACH", payNote: "Routing 103000648 acct 12345678" })).rejects.toThrow(/account and routing/);
+    await expect(jordan.mutation(api.vendorPortal.saveDetails, { businessId: A, name: "Jordan Ellis", payMethod: "Wire" })).rejects.toThrow(/how you get paid/);
+    expect(await w.heston.query(api.vendors.get, { vendorId: a })).toMatchObject({ businessName: "Ellis Films", address: "1 Main St, OKC", payMethod: { method: "ACH", note: "Send a remittance email" } });
+    const up = await w.t.run((ctx) => ctx.storage.store(new Blob(["%PDF-1.4 w9"], { type: "application/pdf" })));
+    await jordan.mutation(api.vendorPortal.setW9, { businessId: A, storageId: up, name: "W-9 2026.pdf" });
+    expect((await w.heston.query(api.vendors.get, { vendorId: a })).w9).toMatchObject({ name: "W-9 2026.pdf", url: expect.any(String) });
+    expect((await jordan.query(api.vendorPortal.settings, { businessId: B })).w9).toBeNull(); // one per business
+    const png = await w.t.run((ctx) => ctx.storage.store(new Blob(["x"], { type: "image/png" })));
+    await expect(jordan.mutation(api.vendorPortal.setW9, { businessId: B, storageId: png, name: "w9.png" })).rejects.toThrow(/PDF/);
+  });
+});

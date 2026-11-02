@@ -3,7 +3,7 @@
 // 735:4610 / 735:4933). One login across the businesses a vendor works for (D94): the switcher picks one, the portal
 // takes on its look, and only its work shows. Invoices, Settings (W-9, payment method) and Review for editors come in
 // the next part of step 4.
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -21,9 +21,8 @@ import { DECLINE_REASONS, dateRange, shortRange, type BookingState } from "../..
 import { PdfPages } from "../proposals/ClientProposal";
 import wpLogo from "../../assets/d1/wp-logo.png";
 
-type Biz = { businessId: Id<"businesses">; name: string; accent: string | null; background: string | null; logoUrl: string | null };
-type VCtx = { biz: Id<"businesses"> | null; setBiz: (b: Id<"businesses">) => void; list: Biz[] };
-const Ctx = createContext<VCtx>({ biz: null, setBiz: () => {}, list: [] });
+import { Ctx, type Biz } from "./ctx";
+import { InvoiceEditor, VendorInvoice, VendorInvoices, VendorReview, VendorSettings, HomeInvoices } from "./VendorWork";
 const KEY = "wr.vendorBiz";
 const read = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
 const write = (v: string) => { try { localStorage.setItem(KEY, v); } catch { /* private window */ } };
@@ -47,14 +46,20 @@ export default function VendorApp({ me }: { me: { name: string | null; email: st
   const setBiz = (b: Id<"businesses">) => { setPicked(b); write(b); };
   const { path } = useLocation();
   const counts = useQuery(api.vendorPortal.counts, biz ? { businessId: biz } : "skip");
+  const reviews = useQuery(api.vendorPortal.reviews, biz ? { businessId: biz } : "skip");
   const starts = (p: string, ...pre: string[]) => pre.some((x) => p === x || p.startsWith(x + "/"));
   const nav = useMemo(() => {
     const home: Item = { to: "/", label: "Home", icon: "home", match: (p) => p === "/" };
     const bookings: Item = { to: "/vendor/bookings", label: "Bookings", icon: "calendar", match: (p) => starts(p, "/vendor/bookings"), badge: counts?.offered || 0 };
     const briefings: Item = { to: "/vendor/briefings", label: "Briefings", icon: "note", match: (p) => starts(p, "/vendor/briefings"), badge: counts?.toRead || 0 };
+    const invoices: Item = { to: "/vendor/invoices", label: "Invoices", icon: "invoice", match: (p) => starts(p, "/vendor/invoices") };
+    // D93: a booked editor gets Review, with that project (each opens its comment link).
+    const rv = reviews?.rows ?? [];
+    const review: Item | null = rv.length ? { to: "/vendor/review", label: "Review", icon: "review", match: (p) => p === "/vendor/review", tab: (p) => starts(p, "/vendor/review"),
+      layer: rv.map((r) => ({ to: `/s/${r.token}`, label: r.project, match: () => false })), layerHas: (p) => starts(p, "/vendor/review") } : null;
     const more: Item = { to: "/more", label: "More", icon: "menu", match: (p) => starts(p, "/more", "/settings") };
-    return { main: [home, bookings, briefings], tabs: [home, bookings, briefings, more] };
-  }, [counts?.offered, counts?.toRead]); // eslint-disable-line react-hooks/exhaustive-deps
+    return { main: [home, bookings, briefings, invoices, ...(review ? [review] : [])], tabs: [home, bookings, briefings, invoices, more] };
+  }, [counts?.offered, counts?.toRead, reviews?.rows.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const ctx = useMemo(() => ({ biz, setBiz, list }), [biz, list]); // eslint-disable-line react-hooks/exhaustive-deps
   if (mine === undefined) return <Loading />;
   if (!list.length) return <EmptyFrame />;
@@ -75,8 +80,13 @@ function Routes({ path, me }: { path: string; me: { name: string | null; email: 
   if (/^\/vendor\/bookings\/?$/.test(path)) return <VendorBookings />;
   if (brief) return <VendorBriefing key={brief[1]} briefingId={brief[1]} />;
   if (/^\/vendor\/briefings\/?$/.test(path)) return <VendorBriefings />;
+  const inv = /^\/vendor\/invoices\/([^/]+)\/?$/.exec(path);
+  if (/^\/vendor\/invoices\/new\/?$/.test(path)) return <InvoiceEditor key={location.search} bookingId={new URLSearchParams(location.search).get("booking")} />;
+  if (inv) return <VendorInvoice key={inv[1]} invoiceId={inv[1]} />;
+  if (/^\/vendor\/invoices\/?$/.test(path)) return <VendorInvoices />;
+  if (/^\/vendor\/review\/?$/.test(path)) return <VendorReview />;
   if (/^\/more\/?$/.test(path)) return <VendorMore me={me} />;
-  if (path.startsWith("/settings")) return <VendorSettings me={me} />;
+  if (path.startsWith("/settings")) return <VendorSettings />;
   return <VendorHome />;
 }
 
@@ -123,7 +133,8 @@ function VendorHome() {
       <TopBar><span className="here">Home</span></TopBar>
       <div className="wp-page">
         <div className="vp-phoneswitch"><Switcher /></div>
-        <PageHeader eyebrow={h.business} title={`Hi ${first}.`} sub={`Your work with ${h.business}.${others ? " Other businesses you work for are in the switcher, kept separate." : ""}`} />
+        <PageHeader eyebrow={h.business} title={`Hi ${first}.`} sub={`Your work with ${h.business}.${others ? " Other businesses you work for are in the switcher, kept separate." : ""}`}
+          actions={h.upcoming.length ? <><ButtonLink to="/vendor/invoices/new">Log hours</ButtonLink><ButtonLink variant="primary" to="/vendor/invoices/new">Send an invoice</ButtonLink></> : undefined} />
         <div className="wp-homecols">
           <div className="col">
             {h.offered.map((x) => (
@@ -151,10 +162,11 @@ function VendorHome() {
             </Card>
           </div>
           <div className="col right">
+            <HomeInvoices />
             <Card label="Your details" head={<SectionHead label="Your details" />}>
               <div className="vd-pad">
                 <div className="vd-row"><span>W-9</span>{h.details.w9 ? <StatusChip tone="success">On file</StatusChip> : <StatusChip tone="warning">Missing</StatusChip>}</div>
-                <p className="wp-small secondary">{h.details.payMethod ? `Payment details: ${h.details.payMethod}. ` : ""}Your W-9 and how you're paid go in Settings (coming next).</p>
+                <p className="wp-small secondary">{h.details.payMethod ? `Payment details: ${h.details.payMethod}. ` : ""}<a {...linkProps("/settings")}>Change them in Settings</a>.</p>
               </div>
             </Card>
           </div>
@@ -334,25 +346,8 @@ function VendorBriefing({ briefingId }: { briefingId: string }) {
   );
 }
 
-// ---------- Settings and More (W-9 and payment details come next) ----------
+// ---------- More (phones) ----------
 
-function VendorSettings({ me }: { me: { name: string | null; email: string } }) {
-  const [signOut, dialog] = useSignOutAsk();
-  return (
-    <>
-      <TopBar><span className="here">Settings</span></TopBar>
-      <div className="wp-page">
-        <PageHeader eyebrow="Settings" title="Settings." sub="Your login works for every business you work for." />
-        <Card label="Account" head={<SectionHead label="Account" />}>
-          <dl className="cp-see"><dt>Name</dt><dd>{me.name ?? "—"}</dd><dt>Email</dt><dd>{me.email}</dd></dl>
-        </Card>
-        <p className="wp-small secondary">Your W-9 and payment details arrive here in the next build step.</p>
-        <Button onClick={signOut}>Sign out</Button>
-      </div>
-      {dialog}
-    </>
-  );
-}
 function VendorMore({ me }: { me: { name: string | null; email: string } }) {
   const [signOut, dialog] = useSignOutAsk();
   return (

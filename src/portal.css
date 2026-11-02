@@ -2347,3 +2347,13 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 .vp-answer { display: grid; gap: 10px; }
 .vp-briefcols { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
 @media (max-width: 980px) { .vp-briefcols { grid-template-columns: minmax(0, 1fr); } .vp-briefcols > .wp-card, .vp-briefcols > section { order: -1; } }
+/* Phase 3c step 4 · the vendor's invoices and settings (734:3527, 734:4386) */
+.vi-for { display: grid; gap: 14px; }
+.vi-rows { display: grid; gap: 8px; }
+.vi-row { display: grid; grid-template-columns: minmax(0, 1fr) 120px auto; gap: 8px; align-items: center; }
+.vi-qty { display: flex; align-items: center; gap: 6px; }
+.vi-qty .input { min-width: 0; }
+.vi-qty > span { color: var(--text-secondary); }
+.vi-add { justify-self: start; color: var(--accent); display: inline-flex; align-items: center; gap: 6px; }
+.vi-total { border-top: 1px solid var(--border-hairline); margin-top: 6px; padding-top: 10px; }
+@media (max-width: 600px) { .vi-row { grid-template-columns: minmax(0, 1fr) 96px auto; } }

@@ -57,12 +57,37 @@ export function pricingCost(r: Rates | undefined, role: string): { cents: number
 }
 const status = (x: Doc<"vendors">) => (x.joinedAt ? "in the portal" : x.invitedAt ? `invited ${new Date(x.invitedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "not invited");
 
+/** Step 4: from the vendor's invoices. Paid this year counts invoices paid since Jan 1 (Central), for 1099s. */
+async function totalsOf(ctx: QueryCtx, vendorId: Id<"vendors">) {
+  const rows = await ctx.db.query("vendorInvoices").withIndex("by_vendor", (q) => q.eq("vendorId", vendorId)).collect();
+  const year = Date.parse(`${new Date().getFullYear()}-01-01T00:00:00-06:00`);
+  const sum = (xs: typeof rows) => xs.reduce((t, x) => t + x.totalCents, 0);
+  const sent = rows.filter((x) => x.status === "sent"), approved = rows.filter((x) => x.status === "approved"), paid = rows.filter((x) => x.status === "paid" && (x.paidAt ?? 0) >= year);
+  return { paidThisYearCents: sum(paid), approvedCents: sum(approved), approvedCount: approved.length, waitingCents: sum(sent), waitingCount: sent.length };
+}
+
+/** Step 4: a vendor's invoices, for their page (approving and marking paid come in step 5). */
+export const invoices = query({
+  args: { vendorId: v.string() },
+  handler: async (ctx, { vendorId }) => {
+    await ownerBiz(ctx);
+    const id = ctx.db.normalizeId("vendors", vendorId);
+    if (!id) return null;
+    const rows = (await ctx.db.query("vendorInvoices").withIndex("by_vendor", (q) => q.eq("vendorId", id)).collect()).filter((x) => x.status !== "draft").sort((a, b) => (b.sentAt ?? 0) - (a.sentAt ?? 0));
+    const out = [];
+    for (const x of rows) { const p = await ctx.db.get(x.projectId); out.push({ _id: x._id, number: x.number, status: x.status, project: p?.name ?? "A project", totalCents: x.totalCents, sentAt: x.sentAt ?? null, paidAt: x.paidAt ?? null }); }
+    return out;
+  },
+});
+
 export const list = query({
   args: {},
   handler: async (ctx) => {
     await ownerBiz(ctx);
     const rows = (await ctx.db.query("vendors").collect()).filter((x) => !x.archivedAt).sort((a, b) => a.name.localeCompare(b.name));
-    return rows.map((x) => ({ _id: x._id, name: x.name, roles: x.roles, basedIn: x.basedIn ?? null, portal: status(x), w9: !!x.w9, paidThisYearCents: 0 }));
+    const out = [];
+    for (const x of rows) out.push({ _id: x._id, name: x.name, roles: x.roles, basedIn: x.basedIn ?? null, portal: status(x), w9: !!x.w9, paidThisYearCents: (await totalsOf(ctx, x._id)).paidThisYearCents });
+    return out;
   },
 });
 
@@ -77,7 +102,7 @@ export const get = query({
     return {
       ...x, portal: status(x), w9: x.w9 ? { name: x.w9.name, uploadedAt: x.w9.uploadedAt, url: await ctx.storage.getUrl(x.w9.fileId) } : null,
       costs: x.roles.map((role) => ({ role, cost: pricingCost(rates, role) })),
-      totals: { paidThisYearCents: 0, approvedCents: 0, approvedCount: 0, waitingCents: 0, waitingCount: 0 },
+      totals: await totalsOf(ctx, x._id),
     };
   },
 });

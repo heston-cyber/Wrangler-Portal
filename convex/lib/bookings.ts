@@ -63,3 +63,5 @@ export function shortRange(start: string, end: string, thisYear = String(new Dat
 
 /** Why a vendor declines (732:3285). */
 export const DECLINE_REASONS = ["Booked that day", "Rate doesn't work", "Too far", "Other"] as const;
+/** How a vendor gets paid (D101: the method and a note only, never bank numbers). */
+export const PAY_METHODS = ["ACH", "Zelle", "Check", "Other"];

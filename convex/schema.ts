@@ -880,6 +880,8 @@ export default defineSchema({
     joinedAt: v.optional(v.number()),                    // signed in to it
     w9: v.optional(v.object({ fileId: v.id("_storage"), name: v.string(), uploadedAt: v.number() })),
     payMethod: v.optional(v.object({ method: v.string(), note: v.optional(v.string()) })),
+    businessName: v.optional(v.string()),               // step 4: their own business name, if they have one
+    address: v.optional(v.string()),                    // step 4: mailing address, for 1099s
     archivedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -923,10 +925,36 @@ export default defineSchema({
     offeredAt: v.number(),
     answeredAt: v.optional(v.number()),                     // accepted or declined (the vendor side, step 4)
     cancelledAt: v.optional(v.number()),
+    reviewShareId: v.optional(v.id("shares")),              // step 4: a booked editor's Review access (D93, D103)
     createdBy: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_vendor", ["vendorId"]).index("by_project", ["projectId"]),
+
+  // Phase 3c step 4 · a vendor's invoice for a booking (S5 · Phase 3c 734:3527, 734:3958): hours × the agreed rate, or
+  // line items. Sent to the owner (email 26 and a Home alert); approved and marked paid by the owner in step 5. Nothing
+  // here moves money (D92).
+  vendorInvoices: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    vendorId: v.id("vendors"),
+    bookingId: v.id("vendorBookings"),
+    projectId: v.id("projects"),
+    number: v.string(),                                   // theirs, or one made for them ("INV-0003")
+    mode: v.union(v.literal("hours"), v.literal("lines")),
+    hours: v.array(v.object({ label: v.string(), qty: v.number() })),  // mode "hours": each day or part, in the booking's unit
+    lines: v.array(v.object({ description: v.string(), cents: v.number() })), // mode "lines"
+    rate: v.object({ cents: v.number(), unit: v.union(v.literal("day"), v.literal("hour")) }), // the booking's agreed rate when sent
+    totalCents: v.number(),
+    note: v.optional(v.string()),
+    status: v.union(v.literal("draft"), v.literal("sent"), v.literal("approved"), v.literal("paid")),
+    sentAt: v.optional(v.number()),
+    approvedAt: v.optional(v.number()),
+    paidAt: v.optional(v.number()),
+    paidMethod: v.optional(v.string()),
+    seenAt: v.optional(v.number()),                       // the owner opened it (the Home alert stays until approved)
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_vendor", ["vendorId"]).index("by_booking", ["bookingId"]).index("by_status", ["status"]),
 
   // Phase 3b (review fix): the files uploaded for a proposal's questionnaire answers. Only these are served or copied.
   proposalFiles: defineTable({
