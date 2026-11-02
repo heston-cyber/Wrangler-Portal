@@ -769,7 +769,7 @@ export const sendCancelled = internalAction({
     const d = await ctx.runQuery(internal.subscriptions.cancelledData, { subscriptionId });
     if (!d) return "skipped";
     const r = await deliverOnce(ctx, `sub-cancelled:${subscriptionId}`, "subscription-cancelled", d.to, subscriptionCancelledMail(d.brand, d), d.brand.replyTo);
-    if (r !== "already") await ctx.runMutation(internal.subscriptions.note, { subscriptionId, kind: r === "held" ? "email_held" : "emailed", detail: "cancellation" });
+    if (r !== "already" && r !== "off") await ctx.runMutation(internal.subscriptions.note, { subscriptionId, kind: r === "held" ? "email_held" : "emailed", detail: "cancellation" });
     return r;
   },
 });
@@ -918,7 +918,7 @@ export const runUpcoming = internalAction({
       const d = await ctx.runQuery(internal.subscriptions.upcomingData, { subscriptionId: u.id });
       if (!d) continue;
       const r = await deliverOnce(ctx, `sub-upcoming:${u.id}:${Math.round(u.at / 60_000)}`, "subscription-upcoming", d.to, upcomingChargeMail(d.brand, { ...d, on: dateWords(u.at) }), d.brand.replyTo);
-      if (r !== "already") { sent++; await ctx.runMutation(internal.subscriptions.note, { subscriptionId: u.id, kind: r === "held" ? "email_held" : "upcoming_emailed", detail: dateWords(u.at) }); }
+      if (r !== "already" && r !== "off") { sent++; await ctx.runMutation(internal.subscriptions.note, { subscriptionId: u.id, kind: r === "held" ? "email_held" : "upcoming_emailed", detail: dateWords(u.at) }); }
     }
     return sent;
   },

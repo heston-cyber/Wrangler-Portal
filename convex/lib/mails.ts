@@ -445,7 +445,7 @@ export function vendorInvoiceApprovedMail(b: MailBrand, d: { name: string; numbe
     { t: "p", text: "You’ll get another email when it’s paid.", tone: "muted" },
     { t: "p", text: "You can see its status in your portal." },
     { t: "button", label: "View the invoice", href: d.link }, { t: "link", href: d.link },
-  ], signoff(b), `${d.number} · ${usd(d.totalCents)} approved`);
+  ], vendorFoot(b), `${d.number} · ${usd(d.totalCents)} approved`);
 }
 export function vendorInvoicePaidMail(b: MailBrand, d: { name: string; number: string; project: string; paidCents: number; paidOn: string; method: string; link: string }): Mail {
   return mk(b, "updates", `Invoice ${d.number} paid`, [
@@ -455,5 +455,61 @@ export function vendorInvoicePaidMail(b: MailBrand, d: { name: string; number: s
     { t: "p", text: first(d.name) ? `Thanks for the work, ${first(d.name)}.` : "Thanks for the work.", tone: "muted" },
     { t: "p", text: `It counts toward your ${d.paidOn.slice(0, 4)} total with ${b.name}.` },
     { t: "button", label: "View the invoice", href: d.link }, { t: "link", href: d.link },
-  ], signoff(b), `${d.number} · ${usd(d.paidCents)} paid`);
+  ], vendorFoot(b), `${d.number} · ${usd(d.paidCents)} paid`);
+}
+
+// ---------- Nov 2 (Heston: email notifications for everything): the events that had no email. No frames: each uses
+// the layout of its nearest drawn sibling (owner alerts like 26; vendor emails like 27). ----------
+const ownerFoot = (what: string): Block[] => [{ t: "small", text: `Sent to you when ${what} · Change which emails you get in Settings › Notifications · WranglerPortal` }];
+export function ownerBookingDeclinedMail(b: MailBrand, d: { vendor: string; role: string; project: string; start: string; end: string; reason: string | null; link: string }): Mail {
+  return mk(b, "updates", `${d.vendor} declined the booking: ${d.project}`, [
+    { t: "eyebrow", text: `${d.vendor} declined the booking` },
+    { t: "title", text: `${d.project} · ${d.role} · ${dateRange(d.start, d.end)}` },
+    ...(d.reason ? [{ t: "box", text: `Reason: ${d.reason}` } as Block] : []),
+    { t: "p", text: "It's off the project's expected costs. Book someone else from the project's Crew card." },
+    { t: "button", label: "Open the booking", href: d.link },
+  ], ownerFoot("a vendor declines a booking"), `${d.vendor} · ${d.role} · ${dateRange(d.start, d.end)}`);
+}
+export function ownerBriefingReadMail(b: MailBrand, d: { vendor: string; title: string; project: string; link: string }): Mail {
+  return mk(b, "updates", `${d.vendor} read the brief: ${d.project}`, [
+    { t: "eyebrow", text: `${d.vendor} read the brief` },
+    { t: "title", text: d.title },
+    { t: "p", text: `They pressed “I’ve read it” in their portal.` },
+    { t: "button", label: "Open the briefing", href: d.link },
+  ], ownerFoot("a vendor reads a briefing"), `${d.vendor} · ${d.project}`);
+}
+export function ownerW9Mail(b: MailBrand, d: { vendor: string; replaced: boolean; link: string }): Mail {
+  return mk(b, "updates", `${d.vendor} ${d.replaced ? "replaced their" : "uploaded a"} W-9`, [
+    { t: "eyebrow", text: `${d.vendor} ${d.replaced ? "replaced their" : "uploaded a"} W-9` },
+    { t: "p", text: "It's on their vendor page under Tax, for your 1099s. Only you can open it." },
+    { t: "button", label: "Open their page", href: d.link },
+  ], ownerFoot("a vendor uploads a W-9"));
+}
+export function ownerPaidMail(b: MailBrand, d: { client: string; number: string; title: string; paidCents: number; method: string; leftCents: number; link: string }): Mail {
+  return mk(b, "updates", `${d.client} paid ${usd(d.paidCents)}: invoice ${d.number}`, [
+    { t: "eyebrow", text: `${d.client} paid invoice ${d.number}` },
+    { t: "sums", rows: [{ label: "Paid", value: usd(d.paidCents), big: true }, { label: "Method", value: d.method }, { label: "Invoice", value: `${d.number} · ${d.title}` }, { label: "Left to pay", value: usd(d.leftCents) }] },
+    { t: "button", label: "Open the invoice", href: d.link },
+  ], ownerFoot("a client pays an invoice"), `${usd(d.paidCents)} · ${d.number}`);
+}
+const vendorFoot = (b: MailBrand): Block[] => [...signoff(b), { t: "small", text: `Choose which emails you get in your portal’s Settings › Notifications.` }];
+export function vendorBookingCancelledMail(b: MailBrand, d: { name: string; role: string; project: string; start: string; end: string; wasAccepted: boolean; link: string }): Mail {
+  return mk(b, "updates", `Booking cancelled: ${d.project}`, [
+    hi(d.name),
+    { t: "p", text: `${b.name} ${d.wasAccepted ? "cancelled your booking" : "took back the booking offer"} as ${/^[aeiou]/i.test(d.role) ? "an" : "a"} ${d.role}.` },
+    { t: "sums", rows: [{ label: "Dates", value: dateRange(d.start, d.end), big: true }, { label: "Project", value: d.project }] },
+    { t: "p", text: `Reply to this email if you have questions.`, tone: "muted" },
+    { t: "button", label: "View your bookings", href: d.link }, { t: "link", href: d.link },
+  ], vendorFoot(b), `${d.role} · ${dateRange(d.start, d.end)}`);
+}
+export function vendorInvoiceDeclinedMail(b: MailBrand, d: { name: string; number: string; project: string; totalCents: number; reason: string; link: string }): Mail {
+  const sender = first(b.ownerName) || b.name;
+  return mk(b, "updates", `Invoice ${d.number} declined`, [
+    hi(d.name),
+    { t: "p", text: `${sender} declined your invoice ${d.number}.` },
+    { t: "box", text: `Reason: ${d.reason}` },
+    { t: "sums", rows: [{ label: "Total", value: usd(d.totalCents), big: true }, { label: "Invoice", value: `${d.number} · ${d.project}` }] },
+    { t: "p", text: "Fix it in your portal and send it again." },
+    { t: "button", label: "Fix the invoice", href: d.link }, { t: "link", href: d.link },
+  ], vendorFoot(b), `${d.number} · ${usd(d.totalCents)}`);
 }

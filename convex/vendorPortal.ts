@@ -11,7 +11,7 @@ import { internal } from "./_generated/api";
 import { randomToken } from "./lib/hash";
 import { businessContact } from "./lib/business";
 import { mailBrandOf } from "./lib/mail";
-import { ownerBookingAcceptedMail, ownerVendorInvoiceMail } from "./lib/mails";
+import { ownerBookingAcceptedMail, ownerBookingDeclinedMail, ownerBriefingReadMail, ownerVendorInvoiceMail, ownerW9Mail } from "./lib/mails";
 import { deliverOnce } from "./invoiceReminders";
 import { SITE } from "./lib/site";
 import { v, ConvexError } from "convex/values";
@@ -20,6 +20,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { PAY_METHODS, bookingState, daysIn, expectedCents, todayCentral, type BookingState } from "./lib/bookings";
 import { label, paidAmount, paidDay } from "./lib/bookingRows";
+import { prefRow, setSwitch, viewFor } from "./lib/notifyPrefs";
 
 type Ctx = QueryCtx | MutationCtx;
 
@@ -193,6 +194,7 @@ export const decline = mutation({
     const note = (a.note ?? "").trim().slice(0, 500);
     const now = Date.now();
     await ctx.db.patch(a.bookingId, { status: "declined", declineReason: note ? `${reason}: ${note}` : reason, answeredAt: now, updatedAt: now });
+    await ctx.scheduler.runAfter(0, internal.vendorPortal.mailOwner, { what: "declined", id: a.bookingId }); // Nov 2: email for everything
     return null;
   },
 });
@@ -235,6 +237,7 @@ export const markRead = mutation({
     if (r.x.readAt) return null;
     const now = Date.now();
     await ctx.db.patch(r.x._id, { readAt: now, updatedAt: now, history: [...r.x.history, { kind: "read", at: now, by: r.me.vendor.name }].slice(-60) });
+    await ctx.scheduler.runAfter(0, internal.vendorPortal.mailOwner, { what: "read", id: r.x._id }); // Nov 2
     return null;
   },
 });
@@ -260,7 +263,50 @@ export const mailAccepted = internalAction({
     if (!d?.owner) return;
     await deliverOnce(ctx, `booking-accepted:${bookingId}`, "booking_accepted", d.owner, ownerBookingAcceptedMail(d.brand, {
       vendor: d.vendor, role: d.x.role, project: d.project, start: d.x.start, end: d.x.end, rateCents: d.x.rate.cents, unit: d.x.rate.unit, link: d.link,
-    }), d.brand.replyTo);
+    }), d.brand.replyTo, d.x.businessId ?? null);
+  },
+});
+
+// ---------- Nov 2 (Heston: email notifications for everything): the owner hears about declines, reads and W-9s ----------
+
+export const ownerMailData = internalQuery({
+  args: { what: v.string(), id: v.string() },
+  handler: async (ctx, { what, id }) => {
+    const brandOf = async (biz: Id<"businesses"> | null) => ({ owner: (await businessContact(ctx, biz)).ownerEmail, brand: await mailBrandOf(ctx, biz), biz });
+    if (what === "declined") {
+      const bid = ctx.db.normalizeId("vendorBookings", id);
+      const x = bid ? await ctx.db.get(bid) : null;
+      if (!x || x.status !== "declined") return null;
+      const vendor = await ctx.db.get(x.vendorId), p = await ctx.db.get(x.projectId);
+      if (!vendor || !p) return null;
+      return { ...(await brandOf(x.businessId ?? null)), key: `booking-declined:${x._id}`, kind: "booking_declined",
+        mail: { k: "declined" as const, vendor: vendor.name, role: x.role, project: label(p), start: x.start, end: x.end, reason: x.declineReason ?? null, link: `${SITE()}/vendors/bookings/${x._id}` } };
+    }
+    if (what === "read") {
+      const rid = ctx.db.normalizeId("briefings", id);
+      const x = rid ? await ctx.db.get(rid) : null;
+      if (!x || !x.readAt || !x.sentTo) return null;
+      const p = await ctx.db.get(x.projectId);
+      const build = await ctx.db.get(x.buildId);
+      return { ...(await brandOf(x.businessId ?? null)), key: `briefing-read:${x._id}:${x.sentAt ?? 0}`, kind: "briefing_read",
+        mail: { k: "read" as const, vendor: x.sentTo.name, title: build?.title ?? "The brief", project: p ? label(p) : "a project", link: `${SITE()}/vendors/briefings/${x._id}` } };
+    }
+    if (what === "w9" || what === "w9-replaced") {
+      const vendor = (await ctx.db.query("vendors").collect()).find((x) => x.w9 && String(x.w9.fileId) === id);
+      if (!vendor) return null;
+      return { ...(await brandOf(vendor.businessId ?? null)), key: `vendor-w9:${id}`, kind: "vendor_w9",
+        mail: { k: "w9" as const, vendor: vendor.name, replaced: what === "w9-replaced", link: `${SITE()}/vendors/${vendor._id}` } };
+    }
+    return null;
+  },
+});
+export const mailOwner = internalAction({
+  args: { what: v.string(), id: v.string() },
+  handler: async (ctx, a) => {
+    const d = await ctx.runQuery(internal.vendorPortal.ownerMailData, a);
+    if (!d?.owner) return;
+    const m = d.mail.k === "declined" ? ownerBookingDeclinedMail(d.brand, d.mail) : d.mail.k === "read" ? ownerBriefingReadMail(d.brand, d.mail) : ownerW9Mail(d.brand, d.mail);
+    await deliverOnce(ctx, d.key, d.kind, d.owner, m, d.brand.replyTo, d.biz);
   },
 });
 
@@ -419,7 +465,7 @@ export const invoiceMailData = internalQuery({
     if (!vendor || !k) return null;
     const c = await businessContact(ctx, x.businessId ?? null);
     const row = await invRow(ctx, x);
-    return { owner: c.ownerEmail, vendor: vendor.name, row, expectedCents: x.mode === "hours" ? expectedCents(k) : null, brand: await mailBrandOf(ctx, x.businessId ?? null), link: `${SITE()}/vendors/payments/${x._id}` };
+    return { owner: c.ownerEmail, vendor: vendor.name, row, expectedCents: x.mode === "hours" ? expectedCents(k) : null, brand: await mailBrandOf(ctx, x.businessId ?? null), link: `${SITE()}/vendors/payments/${x._id}`, biz: x.businessId ?? null };
   },
 });
 export const mailInvoice = internalAction({
@@ -429,7 +475,7 @@ export const mailInvoice = internalAction({
     if (!d?.owner) return;
     await deliverOnce(ctx, sentAt ? `vendor-invoice:${invoiceId}:${sentAt}` : `vendor-invoice:${invoiceId}`, "vendor_invoice", d.owner, ownerVendorInvoiceMail(d.brand, {
       vendor: d.vendor, number: d.row.number, project: d.row.project, role: d.row.role, amount: d.row.mode === "hours" ? d.row.amount : "", totalCents: d.row.totalCents, expectedCents: d.expectedCents, link: d.link,
-    }), d.brand.replyTo);
+    }), d.brand.replyTo, d.biz);
   },
 });
 
@@ -444,6 +490,23 @@ export const settings = query({
       roles: vendor.roles, w9: vendor.w9 ? { name: vendor.w9.name, uploadedAt: vendor.w9.uploadedAt, url: await ctx.storage.getUrl(vendor.w9.fileId) } : null,
       payMethod: vendor.payMethod ?? null,
     };
+  },
+});
+
+// Nov 2 · Notifications: which emails they get from this business (each business they work for has its own list).
+export const notifications = query({
+  args: { businessId: v.optional(v.id("businesses")) },
+  handler: async (ctx, { businessId }) => {
+    const { biz, vendor, email } = await asVendor(ctx, businessId);
+    return { businessId: biz, items: viewFor("vendor", await prefRow(ctx, vendor.email || email, biz)) };
+  },
+});
+export const setNotification = mutation({
+  args: { businessId: v.id("businesses"), key: v.string(), on: v.boolean() },
+  handler: async (ctx, a) => {
+    const { biz, vendor, email } = await asVendor(ctx, a.businessId);
+    try { for (const e of new Set([vendor.email.toLowerCase(), email])) await setSwitch(ctx, e, biz, "vendor", a.key, a.on); } catch (e) { throw new ConvexError((e as Error).message); }
+    return null;
   },
 });
 
@@ -483,6 +546,7 @@ export const setW9 = mutation({
     if (!pdf || file.size > 10 * 1024 * 1024) throw new ConvexError("Upload the W-9 as a PDF, up to 10 MB.");
     const old = vendor.w9?.fileId;
     await ctx.db.patch(vendor._id, { w9: { fileId: a.storageId, name: clip(a.name, 120) || "W-9.pdf", uploadedAt: Date.now() }, updatedAt: Date.now() });
+    await ctx.scheduler.runAfter(0, internal.vendorPortal.mailOwner, { what: old ? "w9-replaced" : "w9", id: a.storageId }); // Nov 2
     if (old && old !== a.storageId) await ctx.storage.delete(old).catch(() => null);
     return null;
   },

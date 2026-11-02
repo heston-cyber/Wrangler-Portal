@@ -13,6 +13,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { switchedOff } from "./emails";
 import { displayStatus, totals } from "./invoices";
 import { invoicePrefix } from "./lib/invoiceNumber";
 import { randomToken } from "./lib/hash";
@@ -353,10 +354,11 @@ export const invoiceEmailData = internalQuery({
 });
 
 export const claimEmail = internalMutation({
-  args: { key: v.string(), to: v.string() },
-  handler: async (ctx, { key, to }) => {
+  args: { key: v.string(), to: v.string(), kind: v.optional(v.string()), businessId: v.optional(v.id("businesses")) },
+  handler: async (ctx, { key, to, kind, businessId }): Promise<boolean | "off"> => {
+    if (kind && (await switchedOff(ctx, to, kind, businessId))) return "off"; // Nov 2: Settings › Notifications
     if (await ctx.db.query("emailLog").withIndex("by_key", (q) => q.eq("key", key)).unique()) return false;
-    await ctx.db.insert("emailLog", { key, kind: "invoice", to, at: Date.now() });
+    await ctx.db.insert("emailLog", { key, kind: kind ?? "invoice", to, at: Date.now() });
     return true;
   },
 });

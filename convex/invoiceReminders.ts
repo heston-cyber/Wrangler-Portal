@@ -11,11 +11,11 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { businessInScope } from "./lib/business";
+import { businessContact, businessInScope } from "./lib/business";
 import { businessOf, postToInbox } from "./lib/inbox";
 import { mailBrandOf } from "./lib/mail";
-import { paymentFailedMail, receiptMail, reminderMail } from "./lib/mails";
-import { sendEmail } from "./lib/email";
+import { ownerPaidMail, paymentFailedMail, receiptMail, reminderMail } from "./lib/mails";
+import { SITE, sendEmail } from "./lib/email";
 import { payLink } from "./invoicePay";
 import { keyMode, platformKey } from "./lib/stripeApi";
 
@@ -144,13 +144,19 @@ export const mailData = internalQuery({
       to: i.billTo.email, name: i.billTo.name, number: i.number ?? "", title: i.title, project: project ? label(project) : null,
       amountCents: i.amountRemainingCents, totalCents: i.totalCents, dueDate: i.dueDate, link: payLink(i.payToken),
       brand: await mailBrandOf(ctx, i.businessId ?? null),
+      // Nov 2: the owner's "a client paid" email
+      businessId: i.businessId ?? null, ownerEmail: (await businessContact(ctx, i.businessId ?? null)).ownerEmail, ownerLink: `${SITE()}/payments/invoices/${i._id}`,
     };
   },
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function deliverOnce(ctx: { runMutation: (ref: any, args: any) => Promise<any> }, key: string, kind: string, to: string, m: { from: string; subject: string; text: string; html: string }, replyTo: string) {
-  if (!(await ctx.runMutation(internal.invoicePay.claimEmail, { key, to }))) return "already";
+export async function deliverOnce(ctx: { runMutation: (ref: any, args: any) => Promise<any> }, key: string, kind: string, to: string, m: { from: string; subject: string; text: string; html: string }, replyTo: string, businessId?: Id<"businesses"> | null) {
+  // Nov 2: an email the person switched off (Settings › Notifications) isn't sent, and isn't logged as sent.
+  const biz = businessId ?? (ctx as { asBusiness?: Id<"businesses"> }).asBusiness ?? null; // the business this run acts for
+  const c = await ctx.runMutation(internal.invoicePay.claimEmail, { key, to, kind, ...(biz ? { businessId: biz } : {}) });
+  if (c === "off") return "off";
+  if (!c) return "already";
   try {
     const id = await sendEmail({ from: m.from, to, subject: m.subject, text: m.text, html: m.html, tag: kind, replyTo });
     await ctx.runMutation(internal.emails.sent, { key, resendId: id || "sent" });
@@ -167,7 +173,7 @@ export const sendReminderEmail = internalAction({
   handler: async (ctx, { invoiceId, kind, key }): Promise<string> => {
     const d = await ctx.runQuery(internal.invoiceReminders.mailData, { invoiceId });
     if (!d || d.invoice.status !== "open" || d.invoice.processing) return "skipped";
-    const r = await deliverOnce(ctx, key, "invoice-reminder", d.to, reminderMail(d.brand, { ...d, kind }), d.brand.replyTo);
+    const r = await deliverOnce(ctx, key, `invoice-reminder-${kind}`, d.to, reminderMail(d.brand, { ...d, kind }), d.brand.replyTo);
     if (r === "held") await ctx.runMutation(internal.invoicePay.noteEmailed, { invoiceId, to: d.to, held: true });
     return r;
   },
@@ -182,6 +188,12 @@ export const sendReceipt = internalAction({
     if (!d || !p) return "skipped";
     const r = await deliverOnce(ctx, `receipt:${invoiceId}:${paymentId}`, "receipt", d.to, receiptMail(d.brand, { ...d, paidCents: p.cents, paidAt: p.at, method: p.method }), d.brand.replyTo);
     if (r === "held") await ctx.runMutation(internal.invoicePay.noteEmailed, { invoiceId, to: d.to, held: true });
+    // Nov 2 (Heston: email notifications for everything): the owner hears when a client pays.
+    if (d.ownerEmail && d.ownerEmail.toLowerCase() !== d.to.toLowerCase()) {
+      await deliverOnce(ctx, `owner-paid:${invoiceId}:${paymentId}`, "owner-paid", d.ownerEmail, ownerPaidMail(d.brand, {
+        client: d.name || d.to, number: d.number, title: d.title, paidCents: p.cents, method: p.method, leftCents: d.amountCents, link: d.ownerLink,
+      }), d.brand.replyTo, d.businessId);
+    }
     return r;
   },
 });

@@ -64,7 +64,6 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "projects.forClient": { pages: ["clientHome"], args: (i) => ({ projectId: i.projectId ?? "nope" }) },
   "projects.page": { pages: ["owner"], args: () => "skip" }, // the owner's project page
   "documents.mine": { pages: ["clientHome"], args: () => ({}) },
-  "emails.myPrefs": { pages: ["clientHome"], args: () => ({}) }, // client Settings
   "library.video": { pages: ["video"], args: (i, s) => ({ videoId: i.videoId, share: s ?? undefined }) },
   "notes.forVersion": { pages: ["video"], args: (i, s) => ({ versionId: i.versionId, share: s ?? undefined }) },
   "waveforms.forVersion": { pages: ["video"], args: (i, s) => ({ versionId: i.versionId, share: s ?? undefined }) },
@@ -127,6 +126,9 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "vendorPortal.settings": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only; tests/vendorPortal.test.ts fires them)
   "vendors.invoices": { pages: ["owner"], args: () => "skip" }, // a vendor page's Invoices and payments
   "vendorPayments.list": { pages: ["owner"], args: () => "skip" }, // Vendors › Payments
+  "notifications.owner": { pages: ["owner"], args: () => ({}) }, // Settings › Notifications (Nov 2)
+  "notifications.client": { pages: ["clientHome"], args: () => ({}) }, // client Settings › Notifications (Nov 2)
+  "vendorPortal.notifications": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only)
   "vendorPayments.totals1099": { pages: ["owner"], args: () => "skip" }, // Vendors › Payments › 1099
   "vendorPayments.get": { pages: ["owner"], args: () => "skip" }, // a vendor invoice
   "proposals.page": { pages: ["share"], args: () => ({ token: "x".repeat(24) }) }, // /p/<token>, no account (D73)

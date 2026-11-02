@@ -107,6 +107,7 @@ export default defineSchema({
     versionsOff: v.optional(v.boolean()),
     repliesOff: v.optional(v.boolean()),
     notesOff: v.optional(v.boolean()), // Phase 1: notes from the business (missing = on unless both others are off)
+    off: v.optional(v.array(v.string())), // Nov 2: every other switch this person turned off here (lib/notify.ts keys)
     updatedAt: v.number(),
   }).index("by_email", ["email"]).index("by_key", ["key"]),
   emailLog: defineTable({

@@ -98,7 +98,8 @@ describe("bookings", () => {
     expect((await w.heston.query(api.bookings.list, {})).find((x: { _id: string }) => x._id === ed).state).toBe("cancelled");
     await expect(w.heston.mutation(api.bookings.cancel, { bookingId: ed })).rejects.toThrow(/already cancelled/);
     await settle(w);
-    expect(mails).toHaveLength(2); // one offer email each; cancelling doesn't email
+    // One offer email each; cancelling (after the offer went) emails the vendor too (Nov 2: email for everything).
+    expect(mails.map((m) => m.subject)).toEqual([expect.stringMatching(/would like to book you/), expect.stringMatching(/would like to book you/), expect.stringMatching(/^Booking cancelled: /)]);
   });
 
   test("bad input is refused; an archived vendor can't be booked", async () => {

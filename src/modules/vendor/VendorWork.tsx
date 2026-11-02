@@ -15,6 +15,7 @@ import { errText, uploadToStorage } from "../docs/pages/common";
 import { MoneyInput, dateShort, money } from "../payments/common";
 import { PAY_METHODS, dateRange, shortRange } from "../../../convex/lib/bookings";
 import { Ctx } from "./ctx";
+import { NotificationList } from "../settings/Notifications";
 
 const Loading = () => <div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div>;
 const dollars = (c: number) => (c % 100 === 0 ? `$${(c / 100).toLocaleString("en-US")}` : money(c));
@@ -235,6 +236,8 @@ export function VendorSettings() {
   const saveDetails = useMutation(api.vendorPortal.saveDetails);
   const uploadUrl = useMutation(api.vendorPortal.w9UploadUrl);
   const setW9 = useMutation(api.vendorPortal.setW9);
+  const ntf = useQuery(api.vendorPortal.notifications, biz ? { businessId: biz } : "skip");
+  const setNtf = useMutation(api.vendorPortal.setNotification);
   const [toast, show] = useToast();
   const [d, setD] = useState<null | { name: string; businessName: string; phone: string; address: string; portfolio: string; payMethod: string; payNote: string }>(null);
   const [busy, setBusy] = useState(false), [up, setUp] = useState(false), [err, setErr] = useState<string | null>(null);
@@ -295,6 +298,10 @@ export function VendorSettings() {
             </Card>
           </div>
         </div>
+        {/* Nov 2 (Heston): every email this business's portal sends you, each with its own switch */}
+        <header className="wp-sethead vp-ntf"><span className="wp-eyebrow">Notifications</span><h2 className="wp-h4">The emails you get from {s.business}.</h2>
+          <p className="wp-body">Each one is on until you switch it off. Each business you work for has its own list.</p></header>
+        <NotificationList className="wp-card glass" items={ntf?.items} onToggle={async (key, on) => { if (!biz) return; await setNtf({ businessId: biz, key, on }); show(on ? "On." : "Off. You won't get these emails."); }} />
       </div>
       {toast}
     </>

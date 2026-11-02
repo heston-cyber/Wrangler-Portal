@@ -19,6 +19,7 @@ import { REPLY_TO, SITE, sendEmail } from "./lib/email";
 import { clientKey, sameBusiness, shareCovers, shareState } from "./lib/shareAccess";
 import { emailThumbUrl } from "./lib/media";
 import { mailBrandOf } from "./lib/mail";
+import { switchFor } from "./lib/notify";
 import { type Mail, newVersionMail, noteMail, ownerAlertMail, portalInviteMail, replyMail } from "./lib/mails";
 
 export const ALERT_DELAY_MS = 10 * 60_000;
@@ -62,10 +63,33 @@ export const recipients = internalMutation({
   },
 });
 
+/** Nov 2 (notifications): has this person switched this kind of email off, in this business? Kinds that are always
+ *  sent (lib/notify.ts) never are. Versions, replies and notes keep their own columns (and unsubscribe links). */
+export async function switchedOff(ctx: QueryCtx | MutationCtx, email: string, kind: string, biz?: Doc<"businesses">["_id"] | null): Promise<boolean> {
+  const n = switchFor(kind);
+  if (!n) return false;
+  const e = email.trim().toLowerCase();
+  const def = (await defaultBusiness(ctx))?._id ?? null;
+  const b = biz ?? businessInScope(ctx) ?? def;
+  const row = (await ctx.db.query("emailPrefs").withIndex("by_email", (q) => q.eq("email", e)).collect()).find((r) => (r.businessId ?? def) === b);
+  if (!row) return false;
+  if (n.key === "versions") return !!row.versionsOff;
+  if (n.key === "replies") return !!row.repliesOff;
+  if (n.key === "notes") return notesOff(row);
+  return (row.off ?? []).includes(n.key);
+}
+
+/** For senders that don't go through a claim (signing's owner emails). */
+export const isOff = internalQuery({
+  args: { email: v.string(), kind: v.string(), businessId: v.optional(v.id("businesses")) },
+  handler: async (ctx, a) => await switchedOff(ctx, a.email, a.kind, a.businessId ?? null),
+});
+
 /** Claims a send: true the first time a key is seen, false after (so nothing goes out twice). */
 export const claim = internalMutation({
   args: { key: v.string(), kind: v.string(), to: v.string() },
   handler: async (ctx, a) => {
+    if (await switchedOff(ctx, a.to, a.kind)) return false; // they switched these off (Settings › Notifications)
     if (await ctx.db.query("emailLog").withIndex("by_key", (q) => q.eq("key", a.key)).unique()) return false;
     await ctx.db.insert("emailLog", { key: a.key, kind: a.kind, to: a.to, at: Date.now() });
     return true;

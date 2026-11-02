@@ -72,7 +72,8 @@ describe("the vendor side", () => {
 
   test("T3c.4 one login, two businesses kept apart (D94); accept, decline with a reason, I've read it", async () => {
     const w = await world();
-    stub([]);
+    const mails: Sent[] = [];
+    stub(mails);
     const { kA, kB, jordan } = await twoBusinesses(w);
     const mine = await jordan.query(api.vendorPortal.businesses, {});
     expect(mine.list.map((b: { name: string }) => b.name)).toEqual(["Wrangler Productions", "Other Films"]);
@@ -102,6 +103,10 @@ describe("the vendor side", () => {
     expect((await w.heston.query(api.briefings.get, { briefingId: brief })).state).toBe("read");
     expect((await w.heston.query(api.bookings.get, { bookingId: kA })).brief).toBe("read");
     expect((await jordan.query(api.vendorPortal.home, { businessId: A })).toRead).toEqual([]);
+    await settle(w); // Nov 2: the owner hears they read it, once
+    await jordan.mutation(api.vendorPortal.markRead, { briefingId: brief });
+    await settle(w);
+    expect(mails.filter((m) => m.subject === "Jordan Ellis read the brief: 26127 Launch").map((m) => m.to)).toEqual(["heston@wranglerproductions.com"]);
   });
 
   test("T3c.4 isolation: only their own work; vendors are refused elsewhere; others are refused here", async () => {

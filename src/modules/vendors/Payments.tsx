@@ -151,7 +151,7 @@ export function VendorInvoicePage({ invoiceId }: { invoiceId: string }) {
       <div className="wp-page">
         <PageHeader eyebrow={`Vendor invoice · ${x.vendor.name}`} title={`${x.number}.`} sub={`${x.project.label} · ${money(x.totalCents)}`} actions={<VendorInvoiceChip status={x.status} />} />
         {x.status === "approved" && <div className="wp-notice vpay-note"><Icon name="info" size={20} /><span className="txt"><b>Approved and in the Ledger</b><br />Pay {first} your usual way, then press Mark paid.</span></div>}
-        {x.status === "declined" && <div className="wp-notice warn vpay-note"><Icon name="alert" size={20} /><span className="txt"><b>You declined it</b><br />“{x.declineReason}” {first} sees this in their portal and can fix it and send it again. The portal doesn’t email {first} about it.</span>{ask && <a className="btn sm" href={ask}>Email {first}</a>}</div>}
+        {x.status === "declined" && <div className="wp-notice warn vpay-note"><Icon name="alert" size={20} /><span className="txt"><b>You declined it</b><br />“{x.declineReason}” {first} got an email with your reason and can fix it and send it again from their portal.</span>{ask && <a className="btn sm" href={ask}>Email {first}</a>}</div>}
         <div className="wp-homecols">
           <div className="col">
             <Card label="Vendor invoice" className="vpay-inv">
@@ -254,7 +254,7 @@ function DeclineInvoice({ invoiceId, number, vendor, onClose, onDone }: { invoic
   return (
     <Modal onClose={onClose} label="Decline this invoice" width={520}>
       <div className="crm-dialog">
-        <DialogHeader eyebrow={`${number} · ${vendor}`} title="Decline this invoice?" body={`${first} sees your reason in their portal and can fix it and send it again. Nothing goes in the Ledger.`} onClose={onClose} />
+        <DialogHeader eyebrow={`${number} · ${vendor}`} title="Decline this invoice?" body={`${first} gets an email with your reason, and can fix it and send it again from their portal. Nothing goes in the Ledger.`} onClose={onClose} />
         <label className="wp-field"><span className="wp-field-label">Reason</span><textarea className="input" rows={3} value={reason} placeholder="The hours don't match the call sheet" onChange={(e) => setReason(e.target.value)} /></label>
         {err && <p className="error" role="alert">{err}</p>}
         <div className="dfoot">

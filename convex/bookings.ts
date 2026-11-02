@@ -13,7 +13,7 @@ import { assertNotClient } from "./lib/roles";
 import { daysIn, isDate, todayCentral } from "./lib/bookings";
 import { type BookingRow, label, order, rowOf } from "./lib/bookingRows";
 import { mailBrandOf } from "./lib/mail";
-import { bookingOfferMail } from "./lib/mails";
+import { bookingOfferMail, vendorBookingCancelledMail } from "./lib/mails";
 import { deliverOnce } from "./invoiceReminders";
 import { SITE } from "./lib/site";
 
@@ -137,7 +137,8 @@ export const create = mutation({
   },
 });
 
-/** Take back an offer, or call off an accepted booking. Its expected cost leaves the Ledger. The vendor isn't emailed. */
+/** Take back an offer, or call off an accepted booking. Its expected cost leaves the Ledger. Nov 2: the vendor gets an
+ *  email (Heston: email notifications for everything), unless it was never sent (cancelled before the offer went). */
 export const cancel = mutation({
   args: { bookingId: v.id("vendorBookings") },
   handler: async (ctx, { bookingId }) => {
@@ -148,6 +149,7 @@ export const cancel = mutation({
     const now = Date.now();
     await ctx.db.patch(bookingId, { status: "cancelled", cancelledAt: now, updatedAt: now });
     if (x.reviewShareId) { const sh = await ctx.db.get(x.reviewShareId); if (sh && !sh.offAt) await ctx.db.patch(sh._id, { offAt: now }); } // a booked editor's Review access ends
+    await ctx.scheduler.runAfter(0, internal.bookings.mailCancelled, { bookingId, wasAccepted: x.status === "accepted" });
     return null;
   },
 });
@@ -166,6 +168,30 @@ export const mailData = internalQuery({
   },
 });
 
+export const cancelData = internalQuery({
+  args: { bookingId: v.id("vendorBookings") },
+  handler: async (ctx, { bookingId }) => {
+    const x = await ctx.db.get(bookingId);
+    if (!x || x.status !== "cancelled") return null;
+    const offered = await ctx.db.query("emailLog").withIndex("by_key", (q) => q.eq("key", `booking-offer:${bookingId}`)).unique();
+    if (!offered?.resendId) return null; // the offer never reached them: nothing to take back by email
+    const vendor = await ctx.db.get(x.vendorId);
+    const p = await ctx.db.get(x.projectId);
+    if (!vendor || !p) return null;
+    return { x, vendor: { name: vendor.name, email: vendor.email }, project: p.name, brand: await mailBrandOf(ctx, x.businessId ?? null), link: `${SITE()}/vendor/bookings` };
+  },
+});
+export const mailCancelled = internalAction({
+  args: { bookingId: v.id("vendorBookings"), wasAccepted: v.boolean() },
+  handler: async (ctx, { bookingId, wasAccepted }) => {
+    const d = await ctx.runQuery(internal.bookings.cancelData, { bookingId });
+    if (!d) return;
+    await deliverOnce(ctx, `booking-cancelled:${bookingId}`, "booking_cancelled", d.vendor.email, vendorBookingCancelledMail(d.brand, {
+      name: d.vendor.name, role: d.x.role, project: d.project, start: d.x.start, end: d.x.end, wasAccepted, link: d.link,
+    }), d.brand.replyTo, d.x.businessId ?? null);
+  },
+});
+
 export const mailOffer = internalAction({
   args: { bookingId: v.id("vendorBookings") },
   handler: async (ctx, { bookingId }) => {
@@ -174,6 +200,6 @@ export const mailOffer = internalAction({
     await deliverOnce(ctx, `booking-offer:${bookingId}`, "booking_offer", d.vendor.email, bookingOfferMail(d.brand, {
       name: d.vendor.name, role: d.x.role, project: d.project, start: d.x.start, end: d.x.end, rateCents: d.x.rate.cents, unit: d.x.rate.unit,
       hours: d.x.hours ?? null, location: d.x.location ?? null, note: d.x.note ?? null, link: d.link,
-    }), d.brand.replyTo);
+    }), d.brand.replyTo, d.x.businessId ?? null);
   },
 });

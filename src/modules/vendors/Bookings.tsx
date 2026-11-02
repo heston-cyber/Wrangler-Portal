@@ -182,7 +182,7 @@ export function BookingPage({ bookingId }: { bookingId: string }) {
   const open = x.state === "offered" || x.state === "accepted";
   const doCancel = async () => {
     const offered = x.state === "offered";
-    if (!(await confirm({ title: offered ? `Take back the offer to ${first}?` : `Cancel ${first}’s booking?`, body: `It comes off the project’s Crew card and Ledger. The portal doesn’t email ${first} about it, so let them know yourself.`, yes: offered ? "Take back" : "Cancel booking" }))) return;
+    if (!(await confirm({ title: offered ? `Take back the offer to ${first}?` : `Cancel ${first}’s booking?`, body: `It comes off the project’s Crew card and Ledger, and ${first} gets an email saying so.`, yes: offered ? "Take back" : "Cancel booking" }))) return;
     try { await cancel({ bookingId: x._id }); show("Cancelled."); } catch (e) { show(errText(e)); }
   };
   const answer = x.state === "accepted" || x.state === "done" ? `Accepted ${dateShort(x.answeredAt ?? x.offeredAt)}` : x.state === "declined" ? `Declined ${dateShort(x.answeredAt ?? x.offeredAt)}${x.declineReason ? `: “${x.declineReason}”` : ""}` : x.state === "cancelled" ? `Cancelled ${dateShort(x.cancelledAt ?? x.offeredAt)}` : `Waiting for ${first} to accept or decline in their portal.`;

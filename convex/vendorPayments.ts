@@ -13,7 +13,7 @@ import { businessInScope } from "./lib/business";
 import { PAY_METHODS, expectedCents, isDate, todayCentral } from "./lib/bookings";
 import { label, paidAmount, paidDay } from "./lib/bookingRows";
 import { mailBrandOf } from "./lib/mail";
-import { vendorInvoiceApprovedMail, vendorInvoicePaidMail } from "./lib/mails";
+import { vendorInvoiceApprovedMail, vendorInvoiceDeclinedMail, vendorInvoicePaidMail } from "./lib/mails";
 import { deliverOnce } from "./invoiceReminders";
 import { SITE } from "./lib/site";
 
@@ -148,7 +148,7 @@ export const approve = mutation({
   },
 });
 
-/** Decline with a reason. The vendor sees it in their portal and can fix and resend it. No email (not drawn). */
+/** Decline with a reason. The vendor gets an email (Nov 2) and sees it in their portal, where they fix and resend it. */
 export const decline = mutation({
   args: { invoiceId: v.id("vendorInvoices"), reason: v.string() },
   handler: async (ctx, { invoiceId, reason }) => {
@@ -160,6 +160,7 @@ export const decline = mutation({
     if (!why) throw new ConvexError("Say why, so they can fix it.");
     const now = Date.now();
     await ctx.db.patch(invoiceId, { status: "declined", declinedAt: now, declineReason: why, history: [...(x.history ?? []), { at: now, text: `Declined by you: ${why}` }], updatedAt: now });
+    await ctx.scheduler.runAfter(0, internal.vendorPayments.mailDeclined, { invoiceId, at: now }); // Nov 2: email for everything
     return null;
   },
 });
@@ -191,7 +192,7 @@ export const markPaid = mutation({
 // ---------- emails 27 and 28 ----------
 
 export const mailData = internalQuery({
-  args: { invoiceId: v.id("vendorInvoices"), status: v.union(v.literal("approved"), v.literal("paid")) },
+  args: { invoiceId: v.id("vendorInvoices"), status: v.union(v.literal("approved"), v.literal("paid"), v.literal("declined")) },
   handler: async (ctx, { invoiceId, status }) => {
     const x = await ctx.db.get(invoiceId);
     if (!x || x.status !== status) return null;
@@ -210,7 +211,18 @@ export const mailApproved = internalAction({
     if (!d) return;
     await deliverOnce(ctx, `vendor-invoice-approved:${invoiceId}`, "vendor_invoice_approved", d.vendor.email, vendorInvoiceApprovedMail(d.brand, {
       name: d.vendor.name, number: d.x.number, project: d.project, totalCents: d.x.totalCents, approvedOn: todayCentral(d.x.approvedAt ?? Date.now()), link: d.link,
-    }), d.brand.replyTo);
+    }), d.brand.replyTo, d.x.businessId ?? null);
+  },
+});
+
+export const mailDeclined = internalAction({
+  args: { invoiceId: v.id("vendorInvoices"), at: v.number() },
+  handler: async (ctx, { invoiceId, at }) => {
+    const d = await ctx.runQuery(internal.vendorPayments.mailData, { invoiceId, status: "declined" });
+    if (!d) return;
+    await deliverOnce(ctx, `vendor-invoice-declined:${invoiceId}:${at}`, "vendor_invoice_declined", d.vendor.email, vendorInvoiceDeclinedMail(d.brand, {
+      name: d.vendor.name, number: d.x.number, project: d.project, totalCents: d.x.totalCents, reason: d.x.declineReason ?? "", link: d.link,
+    }), d.brand.replyTo, d.x.businessId ?? null);
   },
 });
 
@@ -221,6 +233,6 @@ export const mailPaid = internalAction({
     if (!d || !d.paidOn) return;
     await deliverOnce(ctx, `vendor-invoice-paid:${invoiceId}`, "vendor_invoice_paid", d.vendor.email, vendorInvoicePaidMail(d.brand, {
       name: d.vendor.name, number: d.x.number, project: d.project, paidCents: d.paidCents, paidOn: d.paidOn, method: d.x.paidMethod ?? "Other", link: d.link,
-    }), d.brand.replyTo);
+    }), d.brand.replyTo, d.x.businessId ?? null);
   },
 });
