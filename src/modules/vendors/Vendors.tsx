@@ -1,5 +1,6 @@
 // Phase 3c · Vendors, the owner's side (D95: its own layer): All vendors (730:2, empty 730:653), the vendor page
-// (730:1153) and Add vendor (732:2909). Bookings, briefings and payments fill the vendor page's cards in the next steps.
+// (730:1153) and Add vendor (732:2909). Bookings (step 2) are in Bookings.tsx; briefings and payments fill the vendor page's
+// cards in the next steps.
 import { Fragment, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -11,6 +12,7 @@ import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps, navigate } from "../../lib/router";
 import { errText } from "../docs/pages/common";
 import { MoneyInput, money } from "../payments/common";
+import { BookDialog, VendorBookings } from "./Bookings";
 
 export const VENDOR_ROLES = ["Shooter", "Editor", "Drone pilot", "Sound", "Colourist", "Production assistant"];
 type Rate = { role: string; unit: "day" | "hour"; cents: number };
@@ -113,6 +115,7 @@ export function VendorPage({ vendorId }: { vendorId: string }) {
   const x = useQuery(api.vendors.get, { vendorId });
   const archive = useMutation(api.vendors.archive);
   const [editing, setEditing] = useState(false);
+  const [booking, setBooking] = useState(false);
   const [toast, show] = useToast();
   const [confirm, confirmNode] = useConfirm();
   if (x === undefined) return <><TopBar><a {...linkProps("/vendors")}>Vendors</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={5} /></Card></div></>;
@@ -130,7 +133,7 @@ export function VendorPage({ vendorId }: { vendorId: string }) {
             <div className="tags">{x.roles.map((r) => <span key={r} className="wp-tag">{r}</span>)}<span className="wp-tag">{x.portal === "in the portal" ? "In the portal" : x.portal === "not invited" ? "Not invited" : x.portal.replace(/^invited/, "Invited")}</span></div></div>
           <div className="acts">
             <Button disabled title="Briefings arrive in the next build step">Send briefing</Button>
-            <Button variant="primary" disabled title="Bookings arrive in the next build step">Book</Button>
+            <Button variant="primary" onClick={() => setBooking(true)}>Book</Button>
           </div>
         </header>
         <div className="vd-tiles">
@@ -140,7 +143,7 @@ export function VendorPage({ vendorId }: { vendorId: string }) {
         </div>
         <div className="wp-homecols">
           <div className="col">
-            <Card label="Bookings" head={<SectionHead label="Bookings" count={0} />}><ListRow className="ilead quiet" lead={{ icon: "calendar" }} title={`No bookings yet. Book ${first} on a project.`} /></Card>
+            <VendorBookings vendorId={x._id} first={first} />
             <Card label="Briefings" head={<SectionHead label="Briefings" count={0} />}><ListRow className="ilead quiet" lead={{ icon: "note" }} title="No briefings sent yet." /></Card>
             <Card label="Invoices and payments" head={<SectionHead label="Invoices and payments" count={0} />}><ListRow className="ilead quiet" lead={{ icon: "invoice" }} title={`Nothing from ${first} yet.`} /></Card>
           </div>
@@ -170,6 +173,7 @@ export function VendorPage({ vendorId }: { vendorId: string }) {
         </div>
       </div>
       {editing && <VendorDialog onClose={() => setEditing(false)} vendor={x} />}
+      {booking && <BookDialog vendorId={x._id} onClose={() => setBooking(false)} />}
       {confirmNode}{toast}
     </>
   );

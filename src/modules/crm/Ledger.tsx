@@ -118,6 +118,12 @@ function EntryRow({ e, show }: { e: L["entries"][number]; show: (m: string) => v
   );
 }
 
+function ExpectedRow({ x }: { x: L["expected"][number] }) {
+  const amount = x.unit === "hour" ? `${q(x.hours ?? 0)} h` : `${x.days} day${x.days === 1 ? "" : "s"}`;
+  return <ListRow className="ilead" lead={{ icon: "calendar" }} to={`/vendors/bookings/${x._id}`} title={`${x.vendor} · ${amount}`}
+    meta={`${x.role} · ${x.state === "offered" ? "booking offered" : "booking"} · ${money(x.cents)}`} chip={<StatusChip tone="neutral">Expected</StatusChip>} />;
+}
+
 export function LedgerTab({ projectId, show }: { projectId: Id<"projects">; show: (m: string) => void }) {
   const l = useQuery(api.crm.ledger, { projectId });
   const [dialog, setDialog] = useState<null | "log" | "export">(null);
@@ -133,7 +139,9 @@ export function LedgerTab({ projectId, show }: { projectId: Id<"projects">; show
       <Button variant="primary" onClick={() => setDialog("log")} disabled={!l.logKinds.length}>Log hours or a cost</Button>
     </div>
   );
-  const shown = all ? l.entries : l.entries.slice(0, 4);
+  // Phase 3c step 2 (730:3160): vendor bookings as expected costs, listed first; they count once the invoice is approved.
+  const rows = [...l.expected.map((x) => ({ key: x._id, node: <ExpectedRow x={x} /> })), ...l.entries.map((x) => ({ key: x._id as string, node: <EntryRow e={x} show={show} /> }))];
+  const shown = all ? rows : rows.slice(0, 4);
   return (
     <>
       {actions}
@@ -160,12 +168,12 @@ export function LedgerTab({ projectId, show }: { projectId: Id<"projects">; show
               <tr><td>Owner income {q(100 - l.reservePct)}%</td><td>{e ? money(e.ownerCents) : "—"}</td><td>{money(a.ownerCents)}</td><td>{e ? <Diff v={a.ownerCents - e.ownerCents} unit="money" goodWhenUp /> : <span className="dim">—</span>}</td></tr>
             </tbody>
           </table>
-          <p className="crm-note">{a.billed ? `Actual price is what was billed, less refunds. Paid so far: ${money(l.paidCents)} (from Stripe).` : `Until the final invoice goes out, the actual price is the estimate's. Billed so far: ${money(l.billedCents)} · paid ${money(l.paidCents)} (from Stripe).`}{l.entries.some((x) => x.unpriced && !x.draft) ? " Hours marked No cost have no subcontractor cost in your rates (Settings › Estimate rates), so they count as $0." : ""}{l.exportedAt ? ` In the Sheet's Job ledger tab since ${dateLong(new Date(l.exportedAt).toISOString().slice(0, 10))}.` : ""}</p>
+          <p className="crm-note">{a.billed ? `Actual price is what was billed, less refunds. Paid so far: ${money(l.paidCents)} (from Stripe).` : `Until the final invoice goes out, the actual price is the estimate's. Billed so far: ${money(l.billedCents)} · paid ${money(l.paidCents)} (from Stripe).`}{l.entries.some((x) => x.unpriced && !x.draft) ? " Hours marked No cost have no subcontractor cost in your rates (Settings › Estimate rates), so they count as $0." : ""}{l.expected.length ? ` Vendor bookings show as Expected (${money(l.expectedCents)}) and count once you approve their invoice.` : ""}{l.exportedAt ? ` In the Sheet's Job ledger tab since ${dateLong(new Date(l.exportedAt).toISOString().slice(0, 10))}.` : ""}</p>
         </Card>
-        <Card label="Logged" head={<SectionHead label="Logged" count={l.entries.length} />}>
-          {l.entries.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "clock" }} title="Nothing logged yet." meta="Log hours and costs as the job goes, or ask Claude to draft them from your notes." />
-            : shown.map((x, i) => <div key={x._id} className="wp-rowwrap">{i > 0 && <Divider />}<EntryRow e={x} show={show} /></div>)}
-          {l.entries.length > 4 && <button type="button" className="crm-more" onClick={() => setAll((v) => !v)}>{all ? "Show fewer" : `Show all ${l.entries.length}`}<Icon name="chevron-down" size={14} /></button>}
+        <Card label="Logged" head={<SectionHead label="Logged" count={rows.length} />}>
+          {rows.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "clock" }} title="Nothing logged yet." meta="Log hours and costs as the job goes, or ask Claude to draft them from your notes." />
+            : shown.map((x, i) => <div key={x.key} className="wp-rowwrap">{i > 0 && <Divider />}{x.node}</div>)}
+          {rows.length > 4 && <button type="button" className="crm-more" onClick={() => setAll((v) => !v)}>{all ? "Show fewer" : `Show all ${rows.length}`}<Icon name="chevron-down" size={14} /></button>}
         </Card>
       </div>
       {dialog === "log" && <LogDialog l={l} onClose={() => setDialog(null)} show={show} />}

@@ -19,6 +19,7 @@ import type * as crm from "../crm.js";
 import type * as proposals from "../proposals.js";
 import type * as quotes from "../quotes.js";
 import type * as vendors from "../vendors.js";
+import type * as bookings from "../bookings.js";
 import type * as leads from "../leads.js";
 import type * as plans from "../plans.js";
 import type * as subscriptionClock from "../subscriptionClock.js";
@@ -133,6 +134,7 @@ declare const fullApi: ApiFromModules<{
   proposals: typeof proposals;
   quotes: typeof quotes;
   vendors: typeof vendors;
+  bookings: typeof bookings;
   leads: typeof leads;
   plans: typeof plans;
   subscriptionClock: typeof subscriptionClock;

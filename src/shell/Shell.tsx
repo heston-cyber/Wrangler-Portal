@@ -51,7 +51,10 @@ const OWNER_PROPOSALS: Sub[] = [
 ];
 const inProposals = (p: string) => starts(p, "/proposals");
 // Phase 3c (D95): Vendors is its own layer after Payments. Bookings, Briefings and Payments join as they're built.
-const OWNER_VENDORS: Sub[] = [{ to: "/vendors", label: "All vendors", match: (p) => starts(p, "/vendors") }];
+const OWNER_VENDORS: Sub[] = [
+  { to: "/vendors", label: "All vendors", match: (p) => starts(p, "/vendors") && !starts(p, "/vendors/bookings") },
+  { to: "/vendors/bookings", label: "Bookings", match: (p) => starts(p, "/vendors/bookings") },
+];
 const inVendors = (p: string) => starts(p, "/vendors");
 // Phase 3 (Heston, Oct 29): Clients becomes a layer: Pipeline · Companies · Follow-ups. Companies is the client list.
 const CRM = ["/clients/pipeline", "/clients/follow-ups", "/clients/deals", "/clients/estimates"];

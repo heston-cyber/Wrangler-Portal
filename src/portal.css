@@ -2319,3 +2319,13 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 .vd-rate select { width: 100px; flex: 0 0 auto; }
 .vd-archive { justify-self: start; }
 @media (max-width: 760px) { .vd-tiles { grid-template-columns: minmax(0, 1fr); } }
+
+/* Phase 3c step 2 · bookings (732:3051 Book a vendor, 730:2326 Crew card) */
+.bk-dates { display: flex; align-items: center; gap: 8px; }
+.bk-dates .input { flex: 1 1 0; min-width: 0; }
+.bk-dates > span { color: var(--text-secondary); }
+.bk-changed .inv-money .input { border-color: var(--accent); }
+.bk-sug { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-top: -6px; }
+.bk-sug p { margin: 0; }
+.bk-sug .qz-changed { flex: 0 0 auto; }
+.pj-crew .wp-row .title, .pj-crew .wp-row .meta { overflow-wrap: anywhere; }

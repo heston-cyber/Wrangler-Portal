@@ -3,6 +3,7 @@
 // Wrangler's. Senders: review@ for Review and sign-in, contracts@ for Sign, updates@ for notes (Heston, Oct 29).
 import { type Block, type MailBrand, clientFooter, fromLine, renderMail } from "./mail";
 import { SITE, SITE_HOST } from "./site";
+import { dateRange } from "./bookings";
 
 export type Mail = { from: string; subject: string; html: string; text: string };
 const first = (name: string | null | undefined) => (name ?? "").trim().split(/\s+/)[0] || "";
@@ -359,4 +360,25 @@ export function ownerQuoteAnsweredMail(b: MailBrand, d: { kind: "accepted" | "de
     ...(!accepted && d.reason ? [{ t: "box", text: `Reason: ${d.reason}` } as Block] : []),
     { t: "button", label: "Open the quote", href: d.link },
   ], [{ t: "small", text: "Sent to you when a client answers · WranglerPortal" }], `${d.who} ${d.kind} ${d.number}`);
+}
+
+// ---------- 24: a booking offered to a vendor (Phase 3c, S5 · Phase 3c 735:5139) ----------
+export { dateRange };
+const dollars = (cents: number) => (cents % 100 === 0 ? `$${(cents / 100).toLocaleString("en-US")}` : usd(cents));
+export function bookingOfferMail(b: MailBrand, d: { name: string; role: string; project: string; start: string; end: string; rateCents: number; unit: "day" | "hour"; hours: number | null; location: string | null; note: string | null; link: string }): Mail {
+  const article = /^[aeiou]/i.test(d.role) ? "an" : "a";
+  const extra = [d.location ? `${d.location.replace(/\.$/, "")}.` : null, d.note].filter(Boolean).join(" ");
+  return mk(b, "updates", `${b.name} would like to book you: ${d.project}`, [
+    hi(d.name),
+    { t: "p", text: `${b.name} would like to book you as ${article} ${d.role}.` },
+    { t: "sums", rows: [
+      { label: "Rate", value: `${dollars(d.rateCents)} / ${d.unit}`, big: true },
+      { label: "Dates", value: dateRange(d.start, d.end) },
+      ...(d.unit === "hour" && d.hours ? [{ label: "Expected hours", value: String(d.hours) }] : []),
+      { label: "Project", value: d.project },
+    ] },
+    ...(extra ? [{ t: "p", text: extra, tone: "muted" } as Block] : []),
+    { t: "p", text: "Accept or decline it in your vendor portal." },
+    { t: "button", label: "View the booking", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `${d.role} · ${dateRange(d.start, d.end)} · ${dollars(d.rateCents)} / ${d.unit}`);
 }

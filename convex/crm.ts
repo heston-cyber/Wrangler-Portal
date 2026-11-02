@@ -6,6 +6,7 @@
 import { action } from "./_generated/server";
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
+import { expectedForProject } from "./lib/bookingRows";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { ActionCtx, MutationCtx, QueryCtx } from "./_generated/server";
@@ -541,7 +542,11 @@ export const ledger = query({
     if (!p) return null;
     const L = await ledgerCalc(ctx, p, await ratesOf(ctx, b));
     const exported = (await ctx.db.query("projects").collect()).filter((x) => x.ledgerExportedAt).length;
+    // Phase 3c step 2 (730:3160): vendor bookings as expected costs. Shown, not counted: approving the vendor's
+    // invoice (step 5) adds the actual cost.
+    const expected = (await expectedForProject(ctx, p._id)).map((x) => ({ _id: x._id, vendor: x.vendor, role: x.role, start: x.start, end: x.end, days: x.days, unit: x.rate.unit, hours: x.hours, cents: x.expectedCents, state: x.state }));
     return {
+      expected, expectedCents: expected.reduce((t, x) => t + x.cents, 0),
       project: { _id: p._id, label: label(p), clientId: p.clientId ?? null }, exportedAt: p.ledgerExportedAt ?? null, exportedJobs: exported,
       reservePct: L.r.reservePct, kinds: L.kinds, otherCents: L.otherCents, billedCents: L.billedCents, paidCents: L.paidCents, finalSent: L.finalSent,
       estimate: L.estimate, actual: L.actual,

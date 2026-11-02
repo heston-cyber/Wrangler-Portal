@@ -104,6 +104,11 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "proposals.forCompany": { pages: ["owner"], args: () => "skip" }, // the company page's Proposals and quotes
   "vendors.list": { pages: ["owner"], args: () => "skip" }, // Vendors › All vendors
   "vendors.get": { pages: ["owner"], args: () => "skip" }, // a vendor page
+  "bookings.form": { pages: ["owner"], args: () => "skip" }, // Book a vendor
+  "bookings.list": { pages: ["owner"], args: () => "skip" }, // Vendors › Bookings
+  "bookings.forProject": { pages: ["owner"], args: () => "skip" }, // a project's Crew card
+  "bookings.forVendor": { pages: ["owner"], args: () => "skip" }, // a vendor page's Bookings
+  "bookings.get": { pages: ["owner"], args: () => "skip" }, // a booking
   "proposals.page": { pages: ["share"], args: () => ({ token: "x".repeat(24) }) }, // /p/<token>, no account (D73)
   "brandKit.get": { pages: ["owner"], args: () => "skip" }, // Settings › Brand kit, a company's Brand kit tab (Phase 3b)
   "subscriptions.get": { pages: ["owner"], args: () => "skip" }, // a subscription

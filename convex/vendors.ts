@@ -10,6 +10,7 @@ import { requireMe } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import type { Rates } from "./lib/estimate";
 import { ratesOf } from "./crm";
+import { assertNotClient } from "./lib/roles";
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i;
 const clip = (s: string | undefined, n: number) => (s ?? "").trim().slice(0, n);
@@ -83,6 +84,7 @@ export const add = mutation({
     const d = clean(a);
     const dup = (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", d.email)).collect()).find((x) => !x.archivedAt);
     if (dup) throw new ConvexError(`${dup.name} is already a vendor with that email.`);
+    await assertNotClient(ctx, d.email); // D102
     const now = Date.now();
     // The invite email and the vendor's login arrive with the vendor portal (Phase 3c step 4); asking now records it.
     return ctx.db.insert("vendors", { ...d, ...(a.invite ? { invitedAt: now } : {}), createdAt: now, updatedAt: now });
@@ -97,6 +99,7 @@ export const update = mutation({
     if (!x) throw new ConvexError("That vendor isn't here.");
     const d = clean(a);
     if (d.email !== x.email && (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", d.email)).collect()).some((y) => y._id !== x._id && !y.archivedAt)) throw new ConvexError("Another vendor has that email.");
+    if (d.email !== x.email) await assertNotClient(ctx, d.email); // D102
     await ctx.db.patch(vendorId, { ...d, updatedAt: Date.now() });
     return null;
   },
@@ -107,7 +110,9 @@ export const archive = mutation({
   args: { vendorId: v.id("vendors"), archived: v.boolean() },
   handler: async (ctx, { vendorId, archived }) => {
     await ownerBiz(ctx);
-    if (!(await ctx.db.get(vendorId))) throw new ConvexError("That vendor isn't here.");
+    const x = await ctx.db.get(vendorId);
+    if (!x) throw new ConvexError("That vendor isn't here.");
+    if (!archived && x.archivedAt) await assertNotClient(ctx, x.email); // D102: back on the list only if still not a client's
     await ctx.db.patch(vendorId, { archivedAt: archived ? Date.now() : undefined, updatedAt: Date.now() });
     return null;
   },

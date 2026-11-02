@@ -885,6 +885,30 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_email", ["email"]),
 
+  // Phase 3c step 2 · bookings (S5 · Phase 3c 732:3051 Book a vendor, 730:2326 Crew card, 730:3942 Vendors › Bookings).
+  // A vendor offered work on a project: role, dates, the agreed rate. Offered and accepted bookings show on the
+  // project's Crew card and as expected costs in its Ledger; approving the vendor's invoice (step 5) makes it actual.
+  vendorBookings: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    vendorId: v.id("vendors"),
+    projectId: v.id("projects"),
+    role: v.string(),
+    start: v.string(), end: v.string(),                     // YYYY-MM-DD, inclusive
+    rate: v.object({ cents: v.number(), unit: v.union(v.literal("day"), v.literal("hour")) }),
+    hours: v.optional(v.number()),                          // an hourly booking's expected hours (the expected cost)
+    suggestedCents: v.optional(v.number()),                 // what Pricing (or their own rate) suggested, when one did
+    location: v.optional(v.string()),
+    note: v.optional(v.string()),
+    status: v.union(v.literal("offered"), v.literal("accepted"), v.literal("declined"), v.literal("cancelled")),
+    declineReason: v.optional(v.string()),
+    offeredAt: v.number(),
+    answeredAt: v.optional(v.number()),                     // accepted or declined (the vendor side, step 4)
+    cancelledAt: v.optional(v.number()),
+    createdBy: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_vendor", ["vendorId"]).index("by_project", ["projectId"]),
+
   // Phase 3b (review fix): the files uploaded for a proposal's questionnaire answers. Only these are served or copied.
   proposalFiles: defineTable({
     businessId: v.optional(v.id("businesses")),
