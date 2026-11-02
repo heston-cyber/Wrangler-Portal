@@ -87,7 +87,7 @@ export default function SharePage({ token, videoId, versionNumber, noteId, inShe
   }
 
   const ok = res as Extract<OpenResult, { state: "ok" }>;
-  const kind = ok.viewer?.kind ?? "guest";
+  const kind = ok.viewer?.kind === "vendor" ? "guest" : ok.viewer?.kind ?? "guest"; // Phase 3c: a vendor login on a share link is a guest there
   const isClient = kind === "client" && signedIn;
   const viewer: Viewer = {
     share: { token, passcode, guestKey: key, guestName: guestName || undefined },

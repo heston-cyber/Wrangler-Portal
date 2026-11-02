@@ -16,7 +16,7 @@ export default defineSchema({
     phone: v.optional(v.string()),
     phoneVerificationTime: v.optional(v.number()),
     isAnonymous: v.optional(v.boolean()),
-    role: v.optional(v.union(v.literal("owner"), v.literal("client"))),
+    role: v.optional(v.union(v.literal("owner"), v.literal("client"), v.literal("vendor"))), // Phase 3c: vendors (D94, D102: one role per email)
     lastSignInAt: v.optional(v.number()),
   }).index("email", ["email"]).index("phone", ["phone"]),
   // Emails allowed to make a client account. Made by the owner (the Share dialog in C2, or Settings › Clients).
@@ -1127,7 +1127,7 @@ export default defineSchema({
     businessId: v.id("businesses"),
     email: v.string(),              // lower-case
     userId: v.optional(v.id("users")),
-    role: v.union(v.literal("owner"), v.literal("client")),
+    role: v.union(v.literal("owner"), v.literal("client"), v.literal("vendor")), // vendor: Phase 3c, one per business they work for (D94)
     createdAt: v.number(),
     revokedAt: v.optional(v.number()),
   }).index("by_email", ["email"]).index("by_business_email", ["businessId", "email"]).index("by_user", ["userId"]),

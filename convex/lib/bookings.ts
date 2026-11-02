@@ -60,3 +60,6 @@ export function shortRange(start: string, end: string, thisYear = String(new Dat
   const r = dateRange(start, end);
   return start.slice(0, 4) === thisYear && end.slice(0, 4) === thisYear ? r.replace(`, ${thisYear}`, "") : r;
 }
+
+/** Why a vendor declines (732:3285). */
+export const DECLINE_REASONS = ["Booked that day", "Rate doesn't work", "Too far", "Other"] as const;

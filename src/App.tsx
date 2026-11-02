@@ -64,6 +64,7 @@ const VendorPage = lazy(() => import("./modules/vendors/Vendors").then((m) => ({
 const BookingsPage = lazy(() => import("./modules/vendors/Bookings"));
 const BookingPage = lazy(() => import("./modules/vendors/Bookings").then((m) => ({ default: m.BookingPage })));
 const BriefingsPage = lazy(() => import("./modules/vendors/Briefings"));
+const VendorApp = lazy(() => import("./modules/vendor/VendorApp"));
 const BriefingBuilder = lazy(() => import("./modules/vendors/Briefings").then((m) => ({ default: m.BriefingBuilder })));
 const BriefingTemplateBuilder = lazy(() => import("./modules/vendors/Briefings").then((m) => ({ default: m.BriefingTemplateBuilder })));
 const QuestionnaireEditor = lazy(() => import("./modules/proposals/Questionnaire").then((m) => ({ default: m.QuestionnaireEditor })));
@@ -159,6 +160,8 @@ function SignedIn() {
   if (signer) return <Suspense fallback={<Loading />}><SignerApp key={signer[1]} token={signer[1]} /></Suspense>;
   if (isSignHost()) return <SignHostHome />;
   if (me === undefined) return <Loading />;
+  // Phase 3c step 4: vendors get the vendor side (their bookings, briefings and invoices), nothing else.
+  if (me && !me.allowed && me.role === "vendor") return <Suspense fallback={<Loading />}><VendorApp me={me} /></Suspense>;
   // Clients (C1): their own page, nothing of the owner's side.
   if (me && !me.allowed && me.role === "client") {
     return (

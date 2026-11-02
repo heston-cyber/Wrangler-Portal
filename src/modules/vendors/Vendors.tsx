@@ -100,7 +100,7 @@ export function VendorDialog({ onClose, vendor }: { onClose: () => void; vendor?
             <label className="wp-field qz-q wide"><span className="wp-field-label">Notes</span><textarea className="input" rows={3} value={d.notes ?? ""} onChange={(e) => setD({ ...d, notes: e.target.value })} /></label>
           </>}
         </div>
-        {!vendor && <><hr className="wp-divider" /><Checkbox checked={invite} onChange={setInvite} label={`Invite ${first} to the vendor portal`} hint="They get an email to set up a login. If they already work with another business on the portal, they use the same login." /></>}
+        {!vendor && <><hr className="wp-divider" /><Checkbox checked={invite} onChange={setInvite} label={`Invite ${first} to the vendor portal`} hint="They get an email to set up a login, where they accept bookings and read briefs. If they already work with another business on the portal, they use the same login." /></>}
         {err && <p className="error" role="alert">{err}</p>}
         <div className="dfoot">
           <button className="btn ghost" type="button" onClick={onClose}>Cancel</button>
@@ -116,6 +116,7 @@ export function VendorDialog({ onClose, vendor }: { onClose: () => void; vendor?
 export function VendorPage({ vendorId }: { vendorId: string }) {
   const x = useQuery(api.vendors.get, { vendorId });
   const archive = useMutation(api.vendors.archive);
+  const invite = useMutation(api.vendors.invite);
   const [editing, setEditing] = useState(false);
   const [booking, setBooking] = useState(false);
   const [briefing, setBriefing] = useState(false);
@@ -135,6 +136,7 @@ export function VendorPage({ vendorId }: { vendorId: string }) {
           <div className="txt"><h1 className="wp-h2">{x.name}</h1>
             <div className="tags">{x.roles.map((r) => <span key={r} className="wp-tag">{r}</span>)}<span className="wp-tag">{x.portal === "in the portal" ? "In the portal" : x.portal === "not invited" ? "Not invited" : x.portal.replace(/^invited/, "Invited")}</span></div></div>
           <div className="acts">
+            {x.portal !== "in the portal" && <Button variant="ghost" onClick={async () => { try { await invite({ vendorId: x._id }); show(x.portal === "not invited" ? `Invited ${first} to the vendor portal.` : `Sent ${first} the invite again.`); } catch (e) { show(errText(e)); } }}>{x.portal === "not invited" ? "Invite to the portal" : "Resend invite"}</Button>}
             <Button onClick={() => setBriefing(true)}>Send briefing</Button>
             <Button variant="primary" onClick={() => setBooking(true)}>Book</Button>
           </div>

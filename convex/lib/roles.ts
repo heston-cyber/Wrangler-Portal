@@ -17,6 +17,8 @@ export async function isClientEmail(ctx: QueryCtx | MutationCtx, email: string):
 
 export async function isVendorEmail(ctx: QueryCtx | MutationCtx, email: string): Promise<boolean> {
   const e = email.trim().toLowerCase();
+  // A vendor login anywhere on the portal (step 4), or a vendor of this business.
+  if ((await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", e)).collect()).some((m) => m.role === "vendor" && !m.revokedAt)) return true;
   return (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", e)).collect()).some((x) => !x.archivedAt);
 }
 

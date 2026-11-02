@@ -113,6 +113,13 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "briefings.list": { pages: ["owner"], args: () => "skip" }, // Vendors › Briefings
   "briefings.forVendor": { pages: ["owner"], args: () => "skip" }, // a vendor page's Briefings
   "briefings.get": { pages: ["owner"], args: () => "skip" }, // a briefing in the builder
+  "vendorPortal.businesses": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only; tests/vendorPortal.test.ts fires them)
+  "vendorPortal.counts": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only; tests/vendorPortal.test.ts fires them)
+  "vendorPortal.home": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only; tests/vendorPortal.test.ts fires them)
+  "vendorPortal.bookings": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only; tests/vendorPortal.test.ts fires them)
+  "vendorPortal.booking": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only; tests/vendorPortal.test.ts fires them)
+  "vendorPortal.briefings": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only; tests/vendorPortal.test.ts fires them)
+  "vendorPortal.briefing": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only; tests/vendorPortal.test.ts fires them)
   "proposals.page": { pages: ["share"], args: () => ({ token: "x".repeat(24) }) }, // /p/<token>, no account (D73)
   "brandKit.get": { pages: ["owner"], args: () => "skip" }, // Settings › Brand kit, a company's Brand kit tab (Phase 3b)
   "subscriptions.get": { pages: ["owner"], args: () => "skip" }, // a subscription

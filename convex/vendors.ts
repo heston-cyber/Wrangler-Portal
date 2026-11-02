@@ -2,9 +2,14 @@
 // 730:1153 the vendor page, 732:2909 Add vendor). A business's subcontractors with their roles, rates (shown beside the
 // business's own Pricing subcontractor costs), details, gear, W-9 status and notes. Bookings, briefings, the vendor
 // portal and payments build on this in the next steps. Owner only.
-import { mutation, query } from "./lib/functions";
+import { internalAction, internalQuery, mutation, query } from "./lib/functions";
+import { internal } from "./_generated/api";
+import { syncVendorMemberships } from "./lib/business";
+import { mailBrandOf } from "./lib/mail";
+import { vendorInviteMail } from "./lib/mails";
+import { deliverOnce } from "./invoiceReminders";
 import { v, ConvexError } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireMe } from "./lib/access";
 import { businessInScope } from "./lib/business";
@@ -86,8 +91,9 @@ export const add = mutation({
     if (dup) throw new ConvexError(`${dup.name} is already a vendor with that email.`);
     await assertNotClient(ctx, d.email); // D102
     const now = Date.now();
-    // The invite email and the vendor's login arrive with the vendor portal (Phase 3c step 4); asking now records it.
-    return ctx.db.insert("vendors", { ...d, ...(a.invite ? { invitedAt: now } : {}), createdAt: now, updatedAt: now });
+    const id = await ctx.db.insert("vendors", { ...d, ...(a.invite ? { invitedAt: now } : {}), createdAt: now, updatedAt: now });
+    if (a.invite) await inviteNow(ctx, id);
+    return id;
   },
 });
 
@@ -115,5 +121,50 @@ export const archive = mutation({
     if (!archived && x.archivedAt) await assertNotClient(ctx, x.email); // D102: back on the list only if still not a client's
     await ctx.db.patch(vendorId, { archivedAt: archived ? Date.now() : undefined, updatedAt: Date.now() });
     return null;
+  },
+});
+
+// ---------- the vendor portal invite (step 4) ----------
+
+/** Records the invite, gives someone who already has a vendor login (another business's vendor, D94) this business
+ *  too, and emails them. */
+async function inviteNow(ctx: MutationCtx, vendorId: Id<"vendors">) {
+  const x = (await ctx.db.get(vendorId))!;
+  const now = Date.now();
+  await ctx.db.patch(vendorId, { invitedAt: now, updatedAt: now });
+  const user = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", x.email)).unique();
+  if (user?.role === "vendor") await syncVendorMemberships(ctx, x.email, user._id);
+  await ctx.scheduler.runAfter(0, internal.vendors.mailInvite, { vendorId, at: now });
+}
+
+/** Invite to the vendor portal, or send the invite again. */
+export const invite = mutation({
+  args: { vendorId: v.id("vendors") },
+  handler: async (ctx, { vendorId }) => {
+    await ownerBiz(ctx);
+    const x = await ctx.db.get(vendorId);
+    if (!x || x.archivedAt) throw new ConvexError("That vendor isn't on your list.");
+    await assertNotClient(ctx, x.email); // D102
+    await inviteNow(ctx, vendorId);
+    return null;
+  },
+});
+
+export const inviteData = internalQuery({
+  args: { vendorId: v.id("vendors") },
+  handler: async (ctx, { vendorId }) => {
+    const x = await ctx.db.get(vendorId);
+    if (!x || x.archivedAt || !x.invitedAt) return null;
+    const user = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", x.email)).unique();
+    return { name: x.name, email: x.email, hasAccount: !!user, brand: await mailBrandOf(ctx, x.businessId ?? null) };
+  },
+});
+
+export const mailInvite = internalAction({
+  args: { vendorId: v.id("vendors"), at: v.number() },
+  handler: async (ctx, { vendorId, at }) => {
+    const d = await ctx.runQuery(internal.vendors.inviteData, { vendorId });
+    if (!d) return;
+    await deliverOnce(ctx, `vendor-invite:${vendorId}:${at}`, "vendor_invite", d.email, vendorInviteMail(d.brand, { name: d.name, email: d.email, hasAccount: d.hasAccount }), d.brand.replyTo);
   },
 });

@@ -397,3 +397,17 @@ export function briefingMail(b: MailBrand, d: { name: string; kind: string; proj
     { t: "button", label: "Read the brief", href: d.link }, { t: "link", href: d.link },
   ], signoff(b), `${d.title} · ${dateRange(d.start, d.end)}`);
 }
+
+// ---------- the vendor portal invite (Phase 3c step 4; the portal invite's layout, 03b) ----------
+export function vendorInviteMail(b: MailBrand, d: { name: string; email: string; hasAccount: boolean }): Mail {
+  const link = `${SITE()}/?invited=${encodeURIComponent(d.email).replace(/%40/g, "@")}`;
+  const who = byline(b);
+  return mk(b, "updates", `${who} invited you to WranglerPortal`, [
+    hi(d.name),
+    { t: "p", text: `${who} invited you to WranglerPortal, where you’ll get bookings, read briefs and send invoices to ${b.name}.` },
+    { t: "p", text: "Open it here:", tone: "muted" },
+    { t: "button", label: d.hasAccount ? "Sign in to WranglerPortal" : "Open WranglerPortal", href: link }, { t: "link", href: link, full: true },
+    { t: "p", text: d.hasAccount ? `Sign in with your WranglerPortal account (${d.email}). ${b.name}’s work shows up beside the other businesses you work for, kept separate.` : "The first time, you’ll create your account: a password, then a six-digit code we send you. After that, just sign in.", tone: "muted" },
+    { t: "p", text: "Reply to this email if anything doesn't work.", tone: "muted" },
+  ], b.isDefault ? [{ t: "small", text: "— WranglerPortal" }] : [{ t: "small", text: "Powered by WranglerPortal" }]);
+}

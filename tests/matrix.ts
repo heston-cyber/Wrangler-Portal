@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 export const modules = import.meta.glob("../convex/**/*.ts");
 
-export type Ids = { requestId: Id<"wsRequests">; buildId: Id<"wsBuilds">; templateId: Id<"wsTemplates">; clauseId: Id<"wsClauses">; styleId: Id<"wsStyles">; docId: Id<"wsDocuments">; wsVersionId: Id<"wsVersions">; projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage">; clientRecId: Id<"clients">; personId: Id<"clientPeople">; inboxItemId: Id<"inboxItems">; inboxNoteId: Id<"inboxNotes">; deliveryFileId: Id<"deliveryFiles">; invoiceId: Id<"invoices">; planId: Id<"plans">; subscriptionId: Id<"subscriptions">; dealId: Id<"deals">; followUpId: Id<"followUps">; estimateId: Id<"estimates">; entryId: Id<"ledgerEntries">; quoteId: Id<"quotes">; proposalId: Id<"proposals">; vendorId: Id<"vendors">; bookingId: Id<"vendorBookings">; briefingId: Id<"briefings"> };
+export type Ids = { requestId: Id<"wsRequests">; buildId: Id<"wsBuilds">; templateId: Id<"wsTemplates">; clauseId: Id<"wsClauses">; styleId: Id<"wsStyles">; docId: Id<"wsDocuments">; wsVersionId: Id<"wsVersions">; projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage">; clientRecId: Id<"clients">; personId: Id<"clientPeople">; inboxItemId: Id<"inboxItems">; inboxNoteId: Id<"inboxNotes">; deliveryFileId: Id<"deliveryFiles">; invoiceId: Id<"invoices">; planId: Id<"plans">; subscriptionId: Id<"subscriptions">; dealId: Id<"deals">; followUpId: Id<"followUps">; estimateId: Id<"estimates">; entryId: Id<"ledgerEntries">; quoteId: Id<"quotes">; proposalId: Id<"proposals">; vendorId: Id<"vendors">; bookingId: Id<"vendorBookings">; briefingId: Id<"briefings">; businessId: Id<"businesses"> };
 
 // Minimal valid arguments for each function, so the access check (not argument validation) is what refuses.
 export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
@@ -110,7 +110,11 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "bookings.create": { vendorId: ids.vendorId, projectId: ids.projectId, role: "Shooter", start: "2030-01-01", end: "2030-01-02", cents: 100000, unit: "day" }, "bookings.cancel": { bookingId: ids.bookingId },
     "briefings.templates": {}, "briefings.list": {}, "briefings.forVendor": { vendorId: "nope" }, "briefings.get": { briefingId: "nope" }, "briefings.create": { bookingId: ids.bookingId },
     "briefings.setBooking": { briefingId: ids.briefingId, bookingId: ids.bookingId }, "briefings.deleteDraft": { briefingId: ids.briefingId }, "briefings.copy": { briefingId: ids.briefingId },
-    "briefings.send": { briefingId: ids.briefingId, resend: true }, "proposals.setDeck": { proposalId: ids.proposalId, kit: "business" },
+    "briefings.send": { briefingId: ids.briefingId, resend: true },
+    "vendors.invite": { vendorId: ids.vendorId },
+    "vendorPortal.businesses": {}, "vendorPortal.counts": { businessId: ids.businessId }, "vendorPortal.home": {}, "vendorPortal.bookings": {}, "vendorPortal.booking": { bookingId: "nope" },
+    "vendorPortal.accept": { bookingId: ids.bookingId }, "vendorPortal.decline": { bookingId: ids.bookingId, reason: "Too far" }, "vendorPortal.briefings": {},
+    "vendorPortal.briefing": { briefingId: "nope" }, "vendorPortal.markRead": { briefingId: ids.briefingId }, "proposals.setDeck": { proposalId: ids.proposalId, kit: "business" },
     "brandKit.get": {}, "brandKit.save": { colors: [], fonts: {}, links: [], tone: [] }, "brandKit.uploadUrl": {}, "brandKit.addFile": { storageId: ids.storageId, name: "x.pdf" }, "brandKit.removeFile": { fileId: ids.storageId },
     "crm.rates": {}, "crm.saveRates": { rates: {} }, "crm.board": {}, "crm.addDeal": { title: "X" }, "crm.moveDeal": { dealId: ids.dealId, stage: "quoted" }, "crm.closeDeal": { dealId: ids.dealId },
     "crm.deal": { dealId: "nope" }, "crm.companies": {}, "crm.company": { clientId: "nope" }, "crm.contact": { personId: "nope" }, "crm.followUps": {},
@@ -180,8 +184,9 @@ export async function setup() {
     const proposalId = await ctx.db.insert("proposals", { buildId, number: "X-P-0001", seq: 1, status: "draft", history: [], createdAt: 0, updatedAt: 0 });
     const vendorId = await ctx.db.insert("vendors", { name: "V", email: "v@x.example", roles: [], rates: [], createdAt: 0, updatedAt: 0 });
     const bookingId = await ctx.db.insert("vendorBookings", { vendorId, projectId, role: "Shooter", start: "2030-01-01", end: "2030-01-02", rate: { cents: 100000, unit: "day" }, status: "offered", offeredAt: 0, createdAt: 0, updatedAt: 0 });
+    const businessId = (await ctx.db.query("businesses").first())?._id ?? await ctx.db.insert("businesses", { slug: "matrix", name: "Matrix Co", createdAt: 0 });
     const briefingId = await ctx.db.insert("briefings", { buildId, projectId, bookingId, status: "draft", history: [], createdAt: 0, updatedAt: 0 });
-    return { briefingId, bookingId, vendorId, proposalId, quoteId, dealId, followUpId, estimateId, entryId, subscriptionId, planId, invoiceId, deliveryFileId, clientRecId, personId, inboxItemId, inboxNoteId, requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
+    return { businessId, briefingId, bookingId, vendorId, proposalId, quoteId, dealId, followUpId, estimateId, entryId, subscriptionId, planId, invoiceId, deliveryFileId, clientRecId, personId, inboxItemId, inboxNoteId, requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
   });
   return { t, ids };
 }

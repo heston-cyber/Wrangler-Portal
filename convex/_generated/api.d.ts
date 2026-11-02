@@ -21,6 +21,7 @@ import type * as quotes from "../quotes.js";
 import type * as vendors from "../vendors.js";
 import type * as bookings from "../bookings.js";
 import type * as briefings from "../briefings.js";
+import type * as vendorPortal from "../vendorPortal.js";
 import type * as leads from "../leads.js";
 import type * as plans from "../plans.js";
 import type * as subscriptionClock from "../subscriptionClock.js";
@@ -137,6 +138,7 @@ declare const fullApi: ApiFromModules<{
   vendors: typeof vendors;
   bookings: typeof bookings;
   briefings: typeof briefings;
+  vendorPortal: typeof vendorPortal;
   leads: typeof leads;
   plans: typeof plans;
   subscriptionClock: typeof subscriptionClock;
