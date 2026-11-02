@@ -33,7 +33,7 @@ function fake() {
     const m = /\/calendars\/([^/]+)\/events(?:\/([^?]+))?/.exec(url);
     if (m) {
       const id = m[2] ? decodeURIComponent(m[2]) : null;
-      if (method === "POST") { const e = { ...body, id: `ev${++s.n}` }; s.events.set(e.id, e); return ok(e); }
+      if (method === "POST") { const e = { ...body, id: body.id ?? `ev${++s.n}` }; if (s.events.has(e.id)) return ok({ error: { message: "duplicate" } }, 409); s.events.set(e.id, e); return ok(e); }
       if (method === "PATCH") { if (!s.events.has(id!)) return ok({}, 404); s.events.set(id!, { ...s.events.get(id!), ...body }); return ok(s.events.get(id!)); }
       if (method === "DELETE") { s.events.delete(id!); return new Response(null, { status: 204 }); }
     }
@@ -51,7 +51,10 @@ async function connect(w: W) {
   expect(url.searchParams.get("access_type")).toBe("offline");
   const r = await w.t.fetch(`/calendar/callback?code=c1&state=${url.searchParams.get("state")}`, { method: "GET" });
   expect(r.status).toBe(302);
-  expect(r.headers.get("location")).toBe("https://app.wranglerportal.com/settings/calendar?calendar=connected");
+  const back = new URL(r.headers.get("location")!);
+  expect(back.pathname).toBe("/settings/calendar");
+  // The page finishes it as the signed-in owner who started it.
+  expect(await w.heston.action(api.calendar.finish, { code: back.searchParams.get("gcode")!, state: back.searchParams.get("gstate")! })).toEqual({ email: "heston@wranglerproductions.com" });
 }
 
 describe("calendar", () => {
@@ -72,8 +75,13 @@ describe("calendar", () => {
     const { shootId } = await w.heston.mutation(api.shoots.schedule, { projectId: w.p, ...base }) as { shootId: Id<"shoots"> };
     await settle(w);
     const ev = [...s.events.values()][0];
+    expect(ev.id).toMatch(/^shoot[0-9a-f]+$/);
+    expect(ev).toMatchObject({ guestsCanSeeOtherGuests: false, guestsCanInviteOthers: false });
     expect(ev).toMatchObject({ summary: "Shoot · 26127 Launch", location: "Harbor Coffee, 412 Main St.", start: { dateTime: `${day(4)}T07:00:00`, timeZone: "America/Chicago" }, end: { dateTime: `${day(4)}T17:00:00` }, attendees: [{ email: "jordan@ellisfilms.com" }] });
     expect(s.calls.find((c) => c.method === "POST" && c.url.includes("/events"))!.url).toContain("/calendars/heston-cal%40group/events?sendUpdates=all");
+    // Two syncs at once make one event, not two.
+    await Promise.all([w.t.action(anyApi.calendar.syncShoot, { shootId }), w.t.action(anyApi.calendar.syncShoot, { shootId })]);
+    expect(s.events.size).toBe(1);
     // Moved: the same event moves.
     await w.heston.mutation(api.shoots.update, { shootId, ...base, date: day(5) });
     await settle(w);
@@ -105,7 +113,10 @@ describe("calendar", () => {
     await expect(w.boss.mutation(api.calendar.save, { calendarId: "x", calendarName: "x", inviteVendors: false, inviteClient: false })).rejects.toThrow(/Connect Google Calendar first/);
     await expect(w.maya.query(api.calendar.settings, {})).rejects.toThrow(/Not allowed/);
     await expect(w.maya.action(api.calendar.calendars, {})).rejects.toThrow();
-    const r = await w.t.fetch("/calendar/callback?code=c&state=forged", { method: "GET" });
-    expect(r.headers.get("location")).toContain("calendar=error&reason=expired");
+    // A consent link started by another business's owner connects nothing for them when Heston approves it.
+    const url = new URL(await w.boss.action(api.calendar.authUrl, {}));
+    await expect(w.heston.action(api.calendar.finish, { code: "c2", state: url.searchParams.get("state")! })).rejects.toThrow(/someone else/);
+    await expect(w.boss.action(api.calendar.finish, { code: "c2", state: url.searchParams.get("state")! })).rejects.toThrow(/expired/); // used up
+    await expect(w.heston.action(api.calendar.finish, { code: "c", state: "forged" })).rejects.toThrow(/expired/);
   });
 });

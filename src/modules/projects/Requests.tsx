@@ -39,7 +39,7 @@ export function RequestRows({ d, onOpen }: { d: Owner; onOpen: (r: Req) => void 
     return (
       <div key={r._id} className="wp-rowwrap">{i > 0 && <Divider />}
         <ListRow className="ilead" lead={{ icon: "upload" }} onClick={() => onOpen(r)} chevron title={forName(r.title)}
-          meta={[`Due ${shortDay(r.due)}`, r.files.length ? `${plural(r.files.length, "file", "files")} uploaded${last ? ` ${monthDay(last)}` : ""}` : null, `in Dropbox › ${r.folder.split("/").slice(3).join(" › ")}`].filter(Boolean).join(" · ")}
+          meta={[`Due ${shortDay(r.due)}`, r.files.length ? `${plural(r.files.length, "file", "files")} uploaded${last ? ` ${monthDay(last)}` : ""}` : null, `in Dropbox › ${r.folder.split("/").slice(1).join(" › ")}`].filter(Boolean).join(" · ")}
           chip={ownerChip(r, d.today)} />
       </div>
     );
@@ -166,19 +166,19 @@ export function ClientRequestPage({ requestId }: { requestId: string }) {
       const s = await start({ requestId: requestId as Id<"fileRequests">, name: file.name, size: file.size });
       if (s.mode === "direct") {
         const r = await post(s.url, file, (n) => patch(key, { sent: n }), signal);
-        const path = r.json && typeof r.json.path_display === "string" ? r.json.path_display : null;
-        if (r.status !== 200 || !path) throw new Error("Dropbox didn't take the file. Try again.");
-        await finishDirect({ uploadId: s.uploadId, pathDisplay: path });
+        if (r.status !== 200) throw new Error("Dropbox didn't take the file. Try again.");
+        await finishDirect({ uploadId: s.uploadId }); // the portal checks Dropbox has all of it
       } else {
+        // Every piece in order; then, once every byte is in, an empty post at the end until the portal says it's saved.
         let offset = 0, tries = 0;
-        while (offset < file.size) {
+        for (;;) {
           if (signal.stopped) throw new Error("Stopped.");
           const piece = file.slice(offset, Math.min(offset + s.chunk, file.size));
           const base = offset;
           let r: { status: number; json: Record<string, unknown> | null };
           try { r = await post(`${CONVEX_SITE}/upload/chunk?t=${s.token}&o=${offset}`, piece, (n) => patch(key, { sent: base + n }), signal); }
           catch (e) { if (signal.stopped || ++tries > 4) throw e; await new Promise((ok) => setTimeout(ok, 1500 * tries)); continue; }
-          if (r.status === 200 && r.json?.done) { offset = file.size; break; }
+          if (r.status === 200 && r.json?.done) break;
           if ((r.status === 200 || r.status === 409) && typeof r.json?.offset === "number") { offset = r.json.offset; tries = 0; continue; }
           if (r.status === 502 && ++tries <= 4) { await new Promise((ok) => setTimeout(ok, 1500 * tries)); continue; }
           throw new Error(typeof r.json?.error === "string" ? r.json.error : "The upload stopped. Try the file again.");
@@ -220,7 +220,7 @@ export function ClientRequestPage({ requestId }: { requestId: string }) {
                     <Icon name="upload" size={18} /><span>Drag files here, or <span className="lnk">browse</span></span>
                   </label>
                 )}
-                {d.open && (total === 0 || shown.length > 0) && <p className="wp-small secondary">Up to 2 GB a file: images, video, audio, PDFs, fonts and zips. They go straight to {d.business}' project folder.</p>}
+                {d.open && (total === 0 || shown.length > 0) && <p className="wp-small secondary">Up to 2 GB a file: images, video, audio, PDFs, fonts and zips. They go straight to the project folder at {d.business}.</p>}
                 {d.files.map((f, i) => (
                   <div key={`f${i}`} className="rq-file"><Icon name="document" size={16} /><span className="nm">{f.name}</span><span className="st ok">Done <Icon name="check" size={16} /></span></div>
                 ))}

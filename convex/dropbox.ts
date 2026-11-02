@@ -128,7 +128,7 @@ export const authUrl = action({
 });
 
 export const insertState = internalMutation({
-  args: { state: v.string(), userId: v.string() },
+  args: { state: v.string(), userId: v.string(), kind: v.optional(v.string()) },
   handler: async (ctx, a) => {
     for (const old of await ctx.db.query("oauthStates").collect()) if (Date.now() - old.createdAt > 3600_000) await ctx.db.delete(old._id);
     await ctx.db.insert("oauthStates", { ...a, createdAt: Date.now() });
@@ -142,6 +142,7 @@ export const takeState = internalMutation({
     if (!row) return false as const;
     await ctx.db.delete(row._id);
     if (Date.now() - row.createdAt >= 15 * 60_000) return false as const;
+    if (row.kind && row.kind !== "dropbox") return false as const; // Phase 4: a Google Calendar sign-in's state
     // Phase 0.5d step 4: the connection belongs to the business of the owner who started it.
     const user = await ctx.db.get(row.userId as Id<"users">);
     const email = (user?.email ?? "").toLowerCase();

@@ -331,6 +331,7 @@ export default defineSchema({
   oauthStates: defineTable({
     state: v.string(),
     userId: v.string(),
+    kind: v.optional(v.string()),              // Phase 4: "calendar" (Google); Dropbox's have none
     createdAt: v.number(),
   }).index("by_state", ["state"]),
 

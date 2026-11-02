@@ -553,12 +553,12 @@ export function vendorPayoutReturnedMail(b: MailBrand, d: { name: string; number
 // client confirms (no frame: the owner-alert layout of 26). ----------
 export const clock = (hhmm: string) => { const [h, m] = hhmm.split(":").map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
 export const shootDay = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
-export function shootMail(b: MailBrand, d: { name: string | null; project: string; date: string; call: string; location: string; moved: null | { date: string; call: string; location: string }; link: string }): Mail {
+export function shootMail(b: MailBrand, d: { name: string | null; project: string; date: string; call: string; location: string; moved: null | { date: string; call: string; location: string }; prepare?: boolean; link: string }): Mail {
   if (!d.moved) return mk(b, "updates", `Your shoot for ${d.project} is set: ${shootDay(d.date)}`, [
     hi(d.name),
     { t: "p", text: `Your shoot for ${d.project} is set.` },
     { t: "sums", rows: [{ label: "Date", value: shootDay(d.date), big: true }, { label: "Call", value: clock(d.call) }, { label: "Where", value: d.location }] },
-    { t: "p", text: "What to prepare is on the shoot page.", tone: "muted" },
+    ...(d.prepare !== false ? [{ t: "p", text: "What to prepare is on the shoot page.", tone: "muted" } as Block] : []),
     { t: "p", text: "Please confirm it in your portal." },
     { t: "button", label: "Confirm the shoot", href: d.link }, { t: "link", href: d.link },
   ], signoff(b), `${shootDay(d.date)} · ${clock(d.call)} call`);

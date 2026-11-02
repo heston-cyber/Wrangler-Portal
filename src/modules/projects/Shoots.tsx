@@ -203,7 +203,7 @@ export function ClientShootPage({ shootId }: { shootId: string }) {
                   <div className="sh-done"><Icon name="check-circle" size={20} /><span><b>Confirmed by {d.confirmed.name} · {at(d.confirmed.at)}</b><br /><span className="secondary">We'll see you {day}. If something changes, reply to the email.</span></span></div>
                   <Button onClick={() => ics(d)}>Add to my calendar</Button>
                 </> : d.past ? <p className="secondary">This shoot has passed.</p> : <>
-                  {d.moved && <p className="wp-small sh-moved">It moved from {shootDay(d.moved.date)}{d.moved.call !== d.call ? ` at ${clock(d.moved.call)}` : ""}. Please confirm the new details.</p>}
+                  {d.moved && <p className="wp-small sh-moved">{d.moved.date !== d.date ? `It moved from ${shootDay(d.moved.date)}${d.moved.call !== d.call ? ` at ${clock(d.moved.call)}` : ""}.` : d.moved.call !== d.call ? `The call time changed from ${clock(d.moved.call)}.` : "The place changed."} Please confirm the new details.</p>}
                   <p className="secondary">Please confirm the date, time and place. Your confirmation is saved with your name and the time.</p>
                   <Button variant="primary" loading={busy} onClick={() => void onConfirm()}>Confirm the shoot</Button>
                   <a className="btn ghost" href={mail}>Ask to change it</a>

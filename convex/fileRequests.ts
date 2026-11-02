@@ -32,6 +32,8 @@ export const CHUNK = 8 * 1024 ** 2;              // pieces through the portal (a
 const MAX_FILES = 200;
 const UPLOAD_HOURS = 24;
 const OWNER_MAIL_DELAY = 10 * 60_000;
+const MAX_OPEN = 20;          // uploads one person has on their way at once, per request
+const MAX_PER_DAY = 120;      // uploads one person starts in a day, per request
 const isDay = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T12:00:00Z`));
 const tidy = (s: string | undefined, max: number) => (s ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 /** A safe Dropbox name: no slashes or characters Windows and Dropbox refuse, no leading or trailing dots and spaces. */
@@ -81,7 +83,10 @@ export const create = mutation({
     if (!isDay(a.due)) throw new ConvexError("Pick a due date.");
     if (a.due < todayCentral()) throw new ConvexError("That date has passed.");
     if (!(await ctx.db.query("dropbox").first())) throw new ConvexError("Connect Dropbox first (Settings › Dropbox drop folder): the files go to your Dropbox.");
-    const folder = `${await baseFolder(ctx, p)}/${safeName(a.folderName?.trim() || requestFor(title), 80)}`;
+    const base = `${await baseFolder(ctx, p)}/${safeName(a.folderName?.trim() || requestFor(title), 80)}`;
+    const used = new Set((await ctx.db.query("fileRequests").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect()).map((r) => r.folder.toLowerCase()));
+    let folder = base;
+    for (let n = 2; used.has(folder.toLowerCase()); n++) folder = `${base} ${n}`;
     const details = (a.details ?? "").trim().slice(0, 1000);
     const now = Date.now();
     const requestId = await ctx.db.insert("fileRequests", {
@@ -176,7 +181,8 @@ async function content(token: string, path: string, arg: unknown, body: ArrayBuf
   return { status: r.status, json, text };
 }
 
-/** Starts one file: checks it's allowed, then hands back where to send it. */
+/** Starts one file: checks it's allowed, gives it a name nobody else in the folder has, then hands back where to send
+ *  it. The name is fixed here (Dropbox never renames it), so the portal knows exactly which file to check afterwards. */
 export const start = action({
   args: { requestId: v.id("fileRequests"), name: v.string(), size: v.number() },
   handler: async (ctx, a): Promise<{ uploadId: Id<"fileUploads">; mode: "direct"; url: string } | { uploadId: Id<"fileUploads">; mode: "chunks"; token: string; chunk: number }> => {
@@ -188,23 +194,32 @@ export const start = action({
     crypto.getRandomValues(bytes);
     const token = mode === "chunks" ? Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("") : undefined;
     const u = await ctx.runMutation(internal.fileRequests.openUpload, { requestId: a.requestId, name, size: a.size, mode, ...(token ? { token } : {}) });
-    if (mode === "chunks") return { uploadId: u.uploadId, mode, token: token!, chunk: CHUNK };
     try {
       const t = await dropboxToken(ctx, u.businessId);
-      const r = await rpc(t, "/files/get_temporary_upload_link", { commit_info: { path: u.path, mode: "add", autorename: true, mute: false }, duration: 4 * 3600 });
-      if (r.status !== 200 || !r.json?.link) throw new Error(r.json?.error_summary ?? r.text.slice(0, 120));
-      return { uploadId: u.uploadId, mode, url: String(r.json.link) };
+      // What's already in the folder (it may not exist yet).
+      const taken: string[] = [];
+      let r = await rpc(t, "/files/list_folder", { path: u.folder, limit: 2000 });
+      for (let page = 0; r.status === 200 && page < 5; page++) {
+        for (const e of r.json?.entries ?? []) taken.push(String(e.name));
+        if (!r.json?.has_more) break;
+        r = await rpc(t, "/files/list_folder/continue", { cursor: r.json.cursor });
+      }
+      const path: string = await ctx.runMutation(internal.fileRequests.reservePath, { uploadId: u.uploadId, taken });
+      if (mode === "chunks") return { uploadId: u.uploadId, mode, token: token!, chunk: CHUNK };
+      const l = await rpc(t, "/files/get_temporary_upload_link", { commit_info: { path, mode: "add", autorename: false, mute: false }, duration: 4 * 3600 });
+      if (l.status !== 200 || !l.json?.link) throw new Error(l.json?.error_summary ?? l.text.slice(0, 120));
+      return { uploadId: u.uploadId, mode, url: String(l.json.link) };
     } catch (e) {
       await ctx.runMutation(internal.fileRequests.failUpload, { uploadId: u.uploadId });
       const m = String((e as Error).message);
-      console.error("upload link", m.slice(0, 160));
+      console.error("upload start", m.slice(0, 160));
       // The Dropbox app needs the files.content.write permission to take uploads (its Permissions tab, then reconnect).
       throw new ConvexError(/missing_scope/.test(m) ? "The studio's Dropbox isn't set up to take uploads yet. Let them know." : "Dropbox didn't answer. Try again in a minute.");
     }
   },
 });
 
-/** The client's own check for a new upload: who, which request, still open. Makes the upload row. */
+/** The client's own check for a new upload: who, which request, still open, not too many at once. Makes the row. */
 export const openUpload = internalMutation({
   args: { requestId: v.id("fileRequests"), name: v.string(), size: v.number(), mode: v.union(v.literal("direct"), v.literal("chunks")), token: v.optional(v.string()) },
   handler: async (ctx, a) => {
@@ -213,11 +228,32 @@ export const openUpload = internalMutation({
     if (c.r.status !== "open") throw new ConvexError(`${c.b?.ownerName?.trim()?.split(" ")[0] || c.b?.name || "They"} closed this request. Reply to their email if you have more.`);
     if (c.r.files.length >= MAX_FILES) throw new ConvexError("That's the most files one request takes. Zip the rest together.");
     const now = Date.now();
+    const mine = (await ctx.db.query("fileUploads").withIndex("by_request", (q) => q.eq("requestId", a.requestId)).collect()).filter((u) => u.email === c.me.email);
+    if (mine.filter((u) => u.status === "uploading" && u.expiresAt > now).length >= MAX_OPEN) throw new ConvexError(`Wait for some of your uploads to finish first (up to ${MAX_OPEN} at once).`);
+    if (mine.filter((u) => u.createdAt > now - 86_400_000).length >= MAX_PER_DAY) throw new ConvexError("That's a lot of uploads for one day. Zip the rest together, or try again tomorrow.");
     const uploadId = await ctx.db.insert("fileUploads", {
-      requestId: a.requestId, email: c.me.email, name: a.name, size: a.size, path: `${c.r.folder}/${a.name}`, mode: a.mode, ...(a.token ? { token: a.token } : {}),
+      requestId: a.requestId, email: c.me.email, name: a.name, size: a.size, path: "", mode: a.mode, ...(a.token ? { token: a.token } : {}),
       offset: 0, status: "uploading", expiresAt: now + UPLOAD_HOURS * 3_600_000, createdAt: now,
     });
-    return { uploadId, path: `${c.r.folder}/${a.name}`, businessId: (await businessOf(ctx, c.p)) };
+    return { uploadId, folder: c.r.folder, businessId: (await businessOf(ctx, c.p)) };
+  },
+});
+/** A name for the file that's free in Dropbox, on the request and among uploads still on their way: "name (2).ext". */
+export const reservePath = internalMutation({
+  args: { uploadId: v.id("fileUploads"), taken: v.array(v.string()) },
+  handler: async (ctx, { uploadId, taken }): Promise<string> => {
+    const u = await ctx.db.get(uploadId);
+    const r = u ? await ctx.db.get(u.requestId) : null;
+    if (!u || !r) throw new ConvexError("This upload isn't here.");
+    const busy = new Set([...taken, ...r.files.map((f) => f.name),
+      ...(await ctx.db.query("fileUploads").withIndex("by_request", (q) => q.eq("requestId", r._id)).collect()).filter((x) => x._id !== uploadId && x.path && x.status !== "failed").map((x) => x.path.split("/").pop()!)].map((n) => n.toLowerCase()));
+    const dot = u.name.lastIndexOf(".");
+    const [stem, ext] = dot > 0 ? [u.name.slice(0, dot), u.name.slice(dot)] : [u.name, ""];
+    let name = u.name;
+    for (let n = 2; busy.has(name.toLowerCase()); n++) name = `${stem} (${n})${ext}`;
+    const path = `${r.folder}/${name}`;
+    await ctx.db.patch(uploadId, { name, path });
+    return path;
   },
 });
 export const failUpload = internalMutation({
@@ -228,17 +264,21 @@ export const failUpload = internalMutation({
   },
 });
 
-/** After a direct upload: the browser says where Dropbox put it; the portal checks that with Dropbox before recording. */
+/** After a direct upload: the portal looks for the file at the exact path it named, and records it if it's all there. */
 export const finishDirect = action({
-  args: { uploadId: v.id("fileUploads"), pathDisplay: v.string() },
-  handler: async (ctx, { uploadId, pathDisplay }): Promise<{ name: string }> => {
+  args: { uploadId: v.id("fileUploads") },
+  handler: async (ctx, { uploadId }): Promise<{ name: string }> => {
     const u = await ctx.runQuery(internal.fileRequests.mineUpload, { uploadId });
-    if (!u || u.mode !== "direct" || u.status !== "uploading") throw new ConvexError("This upload isn't open any more. Try the file again.");
-    const folder = u.path.slice(0, u.path.lastIndexOf("/") + 1).toLowerCase();
-    if (!pathDisplay.toLowerCase().startsWith(folder) || pathDisplay.slice(folder.length).includes("/")) throw new ConvexError("That file went somewhere else.");
+    if (!u || u.mode !== "direct" || !u.path) throw new ConvexError("This upload isn't open any more. Try the file again.");
+    if (u.status === "done") return { name: u.name };
+    if (u.status !== "uploading") throw new ConvexError("This upload isn't open any more. Try the file again.");
     const t = await dropboxToken(ctx, u.businessId);
-    const r = await rpc(t, "/files/get_metadata", { path: pathDisplay });
-    if (r.status !== 200 || r.json?.[".tag"] !== "file" || r.json.size !== u.size) throw new ConvexError("Dropbox doesn't have the whole file. Try it again.");
+    const r = await rpc(t, "/files/get_metadata", { path: u.path });
+    if (r.status !== 200 || r.json?.[".tag"] !== "file") throw new ConvexError("Dropbox doesn't have the file yet. Try it again.");
+    if (r.json.size !== u.size) {
+      await ctx.runMutation(internal.fileRequests.failUpload, { uploadId });
+      throw new ConvexError("The file Dropbox got isn't the size it should be. Try it again.");
+    }
     return await ctx.runMutation(internal.fileRequests.complete, { uploadId, path: String(r.json.path_display), name: String(r.json.name) });
   },
 });
@@ -249,22 +289,23 @@ export const mineUpload = internalQuery({
     const u = await ctx.db.get(uploadId);
     if (!u || u.email !== me.email || u.expiresAt < Date.now()) return null;
     const r = await ctx.db.get(u.requestId);
-    const p = r ? await ctx.db.get(r.projectId) : null;
-    return { ...u, businessId: p ? await businessOf(ctx, p) : null };
+    const p = r && r.status !== "cancelled" ? await ctx.db.get(r.projectId) : null;
+    if (!p) return null;
+    return { ...u, businessId: await businessOf(ctx, p) };
   },
 });
 
-/** Records a finished file on its request (once), and lines up the owner's email. */
+/** Records a finished file on its request (once), and lines up the owner's email. A cancelled request records nothing. */
 export const complete = internalMutation({
   args: { uploadId: v.id("fileUploads"), path: v.string(), name: v.string() },
   handler: async (ctx, a) => {
     const u = await ctx.db.get(a.uploadId);
     if (!u) throw new ConvexError("This upload isn't here.");
-    if (u.status === "done") return { name: a.name };
+    if (u.status === "done") return { name: u.name };
     const r = await ctx.db.get(u.requestId);
-    if (!r) throw new ConvexError("This request isn't here any more.");
+    if (!r || r.status === "cancelled") throw new ConvexError("This request was cancelled.");
     const now = Date.now();
-    await ctx.db.patch(a.uploadId, { status: "done", offset: u.size, path: a.path });
+    await ctx.db.patch(a.uploadId, { status: "done", offset: u.size, path: a.path, name: a.name });
     if (!r.files.some((f) => f.path.toLowerCase() === a.path.toLowerCase())) {
       await ctx.db.patch(r._id, { files: [...r.files, { name: a.name, size: u.size, path: a.path, at: now, by: u.email }], lastUploadAt: now, updatedAt: now });
       await ctx.scheduler.runAfter(OWNER_MAIL_DELAY, internal.fileRequests.mailOwner, { requestId: r._id, at: now });
@@ -273,7 +314,8 @@ export const complete = internalMutation({
   },
 });
 
-// The pieces of a big file: POST /upload/chunk?t=<upload token>&o=<offset>, the bytes as the body.
+// The pieces of a big file: POST /upload/chunk?t=<upload token>&o=<offset>, the bytes as the body. When every byte is
+// in, the portal commits the file (the browser then posts an empty body at o=<size> until it hears {done: true}).
 export const chunkPreflight = httpAction(async (_ctx, req) => new Response(null, { status: 204, headers: corsHeaders(req) }));
 export const chunk = httpAction(async (ctx, req) => {
   const out = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store", ...corsHeaders(req) } });
@@ -282,32 +324,41 @@ export const chunk = httpAction(async (ctx, req) => {
   const offset = Number(url.searchParams.get("o"));
   if (!token || !Number.isSafeInteger(offset) || offset < 0) return out({ error: "Bad request." }, 400);
   const u = await ctx.runQuery(internal.fileRequests.uploadByToken, { token });
-  if (!u || u.status !== "uploading" || u.expiresAt < Date.now()) return out({ error: "This upload isn't open any more. Try the file again." }, 410);
+  if (u?.status === "done") return out({ done: true, name: u.name }); // a lost reply to the last piece
+  if (!u || u.status !== "uploading" || u.expiresAt < Date.now() || !u.open || !u.path) return out({ error: "This upload isn't open any more. Try the file again." }, 410);
   if (offset !== u.offset) return out({ offset: u.offset }, 409); // the browser picks up where the portal is
   const body = await req.arrayBuffer();
   const len = body.byteLength;
-  const last = offset + len === u.size;
-  if (!len || len > CHUNK || offset + len > u.size || (!last && len !== CHUNK)) return out({ error: "That piece is the wrong size." }, 400);
   try {
     const t = await dropboxToken(ctx, u.businessId);
     let sessionId = u.sessionId;
-    if (offset === 0) {
-      const r = await content(t, "/files/upload_session/start", { close: false }, body);
-      if (r.status !== 200 || !r.json?.session_id) throw new Error(r.json?.error_summary ?? r.text.slice(0, 160));
-      sessionId = String(r.json.session_id);
-    } else {
-      const r = await content(t, "/files/upload_session/append_v2", { cursor: { session_id: sessionId, offset }, close: false }, body);
-      if (r.status !== 200) {
-        const right = r.json?.error?.correct_offset;
-        if (typeof right === "number") { await ctx.runMutation(internal.fileRequests.advance, { uploadId: u._id, from: u.offset, to: right, sessionId: sessionId! }); return out({ offset: right }, 409); }
-        throw new Error(r.json?.error_summary ?? r.text.slice(0, 160));
+    if (offset < u.size) {
+      const last = offset + len === u.size;
+      if (!len || len > CHUNK || offset + len > u.size || (!last && len !== CHUNK)) return out({ error: "That piece is the wrong size." }, 400);
+      if (offset === 0) {
+        const r = await content(t, "/files/upload_session/start", { close: false }, body);
+        if (r.status !== 200 || !r.json?.session_id) throw new Error(r.json?.error_summary ?? r.text.slice(0, 160));
+        sessionId = String(r.json.session_id);
+      } else {
+        const r = await content(t, "/files/upload_session/append_v2", { cursor: { session_id: sessionId, offset }, close: false }, body);
+        if (r.status !== 200) {
+          const right = r.json?.error?.correct_offset;
+          if (typeof right === "number") { await ctx.runMutation(internal.fileRequests.advance, { uploadId: u._id, from: u.offset, to: right, sessionId: sessionId! }); return out({ offset: right }, 409); }
+          throw new Error(r.json?.error_summary ?? r.text.slice(0, 160));
+        }
       }
+      await ctx.runMutation(internal.fileRequests.advance, { uploadId: u._id, from: offset, to: offset + len, sessionId: sessionId! });
+      if (!last) return out({ offset: offset + len });
+    } else if (len) return out({ error: "That piece is the wrong size." }, 400);
+    // Every byte is in: commit it at its own name. If an earlier try committed it and the answer was lost, it's there.
+    const f = await content(t, "/files/upload_session/finish", { cursor: { session_id: sessionId, offset: u.size }, commit: { path: u.path, mode: "add", autorename: false, mute: false } }, null);
+    let meta = f.status === 200 && f.json?.path_display ? f.json : null;
+    if (!meta) {
+      const m = await rpc(t, "/files/get_metadata", { path: u.path });
+      if (m.status === 200 && m.json?.[".tag"] === "file" && m.json.size === u.size) meta = m.json;
     }
-    await ctx.runMutation(internal.fileRequests.advance, { uploadId: u._id, from: offset, to: offset + len, sessionId: sessionId! });
-    if (!last) return out({ offset: offset + len });
-    const f = await content(t, "/files/upload_session/finish", { cursor: { session_id: sessionId, offset: u.size }, commit: { path: u.path, mode: "add", autorename: true, mute: false } }, null);
-    if (f.status !== 200 || !f.json?.path_display) throw new Error(f.json?.error_summary ?? f.text.slice(0, 160));
-    const done = await ctx.runMutation(internal.fileRequests.complete, { uploadId: u._id, path: String(f.json.path_display), name: String(f.json.name) });
+    if (!meta) throw new Error(f.json?.error_summary ?? f.text.slice(0, 160));
+    const done = await ctx.runMutation(internal.fileRequests.complete, { uploadId: u._id, path: String(meta.path_display), name: String(meta.name) });
     return out({ done: true, name: done.name });
   } catch (e) {
     console.error("upload chunk", String((e as Error).message).slice(0, 200));
@@ -321,8 +372,8 @@ export const uploadByToken = internalQuery({
     if (!u || u.mode !== "chunks") return null;
     const r = await ctx.db.get(u.requestId);
     const p = r ? await ctx.db.get(r.projectId) : null;
-    if (!r || r.status !== "open" || !p) return null;
-    return { ...u, businessId: await businessOf(ctx, p) };
+    if (!r || !p) return null;
+    return { ...u, open: r.status === "open", businessId: await businessOf(ctx, p) };
   },
 });
 export const advance = internalMutation({
@@ -332,6 +383,19 @@ export const advance = internalMutation({
     if (!u || u.status !== "uploading" || u.offset !== a.from) return false;
     await ctx.db.patch(a.uploadId, { offset: a.to, sessionId: a.sessionId });
     return true;
+  },
+});
+/** Uploads past their 24 hours are marked failed (the browser gave up, or was closed). */
+export const expireUploads = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    let n = 0;
+    for (const r of await ctx.db.query("fileRequests").withIndex("by_status_due", (q) => q.eq("status", "open")).collect()) {
+      for (const u of await ctx.db.query("fileUploads").withIndex("by_request", (q) => q.eq("requestId", r._id)).collect()) {
+        if (u.status === "uploading" && u.expiresAt < Date.now()) { await ctx.db.patch(u._id, { status: "failed" }); n++; }
+      }
+    }
+    return n;
   },
 });
 
@@ -402,6 +466,7 @@ export const ownerMailed = internalMutation({
 export const remindDue = internalAction({
   args: {},
   handler: async (ctx): Promise<number> => {
+    await ctx.runMutation(internal.fileRequests.expireUploads, {});
     const hour = Number(new Date().toLocaleString("en-US", { timeZone: "America/Chicago", hour: "numeric", hour12: false }));
     if (hour < 9) return 0;
     const due: Array<{ requestId: Id<"fileRequests">; emails: string[] }> = await ctx.runQuery(internal.fileRequests.dueTomorrow, {});
@@ -418,7 +483,8 @@ export const dueTomorrow = internalQuery({
     const t = new Date(`${todayCentral()}T12:00:00Z`);
     t.setUTCDate(t.getUTCDate() + 1);
     const tomorrow = t.toISOString().slice(0, 10);
-    const rows = (await ctx.db.query("fileRequests").withIndex("by_status_due", (q) => q.eq("status", "open").eq("due", tomorrow)).collect()).filter((r) => r.remind && !r.remindedAt && !r.files.length);
+    const rows = (await ctx.db.query("fileRequests").withIndex("by_status_due", (q) => q.eq("status", "open").eq("due", tomorrow)).collect())
+      .filter((r) => r.remind && !r.remindedAt && !r.files.length && Date.now() - r.createdAt > 12 * 3_600_000); // not hours after email 31
     const out = [];
     for (const r of rows) {
       const p = await ctx.db.get(r.projectId);

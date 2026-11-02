@@ -95,7 +95,7 @@ async function tell(ctx: MutationCtx, p: Doc<"projects">, s: { _id: Id<"shoots">
       link: `/shoots/${s._id}`, linkLabel: "Confirm", source: { module: "schedule", id: s._id }, key: `shoot:${s._id}:${at}`,
     });
   }
-  if (people.length) await ctx.scheduler.runAfter(0, internal.shoots.mail, { shootId: s._id, at, emails: people.map((x) => x.email) });
+  if (people.length) await ctx.scheduler.runAfter(0, internal.shoots.mail, { shootId: s._id, at, emails: people.map((x) => x.email), ...(moved ? { moved: { date: moved.date, call: moved.call, location: moved.location } } : {}) });
   return people.length;
 }
 
@@ -155,7 +155,7 @@ export const update = mutation({
       history: [...s.history, { at: now, text: moved ? `Moved from ${shortDay(s.date)} ${clock(s.call)}${f.location !== s.location ? `, ${s.location}` : ""}` : "Details changed" }],
     });
     const told = moved ? await tell(ctx, p, { _id: s._id, ...f }, was, now) : 0;
-    if (f.calendar || s.calendarEvent) await queueCalendar(ctx, s._id);
+    await queueCalendar(ctx, s._id);
     return { moved, told };
   },
 });
@@ -168,7 +168,7 @@ export const cancel = mutation({
     if (s.status === "cancelled") return null;
     const now = Date.now();
     await ctx.db.patch(s._id, { status: "cancelled", updatedAt: now, history: [...s.history, { at: now, text: "Cancelled" }] });
-    if (s.calendarEvent) await queueCalendar(ctx, s._id);
+    await queueCalendar(ctx, s._id);
     const biz = await businessOf(ctx, p);
     if (biz) for (const person of await portalPeople(ctx, p)) {
       await postToInbox(ctx, { businessId: biz, clientId: p.clientId, email: person.email, kind: "shoot", title: `Shoot cancelled: ${shootDay(s.date)}`,
@@ -258,14 +258,15 @@ export const nameOf = internalQuery({
   handler: async (ctx, { email }) => (await ctx.db.query("users").withIndex("email", (q) => q.eq("email", email.toLowerCase())).first())?.name ?? null,
 });
 export const mail = internalAction({
-  args: { shootId: v.id("shoots"), at: v.number(), emails: v.array(v.string()) },
-  handler: async (ctx, { shootId, at, emails }) => {
+  args: { shootId: v.id("shoots"), at: v.number(), emails: v.array(v.string()), moved: v.optional(v.object({ date: v.string(), call: v.string(), location: v.string() })) },
+  handler: async (ctx, { shootId, at, emails, moved: m }) => {
     const d = await ctx.runQuery(internal.shoots.mailData, { shootId });
     if (!d) return 0;
-    const moved = d.s.moved && d.s.moved.at === at ? d.s.moved : null;
+    if (d.s.updatedAt > at + 5_000 && d.s.moved && d.s.moved.at > at) return 0; // moved again since: that move's email says where it is now
+    const moved = m ?? null;
     let sent = 0;
     for (const email of emails) {
-      const m = shootMail(d.brand, { name: await ctx.runQuery(internal.shoots.nameOf, { email }), project: d.project, date: d.s.date, call: d.s.call, location: d.s.location, moved, link: `${SITE()}/shoots/${shootId}` });
+      const m = shootMail(d.brand, { name: await ctx.runQuery(internal.shoots.nameOf, { email }), project: d.project, date: d.s.date, call: d.s.call, location: d.s.location, moved, prepare: d.s.prepare.length > 0, link: `${SITE()}/shoots/${shootId}` });
       try {
         if ((await deliverOnce(ctx, `shoot:${shootId}:${at}:${email.toLowerCase()}`, "shoot", email, m, d.brand.replyTo, d.biz)) === "sent") sent++;
         await ctx.runMutation(internal.emails.markInboxEmailed, { key: `shoot:${shootId}:${at}`, email });

@@ -18,6 +18,7 @@ export function CalendarSettings({ show }: { show: (m: string) => void }) {
   const list = useAction(api.calendar.calendars);
   const save = useMutation(api.calendar.save);
   const disconnect = useAction(api.calendar.disconnect);
+  const finish = useAction(api.calendar.finish);
   const { search } = useLocation();
   const [cals, setCals] = useState<Cal[] | null>(null);
   const [pick, setPick] = useState<string>("");
@@ -30,12 +31,14 @@ export function CalendarSettings({ show }: { show: (m: string) => void }) {
   useEffect(() => {
     if (said.current) return;
     const q = new URLSearchParams(search);
-    const r = q.get("calendar");
-    if (!r) return;
+    const code = q.get("gcode"), state = q.get("gstate"), r = q.get("calendar");
+    if (!code && !r) return;
     said.current = true;
-    show(r === "connected" ? "Google Calendar is connected. Pick the calendar shoots go on." : `Google Calendar didn't connect: ${q.get("reason") ?? "try again"}`);
     history.replaceState(null, "", "/settings/calendar");
-  }, [search, show]);
+    if (r) { show(`Google Calendar didn't connect: ${q.get("reason") ?? "try again"}`); return; }
+    setBusy("connect");
+    finish({ code: code!, state: state ?? "" }).then(() => show("Google Calendar is connected. Pick the calendar shoots go on."), (e) => setErr(errText(e))).finally(() => setBusy(null));
+  }, [search, show, finish]);
   useEffect(() => {
     if (!conn) { setCals(null); return; }
     setVendors(conn.inviteVendors); setClient(conn.inviteClient); setPick(conn.calendarId ?? "");
