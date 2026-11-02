@@ -130,8 +130,8 @@ export function BookDialog({ onClose, projectId, vendorId }: { onClose: () => vo
 
 // ---------- Vendors › Bookings (730:3942) ----------
 
-type Pill = "upcoming" | "offered" | "declined" | "done";
-const inPill = (s: BookingState, p: Pill) => (p === "upcoming" ? s === "accepted" : p === "declined" ? s === "declined" || s === "cancelled" : s === p);
+type Pill = "upcoming" | "offered" | "declined" | "done" | "cancelled";
+const inPill = (s: BookingState, p: Pill) => (p === "upcoming" ? s === "accepted" : s === p);
 
 export default function BookingsPage() {
   const rows = useQuery(api.bookings.list, {});
@@ -141,7 +141,7 @@ export default function BookingsPage() {
   // Opens on Upcoming, or on Offered when nothing is upcoming yet.
   const pill: Pill = picked ?? (count("upcoming") === 0 && count("offered") > 0 ? "offered" : "upcoming");
   const shown = (rows ?? []).filter((x) => inPill(x.state, pill));
-  if (pill === "done" || pill === "declined") shown.reverse(); // the most recent first
+  if (pill === "done" || pill === "declined" || pill === "cancelled") shown.reverse(); // the most recent first
   return (
     <>
       <TopBar><a {...linkProps("/vendors")}>Vendors</a><Sep /><span className="here">Bookings</span></TopBar>
@@ -151,7 +151,7 @@ export default function BookingsPage() {
           <EmptyState icon="calendar" title="No bookings yet." body="Book a vendor on a project: they get the offer by email and accept or decline it in their portal." actions={<Button variant="primary" onClick={() => setBooking(true)}>Book a vendor</Button>} />
         ) : (
           <>
-            <PillTabs label="Show" value={pill} onChange={setPill} items={[{ key: "upcoming", label: "Upcoming", count: count("upcoming") }, { key: "offered", label: "Offered", count: count("offered") }, { key: "declined", label: "Declined", count: count("declined") }, { key: "done", label: "Done", count: count("done") }]} />
+            <PillTabs label="Show" value={pill} onChange={setPill} items={[{ key: "upcoming", label: "Upcoming", count: count("upcoming") }, { key: "offered", label: "Offered", count: count("offered") }, { key: "declined", label: "Declined", count: count("declined") }, { key: "done", label: "Done", count: count("done") }, ...(count("cancelled") ? [{ key: "cancelled" as Pill, label: "Cancelled", count: count("cancelled") }] : [])]} />
             <Card label="Bookings">
               {shown.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "calendar" }} title="None here." />
                 : shown.map((x, i) => <div key={x._id} className="wp-rowwrap">{i > 0 && <Divider />}
