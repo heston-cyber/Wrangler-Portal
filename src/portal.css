@@ -373,7 +373,8 @@ a.wp-row:hover, button.wp-row:hover, .wp-row.hover { background: var(--surface-b
 .backdrop { background: var(--surface-overlay); backdrop-filter: none; -webkit-backdrop-filter: none; }
 .dialog {
   position: relative; isolation: isolate; border-radius: var(--radius-lg); padding: 28px 28px 24px; gap: 18px;
-  background: var(--surface-block); background-image: none;
+  /* Nov 2: the design's dialog shell is Background/raised (solid); a see-through fill let busy pages bleed into the text */
+  background: var(--surface-raised); background-image: none;
   backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass); box-shadow: var(--shadow-float);
 }
 .dialog::before {

@@ -99,23 +99,21 @@ export function BookDialog({ onClose, projectId, vendorId }: { onClose: () => vo
                 {vendor && vendor.roles.length === 0 && <option value="">No roles yet</option>}
                 {vendor?.roles.map((r) => <option key={r} value={r}>{r}</option>)}
               </select></label>
-            <div className="wp-field qz-q"><span className="wp-field-label">Dates</span>
+            <div className="wp-field qz-q"><span className="wp-field-label">Agreed rate</span>
+              <span className={`vd-rate${changed ? " bk-changed" : ""}`}><MoneyInput label="Agreed rate" value={cents} onChange={(c) => { setCents(c); setTouched(true); }} />
+                <select className="input" aria-label="Per" value={unit} onChange={(e) => setUnit(e.target.value as Unit)}><option value="day">/ day</option><option value="hour">/ hour</option></select></span></div>
+            <div className="qz-q wide bk-sug">
+              <p className="wp-small secondary">{sugText ?? (vendor && role ? `No suggestion: Pricing has no ${role} cost and ${first} has no ${role} rate.` : "The rate is suggested from Pricing once you pick the vendor and role.")}</p>
+              {changed && <span className="qz-changed"><StatusChip tone="warning">Changed</StatusChip><button type="button" className="lnk" onClick={() => { setCents(sug!.cents); setTouched(false); }}>Use suggested</button></span>}
+            </div>
+            <div className="wp-field qz-q wide"><span className="wp-field-label">Dates</span>
               <span className="bk-dates">
                 <input className="input" type="date" aria-label="First day" min={today()} value={start} onChange={(e) => { setStart(e.target.value); if (!end || end < e.target.value) setEnd(e.target.value); }} />
                 <span aria-hidden="true">–</span>
                 <input className="input" type="date" aria-label="Last day" min={start || today()} value={end} onChange={(e) => setEnd(e.target.value)} />
               </span></div>
-            <div className="wp-field qz-q"><span className="wp-field-label">Agreed rate</span>
-              <span className={`vd-rate${changed ? " bk-changed" : ""}`}><MoneyInput label="Agreed rate" value={cents} onChange={(c) => { setCents(c); setTouched(true); }} />
-                <select className="input" aria-label="Per" value={unit} onChange={(e) => setUnit(e.target.value as Unit)}><option value="day">/ day</option><option value="hour">/ hour</option></select></span></div>
-            {unit === "hour"
-              ? <label className="wp-field qz-q"><span className="wp-field-label">Hours you expect</span><input className="input" inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="e.g. 30" /></label>
-              : <label className="wp-field qz-q"><span className="wp-field-label">Location</span><input className="input" value={location} onChange={(e) => setLocation(e.target.value)} /></label>}
-            <div className="qz-q wide bk-sug">
-              <p className="wp-small secondary">{sugText ?? (vendor && role ? `No suggestion: Pricing has no ${role} cost and ${first} has no ${role} rate.` : "The rate is suggested from Pricing once you pick the vendor and role.")}</p>
-              {changed && <span className="qz-changed"><StatusChip tone="warning">Changed</StatusChip><button type="button" className="lnk" onClick={() => { setCents(sug!.cents); setTouched(false); }}>Use suggested</button></span>}
-            </div>
-            {unit === "hour" && <label className="wp-field qz-q wide"><span className="wp-field-label">Location</span><input className="input" value={location} onChange={(e) => setLocation(e.target.value)} /></label>}
+            <label className={`wp-field qz-q${unit === "hour" ? "" : " wide"}`}><span className="wp-field-label">Location</span><input className="input" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Where they’ll be" /></label>
+            {unit === "hour" && <label className="wp-field qz-q"><span className="wp-field-label">Hours you expect</span><input className="input" inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="e.g. 30" /></label>}
             <label className="wp-field qz-q wide"><span className="wp-field-label">Note (optional)</span><textarea className="input" rows={3} value={note} onChange={(e) => setNote(e.target.value)} /></label>
             <p className="wp-small secondary qz-q wide">{cost !== null ? <>Adds an expected cost of {money(cost)} to the project Ledger{unit === "day" ? ` (${daysIn(start, end)} day${daysIn(start, end) === 1 ? "" : "s"})` : ""}.</> : "Adds an expected cost to the project Ledger."}</p>
           </div>
