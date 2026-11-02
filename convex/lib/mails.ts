@@ -585,3 +585,36 @@ export function ownerShootConfirmedMail(b: MailBrand, d: { who: string; project:
     { t: "button", label: "Open the project", href: d.link },
   ], ownerFoot("a client confirms a shoot"), `${shootDay(d.date)} · ${d.project}`);
 }
+
+// ---------- Phase 4 (742:2616, 742:2642): 31 · Files requested, 32 · Files due tomorrow; the owner's note when files
+// arrive (no frame: the owner-alert layout of 26). ----------
+/** "Upload your logo and brand guide" → "Logo and brand guide" (the email's For row). */
+export const requestFor = (title: string) => { const t = title.replace(/^(please\s+)?(upload|send|share)\s+(us\s+)?(your|the)\s+/i, "").trim() || title; return t[0].toUpperCase() + t.slice(1); };
+export function fileRequestMail(b: MailBrand, d: { kind: "asked" | "tomorrow"; name: string | null; project: string; title: string; details: string | null; due: string; uploaded: number; link: string }): Mail {
+  const owner = first(b.ownerName) || b.name;
+  const due = shootDay(d.due).replace(/^(\w+),/, "$1,");
+  if (d.kind === "asked") return mk(b, "updates", `${owner} asked for files: ${requestFor(d.title)}`, [
+    hi(d.name),
+    { t: "p", text: `${owner} asked for a few files for ${d.project}.` },
+    { t: "sums", rows: [{ label: "Due", value: due, big: true }, { label: "For", value: requestFor(d.title) }, { label: "Project", value: d.project }] },
+    ...(d.details ? [{ t: "p", text: d.details, tone: "muted" } as Block] : []),
+    { t: "p", text: "Upload them in your portal, up to 2 GB a file." },
+    { t: "button", label: "Upload files", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `Due ${due} · ${requestFor(d.title)}`);
+  return mk(b, "updates", `Reminder: files due tomorrow for ${d.project}`, [
+    hi(d.name),
+    { t: "p", text: `A reminder: the files for ${d.project} are due tomorrow.` },
+    { t: "sums", rows: [{ label: "Due", value: due, big: true }, { label: "For", value: requestFor(d.title) }, { label: "Uploaded so far", value: d.uploaded ? `${d.uploaded} ${d.uploaded === 1 ? "file" : "files"}` : "Nothing yet" }] },
+    { t: "p", text: "If you’ve sent them another way, reply and let us know.", tone: "muted" },
+    { t: "p", text: "Upload them in your portal." },
+    { t: "button", label: "Upload files", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `Due tomorrow · ${requestFor(d.title)}`);
+}
+export function ownerFilesMail(b: MailBrand, d: { who: string; count: number; title: string; project: string; folder: string; link: string }): Mail {
+  return mk(b, "updates", `${d.who} uploaded ${d.count} ${d.count === 1 ? "file" : "files"}: ${requestFor(d.title)}`, [
+    { t: "eyebrow", text: `${d.who} uploaded ${d.count === 1 ? "a file" : `${d.count} files`}` },
+    { t: "title", text: `${requestFor(d.title)} · ${d.project}` },
+    { t: "p", text: `They're in your Dropbox: Apps › Wrangler Review${d.folder.replace(/\//g, " › ")}.` },
+    { t: "button", label: "Open the project", href: d.link },
+  ], ownerFoot("a client uploads files you asked for"), `${d.count} ${d.count === 1 ? "file" : "files"} · ${d.project}`);
+}

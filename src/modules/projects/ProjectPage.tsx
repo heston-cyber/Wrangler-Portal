@@ -17,6 +17,7 @@ import { ProjectInvoices } from "../payments/InvoicesPage";
 import { LedgerTab } from "../crm/Ledger";
 import { CrewCard } from "../vendors/Bookings";
 import { ShootsCard } from "./Shoots";
+import { RequestsCard } from "./Requests";
 import { StageBar, STAGES, stageName, type Stage, dateText, bytes, openFileLink } from "./common";
 
 type Page = NonNullable<ReturnType<typeof useQuery<typeof api.projects.page>>>;
@@ -257,6 +258,7 @@ function Overview({ page, onMove, onRounds, onNext, onDates, postDefault, setPos
           <p className="pj-nexttext">{page.nextStep || <span className="secondary">No next step yet.</span>}</p>
         </Card>
         <ShootsCard projectId={page._id} client={page.client?.name ?? null} label={page.label} />
+        <RequestsCard projectId={page._id} client={page.client?.name ?? null} label={page.label} />
         <Card className="pj-cuts" label="Cuts" head={<SectionHead label="Cuts" count={page.videos.length} action={<Button size="sm" variant="ghost" onClick={() => goTab("cuts")} iconEnd="arrow-right">Open Cuts</Button>} />}>
           {page.videos.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "video" }} title="No cuts yet." />
             : page.videos.slice(0, 6).map((v) => (

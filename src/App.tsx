@@ -10,6 +10,7 @@ import ClientDocuments, { type DocTab } from "./modules/clients/ClientDocuments"
 import ClientReview from "./modules/clients/ClientReview";
 import ClientProject, { type ClientProjectTab } from "./modules/projects/ClientProject";
 import { ClientShootPage } from "./modules/projects/Shoots";
+import { ClientRequestPage } from "./modules/projects/Requests";
 import ClientSettings from "./modules/clients/ClientSettings";
 import Home from "./modules/review/Home";
 import OwnerHome from "./modules/home/OwnerHome";
@@ -281,6 +282,8 @@ function ClientRoutes({ me }: { me: { name: string | null; email: string } }) {
   if (/^\/payments\/subscriptions\/?$/.test(path)) return <Suspense fallback={<Loading />}><ClientSubscriptions /></Suspense>;
   const shoot = /^\/shoots\/([^/]+)\/?$/.exec(path);
   if (shoot) return <ClientShootPage key={shoot[1]} shootId={shoot[1]} />;
+  const req = /^\/requests\/([^/]+)\/?$/.exec(path);
+  if (req) return <ClientRequestPage key={req[1]} requestId={req[1]} />;
   const proj = /^\/projects\/([^/]+)\/?$/.exec(path);
   if (proj) { const t = params.get("tab"); return <ClientProject key={proj[1]} projectId={proj[1]} tab={(t === "videos" || t === "documents" ? t : "overview") as ClientProjectTab} />; }
   if (path.startsWith("/settings")) return <ClientSettings me={me} />;

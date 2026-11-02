@@ -47,6 +47,7 @@ import type * as crons from "../crons.js";
 import type * as dropbox from "../dropbox.js";
 import type * as diag from "../diag.js";
 import type * as emailTest from "../emailTest.js";
+import type * as fileRequests from "../fileRequests.js";
 import type * as finalTest from "../finalTest.js";
 import type * as http from "../http.js";
 import type * as library from "../library.js";
@@ -168,6 +169,7 @@ declare const fullApi: ApiFromModules<{
   dropbox: typeof dropbox;
   diag: typeof diag;
   emailTest: typeof emailTest;
+  fileRequests: typeof fileRequests;
   finalTest: typeof finalTest;
   http: typeof http;
   library: typeof library;

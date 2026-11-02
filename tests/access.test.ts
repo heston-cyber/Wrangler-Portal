@@ -67,6 +67,7 @@ const SIGNED_IN = new Set(["users.setName", "clients.account", "shares.mine",
   "notifications.client", "notifications.setClient",
   // Phase 4: a client's shoots (only on projects they can open)
   "shoots.forClientProject", "shoots.page", "shoots.confirm",
+  "fileRequests.forClientProject", "fileRequests.page", "fileRequests.start", "fileRequests.finishDirect",
   // Phase 2 Part A: a client's projects (only those their share invites cover) and the final files' links (only once open)
   "projects.mine", "projects.forClient", "projects.deliveryLink"]);
 

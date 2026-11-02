@@ -12,5 +12,7 @@ crons.interval("invoice reminders", { hours: 1 }, internal.invoiceReminders.runD
 // Phase 2b (D62): the upcoming-charge email, 7 days before each subscription charge.
 crons.interval("subscription upcoming charges", { hours: 1 }, internal.subscriptions.runUpcoming, {});
 // Pay in portal (Nov 2): vendor payouts still on their way (or recently posted, in case the bank returns one).
+// Phase 4: email 32, the day before files are due (nothing uploaded yet).
+crons.interval("file request reminders", { hours: 1 }, internal.fileRequests.remindDue, {});
 crons.interval("vendor payouts", { minutes: 15 }, internal.vendorPayouts.poll, {});
 export default crons;

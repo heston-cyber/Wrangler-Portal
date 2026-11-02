@@ -176,6 +176,14 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
     const inDays = (n: number) => new Date(now + n * DAY).toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
     const { shootId } = await owner.mutation(api.shoots.schedule, { projectId: w.p1, date: inDays(4), call: "07:00", wrap: "17:00", location: "Harbor Coffee, 412 Main St.", parking: "Behind the shop",
       prepare: ["Shop open and lights on by 7:00", "Two baristas on shift for B-roll", "Menu boards up to date", "Signed releases from anyone on camera"], withOwner: true, bookingIds: [], calendar: true }) as { shootId: string };
+    // Phase 4: two file requests, one with files in (made directly: the kit has no Dropbox).
+    const reqIds = await t.run(async (ctx) => {
+      const folder = "/File requests/Harbor Coffee/26127 Harbor Coffee Launch";
+      const a = await ctx.db.insert("fileRequests", { businessId: w.A, projectId: w.p1, title: "Upload your logo and brand guide", details: "Your logo (SVG or PNG), the brand guide, and any photos of the new menu boards.", due: inDays(1), folder: `${folder}/Logo and brand guide`, remind: true, status: "open",
+        files: [{ name: "harbor-logo.svg", size: 52_000, path: `${folder}/Logo and brand guide/harbor-logo.svg`, at: now - HOUR, by: "maya@harborcoffee.com" }, { name: "Harbor brand guide.pdf", size: 8_400_000, path: `${folder}/Logo and brand guide/Harbor brand guide.pdf`, at: now - HOUR, by: "maya@harborcoffee.com" }], lastUploadAt: now - HOUR, history: [], createdAt: now - DAY, updatedAt: now - HOUR });
+      const b = await ctx.db.insert("fileRequests", { businessId: w.A, projectId: w.p1, title: "Send your music references", due: inDays(6), folder: `${folder}/Music references`, remind: true, status: "open", files: [], history: [], createdAt: now - DAY, updatedAt: now - DAY });
+      return { a, b };
+    });
     const noteIds = await t.run(async (ctx) => (await ctx.db.query("inboxNotes").collect()).map((n) => n._id));
     const OWNER: [string, Record<string, unknown>][] = [
       ["users.me", {}], ["business.brand", {}], ["business.settings", {}], ["payments.settings", {}], ["library.overview", {}], ["activity.feed", { limit: 100 }], ["activity.recent", {}], ["home.needs", {}],
@@ -188,7 +196,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["sign.pendingRequests", {}], ["approvals.forVideo", { videoId: w.harbor30.v }], ["sign.requestsFor", { documentId: w.d1 }],
 ["builder.getBuild#" + b1, { buildId: b1 }], ["builder.getProfile", {}], ["builder.listFonts", {}], ["builder.listStyles", {}],
       ["sign.get#" + w.d1, { documentId: w.d1 }], ["sign.get#" + w.d2, { documentId: w.d2 }], ["sign.get#" + w.d3, { documentId: w.d3 }],
-      ["projects.page#" + w.p1, { projectId: w.p1 }], ["shoots.forProject#" + w.p1, { projectId: w.p1 }], ["projects.nextRound#" + w.harbor30.v, { videoId: w.harbor30.v }],
+      ["projects.page#" + w.p1, { projectId: w.p1 }], ["shoots.forProject#" + w.p1, { projectId: w.p1 }], ["fileRequests.forProject#" + w.p1, { projectId: w.p1 }], ["projects.nextRound#" + w.harbor30.v, { videoId: w.harbor30.v }],
       ["invoices.list", {}], ["invoices.overview", { tzOffsetMin: 300 }], ["invoices.options", {}], ["invoices.forProject#" + w.p1, { projectId: w.p1 }],
       ["invoices.get#" + invIds.paid, { invoiceId: invIds.paid }], ["invoices.get#" + invIds.due, { invoiceId: invIds.due }], ["invoices.get#" + invIds.draft, { invoiceId: invIds.draft }],
     ];
@@ -201,7 +209,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["waveforms.forVersion#" + w.harbor30.last, { versionId: w.harbor30.last, share: { token: shareTokens[0] } }],
       ["transcripts.forVersion#" + w.harbor30.last, { versionId: w.harbor30.last, share: { token: shareTokens[0] } }],
       ["approvals.forVideo#" + w.harbor30.v, { videoId: w.harbor30.v, share: { token: shareTokens[0] } }],
-      ["projects.mine", {}], ["projects.forClient#" + w.p1, { projectId: w.p1 }], ["shoots.forClientProject#" + w.p1, { projectId: w.p1 }], ["shoots.page#" + shootId, { shootId }],
+      ["projects.mine", {}], ["projects.forClient#" + w.p1, { projectId: w.p1 }], ["shoots.forClientProject#" + w.p1, { projectId: w.p1 }], ["shoots.page#" + shootId, { shootId }], ["fileRequests.forClientProject#" + w.p1, { projectId: w.p1 }], ["fileRequests.page#" + reqIds.a, { requestId: reqIds.a }], ["fileRequests.page#" + reqIds.b, { requestId: reqIds.b }],
       ["invoicePay.mine", {}], ...["kitpaidtoken000000001", "kitduetoken0000000002", "kitproctoken000000003"].map((tok): [string, Record<string, unknown>] => ["invoicePay.page#" + tok, { token: tok }])];
     const run = async (as: typeof owner, list: [string, Record<string, unknown>][]) => {
       const out: Record<string, unknown> = {};
@@ -216,7 +224,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
     // The PDFs in convex-test storage can't be fetched by a browser: point them at the kit's sample PDF.
     const pdfs = (v: unknown): unknown => JSON.parse(JSON.stringify(v), (k, x) => ((k === "fileUrl" || k === "finalUrl") && typeof x === "string" ? "/kit-pdf/" : x));
     for (const k of Object.keys(owned)) if (k.startsWith("sign.get#")) owned[k] = pdfs(owned[k]);
-    const fixtures = { owner: owned, client: await run(client, CLIENT), ids: { invoices: invIds, shares: shareTokens, harbor: w.harbor, video: w.harbor30.v, docSent: w.d1, docSigned: w.d2, docDraft: w.d3, notes: noteIds, shoot: shootId, project: w.p1 } };
+    const fixtures = { owner: owned, client: await run(client, CLIENT), ids: { invoices: invIds, shares: shareTokens, harbor: w.harbor, video: w.harbor30.v, docSent: w.d1, docSigned: w.d2, docDraft: w.d3, notes: noteIds, shoot: shootId, project: w.p1, requests: reqIds } };
     writeFileSync(join(__dirname, "..", "src", "dev", "fixtures.json"), JSON.stringify(fixtures, null, 1));
     vi.useRealTimers();
   });

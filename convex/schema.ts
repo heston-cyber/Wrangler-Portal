@@ -1156,6 +1156,44 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_project", ["projectId", "date"]).index("by_date", ["date"]),
 
+  // Phase 4 (Nov 2): file requests. The client uploads straight into the business's Dropbox, under
+  // Apps/Wrangler Review/File requests/<Client>/<Project>/<Request> (Heston, Nov 2), which the render watcher ignores.
+  fileRequests: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    projectId: v.id("projects"),
+    title: v.string(),
+    details: v.optional(v.string()),
+    due: v.string(),                          // YYYY-MM-DD
+    folder: v.string(),                       // in the app folder, as shown: "/File requests/Harbor Coffee/26127 Launch/Logo and brand guide"
+    remind: v.boolean(),                      // email 32 the day before, if nothing's uploaded
+    remindedAt: v.optional(v.number()),
+    status: v.union(v.literal("open"), v.literal("closed"), v.literal("cancelled")),
+    files: v.array(v.object({ name: v.string(), size: v.number(), path: v.string(), at: v.number(), by: v.string() })),
+    lastUploadAt: v.optional(v.number()),
+    ownerMailedAt: v.optional(v.number()),      // the owner's last "files arrived" email covered files up to here
+    history: v.array(v.object({ at: v.number(), text: v.string() })),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_project", ["projectId"]).index("by_status_due", ["status", "due"]),
+
+  // One file on its way into a request's folder: straight to Dropbox (up to 150 MB, a one-time link) or in pieces
+  // through the portal (/upload/chunk, with this row's random token). Rows are kept as the upload log.
+  fileUploads: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    requestId: v.id("fileRequests"),
+    email: v.string(),
+    name: v.string(),
+    size: v.number(),
+    path: v.string(),                         // where it's going (Dropbox may add " (1)" to the name)
+    mode: v.union(v.literal("direct"), v.literal("chunks")),
+    token: v.optional(v.string()),            // chunks: the upload's own key for /upload/chunk
+    sessionId: v.optional(v.string()),        // chunks: Dropbox's upload session
+    offset: v.number(),
+    status: v.union(v.literal("uploading"), v.literal("done"), v.literal("failed")),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+  }).index("by_token", ["token"]).index("by_request", ["requestId"]),
+
   inboxItems: defineTable({
     businessId: v.optional(v.id("businesses")),
     clientId: v.optional(v.id("clients")),

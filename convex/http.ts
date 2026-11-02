@@ -10,6 +10,7 @@ import { ip as wsS0Ip } from "./wsS0";
 import { respond as quoteRespond } from "./quotes";
 import { respond as proposalRespond } from "./proposals";
 import { api as wsApi, preflight as wsPreflight } from "./signing";
+import { chunk as uploadChunk, chunkPreflight as uploadChunkPreflight } from "./fileRequests";
 import { verifyHttp as wsVerify } from "./signDone";
 import { callback as wsDropboxCallback } from "./wsArchive";
 import { connectWebhook } from "./payments";
@@ -67,6 +68,9 @@ http.route({ path: "/q-respond", method: "OPTIONS", handler: wsPreflight });
 // Phase 3b: the same for a proposal on /p/<token> (D73, D86).
 http.route({ path: "/p-respond", method: "POST", handler: proposalRespond });
 http.route({ path: "/p-respond", method: "OPTIONS", handler: wsPreflight });
+// Phase 4: big files for a file request, in pieces (fileRequests.ts).
+http.route({ path: "/upload/chunk", method: "POST", handler: uploadChunk });
+http.route({ path: "/upload/chunk", method: "OPTIONS", handler: uploadChunkPreflight });
 http.route({ path: "/email/stop", method: "GET", handler: emailStop });
 http.route({ path: "/email/stop", method: "POST", handler: emailStop });
 

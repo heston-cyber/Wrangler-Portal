@@ -32,6 +32,7 @@ export const NOTICES: Notice[] = [
   { key: "vendor_w9", side: "owner", group: "Vendors", label: "A vendor uploads a W-9", kinds: ["vendor_w9"] },
   { key: "vendor_payouts", side: "owner", group: "Vendors", label: "A vendor payment through Stripe goes out, fails or comes back", kinds: ["vendor_payout_posted", "vendor_payout_failed"] },
   { key: "shoot_confirmed", side: "owner", group: "Shoots and files", label: "A client confirms a shoot", kinds: ["shoot_confirmed"] },
+  { key: "files_uploaded", side: "owner", group: "Shoots and files", label: "A client uploads files you asked for", hint: "One email per sitting, 10 minutes after their last file.", kinds: ["files_uploaded"] },
   { key: "owner_codes", side: "owner", group: "Your account", label: "Sign-in codes and password resets", kinds: ["code", "reset"], always: true },
 
   // ---------- to a vendor ----------
@@ -50,6 +51,7 @@ export const NOTICES: Notice[] = [
   { key: "subscription_upcoming", side: "client", group: "Payments", label: "A subscription charge is coming up", kinds: ["subscription-upcoming"] },
   { key: "client_bills", side: "client", group: "Payments", label: "Invoices, receipts, overdue notices and failed payments", kinds: ["invoice", "invoice-reminder-overdue", "invoice-reminder-manual", "receipt", "payment-failed", "subscription", "subscription-failed", "subscription-cancelled"], always: true },
   { key: "client_shoots", side: "client", group: "Shoots and files", label: "Shoots scheduled or moved, and files asked for", hint: "They ask you to confirm or upload, so they always arrive.", kinds: ["shoot", "file_request"], always: true },
+  { key: "files_due", side: "client", group: "Shoots and files", label: "A reminder the day before files are due", hint: "Only when nothing has been uploaded yet.", kinds: ["files_due"] },
   { key: "client_docs", side: "client", group: "Documents", label: "Quotes, proposals, documents to sign and signed copies", kinds: ["quote", "proposal", "ws-sign", "ws-reminder", "ws-cancelled", "ws-copy", "ws-code"], always: true },
   { key: "client_access", side: "client", group: "Your account", label: "Invites, shared links and sign-in codes", kinds: ["invite", "share-invite", "code", "reset"], always: true },
 ];

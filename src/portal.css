@@ -2424,3 +2424,30 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 @media (max-width: 720px) { .sh-times { grid-column: 1 / -1; } }
 .sh-page .cp-see { grid-template-columns: auto 1fr; }
 .sh-page .cp-see dd { text-align: right; }
+
+/* ---------- Phase 4 · file requests (741:2666 dialog, 740:551 / 740:897 / 740:1276 client page) ---------- */
+.rq-folder { display: flex; align-items: center; gap: 8px; }
+.rq-folder > svg { color: var(--accent); flex: none; }
+.rq-folder .input { flex: 1; min-width: 0; }
+.rq-path { margin: -6px 0 0; overflow-wrap: anywhere; }
+.rq-files { display: grid; gap: 4px; }
+.rq-name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+.rq-name > svg { color: var(--accent); flex: none; }
+.rq-body { display: grid; gap: 10px; padding: 4px 20px 20px; }
+.rq-body > p { margin: 0; }
+.rq-drop { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 56px; padding: 12px; border: 1px dashed var(--border-strong, rgba(255,255,255,.25)); border-radius: 12px; cursor: pointer; color: var(--text-secondary); font-size: var(--fs-text-small); text-align: center; }
+.rq-drop > svg, .rq-drop .lnk { color: var(--accent); }
+.rq-drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.rq-file { position: relative; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 14px; border: 1px solid var(--border, rgba(255,255,255,.12)); border-radius: 12px; background: rgba(0,0,0,.35); font-size: var(--fs-text-small); overflow: hidden; }
+.rq-file > svg { color: var(--accent); flex: none; }
+.rq-file .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rq-file .st { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.rq-file .st.ok { color: var(--text-success); }
+.rq-file .st.ok svg { color: var(--accent); }
+.rq-file .st.err { color: var(--accent); white-space: normal; text-align: right; flex: 0 1 55%; }
+.rq-file .bar { position: absolute; left: 14px; bottom: 6px; height: 3px; max-width: calc(100% - 28px); border-radius: 2px; background: var(--accent); transition: width .2s; }
+.rq-done { align-items: center; }
+.rq-done > .txt { flex: 1; }
+.rq-details { margin: 0; padding: 4px 20px 8px; font-size: var(--fs-text-small); line-height: var(--lh-small); }
+.rq-page .cp-see { grid-template-columns: auto 1fr; }
+.rq-page .cp-see dd { text-align: right; }
