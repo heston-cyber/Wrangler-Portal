@@ -618,3 +618,30 @@ export function ownerFilesMail(b: MailBrand, d: { who: string; count: number; ti
     { t: "button", label: "Open the project", href: d.link },
   ], ownerFoot("a client uploads files you asked for"), `${d.count} ${d.count === 1 ? "file" : "files"} · ${d.project}`);
 }
+
+// ---------- Phase 4 (Nov 2): the kickoff brief ----------
+
+/** Email 33 (742:2668): "Before we start, tell us about {project}". Also the owner's reminder. */
+export function briefMail(b: MailBrand, d: { kind: "sent" | "reminder"; name: string | null; project: string; covers: string; started: boolean; link: string }): Mail {
+  const owner = first(b.ownerName) || b.name;
+  const reminder = d.kind === "reminder";
+  return mk(b, "updates", reminder ? `Reminder: the kickoff brief for ${d.project}` : `Before we start, tell us about ${d.project}`, [
+    hi(d.name),
+    { t: "p", text: reminder ? `A reminder from ${owner}: the kickoff brief for ${d.project} is still open.` : `Before we start, tell us about ${d.project}.` },
+    { t: "sums", rows: [{ label: "Takes", value: "About 10 minutes", big: true }, { label: "Covers", value: d.covers }, { label: "Project", value: d.project }] },
+    { t: "p", text: d.started ? "Your answers so far are saved. Pick up where you left off." : "You can save and come back any time.", tone: "muted" },
+    { t: "p", text: "Answer it in your portal." },
+    { t: "button", label: d.started ? "Finish the brief" : "Start the brief", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `About 10 minutes · ${d.covers}`);
+}
+/** To the owner when the brief comes back (or is changed afterwards). */
+export function ownerBriefMail(b: MailBrand, d: { who: string; project: string; changed: boolean; answers: Array<{ question: string; answer: string }>; link: string }): Mail {
+  const shown = d.answers.slice(0, 6);
+  return mk(b, "updates", `${d.who} ${d.changed ? "changed" : "answered"} the kickoff brief: ${d.project}`, [
+    { t: "eyebrow", text: `${d.who} ${d.changed ? "changed their answers" : "answered the kickoff brief"}` },
+    { t: "title", text: d.project },
+    ...(shown.length ? [{ t: "sums", rows: shown.map((a) => ({ label: a.question, value: a.answer.length > 90 ? `${a.answer.slice(0, 88)}…` : a.answer })) } as Block] : []),
+    ...(d.answers.length > shown.length ? [{ t: "p", text: `And ${d.answers.length - shown.length} more on the project page.`, tone: "muted" } as Block] : []),
+    { t: "button", label: "Open the project", href: d.link },
+  ], ownerFoot("a client sends back the kickoff brief"), `${d.answers.length} ${d.answers.length === 1 ? "answer" : "answers"} · ${d.project}`);
+}

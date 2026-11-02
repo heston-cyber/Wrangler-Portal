@@ -132,6 +132,11 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "vendorPayments.totals1099": { pages: ["owner"], args: () => "skip" }, // Vendors › Payments › 1099
   "vendorPayments.get": { pages: ["owner"], args: () => "skip" }, // a vendor invoice
   "calendar.settings": { pages: ["owner"], args: () => ({}) }, // Settings › Calendar (Phase 4)
+  "briefs.forProject": { pages: ["owner"], args: () => "skip" }, // project Overview › Requests and brief › Kickoff brief (Phase 4)
+  "briefs.settings": { pages: ["owner"], args: () => ({}) }, // Settings › Kickoff brief, its editor and preview
+  "briefs.forEstimate": { pages: ["owner"], args: () => "skip" }, // New estimate › from the brief
+  "briefs.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Coming up
+  "briefs.page": { pages: ["clientHome"], args: () => ({ briefId: "nope" }) }, // /briefs/<id>, the client's kickoff brief
   "fileRequests.forProject": { pages: ["owner"], args: () => "skip" }, // project Overview › Requests and brief (Phase 4)
   "fileRequests.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Coming up
   "fileRequests.page": { pages: ["clientHome"], args: () => ({ requestId: "nope" }) }, // /requests/<id>, the client's file request page

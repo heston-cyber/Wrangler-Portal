@@ -22,6 +22,7 @@ import { ago } from "../../lib/format";
 import { DropboxSettings } from "./DropboxSettings";
 import { PaymentsSettings } from "./PaymentsSettings";
 import { CalendarSettings } from "./CalendarSettings";
+import { KickoffSettings } from "../projects/Brief";
 import RatesSection from "./RatesSection";
 import { BrandKitEditor } from "./BrandKit";
 import { ClientsSettings } from "../clients/Clients";
@@ -108,6 +109,7 @@ export default function Settings({ me }: { me: { name: string | null; email: str
       {key === "rates" && <RatesSection show={show} />}
       {key === "brand" && <><SetHead eyebrow="Brand kit" title="Your brand, for decks." sub="Claude uses this when it makes a pitch deck in your brand. Each client can have their own kit on their company page." /><BrandKitEditor show={show} /></>}
       {key === "calendar" && <CalendarSettings show={show} />}
+      {key === "brief" && <KickoffSettings />}
       {key === "account" && <AccountSection me={me} show={show} />}
       {key === "notifications" && <OwnerNotifications show={show} />}
       {key === "dropbox" && <DropboxSettings show={show} />}

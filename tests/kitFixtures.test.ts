@@ -184,6 +184,14 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       const b = await ctx.db.insert("fileRequests", { businessId: w.A, projectId: w.p1, title: "Send your music references", due: inDays(6), folder: `${folder}/Music references`, remind: true, status: "open", files: [], history: [], createdAt: now - DAY, updatedAt: now - DAY });
       return { a, b };
     });
+    // Phase 4: the kickoff brief, sent back by Maya (740:2074) (made directly, like the requests).
+    const briefId = await t.run(async (ctx) => {
+      const { KICKOFF_BRIEF } = await import("../convex/lib/kickoff");
+      return await ctx.db.insert("briefs", { businessId: w.A, projectId: w.p1, questions: KICKOFF_BRIEF, step: 3, status: "submitted", sentAt: now - 3 * DAY, startedAt: now - 2 * DAY, submittedAt: now - DAY, submittedBy: "maya@harborcoffee.com", updatedBy: "maya@harborcoffee.com", submits: 1,
+        answers: { goal: "Launch the new menu and bring in the morning crowd.", audience: "Regulars and downtown office workers", where: ["Instagram", "In-store screens"], must: "Latte art, the new menu boards, the team.",
+          feel: ["Warm", "Honest", "community"], colors: ["#3B2A20", "#F2E6D8"], refs: ["https://vimeo.com/76979871"], ready: inDays(18), launch: inDays(20), filming: "Weekdays before 9 AM, when the morning rush is on.", contact: "Maya Brooks, 512 555 0142" },
+        history: [], createdAt: now - 3 * DAY, updatedAt: now - DAY });
+    });
     const noteIds = await t.run(async (ctx) => (await ctx.db.query("inboxNotes").collect()).map((n) => n._id));
     const OWNER: [string, Record<string, unknown>][] = [
       ["users.me", {}], ["business.brand", {}], ["business.settings", {}], ["payments.settings", {}], ["library.overview", {}], ["activity.feed", { limit: 100 }], ["activity.recent", {}], ["home.needs", {}],
@@ -196,7 +204,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["sign.pendingRequests", {}], ["approvals.forVideo", { videoId: w.harbor30.v }], ["sign.requestsFor", { documentId: w.d1 }],
 ["builder.getBuild#" + b1, { buildId: b1 }], ["builder.getProfile", {}], ["builder.listFonts", {}], ["builder.listStyles", {}],
       ["sign.get#" + w.d1, { documentId: w.d1 }], ["sign.get#" + w.d2, { documentId: w.d2 }], ["sign.get#" + w.d3, { documentId: w.d3 }],
-      ["projects.page#" + w.p1, { projectId: w.p1 }], ["shoots.forProject#" + w.p1, { projectId: w.p1 }], ["fileRequests.forProject#" + w.p1, { projectId: w.p1 }], ["calendar.settings", {}], ["projects.nextRound#" + w.harbor30.v, { videoId: w.harbor30.v }],
+      ["projects.page#" + w.p1, { projectId: w.p1 }], ["shoots.forProject#" + w.p1, { projectId: w.p1 }], ["fileRequests.forProject#" + w.p1, { projectId: w.p1 }], ["briefs.forProject#" + w.p1, { projectId: w.p1 }], ["briefs.settings", {}], ["calendar.settings", {}], ["projects.nextRound#" + w.harbor30.v, { videoId: w.harbor30.v }],
       ["invoices.list", {}], ["invoices.overview", { tzOffsetMin: 300 }], ["invoices.options", {}], ["invoices.forProject#" + w.p1, { projectId: w.p1 }],
       ["invoices.get#" + invIds.paid, { invoiceId: invIds.paid }], ["invoices.get#" + invIds.due, { invoiceId: invIds.due }], ["invoices.get#" + invIds.draft, { invoiceId: invIds.draft }],
     ];
@@ -210,6 +218,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["transcripts.forVersion#" + w.harbor30.last, { versionId: w.harbor30.last, share: { token: shareTokens[0] } }],
       ["approvals.forVideo#" + w.harbor30.v, { videoId: w.harbor30.v, share: { token: shareTokens[0] } }],
       ["projects.mine", {}], ["projects.forClient#" + w.p1, { projectId: w.p1 }], ["shoots.forClientProject#" + w.p1, { projectId: w.p1 }], ["shoots.page#" + shootId, { shootId }], ["fileRequests.forClientProject#" + w.p1, { projectId: w.p1 }], ["fileRequests.page#" + reqIds.a, { requestId: reqIds.a }], ["fileRequests.page#" + reqIds.b, { requestId: reqIds.b }],
+      ["briefs.forClientProject#" + w.p1, { projectId: w.p1 }], ["briefs.page#" + briefId, { briefId }],
       ["invoicePay.mine", {}], ...["kitpaidtoken000000001", "kitduetoken0000000002", "kitproctoken000000003"].map((tok): [string, Record<string, unknown>] => ["invoicePay.page#" + tok, { token: tok }])];
     const run = async (as: typeof owner, list: [string, Record<string, unknown>][]) => {
       const out: Record<string, unknown> = {};
@@ -224,7 +233,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
     // The PDFs in convex-test storage can't be fetched by a browser: point them at the kit's sample PDF.
     const pdfs = (v: unknown): unknown => JSON.parse(JSON.stringify(v), (k, x) => ((k === "fileUrl" || k === "finalUrl") && typeof x === "string" ? "/kit-pdf/" : x));
     for (const k of Object.keys(owned)) if (k.startsWith("sign.get#")) owned[k] = pdfs(owned[k]);
-    const fixtures = { owner: owned, client: await run(client, CLIENT), ids: { invoices: invIds, shares: shareTokens, harbor: w.harbor, video: w.harbor30.v, docSent: w.d1, docSigned: w.d2, docDraft: w.d3, notes: noteIds, shoot: shootId, project: w.p1, requests: reqIds } };
+    const fixtures = { owner: owned, client: await run(client, CLIENT), ids: { invoices: invIds, shares: shareTokens, harbor: w.harbor, video: w.harbor30.v, docSent: w.d1, docSigned: w.d2, docDraft: w.d3, notes: noteIds, shoot: shootId, project: w.p1, requests: reqIds, brief: briefId } };
     writeFileSync(join(__dirname, "..", "src", "dev", "fixtures.json"), JSON.stringify(fixtures, null, 1));
     vi.useRealTimers();
   });

@@ -24,11 +24,12 @@ function toEngine(r: Rates, i: Input): EstimateInput {
   return { base: k ? { [k.id]: i.unit === "days" ? i.amount * r.fullDayHours : i.amount } : {}, levels: i.levels, extra: i.extra, travelOver: i.travelOver, travelDays: i.travelDays, travelWaived: i.travelWaived };
 }
 
-export default function EstimatePage({ estimateId, dealId, clientId, projectId }: { estimateId?: string; dealId?: string | null; clientId?: string | null; projectId?: string | null }) {
+export default function EstimatePage({ estimateId, dealId, clientId, projectId, briefId }: { estimateId?: string; dealId?: string | null; clientId?: string | null; projectId?: string | null; briefId?: string | null }) {
   const rates = useQuery(api.crm.rates, {});
   const saved = useQuery(api.crm.getEstimate, estimateId ? { estimateId } : "skip");
   const deal = useQuery(api.crm.deal, !estimateId && dealId ? { dealId } : "skip");
   const company = useQuery(api.crm.company, !estimateId && !dealId && clientId ? { clientId } : "skip");
+  const brief = useQuery(api.briefs.forEstimate, !estimateId && briefId ? { briefId } : "skip"); // Phase 4: "Start an estimate from it"
   const save = useMutation(api.crm.saveEstimate);
   const makeContract = useAction(api.crm.makeContract);
   const [toast, show] = useToast();
@@ -52,6 +53,7 @@ export default function EstimatePage({ estimateId, dealId, clientId, projectId }
     setExtraText(Object.fromEntries(Object.entries(i.extra ?? {}).map(([key, val]) => [key, q(val)]))); setReady(true);
   }, [saved, ready]);
   useEffect(() => { if (deal && !title) setTitle(deal.title); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [deal]);
+  useEffect(() => { if (brief) { if (!title) setTitle(brief.title); if (!scope) setScope(brief.scope); } /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [brief]);
   const r = rates?.rates as Rates | undefined;
   const k = r ? primaryKind(r) : null;
   const result = useMemo(() => (r ? estimate(r, toEngine(r, input)) : null), [r, input]);

@@ -9,7 +9,7 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { estimate, primaryKind, type Rates } from "../../../convex/lib/estimate";
 import {
-  ADDABLE, LOCKED_BINDS, TYPE_LABEL, answerText, bound, linesTotal, type Answers, type ClientAnswer, type FileAnswer, type PLine, type QType, type Question, type Questionnaire, type Step,
+  ADDABLE, KICKOFF_ADDABLE, LOCKED_BINDS, TYPE_LABEL, answerText, bound, linesTotal, type Answers, type ClientAnswer, type FileAnswer, type PLine, type QType, type Question, type Questionnaire, type Step,
 } from "../../../convex/lib/questionnaire";
 import { Button, ButtonLink, Card, Checkbox, EmptyState, Segmented, SkeletonRows, StatusChip, Toggle } from "../../ui/wp";
 import { Icon } from "../../ui/Icon";
@@ -238,7 +238,7 @@ export function QuestionnaireRunner({ proposalId, preview }: { proposalId?: stri
 }
 
 /** One question, by its answer type. */
-function Field({ q, v, set, r, who, proposalId, files, show, preview }: {
+export function Field({ q, v, set, r, who, proposalId, files, show, preview }: {
   q: Question; v: unknown; set: (v: unknown) => void; r: Rates | undefined; who: Who[]; proposalId: Id<"proposals"> | null; files: Record<string, string | null>; show: (m: string) => void; preview: boolean;
 }) {
   const label = <span className="wp-field-label">{q.label}{q.required && <span className="req" aria-label="required"> *</span>}</span>;
@@ -466,10 +466,19 @@ export function ProposalWaiting({ p }: { p: ProposalInfo }) {
 
 // ---------- the business's questionnaire editor (718:5483, D70) ----------
 
-export function QuestionnaireEditor() {
-  const qq = useQuery(api.proposals.questionnaire, {});
-  const save = useMutation(api.proposals.saveQuestionnaire);
-  const reset = useMutation(api.proposals.resetQuestionnaire);
+/** The business's own questions: the proposal questionnaire (Proposals › Questionnaire), or the kickoff brief
+ *  (Settings › Kickoff brief, Phase 4 option B), which has no built-in steps and no file questions. */
+export function QuestionnaireEditor({ kind = "proposal" }: { kind?: "proposal" | "kickoff" }) {
+  const brief = kind === "kickoff";
+  const pq = useQuery(api.proposals.questionnaire, brief ? "skip" : {});
+  const bq = useQuery(api.briefs.settings, brief ? {} : "skip");
+  const qq = brief ? bq : pq;
+  const saveP = useMutation(api.proposals.saveQuestionnaire), saveB = useMutation(api.briefs.saveSettings);
+  const resetP = useMutation(api.proposals.resetQuestionnaire), resetB = useMutation(api.briefs.resetSettings);
+  const save = brief ? saveB : saveP, reset = brief ? resetB : resetP;
+  const addable = brief ? KICKOFF_ADDABLE : ADDABLE;
+  const crumbs = brief ? <><a {...linkProps("/settings/brief")}>Settings</a><Sep /><a {...linkProps("/settings/brief")}>Kickoff brief</a><Sep /><span className="here">Questions</span></>
+    : <><a {...linkProps("/proposals")}>Proposals</a><Sep /><span className="here">Questionnaire</span></>;
   const [toast, show] = useToast();
   const [confirm, confirmNode] = useConfirm();
   const [qn, setQn] = useState<Questionnaire | null>(null);
@@ -484,7 +493,7 @@ export function QuestionnaireEditor() {
     const t = setTimeout(async () => { try { await save({ questionnaire: qn }); setDirty(false); setSavedAt(Date.now()); } catch (e) { show(errText(e)); } }, 800);
     return () => clearTimeout(t);
   }, [qn, dirty]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!qn) return <><TopBar><a {...linkProps("/proposals")}>Proposals</a><Sep /><span className="here">Questionnaire</span></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={6} /></Card></div></>;
+  if (!qn) return <><TopBar>{crumbs}</TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={6} /></Card></div></>;
   const edit = (f: (q: Questionnaire) => Questionnaire) => { setQn(f(qn)); setDirty(true); };
   const step = qn.steps[Math.min(sel, qn.steps.length - 1)];
   const setStep = (p: Partial<Step>) => edit((q) => ({ steps: q.steps.map((s) => (s.id === step.id ? { ...s, ...p } : s)) }));
@@ -492,16 +501,16 @@ export function QuestionnaireEditor() {
   const moveQ = (i: number, d: -1 | 1) => { const qs = [...step.questions]; const j = i + d; if (j < 0 || j >= qs.length) return; [qs[i], qs[j]] = [qs[j], qs[i]]; setStep({ questions: qs }); };
   const moveStep = (i: number, d: -1 | 1) => edit((q) => { const ss = [...q.steps]; const j = i + d; if (j < 0 || j >= ss.length) return q; [ss[i], ss[j]] = [ss[j], ss[i]]; setSel(j); return { steps: ss }; });
   const locked = (x: Question) => !!x.bind && LOCKED_BINDS.has(x.bind);
-  const builtIn = (x: Question) => !ADDABLE.some((t) => t.type === x.type) || locked(x);
+  const builtIn = (x: Question) => !addable.some((t) => t.type === x.type) || locked(x);
   return (
     <>
-      <TopBar right={savedAt ? <span className="wp-small">Saved · {timeWord(savedAt)}</span> : undefined}><a {...linkProps("/proposals")}>Proposals</a><Sep /><span className="here">Questionnaire</span></TopBar>
+      <TopBar right={savedAt ? <span className="wp-small">Saved · {timeWord(savedAt)}</span> : undefined}>{crumbs}</TopBar>
       <div className="wp-page qz-edit">
-        <header className="wp-pagehead"><div className="txt"><span className="wp-eyebrow">Proposals</span><h1 className="wp-h2">Your questionnaire.</h1>
-          <p className="wp-body">The questions New proposal asks, step by step. {qq?.custom ? "Your own set; change anything." : "Started from Wrangler's set; change anything."}</p></div>
+        <header className="wp-pagehead"><div className="txt"><span className="wp-eyebrow">{brief ? "Kickoff brief" : "Proposals"}</span><h1 className="wp-h2">{brief ? "Your kickoff brief." : "Your questionnaire."}</h1>
+          <p className="wp-body">{brief ? "The questions a client answers before a project starts, step by step. A brief already sent keeps the questions it went with." : "The questions New proposal asks, step by step."} {qq?.custom ? "Your own set; change anything." : "Started from Wrangler's set; change anything."}</p></div>
           <div className="acts">
-            <Button onClick={async () => { if (!(await confirm({ title: "Reset to Wrangler's set?", body: "Your steps and questions go back to the starting set. Proposals already answered keep their answers.", yes: "Reset", danger: true }))) return; try { await reset({}); setQn(qq!.wrangler as Questionnaire); setSel(0); setDirty(false); show("Back to Wrangler's set"); } catch (e) { show(errText(e)); } }}>Reset to Wrangler's set</Button>
-            <ButtonLink variant="primary" to="/proposals/questionnaire/preview">Preview</ButtonLink>
+            <Button onClick={async () => { if (!(await confirm({ title: "Reset to Wrangler's set?", body: brief ? "Your steps and questions go back to the starting set. Briefs already sent keep theirs." : "Your steps and questions go back to the starting set. Proposals already answered keep their answers.", yes: "Reset", danger: true }))) return; try { await reset({}); setQn(qq!.wrangler as Questionnaire); setSel(0); setDirty(false); show("Back to Wrangler's set"); } catch (e) { show(errText(e)); } }}>Reset to Wrangler's set</Button>
+            <ButtonLink variant="primary" to={brief ? "/settings/brief/preview" : "/proposals/questionnaire/preview"}>Preview</ButtonLink>
           </div>
         </header>
         <div className="qz-ecols">
@@ -510,7 +519,7 @@ export function QuestionnaireEditor() {
               {qn.steps.map((s, i) => <button key={s.id} type="button" className={`qz-sitem${i === sel ? " on" : ""}`} onClick={() => { setSel(i); setOpen(null); setRenaming(false); }}><span>{i + 1}. {s.title}</span><span className="secondary">{s.questions.length}</span></button>)}
               {qn.steps.length < 12 && <button type="button" className="btn ghost sm qz-add" onClick={() => { const id = `s${newId()}`; edit((q) => ({ steps: [...q.steps, { id, title: "New step", heading: "New step.", sub: "", questions: [] }] })); setSel(qn.steps.length); setRenaming(true); }}><Icon name="plus" size={14} />Add step</button>}
             </section>
-            <p className="wp-small secondary">Client and Pricing can't be removed: a proposal needs both.</p>
+            <p className="wp-small secondary">{brief ? "Files aren't asked for here: use Make a request on the project, and they go straight to your Dropbox." : "Client and Pricing can't be removed: a proposal needs both."}</p>
           </div>
           <section className="qz-card glass col" aria-label={step.title}>
             <div className="qz-rhead">
@@ -520,7 +529,7 @@ export function QuestionnaireEditor() {
                 <Menu label="More for this step" align="end" trigger={(p) => <button type="button" className="icon-btn sm" aria-label="More for this step" {...p}><Icon name="more" size={18} /></button>}>
                   <MenuItem disabled={sel === 0} onSelect={() => moveStep(sel, -1)}>Move up</MenuItem>
                   <MenuItem disabled={sel === qn.steps.length - 1} onSelect={() => moveStep(sel, 1)}>Move down</MenuItem>
-                  <MenuItem danger disabled={!!step.fixed} onSelect={async () => { if (!(await confirm({ title: `Remove "${step.title}"?`, body: "Its questions go too.", yes: "Remove", danger: true }))) return; edit((q) => ({ steps: q.steps.filter((s) => s.id !== step.id) })); setSel(Math.max(0, sel - 1)); }}>Remove step</MenuItem>
+                  <MenuItem danger disabled={!!step.fixed || qn.steps.length === 1} onSelect={async () => { if (!(await confirm({ title: `Remove "${step.title}"?`, body: "Its questions go too.", yes: "Remove", danger: true }))) return; edit((q) => ({ steps: q.steps.filter((s) => s.id !== step.id) })); setSel(Math.max(0, sel - 1)); }}>Remove step</MenuItem>
                 </Menu>
               </span>
             </div>
@@ -565,7 +574,7 @@ export function QuestionnaireEditor() {
               </div>
             ))}
             {step.questions.length < 20 && <Menu label="Add question" trigger={(p) => <button type="button" className="btn ghost sm qz-add" {...p}><Icon name="plus" size={14} />Add question</button>}>
-              {ADDABLE.map((t) => <MenuItem key={t.type} onSelect={() => { const id = `q${newId()}`; setStep({ questions: [...step.questions, { id, label: t.label, type: t.type, ...(t.type === "select" || t.type === "multi" ? { options: ["Option 1"] } : {}) }] }); setOpen(id); }}>{t.label}</MenuItem>)}
+              {addable.map((t) => <MenuItem key={t.type} onSelect={() => { const id = `q${newId()}`; setStep({ questions: [...step.questions, { id, label: t.label, type: t.type, ...(t.type === "select" || t.type === "multi" ? { options: ["Option 1"] } : {}) }] }); setOpen(id); }}>{t.label}</MenuItem>)}
             </Menu>}
           </section>
         </div>

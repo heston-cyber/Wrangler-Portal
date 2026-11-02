@@ -15,6 +15,7 @@ import { errText } from "../docs/pages/common";
 import { CONVEX_SITE } from "../docs/lib/client";
 import { bytes } from "./common";
 import { shootDay } from "./Shoots";
+import { BriefRow, useBrief } from "./Brief";
 
 const todayLocal = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
 const monthDay = (t: number) => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -254,19 +255,22 @@ export function ClientRequestPage({ requestId }: { requestId: string }) {
   );
 }
 
-/** The owner's "Requests and brief" card (741:1424): file requests now; the kickoff brief joins it. */
+/** The owner's "Requests and brief" card (741:1424): file requests, then the kickoff brief. */
 export function RequestsCard({ projectId, label, client }: { projectId: Id<"projects">; label: string; client: string | null }) {
   const d = useRequests(projectId);
+  const brief = useBrief(projectId);
   const [asking, setAsking] = useState(false);
   const [open, setOpen] = useState<Req | null>(null);
   const [toast, show] = useToast();
-  if (d === undefined) return <Card className="pj-requests" label="Requests and brief" head={<SectionHead label="Requests and brief" />}><SkeletonRows n={1} /></Card>;
-  if (d === null) return null;
+  if (d === undefined || brief === undefined) return <Card className="pj-requests" label="Requests and brief" head={<SectionHead label="Requests and brief" />}><SkeletonRows n={2} /></Card>;
+  if (d === null || brief === null) return null;
+  const count = d.requests.length + (brief.brief ? 1 : 0);
   return (
     <>
-      <Card className="pj-requests" label="Requests and brief" head={<SectionHead label="Requests and brief" count={d.requests.length || undefined} action={<Button size="sm" variant="ghost" onClick={() => setAsking(true)}>Make a request</Button>} />}>
+      <Card className="pj-requests" label="Requests and brief" head={<SectionHead label="Requests and brief" count={count || undefined} action={<Button size="sm" variant="ghost" onClick={() => setAsking(true)}>Make a request</Button>} />}>
         {d.requests.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "upload" }} title="No file requests." meta={`Ask ${client ?? "the client"} for logos, brand guides, music and more. They upload straight to your Dropbox.`} />
           : <RequestRows d={d} onOpen={setOpen} />}
+        <BriefRow projectId={projectId} d={brief} client={client} divider show={show} />
       </Card>
       {asking && <AskForFiles projectId={projectId} label={label} d={d} client={client} onClose={() => setAsking(false)} show={show} />}
       {open && <RequestDialog r={open} today={d.today} onClose={() => setOpen(null)} show={show} />}

@@ -721,6 +721,7 @@ export default defineSchema({
     brandKit: v.optional(v.any()),           // Phase 3b (D71): Settings › Brand kit (convex/brandKit.ts)
     quoteSeq: v.optional(v.number()),        // Phase 3b: the last quote number used (D74)
     proposalSeq: v.optional(v.number()),     // Phase 3b: the last proposal number used (D85)
+    kickoff: v.optional(v.any()),            // Phase 4 (Nov 2): the business's own kickoff brief questions (lib/kickoff.ts)
     questionnaire: v.optional(v.any()),      // Phase 3b (D70): the business's own proposal questionnaire (lib/questionnaire.ts)
     // Phase 2b (D64): when Stripe's last retry of a subscription payment fails: keep it past due (default) or cancel it.
     subFailRule: v.optional(v.union(v.literal("past_due"), v.literal("cancel"))),
@@ -1209,6 +1210,28 @@ export default defineSchema({
     expiresAt: v.number(),
     createdAt: v.number(),
   }).index("by_token", ["token"]).index("by_request", ["requestId"]),
+
+  // Phase 4 (Nov 2): the kickoff brief, one per project (option B). The questions are copied in when it's sent, so
+  // editing Settings › Kickoff brief later doesn't change a brief already out. Every portal person on the project
+  // answers the same one; answers save as they're typed.
+  briefs: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    projectId: v.id("projects"),
+    questions: v.any(),                       // the Questionnaire as sent (lib/questionnaire.ts)
+    answers: v.any(),                         // { [questionId]: value }
+    step: v.number(),                         // where they left off
+    status: v.union(v.literal("sent"), v.literal("submitted")),
+    sentAt: v.number(),
+    remindedAt: v.optional(v.number()),
+    startedAt: v.optional(v.number()),        // first answer saved
+    submittedAt: v.optional(v.number()),      // the first time it was sent back
+    submittedBy: v.optional(v.string()),      // email
+    updatedBy: v.optional(v.string()),
+    submits: v.number(),
+    history: v.array(v.object({ at: v.number(), text: v.string() })),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_project", ["projectId"]),
 
   inboxItems: defineTable({
     businessId: v.optional(v.id("businesses")),

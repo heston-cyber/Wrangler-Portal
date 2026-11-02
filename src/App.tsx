@@ -11,6 +11,7 @@ import ClientReview from "./modules/clients/ClientReview";
 import ClientProject, { type ClientProjectTab } from "./modules/projects/ClientProject";
 import { ClientShootPage } from "./modules/projects/Shoots";
 import { ClientRequestPage } from "./modules/projects/Requests";
+import { ClientBriefPage } from "./modules/projects/Brief";
 import ClientSettings from "./modules/clients/ClientSettings";
 import Home from "./modules/review/Home";
 import OwnerHome from "./modules/home/OwnerHome";
@@ -232,7 +233,7 @@ function SignedIn() {
   else if (/^\/clients\/follow-ups\/?$/.test(path)) page = <Suspense fallback={<Loading />}><FollowUps /></Suspense>;
   else if (/^\/clients\/deals\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><DealPage key={id} dealId={id} /></Suspense>; }
   else if (/^\/clients\/people\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><ContactPage key={id} personId={id} /></Suspense>; }
-  else if (/^\/clients\/estimates\/new\/?$/.test(path)) page = <Suspense fallback={<Loading />}><EstimatePage key={search} dealId={params.get("deal")} clientId={params.get("client")} projectId={params.get("project")} /></Suspense>;
+  else if (/^\/clients\/estimates\/new\/?$/.test(path)) page = <Suspense fallback={<Loading />}><EstimatePage key={search} dealId={params.get("deal")} clientId={params.get("client")} projectId={params.get("project")} briefId={params.get("brief")} /></Suspense>;
   else if (/^\/clients\/estimates\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><EstimatePage key={id} estimateId={id} /></Suspense>; }
   else if (/^\/clients\/?$/.test(path)) page = <ClientsPage />;
   else if (/^\/sent\/?$/.test(path)) page = <SentPage />;
@@ -241,6 +242,8 @@ function SignedIn() {
   else if (clientRec) { const t = params.get("tab"); page = <ClientPage key={clientRec[1]} clientId={clientRec[1] as Id<"clients">} tab={(["projects", "shared", "documents", "inbox", "brand", "settings"].includes(t ?? "") ? t : "overview") as ClientTab} />; }
   else if (path.startsWith("/activity")) page = <ActivityPage />;
   else if (path.startsWith("/register")) page = <Settings me={me} />; // now Settings › Register
+  else if (/^\/settings\/brief\/questions\/?$/.test(path)) page = <Suspense fallback={<Loading />}><QuestionnaireEditor kind="kickoff" /></Suspense>;
+  else if (/^\/settings\/brief\/preview\/?$/.test(path)) page = <ClientBriefPage key="preview" preview />;
   else if (path.startsWith("/settings")) page = <Settings me={me} />;
   else if (/^\/more\/?$/.test(path)) page = <MorePage me={me} side="owner" />;
   else if (/^\/review\/?$/.test(path)) page = <Home />; // Review's main page
@@ -284,6 +287,8 @@ function ClientRoutes({ me }: { me: { name: string | null; email: string } }) {
   if (shoot) return <ClientShootPage key={shoot[1]} shootId={shoot[1]} />;
   const req = /^\/requests\/([^/]+)\/?$/.exec(path);
   if (req) return <ClientRequestPage key={req[1]} requestId={req[1]} />;
+  const brief = /^\/briefs\/([^/]+)\/?$/.exec(path);
+  if (brief) return <ClientBriefPage key={brief[1]} briefId={brief[1]} />;
   const proj = /^\/projects\/([^/]+)\/?$/.exec(path);
   if (proj) { const t = params.get("tab"); return <ClientProject key={proj[1]} projectId={proj[1]} tab={(t === "videos" || t === "documents" ? t : "overview") as ClientProjectTab} />; }
   if (path.startsWith("/settings")) return <ClientSettings me={me} />;

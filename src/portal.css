@@ -2460,3 +2460,24 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 .cal-err { margin: 0; color: var(--text-warning); }
 .cal-off { justify-self: start; }
 .sh-done > :first-child { color: var(--text-success); flex: none; }
+
+/* Phase 4 (Nov 2): the kickoff brief (740:1671, 740:2074; the row on Requests and brief, 741:1424) */
+.br-sec { display: grid; gap: 4px; margin: 4px 0 8px; }
+.br-sec .crm-dl { padding: 0; }
+.br-sec .crm-dl dt { padding-right: 24px; }
+.br-answers { padding: 4px 0 6px; column-gap: 24px; }
+.br-answers dd { white-space: pre-wrap; }
+.br-rowacts { display: inline-flex; gap: 8px; flex: none; }
+.br-acts { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+@media (max-width: 600px) {
+  .br-row { flex-wrap: wrap; }
+  .br-row .br-rowacts { width: 100%; padding-left: 44px; }
+  .br-answers { grid-template-columns: 1fr; }
+  .br-answers dt { padding-bottom: 0; }
+  .br-answers dd { text-align: left; padding-top: 4px; }
+  .br-sec .crm-dl { grid-template-columns: 1fr; }
+  .br-sec .crm-dl dd { text-align: left; padding-top: 2px; }
+  .br-sec .crm-dl dt { padding-bottom: 0; }
+}
+/* The done tick on a step (the proposal questionnaire's too): white on the red dot, not red on red. */
+.qz-step .n .wp-icon { color: var(--on-accent); width: 12px; height: 12px; }
