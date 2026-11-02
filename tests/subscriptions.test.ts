@@ -96,6 +96,9 @@ describe("starting a subscription", () => {
   });
 
   test("the client saves a card: it becomes the default, and the subscription is made in Stripe charged now; Stripe's state comes back", async () => {
+    // A start date of today begins at 9:00 Central (startMoment), so before 9 AM "today" counts as a later start.
+    // Pin the clock to midday Central so this test means the same thing whenever it runs (it failed at 7:45 AM).
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(`${today()}T18:00:00Z`) });
     process.env.STRIPE_PUBLISHABLE_KEY = "pk_test_platform";
     const w = await world();
     const planId = await withPlan(w);
@@ -113,6 +116,7 @@ describe("starting a subscription", () => {
     const s = await w.heston.query(api.subscriptions.get, { subscriptionId: id });
     expect(s).toMatchObject({ status: "active", method: "Visa •••• 4242", inStripe: true, currentPeriodEnd: 1_792_592_000_000 });
     delete process.env.STRIPE_PUBLISHABLE_KEY;
+    vi.useRealTimers();
   });
 
   test("a later start: nothing now (charged on the start date), or the first period now with the plan from the next period on", async () => {
