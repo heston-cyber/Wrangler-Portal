@@ -857,7 +857,10 @@ function BriefingSendTo({ b, locked, onPick }: { b: BriefingInfo; locked: boolea
   return (
     <div className="wsb-brief">
       <span className="label">Briefing</span>
-      {locked ? <p className="caption">Sent to {b.sentTo?.name ?? b.vendor}{b.sentTo ? ` (${b.sentTo.email})` : ""}{b.readAt ? `. Read ${longDay(b.readAt)}.` : ". Not read yet."}</p> : <>
+      {locked ? <>
+        <p className="caption">Sent to {b.sentTo?.name ?? b.vendor}{b.sentTo ? ` (${b.sentTo.email})` : ""}{b.readAt ? `. Read ${longDay(b.readAt)}.` : ". Not read yet."}</p>
+        {b.pdfUrl && <a className="btn ghost sm" href={b.pdfUrl} target="_blank" rel="noopener noreferrer">Open the PDF they got</a>}
+      </> : <>
         <label className="field"><span className="ws-flabel">Send to</span>
           <select className="input sm" value={b.bookingId ?? ""} onChange={(e) => onPick(e.target.value)}>
             {!b.bookingId && <option value="" disabled>Pick a booked vendor</option>}
