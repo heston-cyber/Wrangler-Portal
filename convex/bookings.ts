@@ -93,7 +93,10 @@ export const get = query({
     const x = id ? await ctx.db.get(id) : null;
     if (!x) return null;
     const vendor = await ctx.db.get(x.vendorId);
-    return { ...(await rowOf(ctx, x, todayCentral())), vendorEmail: vendor?.email ?? null, suggestedCents: x.suggestedCents ?? null, createdBy: x.createdBy ?? null };
+    // Phase 3c step 3: the newest briefing for this booking, to open from here.
+    const brief = (await ctx.db.query("briefings").withIndex("by_booking", (q) => q.eq("bookingId", x._id)).collect()).sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
+    return { ...(await rowOf(ctx, x, todayCentral())), vendorEmail: vendor?.email ?? null, suggestedCents: x.suggestedCents ?? null, createdBy: x.createdBy ?? null,
+      briefing: brief ? { _id: brief._id, sentAt: brief.sentAt ?? null, readAt: brief.readAt ?? null } : null };
   },
 });
 

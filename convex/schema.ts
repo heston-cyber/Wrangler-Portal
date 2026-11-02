@@ -481,7 +481,7 @@ export default defineSchema({
     style: v.any(),
     signers: v.any(),                       // client signers (name, email, title) for when it's sent
     templateId: v.optional(v.id("wsTemplates")),
-    kind: v.optional(v.literal("proposal")),  // Phase 3b: a proposal (Proposals), never a contract; kept out of Docs
+    kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"))),  // Phase 3b: a proposal (Proposals); 3c: a briefing (D97). Never a contract; kept out of Docs
     documentId: v.optional(v.id("wsDocuments")), // set once it has gone to signing
     renderedAt: v.optional(v.number()),
     createdAt: v.number(),
@@ -491,7 +491,7 @@ export default defineSchema({
     businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     name: v.string(),
     description: v.optional(v.string()),
-    kind: v.optional(v.literal("proposal")),  // Phase 3b: a proposal template, kept apart from contract templates
+    kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"))),  // a proposal or briefing template, kept apart from contract templates
     blocks: v.any(),
     fields: v.any(),
     style: v.any(),
@@ -884,6 +884,25 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_email", ["email"]),
+
+  // Phase 3c step 3 · briefings (D97, S5 · Phase 3c 730:4522, 731:3904): a shoot or edit brief made in the builder (its
+  // wsBuilds row, kind "briefing"), sent to a vendor booked on the project (email 25). The vendor reads the PDF that was
+  // sent and presses "I've read it" in their portal (step 4). Never signed.
+  briefings: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    buildId: v.id("wsBuilds"),
+    projectId: v.id("projects"),
+    bookingId: v.optional(v.id("vendorBookings")),      // who it's for (a booking on this project)
+    starter: v.optional(v.union(v.literal("shoot"), v.literal("edit"))),
+    status: v.union(v.literal("draft"), v.literal("sent")),
+    pdfId: v.optional(v.id("_storage")),                // frozen at send: what the vendor reads
+    sentAt: v.optional(v.number()),
+    sentTo: v.optional(v.object({ vendorId: v.id("vendors"), name: v.string(), email: v.string() })),
+    readAt: v.optional(v.number()),                     // "I've read it" (the vendor side, step 4)
+    history: v.array(v.object({ kind: v.string(), at: v.number(), by: v.optional(v.string()), detail: v.optional(v.string()) })),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_build", ["buildId"]).index("by_project", ["projectId"]).index("by_booking", ["bookingId"]),
 
   // Phase 3c step 2 · bookings (S5 · Phase 3c 732:3051 Book a vendor, 730:2326 Crew card, 730:3942 Vendors › Bookings).
   // A vendor offered work on a project: role, dates, the agreed rate. Offered and accepted bookings show on the

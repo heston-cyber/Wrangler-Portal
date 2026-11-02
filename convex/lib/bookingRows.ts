@@ -10,12 +10,17 @@ export type BookingRow = {
   role: string; start: string; end: string; days: number; rate: { cents: number; unit: "day" | "hour" }; hours: number | null;
   expectedCents: number; state: BookingState; location: string | null; note: string | null; declineReason: string | null;
   offeredAt: number; answeredAt: number | null; cancelledAt: number | null;
+  brief: "none" | "draft" | "sent" | "read"; // Phase 3c step 3: the latest briefing for this booking
 };
 
 export async function rowOf(ctx: QueryCtx, x: Doc<"vendorBookings">, today: string): Promise<BookingRow> {
   const vendor = await ctx.db.get(x.vendorId);
   const p = await ctx.db.get(x.projectId);
+  const briefs = await ctx.db.query("briefings").withIndex("by_booking", (q) => q.eq("bookingId", x._id)).collect();
+  const sent = briefs.filter((b) => b.status === "sent");
+  const brief = sent.some((b) => b.readAt) ? "read" : sent.length ? "sent" : briefs.length ? "draft" : "none";
   return {
+    brief,
     _id: x._id, vendorId: x.vendorId, vendor: vendor?.name ?? "A vendor", projectId: x.projectId, project: p ? label(p) : "A project",
     role: x.role, start: x.start, end: x.end, days: daysIn(x.start, x.end), rate: x.rate, hours: x.hours ?? null,
     expectedCents: expectedCents(x), state: bookingState(x, today), location: x.location ?? null, note: x.note ?? null,

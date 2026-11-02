@@ -382,3 +382,18 @@ export function bookingOfferMail(b: MailBrand, d: { name: string; role: string; 
     { t: "button", label: "View the booking", href: d.link }, { t: "link", href: d.link },
   ], signoff(b), `${d.role} · ${dateRange(d.start, d.end)} · ${dollars(d.rateCents)} / ${d.unit}`);
 }
+
+// ---------- 25: a briefing sent to a booked vendor (Phase 3c, S5 · Phase 3c 735:5165) ----------
+const andList = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
+export function briefingMail(b: MailBrand, d: { name: string; kind: string; project: string; title: string; role: string; start: string; end: string; headings: string[]; link: string }): Mail {
+  const sender = first(b.ownerName) || b.name;
+  const parts = d.headings.slice(0, 4).map((h, i) => (i === 0 ? h : h.toLowerCase()));
+  return mk(b, "updates", `Brief: ${d.project}`, [
+    hi(d.name),
+    { t: "p", text: `${sender} sent you the ${d.kind.toLowerCase()} for ${d.project}.` },
+    { t: "sums", rows: [{ label: "Dates", value: dateRange(d.start, d.end), big: true }, { label: "Role", value: d.role }, { label: "Brief", value: d.title }] },
+    ...(parts.length ? [{ t: "p", text: `${andList(parts)} ${parts.length === 1 ? "is" : "are"} in the brief.`, tone: "muted" } as Block] : []),
+    { t: "p", text: "Read it in your portal and press “I’ve read it”." },
+    { t: "button", label: "Read the brief", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `${d.title} · ${dateRange(d.start, d.end)}`);
+}

@@ -11,6 +11,7 @@ import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps, navigate } from "../../lib/router";
 import { errText } from "../docs/pages/common";
 import { MoneyInput, dateShort, money } from "../payments/common";
+import { NewBriefing } from "./NewBriefing";
 import { dateRange, daysIn, expectedCents, isDate, shortRange, suggestRate, type BookingState, type Unit } from "../../../convex/lib/bookings";
 
 type Row = NonNullable<ReturnType<typeof useQuery<typeof api.bookings.list>>>[number];
@@ -21,8 +22,9 @@ const CHIP: Record<BookingState, [Tone, string]> = { offered: ["danger", "Offere
 export const BookingChip = ({ state }: { state: BookingState }) => <StatusChip tone={CHIP[state][0]}>{CHIP[state][1]}</StatusChip>;
 const offeredText = (t: number) => (new Date(t).toDateString() === new Date().toDateString() ? "offered today" : `offered ${dateShort(t)}`);
 /** What follows the dates in a row: the rate, then where it stands. */
+const BRIEF = { none: "no brief yet", draft: "brief drafted", sent: "brief sent", read: "brief read" } as const;
 function rowMeta(x: Row, withProject: boolean) {
-  const tail = x.state === "declined" ? (x.declineReason ? `“${x.declineReason}”` : "no reason given") : x.state === "offered" ? offeredText(x.offeredAt) : x.state === "cancelled" ? `cancelled ${dateShort(x.cancelledAt ?? x.offeredAt)}` : null;
+  const tail = x.state === "declined" ? (x.declineReason ? `“${x.declineReason}”` : "no reason given") : x.state === "offered" ? (x.brief === "none" ? offeredText(x.offeredAt) : BRIEF[x.brief]) : x.state === "cancelled" ? `cancelled ${dateShort(x.cancelledAt ?? x.offeredAt)}` : BRIEF[x.brief];
   return [withProject ? x.project : null, shortRange(x.start, x.end), rateText(x.rate), tail].filter(Boolean).join(" · ");
 }
 
@@ -172,6 +174,7 @@ export function BookingPage({ bookingId }: { bookingId: string }) {
   const cancel = useMutation(api.bookings.cancel);
   const [toast, show] = useToast();
   const [confirm, confirmNode] = useConfirm();
+  const [briefing, setBriefing] = useState(false);
   const top = <TopBar><a {...linkProps("/vendors")}>Vendors</a><Sep /><a {...linkProps("/vendors/bookings")}>Bookings</a>{x && <><Sep /><span className="here">{x.vendor} · {x.role}</span></>}</TopBar>;
   if (x === undefined) return <>{top}<div className="wp-page"><Card label="Loading"><SkeletonRows n={5} /></Card></div></>;
   if (x === null) return <>{top}<div className="wp-page"><EmptyState icon="calendar" title="This booking isn't here." actions={<ButtonLink to="/vendors/bookings">All bookings</ButtonLink>} /></div></>;
@@ -209,12 +212,14 @@ export function BookingPage({ bookingId }: { bookingId: string }) {
               <dl className="cp-see">
                 <dt>Offered</dt><dd>{dateShort(x.offeredAt)}{x.createdBy ? ` by ${x.createdBy}` : ""} · emailed to {x.vendorEmail ?? first}</dd>
                 <dt>Answer</dt><dd>{answer}</dd>
-                <dt>Briefing</dt><dd className="secondary">Briefings arrive in the next build step.</dd>
+                <dt>Briefing</dt><dd>{x.briefing ? <a {...linkProps(`/vendors/briefings/${x.briefing._id}`)}>{x.briefing.readAt ? `Read ${dateShort(x.briefing.readAt)}` : x.briefing.sentAt ? `Sent ${dateShort(x.briefing.sentAt)}, not read yet` : "A draft"}</a>
+                  : open ? <button type="button" className="linkbtn" onClick={() => setBriefing(true)}>Write the briefing</button> : <span className="secondary">None</span>}</dd>
               </dl>
             </Card>
           </div>
         </div>
       </div>
+      {briefing && <NewBriefing bookingId={x._id} onClose={() => setBriefing(false)} />}
       {confirmNode}{toast}
     </>
   );
@@ -230,7 +235,7 @@ export function CrewCard({ projectId }: { projectId: Id<"projects"> }) {
       <Card className="pj-crew" label="Crew" head={<SectionHead label="Crew" count={rows?.length ?? undefined} action={<Button size="sm" variant="ghost" onClick={() => setBooking(true)}>Book a vendor</Button>} />}>
         {rows === undefined ? <SkeletonRows n={2} /> : !rows || rows.length === 0 ? <p className="pj-pad secondary">No one booked yet. Book a shooter, editor or anyone else you hire.</p>
           : rows.map((x) => <ListRow key={x._id} lead={{ avatar: x.vendor, two: true }} to={`/vendors/bookings/${x._id}`} title={`${x.vendor} · ${x.role}`}
-            meta={[shortRange(x.start, x.end), x.state === "offered" ? offeredText(x.offeredAt) : x.state === "declined" ? (x.declineReason ? `“${x.declineReason}”` : null) : null].filter(Boolean).join(" · ")}
+            meta={[shortRange(x.start, x.end), x.state === "declined" ? (x.declineReason ? `“${x.declineReason}”` : null) : x.state === "offered" && x.brief === "none" ? offeredText(x.offeredAt) : BRIEF[x.brief]].filter(Boolean).join(" · ")}
             chip={<BookingChip state={x.state} />} chevron />)}
       </Card>
       {booking && <BookDialog projectId={projectId} onClose={() => setBooking(false)} />}

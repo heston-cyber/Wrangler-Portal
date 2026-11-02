@@ -2330,3 +2330,6 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 .bk-sug p { margin: 0; }
 .bk-sug .qz-changed { flex: 0 0 auto; }
 .pj-crew .wp-row .title, .pj-crew .wp-row .meta { overflow-wrap: anywhere; }
+/* Phase 3c step 3 · a briefing's Send to, under Insert (731:3904) */
+.wsb-brief { display: grid; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-hairline); }
+.wsb-brief .label { color: var(--accent); }

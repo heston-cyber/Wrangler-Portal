@@ -13,6 +13,8 @@ import { linkProps, navigate } from "../../lib/router";
 import { errText } from "../docs/pages/common";
 import { MoneyInput, money } from "../payments/common";
 import { BookDialog, VendorBookings } from "./Bookings";
+import { NewBriefing } from "./NewBriefing";
+import { VendorBriefings } from "./VendorBriefings";
 
 export const VENDOR_ROLES = ["Shooter", "Editor", "Drone pilot", "Sound", "Colourist", "Production assistant"];
 type Rate = { role: string; unit: "day" | "hour"; cents: number };
@@ -116,6 +118,7 @@ export function VendorPage({ vendorId }: { vendorId: string }) {
   const archive = useMutation(api.vendors.archive);
   const [editing, setEditing] = useState(false);
   const [booking, setBooking] = useState(false);
+  const [briefing, setBriefing] = useState(false);
   const [toast, show] = useToast();
   const [confirm, confirmNode] = useConfirm();
   if (x === undefined) return <><TopBar><a {...linkProps("/vendors")}>Vendors</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={5} /></Card></div></>;
@@ -132,7 +135,7 @@ export function VendorPage({ vendorId }: { vendorId: string }) {
           <div className="txt"><h1 className="wp-h2">{x.name}</h1>
             <div className="tags">{x.roles.map((r) => <span key={r} className="wp-tag">{r}</span>)}<span className="wp-tag">{x.portal === "in the portal" ? "In the portal" : x.portal === "not invited" ? "Not invited" : x.portal.replace(/^invited/, "Invited")}</span></div></div>
           <div className="acts">
-            <Button disabled title="Briefings arrive in the next build step">Send briefing</Button>
+            <Button onClick={() => setBriefing(true)}>Send briefing</Button>
             <Button variant="primary" onClick={() => setBooking(true)}>Book</Button>
           </div>
         </header>
@@ -144,7 +147,7 @@ export function VendorPage({ vendorId }: { vendorId: string }) {
         <div className="wp-homecols">
           <div className="col">
             <VendorBookings vendorId={x._id} first={first} />
-            <Card label="Briefings" head={<SectionHead label="Briefings" count={0} />}><ListRow className="ilead quiet" lead={{ icon: "note" }} title="No briefings sent yet." /></Card>
+            <VendorBriefings vendorId={x._id} first={first} />
             <Card label="Invoices and payments" head={<SectionHead label="Invoices and payments" count={0} />}><ListRow className="ilead quiet" lead={{ icon: "invoice" }} title={`Nothing from ${first} yet.`} /></Card>
           </div>
           <div className="col right">
@@ -174,6 +177,7 @@ export function VendorPage({ vendorId }: { vendorId: string }) {
       </div>
       {editing && <VendorDialog onClose={() => setEditing(false)} vendor={x} />}
       {booking && <BookDialog vendorId={x._id} onClose={() => setBooking(false)} />}
+      {briefing && <NewBriefing vendorId={x._id} onClose={() => setBriefing(false)} />}
       {confirmNode}{toast}
     </>
   );

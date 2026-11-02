@@ -63,6 +63,9 @@ const VendorsPage = lazy(() => import("./modules/vendors/Vendors"));
 const VendorPage = lazy(() => import("./modules/vendors/Vendors").then((m) => ({ default: m.VendorPage })));
 const BookingsPage = lazy(() => import("./modules/vendors/Bookings"));
 const BookingPage = lazy(() => import("./modules/vendors/Bookings").then((m) => ({ default: m.BookingPage })));
+const BriefingsPage = lazy(() => import("./modules/vendors/Briefings"));
+const BriefingBuilder = lazy(() => import("./modules/vendors/Briefings").then((m) => ({ default: m.BriefingBuilder })));
+const BriefingTemplateBuilder = lazy(() => import("./modules/vendors/Briefings").then((m) => ({ default: m.BriefingTemplateBuilder })));
 const QuestionnaireEditor = lazy(() => import("./modules/proposals/Questionnaire").then((m) => ({ default: m.QuestionnaireEditor })));
 const QuestionnaireRunner = lazy(() => import("./modules/proposals/Questionnaire").then((m) => ({ default: m.QuestionnaireRunner })));
 // Wrangler Sign (S1): its own chunk, so pdf.js only loads on those pages.
@@ -202,6 +205,9 @@ function SignedIn() {
   else if (/^\/sign\/templates\/?$/.test(path)) page = <Suspense fallback={<Loading />}><SignTemplates /></Suspense>;
   else if (path.startsWith("/sign")) page = <Suspense fallback={<Loading />}><SignHome /></Suspense>;
   else if (/^\/vendors\/?$/.test(path)) page = <Suspense fallback={<Loading />}><VendorsPage /></Suspense>;
+  else if (/^\/vendors\/briefings\/?$/.test(path)) page = <Suspense fallback={<Loading />}><BriefingsPage /></Suspense>;
+  else if (/^\/vendors\/briefings\/templates\/[^/]+\/?$/.test(path)) { const id = path.split("/")[4]; page = <Suspense fallback={<Loading />}><BriefingTemplateBuilder key={id} templateId={id} /></Suspense>; }
+  else if (/^\/vendors\/briefings\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><BriefingBuilder key={id} briefingId={id} /></Suspense>; }
   else if (/^\/vendors\/bookings\/?$/.test(path)) page = <Suspense fallback={<Loading />}><BookingsPage /></Suspense>;
   else if (/^\/vendors\/bookings\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><BookingPage key={id} bookingId={id} /></Suspense>; }
   else if (/^\/vendors\/[^/]+\/?$/.test(path)) { const id = path.split("/")[2]; page = <Suspense fallback={<Loading />}><VendorPage key={id} vendorId={id} /></Suspense>; }

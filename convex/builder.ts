@@ -30,7 +30,15 @@ const clean = (s: string, n = 120) => s.trim().slice(0, n);
 // Phase 3b: proposals live in the builder too (kind "proposal"), but never in Docs' lists, never go to signing, and
 // can't change once sent (the client is reading the PDF that was sent).
 const isProposal = (x: { kind?: string } | null | undefined) => x?.kind === "proposal";
+// Phase 3c: briefings (D97) too: their own kind, kept out of Docs, never signed, locked once sent.
+const isBriefing = (x: { kind?: string } | null | undefined) => x?.kind === "briefing";
+const isSide = (x: { kind?: string } | null | undefined) => isProposal(x) || isBriefing(x);
 async function assertEditable(ctx: QueryCtx, b: { _id: Id<"wsBuilds">; kind?: string }) {
+  if (isBriefing(b)) {
+    const br = await ctx.db.query("briefings").withIndex("by_build", (q) => q.eq("buildId", b._id)).first();
+    if (br && br.status !== "draft") throw new ConvexError("This briefing has been sent, so it can't change. Make a copy to change it.");
+    return;
+  }
   if (!isProposal(b)) return;
   const p = await ctx.db.query("proposals").withIndex("by_build", (q) => q.eq("buildId", b._id)).first();
   if (p && p.status !== "draft" && p.status !== "ready" && p.status !== "waiting") throw new ConvexError(`Proposal ${p.number} has been sent, so it can't change. Make a copy to change it.`);
@@ -68,7 +76,7 @@ export const listBuilds = query({
   args: {},
   handler: async (ctx) => {
     await requireMe(ctx);
-    const rows = (await ctx.db.query("wsBuilds").withIndex("by_updated").order("desc").take(300)).filter((b) => !isProposal(b));
+    const rows = (await ctx.db.query("wsBuilds").withIndex("by_updated").order("desc").take(300)).filter((b) => !isSide(b));
     return rows.map((b) => ({ _id: b._id, title: b.title, updatedAt: b.updatedAt, createdAt: b.createdAt, documentId: b.documentId ?? null, client: ((b.fields as Fields)?.client?.name) || "" }));
   },
 });
@@ -93,6 +101,7 @@ export const createBuild = mutation({
     const t = templateId ? await ctx.db.get(templateId) : null;
     if (templateId && !t) throw new ConvexError("That template doesn't exist.");
     if (isProposal(t)) throw new ConvexError("That's a proposal template. Use it from Proposals.");
+    if (isBriefing(t)) throw new ConvexError("That's a briefing template. Use it from Vendors › Briefings.");
     const fields: Fields = t ? { ...emptyFields(business), ...(t.fields as Partial<Fields>), business, client: emptyFields(business).client, date: emptyFields(business).date } : emptyFields(business);
     const blocks: Page = t ? freshIds(pageOf(t.blocks)) : { type: "doc", content: [
       line("Untitled document", { size: "title" }),
@@ -135,6 +144,7 @@ export const deleteBuild = mutation({
     const b = await ctx.db.get(buildId);
     if (!b) return null;
     if (isProposal(b)) throw new ConvexError("This is a proposal. Delete it from Proposals.");
+    if (isBriefing(b)) throw new ConvexError("This is a briefing. Delete it from Vendors › Briefings.");
     if (b.documentId && (await ctx.db.get(b.documentId))) throw new ConvexError("This one has gone to signing; it stays with its document.");
     await ctx.db.delete(buildId);
     return null;
@@ -178,6 +188,7 @@ export async function toSigningCore(ctx: ActionCtx, buildId: Id<"wsBuilds">, sto
   const r = await ctx.runQuery(internal.builder.buildForSigning, { buildId });
   if (!r) { await ctx.storage.delete(storageId); throw new Error("That document doesn't exist."); }
   if (isProposal(r.build)) { await ctx.storage.delete(storageId); throw new Error("Proposals aren't signed. Send it from Proposals; once it's accepted, Start the contract makes the agreement."); }
+  if (isBriefing(r.build)) { await ctx.storage.delete(storageId); throw new Error("Briefings aren't signed. Send it from Vendors › Briefings; the vendor presses “I’ve read it”."); }
   const d: BuildDoc = { title: r.build.title, page: pageOf(r.build.blocks), fields: r.build.fields as Fields, signers: (r.build.signers as ExtraSigner[]) ?? [], style: r.build.style as Style };
   const problems = buildProblems(d);
   if (problems.length) { await ctx.storage.delete(storageId); throw new Error(problems[0]); }
@@ -223,7 +234,7 @@ export const listTemplates = query({
   args: {},
   handler: async (ctx) => {
     await requireMe(ctx);
-    const rows = (await ctx.db.query("wsTemplates").withIndex("by_updated").order("desc").collect()).filter((t) => !isProposal(t));
+    const rows = (await ctx.db.query("wsTemplates").withIndex("by_updated").order("desc").collect()).filter((t) => !isSide(t));
     return rows.map((t) => ({ _id: t._id, name: t.name, description: t.description ?? "", updatedAt: t.updatedAt, blocks: pageOf(t.blocks).content.length, styleName: (t.style as Style)?.name ?? "" }));
   },
 });
@@ -234,7 +245,7 @@ export const getTemplate = query({
 });
 
 export const saveAsTemplate = mutation({
-  args: { name: v.string(), description: v.optional(v.string()), kind: v.optional(v.literal("proposal")), ...docArgs },
+  args: { name: v.string(), description: v.optional(v.string()), kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"))), ...docArgs },
   handler: async (ctx, a) => {
     await requireMe(ctx);
     tooBig(a.blocks, a.fields, a.style);
@@ -555,7 +566,7 @@ export const createBuildFor = internalMutation({
   args: { title: v.string(), page: v.any(), fields: v.optional(v.any()), signers: v.optional(v.any()), templateId: v.optional(v.id("wsTemplates")) },
   handler: async (ctx, a) => {
     const t = a.templateId ? await ctx.db.get(a.templateId) : null;
-    if (a.templateId && (!t || isProposal(t))) throw new ConvexError("That template doesn't exist.");
+    if (a.templateId && (!t || isSide(t))) throw new ConvexError("That template doesn't exist.");
     const tf = (t?.fields as Partial<Fields> | undefined) ?? {};
     const fields = { project: tf.project ?? "", custom: tf.custom ?? [], ...((a.fields as Partial<Fields>) ?? {}) };
     return insertBuild(ctx, { title: a.title, page: a.page ? pageOf(a.page) : pageOf(t?.blocks), fields, signers: a.signers as ExtraSigner[] | undefined, style: t ? (t.style as Style) : undefined, templateId: t?._id });
@@ -592,9 +603,9 @@ export const findBuild = internalQuery({
     if (!r) return { ok: false, error: "Pass the draft: its draft_id or words from its title." };
     const id = ctx.db.normalizeId("wsBuilds", r);
     const got = id ? await ctx.db.get(id) : null;
-    if (got && !isProposal(got)) return { ok: true, buildId: got._id };
+    if (got && !isSide(got)) return { ok: true, buildId: got._id };
     const words = r.toLowerCase().split(/\s+/);
-    const rows = (await ctx.db.query("wsBuilds").withIndex("by_updated").order("desc").take(300)).filter((b) => !isProposal(b) && words.every((w) => b.title.toLowerCase().includes(w)));
+    const rows = (await ctx.db.query("wsBuilds").withIndex("by_updated").order("desc").take(300)).filter((b) => !isSide(b) && words.every((w) => b.title.toLowerCase().includes(w)));
     if (rows.length === 1) return { ok: true, buildId: rows[0]._id };
     if (!rows.length) return { ok: false, error: `No draft matches "${r}". list_drafts shows them.` };
     return { ok: false, error: `${rows.length} drafts match "${r}"; pass a draft_id.`, candidates: rows.slice(0, 10).map((b) => ({ draft_id: b._id, title: b.title })) };
@@ -606,7 +617,7 @@ export const listBuildsInternal = internalQuery({
     const words = (q ?? "").toLowerCase().split(/\s+/).filter(Boolean);
     const rows = await ctx.db.query("wsBuilds").withIndex("by_updated").order("desc").take(300);
     const out = [];
-    for (const b of rows.filter((x) => !isProposal(x) && words.every((w) => x.title.toLowerCase().includes(w))).slice(0, 50)) {
+    for (const b of rows.filter((x) => !isSide(x) && words.every((w) => x.title.toLowerCase().includes(w))).slice(0, 50)) {
       const doc = b.documentId ? await ctx.db.get(b.documentId) : null;
       out.push({ draft_id: b._id, title: b.title, client: (b.fields as Fields)?.client?.name || null, updated: new Date(b.updatedAt).toISOString(), document: doc ? `${docLabel(doc.number)} (${doc.status})` : null });
     }
@@ -615,7 +626,7 @@ export const listBuildsInternal = internalQuery({
 });
 export const templatesInternal = internalQuery({
   args: {},
-  handler: async (ctx) => (await ctx.db.query("wsTemplates").withIndex("by_updated").order("desc").collect()).filter((t) => !isProposal(t)).map((t) => ({ _id: t._id, name: t.name, description: t.description ?? "", fields: t.fields, page: pageOf(t.blocks) })),
+  handler: async (ctx) => (await ctx.db.query("wsTemplates").withIndex("by_updated").order("desc").collect()).filter((t) => !isSide(t)).map((t) => ({ _id: t._id, name: t.name, description: t.description ?? "", fields: t.fields, page: pageOf(t.blocks) })),
 });
 export const saveTemplateFrom = internalMutation({
   args: { buildId: v.id("wsBuilds"), name: v.string(), description: v.optional(v.string()) },
