@@ -135,9 +135,11 @@ const inPill = (s: BookingState, p: Pill) => (p === "upcoming" ? s === "accepted
 
 export default function BookingsPage() {
   const rows = useQuery(api.bookings.list, {});
-  const [pill, setPill] = useState<Pill>("upcoming");
+  const [picked, setPill] = useState<Pill | null>(null);
   const [booking, setBooking] = useState(false);
   const count = (p: Pill) => (rows ?? []).filter((x) => inPill(x.state, p)).length;
+  // Opens on Upcoming, or on Offered when nothing is upcoming yet.
+  const pill: Pill = picked ?? (count("upcoming") === 0 && count("offered") > 0 ? "offered" : "upcoming");
   const shown = (rows ?? []).filter((x) => inPill(x.state, pill));
   if (pill === "done" || pill === "declined") shown.reverse(); // the most recent first
   return (

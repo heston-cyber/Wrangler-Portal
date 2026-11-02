@@ -121,7 +121,7 @@ function EntryRow({ e, show }: { e: L["entries"][number]; show: (m: string) => v
 function ExpectedRow({ x }: { x: L["expected"][number] }) {
   const amount = x.unit === "hour" ? `${q(x.hours ?? 0)} h` : `${x.days} day${x.days === 1 ? "" : "s"}`;
   return <ListRow className="ilead" lead={{ icon: "calendar" }} to={`/vendors/bookings/${x._id}`} title={`${x.vendor} · ${amount}`}
-    meta={`${x.role} · ${x.state === "offered" ? "booking offered" : "booking"} · ${money(x.cents)}`} chip={<StatusChip tone="neutral">Expected</StatusChip>} />;
+    meta={`${x.role} · booking · ${money(x.cents)}`} chip={<StatusChip tone="neutral">Expected</StatusChip>} />;
 }
 
 export function LedgerTab({ projectId, show }: { projectId: Id<"projects">; show: (m: string) => void }) {
