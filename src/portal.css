@@ -2451,3 +2451,12 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 .rq-details { margin: 0; padding: 4px 20px 8px; font-size: var(--fs-text-small); line-height: var(--lh-small); }
 .rq-page .cp-see { grid-template-columns: auto 1fr; }
 .rq-page .cp-see dd { text-align: right; }
+
+/* ---------- Phase 4 · Settings › Calendar (741:1953) ---------- */
+.cal-card { display: grid; gap: 14px; }
+.cal-who { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cal-who > svg { color: var(--accent); }
+.cal-who > span:not(.wp-status) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cal-err { margin: 0; color: var(--text-warning); }
+.cal-off { justify-self: start; }
+.sh-done > :first-child { color: var(--text-success); flex: none; }

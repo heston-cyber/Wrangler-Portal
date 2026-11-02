@@ -1602,7 +1602,7 @@
      "state": "notes",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
-     "token": "jhn--62Njca4VpuUuTDsQw",
+     "token": "sXAxUGAA5pyfGufVk8LNgA",
      "versionId": "000000000000000000010028versions",
      "videoId": "00000000000000000000010024videos"
     },
@@ -1616,7 +1616,7 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
-     "token": "jhn--62Njca4VpuUuTDsQw",
+     "token": "sXAxUGAA5pyfGufVk8LNgA",
      "versionId": "000000000000000000010027versions",
      "videoId": "00000000000000000000010024videos"
     },
@@ -1630,7 +1630,7 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
-     "token": "jhn--62Njca4VpuUuTDsQw",
+     "token": "sXAxUGAA5pyfGufVk8LNgA",
      "versionId": "000000000000000000010026versions",
      "videoId": "00000000000000000000010024videos"
     },
@@ -1644,7 +1644,7 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
      "title": "Harbor Coffee 15s cutdown",
-     "token": "jhn--62Njca4VpuUuTDsQw",
+     "token": "sXAxUGAA5pyfGufVk8LNgA",
      "versionId": "000000000000000000010032versions",
      "videoId": "00000000000000000000010030videos"
     },
@@ -1658,7 +1658,7 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
-     "token": "jhn--62Njca4VpuUuTDsQw",
+     "token": "sXAxUGAA5pyfGufVk8LNgA",
      "versionId": "000000000000000000010025versions",
      "videoId": "00000000000000000000010024videos"
     },
@@ -1672,7 +1672,7 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
      "title": "Harbor Coffee 15s cutdown",
-     "token": "jhn--62Njca4VpuUuTDsQw",
+     "token": "sXAxUGAA5pyfGufVk8LNgA",
      "versionId": "000000000000000000010031versions",
      "videoId": "00000000000000000000010030videos"
     }
@@ -2464,8 +2464,8 @@
     "projectId": null,
     "state": "on",
     "sub": "26127 Harbor Coffee Launch",
-    "token": "G6VJBYsoMGeoGW2OhdRuTg",
-    "url": "https://app.wranglerportal.com/s/G6VJBYsoMGeoGW2OhdRuTg",
+    "token": "FZ5lIyXzBskHIscaKleR5w",
+    "url": "https://app.wranglerportal.com/s/FZ5lIyXzBskHIscaKleR5w",
     "videoId": "00000000000000000000010024videos",
     "who": "link"
    },
@@ -2504,8 +2504,8 @@
     "projectId": "000000000000000000010020projects",
     "state": "on",
     "sub": "Harbor Coffee",
-    "token": "jhn--62Njca4VpuUuTDsQw",
-    "url": "https://app.wranglerportal.com/s/jhn--62Njca4VpuUuTDsQw",
+    "token": "sXAxUGAA5pyfGufVk8LNgA",
+    "url": "https://app.wranglerportal.com/s/sXAxUGAA5pyfGufVk8LNgA",
     "videoId": null,
     "who": "invited"
    }
@@ -2546,8 +2546,8 @@
     "projectId": null,
     "state": "on",
     "sub": "26127 Harbor Coffee Launch",
-    "token": "G6VJBYsoMGeoGW2OhdRuTg",
-    "url": "https://app.wranglerportal.com/s/G6VJBYsoMGeoGW2OhdRuTg",
+    "token": "FZ5lIyXzBskHIscaKleR5w",
+    "url": "https://app.wranglerportal.com/s/FZ5lIyXzBskHIscaKleR5w",
     "videoId": "00000000000000000000010024videos",
     "who": "link"
    },
@@ -2586,8 +2586,8 @@
     "projectId": "000000000000000000010020projects",
     "state": "on",
     "sub": "Harbor Coffee",
-    "token": "jhn--62Njca4VpuUuTDsQw",
-    "url": "https://app.wranglerportal.com/s/jhn--62Njca4VpuUuTDsQw",
+    "token": "sXAxUGAA5pyfGufVk8LNgA",
+    "url": "https://app.wranglerportal.com/s/sXAxUGAA5pyfGufVk8LNgA",
     "videoId": null,
     "who": "invited"
    }
@@ -2739,7 +2739,7 @@
        "rows": [
         {
          "description": "Video production (describe the deliverables)",
-         "id": "kaurtewu",
+         "id": "kno5tba7",
          "qty": 1,
          "rate": 0
         }
@@ -4393,6 +4393,7 @@
    ]
   },
   "shoots.forProject#000000000000000000010020projects": {
+   "calendar": null,
    "crew": [],
    "owner": "Heston Hill",
    "people": 2,
@@ -4433,7 +4434,7 @@
    "people": 2,
    "requests": [
     {
-     "_id": "00000000000000010127fileRequests",
+     "_id": "00000000000000010128fileRequests",
      "details": "Your logo (SVG or PNG), the brand guide, and any photos of the new menu boards.",
      "due": "2026-10-30",
      "files": [
@@ -4457,7 +4458,7 @@
      "title": "Upload your logo and brand guide"
     },
     {
-     "_id": "00000000000000010128fileRequests",
+     "_id": "00000000000000010129fileRequests",
      "details": null,
      "due": "2026-11-04",
      "files": [],
@@ -4469,6 +4470,11 @@
     }
    ],
    "today": "2026-10-29"
+  },
+  "calendar.settings": {
+   "connection": null,
+   "keys": false,
+   "redirect": "https://x.convex.site/calendar/callback"
   },
   "projects.nextRound#00000000000000000000010024videos": {
    "client": "Harbor Coffee",
@@ -5183,7 +5189,7 @@
    }
   ],
   "vendors.get#0000000000000000000010024vendors": {
-   "_creationTime": 1793656110841,
+   "_creationTime": 1793656565611,
    "_id": "0000000000000000000010024vendors",
    "address": "1200 NW 16th St\nOklahoma City, OK 73106",
    "basedIn": "Oklahoma City",
@@ -5207,9 +5213,9 @@
      "role": "Editor"
     }
    ],
-   "createdAt": 1793656110841,
+   "createdAt": 1793656565611,
    "email": "jordan@ellisfilms.com",
-   "invitedAt": 1793656110842,
+   "invitedAt": 1793656565611,
    "name": "Jordan Ellis",
    "payMethod": {
     "method": "ACH",
@@ -5217,7 +5223,7 @@
    },
    "payout": {
     "bankName": "STRIPE TEST BANK",
-    "checkedAt": 1793656111037,
+    "checkedAt": 1793656565841,
     "last4": "6789",
     "mode": "test",
     "payoutMethodId": "pm_kit",
@@ -5245,11 +5251,11 @@
     "waitingCents": 170000,
     "waitingCount": 1
    },
-   "updatedAt": 1793656111038,
+   "updatedAt": 1793656565842,
    "w9": null
   },
   "vendors.get#0000000000000000000010026vendors": {
-   "_creationTime": 1793656110846,
+   "_creationTime": 1793656565616,
    "_id": "0000000000000000000010026vendors",
    "businessId": "0000000000000000010000businesses",
    "costs": [
@@ -5262,7 +5268,7 @@
      "role": "Editor"
     }
    ],
-   "createdAt": 1793656110846,
+   "createdAt": 1793656565616,
    "email": "riley@chen.example",
    "name": "Riley Chen",
    "portal": "not invited",
@@ -5283,7 +5289,7 @@
     "waitingCents": 0,
     "waitingCount": 0
    },
-   "updatedAt": 1793656110846,
+   "updatedAt": 1793656565616,
    "w9": null
   },
   "vendors.invoices#0000000000000000000010024vendors": [
@@ -5293,17 +5299,17 @@
     "paidAt": null,
     "paidOn": null,
     "project": "Launch",
-    "sentAt": 1793656111034,
+    "sentAt": 1793656565838,
     "status": "approved",
     "totalCents": 9000
    },
    {
     "_id": "000000000000010050vendorInvoices",
     "number": "JE-013",
-    "paidAt": 1793656111031,
+    "paidAt": 1793656565835,
     "paidOn": "2026-11-02",
     "project": "Launch",
-    "sentAt": 1793656110977,
+    "sentAt": 1793656565782,
     "status": "paid",
     "totalCents": 16850
    },
@@ -5313,7 +5319,7 @@
     "paidAt": null,
     "paidOn": null,
     "project": "Launch",
-    "sentAt": 1793656110974,
+    "sentAt": 1793656565778,
     "status": "approved",
     "totalCents": 117000
    },
@@ -5323,7 +5329,7 @@
     "paidAt": null,
     "paidOn": null,
     "project": "Launch",
-    "sentAt": 1793656110971,
+    "sentAt": 1793656565772,
     "status": "sent",
     "totalCents": 170000
    }
@@ -5332,7 +5338,7 @@
   "bookings.list": [
    {
     "_id": "000000000000010031vendorBookings",
-    "answeredAt": 1793656110958,
+    "answeredAt": 1793656565762,
     "brief": "none",
     "cancelledAt": null,
     "days": 2,
@@ -5342,7 +5348,7 @@
     "hours": null,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793656110872,
+    "offeredAt": 1793656565648,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5357,7 +5363,7 @@
    },
    {
     "_id": "000000000000010035vendorBookings",
-    "answeredAt": 1793656110962,
+    "answeredAt": 1793656565764,
     "brief": "none",
     "cancelledAt": null,
     "days": 5,
@@ -5367,7 +5373,7 @@
     "hours": 18,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793656110879,
+    "offeredAt": 1793656565654,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5392,7 +5398,7 @@
     "hours": 18,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793656110881,
+    "offeredAt": 1793656565658,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5417,7 +5423,7 @@
     "hours": null,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793656110876,
+    "offeredAt": 1793656565652,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5444,7 +5450,7 @@
     "hours": null,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793656110876,
+    "offeredAt": 1793656565652,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5459,7 +5465,7 @@
    },
    {
     "_id": "000000000000010035vendorBookings",
-    "answeredAt": 1793656110962,
+    "answeredAt": 1793656565764,
     "brief": "none",
     "cancelledAt": null,
     "days": 5,
@@ -5469,7 +5475,7 @@
     "hours": 18,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793656110879,
+    "offeredAt": 1793656565654,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5484,7 +5490,7 @@
    },
    {
     "_id": "000000000000010031vendorBookings",
-    "answeredAt": 1793656110958,
+    "answeredAt": 1793656565762,
     "brief": "none",
     "cancelledAt": null,
     "days": 2,
@@ -5494,7 +5500,7 @@
     "hours": null,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793656110872,
+    "offeredAt": 1793656565648,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5521,7 +5527,7 @@
     "hours": 18,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793656110881,
+    "offeredAt": 1793656565658,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5537,7 +5543,7 @@
   ],
   "bookings.get#000000000000010031vendorBookings": {
    "_id": "000000000000010031vendorBookings",
-   "answeredAt": 1793656110958,
+   "answeredAt": 1793656565762,
    "brief": "none",
    "briefing": null,
    "cancelledAt": null,
@@ -5549,7 +5555,7 @@
    "hours": null,
    "location": "Harbor Coffee, Plaza District",
    "note": "Run and gun. Bring the gimbal.",
-   "offeredAt": 1793656110872,
+   "offeredAt": 1793656565648,
    "project": "26127 Launch",
    "projectId": "000000000000000000010018projects",
    "rate": {
@@ -5567,7 +5573,7 @@
   "bookings.forProject#000000000000000000010018projects": [
    {
     "_id": "000000000000010031vendorBookings",
-    "answeredAt": 1793656110958,
+    "answeredAt": 1793656565762,
     "brief": "none",
     "cancelledAt": null,
     "days": 2,
@@ -5577,7 +5583,7 @@
     "hours": null,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793656110872,
+    "offeredAt": 1793656565648,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5592,7 +5598,7 @@
    },
    {
     "_id": "000000000000010035vendorBookings",
-    "answeredAt": 1793656110962,
+    "answeredAt": 1793656565764,
     "brief": "none",
     "cancelledAt": null,
     "days": 5,
@@ -5602,7 +5608,7 @@
     "hours": 18,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793656110879,
+    "offeredAt": 1793656565654,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5627,7 +5633,7 @@
     "hours": 18,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793656110881,
+    "offeredAt": 1793656565658,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5652,7 +5658,7 @@
     "hours": null,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793656110876,
+    "offeredAt": 1793656565652,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5688,7 +5694,7 @@
    "approved": [
     {
      "_id": "000000000000010062vendorInvoices",
-     "approvedAt": 1793656111036,
+     "approvedAt": 1793656565840,
      "declinedAt": null,
      "number": "JE-016",
      "paidAt": null,
@@ -5697,7 +5703,7 @@
      "paidOn": null,
      "project": "26127 Launch",
      "role": "Editor",
-     "sentAt": 1793656111034,
+     "sentAt": 1793656565838,
      "status": "approved",
      "totalCents": 9000,
      "vendor": "Jordan Ellis",
@@ -5706,7 +5712,7 @@
     },
     {
      "_id": "000000000000010048vendorInvoices",
-     "approvedAt": 1793656111026,
+     "approvedAt": 1793656565829,
      "declinedAt": null,
      "number": "JE-015",
      "paidAt": null,
@@ -5715,7 +5721,7 @@
      "paidOn": null,
      "project": "26127 Launch",
      "role": "Editor",
-     "sentAt": 1793656110974,
+     "sentAt": 1793656565778,
      "status": "approved",
      "totalCents": 117000,
      "vendor": "Jordan Ellis",
@@ -5726,16 +5732,16 @@
    "paid": [
     {
      "_id": "000000000000010050vendorInvoices",
-     "approvedAt": 1793656111029,
+     "approvedAt": 1793656565833,
      "declinedAt": null,
      "number": "JE-013",
-     "paidAt": 1793656111031,
+     "paidAt": 1793656565835,
      "paidCents": 16850,
      "paidMethod": "Zelle",
      "paidOn": "2026-11-02",
      "project": "26127 Launch",
      "role": "Shooter",
-     "sentAt": 1793656110977,
+     "sentAt": 1793656565782,
      "status": "paid",
      "totalCents": 16850,
      "vendor": "Jordan Ellis",
@@ -5755,7 +5761,7 @@
      "paidOn": null,
      "project": "26127 Launch",
      "role": "Shooter",
-     "sentAt": 1793656110971,
+     "sentAt": 1793656565772,
      "status": "sent",
      "totalCents": 170000,
      "vendor": "Jordan Ellis",
@@ -5809,7 +5815,7 @@
    "declinedAt": null,
    "history": [
     {
-     "at": 1793656110971,
+     "at": 1793656565772,
      "text": "Sent by Jordan Ellis"
     }
    ],
@@ -5841,7 +5847,7 @@
     "label": "26127 Launch",
     "name": "Launch"
    },
-   "sentAt": 1793656110971,
+   "sentAt": 1793656565772,
    "status": "sent",
    "to": "Wrangler Productions",
    "totalCents": 170000,
@@ -5859,7 +5865,7 @@
   },
   "vendorPayments.get#000000000000010048vendorInvoices": {
    "_id": "000000000000010048vendorInvoices",
-   "approvedAt": 1793656111026,
+   "approvedAt": 1793656565829,
    "booking": {
     "_id": "000000000000010035vendorBookings",
     "end": "2026-11-14",
@@ -5876,11 +5882,11 @@
    "declinedAt": null,
    "history": [
     {
-     "at": 1793656111026,
+     "at": 1793656565829,
      "text": "Approved by you · added to the Ledger"
     },
     {
-     "at": 1793656110974,
+     "at": 1793656565778,
      "text": "Sent by Jordan Ellis"
     }
    ],
@@ -5912,7 +5918,7 @@
     "label": "26127 Launch",
     "name": "Launch"
    },
-   "sentAt": 1793656110974,
+   "sentAt": 1793656565778,
    "status": "approved",
    "to": "Wrangler Productions",
    "totalCents": 117000,
@@ -5930,7 +5936,7 @@
   },
   "vendorPayments.get#000000000000010050vendorInvoices": {
    "_id": "000000000000010050vendorInvoices",
-   "approvedAt": 1793656111029,
+   "approvedAt": 1793656565833,
    "booking": {
     "_id": "000000000000010031vendorBookings",
     "end": "2026-11-07",
@@ -5947,15 +5953,15 @@
    "declinedAt": null,
    "history": [
     {
-     "at": 1793656111031,
+     "at": 1793656565835,
      "text": "Marked paid · Zelle · Nov 2"
     },
     {
-     "at": 1793656111029,
+     "at": 1793656565833,
      "text": "Approved by you · added to the Ledger"
     },
     {
-     "at": 1793656110977,
+     "at": 1793656565782,
      "text": "Sent by Jordan Ellis"
     }
    ],
@@ -5977,7 +5983,7 @@
    "mode": "lines",
    "note": null,
    "number": "JE-013",
-   "paidAt": 1793656111031,
+   "paidAt": 1793656565835,
    "paidCents": 16850,
    "paidMethod": "Zelle",
    "paidOn": "2026-11-02",
@@ -5987,7 +5993,7 @@
     "label": "26127 Launch",
     "name": "Launch"
    },
-   "sentAt": 1793656110977,
+   "sentAt": 1793656565782,
    "status": "paid",
    "to": "Wrangler Productions",
    "totalCents": 16850,
@@ -6140,7 +6146,7 @@
   },
   "vendorPayments.get#000000000000010062vendorInvoices": {
    "_id": "000000000000010062vendorInvoices",
-   "approvedAt": 1793656111036,
+   "approvedAt": 1793656565840,
    "booking": {
     "_id": "000000000000010035vendorBookings",
     "end": "2026-11-14",
@@ -6157,11 +6163,11 @@
    "declinedAt": null,
    "history": [
     {
-     "at": 1793656111036,
+     "at": 1793656565840,
      "text": "Approved by you · added to the Ledger"
     },
     {
-     "at": 1793656111034,
+     "at": 1793656565838,
      "text": "Sent by Jordan Ellis"
     }
    ],
@@ -6187,7 +6193,7 @@
     "label": "26127 Launch",
     "name": "Launch"
    },
-   "sentAt": 1793656111034,
+   "sentAt": 1793656565838,
    "status": "approved",
    "to": "Wrangler Productions",
    "totalCents": 9000,
@@ -6247,7 +6253,7 @@
     "reason": null,
     "receiptUrl": null,
     "stale": false,
-    "startedAt": 1793656111037,
+    "startedAt": 1793656565841,
     "status": "processing"
    },
    "vendor": {
@@ -6288,7 +6294,7 @@
     "kind": "project",
     "label": "26127 Harbor Coffee Launch",
     "sub": "Harbor Coffee",
-    "token": "jhn--62Njca4VpuUuTDsQw",
+    "token": "sXAxUGAA5pyfGufVk8LNgA",
     "videos": [
      {
       "_id": "00000000000000000000010030videos",
@@ -6433,7 +6439,7 @@
    "cuts": [
     {
      "lengthSec": 30,
-     "link": "/s/jhn--62Njca4VpuUuTDsQw/v/00000000000000000000010024videos?version=4",
+     "link": "/s/sXAxUGAA5pyfGufVk8LNgA/v/00000000000000000000010024videos?version=4",
      "number": 4,
      "sharedAt": 1793289600000,
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
@@ -6442,7 +6448,7 @@
     },
     {
      "lengthSec": 30,
-     "link": "/s/jhn--62Njca4VpuUuTDsQw/v/00000000000000000000010030videos?version=2",
+     "link": "/s/sXAxUGAA5pyfGufVk8LNgA/v/00000000000000000000010030videos?version=2",
      "number": 2,
      "sharedAt": 1793289600000,
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
@@ -6464,7 +6470,7 @@
   "emails.myPrefs": {
    "on": true
   },
-  "shares.open#jhn--62Njca4VpuUuTDsQw": {
+  "shares.open#sXAxUGAA5pyfGufVk8LNgA": {
    "access": "comment",
    "allVersions": true,
    "client": "Harbor Coffee",
@@ -6483,7 +6489,7 @@
    ],
    "state": "ok",
    "sub": "Harbor Coffee",
-   "token": "jhn--62Njca4VpuUuTDsQw",
+   "token": "sXAxUGAA5pyfGufVk8LNgA",
    "videos": [
     {
      "_id": "00000000000000000000010024videos",
@@ -6619,7 +6625,7 @@
    },
    "who": "invited"
   },
-  "shares.open#G6VJBYsoMGeoGW2OhdRuTg": {
+  "shares.open#FZ5lIyXzBskHIscaKleR5w": {
    "access": "view",
    "allVersions": true,
    "client": "Harbor Coffee",
@@ -6638,7 +6644,7 @@
    ],
    "state": "ok",
    "sub": "26127 Harbor Coffee Launch",
-   "token": "G6VJBYsoMGeoGW2OhdRuTg",
+   "token": "FZ5lIyXzBskHIscaKleR5w",
    "videos": [
     {
      "_id": "00000000000000000000010024videos",
@@ -7013,7 +7019,7 @@
      },
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
      "title": "Harbor Coffee 15s cutdown",
-     "token": "jhn--62Njca4VpuUuTDsQw",
+     "token": "sXAxUGAA5pyfGufVk8LNgA",
      "updatedAt": 1793203200000,
      "version": 2
     },
@@ -7029,7 +7035,7 @@
      },
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
-     "token": "jhn--62Njca4VpuUuTDsQw",
+     "token": "sXAxUGAA5pyfGufVk8LNgA",
      "updatedAt": 1793160000000,
      "version": 4
     }
@@ -7081,20 +7087,20 @@
   },
   "fileRequests.forClientProject#000000000000000000010020projects": [
    {
-    "_id": "00000000000000010127fileRequests",
+    "_id": "00000000000000010128fileRequests",
     "due": "2026-10-30",
     "files": 2,
     "title": "Upload your logo and brand guide"
    },
    {
-    "_id": "00000000000000010128fileRequests",
+    "_id": "00000000000000010129fileRequests",
     "due": "2026-11-04",
     "files": 0,
     "title": "Send your music references"
    }
   ],
-  "fileRequests.page#00000000000000010127fileRequests": {
-   "_id": "00000000000000010127fileRequests",
+  "fileRequests.page#00000000000000010128fileRequests": {
+   "_id": "00000000000000010128fileRequests",
    "business": "Wrangler Productions",
    "details": "Your logo (SVG or PNG), the brand guide, and any photos of the new menu boards.",
    "due": "2026-10-30",
@@ -7123,8 +7129,8 @@
    "title": "Upload your logo and brand guide",
    "today": "2026-10-29"
   },
-  "fileRequests.page#00000000000000010128fileRequests": {
-   "_id": "00000000000000010128fileRequests",
+  "fileRequests.page#00000000000000010129fileRequests": {
+   "_id": "00000000000000010129fileRequests",
    "business": "Wrangler Productions",
    "details": null,
    "due": "2026-11-04",
@@ -7436,8 +7442,8 @@
    "paid": "000000000000000000010118invoices"
   },
   "shares": [
-   "jhn--62Njca4VpuUuTDsQw",
-   "G6VJBYsoMGeoGW2OhdRuTg"
+   "sXAxUGAA5pyfGufVk8LNgA",
+   "FZ5lIyXzBskHIscaKleR5w"
   ],
   "harbor": "0000000000000000000010003clients",
   "video": "00000000000000000000010024videos",
@@ -7452,8 +7458,8 @@
   "shoot": "00000000000000000000010123shoots",
   "project": "000000000000000000010020projects",
   "requests": {
-   "a": "00000000000000010127fileRequests",
-   "b": "00000000000000010128fileRequests"
+   "a": "00000000000000010128fileRequests",
+   "b": "00000000000000010129fileRequests"
   },
   "vendor": {
    "jordan": "0000000000000000000010024vendors",
@@ -7517,7 +7523,7 @@
      "hours": null,
      "location": "Harbor Coffee, Plaza District",
      "note": "Run and gun. Bring the gimbal.",
-     "offeredAt": 1793656110876,
+     "offeredAt": 1793656565652,
      "project": "26127 Launch",
      "projectName": "Launch",
      "rate": {
@@ -7534,7 +7540,7 @@
    "upcoming": [
     {
      "_id": "000000000000010031vendorBookings",
-     "answeredAt": 1793656110958,
+     "answeredAt": 1793656565762,
      "brief": null,
      "days": 2,
      "declineReason": null,
@@ -7543,7 +7549,7 @@
      "hours": null,
      "location": "Harbor Coffee, Plaza District",
      "note": "Run and gun. Bring the gimbal.",
-     "offeredAt": 1793656110872,
+     "offeredAt": 1793656565648,
      "project": "26127 Launch",
      "projectName": "Launch",
      "rate": {
@@ -7556,7 +7562,7 @@
     },
     {
      "_id": "000000000000010035vendorBookings",
-     "answeredAt": 1793656110962,
+     "answeredAt": 1793656565764,
      "brief": null,
      "days": 5,
      "declineReason": null,
@@ -7565,7 +7571,7 @@
      "hours": 18,
      "location": "Harbor Coffee, Plaza District",
      "note": "Run and gun. Bring the gimbal.",
-     "offeredAt": 1793656110879,
+     "offeredAt": 1793656565654,
      "project": "26127 Launch",
      "projectName": "Launch",
      "rate": {
@@ -7583,7 +7589,7 @@
    "rows": [
     {
      "_id": "000000000000010031vendorBookings",
-     "answeredAt": 1793656110958,
+     "answeredAt": 1793656565762,
      "brief": null,
      "days": 2,
      "declineReason": null,
@@ -7592,7 +7598,7 @@
      "hours": null,
      "location": "Harbor Coffee, Plaza District",
      "note": "Run and gun. Bring the gimbal.",
-     "offeredAt": 1793656110872,
+     "offeredAt": 1793656565648,
      "project": "26127 Launch",
      "projectName": "Launch",
      "rate": {
@@ -7605,7 +7611,7 @@
     },
     {
      "_id": "000000000000010035vendorBookings",
-     "answeredAt": 1793656110962,
+     "answeredAt": 1793656565764,
      "brief": null,
      "days": 5,
      "declineReason": null,
@@ -7614,7 +7620,7 @@
      "hours": 18,
      "location": "Harbor Coffee, Plaza District",
      "note": "Run and gun. Bring the gimbal.",
-     "offeredAt": 1793656110879,
+     "offeredAt": 1793656565654,
      "project": "26127 Launch",
      "projectName": "Launch",
      "rate": {
@@ -7636,7 +7642,7 @@
      "hours": null,
      "location": "Harbor Coffee, Plaza District",
      "note": "Run and gun. Bring the gimbal.",
-     "offeredAt": 1793656110876,
+     "offeredAt": 1793656565652,
      "project": "26127 Launch",
      "projectName": "Launch",
      "rate": {
@@ -7651,7 +7657,7 @@
   },
   "vendorPortal.booking#000000000000010031vendorBookings": {
    "_id": "000000000000010031vendorBookings",
-   "answeredAt": 1793656110958,
+   "answeredAt": 1793656565762,
    "brief": null,
    "business": "Wrangler Productions",
    "businessId": "0000000000000000010000businesses",
@@ -7662,7 +7668,7 @@
    "hours": null,
    "location": "Harbor Coffee, Plaza District",
    "note": "Run and gun. Bring the gimbal.",
-   "offeredAt": 1793656110872,
+   "offeredAt": 1793656565648,
    "owner": "Wrangler Productions",
    "project": "26127 Launch",
    "projectName": "Launch",
@@ -7687,7 +7693,7 @@
    "hours": null,
    "location": "Harbor Coffee, Plaza District",
    "note": "Run and gun. Bring the gimbal.",
-   "offeredAt": 1793656110876,
+   "offeredAt": 1793656565652,
    "owner": "Wrangler Productions",
    "project": "26127 Launch",
    "projectName": "Launch",
@@ -7713,7 +7719,7 @@
      "project": "26127 Launch",
      "role": "Editor",
      "start": "2026-11-10",
-     "token": "ATG9D-N8odIDYFGimMB4WQ"
+     "token": "v_7VOm54_lU6onWaeT0sEQ"
     }
    ]
   },
@@ -7723,7 +7729,7 @@
     {
      "_id": "000000000000010062vendorInvoices",
      "amount": "1 line",
-     "approvedAt": 1793656111036,
+     "approvedAt": 1793656565840,
      "bookingId": "000000000000010035vendorBookings",
      "declineReason": null,
      "declinedAt": null,
@@ -7751,15 +7757,15 @@
       "unit": "hour"
      },
      "role": "Editor",
-     "sentAt": 1793656111034,
+     "sentAt": 1793656565838,
      "status": "approved",
      "totalCents": 9000,
-     "updatedAt": 1793656111036
+     "updatedAt": 1793656565840
     },
     {
      "_id": "000000000000010050vendorInvoices",
      "amount": "2 lines",
-     "approvedAt": 1793656111029,
+     "approvedAt": 1793656565833,
      "bookingId": "000000000000010031vendorBookings",
      "declineReason": null,
      "declinedAt": null,
@@ -7778,7 +7784,7 @@
      "note": null,
      "number": "JE-013",
      "onTheWay": null,
-     "paidAt": 1793656111031,
+     "paidAt": 1793656565835,
      "paidCents": 16850,
      "paidMethod": "Zelle",
      "paidOn": "2026-11-02",
@@ -7789,15 +7795,15 @@
       "unit": "day"
      },
      "role": "Shooter",
-     "sentAt": 1793656110977,
+     "sentAt": 1793656565782,
      "status": "paid",
      "totalCents": 16850,
-     "updatedAt": 1793656111031
+     "updatedAt": 1793656565835
     },
     {
      "_id": "000000000000010048vendorInvoices",
      "amount": "18 h",
-     "approvedAt": 1793656111026,
+     "approvedAt": 1793656565829,
      "bookingId": "000000000000010035vendorBookings",
      "declineReason": null,
      "declinedAt": null,
@@ -7827,10 +7833,10 @@
       "unit": "hour"
      },
      "role": "Editor",
-     "sentAt": 1793656110974,
+     "sentAt": 1793656565778,
      "status": "approved",
      "totalCents": 117000,
-     "updatedAt": 1793656111026
+     "updatedAt": 1793656565829
     },
     {
      "_id": "000000000000010046vendorInvoices",
@@ -7865,10 +7871,10 @@
       "unit": "day"
      },
      "role": "Shooter",
-     "sentAt": 1793656110971,
+     "sentAt": 1793656565772,
      "status": "sent",
      "totalCents": 170000,
-     "updatedAt": 1793656110971
+     "updatedAt": 1793656565772
     }
    ]
   },
@@ -7941,15 +7947,15 @@
     "unit": "day"
    },
    "role": "Shooter",
-   "sentAt": 1793656110971,
+   "sentAt": 1793656565772,
    "status": "sent",
    "totalCents": 170000,
-   "updatedAt": 1793656110971
+   "updatedAt": 1793656565772
   },
   "vendorPortal.invoice#000000000000010048vendorInvoices": {
    "_id": "000000000000010048vendorInvoices",
    "amount": "18 h",
-   "approvedAt": 1793656111026,
+   "approvedAt": 1793656565829,
    "bookingId": "000000000000010035vendorBookings",
    "business": "Wrangler Productions",
    "businessId": "0000000000000000010000businesses",
@@ -7982,15 +7988,15 @@
     "unit": "hour"
    },
    "role": "Editor",
-   "sentAt": 1793656110974,
+   "sentAt": 1793656565778,
    "status": "approved",
    "totalCents": 117000,
-   "updatedAt": 1793656111026
+   "updatedAt": 1793656565829
   },
   "vendorPortal.invoice#000000000000010050vendorInvoices": {
    "_id": "000000000000010050vendorInvoices",
    "amount": "2 lines",
-   "approvedAt": 1793656111029,
+   "approvedAt": 1793656565833,
    "bookingId": "000000000000010031vendorBookings",
    "business": "Wrangler Productions",
    "businessId": "0000000000000000010000businesses",
@@ -8012,7 +8018,7 @@
    "number": "JE-013",
    "onTheWay": null,
    "owner": "Wrangler Productions",
-   "paidAt": 1793656111031,
+   "paidAt": 1793656565835,
    "paidCents": 16850,
    "paidMethod": "Zelle",
    "paidOn": "2026-11-02",
@@ -8023,10 +8029,10 @@
     "unit": "day"
    },
    "role": "Shooter",
-   "sentAt": 1793656110977,
+   "sentAt": 1793656565782,
    "status": "paid",
    "totalCents": 16850,
-   "updatedAt": 1793656111031
+   "updatedAt": 1793656565835
   },
   "vendorPortal.settings": {
    "address": "1200 NW 16th St\nOklahoma City, OK 73106",
@@ -8111,7 +8117,7 @@
   "vendorPortal.invoice#000000000000010062vendorInvoices": {
    "_id": "000000000000010062vendorInvoices",
    "amount": "1 line",
-   "approvedAt": 1793656111036,
+   "approvedAt": 1793656565840,
    "bookingId": "000000000000010035vendorBookings",
    "business": "Wrangler Productions",
    "businessId": "0000000000000000010000businesses",
@@ -8142,10 +8148,10 @@
     "unit": "hour"
    },
    "role": "Editor",
-   "sentAt": 1793656111034,
+   "sentAt": 1793656565838,
    "status": "approved",
    "totalCents": 9000,
-   "updatedAt": 1793656111036
+   "updatedAt": 1793656565840
   }
  }
 }

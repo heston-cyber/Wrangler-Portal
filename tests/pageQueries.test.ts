@@ -131,6 +131,7 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "vendorPortal.notifications": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only)
   "vendorPayments.totals1099": { pages: ["owner"], args: () => "skip" }, // Vendors › Payments › 1099
   "vendorPayments.get": { pages: ["owner"], args: () => "skip" }, // a vendor invoice
+  "calendar.settings": { pages: ["owner"], args: () => ({}) }, // Settings › Calendar (Phase 4)
   "fileRequests.forProject": { pages: ["owner"], args: () => "skip" }, // project Overview › Requests and brief (Phase 4)
   "fileRequests.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Coming up
   "fileRequests.page": { pages: ["clientHome"], args: () => ({ requestId: "nope" }) }, // /requests/<id>, the client's file request page

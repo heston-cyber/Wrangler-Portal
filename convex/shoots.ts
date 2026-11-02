@@ -21,6 +21,7 @@ import { mailBrandOf } from "./lib/mail";
 import { clock, ownerShootConfirmedMail, shootDay, shootMail } from "./lib/mails";
 import { deliverOnce } from "./invoiceReminders";
 import { SITE } from "./lib/site";
+import { queueCalendar } from "./calendar";
 
 type Ctx = QueryCtx | MutationCtx;
 const isDay = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T12:00:00Z`));
@@ -116,7 +117,8 @@ export const forProject = query({
       crew.push({ bookingId: k._id, name: vendor?.name ?? "A vendor", role: k.role, start: k.start, end: k.end, status: k.status });
     }
     const people = (await portalPeople(ctx, p)).length;
-    return { owner: await ownerName(ctx, p, me), shoots: shoots.map(view), crew, people, today: todayCentral() };
+    const cal = await ctx.db.query("calendars").first();
+    return { calendar: cal?.calendarId ? cal.calendarName ?? "your calendar" : null, owner: await ownerName(ctx, p, me), shoots: shoots.map(view), crew, people, today: todayCentral() };
   },
 });
 
@@ -130,6 +132,7 @@ export const schedule = mutation({
     const now = Date.now();
     const shootId = await ctx.db.insert("shoots", { projectId: p._id, ...f, status: "scheduled", history: [{ at: now, text: "Scheduled" }], createdAt: now, updatedAt: now });
     const told = await tell(ctx, p, { _id: shootId, ...f }, null, now);
+    if (f.calendar) await queueCalendar(ctx, shootId);
     return { shootId, told };
   },
 });
@@ -152,6 +155,7 @@ export const update = mutation({
       history: [...s.history, { at: now, text: moved ? `Moved from ${shortDay(s.date)} ${clock(s.call)}${f.location !== s.location ? `, ${s.location}` : ""}` : "Details changed" }],
     });
     const told = moved ? await tell(ctx, p, { _id: s._id, ...f }, was, now) : 0;
+    if (f.calendar || s.calendarEvent) await queueCalendar(ctx, s._id);
     return { moved, told };
   },
 });
@@ -164,6 +168,7 @@ export const cancel = mutation({
     if (s.status === "cancelled") return null;
     const now = Date.now();
     await ctx.db.patch(s._id, { status: "cancelled", updatedAt: now, history: [...s.history, { at: now, text: "Cancelled" }] });
+    if (s.calendarEvent) await queueCalendar(ctx, s._id);
     const biz = await businessOf(ctx, p);
     if (biz) for (const person of await portalPeople(ctx, p)) {
       await postToInbox(ctx, { businessId: biz, clientId: p.clientId, email: person.email, kind: "shoot", title: `Shoot cancelled: ${shootDay(s.date)}`,

@@ -5,13 +5,14 @@ import { Sep, TopBar } from "../../shell/Shell";
 import { Icon, type IconName } from "../../ui/Icon";
 import { linkProps } from "../../lib/router";
 
-export type SectionKey = "business" | "payments" | "rates" | "brand" | "account" | "notifications" | "register" | "dropbox" | "connectors" | "sheet" | "clients" | "shares";
+export type SectionKey = "business" | "payments" | "rates" | "brand" | "calendar" | "account" | "notifications" | "register" | "dropbox" | "connectors" | "sheet" | "clients" | "shares";
 
 export const SECTIONS: Array<{ key: SectionKey; label: string; icon: IconName }> = [
   { key: "business", label: "Business", icon: "users" },
   { key: "payments", label: "Payments", icon: "invoice" },
   { key: "rates", label: "Pricing", icon: "activity" }, // Phase 3 (263:1382), renamed Pricing in 3b (D76)
   { key: "brand", label: "Brand kit", icon: "folder" }, // Phase 3b (708:1235)
+  { key: "calendar", label: "Calendar", icon: "calendar" }, // Phase 4 (741:1953)
   { key: "account", label: "Account", icon: "user" },
   { key: "notifications", label: "Notifications", icon: "bell" }, // Nov 2 (Heston): every email, with a switch
   { key: "register", label: "Register", icon: "register" },
@@ -24,7 +25,7 @@ export const SECTIONS: Array<{ key: SectionKey; label: string; icon: IconName }>
 
 // Old addresses still land on the right section: /register, /sign/connector, /settings#claude and the like, and
 // Dropbox's return to /settings?dropbox=….
-const HASH: Record<string, SectionKey> = { claude: "connectors", sign: "connectors", dropbox: "dropbox", sheet: "sheet", shares: "shares", clients: "clients", account: "account", notifications: "notifications", business: "business", register: "register", payments: "payments", rates: "rates", pricing: "rates", brand: "brand" };
+const HASH: Record<string, SectionKey> = { claude: "connectors", sign: "connectors", dropbox: "dropbox", sheet: "sheet", shares: "shares", clients: "clients", account: "account", notifications: "notifications", business: "business", register: "register", payments: "payments", calendar: "calendar", rates: "rates", pricing: "rates", brand: "brand" };
 export function sectionOf(path: string, search: string, hash: string): SectionKey | null {
   if (path.startsWith("/register")) return "register";
   if (path.startsWith("/sign/connector")) return "connectors";

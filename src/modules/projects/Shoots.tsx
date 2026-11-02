@@ -60,7 +60,7 @@ function ShootDialog({ projectId, label, data, shoot, client, people, onClose, s
   const [prepare, setPrepare] = useState((shoot?.prepare ?? []).join("\n"));
   const [withOwner, setWithOwner] = useState(shoot ? shoot.crew.some((c) => c.owner) : true);
   const [crew, setCrew] = useState<string[]>(shoot ? shoot.crew.filter((c) => c.bookingId).map((c) => c.bookingId!) : []);
-  const [calendar, setCalendar] = useState(shoot?.calendar ?? false);
+  const [calendar, setCalendar] = useState(shoot?.calendar ?? !!data.calendar);
   const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
   const who = client ?? "The client";
   const moved = !!shoot && (date !== shoot.date || call !== shoot.call || location.trim() !== shoot.location);
@@ -104,7 +104,7 @@ function ShootDialog({ projectId, label, data, shoot, client, people, onClose, s
             </div>
             {data.crew.length === 0 && <span className="wp-field-hint">Book vendors on this project (the Crew card) to add them here.</span>}
           </div>
-          <div className="qz-q wide"><Checkbox checked={calendar} onChange={setCalendar} label="Add to your calendar" hint="Once Settings › Calendar is connected, shoots you tick go on it and move with it." /></div>
+          <div className="qz-q wide"><Checkbox checked={calendar} onChange={setCalendar} label={data.calendar ? `Add to ${data.calendar}` : "Add to your calendar"} hint={data.calendar ? "Set in Settings › Calendar." : "Once Settings › Calendar is connected, shoots you tick go on it and move with it."} /></div>
         </div>
         {err && <p className="error" role="alert">{err}</p>}
         <div className="dfoot">

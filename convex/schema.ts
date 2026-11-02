@@ -1134,6 +1134,21 @@ export default defineSchema({
     shareId: v.id("shares"),
     at: v.number(),
   }).index("by_video", ["videoId", "at"]).index("by_version_user", ["versionId", "userId"]).index("by_at", ["at"]),
+  // Phase 4 (Nov 2): Settings › Calendar. One Google Calendar connection per business (D32); tokens stay here.
+  calendars: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    email: v.string(),
+    refreshToken: v.string(),
+    accessToken: v.optional(v.string()),
+    accessExpiresAt: v.optional(v.number()),
+    calendarId: v.optional(v.string()),
+    calendarName: v.optional(v.string()),
+    inviteVendors: v.boolean(),
+    inviteClient: v.boolean(),
+    lastError: v.optional(v.string()),
+    connectedAt: v.number(),
+  }),
+
   // Phase 4 (Nov 2): shoots on a project (frames S5 · Phase 4). The client confirms one in their portal; moving its date,
   // call time or place clears the confirmation and asks again (email 30). Times are the business's local wall clock.
   shoots: defineTable({

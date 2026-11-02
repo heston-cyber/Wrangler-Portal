@@ -34,6 +34,7 @@ import type * as payments from "../payments.js";
 import type * as projects from "../projects.js";
 import type * as auth from "../auth.js";
 import type * as bunny from "../bunny.js";
+import type * as calendar from "../calendar.js";
 import type * as clients from "../clients.js";
 import type * as shares from "../shares.js";
 import type * as shoots from "../shoots.js";
@@ -156,6 +157,7 @@ declare const fullApi: ApiFromModules<{
   projects: typeof projects;
   auth: typeof auth;
   bunny: typeof bunny;
+  calendar: typeof calendar;
   clients: typeof clients;
   shares: typeof shares;
   shoots: typeof shoots;
