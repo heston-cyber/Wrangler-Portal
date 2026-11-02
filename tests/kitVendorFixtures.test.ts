@@ -44,6 +44,14 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures (Phase 3c)", () => {
     await w.heston.mutation(api.vendorPayments.approve, { invoiceId: inv2 });
     await w.heston.mutation(api.vendorPayments.approve, { invoiceId: inv3 });
     await w.heston.mutation(api.vendorPayments.markPaid, { invoiceId: inv3, paidOn: todayCentral(), method: "Zelle", reference: "Conf 88213" });
+    // Pay in portal (Nov 2): connected (test mode); Jordan's direct deposit ready; JE-016 on its way through Stripe.
+    process.env.STRIPE_PAYOUTS_KEY = "rk_test_kit";
+    const inv4 = await jordan.mutation(api.vendorPortal.saveInvoice, { bookingId: k3, mode: "lines", hours: [], lines: [{ description: "Drive rental", cents: 9_000 }], number: "JE-016", send: true }) as Id<"vendorInvoices">;
+    await w.heston.mutation(api.vendorPayments.approve, { invoiceId: inv4 });
+    await w.t.run(async (ctx) => {
+      await ctx.db.patch(a, { payout: { recipientId: "acct_kit", mode: "test", ready: true, payoutMethodId: "pm_kit", last4: "6789", bankName: "STRIPE TEST BANK", checkedAt: Date.now() } });
+      await ctx.db.patch(inv4, { payout: { id: "obp_kit", status: "processing", attempt: 1, mode: "test", startedAt: Date.now(), by: "Heston", expectedArrival: "2026-11-05" } });
+    });
     await jordan.mutation(api.vendorPortal.saveDetails, { businessId: w.A, name: "Jordan Ellis", businessName: "Ellis Films LLC", phone: "405-555-0142", address: "1200 NW 16th St\nOklahoma City, OK 73106", portfolio: "ellisfilms.com", payMethod: "ACH", payNote: "Bank of Example · account ending 0000" });
     await w.heston.mutation(api.notifications.setOwner, { key: "briefing_read", on: false });
     await jordan.mutation(api.vendorPortal.setNotification, { businessId: w.A, key: "briefings", on: false });
@@ -54,13 +62,14 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures (Phase 3c)", () => {
       ["bookings.list", {}], ["bookings.forVendor#" + a, { vendorId: a }], ["bookings.forVendor#" + r, { vendorId: r }], ["bookings.get#" + k1, { bookingId: k1 }], ["bookings.forProject#" + w.p, { projectId: w.p }],
       ["briefings.forVendor#" + a, { vendorId: a }], ["briefings.forVendor#" + r, { vendorId: r }], ["briefings.list", {}], ["briefings.templates", {}],
       ["vendorPayments.list", {}], ["vendorPayments.totals1099", {}], ["vendorPayments.get#" + inv1, { invoiceId: inv1 }], ["vendorPayments.get#" + inv2, { invoiceId: inv2 }], ["vendorPayments.get#" + inv3, { invoiceId: inv3 }],
-      ["notifications.owner", {}],
+      ["notifications.owner", {}], ["vendorPayments.get#" + inv4, { invoiceId: inv4 }], ["vendorPayouts.status", {}],
+      ["vendorPayouts.forInvoice#" + inv1, { invoiceId: inv1 }], ["vendorPayouts.forInvoice#" + inv2, { invoiceId: inv2 }], ["vendorPayouts.forInvoice#" + inv3, { invoiceId: inv3 }], ["vendorPayouts.forInvoice#" + inv4, { invoiceId: inv4 }],
     ];
     const VENDOR: [string, Record<string, unknown>][] = [
       ["users.me", {}], ["vendorPortal.businesses", {}], ["vendorPortal.counts", { businessId: w.A }], ["vendorPortal.home", { businessId: w.A }], ["vendorPortal.bookings", { businessId: w.A }],
       ["vendorPortal.booking#" + k1, { bookingId: k1 }], ["vendorPortal.booking#" + k2, { bookingId: k2 }], ["vendorPortal.briefings", { businessId: w.A }], ["vendorPortal.reviews", { businessId: w.A }],
       ["vendorPortal.invoices", { businessId: w.A }], ["vendorPortal.invoiceForm", { businessId: w.A }], ["vendorPortal.invoice#" + inv1, { invoiceId: inv1 }], ["vendorPortal.invoice#" + inv2, { invoiceId: inv2 }], ["vendorPortal.invoice#" + inv3, { invoiceId: inv3 }],
-      ["vendorPortal.settings", { businessId: w.A }], ["vendorPortal.notifications", { businessId: w.A }], ["business.brand", {}],
+      ["vendorPortal.settings", { businessId: w.A }], ["vendorPortal.notifications", { businessId: w.A }], ["business.brand", {}], ["vendorPayouts.mine", { businessId: w.A }], ["vendorPortal.invoice#" + inv4, { invoiceId: inv4 }],
     ];
     const run = async (as: typeof w.heston, list: [string, Record<string, unknown>][]) => {
       const out: Record<string, unknown> = {};
@@ -76,7 +85,8 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures (Phase 3c)", () => {
     Object.assign(fx.owner, await run(w.heston, OWNER));
     fx.vendor = await run(jordan, VENDOR);
     Object.assign(fx.client, await run(w.maya, [["notifications.client", {}]]));
-    fx.ids = { ...fx.ids, vendor: { jordan: a, riley: r, bookings: [k1, k2, k3], invoices: { toApprove: inv1, approved: inv2, paid: inv3 } } };
+    fx.ids = { ...fx.ids, vendor: { jordan: a, riley: r, bookings: [k1, k2, k3], invoices: { toApprove: inv1, approved: inv2, paid: inv3, paying: inv4 } } };
+    delete process.env.STRIPE_PAYOUTS_KEY;
     writeFileSync(file, JSON.stringify(fx, null, 1));
   });
 });

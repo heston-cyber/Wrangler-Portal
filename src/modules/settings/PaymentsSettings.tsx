@@ -49,6 +49,32 @@ function SubFail({ show }: { show: (m: string) => void }) {
   );
 }
 
+/** Pay in portal (Nov 2): paying vendors from the business's own Stripe balance (Global Payouts). Wrangler only. */
+function VendorPayouts() {
+  const st = useQuery(api.vendorPayouts.status, {});
+  const balanceOf = useAction(api.vendorPayouts.balance);
+  const [bal, setBal] = useState<number | string | null>(null);
+  useEffect(() => { if (!st?.on) return; let live = true; balanceOf({}).then((r) => live && setBal(r && "availableCents" in r ? r.availableCents : r ? r.error : "Couldn't check"), (e) => live && setBal(err(e))); return () => { live = false; }; }, [st?.on, balanceOf]);
+  if (!st?.isDefault) return null;
+  const usd = (c: number) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return (
+    <div className="panel pay-card">
+      <span className="wp-eyebrow">Vendor payouts {st.mode === "test" && <span className="wp-tag pay-test">Test mode</span>}</span>
+      {st.on ? <>
+        <dl className="pay-rows">
+          <dt>Status</dt><dd><StatusChip tone="success">Connected</StatusChip></dd>
+          <dt>Stripe balance</dt><dd>{bal === null ? "Checking…" : typeof bal === "number" ? usd(bal) : bal}</dd>
+          <dt>How</dt><dd>Direct deposit by standard ACH, usually 1 to 3 business days</dd>
+        </dl>
+        <p className="secondary pay-note">Pay an approved vendor invoice from its page (Vendors › Payments). Vendors set up direct deposit in their portal's Settings, on Stripe's form. Add funds to your balance in your Stripe dashboard.</p>
+      </> : <>
+        <dl className="pay-rows"><dt>Status</dt><dd><StatusChip tone="neutral">Not connected</StatusChip></dd></dl>
+        <p className="secondary pay-note">Pay approved vendor invoices from your Stripe balance, straight to their bank. It needs Global Payouts turned on in your Stripe account and a restricted key from it added to the portal. Until then, pay your usual way and press Mark paid.</p>
+      </>}
+    </div>
+  );
+}
+
 function Reminders({ r, show }: { r: { on: boolean; beforeDays: number; afterDays: number; everyDays: number; stopAfter: number }; show: (m: string) => void }) {
   const save = useMutation(api.invoiceReminders.setReminders);
   const set = (patch: Partial<typeof r>) => void save({ ...r, ...patch }).then(
@@ -212,6 +238,7 @@ export function PaymentsSettings({ show }: { show: (m: string) => void }) {
       )}
       {st.status === "connected" && <Reminders r={s.reminders} show={show} />}
       {st.status === "connected" && <SubFail show={show} />}
+      <VendorPayouts />
       {asking && (
         <Modal onClose={() => setAsking(false)} label="Disconnect Stripe" width={560}>
           <div style={{ display: "grid", gap: 18 }}>

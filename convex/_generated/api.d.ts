@@ -23,6 +23,7 @@ import type * as bookings from "../bookings.js";
 import type * as briefings from "../briefings.js";
 import type * as notifications from "../notifications.js";
 import type * as vendorPayments from "../vendorPayments.js";
+import type * as vendorPayouts from "../vendorPayouts.js";
 import type * as vendorPortal from "../vendorPortal.js";
 import type * as leads from "../leads.js";
 import type * as plans from "../plans.js";
@@ -142,6 +143,7 @@ declare const fullApi: ApiFromModules<{
   briefings: typeof briefings;
   notifications: typeof notifications;
   vendorPayments: typeof vendorPayments;
+  vendorPayouts: typeof vendorPayouts;
   vendorPortal: typeof vendorPortal;
   leads: typeof leads;
   plans: typeof plans;

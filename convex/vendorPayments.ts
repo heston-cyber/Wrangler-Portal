@@ -175,6 +175,7 @@ export const markPaid = mutation({
     const x = await ctx.db.get(a.invoiceId);
     if (!x || x.status === "draft") throw new ConvexError("That invoice isn't here.");
     if (x.status !== "approved") throw new ConvexError(x.status === "paid" ? "It's already marked paid." : "Approve it first.");
+    if (x.payout && (x.payout.status === "starting" || x.payout.status === "processing")) throw new ConvexError("It's being paid through Stripe right now. Wait for that to finish (or fail) first.");
     if (!isDate(a.paidOn)) throw new ConvexError("Pick the day you paid.");
     if (a.paidOn > todayCentral()) throw new ConvexError("The paid date can't be in the future.");
     if (!PAY_METHODS.includes(a.method)) throw new ConvexError("Pick how you paid.");

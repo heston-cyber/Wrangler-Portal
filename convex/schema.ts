@@ -882,6 +882,10 @@ export default defineSchema({
     w9: v.optional(v.object({ fileId: v.id("_storage"), name: v.string(), uploadedAt: v.number() })),
     payMethod: v.optional(v.object({ method: v.string(), note: v.optional(v.string()) })),
     businessName: v.optional(v.string()),               // step 4: their own business name, if they have one
+    // Pay in portal (Nov 2): their Stripe recipient on the business's own Stripe account (vendorPayouts.ts). Bank
+    // details live at Stripe; the portal keeps only the bank's name and last 4 to show.
+    payout: v.optional(v.object({ recipientId: v.string(), mode: v.string(), ready: v.boolean(), needsInfo: v.optional(v.boolean()),
+      payoutMethodId: v.optional(v.string()), last4: v.optional(v.string()), bankName: v.optional(v.string()), checkedAt: v.number() })),
     address: v.optional(v.string()),                    // step 4: mailing address, for 1099s
     archivedAt: v.optional(v.number()),
     createdAt: v.number(),
@@ -960,6 +964,10 @@ export default defineSchema({
     paidMethod: v.optional(v.string()),
     paidRef: v.optional(v.string()),                      // "Confirmation 000000" (optional)
     history: v.optional(v.array(v.object({ at: v.number(), text: v.string() }))),
+    // Pay in portal (Nov 2): the Stripe payout for this invoice. "starting" while the request is out; then Stripe's own
+    // status. Posted → the invoice is paid; failed / returned / canceled → back to approved, with the reason.
+    payout: v.optional(v.object({ id: v.optional(v.string()), status: v.string(), attempt: v.number(), mode: v.string(), startedAt: v.number(), by: v.optional(v.string()),
+      expectedArrival: v.optional(v.string()), receiptUrl: v.optional(v.string()), reason: v.optional(v.string()), checkedAt: v.optional(v.number()) })),
     seenAt: v.optional(v.number()),                       // the owner opened it (the Home alert stays until approved)
     createdAt: v.number(),
     updatedAt: v.number(),
