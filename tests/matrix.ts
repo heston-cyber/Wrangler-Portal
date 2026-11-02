@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 export const modules = import.meta.glob("../convex/**/*.ts");
 
-export type Ids = { requestId: Id<"wsRequests">; buildId: Id<"wsBuilds">; templateId: Id<"wsTemplates">; clauseId: Id<"wsClauses">; styleId: Id<"wsStyles">; docId: Id<"wsDocuments">; wsVersionId: Id<"wsVersions">; projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage">; clientRecId: Id<"clients">; personId: Id<"clientPeople">; inboxItemId: Id<"inboxItems">; inboxNoteId: Id<"inboxNotes">; deliveryFileId: Id<"deliveryFiles">; invoiceId: Id<"invoices">; planId: Id<"plans">; subscriptionId: Id<"subscriptions">; dealId: Id<"deals">; followUpId: Id<"followUps">; estimateId: Id<"estimates">; entryId: Id<"ledgerEntries">; quoteId: Id<"quotes">; proposalId: Id<"proposals"> };
+export type Ids = { requestId: Id<"wsRequests">; buildId: Id<"wsBuilds">; templateId: Id<"wsTemplates">; clauseId: Id<"wsClauses">; styleId: Id<"wsStyles">; docId: Id<"wsDocuments">; wsVersionId: Id<"wsVersions">; projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage">; clientRecId: Id<"clients">; personId: Id<"clientPeople">; inboxItemId: Id<"inboxItems">; inboxNoteId: Id<"inboxNotes">; deliveryFileId: Id<"deliveryFiles">; invoiceId: Id<"invoices">; planId: Id<"plans">; subscriptionId: Id<"subscriptions">; dealId: Id<"deals">; followUpId: Id<"followUps">; estimateId: Id<"estimates">; entryId: Id<"ledgerEntries">; quoteId: Id<"quotes">; proposalId: Id<"proposals">; vendorId: Id<"vendors">; bookingId: Id<"vendorBookings">; briefingId: Id<"briefings">; businessId: Id<"businesses">; vendorInvoiceId: Id<"vendorInvoices"> };
 
 // Minimal valid arguments for each function, so the access check (not argument validation) is what refuses.
 export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
@@ -72,7 +72,8 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "clients.people": { clientId: ids.clientRecId }, "clients.addPerson": { clientId: ids.clientRecId, email: "p@example.com", role: "contact" },
     "clients.updatePerson": { personId: ids.personId, role: "signer" }, "clients.removePerson": { personId: ids.personId }, "clients.invitePerson": { personId: ids.personId },
     "clients.page": { clientId: ids.clientRecId }, "clients.directory": {},
-    "documents.mine": {}, "portal.waiting": {}, "emails.myPrefs": {}, "emails.setMine": { on: true }, "documents.signedCopy": { documentId: ids.docId },
+    "documents.mine": {}, "portal.waiting": {}, "emails.myPrefs": {}, "emails.setMine": { on: true }, "notifications.owner": {}, "notifications.setOwner": { key: "client_paid", on: true },
+    "notifications.client": {}, "notifications.setClient": { key: "versions", on: true }, "vendorPortal.notifications": {}, "vendorPortal.setNotification": { businessId: ids.businessId, key: "bookings", on: true }, "documents.signedCopy": { documentId: ids.docId },
     "business.settings": {}, "business.updateSettings": { accent: "#112233" }, "business.logoUploadUrl": {}, "business.setLogo": { storageId: null }, "business.brand": {},
     "activity.recent": {}, "home.needs": {},
     "approvals.approve": { versionId: ids.versionId }, "approvals.forVideo": { videoId: ids.videoId },
@@ -103,7 +104,24 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "proposals.questionnaire": {}, "proposals.saveQuestionnaire": { questionnaire: {} }, "proposals.resetQuestionnaire": {}, "proposals.startQuestionnaire": {},
     "proposals.saveAnswers": { proposalId: ids.proposalId, answers: {} }, "proposals.answerUploadUrl": {}, "proposals.addAnswerFile": { proposalId: ids.proposalId, storageId: ids.storageId, name: "f" },
     "proposals.fileUrls": { proposalId: ids.proposalId }, "proposals.finish": { proposalId: ids.proposalId, how: "self" }, "proposals.fillInstead": { proposalId: ids.proposalId },
-    "proposals.dismissDrafted": { proposalId: ids.proposalId }, "proposals.forCompany": { clientId: ids.clientRecId }, "proposals.setDeck": { proposalId: ids.proposalId, kit: "business" },
+    "proposals.dismissDrafted": { proposalId: ids.proposalId }, "proposals.forCompany": { clientId: ids.clientRecId },
+    "vendors.list": {}, "vendors.get": { vendorId: "nope" }, "vendors.add": { name: "V", email: "v@x.example", roles: [], rates: [], invite: false },
+    "vendors.update": { vendorId: ids.vendorId, name: "V", email: "v@x.example", roles: [], rates: [] }, "vendors.archive": { vendorId: ids.vendorId, archived: true },
+    "bookings.form": {}, "bookings.list": {}, "bookings.forProject": { projectId: "nope" }, "bookings.forVendor": { vendorId: "nope" }, "bookings.get": { bookingId: "nope" },
+    "bookings.create": { vendorId: ids.vendorId, projectId: ids.projectId, role: "Shooter", start: "2030-01-01", end: "2030-01-02", cents: 100000, unit: "day" }, "bookings.cancel": { bookingId: ids.bookingId },
+    "briefings.templates": {}, "briefings.list": {}, "briefings.forVendor": { vendorId: "nope" }, "briefings.get": { briefingId: "nope" }, "briefings.create": { bookingId: ids.bookingId },
+    "briefings.setBooking": { briefingId: ids.briefingId, bookingId: ids.bookingId }, "briefings.deleteDraft": { briefingId: ids.briefingId }, "briefings.copy": { briefingId: ids.briefingId },
+    "briefings.send": { briefingId: ids.briefingId, resend: true },
+    "vendors.invite": { vendorId: ids.vendorId },
+    "vendorPortal.businesses": {}, "vendorPortal.counts": { businessId: ids.businessId }, "vendorPortal.home": {}, "vendorPortal.bookings": {}, "vendorPortal.booking": { bookingId: "nope" },
+    "vendorPortal.accept": { bookingId: ids.bookingId }, "vendorPortal.decline": { bookingId: ids.bookingId, reason: "Too far" }, "vendorPortal.briefings": {},
+    "vendorPortal.briefing": { briefingId: "nope" }, "vendorPortal.markRead": { briefingId: ids.briefingId },
+    "vendorPortal.reviews": {}, "vendorPortal.invoices": {}, "vendorPortal.invoiceForm": {}, "vendorPortal.invoice": { invoiceId: "nope" },
+    "vendorPortal.saveInvoice": { bookingId: ids.bookingId, mode: "hours", hours: [], lines: [], send: false }, "vendorPortal.deleteInvoice": { invoiceId: ids.vendorInvoiceId },
+    "vendorPortal.settings": {}, "vendorPortal.saveDetails": { businessId: ids.businessId, name: "V" }, "vendorPortal.w9UploadUrl": { businessId: ids.businessId },
+    "vendorPortal.setW9": { businessId: ids.businessId, storageId: ids.storageId, name: "w9.pdf" }, "vendors.invoices": { vendorId: "nope" },
+    "vendorPayments.list": {}, "vendorPayments.totals1099": {}, "vendorPayments.get": { invoiceId: "nope" }, "vendorPayments.approve": { invoiceId: ids.vendorInvoiceId },
+    "vendorPayments.decline": { invoiceId: ids.vendorInvoiceId, reason: "No" }, "vendorPayments.markPaid": { invoiceId: ids.vendorInvoiceId, paidOn: "2026-01-02", method: "ACH" }, "proposals.setDeck": { proposalId: ids.proposalId, kit: "business" },
     "brandKit.get": {}, "brandKit.save": { colors: [], fonts: {}, links: [], tone: [] }, "brandKit.uploadUrl": {}, "brandKit.addFile": { storageId: ids.storageId, name: "x.pdf" }, "brandKit.removeFile": { fileId: ids.storageId },
     "crm.rates": {}, "crm.saveRates": { rates: {} }, "crm.board": {}, "crm.addDeal": { title: "X" }, "crm.moveDeal": { dealId: ids.dealId, stage: "quoted" }, "crm.closeDeal": { dealId: ids.dealId },
     "crm.deal": { dealId: "nope" }, "crm.companies": {}, "crm.company": { clientId: "nope" }, "crm.contact": { personId: "nope" }, "crm.followUps": {},
@@ -171,7 +189,12 @@ export async function setup() {
     const entryId = await ctx.db.insert("ledgerEntries", { projectId, kind: "hours", hours: 1, date: "2030-01-01", createdAt: 0 });
     const quoteId = await ctx.db.insert("quotes", { number: "X-Q-0001", seq: 1, status: "draft", contact: { name: "A", email: "a@b.co" }, title: "T", lines: [], deposit: { kind: "percent", value: 25 }, validUntil: "2030-01-01", totalCents: 0, history: [], createdAt: 0, updatedAt: 0 });
     const proposalId = await ctx.db.insert("proposals", { buildId, number: "X-P-0001", seq: 1, status: "draft", history: [], createdAt: 0, updatedAt: 0 });
-    return { proposalId, quoteId, dealId, followUpId, estimateId, entryId, subscriptionId, planId, invoiceId, deliveryFileId, clientRecId, personId, inboxItemId, inboxNoteId, requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
+    const vendorId = await ctx.db.insert("vendors", { name: "V", email: "v@x.example", roles: [], rates: [], createdAt: 0, updatedAt: 0 });
+    const bookingId = await ctx.db.insert("vendorBookings", { vendorId, projectId, role: "Shooter", start: "2030-01-01", end: "2030-01-02", rate: { cents: 100000, unit: "day" }, status: "offered", offeredAt: 0, createdAt: 0, updatedAt: 0 });
+    const businessId = (await ctx.db.query("businesses").first())?._id ?? await ctx.db.insert("businesses", { slug: "matrix", name: "Matrix Co", createdAt: 0 });
+    const briefingId = await ctx.db.insert("briefings", { buildId, projectId, bookingId, status: "draft", history: [], createdAt: 0, updatedAt: 0 });
+    const vendorInvoiceId = await ctx.db.insert("vendorInvoices", { vendorId, bookingId, projectId, number: "INV-0001", mode: "hours", hours: [], lines: [], rate: { cents: 1, unit: "day" }, totalCents: 0, status: "draft", createdAt: 0, updatedAt: 0 });
+    return { vendorInvoiceId, businessId, briefingId, bookingId, vendorId, proposalId, quoteId, dealId, followUpId, estimateId, entryId, subscriptionId, planId, invoiceId, deliveryFileId, clientRecId, personId, inboxItemId, inboxNoteId, requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
   });
   return { t, ids };
 }

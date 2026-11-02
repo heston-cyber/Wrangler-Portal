@@ -15,6 +15,7 @@ import { errText } from "../docs/pages/common";
 import Projects from "../review/Projects";
 import { ProjectInvoices } from "../payments/InvoicesPage";
 import { LedgerTab } from "../crm/Ledger";
+import { CrewCard } from "../vendors/Bookings";
 import { StageBar, STAGES, stageName, type Stage, dateText, bytes, openFileLink } from "./common";
 
 type Page = NonNullable<ReturnType<typeof useQuery<typeof api.projects.page>>>;
@@ -291,6 +292,7 @@ function Overview({ page, onMove, onRounds, onNext, onDates, postDefault, setPos
           {page.people.length === 0 ? <p className="pj-pad secondary">{page.client ? `No one at ${client} yet.` : "This project has no client."}</p>
             : page.people.map((p) => <ListRow key={p._id} lead={{ avatar: p.name ?? p.email, two: true }} title={p.name ?? p.email} meta={p.name ? p.email : undefined} />)}
         </Card>
+        <CrewCard projectId={page._id} />
       </div>
     </div>
   );

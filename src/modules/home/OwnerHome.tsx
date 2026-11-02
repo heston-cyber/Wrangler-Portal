@@ -1,5 +1,6 @@
 // The back-office Home (P1 / Owner / Home, page "S5 · Phase 1"): what needs you today, your clients, and recent
 // activity across Review, Docs and the Inbox.
+import { money } from "../payments/common";
 import { Suspense, lazy, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -73,6 +74,13 @@ function NeedRow({ n, remind }: { n: Need; remind: (n: Extract<Need, { kind: "do
         title={`${first(n.who)} ${n.what} quote ${n.number}`} meta={`${n.company} · ${n.title} · ${dayWord(n.at)}`}
         titleChip={<span className="pc-only"><StatusChip tone={n.what === "accepted" ? "success" : "danger"}>{n.what === "accepted" ? "Accepted" : "Declined"}</StatusChip></span>}
         action={<ButtonLink size="sm" variant={n.what === "accepted" ? "primary" : "secondary"} to={`/payments/quotes/${n.quoteId}`}>Open</ButtonLink>} />
+    );
+  }
+  if (n.kind === "vendorInvoice") { // Phase 3c: a vendor's invoice to approve (email 26), until it's approved or declined
+    return (
+      <ListRow className="ilead" lead={{ icon: "invoice" }} title={`${n.vendor} sent invoice ${n.number}`} meta={`${n.project} · ${money(n.totalCents)} · ${dayWord(n.at)}`}
+        titleChip={<span className="pc-only"><StatusChip tone="warning">To approve</StatusChip></span>}
+        action={<ButtonLink size="sm" variant="primary" to={`/vendors/payments/${n.invoiceId}`}>Review it</ButtonLink>} />
     );
   }
   if (n.kind === "proposal") { // Phase 3b: an answered proposal, until the contract starts / Not now, or it's seen

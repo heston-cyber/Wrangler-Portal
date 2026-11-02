@@ -17,7 +17,7 @@ import pdf from "./stills/sample.pdf?url";
 if (/^\/x\//.test(location.pathname)) installSignerKit();
 
 const STILLS: Record<string, string> = { stadium, aerial, premiere, bts, landscape, pdf };
-type Side = "owner" | "client";
+type Side = "owner" | "client" | "vendor"; // vendor: Phase 3c (tests/kitVendorFixtures.test.ts)
 
 // Point every sample thumbnail at a local still.
 function localStills<T>(v: T): T {

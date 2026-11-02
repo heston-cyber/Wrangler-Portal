@@ -33,11 +33,16 @@ import { errText, uploadToStorage } from "../pages/common";
 import { Icon } from "../../../ui/Icon";
 import { Button, IconButton, SkeletonRows, EmptyState, ButtonLink, StatusChip as Chip, Checkbox, DialogHeader, TextArea } from "../../../ui/wp";
 import { proposalProblems } from "../../../../convex/lib/wsProposal";
+import { briefingProblems } from "../../../../convex/lib/wsBriefing";
 
 // Phase 3b: proposals open here too (S5 · Phase 3b 716:4980 / 718:4495): no signature boxes, Send instead of
 // "Continue to signing", locked once sent, and "Start the contract?" once accepted (D75, D84).
 export type ProposalInfo = NonNullable<FunctionReturnType<typeof api.proposals.get>>;
-type Mode = { kind: "build"; buildId: Id<"wsBuilds">; proposal?: ProposalInfo } | { kind: "template"; templateId: Id<"wsTemplates">; proposal?: boolean };
+// Phase 3c: briefings too (D97, 731:3904): no signature boxes, "Send to {vendor}" (a vendor booked on the project),
+// locked once sent, "Sent · Read" in the top row.
+export type BriefingInfo = NonNullable<FunctionReturnType<typeof api.briefings.get>>;
+type Mode = { kind: "build"; buildId: Id<"wsBuilds">; proposal?: ProposalInfo; briefing?: BriefingInfo } | { kind: "template"; templateId: Id<"wsTemplates">; proposal?: boolean; briefing?: boolean };
+const B_CHIP: Record<string, { tone: "neutral" | "accent" | "success"; text: string }> = { draft: { tone: "neutral", text: "Draft" }, sent: { tone: "accent", text: "Sent" }, read: { tone: "success", text: "Read" } };
 const P_OPEN = new Set(["draft", "waiting", "ready"]);
 const P_CHIP: Record<string, { tone: "neutral" | "accent" | "success" | "danger" | "warning"; text: string }> = {
   draft: { tone: "neutral", text: "Draft" }, waiting: { tone: "warning", text: "Waiting for Claude" }, ready: { tone: "accent", text: "Ready" }, sent: { tone: "accent", text: "Sent" },
@@ -67,7 +72,10 @@ const INSERT: Array<{ kind: InsertKind; icon: React.ReactNode; hint: string }> =
 export default function Builder({ mode }: { mode: Mode }) {
   const prop = mode.kind === "build" ? mode.proposal ?? null : null;
   const isProp = !!prop || (mode.kind === "template" && !!mode.proposal);
-  const locked = !!prop && !P_OPEN.has(prop.status);
+  const brief = mode.kind === "build" ? mode.briefing ?? null : null;
+  const isBrief = !!brief || (mode.kind === "template" && !!mode.briefing);
+  const side = isProp || isBrief; // never signed: no parties or signature blocks, no clause library
+  const locked = (!!prop && !P_OPEN.has(prop.status)) || (!!brief && brief.state !== "draft");
   const build = useQuery(api.builder.getBuild, mode.kind === "build" ? { buildId: mode.buildId } : "skip");
   const tpl = useQuery(api.builder.getTemplate, mode.kind === "template" ? { templateId: mode.templateId } : "skip");
   const profile = useQuery(api.builder.getProfile);
@@ -88,8 +96,12 @@ export default function Builder({ mode }: { mode: Mode }) {
   const withdrawProposal = useMutation(api.proposals.withdraw);
   const copyProposal = useMutation(api.proposals.copy);
   const dismissDrafted = useMutation(api.proposals.dismissDrafted);
+  const sendBriefing = useAction(api.briefings.send);
+  const copyBriefing = useMutation(api.briefings.copy);
+  const setBriefingBooking = useMutation(api.briefings.setBooking);
   const [toast, show] = useToast();
   const [sending, setSending] = useState(false);
+  const [askBrief, setAskBrief] = useState(false); // Heston, Nov 2: ask before a briefing goes out, as proposals do
   const [contracting, setContracting] = useState(false);
 
   const [doc, setDocRaw] = useState<BuildDoc | null>(null);
@@ -271,7 +283,7 @@ export default function Builder({ mode }: { mode: Mode }) {
   // Save a moment after the last change.
   useEffect(() => {
     if (!dirty || !doc) return;
-    if (locked) { setDirty(false); return; } // a sent proposal doesn't change (the server refuses it too)
+    if (locked) { setDirty(false); return; } // a sent proposal or briefing doesn't change (the server refuses it too)
     setSaveState("saving");
     const t = setTimeout(async () => {
       const savedDoc = doc, savedMeta = meta;
@@ -321,6 +333,7 @@ export default function Builder({ mode }: { mode: Mode }) {
 
   if (!doc) return <><TopBar><a {...linkProps("/sign")}>Docs</a></TopBar><div className="wp-page docs"><div className="wp-tablecard glass"><SkeletonRows n={3} /></div></div></>;
   if (mode.kind === "build" && !prop && build?.kind === "proposal") return <><TopBar><a {...linkProps("/proposals")}>Proposals</a></TopBar><div className="wp-page docs"><EmptyState icon="quote" title="This is a proposal." body="Proposals open from Proposals, where they're sent and answered." actions={<ButtonLink to="/proposals">All proposals</ButtonLink>} /></div></>;
+  if (mode.kind === "build" && !brief && build?.kind === "briefing") return <><TopBar><a {...linkProps("/vendors/briefings")}>Briefings</a></TopBar><div className="wp-page docs"><EmptyState icon="note" title="This is a briefing." body="Briefings open from Vendors › Briefings, where they're sent to a booked vendor." actions={<ButtonLink to="/vendors/briefings">All briefings</ButtonLink>} /></div></>;
   if (mode.kind === "build" && build === null) return <><TopBar><a {...linkProps("/sign")}>Docs</a></TopBar><div className="wp-page docs"><EmptyState icon="document" title="This document doesn't exist." actions={<ButtonLink to="/sign/docs">All docs</ButtonLink>} /></div></>;
 
   const st = doc.style;
@@ -344,7 +357,7 @@ export default function Builder({ mode }: { mode: Mode }) {
   const dragNodes = (e: React.DragEvent, nodes: PNode[]) => startInsertDrag(e, nodes);
 
   const assets = () => ({ fonts: fontRows, files: files as Record<string, string | null> });
-  const render = async () => { const { renderPdf } = await import("./pdf"); return renderPdf(doc, assets(), prop ? prop.number : build?.document?.label); };
+  const render = async () => { const { renderPdf } = await import("./pdf"); return renderPdf(doc, assets(), prop ? prop.number : brief ? undefined : build?.document?.label); };
   const onPreview = async () => {
     setBusy("preview");
     try { const blob = await render(); setPreview(URL.createObjectURL(blob)); }
@@ -367,6 +380,7 @@ export default function Builder({ mode }: { mode: Mode }) {
     const templateId = (mode as { templateId: Id<"wsTemplates"> }).templateId;
     try {
       if (isProp) { const id = await createProposal({ templateId }); navigate(`/proposals/${id}`); }
+      else if (isBrief) navigate(`/vendors/briefings?template=${templateId}`); // New briefing asks who it's for
       else { const id = await createBuild({ templateId }); navigate(`/sign/b/${id}`); }
     } catch (e) { show(errText(e)); setBusy(null); }
   };
@@ -390,12 +404,49 @@ export default function Builder({ mode }: { mode: Mode }) {
       show(r.held ? "Saved as sent, but the email was held (email sending is limited on this site)." : `Sent to ${doc.fields.client.name.split(" ")[0] || doc.fields.client.email}`);
     } catch (e) { show(errText(e)); }
   };
+  // Briefings: Send to {vendor} (731:3904) checks it, saves, freezes the PDF and emails them (email 25).
+  const recipient = brief?.recipients.find((r) => r._id === brief.bookingId) ?? null;
+  const onAskBriefing = () => {
+    if (!brief) return;
+    const p = [...(recipient ? [] : ["Pick who it's for (Send to, under Insert)."]), ...briefingProblems(doc)];
+    if (p.length) { setProblems(p); setTab(recipient ? "details" : "insert"); if (phone) setSheet(true); show(p[0]); return; }
+    setProblems(null); setAskBrief(true);
+  };
+  const onSendBriefing = async () => {
+    if (!brief || !recipient) return;
+    setBusy("brief");
+    try {
+      const sent = doc;
+      await saveBuild({ buildId: brief.buildId, title: sent.title, blocks: sent.page, fields: sent.fields, signers: sent.signers, style: sent.style });
+      if (docRef.current === sent) setDirty(false);
+      const blob = await render();
+      const storageId = await uploadToStorage(await uploadUrl({}), new File([blob], `${doc.title}.pdf`, { type: "application/pdf" }));
+      const r = await sendBriefing({ briefingId: brief._id, storageId });
+      setAskBrief(false);
+      show(r.held ? "Saved as sent, but the email was held (email sending is limited on this site)." : r.off ? `Sent to ${recipient.name.split(" ")[0]}’s portal. They’ve switched off briefing emails, so no email went out.` : `Sent to ${recipient.name.split(" ")[0]}`);
+    } catch (e) { show(errText(e)); } finally { setBusy(null); }
+  };
+  const onPickRecipient = async (bookingId: string) => {
+    if (!brief) return;
+    const r = brief.recipients.find((x) => x._id === bookingId);
+    if (!r) return;
+    try {
+      await setBriefingBooking({ briefingId: brief._id, bookingId: r._id });
+      setDoc((d) => ({ ...d, fields: { ...d.fields, custom: [{ key: "vendor", label: "Vendor", value: r.vendor }, { key: "dates", label: "Dates", value: r.dates }, ...d.fields.custom.filter((c) => c.key !== "vendor" && c.key !== "dates")] } }));
+    } catch (e) { show(errText(e)); }
+  };
   const onResend = async () => {
+    if (brief) {
+      setBusy("resend");
+      try { const r = await sendBriefing({ briefingId: brief._id, resend: true }); show(r.held ? "The email was held (email sending is limited on this site)." : r.off ? "They’ve switched off briefing emails, so no email went out. It’s in their portal." : "Sent the email again"); } catch (e) { show(errText(e)); } finally { setBusy(null); }
+      return;
+    }
     if (!prop) return;
     setBusy("resend");
     try { const r = await sendProposal({ proposalId: prop._id, resend: true }); show(r.held ? "The email was held (email sending is limited on this site)." : "Sent the email again"); } catch (e) { show(errText(e)); } finally { setBusy(null); }
   };
   const onCopy = async () => {
+    if (brief) { setBusy("copy"); try { const id = await copyBriefing({ briefingId: brief._id }); navigate(`/vendors/briefings/${id}`); } catch (e) { show(errText(e)); setBusy(null); } return; }
     if (!prop) return;
     setBusy("copy");
     try { const id = await copyProposal({ proposalId: prop._id }); navigate(`/proposals/${id}`); } catch (e) { show(errText(e)); setBusy(null); }
@@ -420,11 +471,17 @@ export default function Builder({ mode }: { mode: Mode }) {
           <button className="icon-btn sm" aria-label="Undo" title={`Undo (${mac ? "⌘Z" : "Ctrl+Z"})`} disabled={!hist.current.past.length} onClick={() => step("undo")}><Icon name="arrow-left" size={18} /></button>
           <button className="icon-btn sm" aria-label="Redo" title={`Redo (${mac ? "⇧⌘Z" : "Ctrl+Shift+Z"})`} disabled={!hist.current.future.length} onClick={() => step("redo")}><Icon name="arrow-right" size={18} /></button>
         </span>
-        {locked ? <span className="ws-save hide-sm saved"><Icon name="lock" size={14} /> Locked · {P_CHIP[prop!.status]?.text.toLowerCase()}</span>
+        {brief && locked ? <span className="ws-save hide-sm saved"><Icon name="lock" size={14} /> Sent {longDay(brief.sentAt ?? Date.now()).replace(/, \d{4}$/, "")}{brief.readAt ? ` · Read ${longDay(brief.readAt).replace(/, \d{4}$/, "")}` : ""}</span>
+          : locked ? <span className="ws-save hide-sm saved"><Icon name="lock" size={14} /> Locked · {P_CHIP[prop!.status]?.text.toLowerCase()}</span>
           : <span className={`ws-save hide-sm ${saveState}`}>{saveState === "saving" ? <><Spinner /> Saving</> : saveState === "error" ? <><Icon name="alert" size={14} /> Not saved</> : <><Icon name="check" size={14} plain /> Saved</>}</span>}
         {prop && <span className="hide-sm"><ProposalChip status={prop.status} /></span>}
+        {brief && <span className="hide-sm"><Chip tone={B_CHIP[brief.state].tone}>{B_CHIP[brief.state].text}</Chip></span>}
         <Button variant="ghost" size="sm" className="hide-sm" loading={busy === "preview"} onClick={() => void onPreview()} iconEnd="external">Preview PDF</Button>
-        {prop ? <>
+        {brief ? <>
+          {!locked && <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setAsTemplate(true)}>Save as briefing template</Button>}
+          {!locked ? <Button variant="primary" size="sm" onClick={onAskBriefing}>{recipient ? `Send to ${recipient.name.split(" ")[0]}` : "Send"}</Button>
+            : <><Button variant="ghost" size="sm" className="hide-sm" loading={busy === "copy"} onClick={() => void onCopy()}>Make a copy</Button><Button variant="secondary" size="sm" loading={busy === "resend"} onClick={() => void onResend()}>Send again</Button></>}
+        </> : prop ? <>
           {!locked && <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setAsTemplate(true)}>Save as proposal template</Button>}
           {!locked ? <Button variant="primary" size="sm" disabled={prop.status === "waiting"} title={prop.status === "waiting" ? "Claude is still drafting it" : undefined} onClick={onAskSend}>Send</Button>
             : prop.status === "accepted" ? (prop.contract ? <ButtonLink variant="secondary" size="sm" to={`/sign/b/${prop.contract._id}`}>Open the contract</ButtonLink> : <Button variant="primary" size="sm" onClick={() => setContracting(true)}>Start the contract</Button>)
@@ -433,10 +490,10 @@ export default function Builder({ mode }: { mode: Mode }) {
         </> : mode.kind === "build" ? <>
           <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setAsTemplate(true)} iconEnd="chevron-right">Save as template</Button>
           <Button variant="primary" size="sm" loading={busy === "continue"} disabled={!!sent} onClick={() => void onContinue()} title={sent ? "It's out for signature or signed" : undefined}>{build?.document ? "Update the PDF" : "Continue to signing"}</Button>
-        </> : <Button variant="primary" size="sm" loading={busy === "use"} onClick={() => void onUseTemplate()}>{isProp ? "New proposal from this" : "New document from this"}</Button>}
+        </> : <Button variant="primary" size="sm" loading={busy === "use"} onClick={() => void onUseTemplate()}>{isProp ? "New proposal from this" : isBrief ? "New briefing from this" : "New document from this"}</Button>}
       </>}>
-        {isProp ? <><a {...linkProps("/proposals")}>Proposals</a><Sep /></> : <><a {...linkProps("/sign")}>Docs</a><Sep /></>}
-        {mode.kind === "template" ? <><a {...linkProps(isProp ? "/proposals/templates" : "/sign/templates")}>Templates</a><Sep /></> : null}
+        {isProp ? <><a {...linkProps("/proposals")}>Proposals</a><Sep /></> : isBrief ? <><a {...linkProps("/vendors")}>Vendors</a><Sep /><a {...linkProps("/vendors/briefings")}>Briefings</a><Sep /></> : <><a {...linkProps("/sign")}>Docs</a><Sep /></>}
+        {mode.kind === "template" && !isBrief ? <><a {...linkProps(isProp ? "/proposals/templates" : "/sign/templates")}>Templates</a><Sep /></> : null}
         <span className="here">{mode.kind === "template" ? meta.name || doc.title : doc.title}{prop ? ` · ${prop.number}` : build?.document ? ` · ${build.document.label}` : ""}</span>
       </TopBar>
 
@@ -492,15 +549,16 @@ export default function Builder({ mode }: { mode: Mode }) {
           {tab === "insert" && (
             <div className="wsb-pane">
               <span className="wsb-hint">{phone ? "Tap to add after the cursor, or press and hold to drag onto the page" : "Drag onto the page (or into a container), or click to add after the cursor"}</span>
-              {INSERT.filter((x) => !isProp || (x.kind !== "parties" && x.kind !== "signatures")).map((x) => <button key={x.kind} className="wsb-insert" draggable onDragStart={(e) => dragNodes(e, newNodes(x.kind))} onDragEnd={() => endInsertDrag(editor)} {...touch.item(() => newNodes(x.kind), INSERT_LABEL[x.kind])} onClick={() => { if (touch.justDropped()) return; if (editor) insertKind(editor, x.kind); if (phone) setSheet(false); }}>{x.icon}<span><b>{INSERT_LABEL[x.kind]}</b><span className="secondary">{x.hint}</span></span></button>)}
+              {INSERT.filter((x) => !side || (x.kind !== "parties" && x.kind !== "signatures")).map((x) => <button key={x.kind} className="wsb-insert" draggable onDragStart={(e) => dragNodes(e, newNodes(x.kind))} onDragEnd={() => endInsertDrag(editor)} {...touch.item(() => newNodes(x.kind), INSERT_LABEL[x.kind])} onClick={() => { if (touch.justDropped()) return; if (editor) insertKind(editor, x.kind); if (phone) setSheet(false); }}>{x.icon}<span><b>{INSERT_LABEL[x.kind]}</b><span className="secondary">{x.hint}</span></span></button>)}
               {prop && <PitchDeck p={prop} show={show} />}
-              {!isProp && <ClauseLibrary clauses={clauses} onInsert={(c) => { if (touch.justDropped()) return; if (editor) insertNodes(editor, [clauseSection(c)]); if (phone) setSheet(false); }} onDragStart={(e, c) => dragNodes(e, [clauseSection(c)])} onDragEnd={() => endInsertDrag(editor)} touchProps={(c) => touch.item(() => [clauseSection(c)], c.title)} />}
+              {brief && <BriefingSendTo b={brief} locked={locked} onPick={(id) => void onPickRecipient(id)} />}
+              {!side && <ClauseLibrary clauses={clauses} onInsert={(c) => { if (touch.justDropped()) return; if (editor) insertNodes(editor, [clauseSection(c)]); if (phone) setSheet(false); }} onDragStart={(e, c) => dragNodes(e, [clauseSection(c)])} onDragEnd={() => endInsertDrag(editor)} touchProps={(c) => touch.item(() => [clauseSection(c)], c.title)} />}
             </div>
           )}
           {tab === "format" && <FormatPanel editor={editor} accent={st.accent} onSaveClause={(sec) => void onSaveClause(sec)} />}
           {tab === "style" && <StylePanel style={st} onChange={(s) => setDoc((d) => ({ ...d, style: s }))} fonts={fontRows} files={files as Record<string, string | null>} show={show} />}
           {tab === "details" && (
-            <DetailsPane doc={doc} setDoc={setDoc} extraKeys={isProp ? [] : extraKeys} mode={mode.kind} proposal={isProp} meta={meta} setMeta={(m) => { setMeta(m); setDirty(true); }} total={t} problems={problems ?? (mode.kind === "build" ? (isProp ? (locked ? [] : proposalProblems(doc)) : buildProblems(doc)) : [])} show={show} />
+            <DetailsPane doc={doc} setDoc={setDoc} extraKeys={side ? [] : extraKeys} mode={mode.kind} proposal={isProp} briefing={isBrief} meta={meta} setMeta={(m) => { setMeta(m); setDirty(true); }} total={t} problems={problems ?? (mode.kind === "build" ? (locked ? [] : isProp ? proposalProblems(doc) : isBrief ? briefingProblems(doc) : buildProblems(doc)) : [])} show={show} />
           )}
         </aside>
       </div>
@@ -541,15 +599,16 @@ export default function Builder({ mode }: { mode: Mode }) {
       {preview && (
         <Modal onClose={() => { URL.revokeObjectURL(preview); setPreview(null); }} label="PDF preview" width={900}>
           <div className="wsb-preview">
-            <div className="dhead"><h2 className="headline">Preview <span className="rest">{isProp ? (locked ? "This page now; the client has the PDF that was sent." : "Exactly what the client will read.") : "Exactly what will be signed (the signature spots are invisible markers)."}</span></h2><button className="icon-btn" onClick={() => { URL.revokeObjectURL(preview); setPreview(null); }} aria-label="Close"><X size={18} /></button></div>
+            <div className="dhead"><h2 className="headline">Preview <span className="rest">{isProp ? (locked ? "This page now; the client has the PDF that was sent." : "Exactly what the client will read.") : isBrief ? (locked ? "This page now; the vendor has the PDF that was sent." : "Exactly what the vendor will read.") : "Exactly what will be signed (the signature spots are invisible markers)."}</span></h2><button className="icon-btn" onClick={() => { URL.revokeObjectURL(preview); setPreview(null); }} aria-label="Close"><X size={18} /></button></div>
             <iframe title="PDF preview" src={preview} />
             <a className="btn ghost sm" href={preview} download={`${doc.title}.pdf`}>Download this preview</a>
           </div>
         </Modal>
       )}
-      {asTemplate && <SaveTemplate doc={doc} proposal={isProp} onClose={() => setAsTemplate(false)} onSave={async (name, description) => {
-        try { await saveAsTemplate({ name, description, title: doc.title, blocks: doc.page, fields: doc.fields, signers: [], style: doc.style, ...(isProp ? { kind: "proposal" as const } : {}) }); setAsTemplate(false); show(`Saved as the ${isProp ? "proposal " : ""}template "${name}"`); } catch (e) { show(errText(e)); }
+      {asTemplate && <SaveTemplate doc={doc} proposal={isProp} briefing={isBrief} onClose={() => setAsTemplate(false)} onSave={async (name, description) => {
+        try { await saveAsTemplate({ name, description, title: doc.title, blocks: doc.page, fields: doc.fields, signers: [], style: doc.style, ...(isProp ? { kind: "proposal" as const } : isBrief ? { kind: "briefing" as const } : {}) }); setAsTemplate(false); show(`Saved as the ${isProp ? "proposal " : isBrief ? "briefing " : ""}template "${name}"`); } catch (e) { show(errText(e)); }
       }} />}
+      {askBrief && brief && recipient && <SendBriefing b={brief} to={recipient} busy={busy === "brief"} onClose={() => setAskBrief(false)} onSend={() => void onSendBriefing()} />}
       {sending && prop && <SendProposal p={prop} doc={doc} onClose={() => setSending(false)} onSend={onSend} />}
       {contracting && prop && <StartContract p={prop} doc={doc} onClose={() => setContracting(false)} onStart={onStartContract} />}
       {tdrag && <>
@@ -577,8 +636,8 @@ function ClauseLibrary({ clauses, onInsert, onDragStart, onDragEnd, touchProps }
 }
 
 
-function DetailsPane({ doc, setDoc, extraKeys, mode, proposal, meta, setMeta, total, problems, show }: {
-  doc: BuildDoc; setDoc: (f: (d: BuildDoc) => BuildDoc) => void; extraKeys: string[]; mode: "build" | "template"; proposal: boolean; meta: Meta; setMeta: (m: Meta) => void;
+function DetailsPane({ doc, setDoc, extraKeys, mode, proposal, briefing, meta, setMeta, total, problems, show }: {
+  doc: BuildDoc; setDoc: (f: (d: BuildDoc) => BuildDoc) => void; extraKeys: string[]; mode: "build" | "template"; proposal: boolean; briefing?: boolean; meta: Meta; setMeta: (m: Meta) => void;
   total: ReturnType<typeof totals>; problems: string[]; show: (m: string) => void;
 }) {
   const saveProfile = useMutation(api.builder.saveProfile);
@@ -594,6 +653,9 @@ function DetailsPane({ doc, setDoc, extraKeys, mode, proposal, meta, setMeta, to
         {input("Template name", meta.name, (v) => setMeta({ ...meta, name: v }))}
         {input("Description", meta.description, (v) => setMeta({ ...meta, description: v }))}
         <p className="caption secondary">Client details are filled in on each document made from this template.</p>
+      </> : briefing ? <>
+        {input("Briefing title", doc.title, (v) => setDoc((d) => ({ ...d, title: v })))}
+        <p className="caption secondary">Who it's for ({"{vendor}"}, {"{dates}"}) comes from the booking you send it to (Send to, under Insert).</p>
       </> : <>
         {input(proposal ? "Proposal title" : "Document title", doc.title, (v) => setDoc((d) => ({ ...d, title: v })))}
         <span className="label">Client</span>
@@ -623,7 +685,7 @@ function DetailsPane({ doc, setDoc, extraKeys, mode, proposal, meta, setMeta, to
       <div className="field"><span className="ws-flabel">Fill-in fields (click to copy)</span><div className="wsb-fields">
         {[...FIELD_HELP, ...f.custom.filter((c) => c.key).map((c) => ({ key: c.key, label: c.key }))].map((x) => <button key={x.key} className="chip" onClick={() => { void navigator.clipboard.writeText(`{${x.key}}`); show(`Copied {${x.key}}`); }} title={x.label}>{`{${x.key}}`}</button>)}
       </div></div>
-      {mode === "build" && <div className="wsb-totals"><span>{proposal ? "Investment" : "Total"} <b>{money(total.total)}</b></span>{total.depositPct > 0 && <span>{proposal ? "Deposit to book" : "Deposit"} <b>{money(total.deposit)}</b>{total.invoiceDeposit && !proposal ? " → Stripe draft" : ""}</span>}</div>}
+      {mode === "build" && !briefing && <div className="wsb-totals"><span>{proposal ? "Investment" : "Total"} <b>{money(total.total)}</b></span>{total.depositPct > 0 && <span>{proposal ? "Deposit to book" : "Deposit"} <b>{money(total.deposit)}</b>{total.invoiceDeposit && !proposal ? " → Stripe draft" : ""}</span>}</div>}
       <span className="label">Your business</span>
       {input("Legal name", f.business.legalName, (v) => setBiz("legalName", v))}
       {input("Doing business as", f.business.name, (v) => setBiz("name", v))}
@@ -637,15 +699,15 @@ function DetailsPane({ doc, setDoc, extraKeys, mode, proposal, meta, setMeta, to
   );
 }
 
-function SaveTemplate({ doc, proposal, onClose, onSave }: { doc: BuildDoc; proposal?: boolean; onClose: () => void; onSave: (name: string, description: string) => Promise<void> }) {
+function SaveTemplate({ doc, proposal, briefing, onClose, onSave }: { doc: BuildDoc; proposal?: boolean; briefing?: boolean; onClose: () => void; onSave: (name: string, description: string) => Promise<void> }) {
   const [name, setName] = useState(doc.title);
   const [desc, setDesc] = useState("");
   const [busy, setBusy] = useState(false);
   return (
     <Modal onClose={onClose} label="Save as template" width={460}>
       <div style={{ display: "grid", gap: 12 }}>
-        <h2 className="headline">{proposal ? "Save as a proposal template" : "Save as a template"}</h2>
-        <p className="caption secondary">{proposal ? "The sections, wording and style are saved; the client's details and the prices aren't (they come from Settings › Pricing each time)." : "The page, fields and style are saved; the client's details aren't."}</p>
+        <h2 className="headline">{proposal ? "Save as a proposal template" : briefing ? "Save as a briefing template" : "Save as a template"}</h2>
+        <p className="caption secondary">{proposal ? "The sections, wording and style are saved; the client's details and the prices aren't (they come from Settings › Pricing each time)." : briefing ? "The sections, wording and style are saved; who it's for comes from each booking." : "The page, fields and style are saved; the client's details aren't."}</p>
         <label className="field"><span className="ws-flabel">Name</span><input className="input sm" value={name} onChange={(e) => setName(e.target.value)} /></label>
         <label className="field"><span className="ws-flabel">Description (optional)</span><input className="input sm" value={desc} onChange={(e) => setDesc(e.target.value)} /></label>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}><button className="btn ghost" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!name.trim() || busy} onClick={async () => { setBusy(true); await onSave(name, desc); setBusy(false); }}>{busy ? <Spinner /> : <LayoutTemplate size={15} />}Save template</button></div>
@@ -793,5 +855,42 @@ function PitchDeck({ p, show }: { p: ProposalInfo; show: (m: string) => void }) 
         </Modal>
       )}
     </div>
+  );
+}
+
+// ---------- Phase 3c: a briefing's Send to (731:3904, under Insert) ----------
+
+function BriefingSendTo({ b, locked, onPick }: { b: BriefingInfo; locked: boolean; onPick: (bookingId: string) => void }) {
+  return (
+    <div className="wsb-brief">
+      <span className="label">Briefing</span>
+      {locked ? <>
+        <p className="caption">Sent to {b.sentTo?.name ?? b.vendor}{b.sentTo ? ` (${b.sentTo.email})` : ""}{b.readAt ? `. Read ${longDay(b.readAt)}.` : ". Not read yet."}</p>
+        {b.pdfUrl && <a className="btn ghost sm" href={b.pdfUrl} target="_blank" rel="noopener noreferrer">Open the PDF they got</a>}
+      </> : <>
+        <label className="field"><span className="ws-flabel">Send to</span>
+          <select className="input sm" value={b.bookingId ?? ""} onChange={(e) => onPick(e.target.value)}>
+            {!b.bookingId && <option value="" disabled>Pick a booked vendor</option>}
+            {b.recipients.map((r) => <option key={r._id} value={r._id}>{r.name} · {r.role} ({r.state === "accepted" ? "booked" : "offered"})</option>)}
+          </select></label>
+        <p className="caption secondary">{b.recipients.length ? "Only vendors booked on this project can get it. They see it in their portal and press “I’ve read it”." : "No one is booked on this project now. Book a vendor first."}</p>
+      </>}
+    </div>
+  );
+}
+
+function SendBriefing({ b, to, busy, onClose, onSend }: { b: BriefingInfo; to: BriefingInfo["recipients"][number]; busy: boolean; onClose: () => void; onSend: () => void }) {
+  const first = to.name.split(" ")[0];
+  return (
+    <Modal onClose={onClose} label="Send the briefing" width={520}>
+      <div className="crm-dialog">
+        <DialogHeader eyebrow={`Send · ${b.kindName}`} title={`Send the briefing to ${first}?`} body={`${first} gets an email with a link to read it in their vendor portal and press “I’ve read it”. It can’t change once it’s sent; make a copy to send a new version.`} onClose={onClose} />
+        <div className="wp-field"><span className="wp-field-label">To</span><div className="pr-to"><Icon name="mail" size={16} />{to.name} · {to.role} · {to.dates}</div></div>
+        <div className="dfoot">
+          <button className="btn ghost" type="button" onClick={onClose}>Cancel</button>
+          <Button variant="primary" loading={busy} onClick={onSend}>Send briefing</Button>
+        </div>
+      </div>
+    </Modal>
   );
 }

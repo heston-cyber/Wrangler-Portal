@@ -1,9 +1,10 @@
-// The client's Settings (P1 / Client / Settings): their name, email, password, the one email switch, and Sign out.
+// The client's Settings (P1 / Client / Settings): their name, email, password, Sign out, and (Nov 2) Notifications.
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../../convex/_generated/api";
-import { Button, Toggle } from "../../ui/wp";
+import { Button } from "../../ui/wp";
+import { NotificationList } from "../settings/Notifications";
 import { useToast } from "../../ui/kit";
 import { TopBar } from "../../shell/Shell";
 import { useSignOutAsk } from "../../shell/SignOut";
@@ -12,10 +13,10 @@ export default function ClientSettings({ me }: { me: { name: string | null; emai
   const { signIn } = useAuthActions();
   const [signOut, signOutDialog] = useSignOutAsk();
   const setName = useMutation(api.users.setName);
-  const prefs = useQuery(api.emails.myPrefs, {});
+  const ntf = useQuery(api.notifications.client, {});
+  const setNtf = useMutation(api.notifications.setClient);
   const brands = useQuery(api.business.brand);
   const business = brands?.[0]?.name ?? "Wrangler Productions";
-  const setPrefs = useMutation(api.emails.setMine);
   const [name, setN] = useState(me.name ?? "");
   const [resetSent, setResetSent] = useState(false);
   const [toast, show] = useToast();
@@ -38,12 +39,12 @@ export default function ClientSettings({ me }: { me: { name: string | null; emai
             <span className="l"><b>Password</b><span>{resetSent ? "A code is on its way. Sign out, then use Forgot your password to finish." : "Change it with a code sent to your email."}</span></span>
             <span className="v"><Button size="sm" disabled={resetSent} onClick={async () => { try { await signIn("password", { flow: "reset", email: me.email }); setResetSent(true); } catch { show("Couldn't send the code. Try again in a minute."); } }}>Email me a code</Button></span>
           </div>
-          <div className="r">
-            <span className="l"><b>Email me when something new arrives</b><span>{`New cuts, replies to your notes and notes from ${business}. Documents to sign always arrive by email.`}</span></span>
-            <span className="v"><Toggle label="Email me when something new arrives" checked={prefs?.on ?? true} disabled={prefs === undefined} onChange={async (on) => { await setPrefs({ on }); show(on ? "Emails on." : "Emails off."); }} /></span>
-          </div>
           <div className="r"><span className="l"><b>Sign out</b></span><span className="v"><Button size="sm" onClick={signOut}>Sign out</Button></span></div>{signOutDialog}
         </section>
+        {/* Nov 2: every email, each with its own switch (it replaces the one "Email me when something new arrives" switch) */}
+        <header className="wp-sethead cset-ntf"><span className="wp-eyebrow">Notifications</span><h2 className="wp-h4">The emails you get.</h2>
+          <p className="wp-body">{`Each one is on until you switch it off. Bills and documents from ${business} always arrive.`}</p></header>
+        <NotificationList className="wp-card glass" items={ntf?.items} onToggle={async (key, on) => { await setNtf({ key, on }); show(on ? "On." : "Off. You won't get these emails."); }} />
       </div>
       {toast}
     </>

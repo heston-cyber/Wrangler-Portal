@@ -21,7 +21,8 @@ export type Need =
   | { kind: "draft"; at: number; noteId: Id<"inboxNotes">; title: string; client: string | null }
   | { kind: "request"; at: number; documentId: Id<"wsDocuments">; label: string; title: string; what: "approve" | "send" | "cancel" }
   | { kind: "quote"; at: number; quoteId: Id<"quotes">; number: string; company: string; title: string; what: "accepted" | "declined"; who: string } // Phase 3b
-  | { kind: "proposal"; at: number; proposalId: Id<"proposals">; number: string; company: string; title: string; what: "accepted" | "declined"; who: string }; // Phase 3b
+  | { kind: "proposal"; at: number; proposalId: Id<"proposals">; number: string; company: string; title: string; what: "accepted" | "declined"; who: string } // Phase 3b
+  | { kind: "vendorInvoice"; at: number; invoiceId: Id<"vendorInvoices">; vendorId: Id<"vendors">; vendor: string; number: string; project: string; totalCents: number }; // Phase 3c
 
 /** The client a document belongs to: the client of its first signer that's one of a client's people. */
 export async function docClient(ctx: QueryCtx, emails: string[]) {
@@ -84,7 +85,13 @@ export const needs = query({
     // Phase 3b: a quote the client answered, until the owner drafts from it (accepted) or has seen it (declined).
     out.push(...(await quoteNeeds(ctx)));
     out.push(...(await proposalNeeds(ctx))); // and a proposal, until the contract starts / Not now (accepted) or it's seen (declined)
-    const order = { proposal: 0, quote: 0, notes: 1, doc: 2, draft: 3, request: 4 } as const;
+    // Phase 3c (step 4): a vendor's invoice waiting for approval (email 26 too), until it's approved (step 5).
+    for (const x of await ctx.db.query("vendorInvoices").withIndex("by_status", (q) => q.eq("status", "sent")).collect()) {
+      const vendor = await ctx.db.get(x.vendorId);
+      const p = await ctx.db.get(x.projectId);
+      out.push({ kind: "vendorInvoice", at: x.sentAt ?? x.updatedAt, invoiceId: x._id, vendorId: x.vendorId, vendor: vendor?.name ?? "A vendor", number: x.number, project: p?.name ?? "A project", totalCents: x.totalCents });
+    }
+    const order = { proposal: 0, quote: 0, vendorInvoice: 0, notes: 1, doc: 2, draft: 3, request: 4 } as const;
     return out.sort((a, b) => order[a.kind] - order[b.kind] || b.at - a.at);
   },
 });

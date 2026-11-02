@@ -373,7 +373,8 @@ a.wp-row:hover, button.wp-row:hover, .wp-row.hover { background: var(--surface-b
 .backdrop { background: var(--surface-overlay); backdrop-filter: none; -webkit-backdrop-filter: none; }
 .dialog {
   position: relative; isolation: isolate; border-radius: var(--radius-lg); padding: 28px 28px 24px; gap: 18px;
-  background: var(--surface-block); background-image: none;
+  /* Nov 2: the design's dialog shell is Background/raised (solid); a see-through fill let busy pages bleed into the text */
+  background: var(--surface-raised); background-image: none;
   backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass); box-shadow: var(--shadow-float);
 }
 .dialog::before {
@@ -2298,3 +2299,111 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
   .qz-cols > .col.right .qz-side:last-child { display: none; }
   .qz-eqhead { flex-wrap: wrap; }
 }
+
+/* Phase 2b D64 rows (702:1451) */
+.d64 { display: grid; gap: 4px; }
+.d64 b { font-weight: 500; color: var(--text-primary); }
+.d64 .secondary { font-size: var(--fs-text-small); }
+
+/* ---------- Phase 3c · Vendors (730:2 list, 730:1153 vendor page, 732:2909 Add vendor) ---------- */
+.vd-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.vd-tile { display: grid; gap: 4px; padding: 16px 18px; border-radius: 16px; box-shadow: inset 0 0 0 1px var(--border-faint); }
+.vd-tile .wp-eyebrow { margin: 0; }
+.vd-tile b { font: 600 24px/1.2 var(--font-title); }
+.vd-pad { padding: 4px 20px 16px; margin: 0; }
+.vd-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; }
+.vd-row b { font-weight: 500; }
+.vd-cost { margin: -2px 0 6px; }
+.vd-gear { display: flex; flex-wrap: wrap; gap: 6px; }
+.vd-notes { white-space: pre-wrap; }
+.vd-rate { display: flex; gap: 8px; }
+.vd-rate select { width: 100px; flex: 0 0 auto; }
+.vd-archive { justify-self: start; }
+@media (max-width: 760px) { .vd-tiles { grid-template-columns: minmax(0, 1fr); } }
+
+/* Phase 3c step 2 · bookings (732:3051 Book a vendor, 730:2326 Crew card) */
+.bk-dates { display: flex; align-items: center; gap: 8px; }
+.bk-dates .input { flex: 1 1 0; min-width: 0; }
+.bk-dates > span { color: var(--text-secondary); }
+.bk-changed .inv-money .input { border-color: var(--accent); }
+.bk-sug { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-top: -6px; }
+.bk-sug p { margin: 0; }
+.bk-sug .qz-changed { flex: 0 0 auto; }
+.pj-crew .wp-row .title, .pj-crew .wp-row .meta { overflow-wrap: anywhere; }
+/* Phase 3c step 3 · a briefing's Send to, under Insert (731:3904) */
+.wsb-brief { display: grid; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-hairline); }
+.wsb-brief .label { color: var(--accent); }
+/* Phase 3c step 4 · the vendor side (733:3100, 734:5189) */
+.vp-switch { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0 8px; width: calc(100% - 24px); margin: 4px 12px 10px; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--border-hairline); background: var(--surface-block); color: var(--text-primary); text-align: left; font: inherit; cursor: pointer; }
+.vp-switch .wp-label { grid-column: 1; font-size: 10px; color: var(--text-secondary); }
+.vp-switch b { grid-column: 1; font-weight: 500; font-size: var(--fs-text-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vp-switch .wp-icon { grid-column: 2; grid-row: 1 / span 2; color: var(--accent); }
+.vp-switch.one { cursor: default; }
+.vp-swrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
+.vp-phoneswitch { display: none; }
+@media (max-width: 760px) { .vp-phoneswitch { display: block; margin-bottom: 12px; } .vp-phoneswitch .vp-switch { width: 100%; margin: 0; } }
+.vp-offer { display: grid; gap: 6px; padding: 4px 20px 18px; }
+.vp-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.vp-answer { display: grid; gap: 10px; }
+.vp-briefcols { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+@media (max-width: 980px) { .vp-briefcols { grid-template-columns: minmax(0, 1fr); } .vp-briefcols > .wp-card, .vp-briefcols > section { order: -1; } }
+/* Phase 3c step 4 · the vendor's invoices and settings (734:3527, 734:4386) */
+.vi-for { display: grid; gap: 14px; }
+.vi-rows { display: grid; gap: 8px; }
+.vi-row { display: grid; grid-template-columns: minmax(0, 1fr) 120px auto; gap: 8px; align-items: center; }
+.vi-qty { display: flex; align-items: center; gap: 6px; }
+.vi-qty .input { min-width: 0; }
+.vi-qty > span { color: var(--text-secondary); }
+.vi-add { justify-self: start; color: var(--accent); display: inline-flex; align-items: center; gap: 6px; }
+.vi-total { border-top: 1px solid var(--border-hairline); margin-top: 6px; padding-top: 10px; }
+@media (max-width: 600px) { .vi-row { grid-template-columns: minmax(0, 1fr) 96px auto; } }
+
+/* Phase 3c step 5 · Vendors › Payments (730:5246, 730:5780) and a vendor invoice (731:2198 · 731:2769 · 731:3341) */
+.wp-utabs + .wp-card, .wp-utabs + .vpay-bar, .wp-utabs + .wp-empty { margin-top: 16px; }
+.vpay-note { margin-top: 16px; }
+.vp-review { pointer-events: none; }
+.vpay-bar { display: flex; align-items: center; gap: 16px; margin: 16px 0; flex-wrap: wrap; }
+.vpay-bar > p { flex: 1 1 220px; margin: 0; }
+.vpay-year select { min-width: 120px; }
+.vpay-head { display: flex; align-items: center; gap: 12px; padding: 18px 20px; }
+.vpay-head .txt { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.vpay-head .txt b { font-weight: 500; }
+.vpay-num { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; }
+.vpay-num .wp-eyebrow-sm { font: 500 11px/1.2 var(--font-body); letter-spacing: .08em; text-transform: uppercase; }
+.vpay-num b { font-weight: 500; }
+.vpay-line { padding-top: 10px; padding-bottom: 10px; }
+.vpay-line > span:last-child { white-space: nowrap; }
+.vpay-total { font-size: 1.25em; }
+.vpay-actions { display: flex; flex-direction: column; gap: 10px; padding-top: 12px; }
+.vpay-actions > .btn { width: 100%; justify-content: center; }
+.vpay-actions p { margin: 0; }
+.vpay-when { white-space: nowrap; }
+.vpay-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 560px) {
+  .vpay-two { grid-template-columns: 1fr; }
+  .vpay-head { flex-wrap: wrap; }
+  .vpay-line { flex-wrap: wrap; }
+}
+
+/* Nov 2 · Settings › Notifications (owner, vendor, client): the emails each person gets, grouped, each with a switch */
+.ntf-group { padding: 0; overflow: hidden; }
+.ntf-group + .ntf-group { margin-top: 12px; }
+.ntf-head { padding: 14px 18px 4px; font: 500 11px/1.2 var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.ntf-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 18px; min-height: 56px; }
+.ntf-row + .ntf-row { border-top: 1px solid var(--border-hairline); }
+.ntf-row .pl { flex: 1; min-width: 0; font: 500 var(--fs-text-regular)/var(--lh-regular-medium) var(--font-body); color: var(--text-primary); }
+.ntf-row .psub { display: block; margin-top: 2px; font: 400 var(--fs-text-small)/var(--lh-small) var(--font-body); color: var(--text-secondary); }
+.ntf-row .pr { flex: 0 0 auto; }
+.ntf-always { font: 400 var(--fs-text-small)/var(--lh-small) var(--font-body); color: var(--text-secondary); white-space: nowrap; }
+.cset-ntf, .vp-ntf { margin-top: 28px; margin-bottom: 12px; }
+/* step 6 (phones): the invoice lines keep the card's side padding; switches stay beside their label; on a phone the
+   payments rows drop the Review pill (the whole row opens it) and long names wrap instead of cutting off */
+.vd-row.vpay-line { padding: 10px 20px; }
+.ntf-row { flex-wrap: nowrap; }
+@media (max-width: 560px) {
+  .vp-review { display: none; }
+  .vpay-list .wp-row .ttl > span, .vpay-list .wp-row .meta { white-space: normal; overflow: visible; text-overflow: clip; }
+}
+.prow.ntf-row { flex-wrap: nowrap; }
+.prow.ntf-row .pr { width: auto; margin-left: auto; }
+@media (max-width: 560px) { .prow.ntf-row { flex-wrap: nowrap; } .prow.ntf-row .pr { width: auto; margin-left: auto; } }

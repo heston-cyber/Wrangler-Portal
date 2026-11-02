@@ -17,7 +17,7 @@ import wpLogo from "../assets/d1/wp-logo.png";
 import lightBack from "../assets/portal/light-softblob.jpg";
 import lightClient from "../assets/portal/light-elbow.jpg";
 
-export type Side = "owner" | "client";
+export type Side = "owner" | "client" | "vendor"; // Phase 3c: the vendor side
 type Me = { name: string | null; email: string };
 type ShellCtx = { openSidebar: () => void; peekSidebar: (on: boolean) => void; openSearch: () => void; overlay: boolean; side: Side };
 const Ctx = createContext<ShellCtx>({ openSidebar: () => {}, peekSidebar: () => {}, openSearch: () => {}, overlay: false, side: "owner" });
@@ -25,7 +25,7 @@ export const useShell = () => useContext(Ctx);
 
 // ---------- what goes where ----------
 type Sub = { to: string; label: string; match: (p: string) => boolean };
-type Item = { to: string; label: string; icon: IconName; match: (p: string) => boolean; tab?: (p: string) => boolean; layer?: Sub[]; layerHas?: (p: string) => boolean; badge?: number };
+export type Item = { to: string; label: string; icon: IconName; match: (p: string) => boolean; tab?: (p: string) => boolean; layer?: Sub[]; layerHas?: (p: string) => boolean; badge?: number };
 
 const starts = (p: string, ...pre: string[]) => pre.some((x) => p === x || p.startsWith(x + "/"));
 const OWNER_REVIEW: Sub[] = [
@@ -50,6 +50,14 @@ const OWNER_PROPOSALS: Sub[] = [
   { to: "/proposals/questionnaire", label: "Questionnaire", match: (p) => starts(p, "/proposals/questionnaire") },
 ];
 const inProposals = (p: string) => starts(p, "/proposals");
+// Phase 3c (D95): Vendors is its own layer after Payments. Bookings, Briefings and Payments join as they're built.
+const OWNER_VENDORS: Sub[] = [
+  { to: "/vendors", label: "All vendors", match: (p) => starts(p, "/vendors") && !starts(p, "/vendors/bookings", "/vendors/briefings", "/vendors/payments") },
+  { to: "/vendors/bookings", label: "Bookings", match: (p) => starts(p, "/vendors/bookings") },
+  { to: "/vendors/briefings", label: "Briefings", match: (p) => starts(p, "/vendors/briefings") },
+  { to: "/vendors/payments", label: "Payments", match: (p) => starts(p, "/vendors/payments") }, // step 5
+];
+const inVendors = (p: string) => starts(p, "/vendors");
 // Phase 3 (Heston, Oct 29): Clients becomes a layer: Pipeline · Companies · Follow-ups. Companies is the client list.
 const CRM = ["/clients/pipeline", "/clients/follow-ups", "/clients/deals", "/clients/estimates"];
 const OWNER_CLIENTS: Sub[] = [
@@ -67,11 +75,12 @@ function ownerItems(payments = false): { main: Item[]; tabs: Item[] } {
   const review: Item = { to: "/review", label: "Review", icon: "review", match: (p) => p === "/review", tab: inReview, layer: OWNER_REVIEW, layerHas: inReview };
   const docs: Item = { to: "/sign", label: "Docs", icon: "document", match: (p) => p === "/sign", tab: inDocs, layer: OWNER_DOCS, layerHas: inDocs };
   const proposals: Item = { to: "/proposals", label: "Proposals", icon: "quote", match: () => false, tab: inProposals, layer: OWNER_PROPOSALS, layerHas: inProposals };
+  const vendors: Item = { to: "/vendors", label: "Vendors", icon: "user", match: () => false, tab: inVendors, layer: OWNER_VENDORS, layerHas: inVendors };
   const sent: Item = { to: "/sent", label: "Sent", icon: "send", match: (p) => starts(p, "/sent") };
-  const more: Item = { to: "/more", label: "More", icon: "menu", match: (p) => starts(p, "/more", "/sent", "/settings", "/payments", "/proposals") };
+  const more: Item = { to: "/more", label: "More", icon: "menu", match: (p) => starts(p, "/more", "/sent", "/settings", "/payments", "/proposals", "/vendors") };
   // Phase 2 Part B: Payments › Invoices once the business has connected Stripe (D45).
   const pay: Item = { to: "/payments", label: "Payments", icon: "invoice", match: () => false, tab: inPayments, layer: OWNER_PAYMENTS, layerHas: inPayments };
-  return { main: payments ? [home, clients, review, docs, proposals, pay, sent] : [home, clients, review, docs, proposals, sent], tabs: [home, clients, review, docs, more] };
+  return { main: payments ? [home, clients, review, docs, proposals, pay, vendors, sent] : [home, clients, review, docs, proposals, vendors, sent], tabs: [home, clients, review, docs, more] };
 }
 
 type SharedProject = { to: string; label: string };
@@ -124,9 +133,10 @@ export function Shell({ me, side = "owner", overlay, light = true, subtitle, chi
 }
 
 /** The frame itself, fed by Shell (or by the dev-only component page with sample data). */
-export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, shared, unread, recent, search: canSearch, payments, children }: {
+export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, shared, unread, recent, search: canSearch, payments, nav: navIn, top, children }: {
   me: Me; side: Side; overlay: boolean; light: boolean; subtitle?: string | null; logo: string; bizName: string;
   shared: SharedProject[]; unread: number; recent: Recent[]; search: boolean; payments?: boolean; children: React.ReactNode;
+  nav?: { main: Item[]; tabs: Item[] }; top?: React.ReactNode; // Phase 3c: the vendor side's own items and its "Working for" switcher
 }) {
   // The drawer on work surfaces: "open" from a click (stays until closed); "peek" from hovering the menu button with a
   // mouse (Heston, Oct 29): it slides out, and slides back once the pointer leaves it.
@@ -149,17 +159,17 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [canSearch]);
-  const nav = side === "owner" ? ownerItems(payments) : clientItems(shared, unread, payments);
+  const nav = navIn ?? (side === "owner" ? ownerItems(payments) : clientItems(shared, unread, payments));
   const ctx = useMemo(() => ({ openSidebar: () => setDrawerState("open"), peekSidebar: peek, openSearch: () => setSearch(true), overlay, side }), [overlay, side]);
   const showSidebar = !overlay || drawer;
   const lightSrc = side === "owner" ? lightBack : lightClient;
   const onSearch = canSearch ? () => setSearch(true) : undefined;
   return (
     <Ctx.Provider value={ctx}>
-      <div className={`wp-shell${overlay ? " overlay" : ""}${side === "client" ? " client-side" : ""}`}>
+      <div className={`wp-shell${overlay ? " overlay" : ""}${side !== "owner" ? " client-side" : ""}`}>
         {light && !overlay && <div className={`wp-light ${side === "owner" ? "back" : "client"}`} aria-hidden><i style={{ backgroundImage: `url(${lightSrc})` }} /></div>}
         {showSidebar && (
-          <Sidebar me={me} side={side} items={nav.main} logo={logo} bizName={bizName} subtitle={subtitle} recent={recent}
+          <Sidebar me={me} side={side} items={nav.main} logo={logo} bizName={bizName} subtitle={subtitle} recent={recent} top={top}
             drawer={overlay && !!drawer} onClose={() => setDrawer(false)} onSearch={onSearch}
             onHover={overlay && drawer === "peek" ? peek : undefined} />
         )}
@@ -177,8 +187,8 @@ function Logo({ src, name }: { src: string; name: string }) {
   return <span className="wp-logo"><span className="rec" aria-hidden /><img src={src} alt={name} /></span>;
 }
 
-function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onClose, onSearch, onHover }: {
-  me: Me; side: Side; items: Item[]; logo: string; bizName: string; subtitle?: string | null; recent: Recent[]; drawer: boolean; onClose: () => void; onSearch?: () => void;
+function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onClose, onSearch, onHover, top }: {
+  me: Me; side: Side; items: Item[]; logo: string; bizName: string; subtitle?: string | null; recent: Recent[]; drawer: boolean; onClose: () => void; onSearch?: () => void; top?: React.ReactNode;
   onHover?: (on: boolean) => void;
 }) {
   const { path } = useLocation();
@@ -197,6 +207,7 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
           {drawer && <IconButton icon="close" label="Close menu" onClick={onClose} />}
         </span>
       </div>
+      {top}
       <div className="scroll">
         {items.map((it) => (
           <div key={it.to} style={{ display: "contents" }}>
@@ -251,8 +262,8 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
       <Menu side="top" label="Account" trigger={(p) => (
         <button {...p} className="wp-acct">
           <Avatar name={me.name || me.email} />
-          <span className="who"><span className="nm">{me.name || me.email}</span>{side === "client" && <span className="sub">{subtitle ?? bizName}</span>}</span>
-          {side === "client" && <Icon name="chevron-down" size={16} />}
+          <span className="who"><span className="nm">{me.name || me.email}</span>{side === "client" && <span className="sub">{subtitle ?? bizName}</span>}{side === "vendor" && <span className="sub">Vendor</span>}</span>
+          {side !== "owner" && <Icon name="chevron-down" size={16} />}
         </button>
       )}>
         <div className="mlabel" style={{ textTransform: "none", letterSpacing: 0, fontFamily: "var(--font-body)", fontSize: 12 }}>{me.email}</div>
@@ -316,6 +327,7 @@ export function MorePage({ me, side }: { me: Me; side: Side }) {
   const rows: { to?: string; icon: IconName; title: string; sub?: string; onClick?: () => void }[] = side === "owner"
     ? [
       { to: "/proposals", icon: "quote", title: "Proposals", sub: "Written pitches, templates" },
+      { to: "/vendors", icon: "user", title: "Vendors", sub: "Shooters, editors and crew you hire" },
       ...payRow,
       { to: "/sent", icon: "send", title: "Sent", sub: "Notes and items you sent" },
       { to: "/settings", icon: "settings", title: "Settings", sub: "Business, Register, Dropbox, connectors…" },

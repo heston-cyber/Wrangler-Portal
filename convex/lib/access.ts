@@ -13,7 +13,9 @@ import { businessFor } from "./business";
 export type Me = { userId: Id<"users">; name: string; email: string };
 // businessId (Phase 0.5d step 1): the business they work in or are a client of. Optional until step 3 makes every
 // function use it; null only before the default business has been made.
-export type Viewer = { kind: "owner" | "client"; userId: Id<"users">; name: string; email: string; businessId: Id<"businesses"> | null } | { kind: "nobody" };
+// Phase 3c: "vendor" is a third side (the vendor portal). Vendors never pass requireMe or requireSignedIn; the vendor
+// portal's own functions (vendorPortal.ts) check them with requireVendor.
+export type Viewer = { kind: "owner" | "client" | "vendor"; userId: Id<"users">; name: string; email: string; businessId: Id<"businesses"> | null } | { kind: "nobody" };
 
 const fallbackName = (email: string) => { const local = email.split("@")[0] ?? ""; return local ? local[0].toUpperCase() + local.slice(1) : "Someone"; };
 
@@ -31,6 +33,7 @@ export async function viewerOf(ctx: QueryCtx | MutationCtx): Promise<Viewer> {
   if (ownerM) return { kind: "owner", userId, name, email, businessId: ownerM.businessId };
   if (allowedEmails().includes(email)) return { kind: "owner", userId, name, email, businessId: await businessFor(ctx, email, "owner") };
   if (user.role === "client") return { kind: "client", userId, name, email, businessId: await businessFor(ctx, email, "client") };
+  if (user.role === "vendor") return { kind: "vendor", userId, name, email, businessId: null };
   return { kind: "nobody" };
 }
 
@@ -44,6 +47,7 @@ export async function requireMe(ctx: QueryCtx | MutationCtx): Promise<Me> {
 export async function requireSignedIn(ctx: QueryCtx | MutationCtx): Promise<Me & { kind: "owner" | "client" }> {
   const v = await viewerOf(ctx);
   if (v.kind === "nobody") throw new ConvexError(await getAuthUserId(ctx) ? "Not allowed." : "Sign in first.");
+  if (v.kind === "vendor") throw new ConvexError("Not allowed.");
   return { userId: v.userId, name: v.name, email: v.email, kind: v.kind };
 }
 

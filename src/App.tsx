@@ -58,6 +58,17 @@ const NewProposal = lazy(() => import("./modules/proposals/Proposals").then((m) 
 const ProposalTemplates = lazy(() => import("./modules/proposals/Proposals").then((m) => ({ default: m.ProposalTemplates })));
 const ProposalBuilder = lazy(() => import("./modules/proposals/Proposals").then((m) => ({ default: m.ProposalBuilder })));
 const ClientProposal = lazy(() => import("./modules/proposals/ClientProposal"));
+// Phase 3c: Vendors (D95: its own layer).
+const VendorsPage = lazy(() => import("./modules/vendors/Vendors"));
+const VendorPage = lazy(() => import("./modules/vendors/Vendors").then((m) => ({ default: m.VendorPage })));
+const BookingsPage = lazy(() => import("./modules/vendors/Bookings"));
+const VendorPaymentsPage = lazy(() => import("./modules/vendors/Payments"));
+const VendorInvoicePage = lazy(() => import("./modules/vendors/Payments").then((m) => ({ default: m.VendorInvoicePage })));
+const BookingPage = lazy(() => import("./modules/vendors/Bookings").then((m) => ({ default: m.BookingPage })));
+const BriefingsPage = lazy(() => import("./modules/vendors/Briefings"));
+const VendorApp = lazy(() => import("./modules/vendor/VendorApp"));
+const BriefingBuilder = lazy(() => import("./modules/vendors/Briefings").then((m) => ({ default: m.BriefingBuilder })));
+const BriefingTemplateBuilder = lazy(() => import("./modules/vendors/Briefings").then((m) => ({ default: m.BriefingTemplateBuilder })));
 const QuestionnaireEditor = lazy(() => import("./modules/proposals/Questionnaire").then((m) => ({ default: m.QuestionnaireEditor })));
 const QuestionnaireRunner = lazy(() => import("./modules/proposals/Questionnaire").then((m) => ({ default: m.QuestionnaireRunner })));
 // Wrangler Sign (S1): its own chunk, so pdf.js only loads on those pages.
@@ -76,14 +87,14 @@ const KIT_ON = import.meta.env.DEV || import.meta.env.VITE_KIT === "1";
 const Kit = KIT_ON ? lazy(() => import("./dev/Kit")) : null;
 const KitApp = KIT_ON ? lazy(() => import("./dev/KitApp")) : null;
 // ?kit=owner or ?kit=client: the real pages with sample data (dev only); ?kit=off ends it.
-function kitSide(): "owner" | "client" | null {
+function kitSide(): "owner" | "client" | "vendor" | null {
   if (!KIT_ON) return null;
   try {
     const q = new URLSearchParams(location.search).get("kit");
-    if (q === "owner" || q === "client") sessionStorage.setItem("wr.kit", q);
+    if (q === "owner" || q === "client" || q === "vendor") sessionStorage.setItem("wr.kit", q);
     if (q === "off") sessionStorage.removeItem("wr.kit");
     const s = sessionStorage.getItem("wr.kit");
-    return s === "owner" || s === "client" ? s : null;
+    return s === "owner" || s === "client" || s === "vendor" ? s : null;
   } catch { return null; }
 }
 const isSignHost = () => /^sign\./i.test(location.hostname);
@@ -151,6 +162,8 @@ function SignedIn() {
   if (signer) return <Suspense fallback={<Loading />}><SignerApp key={signer[1]} token={signer[1]} /></Suspense>;
   if (isSignHost()) return <SignHostHome />;
   if (me === undefined) return <Loading />;
+  // Phase 3c step 4: vendors get the vendor side (their bookings, briefings and invoices), nothing else.
+  if (me && !me.allowed && me.role === "vendor") return <Suspense fallback={<Loading />}><VendorApp me={me} /></Suspense>;
   // Clients (C1): their own page, nothing of the owner's side.
   if (me && !me.allowed && me.role === "client") {
     return (
@@ -196,6 +209,15 @@ function SignedIn() {
   else if (/^\/sign\/templates\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3] as Id<"wsTemplates">; page = <Suspense fallback={<Loading />}><Builder key={id} mode={{ kind: "template", templateId: id }} /></Suspense>; }
   else if (/^\/sign\/templates\/?$/.test(path)) page = <Suspense fallback={<Loading />}><SignTemplates /></Suspense>;
   else if (path.startsWith("/sign")) page = <Suspense fallback={<Loading />}><SignHome /></Suspense>;
+  else if (/^\/vendors\/?$/.test(path)) page = <Suspense fallback={<Loading />}><VendorsPage /></Suspense>;
+  else if (/^\/vendors\/briefings\/?$/.test(path)) page = <Suspense fallback={<Loading />}><BriefingsPage /></Suspense>;
+  else if (/^\/vendors\/briefings\/templates\/[^/]+\/?$/.test(path)) { const id = path.split("/")[4]; page = <Suspense fallback={<Loading />}><BriefingTemplateBuilder key={id} templateId={id} /></Suspense>; }
+  else if (/^\/vendors\/briefings\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><BriefingBuilder key={id} briefingId={id} /></Suspense>; }
+  else if (/^\/vendors\/payments\/?$/.test(path)) page = <Suspense fallback={<Loading />}><VendorPaymentsPage /></Suspense>;
+  else if (/^\/vendors\/payments\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><VendorInvoicePage key={id} invoiceId={id} /></Suspense>; }
+  else if (/^\/vendors\/bookings\/?$/.test(path)) page = <Suspense fallback={<Loading />}><BookingsPage /></Suspense>;
+  else if (/^\/vendors\/bookings\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><BookingPage key={id} bookingId={id} /></Suspense>; }
+  else if (/^\/vendors\/[^/]+\/?$/.test(path)) { const id = path.split("/")[2]; page = <Suspense fallback={<Loading />}><VendorPage key={id} vendorId={id} /></Suspense>; }
   else if (/^\/proposals\/?$/.test(path)) page = <Suspense fallback={<Loading />}><ProposalsPage /></Suspense>;
   else if (/^\/proposals\/new\/?$/.test(path)) page = <Suspense fallback={<Loading />}><NewProposal key={search} clientId={params.get("client")} dealId={params.get("deal")} /></Suspense>;
   else if (/^\/proposals\/questionnaire\/?$/.test(path)) page = <Suspense fallback={<Loading />}><QuestionnaireEditor /></Suspense>;

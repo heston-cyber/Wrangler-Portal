@@ -19,7 +19,7 @@ export const me = query({
     const fallback = local ? local[0].toUpperCase() + local.slice(1) : null;
     const v = await viewerOf(ctx);
     const owner = v.kind === "owner";
-    const role: "owner" | "client" | null = owner ? "owner" : v.kind === "client" ? "client" : null;
+    const role: "owner" | "client" | "vendor" | null = owner ? "owner" : v.kind === "client" ? "client" : v.kind === "vendor" ? "vendor" : null;
     return { id: userId, email, name: (user.name as string | undefined) || fallback, allowed: owner, role };
   },
 });

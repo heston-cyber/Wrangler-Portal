@@ -433,7 +433,7 @@ export const tellOwner = internalAction({
     await deliverOnce(ctx, `quote-${r.kind}:${quoteId}`, `quote-${r.kind}`, d.owner, ownerQuoteAnsweredMail(d.brand, {
       kind: r.kind, who: r.name, number: d.q.number, company: d.q.contact.company || d.q.contact.name, title: d.q.title, totalCents: d.q.totalCents,
       at: when(r.at), reason: r.reason ?? null, link: `${SITE()}/payments/quotes/${quoteId}`,
-    }), d.brand.replyTo);
+    }), d.brand.replyTo, d.q.businessId ?? null); // the quote's business decides its owner's switches
   },
 });
 

@@ -8,7 +8,7 @@ import { sendEmail, sixDigits } from "./lib/email";
 import type { MutationCtx } from "./_generated/server";
 import { SITE_HOST } from "./lib/site";
 import { allowedEmails } from "./lib/owners";
-import { ensureDefaultBusiness, ensureMembership, syncClientMemberships } from "./lib/business";
+import { ensureDefaultBusiness, ensureMembership, syncClientMemberships, syncVendorMemberships } from "./lib/business";
 
 // Owners: the emails in ALLOWED_EMAILS (comma-separated Convex env var). Everyone else needs an invite (C1, Oct 23).
 /** Names a client may not use: the owners' names and email local parts ("heston"), lower-case. Security review, Oct 23. */
@@ -64,20 +64,28 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         if (verified) patch.emailVerificationTime = Date.now();
         if (typeof args.profile.name === "string" && args.profile.name && !(args.existingUserId && !allowedEmails().includes(email) && ownerNames().has(args.profile.name.trim().toLowerCase()))) patch.name = args.profile.name;
         await ctx.db.patch(args.existingUserId, patch);
-        if (!allowedEmails().includes(email)) await syncClientMemberships(ctx, email, args.existingUserId);
+        if (!allowedEmails().includes(email)) {
+          const u = await ctx.db.get(args.existingUserId);
+          if (u?.role === "vendor") await syncVendorMemberships(ctx, email, args.existingUserId); // Phase 3c
+          else await syncClientMemberships(ctx, email, args.existingUserId);
+        }
         return args.existingUserId;
       }
       const owner = allowedEmails().includes(email);
       const invite = owner ? null : (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()).find((i) => !i.revokedAt) ?? null;
-      if (!owner && !invite) throw new ConvexError("This email hasn't been invited to Wrangler Review.");
+      // Phase 3c step 4: a vendor a business has invited to the vendor portal (and not taken off its list). D102: one role
+      // per email, so a client invite wins (adding a vendor with a client's email is refused anyway).
+      const vendor = owner || invite ? null : (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", email)).collect()).find((x) => !x.archivedAt && x.invitedAt) ?? null;
+      if (!owner && !invite && !vendor) throw new ConvexError("This email hasn't been invited to WranglerPortal.");
       const userId = await ctx.db.insert("users", {
-        email, role: owner ? "owner" : "client",
-        name: (typeof args.profile.name === "string" && args.profile.name && !(!owner && ownerNames().has(args.profile.name.trim().toLowerCase())) ? args.profile.name : undefined) || invite?.name || undefined,
+        email, role: owner ? "owner" : vendor ? "vendor" : "client",
+        name: (typeof args.profile.name === "string" && args.profile.name && !(!owner && ownerNames().has(args.profile.name.trim().toLowerCase())) ? args.profile.name : undefined) || invite?.name || vendor?.name || undefined,
         emailVerificationTime: verified ? Date.now() : undefined, lastSignInAt: Date.now(),
       });
       if (invite) await ctx.db.patch(invite._id, { acceptedAt: Date.now(), userId });
       // Step 6: an owner (ALLOWED_EMAILS) belongs to the default business; a client to each business that invited them.
       if (owner) await ensureMembership(ctx, (await ensureDefaultBusiness(ctx)).businessId, email, "owner", userId);
+      else if (vendor) await syncVendorMemberships(ctx, email, userId);
       else await syncClientMemberships(ctx, email, userId);
       return userId;
     },

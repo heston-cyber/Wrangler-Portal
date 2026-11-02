@@ -22,7 +22,7 @@ async function respond(body: { token: string; action: "accept" | "decline"; name
 const longMs = (ms: number) => new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 /** The sent PDF, every page drawn to the column's width. */
-function PdfPages({ url, title }: { url: string; title: string }) {
+export function PdfPages({ url, title }: { url: string; title: string }) {
   const box = useRef<HTMLDivElement | null>(null);
   const [pdf, setPdf] = useState<PdfDoc | null>(null);
   const [failed, setFailed] = useState(false);

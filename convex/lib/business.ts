@@ -30,7 +30,7 @@ export async function ensureDefaultBusiness(ctx: MutationCtx): Promise<{ busines
 }
 
 /** Adds an active membership for this email in this business with this role, unless one exists. True if it added one. */
-export async function ensureMembership(ctx: MutationCtx, businessId: Id<"businesses">, email: string, role: "owner" | "client", userId?: Id<"users">): Promise<boolean> {
+export async function ensureMembership(ctx: MutationCtx, businessId: Id<"businesses">, email: string, role: "owner" | "client" | "vendor", userId?: Id<"users">): Promise<boolean> {
   const e = email.trim().toLowerCase();
   if (!e) return false;
   const rows = await ctx.db.query("memberships").withIndex("by_business_email", (q) => q.eq("businessId", businessId).eq("email", e)).collect();
@@ -95,6 +95,23 @@ export async function syncClientMemberships(ctx: MutationCtx, email: string, use
   for (const i of invites) {
     const biz = i.businessId ?? (await ensureDefaultBusiness(ctx)).businessId;
     if (await ensureMembership(ctx, biz, e, "client", userId)) made++;
+  }
+  return made;
+}
+
+/**
+ * Phase 3c step 4 · vendors (D94): one login across the businesses a vendor works for. A vendor membership for each
+ * business with a live (not archived) vendor record for this email that has been invited to the portal. Marks each of
+ * those records joined. Trusted code only (sign-in, and the owner's invite). Returns how many it added.
+ */
+export async function syncVendorMemberships(ctx: MutationCtx, email: string, userId?: Id<"users">): Promise<number> {
+  const e = email.trim().toLowerCase();
+  const rows = (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", e)).collect()).filter((x) => !x.archivedAt && x.invitedAt);
+  let made = 0;
+  for (const x of rows) {
+    const biz = x.businessId ?? (await ensureDefaultBusiness(ctx)).businessId;
+    if (await ensureMembership(ctx, biz, e, "vendor", userId)) made++;
+    if (userId && !x.joinedAt) await ctx.db.patch(x._id, { joinedAt: Date.now() });
   }
   return made;
 }

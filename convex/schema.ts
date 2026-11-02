@@ -16,7 +16,7 @@ export default defineSchema({
     phone: v.optional(v.string()),
     phoneVerificationTime: v.optional(v.number()),
     isAnonymous: v.optional(v.boolean()),
-    role: v.optional(v.union(v.literal("owner"), v.literal("client"))),
+    role: v.optional(v.union(v.literal("owner"), v.literal("client"), v.literal("vendor"))), // Phase 3c: vendors (D94, D102: one role per email)
     lastSignInAt: v.optional(v.number()),
   }).index("email", ["email"]).index("phone", ["phone"]),
   // Emails allowed to make a client account. Made by the owner (the Share dialog in C2, or Settings › Clients).
@@ -107,6 +107,7 @@ export default defineSchema({
     versionsOff: v.optional(v.boolean()),
     repliesOff: v.optional(v.boolean()),
     notesOff: v.optional(v.boolean()), // Phase 1: notes from the business (missing = on unless both others are off)
+    off: v.optional(v.array(v.string())), // Nov 2: every other switch this person turned off here (lib/notify.ts keys)
     updatedAt: v.number(),
   }).index("by_email", ["email"]).index("by_key", ["key"]),
   emailLog: defineTable({
@@ -481,7 +482,7 @@ export default defineSchema({
     style: v.any(),
     signers: v.any(),                       // client signers (name, email, title) for when it's sent
     templateId: v.optional(v.id("wsTemplates")),
-    kind: v.optional(v.literal("proposal")),  // Phase 3b: a proposal (Proposals), never a contract; kept out of Docs
+    kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"))),  // Phase 3b: a proposal (Proposals); 3c: a briefing (D97). Never a contract; kept out of Docs
     documentId: v.optional(v.id("wsDocuments")), // set once it has gone to signing
     renderedAt: v.optional(v.number()),
     createdAt: v.number(),
@@ -491,7 +492,7 @@ export default defineSchema({
     businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     name: v.string(),
     description: v.optional(v.string()),
-    kind: v.optional(v.literal("proposal")),  // Phase 3b: a proposal template, kept apart from contract templates
+    kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"))),  // a proposal or briefing template, kept apart from contract templates
     blocks: v.any(),
     fields: v.any(),
     style: v.any(),
@@ -862,6 +863,108 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_token", ["token"]).index("by_build", ["buildId"]).index("by_client", ["clientId"]).index("by_deal", ["dealId"]).index("by_updated", ["updatedAt"]),
 
+  // Phase 3c · Vendors (D91–D104): the subcontractors a business hires. One row per business per vendor (D94: the same
+  // person working for two businesses has two rows, each seen only by its business). W-9 per business (D100); payment
+  // details are the method and a note only, never bank numbers (D101).
+  vendors: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    name: v.string(),
+    email: v.string(),                                   // lower-case; the vendor portal login (step 4)
+    roles: v.array(v.string()),                          // Shooter, Editor, Drone pilot…
+    rates: v.array(v.object({ role: v.string(), unit: v.union(v.literal("day"), v.literal("hour")), cents: v.number() })),
+    basedIn: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    portfolio: v.optional(v.string()),
+    gear: v.optional(v.array(v.string())),
+    notes: v.optional(v.string()),
+    invitedAt: v.optional(v.number()),                   // invited to the vendor portal
+    joinedAt: v.optional(v.number()),                    // signed in to it
+    w9: v.optional(v.object({ fileId: v.id("_storage"), name: v.string(), uploadedAt: v.number() })),
+    payMethod: v.optional(v.object({ method: v.string(), note: v.optional(v.string()) })),
+    businessName: v.optional(v.string()),               // step 4: their own business name, if they have one
+    address: v.optional(v.string()),                    // step 4: mailing address, for 1099s
+    archivedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_email", ["email"]),
+
+  // Phase 3c step 3 · briefings (D97, S5 · Phase 3c 730:4522, 731:3904): a shoot or edit brief made in the builder (its
+  // wsBuilds row, kind "briefing"), sent to a vendor booked on the project (email 25). The vendor reads the PDF that was
+  // sent and presses "I've read it" in their portal (step 4). Never signed.
+  briefings: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    buildId: v.id("wsBuilds"),
+    projectId: v.id("projects"),
+    bookingId: v.optional(v.id("vendorBookings")),      // who it's for (a booking on this project)
+    starter: v.optional(v.union(v.literal("shoot"), v.literal("edit"))),
+    status: v.union(v.literal("draft"), v.literal("sent")),
+    pdfId: v.optional(v.id("_storage")),                // frozen at send: what the vendor reads
+    sentAt: v.optional(v.number()),
+    sentTo: v.optional(v.object({ vendorId: v.id("vendors"), name: v.string(), email: v.string() })),
+    readAt: v.optional(v.number()),                     // "I've read it" (the vendor side, step 4)
+    history: v.array(v.object({ kind: v.string(), at: v.number(), by: v.optional(v.string()), detail: v.optional(v.string()) })),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_build", ["buildId"]).index("by_project", ["projectId"]).index("by_booking", ["bookingId"]),
+
+  // Phase 3c step 2 · bookings (S5 · Phase 3c 732:3051 Book a vendor, 730:2326 Crew card, 730:3942 Vendors › Bookings).
+  // A vendor offered work on a project: role, dates, the agreed rate. Offered and accepted bookings show on the
+  // project's Crew card and as expected costs in its Ledger; approving the vendor's invoice (step 5) makes it actual.
+  vendorBookings: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    vendorId: v.id("vendors"),
+    projectId: v.id("projects"),
+    role: v.string(),
+    start: v.string(), end: v.string(),                     // YYYY-MM-DD, inclusive
+    rate: v.object({ cents: v.number(), unit: v.union(v.literal("day"), v.literal("hour")) }),
+    hours: v.optional(v.number()),                          // an hourly booking's expected hours (the expected cost)
+    suggestedCents: v.optional(v.number()),                 // what Pricing (or their own rate) suggested, when one did
+    location: v.optional(v.string()),
+    note: v.optional(v.string()),
+    status: v.union(v.literal("offered"), v.literal("accepted"), v.literal("declined"), v.literal("cancelled")),
+    declineReason: v.optional(v.string()),
+    offeredAt: v.number(),
+    answeredAt: v.optional(v.number()),                     // accepted or declined (the vendor side, step 4)
+    cancelledAt: v.optional(v.number()),
+    reviewShareId: v.optional(v.id("shares")),              // step 4: a booked editor's Review access (D93, D103)
+    createdBy: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_vendor", ["vendorId"]).index("by_project", ["projectId"]),
+
+  // Phase 3c step 4 · a vendor's invoice for a booking (S5 · Phase 3c 734:3527, 734:3958): hours × the agreed rate, or
+  // line items. Sent to the owner (email 26 and a Home alert); approved and marked paid by the owner in step 5. Nothing
+  // here moves money (D92).
+  vendorInvoices: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    vendorId: v.id("vendors"),
+    bookingId: v.id("vendorBookings"),
+    projectId: v.id("projects"),
+    number: v.string(),                                   // theirs, or one made for them ("INV-0003")
+    mode: v.union(v.literal("hours"), v.literal("lines")),
+    hours: v.array(v.object({ label: v.string(), qty: v.number() })),  // mode "hours": each day or part, in the booking's unit
+    lines: v.array(v.object({ description: v.string(), cents: v.number() })), // mode "lines"
+    rate: v.object({ cents: v.number(), unit: v.union(v.literal("day"), v.literal("hour")) }), // the booking's agreed rate when sent
+    totalCents: v.number(),
+    note: v.optional(v.string()),
+    status: v.union(v.literal("draft"), v.literal("sent"), v.literal("approved"), v.literal("paid"), v.literal("declined")),
+    sentAt: v.optional(v.number()),
+    approvedAt: v.optional(v.number()),
+    approvedBy: v.optional(v.string()),
+    ledgerEntryId: v.optional(v.id("ledgerEntries")),     // step 5: the actual cost Approve added to the project's Ledger
+    declinedAt: v.optional(v.number()),                   // step 5: the owner declined it (with a reason); the vendor can fix and resend
+    declineReason: v.optional(v.string()),
+    paidAt: v.optional(v.number()),                       // when Mark paid was pressed
+    paidOn: v.optional(v.string()),                       // step 5: the day they say they paid (YYYY-MM-DD): the 1099 year
+    paidCents: v.optional(v.number()),                    // what they say they paid (the total unless changed)
+    paidMethod: v.optional(v.string()),
+    paidRef: v.optional(v.string()),                      // "Confirmation 000000" (optional)
+    history: v.optional(v.array(v.object({ at: v.number(), text: v.string() }))),
+    seenAt: v.optional(v.number()),                       // the owner opened it (the Home alert stays until approved)
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_vendor", ["vendorId"]).index("by_booking", ["bookingId"]).index("by_status", ["status"]),
+
   // Phase 3b (review fix): the files uploaded for a proposal's questionnaire answers. Only these are served or copied.
   proposalFiles: defineTable({
     businessId: v.optional(v.id("businesses")),
@@ -884,6 +987,7 @@ export default defineSchema({
     note: v.optional(v.string()),
     date: v.string(),
     draft: v.optional(v.boolean()),              // drafted by Claude from notes: counts once confirmed (D67)
+    vendorInvoiceId: v.optional(v.id("vendorInvoices")), // Phase 3c step 5: added by approving a vendor's invoice
     createdBy: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_project", ["projectId"]),
@@ -1061,7 +1165,7 @@ export default defineSchema({
     businessId: v.id("businesses"),
     email: v.string(),              // lower-case
     userId: v.optional(v.id("users")),
-    role: v.union(v.literal("owner"), v.literal("client")),
+    role: v.union(v.literal("owner"), v.literal("client"), v.literal("vendor")), // vendor: Phase 3c, one per business they work for (D94)
     createdAt: v.number(),
     revokedAt: v.optional(v.number()),
   }).index("by_email", ["email"]).index("by_business_email", ["businessId", "email"]).index("by_user", ["userId"]),

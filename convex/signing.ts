@@ -486,6 +486,7 @@ export const notifyOwner = internalAction({
     const m = kind === "locked" ? ownerLockedMail(b, { signer: d.s.name, title: d.doc.title, label: d.label, link })
       : kind === "all_signed" ? ownerAllSignedMail(b, { title: d.doc.title, label: d.label, link })
       : ownerSignedMail(b, { signer: d.s.name, title: d.doc.title, label: d.label, left, link });
+    if (await ctx.runQuery(internal.emails.isOff, { email: to, kind: `ws-owner-${kind}`, ...(d.doc.businessId ? { businessId: d.doc.businessId } : {}) })) return null; // Settings › Notifications
     try { await sendEmail({ from: m.from, to, replyTo: null, subject: m.subject, text: m.text, html: m.html, tag: `ws-owner-${kind}` }); } catch (e) { console.error("notifyOwner", String((e as Error).message).slice(0, 120)); }
     return null;
   },
