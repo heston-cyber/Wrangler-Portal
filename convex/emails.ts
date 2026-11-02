@@ -259,6 +259,11 @@ export const ownerAlert = internalAction({
     // Phase 0.5d step 4: the owner of this video's business (Wrangler keeps ALERT_EMAIL if it's set).
     const biz = await ctx.runQuery(internal.business.contact, {});
     const to = (biz.isDefault && process.env.ALERT_EMAIL) || biz.ownerEmail;
+    // Review fix: switched off (Settings › Notifications): these notes count as told, so they don't pile up for later.
+    if (await ctx.runQuery(internal.emails.isOff, { email: to, kind: "alert", ...(biz.businessId ? { businessId: biz.businessId } : {}) })) {
+      await ctx.runMutation(internal.emails.markAlerted, { noteIds: d.noteIds });
+      return { sent: 0, reason: "switched off", notes: d.noteIds.length };
+    }
     const ok = await deliver(ctx, `alert:${videoId}:${d.noteIds[d.noteIds.length - 1]}`, "alert", to, m, undefined, null);
     if (ok) await ctx.runMutation(internal.emails.markAlerted, { noteIds: d.noteIds });
     return { sent: ok ? 1 : 0, notes: d.noteIds.length };

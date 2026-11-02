@@ -56,9 +56,12 @@ export const client = query({
   handler: async (ctx) => {
     const me = await requireSignedIn(ctx);
     const email = me.email.toLowerCase();
-    const bizs = await clientBusinesses(ctx, email);
-    const row = bizs.length ? await prefRow(ctx, email, bizs[0]) : null;
-    return { items: viewFor("client", row) };
+    // Review fix: a client of several businesses has a row in each (an email's unsubscribe link changes only that
+    // business's); a switch shows on only when it's on in all of them.
+    const rows = [];
+    for (const b of await clientBusinesses(ctx, email)) rows.push(await prefRow(ctx, email, b));
+    const views = rows.length ? rows.map((r) => viewFor("client", r)) : [viewFor("client", null)];
+    return { items: views[0].map((i, n) => ({ ...i, on: views.every((v) => v[n].on) })) };
   },
 });
 

@@ -43,9 +43,9 @@ export const NOTICES: Notice[] = [
   { key: "versions", side: "client", group: "Review", label: "A new version is ready to watch", kinds: ["versions"] },
   { key: "replies", side: "client", group: "Review", label: "Someone replies to your note", kinds: ["replies"] },
   { key: "notes", side: "client", group: "Inbox", label: "A note from the business", kinds: ["notes"] },
-  { key: "invoice_reminders", side: "client", group: "Payments", label: "Reminders before an invoice is due", hint: "Overdue notices still arrive.", kinds: ["invoice-reminder-before"] },
+  { key: "invoice_reminders", side: "client", group: "Payments", label: "Reminders before an invoice is due", hint: "Overdue notices, and reminders the business sends by hand, still arrive.", kinds: ["invoice-reminder-before"] },
   { key: "subscription_upcoming", side: "client", group: "Payments", label: "A subscription charge is coming up", kinds: ["subscription-upcoming"] },
-  { key: "client_bills", side: "client", group: "Payments", label: "Invoices, receipts, overdue notices and failed payments", kinds: ["invoice", "invoice-reminder-overdue", "receipt", "payment-failed", "subscription", "subscription-failed", "subscription-cancelled"], always: true },
+  { key: "client_bills", side: "client", group: "Payments", label: "Invoices, receipts, overdue notices and failed payments", kinds: ["invoice", "invoice-reminder-overdue", "invoice-reminder-manual", "receipt", "payment-failed", "subscription", "subscription-failed", "subscription-cancelled"], always: true },
   { key: "client_docs", side: "client", group: "Documents", label: "Quotes, proposals, documents to sign and signed copies", kinds: ["quote", "proposal", "ws-sign", "ws-reminder", "ws-cancelled", "ws-copy", "ws-code"], always: true },
   { key: "client_access", side: "client", group: "Your account", label: "Invites, shared links and sign-in codes", kinds: ["invite", "share-invite", "code", "reset"], always: true },
 ];

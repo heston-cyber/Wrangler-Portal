@@ -10,7 +10,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireMe } from "./lib/access";
 import { businessInScope } from "./lib/business";
-import { PAY_METHODS, expectedCents, isDate, todayCentral } from "./lib/bookings";
+import { PAY_METHODS, expectedCents, isDate, looksLikeAccount, todayCentral } from "./lib/bookings";
 import { label, paidAmount, paidDay } from "./lib/bookingRows";
 import { mailBrandOf } from "./lib/mail";
 import { vendorInvoiceApprovedMail, vendorInvoiceDeclinedMail, vendorInvoicePaidMail } from "./lib/mails";
@@ -178,7 +178,7 @@ export const markPaid = mutation({
     if (!(Number.isInteger(a.cents) && a.cents > 0 && a.cents <= 100_000_000)) throw new ConvexError("Add the amount you paid.");
     if (!PAY_METHODS.includes(a.method)) throw new ConvexError("Pick how you paid.");
     const ref = clip(a.reference, 80);
-    if (/\d[\d\s-]{11,}\d/.test(ref)) throw new ConvexError("Leave account numbers out. A confirmation number is enough.");
+    if (looksLikeAccount(ref)) throw new ConvexError("Leave account numbers out. A short confirmation number, or its last 4 digits, is enough.");
     const now = Date.now();
     await ctx.db.patch(a.invoiceId, {
       status: "paid", paidAt: now, paidOn: a.paidOn, paidCents: a.cents, paidMethod: a.method, ...(ref ? { paidRef: ref } : {}),

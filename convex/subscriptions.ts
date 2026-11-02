@@ -906,7 +906,7 @@ export const upcomingData = internalQuery({
   handler: async (ctx, { subscriptionId }) => {
     const s = await ctx.db.get(subscriptionId);
     if (!s) return null;
-    return { to: s.billTo.email, name: s.billTo.name, plan: s.planName, amountCents: s.amountCents, method: s.method ?? null, link: subLink(s.payToken), brand: await mailBrandOf(ctx, s.businessId ?? null) };
+    return { to: s.billTo.email, name: s.billTo.name, plan: s.planName, amountCents: s.amountCents, method: s.method ?? null, link: subLink(s.payToken), brand: await mailBrandOf(ctx, s.businessId ?? null), businessId: s.businessId ?? null };
   },
 });
 
@@ -917,7 +917,7 @@ export const runUpcoming = internalAction({
     for (const u of await ctx.runQuery(internal.subscriptions.upcomingDue, {})) {
       const d = await ctx.runQuery(internal.subscriptions.upcomingData, { subscriptionId: u.id });
       if (!d) continue;
-      const r = await deliverOnce(ctx, `sub-upcoming:${u.id}:${Math.round(u.at / 60_000)}`, "subscription-upcoming", d.to, upcomingChargeMail(d.brand, { ...d, on: dateWords(u.at) }), d.brand.replyTo);
+      const r = await deliverOnce(ctx, `sub-upcoming:${u.id}:${Math.round(u.at / 60_000)}`, "subscription-upcoming", d.to, upcomingChargeMail(d.brand, { ...d, on: dateWords(u.at) }), d.brand.replyTo, d.businessId);
       if (r !== "already" && r !== "off") { sent++; await ctx.runMutation(internal.subscriptions.note, { subscriptionId: u.id, kind: r === "held" ? "email_held" : "upcoming_emailed", detail: dateWords(u.at) }); }
     }
     return sent;

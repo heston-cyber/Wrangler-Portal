@@ -2396,3 +2396,14 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 .ntf-row .pr { flex: 0 0 auto; }
 .ntf-always { font: 400 var(--fs-text-small)/var(--lh-small) var(--font-body); color: var(--text-secondary); white-space: nowrap; }
 .cset-ntf, .vp-ntf { margin-top: 28px; margin-bottom: 12px; }
+/* step 6 (phones): the invoice lines keep the card's side padding; switches stay beside their label; on a phone the
+   payments rows drop the Review pill (the whole row opens it) and long names wrap instead of cutting off */
+.vd-row.vpay-line { padding: 10px 20px; }
+.ntf-row { flex-wrap: nowrap; }
+@media (max-width: 560px) {
+  .vp-review { display: none; }
+  .vpay-list .wp-row .ttl > span, .vpay-list .wp-row .meta { white-space: normal; overflow: visible; text-overflow: clip; }
+}
+.prow.ntf-row { flex-wrap: nowrap; }
+.prow.ntf-row .pr { width: auto; margin-left: auto; }
+@media (max-width: 560px) { .prow.ntf-row { flex-wrap: nowrap; } .prow.ntf-row .pr { width: auto; margin-left: auto; } }

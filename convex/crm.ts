@@ -581,7 +581,10 @@ export const entryAction = mutation({
   args: { entryId: v.id("ledgerEntries"), action: v.union(v.literal("confirm"), v.literal("remove")) },
   handler: async (ctx, { entryId, action: what }) => {
     await ownerBiz(ctx);
-    if (!(await ctx.db.get(entryId))) throw new ConvexError("That entry isn't here.");
+    const e = await ctx.db.get(entryId);
+    if (!e) throw new ConvexError("That entry isn't here.");
+    // Review fix (step 6): a vendor invoice's cost comes from approving it; it stays while the invoice is approved.
+    if (what === "remove" && e.vendorInvoiceId) throw new ConvexError("This cost is an approved vendor invoice. It stays in the Ledger.");
     if (what === "remove") await ctx.db.delete(entryId); else await ctx.db.patch(entryId, { draft: undefined });
     return null;
   },

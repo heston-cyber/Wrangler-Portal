@@ -439,7 +439,7 @@ export const tellOwner = internalAction({
     await deliverOnce(ctx, `proposal-${r.kind}:${proposalId}`, `proposal-${r.kind}`, d.owner, ownerProposalAnsweredMail(d.brand, {
       kind: r.kind, who: r.name, number: d.p.number, company: d.contact.company || d.contact.name, title: d.title, totalCents: d.p.totalCents ?? 0,
       at: when(r.at), reason: r.reason ?? null, link: `${SITE()}/proposals/${proposalId}`,
-    }), d.brand.replyTo);
+    }), d.brand.replyTo, d.p.businessId ?? null); // the proposal's business decides its owner's switches
   },
 });
 

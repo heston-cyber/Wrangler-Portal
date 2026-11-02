@@ -162,4 +162,35 @@ describe("T3c.6 notifications", () => {
     const second = await pay("py_2", 250_000);
     expect(second.map((m) => m.to)).toEqual(["maya@harbor.example"]); // the receipt always goes
   });
+
+  test("review fixes: switches hold in a second business; an archived vendor loses the portal; approved costs stay; no account numbers", async () => {
+    const w = await world();
+    stub([]);
+    const { a, A, B, jordan, book } = await setup(w);
+    // Other Films' owner switches quote answers off: a check for Other Films says off, Wrangler's still on.
+    await w.boss.mutation(api.notifications.setOwner, { key: "quote_answers", on: false });
+    const bossEmail = (await w.boss.query(api.notifications.owner, {})).to[0];
+    expect(await w.t.mutation(internal.invoicePay.claimEmail, { key: "k-b", to: bossEmail, kind: "quote-accepted", businessId: B })).toBe("off");
+    expect(await w.t.mutation(internal.invoicePay.claimEmail, { key: "k-a", to: bossEmail, kind: "quote-accepted", businessId: A })).toBe(true);
+    // Invoice notes and lines can't carry account or routing numbers; a phone number is fine.
+    const k = await book("A", "2030-11-06");
+    await jordan.mutation(api.vendorPortal.accept, { bookingId: k });
+    await expect(jordan.mutation(api.vendorPortal.saveInvoice, { bookingId: k, mode: "hours", hours: [{ label: "Nov 6", qty: 1 }], lines: [], note: "ACH routing 021000021", send: true })).rejects.toThrow(/account and routing/);
+    const inv = await jordan.mutation(api.vendorPortal.saveInvoice, { bookingId: k, mode: "hours", hours: [{ label: "Nov 6", qty: 1 }], lines: [], note: "Zelle to 405-555-1234", send: true }) as Id<"vendorInvoices">;
+    // An approved invoice's Ledger cost can't be removed by itself.
+    await w.heston.mutation(api.vendorPayments.approve, { invoiceId: inv });
+    const entry = (await w.heston.query(api.crm.ledger, { projectId: w.p })).entries.find((e: { note: string | null }) => e.note?.startsWith("Invoice "));
+    await expect(w.heston.mutation(api.crm.entryAction, { entryId: entry._id, action: "remove" })).rejects.toThrow(/approved vendor invoice/);
+    await expect(w.heston.mutation(api.vendorPayments.markPaid, { invoiceId: inv, paidOn: "2026-01-02", cents: 100_000, method: "ACH", reference: "acct 12345678" })).rejects.toThrow(/account numbers/);
+    // Off the list: Wrangler leaves their portal (the other business stays); back on the list: it returns.
+    await w.heston.mutation(api.vendors.archive, { vendorId: a, archived: true });
+    expect((await jordan.query(api.vendorPortal.businesses, {})).list.map((b: { businessId: string }) => b.businessId)).toEqual([B]);
+    expect(await jordan.query(api.vendorPortal.counts, { businessId: B })).toBeTruthy();
+    await w.heston.mutation(api.vendors.archive, { vendorId: a, archived: false });
+    expect((await jordan.query(api.vendorPortal.businesses, {})).list.map((b: { businessId: string }) => b.businessId).sort()).toEqual([A, B].sort());
+    // A new email is a new login: the old one loses the business until the new address is invited.
+    await w.heston.mutation(api.vendors.update, { vendorId: a, name: "Jordan Ellis", email: "jordan@new.example", roles: ["Shooter"], rates: [] } as never);
+    expect((await jordan.query(api.vendorPortal.businesses, {})).list.map((b: { businessId: string }) => b.businessId)).toEqual([B]);
+    expect((await w.heston.query(api.vendors.get, { vendorId: a })).portal).not.toBe("joined");
+  });
 });

@@ -5028,6 +5028,926 @@
    },
    "updatedAt": 1793278800000,
    "viewedAt": null
+  },
+  "vendors.list": [
+   {
+    "_id": "0000000000000000000010024vendors",
+    "basedIn": "Oklahoma City",
+    "name": "Jordan Ellis",
+    "paidThisYearCents": 16850,
+    "portal": "invited Nov 2",
+    "roles": [
+     "Shooter",
+     "Editor"
+    ],
+    "w9": false
+   },
+   {
+    "_id": "0000000000000000000010026vendors",
+    "basedIn": null,
+    "name": "Riley Chen",
+    "paidThisYearCents": 0,
+    "portal": "not invited",
+    "roles": [
+     "Editor"
+    ],
+    "w9": false
+   }
+  ],
+  "vendors.get#0000000000000000000010024vendors": {
+   "_creationTime": 1793640674090,
+   "_id": "0000000000000000000010024vendors",
+   "address": "1200 NW 16th St\nOklahoma City, OK 73106",
+   "basedIn": "Oklahoma City",
+   "businessId": "0000000000000000010000businesses",
+   "businessName": "Ellis Films LLC",
+   "costs": [
+    {
+     "cost": {
+      "cents": 12500,
+      "name": "Shooter",
+      "unit": "hour"
+     },
+     "role": "Shooter"
+    },
+    {
+     "cost": {
+      "cents": 9000,
+      "name": "Editor",
+      "unit": "hour"
+     },
+     "role": "Editor"
+    }
+   ],
+   "createdAt": 1793640674089,
+   "email": "jordan@ellisfilms.com",
+   "invitedAt": 1793640674090,
+   "name": "Jordan Ellis",
+   "payMethod": {
+    "method": "ACH",
+    "note": "Bank of Example · account ending 0000"
+   },
+   "phone": "405-555-0142",
+   "portal": "invited Nov 2",
+   "portfolio": "ellisfilms.com",
+   "rates": [
+    {
+     "cents": 85000,
+     "role": "Shooter",
+     "unit": "day"
+    }
+   ],
+   "roles": [
+    "Shooter",
+    "Editor"
+   ],
+   "totals": {
+    "approvedCents": 117000,
+    "approvedCount": 1,
+    "paidThisYearCents": 16850,
+    "waitingCents": 170000,
+    "waitingCount": 1
+   },
+   "updatedAt": 1793640674439,
+   "w9": null
+  },
+  "vendors.get#0000000000000000000010026vendors": {
+   "_creationTime": 1793640674100,
+   "_id": "0000000000000000000010026vendors",
+   "businessId": "0000000000000000010000businesses",
+   "costs": [
+    {
+     "cost": {
+      "cents": 9000,
+      "name": "Editor",
+      "unit": "hour"
+     },
+     "role": "Editor"
+    }
+   ],
+   "createdAt": 1793640674100,
+   "email": "riley@chen.example",
+   "name": "Riley Chen",
+   "portal": "not invited",
+   "rates": [
+    {
+     "cents": 6500,
+     "role": "Editor",
+     "unit": "hour"
+    }
+   ],
+   "roles": [
+    "Editor"
+   ],
+   "totals": {
+    "approvedCents": 0,
+    "approvedCount": 0,
+    "paidThisYearCents": 0,
+    "waitingCents": 0,
+    "waitingCount": 0
+   },
+   "updatedAt": 1793640674100,
+   "w9": null
+  },
+  "vendors.invoices#0000000000000000000010024vendors": [
+   {
+    "_id": "000000000000010050vendorInvoices",
+    "number": "JE-013",
+    "paidAt": 1793640674432,
+    "paidOn": "2026-11-02",
+    "project": "Launch",
+    "sentAt": 1793640674346,
+    "status": "paid",
+    "totalCents": 16850
+   },
+   {
+    "_id": "000000000000010048vendorInvoices",
+    "number": "JE-015",
+    "paidAt": null,
+    "paidOn": null,
+    "project": "Launch",
+    "sentAt": 1793640674342,
+    "status": "approved",
+    "totalCents": 117000
+   },
+   {
+    "_id": "000000000000010046vendorInvoices",
+    "number": "JE-014",
+    "paidAt": null,
+    "paidOn": null,
+    "project": "Launch",
+    "sentAt": 1793640674339,
+    "status": "sent",
+    "totalCents": 170000
+   }
+  ],
+  "vendors.invoices#0000000000000000000010026vendors": [],
+  "bookings.list": [
+   {
+    "_id": "000000000000010031vendorBookings",
+    "answeredAt": 1793640674313,
+    "brief": "none",
+    "cancelledAt": null,
+    "days": 2,
+    "declineReason": null,
+    "end": "2026-11-07",
+    "expectedCents": 170000,
+    "hours": null,
+    "location": "Harbor Coffee, Plaza District",
+    "note": "Run and gun. Bring the gimbal.",
+    "offeredAt": 1793640674145,
+    "project": "26127 Launch",
+    "projectId": "000000000000000000010018projects",
+    "rate": {
+     "cents": 85000,
+     "unit": "day"
+    },
+    "role": "Shooter",
+    "start": "2026-11-06",
+    "state": "accepted",
+    "vendor": "Jordan Ellis",
+    "vendorId": "0000000000000000000010024vendors"
+   },
+   {
+    "_id": "000000000000010035vendorBookings",
+    "answeredAt": 1793640674321,
+    "brief": "none",
+    "cancelledAt": null,
+    "days": 5,
+    "declineReason": null,
+    "end": "2026-11-14",
+    "expectedCents": 117000,
+    "hours": 18,
+    "location": "Harbor Coffee, Plaza District",
+    "note": "Run and gun. Bring the gimbal.",
+    "offeredAt": 1793640674158,
+    "project": "26127 Launch",
+    "projectId": "000000000000000000010018projects",
+    "rate": {
+     "cents": 6500,
+     "unit": "hour"
+    },
+    "role": "Editor",
+    "start": "2026-11-10",
+    "state": "accepted",
+    "vendor": "Jordan Ellis",
+    "vendorId": "0000000000000000000010024vendors"
+   },
+   {
+    "_id": "000000000000010037vendorBookings",
+    "answeredAt": null,
+    "brief": "none",
+    "cancelledAt": null,
+    "days": 5,
+    "declineReason": null,
+    "end": "2026-11-21",
+    "expectedCents": 117000,
+    "hours": 18,
+    "location": "Harbor Coffee, Plaza District",
+    "note": "Run and gun. Bring the gimbal.",
+    "offeredAt": 1793640674173,
+    "project": "26127 Launch",
+    "projectId": "000000000000000000010018projects",
+    "rate": {
+     "cents": 6500,
+     "unit": "hour"
+    },
+    "role": "Editor",
+    "start": "2026-11-17",
+    "state": "offered",
+    "vendor": "Riley Chen",
+    "vendorId": "0000000000000000000010026vendors"
+   },
+   {
+    "_id": "000000000000010033vendorBookings",
+    "answeredAt": null,
+    "brief": "none",
+    "cancelledAt": null,
+    "days": 1,
+    "declineReason": null,
+    "end": "2026-12-02",
+    "expectedCents": 85000,
+    "hours": null,
+    "location": "Harbor Coffee, Plaza District",
+    "note": "Run and gun. Bring the gimbal.",
+    "offeredAt": 1793640674150,
+    "project": "26127 Launch",
+    "projectId": "000000000000000000010018projects",
+    "rate": {
+     "cents": 85000,
+     "unit": "day"
+    },
+    "role": "Shooter",
+    "start": "2026-12-02",
+    "state": "offered",
+    "vendor": "Jordan Ellis",
+    "vendorId": "0000000000000000000010024vendors"
+   }
+  ],
+  "bookings.forVendor#0000000000000000000010024vendors": [
+   {
+    "_id": "000000000000010033vendorBookings",
+    "answeredAt": null,
+    "brief": "none",
+    "cancelledAt": null,
+    "days": 1,
+    "declineReason": null,
+    "end": "2026-12-02",
+    "expectedCents": 85000,
+    "hours": null,
+    "location": "Harbor Coffee, Plaza District",
+    "note": "Run and gun. Bring the gimbal.",
+    "offeredAt": 1793640674150,
+    "project": "26127 Launch",
+    "projectId": "000000000000000000010018projects",
+    "rate": {
+     "cents": 85000,
+     "unit": "day"
+    },
+    "role": "Shooter",
+    "start": "2026-12-02",
+    "state": "offered",
+    "vendor": "Jordan Ellis",
+    "vendorId": "0000000000000000000010024vendors"
+   },
+   {
+    "_id": "000000000000010035vendorBookings",
+    "answeredAt": 1793640674321,
+    "brief": "none",
+    "cancelledAt": null,
+    "days": 5,
+    "declineReason": null,
+    "end": "2026-11-14",
+    "expectedCents": 117000,
+    "hours": 18,
+    "location": "Harbor Coffee, Plaza District",
+    "note": "Run and gun. Bring the gimbal.",
+    "offeredAt": 1793640674158,
+    "project": "26127 Launch",
+    "projectId": "000000000000000000010018projects",
+    "rate": {
+     "cents": 6500,
+     "unit": "hour"
+    },
+    "role": "Editor",
+    "start": "2026-11-10",
+    "state": "accepted",
+    "vendor": "Jordan Ellis",
+    "vendorId": "0000000000000000000010024vendors"
+   },
+   {
+    "_id": "000000000000010031vendorBookings",
+    "answeredAt": 1793640674313,
+    "brief": "none",
+    "cancelledAt": null,
+    "days": 2,
+    "declineReason": null,
+    "end": "2026-11-07",
+    "expectedCents": 170000,
+    "hours": null,
+    "location": "Harbor Coffee, Plaza District",
+    "note": "Run and gun. Bring the gimbal.",
+    "offeredAt": 1793640674145,
+    "project": "26127 Launch",
+    "projectId": "000000000000000000010018projects",
+    "rate": {
+     "cents": 85000,
+     "unit": "day"
+    },
+    "role": "Shooter",
+    "start": "2026-11-06",
+    "state": "accepted",
+    "vendor": "Jordan Ellis",
+    "vendorId": "0000000000000000000010024vendors"
+   }
+  ],
+  "bookings.forVendor#0000000000000000000010026vendors": [
+   {
+    "_id": "000000000000010037vendorBookings",
+    "answeredAt": null,
+    "brief": "none",
+    "cancelledAt": null,
+    "days": 5,
+    "declineReason": null,
+    "end": "2026-11-21",
+    "expectedCents": 117000,
+    "hours": 18,
+    "location": "Harbor Coffee, Plaza District",
+    "note": "Run and gun. Bring the gimbal.",
+    "offeredAt": 1793640674173,
+    "project": "26127 Launch",
+    "projectId": "000000000000000000010018projects",
+    "rate": {
+     "cents": 6500,
+     "unit": "hour"
+    },
+    "role": "Editor",
+    "start": "2026-11-17",
+    "state": "offered",
+    "vendor": "Riley Chen",
+    "vendorId": "0000000000000000000010026vendors"
+   }
+  ],
+  "bookings.get#000000000000010031vendorBookings": {
+   "_id": "000000000000010031vendorBookings",
+   "answeredAt": 1793640674313,
+   "brief": "none",
+   "briefing": null,
+   "cancelledAt": null,
+   "createdBy": "Heston",
+   "days": 2,
+   "declineReason": null,
+   "end": "2026-11-07",
+   "expectedCents": 170000,
+   "hours": null,
+   "location": "Harbor Coffee, Plaza District",
+   "note": "Run and gun. Bring the gimbal.",
+   "offeredAt": 1793640674145,
+   "project": "26127 Launch",
+   "projectId": "000000000000000000010018projects",
+   "rate": {
+    "cents": 85000,
+    "unit": "day"
+   },
+   "role": "Shooter",
+   "start": "2026-11-06",
+   "state": "accepted",
+   "suggestedCents": null,
+   "vendor": "Jordan Ellis",
+   "vendorEmail": "jordan@ellisfilms.com",
+   "vendorId": "0000000000000000000010024vendors"
+  },
+  "bookings.forProject#000000000000000000010018projects": [
+   {
+    "_id": "000000000000010031vendorBookings",
+    "answeredAt": 1793640674313,
+    "brief": "none",
+    "cancelledAt": null,
+    "days": 2,
+    "declineReason": null,
+    "end": "2026-11-07",
+    "expectedCents": 170000,
+    "hours": null,
+    "location": "Harbor Coffee, Plaza District",
+    "note": "Run and gun. Bring the gimbal.",
+    "offeredAt": 1793640674145,
+    "project": "26127 Launch",
+    "projectId": "000000000000000000010018projects",
+    "rate": {
+     "cents": 85000,
+     "unit": "day"
+    },
+    "role": "Shooter",
+    "start": "2026-11-06",
+    "state": "accepted",
+    "vendor": "Jordan Ellis",
+    "vendorId": "0000000000000000000010024vendors"
+   },
+   {
+    "_id": "000000000000010035vendorBookings",
+    "answeredAt": 1793640674321,
+    "brief": "none",
+    "cancelledAt": null,
+    "days": 5,
+    "declineReason": null,
+    "end": "2026-11-14",
+    "expectedCents": 117000,
+    "hours": 18,
+    "location": "Harbor Coffee, Plaza District",
+    "note": "Run and gun. Bring the gimbal.",
+    "offeredAt": 1793640674158,
+    "project": "26127 Launch",
+    "projectId": "000000000000000000010018projects",
+    "rate": {
+     "cents": 6500,
+     "unit": "hour"
+    },
+    "role": "Editor",
+    "start": "2026-11-10",
+    "state": "accepted",
+    "vendor": "Jordan Ellis",
+    "vendorId": "0000000000000000000010024vendors"
+   },
+   {
+    "_id": "000000000000010037vendorBookings",
+    "answeredAt": null,
+    "brief": "none",
+    "cancelledAt": null,
+    "days": 5,
+    "declineReason": null,
+    "end": "2026-11-21",
+    "expectedCents": 117000,
+    "hours": 18,
+    "location": "Harbor Coffee, Plaza District",
+    "note": "Run and gun. Bring the gimbal.",
+    "offeredAt": 1793640674173,
+    "project": "26127 Launch",
+    "projectId": "000000000000000000010018projects",
+    "rate": {
+     "cents": 6500,
+     "unit": "hour"
+    },
+    "role": "Editor",
+    "start": "2026-11-17",
+    "state": "offered",
+    "vendor": "Riley Chen",
+    "vendorId": "0000000000000000000010026vendors"
+   },
+   {
+    "_id": "000000000000010033vendorBookings",
+    "answeredAt": null,
+    "brief": "none",
+    "cancelledAt": null,
+    "days": 1,
+    "declineReason": null,
+    "end": "2026-12-02",
+    "expectedCents": 85000,
+    "hours": null,
+    "location": "Harbor Coffee, Plaza District",
+    "note": "Run and gun. Bring the gimbal.",
+    "offeredAt": 1793640674150,
+    "project": "26127 Launch",
+    "projectId": "000000000000000000010018projects",
+    "rate": {
+     "cents": 85000,
+     "unit": "day"
+    },
+    "role": "Shooter",
+    "start": "2026-12-02",
+    "state": "offered",
+    "vendor": "Jordan Ellis",
+    "vendorId": "0000000000000000000010024vendors"
+   }
+  ],
+  "briefings.forVendor#0000000000000000000010024vendors": [],
+  "briefings.forVendor#0000000000000000000010026vendors": [],
+  "briefings.list": [],
+  "briefings.templates": {
+   "saved": [],
+   "starters": [
+    {
+     "key": "shoot",
+     "name": "Shoot brief",
+     "summary": "Call sheet · schedule · shot list · gear · contacts · deliverables · notes"
+    },
+    {
+     "key": "edit",
+     "name": "Edit brief",
+     "summary": "Story · cuts and lengths · music · references · files · deadlines"
+    }
+   ]
+  },
+  "vendorPayments.list": {
+   "approved": [
+    {
+     "_id": "000000000000010048vendorInvoices",
+     "approvedAt": 1793640674419,
+     "declinedAt": null,
+     "number": "JE-015",
+     "paidAt": null,
+     "paidCents": null,
+     "paidMethod": null,
+     "paidOn": null,
+     "project": "26127 Launch",
+     "role": "Editor",
+     "sentAt": 1793640674342,
+     "status": "approved",
+     "totalCents": 117000,
+     "vendor": "Jordan Ellis",
+     "vendorId": "0000000000000000000010024vendors",
+     "what": "18 h editor"
+    }
+   ],
+   "paid": [
+    {
+     "_id": "000000000000010050vendorInvoices",
+     "approvedAt": 1793640674423,
+     "declinedAt": null,
+     "number": "JE-013",
+     "paidAt": 1793640674432,
+     "paidCents": 16850,
+     "paidMethod": "Zelle",
+     "paidOn": "2026-11-02",
+     "project": "26127 Launch",
+     "role": "Shooter",
+     "sentAt": 1793640674346,
+     "status": "paid",
+     "totalCents": 16850,
+     "vendor": "Jordan Ellis",
+     "vendorId": "0000000000000000000010024vendors",
+     "what": "2 lines"
+    }
+   ],
+   "toApprove": [
+    {
+     "_id": "000000000000010046vendorInvoices",
+     "approvedAt": null,
+     "declinedAt": null,
+     "number": "JE-014",
+     "paidAt": null,
+     "paidCents": null,
+     "paidMethod": null,
+     "paidOn": null,
+     "project": "26127 Launch",
+     "role": "Shooter",
+     "sentAt": 1793640674339,
+     "status": "sent",
+     "totalCents": 170000,
+     "vendor": "Jordan Ellis",
+     "vendorId": "0000000000000000000010024vendors",
+     "what": "2 days shooter"
+    }
+   ]
+  },
+  "vendorPayments.totals1099": {
+   "missing": [
+    {
+     "email": "jordan@ellisfilms.com",
+     "name": "Jordan Ellis",
+     "vendorId": "0000000000000000000010024vendors"
+    }
+   ],
+   "rows": [
+    {
+     "address": "1200 NW 16th St\nOklahoma City, OK 73106",
+     "businessName": "Ellis Films LLC",
+     "email": "jordan@ellisfilms.com",
+     "last": "2026-11-02",
+     "name": "Jordan Ellis",
+     "payments": 1,
+     "totalCents": 16850,
+     "vendorId": "0000000000000000000010024vendors",
+     "w9": false
+    }
+   ],
+   "year": 2026,
+   "years": [
+    2026
+   ]
+  },
+  "vendorPayments.get#000000000000010046vendorInvoices": {
+   "_id": "000000000000010046vendorInvoices",
+   "approvedAt": null,
+   "booking": {
+    "_id": "000000000000010031vendorBookings",
+    "end": "2026-11-07",
+    "expectedCents": 170000,
+    "hours": null,
+    "rate": {
+     "cents": 85000,
+     "unit": "day"
+    },
+    "role": "Shooter",
+    "start": "2026-11-06"
+   },
+   "declineReason": null,
+   "declinedAt": null,
+   "history": [
+    {
+     "at": 1793640674339,
+     "text": "Sent by Jordan Ellis"
+    }
+   ],
+   "ledgerEntryId": null,
+   "lines": [
+    {
+     "cents": 85000,
+     "label": "Shooting day · Nov 6",
+     "qty": 1,
+     "rateCents": 85000
+    },
+    {
+     "cents": 85000,
+     "label": "Shooting day · Nov 7",
+     "qty": 1,
+     "rateCents": 85000
+    }
+   ],
+   "mode": "hours",
+   "note": "Thanks for having me on this one.",
+   "number": "JE-014",
+   "paidAt": null,
+   "paidCents": null,
+   "paidMethod": null,
+   "paidOn": null,
+   "paidRef": null,
+   "project": {
+    "_id": "000000000000000000010018projects",
+    "label": "26127 Launch",
+    "name": "Launch"
+   },
+   "sentAt": 1793640674339,
+   "status": "sent",
+   "to": "Wrangler Productions",
+   "totalCents": 170000,
+   "vendor": {
+    "_id": "0000000000000000000010024vendors",
+    "address": "1200 NW 16th St\nOklahoma City, OK 73106",
+    "businessName": "Ellis Films LLC",
+    "email": "jordan@ellisfilms.com",
+    "name": "Jordan Ellis",
+    "payMethod": {
+     "method": "ACH",
+     "note": "Bank of Example · account ending 0000"
+    }
+   }
+  },
+  "vendorPayments.get#000000000000010048vendorInvoices": {
+   "_id": "000000000000010048vendorInvoices",
+   "approvedAt": 1793640674419,
+   "booking": {
+    "_id": "000000000000010035vendorBookings",
+    "end": "2026-11-14",
+    "expectedCents": 117000,
+    "hours": 18,
+    "rate": {
+     "cents": 6500,
+     "unit": "hour"
+    },
+    "role": "Editor",
+    "start": "2026-11-10"
+   },
+   "declineReason": null,
+   "declinedAt": null,
+   "history": [
+    {
+     "at": 1793640674419,
+     "text": "Approved by you · added to the Ledger"
+    },
+    {
+     "at": 1793640674342,
+     "text": "Sent by Jordan Ellis"
+    }
+   ],
+   "ledgerEntryId": "0000000000000010057ledgerEntries",
+   "lines": [
+    {
+     "cents": 65000,
+     "label": "Assembly · Nov 10–11",
+     "qty": 10,
+     "rateCents": 6500
+    },
+    {
+     "cents": 52000,
+     "label": "Fine cut · Nov 12–13",
+     "qty": 8,
+     "rateCents": 6500
+    }
+   ],
+   "mode": "hours",
+   "note": null,
+   "number": "JE-015",
+   "paidAt": null,
+   "paidCents": null,
+   "paidMethod": null,
+   "paidOn": null,
+   "paidRef": null,
+   "project": {
+    "_id": "000000000000000000010018projects",
+    "label": "26127 Launch",
+    "name": "Launch"
+   },
+   "sentAt": 1793640674342,
+   "status": "approved",
+   "to": "Wrangler Productions",
+   "totalCents": 117000,
+   "vendor": {
+    "_id": "0000000000000000000010024vendors",
+    "address": "1200 NW 16th St\nOklahoma City, OK 73106",
+    "businessName": "Ellis Films LLC",
+    "email": "jordan@ellisfilms.com",
+    "name": "Jordan Ellis",
+    "payMethod": {
+     "method": "ACH",
+     "note": "Bank of Example · account ending 0000"
+    }
+   }
+  },
+  "vendorPayments.get#000000000000010050vendorInvoices": {
+   "_id": "000000000000010050vendorInvoices",
+   "approvedAt": 1793640674423,
+   "booking": {
+    "_id": "000000000000010031vendorBookings",
+    "end": "2026-11-07",
+    "expectedCents": 170000,
+    "hours": null,
+    "rate": {
+     "cents": 85000,
+     "unit": "day"
+    },
+    "role": "Shooter",
+    "start": "2026-11-06"
+   },
+   "declineReason": null,
+   "declinedAt": null,
+   "history": [
+    {
+     "at": 1793640674432,
+     "text": "Marked paid · Zelle · Nov 2"
+    },
+    {
+     "at": 1793640674423,
+     "text": "Approved by you · added to the Ledger"
+    },
+    {
+     "at": 1793640674346,
+     "text": "Sent by Jordan Ellis"
+    }
+   ],
+   "ledgerEntryId": "0000000000000010059ledgerEntries",
+   "lines": [
+    {
+     "cents": 12500,
+     "label": "Gimbal rental",
+     "qty": null,
+     "rateCents": null
+    },
+    {
+     "cents": 4350,
+     "label": "Mileage",
+     "qty": null,
+     "rateCents": null
+    }
+   ],
+   "mode": "lines",
+   "note": null,
+   "number": "JE-013",
+   "paidAt": 1793640674432,
+   "paidCents": 16850,
+   "paidMethod": "Zelle",
+   "paidOn": "2026-11-02",
+   "paidRef": "Conf 88213",
+   "project": {
+    "_id": "000000000000000000010018projects",
+    "label": "26127 Launch",
+    "name": "Launch"
+   },
+   "sentAt": 1793640674346,
+   "status": "paid",
+   "to": "Wrangler Productions",
+   "totalCents": 16850,
+   "vendor": {
+    "_id": "0000000000000000000010024vendors",
+    "address": "1200 NW 16th St\nOklahoma City, OK 73106",
+    "businessName": "Ellis Films LLC",
+    "email": "jordan@ellisfilms.com",
+    "name": "Jordan Ellis",
+    "payMethod": {
+     "method": "ACH",
+     "note": "Bank of Example · account ending 0000"
+    }
+   }
+  },
+  "notifications.owner": {
+   "items": [
+    {
+     "always": false,
+     "group": "Review",
+     "hint": "One email per sitting, 10 minutes after their last note.",
+     "key": "review_notes",
+     "label": "Clients leave notes on a video",
+     "on": true
+    },
+    {
+     "always": false,
+     "group": "Contracts",
+     "hint": "Each signature, and when everyone has signed.",
+     "key": "sign_progress",
+     "label": "Someone signs a document",
+     "on": true
+    },
+    {
+     "always": true,
+     "group": "Contracts",
+     "hint": null,
+     "key": "sign_locked",
+     "label": "A signing link is locked after wrong codes",
+     "on": true
+    },
+    {
+     "always": true,
+     "group": "Contracts",
+     "hint": null,
+     "key": "sign_copy",
+     "label": "Your copy of a signed document",
+     "on": true
+    },
+    {
+     "always": false,
+     "group": "Quotes and proposals",
+     "hint": null,
+     "key": "quote_answers",
+     "label": "A client accepts or declines a quote",
+     "on": true
+    },
+    {
+     "always": false,
+     "group": "Quotes and proposals",
+     "hint": null,
+     "key": "proposal_answers",
+     "label": "A client accepts or declines a proposal",
+     "on": true
+    },
+    {
+     "always": false,
+     "group": "Payments",
+     "hint": null,
+     "key": "client_paid",
+     "label": "A client pays an invoice",
+     "on": true
+    },
+    {
+     "always": false,
+     "group": "Payments",
+     "hint": null,
+     "key": "subscription_failed",
+     "label": "A subscription payment fails",
+     "on": true
+    },
+    {
+     "always": false,
+     "group": "Vendors",
+     "hint": null,
+     "key": "booking_answers",
+     "label": "A vendor accepts or declines a booking",
+     "on": true
+    },
+    {
+     "always": false,
+     "group": "Vendors",
+     "hint": null,
+     "key": "briefing_read",
+     "label": "A vendor reads a briefing",
+     "on": false
+    },
+    {
+     "always": false,
+     "group": "Vendors",
+     "hint": null,
+     "key": "vendor_invoices",
+     "label": "A vendor sends an invoice",
+     "on": true
+    },
+    {
+     "always": false,
+     "group": "Vendors",
+     "hint": null,
+     "key": "vendor_w9",
+     "label": "A vendor uploads a W-9",
+     "on": true
+    },
+    {
+     "always": true,
+     "group": "Your account",
+     "hint": null,
+     "key": "owner_codes",
+     "label": "Sign-in codes and password resets",
+     "on": true
+    }
+   ],
+   "to": [
+    "heston@wranglerproductions.com"
+   ]
   }
  },
  "client": {
@@ -5991,6 +6911,74 @@
    "token": "kitproctoken000000003",
    "totalCents": 120000,
    "voidedAt": null
+  },
+  "notifications.client": {
+   "items": [
+    {
+     "always": false,
+     "group": "Review",
+     "hint": null,
+     "key": "versions",
+     "label": "A new version is ready to watch",
+     "on": true
+    },
+    {
+     "always": false,
+     "group": "Review",
+     "hint": null,
+     "key": "replies",
+     "label": "Someone replies to your note",
+     "on": true
+    },
+    {
+     "always": false,
+     "group": "Inbox",
+     "hint": null,
+     "key": "notes",
+     "label": "A note from the business",
+     "on": true
+    },
+    {
+     "always": false,
+     "group": "Payments",
+     "hint": "Overdue notices still arrive.",
+     "key": "invoice_reminders",
+     "label": "Reminders before an invoice is due",
+     "on": false
+    },
+    {
+     "always": false,
+     "group": "Payments",
+     "hint": null,
+     "key": "subscription_upcoming",
+     "label": "A subscription charge is coming up",
+     "on": true
+    },
+    {
+     "always": true,
+     "group": "Payments",
+     "hint": null,
+     "key": "client_bills",
+     "label": "Invoices, receipts, overdue notices and failed payments",
+     "on": true
+    },
+    {
+     "always": true,
+     "group": "Documents",
+     "hint": null,
+     "key": "client_docs",
+     "label": "Quotes, proposals, documents to sign and signed copies",
+     "on": true
+    },
+    {
+     "always": true,
+     "group": "Your account",
+     "hint": null,
+     "key": "client_access",
+     "label": "Invites, shared links and sign-in codes",
+     "on": true
+    }
+   ]
   }
  },
  "ids": {
@@ -6012,6 +7000,602 @@
    "0000000000000000010083inboxNotes",
    "0000000000000000010087inboxNotes",
    "0000000000000000010088inboxNotes"
-  ]
+  ],
+  "vendor": {
+   "jordan": "0000000000000000000010024vendors",
+   "riley": "0000000000000000000010026vendors",
+   "bookings": [
+    "000000000000010031vendorBookings",
+    "000000000000010033vendorBookings",
+    "000000000000010035vendorBookings"
+   ],
+   "invoices": {
+    "toApprove": "000000000000010046vendorInvoices",
+    "approved": "000000000000010048vendorInvoices",
+    "paid": "000000000000010050vendorInvoices"
+   }
+  }
+ },
+ "vendor": {
+  "users.me": {
+   "allowed": false,
+   "email": "jordan@ellisfilms.com",
+   "id": "000000000000000000000010027users",
+   "name": "Jordan Ellis",
+   "role": "vendor"
+  },
+  "vendorPortal.businesses": {
+   "email": "jordan@ellisfilms.com",
+   "list": [
+    {
+     "accent": null,
+     "background": null,
+     "businessId": "0000000000000000010000businesses",
+     "logoUrl": null,
+     "name": "Wrangler Productions"
+    }
+   ],
+   "name": "Jordan Ellis"
+  },
+  "vendorPortal.counts": {
+   "offered": 1,
+   "toRead": 0,
+   "total": 1
+  },
+  "vendorPortal.home": {
+   "business": "Wrangler Productions",
+   "businessId": "0000000000000000010000businesses",
+   "details": {
+    "payMethod": "ACH",
+    "w9": false
+   },
+   "name": "Jordan Ellis",
+   "offered": [
+    {
+     "_id": "000000000000010033vendorBookings",
+     "answeredAt": null,
+     "brief": null,
+     "days": 1,
+     "declineReason": null,
+     "end": "2026-12-02",
+     "expectedCents": 85000,
+     "hours": null,
+     "location": "Harbor Coffee, Plaza District",
+     "note": "Run and gun. Bring the gimbal.",
+     "offeredAt": 1793640674150,
+     "project": "26127 Launch",
+     "projectName": "Launch",
+     "rate": {
+      "cents": 85000,
+      "unit": "day"
+     },
+     "role": "Shooter",
+     "start": "2026-12-02",
+     "state": "offered"
+    }
+   ],
+   "owner": "Wrangler Productions",
+   "toRead": [],
+   "upcoming": [
+    {
+     "_id": "000000000000010031vendorBookings",
+     "answeredAt": 1793640674313,
+     "brief": null,
+     "days": 2,
+     "declineReason": null,
+     "end": "2026-11-07",
+     "expectedCents": 170000,
+     "hours": null,
+     "location": "Harbor Coffee, Plaza District",
+     "note": "Run and gun. Bring the gimbal.",
+     "offeredAt": 1793640674145,
+     "project": "26127 Launch",
+     "projectName": "Launch",
+     "rate": {
+      "cents": 85000,
+      "unit": "day"
+     },
+     "role": "Shooter",
+     "start": "2026-11-06",
+     "state": "accepted"
+    },
+    {
+     "_id": "000000000000010035vendorBookings",
+     "answeredAt": 1793640674321,
+     "brief": null,
+     "days": 5,
+     "declineReason": null,
+     "end": "2026-11-14",
+     "expectedCents": 117000,
+     "hours": 18,
+     "location": "Harbor Coffee, Plaza District",
+     "note": "Run and gun. Bring the gimbal.",
+     "offeredAt": 1793640674158,
+     "project": "26127 Launch",
+     "projectName": "Launch",
+     "rate": {
+      "cents": 6500,
+      "unit": "hour"
+     },
+     "role": "Editor",
+     "start": "2026-11-10",
+     "state": "accepted"
+    }
+   ]
+  },
+  "vendorPortal.bookings": {
+   "businessId": "0000000000000000010000businesses",
+   "rows": [
+    {
+     "_id": "000000000000010031vendorBookings",
+     "answeredAt": 1793640674313,
+     "brief": null,
+     "days": 2,
+     "declineReason": null,
+     "end": "2026-11-07",
+     "expectedCents": 170000,
+     "hours": null,
+     "location": "Harbor Coffee, Plaza District",
+     "note": "Run and gun. Bring the gimbal.",
+     "offeredAt": 1793640674145,
+     "project": "26127 Launch",
+     "projectName": "Launch",
+     "rate": {
+      "cents": 85000,
+      "unit": "day"
+     },
+     "role": "Shooter",
+     "start": "2026-11-06",
+     "state": "accepted"
+    },
+    {
+     "_id": "000000000000010035vendorBookings",
+     "answeredAt": 1793640674321,
+     "brief": null,
+     "days": 5,
+     "declineReason": null,
+     "end": "2026-11-14",
+     "expectedCents": 117000,
+     "hours": 18,
+     "location": "Harbor Coffee, Plaza District",
+     "note": "Run and gun. Bring the gimbal.",
+     "offeredAt": 1793640674158,
+     "project": "26127 Launch",
+     "projectName": "Launch",
+     "rate": {
+      "cents": 6500,
+      "unit": "hour"
+     },
+     "role": "Editor",
+     "start": "2026-11-10",
+     "state": "accepted"
+    },
+    {
+     "_id": "000000000000010033vendorBookings",
+     "answeredAt": null,
+     "brief": null,
+     "days": 1,
+     "declineReason": null,
+     "end": "2026-12-02",
+     "expectedCents": 85000,
+     "hours": null,
+     "location": "Harbor Coffee, Plaza District",
+     "note": "Run and gun. Bring the gimbal.",
+     "offeredAt": 1793640674150,
+     "project": "26127 Launch",
+     "projectName": "Launch",
+     "rate": {
+      "cents": 85000,
+      "unit": "day"
+     },
+     "role": "Shooter",
+     "start": "2026-12-02",
+     "state": "offered"
+    }
+   ]
+  },
+  "vendorPortal.booking#000000000000010031vendorBookings": {
+   "_id": "000000000000010031vendorBookings",
+   "answeredAt": 1793640674313,
+   "brief": null,
+   "business": "Wrangler Productions",
+   "businessId": "0000000000000000010000businesses",
+   "days": 2,
+   "declineReason": null,
+   "end": "2026-11-07",
+   "expectedCents": 170000,
+   "hours": null,
+   "location": "Harbor Coffee, Plaza District",
+   "note": "Run and gun. Bring the gimbal.",
+   "offeredAt": 1793640674145,
+   "owner": "Wrangler Productions",
+   "project": "26127 Launch",
+   "projectName": "Launch",
+   "rate": {
+    "cents": 85000,
+    "unit": "day"
+   },
+   "role": "Shooter",
+   "start": "2026-11-06",
+   "state": "accepted"
+  },
+  "vendorPortal.booking#000000000000010033vendorBookings": {
+   "_id": "000000000000010033vendorBookings",
+   "answeredAt": null,
+   "brief": null,
+   "business": "Wrangler Productions",
+   "businessId": "0000000000000000010000businesses",
+   "days": 1,
+   "declineReason": null,
+   "end": "2026-12-02",
+   "expectedCents": 85000,
+   "hours": null,
+   "location": "Harbor Coffee, Plaza District",
+   "note": "Run and gun. Bring the gimbal.",
+   "offeredAt": 1793640674150,
+   "owner": "Wrangler Productions",
+   "project": "26127 Launch",
+   "projectName": "Launch",
+   "rate": {
+    "cents": 85000,
+    "unit": "day"
+   },
+   "role": "Shooter",
+   "start": "2026-12-02",
+   "state": "offered"
+  },
+  "vendorPortal.briefings": {
+   "businessId": "0000000000000000010000businesses",
+   "rows": []
+  },
+  "vendorPortal.reviews": {
+   "businessId": "0000000000000000010000businesses",
+   "rows": [
+    {
+     "bookingId": "000000000000010035vendorBookings",
+     "end": "2026-11-14",
+     "expiresAt": 1797314399000,
+     "project": "26127 Launch",
+     "role": "Editor",
+     "start": "2026-11-10",
+     "token": "tAbya7ekji1VoWelUWvnJw"
+    }
+   ]
+  },
+  "vendorPortal.invoices": {
+   "businessId": "0000000000000000010000businesses",
+   "rows": [
+    {
+     "_id": "000000000000010050vendorInvoices",
+     "amount": "2 lines",
+     "approvedAt": 1793640674423,
+     "bookingId": "000000000000010031vendorBookings",
+     "declineReason": null,
+     "declinedAt": null,
+     "hours": [],
+     "lines": [
+      {
+       "cents": 12500,
+       "description": "Gimbal rental"
+      },
+      {
+       "cents": 4350,
+       "description": "Mileage"
+      }
+     ],
+     "mode": "lines",
+     "note": null,
+     "number": "JE-013",
+     "paidAt": 1793640674432,
+     "paidCents": 16850,
+     "paidMethod": "Zelle",
+     "paidOn": "2026-11-02",
+     "project": "26127 Launch",
+     "projectName": "Launch",
+     "rate": {
+      "cents": 85000,
+      "unit": "day"
+     },
+     "role": "Shooter",
+     "sentAt": 1793640674346,
+     "status": "paid",
+     "totalCents": 16850,
+     "updatedAt": 1793640674432
+    },
+    {
+     "_id": "000000000000010048vendorInvoices",
+     "amount": "18 h",
+     "approvedAt": 1793640674419,
+     "bookingId": "000000000000010035vendorBookings",
+     "declineReason": null,
+     "declinedAt": null,
+     "hours": [
+      {
+       "label": "Assembly · Nov 10–11",
+       "qty": 10
+      },
+      {
+       "label": "Fine cut · Nov 12–13",
+       "qty": 8
+      }
+     ],
+     "lines": [],
+     "mode": "hours",
+     "note": null,
+     "number": "JE-015",
+     "paidAt": null,
+     "paidCents": null,
+     "paidMethod": null,
+     "paidOn": null,
+     "project": "26127 Launch",
+     "projectName": "Launch",
+     "rate": {
+      "cents": 6500,
+      "unit": "hour"
+     },
+     "role": "Editor",
+     "sentAt": 1793640674342,
+     "status": "approved",
+     "totalCents": 117000,
+     "updatedAt": 1793640674419
+    },
+    {
+     "_id": "000000000000010046vendorInvoices",
+     "amount": "2 days",
+     "approvedAt": null,
+     "bookingId": "000000000000010031vendorBookings",
+     "declineReason": null,
+     "declinedAt": null,
+     "hours": [
+      {
+       "label": "Shooting day · Nov 6",
+       "qty": 1
+      },
+      {
+       "label": "Shooting day · Nov 7",
+       "qty": 1
+      }
+     ],
+     "lines": [],
+     "mode": "hours",
+     "note": "Thanks for having me on this one.",
+     "number": "JE-014",
+     "paidAt": null,
+     "paidCents": null,
+     "paidMethod": null,
+     "paidOn": null,
+     "project": "26127 Launch",
+     "projectName": "Launch",
+     "rate": {
+      "cents": 85000,
+      "unit": "day"
+     },
+     "role": "Shooter",
+     "sentAt": 1793640674339,
+     "status": "sent",
+     "totalCents": 170000,
+     "updatedAt": 1793640674339
+    }
+   ]
+  },
+  "vendorPortal.invoiceForm": {
+   "bookings": [
+    {
+     "_id": "000000000000010031vendorBookings",
+     "end": "2026-11-07",
+     "expectedCents": 170000,
+     "hours": null,
+     "label": "26127 Launch · Shooter",
+     "rate": {
+      "cents": 85000,
+      "unit": "day"
+     },
+     "start": "2026-11-06"
+    },
+    {
+     "_id": "000000000000010035vendorBookings",
+     "end": "2026-11-14",
+     "expectedCents": 117000,
+     "hours": 18,
+     "label": "26127 Launch · Editor",
+     "rate": {
+      "cents": 6500,
+      "unit": "hour"
+     },
+     "start": "2026-11-10"
+    }
+   ],
+   "business": "Wrangler Productions",
+   "businessId": "0000000000000000010000businesses",
+   "invoice": null,
+   "nextNumber": "INV-0004",
+   "owner": "Wrangler Productions"
+  },
+  "vendorPortal.invoice#000000000000010046vendorInvoices": {
+   "_id": "000000000000010046vendorInvoices",
+   "amount": "2 days",
+   "approvedAt": null,
+   "bookingId": "000000000000010031vendorBookings",
+   "business": "Wrangler Productions",
+   "businessId": "0000000000000000010000businesses",
+   "declineReason": null,
+   "declinedAt": null,
+   "hours": [
+    {
+     "label": "Shooting day · Nov 6",
+     "qty": 1
+    },
+    {
+     "label": "Shooting day · Nov 7",
+     "qty": 1
+    }
+   ],
+   "lines": [],
+   "mode": "hours",
+   "note": "Thanks for having me on this one.",
+   "number": "JE-014",
+   "owner": "Wrangler Productions",
+   "paidAt": null,
+   "paidCents": null,
+   "paidMethod": null,
+   "paidOn": null,
+   "project": "26127 Launch",
+   "projectName": "Launch",
+   "rate": {
+    "cents": 85000,
+    "unit": "day"
+   },
+   "role": "Shooter",
+   "sentAt": 1793640674339,
+   "status": "sent",
+   "totalCents": 170000,
+   "updatedAt": 1793640674339
+  },
+  "vendorPortal.invoice#000000000000010048vendorInvoices": {
+   "_id": "000000000000010048vendorInvoices",
+   "amount": "18 h",
+   "approvedAt": 1793640674419,
+   "bookingId": "000000000000010035vendorBookings",
+   "business": "Wrangler Productions",
+   "businessId": "0000000000000000010000businesses",
+   "declineReason": null,
+   "declinedAt": null,
+   "hours": [
+    {
+     "label": "Assembly · Nov 10–11",
+     "qty": 10
+    },
+    {
+     "label": "Fine cut · Nov 12–13",
+     "qty": 8
+    }
+   ],
+   "lines": [],
+   "mode": "hours",
+   "note": null,
+   "number": "JE-015",
+   "owner": "Wrangler Productions",
+   "paidAt": null,
+   "paidCents": null,
+   "paidMethod": null,
+   "paidOn": null,
+   "project": "26127 Launch",
+   "projectName": "Launch",
+   "rate": {
+    "cents": 6500,
+    "unit": "hour"
+   },
+   "role": "Editor",
+   "sentAt": 1793640674342,
+   "status": "approved",
+   "totalCents": 117000,
+   "updatedAt": 1793640674419
+  },
+  "vendorPortal.invoice#000000000000010050vendorInvoices": {
+   "_id": "000000000000010050vendorInvoices",
+   "amount": "2 lines",
+   "approvedAt": 1793640674423,
+   "bookingId": "000000000000010031vendorBookings",
+   "business": "Wrangler Productions",
+   "businessId": "0000000000000000010000businesses",
+   "declineReason": null,
+   "declinedAt": null,
+   "hours": [],
+   "lines": [
+    {
+     "cents": 12500,
+     "description": "Gimbal rental"
+    },
+    {
+     "cents": 4350,
+     "description": "Mileage"
+    }
+   ],
+   "mode": "lines",
+   "note": null,
+   "number": "JE-013",
+   "owner": "Wrangler Productions",
+   "paidAt": 1793640674432,
+   "paidCents": 16850,
+   "paidMethod": "Zelle",
+   "paidOn": "2026-11-02",
+   "project": "26127 Launch",
+   "projectName": "Launch",
+   "rate": {
+    "cents": 85000,
+    "unit": "day"
+   },
+   "role": "Shooter",
+   "sentAt": 1793640674346,
+   "status": "paid",
+   "totalCents": 16850,
+   "updatedAt": 1793640674432
+  },
+  "vendorPortal.settings": {
+   "address": "1200 NW 16th St\nOklahoma City, OK 73106",
+   "business": "Wrangler Productions",
+   "businessId": "0000000000000000010000businesses",
+   "businessName": "Ellis Films LLC",
+   "email": "jordan@ellisfilms.com",
+   "name": "Jordan Ellis",
+   "owner": "Wrangler Productions",
+   "payMethod": {
+    "method": "ACH",
+    "note": "Bank of Example · account ending 0000"
+   },
+   "phone": "405-555-0142",
+   "portfolio": "ellisfilms.com",
+   "roles": [
+    "Shooter",
+    "Editor"
+   ],
+   "w9": null
+  },
+  "vendorPortal.notifications": {
+   "businessId": "0000000000000000010000businesses",
+   "items": [
+    {
+     "always": false,
+     "group": "Bookings",
+     "hint": null,
+     "key": "bookings",
+     "label": "A new booking, or a booking is cancelled",
+     "on": true
+    },
+    {
+     "always": false,
+     "group": "Briefings",
+     "hint": null,
+     "key": "briefings",
+     "label": "A briefing is sent to you",
+     "on": false
+    },
+    {
+     "always": false,
+     "group": "Invoices",
+     "hint": null,
+     "key": "invoice_updates",
+     "label": "Your invoice is approved, declined or paid",
+     "on": true
+    },
+    {
+     "always": true,
+     "group": "Your account",
+     "hint": null,
+     "key": "vendor_invite",
+     "label": "Invites from a business",
+     "on": true
+    },
+    {
+     "always": true,
+     "group": "Your account",
+     "hint": null,
+     "key": "vendor_codes",
+     "label": "Sign-in codes and password resets",
+     "on": true
+    }
+   ]
+  },
+  "business.brand": null
  }
 }

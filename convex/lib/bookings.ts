@@ -64,4 +64,10 @@ export function shortRange(start: string, end: string, thisYear = String(new Dat
 /** Why a vendor declines (732:3285). */
 export const DECLINE_REASONS = ["Booked that day", "Rate doesn't work", "Too far", "Other"] as const;
 /** How a vendor gets paid (D101: the method and a note only, never bank numbers). */
+/** D101 (review fix, step 6): text that looks like a bank account or routing number (a run of 8 or more digits, spaces
+ *  and dashes allowed). A US phone number (405-555-1234, (405) 555 1234) is fine, so "Zelle to 405-555-1234" passes. */
+export function looksLikeAccount(text: string): boolean {
+  const t = text.replace(/(\+?1[\s.-]?)?\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b/g, " ");
+  return /\d(?:[\s-]?\d){7,}/.test(t);
+}
 export const PAY_METHODS = ["ACH", "Zelle", "Check", "Other"];

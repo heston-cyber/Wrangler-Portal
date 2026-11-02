@@ -43,7 +43,7 @@ export default function PaymentsPage() {
           const rows = tab === "approve" ? r.toApprove : tab === "approved" ? r.approved : r.paid;
           const empty = tab === "approve" ? ["Nothing to approve.", "When a vendor sends an invoice from their portal, it waits here."] : tab === "approved" ? ["Nothing waiting to be paid.", "Approved invoices wait here until you mark them paid."] : ["Nothing paid yet.", "Invoices you mark paid land here, and count toward each vendor's 1099 total."];
           return rows.length === 0 ? <EmptyState icon="invoice" title={empty[0]} body={empty[1]} /> : (
-            <Card label={tab === "approve" ? "To approve" : tab === "approved" ? "Approved" : "Paid"}>
+            <Card className="vpay-list" label={tab === "approve" ? "To approve" : tab === "approved" ? "Approved" : "Paid"}>
               {rows.map((x, i) => <div key={x._id} className="wp-rowwrap">{i > 0 && <Divider />}
                 <ListRow lead={{ avatar: x.vendor, two: true }} to={`/vendors/payments/${x._id}`} title={`${x.number} · ${x.vendor}`}
                   meta={[x.project, x.what, x.status === "paid" && x.paidOn ? `paid ${dayShort(x.paidOn)}${x.paidMethod ? ` · ${x.paidMethod}` : ""}` : x.status === "approved" && x.approvedAt ? `approved ${when(x.approvedAt)}` : x.sentAt ? `sent ${when(x.sentAt)}` : null].filter(Boolean).join(" · ")}
@@ -60,7 +60,9 @@ export default function PaymentsPage() {
 // ---------- the 1099 tab (730:5780) ----------
 
 function csvCell(s: string | number) {
-  const t = String(s);
+  // Review fix: a vendor-typed value starting with = + - @ (or a tab / return) would run as a formula in Excel or
+  // Sheets; a leading ' keeps it text. Numbers we write ourselves are left alone.
+  const t = typeof s === "number" ? String(s) : /^[\s]*[=+\-@\t\r]/.test(s) ? `'${s}` : s;
   return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
 }
 
@@ -89,10 +91,11 @@ function Totals1099() {
         <Button onClick={exportCsv} disabled={r.rows.length === 0}>Export CSV</Button>
       </div>
       {r.rows.length === 0 ? <EmptyState icon="invoice" title={`Nothing paid in ${r.year}.`} body="Each vendor's total shows here once you mark their invoices paid." /> : (
-        <Card label={`Paid in ${r.year}`}>
+        <Card className="vpay-list" label={`Paid in ${r.year}`}>
           {r.rows.map((x, i) => <div key={x.vendorId} className="wp-rowwrap">{i > 0 && <Divider />}
             <ListRow lead={{ avatar: x.name, two: true }} to={`/vendors/${x.vendorId}`} title={x.name} meta={`${x.payments} payment${x.payments === 1 ? "" : "s"}${x.last ? ` · last ${dayShort(x.last)}` : ""}`}
-              trailing={money(x.totalCents)} chip={x.w9 ? <StatusChip tone="success">W-9 on file</StatusChip> : <StatusChip tone="warning">W-9 missing</StatusChip>} chevron /></div>)}
+              trailing={money(x.totalCents)} chip={<span className="pc-only">{x.w9 ? <StatusChip tone="success">W-9 on file</StatusChip> : <StatusChip tone="warning">W-9 missing</StatusChip>}</span>}
+              titleChip={<span className="ph-only">{x.w9 ? <StatusChip tone="success">W-9</StatusChip> : <StatusChip tone="warning">No W-9</StatusChip>}</span>} chevron /></div>)}
         </Card>
       )}
       {r.missing.length > 0 && (
@@ -172,7 +175,7 @@ export function VendorInvoicePage({ invoiceId }: { invoiceId: string }) {
               <Divider />
               <div className="vd-pad">
                 <div className="vd-row vi-total"><b>Total</b><b className="vpay-total">{money(x.totalCents)}</b></div>
-                {k && <div className="vd-row"><span className="secondary">Agreed on the booking</span><span>{money(k.expectedCents)} · {diff === 0 ? "matches" : `${money(Math.abs(diff))} ${diff > 0 ? "more" : "less"}`}</span></div>}
+                {k && x.mode === "hours" && <div className="vd-row"><span className="secondary">Agreed on the booking</span><span>{money(k.expectedCents)} · {diff === 0 ? "matches" : `${money(Math.abs(diff))} ${diff > 0 ? "more" : "less"}`}</span></div>}
                 {x.note && <p className="wp-small secondary">“{x.note}”</p>}
               </div>
             </Card>

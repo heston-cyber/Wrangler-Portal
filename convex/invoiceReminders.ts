@@ -78,7 +78,7 @@ async function logReminder(ctx: MutationCtx, i: Doc<"invoices">, kind: "before" 
   const now = Date.now();
   const reminders = [...(i.reminders ?? []), { at: now, kind, auto }];
   await ctx.db.patch(i._id, { reminders: reminders.slice(-30), history: [...i.history, { kind: "reminder", at: now, ...(by ? { by } : {}), detail }].slice(-60), updatedAt: now });
-  await ctx.scheduler.runAfter(0, internal.invoiceReminders.sendReminderEmail, { invoiceId: i._id, kind, key: `reminder:${i._id}:${now}` });
+  await ctx.scheduler.runAfter(0, internal.invoiceReminders.sendReminderEmail, { invoiceId: i._id, kind, key: `reminder:${i._id}:${now}`, ...(auto ? {} : { manual: true }) });
 }
 
 /** "Send reminder" on the owner's invoice page (always available while it's unpaid). */
@@ -169,11 +169,12 @@ export async function deliverOnce(ctx: { runMutation: (ref: any, args: any) => P
 
 /** Emails 09 (before the due date) and 10 (overdue). */
 export const sendReminderEmail = internalAction({
-  args: { invoiceId: v.id("invoices"), kind: v.union(v.literal("before"), v.literal("overdue")), key: v.string() },
-  handler: async (ctx, { invoiceId, kind, key }): Promise<string> => {
+  args: { invoiceId: v.id("invoices"), kind: v.union(v.literal("before"), v.literal("overdue")), key: v.string(), manual: v.optional(v.boolean()) },
+  handler: async (ctx, { invoiceId, kind, key, manual }): Promise<string> => {
     const d = await ctx.runQuery(internal.invoiceReminders.mailData, { invoiceId });
     if (!d || d.invoice.status !== "open" || d.invoice.processing) return "skipped";
-    const r = await deliverOnce(ctx, key, `invoice-reminder-${kind}`, d.to, reminderMail(d.brand, { ...d, kind }), d.brand.replyTo);
+    // Review fix: one the owner sends by hand always goes (the client's switch is for the automatic ones).
+    const r = await deliverOnce(ctx, key, manual ? "invoice-reminder-manual" : `invoice-reminder-${kind}`, d.to, reminderMail(d.brand, { ...d, kind }), d.brand.replyTo, d.businessId);
     if (r === "held") await ctx.runMutation(internal.invoicePay.noteEmailed, { invoiceId, to: d.to, held: true });
     return r;
   },
@@ -186,7 +187,7 @@ export const sendReceipt = internalAction({
     const d = await ctx.runQuery(internal.invoiceReminders.mailData, { invoiceId });
     const p = d?.invoice.payments.find((x) => x.id === paymentId && x.status === "paid");
     if (!d || !p) return "skipped";
-    const r = await deliverOnce(ctx, `receipt:${invoiceId}:${paymentId}`, "receipt", d.to, receiptMail(d.brand, { ...d, paidCents: p.cents, paidAt: p.at, method: p.method }), d.brand.replyTo);
+    const r = await deliverOnce(ctx, `receipt:${invoiceId}:${paymentId}`, "receipt", d.to, receiptMail(d.brand, { ...d, paidCents: p.cents, paidAt: p.at, method: p.method }), d.brand.replyTo, d.businessId);
     if (r === "held") await ctx.runMutation(internal.invoicePay.noteEmailed, { invoiceId, to: d.to, held: true });
     // Nov 2 (Heston: email notifications for everything): the owner hears when a client pays.
     if (d.ownerEmail && d.ownerEmail.toLowerCase() !== d.to.toLowerCase()) {

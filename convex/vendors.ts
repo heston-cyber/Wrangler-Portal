@@ -133,7 +133,10 @@ export const update = mutation({
     const d = clean(a);
     if (d.email !== x.email && (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", d.email)).collect()).some((y) => y._id !== x._id && !y.archivedAt)) throw new ConvexError("Another vendor has that email.");
     if (d.email !== x.email) await assertNotClient(ctx, d.email); // D102
-    await ctx.db.patch(vendorId, { ...d, updatedAt: Date.now() });
+    // Review fix (step 6): a new email is a new login. The old address loses this business, and the new one needs a
+    // fresh invite before it sees any of their bookings, invoices or W-9.
+    if (d.email !== x.email) await endAccess(ctx, x);
+    await ctx.db.patch(vendorId, { ...d, ...(d.email !== x.email ? { invitedAt: undefined, joinedAt: undefined } : {}), updatedAt: Date.now() });
     return null;
   },
 });
@@ -147,9 +150,29 @@ export const archive = mutation({
     if (!x) throw new ConvexError("That vendor isn't here.");
     if (!archived && x.archivedAt) await assertNotClient(ctx, x.email); // D102: back on the list only if still not a client's
     await ctx.db.patch(vendorId, { archivedAt: archived ? Date.now() : undefined, updatedAt: Date.now() });
+    // Review fix (step 6): off the list ends their portal access to this business (and a booked editor's Review link);
+    // back on the list gives it back to an invited vendor.
+    if (archived && !x.archivedAt) await endAccess(ctx, x);
+    if (!archived && x.archivedAt && x.invitedAt) {
+      const user = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", x.email)).first();
+      await syncVendorMemberships(ctx, x.email, user?.role === "vendor" ? user._id : undefined);
+    }
     return null;
   },
 });
+
+/** Their vendor login loses this business, and any Review link a booking gave them is switched off. */
+async function endAccess(ctx: MutationCtx, x: Doc<"vendors">) {
+  const now = Date.now();
+  const biz = x.businessId;
+  if (biz) for (const m of await ctx.db.query("memberships").withIndex("by_business_email", (q) => q.eq("businessId", biz).eq("email", x.email)).collect())
+    if (m.role === "vendor" && !m.revokedAt) await ctx.db.patch(m._id, { revokedAt: now });
+  for (const k of await ctx.db.query("vendorBookings").withIndex("by_vendor", (q) => q.eq("vendorId", x._id)).collect()) {
+    if (!k.reviewShareId) continue;
+    const sh = await ctx.db.get(k.reviewShareId);
+    if (sh && !sh.offAt) await ctx.db.patch(sh._id, { offAt: now });
+  }
+}
 
 // ---------- the vendor portal invite (step 4) ----------
 

@@ -87,14 +87,14 @@ const KIT_ON = import.meta.env.DEV || import.meta.env.VITE_KIT === "1";
 const Kit = KIT_ON ? lazy(() => import("./dev/Kit")) : null;
 const KitApp = KIT_ON ? lazy(() => import("./dev/KitApp")) : null;
 // ?kit=owner or ?kit=client: the real pages with sample data (dev only); ?kit=off ends it.
-function kitSide(): "owner" | "client" | null {
+function kitSide(): "owner" | "client" | "vendor" | null {
   if (!KIT_ON) return null;
   try {
     const q = new URLSearchParams(location.search).get("kit");
-    if (q === "owner" || q === "client") sessionStorage.setItem("wr.kit", q);
+    if (q === "owner" || q === "client" || q === "vendor") sessionStorage.setItem("wr.kit", q);
     if (q === "off") sessionStorage.removeItem("wr.kit");
     const s = sessionStorage.getItem("wr.kit");
-    return s === "owner" || s === "client" ? s : null;
+    return s === "owner" || s === "client" || s === "vendor" ? s : null;
   } catch { return null; }
 }
 const isSignHost = () => /^sign\./i.test(location.hostname);

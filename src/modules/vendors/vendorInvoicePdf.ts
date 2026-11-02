@@ -11,7 +11,7 @@ export type InvoicePdf = {
 
 const usd = (c: number) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 // Helvetica (WinAnsi) can't draw every character: swap the common ones and drop the rest.
-const safe = (s: string) => s.replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/[–—]/g, "-").replace(/×/g, "x").replace(/…/g, "...").replace(/[^\x20-\x7E\xA0-\xFF]/g, "");
+const safe = (s: string) => s.replace(/\r?\n/g, " ").replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/[–—]/g, "-").replace(/×/g, "x").replace(/…/g, "...").replace(/[^\x20-\x7E\xA0-\xFF]/g, "");
 
 export async function vendorInvoicePdf(d: InvoicePdf): Promise<Blob> {
   const pdf = await PDFDocument.create();

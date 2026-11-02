@@ -253,7 +253,7 @@ export const note = internalMutation({
 
 export const send = action({
   args: { briefingId: v.id("briefings"), storageId: v.optional(v.id("_storage")), resend: v.optional(v.boolean()) },
-  handler: async (ctx, a): Promise<{ held: boolean }> => {
+  handler: async (ctx, a): Promise<{ held: boolean; off?: boolean }> => {
     const m = await ctx.runMutation(internal.briefings.markSent, { briefingId: a.briefingId, storageId: a.storageId, resend: !!a.resend });
     if (m.error !== undefined || !m.key) throw new ConvexError(m.error ?? "That didn't send. Try again.");
     const d = await ctx.runQuery(internal.briefings.mailData, { briefingId: a.briefingId });
@@ -262,6 +262,6 @@ export const send = action({
       name: d.to.name, kind: d.kind, project: d.project, title: d.title, role: d.role, start: d.start, end: d.end, headings: d.headings, link: d.link,
     }), d.brand.replyTo);
     if (r === "held") await ctx.runMutation(internal.briefings.note, { briefingId: a.briefingId, kind: "email_held", detail: d.to.email });
-    return { held: r === "held" };
+    return { held: r === "held", off: r === "off" }; // off: they switched briefing emails off; it's in their portal
   },
 });

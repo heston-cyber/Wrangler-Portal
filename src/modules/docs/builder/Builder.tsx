@@ -423,7 +423,7 @@ export default function Builder({ mode }: { mode: Mode }) {
       const storageId = await uploadToStorage(await uploadUrl({}), new File([blob], `${doc.title}.pdf`, { type: "application/pdf" }));
       const r = await sendBriefing({ briefingId: brief._id, storageId });
       setAskBrief(false);
-      show(r.held ? "Saved as sent, but the email was held (email sending is limited on this site)." : `Sent to ${recipient.name.split(" ")[0]}`);
+      show(r.held ? "Saved as sent, but the email was held (email sending is limited on this site)." : r.off ? `Sent to ${recipient.name.split(" ")[0]}’s portal. They’ve switched off briefing emails, so no email went out.` : `Sent to ${recipient.name.split(" ")[0]}`);
     } catch (e) { show(errText(e)); } finally { setBusy(null); }
   };
   const onPickRecipient = async (bookingId: string) => {
@@ -438,7 +438,7 @@ export default function Builder({ mode }: { mode: Mode }) {
   const onResend = async () => {
     if (brief) {
       setBusy("resend");
-      try { const r = await sendBriefing({ briefingId: brief._id, resend: true }); show(r.held ? "The email was held (email sending is limited on this site)." : "Sent the email again"); } catch (e) { show(errText(e)); } finally { setBusy(null); }
+      try { const r = await sendBriefing({ briefingId: brief._id, resend: true }); show(r.held ? "The email was held (email sending is limited on this site)." : r.off ? "They’ve switched off briefing emails, so no email went out. It’s in their portal." : "Sent the email again"); } catch (e) { show(errText(e)); } finally { setBusy(null); }
       return;
     }
     if (!prop) return;

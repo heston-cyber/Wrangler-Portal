@@ -18,7 +18,7 @@ import { v, ConvexError } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { PAY_METHODS, bookingState, daysIn, expectedCents, todayCentral, type BookingState } from "./lib/bookings";
+import { PAY_METHODS, looksLikeAccount, bookingState, daysIn, expectedCents, todayCentral, type BookingState } from "./lib/bookings";
 import { label, paidAmount, paidDay } from "./lib/bookingRows";
 import { prefRow, setSwitch, viewFor } from "./lib/notifyPrefs";
 
@@ -434,6 +434,7 @@ export const saveInvoice = mutation({
     const count = (await ctx.db.query("vendorInvoices").withIndex("by_vendor", (q) => q.eq("vendorId", me.vendor._id)).collect()).length;
     const number = (a.number ?? "").trim().slice(0, 30) || prev?.number || `INV-${String(count + 1).padStart(4, "0")}`;
     const now = Date.now();
+    if (looksLikeAccount(a.note ?? "") || [...hours.map((h) => h.label), ...lines.map((l) => l.description)].some(looksLikeAccount)) throw new ConvexError("Leave out account and routing numbers. Your payment details are in Settings; the business asks for the rest.");
     const body = { bookingId: k._id, projectId: k.projectId, number, mode: a.mode, hours, lines, rate: k.rate, totalCents, note: (a.note ?? "").trim().slice(0, 1000) || undefined, updatedAt: now,
       ...(a.send ? { status: "sent" as const, sentAt: now, history: [...(prev?.history ?? []), { at: now, text: `${prev?.status === "declined" ? "Sent again" : "Sent"} by ${me.vendor.name}` }] }
         : prev?.status === "declined" ? { status: "draft" as const } : {}) };
@@ -519,7 +520,7 @@ export const saveDetails = mutation({
     if (!a.name.trim()) throw new ConvexError("Add your name.");
     const note = clip(a.payNote, 300);
     // D101: the method and a note only. A long run of digits looks like an account or routing number: refused.
-    if (/\d[\d\s-]{6,}\d/.test(note)) throw new ConvexError("Leave out account and routing numbers. Say how you like to be paid; the business asks for the rest.");
+    if (looksLikeAccount(note)) throw new ConvexError("Leave out account and routing numbers. Say how you like to be paid; the business asks for the rest.");
     if (a.payMethod && !PAY_METHODS.includes(a.payMethod)) throw new ConvexError("Pick how you get paid.");
     await ctx.db.patch(vendor._id, {
       name: clip(a.name, 120), businessName: clip(a.businessName, 120) || undefined, phone: clip(a.phone, 40) || undefined, address: clip(a.address, 300) || undefined,
