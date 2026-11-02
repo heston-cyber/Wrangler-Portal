@@ -62,6 +62,8 @@ const ClientProposal = lazy(() => import("./modules/proposals/ClientProposal"));
 const VendorsPage = lazy(() => import("./modules/vendors/Vendors"));
 const VendorPage = lazy(() => import("./modules/vendors/Vendors").then((m) => ({ default: m.VendorPage })));
 const BookingsPage = lazy(() => import("./modules/vendors/Bookings"));
+const VendorPaymentsPage = lazy(() => import("./modules/vendors/Payments"));
+const VendorInvoicePage = lazy(() => import("./modules/vendors/Payments").then((m) => ({ default: m.VendorInvoicePage })));
 const BookingPage = lazy(() => import("./modules/vendors/Bookings").then((m) => ({ default: m.BookingPage })));
 const BriefingsPage = lazy(() => import("./modules/vendors/Briefings"));
 const VendorApp = lazy(() => import("./modules/vendor/VendorApp"));
@@ -211,6 +213,8 @@ function SignedIn() {
   else if (/^\/vendors\/briefings\/?$/.test(path)) page = <Suspense fallback={<Loading />}><BriefingsPage /></Suspense>;
   else if (/^\/vendors\/briefings\/templates\/[^/]+\/?$/.test(path)) { const id = path.split("/")[4]; page = <Suspense fallback={<Loading />}><BriefingTemplateBuilder key={id} templateId={id} /></Suspense>; }
   else if (/^\/vendors\/briefings\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><BriefingBuilder key={id} briefingId={id} /></Suspense>; }
+  else if (/^\/vendors\/payments\/?$/.test(path)) page = <Suspense fallback={<Loading />}><VendorPaymentsPage /></Suspense>;
+  else if (/^\/vendors\/payments\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><VendorInvoicePage key={id} invoiceId={id} /></Suspense>; }
   else if (/^\/vendors\/bookings\/?$/.test(path)) page = <Suspense fallback={<Loading />}><BookingsPage /></Suspense>;
   else if (/^\/vendors\/bookings\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><BookingPage key={id} bookingId={id} /></Suspense>; }
   else if (/^\/vendors\/[^/]+\/?$/.test(path)) { const id = path.split("/")[2]; page = <Suspense fallback={<Loading />}><VendorPage key={id} vendorId={id} /></Suspense>; }

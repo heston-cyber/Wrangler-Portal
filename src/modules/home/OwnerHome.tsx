@@ -76,11 +76,11 @@ function NeedRow({ n, remind }: { n: Need; remind: (n: Extract<Need, { kind: "do
         action={<ButtonLink size="sm" variant={n.what === "accepted" ? "primary" : "secondary"} to={`/payments/quotes/${n.quoteId}`}>Open</ButtonLink>} />
     );
   }
-  if (n.kind === "vendorInvoice") { // Phase 3c: a vendor's invoice to approve (email 26); approving comes in step 5
+  if (n.kind === "vendorInvoice") { // Phase 3c: a vendor's invoice to approve (email 26), until it's approved or declined
     return (
       <ListRow className="ilead" lead={{ icon: "invoice" }} title={`${n.vendor} sent invoice ${n.number}`} meta={`${n.project} · ${money(n.totalCents)} · ${dayWord(n.at)}`}
         titleChip={<span className="pc-only"><StatusChip tone="warning">To approve</StatusChip></span>}
-        action={<ButtonLink size="sm" variant="primary" to={`/vendors/${n.vendorId}`}>Review it</ButtonLink>} />
+        action={<ButtonLink size="sm" variant="primary" to={`/vendors/payments/${n.invoiceId}`}>Review it</ButtonLink>} />
     );
   }
   if (n.kind === "proposal") { // Phase 3b: an answered proposal, until the contract starts / Not now, or it's seen

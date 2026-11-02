@@ -15,6 +15,7 @@ import { MoneyInput, money } from "../payments/common";
 import { BookDialog, VendorBookings } from "./Bookings";
 import { NewBriefing } from "./NewBriefing";
 import { VendorBriefings } from "./VendorBriefings";
+import { VendorInvoiceChip } from "./Payments";
 
 export const VENDOR_ROLES = ["Shooter", "Editor", "Drone pilot", "Sound", "Colourist", "Production assistant"];
 type Rate = { role: string; unit: "day" | "hour"; cents: number };
@@ -185,17 +186,17 @@ export function VendorPage({ vendorId }: { vendorId: string }) {
   );
 }
 
-// Step 4: the invoices a vendor has sent (Approve and Mark paid come in step 5).
-const INV_CHIP: Record<string, [Tone, string]> = { sent: ["warning", "To approve"], approved: ["danger", "Approved"], paid: ["success", "Paid"] };
+// The invoices a vendor has sent; each opens at Vendors › Payments (step 5).
 function VendorInvoices({ vendorId, first }: { vendorId: Id<"vendors">; first: string }) {
   const rows = useQuery(api.vendors.invoices, { vendorId });
+  const day = (t: number) => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" });
   return (
-    <Card label="Invoices and payments" head={<SectionHead label="Invoices and payments" count={rows?.length ?? 0} />}>
+    <Card label="Invoices and payments" head={<SectionHead label="Invoices and payments" count={rows?.length ?? 0} action={rows?.length ? <ButtonLink size="sm" variant="ghost" to="/vendors/payments">Payments</ButtonLink> : undefined} />}>
       {rows === undefined ? <SkeletonRows n={2} /> : !rows || rows.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "invoice" }} title={`Nothing from ${first} yet.`} />
         : rows.map((x, i) => <div key={x._id} className="wp-rowwrap">{i > 0 && <Divider />}
-          <ListRow className="ilead" lead={{ icon: "invoice" }} title={x.number} meta={[x.project, x.paidAt ? `paid ${new Date(x.paidAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : x.sentAt ? `sent ${new Date(x.sentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : null].filter(Boolean).join(" · ")}
-            trailing={money(x.totalCents)} chip={<StatusChip tone={INV_CHIP[x.status]?.[0] ?? "neutral"}>{INV_CHIP[x.status]?.[1] ?? x.status}</StatusChip>} /></div>)}
-      {rows && rows.some((x) => x.status === "sent") && <p className="wp-small secondary vd-pad">Approving and marking invoices paid arrives in the next build step.</p>}
+          <ListRow className="ilead" lead={{ icon: "invoice" }} to={`/vendors/payments/${x._id}`} title={x.number}
+            meta={[x.project, x.paidOn ? `paid ${new Date(`${x.paidOn}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" })}` : x.sentAt ? `sent ${day(x.sentAt)}` : null].filter(Boolean).join(" · ")}
+            trailing={money(x.totalCents)} chip={<VendorInvoiceChip status={x.status} />} chevron /></div>)}
     </Card>
   );
 }

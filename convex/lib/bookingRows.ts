@@ -30,12 +30,25 @@ export async function rowOf(ctx: QueryCtx, x: Doc<"vendorBookings">, today: stri
 /** Soonest first; within a day, the newest offer first. */
 export const order = (a: BookingRow, b: BookingRow) => a.start.localeCompare(b.start) || b.offeredAt - a.offeredAt;
 
-/** Bookings that count as an expected cost in a project's Ledger: offered or accepted (done included). */
+/** Bookings that count as an expected cost in a project's Ledger: offered or accepted (done included). Step 5: what
+ *  the owner has approved on a booking's invoices is an actual cost now, so it comes off the expected one; a booking
+ *  invoiced in full (or more) drops out. */
 export async function expectedForProject(ctx: QueryCtx, projectId: Id<"projects">) {
   const today = todayCentral();
   const rows = (await ctx.db.query("vendorBookings").withIndex("by_project", (q) => q.eq("projectId", projectId)).collect()).filter((x) => x.status === "offered" || x.status === "accepted");
   const out: BookingRow[] = [];
-  for (const x of rows) out.push(await rowOf(ctx, x, today));
+  for (const x of rows) {
+    const approved = (await ctx.db.query("vendorInvoices").withIndex("by_booking", (q) => q.eq("bookingId", x._id)).collect())
+      .filter((i) => i.status === "approved" || i.status === "paid").reduce((t, i) => t + i.totalCents, 0);
+    const r = await rowOf(ctx, x, today);
+    const left = Math.max(0, r.expectedCents - approved);
+    if (left > 0) out.push({ ...r, expectedCents: left });
+  }
   return out.sort(order);
 }
 
+
+/** Step 5 · the day a paid vendor invoice counts toward a 1099: the day the owner says they paid, else the day they
+ *  pressed Mark paid; and the amount (what they say they paid, else the total). */
+export const paidDay = (x: Doc<"vendorInvoices">) => x.paidOn ?? (x.paidAt ? todayCentral(x.paidAt) : null);
+export const paidAmount = (x: Doc<"vendorInvoices">) => x.paidCents ?? x.totalCents;

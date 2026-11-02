@@ -16,6 +16,8 @@ import { businessInScope } from "./lib/business";
 import type { Rates } from "./lib/estimate";
 import { ratesOf } from "./crm";
 import { assertNotClient } from "./lib/roles";
+import { todayCentral } from "./lib/bookings";
+import { paidAmount, paidDay } from "./lib/bookingRows";
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i;
 const clip = (s: string | undefined, n: number) => (s ?? "").trim().slice(0, n);
@@ -60,13 +62,13 @@ const status = (x: Doc<"vendors">) => (x.joinedAt ? "in the portal" : x.invitedA
 /** Step 4: from the vendor's invoices. Paid this year counts invoices paid since Jan 1 (Central), for 1099s. */
 async function totalsOf(ctx: QueryCtx, vendorId: Id<"vendors">) {
   const rows = await ctx.db.query("vendorInvoices").withIndex("by_vendor", (q) => q.eq("vendorId", vendorId)).collect();
-  const year = Date.parse(`${new Date().getFullYear()}-01-01T00:00:00-06:00`);
+  const year = `${todayCentral().slice(0, 4)}-`;
   const sum = (xs: typeof rows) => xs.reduce((t, x) => t + x.totalCents, 0);
-  const sent = rows.filter((x) => x.status === "sent"), approved = rows.filter((x) => x.status === "approved"), paid = rows.filter((x) => x.status === "paid" && (x.paidAt ?? 0) >= year);
-  return { paidThisYearCents: sum(paid), approvedCents: sum(approved), approvedCount: approved.length, waitingCents: sum(sent), waitingCount: sent.length };
+  const sent = rows.filter((x) => x.status === "sent"), approved = rows.filter((x) => x.status === "approved"), paid = rows.filter((x) => x.status === "paid" && (paidDay(x) ?? "").startsWith(year));
+  return { paidThisYearCents: paid.reduce((t, x) => t + paidAmount(x), 0), approvedCents: sum(approved), approvedCount: approved.length, waitingCents: sum(sent), waitingCount: sent.length };
 }
 
-/** Step 4: a vendor's invoices, for their page (approving and marking paid come in step 5). */
+/** A vendor's invoices, for their page (each opens at Vendors › Payments). */
 export const invoices = query({
   args: { vendorId: v.string() },
   handler: async (ctx, { vendorId }) => {
@@ -75,7 +77,7 @@ export const invoices = query({
     if (!id) return null;
     const rows = (await ctx.db.query("vendorInvoices").withIndex("by_vendor", (q) => q.eq("vendorId", id)).collect()).filter((x) => x.status !== "draft").sort((a, b) => (b.sentAt ?? 0) - (a.sentAt ?? 0));
     const out = [];
-    for (const x of rows) { const p = await ctx.db.get(x.projectId); out.push({ _id: x._id, number: x.number, status: x.status, project: p?.name ?? "A project", totalCents: x.totalCents, sentAt: x.sentAt ?? null, paidAt: x.paidAt ?? null }); }
+    for (const x of rows) { const p = await ctx.db.get(x.projectId); out.push({ _id: x._id, number: x.number, status: x.status, project: p?.name ?? "A project", totalCents: x.totalCents, sentAt: x.sentAt ?? null, paidAt: x.paidAt ?? null, paidOn: paidDay(x) }); }
     return out;
   },
 });

@@ -433,3 +433,27 @@ export function ownerVendorInvoiceMail(b: MailBrand, d: { vendor: string; number
     { t: "button", label: "Review it", href: d.link },
   ], [{ t: "small", text: "Sent to you when a vendor sends an invoice · WranglerPortal" }], `${d.project} · ${usd(d.totalCents)}`);
 }
+
+// ---------- 27 · 28: to the vendor when the owner approves an invoice, then marks it paid (Phase 3c, 735:5191 · 735:5217) ----------
+const ymdLong = (ymd: string) => dateRange(ymd, ymd);
+export function vendorInvoiceApprovedMail(b: MailBrand, d: { name: string; number: string; project: string; totalCents: number; approvedOn: string; link: string }): Mail {
+  const sender = first(b.ownerName) || b.name;
+  return mk(b, "updates", `Invoice ${d.number} approved`, [
+    hi(d.name),
+    { t: "p", text: `${sender} approved your invoice ${d.number}.` },
+    { t: "sums", rows: [{ label: "Total", value: usd(d.totalCents), big: true }, { label: "Approved", value: ymdLong(d.approvedOn) }, { label: "Invoice", value: `${d.number} · ${d.project}` }] },
+    { t: "p", text: "You’ll get another email when it’s paid.", tone: "muted" },
+    { t: "p", text: "You can see its status in your portal." },
+    { t: "button", label: "View the invoice", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `${d.number} · ${usd(d.totalCents)} approved`);
+}
+export function vendorInvoicePaidMail(b: MailBrand, d: { name: string; number: string; project: string; paidCents: number; paidOn: string; method: string; link: string }): Mail {
+  return mk(b, "updates", `Invoice ${d.number} paid`, [
+    hi(d.name),
+    { t: "p", text: `${b.name} paid your invoice ${d.number}.` },
+    { t: "sums", rows: [{ label: "Paid", value: usd(d.paidCents), big: true }, { label: "Paid on", value: `${ymdLong(d.paidOn)} · ${d.method}` }, { label: "Invoice", value: `${d.number} · ${d.project}` }] },
+    { t: "p", text: first(d.name) ? `Thanks for the work, ${first(d.name)}.` : "Thanks for the work.", tone: "muted" },
+    { t: "p", text: `It counts toward your ${d.paidOn.slice(0, 4)} total with ${b.name}.` },
+    { t: "button", label: "View the invoice", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `${d.number} · ${usd(d.paidCents)} paid`);
+}

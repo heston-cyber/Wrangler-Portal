@@ -19,7 +19,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { PAY_METHODS, bookingState, daysIn, expectedCents, todayCentral, type BookingState } from "./lib/bookings";
-import { label } from "./lib/bookingRows";
+import { label, paidAmount, paidDay } from "./lib/bookingRows";
 
 type Ctx = QueryCtx | MutationCtx;
 
@@ -318,6 +318,7 @@ async function invRow(ctx: Ctx, x: Doc<"vendorInvoices">) {
     mode: x.mode, hours: x.hours, lines: x.lines, rate: x.rate, totalCents: x.totalCents, note: x.note ?? null, bookingId: x.bookingId,
     amount: x.mode === "hours" ? `${Math.round(qty * 100) / 100} ${x.rate.unit === "day" ? (qty === 1 ? "day" : "days") : "h"}` : `${x.lines.length} line${x.lines.length === 1 ? "" : "s"}`,
     sentAt: x.sentAt ?? null, approvedAt: x.approvedAt ?? null, paidAt: x.paidAt ?? null, paidMethod: x.paidMethod ?? null, updatedAt: x.updatedAt,
+    paidOn: paidDay(x), paidCents: x.status === "paid" ? paidAmount(x) : null, declinedAt: x.declinedAt ?? null, declineReason: x.declineReason ?? null, // step 5
   };
 }
 
@@ -376,7 +377,7 @@ export const saveInvoice = mutation({
     if (k.status !== "accepted") throw new ConvexError("Invoices are for bookings you've accepted.");
     const prev = a.invoiceId ? await ctx.db.get(a.invoiceId) : null;
     if (a.invoiceId && (!prev || prev.vendorId !== me.vendor._id)) throw new ConvexError("That invoice isn't here.");
-    if (prev && prev.status !== "draft") throw new ConvexError("It's been sent, so it can't change.");
+    if (prev && prev.status !== "draft" && prev.status !== "declined") throw new ConvexError("It's been sent, so it can't change."); // step 5: a declined one can be fixed and resent
     const hours = a.mode === "hours" ? a.hours.slice(0, 60).map((h) => ({ label: h.label.trim().slice(0, 80), qty: Math.round(Number(h.qty) * 100) / 100 })).filter((h) => h.qty !== 0 || h.label) : [];
     const lines = a.mode === "lines" ? a.lines.slice(0, 60).map((l) => ({ description: l.description.trim().slice(0, 200), cents: Math.round(Number(l.cents)) })).filter((l) => l.cents !== 0 || l.description) : [];
     if (hours.some((h) => !(h.qty > 0 && h.qty <= 1000))) throw new ConvexError(`Each ${k.rate.unit === "day" ? "line needs its days" : "line needs its hours"}, more than 0.`);
@@ -388,9 +389,10 @@ export const saveInvoice = mutation({
     const number = (a.number ?? "").trim().slice(0, 30) || prev?.number || `INV-${String(count + 1).padStart(4, "0")}`;
     const now = Date.now();
     const body = { bookingId: k._id, projectId: k.projectId, number, mode: a.mode, hours, lines, rate: k.rate, totalCents, note: (a.note ?? "").trim().slice(0, 1000) || undefined, updatedAt: now,
-      ...(a.send ? { status: "sent" as const, sentAt: now } : {}) };
+      ...(a.send ? { status: "sent" as const, sentAt: now, history: [...(prev?.history ?? []), { at: now, text: `${prev?.status === "declined" ? "Sent again" : "Sent"} by ${me.vendor.name}` }] }
+        : prev?.status === "declined" ? { status: "draft" as const } : {}) };
     const id = prev ? (await ctx.db.patch(prev._id, body), prev._id) : await ctx.db.insert("vendorInvoices", { vendorId: me.vendor._id, status: "draft", createdAt: now, ...body });
-    if (a.send) await ctx.scheduler.runAfter(0, internal.vendorPortal.mailInvoice, { invoiceId: id });
+    if (a.send) await ctx.scheduler.runAfter(0, internal.vendorPortal.mailInvoice, { invoiceId: id, sentAt: now });
     return id;
   },
 });
@@ -417,15 +419,15 @@ export const invoiceMailData = internalQuery({
     if (!vendor || !k) return null;
     const c = await businessContact(ctx, x.businessId ?? null);
     const row = await invRow(ctx, x);
-    return { owner: c.ownerEmail, vendor: vendor.name, row, expectedCents: x.mode === "hours" ? expectedCents(k) : null, brand: await mailBrandOf(ctx, x.businessId ?? null), link: `${SITE()}/vendors/${vendor._id}` };
+    return { owner: c.ownerEmail, vendor: vendor.name, row, expectedCents: x.mode === "hours" ? expectedCents(k) : null, brand: await mailBrandOf(ctx, x.businessId ?? null), link: `${SITE()}/vendors/payments/${x._id}` };
   },
 });
 export const mailInvoice = internalAction({
-  args: { invoiceId: v.id("vendorInvoices") },
-  handler: async (ctx, { invoiceId }) => {
+  args: { invoiceId: v.id("vendorInvoices"), sentAt: v.optional(v.number()) },
+  handler: async (ctx, { invoiceId, sentAt }) => {
     const d = await ctx.runQuery(internal.vendorPortal.invoiceMailData, { invoiceId });
     if (!d?.owner) return;
-    await deliverOnce(ctx, `vendor-invoice:${invoiceId}`, "vendor_invoice", d.owner, ownerVendorInvoiceMail(d.brand, {
+    await deliverOnce(ctx, sentAt ? `vendor-invoice:${invoiceId}:${sentAt}` : `vendor-invoice:${invoiceId}`, "vendor_invoice", d.owner, ownerVendorInvoiceMail(d.brand, {
       vendor: d.vendor, number: d.row.number, project: d.row.project, role: d.row.role, amount: d.row.mode === "hours" ? d.row.amount : "", totalCents: d.row.totalCents, expectedCents: d.expectedCents, link: d.link,
     }), d.brand.replyTo);
   },

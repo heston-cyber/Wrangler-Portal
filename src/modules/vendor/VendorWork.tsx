@@ -1,6 +1,7 @@
 // Phase 3c step 4 (part 2) · the vendor side's Invoices (S5 · Phase 3c 734:3958, Send an invoice 734:3527), Settings
 // (734:4386: their details, the W-9 for this business D100, how they're paid D101) and Review for booked editors
-// (734:4809, D93, D103). Approving and marking invoices paid is the owner's, in step 5.
+// (734:4809, D93, D103). Approving and marking invoices paid is the owner's (step 5, convex/vendorPayments.ts); an
+// invoice the owner declines comes back here to fix and send again.
 import { useContext, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -18,10 +19,12 @@ import { Ctx } from "./ctx";
 const Loading = () => <div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div>;
 const dollars = (c: number) => (c % 100 === 0 ? `$${(c / 100).toLocaleString("en-US")}` : money(c));
 const when = (t: number) => (new Date(t).toDateString() === new Date().toDateString() ? "today" : dateShort(t));
-const CHIP: Record<string, [Tone, string]> = { draft: ["neutral", "Draft"], sent: ["neutral", "Sent"], approved: ["danger", "Approved"], paid: ["success", "Paid"] };
+const CHIP: Record<string, [Tone, string]> = { draft: ["neutral", "Draft"], sent: ["neutral", "Sent"], approved: ["danger", "Approved"], paid: ["success", "Paid"], declined: ["warning", "Declined"] };
+const dayShort = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
 export const InvoiceChip = ({ status }: { status: string }) => <StatusChip tone={CHIP[status]?.[0] ?? "neutral"}>{CHIP[status]?.[1] ?? status}</StatusChip>;
-type Row = { _id: Id<"vendorInvoices">; number: string; status: string; projectName: string; role: string; amount: string; totalCents: number; sentAt: number | null; approvedAt: number | null; paidAt: number | null; paidMethod: string | null; updatedAt: number };
-const meta = (x: Row) => [x.projectName, x.role, x.amount, x.status === "paid" && x.paidAt ? `paid ${when(x.paidAt)}${x.paidMethod ? ` · ${x.paidMethod}` : ""}` : x.status === "approved" && x.approvedAt ? `approved ${when(x.approvedAt)}` : x.sentAt ? `sent ${when(x.sentAt)}` : "draft"].filter(Boolean).join(" · ");
+type Row = { _id: Id<"vendorInvoices">; number: string; status: string; projectName: string; role: string; amount: string; totalCents: number; sentAt: number | null; approvedAt: number | null; paidAt: number | null; paidOn: string | null; paidMethod: string | null; declinedAt: number | null; updatedAt: number };
+const meta = (x: Row) => [x.projectName, x.role, x.amount, x.status === "paid" && x.paidOn ? `paid ${dayShort(x.paidOn)}${x.paidMethod ? ` · ${x.paidMethod}` : ""}` : x.status === "approved" && x.approvedAt ? `approved ${when(x.approvedAt)}`
+  : x.status === "declined" && x.declinedAt ? `declined ${when(x.declinedAt)}` : x.status === "draft" ? "draft" : x.sentAt ? `sent ${when(x.sentAt)}` : "draft"].filter(Boolean).join(" · ");
 const rowOf = (x: Row, i: number) => <div key={x._id} className="wp-rowwrap">{i > 0 && <Divider />}
   <ListRow className="ilead" lead={{ icon: "invoice" }} to={`/vendor/invoices/${x._id}`} title={x.number} meta={meta(x)} trailing={money(x.totalCents)} chip={<InvoiceChip status={x.status} />} chevron /></div>;
 
@@ -41,7 +44,7 @@ export function HomeInvoices() {
 
 // ---------- Invoices (734:3958) ----------
 
-type Pill = "all" | "draft" | "sent" | "approved" | "paid";
+type Pill = "all" | "draft" | "declined" | "sent" | "approved" | "paid";
 export function VendorInvoices() {
   const { biz } = useContext(Ctx);
   const r = useQuery(api.vendorPortal.invoices, biz ? { businessId: biz } : "skip");
@@ -58,7 +61,7 @@ export function VendorInvoices() {
       <div className="wp-page">
         <PageHeader eyebrow={owner?.business} title="Invoices." sub={`Paid outside the portal for now; ${ownerFirst} marks each one paid.`} actions={<ButtonLink variant="primary" to="/vendor/invoices/new">Send an invoice</ButtonLink>} />
         {rows.length === 0 ? <EmptyState icon="invoice" title="No invoices yet." body="Send an invoice for a booking you've accepted: hours at the agreed rate, or line items." actions={<ButtonLink variant="primary" to="/vendor/invoices/new">Send an invoice</ButtonLink>} /> : <>
-          <PillTabs label="Show" value={pill} onChange={setPill} items={[{ key: "all", label: "All", count: count("all") }, ...(count("draft") ? [{ key: "draft" as Pill, label: "Draft", count: count("draft") }] : []), { key: "sent", label: "Sent", count: count("sent") }, { key: "approved", label: "Approved", count: count("approved") }, { key: "paid", label: "Paid", count: count("paid") }]} />
+          <PillTabs label="Show" value={pill} onChange={setPill} items={[{ key: "all", label: "All", count: count("all") }, ...(count("draft") ? [{ key: "draft" as Pill, label: "Draft", count: count("draft") }] : []), ...(count("declined") ? [{ key: "declined" as Pill, label: "Declined", count: count("declined") }] : []), { key: "sent", label: "Sent", count: count("sent") }, { key: "approved", label: "Approved", count: count("approved") }, { key: "paid", label: "Paid", count: count("paid") }]} />
           <Card label="Invoices">{shown.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "invoice" }} title="None here." /> : shown.map(rowOf)}</Card>
         </>}
       </div>
@@ -70,7 +73,7 @@ export function VendorInvoices() {
 
 type H = { label: string; qty: string };
 type L = { description: string; cents: number };
-export function InvoiceEditor({ bookingId, invoiceId }: { bookingId?: string | null; invoiceId?: string }) {
+export function InvoiceEditor({ bookingId, invoiceId, onCancel }: { bookingId?: string | null; invoiceId?: string; onCancel?: () => void }) {
   const { biz, setBiz } = useContext(Ctx);
   const f = useQuery(api.vendorPortal.invoiceForm, invoiceId ? { invoiceId } : biz ? { businessId: biz } : "skip");
   const save = useMutation(api.vendorPortal.saveInvoice);
@@ -103,6 +106,7 @@ export function InvoiceEditor({ bookingId, invoiceId }: { bookingId?: string | n
   const qty = hours.reduce((t, h) => t + (Number(h.qty) || 0), 0);
   const total = mode === "hours" ? Math.round(qty * (k?.rate.cents ?? 0)) : lines.reduce((t, l) => t + l.cents, 0);
   const ownerFirst = f.owner.split(" ")[0];
+  const fixing = f.invoice?.status === "declined"; // step 5: declined by the owner; fixed here and sent again
   const go = async (send: boolean) => {
     if (!k) return;
     setBusy(send ? "send" : "draft"); setErr(null);
@@ -110,17 +114,17 @@ export function InvoiceEditor({ bookingId, invoiceId }: { bookingId?: string | n
       const id = await save({ ...(f.invoice ? { invoiceId: f.invoice._id } : {}), bookingId: k._id, mode, send, ...(number.trim() ? { number } : {}), ...(note.trim() ? { note } : {}),
         hours: mode === "hours" ? hours.filter((h) => h.label.trim() || h.qty.trim()).map((h) => ({ label: h.label, qty: Number(h.qty) || 0 })) : [],
         lines: mode === "lines" ? lines.filter((l) => l.description.trim() || l.cents) : [] });
-      if (send) navigate(`/vendor/invoices/${id}`); else { show("Saved as a draft."); if (!f.invoice) navigate(`/vendor/invoices/${id}`); }
+      if (send) { navigate(`/vendor/invoices/${id}`); onCancel?.(); } else { show("Saved as a draft."); if (!f.invoice) navigate(`/vendor/invoices/${id}`); else onCancel?.(); }
     } catch (e) { setErr(errText(e)); } finally { setBusy(null); }
   };
   return (
     <>
       <TopBar><a {...linkProps("/vendor/invoices")}>Invoices</a><Sep /><span className="here">{f.invoice ? f.invoice.number : "New invoice"}</span></TopBar>
       <div className="wp-page">
-        <PageHeader eyebrow={f.business} title="Send an invoice." sub={`It goes to ${f.owner} for approval. You'll see Sent · Approved · Paid here.`}
-          actions={<>{f.invoice && <Button variant="ghost" onClick={async () => { if (!(await confirm({ title: "Delete this draft?", body: "It hasn't been sent.", yes: "Delete" }))) return; await del({ invoiceId: f.invoice!._id }); navigate("/vendor/invoices"); }}>Delete draft</Button>}
+        <PageHeader eyebrow={f.business} title={fixing ? "Fix and send again." : "Send an invoice."} sub={fixing ? `${ownerFirst} declined it: ${f.invoice!.declineReason ?? "no reason given"}` : `It goes to ${f.owner} for approval. You'll see Sent · Approved · Paid here.`}
+          actions={<>{fixing && onCancel && <Button variant="ghost" onClick={onCancel}>Cancel</Button>}{f.invoice && !fixing && <Button variant="ghost" onClick={async () => { if (!(await confirm({ title: "Delete this draft?", body: "It hasn't been sent.", yes: "Delete" }))) return; await del({ invoiceId: f.invoice!._id }); navigate("/vendor/invoices"); }}>Delete draft</Button>}
             <Button loading={busy === "draft"} disabled={!k} onClick={() => void go(false)}>Save draft</Button>
-            <Button variant="primary" loading={busy === "send"} disabled={!k || total <= 0} onClick={() => void go(true)}>Send invoice</Button></>} />
+            <Button variant="primary" loading={busy === "send"} disabled={!k || total <= 0} onClick={() => void go(true)}>{fixing ? "Send again" : "Send invoice"}</Button></>} />
         {f.bookings.length === 0 ? <EmptyState icon="calendar" title="Nothing to invoice yet." body={`Invoices are for bookings you've accepted with ${f.business}.`} actions={<ButtonLink to="/vendor/bookings">Your bookings</ButtonLink>} /> : (
           <div className="wp-homecols">
             <div className="col">
@@ -187,12 +191,15 @@ export function InvoiceEditor({ bookingId, invoiceId }: { bookingId?: string | n
 export function VendorInvoice({ invoiceId }: { invoiceId: string }) {
   const { biz, setBiz } = useContext(Ctx);
   const x = useQuery(api.vendorPortal.invoice, { invoiceId });
+  const [fix, setFix] = useState(false);
   useEffect(() => { if (x && x.businessId !== biz) setBiz(x.businessId); }, [x?.businessId]); // eslint-disable-line react-hooks/exhaustive-deps
   if (x === undefined) return <Loading />;
   if (x === null) return <div className="wp-page"><EmptyState icon="invoice" title="This invoice isn't here." body="It may be for another login, or the business took you off its list." actions={<ButtonLink to="/vendor/invoices">Your invoices</ButtonLink>} /></div>;
   if (x.status === "draft") return <InvoiceEditor invoiceId={x._id} />;
+  if (x.status === "declined" && fix) return <InvoiceEditor invoiceId={x._id} onCancel={() => setFix(false)} />;
   const ownerFirst = x.owner.split(" ")[0];
-  const where = x.status === "paid" ? `${ownerFirst} marked it paid ${x.paidAt ? dateShort(x.paidAt) : ""}${x.paidMethod ? ` (${x.paidMethod})` : ""}.` : x.status === "approved" ? `${ownerFirst} approved it ${x.approvedAt ? dateShort(x.approvedAt) : ""}. You'll get an email when it's paid.` : `Sent ${x.sentAt ? dateShort(x.sentAt) : ""}. Waiting for ${ownerFirst} to approve it.`;
+  const where = x.status === "paid" ? `${ownerFirst} marked it paid${x.paidOn ? ` on ${dayShort(x.paidOn)}` : ""}${x.paidMethod ? ` (${x.paidMethod})` : ""}${x.paidCents !== null && x.paidCents !== x.totalCents ? `: ${money(x.paidCents)}` : ""}. It counts toward your ${(x.paidOn ?? "").slice(0, 4)} total with ${x.business}.`
+    : x.status === "declined" ? `${ownerFirst} declined it ${x.declinedAt ? dateShort(x.declinedAt) : ""}: ${x.declineReason ?? "no reason given"}. Fix it and send it again.` : x.status === "approved" ? `${ownerFirst} approved it ${x.approvedAt ? dateShort(x.approvedAt) : ""}. You'll get an email when it's paid.` : `Sent ${x.sentAt ? dateShort(x.sentAt) : ""}. Waiting for ${ownerFirst} to approve it.`;
   return (
     <>
       <TopBar><a {...linkProps("/vendor/invoices")}>Invoices</a><Sep /><span className="here">{x.number}</span></TopBar>
@@ -211,7 +218,8 @@ export function VendorInvoice({ invoiceId }: { invoiceId: string }) {
             </Card>
           </div>
           <div className="col right">
-            <Card label="Where it stands" head={<SectionHead label="Where it stands" />}><p className="wp-body vd-pad">{where}</p></Card>
+            <Card label="Where it stands" head={<SectionHead label="Where it stands" />}><div className="vd-pad"><p className="wp-body">{where}</p>
+              {x.status === "declined" && <Button variant="primary" onClick={() => setFix(true)}>Fix and send again</Button>}</div></Card>
           </div>
         </div>
       </div>

@@ -126,6 +126,9 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "vendorPortal.invoice": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only; tests/vendorPortal.test.ts fires them)
   "vendorPortal.settings": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only; tests/vendorPortal.test.ts fires them)
   "vendors.invoices": { pages: ["owner"], args: () => "skip" }, // a vendor page's Invoices and payments
+  "vendorPayments.list": { pages: ["owner"], args: () => "skip" }, // Vendors › Payments
+  "vendorPayments.totals1099": { pages: ["owner"], args: () => "skip" }, // Vendors › Payments › 1099
+  "vendorPayments.get": { pages: ["owner"], args: () => "skip" }, // a vendor invoice
   "proposals.page": { pages: ["share"], args: () => ({ token: "x".repeat(24) }) }, // /p/<token>, no account (D73)
   "brandKit.get": { pages: ["owner"], args: () => "skip" }, // Settings › Brand kit, a company's Brand kit tab (Phase 3b)
   "subscriptions.get": { pages: ["owner"], args: () => "skip" }, // a subscription

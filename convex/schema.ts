@@ -946,11 +946,19 @@ export default defineSchema({
     rate: v.object({ cents: v.number(), unit: v.union(v.literal("day"), v.literal("hour")) }), // the booking's agreed rate when sent
     totalCents: v.number(),
     note: v.optional(v.string()),
-    status: v.union(v.literal("draft"), v.literal("sent"), v.literal("approved"), v.literal("paid")),
+    status: v.union(v.literal("draft"), v.literal("sent"), v.literal("approved"), v.literal("paid"), v.literal("declined")),
     sentAt: v.optional(v.number()),
     approvedAt: v.optional(v.number()),
-    paidAt: v.optional(v.number()),
+    approvedBy: v.optional(v.string()),
+    ledgerEntryId: v.optional(v.id("ledgerEntries")),     // step 5: the actual cost Approve added to the project's Ledger
+    declinedAt: v.optional(v.number()),                   // step 5: the owner declined it (with a reason); the vendor can fix and resend
+    declineReason: v.optional(v.string()),
+    paidAt: v.optional(v.number()),                       // when Mark paid was pressed
+    paidOn: v.optional(v.string()),                       // step 5: the day they say they paid (YYYY-MM-DD): the 1099 year
+    paidCents: v.optional(v.number()),                    // what they say they paid (the total unless changed)
     paidMethod: v.optional(v.string()),
+    paidRef: v.optional(v.string()),                      // "Confirmation 000000" (optional)
+    history: v.optional(v.array(v.object({ at: v.number(), text: v.string() }))),
     seenAt: v.optional(v.number()),                       // the owner opened it (the Home alert stays until approved)
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -978,6 +986,7 @@ export default defineSchema({
     note: v.optional(v.string()),
     date: v.string(),
     draft: v.optional(v.boolean()),              // drafted by Claude from notes: counts once confirmed (D67)
+    vendorInvoiceId: v.optional(v.id("vendorInvoices")), // Phase 3c step 5: added by approving a vendor's invoice
     createdBy: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_project", ["projectId"]),

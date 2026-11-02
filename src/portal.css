@@ -2357,3 +2357,30 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 .vi-add { justify-self: start; color: var(--accent); display: inline-flex; align-items: center; gap: 6px; }
 .vi-total { border-top: 1px solid var(--border-hairline); margin-top: 6px; padding-top: 10px; }
 @media (max-width: 600px) { .vi-row { grid-template-columns: minmax(0, 1fr) 96px auto; } }
+
+/* Phase 3c step 5 · Vendors › Payments (730:5246, 730:5780) and a vendor invoice (731:2198 · 731:2769 · 731:3341) */
+.wp-utabs + .wp-card, .wp-utabs + .vpay-bar, .wp-utabs + .wp-empty { margin-top: 16px; }
+.vpay-note { margin-top: 16px; }
+.vp-review { pointer-events: none; }
+.vpay-bar { display: flex; align-items: center; gap: 16px; margin: 16px 0; flex-wrap: wrap; }
+.vpay-bar > p { flex: 1 1 220px; margin: 0; }
+.vpay-year select { min-width: 120px; }
+.vpay-head { display: flex; align-items: center; gap: 12px; padding: 18px 20px; }
+.vpay-head .txt { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.vpay-head .txt b { font-weight: 500; }
+.vpay-num { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; }
+.vpay-num .wp-eyebrow-sm { font: 500 11px/1.2 var(--font-body); letter-spacing: .08em; text-transform: uppercase; }
+.vpay-num b { font-weight: 500; }
+.vpay-line { padding-top: 10px; padding-bottom: 10px; }
+.vpay-line > span:last-child { white-space: nowrap; }
+.vpay-total { font-size: 1.25em; }
+.vpay-actions { display: flex; flex-direction: column; gap: 10px; padding-top: 12px; }
+.vpay-actions > .btn { width: 100%; justify-content: center; }
+.vpay-actions p { margin: 0; }
+.vpay-when { white-space: nowrap; }
+.vpay-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 560px) {
+  .vpay-two { grid-template-columns: 1fr; }
+  .vpay-head { flex-wrap: wrap; }
+  .vpay-line { flex-wrap: wrap; }
+}
