@@ -101,6 +101,7 @@ export default function Builder({ mode }: { mode: Mode }) {
   const setBriefingBooking = useMutation(api.briefings.setBooking);
   const [toast, show] = useToast();
   const [sending, setSending] = useState(false);
+  const [askBrief, setAskBrief] = useState(false); // Heston, Nov 2: ask before a briefing goes out, as proposals do
   const [contracting, setContracting] = useState(false);
 
   const [doc, setDocRaw] = useState<BuildDoc | null>(null);
@@ -405,11 +406,15 @@ export default function Builder({ mode }: { mode: Mode }) {
   };
   // Briefings: Send to {vendor} (731:3904) checks it, saves, freezes the PDF and emails them (email 25).
   const recipient = brief?.recipients.find((r) => r._id === brief.bookingId) ?? null;
-  const onSendBriefing = async () => {
+  const onAskBriefing = () => {
     if (!brief) return;
     const p = [...(recipient ? [] : ["Pick who it's for (Send to, under Insert)."]), ...briefingProblems(doc)];
     if (p.length) { setProblems(p); setTab(recipient ? "details" : "insert"); if (phone) setSheet(true); show(p[0]); return; }
-    setProblems(null); setBusy("brief");
+    setProblems(null); setAskBrief(true);
+  };
+  const onSendBriefing = async () => {
+    if (!brief || !recipient) return;
+    setBusy("brief");
     try {
       const sent = doc;
       await saveBuild({ buildId: brief.buildId, title: sent.title, blocks: sent.page, fields: sent.fields, signers: sent.signers, style: sent.style });
@@ -417,7 +422,8 @@ export default function Builder({ mode }: { mode: Mode }) {
       const blob = await render();
       const storageId = await uploadToStorage(await uploadUrl({}), new File([blob], `${doc.title}.pdf`, { type: "application/pdf" }));
       const r = await sendBriefing({ briefingId: brief._id, storageId });
-      show(r.held ? "Saved as sent, but the email was held (email sending is limited on this site)." : `Sent to ${recipient!.name.split(" ")[0]}`);
+      setAskBrief(false);
+      show(r.held ? "Saved as sent, but the email was held (email sending is limited on this site)." : `Sent to ${recipient.name.split(" ")[0]}`);
     } catch (e) { show(errText(e)); } finally { setBusy(null); }
   };
   const onPickRecipient = async (bookingId: string) => {
@@ -473,7 +479,7 @@ export default function Builder({ mode }: { mode: Mode }) {
         <Button variant="ghost" size="sm" className="hide-sm" loading={busy === "preview"} onClick={() => void onPreview()} iconEnd="external">Preview PDF</Button>
         {brief ? <>
           {!locked && <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setAsTemplate(true)}>Save as briefing template</Button>}
-          {!locked ? <Button variant="primary" size="sm" loading={busy === "brief"} onClick={() => void onSendBriefing()}>{recipient ? `Send to ${recipient.name.split(" ")[0]}` : "Send"}</Button>
+          {!locked ? <Button variant="primary" size="sm" onClick={onAskBriefing}>{recipient ? `Send to ${recipient.name.split(" ")[0]}` : "Send"}</Button>
             : <><Button variant="ghost" size="sm" className="hide-sm" loading={busy === "copy"} onClick={() => void onCopy()}>Make a copy</Button><Button variant="secondary" size="sm" loading={busy === "resend"} onClick={() => void onResend()}>Send again</Button></>}
         </> : prop ? <>
           {!locked && <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setAsTemplate(true)}>Save as proposal template</Button>}
@@ -602,6 +608,7 @@ export default function Builder({ mode }: { mode: Mode }) {
       {asTemplate && <SaveTemplate doc={doc} proposal={isProp} briefing={isBrief} onClose={() => setAsTemplate(false)} onSave={async (name, description) => {
         try { await saveAsTemplate({ name, description, title: doc.title, blocks: doc.page, fields: doc.fields, signers: [], style: doc.style, ...(isProp ? { kind: "proposal" as const } : isBrief ? { kind: "briefing" as const } : {}) }); setAsTemplate(false); show(`Saved as the ${isProp ? "proposal " : isBrief ? "briefing " : ""}template "${name}"`); } catch (e) { show(errText(e)); }
       }} />}
+      {askBrief && brief && recipient && <SendBriefing b={brief} to={recipient} busy={busy === "brief"} onClose={() => setAskBrief(false)} onSend={() => void onSendBriefing()} />}
       {sending && prop && <SendProposal p={prop} doc={doc} onClose={() => setSending(false)} onSend={onSend} />}
       {contracting && prop && <StartContract p={prop} doc={doc} onClose={() => setContracting(false)} onStart={onStartContract} />}
       {tdrag && <>
@@ -869,5 +876,21 @@ function BriefingSendTo({ b, locked, onPick }: { b: BriefingInfo; locked: boolea
         <p className="caption secondary">{b.recipients.length ? "Only vendors booked on this project can get it. They see it in their portal and press “I’ve read it”." : "No one is booked on this project now. Book a vendor first."}</p>
       </>}
     </div>
+  );
+}
+
+function SendBriefing({ b, to, busy, onClose, onSend }: { b: BriefingInfo; to: BriefingInfo["recipients"][number]; busy: boolean; onClose: () => void; onSend: () => void }) {
+  const first = to.name.split(" ")[0];
+  return (
+    <Modal onClose={onClose} label="Send the briefing" width={520}>
+      <div className="crm-dialog">
+        <DialogHeader eyebrow={`Send · ${b.kindName}`} title={`Send the briefing to ${first}?`} body={`${first} gets an email with a link to read it in their vendor portal and press “I’ve read it”. It can’t change once it’s sent; make a copy to send a new version.`} onClose={onClose} />
+        <div className="wp-field"><span className="wp-field-label">To</span><div className="pr-to"><Icon name="mail" size={16} />{to.name} · {to.role} · {to.dates}</div></div>
+        <div className="dfoot">
+          <button className="btn ghost" type="button" onClick={onClose}>Cancel</button>
+          <Button variant="primary" loading={busy} onClick={onSend}>Send briefing</Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
