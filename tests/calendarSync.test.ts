@@ -431,6 +431,11 @@ describe("T5b.4 calendar sync", () => {
 
   test("times: Google's forms to the portal's and back", () => {
     expect(fromGoogle({ dateTime: "2026-11-05T15:00:00Z" }, { dateTime: "2026-11-05T22:00:00Z" })).toEqual({ date: "2026-11-05", endDate: "2026-11-05", start: "09:00", end: "16:00" });
+    // A dateTime with no offset is read in its own timeZone, never the server's (Nov 3: failed in UTC CI).
+    expect(fromGoogle({ dateTime: "2026-11-05T17:00:00", timeZone: "America/Chicago" }, { dateTime: "2026-11-05T18:30:00", timeZone: "America/Chicago" })).toEqual({ date: "2026-11-05", endDate: "2026-11-05", start: "17:00", end: "18:30" });
+    expect(fromGoogle({ dateTime: "2026-11-05T17:00:00", timeZone: "America/New_York" }, { dateTime: "2026-11-05T18:00:00", timeZone: "America/New_York" })).toEqual({ date: "2026-11-05", endDate: "2026-11-05", start: "16:00", end: "17:00" });
+    expect(fromGoogle({ dateTime: "2026-03-08T03:30:00", timeZone: "America/Chicago" }, undefined)).toMatchObject({ date: "2026-03-08", start: "03:30" }); // the spring-forward day
+    expect(fromGoogle({ dateTime: "2026-11-05T17:00:00", timeZone: "Not/AZone" }, undefined)).toMatchObject({ start: "17:00" }); // unknown zone: the business's
     expect(fromGoogle({ date: "2026-11-26" }, { date: "2026-11-28" })).toEqual({ date: "2026-11-26", endDate: "2026-11-27" });
     expect(fromGoogle({ dateTime: "2026-11-05T22:00:00-06:00" }, { dateTime: "2026-11-06T00:00:00-06:00" })).toEqual({ date: "2026-11-05", endDate: "2026-11-05", start: "22:00", end: "23:59" });
     expect(toGoogle({ date: "2026-11-26", endDate: "2026-11-27" })).toEqual({ start: { date: "2026-11-26" }, end: { date: "2026-11-28" } });
