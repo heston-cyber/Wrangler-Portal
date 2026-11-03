@@ -23,6 +23,7 @@ import { applyScan } from "./lib/wsMarkers";
 import { OWNER_KEY, docLabel, type LayoutBox, type LayoutSigner } from "./lib/wsLayout";
 import { safeFileName } from "./lib/wsFinal";
 import { withoutPrices } from "./lib/wsProposal";
+import { withoutPeople } from "./lib/callSheet";
 
 const errText = (e: unknown) => String((e as Error)?.message ?? e).replace(/^.*ConvexError: /, "").split("\n")[0].slice(0, 300);
 function tooBig(...xs: unknown[]) { if (JSON.stringify(xs).length > MAX_BUILD_JSON) throw new ConvexError("That's too much content for one document."); }
@@ -32,8 +33,12 @@ const clean = (s: string, n = 120) => s.trim().slice(0, n);
 const isProposal = (x: { kind?: string } | null | undefined) => x?.kind === "proposal";
 // Phase 3c: briefings (D97) too: their own kind, kept out of Docs, never signed, locked once sent.
 const isBriefing = (x: { kind?: string } | null | undefined) => x?.kind === "briefing";
-const isSide = (x: { kind?: string } | null | undefined) => isProposal(x) || isBriefing(x);
+// Phase 5b step 3: call sheets too: their own kind, kept out of Docs, never signed. They stay editable after they're
+// sent (everyone reads the copy frozen at Send; "Send an update" sends the new one).
+const isCallSheet = (x: { kind?: string } | null | undefined) => x?.kind === "callsheet";
+const isSide = (x: { kind?: string } | null | undefined) => isProposal(x) || isBriefing(x) || isCallSheet(x);
 async function assertEditable(ctx: QueryCtx, b: { _id: Id<"wsBuilds">; kind?: string }) {
+  if (isCallSheet(b)) return;
   if (isBriefing(b)) {
     const br = await ctx.db.query("briefings").withIndex("by_build", (q) => q.eq("buildId", b._id)).first();
     if (br && br.status !== "draft") throw new ConvexError("This briefing has been sent, so it can't change. Make a copy to change it.");
@@ -102,6 +107,7 @@ export const createBuild = mutation({
     if (templateId && !t) throw new ConvexError("That template doesn't exist.");
     if (isProposal(t)) throw new ConvexError("That's a proposal template. Use it from Proposals.");
     if (isBriefing(t)) throw new ConvexError("That's a briefing template. Use it from Vendors › Briefings.");
+    if (isCallSheet(t)) throw new ConvexError("That's a call sheet template. Use it from Production › Call sheets.");
     const fields: Fields = t ? { ...emptyFields(business), ...(t.fields as Partial<Fields>), business, client: emptyFields(business).client, date: emptyFields(business).date } : emptyFields(business);
     const blocks: Page = t ? freshIds(pageOf(t.blocks)) : { type: "doc", content: [
       line("Untitled document", { size: "title" }),
@@ -145,6 +151,7 @@ export const deleteBuild = mutation({
     if (!b) return null;
     if (isProposal(b)) throw new ConvexError("This is a proposal. Delete it from Proposals.");
     if (isBriefing(b)) throw new ConvexError("This is a briefing. Delete it from Vendors › Briefings.");
+    if (isCallSheet(b)) throw new ConvexError("This is a call sheet. Delete it from Production › Call sheets.");
     if (b.documentId && (await ctx.db.get(b.documentId))) throw new ConvexError("This one has gone to signing; it stays with its document.");
     await ctx.db.delete(buildId);
     return null;
@@ -189,6 +196,7 @@ export async function toSigningCore(ctx: ActionCtx, buildId: Id<"wsBuilds">, sto
   if (!r) { await ctx.storage.delete(storageId); throw new Error("That document doesn't exist."); }
   if (isProposal(r.build)) { await ctx.storage.delete(storageId); throw new Error("Proposals aren't signed. Send it from Proposals; once it's accepted, Start the contract makes the agreement."); }
   if (isBriefing(r.build)) { await ctx.storage.delete(storageId); throw new Error("Briefings aren't signed. Send it from Vendors › Briefings; the vendor presses “I’ve read it”."); }
+  if (isCallSheet(r.build)) { await ctx.storage.delete(storageId); throw new Error("Call sheets aren't signed. Send it from Production › Call sheets."); }
   const d: BuildDoc = { title: r.build.title, page: pageOf(r.build.blocks), fields: r.build.fields as Fields, signers: (r.build.signers as ExtraSigner[]) ?? [], style: r.build.style as Style };
   const problems = buildProblems(d);
   if (problems.length) { await ctx.storage.delete(storageId); throw new Error(problems[0]); }
@@ -245,7 +253,7 @@ export const getTemplate = query({
 });
 
 export const saveAsTemplate = mutation({
-  args: { name: v.string(), description: v.optional(v.string()), kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"))), ...docArgs },
+  args: { name: v.string(), description: v.optional(v.string()), kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"), v.literal("callsheet"))), ...docArgs },
   handler: async (ctx, a) => {
     await requireMe(ctx);
     tooBig(a.blocks, a.fields, a.style);
@@ -256,7 +264,9 @@ export const saveAsTemplate = mutation({
     const fields = { project: f?.project ?? "", custom: (f?.custom ?? []).map((c) => ({ key: c.key, label: c.label, value: "" })) };
     const now = Date.now();
     // A proposal template keeps the wording and lines, never the prices (they come from Settings › Pricing each time).
-    const blocks = a.kind === "proposal" && isPage(a.blocks) && !Array.isArray(a.blocks) ? withoutPrices(a.blocks as Page) : a.blocks;
+    // A call sheet template keeps the layout, not the people (765:3564).
+    const blocks = a.kind === "proposal" && isPage(a.blocks) && !Array.isArray(a.blocks) ? withoutPrices(a.blocks as Page)
+      : a.kind === "callsheet" && isPage(a.blocks) && !Array.isArray(a.blocks) ? withoutPeople(a.blocks as Page) : a.blocks;
     return ctx.db.insert("wsTemplates", { name, description: clean(a.description ?? "", 300) || undefined, ...(a.kind ? { kind: a.kind } : {}), blocks, fields, style: a.style, createdAt: now, updatedAt: now });
   },
 });

@@ -43,6 +43,7 @@ export const NOTICES: Notice[] = [
   // ---------- to a vendor ----------
   { key: "bookings", side: "vendor", group: "Bookings", label: "A new booking, or a booking is cancelled", kinds: ["booking_offer", "booking_cancelled"] },
   { key: "briefings", side: "vendor", group: "Briefings", label: "A briefing is sent to you", kinds: ["briefing"] },
+  { key: "vendor_call_sheets", side: "vendor", group: "Call sheets", label: "A call sheet is sent to you, or updated", hint: "With reminders when you haven't opened one yet.", kinds: ["vendor_callsheet", "vendor_callsheet_update"] }, // Phase 5b step 3
   { key: "invoice_updates", side: "vendor", group: "Invoices", label: "Your invoice is approved, declined or paid", kinds: ["vendor_invoice_approved", "vendor_invoice_declined", "vendor_invoice_paid", "vendor_payout_returned"] },
   { key: "vendor_payout_setup", side: "vendor", group: "Your account", label: "A business asks you to set up direct deposit", kinds: ["vendor_payout_setup"], always: true },
   { key: "vendor_invite", side: "vendor", group: "Your account", label: "Invites from a business", kinds: ["vendor_invite"], always: true },
@@ -56,6 +57,7 @@ export const NOTICES: Notice[] = [
   { key: "subscription_upcoming", side: "client", group: "Payments", label: "A subscription charge is coming up", kinds: ["subscription-upcoming"] },
   { key: "client_bills", side: "client", group: "Payments", label: "Invoices, receipts, overdue notices and failed payments", kinds: ["invoice", "invoice-reminder-overdue", "invoice-reminder-manual", "receipt", "payment-failed", "subscription", "subscription-failed", "subscription-cancelled"], always: true },
   { key: "client_shoots", side: "client", group: "Shoots and files", label: "Shoots scheduled or moved, files asked for, and the kickoff brief", hint: "They ask you to confirm, upload or answer, so they always arrive.", kinds: ["shoot", "file_request", "brief"], always: true },
+  { key: "call_sheets", side: "client", group: "Shoots and files", label: "A call sheet is sent to you, or updated", hint: "With reminders when you haven't opened one yet.", kinds: ["callsheet", "callsheet_update"] }, // Phase 5b step 3
   { key: "files_due", side: "client", group: "Shoots and files", label: "A reminder the day before files are due", hint: "Only when nothing has been uploaded yet.", kinds: ["files_due"] },
   { key: "footage_offer", side: "client", group: "Delivery", label: "An offer to keep your raw footage after delivery", kinds: ["footage_offer"] },
   { key: "client_docs", side: "client", group: "Documents", label: "Quotes, proposals, documents to sign and signed copies", kinds: ["quote", "proposal", "ws-sign", "ws-reminder", "ws-cancelled", "ws-copy", "ws-code"], always: true },

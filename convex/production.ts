@@ -22,9 +22,13 @@ export async function shootRows(ctx: QueryCtx, shoots: Shoot[]) {
     if (!p) continue;
     const ck = String(p.clientId ?? "");
     if (!clients.has(ck)) clients.set(ck, p.clientId ? (await ctx.db.get(p.clientId))?.name ?? null : null);
+    // Phase 5b step 3: its call sheet, if it has one (NO CALL SHEET · DRAFT · SENT · N OF M OPENED).
+    const cs = await ctx.db.query("callSheets").withIndex("by_shoot", (q) => q.eq("shootId", s._id)).first();
+    const sentTo = cs ? cs.recipients.filter((r) => r.sentAt && r.kind !== "guest") : [];
     out.push({
       _id: s._id, projectId: p._id, project: p.name, label: label(p), client: clients.get(ck) ?? null,
       date: s.date, call: s.call, location: s.location, crew: s.crew.length, confirmed: !!s.confirmed, moved: !!s.moved,
+      sheet: cs ? { _id: cs._id, state: cs.status === "sent" ? "sent" as const : "draft" as const, opened: sentTo.filter((r) => r.openedAt).length, of: sentTo.length, people: cs.recipients.filter((r) => r.on).length } : null,
     });
   }
   return out;
@@ -69,9 +73,15 @@ export const overview = query({
     }
     items.sort((a, b) => a.date.localeCompare(b.date) || (a.kind === b.kind ? 0 : a.kind === "shoot" ? -1 : 1));
     const cal = await ctx.db.query("calendars").first();
+    // Phase 5b step 3: the Call sheets tile and card.
+    const sheets = await ctx.db.query("callSheets").collect();
+    const withSheet = new Set(sheets.map((c) => String(c.shootId)));
+    const sentWeek = sheets.filter((c) => c.sentAt && c.sentAt >= Date.now() - 7 * 86_400_000).length;
+    const templates = (await ctx.db.query("wsTemplates").collect()).filter((t) => t.kind === "callsheet").length;
     return {
       today,
-      tiles: { today: todays.length, todayFirst: todays[0] ? (await shootRows(ctx, [todays[0]]))[0] ?? null : null, week: week.length, edits: edits.length },
+      tiles: { today: todays.length, todayFirst: todays[0] ? (await shootRows(ctx, [todays[0]]))[0] ?? null : null, week: week.length, weekNoSheet: week.filter((s) => !withSheet.has(String(s._id))).length, edits: edits.length },
+      callSheets: { notSent: sheets.filter((c) => c.status === "draft").length, sentWeek, templates },
       shoots: (await shootRows(ctx, upcoming.slice(0, 5))),
       shootsTotal: upcoming.length,
       edits: edits.slice(0, 6),
@@ -90,7 +100,8 @@ export const shoots = query({
     const all = await scheduled(ctx);
     const upcoming = all.filter((s) => s.date >= today);
     const past = all.filter((s) => s.date < today).reverse().slice(0, 100);
-    return { today, upcoming: await shootRows(ctx, upcoming), past: await shootRows(ctx, past), pastTotal: all.length - upcoming.length };
+    const up = await shootRows(ctx, upcoming);
+    return { today, upcoming: up, past: await shootRows(ctx, past), pastTotal: all.length - upcoming.length, needsSheet: up.filter((s) => s.sheet?.state !== "sent").length };
   },
 });
 

@@ -4,6 +4,7 @@ import { createContext, useContext } from "react";
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import { BookmarkPlus, Plus, X } from "lucide-react";
 import { fill, money, type BuildDoc, type ItemRow, type PNode, newId, totals } from "../../../../../convex/lib/wsBuilder";
+import { locationOf, type LocationAttrs } from "../../../../../convex/lib/callSheet";
 
 export type BuilderCtxValue = {
   doc: BuildDoc;
@@ -101,6 +102,42 @@ function Atom({ node, updateAttributes, ctx }: NodeViewProps & { ctx: BuilderCtx
     case "divider": return <div className={`wsb-sep ${doc.style.separator}`} title="Divider (its look is set in Style › Separator)" />;
     case "pagebreak": return <div className="wsb-break"><span>Page break</span></div>;
     case "spacer": return <div className="wsb-spacer" style={{ height: px(Number(a.size) || 18) }} title="Space (set its height in Format)" />;
+    // Phase 5b step 3: the call sheet's blocks, edited where they sit.
+    case "location": {
+      const l = locationOf(node.toJSON() as PNode);
+      const set = (p: Partial<LocationAttrs>) => updateAttributes({ ...l, ...p });
+      const inp = (k: keyof LocationAttrs, ph: string, type = "text") => <input type={type} value={String(l[k] ?? "")} placeholder={ph} aria-label={ph} onChange={(e) => set({ [k]: e.target.value } as Partial<LocationAttrs>)} />;
+      return (
+        <div className="wsb-cs-loc">
+          <div><span className="wsb-cap">Call times</span>
+            <label>Crew {inp("crewCall", "Crew call", "time")}</label><label>Talent {inp("talentCall", "Talent call", "time")}</label><label>Wrap {inp("wrap", "Wrap", "time")}</label></div>
+          <div><span className="wsb-cap">Location</span>
+            {inp("name", "Place name")}{inp("address", "Address")}{inp("parking", "Parking and load-in")}
+            <label className="wsb-check"><input type="checkbox" checked={!!l.weather} onChange={(e) => set({ weather: e.target.checked })} />Add the weather the day before</label></div>
+        </div>
+      );
+    }
+    case "schedule": case "crew": case "contacts": {
+      const cols: Array<[string, string, string]> = node.type.name === "schedule" ? [["time", "Time", "time"], ["what", "What happens", "text"], ["who", "Who", "text"], ["notes", "Notes", "text"]]
+        : node.type.name === "crew" ? [["name", "Name", "text"], ["role", "Role", "text"], ["call", "Call", "time"], ["phone", "Phone", "tel"]]
+        : [["label", "Who", "text"], ["name", "Name", "text"], ["phone", "Phone", "tel"]];
+      type Row = Record<string, string> & { id: string };
+      const rows = (a.rows as Row[]) ?? [];
+      const set = (r: Row[]) => updateAttributes({ rows: r });
+      const blank = () => ({ id: newId(), ...Object.fromEntries(cols.map(([k]) => [k, ""])) }) as Row;
+      return (
+        <table className={`wsb-items wsb-cs-table wsb-cs-${node.type.name}`}>
+          <thead><tr>{cols.map(([k, label]) => <th key={k}>{label}</th>)}<th /></tr></thead>
+          <tbody>{rows.map((r) => (
+            <tr key={r.id}>
+              {cols.map(([k, label, type]) => <td key={k}><input type={type} value={r[k] ?? ""} placeholder={label} aria-label={label} onChange={(e) => set(rows.map((x) => (x.id === r.id ? { ...x, [k]: e.target.value } : x)))} /></td>)}
+              <td><button type="button" className="icon-btn" aria-label="Remove row" onClick={() => set(rows.filter((x) => x.id !== r.id))}><X size={13} /></button></td>
+            </tr>
+          ))}</tbody>
+          <tfoot><tr><td colSpan={cols.length + 1}><button type="button" className="btn ghost sm" onClick={() => set([...rows, blank()])}><Plus size={13} />Add a row</button></td></tr></tfoot>
+        </table>
+      );
+    }
     default: return null;
   }
 }

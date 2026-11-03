@@ -22,6 +22,7 @@ import { PAY_METHODS, looksLikeAccount, bookingState, daysIn, expectedCents, tod
 import { label, paidAmount, paidDay } from "./lib/bookingRows";
 import { prefRow, setSwitch, viewFor } from "./lib/notifyPrefs";
 import { sideOf } from "./lib/roles";
+import { markOpened, readerView, sentToVendor } from "./callSheets";
 
 type Ctx = QueryCtx | MutationCtx;
 
@@ -554,6 +555,58 @@ export const setW9 = mutation({
     await ctx.db.patch(vendor._id, { w9: { fileId: a.storageId, name: clip(a.name, 120) || "W-9.pdf", uploadedAt: Date.now() }, updatedAt: Date.now() });
     await ctx.scheduler.runAfter(0, internal.vendorPortal.mailOwner, { what: old ? "w9-replaced" : "w9", id: a.storageId }); // Nov 2
     if (old && old !== a.storageId) await ctx.storage.delete(old).catch(() => null);
+    return null;
+  },
+});
+
+// ---------- Phase 5b step 3 (Nov 3): call sheets sent to this vendor (read in the portal; email 40's link) ----------
+
+/** One call sheet: the copy that was sent, only while they're still booked on the project. */
+export const callSheet = query({
+  args: { callSheetId: v.string() },
+  handler: async (ctx, { callSheetId }) => {
+    await myBusinesses(ctx);
+    const id = ctx.db.normalizeId("callSheets", callSheetId);
+    const cs = id ? await ctx.db.get(id) : null;
+    const me = await mine(ctx, cs, () => true);
+    if (!me || !cs) return null;
+    const r = await sentToVendor(ctx, cs, me.vendor._id);
+    if (!r) return null;
+    const view = await readerView(ctx, cs, r);
+    return view ? { businessId: me.biz, ...view } : null;
+  },
+});
+
+/** The call sheets sent to them by one business (their Home). */
+export const callSheets = query({
+  args: { businessId: v.id("businesses") },
+  handler: async (ctx, { businessId }) => {
+    const { vendor } = await asVendor(ctx, businessId);
+    const out: Array<{ _id: Id<"callSheets">; project: string; date: string; opened: boolean; sentAt: number }> = [];
+    for (const k of await myBookings(ctx, vendor._id)) {
+      for (const cs of await ctx.db.query("callSheets").withIndex("by_project", (q) => q.eq("projectId", k.projectId)).collect()) {
+        if (out.some((x) => x._id === cs._id)) continue;
+        const r = await sentToVendor(ctx, cs, vendor._id);
+        const s = r ? await ctx.db.get(cs.shootId) : null;
+        const p = s ? await ctx.db.get(s.projectId) : null;
+        if (r && s && p && s.status === "scheduled" && s.date >= todayCentral()) out.push({ _id: cs._id, project: label(p), date: s.date, opened: !!r.openedAt, sentAt: cs.sent!.at });
+      }
+    }
+    return out.sort((a, b) => a.date.localeCompare(b.date));
+  },
+});
+
+/** Opening it records "opened" for them. */
+export const openCallSheet = mutation({
+  args: { callSheetId: v.string() },
+  handler: async (ctx, { callSheetId }) => {
+    await myBusinesses(ctx);
+    const id = ctx.db.normalizeId("callSheets", callSheetId);
+    const cs = id ? await ctx.db.get(id) : null;
+    const me = await mine(ctx, cs, () => true);
+    const r = me && cs ? await sentToVendor(ctx, cs, me.vendor._id) : null;
+    if (!me || !cs || !r) throw new ConvexError("This call sheet isn't here.");
+    await markOpened(ctx, cs, r.id, r.name);
     return null;
   },
 });

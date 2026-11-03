@@ -39,7 +39,8 @@ export type SectionAttrs = { look?: "plain" | "card"; initials?: boolean; clause
 export type PNode = RichNode;
 export type Page = { type: "doc"; content: PNode[] };
 
-export const ATOMS = ["parties", "items", "payment", "signatures", "divider", "pagebreak", "spacer"] as const;
+// Phase 5b step 3: the call sheet's own blocks (lib/callSheet.ts) come last; contracts never use them.
+export const ATOMS = ["parties", "items", "payment", "signatures", "divider", "pagebreak", "spacer", "location", "schedule", "crew", "contacts"] as const;
 export type AtomType = (typeof ATOMS)[number];
 export const isAtom = (t: string): t is AtomType => (ATOMS as readonly string[]).includes(t);
 
@@ -48,6 +49,7 @@ export type InsertKind = "title" | "heading" | "text" | "section" | "card" | Ato
 export const INSERT_LABEL: Record<InsertKind, string> = {
   title: "Title", heading: "Heading", text: "Text", section: "Section", card: "Card", parties: "Parties", items: "Line items",
   payment: "Payment schedule", signatures: "Signatures", divider: "Divider", pagebreak: "Page break", spacer: "Space",
+  location: "Location", schedule: "Schedule", crew: "Crew list", contacts: "Contacts",
 };
 export const BLOCK_LABEL = INSERT_LABEL;
 
@@ -71,6 +73,11 @@ export function newNodes(kind: InsertKind): PNode[] {
     case "divider": return [atom("divider")];
     case "pagebreak": return [atom("pagebreak")];
     case "spacer": return [atom("spacer", { size: 18 })];
+    // Phase 5b step 3: call-sheet blocks (their attributes are described in lib/callSheet.ts)
+    case "location": return [atom("location", { crewCall: "", talentCall: "", wrap: "", name: "", address: "", parking: "", weather: false })];
+    case "schedule": return [line("Schedule", { size: "heading" }), atom("schedule", { rows: [{ id: newId(), time: "", what: "", who: "", notes: "" }] })];
+    case "crew": return [line("Crew and talent", { size: "heading" }), atom("crew", { rows: [{ id: newId(), name: "", role: "", call: "", phone: "" }] })];
+    case "contacts": return [line("Contacts", { size: "heading" }), atom("contacts", { rows: [{ id: newId(), label: "Producer", name: "", phone: "" }] })];
   }
 }
 

@@ -721,3 +721,32 @@ export function ownerFootageAlertMail(b: MailBrand, d: { what: "unpaid" | "paidL
     { t: "button", label: "Open the project", href: d.link },
   ], [{ t: "small", text: "Sent to you about raw footage · WranglerPortal ·", link: { label: "Email settings", href: `${SITE()}/settings/notifications` } }], `${d.client} · ${d.project}`);
 }
+
+// ---------- Phase 5b step 3 (Nov 3): call sheets (emails 40 and 42; 41, the guest's, is step 4) ----------
+
+/** Email 40 · Call sheet · crew and client (768:6432). A reminder (Remind on the Detail page) is the same email, marked. */
+export function callSheetMail(b: MailBrand, d: { name: string | null; title: string; date: string; dayLong: string; call: string; where: string; from: string; message?: string | null; reminder?: boolean; link: string }): Mail {
+  return mk(b, "updates", `${d.reminder ? "Reminder: c" : "C"}all sheet for ${d.dayLong}: ${d.title}`, [
+    hi(d.name),
+    { t: "p", text: `${d.reminder ? "A reminder: here’s" : "Here’s"} the call sheet for ${d.dayLong}: ${d.title}.` },
+    { t: "sums", rows: [...(d.call ? [{ label: "Call", value: d.call, big: true }] : []), ...(d.where ? [{ label: "Where", value: d.where }] : []), { label: "From", value: d.from }] },
+    ...(d.message ? [{ t: "p", text: d.message } as Block] : []),
+    { t: "p", text: "Read it in WranglerPortal on your phone or computer. Changes show up as soon as they’re sent.", tone: "muted" },
+    { t: "p", text: "You’ll get another email if the sheet is updated." },
+    { t: "button", label: "Open the call sheet", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `${d.call ? `${d.call} call · ` : ""}${d.where || d.title}`);
+}
+
+/** Email 42 · Call sheet · updated (768:6484). */
+export function callSheetUpdateMail(b: MailBrand, d: { name: string | null; title: string; dayLong: string; changed: string; call: string; was: string | null; from: string; message?: string | null; link: string }): Mail {
+  const same = !d.was || d.was === d.call;
+  return mk(b, "updates", `Call sheet updated for ${d.dayLong}: ${d.title}`, [
+    hi(d.name),
+    { t: "p", text: `The call sheet for ${d.dayLong} was updated.` },
+    { t: "sums", rows: [{ label: "What changed", value: d.changed, big: true }, ...(d.call ? [{ label: "Your call", value: same ? `${d.call} (same)` : `${d.call} (was ${d.was})` }] : []), { label: "From", value: d.from }] },
+    ...(d.message ? [{ t: "p", text: d.message } as Block] : []),
+    { t: "p", text: "Open it to see the new sheet.", tone: "muted" },
+    ...(same ? [{ t: "p", text: "Nothing else changed for you." } as Block] : []),
+    { t: "button", label: "Open the call sheet", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), d.changed);
+}

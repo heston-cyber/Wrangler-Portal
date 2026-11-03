@@ -171,7 +171,7 @@ export const docs = query({
       tiles: { toSign: rows.length, signed: done.filter((d) => d.completedAt && month(d.completedAt) === thisMonth).length, drafts: all.filter((d) => d.status === "draft" || d.status === "approved").length, templates: templates.filter((t) => !t.kind).length },
       waiting: rows.slice(0, 3),
       signed: done.slice(0, 3).map((d) => ({ _id: d._id, title: d.title, at: d.completedAt ?? d.updatedAt })),
-      templates: { contracts: templates.filter((t) => !t.kind).length },
+      templates: { contracts: templates.filter((t) => !t.kind).length, callSheets: templates.filter((t) => t.kind === "callsheet").length, other: templates.filter((t) => t.kind === "proposal" || t.kind === "briefing").length },
       signature: sig ? { adopted: true, method: sig.method } : { adopted: false, method: null },
     };
   },

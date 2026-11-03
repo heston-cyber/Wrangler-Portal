@@ -485,7 +485,7 @@ export default defineSchema({
     style: v.any(),
     signers: v.any(),                       // client signers (name, email, title) for when it's sent
     templateId: v.optional(v.id("wsTemplates")),
-    kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"))),  // Phase 3b: a proposal (Proposals); 3c: a briefing (D97). Never a contract; kept out of Docs
+    kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"), v.literal("callsheet"))),  // Phase 3b: a proposal (Proposals); 3c: a briefing (D97); 5b: a call sheet. Never a contract; kept out of Docs
     documentId: v.optional(v.id("wsDocuments")), // set once it has gone to signing
     renderedAt: v.optional(v.number()),
     createdAt: v.number(),
@@ -495,7 +495,7 @@ export default defineSchema({
     businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     name: v.string(),
     description: v.optional(v.string()),
-    kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"))),  // a proposal or briefing template, kept apart from contract templates
+    kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"), v.literal("callsheet"))),  // a proposal, briefing or call-sheet template, kept apart from contract templates
     blocks: v.any(),
     fields: v.any(),
     style: v.any(),
@@ -1206,6 +1206,41 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_project", ["projectId", "date"]).index("by_date", ["date"]),
+
+  // Phase 5b step 3 (Nov 3): call sheets (D126, S5 · Phase 5b 765:2852 …). One per shoot. The page is a builder document
+  // (its wsBuilds row, kind "callsheet"); until the quick questionnaire is finished there's no build yet, only answers.
+  // `sent` is the copy everyone on it reads: frozen at Send, replaced by each Send an update. Each person on it has
+  // their own sent / opened times; crew are vendors booked on the project, client people are the client's portal people,
+  // guests (D127) are stored here and get their login in step 4.
+  callSheets: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    shootId: v.id("shoots"),
+    projectId: v.id("projects"),
+    buildId: v.optional(v.id("wsBuilds")),
+    templateId: v.optional(v.id("wsTemplates")),
+    how: v.union(v.literal("questions"), v.literal("template"), v.literal("blank")),
+    status: v.union(v.literal("draft"), v.literal("sent")),
+    answers: v.optional(v.any()),                       // the questionnaire (lib/callSheet.ts Answers), until it's made
+    step: v.optional(v.number()),
+    recipients: v.array(v.object({
+      id: v.string(),                                   // crew:<bookingId> · client:<email> · guest:<random>
+      kind: v.union(v.literal("crew"), v.literal("client"), v.literal("guest")),
+      name: v.string(), email: v.string(), role: v.optional(v.string()),
+      vendorId: v.optional(v.id("vendors")), bookingId: v.optional(v.id("vendorBookings")),
+      on: v.boolean(),                                  // ticked: gets it
+      sentAt: v.optional(v.number()),                   // email 40 went (or was queued) to them
+      round: v.optional(v.number()),                    // the last update (42) they were sent
+      openedAt: v.optional(v.number()), lastOpenedAt: v.optional(v.number()),
+      remindedAt: v.optional(v.number()), reminders: v.optional(v.number()),
+      addedAt: v.number(),
+    })),
+    sent: v.optional(v.object({ title: v.string(), page: v.any(), fields: v.any(), style: v.any(), at: v.number(), round: v.number() })),
+    sentAt: v.optional(v.number()),
+    updates: v.optional(v.number()),                    // how many updates have gone out
+    history: v.array(v.object({ at: v.number(), kind: v.string(), by: v.optional(v.string()), detail: v.optional(v.string()) })),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_shoot", ["shootId"]).index("by_project", ["projectId"]).index("by_build", ["buildId"]),
 
   // Phase 4 (Nov 2): file requests. The client uploads straight into the business's Dropbox, under
   // Apps/Wrangler Review/File requests/<Client>/<Project>/<Request> (Heston, Nov 2), which the render watcher ignores.

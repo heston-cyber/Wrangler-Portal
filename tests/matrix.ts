@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 export const modules = import.meta.glob("../convex/**/*.ts");
 
-export type Ids = { requestId: Id<"wsRequests">; buildId: Id<"wsBuilds">; templateId: Id<"wsTemplates">; clauseId: Id<"wsClauses">; styleId: Id<"wsStyles">; docId: Id<"wsDocuments">; wsVersionId: Id<"wsVersions">; projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage">; clientRecId: Id<"clients">; personId: Id<"clientPeople">; inboxItemId: Id<"inboxItems">; inboxNoteId: Id<"inboxNotes">; deliveryFileId: Id<"deliveryFiles">; invoiceId: Id<"invoices">; planId: Id<"plans">; subscriptionId: Id<"subscriptions">; dealId: Id<"deals">; followUpId: Id<"followUps">; estimateId: Id<"estimates">; entryId: Id<"ledgerEntries">; quoteId: Id<"quotes">; proposalId: Id<"proposals">; vendorId: Id<"vendors">; bookingId: Id<"vendorBookings">; briefingId: Id<"briefings">; businessId: Id<"businesses">; vendorInvoiceId: Id<"vendorInvoices">; shootId: Id<"shoots">; fileRequestId: Id<"fileRequests">; fileUploadId: Id<"fileUploads">; briefId: Id<"briefs">; testimonialId: Id<"testimonials"> };
+export type Ids = { requestId: Id<"wsRequests">; buildId: Id<"wsBuilds">; templateId: Id<"wsTemplates">; clauseId: Id<"wsClauses">; styleId: Id<"wsStyles">; docId: Id<"wsDocuments">; wsVersionId: Id<"wsVersions">; projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage">; clientRecId: Id<"clients">; personId: Id<"clientPeople">; inboxItemId: Id<"inboxItems">; inboxNoteId: Id<"inboxNotes">; deliveryFileId: Id<"deliveryFiles">; invoiceId: Id<"invoices">; planId: Id<"plans">; subscriptionId: Id<"subscriptions">; dealId: Id<"deals">; followUpId: Id<"followUps">; estimateId: Id<"estimates">; entryId: Id<"ledgerEntries">; quoteId: Id<"quotes">; proposalId: Id<"proposals">; vendorId: Id<"vendors">; bookingId: Id<"vendorBookings">; briefingId: Id<"briefings">; businessId: Id<"businesses">; vendorInvoiceId: Id<"vendorInvoices">; shootId: Id<"shoots">; fileRequestId: Id<"fileRequests">; fileUploadId: Id<"fileUploads">; briefId: Id<"briefs">; testimonialId: Id<"testimonials">; callSheetId: Id<"callSheets"> };
 
 // Minimal valid arguments for each function, so the access check (not argument validation) is what refuses.
 export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
@@ -154,6 +154,15 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "overviews.clients": {}, "overviews.review": {}, "overviews.docs": {}, "overviews.proposals": {}, "overviews.vendors": {}, "home.dashboard": {}, // Phase 5b step 2
     "siteWatch.report": {}, "siteWatch.run": { id: "nope" }, "siteWatch.summary": {}, "siteWatch.markDone": { id: "nope" },
     "testimonials.list": {}, "testimonials.markRead": { testimonialId: ids.testimonialId }, "testimonials.saveAgain": { testimonialId: ids.testimonialId },
+    // Phase 5b step 3: call sheets (the owner's; the client's reader; the vendor's reader in vendorPortal)
+    "callSheets.ensureStarters": {}, "callSheets.list": {}, "callSheets.newOptions": {}, "callSheets.get": { callSheetId: ids.callSheetId },
+    "callSheets.create": { shootId: ids.shootId, how: "blank" }, "callSheets.make": { callSheetId: ids.callSheetId }, "callSheets.deleteDraft": { callSheetId: ids.callSheetId },
+    "callSheets.saveAnswers": { callSheetId: ids.callSheetId, step: 0, answers: { crewCall: "07:00", talentCall: "", wrap: "", locationName: "X", address: "", parking: "", weather: false, schedule: [], notes: "" } },
+    "callSheets.toggle": { callSheetId: ids.callSheetId, id: "client:client@example.com", on: false }, "callSheets.addGuest": { callSheetId: ids.callSheetId, name: "G", email: "g@x.example", role: "Talent" },
+    "callSheets.removeGuest": { callSheetId: ids.callSheetId, id: "guest:x" }, "callSheets.send": { callSheetId: ids.callSheetId, crew: true, client: true },
+    "callSheets.sendUpdate": { callSheetId: ids.callSheetId, changed: "Talent call moved" }, "callSheets.remind": { callSheetId: ids.callSheetId },
+    "callSheets.forClient": { callSheetId: ids.callSheetId }, "callSheets.forClientProject": { projectId: ids.projectId }, "callSheets.opened": { callSheetId: ids.callSheetId },
+    "vendorPortal.callSheet": { callSheetId: ids.callSheetId }, "vendorPortal.callSheets": { businessId: ids.businessId }, "vendorPortal.openCallSheet": { callSheetId: ids.callSheetId },
   };
 }
 
@@ -227,7 +236,13 @@ export async function setup() {
     const vendorUser = await ctx.db.insert("users", { email: "vee@x.example", name: "Vee", role: "vendor" });
     await ctx.db.insert("memberships", { businessId, email: "vee@x.example", userId: vendorUser, role: "vendor", createdAt: 0 });
     await ctx.db.insert("vendors", { businessId, name: "Vee", email: "vee@x.example", roles: [], rates: [], createdAt: 0, updatedAt: 0 });
-    return { testimonialId, vendorSub: await sess(vendorUser), briefId, fileRequestId, fileUploadId, shootId, vendorInvoiceId, businessId, briefingId, bookingId, vendorId, proposalId, quoteId, dealId, followUpId, estimateId, entryId, subscriptionId, planId, invoiceId, deliveryFileId, clientRecId, personId, inboxItemId, inboxNoteId, requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
+    // Phase 5b step 3: a call sheet for the shoot, sent to the invited client (who isn't on the project's shares, so the
+    // client reader still answers null for them: the matrix proves nobody else gets it; callSheets.test.ts proves who does).
+    const csBuild = await ctx.db.insert("wsBuilds", { title: "CS", blocks: { type: "doc", content: [] }, fields: {}, style: {}, signers: [], kind: "callsheet", createdAt: 0, updatedAt: 0 });
+    const callSheetId = await ctx.db.insert("callSheets", { shootId, projectId, buildId: csBuild, how: "blank", status: "sent", sentAt: 0, updates: 0,
+      recipients: [{ id: "client:client@example.com", kind: "client", name: "Client", email: "client@example.com", on: true, sentAt: 0, addedAt: 0 }, { id: `crew:${bookingId}`, kind: "crew", name: "V", email: "v@x.example", vendorId, bookingId, on: true, sentAt: 0, addedAt: 0 }],
+      sent: { title: "CS", page: { type: "doc", content: [] }, fields: {}, style: {}, at: 0, round: 0 }, history: [], createdAt: 0, updatedAt: 0 });
+    return { callSheetId, testimonialId, vendorSub: await sess(vendorUser), briefId, fileRequestId, fileUploadId, shootId, vendorInvoiceId, businessId, briefingId, bookingId, vendorId, proposalId, quoteId, dealId, followUpId, estimateId, entryId, subscriptionId, planId, invoiceId, deliveryFileId, clientRecId, personId, inboxItemId, inboxNoteId, requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
   });
   return { t, ids };
 }

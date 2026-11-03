@@ -109,7 +109,7 @@ describe("T3c.6 notifications", () => {
     stub(mails);
     const { A, B, jordan, book } = await setup(w);
     const list = await jordan.query(api.vendorPortal.notifications, { businessId: A });
-    expect(list.items.map((i: { key: string }) => i.key)).toEqual(["bookings", "briefings", "invoice_updates", "vendor_payout_setup", "vendor_invite", "vendor_codes"]);
+    expect(list.items.map((i: { key: string }) => i.key)).toEqual(["bookings", "briefings", "vendor_call_sheets", "invoice_updates", "vendor_payout_setup", "vendor_invite", "vendor_codes"]);
     await jordan.mutation(api.vendorPortal.setNotification, { businessId: B, key: "bookings", on: false }); // only Other Films
     await expect(jordan.mutation(api.vendorPortal.setNotification, { businessId: A, key: "vendor_invite", on: false })).rejects.toThrow(/always sent/);
     expect((await jordan.query(api.vendorPortal.notifications, { businessId: A })).items[0].on).toBe(true);
