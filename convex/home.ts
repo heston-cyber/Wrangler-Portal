@@ -4,6 +4,7 @@
 //   doc      a sent document waiting on a client signer whose turn it is (with Remind)
 //   draft    an Inbox note Claude drafted, waiting for you to confirm it on the site
 //   request  something Claude asked to do in Sign (approve, send, cancel), waiting for you to confirm
+import { v } from "convex/values";
 import { query } from "./lib/functions";
 import { requireMe } from "./lib/access";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -14,6 +15,9 @@ import { quoteNeeds } from "./quotes";
 import { proposalNeeds } from "./proposals";
 import { footageNeeds } from "./footage";
 import { testimonialNeeds } from "./testimonials";
+import { shootRows, scheduled, liveEdits } from "./production";
+import { overviewData } from "./invoices";
+import { todayCentral } from "./lib/bookings";
 
 const MAX_NOTE_GROUPS = 10;
 
@@ -100,5 +104,25 @@ export const needs = query({
     out.push(...(await testimonialNeeds(ctx)));
     const order = { proposal: 0, quote: 0, vendorInvoice: 0, footage: 0, testimonial: 0, notes: 1, doc: 2, draft: 3, request: 4 } as const;
     return out.sort((a, b) => order[a.kind] - order[b.kind] || b.at - a.at);
+  },
+});
+
+/** The Dashboard's Today tile, Coming up, Live edits and Money this month (Nov 3, frame 767:8254). The Needs list is `needs`. */
+export const dashboard = query({
+  args: { tzOffsetMin: v.optional(v.number()) },
+  handler: async (ctx, { tzOffsetMin }) => {
+    await requireMe(ctx);
+    const today = todayCentral();
+    const upcoming = (await scheduled(ctx)).filter((s) => s.date >= today);
+    const todays = upcoming.filter((s) => s.date === today);
+    const edits = await liveEdits(ctx, today);
+    const money = await overviewData(ctx, tzOffsetMin ?? 0);
+    return {
+      today,
+      tiles: { today: todays.length, todayFirst: todays[0] ? (await shootRows(ctx, [todays[0]]))[0] ?? null : null, edits: edits.length },
+      coming: await shootRows(ctx, upcoming.slice(0, 3)), comingTotal: upcoming.length,
+      edits: edits.slice(0, 3),
+      money: { stripe: money.stripe, paid: money.paid.month, due: money.due.cents, overdue: money.overdue.cents },
+    };
   },
 });

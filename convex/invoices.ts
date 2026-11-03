@@ -83,6 +83,13 @@ export const overview = query({
   args: { tzOffsetMin: v.optional(v.number()) },
   handler: async (ctx, { tzOffsetMin = 0 }) => {
     await requireMe(ctx);
+    return overviewData(ctx, tzOffsetMin);
+  },
+});
+
+/** The numbers behind Payments › Overview (also the Dashboard's Money this month). The caller has checked who's asking. */
+export async function overviewData(ctx: QueryCtx, tzOffsetMin = 0) {
+  {
     const biz = await ctx.db.get(ownBusiness(ctx));
     const all = await ctx.db.query("invoices").withIndex("by_updated").order("desc").take(1000);
     const now = Date.now();
@@ -140,8 +147,8 @@ export const overview = query({
       paid: { month: sum.month, year: sum.year, lastMonth: sum.last },
       needs: needs.slice(0, 8), activity: activity.slice(0, 6),
     };
-  },
-});
+  }
+}
 
 /** A project's Invoices tab. */
 export const forProject = query({

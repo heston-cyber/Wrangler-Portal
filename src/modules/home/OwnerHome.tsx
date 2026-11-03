@@ -9,6 +9,9 @@ import { Button, ButtonLink, Card, Divider, EmptyState, InboxItem, ListRow, Page
 import type { IconName } from "../../ui/Icon";
 import { useToast } from "../../ui/kit";
 import { errText } from "../docs/pages/common";
+import { TopBar } from "../../shell/Shell";
+import { Tile } from "../overviews/Tile";
+import { clock, shootDay } from "../projects/Shoots";
 import { FollowUpRow } from "../crm/common";
 import { DEFAULT_TOOLS, type Tools, type WidgetKey } from "../../../convex/lib/tools";
 
@@ -16,7 +19,6 @@ import { DEFAULT_TOOLS, type Tools, type WidgetKey } from "../../../convex/lib/t
 const Recurring = lazy(() => import("../payments/PaymentsOverview").then((m) => ({ default: m.Recurring })));
 
 const TZ = "America/Chicago";
-const WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
 const first = (who: string) => who.trim().split(/\s+/)[0] || who;
 const ymd = (t: number) => new Date(t).toLocaleDateString("en-CA", { timeZone: TZ });
 const monthDay = (t: number) => new Date(t).toLocaleDateString("en-US", { timeZone: TZ, month: "short", day: "numeric" });
@@ -36,11 +38,6 @@ export function activityWhen(t: number, now = Date.now()) {
   if (ymd(t) === ymd(now)) return `${Math.round(m / 60)}h`;
   if (ymd(t) === ymd(now - DAY)) return "Yesterday";
   return monthDay(t);
-}
-function headline(n: number) {
-  if (n === 0) return "Nothing needs you today.";
-  const w = n < WORDS.length ? WORDS[n] : String(n);
-  return n === 1 ? `${w} thing needs you.` : `${w} things need you.`;
 }
 
 type Need = NonNullable<ReturnType<typeof useQuery<typeof api.home.needs>>>[number];
@@ -156,12 +153,14 @@ function waitingChip(c: ClientRow) {
   return parts.length ? <StatusChip tone="warning">{parts.join(" · ")}</StatusChip> : undefined;
 }
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+type Dash = NonNullable<ReturnType<typeof useQuery<typeof api.home.dashboard>>>;
 
 export default function OwnerHome() {
   const needs = useQuery(api.home.needs);
   const recent = useQuery(api.activity.recent, { limit: 8 });
   const clients = useQuery(api.clients.directory);
   const due = useQuery(api.crm.due, {}); // Phase 3: follow-ups due today or overdue
+  const dash = useQuery(api.home.dashboard, { tzOffsetMin: new Date().getTimezoneOffset() }); // Phase 5b: Today, Coming up, Live edits, Money this month
   const resend = useMutation(api.sign.resend);
   const [toast, show] = useToast();
   const now = Date.now();
@@ -175,11 +174,11 @@ export default function OwnerHome() {
   const on = (tools?.widgets ?? DEFAULT_TOOLS.widgets).filter((w) => w.on).map((w) => w.id);
   const card: Record<WidgetKey, React.ReactNode> = {
     needs: (
-      <Card key="needs" label="Needs you today" head={<SectionHead label="Needs you today" count={needs?.length ? needs.length : undefined} />}>
+      <div key="needs" id="needs"><Card label="Needs you" head={<SectionHead label="Needs you" count={needs?.length ? needs.length : undefined} />}>
         {needs === undefined ? <SkeletonRows n={3} />
           : needs.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "check-circle" }} title="New client notes, documents waiting on clients and drafts to confirm show up here." />
           : needs.map((n, i) => <div key={i} className="wp-rowwrap">{i > 0 && <Divider />}<NeedRow n={n} remind={remind} /></div>)}
-      </Card>
+      </Card></div>
     ),
     followups: due && due.length > 0 ? (
       <Card key="followups" label="Follow-ups" head={<SectionHead label="Follow-ups" count={due.length} action={<ButtonLink size="sm" variant="ghost" to="/clients/follow-ups">All follow-ups</ButtonLink>} />}>
@@ -206,21 +205,64 @@ export default function OwnerHome() {
           ))}
       </Card>
     ),
+    coming_up: (
+      <Card key="coming_up" label="Coming up" head={<SectionHead label="Coming up" count={dash?.comingTotal || undefined} action={<ButtonLink size="sm" variant="ghost" to="/production" iconEnd={false}>Production</ButtonLink>} />}>
+        {dash === undefined ? <SkeletonRows n={3} />
+          : dash.coming.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "video" }} title="No shoots coming up." />
+          : dash.coming.map((c, i) => (
+            <div key={c._id} className="wp-rowwrap">{i > 0 && <Divider />}
+              <ListRow className="ilead" lead={{ icon: "video" }} to={`/projects/${c.projectId}`} chevron={c.date !== dash.today}
+                title={c.client ? `${c.project} · ${c.client}` : c.label}
+                meta={[c.date === dash.today ? "Today" : shootDay(c.date), `Call ${clock(c.call)}`].join(" · ")}
+                chip={c.date === dash.today ? <StatusChip tone="accent">Today</StatusChip> : c.confirmed ? <StatusChip tone="success">Confirmed</StatusChip> : <StatusChip tone="warning">{c.moved ? "Moved · to confirm" : "To confirm"}</StatusChip>} />
+            </div>
+          ))}
+      </Card>
+    ),
+    live_edits: (
+      <Card key="live_edits" label="Live edits" head={<SectionHead label="Live edits" count={dash?.tiles.edits || undefined} action={<ButtonLink size="sm" variant="ghost" to="/review" iconEnd={false}>Review</ButtonLink>} />}>
+        {dash === undefined ? <SkeletonRows n={2} />
+          : dash.edits.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "review" }} title="No projects in Production or Polish." />
+          : dash.edits.map((e, i) => (
+            <div key={e._id} className="wp-rowwrap">{i > 0 && <Divider />}
+              <ListRow className="ilead" lead={{ icon: "review" }} to={`/projects/${e._id}`} chevron title={e.label}
+                meta={[e.round ? `Round ${e.round}` : null, e.nextStep ?? (e.next ? `${e.next.label} ${shootDay(e.next.date).replace(/^\w+, /, "")}` : null)].filter(Boolean).join(" · ") || undefined} />
+            </div>
+          ))}
+      </Card>
+    ),
+    money: (
+      <Card key="money" label="Money this month" head={<SectionHead label="Money this month" action={<ButtonLink size="sm" variant="ghost" to="/payments" iconEnd={false}>Payments</ButtonLink>} />}>
+        {dash === undefined ? <SkeletonRows n={3} />
+          : !dash.money.stripe ? <ListRow className="ilead quiet" lead={{ icon: "invoice" }} title="Connect Stripe to see paid, due and overdue here." />
+          : <dl className="pov-paid prod-week"><dt>Paid</dt><dd>{money(dash.money.paid)}</dd><dt>Due</dt><dd>{money(dash.money.due)}</dd><dt>Overdue</dt><dd>{money(dash.money.overdue)}</dd></dl>}
+      </Card>
+    ),
     recurring: <Suspense key="recurring" fallback={null}><Recurring withPastDue /></Suspense>,
   };
   // Each widget keeps its column from the approved Home (lists on the left, activity and money on the right); your
   // order decides the order inside each. With only one column's widgets on, they take the page.
-  const RIGHT = new Set<WidgetKey>(["activity", "recurring"]);
+  const RIGHT = new Set<WidgetKey>(["live_edits", "money", "activity", "recurring"]);
   const cols: [React.ReactNode[], React.ReactNode[]] = [[], []];
   for (const id of on) if (card[id]) cols[RIGHT.has(id) ? 1 : 0].push(card[id]);
   if (!cols[0].length) { cols[0] = cols[1]; cols[1] = []; }
   return (
-    <div className="wp-page notop wp-home">
-      <PageHeader eyebrow={new Date(now).toLocaleDateString("en-US", { timeZone: TZ, weekday: "long", month: "short", day: "numeric" })} title={needs === undefined ? " " : headline(needs.length)}
-        actions={<ButtonLink size="sm" variant="ghost" to="/settings/tools">Customize</ButtonLink>} />
+    <>
+    <TopBar><span className="here">Dashboard</span></TopBar>
+    <div className="wp-page wp-home pov">
+      <PageHeader eyebrow="Dashboard" title="Dashboard." sub="What needs you today." actions={<ButtonLink variant="secondary" to="/settings/tools" iconEnd={false}>Customize</ButtonLink>} />
+      <div className="pov-stats ov-tiles">
+        <Tile label="Today" n={dash ? dash.tiles.today : "–"} sub={dash?.tiles.todayFirst ? `${dash.tiles.today === 1 ? "shoot" : "shoots"} · ${dash.tiles.todayFirst.client ?? dash.tiles.todayFirst.project}` : "no shoots"}
+          to={dash?.tiles.todayFirst ? `/projects/${dash.tiles.todayFirst.projectId}` : "/production/shoots"} link={dash?.tiles.todayFirst ? "Open shoot" : "See shoots"} />
+        <Tile label="Live edits" n={dash ? dash.tiles.edits : "–"} sub="in Production or Polish" to="/review" link="See edits" />
+        <Tile label="Money this month" n={dash ? (dash.money.stripe ? money(dash.money.paid) : "–") : "–"}
+          sub={dash?.money.stripe ? `paid · ${money(dash.money.due + dash.money.overdue)} due` : "Stripe isn't connected"} to="/payments" link="See payments" />
+        <Tile label="Needs you" n={needs ? needs.length : "–"} sub="across your tools" to="#needs" link="See them" />
+      </div>
       {on.length === 0 ? <EmptyState icon="home" title="No widgets on your Dashboard." body="Pick what shows here in Settings › Tools." actions={<ButtonLink variant="primary" to="/settings/tools">Settings › Tools</ButtonLink>} />
         : <div className="wp-homecols"><div className="col">{cols[0]}</div><div className="col right">{cols[1]}</div></div>}
       {toast}
     </div>
+    </>
   );
 }

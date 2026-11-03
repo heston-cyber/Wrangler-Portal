@@ -67,6 +67,11 @@ const ClientProposal = lazy(() => import("./modules/proposals/ClientProposal"));
 // Phase 3c: Vendors (D95: its own layer).
 const VendorsPage = lazy(() => import("./modules/vendors/Vendors"));
 // Phase 5b: Production (D126).
+const ClientsOverview = lazy(() => import("./modules/overviews/Overviews").then((m) => ({ default: m.ClientsOverview })));
+const ReviewOverview = lazy(() => import("./modules/overviews/Overviews").then((m) => ({ default: m.ReviewOverview })));
+const DocsOverview = lazy(() => import("./modules/overviews/Overviews").then((m) => ({ default: m.DocsOverview })));
+const ProposalsOverview = lazy(() => import("./modules/overviews/Overviews").then((m) => ({ default: m.ProposalsOverview })));
+const VendorsOverview = lazy(() => import("./modules/overviews/Overviews").then((m) => ({ default: m.VendorsOverview })));
 const ProductionOverview = lazy(() => import("./modules/production/Production"));
 const ProductionShoots = lazy(() => import("./modules/production/Production").then((m) => ({ default: m.ProductionShoots })));
 const VendorPage = lazy(() => import("./modules/vendors/Vendors").then((m) => ({ default: m.VendorPage })));
@@ -197,7 +202,10 @@ function SignedIn() {
   const clientRec = /^\/clients\/([^/]+)\/?$/.exec(path);
   const sentNote = /^\/sent\/([^/]+)\/?$/.exec(path);
   let page: React.ReactNode;
-  if (video) page = <VideoPage key={video[1]} videoId={video[1] as Id<"videos">} versionNumber={Number(params.get("version")) || null} noteId={params.get("note")} />;
+  const overview = /^\/(clients|review|sign|proposals|vendors)\/overview\/?$/.exec(path); // Phase 5b step 2: a tool's overview, before the pages that would read "overview" as an id
+  const OVERVIEW = { clients: ClientsOverview, review: ReviewOverview, sign: DocsOverview, proposals: ProposalsOverview, vendors: VendorsOverview } as const;
+  if (overview) { const Page = OVERVIEW[overview[1] as keyof typeof OVERVIEW]; page = <Suspense fallback={<Loading />}><Page /></Suspense>; }
+  else if (video) page = <VideoPage key={video[1]} videoId={video[1] as Id<"videos">} versionNumber={Number(params.get("version")) || null} noteId={params.get("note")} />;
   else if (project) { const t = params.get("tab"); page = <Suspense fallback={<Loading />}><ProjectPage key={project[1]} projectId={project[1] as Id<"projects">} tab={(["cuts", "documents", "invoices", "delivery", "ledger"].includes(t ?? "") ? t : "overview") as ProjectTab} /></Suspense>; }
   else if (path.startsWith("/projects")) page = <Projects key="all" />;
   else if (/^\/payments\/invoices\/new\/?$/.test(path)) page = <Suspense fallback={<Loading />}><InvoiceEditor key={search} clientId={params.get("client")} projectId={params.get("project")} /></Suspense>;

@@ -6,9 +6,12 @@ export type ToolKey = (typeof TOOLS)[number];
 export const TOOL_LABEL: Record<ToolKey, string> = { dashboard: "Dashboard", clients: "Clients", review: "Review", docs: "Docs", proposals: "Proposals", payments: "Payments", vendors: "Vendors", production: "Production", sent: "Sent" };
 export const REQUIRED_TOOLS: ToolKey[] = ["dashboard"]; // always on the menu
 
-export const WIDGETS = ["needs", "followups", "clients", "activity", "recurring"] as const;
+export const WIDGETS = ["coming_up", "needs", "followups", "clients", "live_edits", "money", "activity", "recurring"] as const; // Phase 5b: Coming up, Live edits, Money this month
 export type WidgetKey = (typeof WIDGETS)[number];
 export const WIDGET_LABEL: Record<WidgetKey, { label: string; sub: string }> = {
+  coming_up: { label: "Coming up", sub: "The next shoots, from Production" },
+  live_edits: { label: "Live edits", sub: "Projects in Production or Polish" },
+  money: { label: "Money this month", sub: "Paid, due and overdue (once Stripe is on)" },
   needs: { label: "Needs you today", sub: "Client notes, documents waiting, drafts to confirm" },
   followups: { label: "Follow-ups", sub: "Due today or overdue (only when there are some)" },
   clients: { label: "Your clients", sub: "The first five, the ones waiting on you first" },

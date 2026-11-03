@@ -47,14 +47,14 @@ const inPayments = (p: string) => starts(p, "/payments");
 // Phase 3b (D69): Proposals is its own item with a layer.
 const OWNER_PROPOSALS: Sub[] = [
   { to: "/proposals/new", label: "New proposal", match: (p) => starts(p, "/proposals/new") },
-  { to: "/proposals", label: "All proposals", match: (p) => starts(p, "/proposals") && !starts(p, "/proposals/new", "/proposals/templates", "/proposals/questionnaire") },
+  { to: "/proposals", label: "All proposals", match: (p) => starts(p, "/proposals") && !starts(p, "/proposals/overview", "/proposals/new", "/proposals/templates", "/proposals/questionnaire") },
   { to: "/proposals/templates", label: "Templates", match: (p) => starts(p, "/proposals/templates") },
   { to: "/proposals/questionnaire", label: "Questionnaire", match: (p) => starts(p, "/proposals/questionnaire") },
 ];
 const inProposals = (p: string) => starts(p, "/proposals");
 // Phase 3c (D95): Vendors is its own layer after Payments. Bookings, Briefings and Payments join as they're built.
 const OWNER_VENDORS: Sub[] = [
-  { to: "/vendors", label: "All vendors", match: (p) => starts(p, "/vendors") && !starts(p, "/vendors/bookings", "/vendors/briefings", "/vendors/payments") },
+  { to: "/vendors", label: "All vendors", match: (p) => starts(p, "/vendors") && !starts(p, "/vendors/overview", "/vendors/bookings", "/vendors/briefings", "/vendors/payments") },
   { to: "/vendors/bookings", label: "Bookings", match: (p) => starts(p, "/vendors/bookings") },
   { to: "/vendors/briefings", label: "Briefings", match: (p) => starts(p, "/vendors/briefings") },
   { to: "/vendors/payments", label: "Payments", match: (p) => starts(p, "/vendors/payments") }, // step 5
@@ -67,7 +67,7 @@ const OWNER_PRODUCTION: Sub[] = [
 ];
 const inProduction = (p: string) => starts(p, "/production");
 // Phase 3 (Heston, Oct 29): Clients becomes a layer: Pipeline · Companies · Follow-ups. Companies is the client list.
-const CRM = ["/clients/pipeline", "/clients/follow-ups", "/clients/deals", "/clients/estimates", "/clients/testimonials"];
+const CRM = ["/clients/overview", "/clients/pipeline", "/clients/follow-ups", "/clients/deals", "/clients/estimates", "/clients/testimonials"];
 const OWNER_CLIENTS: Sub[] = [
   { to: "/clients/pipeline", label: "Pipeline", match: (p) => starts(p, "/clients/pipeline", "/clients/deals", "/clients/estimates") },
   { to: "/clients", label: "Companies", match: (p) => starts(p, "/clients") && !CRM.some((x) => starts(p, x)) },
@@ -82,11 +82,11 @@ const inDocs = (p: string) => starts(p, "/sign", "/docs");
 // Phones: the first four tools on the menu, then More (the rest, then Settings).
 function ownerItems(payments = false, tools: Tools = DEFAULT_TOOLS): { main: Item[]; tabs: Item[] } {
   const home: Item = { to: "/", label: "Dashboard", icon: "home", match: (p) => p === "/" };
-  const clients: Item = { to: "/clients", label: "Clients", icon: "users", match: () => false, tab: inClients, layer: OWNER_CLIENTS, layerHas: inClients };
-  const review: Item = { to: "/review", label: "Review", icon: "review", match: (p) => p === "/review", tab: inReview, layer: OWNER_REVIEW, layerHas: inReview };
-  const docs: Item = { to: "/sign", label: "Docs", icon: "document", match: (p) => p === "/sign", tab: inDocs, layer: OWNER_DOCS, layerHas: inDocs };
-  const proposals: Item = { to: "/proposals", label: "Proposals", icon: "quote", match: () => false, tab: inProposals, layer: OWNER_PROPOSALS, layerHas: inProposals };
-  const vendors: Item = { to: "/vendors", label: "Vendors", icon: "user", match: () => false, tab: inVendors, layer: OWNER_VENDORS, layerHas: inVendors };
+  const clients: Item = { to: "/clients/overview", label: "Clients", icon: "users", match: (p) => p === "/clients/overview", tab: inClients, layer: OWNER_CLIENTS, layerHas: inClients };
+  const review: Item = { to: "/review/overview", label: "Review", icon: "review", match: (p) => p === "/review" || p === "/review/overview", tab: inReview, layer: OWNER_REVIEW, layerHas: inReview };
+  const docs: Item = { to: "/sign/overview", label: "Docs", icon: "document", match: (p) => p === "/sign" || p === "/sign/overview", tab: inDocs, layer: OWNER_DOCS, layerHas: inDocs };
+  const proposals: Item = { to: "/proposals/overview", label: "Proposals", icon: "quote", match: (p) => p === "/proposals/overview", tab: inProposals, layer: OWNER_PROPOSALS, layerHas: inProposals };
+  const vendors: Item = { to: "/vendors/overview", label: "Vendors", icon: "user", match: (p) => p === "/vendors/overview", tab: inVendors, layer: OWNER_VENDORS, layerHas: inVendors };
   const production: Item = { to: "/production", label: "Production", icon: "video", match: () => false, tab: inProduction, layer: OWNER_PRODUCTION, layerHas: inProduction };
   const sent: Item = { to: "/sent", label: "Sent", icon: "send", match: (p) => starts(p, "/sent") };
   // Phase 2 Part B: Payments › Invoices once the business has connected Stripe (D45).
@@ -248,7 +248,7 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
                 {it.layer.map((s) => (
                   <a key={s.to} className="wp-sub" aria-current={s.match(path) ? "page" : undefined} {...linkProps(s.to)} title={s.label}><span>{s.label}</span></a>
                 ))}
-                {it.to === "/review" && recent.length > 0 && (
+                {(it.to === "/review" || it.to === "/review/overview") && recent.length > 0 && (
                   <>
                     <div className="wp-layerlabel"><span className="wp-label">Last opened</span></div>
                     {recent.map((x) => (
@@ -347,8 +347,8 @@ export function MorePage({ me, side }: { me: Me; side: Side }) {
       ...(subs?.length ? [{ to: "/payments/subscriptions", icon: "activity" as IconName, title: "Subscriptions", sub: "Your plans" }] : [])];
   // The owner's: the tools on their menu that don't fit the tab bar (Settings › Tools sets which and in what order).
   const tools = useQuery(api.users.me, side === "owner" ? {} : "skip")?.tools as Tools | undefined;
-  const TOOL_SUB: Record<string, string> = { "/": "Today, clients and activity", "/clients": "Pipeline, companies, follow-ups", "/review": "Projects and activity", "/sign": "Documents and templates",
-    "/proposals": "Written pitches, templates", "/payments": "Overview, invoices and subscriptions", "/vendors": "Shooters, editors and crew you hire", "/sent": "Notes and items you sent" };
+  const TOOL_SUB: Record<string, string> = { "/": "Today, clients and activity", "/clients/overview": "Pipeline, companies, follow-ups", "/review": "Projects and activity", "/review/overview": "Projects and activity", "/sign/overview": "Documents and templates",
+    "/proposals/overview": "Written pitches, templates", "/payments": "Overview, invoices and subscriptions", "/vendors/overview": "Shooters, editors and crew you hire", "/sent": "Notes and items you sent" };
   const rest = side === "owner" ? ownerItems(!!pay?.stripe, tools).main.slice(4) : [];
   const rows: { to?: string; icon: IconName; title: string; sub?: string; onClick?: () => void }[] = side === "owner"
     ? [

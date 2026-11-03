@@ -139,6 +139,12 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "briefs.page": { pages: ["clientHome"], args: () => ({ briefId: "nope" }) }, // /briefs/<id>, the client's kickoff brief
   // Phase 5 (Nov 3): raw footage storage and testimonials
   "production.overview": { pages: ["owner"], args: () => ({}) }, // Production › Overview (Phase 5b)
+  "overviews.clients": { pages: ["owner"], args: () => ({}) }, // Clients › Overview (Phase 5b step 2)
+  "overviews.review": { pages: ["owner"], args: () => ({}) }, // Review › Overview
+  "overviews.docs": { pages: ["owner"], args: () => ({}) }, // Docs › Overview
+  "overviews.proposals": { pages: ["owner"], args: () => ({}) }, // Proposals › Overview
+  "overviews.vendors": { pages: ["owner"], args: () => ({}) }, // Vendors › Overview
+  "home.dashboard": { pages: ["owner"], args: () => ({ tzOffsetMin: 300 }) }, // Dashboard: Today, Coming up, Live edits, Money
   "production.shoots": { pages: ["owner"], args: () => ({}) }, // Production › Shoots
   "production.projectsForShoot": { pages: ["owner"], args: () => ({}) }, // New shoot
   "footage.settings": { pages: ["owner"], args: () => ({}) }, // Settings › Payments › Footage storage

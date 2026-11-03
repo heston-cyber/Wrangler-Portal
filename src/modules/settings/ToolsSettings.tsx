@@ -81,7 +81,7 @@ export function ToolsSettings({ show }: { show: (m: string) => void }) {
             <Toggle label={`${WIDGET_LABEL[id].label} on the Dashboard`} checked={w.on} onChange={(v) => put({ ...t, widgets: t.widgets.map((x) => (x.id === id ? { ...x, on: v } : x)) })} />
           </>;
         }} />
-        <p className="wp-small secondary tl-note">On a wide screen, lists stay on the left and Recent activity and Recurring revenue on the right, each in this order.</p>
+        <p className="wp-small secondary tl-note">On a wide screen, lists stay on the left and Live edits, Money this month, Recent activity and Recurring revenue on the right, each in this order.</p>
         <button type="button" className="btn ghost sm" onClick={() => put(DEFAULT_TOOLS)}>Reset menu and Dashboard</button>
       </div>
     </>

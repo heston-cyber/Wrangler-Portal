@@ -12,7 +12,7 @@ import { addDays } from "./footage";
 
 type Shoot = Doc<"shoots">;
 
-async function shootRows(ctx: QueryCtx, shoots: Shoot[]) {
+export async function shootRows(ctx: QueryCtx, shoots: Shoot[]) {
   const projects = new Map<string, Doc<"projects"> | null>();
   const clients = new Map<string, string | null>();
   const out = [];
@@ -30,10 +30,10 @@ async function shootRows(ctx: QueryCtx, shoots: Shoot[]) {
   return out;
 }
 
-const scheduled = async (ctx: QueryCtx) => (await ctx.db.query("shoots").withIndex("by_date").collect()).filter((s) => s.status === "scheduled");
+export const scheduled = async (ctx: QueryCtx) => (await ctx.db.query("shoots").withIndex("by_date").collect()).filter((s) => s.status === "scheduled");
 
 /** Projects in Production or Polish: the latest round and what's next. */
-async function liveEdits(ctx: QueryCtx, today: string) {
+export async function liveEdits(ctx: QueryCtx, today: string) {
   const out = [];
   for (const p of await ctx.db.query("projects").collect()) {
     if (p.stage !== "production" && p.stage !== "polish") continue;
