@@ -181,10 +181,9 @@ describe("the client's projects and final files", () => {
     // Another business can't touch the files.
     await expect(w.boss.mutation(api.projects.removeDeliveryFile, { fileId })).resolves.toBeNull();
     expect((await w.heston.query(api.projects.page, { projectId: w.p })).delivery.files).toHaveLength(2);
-    // With project pages switched off (Settings › Business), the client sees none.
+    // Nov 2 (Heston): the module switches are gone; an old "projects off" setting no longer hides project pages.
     await w.heston.mutation(api.business.updateSettings, { modules: { review: true, docs: true, payments: false, projects: false } });
-    expect(await w.mayaC.query(api.projects.mine, {})).toEqual([]);
-    expect(await w.mayaC.query(api.projects.forClient, { projectId: w.p })).toBeNull();
+    expect(await w.mayaC.query(api.projects.forClient, { projectId: w.p })).not.toBeNull();
   });
 
   test("a share of one video doesn't open its project; stage news goes only to the people a project share covers", async () => {

@@ -41,7 +41,8 @@ export async function scopeFor(ctx: QueryCtx | MutationCtx): Promise<Scope> {
   const ownerM = ms.filter((m) => m.role === "owner").sort((a, b) => a.createdAt - b.createdAt)[0];
   if (ownerM) { scope.owner = ownerM.businessId; scope.isOwner = true; return scope; }
   if (allowedEmails().includes(email)) { scope.owner = defaultBiz; scope.isOwner = true; return scope; }
-  for (const m of ms) if (m.role === "client") scope.members.add(m.businessId);
+  // Nov 2: a login on its vendor side gets no client reach (vendor calls focus on one of their vendor businesses).
+  if (user?.role !== "vendor") for (const m of ms) if (m.role === "client") scope.members.add(m.businessId);
   return scope;
 }
 

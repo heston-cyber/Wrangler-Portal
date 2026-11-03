@@ -12,6 +12,7 @@ import ClientProject, { type ClientProjectTab } from "./modules/projects/ClientP
 import { ClientShootPage } from "./modules/projects/Shoots";
 import { ClientRequestPage } from "./modules/projects/Requests";
 import { ClientBriefPage } from "./modules/projects/Brief";
+import { SideFromLink } from "./shell/SideSwitch";
 import ClientSettings from "./modules/clients/ClientSettings";
 import Home from "./modules/review/Home";
 import OwnerHome from "./modules/home/OwnerHome";
@@ -166,11 +167,11 @@ function SignedIn() {
   if (isSignHost()) return <SignHostHome />;
   if (me === undefined) return <Loading />;
   // Phase 3c step 4: vendors get the vendor side (their bookings, briefings and invoices), nothing else.
-  if (me && !me.allowed && me.role === "vendor") return <Suspense fallback={<Loading />}><VendorApp me={me} /></Suspense>;
+  if (me && !me.allowed && me.role === "vendor") return <><SideFromLink /><Suspense fallback={<Loading />}><VendorApp me={me} /></Suspense></>;
   // Clients (C1): their own page, nothing of the owner's side.
   if (me && !me.allowed && me.role === "client") {
     return (
-      <ClientShell me={me} />
+      <><SideFromLink /><ClientShell me={me} /></>
     );
   }
   if (!me || !me.allowed) {

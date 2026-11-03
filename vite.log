@@ -1,0 +1,11 @@
+
+  VITE v5.4.21  ready in 303 ms
+
+  ➜  Local:   http://localhost:5179/
+  ➜  Network: use --host to expose
+10:10:00 PM [vite] hmr update /src/modules/settings/ToolsSettings.tsx
+10:10:00 PM [vite] hmr update /src/portal.css
+10:10:23 PM [vite] hmr update /src/portal.css
+10:10:44 PM [vite] hmr update /src/portal.css
+10:11:08 PM [vite] hmr update /src/modules/home/OwnerHome.tsx
+10:11:08 PM [vite] hmr update /src/modules/settings/ToolsSettings.tsx

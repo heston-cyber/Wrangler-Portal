@@ -5,6 +5,7 @@
 //           wrote through the connector (T1.7).
 //   Hooks:  onVersionReady, onReply (Review), onSignInvite, onSigned (Sign). Called where those emails are sent.
 //           They only add Inbox rows; the emails themselves are unchanged until the one-email switch (task 10).
+import { isClientLogin } from "./lib/roles";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
@@ -407,7 +408,7 @@ export const onReply = internalMutation({
     if (!note || note.visibility !== "shared" || !note.authorId) return 0;
     if (r.authorId && r.authorId === note.authorId) return 0;
     const author = await ctx.db.get(note.authorId);
-    if (!author?.email || author.role !== "client") return 0;
+    if (!author?.email || (author.role !== "client" && !(author.role === "vendor" && await isClientLogin(ctx, author.email)))) return 0;
     const ver = await ctx.db.get(note.versionId);
     const vid = ver ? await ctx.db.get(ver.videoId) : null;
     if (!ver || !vid) return 0;

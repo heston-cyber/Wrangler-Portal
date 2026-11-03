@@ -128,7 +128,6 @@ async function clientRequest(ctx: QueryCtx | MutationCtx, requestId: string) {
   const row = (await myProjects(ctx as QueryCtx, me.email)).get(r.projectId);
   if (!row) return null;
   const b = row.project.businessId ? await ctx.db.get(row.project.businessId) : null;
-  if (b?.modules?.projects === false) return null;
   return { me, r, p: row.project, b };
 }
 

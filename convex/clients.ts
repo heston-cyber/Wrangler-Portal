@@ -12,7 +12,6 @@ import { businessInScope, ensureMembership } from "./lib/business";
 import type { Doc, Id } from "./_generated/dataModel";
 import { signedThumbUrl, signStillUrl } from "./lib/media";
 import { docLabel } from "./lib/wsLayout";
-import { assertNotVendor } from "./lib/roles";
 
 const cleanEmail = (e: string) => e.trim().toLowerCase();
 const valid = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && e.length <= 200;
@@ -24,7 +23,6 @@ export async function ensureInvite(ctx: MutationCtx, rawEmail: string, rawName?:
   if (allowedEmails().includes(email)) throw new ConvexError("That's an owner's email; it already has full access.");
   const ownsOne = (await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", email)).collect()).some((m) => m.role === "owner" && !m.revokedAt);
   if (ownsOne) throw new ConvexError("That email runs a business here, so it can't be invited as a client.");
-  await assertNotVendor(ctx, email); // D102: one role per email
   const name = rawName?.trim().replace(/\s+/g, " ").slice(0, 60) || undefined;
   const existing = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()).find((i) => !i.revokedAt);
   if (existing) {
@@ -141,7 +139,6 @@ export const addPerson = mutation({
     const email = cleanEmail(a.email);
     if (!valid(email)) throw new ConvexError("Enter a valid email.");
     if (allowedEmails().includes(email)) throw new ConvexError("That's an owner's email.");
-    await assertNotVendor(ctx, email); // D102: one role per email
     const name = a.name?.trim().replace(/\s+/g, " ").slice(0, 60) || undefined;
     const same = (await ctx.db.query("clientPeople").withIndex("by_client", (q) => q.eq("clientId", a.clientId)).collect()).find((p) => p.email === email);
     if (same && !same.removedAt) throw new ConvexError("That person is already on this client.");

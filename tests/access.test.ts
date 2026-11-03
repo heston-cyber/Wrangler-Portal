@@ -59,7 +59,7 @@ const OPEN: Record<string, string> = {
 // Functions with their own gate (a key in the arguments): refused with the wrong key, whoever calls.
 const KEYED = new Set(["r1results.report"]);
 // Functions any signed-in account may call (owner or client), never a stranger.
-const SIGNED_IN = new Set(["users.setName", "clients.account", "shares.mine",
+const SIGNED_IN = new Set(["users.setName", "users.switchSide", "clients.account", "shares.mine",
   // Phase 1: a client's own Inbox, Documents and their businesses' look
   "inbox.mine", "inbox.unreadCount", "inbox.markRead", "inbox.markAllRead", "documents.mine", "business.brand",
   "portal.waiting", "emails.myPrefs", "emails.setMine",

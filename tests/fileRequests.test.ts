@@ -185,7 +185,9 @@ describe("file requests", () => {
     expect(b.folder).toBe("/File requests/Harbor Coffee/26127 Launch/Music references");
     // Not within hours of email 31: asked yesterday.
     expect(await w.t.action(anyApi.fileRequests.remindDue, {})).toBe(0);
-    await w.t.run(async (ctx) => { for (const r of await ctx.db.query("fileRequests").collect()) await ctx.db.patch(r._id, { createdAt: Date.now() - 86_400_000 }); });
+    // A day before the 10 AM run below (not "now - a day": late at night that would be under 12 hours before it).
+    const tenAm = Date.parse(`${todayCentral()}T16:00:00Z`);
+    await w.t.run(async (ctx) => { for (const r of await ctx.db.query("fileRequests").collect()) await ctx.db.patch(r._id, { createdAt: tenAm - 86_400_000 }); });
     vi.useFakeTimers({ now: new Date(`${todayCentral()}T16:00:00Z`) }); // 10 AM Central
     const n = await w.t.action(anyApi.fileRequests.remindDue, {});
     vi.useRealTimers();

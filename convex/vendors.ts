@@ -15,7 +15,6 @@ import { requireMe } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import type { Rates } from "./lib/estimate";
 import { ratesOf } from "./crm";
-import { assertNotClient } from "./lib/roles";
 import { todayCentral } from "./lib/bookings";
 import { paidAmount, paidDay } from "./lib/bookingRows";
 
@@ -116,7 +115,6 @@ export const add = mutation({
     const d = clean(a);
     const dup = (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", d.email)).collect()).find((x) => !x.archivedAt);
     if (dup) throw new ConvexError(`${dup.name} is already a vendor with that email.`);
-    await assertNotClient(ctx, d.email); // D102
     const now = Date.now();
     const id = await ctx.db.insert("vendors", { ...d, ...(a.invite ? { invitedAt: now } : {}), createdAt: now, updatedAt: now });
     if (a.invite) await inviteNow(ctx, id);
@@ -132,7 +130,6 @@ export const update = mutation({
     if (!x) throw new ConvexError("That vendor isn't here.");
     const d = clean(a);
     if (d.email !== x.email && (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", d.email)).collect()).some((y) => y._id !== x._id && !y.archivedAt)) throw new ConvexError("Another vendor has that email.");
-    if (d.email !== x.email) await assertNotClient(ctx, d.email); // D102
     // Review fix (step 6): a new email is a new login. The old address loses this business, and the new one needs a
     // fresh invite before it sees any of their bookings, invoices or W-9.
     if (d.email !== x.email) await endAccess(ctx, x);
@@ -148,14 +145,13 @@ export const archive = mutation({
     await ownerBiz(ctx);
     const x = await ctx.db.get(vendorId);
     if (!x) throw new ConvexError("That vendor isn't here.");
-    if (!archived && x.archivedAt) await assertNotClient(ctx, x.email); // D102: back on the list only if still not a client's
     await ctx.db.patch(vendorId, { archivedAt: archived ? Date.now() : undefined, updatedAt: Date.now() });
     // Review fix (step 6): off the list ends their portal access to this business (and a booked editor's Review link);
     // back on the list gives it back to an invited vendor.
     if (archived && !x.archivedAt) await endAccess(ctx, x);
     if (!archived && x.archivedAt && x.invitedAt) {
       const user = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", x.email)).first();
-      await syncVendorMemberships(ctx, x.email, user?.role === "vendor" ? user._id : undefined);
+      await syncVendorMemberships(ctx, x.email, user && user.role !== "owner" ? user._id : undefined);
     }
     return null;
   },
@@ -183,7 +179,8 @@ async function inviteNow(ctx: MutationCtx, vendorId: Id<"vendors">) {
   const now = Date.now();
   await ctx.db.patch(vendorId, { invitedAt: now, updatedAt: now });
   const user = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", x.email)).unique();
-  if (user?.role === "vendor") await syncVendorMemberships(ctx, x.email, user._id);
+  // An existing login (a vendor elsewhere, or a client: one login can be both) gets this business on its vendor side.
+  if (user && user.role !== "owner") await syncVendorMemberships(ctx, x.email, user._id);
   await ctx.scheduler.runAfter(0, internal.vendors.mailInvite, { vendorId, at: now });
 }
 
@@ -194,7 +191,6 @@ export const invite = mutation({
     await ownerBiz(ctx);
     const x = await ctx.db.get(vendorId);
     if (!x || x.archivedAt) throw new ConvexError("That vendor isn't on your list.");
-    await assertNotClient(ctx, x.email); // D102
     await inviteNow(ctx, vendorId);
     return null;
   },

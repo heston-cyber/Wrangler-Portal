@@ -3,6 +3,7 @@
 // 735:4610 / 735:4933). One login across the businesses a vendor works for (D94): the switcher picks one, the portal
 // takes on its look, and only its work shows. Invoices, Settings (W-9, payment method) and Review for editors come in
 // the next part of step 4.
+import { useSideSwitch } from "../../shell/SideSwitch";
 import { useContext, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -350,6 +351,7 @@ function VendorBriefing({ briefingId }: { briefingId: string }) {
 
 function VendorMore({ me }: { me: { name: string | null; email: string } }) {
   const [signOut, dialog] = useSignOutAsk();
+  const sideSwitch = useSideSwitch();
   return (
     <div className="wp-page">
       <PageHeader title={me.name ?? me.email} sub={me.email} />
@@ -357,6 +359,7 @@ function VendorMore({ me }: { me: { name: string | null; email: string } }) {
       <Card label="More">
         <ListRow className="ilead" lead={{ icon: "settings" }} to="/settings" title="Settings" meta="Your account" chevron />
         <Divider />
+        {sideSwitch.other && <><ListRow className="ilead" lead={{ icon: "users" }} onClick={() => void sideSwitch.go()} title="Switch to the client side" meta="Same login, your projects as a client" /><Divider /></>}
         <ListRow className="ilead" lead={{ icon: "sign-out" }} onClick={signOut} title="Sign out" />
       </Card>
       {dialog}

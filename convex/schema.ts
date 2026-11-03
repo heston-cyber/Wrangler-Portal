@@ -16,8 +16,9 @@ export default defineSchema({
     phone: v.optional(v.string()),
     phoneVerificationTime: v.optional(v.number()),
     isAnonymous: v.optional(v.boolean()),
-    role: v.optional(v.union(v.literal("owner"), v.literal("client"), v.literal("vendor"))), // Phase 3c: vendors (D94, D102: one role per email)
+    role: v.optional(v.union(v.literal("owner"), v.literal("client"), v.literal("vendor"))), // Phase 3c: vendors (D94). Nov 2: for a client-and-vendor login, the side it's on now (users.switchSide)
     lastSignInAt: v.optional(v.number()),
+    tools: v.optional(v.any()),                // Nov 2: an owner's Settings › Tools (menu order, tools off the menu, Dashboard widgets; lib/tools.ts)
   }).index("email", ["email"]).index("phone", ["phone"]),
   // Emails allowed to make a client account. Made by the owner (the Share dialog in C2, or Settings › Clients).
   invites: defineTable({
@@ -701,7 +702,7 @@ export default defineSchema({
     // on review copies (D24: on for every client unless switched off on the client).
     roundsDefault: v.optional(v.number()),
     roundsOff: v.optional(v.boolean()), // revision rounds switched off for the whole business
-    watermark: v.optional(v.object({ corner: v.union(v.literal("tl"), v.literal("tr"), v.literal("bl"), v.literal("br")), size: v.union(v.literal("small"), v.literal("large")), opacity: v.number() })),
+    watermark: v.optional(v.object({ corner: v.union(v.literal("tl"), v.literal("tr"), v.literal("bl"), v.literal("br"), v.literal("c")), size: v.union(v.literal("small"), v.literal("large")), opacity: v.number(), mark: v.optional(v.union(v.literal("logo"), v.literal("text"), v.literal("both"))), text: v.optional(v.string()) })), // Nov 2: center, and your own text
     // Phase 2 Part B (D45): the business's own Stripe account, connected to the portal's platform account. Money goes
     // straight to it; the portal only mirrors what Stripe holds.
     stripe: v.optional(v.object({

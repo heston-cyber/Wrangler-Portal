@@ -4,6 +4,7 @@
 //   ownerAlert   clients or guests left notes → one email to Heston per sitting, 10 minutes after the last note
 // Every client email carries an unsubscribe link for that kind; each email is logged by key so it goes out once.
 // Bodies name the video and its project only, never other clients; links carry the share token, never a key.
+import { isClientLogin } from "./lib/roles";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { requireSignedIn } from "./lib/access";
 import { httpAction } from "./_generated/server";
@@ -181,7 +182,7 @@ export const replyData = internalQuery({
     const n = await ctx.db.get(r.noteId);
     if (!n || n.visibility !== "shared" || !n.authorId) return null; // guests have no email; private notes have no client
     const author = await ctx.db.get(n.authorId);
-    if (!author?.email || author.role !== "client") return null;
+    if (!author?.email || (author.role !== "client" && !(author.role === "vendor" && await isClientLogin(ctx, author.email)))) return null;
     if (r.authorId && r.authorId === n.authorId) return null; // their own reply
     const ver = await ctx.db.get(n.versionId);
     const vid = ver ? await ctx.db.get(ver.videoId) : null;

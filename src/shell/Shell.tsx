@@ -5,6 +5,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "convex/react";
 import { useSignOutAsk } from "./SignOut";
+import { sideWord, useSideSwitch } from "./SideSwitch";
+import { DEFAULT_TOOLS, type ToolKey, type Tools } from "../../convex/lib/tools";
 import { api } from "../../convex/_generated/api";
 import { linkProps, navigate, useLocation } from "../lib/router";
 import { useUploads } from "../lib/uploads";
@@ -69,18 +71,25 @@ const inClients = (p: string) => starts(p, "/clients");
 const inReview = (p: string) => starts(p, "/review", "/projects", "/activity", "/v");
 const inDocs = (p: string) => starts(p, "/sign", "/docs");
 
-function ownerItems(payments = false): { main: Item[]; tabs: Item[] } {
-  const home: Item = { to: "/", label: "Home", icon: "home", match: (p) => p === "/" };
+// Nov 2 (Heston): Settings › Tools sets this owner's menu: the order, which tools are on it, and Home is now Dashboard.
+// Phones: the first four tools on the menu, then More (the rest, then Settings).
+function ownerItems(payments = false, tools: Tools = DEFAULT_TOOLS): { main: Item[]; tabs: Item[] } {
+  const home: Item = { to: "/", label: "Dashboard", icon: "home", match: (p) => p === "/" };
   const clients: Item = { to: "/clients", label: "Clients", icon: "users", match: () => false, tab: inClients, layer: OWNER_CLIENTS, layerHas: inClients };
   const review: Item = { to: "/review", label: "Review", icon: "review", match: (p) => p === "/review", tab: inReview, layer: OWNER_REVIEW, layerHas: inReview };
   const docs: Item = { to: "/sign", label: "Docs", icon: "document", match: (p) => p === "/sign", tab: inDocs, layer: OWNER_DOCS, layerHas: inDocs };
   const proposals: Item = { to: "/proposals", label: "Proposals", icon: "quote", match: () => false, tab: inProposals, layer: OWNER_PROPOSALS, layerHas: inProposals };
   const vendors: Item = { to: "/vendors", label: "Vendors", icon: "user", match: () => false, tab: inVendors, layer: OWNER_VENDORS, layerHas: inVendors };
   const sent: Item = { to: "/sent", label: "Sent", icon: "send", match: (p) => starts(p, "/sent") };
-  const more: Item = { to: "/more", label: "More", icon: "menu", match: (p) => starts(p, "/more", "/sent", "/settings", "/payments", "/proposals", "/vendors") };
   // Phase 2 Part B: Payments › Invoices once the business has connected Stripe (D45).
   const pay: Item = { to: "/payments", label: "Payments", icon: "invoice", match: () => false, tab: inPayments, layer: OWNER_PAYMENTS, layerHas: inPayments };
-  return { main: payments ? [home, clients, review, docs, proposals, pay, vendors, sent] : [home, clients, review, docs, proposals, vendors, sent], tabs: [home, clients, review, docs, more] };
+  const byKey: Record<ToolKey, Item | null> = { dashboard: home, clients, review, docs, proposals, payments: payments ? pay : null, vendors, sent };
+  const main = tools.order.filter((k) => !tools.hidden.includes(k)).map((k) => byKey[k]).filter((x): x is Item => !!x);
+  const tabbed = main.slice(0, 4);
+  const rest = main.slice(4);
+  const inRest = (p: string) => rest.some((it) => (it.tab ?? it.match)(p));
+  const more: Item = { to: "/more", label: "More", icon: "menu", match: (p) => starts(p, "/more", "/settings") || inRest(p) };
+  return { main, tabs: [...tabbed, more] };
 }
 
 type SharedProject = { to: string; label: string };
@@ -113,6 +122,7 @@ export function Shell({ me, side = "owner", overlay, light = true, subtitle, chi
   const pay = useQuery(api.payments.settings, side === "owner" ? {} : "skip");
   const billed = useQuery(api.invoicePay.mine, side === "client" ? {} : "skip");
   const subs = useQuery(api.subscriptions.mine, side === "client" ? {} : "skip");
+  const tools = useQuery(api.users.me)?.tools as Tools | undefined; // the owner's Settings › Tools
   // Phase 2: the client's Review layer lists their projects (each opens its project page), then any other shared
   // collection that isn't one of those projects.
   const myProjects = useQuery(api.projects.mine, side === "client" ? {} : "skip");
@@ -126,15 +136,15 @@ export function Shell({ me, side = "owner", overlay, light = true, subtitle, chi
     : [];
   return (
     <ShellFrame me={me} side={side} overlay={overlay} light={light} subtitle={subtitle} logo={brand?.logoUrl ?? wpLogo} bizName={brand?.name ?? "Wrangler Productions"}
-      shared={shared} unread={unread} recent={recent} search={side === "owner"} payments={side === "owner" ? !!pay?.stripe : !!billed?.length || !!subs?.length}>
+      shared={shared} unread={unread} recent={recent} search={side === "owner"} tools={tools} payments={side === "owner" ? !!pay?.stripe : !!billed?.length || !!subs?.length}>
       {children}
     </ShellFrame>
   );
 }
 
 /** The frame itself, fed by Shell (or by the dev-only component page with sample data). */
-export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, shared, unread, recent, search: canSearch, payments, nav: navIn, top, children }: {
-  me: Me; side: Side; overlay: boolean; light: boolean; subtitle?: string | null; logo: string; bizName: string;
+export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, shared, unread, recent, search: canSearch, payments, nav: navIn, top, tools, children }: {
+  me: Me; side: Side; overlay: boolean; light: boolean; subtitle?: string | null; logo: string; bizName: string; tools?: Tools;
   shared: SharedProject[]; unread: number; recent: Recent[]; search: boolean; payments?: boolean; children: React.ReactNode;
   nav?: { main: Item[]; tabs: Item[] }; top?: React.ReactNode; // Phase 3c: the vendor side's own items and its "Working for" switcher
 }) {
@@ -159,7 +169,7 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [canSearch]);
-  const nav = navIn ?? (side === "owner" ? ownerItems(payments) : clientItems(shared, unread, payments));
+  const nav = navIn ?? (side === "owner" ? ownerItems(payments, tools) : clientItems(shared, unread, payments));
   const ctx = useMemo(() => ({ openSidebar: () => setDrawerState("open"), peekSidebar: peek, openSearch: () => setSearch(true), overlay, side }), [overlay, side]);
   const showSidebar = !overlay || drawer;
   const lightSrc = side === "owner" ? lightBack : lightClient;
@@ -194,6 +204,7 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
   const { path } = useLocation();
   const uploads = useUploads().filter((u) => u.status === "starting" || u.status === "uploading");
   const [signOut, signOutDialog] = useSignOutAsk();
+  const sideSwitch = useSideSwitch();
   // A layer opens by itself on its own pages; the chevron opens or closes it anywhere.
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const isOpen = (it: Item) => open[it.to] ?? !!it.layerHas?.(path);
@@ -268,6 +279,7 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
       )}>
         <div className="mlabel" style={{ textTransform: "none", letterSpacing: 0, fontFamily: "var(--font-body)", fontSize: 12 }}>{me.email}</div>
         <MenuItem icon={<Icon name="settings" size={18} />} onSelect={() => navigate("/settings")}>Settings</MenuItem>
+        {sideSwitch.other && <MenuItem icon={<Icon name="users" size={18} />} onSelect={() => void sideSwitch.go()}>Switch to the {sideWord(sideSwitch.other)}</MenuItem>}
         <MenuSep />
         <MenuItem icon={<Icon name="sign-out" size={18} />} onSelect={signOut}>Sign out</MenuItem>
       </Menu>
@@ -317,6 +329,7 @@ function TabBar({ items }: { items: Item[] }) {
 /** The More page on phones: what doesn't fit in the tab bar. */
 export function MorePage({ me, side }: { me: Me; side: Side }) {
   const [signOut, signOutDialog] = useSignOutAsk();
+  const sideSwitch = useSideSwitch();
   // Phones: Payments lives here (the tab bar has five places).
   const pay = useQuery(api.payments.settings, side === "owner" ? {} : "skip");
   const billed = useQuery(api.invoicePay.mine, side === "client" ? {} : "skip");
@@ -324,12 +337,14 @@ export function MorePage({ me, side }: { me: Me; side: Side }) {
   const payRow = side === "owner" ? (pay?.stripe ? [{ to: "/payments", icon: "invoice" as IconName, title: "Payments", sub: "Overview, invoices and subscriptions" }] : [])
     : [...(billed?.length ? [{ to: "/payments/invoices", icon: "invoice" as IconName, title: "Payments", sub: "Your invoices" }] : []),
       ...(subs?.length ? [{ to: "/payments/subscriptions", icon: "activity" as IconName, title: "Subscriptions", sub: "Your plans" }] : [])];
+  // The owner's: the tools on their menu that don't fit the tab bar (Settings › Tools sets which and in what order).
+  const tools = useQuery(api.users.me, side === "owner" ? {} : "skip")?.tools as Tools | undefined;
+  const TOOL_SUB: Record<string, string> = { "/": "Today, clients and activity", "/clients": "Pipeline, companies, follow-ups", "/review": "Projects and activity", "/sign": "Documents and templates",
+    "/proposals": "Written pitches, templates", "/payments": "Overview, invoices and subscriptions", "/vendors": "Shooters, editors and crew you hire", "/sent": "Notes and items you sent" };
+  const rest = side === "owner" ? ownerItems(!!pay?.stripe, tools).main.slice(4) : [];
   const rows: { to?: string; icon: IconName; title: string; sub?: string; onClick?: () => void }[] = side === "owner"
     ? [
-      { to: "/proposals", icon: "quote", title: "Proposals", sub: "Written pitches, templates" },
-      { to: "/vendors", icon: "user", title: "Vendors", sub: "Shooters, editors and crew you hire" },
-      ...payRow,
-      { to: "/sent", icon: "send", title: "Sent", sub: "Notes and items you sent" },
+      ...rest.map((it) => ({ to: it.to, icon: it.icon, title: it.label, sub: TOOL_SUB[it.to] })),
       { to: "/settings", icon: "settings", title: "Settings", sub: "Business, Register, Dropbox, connectors…" },
       { to: "/settings/account", icon: "user", title: "Account", sub: `${me.name ?? ""}${me.name ? " · " : ""}${me.email}` },
       { icon: "sign-out", title: "Sign out", onClick: signOut },
@@ -337,6 +352,7 @@ export function MorePage({ me, side }: { me: Me; side: Side }) {
     : [
       ...payRow,
       { to: "/settings", icon: "settings", title: "Settings", sub: `${me.name ?? ""}${me.name ? " · " : ""}${me.email}` },
+      ...(sideSwitch.other ? [{ icon: "users" as IconName, title: `Switch to the ${sideWord(sideSwitch.other)}`, sub: "Same login, your work as a vendor", onClick: () => void sideSwitch.go() }] : []),
       { icon: "sign-out", title: "Sign out", onClick: signOut },
     ];
   return (

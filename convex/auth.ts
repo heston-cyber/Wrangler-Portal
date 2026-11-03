@@ -1,3 +1,4 @@
+import { sidesOf } from "./lib/roles";
 import { convexAuth } from "@convex-dev/auth/server";
 import { Password } from "@convex-dev/auth/providers/Password";
 import { Email } from "@convex-dev/auth/providers/Email";
@@ -66,27 +67,31 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         await ctx.db.patch(args.existingUserId, patch);
         if (!allowedEmails().includes(email)) {
           const u = await ctx.db.get(args.existingUserId);
-          if (u?.role === "vendor") await syncVendorMemberships(ctx, email, args.existingUserId); // Phase 3c
-          else await syncClientMemberships(ctx, email, args.existingUserId);
+          // Nov 2: one login can be a client and a vendor; both kinds of membership stay in step.
+          if (u?.role !== "owner") {
+            await syncVendorMemberships(ctx, email, args.existingUserId); await syncClientMemberships(ctx, email, args.existingUserId);
+            // On a side with nothing left (every business took them off it) but work on the other: land on the other.
+            const sides = await sidesOf(ctx, email);
+            if (sides.length && !sides.includes(u?.role === "vendor" ? "vendor" : "client")) await ctx.db.patch(args.existingUserId, { role: sides[0] });
+          }
         }
         return args.existingUserId;
       }
       const owner = allowedEmails().includes(email);
       const invite = owner ? null : (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()).find((i) => !i.revokedAt) ?? null;
-      // Phase 3c step 4: a vendor a business has invited to the vendor portal (and not taken off its list). D102: one role
-      // per email, so a client invite wins (adding a vendor with a client's email is refused anyway).
-      const vendor = owner || invite ? null : (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", email)).collect()).find((x) => !x.archivedAt && x.invitedAt) ?? null;
+      // Phase 3c step 4: a vendor a business has invited to the vendor portal (and not taken off its list). Nov 2: the
+      // login can be both; it starts on the client side when there's a client invite too, and can switch.
+      const vendor = owner ? null : (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", email)).collect()).find((x) => !x.archivedAt && x.invitedAt) ?? null;
       if (!owner && !invite && !vendor) throw new ConvexError("This email hasn't been invited to WranglerPortal.");
       const userId = await ctx.db.insert("users", {
-        email, role: owner ? "owner" : vendor ? "vendor" : "client",
+        email, role: owner ? "owner" : invite ? "client" : "vendor",
         name: (typeof args.profile.name === "string" && args.profile.name && !(!owner && ownerNames().has(args.profile.name.trim().toLowerCase())) ? args.profile.name : undefined) || invite?.name || vendor?.name || undefined,
         emailVerificationTime: verified ? Date.now() : undefined, lastSignInAt: Date.now(),
       });
       if (invite) await ctx.db.patch(invite._id, { acceptedAt: Date.now(), userId });
       // Step 6: an owner (ALLOWED_EMAILS) belongs to the default business; a client to each business that invited them.
       if (owner) await ensureMembership(ctx, (await ensureDefaultBusiness(ctx)).businessId, email, "owner", userId);
-      else if (vendor) await syncVendorMemberships(ctx, email, userId);
-      else await syncClientMemberships(ctx, email, userId);
+      else { if (vendor) await syncVendorMemberships(ctx, email, userId); if (invite) await syncClientMemberships(ctx, email, userId); }
       return userId;
     },
   },

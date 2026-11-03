@@ -45,7 +45,7 @@ export function shareInviteMail(b: MailBrand, d: { kind: string; label: string; 
 }
 /** 03b Portal invite (drawn Oct 29): "Invite to the portal" / "Resend invite" from the client page. */
 export function portalInviteMail(b: MailBrand, d: { name: string | null; email: string; hasAccount: boolean }): Mail {
-  const link = `${SITE()}/?invited=${encodeURIComponent(d.email).replace(/%40/g, "@")}`;
+  const link = `${SITE()}/?invited=${encodeURIComponent(d.email).replace(/%40/g, "@")}&side=client`; // a client-and-vendor login lands on the client side
   const who = byline(b);
   return mk(b, "review", `${who} invited you to WranglerPortal`, [
     hi(d.name),
@@ -400,7 +400,7 @@ export function briefingMail(b: MailBrand, d: { name: string; kind: string; proj
 
 // ---------- the vendor portal invite (Phase 3c step 4; the portal invite's layout, 03b) ----------
 export function vendorInviteMail(b: MailBrand, d: { name: string; email: string; hasAccount: boolean }): Mail {
-  const link = `${SITE()}/?invited=${encodeURIComponent(d.email).replace(/%40/g, "@")}`;
+  const link = `${SITE()}/?invited=${encodeURIComponent(d.email).replace(/%40/g, "@")}&side=vendor`; // lands on the vendor side
   const who = byline(b);
   return mk(b, "updates", `${who} invited you to WranglerPortal`, [
     hi(d.name),

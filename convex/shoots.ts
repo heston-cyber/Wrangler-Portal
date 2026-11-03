@@ -190,7 +190,6 @@ async function clientShoot(ctx: QueryCtx, shootId: string) {
   if (!row) return null;
   const p = row.project;
   const b = p.businessId ? await ctx.db.get(p.businessId) : null;
-  if (b?.modules?.projects === false) return null;
   return { me, s, p, b };
 }
 

@@ -1646,6 +1646,8 @@ button.wp-hubcard[aria-busy], button.wp-tplcard[aria-busy] { opacity: 1; }
 .wp-watermark.large { font-size: clamp(12px, 2.4vw, 30px); }
 .wp-watermark.tl { top: 4%; left: 3%; } .wp-watermark.tr { top: 4%; right: 3%; }
 .wp-watermark.bl { bottom: 5%; left: 3%; } .wp-watermark.br { bottom: 5%; right: 3%; }
+.wp-watermark.c { top: 50%; left: 50%; transform: translate(-50%, -50%); }
+.wp-watermark .wm-text { font: 600 1.25em/1.1 var(--font-display, var(--font-body)); color: #fff; white-space: nowrap; letter-spacing: 0.01em; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
 /* Settings › Business: revision rounds and watermark (Phase 2) */
 .wp-bizextra { display: grid; gap: 20px; max-width: 818px; margin-top: 24px; }
 .wp-bizextra .panel > .wp-eyebrow { display: block; padding: 18px 18px 4px; }
@@ -2481,3 +2483,24 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 }
 /* The done tick on a step (the proposal questionnaire's too): white on the red dot, not red on red. */
 .qz-step .n .wp-icon { color: var(--on-accent); width: 12px; height: 12px; }
+.wp-wmtext { display: grid; gap: 4px; width: min(100%, 360px); }
+
+/* Nov 2: Settings › Tools (drag to reorder the side menu and the Dashboard's widgets) */
+.tl-card { display: grid; gap: 10px; max-width: 818px; }
+.tl-card + .tl-card { margin-top: 20px; }
+.tl-grip { position: relative; }
+.tl-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.tl-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--surface-raised, rgba(255,255,255,.03)); box-shadow: inset 0 0 0 1px var(--border-faint); cursor: grab; }
+.tl-row.dragging { opacity: .45; }
+.tl-row.over-before { box-shadow: inset 0 2px 0 0 var(--accent), inset 0 0 0 1px var(--border-faint); }
+.tl-row.over-after { box-shadow: inset 0 -2px 0 0 var(--accent), inset 0 0 0 1px var(--border-faint); }
+.tl-grip { display: grid; gap: 3px; width: 14px; min-width: 14px; flex: none; margin-right: 4px; }
+.tl-grip i { display: block; width: 14px; height: 2px; border-radius: 1px; background: var(--text-muted); }
+.tl-txt { display: grid; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.tl-txt b { font-weight: 500; }
+.tl-txt .secondary { font-size: var(--fs-text-small); }
+.tl-moves { display: inline-flex; gap: 2px; flex: none; }
+.tl-note { margin: 2px 0 0; }
+.tl-card > .btn { justify-self: start; }
+@media (max-width: 600px) { .tl-row { gap: 8px; padding: 10px; } .tl-grip { display: none; } }
+.tl-row > .wp-icon { margin-left: 10px; }

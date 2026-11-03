@@ -5,11 +5,12 @@ import { Suspense, lazy, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { Button, ButtonLink, Card, Divider, InboxItem, ListRow, PageHeader, SectionHead, SkeletonRows, StatusChip } from "../../ui/wp";
+import { Button, ButtonLink, Card, Divider, EmptyState, InboxItem, ListRow, PageHeader, SectionHead, SkeletonRows, StatusChip } from "../../ui/wp";
 import type { IconName } from "../../ui/Icon";
 import { useToast } from "../../ui/kit";
 import { errText } from "../docs/pages/common";
 import { FollowUpRow } from "../crm/common";
+import { DEFAULT_TOOLS, type Tools, type WidgetKey } from "../../../convex/lib/tools";
 
 // Phase 2b: monthly recurring and any past-due subscription (loaded with the Payments code).
 const Recurring = lazy(() => import("../payments/PaymentsOverview").then((m) => ({ default: m.Recurring })));
@@ -150,44 +151,56 @@ export default function OwnerHome() {
     catch (e) { show(errText(e)); }
   };
   const shownClients = (clients ?? []).slice().sort((a, b) => Number(b.toSign + b.toReview > 0) - Number(a.toSign + a.toReview > 0) || a.name.localeCompare(b.name)).slice(0, 5);
+  // Nov 2 (Heston): the Dashboard's widgets and their order come from Settings › Tools.
+  const tools = useQuery(api.users.me)?.tools as Tools | undefined;
+  const on = (tools?.widgets ?? DEFAULT_TOOLS.widgets).filter((w) => w.on).map((w) => w.id);
+  const card: Record<WidgetKey, React.ReactNode> = {
+    needs: (
+      <Card key="needs" label="Needs you today" head={<SectionHead label="Needs you today" count={needs?.length ? needs.length : undefined} />}>
+        {needs === undefined ? <SkeletonRows n={3} />
+          : needs.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "check-circle" }} title="New client notes, documents waiting on clients and drafts to confirm show up here." />
+          : needs.map((n, i) => <div key={i} className="wp-rowwrap">{i > 0 && <Divider />}<NeedRow n={n} remind={remind} /></div>)}
+      </Card>
+    ),
+    followups: due && due.length > 0 ? (
+      <Card key="followups" label="Follow-ups" head={<SectionHead label="Follow-ups" count={due.length} action={<ButtonLink size="sm" variant="ghost" to="/clients/follow-ups">All follow-ups</ButtonLink>} />}>
+        {due.map((f, i) => <div key={f._id} className="wp-rowwrap">{i > 0 && <Divider />}<FollowUpRow f={f} show={show} /></div>)}
+      </Card>
+    ) : null,
+    clients: clients && clients.length > 0 ? (
+      <Card key="clients" className="wp-homeclients" label="Your clients" head={<SectionHead label="Your clients" count={clients.length} action={<ButtonLink size="sm" variant="ghost" to="/clients">All clients</ButtonLink>} />}>
+        {shownClients.map((c, i) => (
+          <div key={c._id} className="wp-rowwrap">{i > 0 && <Divider />}
+            <ListRow to={`/clients/${c._id}`} lead={{ avatar: c.name, two: true }} title={c.name} meta={`${plural(c.people, "person", "people")} · ${plural(c.projects, "project", "projects")}`} chip={waitingChip(c)} chevron />
+          </div>
+        ))}
+      </Card>
+    ) : null,
+    activity: (
+      <Card key="activity" label="Recent activity" head={<SectionHead label="Recent activity" action={<ButtonLink size="sm" variant="ghost" to="/activity">See all</ButtonLink>} />}>
+        {recent === undefined ? <SkeletonRows n={4} />
+          : recent.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "activity" }} title="Client views, notes and signatures show up here." />
+          : recent.slice(0, 5).map((r, i) => (
+            <div key={i} className="wp-rowwrap">{i > 0 && <Divider />}
+              <InboxItem icon={RECENT_ICON[r.what]} title={recentTitle(r)} detail={r.detail ?? undefined} time={activityWhen(r.at, now)} to={recentLink(r)} />
+            </div>
+          ))}
+      </Card>
+    ),
+    recurring: <Suspense key="recurring" fallback={null}><Recurring withPastDue /></Suspense>,
+  };
+  // Each widget keeps its column from the approved Home (lists on the left, activity and money on the right); your
+  // order decides the order inside each. With only one column's widgets on, they take the page.
+  const RIGHT = new Set<WidgetKey>(["activity", "recurring"]);
+  const cols: [React.ReactNode[], React.ReactNode[]] = [[], []];
+  for (const id of on) if (card[id]) cols[RIGHT.has(id) ? 1 : 0].push(card[id]);
+  if (!cols[0].length) { cols[0] = cols[1]; cols[1] = []; }
   return (
     <div className="wp-page notop wp-home">
-      <PageHeader eyebrow={new Date(now).toLocaleDateString("en-US", { timeZone: TZ, weekday: "long", month: "short", day: "numeric" })} title={needs === undefined ? " " : headline(needs.length)} />
-      <div className="wp-homecols">
-        <div className="col">
-          <Card label="Needs you today" head={<SectionHead label="Needs you today" count={needs?.length ? needs.length : undefined} />}>
-            {needs === undefined ? <SkeletonRows n={3} />
-              : needs.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "check-circle" }} title="New client notes, documents waiting on clients and drafts to confirm show up here." />
-              : needs.map((n, i) => <div key={i} className="wp-rowwrap">{i > 0 && <Divider />}<NeedRow n={n} remind={remind} /></div>)}
-          </Card>
-          {due && due.length > 0 && (
-            <Card label="Follow-ups" head={<SectionHead label="Follow-ups" count={due.length} action={<ButtonLink size="sm" variant="ghost" to="/clients/follow-ups">All follow-ups</ButtonLink>} />}>
-              {due.map((f, i) => <div key={f._id} className="wp-rowwrap">{i > 0 && <Divider />}<FollowUpRow f={f} show={show} /></div>)}
-            </Card>
-          )}
-          {clients && clients.length > 0 && (
-            <Card className="wp-homeclients" label="Your clients" head={<SectionHead label="Your clients" count={clients.length} action={<ButtonLink size="sm" variant="ghost" to="/clients">All clients</ButtonLink>} />}>
-              {shownClients.map((c, i) => (
-                <div key={c._id} className="wp-rowwrap">{i > 0 && <Divider />}
-                  <ListRow to={`/clients/${c._id}`} lead={{ avatar: c.name, two: true }} title={c.name} meta={`${plural(c.people, "person", "people")} · ${plural(c.projects, "project", "projects")}`} chip={waitingChip(c)} chevron />
-                </div>
-              ))}
-            </Card>
-          )}
-        </div>
-        <div className="col right">
-          <Card label="Recent activity" head={<SectionHead label="Recent activity" action={<ButtonLink size="sm" variant="ghost" to="/activity">See all</ButtonLink>} />}>
-            {recent === undefined ? <SkeletonRows n={4} />
-              : recent.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "activity" }} title="Client views, notes and signatures show up here." />
-              : recent.slice(0, 5).map((r, i) => (
-                <div key={i} className="wp-rowwrap">{i > 0 && <Divider />}
-                  <InboxItem icon={RECENT_ICON[r.what]} title={recentTitle(r)} detail={r.detail ?? undefined} time={activityWhen(r.at, now)} to={recentLink(r)} />
-                </div>
-              ))}
-          </Card>
-          <Suspense fallback={null}><Recurring withPastDue /></Suspense>
-        </div>
-      </div>
+      <PageHeader eyebrow={new Date(now).toLocaleDateString("en-US", { timeZone: TZ, weekday: "long", month: "short", day: "numeric" })} title={needs === undefined ? " " : headline(needs.length)}
+        actions={<ButtonLink size="sm" variant="ghost" to="/settings/tools">Customize</ButtonLink>} />
+      {on.length === 0 ? <EmptyState icon="home" title="No widgets on your Dashboard." body="Pick what shows here in Settings › Tools." actions={<ButtonLink variant="primary" to="/settings/tools">Settings › Tools</ButtonLink>} />
+        : <div className="wp-homecols"><div className="col">{cols[0]}</div><div className="col right">{cols[1]}</div></div>}
       {toast}
     </div>
   );
