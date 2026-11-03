@@ -1110,6 +1110,29 @@ export default defineSchema({
   }).index("by_project", ["projectId"]).index("by_client", ["clientId"]).index("by_stripe", ["stripe.invoiceId"]).index("by_updated", ["updatedAt"]).index("by_pay_token", ["payToken"]).index("by_bill_email", ["billTo.email"]),
 
   // Phase 2 Part B: every Stripe webhook event, once (a repeat delivery changes nothing).
+  // Phase 5c (Nov 3): Site watch. Global (the portal's own health, not a business's records): one row per problem,
+  // seen by the portal's admins only (ALLOWED_EMAILS). Holds counts and error text with email addresses masked.
+  siteWatchFindings: defineTable({
+    key: v.string(),                       // e.g. "email:footage_offer", "job:footage.mailOffer", "stored:versions.failed"
+    area: v.string(),                      // email · job · stored · tests · page
+    title: v.string(),
+    detail: v.optional(v.string()),
+    count: v.number(),                     // events seen, or rows in the problem state now
+    hits: v.optional(v.number()),          // businesses affected
+    firstAt: v.number(), lastAt: v.number(),
+    status: v.union(v.literal("found"), v.literal("fix_ready"), v.literal("fixed"), v.literal("needs_you"), v.literal("cleared")),
+    urgent: v.optional(v.boolean()),
+    branch: v.optional(v.string()),        // the fix's branch (watch/...), only ever on the preview
+    note: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]).index("by_status", ["status"]),
+  siteWatchRuns: defineTable({
+    at: v.number(),
+    by: v.union(v.literal("app"), v.literal("agent")),
+    found: v.number(), cleared: v.number(),
+    summary: v.optional(v.string()),
+  }).index("by_at", ["at"]),
+
   stripeEvents: defineTable({
     eventId: v.string(), type: v.string(), account: v.optional(v.string()), livemode: v.boolean(), receivedAt: v.number(),
   }).index("by_event", ["eventId"]),
