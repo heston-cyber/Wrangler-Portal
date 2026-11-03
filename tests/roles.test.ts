@@ -71,11 +71,13 @@ describe("one login, client and vendor", () => {
     await expect(w.boss.mutation(api.users.switchSide, { side: "vendor" })).rejects.toThrow(/Not allowed/);
     const vendorId = await w.heston.mutation(api.vendors.add, { name: "Maya Brooks", email: MAYA, roles: ["Shooter"], rates: [], invite: true }) as Id<"vendors">;
     await w.maya.mutation(api.users.switchSide, { side: "vendor" });
+    // On the vendor side when Heston takes her off his list: she isn't stranded there; she's back on her client side.
+    expect(await w.maya.query(api.invoicePay.mine, {})).toEqual([]); // no client billing on the vendor side
     await w.heston.mutation(api.vendors.archive, { vendorId, archived: true });
-    expect((await w.maya.query(api.users.me, {})).sides).toEqual(["client"]);
+    expect(await w.maya.query(api.users.me, {})).toMatchObject({ role: "client", sides: ["client"] });
     await expect(w.maya.query(api.vendorPortal.home, {})).rejects.toThrow(/Not allowed/);
+    await w.maya.query(api.inbox.mine, {});
     await expect(w.maya.mutation(api.users.switchSide, { side: "vendor" })).rejects.toThrow(/No business has you as a vendor/);
-    await w.maya.mutation(api.users.switchSide, { side: "client" });
     // Back on the list (invited before): the vendor side comes back.
     await w.heston.mutation(api.vendors.archive, { vendorId, archived: false });
     expect((await w.maya.query(api.users.me, {})).sides).toEqual(["client", "vendor"]);

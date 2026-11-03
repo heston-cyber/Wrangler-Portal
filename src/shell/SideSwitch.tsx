@@ -13,9 +13,24 @@ export function useSideSwitch() {
   const me = useQuery(api.users.me);
   const sw = useMutation(api.users.switchSide);
   const sides = (me?.sides ?? []) as SideName[];
-  const other = me && !me.allowed && sides.length > 1 ? (sides.find((s) => s !== me.role) ?? null) : null;
-  const go = async (side?: SideName) => { const s = side ?? other; if (!s) return; await sw({ side: s }); navigate("/"); };
+  // Review (Nov 2): offered whenever the login has a side it isn't on (even after losing the one it's on).
+  const other = me && !me.allowed ? (sides.find((s) => s !== me.role) ?? null) : null;
+  const go = async (side?: SideName, stay = false) => { const s = side ?? other; if (!s) return; await sw({ side: s }); if (!stay) navigate("/"); };
   return { other, go, sides };
+}
+
+/** A client page (an email's link to a cut, an invoice, a project…) opened while on the vendor side: one tap to
+ *  switch to the client side and see it. Null when this login has no client side. */
+export function ClientSidePrompt() {
+  const { other, go } = useSideSwitch();
+  if (other !== "client") return null;
+  return (
+    <div className="wp-page"><div className="wp-empty glass" style={{ maxWidth: 560, margin: "48px auto", padding: 32, display: "grid", gap: 12, textAlign: "center" }}>
+      <h1 className="wp-h3">This is on your client side.</h1>
+      <p className="secondary">You're signed in on your vendor side. Switch to see it; you can switch back from the account menu.</p>
+      <div><button type="button" className="btn primary" onClick={() => void go("client", true)}>Switch to the client side</button></div>
+    </div></div>
+  );
 }
 
 /** An invite link's ?side=vendor or ?side=client: switch to it once, if this login has that side. */

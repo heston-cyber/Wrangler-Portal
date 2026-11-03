@@ -21,6 +21,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { PAY_METHODS, looksLikeAccount, bookingState, daysIn, expectedCents, todayCentral, type BookingState } from "./lib/bookings";
 import { label, paidAmount, paidDay } from "./lib/bookingRows";
 import { prefRow, setSwitch, viewFor } from "./lib/notifyPrefs";
+import { sideOf } from "./lib/roles";
 
 type Ctx = QueryCtx | MutationCtx;
 
@@ -30,8 +31,10 @@ async function myBusinesses(ctx: Ctx) {
   if (!userId) throw new ConvexError("Sign in first.");
   const user = await ctx.db.get(userId);
   const email = (user?.email ?? "").toLowerCase();
-  if (!user || user.role !== "vendor" || !email) throw new ConvexError("Not allowed.");
-  const ms = (await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", email)).collect()).filter((m) => m.role === "vendor" && !m.revokedAt).sort((a, b) => a.createdAt - b.createdAt);
+  if (!user || !email) throw new ConvexError("Not allowed.");
+  const all = await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", email)).collect();
+  if (all.some((m) => m.role === "owner" && !m.revokedAt) || sideOf(user.role, all) !== "vendor") throw new ConvexError("Not allowed."); // Nov 2: the side it's on
+  const ms = all.filter((m) => m.role === "vendor" && !m.revokedAt).sort((a, b) => a.createdAt - b.createdAt);
   return { user, email, ids: [...new Set(ms.map((m) => m.businessId))] };
 }
 

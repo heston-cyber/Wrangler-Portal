@@ -2,6 +2,7 @@
 // 730:1153 the vendor page, 732:2909 Add vendor). A business's subcontractors with their roles, rates (shown beside the
 // business's own Pricing subcontractor costs), details, gear, W-9 status and notes. Bookings, briefings, the vendor
 // portal and payments build on this in the next steps. Owner only.
+import { allowedEmails } from "./lib/owners";
 import { internalAction, internalQuery, mutation, query } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { syncVendorMemberships } from "./lib/business";
@@ -35,6 +36,11 @@ const detailsV = {
 };
 type Details = { name: string; email: string; roles: string[]; rates: Array<{ role: string; unit: "day" | "hour"; cents: number }>; basedIn?: string; phone?: string; portfolio?: string; gear?: string[]; notes?: string };
 
+/** An email that runs a business here can't also be a vendor (its owner side always wins, so it would do nothing). */
+async function notOwner(ctx: MutationCtx, email: string) {
+  const owner = allowedEmails().includes(email) || (await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", email)).collect()).some((m) => m.role === "owner" && !m.revokedAt);
+  if (owner) throw new ConvexError("That email runs a business here, so it can't be a vendor.");
+}
 function clean(a: Details) {
   const email = a.email.trim().toLowerCase();
   if (!a.name.trim()) throw new ConvexError("Add their name.");
@@ -113,6 +119,7 @@ export const add = mutation({
   handler: async (ctx, a) => {
     await ownerBiz(ctx);
     const d = clean(a);
+    await notOwner(ctx, d.email); // review (Nov 2): an owner's email can't be a vendor
     const dup = (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", d.email)).collect()).find((x) => !x.archivedAt);
     if (dup) throw new ConvexError(`${dup.name} is already a vendor with that email.`);
     const now = Date.now();
@@ -129,6 +136,7 @@ export const update = mutation({
     const x = await ctx.db.get(vendorId);
     if (!x) throw new ConvexError("That vendor isn't here.");
     const d = clean(a);
+    await notOwner(ctx, d.email); // review (Nov 2): an owner's email can't be a vendor
     if (d.email !== x.email && (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", d.email)).collect()).some((y) => y._id !== x._id && !y.archivedAt)) throw new ConvexError("Another vendor has that email.");
     // Review fix (step 6): a new email is a new login. The old address loses this business, and the new one needs a
     // fresh invite before it sees any of their bookings, invoices or W-9.

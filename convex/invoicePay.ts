@@ -6,6 +6,7 @@
 //   - After a payment (and on every invoice event from the Connect webhook) the portal reads the invoice's payments
 //     back from Stripe: paid, processing (a bank payment clearing) or failed, each with "Visa •••• 4242".
 //   - Send (the owner's confirm) emails the invoice (email 08) and posts "Invoice to pay" to the person's Inbox.
+import { viewerOf } from "./lib/access";
 import { action } from "./_generated/server";
 import { internalAction, internalMutation, internalQuery, mutation, query, focusBusiness, forBusiness } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
@@ -96,7 +97,7 @@ export const mine = query({
   args: {},
   handler: async (ctx) => {
     const me = await signedInEmail(ctx);
-    if (!me) return [];
+    if (!me || (await viewerOf(ctx)).kind === "vendor") return []; // Nov 2: the vendor side sees no client billing
     // Billed to them, or to a client they're one of (looked up by index, so no other client's invoice is read).
     const seen = new Map<string, Doc<"invoices">>();
     for (const i of await ctx.db.query("invoices").withIndex("by_bill_email", (q) => q.eq("billTo.email", me.email)).collect()) seen.set(i._id, i);

@@ -12,7 +12,7 @@ import ClientProject, { type ClientProjectTab } from "./modules/projects/ClientP
 import { ClientShootPage } from "./modules/projects/Shoots";
 import { ClientRequestPage } from "./modules/projects/Requests";
 import { ClientBriefPage } from "./modules/projects/Brief";
-import { SideFromLink } from "./shell/SideSwitch";
+import { ClientSidePrompt, SideFromLink } from "./shell/SideSwitch";
 import ClientSettings from "./modules/clients/ClientSettings";
 import Home from "./modules/review/Home";
 import OwnerHome from "./modules/home/OwnerHome";
@@ -167,7 +167,11 @@ function SignedIn() {
   if (isSignHost()) return <SignHostHome />;
   if (me === undefined) return <Loading />;
   // Phase 3c step 4: vendors get the vendor side (their bookings, briefings and invoices), nothing else.
-  if (me && !me.allowed && me.role === "vendor") return <><SideFromLink /><Suspense fallback={<Loading />}><VendorApp me={me} /></Suspense></>;
+  if (me && !me.allowed && me.role === "vendor") {
+    // A client page's address (from a client email) on the vendor side: offer the switch.
+    if ((me.sides ?? []).includes("client") && /^\/(projects|requests|shoots|briefs|inbox|docs|payments|sub)(\/|$)/.test(path) && !new URLSearchParams(search).get("side")) return <ClientSidePrompt />;
+    return <><SideFromLink /><Suspense fallback={<Loading />}><VendorApp me={me} /></Suspense></>;
+  }
   // Clients (C1): their own page, nothing of the owner's side.
   if (me && !me.allowed && me.role === "client") {
     return (
@@ -271,6 +275,8 @@ function ShareForMember({ video, page }: { video: boolean; page: (inShell: boole
   const me = useQuery(api.users.me);
   if (me === undefined) return <Loading />;
   if (me && !me.allowed && me.role === "client") return <ClientShell me={me} overlay={video}>{page(true)}</ClientShell>;
+  // On the vendor side with a client side too: offer the switch rather than a sign-in or "not allowed" (review, Nov 2).
+  if (me && !me.allowed && me.role === "vendor" && (me.sides ?? []).includes("client")) return <ClientSidePrompt />;
   return <>{page(false)}</>;
 }
 

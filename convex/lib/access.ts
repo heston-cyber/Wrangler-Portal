@@ -9,6 +9,7 @@ import type { QueryCtx, MutationCtx, ActionCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import { allowedEmails } from "./owners";
 import { businessFor } from "./business";
+import { sideOf } from "./roles";
 
 export type Me = { userId: Id<"users">; name: string; email: string };
 // businessId (Phase 0.5d step 1): the business they work in or are a client of. Optional until step 3 makes every
@@ -28,12 +29,14 @@ export async function viewerOf(ctx: QueryCtx | MutationCtx): Promise<Viewer> {
   const name = (user.name as string | undefined) || fallbackName(email);
   // Owner (Phase 0.5d step 3): an active owner membership in a business, or, for Wrangler, the ALLOWED_EMAILS list
   // (kept as the bootstrap and backup). Owner memberships are only ever made by internal code.
-  const ownerM = (await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", email)).collect())
-    .filter((m) => !m.revokedAt && m.role === "owner").sort((a, b) => a.createdAt - b.createdAt)[0];
+  const ms = await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", email)).collect();
+  const ownerM = ms.filter((m) => !m.revokedAt && m.role === "owner").sort((a, b) => a.createdAt - b.createdAt)[0];
   if (ownerM) return { kind: "owner", userId, name, email, businessId: ownerM.businessId };
   if (allowedEmails().includes(email)) return { kind: "owner", userId, name, email, businessId: await businessFor(ctx, email, "owner") };
-  if (user.role === "client") return { kind: "client", userId, name, email, businessId: await businessFor(ctx, email, "client") };
-  if (user.role === "vendor") return { kind: "vendor", userId, name, email, businessId: null };
+  // Nov 2: a client-and-vendor login's side (lib/roles.ts sideOf).
+  const side = sideOf(user.role, ms);
+  if (side === "client") return { kind: "client", userId, name, email, businessId: await businessFor(ctx, email, "client") };
+  if (side === "vendor") return { kind: "vendor", userId, name, email, businessId: null };
   return { kind: "nobody" };
 }
 

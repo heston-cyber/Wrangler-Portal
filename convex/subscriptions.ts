@@ -10,6 +10,7 @@
 // Stripe makes an invoice each period and charges it; the portal mirrors each one into Payments › Invoices (kind
 // "subscription"), so receipts (email 11, D66) and the invoice page work as for any invoice. The subscription's own
 // state is read back from Stripe after each of its events (never trusting an old payload).
+import { viewerOf } from "./lib/access";
 import { action } from "./_generated/server";
 import { internalAction, internalMutation, internalQuery, query, focusBusiness } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
@@ -332,7 +333,7 @@ export const mine = query({
   args: {},
   handler: async (ctx) => {
     const email = await signedInEmail(ctx);
-    if (!email) return [];
+    if (!email || (await viewerOf(ctx)).kind === "vendor") return []; // Nov 2: the vendor side sees no client billing
     const seen = new Map<string, Doc<"subscriptions">>();
     for (const s of await ctx.db.query("subscriptions").withIndex("by_bill_email", (q) => q.eq("billTo.email", email)).collect()) seen.set(s._id, s);
     for (const cp of await ctx.db.query("clientPeople").withIndex("by_email", (q) => q.eq("email", email)).collect()) {

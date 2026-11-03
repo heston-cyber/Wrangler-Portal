@@ -9,3 +9,5 @@
 10:10:44 PM [vite] hmr update /src/portal.css
 10:11:08 PM [vite] hmr update /src/modules/home/OwnerHome.tsx
 10:11:08 PM [vite] hmr update /src/modules/settings/ToolsSettings.tsx
+10:21:23 PM [vite] hmr update /src/shell/SideSwitch.tsx
+10:21:23 PM [vite] hmr update /src/App.tsx

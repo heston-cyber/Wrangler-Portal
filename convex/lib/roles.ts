@@ -12,6 +12,17 @@ export async function sidesOf(ctx: QueryCtx | MutationCtx, email: string): Promi
   return (["client", "vendor"] as const).filter((r) => ms.some((m) => m.role === r));
 }
 
+/** The side a client-and-vendor login is really on: its saved side while it still has work there; if every business
+ *  took it off that side, the other one (so nobody is stranded on a side with nothing, with no switch to leave it).
+ *  A login with no memberships at all keeps its saved role (accounts made before memberships existed). */
+export function sideOf(role: string | undefined, ms: Array<{ role: string; revokedAt?: number }>): Side | null {
+  if (role !== "client" && role !== "vendor") return null;
+  const live = new Set(ms.filter((m) => !m.revokedAt).map((m) => m.role));
+  if (live.has(role)) return role;
+  const other: Side = role === "client" ? "vendor" : "client";
+  return live.has(other) ? other : role;
+}
+
 /** True when this login is a client of some business, whichever side it's on right now. */
 export async function isClientLogin(ctx: QueryCtx | MutationCtx, email: string): Promise<boolean> {
   return (await sidesOf(ctx, email)).includes("client");
