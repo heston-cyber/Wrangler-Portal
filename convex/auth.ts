@@ -2,6 +2,9 @@ import { sidesOf } from "./lib/roles";
 import { convexAuth } from "@convex-dev/auth/server";
 import { Password } from "@convex-dev/auth/providers/Password";
 import { Email } from "@convex-dev/auth/providers/Email";
+import { ConvexCredentials } from "@convex-dev/auth/providers/ConvexCredentials";
+import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { ConvexError } from "convex/values";
 import { brandFrom } from "./lib/mail";
 import { resetMail, signInCodeMail } from "./lib/mails";
@@ -51,8 +54,30 @@ const WranglerPassword = Password({
   reset: codeByEmail("resend-reset", "reset"),
 });
 
+// Phase 5b step 4 (D127): a call-sheet guest's light sign-in: the link's token and the 6-digit code emailed by
+// guests.sendCode. guests.redeem checks both (and that the email has no login of its own, and the sheet is active) and
+// returns the guest login; nothing here can reach an owner, client or vendor account.
+const GuestCode = ConvexCredentials({
+  id: "guest",
+  authorize: async (credentials, ctx) => {
+    const token = typeof credentials.token === "string" ? credentials.token : "";
+    const code = typeof credentials.code === "string" ? credentials.code.replace(/\D/g, "") : "";
+    const r: { userId: Id<"users"> } | { error: string } = await ctx.runMutation(internal.guests.redeem, { token, code });
+    if ("error" in r) throw new ConvexError(r.error);
+    return { userId: r.userId };
+  },
+});
+
+/** Every session of a login (a guest login becoming a full account starts again from its password). */
+async function endSessions(ctx: MutationCtx, userId: Id<"users">) {
+  for (const sess of await ctx.db.query("authSessions").withIndex("userId", (q) => q.eq("userId", userId)).collect()) {
+    for (const t of await ctx.db.query("authRefreshTokens").withIndex("sessionId", (q) => q.eq("sessionId", sess._id)).collect()) await ctx.db.delete(t._id);
+    await ctx.db.delete(sess._id);
+  }
+}
+
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
-  providers: [WranglerPassword],
+  providers: [WranglerPassword, GuestCode],
   callbacks: {
     // Who may have an account: owners (the allow list) and invited clients. Decided here, on the server, for every
     // sign-up; the page can't get around it.
@@ -61,6 +86,20 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       const email = String(args.profile.email ?? "").toLowerCase();
       const verified = args.type === "verification" || args.profile.emailVerified === true;
       if (args.existingUserId) {
+        // Phase 5b step 4: a guest login that set a password (they were invited since). Until the email is proved it
+        // stays a guest login, untouched; once proved, it becomes the account its invite says, and its guest sessions end.
+        const cur = await ctx.db.get(args.existingUserId);
+        if (cur?.role === "guest") {
+          if (!verified) return args.existingUserId;
+          const owner = allowedEmails().includes(email);
+          const invite = owner ? null : (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()).find((i) => !i.revokedAt) ?? null;
+          const vendor = owner || invite ? null : (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", email)).collect()).find((x) => !x.archivedAt && x.invitedAt) ?? null;
+          if (!owner && !invite && !vendor) throw new ConvexError("This email hasn't been invited to WranglerPortal.");
+          await endSessions(ctx, args.existingUserId);
+          await ctx.db.patch(args.existingUserId, { role: owner ? "owner" : invite ? "client" : "vendor" });
+          if (invite && !invite.acceptedAt) await ctx.db.patch(invite._id, { acceptedAt: Date.now(), userId: args.existingUserId });
+          if (owner) await ensureMembership(ctx, (await ensureDefaultBusiness(ctx)).businessId, email, "owner", args.existingUserId);
+        }
         const patch: Record<string, unknown> = { lastSignInAt: Date.now() };
         if (verified) patch.emailVerificationTime = Date.now();
         if (typeof args.profile.name === "string" && args.profile.name && !(args.existingUserId && !allowedEmails().includes(email) && ownerNames().has(args.profile.name.trim().toLowerCase()))) patch.name = args.profile.name;
@@ -83,6 +122,10 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       // login can be both; it starts on the client side when there's a client invite too, and can switch.
       const vendor = owner ? null : (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", email)).collect()).find((x) => !x.archivedAt && x.invitedAt) ?? null;
       if (!owner && !invite && !vendor) throw new ConvexError("This email hasn't been invited to WranglerPortal.");
+      // Phase 5b step 4: a call-sheet guest who was invited since keeps one row per email: the password joins their guest
+      // login, which becomes the full account once the email is proved (above), never before.
+      const guestRow = (await ctx.db.query("users").withIndex("email", (q) => q.eq("email", email)).collect()).find((u) => u.role === "guest");
+      if (guestRow) return guestRow._id;
       const userId = await ctx.db.insert("users", {
         email, role: owner ? "owner" : invite ? "client" : "vendor",
         name: (typeof args.profile.name === "string" && args.profile.name && !(!owner && ownerNames().has(args.profile.name.trim().toLowerCase())) ? args.profile.name : undefined) || invite?.name || vendor?.name || undefined,

@@ -16,7 +16,7 @@ export default defineSchema({
     phone: v.optional(v.string()),
     phoneVerificationTime: v.optional(v.number()),
     isAnonymous: v.optional(v.boolean()),
-    role: v.optional(v.union(v.literal("owner"), v.literal("client"), v.literal("vendor"))), // Phase 3c: vendors (D94). Nov 2: for a client-and-vendor login, the side it's on now (users.switchSide)
+    role: v.optional(v.union(v.literal("owner"), v.literal("client"), v.literal("vendor"), v.literal("guest"))), // Phase 3c: vendors (D94). Nov 2: for a client-and-vendor login, the side it's on now (users.switchSide). Phase 5b step 4 (D127): "guest", a call-sheet guest's code-only login: never an owner, client or vendor (lib/access.ts)
     lastSignInAt: v.optional(v.number()),
     tools: v.optional(v.any()),                // Nov 2: an owner's Settings › Tools (menu order, tools off the menu, Dashboard widgets; lib/tools.ts)
   }).index("email", ["email"]).index("phone", ["phone"]),
@@ -1232,6 +1232,7 @@ export default defineSchema({
       round: v.optional(v.number()),                    // the last update (42) they were sent
       openedAt: v.optional(v.number()), lastOpenedAt: v.optional(v.number()),
       remindedAt: v.optional(v.number()), reminders: v.optional(v.number()),
+      endedAt: v.optional(v.number()),                  // Phase 5b step 4: a guest whose access the owner ended by hand
       addedAt: v.number(),
     })),
     sent: v.optional(v.object({ title: v.string(), page: v.any(), fields: v.any(), style: v.any(), at: v.number(), round: v.number() })),
@@ -1393,6 +1394,22 @@ export default defineSchema({
     sentAt: v.optional(v.number()),
     recipients: v.optional(v.number()),
   }).index("by_status", ["status", "createdAt"]).index("by_client", ["clientId", "createdAt"]),
+
+  // Phase 5b step 4 (D127): a call-sheet guest's pass: one per guest per sheet. Global (like memberships), so a guest's
+  // sheets can be found by email before any business is known; it holds ids and the link token only, never sheet content.
+  // The call sheet's recipient row stays the truth (on, sent, ended); every guest function re-checks it and the sheet.
+  guestPasses: defineTable({
+    businessId: v.id("businesses"),
+    callSheetId: v.id("callSheets"),
+    personId: v.string(),                     // the recipient's id on the sheet: guest:<random>
+    email: v.string(),                        // lower-case
+    token: v.string(),                        // the link in email 41: /guest/<token>
+    createdAt: v.number(),
+    codeHash: v.optional(v.string()),         // the 6-digit sign-in code, hashed with the pass id; one at a time
+    codeExpiresAt: v.optional(v.number()),
+    codeTries: v.optional(v.number()),        // wrong tries on this code (5 and it's gone)
+    codeSentAt: v.optional(v.number()),
+  }).index("by_token", ["token"]).index("by_email", ["email"]).index("by_sheet", ["callSheetId"]),
 
   memberships: defineTable({
     businessId: v.id("businesses"),

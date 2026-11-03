@@ -26,6 +26,9 @@ export async function viewerOf(ctx: QueryCtx | MutationCtx): Promise<Viewer> {
   const user = await ctx.db.get(userId);
   const email = (user?.email ?? "").toLowerCase();
   if (!user || !email) return { kind: "nobody" };
+  // Phase 5b step 4 (D127): a call-sheet guest's login is never an owner, client or vendor, whatever memberships or
+  // allow-list entries its email has (or gets later): it only passes the guest functions' own check (lib/guests.ts).
+  if (user.role === "guest") return { kind: "nobody" };
   const name = (user.name as string | undefined) || fallbackName(email);
   // Owner (Phase 0.5d step 3): an active owner membership in a business, or, for Wrangler, the ALLOWED_EMAILS list
   // (kept as the bootstrap and backup). Owner memberships are only ever made by internal code.

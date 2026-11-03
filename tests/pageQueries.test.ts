@@ -156,6 +156,11 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "callSheets.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Coming up
   "vendorPortal.callSheet": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only)
   "vendorPortal.callSheets": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only)
+  // Phase 5b step 4: call-sheet guests. The link's page works signed out (anyone with a made-up token gets "missing");
+  // the signed-in guest pages fire only for a guest login (tests/callSheetGuests.test.ts fires them as guests).
+  "guests.intro": { pages: ["share", "signin"], args: () => ({ token: "x".repeat(24) }) }, // /guest/<token>, signed out
+  "guests.home": { pages: ["owner"], args: () => "skip" }, // /guest (guest logins only)
+  "guests.sheet": { pages: ["owner"], args: () => "skip" }, // /guest/<token> signed in (guest logins only)
   "footage.settings": { pages: ["owner"], args: () => ({}) }, // Settings › Payments › Footage storage
   "footage.forProject": { pages: ["owner"], args: () => "skip" }, // project › Delivery › Raw footage storage
   "footage.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Raw footage

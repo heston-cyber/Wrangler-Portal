@@ -750,3 +750,17 @@ export function callSheetUpdateMail(b: MailBrand, d: { name: string | null; titl
     { t: "button", label: "Open the call sheet", href: d.link }, { t: "link", href: d.link },
   ], signoff(b), d.changed);
 }
+
+/** Email 41 · Call sheet · guest (768:6458): a guest's link to the sheet, signed into with a code (D127). Sent on Send
+ *  and Remind; a guest it already went to gets email 42 for an update, with the same link. */
+export function guestCallSheetMail(b: MailBrand, d: { name: string | null; title: string; dayLong: string; call: string; where: string; from: string; message?: string | null; reminder?: boolean; link: string }): Mail {
+  return mk(b, "updates", `${d.reminder ? "Reminder: c" : "C"}all sheet for ${d.dayLong}: ${d.title}`, [
+    hi(d.name),
+    { t: "p", text: `${d.reminder ? "A reminder: " : ""}${b.name} added you to the call sheet for ${d.dayLong}.` },
+    { t: "sums", rows: [...(d.call ? [{ label: "Your call", value: d.call, big: true }] : []), ...(d.where ? [{ label: "Where", value: d.where }] : []), { label: "From", value: d.from }] },
+    ...(d.message ? [{ t: "p", text: d.message } as Block] : []),
+    { t: "p", text: "Open the link to read the whole sheet. You sign in with a 6-digit code we email you. No account needed." },
+    { t: "p", text: "Your access ends when the project is closed." },
+    { t: "button", label: "Open the call sheet", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `${d.call ? `${d.call} call · ` : ""}${d.where || d.title}`);
+}
