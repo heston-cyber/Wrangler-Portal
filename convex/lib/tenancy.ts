@@ -13,7 +13,7 @@ export const BUSINESS_TABLES = [
 ] as readonly string[];
 
 export const GLOBAL_TABLES = [
-  "users", "businesses", "memberships", "rateLimits", "oauthStates", "emailLog", "stripeEvents", "userPrefs", "playerLogs", "phase0Runs", "r1Results", "siteWatchFindings", "siteWatchRuns",
+  "users", "businesses", "memberships", "guestPasses", "rateLimits", "oauthStates", "emailLog", "stripeEvents", "userPrefs", "playerLogs", "phase0Runs", "r1Results", "siteWatchFindings", "siteWatchRuns",
 ] as readonly string[];
 
 // Belong to a business through their parent and are never patched: Wrangler Sign's audit trail is append-only

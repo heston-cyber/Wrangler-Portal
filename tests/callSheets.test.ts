@@ -1,6 +1,7 @@
 // Phase 5b step 3 · call sheets. T5b.2: questions → template → editor → send. Each crew member and each client person
 // gets email 40 exactly once; opens are recorded per person; Remind goes only to people who haven't opened it; Send an
-// update sends email 42 once per person per update; guests are stored but get no email and no access yet (step 4);
+// update sends email 42 once per person per update; guests (step 4) get email 41 with their own link, and 42 for updates
+// (their sign-in and pages are in callSheetGuests.test.ts);
 // a vendor not booked on the shoot and a client of another project can't open it. Contracts in the builder are
 // untouched (their own tests run unchanged; here: call sheets stay out of Docs' lists and can't go to signing).
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
@@ -71,7 +72,7 @@ const answers = (templateId: string | null) => ({
 });
 
 describe("call sheets", () => {
-  test("T5b.2 questions → template → editor → send → opens → remind → updates; guests wait for step 4", async () => {
+  test("T5b.2 questions → template → editor → send → opens → remind → updates; guests by their own link", async () => {
     const w = await world();
     const mails: Sent[] = [];
     stub(mails);
@@ -118,13 +119,13 @@ describe("call sheets", () => {
     expect((await w.heston.query(api.builder.listBuilds, {})).some((b: { _id: string }) => b._id === buildId)).toBe(false); // not in Docs
     await expect(w.heston.mutation(api.builder.deleteBuild, { buildId })).rejects.toThrow(/call sheet/);
 
-    // Send (766:6190): crew and client people get email 40, once each; the guest and Jo get nothing.
-    const r = await w.heston.mutation(api.callSheets.send, { callSheetId: csId, crew: true, client: true, message: "Looking forward to it." });
-    expect(r).toEqual({ sent: 2, skipped: [], guests: 1 });
+    // Send (766:6190): crew and client people get email 40, once each; the guest gets 41 (step 4); Jo gets nothing.
+    const r = await w.heston.mutation(api.callSheets.send, { callSheetId: csId, crew: true, client: true, guests: true, message: "Looking forward to it." });
+    expect(r).toEqual({ sent: 3, skipped: [], guests: 1 });
     await expect(w.heston.mutation(api.callSheets.send, { callSheetId: csId, crew: true, client: true })).rejects.toThrow(/Send an update/);
     await settle(w);
     let sm = sheetMails(mails);
-    expect(sm.map((m) => m.to).sort()).toEqual([JORDAN, "maya@harbor.example"]);
+    expect(sm.map((m) => m.to).sort()).toEqual([JORDAN, "maya@harbor.example", RILEY]);
     const m40 = sm.find((m) => m.to === JORDAN)!;
     expect(m40.subject).toMatch(/^Call sheet for \w+day, \w{3} \d+: Launch · Harbor Coffee$/);
     expect(m40.text).toContain("Hi Jordan,");
@@ -133,9 +134,9 @@ describe("call sheets", () => {
     expect(m40.text).toContain(`https://app.wranglerportal.com/vendor/call-sheets/${csId}`);
     expect(sm.find((m) => m.to === "maya@harbor.example")!.text).toContain(`https://app.wranglerportal.com/call-sheets/${csId}`);
     // A retried job sends nothing twice.
-    const again = await w.t.action(internal.callSheets.mail, { callSheetId: csId, out: [{ id: `crew:${kJ}`, email: JORDAN, name: "Jordan Ellis", kind: "crew", mail: "first", key: `callsheet:${csId}:first:${JORDAN}`, call: "07:30" }] });
+    const again = await w.t.action(internal.callSheets.mail, { callSheetId: csId, out: [{ id: `crew:${kJ}`, email: JORDAN, name: "Jordan Ellis", kind: "crew", mail: "first", key: `callsheet:${csId}:first:crew:${kJ}`, call: "07:30" }] });
     expect(again).toBe(0);
-    expect(sheetMails(mails)).toHaveLength(2);
+    expect(sheetMails(mails)).toHaveLength(3);
     // Maya's Inbox.
     const inbox = await w.maya.query(api.inbox.mine, {});
     const items = (inbox.items ?? inbox) as Array<{ title: string; link: string | null }>;
@@ -156,10 +157,10 @@ describe("call sheets", () => {
     await w.t.run(async (ctx) => { const x = (await ctx.db.get(csId))!; await ctx.db.patch(csId, { recipients: [...x.recipients, { id: "client:sam@elsewhere.example", kind: "client", name: "Sam", email: "sam@elsewhere.example", on: true, sentAt: 1, addedAt: 1 }] }); });
     expect(await w.sam.query(api.callSheets.forClient, { callSheetId: csId })).toBeNull();
     await w.t.run(async (ctx) => { const x = (await ctx.db.get(csId))!; await ctx.db.patch(csId, { recipients: x.recipients.filter((p) => p.email !== "sam@elsewhere.example") }); });
-    // The guest is on it, but has no access and got no email (step 4).
+    // The guest is on it, with access by their own link (step 4), and got email 41.
     cs = await w.heston.query(api.callSheets.get, { callSheetId: csId });
-    expect(who(guest)).toMatchObject({ kind: "guest", name: "Riley Quinn", role: "Talent", on: true, access: false, sentAt: null, note: "Gets access in the next update" });
-    expect(mails.some((m) => m.to === RILEY)).toBe(false);
+    expect(who(guest)).toMatchObject({ kind: "guest", name: "Riley Quinn", role: "Talent", on: true, access: true, sentAt: expect.any(Number), note: null });
+    expect(sm.find((m) => m.to === RILEY)!.text).toMatch(/https:\/\/app\.wranglerportal\.com\/guest\/[A-Za-z0-9_-]{24}/);
 
     // Opens are per person.
     await w.maya.mutation(api.callSheets.opened, { callSheetId: csId });
@@ -167,17 +168,18 @@ describe("call sheets", () => {
     expect(who("client:maya@harbor.example").openedAt).toBeTypeOf("number");
     expect(who(`crew:${kJ}`).openedAt).toBeNull();
     const list = await w.heston.query(api.callSheets.list, {});
-    expect(list.rows[0]).toMatchObject({ _id: csId, state: "sent", opened: 1, of: 2, people: 3, guests: 1 });
+    expect(list.rows[0]).toMatchObject({ _id: csId, state: "sent", opened: 1, of: 3, people: 3, guests: 1 });
     const shoots = await w.heston.query(api.production.shoots, {});
-    expect(shoots.upcoming[0].sheet).toMatchObject({ _id: csId, state: "sent", opened: 1, of: 2 });
+    expect(shoots.upcoming[0].sheet).toMatchObject({ _id: csId, state: "sent", opened: 1, of: 3 });
 
-    // Remind: only Jordan (Maya opened it; the guest never gets one).
+    // Remind: Jordan and the guest (Maya opened it).
     await expect(w.heston.mutation(api.callSheets.remind, { callSheetId: csId, id: "client:maya@harbor.example" })).rejects.toThrow(/opened it already/);
-    expect(await w.heston.mutation(api.callSheets.remind, { callSheetId: csId })).toEqual({ sent: 1 });
+    expect(await w.heston.mutation(api.callSheets.remind, { callSheetId: csId })).toEqual({ sent: 2 });
     await settle(w);
     sm = sheetMails(mails);
-    expect(sm).toHaveLength(3);
-    expect(sm[2]).toMatchObject({ to: JORDAN, subject: expect.stringMatching(/^Reminder: call sheet for /) });
+    expect(sm).toHaveLength(5);
+    expect(sm.slice(3).map((m) => m.to).sort()).toEqual([JORDAN, RILEY]);
+    expect(sm.slice(3).every((m) => /^Reminder: call sheet for /.test(m.subject))).toBe(true);
     expect(await w.heston.mutation(api.callSheets.remind, { callSheetId: csId })).toEqual({ sent: 0 }); // not again within minutes
     await jordan.mutation(api.vendorPortal.openCallSheet, { callSheetId: csId });
 
@@ -193,23 +195,22 @@ describe("call sheets", () => {
     await w.heston.mutation(api.callSheets.sendUpdate, { callSheetId: csId, changed: "Talent call moved to 10:00 AM" });
     await settle(w);
     const updates = () => sheetMails(mails).filter((m) => m.subject.startsWith("Call sheet updated"));
-    expect(updates().map((m) => m.to).sort()).toEqual([JORDAN, "maya@harbor.example"]);
+    expect(updates().map((m) => m.to).sort()).toEqual([JORDAN, "maya@harbor.example", RILEY]);
     const m42 = updates().find((m) => m.to === JORDAN)!;
     expect(m42.text).toContain("Talent call moved to 10:00 AM");
     expect(m42.text).toContain("7:30 AM (same)");
     expect(m42.text).toContain("Nothing else changed for you.");
     expect(nodesOf((await w.maya.query(api.callSheets.forClient, { callSheetId: csId })).page, "location")[0].attrs.talentCall).toBe("10:00");
     expect((await w.heston.query(api.callSheets.get, { callSheetId: csId })).changed).toBe(false);
-    const retry = await w.t.action(internal.callSheets.mail, { callSheetId: csId, changed: "x", out: [{ id: "client:maya@harbor.example", email: "maya@harbor.example", name: "Maya Brooks", kind: "client", mail: "update", key: `callsheet:${csId}:update:1:maya@harbor.example`, call: "07:30", was: "07:30" }] });
+    const retry = await w.t.action(internal.callSheets.mail, { callSheetId: csId, changed: "x", out: [{ id: "client:maya@harbor.example", email: "maya@harbor.example", name: "Maya Brooks", kind: "client", mail: "update", key: `callsheet:${csId}:update:1:client:maya@harbor.example`, call: "07:30", was: "07:30" }] });
     expect(retry).toBe(0);
     // A second update is a second email each; Maya has switched call sheet emails off (her Inbox still gets it).
     await w.maya.mutation(api.notifications.setClient, { key: "call_sheets", on: false });
     await w.heston.mutation(api.callSheets.sendUpdate, { callSheetId: csId, changed: "Lunch moved to noon" });
     await settle(w);
-    expect(updates().map((m) => m.to).sort()).toEqual([JORDAN, JORDAN, "maya@harbor.example"]);
+    expect(updates().map((m) => m.to).sort()).toEqual([JORDAN, JORDAN, "maya@harbor.example", RILEY, RILEY]);
     const items2 = ((await w.maya.query(api.inbox.mine, {})).items ?? await w.maya.query(api.inbox.mine, {})) as Array<{ text: string }>;
     expect(items2.some((i) => i.text === "Lunch moved to noon.")).toBe(true);
-    expect(mails.some((m) => m.to === RILEY)).toBe(false);
 
     // A cancelled booking ends the vendor's access.
     await w.heston.mutation(api.bookings.cancel, { bookingId: kJ });

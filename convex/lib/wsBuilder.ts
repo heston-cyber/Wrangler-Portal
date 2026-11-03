@@ -43,6 +43,9 @@ export type Page = { type: "doc"; content: PNode[] };
 export const ATOMS = ["parties", "items", "payment", "signatures", "divider", "pagebreak", "spacer", "location", "schedule", "crew", "contacts"] as const;
 export type AtomType = (typeof ATOMS)[number];
 export const isAtom = (t: string): t is AtomType => (ATOMS as readonly string[]).includes(t);
+/** Review L8: the call sheet's own blocks (lib/callSheet.ts CALL_ATOMS), which never belong in a contract. */
+export const CALL_ONLY = ["location", "schedule", "crew", "contacts"] as const;
+const isCallOnly = (t: string) => (CALL_ONLY as readonly string[]).includes(t);
 
 /** What the Insert panel adds. */
 export type InsertKind = "title" | "heading" | "text" | "section" | "card" | AtomType;
@@ -295,7 +298,8 @@ export function signerKeys(page: Page): string[] {
 export function buildProblems(d: BuildDoc): string[] {
   const out: string[] = [];
   if (!d.title.trim()) out.push("Give the document a title.");
-  if (!textOf(d.page as PNode).trim() && !(d.page.content ?? []).some((n) => isAtom(n.type))) out.push("Add some content.");
+  if (!textOf(d.page as PNode).trim() && !(d.page.content ?? []).some((n) => isAtom(n.type) && !isCallOnly(n.type))) out.push("Add some content.");
+  if (CALL_ONLY.some((t) => nodesOf(d.page, t).length)) out.push("Call sheet blocks (call times, schedule, crew, contacts) can't go in a contract: remove them.");
   const keys = signerKeys(d.page);
   if (!nodesOf(d.page, "signatures").length) out.push("Add a signature block.");
   if (keys.includes("client")) {

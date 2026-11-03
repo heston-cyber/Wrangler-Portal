@@ -38,6 +38,8 @@ export async function scopeFor(ctx: QueryCtx | MutationCtx): Promise<Scope> {
   const user = userId ? await ctx.db.get(userId) : null;
   const email = (user?.email ?? "").toLowerCase();
   if (!email) return scope;
+  // Phase 5b step 4 (D127): a call-sheet guest gets no owner or client reach, like someone signed out (lib/guests.ts).
+  if (user?.role === "guest") return scope;
   const ms = (await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", email)).collect()).filter((m) => !m.revokedAt);
   const ownerM = ms.filter((m) => m.role === "owner").sort((a, b) => a.createdAt - b.createdAt)[0];
   if (ownerM) { scope.owner = ownerM.businessId; scope.isOwner = true; return scope; }

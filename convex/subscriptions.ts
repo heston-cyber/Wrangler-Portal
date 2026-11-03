@@ -325,6 +325,7 @@ export const page = query({
 async function signedInEmail(ctx: QueryCtx | MutationCtx) {
   const userId = await getAuthUserId(ctx);
   const u = userId ? await ctx.db.get(userId) : null;
+  if (u?.role === "guest") return null; // Phase 5b step 4: a call-sheet guest sees no billing (D127)
   return u?.email ? String(u.email).toLowerCase() : null;
 }
 

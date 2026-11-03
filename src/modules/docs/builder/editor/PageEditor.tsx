@@ -8,7 +8,7 @@ import { Placeholder } from "@tiptap/extensions";
 import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { DOMSerializer, Fragment, Slice } from "@tiptap/pm/model";
 import { Ellipsis, GripVertical } from "lucide-react";
-import { isAtom, type Page, type PNode } from "../../../../../convex/lib/wsBuilder";
+import { CALL_ONLY, isAtom, type Page, type PNode } from "../../../../../convex/lib/wsBuilder";
 import { Atoms, BlockSelect, FieldHighlight, Line, Section, fieldsKey } from "./schema";
 import { BlockSelection, PickSelection, blockStartAt, unitAt, unitsBetween } from "./blockSelection";
 import { clickBlock, dropNodes, picks } from "./commands";
@@ -28,14 +28,27 @@ export function endInsertDrag(editor: Editor | null) {
   if (editor && !editor.isDestroyed) (editor.view as unknown as { dragging: unknown }).dragging = null;
 }
 
-export function PageEditor({ page, onChange, onEditor, onSelectText, onMenu, missing }: {
+// Review L8: a call sheet's own blocks only ever land on a call sheet; a contract, proposal or briefing drops them from
+// a paste or a drop (copied from a call sheet in another tab, say). The server's contract check refuses them too.
+const callOnly = (t: string) => (CALL_ONLY as readonly string[]).includes(t);
+function withoutCallNodes(f: Fragment): Fragment {
+  const out: import("@tiptap/pm/model").Node[] = [];
+  f.forEach((n) => { if (!callOnly(n.type.name)) out.push(n.isLeaf ? n : n.copy(withoutCallNodes(n.content))); });
+  return Fragment.fromArray(out);
+}
+const withoutCallJson = (ns: PNode[]): PNode[] => ns.filter((n) => !callOnly(n.type)).map((n) => (n.content ? { ...n, content: withoutCallJson(n.content) } : n));
+
+export function PageEditor({ page, onChange, onEditor, onSelectText, onMenu, missing, callBlocks = false }: {
   page: Page;
   onChange: (p: Page) => void;
   onEditor: (e: Editor | null) => void;
   onSelectText: () => void;
   onMenu: (at: { x: number; y: number }) => void;
   missing: Set<string>;
+  callBlocks?: boolean;   // a call sheet: its blocks may be pasted and dropped
 }) {
+  const callRef = useRef(callBlocks);
+  callRef.current = callBlocks;
   const last = useRef(JSON.stringify(page));
   const missingRef = useRef(missing);
   missingRef.current = missing;
@@ -54,13 +67,18 @@ export function PageEditor({ page, onChange, onEditor, onSelectText, onMenu, mis
     content: page,
     editorProps: {
       attributes: { class: "wsb-doc", spellcheck: "true" },
+      transformPasted: (slice) => (callRef.current ? slice : new Slice(withoutCallNodes(slice.content), slice.openStart, slice.openEnd)),
       handleDrop: (view, e) => {
         const raw = e.dataTransfer?.getData(INSERT_MIME);
         if (!raw) return false;
         e.preventDefault();
         (view as unknown as { dragging: unknown }).dragging = null;
         dragged = null;
-        try { return dropNodes(editorRef.current!, JSON.parse(raw) as PNode[], { left: e.clientX, top: e.clientY }); } catch { return false; }
+        try {
+          const nodes = JSON.parse(raw) as PNode[];
+          const keep = callRef.current ? nodes : withoutCallJson(nodes);
+          return keep.length ? dropNodes(editorRef.current!, keep, { left: e.clientX, top: e.clientY }) : true;
+        } catch { return false; }
       },
     },
     onUpdate: ({ editor: e }) => { const j = e.getJSON() as Page; last.current = JSON.stringify(j); cb.current.onChange(j); },

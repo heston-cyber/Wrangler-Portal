@@ -2832,3 +2832,67 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
   .cal-frow { grid-template-columns: 1fr 1fr; }
   .cal-frow > .wp-field:first-child { grid-column: 1 / -1; }
 }
+
+/* ---------- Phase 5b step 4: call-sheet guests (768:6282 … 769:6466) ---------- */
+.gst-card .headline, .gst .headline { overflow-wrap: anywhere; }
+.gst .wsx-card.glass { width: min(560px, calc(100vw - 32px)); justify-self: center; display: flex; flex-direction: column; }
+.gst .wsx-card .wp-eyebrow { margin: 0; }
+.gst-small { font-size: var(--fs-text-small) !important; }
+.gst-ico { color: var(--accent); display: inline-flex; }
+.gst-biz { display: flex; flex-wrap: wrap; gap: 8px; }
+.gst-page { position: relative; min-height: 100vh; isolation: isolate; background: var(--surface-base); overflow-x: hidden; }
+.gst-page > .wp-light { z-index: -1; position: fixed; }
+.gst-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: min(1188px, 100%); margin: 0 auto; padding: 40px 0 20px; box-sizing: border-box; }
+.gst-top .wp-logo img { height: 22px; }
+.gst-who { display: flex; align-items: center; gap: 24px; font: 400 var(--fs-text-small)/var(--lh-small) var(--font-body); color: var(--text-primary); }
+.gst-who .wp-link, .gst-backlink { color: var(--text-primary); text-decoration: none; }
+.gst-backlink { color: var(--text-secondary); }
+.gst-avatar { position: relative; }
+.gst-avatar > button { background: none; border: 0; padding: 0; cursor: pointer; border-radius: 50%; }
+.gst-menu { position: absolute; right: 0; top: 42px; z-index: 5; display: grid; gap: 10px; min-width: 200px; padding: 14px 16px; border-radius: 16px; font-size: var(--fs-text-small); }
+.gst-menu a, .gst-menu .wp-link { color: var(--text-primary); text-align: left; text-decoration: none; }
+.gst-main { width: min(1188px, 100%); margin: 0 auto; display: grid; grid-template-columns: minmax(0, 824px) 340px; gap: 24px; align-items: start; padding: 0 0 48px; box-sizing: border-box; }
+.gst-paper .cs-sheet { max-width: none; border-radius: 4px; padding: 48px; }
+.gst-side { display: grid; gap: 20px; position: sticky; top: 24px; }
+.gst-card.glass { box-shadow: none; display: grid; gap: 14px; padding: 22px 20px; border-radius: 24px; }
+.gst-card > p { margin: 0; color: var(--text-primary); font: 400 var(--fs-text-small)/var(--lh-small) var(--font-body); }
+.gst-dl { margin: 0; display: grid; gap: 12px; }
+.gst-dl > div { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+.gst-dl dt { color: var(--text-secondary); font-size: var(--fs-text-small); }
+.gst-dl dd { margin: 0; text-align: right; font-size: var(--fs-text-small); overflow-wrap: anywhere; min-width: 0; }
+.gst-yours .gst-dl > div:first-child dt { color: var(--text-primary); font-size: var(--fs-text-regular); }
+.gst-dl .big { font: 600 var(--fs-h4)/var(--lh-h4) var(--font-title); }
+.gst-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.gst-foot { grid-column: 1 / -1; margin: 0; padding: 0 4px; color: var(--text-secondary); font-size: var(--fs-text-small); }
+.gst-whole summary { list-style: none; display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+.gst-whole summary::-webkit-details-marker { display: none; }
+.gst-whole[open] summary .wp-icon { transform: rotate(180deg); }
+.gst-whole .cs-sheet { padding: 20px 16px; }
+.gst-list { width: min(760px, 100%); margin: 0 auto; display: grid; gap: 14px; padding: 8px 0 48px; box-sizing: border-box; }
+.gst-list .wp-h2 { margin: 0 0 6px; }
+.gst-row.glass { display: flex; align-items: center; gap: 16px; padding: 18px 20px; border-radius: 20px; box-shadow: none; color: var(--text-primary); text-decoration: none; }
+.gst-row .txt { flex: 1; min-width: 0; display: grid; gap: 2px; overflow-wrap: anywhere; }
+.gst-row .txt b { font-weight: 500; }
+.gst-row .call { display: grid; justify-items: end; gap: 2px; font-size: var(--fs-text-small); }
+.gst-row .call b { font: 600 var(--fs-text-regular)/1.2 var(--font-title); }
+.gst-row > .wp-icon { color: var(--accent); flex: none; }
+.gst-upd { color: var(--text-accent); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+.gst-narrow { display: none !important; }
+@media (max-width: 1240px) { .gst-top, .gst-main, .gst-list { padding-left: 24px; padding-right: 24px; } }
+@media (max-width: 900px) {
+  .gst-wide { display: none !important; }
+  .gst-narrow { display: revert !important; }
+  .gst-card.gst-narrow, details.gst-card.gst-narrow { display: grid !important; }
+  .gst-top { padding: 20px 16px 8px; }
+  .gst-top .wp-logo img { height: 20px; }
+  .gst-main { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 0 16px 32px; }
+  .gst-side { position: static; gap: 16px; }
+  .gst-head { display: grid !important; gap: 4px; padding: 4px 0; }
+  .gst-head .wp-h2 { margin: 0; font-size: 26px; line-height: 1.2; overflow-wrap: anywhere; }
+  .gst-list { padding: 8px 16px 32px; }
+  .gst-row.glass { padding: 16px; gap: 12px; }
+}
+.cs-guests dd { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 10px; }
+.gst-page > .wp-light > i { left: -20%; top: -30%; width: 140%; height: 160%; opacity: .6; }
+.gst-card.glass, .gst-row.glass, .gst-menu.glass { background-color: rgba(16, 11, 13, .72); }
+@media (max-width: 900px) { .gst-page > .wp-light > i { left: -60%; top: -20%; width: 260%; height: 140%; } }

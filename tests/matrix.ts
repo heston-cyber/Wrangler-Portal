@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 export const modules = import.meta.glob("../convex/**/*.ts");
 
-export type Ids = { requestId: Id<"wsRequests">; buildId: Id<"wsBuilds">; templateId: Id<"wsTemplates">; clauseId: Id<"wsClauses">; styleId: Id<"wsStyles">; docId: Id<"wsDocuments">; wsVersionId: Id<"wsVersions">; projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage">; clientRecId: Id<"clients">; personId: Id<"clientPeople">; inboxItemId: Id<"inboxItems">; inboxNoteId: Id<"inboxNotes">; deliveryFileId: Id<"deliveryFiles">; invoiceId: Id<"invoices">; planId: Id<"plans">; subscriptionId: Id<"subscriptions">; dealId: Id<"deals">; followUpId: Id<"followUps">; estimateId: Id<"estimates">; entryId: Id<"ledgerEntries">; quoteId: Id<"quotes">; proposalId: Id<"proposals">; vendorId: Id<"vendors">; bookingId: Id<"vendorBookings">; briefingId: Id<"briefings">; businessId: Id<"businesses">; vendorInvoiceId: Id<"vendorInvoices">; shootId: Id<"shoots">; fileRequestId: Id<"fileRequests">; fileUploadId: Id<"fileUploads">; briefId: Id<"briefs">; testimonialId: Id<"testimonials">; callSheetId: Id<"callSheets">; calendarEventId: Id<"calendarEvents"> };
+export type Ids = { requestId: Id<"wsRequests">; buildId: Id<"wsBuilds">; templateId: Id<"wsTemplates">; clauseId: Id<"wsClauses">; styleId: Id<"wsStyles">; docId: Id<"wsDocuments">; wsVersionId: Id<"wsVersions">; projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage">; clientRecId: Id<"clients">; personId: Id<"clientPeople">; inboxItemId: Id<"inboxItems">; inboxNoteId: Id<"inboxNotes">; deliveryFileId: Id<"deliveryFiles">; invoiceId: Id<"invoices">; planId: Id<"plans">; subscriptionId: Id<"subscriptions">; dealId: Id<"deals">; followUpId: Id<"followUps">; estimateId: Id<"estimates">; entryId: Id<"ledgerEntries">; quoteId: Id<"quotes">; proposalId: Id<"proposals">; vendorId: Id<"vendors">; bookingId: Id<"vendorBookings">; briefingId: Id<"briefings">; businessId: Id<"businesses">; vendorInvoiceId: Id<"vendorInvoices">; shootId: Id<"shoots">; fileRequestId: Id<"fileRequests">; fileUploadId: Id<"fileUploads">; briefId: Id<"briefs">; testimonialId: Id<"testimonials">; callSheetId: Id<"callSheets">; calendarEventId: Id<"calendarEvents">; guestToken: string; guestInvitedSub: string };
 
 // Minimal valid arguments for each function, so the access check (not argument validation) is what refuses.
 export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
@@ -172,6 +172,10 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "calendarSync.moveShoot": { shootId: ids.shootId, date: "2030-01-03", call: "08:00", notify: false }, "calendarSync.undoShoot": { shootId: ids.shootId },
     "calendarSync.moveDate": { projectId: ids.projectId, label: "Cut 1 due", from: "2030-01-05", to: "2030-01-06" },
     "calendarSync.shootMoveDone": { shootId: ids.shootId }, "calendarSync.askConfirmAgain": { shootId: ids.shootId }, "calendarSync.syncNow": {},
+    // Phase 5b step 4: call-sheet guests (the owner's End access; the guest's link, code and pages)
+    "callSheets.endGuest": { callSheetId: ids.callSheetId, id: "guest:matrix" }, "callSheets.restoreGuest": { callSheetId: ids.callSheetId, id: "guest:matrix" },
+    "guests.intro": { token: ids.guestToken }, "guests.sendCode": { token: "nope-nope-nope-nope" },
+    "guests.home": {}, "guests.sheet": { token: ids.guestToken }, "guests.opened": { token: ids.guestToken },
   };
 }
 
@@ -249,7 +253,9 @@ export async function setup() {
     // client reader still answers null for them: the matrix proves nobody else gets it; callSheets.test.ts proves who does).
     const csBuild = await ctx.db.insert("wsBuilds", { title: "CS", blocks: { type: "doc", content: [] }, fields: {}, style: {}, signers: [], kind: "callsheet", createdAt: 0, updatedAt: 0 });
     const callSheetId = await ctx.db.insert("callSheets", { shootId, projectId, buildId: csBuild, how: "blank", status: "sent", sentAt: 0, updates: 0,
-      recipients: [{ id: "client:client@example.com", kind: "client", name: "Client", email: "client@example.com", on: true, sentAt: 0, addedAt: 0 }, { id: `crew:${bookingId}`, kind: "crew", name: "V", email: "v@x.example", vendorId, bookingId, on: true, sentAt: 0, addedAt: 0 }],
+      recipients: [{ id: "client:client@example.com", kind: "client", name: "Client", email: "client@example.com", on: true, sentAt: 0, addedAt: 0 }, { id: `crew:${bookingId}`, kind: "crew", name: "V", email: "v@x.example", vendorId, bookingId, on: true, sentAt: 0, addedAt: 0 },
+        { id: "guest:matrix", kind: "guest", name: "Gail", email: "gail@x.example", role: "Talent", on: true, sentAt: 0, addedAt: 0 },
+        { id: "guest:invited", kind: "guest", name: "Ivy", email: "ivy@x.example", role: "Talent", on: true, sentAt: 1, addedAt: 0 }],
       sent: { title: "CS", page: { type: "doc", content: [] }, fields: {}, style: {}, at: 0, round: 0 }, history: [], createdAt: 0, updatedAt: 0 });
     // Phase 5b step 5: a Google Calendar connection with one event, and the shoot moved in Google (its Dashboard note).
     await ctx.db.insert("calendars", { email: "heston@gmail.example", refreshToken: "rt", calendarId: "cal@x", calendarName: "Wrangler", inviteVendors: true, inviteClient: false, connectedAt: 0,
@@ -257,7 +263,17 @@ export async function setup() {
     const calendarEventId = await ctx.db.insert("calendarEvents", { kind: "google", calendarId: "cal@x", googleId: "wpabc123", title: "Team call", date: "2030-01-02", endDate: "2030-01-02", start: "10:00", end: "11:00",
       guests: [{ email: "g@x.example" }], gUpdated: 1, syncedAt: 0, createdAt: 0, prev: { date: "2030-01-01", endDate: "2030-01-01", start: "10:00", end: "11:00", at: Date.now(), notify: false } });
     await ctx.db.patch(shootId, { googleMove: { at: 0, was: { date: "2030-01-01", call: "07:00", location: "X" } }, dragUndo: { at: Date.now(), was: { date: "2030-01-01", call: "07:00", wrap: null, moved: null, confirmed: null, notify: false } } });
-    return { calendarEventId, callSheetId, testimonialId, vendorSub: await sess(vendorUser), briefId, fileRequestId, fileUploadId, shootId, vendorInvoiceId, businessId, briefingId, bookingId, vendorId, proposalId, quoteId, dealId, followUpId, estimateId, entryId, subscriptionId, planId, invoiceId, deliveryFileId, clientRecId, personId, inboxItemId, inboxNoteId, requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
+    // Phase 5b step 4 (D127): a call-sheet guest, signed in, on that sheet: the matrix's fifth caller. It proves a guest login
+    // is refused everything but its own three guest functions; callSheetGuests.test.ts proves what those answer.
+    const guestToken = "matrixguesttoken0123456789";
+    await ctx.db.insert("guestPasses", { businessId, callSheetId, personId: "guest:matrix", email: "gail@x.example", token: guestToken, createdAt: 0 });
+    const guestUser = await ctx.db.insert("users", { email: "gail@x.example", name: "Gail", role: "guest" });
+    // Review test gap: a guest whose email also has a client invite (not yet accepted: no membership, no password). The
+    // invite gives the guest login no client powers; it stays a guest until the email signs up and is proved.
+    await ctx.db.insert("guestPasses", { businessId, callSheetId, personId: "guest:invited", email: "ivy@x.example", token: "matrixinvitedtoken01234567", createdAt: 0, sentAt: 1 });
+    const invitedGuest = await ctx.db.insert("users", { email: "ivy@x.example", name: "Ivy", role: "guest" });
+    await ctx.db.insert("invites", { email: "ivy@x.example", createdAt: 0 });
+    return { calendarEventId, guestToken, guestInvitedSub: await sess(invitedGuest), guestSub: await sess(guestUser), callSheetId, testimonialId, vendorSub: await sess(vendorUser), briefId, fileRequestId, fileUploadId, shootId, vendorInvoiceId, businessId, briefingId, bookingId, vendorId, proposalId, quoteId, dealId, followUpId, estimateId, entryId, subscriptionId, planId, invoiceId, deliveryFileId, clientRecId, personId, inboxItemId, inboxNoteId, requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
   });
   return { t, ids };
 }

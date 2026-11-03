@@ -82,6 +82,8 @@ const CallSheetQuestions = lazy(() => import("./modules/production/CallSheets").
 const CallSheetEditor = lazy(() => import("./modules/production/CallSheets").then((m) => ({ default: m.CallSheetEditor })));
 const CallSheetTemplate = lazy(() => import("./modules/production/CallSheets").then((m) => ({ default: m.CallSheetTemplate })));
 const CallSheetDetail = lazy(() => import("./modules/production/CallSheets").then((m) => ({ default: m.CallSheetDetail })));
+// Phase 5b step 4 (D127): call-sheet guests, signed in or out (their link, the code, their sheets).
+const GuestApp = lazy(() => import("./modules/guest/GuestApp"));
 const ClientCallSheetPage = lazy(() => import("./modules/production/CallSheetRead").then((m) => ({ default: m.ClientCallSheetPage })));
 const VendorPage = lazy(() => import("./modules/vendors/Vendors").then((m) => ({ default: m.VendorPage })));
 const BookingsPage = lazy(() => import("./modules/vendors/Bookings"));
@@ -171,6 +173,9 @@ export default function App() {
     const page = (inShell: boolean) => <Suspense fallback={<Loading />}><ClientInvoice key={invoice[1]} token={invoice[1]} inShell={inShell} /></Suspense>;
     return isAuthenticated ? <ShareForMember video={false} page={page} /> : page(false);
   }
+  // Phase 5b step 4: a call-sheet guest's link (email 41), signed in or out; the page decides.
+  const guestLink = /^\/guest(?:\/([A-Za-z0-9_-]{16,64}))?\/?$/.exec(path);
+  if (guestLink) return <Suspense fallback={<Loading />}><GuestApp key={guestLink[1] ?? "home"} token={guestLink[1] ?? null} /></Suspense>;
   if (isLoading) return <Loading />;
   if (!isAuthenticated) return <SignIn invitedEmail={new URLSearchParams(location.search).get("invited")} />;
   return <SignedIn />;
@@ -185,6 +190,8 @@ function SignedIn() {
   if (signer) return <Suspense fallback={<Loading />}><SignerApp key={signer[1]} token={signer[1]} /></Suspense>;
   if (isSignHost()) return <SignHostHome />;
   if (me === undefined) return <Loading />;
+  // Phase 5b step 4 (D127): a call-sheet guest sees their call sheets and nothing else, whatever address they open.
+  if (me && me.role === "guest") return <Suspense fallback={<Loading />}><GuestApp token={null} /></Suspense>;
   // Phase 3c step 4: vendors get the vendor side (their bookings, briefings and invoices), nothing else.
   if (me && !me.allowed && me.role === "vendor") {
     // A client page's address (from a client email) on the vendor side: offer the switch.

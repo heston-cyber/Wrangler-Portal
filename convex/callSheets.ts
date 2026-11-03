@@ -4,7 +4,8 @@
 //   - One call sheet per shoot, written in the Docs builder (a wsBuilds row of kind "callsheet"), from a saved template,
 //     a blank page, or the five-step quick questionnaire that fills a template.
 //   - Who gets it: crew (vendors booked on the project for that day), the client's people (their portal people), and
-//     guests (D127). Guests are stored now and get their light login in step 4: no email, no access yet.
+//     guests (D127). Step 4: a guest gets email 41 with their own link, signs in with an emailed code (guests.ts), and
+//     reads only the sheets they're on while each is active (lib/guests.ts); the owner can end their access by hand.
 //   - Send, Remind and Send an update are the owner's own clicks. Send freezes the copy everyone reads; email 40 goes to
 //     each person once; opening it in the portal is recorded per person; Remind goes only to people who haven't opened
 //     it; Send an update freezes the new copy and sends email 42 once per person per update.
@@ -22,7 +23,9 @@ import { label } from "./lib/bookingRows";
 import { todayCentral } from "./lib/bookings";
 import { businessContact } from "./lib/business";
 import { mailBrandOf } from "./lib/mail";
-import { callSheetMail, callSheetUpdateMail } from "./lib/mails";
+import { callSheetMail, callSheetUpdateMail, guestCallSheetMail } from "./lib/mails";
+import { addPass, dropPasses, hasOwnLogin, ownLoginHere, projectClosed, sheetBusiness } from "./lib/guests";
+import { defaultBusiness } from "./lib/business";
 import { deliverOnce } from "./invoiceReminders";
 import { SITE } from "./lib/site";
 import { defaultStyle, insertBuild } from "./builder";
@@ -43,10 +46,13 @@ const by = (me: { name?: string | null; email: string }) => me.name || me.email;
 const hist = (cs: Sheet, kind: string, me: { name?: string | null; email: string } | null, detail?: string) =>
   [...cs.history, { at: Date.now(), kind, ...(me ? { by: by(me) } : {}), ...(detail ? { detail: detail.slice(0, 200) } : {}) }].slice(-80);
 const openBooking = (k: Doc<"vendorBookings"> | null) => !!k && (k.status === "offered" || k.status === "accepted");
+/** A booking that puts this vendor on this shoot: still open, and named on the shoot or covering its day. */
+const coversShoot = (k: Doc<"vendorBookings"> | null, s: Doc<"shoots">) =>
+  !!k && openBooking(k) && (s.crew.some((c) => String(c.bookingId ?? "") === String(k._id)) || (k.start <= s.date && s.date <= k.end));
 
 // ---------- the shoot, and who can be on its sheet ----------
 
-async function shootOf(ctx: Ctx, shootId: Id<"shoots">) {
+export async function shootOf(ctx: Ctx, shootId: Id<"shoots">) {
   const s = await ctx.db.get(shootId);
   const p = s ? await ctx.db.get(s.projectId) : null;
   if (!s || !p) return null;
@@ -59,9 +65,8 @@ type Candidate = Omit<Person, "on" | "addedAt"> & { access: boolean; note: strin
  *  client's people; only those who can open the project in the portal can read the sheet. */
 async function candidates(ctx: Ctx, s: Doc<"shoots">, p: Doc<"projects">): Promise<Candidate[]> {
   const out: Candidate[] = [];
-  const onShoot = new Set(s.crew.map((c) => String(c.bookingId ?? "")));
   for (const k of await ctx.db.query("vendorBookings").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect()) {
-    if (!openBooking(k) || !(onShoot.has(String(k._id)) || (k.start <= s.date && s.date <= k.end))) continue;
+    if (!coversShoot(k, s)) continue;
     const vendor = await ctx.db.get(k.vendorId);
     if (!vendor || vendor.archivedAt) continue;
     const access = !!vendor.invitedAt;
@@ -87,18 +92,34 @@ async function candidates(ctx: Ctx, s: Doc<"shoots">, p: Doc<"projects">): Promi
 async function peopleOf(ctx: Ctx, cs: Sheet, s: Doc<"shoots">, p: Doc<"projects">) {
   const cands = await candidates(ctx, s, p);
   const byId = new Map(cands.map((c) => [c.id, c]));
-  const out: Array<Person & { access: boolean; note: string | null }> = cs.recipients.map((r) => {
+  const out: Array<Person & { access: boolean; note: string | null }> = [];
+  for (const r of cs.recipients) {
     const c = byId.get(r.id);
-    if (r.kind === "guest") return { ...r, access: false, note: "Gets access in the next update" };
-    return { ...r, access: !!c?.access, note: c ? c.note : r.kind === "crew" ? "No longer booked for this day" : "No longer one of the client's people" };
-  });
+    if (r.kind === "guest") { out.push({ ...r, ...(await guestAccess(ctx, cs, r, s, p)) }); continue; }
+    out.push({ ...r, access: !!c?.access, note: c ? c.note : r.kind === "crew" ? "No longer booked for this day" : "No longer one of the client's people" });
+  }
   for (const c of cands) if (!cs.recipients.some((r) => r.id === c.id)) out.push({ ...c, on: false, addedAt: 0 });
   return out;
 }
 
+/** Step 4 (D127): whether a guest can have this sheet. Never an email with a login of its own (it keeps that login and
+ *  gets no guest powers); not after the owner ended it; not once the shoot is over or cancelled, or the project closed. */
+async function guestAccess(ctx: Ctx, cs: Sheet, r: Person, s: Doc<"shoots">, p: Doc<"projects">): Promise<{ access: boolean; note: string | null }> {
+  if (await hasOwnLogin(ctx.db, r.email)) {
+    // Review L1: say why only for a login with this business; anything else gets the same neutral note.
+    const here = await ownLoginHere(ctx.db, r.email, await sheetBusiness(ctx, cs), (await defaultBusiness(ctx))?._id ?? null);
+    return { access: false, note: here ? "Has their own portal login: add them as crew or a client person instead" : "Can't get a guest link" };
+  }
+  if (r.endedAt) return { access: false, note: "Access ended" };
+  if (s.status !== "scheduled") return { access: false, note: "The shoot was cancelled" };
+  if (s.date < todayCentral()) return { access: false, note: "The shoot is over" };
+  if (projectClosed(p)) return { access: false, note: "The project is closed" };
+  return { access: true, note: null };
+}
+
 const firstOn = <T extends { on: boolean }>(people: T[]) => people.filter((x) => x.on);
-/** Who it actually goes to: ticked, not a guest (step 4), and able to read it in the portal. */
-const reachable = <T extends Person & { access: boolean }>(people: T[]) => people.filter((x) => x.on && x.kind !== "guest" && x.access);
+/** Who it actually goes to: ticked, and able to read it (crew and client people in the portal, guests by their link). */
+const reachable = <T extends Person & { access: boolean }>(people: T[]) => people.filter((x) => x.on && x.access);
 
 async function businessPhone(ctx: Ctx) {
   const row = await ctx.db.query("wsProfile").first();
@@ -165,7 +186,7 @@ export async function sheetRow(ctx: QueryCtx, cs: Sheet): Promise<Row | null> {
   const sh = await shootOf(ctx, cs.shootId);
   if (!sh) return null;
   const build = cs.buildId ? await ctx.db.get(cs.buildId) : null;
-  const sentTo = cs.recipients.filter((r) => r.sentAt && r.kind !== "guest");
+  const sentTo = cs.recipients.filter((r) => r.sentAt);
   return {
     _id: cs._id, title: sh.title, date: sh.s.date, people: cs.recipients.filter((r) => r.on).length, guests: cs.recipients.filter((r) => r.on && r.kind === "guest").length,
     state: cs.status === "sent" ? "sent" : build ? "draft" : "questions", opened: sentTo.filter((r) => r.openedAt).length, of: sentTo.length,
@@ -225,7 +246,7 @@ export const get = query({
       shoot: { _id: sh.s._id, date: sh.s.date, call: sh.s.call, wrap: sh.s.wrap ?? null, location: sh.s.location, parking: sh.s.parking ?? null },
       crewCall: loc?.crewCall || sh.s.call, place: loc?.name || sh.s.location,
       people: people.map((x) => ({ id: x.id, kind: x.kind, name: x.name, email: x.email, role: x.role ?? null, on: x.on, access: x.access, note: x.note,
-        sentAt: x.sentAt ?? null, openedAt: x.openedAt ?? null, lastOpenedAt: x.lastOpenedAt ?? null, remindedAt: x.remindedAt ?? null })),
+        sentAt: x.sentAt ?? null, openedAt: x.openedAt ?? null, lastOpenedAt: x.lastOpenedAt ?? null, remindedAt: x.remindedAt ?? null, endedAt: x.endedAt ?? null })),
       templates: await templateRows(ctx),
       sent: cs.sent ? { at: cs.sent.at, round: cs.sent.round } : null, sentAt: cs.sentAt ?? null, updates: cs.updates ?? 0,
       changed, changes: changed && cs.sent && page ? whatChanged(pageOf(cs.sent.page), page, values) : [],
@@ -333,7 +354,7 @@ export const toggle = mutation({
   },
 });
 
-/** Add a guest (766:6270): talent or another one-off person. Stored now; their login arrives in step 4 (D127). */
+/** Add a guest (766:6270): talent or another one-off person, with their own pass (lib/guests.ts, D127). */
 export const addGuest = mutation({
   args: { callSheetId: v.id("callSheets"), name: v.string(), email: v.string(), role: v.string() },
   handler: async (ctx, a) => {
@@ -344,10 +365,11 @@ export const addGuest = mutation({
     if (!isEmail(email)) throw new ConvexError("Enter their email.");
     if (cs.recipients.some((r) => r.email === email)) throw new ConvexError("They're already on this call sheet.");
     if (cs.recipients.length >= MAX_PEOPLE) throw new ConvexError(`A call sheet can go to up to ${MAX_PEOPLE} people.`);
-    // TODO(step 4, D127): guests get a light login (email + 6-digit code), email 41 and the guest page; until then a guest is
-    // stored here only: never emailed, never given access, and left out of Send, Remind and Send an update.
+    // Step 4: their pass holds the link token for email 41. An email with a login of its own can be listed, but is never
+    // sent the guest link (its access shows as such on the sheet).
     const id = `guest:${randomToken(9)}`;
     await ctx.db.patch(cs._id, { recipients: [...cs.recipients, { id, kind: "guest", name, email, role, on: true, addedAt: Date.now() }], updatedAt: Date.now(), history: hist(cs, "guest", me, `${name} (${role})`) });
+    await addPass(ctx, cs, id, email);
     return id;
   },
 });
@@ -359,6 +381,43 @@ export const removeGuest = mutation({
     const { cs } = await sheetFor(ctx, a.callSheetId);
     if (!cs.recipients.some((r) => r.id === a.id && r.kind === "guest")) throw new ConvexError("That guest isn't on this call sheet.");
     await ctx.db.patch(cs._id, { recipients: cs.recipients.filter((r) => r.id !== a.id), updatedAt: Date.now() });
+    await dropPasses(ctx, cs._id, a.id); // their link stops working
+    return null;
+  },
+});
+
+/** End a guest's access by hand (the Detail page's Guest access). Their link and login then show Access ended. */
+export const endGuest = mutation({
+  args: { callSheetId: v.id("callSheets"), id: v.string() },
+  handler: async (ctx, a) => {
+    const me = await requireMe(ctx);
+    const { cs } = await sheetFor(ctx, a.callSheetId);
+    const g = cs.recipients.find((r) => r.id === a.id && r.kind === "guest");
+    if (!g) throw new ConvexError("That guest isn't on this call sheet.");
+    if (g.endedAt) return null;
+    const now = Date.now();
+    await ctx.db.patch(cs._id, { recipients: cs.recipients.map((r) => (r.id === a.id ? { ...r, endedAt: now } : r)), updatedAt: now, history: hist(cs, "guest-ended", me, g.name) });
+    for (const p of await ctx.db.query("guestPasses").withIndex("by_sheet", (q) => q.eq("callSheetId", cs._id)).collect()) if (p.personId === a.id) await ctx.db.patch(p._id, { sentAt: undefined });
+    return null;
+  },
+});
+
+/** Review L3: Restore access for a guest whose access was ended. Not at once: they get the sheet again (email 41, a
+ *  working link) on the next Send an update or Remind. */
+export const restoreGuest = mutation({
+  args: { callSheetId: v.id("callSheets"), id: v.string() },
+  handler: async (ctx, a) => {
+    const me = await requireMe(ctx);
+    const { cs } = await sheetFor(ctx, a.callSheetId);
+    const g = cs.recipients.find((r) => r.id === a.id && r.kind === "guest");
+    if (!g) throw new ConvexError("That guest isn't on this call sheet.");
+    if (!g.endedAt) return null;
+    const now = Date.now();
+    const back = (r: Person): Person => {
+      const { endedAt: _e, sentAt: _s, openedAt: _o, lastOpenedAt: _l, remindedAt: _r, round: _n, ...rest } = r;
+      return { ...rest, on: true, grant: (r.grant ?? 0) + 1 };
+    };
+    await ctx.db.patch(cs._id, { recipients: cs.recipients.map((r) => (r.id === a.id ? back(r) : r)), updatedAt: now, history: hist(cs, "guest-restored", me, g.name) });
     return null;
   },
 });
@@ -371,6 +430,7 @@ export const deleteDraft = mutation({
     if (!cs) return null;
     if (cs.status !== "draft") throw new ConvexError("A sent call sheet stays, so you can see who opened it.");
     if (cs.buildId) await ctx.db.delete(cs.buildId);
+    await dropPasses(ctx, cs._id);
     await ctx.db.delete(cs._id);
     return null;
   },
@@ -378,7 +438,22 @@ export const deleteDraft = mutation({
 
 // ---------- the owner: Send, Send an update, Remind ----------
 
-type Out = { id: string; email: string; name: string; kind: "crew" | "client"; mail: "first" | "update" | "remind"; key: string; call: string; was?: string };
+type Out = { id: string; email: string; name: string; kind: "crew" | "client" | "guest"; mail: "first" | "update" | "remind"; key: string; call: string; was?: string; inbox?: string };
+// Review L3: each email goes once per recipient (their id on the sheet), not per address: a guest removed and added again
+// is a new recipient, and one whose access was restored (grant) gets email 41 again.
+const firstKey = (cs: Sheet, x: Person) => `callsheet:${cs._id}:first:${x.id}${x.grant ? `:g${x.grant}` : ""}`;
+const updateKey = (cs: Sheet, round: number, x: Person) => `callsheet:${cs._id}:update:${round}:${x.id}`;
+const remindKey = (cs: Sheet, x: Person) => `callsheet:${cs._id}:remind:${(x.reminders ?? 0) + 1}:${x.id}`;
+
+/** Review L2/L5: a guest it was just sent to: their pass says so (the /guest list's hint), and a pass locked by wrong
+ *  codes opens again. */
+async function passesSent(ctx: MutationCtx, cs: Sheet, ids: string[], date: string) {
+  if (!ids.length) return;
+  const now = Date.now();
+  for (const p of await ctx.db.query("guestPasses").withIndex("by_sheet", (q) => q.eq("callSheetId", cs._id)).collect())
+    if (ids.includes(p.personId)) await ctx.db.patch(p._id, { sentAt: now, date, lockedAt: undefined, wrongCount: undefined, wrongDay: undefined });
+}
+const guestIds = (xs: Array<{ id: string; kind: string }>) => xs.filter((x) => x.kind === "guest").map((x) => x.id);
 
 async function frozenCopy(ctx: MutationCtx, cs: Sheet) {
   const build = cs.buildId ? await ctx.db.get(cs.buildId) : null;
@@ -398,33 +473,35 @@ async function tellClients(ctx: MutationCtx, cs: Sheet, p: Doc<"projects">, out:
   }
 }
 
-/** Send call sheet (766:6190): to the ticked crew and client people (each group can be left out); email 40 each, once. */
+/** Send call sheet (766:6190): to the ticked crew, client people and guests (each group can be left out); email 40 each
+ *  (41 for a guest), once. Guests are left out unless `guests` is true. */
 export const send = mutation({
-  args: { callSheetId: v.id("callSheets"), crew: v.boolean(), client: v.boolean(), message: v.optional(v.string()) },
+  args: { callSheetId: v.id("callSheets"), crew: v.boolean(), client: v.boolean(), guests: v.optional(v.boolean()), message: v.optional(v.string()) },
   handler: async (ctx, a) => {
     const me = await requireMe(ctx);
     const { cs, sh } = await sheetFor(ctx, a.callSheetId);
     if (cs.status === "sent") throw new ConvexError("It's already been sent. Use Send an update.");
     const { build, doc } = await frozenCopy(ctx, cs);
     const people = await peopleOf(ctx, cs, sh.s, sh.p);
-    const left = (k: string) => (k === "crew" && !a.crew) || (k === "client" && !a.client);
+    const left = (k: string) => (k === "crew" && !a.crew) || (k === "client" && !a.client) || (k === "guest" && !a.guests);
     const go = reachable(people).filter((x) => !left(x.kind));
-    if (!go.length) throw new ConvexError("Tick at least one person who can open the portal.");
+    if (!go.length) throw new ConvexError("Tick at least one person who can open it.");
     const now = Date.now();
     const ids = new Set(go.map((x) => x.id));
     const recipients: Person[] = people.filter((x) => x.addedAt || ids.has(x.id) || x.on).map(({ access: _a, note: _n, ...r }) => ({
       ...r, addedAt: r.addedAt || now, ...(left(r.kind) ? { on: false } : {}), ...(ids.has(r.id) ? { sentAt: now } : {}),
     }));
-    const out: Out[] = go.map((x) => ({ id: x.id, email: x.email, name: x.name, kind: x.kind as "crew" | "client", mail: "first", key: `callsheet:${cs._id}:first:${x.email}`, call: callFor(doc.page, x) }));
+    const out: Out[] = go.map((x) => ({ id: x.id, email: x.email, name: x.name, kind: x.kind, mail: "first", key: firstKey(cs, x), call: callFor(doc.page, x), inbox: `callsheet:${cs._id}:first` }));
     await ctx.db.patch(cs._id, {
       status: "sent", sentAt: now, recipients, updates: 0, updatedAt: now,
-      sent: { title: build.title, page: doc.page, fields: doc.fields, style: doc.style, at: now, round: 0 },
+      sent: { title: build.title, page: doc.page, fields: doc.fields, style: doc.style, at: now, round: 0, heading: sh.title, date: sh.s.date },
       history: hist(cs, "sent", me, `${go.length} ${go.length === 1 ? "person" : "people"}`),
     });
     await ctx.db.patch(build._id, { renderedAt: now });
+    await passesSent(ctx, cs, guestIds(go), sh.s.date);
     await tellClients(ctx, cs, sh.p, out, `callsheet:${cs._id}:first`, `Call sheet: ${sheetDay(sh.s.date)}`, (o) => `${sh.title}${o.call ? ` · your call ${clockOf(o.call)}` : ""}`);
     await ctx.scheduler.runAfter(0, internal.callSheets.mail, { callSheetId: cs._id, out, message: tidy(a.message, 500) || undefined });
-    return { sent: go.length, skipped: people.filter((x) => x.on && x.kind !== "guest" && !x.access).map((x) => x.name), guests: people.filter((x) => x.on && x.kind === "guest").length };
+    return { sent: go.length, skipped: people.filter((x) => x.on && !x.access && !left(x.kind)).map((x) => x.name), guests: go.filter((x) => x.kind === "guest").length };
   },
 });
 
@@ -440,21 +517,22 @@ export const sendUpdate = mutation({
     if (!changed) throw new ConvexError("Say what changed.");
     const people = await peopleOf(ctx, cs, sh.s, sh.p);
     const go = reachable(people);
-    if (!go.length) throw new ConvexError("Nobody on it can open the portal.");
+    if (!go.length) throw new ConvexError("Nobody on it can open it.");
     const now = Date.now();
     const round = (cs.updates ?? 0) + 1;
     const before = pageOf(cs.sent.page);
     const ids = new Set(go.map((x) => x.id));
     const out: Out[] = go.map((x) => x.sentAt
-      ? { id: x.id, email: x.email, name: x.name, kind: x.kind as "crew" | "client", mail: "update", key: `callsheet:${cs._id}:update:${round}:${x.email}`, call: callFor(doc.page, x), was: callFor(before, x) }
-      : { id: x.id, email: x.email, name: x.name, kind: x.kind as "crew" | "client", mail: "first", key: `callsheet:${cs._id}:first:${x.email}`, call: callFor(doc.page, x) });
+      ? { id: x.id, email: x.email, name: x.name, kind: x.kind, mail: "update", key: updateKey(cs, round, x), call: callFor(doc.page, x), was: callFor(before, x), inbox: `callsheet:${cs._id}:update:${round}` }
+      : { id: x.id, email: x.email, name: x.name, kind: x.kind, mail: "first", key: firstKey(cs, x), call: callFor(doc.page, x), inbox: `callsheet:${cs._id}:update:${round}` });
     const recipients: Person[] = people.filter((x) => x.addedAt || x.on).map(({ access: _a, note: _n, ...r }) => ({
       ...r, addedAt: r.addedAt || now, ...(ids.has(r.id) ? (r.sentAt ? { round } : { sentAt: now }) : {}),
     }));
     await ctx.db.patch(cs._id, {
-      recipients, updates: round, updatedAt: now, sent: { title: build.title, page: doc.page, fields: doc.fields, style: doc.style, at: now, round },
+      recipients, updates: round, updatedAt: now, sent: { title: build.title, page: doc.page, fields: doc.fields, style: doc.style, at: now, round, heading: sh.title, date: sh.s.date },
       history: hist(cs, "update", me, changed),
     });
+    await passesSent(ctx, cs, guestIds(go), sh.s.date);
     await tellClients(ctx, cs, sh.p, out, `callsheet:${cs._id}:update:${round}`, `Call sheet updated: ${sheetDay(sh.s.date)}`, () => `${changed}.`);
     await ctx.scheduler.runAfter(0, internal.callSheets.mail, { callSheetId: cs._id, out, changed, message: tidy(a.message, 500) || undefined });
     return { sent: out.length };
@@ -471,18 +549,24 @@ export const remind = mutation({
     const now = Date.now();
     const page = pageOf(cs.sent.page);
     const people = await peopleOf(ctx, cs, sh.s, sh.p);
-    const go = people.filter((x) => x.sentAt && !x.openedAt && x.kind !== "guest" && x.access && (!a.id || x.id === a.id) && !(x.remindedAt && now - x.remindedAt < 10 * 60_000));
+    // Review L3: a guest it hasn't gone to (access restored, or added after Send) gets email 41 from Remind too.
+    const restored = (x: Person) => x.kind === "guest" && !x.sentAt;
+    const go = people.filter((x) => ((x.sentAt && !x.openedAt) || restored(x)) && x.on && x.access && (!a.id || x.id === a.id) && !(x.remindedAt && now - x.remindedAt < 10 * 60_000));
     if (a.id && !go.length) {
       const x = people.find((r) => r.id === a.id);
       throw new ConvexError(!x ? "That person isn't on this call sheet." : x.openedAt ? "They've opened it already." : x.remindedAt && now - x.remindedAt < 10 * 60_000 ? "You reminded them a moment ago." : "They can't be reminded.");
     }
     if (!go.length) return { sent: 0 };
     const ids = new Set(go.map((x) => x.id));
-    const out: Out[] = go.map((x) => ({ id: x.id, email: x.email, name: x.name, kind: x.kind as "crew" | "client", mail: "remind", key: `callsheet:${cs._id}:remind:${(x.reminders ?? 0) + 1}:${x.email}`, call: callFor(page, x) }));
+    const out: Out[] = go.map((x) => restored(x)
+      ? { id: x.id, email: x.email, name: x.name, kind: x.kind, mail: "first", key: firstKey(cs, x), call: callFor(page, x) }
+      : { id: x.id, email: x.email, name: x.name, kind: x.kind, mail: "remind", key: remindKey(cs, x), call: callFor(page, x) });
+    const fresh = new Set(go.filter(restored).map((x) => x.id));
     await ctx.db.patch(cs._id, {
-      recipients: cs.recipients.map((r) => (ids.has(r.id) ? { ...r, remindedAt: now, reminders: (r.reminders ?? 0) + 1 } : r)), updatedAt: now,
+      recipients: cs.recipients.map((r) => (fresh.has(r.id) ? { ...r, sentAt: now, round: cs.sent!.round } : ids.has(r.id) ? { ...r, remindedAt: now, reminders: (r.reminders ?? 0) + 1 } : r)), updatedAt: now,
       history: hist(cs, "remind", me, go.map((x) => x.name).join(", ")),
     });
+    await passesSent(ctx, cs, guestIds(go), sh.s.date);
     await ctx.scheduler.runAfter(0, internal.callSheets.mail, { callSheetId: cs._id, out });
     return { sent: go.length };
   },
@@ -500,11 +584,15 @@ export const mailData = internalQuery({
     const biz = await businessOf(ctx, sh.p);
     const page = pageOf(cs.sent.page);
     const loc = locationOf(nodesOf(page, "location")[0]);
-    return { biz, brand: await mailBrandOf(ctx, biz), title: sh.title, date: sh.s.date, where: loc.name || sh.s.location, from: await ownerName(ctx, sh.p), status: cs.status };
+    // Step 4: each guest's own link (their pass's token), for email 41 and their copy of 42.
+    const links: Record<string, string> = {};
+    for (const p of await ctx.db.query("guestPasses").withIndex("by_sheet", (q) => q.eq("callSheetId", cs._id)).collect()) links[p.personId] = p.token;
+    // Review L6: the heading and date as sent (Remind goes out later, and the project or shoot may have changed since).
+    return { biz, brand: await mailBrandOf(ctx, biz), title: cs.sent.heading ?? sh.title, date: cs.sent.date ?? sh.s.date, where: loc.name || sh.s.location, from: await ownerName(ctx, sh.p), status: cs.status, links };
   },
 });
 
-const outArg = v.array(v.object({ id: v.string(), email: v.string(), name: v.string(), kind: v.union(v.literal("crew"), v.literal("client")), mail: v.union(v.literal("first"), v.literal("update"), v.literal("remind")), key: v.string(), call: v.string(), was: v.optional(v.string()) }));
+const outArg = v.array(v.object({ id: v.string(), email: v.string(), name: v.string(), kind: v.union(v.literal("crew"), v.literal("client"), v.literal("guest")), mail: v.union(v.literal("first"), v.literal("update"), v.literal("remind")), key: v.string(), call: v.string(), was: v.optional(v.string()), inbox: v.optional(v.string()) }));
 export const mail = internalAction({
   args: { callSheetId: v.id("callSheets"), out: outArg, changed: v.optional(v.string()), message: v.optional(v.string()) },
   handler: async (ctx, a) => {
@@ -512,14 +600,17 @@ export const mail = internalAction({
     if (!d || d.status !== "sent") return 0;
     let sent = 0;
     for (const o of a.out) {
-      const link = o.kind === "crew" ? `${SITE()}/vendor/call-sheets/${a.callSheetId}` : `${SITE()}/call-sheets/${a.callSheetId}`;
-      const kind = `${o.kind === "crew" ? "vendor_" : ""}${o.mail === "update" ? "callsheet_update" : "callsheet"}`;
+      const token = o.kind === "guest" ? d.links[o.id] : null;
+      if (o.kind === "guest" && !token) continue; // a guest taken off the sheet since: no link, no email
+      const link = o.kind === "guest" ? `${SITE()}/guest/${token}` : o.kind === "crew" ? `${SITE()}/vendor/call-sheets/${a.callSheetId}` : `${SITE()}/call-sheets/${a.callSheetId}`;
+      const kind = `${o.kind === "crew" ? "vendor_" : o.kind === "guest" ? "guest_" : ""}${o.mail === "update" ? "callsheet_update" : "callsheet"}`;
+      const first = { name: o.name, title: d.title, dayLong: sheetDayLong(d.date), call: clockOf(o.call), where: d.where, from: d.from, message: o.mail === "first" ? a.message : null, reminder: o.mail === "remind", link };
       const m = o.mail === "update"
         ? callSheetUpdateMail(d.brand, { name: o.name, title: d.title, dayLong: sheetDayLong(d.date), changed: a.changed ?? "The call sheet changed", call: clockOf(o.call), was: o.was !== undefined ? clockOf(o.was) : null, from: d.from, message: a.message, link })
-        : callSheetMail(d.brand, { name: o.name, title: d.title, date: d.date, dayLong: sheetDayLong(d.date), call: clockOf(o.call), where: d.where, from: d.from, message: o.mail === "first" ? a.message : null, reminder: o.mail === "remind", link });
+        : o.kind === "guest" ? guestCallSheetMail(d.brand, first) : callSheetMail(d.brand, { ...first, date: d.date });
       try {
         if ((await deliverOnce(ctx, o.key, kind, o.email, m, d.brand.replyTo, d.biz)) === "sent") sent++;
-        if (o.kind === "client" && o.mail !== "remind") await ctx.runMutation(internal.emails.markInboxEmailed, { key: o.key.replace(/:[^:]+$/, ""), email: o.email });
+        if (o.kind === "client" && o.inbox) await ctx.runMutation(internal.emails.markInboxEmailed, { key: o.inbox, email: o.email });
       } catch (e) { console.error("call sheet email", String((e as Error).message).slice(0, 120)); }
     }
     return sent;
@@ -534,11 +625,16 @@ export async function readerView(ctx: QueryCtx, cs: Sheet, me: Person) {
   if (!sh || !cs.sent) return null;
   const page = pageOf(cs.sent.page);
   const fields = cs.sent.fields as Fields;
+  // Review L9: only the fill-in values this page uses (the others, e.g. the business's own details, stay out).
+  const all = fieldValues(fields, page);
+  const used = new Set([...JSON.stringify(page).matchAll(/(?<!\{)\{([a-z][a-z0-9_.]{0,40})\}(?!\})/gi)].map((m) => m[1]));
+  const values = Object.fromEntries(Object.entries(all).filter(([k]) => used.has(k)));
   const contact = await businessContact(ctx, cs.businessId ?? null);
   const b = cs.businessId ? await ctx.db.get(cs.businessId) : null;
   const st = cs.sent.style as Partial<Style> | undefined;
   return {
-    _id: cs._id, title: sh.title, docTitle: cs.sent.title, date: sh.s.date, project: { _id: sh.p._id, label: label(sh.p) }, page, values: fieldValues(fields, page),
+    // Review L6: the heading and date as sent, not the project or shoot as they are now.
+    _id: cs._id, title: cs.sent.heading ?? sh.title, docTitle: cs.sent.title, date: cs.sent.date ?? sh.s.date, project: { _id: sh.p._id, label: label(sh.p) }, page, values,
     accent: typeof st?.accent === "string" ? st.accent : null, sentAt: cs.sent.at, updated: cs.sent.round > 0,
     business: b?.name ?? contact.name, owner: b?.ownerName?.trim() || contact.name, replyTo: b?.replyTo || contact.ownerEmail,
     me: { name: me.name, kind: me.kind, role: me.role ?? null, call: callFor(page, me) }, openedAt: me.openedAt ?? null,
@@ -552,8 +648,11 @@ async function clientSheet(ctx: QueryCtx, callSheetId: string) {
   const cs = id ? await ctx.db.get(id) : null;
   if (!cs || cs.status !== "sent" || !cs.sent) return null;
   const email = me.email.toLowerCase();
-  const r = cs.recipients.find((x) => x.kind === "client" && x.email === email && x.sentAt);
+  // Review M1: still ticked (the owner can take someone off after Send) and the shoot still on.
+  const r = cs.recipients.find((x) => x.kind === "client" && x.email === email && x.sentAt && x.on);
   if (!r || !(await myProjects(ctx, email)).has(cs.projectId)) return null;
+  const shoot = await ctx.db.get(cs.shootId);
+  if (!shoot || shoot.status !== "scheduled") return null;
   return { cs, r, email };
 }
 
@@ -577,9 +676,10 @@ export const forClientProject = query({
     if (!id || !(await myProjects(ctx, email)).has(id)) return [];
     const out = [];
     for (const cs of await ctx.db.query("callSheets").withIndex("by_project", (q) => q.eq("projectId", id)).collect()) {
-      const r = cs.status === "sent" && cs.sent ? cs.recipients.find((x) => x.kind === "client" && x.email === email && x.sentAt) : null;
+      const r = cs.status === "sent" && cs.sent ? cs.recipients.find((x) => x.kind === "client" && x.email === email && x.sentAt && x.on) : null;
       const s = r ? await ctx.db.get(cs.shootId) : null;
-      if (r && s && s.status === "scheduled" && s.date >= todayCentral()) out.push({ _id: cs._id, date: s.date, call: callFor(pageOf(cs.sent!.page), r), opened: !!r.openedAt, sentAt: cs.sent!.at });
+      // The live shoot date decides whether it's still coming up; the date shown is the one sent (review L6).
+      if (r && s && s.status === "scheduled" && s.date >= todayCentral()) out.push({ _id: cs._id, date: cs.sent!.date ?? s.date, call: callFor(pageOf(cs.sent!.page), r), opened: !!r.openedAt, sentAt: cs.sent!.at });
     }
     return out.sort((a, b) => a.date.localeCompare(b.date));
   },
@@ -616,8 +716,10 @@ export async function markOpened(ctx: MutationCtx, cs: Sheet, personId: string, 
 /** The vendor side's check (vendorPortal.ts): this vendor is on the sheet it was sent to, and still booked. */
 export async function sentToVendor(ctx: Ctx, cs: Sheet | null, vendorId: Id<"vendors">) {
   if (!cs || cs.status !== "sent" || !cs.sent) return null;
-  const r = cs.recipients.find((x) => x.kind === "crew" && x.vendorId === vendorId && x.sentAt);
+  // Review M1: still ticked, the shoot still on, and the booking still covering it (the rule that put them on it).
+  const r = cs.recipients.find((x) => x.kind === "crew" && x.vendorId === vendorId && x.sentAt && x.on);
   if (!r?.bookingId) return null;
   const k = await ctx.db.get(r.bookingId);
-  return k && k.vendorId === vendorId && k.projectId === cs.projectId && openBooking(k) ? r : null;
+  const s = await ctx.db.get(cs.shootId);
+  return k && s && s.status === "scheduled" && k.vendorId === vendorId && k.projectId === cs.projectId && coversShoot(k, s) ? r : null;
 }

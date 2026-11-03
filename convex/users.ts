@@ -21,9 +21,10 @@ export const me = query({
     const fallback = local ? local[0].toUpperCase() + local.slice(1) : null;
     const v = await viewerOf(ctx);
     const owner = v.kind === "owner";
-    const role: "owner" | "client" | "vendor" | null = owner ? "owner" : v.kind === "client" ? "client" : v.kind === "vendor" ? "vendor" : null;
+    // Phase 5b step 4: a call-sheet guest's login (D127): the page shows it the guest pages and nothing else.
+    const role: "owner" | "client" | "vendor" | "guest" | null = owner ? "owner" : v.kind === "client" ? "client" : v.kind === "vendor" ? "vendor" : user.role === "guest" ? "guest" : null;
     // Nov 2: a login that is a client and a vendor shows a switch between the two sides.
-    const sides = owner ? [] : await sidesOf(ctx, email);
+    const sides = owner || role === "guest" ? [] : await sidesOf(ctx, email);
     return { id: userId, email, name: (user.name as string | undefined) || fallback, allowed: owner, role, sides, ...(owner ? { tools: toolsOf(user.tools) } : {}) };
   },
 });

@@ -56,9 +56,19 @@ const OPEN: Record<string, string> = {
   "subscriptions.setupDone": "the same link: checks the SetupIntent is that subscription's own before using it; a missing token is refused",
   "subscriptions.mine": "a client's subscriptions, found by their own email; anyone else gets []",
   "siteWatch.summary": "Phase 5c: open and urgent counts for the portal's admins (ALLOWED_EMAILS); null for anyone else, tested in siteWatch.test.ts",
+  // Phase 5b step 4 (D127): a call-sheet guest's link (/guest/<token>, email 41), signed out.
+  "guests.intro": "a guest's link: answers only for that pass's own long random token, with the sheet's title, day, the guest's first name and a masked email; tested in callSheetGuests.test.ts",
+  "guests.sendCode": "the same link's \"Email me a code\": emails a code to the pass's own address only (never shown), rate-limited; a missing token is refused",
 };
 // Functions with their own gate (a key in the arguments): refused with the wrong key, whoever calls.
 const KEYED = new Set(["r1results.report"]);
+// Phase 5b step 4 (D127): the only functions a call-sheet guest's login may call, and why. Each finds the guest's own pass
+// by its token and re-checks the sheet on every call (lib/guests.ts); tested in callSheetGuests.test.ts.
+const GUEST: Record<string, string> = {
+  "guests.home": "the guest's own active call sheets (passes found by their own email), one business at a time",
+  "guests.sheet": "one of the guest's own sheets by its link token: the sent copy while active, else Access ended (title and day only)",
+  "guests.opened": "records the guest opening their own sheet, only while it's active",
+};
 // Functions any signed-in account may call (owner or client), never a stranger.
 const SIGNED_IN = new Set(["users.setName", "users.switchSide", "clients.account", "shares.mine",
   // Phase 1: a client's own Inbox, Documents and their businesses' look
@@ -97,15 +107,15 @@ describe("access matrix", () => {
     expect(missing).toEqual([]);
   });
 
-  for (const who of ["nobody", "stranger", "client", "vendor"] as const) {
+  for (const who of ["nobody", "stranger", "client", "vendor", "guest", "guestInvited"] as const) {
     test(`${who}: every function refuses, except the ones meant to answer`, async () => {
       const { t, ids } = await setup();
       vi.stubGlobal("fetch", async () => new Response("{}", { status: 500 })); // nothing external may be reached
-      const as = who === "nobody" ? t : t.withIdentity({ subject: who === "stranger" ? ids.strangerSub : who === "vendor" ? ids.vendorSub : ids.clientSub });
+      const as = who === "nobody" ? t : t.withIdentity({ subject: who === "stranger" ? ids.strangerSub : who === "vendor" ? ids.vendorSub : who === "guest" ? ids.guestSub : who === "guestInvited" ? ids.guestInvitedSub : ids.clientSub });
       const table = argsFor(ids);
       const results: Record<string, string> = {};
       for (const f of publicFunctions()) {
-        const allowed = f.key in OPEN || (who === "client" && SIGNED_IN.has(f.key)) || (who === "vendor" && VENDOR.has(f.key));
+        const allowed = f.key in OPEN || (who === "client" && SIGNED_IN.has(f.key)) || (who === "vendor" && VENDOR.has(f.key)) || ((who === "guest" || who === "guestInvited") && f.key in GUEST);
         if (KEYED.has(f.key)) { await expect(call(as, f.ref, table[f.key], "")).rejects.toThrow(/Not allowed/); results[f.key] = "denied (own key)"; continue; }
         try {
           await call(as, f.ref, table[f.key], "");
@@ -127,7 +137,7 @@ describe("access matrix", () => {
     const me = t.withIdentity({ subject: ids.ownerSub });
     expect(await me.query(api.library.overview, {})).toBeTruthy();
     expect((await me.query(api.users.me, {}))?.role).toBe("owner");
-    expect(await me.query(api.clients.listInvites, {})).toHaveLength(1);
+    expect(await me.query(api.clients.listInvites, {})).toHaveLength(2); // the client's, and the invited guest's (step 4 review)
   });
 
   test("a client sees their own identity and account, and nothing else", async () => {

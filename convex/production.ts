@@ -4,6 +4,7 @@
 import { query } from "./lib/functions";
 import type { Doc } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
+import { projectClosed } from "./lib/guests";
 import { requireMe } from "./lib/access";
 import { todayCentral } from "./lib/bookings";
 import { label } from "./lib/bookingRows";
@@ -24,7 +25,7 @@ export async function shootRows(ctx: QueryCtx, shoots: Shoot[]) {
     if (!clients.has(ck)) clients.set(ck, p.clientId ? (await ctx.db.get(p.clientId))?.name ?? null : null);
     // Phase 5b step 3: its call sheet, if it has one (NO CALL SHEET · DRAFT · SENT · N OF M OPENED).
     const cs = await ctx.db.query("callSheets").withIndex("by_shoot", (q) => q.eq("shootId", s._id)).first();
-    const sentTo = cs ? cs.recipients.filter((r) => r.sentAt && r.kind !== "guest") : [];
+    const sentTo = cs ? cs.recipients.filter((r) => r.sentAt) : []; // step 4: guests it went to count too
     out.push({
       _id: s._id, projectId: p._id, project: p.name, label: label(p), client: clients.get(ck) ?? null,
       date: s.date, call: s.call, location: s.location, crew: s.crew.length, confirmed: !!s.confirmed, moved: !!s.moved,
@@ -112,7 +113,7 @@ export const projectsForShoot = query({
     await requireMe(ctx);
     const out = [];
     for (const p of await ctx.db.query("projects").order("desc").take(300)) {
-      if (p.stage === "delivery" && p.deliveryUnlockedAt) continue;
+      if (projectClosed(p)) continue;
       out.push({ _id: p._id, label: label(p), client: p.clientId ? (await ctx.db.get(p.clientId))?.name ?? null : null });
     }
     return out;
