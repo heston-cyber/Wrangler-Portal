@@ -129,7 +129,7 @@ export function ComingUpShoots({ projectId }: { projectId: string }) {
     <div key={s._id} className="wp-rowwrap">{i > 0 && <Divider />}
       <ListRow className="ilead" lead={{ icon: "calendar" }} to={`/shoots/${s._id}`} title={`Shoot · ${shootDay(s.date)} · ${clock(s.call)} call`}
         meta={`${s.location}${s.confirmed ? " · confirmed" : " · please confirm"}`}
-        action={s.confirmed ? <StatusChip tone="success">Confirmed</StatusChip> : <ButtonLink size="sm" to={`/shoots/${s._id}`}>Confirm</ButtonLink>} />
+        action={s.confirmed ? <StatusChip tone="success">Confirmed</StatusChip> : <span className="btn sm" aria-hidden>Confirm</span>} />
     </div>
   ))}</>;
 }

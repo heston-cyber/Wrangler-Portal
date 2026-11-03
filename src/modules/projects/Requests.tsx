@@ -126,7 +126,7 @@ export function ComingUpRequests({ projectId }: { projectId: string }) {
     <div key={r._id} className="wp-rowwrap">{i > 0 && <Divider />}
       <ListRow className="ilead" lead={{ icon: "upload" }} to={`/requests/${r._id}`} title={r.title}
         meta={`Due ${shortDay(r.due)}${r.files ? ` · ${plural(r.files, "file", "files")} uploaded` : ""}`}
-        action={<ButtonLink size="sm" to={`/requests/${r._id}`}>{r.files ? "Add more" : "Upload"}</ButtonLink>} />
+        action={<span className="btn sm" aria-hidden>{r.files ? "Add more" : "Upload"}</span>} />
     </div>
   ))}</>;
 }
