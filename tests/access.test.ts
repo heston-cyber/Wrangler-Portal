@@ -70,7 +70,16 @@ const SIGNED_IN = new Set(["users.setName", "users.switchSide", "clients.account
   "fileRequests.forClientProject", "fileRequests.page", "fileRequests.start", "fileRequests.finishDirect",
   "briefs.forClientProject", "briefs.page", "briefs.save", "briefs.submit",
   // Phase 2 Part A: a client's projects (only those their share invites cover) and the final files' links (only once open)
-  "projects.mine", "projects.forClient", "projects.deliveryLink"]);
+  "projects.mine", "projects.forClient", "projects.deliveryLink",
+  // Phase 5: a client's raw footage offer (only on projects they can open) and the testimonial form (only from a request they got)
+  "footage.forClientProject", "footage.keep", "footage.decline", "testimonials.ask", "testimonials.send"]);
+// D133 (Phase 5): functions a vendor login may call: their own side of the portal (each checks the vendor's own records,
+// tested in vendorPortal.test.ts and vendorPayouts.test.ts), their own identity, and nothing of the owner's or a client's.
+const VENDOR = new Set(["users.switchSide",
+  "vendorPortal.businesses", "vendorPortal.counts", "vendorPortal.home", "vendorPortal.bookings", "vendorPortal.booking", "vendorPortal.accept", "vendorPortal.decline",
+  "vendorPortal.briefings", "vendorPortal.briefing", "vendorPortal.markRead", "vendorPortal.reviews", "vendorPortal.invoices", "vendorPortal.invoiceForm", "vendorPortal.invoice",
+  "vendorPortal.saveInvoice", "vendorPortal.deleteInvoice", "vendorPortal.settings", "vendorPortal.notifications", "vendorPortal.setNotification", "vendorPortal.saveDetails",
+  "vendorPortal.w9UploadUrl", "vendorPortal.setW9", "vendorPayouts.mine", "vendorPayouts.setupLink", "vendorPayouts.refreshMine"]);
 
 import { argsFor, call, publicFunctions, setup } from "./matrix";
 const denied = (e: unknown) => /Sign in first|Not allowed/.test(String((e as Error).message ?? e));
@@ -83,15 +92,15 @@ describe("access matrix", () => {
     expect(missing).toEqual([]);
   });
 
-  for (const who of ["nobody", "stranger", "client"] as const) {
+  for (const who of ["nobody", "stranger", "client", "vendor"] as const) {
     test(`${who}: every function refuses, except the ones meant to answer`, async () => {
       const { t, ids } = await setup();
       vi.stubGlobal("fetch", async () => new Response("{}", { status: 500 })); // nothing external may be reached
-      const as = who === "nobody" ? t : t.withIdentity({ subject: who === "stranger" ? ids.strangerSub : ids.clientSub });
+      const as = who === "nobody" ? t : t.withIdentity({ subject: who === "stranger" ? ids.strangerSub : who === "vendor" ? ids.vendorSub : ids.clientSub });
       const table = argsFor(ids);
       const results: Record<string, string> = {};
       for (const f of publicFunctions()) {
-        const allowed = f.key in OPEN || (who === "client" && SIGNED_IN.has(f.key));
+        const allowed = f.key in OPEN || (who === "client" && SIGNED_IN.has(f.key)) || (who === "vendor" && VENDOR.has(f.key));
         if (KEYED.has(f.key)) { await expect(call(as, f.ref, table[f.key], "")).rejects.toThrow(/Not allowed/); results[f.key] = "denied (own key)"; continue; }
         try {
           await call(as, f.ref, table[f.key], "");

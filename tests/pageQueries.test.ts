@@ -137,6 +137,13 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "briefs.forEstimate": { pages: ["owner"], args: () => "skip" }, // New estimate › from the brief
   "briefs.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Coming up
   "briefs.page": { pages: ["clientHome"], args: () => ({ briefId: "nope" }) }, // /briefs/<id>, the client's kickoff brief
+  // Phase 5 (Nov 3): raw footage storage and testimonials
+  "footage.settings": { pages: ["owner"], args: () => ({}) }, // Settings › Payments › Footage storage
+  "footage.forProject": { pages: ["owner"], args: () => "skip" }, // project › Delivery › Raw footage storage
+  "footage.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Raw footage
+  "testimonials.projectsFor": { pages: ["owner"], args: () => "skip" }, // Post a note › Ask for a testimonial
+  "testimonials.list": { pages: ["owner"], args: () => ({}) }, // Clients › Testimonials
+  "testimonials.ask": { pages: ["clientHome"], args: () => ({ noteId: "nope" }) }, // /words/<note>, the client's testimonial form
   "fileRequests.forProject": { pages: ["owner"], args: () => "skip" }, // project Overview › Requests and brief (Phase 4)
   "fileRequests.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Coming up
   "fileRequests.page": { pages: ["clientHome"], args: () => ({ requestId: "nope" }) }, // /requests/<id>, the client's file request page

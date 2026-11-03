@@ -801,6 +801,13 @@
   ],
   "home.needs": [
    {
+    "at": 1793286000000,
+    "kind": "testimonial",
+    "project": "26127 Harbor Coffee Launch",
+    "testimonialId": "00000000000000010134testimonials",
+    "who": "Ava Chen, Harbor Coffee"
+   },
+   {
     "at": 1793271600000,
     "count": 1,
     "kind": "notes",
@@ -916,7 +923,7 @@
   ],
   "builder.listBuilds": [
    {
-    "_id": "000000000000000000010110wsBuilds",
+    "_id": "000000000000000000010107wsBuilds",
     "client": "",
     "createdAt": 1793289600000,
     "documentId": null,
@@ -924,7 +931,7 @@
     "updatedAt": 1793282400000
    },
    {
-    "_id": "000000000000000000010111wsBuilds",
+    "_id": "000000000000000000010108wsBuilds",
     "client": "",
     "createdAt": 1793289600000,
     "documentId": null,
@@ -934,7 +941,7 @@
   ],
   "builder.listTemplates": [
    {
-    "_id": "000000000000000010113wsTemplates",
+    "_id": "000000000000000010110wsTemplates",
     "blocks": 23,
     "description": "",
     "name": "Usage Release",
@@ -942,7 +949,7 @@
     "updatedAt": 1793289600000
    },
    {
-    "_id": "000000000000000010112wsTemplates",
+    "_id": "000000000000000010109wsTemplates",
     "blocks": 23,
     "description": "",
     "name": "Change Order",
@@ -950,7 +957,7 @@
     "updatedAt": 1793289600000
    },
    {
-    "_id": "000000000000000010096wsTemplates",
+    "_id": "000000000000000010093wsTemplates",
     "blocks": 23,
     "description": "Wrangler's standard agreement",
     "name": "Service Agreement",
@@ -960,8 +967,8 @@
   ],
   "builder.listClauses": [
    {
-    "_creationTime": 1793289600000.0977,
-    "_id": "00000000000000000010100wsClauses",
+    "_creationTime": 1793289600000.0947,
+    "_id": "00000000000000000010097wsClauses",
     "body": {
      "content": [
       {
@@ -992,8 +999,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.1025,
-    "_id": "00000000000000000010105wsClauses",
+    "_creationTime": 1793289600000.0996,
+    "_id": "00000000000000000010102wsClauses",
     "body": {
      "content": [
       {
@@ -1024,8 +1031,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.0957,
-    "_id": "00000000000000000010098wsClauses",
+    "_creationTime": 1793289600000.0928,
+    "_id": "00000000000000000010095wsClauses",
     "body": {
      "content": [
       {
@@ -1047,8 +1054,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.1055,
-    "_id": "00000000000000000010108wsClauses",
+    "_creationTime": 1793289600000.1025,
+    "_id": "00000000000000000010105wsClauses",
     "body": {
      "content": [
       {
@@ -1148,8 +1155,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.1016,
-    "_id": "00000000000000000010104wsClauses",
+    "_creationTime": 1793289600000.0986,
+    "_id": "00000000000000000010101wsClauses",
     "body": {
      "content": [
       {
@@ -1171,8 +1178,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.1035,
-    "_id": "00000000000000000010106wsClauses",
+    "_creationTime": 1793289600000.1006,
+    "_id": "00000000000000000010103wsClauses",
     "body": {
      "content": [
       {
@@ -1194,8 +1201,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.1064,
-    "_id": "00000000000000000010109wsClauses",
+    "_creationTime": 1793289600000.1035,
+    "_id": "00000000000000000010106wsClauses",
     "body": {
      "content": [
       {
@@ -1217,8 +1224,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.1006,
-    "_id": "00000000000000000010103wsClauses",
+    "_creationTime": 1793289600000.0977,
+    "_id": "00000000000000000010100wsClauses",
     "body": {
      "content": [
       {
@@ -1240,8 +1247,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.0996,
-    "_id": "00000000000000000010102wsClauses",
+    "_creationTime": 1793289600000.0967,
+    "_id": "00000000000000000010099wsClauses",
     "body": {
      "content": [
       {
@@ -1272,8 +1279,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.0967,
-    "_id": "00000000000000000010099wsClauses",
+    "_creationTime": 1793289600000.0938,
+    "_id": "00000000000000000010096wsClauses",
     "body": {
      "content": [
       {
@@ -1313,8 +1320,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.0947,
-    "_id": "00000000000000000010097wsClauses",
+    "_creationTime": 1793289600000.0918,
+    "_id": "00000000000000000010094wsClauses",
     "body": {
      "content": [
       {
@@ -1363,8 +1370,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.1045,
-    "_id": "00000000000000000010107wsClauses",
+    "_creationTime": 1793289600000.1016,
+    "_id": "00000000000000000010104wsClauses",
     "body": {
      "content": [
       {
@@ -1404,8 +1411,8 @@
     "updatedAt": 1793289600000
    },
    {
-    "_creationTime": 1793289600000.0986,
-    "_id": "00000000000000000010101wsClauses",
+    "_creationTime": 1793289600000.0957,
+    "_id": "00000000000000000010098wsClauses",
     "body": {
      "content": [
       {
@@ -1575,8 +1582,8 @@
     }
    ],
    "inbox": {
-    "items": 9,
-    "unread": 8
+    "items": 10,
+    "unread": 9
    },
    "people": [
     {
@@ -1638,7 +1645,7 @@
      "state": "notes",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
-     "token": "m4QgaJKVq4j1wT0O6bM8KA",
+     "token": "VsUs7QGoOi57u4w8vJIaow",
      "versionId": "000000000000000000010028versions",
      "videoId": "00000000000000000000010024videos"
     },
@@ -1652,7 +1659,7 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
-     "token": "m4QgaJKVq4j1wT0O6bM8KA",
+     "token": "VsUs7QGoOi57u4w8vJIaow",
      "versionId": "000000000000000000010027versions",
      "videoId": "00000000000000000000010024videos"
     },
@@ -1666,7 +1673,7 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
-     "token": "m4QgaJKVq4j1wT0O6bM8KA",
+     "token": "VsUs7QGoOi57u4w8vJIaow",
      "versionId": "000000000000000000010026versions",
      "videoId": "00000000000000000000010024videos"
     },
@@ -1680,7 +1687,7 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
      "title": "Harbor Coffee 15s cutdown",
-     "token": "m4QgaJKVq4j1wT0O6bM8KA",
+     "token": "VsUs7QGoOi57u4w8vJIaow",
      "versionId": "000000000000000000010032versions",
      "videoId": "00000000000000000000010030videos"
     },
@@ -1694,7 +1701,7 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
-     "token": "m4QgaJKVq4j1wT0O6bM8KA",
+     "token": "VsUs7QGoOi57u4w8vJIaow",
      "versionId": "000000000000000000010025versions",
      "videoId": "00000000000000000000010024videos"
     },
@@ -1708,7 +1715,7 @@
      "state": "not_watched",
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
      "title": "Harbor Coffee 15s cutdown",
-     "token": "m4QgaJKVq4j1wT0O6bM8KA",
+     "token": "VsUs7QGoOi57u4w8vJIaow",
      "versionId": "000000000000000000010031versions",
      "videoId": "00000000000000000000010030videos"
     }
@@ -1824,6 +1831,26 @@
     "title": "Shoot moved to Friday",
     "to": null,
     "updatedAt": 1793289600000
+   },
+   {
+    "_id": "0000000000000000010132inboxNotes",
+    "client": "Harbor Coffee",
+    "clientId": "0000000000000000000010003clients",
+    "createdAt": 1793282400000,
+    "draftedBy": "owner",
+    "emailThem": true,
+    "emailed": 0,
+    "link": "/words/0000000000000000010132inboxNotes",
+    "linkLabel": "Share a few words",
+    "readBy": 0,
+    "recipients": 1,
+    "said": null,
+    "sentAt": 1793282400000,
+    "status": "sent",
+    "text": "Two quick questions, about a minute.",
+    "title": "A few words about 26127 Harbor Coffee Launch?",
+    "to": null,
+    "updatedAt": 1793282400000
    }
   ],
   "inbox.sent": [
@@ -1938,9 +1965,45 @@
     "title": "New cut ready",
     "to": "Maya Brooks",
     "type": "auto"
+   },
+   {
+    "at": 1793282400000,
+    "draftedBy": "owner",
+    "emailed": false,
+    "key": "note:0000000000000000010132inboxNotes",
+    "kind": "note",
+    "open": "/sent/0000000000000000010132inboxNotes",
+    "readBy": 0,
+    "sentTo": 1,
+    "subject": null,
+    "title": "A few words about 26127 Harbor Coffee Launch?",
+    "to": "Harbor Coffee (1)",
+    "type": "note"
    }
   ],
   "inbox.forClient": [
+   {
+    "_id": "0000000000000000010133inboxItems",
+    "createdAt": 1793289600000,
+    "documentId": null,
+    "emailed": false,
+    "kind": "note",
+    "link": "/words/0000000000000000010132inboxNotes",
+    "linkLabel": "Share a few words",
+    "people": [
+     {
+      "email": "maya@harborcoffee.com",
+      "emailed": false,
+      "readAt": null
+     }
+    ],
+    "read": false,
+    "readAt": null,
+    "readBy": 0,
+    "sentTo": 1,
+    "text": "Two quick questions, about a minute.",
+    "title": "A few words about 26127 Harbor Coffee Launch?"
+   },
    {
     "_id": "0000000000000000010125inboxItems",
     "createdAt": 1793289600000,
@@ -1969,7 +2032,7 @@
     "title": "Shoot scheduled: Mon, Nov 2 · 7:00 AM"
    },
    {
-    "_id": "0000000000000000010115inboxItems",
+    "_id": "0000000000000000010112inboxItems",
     "createdAt": 1793289600000,
     "documentId": null,
     "emailed": false,
@@ -2133,6 +2196,7 @@
    "said": null,
    "sentAt": 1793289600000,
    "status": "sent",
+   "testimonial": null,
    "text": "Same time, same place. We'll start with the counter shots.",
    "title": "Shoot moved to Friday",
    "to": null
@@ -2151,6 +2215,7 @@
    "said": null,
    "sentAt": null,
    "status": "draft",
+   "testimonial": null,
    "text": "The 15s is on its way.",
    "title": "Cutdown ready next week",
    "to": null
@@ -2169,8 +2234,44 @@
    "said": "tell Harbor the shoot moved to Thursday",
    "sentAt": null,
    "status": "draft",
+   "testimonial": null,
    "text": "Same call time. We'll send the shot list Monday.",
    "title": "Shoot moved to Thursday, Nov 6",
+   "to": null
+  },
+  "inbox.noteDetail#0000000000000000010132inboxNotes": {
+   "_id": "0000000000000000010132inboxNotes",
+   "attachment": {
+    "kind": "page",
+    "number": null,
+    "thumbUrl": null,
+    "title": null,
+    "videoId": null
+   },
+   "client": "Harbor Coffee",
+   "clientId": "0000000000000000000010003clients",
+   "createdAt": 1793282400000,
+   "draftedBy": "owner",
+   "emailThem": true,
+   "link": "/words/0000000000000000010132inboxNotes",
+   "linkLabel": "Share a few words",
+   "people": [
+    {
+     "email": "maya@harborcoffee.com",
+     "emailedAt": null,
+     "name": "Maya Brooks",
+     "readAt": null
+    }
+   ],
+   "said": null,
+   "sentAt": 1793282400000,
+   "status": "sent",
+   "testimonial": {
+    "project": "26127 Harbor Coffee Launch",
+    "projectId": "000000000000000000010020projects"
+   },
+   "text": "Two quick questions, about a minute.",
+   "title": "A few words about 26127 Harbor Coffee Launch?",
    "to": null
   },
   "library.video": {
@@ -2186,6 +2287,7 @@
     "jobNumber": "26127",
     "name": "Harbor Coffee Launch"
    },
+   "projectFolder": null,
    "roundsIncluded": 2,
    "shortTitle": "Harbor30",
    "title": "Harbor Coffee 30s",
@@ -2500,8 +2602,8 @@
     "projectId": null,
     "state": "on",
     "sub": "26127 Harbor Coffee Launch",
-    "token": "JkzaE1B2kgiwLfHGmM7hIw",
-    "url": "https://app.wranglerportal.com/s/JkzaE1B2kgiwLfHGmM7hIw",
+    "token": "T1WpVMN9e_oMVowa7cKxZA",
+    "url": "https://app.wranglerportal.com/s/T1WpVMN9e_oMVowa7cKxZA",
     "videoId": "00000000000000000000010024videos",
     "who": "link"
    },
@@ -2540,8 +2642,8 @@
     "projectId": "000000000000000000010020projects",
     "state": "on",
     "sub": "Harbor Coffee",
-    "token": "m4QgaJKVq4j1wT0O6bM8KA",
-    "url": "https://app.wranglerportal.com/s/m4QgaJKVq4j1wT0O6bM8KA",
+    "token": "VsUs7QGoOi57u4w8vJIaow",
+    "url": "https://app.wranglerportal.com/s/VsUs7QGoOi57u4w8vJIaow",
     "videoId": null,
     "who": "invited"
    }
@@ -2582,8 +2684,8 @@
     "projectId": null,
     "state": "on",
     "sub": "26127 Harbor Coffee Launch",
-    "token": "JkzaE1B2kgiwLfHGmM7hIw",
-    "url": "https://app.wranglerportal.com/s/JkzaE1B2kgiwLfHGmM7hIw",
+    "token": "T1WpVMN9e_oMVowa7cKxZA",
+    "url": "https://app.wranglerportal.com/s/T1WpVMN9e_oMVowa7cKxZA",
     "videoId": "00000000000000000000010024videos",
     "who": "link"
    },
@@ -2622,8 +2724,8 @@
     "projectId": "000000000000000000010020projects",
     "state": "on",
     "sub": "Harbor Coffee",
-    "token": "m4QgaJKVq4j1wT0O6bM8KA",
-    "url": "https://app.wranglerportal.com/s/m4QgaJKVq4j1wT0O6bM8KA",
+    "token": "VsUs7QGoOi57u4w8vJIaow",
+    "url": "https://app.wranglerportal.com/s/VsUs7QGoOi57u4w8vJIaow",
     "videoId": null,
     "who": "invited"
    }
@@ -2631,9 +2733,9 @@
   "sign.pendingRequests": [],
   "approvals.forVideo": [],
   "sign.requestsFor": [],
-  "builder.getBuild#000000000000000000010110wsBuilds": {
-   "_creationTime": 1793289600000.1074,
-   "_id": "000000000000000000010110wsBuilds",
+  "builder.getBuild#000000000000000000010107wsBuilds": {
+   "_creationTime": 1793289600000.1045,
+   "_id": "000000000000000000010107wsBuilds",
    "blocks": {
     "content": [
      {
@@ -2775,7 +2877,7 @@
        "rows": [
         {
          "description": "Video production (describe the deliverables)",
-         "id": "k3935zwl",
+         "id": "kaxzhkqw",
          "qty": 1,
          "rate": 0
         }
@@ -3565,7 +3667,7 @@
     "separator": "line",
     "text": "#1d1d1f"
    },
-   "templateId": "000000000000000010096wsTemplates",
+   "templateId": "000000000000000010093wsTemplates",
    "title": "Spirit Days Service Agreement",
    "updatedAt": 1793282400000
   },
@@ -4302,14 +4404,14 @@
     "expiresAt": null,
     "files": [
      {
-      "_id": "0000000000000010116deliveryFiles",
+      "_id": "0000000000000010113deliveryFiles",
       "kind": "dropbox",
       "name": "HarborCoffee_30s_FINAL.mov",
       "note": "Dropbox",
       "size": 4200000000
      },
      {
-      "_id": "0000000000000010117deliveryFiles",
+      "_id": "0000000000000010114deliveryFiles",
       "kind": "version",
       "name": "00001_Harbor30_v4.mp4",
       "note": "From the site",
@@ -4844,9 +4946,94 @@
    "projectId": "000000000000000000010020projects",
    "video": "Harbor Coffee 30s"
   },
+  "footage.settings": {
+   "keepDayChoices": [
+    7,
+    14,
+    30,
+    60,
+    90
+   ],
+   "keepDays": 30,
+   "on": true,
+   "priceCents": 10000
+  },
+  "footage.forProject#000000000000000000010020projects": {
+   "client": "Harbor Coffee",
+   "delivered": true,
+   "settings": {
+    "keepDays": 30,
+    "on": true,
+    "priceCents": 10000
+   },
+   "storage": {
+    "_id": "000000000000010131footageStorage",
+    "by": null,
+    "doneAt": null,
+    "endedAt": null,
+    "history": [
+     {
+      "at": 1793203200000,
+      "text": "Offered at delivery"
+     }
+    ],
+    "invoice": null,
+    "keepUntil": "2026-11-27",
+    "keptUntil": null,
+    "offeredAt": 1793203200000,
+    "paidUntil": null,
+    "priceCents": 10000,
+    "renewing": false,
+    "status": "offered"
+   }
+  },
+  "testimonials.list": [
+   {
+    "_id": "00000000000000010134testimonials",
+    "company": "Harbor Coffee",
+    "createdAt": 1793286000000,
+    "email": "ava@harborcoffee.com",
+    "film": "We use the launch film on every pitch now.",
+    "name": "Ava Chen",
+    "permission": true,
+    "project": "26127 Harbor Coffee Launch",
+    "projectId": "000000000000000000010020projects",
+    "read": false,
+    "saveError": null,
+    "saved": {
+     "at": 1793286000000,
+     "path": "/Apps/Wrangler Review/Testimonials/2026-10-29 Ava Chen - 26127 Harbor Coffee Launch.md"
+    },
+    "working": "Clear, fast, and they actually listened."
+   },
+   {
+    "_id": "00000000000000010135testimonials",
+    "company": "Harbor Coffee",
+    "createdAt": 1793030400000,
+    "email": "jordan@harborcoffee.com",
+    "film": "Customers mention the recap.",
+    "name": "Jordan Reyes",
+    "permission": false,
+    "project": "26127 Harbor Coffee Launch",
+    "projectId": "000000000000000000010020projects",
+    "read": true,
+    "saveError": "Dropbox isn't connected. Connect it in Settings › Dropbox drop folder, then Save again.",
+    "saved": null,
+    "working": "Great to work with."
+   }
+  ],
+  "testimonials.projectsFor#0000000000000000000010003clients": [
+   {
+    "_id": "000000000000000000010020projects",
+    "asked": true,
+    "delivered": false,
+    "label": "26127 Harbor Coffee Launch",
+    "updatedAt": 1793289600000
+   }
+  ],
   "invoices.list": [
    {
-    "_id": "000000000000000000010120invoices",
+    "_id": "000000000000000000010117invoices",
     "amountPaidCents": 0,
     "amountRemainingCents": 1020000,
     "billTo": {
@@ -4877,7 +5064,7 @@
     "viewedAt": null
    },
    {
-    "_id": "000000000000000000010119invoices",
+    "_id": "000000000000000000010116invoices",
     "amountPaidCents": 0,
     "amountRemainingCents": 45000,
     "billTo": {
@@ -4908,7 +5095,7 @@
     "viewedAt": null
    },
    {
-    "_id": "000000000000000000010121invoices",
+    "_id": "000000000000000000010118invoices",
     "amountPaidCents": 0,
     "amountRemainingCents": 120000,
     "billTo": {
@@ -4939,7 +5126,7 @@
     "viewedAt": null
    },
    {
-    "_id": "000000000000000000010118invoices",
+    "_id": "000000000000000000010115invoices",
     "amountPaidCents": 300000,
     "amountRemainingCents": 0,
     "billTo": {
@@ -4974,28 +5161,28 @@
    "activity": [
     {
      "at": 1793203200000,
-     "invoiceId": "000000000000000000010119invoices",
+     "invoiceId": "000000000000000000010116invoices",
      "kind": "sent",
      "meta": "Harbor Coffee · WRNGLR-0002",
      "title": "Invoice sent"
     },
     {
      "at": 1792684800000,
-     "invoiceId": "000000000000000000010118invoices",
+     "invoiceId": "000000000000000000010115invoices",
      "kind": "paid",
      "meta": "Harbor Coffee · WRNGLR-0001 · Visa •••• 4242",
      "title": "Payment received · $3,000.00"
     },
     {
      "at": 1792641600000,
-     "invoiceId": "000000000000000000010118invoices",
+     "invoiceId": "000000000000000000010115invoices",
      "kind": "viewed",
      "meta": "Harbor Coffee · WRNGLR-0001",
      "title": "Invoice viewed"
     },
     {
      "at": 1792598400000,
-     "invoiceId": "000000000000000000010118invoices",
+     "invoiceId": "000000000000000000010115invoices",
      "kind": "sent",
      "meta": "Harbor Coffee · WRNGLR-0001",
      "title": "Invoice sent"
@@ -5008,7 +5195,7 @@
    "invoices": 4,
    "needs": [
     {
-     "_id": "000000000000000000010120invoices",
+     "_id": "000000000000000000010117invoices",
      "at": 1792598400000,
      "cents": 1020000,
      "client": "Harbor Coffee",
@@ -5118,7 +5305,7 @@
   },
   "invoices.forProject#000000000000000000010020projects": [
    {
-    "_id": "000000000000000000010118invoices",
+    "_id": "000000000000000000010115invoices",
     "amountPaidCents": 300000,
     "amountRemainingCents": 0,
     "billTo": {
@@ -5149,7 +5336,7 @@
     "viewedAt": null
    },
    {
-    "_id": "000000000000000000010119invoices",
+    "_id": "000000000000000000010116invoices",
     "amountPaidCents": 0,
     "amountRemainingCents": 45000,
     "billTo": {
@@ -5180,7 +5367,7 @@
     "viewedAt": null
    },
    {
-    "_id": "000000000000000000010120invoices",
+    "_id": "000000000000000000010117invoices",
     "amountPaidCents": 0,
     "amountRemainingCents": 1020000,
     "billTo": {
@@ -5211,7 +5398,7 @@
     "viewedAt": null
    },
    {
-    "_id": "000000000000000000010121invoices",
+    "_id": "000000000000000000010118invoices",
     "amountPaidCents": 0,
     "amountRemainingCents": 120000,
     "billTo": {
@@ -5242,8 +5429,8 @@
     "viewedAt": null
    }
   ],
-  "invoices.get#000000000000000000010118invoices": {
-   "_id": "000000000000000000010118invoices",
+  "invoices.get#000000000000000000010115invoices": {
+   "_id": "000000000000000000010115invoices",
    "amountPaidCents": 300000,
    "amountRemainingCents": 0,
    "billTo": {
@@ -5349,8 +5536,8 @@
    "updatedAt": 1792684800000,
    "viewedAt": null
   },
-  "invoices.get#000000000000000000010119invoices": {
-   "_id": "000000000000000000010119invoices",
+  "invoices.get#000000000000000000010116invoices": {
+   "_id": "000000000000000000010116invoices",
    "amountPaidCents": 0,
    "amountRemainingCents": 45000,
    "billTo": {
@@ -5438,8 +5625,8 @@
    "updatedAt": 1793203200000,
    "viewedAt": null
   },
-  "invoices.get#000000000000000000010120invoices": {
-   "_id": "000000000000000000010120invoices",
+  "invoices.get#000000000000000000010117invoices": {
+   "_id": "000000000000000000010117invoices",
    "amountPaidCents": 0,
    "amountRemainingCents": 1020000,
    "billTo": {
@@ -5528,7 +5715,7 @@
     "basedIn": "Oklahoma City",
     "name": "Jordan Ellis",
     "paidThisYearCents": 16850,
-    "portal": "invited Nov 2",
+    "portal": "invited Nov 3",
     "roles": [
      "Shooter",
      "Editor"
@@ -5548,7 +5735,7 @@
    }
   ],
   "vendors.get#0000000000000000000010024vendors": {
-   "_creationTime": 1793678945936,
+   "_creationTime": 1793721075587,
    "_id": "0000000000000000000010024vendors",
    "address": "1200 NW 16th St\nOklahoma City, OK 73106",
    "basedIn": "Oklahoma City",
@@ -5572,9 +5759,9 @@
      "role": "Editor"
     }
    ],
-   "createdAt": 1793678945936,
+   "createdAt": 1793721075587,
    "email": "jordan@ellisfilms.com",
-   "invitedAt": 1793678945936,
+   "invitedAt": 1793721075588,
    "name": "Jordan Ellis",
    "payMethod": {
     "method": "ACH",
@@ -5582,7 +5769,7 @@
    },
    "payout": {
     "bankName": "STRIPE TEST BANK",
-    "checkedAt": 1793678946089,
+    "checkedAt": 1793721075732,
     "last4": "6789",
     "mode": "test",
     "payoutMethodId": "pm_kit",
@@ -5590,7 +5777,7 @@
     "recipientId": "acct_kit"
    },
    "phone": "405-555-0142",
-   "portal": "invited Nov 2",
+   "portal": "invited Nov 3",
    "portfolio": "ellisfilms.com",
    "rates": [
     {
@@ -5610,11 +5797,11 @@
     "waitingCents": 170000,
     "waitingCount": 1
    },
-   "updatedAt": 1793678946091,
+   "updatedAt": 1793721075733,
    "w9": null
   },
   "vendors.get#0000000000000000000010026vendors": {
-   "_creationTime": 1793678945940,
+   "_creationTime": 1793721075591,
    "_id": "0000000000000000000010026vendors",
    "businessId": "0000000000000000010000businesses",
    "costs": [
@@ -5627,7 +5814,7 @@
      "role": "Editor"
     }
    ],
-   "createdAt": 1793678945940,
+   "createdAt": 1793721075591,
    "email": "riley@chen.example",
    "name": "Riley Chen",
    "portal": "not invited",
@@ -5648,7 +5835,7 @@
     "waitingCents": 0,
     "waitingCount": 0
    },
-   "updatedAt": 1793678945940,
+   "updatedAt": 1793721075591,
    "w9": null
   },
   "vendors.invoices#0000000000000000000010024vendors": [
@@ -5658,17 +5845,17 @@
     "paidAt": null,
     "paidOn": null,
     "project": "Launch",
-    "sentAt": 1793678946086,
+    "sentAt": 1793721075730,
     "status": "approved",
     "totalCents": 9000
    },
    {
     "_id": "000000000000010050vendorInvoices",
     "number": "JE-013",
-    "paidAt": 1793678946085,
-    "paidOn": "2026-11-02",
+    "paidAt": 1793721075729,
+    "paidOn": "2026-11-03",
     "project": "Launch",
-    "sentAt": 1793678946043,
+    "sentAt": 1793721075687,
     "status": "paid",
     "totalCents": 16850
    },
@@ -5678,7 +5865,7 @@
     "paidAt": null,
     "paidOn": null,
     "project": "Launch",
-    "sentAt": 1793678946041,
+    "sentAt": 1793721075685,
     "status": "approved",
     "totalCents": 117000
    },
@@ -5688,7 +5875,7 @@
     "paidAt": null,
     "paidOn": null,
     "project": "Launch",
-    "sentAt": 1793678946034,
+    "sentAt": 1793721075683,
     "status": "sent",
     "totalCents": 170000
    }
@@ -5697,7 +5884,7 @@
   "bookings.list": [
    {
     "_id": "000000000000010031vendorBookings",
-    "answeredAt": 1793678946026,
+    "answeredAt": 1793721075676,
     "brief": "none",
     "cancelledAt": null,
     "days": 2,
@@ -5707,7 +5894,7 @@
     "hours": null,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793678945967,
+    "offeredAt": 1793721075610,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5722,7 +5909,7 @@
    },
    {
     "_id": "000000000000010035vendorBookings",
-    "answeredAt": 1793678946028,
+    "answeredAt": 1793721075678,
     "brief": "none",
     "cancelledAt": null,
     "days": 5,
@@ -5732,7 +5919,7 @@
     "hours": 18,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793678945972,
+    "offeredAt": 1793721075615,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5757,7 +5944,7 @@
     "hours": 18,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793678945973,
+    "offeredAt": 1793721075616,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5782,7 +5969,7 @@
     "hours": null,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793678945970,
+    "offeredAt": 1793721075614,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5809,7 +5996,7 @@
     "hours": null,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793678945970,
+    "offeredAt": 1793721075614,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5824,7 +6011,7 @@
    },
    {
     "_id": "000000000000010035vendorBookings",
-    "answeredAt": 1793678946028,
+    "answeredAt": 1793721075678,
     "brief": "none",
     "cancelledAt": null,
     "days": 5,
@@ -5834,7 +6021,7 @@
     "hours": 18,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793678945972,
+    "offeredAt": 1793721075615,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5849,7 +6036,7 @@
    },
    {
     "_id": "000000000000010031vendorBookings",
-    "answeredAt": 1793678946026,
+    "answeredAt": 1793721075676,
     "brief": "none",
     "cancelledAt": null,
     "days": 2,
@@ -5859,7 +6046,7 @@
     "hours": null,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793678945967,
+    "offeredAt": 1793721075610,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5886,7 +6073,7 @@
     "hours": 18,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793678945973,
+    "offeredAt": 1793721075616,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5902,7 +6089,7 @@
   ],
   "bookings.get#000000000000010031vendorBookings": {
    "_id": "000000000000010031vendorBookings",
-   "answeredAt": 1793678946026,
+   "answeredAt": 1793721075676,
    "brief": "none",
    "briefing": null,
    "cancelledAt": null,
@@ -5914,7 +6101,7 @@
    "hours": null,
    "location": "Harbor Coffee, Plaza District",
    "note": "Run and gun. Bring the gimbal.",
-   "offeredAt": 1793678945967,
+   "offeredAt": 1793721075610,
    "project": "26127 Launch",
    "projectId": "000000000000000000010018projects",
    "rate": {
@@ -5932,7 +6119,7 @@
   "bookings.forProject#000000000000000000010018projects": [
    {
     "_id": "000000000000010031vendorBookings",
-    "answeredAt": 1793678946026,
+    "answeredAt": 1793721075676,
     "brief": "none",
     "cancelledAt": null,
     "days": 2,
@@ -5942,7 +6129,7 @@
     "hours": null,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793678945967,
+    "offeredAt": 1793721075610,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5957,7 +6144,7 @@
    },
    {
     "_id": "000000000000010035vendorBookings",
-    "answeredAt": 1793678946028,
+    "answeredAt": 1793721075678,
     "brief": "none",
     "cancelledAt": null,
     "days": 5,
@@ -5967,7 +6154,7 @@
     "hours": 18,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793678945972,
+    "offeredAt": 1793721075615,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -5992,7 +6179,7 @@
     "hours": 18,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793678945973,
+    "offeredAt": 1793721075616,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -6017,7 +6204,7 @@
     "hours": null,
     "location": "Harbor Coffee, Plaza District",
     "note": "Run and gun. Bring the gimbal.",
-    "offeredAt": 1793678945970,
+    "offeredAt": 1793721075614,
     "project": "26127 Launch",
     "projectId": "000000000000000000010018projects",
     "rate": {
@@ -6053,7 +6240,7 @@
    "approved": [
     {
      "_id": "000000000000010062vendorInvoices",
-     "approvedAt": 1793678946088,
+     "approvedAt": 1793721075732,
      "declinedAt": null,
      "number": "JE-016",
      "paidAt": null,
@@ -6062,7 +6249,7 @@
      "paidOn": null,
      "project": "26127 Launch",
      "role": "Editor",
-     "sentAt": 1793678946086,
+     "sentAt": 1793721075730,
      "status": "approved",
      "totalCents": 9000,
      "vendor": "Jordan Ellis",
@@ -6071,7 +6258,7 @@
     },
     {
      "_id": "000000000000010048vendorInvoices",
-     "approvedAt": 1793678946080,
+     "approvedAt": 1793721075716,
      "declinedAt": null,
      "number": "JE-015",
      "paidAt": null,
@@ -6080,7 +6267,7 @@
      "paidOn": null,
      "project": "26127 Launch",
      "role": "Editor",
-     "sentAt": 1793678946041,
+     "sentAt": 1793721075685,
      "status": "approved",
      "totalCents": 117000,
      "vendor": "Jordan Ellis",
@@ -6091,16 +6278,16 @@
    "paid": [
     {
      "_id": "000000000000010050vendorInvoices",
-     "approvedAt": 1793678946082,
+     "approvedAt": 1793721075727,
      "declinedAt": null,
      "number": "JE-013",
-     "paidAt": 1793678946085,
+     "paidAt": 1793721075729,
      "paidCents": 16850,
      "paidMethod": "Zelle",
-     "paidOn": "2026-11-02",
+     "paidOn": "2026-11-03",
      "project": "26127 Launch",
      "role": "Shooter",
-     "sentAt": 1793678946043,
+     "sentAt": 1793721075687,
      "status": "paid",
      "totalCents": 16850,
      "vendor": "Jordan Ellis",
@@ -6120,7 +6307,7 @@
      "paidOn": null,
      "project": "26127 Launch",
      "role": "Shooter",
-     "sentAt": 1793678946034,
+     "sentAt": 1793721075683,
      "status": "sent",
      "totalCents": 170000,
      "vendor": "Jordan Ellis",
@@ -6142,7 +6329,7 @@
      "address": "1200 NW 16th St\nOklahoma City, OK 73106",
      "businessName": "Ellis Films LLC",
      "email": "jordan@ellisfilms.com",
-     "last": "2026-11-02",
+     "last": "2026-11-03",
      "name": "Jordan Ellis",
      "payments": 1,
      "totalCents": 16850,
@@ -6174,7 +6361,7 @@
    "declinedAt": null,
    "history": [
     {
-     "at": 1793678946034,
+     "at": 1793721075683,
      "text": "Sent by Jordan Ellis"
     }
    ],
@@ -6206,7 +6393,7 @@
     "label": "26127 Launch",
     "name": "Launch"
    },
-   "sentAt": 1793678946034,
+   "sentAt": 1793721075683,
    "status": "sent",
    "to": "Wrangler Productions",
    "totalCents": 170000,
@@ -6224,7 +6411,7 @@
   },
   "vendorPayments.get#000000000000010048vendorInvoices": {
    "_id": "000000000000010048vendorInvoices",
-   "approvedAt": 1793678946080,
+   "approvedAt": 1793721075716,
    "booking": {
     "_id": "000000000000010035vendorBookings",
     "end": "2026-11-14",
@@ -6241,11 +6428,11 @@
    "declinedAt": null,
    "history": [
     {
-     "at": 1793678946080,
+     "at": 1793721075716,
      "text": "Approved by you · added to the Ledger"
     },
     {
-     "at": 1793678946041,
+     "at": 1793721075685,
      "text": "Sent by Jordan Ellis"
     }
    ],
@@ -6277,7 +6464,7 @@
     "label": "26127 Launch",
     "name": "Launch"
    },
-   "sentAt": 1793678946041,
+   "sentAt": 1793721075685,
    "status": "approved",
    "to": "Wrangler Productions",
    "totalCents": 117000,
@@ -6295,7 +6482,7 @@
   },
   "vendorPayments.get#000000000000010050vendorInvoices": {
    "_id": "000000000000010050vendorInvoices",
-   "approvedAt": 1793678946082,
+   "approvedAt": 1793721075727,
    "booking": {
     "_id": "000000000000010031vendorBookings",
     "end": "2026-11-07",
@@ -6312,15 +6499,15 @@
    "declinedAt": null,
    "history": [
     {
-     "at": 1793678946085,
-     "text": "Marked paid · Zelle · Nov 2"
+     "at": 1793721075729,
+     "text": "Marked paid · Zelle · Nov 3"
     },
     {
-     "at": 1793678946082,
+     "at": 1793721075727,
      "text": "Approved by you · added to the Ledger"
     },
     {
-     "at": 1793678946043,
+     "at": 1793721075687,
      "text": "Sent by Jordan Ellis"
     }
    ],
@@ -6342,17 +6529,17 @@
    "mode": "lines",
    "note": null,
    "number": "JE-013",
-   "paidAt": 1793678946085,
+   "paidAt": 1793721075729,
    "paidCents": 16850,
    "paidMethod": "Zelle",
-   "paidOn": "2026-11-02",
+   "paidOn": "2026-11-03",
    "paidRef": "Conf 88213",
    "project": {
     "_id": "000000000000000000010018projects",
     "label": "26127 Launch",
     "name": "Launch"
    },
-   "sentAt": 1793678946043,
+   "sentAt": 1793721075687,
    "status": "paid",
    "to": "Wrangler Productions",
    "totalCents": 16850,
@@ -6499,6 +6686,30 @@
      "on": true
     },
     {
+     "always": false,
+     "group": "Delivery",
+     "hint": "With the invoice draft for you to send.",
+     "key": "footage",
+     "label": "A client keeps their raw footage, or a storage year is about to renew",
+     "on": true
+    },
+    {
+     "always": true,
+     "group": "Delivery",
+     "hint": "The portal never deletes files, so this always arrives.",
+     "key": "footage_ended",
+     "label": "The keep date comes and the raw footage wasn't kept",
+     "on": true
+    },
+    {
+     "always": false,
+     "group": "Delivery",
+     "hint": null,
+     "key": "testimonials",
+     "label": "A client sends a testimonial",
+     "on": true
+    },
+    {
      "always": true,
      "group": "Your account",
      "hint": null,
@@ -6513,7 +6724,7 @@
   },
   "vendorPayments.get#000000000000010062vendorInvoices": {
    "_id": "000000000000010062vendorInvoices",
-   "approvedAt": 1793678946088,
+   "approvedAt": 1793721075732,
    "booking": {
     "_id": "000000000000010035vendorBookings",
     "end": "2026-11-14",
@@ -6530,11 +6741,11 @@
    "declinedAt": null,
    "history": [
     {
-     "at": 1793678946088,
+     "at": 1793721075732,
      "text": "Approved by you · added to the Ledger"
     },
     {
-     "at": 1793678946086,
+     "at": 1793721075730,
      "text": "Sent by Jordan Ellis"
     }
    ],
@@ -6560,7 +6771,7 @@
     "label": "26127 Launch",
     "name": "Launch"
    },
-   "sentAt": 1793678946086,
+   "sentAt": 1793721075730,
    "status": "approved",
    "to": "Wrangler Productions",
    "totalCents": 9000,
@@ -6620,7 +6831,7 @@
     "reason": null,
     "receiptUrl": null,
     "stale": false,
-    "startedAt": 1793678946089,
+    "startedAt": 1793721075732,
     "status": "processing"
    },
    "vendor": {
@@ -6664,7 +6875,7 @@
     "kind": "project",
     "label": "26127 Harbor Coffee Launch",
     "sub": "Harbor Coffee",
-    "token": "m4QgaJKVq4j1wT0O6bM8KA",
+    "token": "VsUs7QGoOi57u4w8vJIaow",
     "videos": [
      {
       "_id": "00000000000000000000010030videos",
@@ -6698,6 +6909,20 @@
   "inbox.mine": {
    "items": [
     {
+     "_id": "0000000000000000010133inboxItems",
+     "createdAt": 1793289600000,
+     "documentId": null,
+     "emailed": false,
+     "from": "Wrangler Productions",
+     "kind": "note",
+     "link": "/words/0000000000000000010132inboxNotes",
+     "linkLabel": "Share a few words",
+     "read": false,
+     "readAt": null,
+     "text": "Two quick questions, about a minute.",
+     "title": "A few words about 26127 Harbor Coffee Launch?"
+    },
+    {
      "_id": "0000000000000000010124inboxItems",
      "createdAt": 1793289600000,
      "documentId": null,
@@ -6712,7 +6937,7 @@
      "title": "Shoot scheduled: Mon, Nov 2 · 7:00 AM"
     },
     {
-     "_id": "0000000000000000010114inboxItems",
+     "_id": "0000000000000000010111inboxItems",
      "createdAt": 1793289600000,
      "documentId": null,
      "emailed": false,
@@ -6782,9 +7007,9 @@
      "title": "Shoot moved to Friday"
     }
    ],
-   "unread": 5
+   "unread": 6
   },
-  "inbox.unreadCount": 5,
+  "inbox.unreadCount": 6,
   "documents.mine": {
    "cancelled": [],
    "signed": [],
@@ -6809,7 +7034,7 @@
    "cuts": [
     {
      "lengthSec": 30,
-     "link": "/s/m4QgaJKVq4j1wT0O6bM8KA/v/00000000000000000000010024videos?version=4",
+     "link": "/s/VsUs7QGoOi57u4w8vJIaow/v/00000000000000000000010024videos?version=4",
      "number": 4,
      "sharedAt": 1793289600000,
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
@@ -6818,7 +7043,7 @@
     },
     {
      "lengthSec": 30,
-     "link": "/s/m4QgaJKVq4j1wT0O6bM8KA/v/00000000000000000000010030videos?version=2",
+     "link": "/s/VsUs7QGoOi57u4w8vJIaow/v/00000000000000000000010030videos?version=2",
      "number": 2,
      "sharedAt": 1793289600000,
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
@@ -6840,7 +7065,7 @@
   "emails.myPrefs": {
    "on": true
   },
-  "shares.open#m4QgaJKVq4j1wT0O6bM8KA": {
+  "shares.open#VsUs7QGoOi57u4w8vJIaow": {
    "access": "comment",
    "allVersions": true,
    "client": "Harbor Coffee",
@@ -6859,7 +7084,7 @@
    ],
    "state": "ok",
    "sub": "Harbor Coffee",
-   "token": "m4QgaJKVq4j1wT0O6bM8KA",
+   "token": "VsUs7QGoOi57u4w8vJIaow",
    "videos": [
     {
      "_id": "00000000000000000000010024videos",
@@ -6995,7 +7220,7 @@
    },
    "who": "invited"
   },
-  "shares.open#JkzaE1B2kgiwLfHGmM7hIw": {
+  "shares.open#T1WpVMN9e_oMVowa7cKxZA": {
    "access": "view",
    "allVersions": true,
    "client": "Harbor Coffee",
@@ -7014,7 +7239,7 @@
    ],
    "state": "ok",
    "sub": "26127 Harbor Coffee Launch",
-   "token": "JkzaE1B2kgiwLfHGmM7hIw",
+   "token": "T1WpVMN9e_oMVowa7cKxZA",
    "videos": [
     {
      "_id": "00000000000000000000010024videos",
@@ -7064,6 +7289,7 @@
     "jobNumber": "26127",
     "name": "Harbor Coffee Launch"
    },
+   "projectFolder": null,
    "roundsIncluded": 2,
    "shortTitle": null,
    "title": "Harbor Coffee 30s",
@@ -7389,7 +7615,7 @@
      },
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-bts/thumbnail.jpg",
      "title": "Harbor Coffee 15s cutdown",
-     "token": "m4QgaJKVq4j1wT0O6bM8KA",
+     "token": "VsUs7QGoOi57u4w8vJIaow",
      "updatedAt": 1793203200000,
      "version": 2
     },
@@ -7405,7 +7631,7 @@
      },
      "thumbUrl": "https://vz-3ba0610b-f90.b-cdn.net/kit-premiere/thumbnail.jpg",
      "title": "Harbor Coffee 30s",
-     "token": "m4QgaJKVq4j1wT0O6bM8KA",
+     "token": "VsUs7QGoOi57u4w8vJIaow",
      "updatedAt": 1793160000000,
      "version": 4
     }
@@ -7683,6 +7909,32 @@
    "updatedAt": 1793203200000,
    "updatedBy": "Maya Brooks"
   },
+  "footage.forClientProject#000000000000000000010020projects": {
+   "business": "Wrangler Productions",
+   "by": null,
+   "invoiceCents": 10000,
+   "invoiceSent": false,
+   "keepUntil": "2026-11-27",
+   "keptUntil": null,
+   "paidUntil": null,
+   "priceCents": 10000,
+   "status": "offered"
+  },
+  "testimonials.ask#0000000000000000010132inboxNotes": {
+   "business": "Wrangler Productions",
+   "company": "Harbor Coffee",
+   "name": "Maya Brooks",
+   "owner": "Heston Hill",
+   "project": {
+    "_id": "000000000000000000010020projects",
+    "label": "26127 Harbor Coffee Launch"
+   },
+   "questions": {
+    "film": "What did the film do for you?",
+    "working": "What was it like working with us?"
+   },
+   "sent": null
+  },
   "invoicePay.mine": [
    {
     "amountPaidCents": 0,
@@ -7954,6 +8206,14 @@
      "on": true
     },
     {
+     "always": false,
+     "group": "Delivery",
+     "hint": null,
+     "key": "footage_offer",
+     "label": "An offer to keep your raw footage after delivery",
+     "on": true
+    },
+    {
      "always": true,
      "group": "Documents",
      "hint": null,
@@ -7974,13 +8234,13 @@
  },
  "ids": {
   "invoices": {
-   "draft": "000000000000000000010120invoices",
-   "due": "000000000000000000010119invoices",
-   "paid": "000000000000000000010118invoices"
+   "draft": "000000000000000000010117invoices",
+   "due": "000000000000000000010116invoices",
+   "paid": "000000000000000000010115invoices"
   },
   "shares": [
-   "m4QgaJKVq4j1wT0O6bM8KA",
-   "JkzaE1B2kgiwLfHGmM7hIw"
+   "VsUs7QGoOi57u4w8vJIaow",
+   "T1WpVMN9e_oMVowa7cKxZA"
   ],
   "harbor": "0000000000000000000010003clients",
   "video": "00000000000000000000010024videos",
@@ -7990,7 +8250,8 @@
   "notes": [
    "0000000000000000010083inboxNotes",
    "0000000000000000010087inboxNotes",
-   "0000000000000000010088inboxNotes"
+   "0000000000000000010088inboxNotes",
+   "0000000000000000010132inboxNotes"
   ],
   "shoot": "00000000000000000000010123shoots",
   "project": "000000000000000000010020projects",
@@ -8064,7 +8325,7 @@
      "hours": null,
      "location": "Harbor Coffee, Plaza District",
      "note": "Run and gun. Bring the gimbal.",
-     "offeredAt": 1793678945970,
+     "offeredAt": 1793721075614,
      "project": "26127 Launch",
      "projectName": "Launch",
      "rate": {
@@ -8081,7 +8342,7 @@
    "upcoming": [
     {
      "_id": "000000000000010031vendorBookings",
-     "answeredAt": 1793678946026,
+     "answeredAt": 1793721075676,
      "brief": null,
      "days": 2,
      "declineReason": null,
@@ -8090,7 +8351,7 @@
      "hours": null,
      "location": "Harbor Coffee, Plaza District",
      "note": "Run and gun. Bring the gimbal.",
-     "offeredAt": 1793678945967,
+     "offeredAt": 1793721075610,
      "project": "26127 Launch",
      "projectName": "Launch",
      "rate": {
@@ -8103,7 +8364,7 @@
     },
     {
      "_id": "000000000000010035vendorBookings",
-     "answeredAt": 1793678946028,
+     "answeredAt": 1793721075678,
      "brief": null,
      "days": 5,
      "declineReason": null,
@@ -8112,7 +8373,7 @@
      "hours": 18,
      "location": "Harbor Coffee, Plaza District",
      "note": "Run and gun. Bring the gimbal.",
-     "offeredAt": 1793678945972,
+     "offeredAt": 1793721075615,
      "project": "26127 Launch",
      "projectName": "Launch",
      "rate": {
@@ -8130,7 +8391,7 @@
    "rows": [
     {
      "_id": "000000000000010031vendorBookings",
-     "answeredAt": 1793678946026,
+     "answeredAt": 1793721075676,
      "brief": null,
      "days": 2,
      "declineReason": null,
@@ -8139,7 +8400,7 @@
      "hours": null,
      "location": "Harbor Coffee, Plaza District",
      "note": "Run and gun. Bring the gimbal.",
-     "offeredAt": 1793678945967,
+     "offeredAt": 1793721075610,
      "project": "26127 Launch",
      "projectName": "Launch",
      "rate": {
@@ -8152,7 +8413,7 @@
     },
     {
      "_id": "000000000000010035vendorBookings",
-     "answeredAt": 1793678946028,
+     "answeredAt": 1793721075678,
      "brief": null,
      "days": 5,
      "declineReason": null,
@@ -8161,7 +8422,7 @@
      "hours": 18,
      "location": "Harbor Coffee, Plaza District",
      "note": "Run and gun. Bring the gimbal.",
-     "offeredAt": 1793678945972,
+     "offeredAt": 1793721075615,
      "project": "26127 Launch",
      "projectName": "Launch",
      "rate": {
@@ -8183,7 +8444,7 @@
      "hours": null,
      "location": "Harbor Coffee, Plaza District",
      "note": "Run and gun. Bring the gimbal.",
-     "offeredAt": 1793678945970,
+     "offeredAt": 1793721075614,
      "project": "26127 Launch",
      "projectName": "Launch",
      "rate": {
@@ -8198,7 +8459,7 @@
   },
   "vendorPortal.booking#000000000000010031vendorBookings": {
    "_id": "000000000000010031vendorBookings",
-   "answeredAt": 1793678946026,
+   "answeredAt": 1793721075676,
    "brief": null,
    "business": "Wrangler Productions",
    "businessId": "0000000000000000010000businesses",
@@ -8209,7 +8470,7 @@
    "hours": null,
    "location": "Harbor Coffee, Plaza District",
    "note": "Run and gun. Bring the gimbal.",
-   "offeredAt": 1793678945967,
+   "offeredAt": 1793721075610,
    "owner": "Wrangler Productions",
    "project": "26127 Launch",
    "projectName": "Launch",
@@ -8234,7 +8495,7 @@
    "hours": null,
    "location": "Harbor Coffee, Plaza District",
    "note": "Run and gun. Bring the gimbal.",
-   "offeredAt": 1793678945970,
+   "offeredAt": 1793721075614,
    "owner": "Wrangler Productions",
    "project": "26127 Launch",
    "projectName": "Launch",
@@ -8260,7 +8521,7 @@
      "project": "26127 Launch",
      "role": "Editor",
      "start": "2026-11-10",
-     "token": "yp-I14PSUy6QICpCaTKr3A"
+     "token": "sVudqBi6eHn9yjFV6W5EUQ"
     }
    ]
   },
@@ -8270,7 +8531,7 @@
     {
      "_id": "000000000000010062vendorInvoices",
      "amount": "1 line",
-     "approvedAt": 1793678946088,
+     "approvedAt": 1793721075732,
      "bookingId": "000000000000010035vendorBookings",
      "declineReason": null,
      "declinedAt": null,
@@ -8298,15 +8559,15 @@
       "unit": "hour"
      },
      "role": "Editor",
-     "sentAt": 1793678946086,
+     "sentAt": 1793721075730,
      "status": "approved",
      "totalCents": 9000,
-     "updatedAt": 1793678946088
+     "updatedAt": 1793721075732
     },
     {
      "_id": "000000000000010050vendorInvoices",
      "amount": "2 lines",
-     "approvedAt": 1793678946082,
+     "approvedAt": 1793721075727,
      "bookingId": "000000000000010031vendorBookings",
      "declineReason": null,
      "declinedAt": null,
@@ -8325,10 +8586,10 @@
      "note": null,
      "number": "JE-013",
      "onTheWay": null,
-     "paidAt": 1793678946085,
+     "paidAt": 1793721075729,
      "paidCents": 16850,
      "paidMethod": "Zelle",
-     "paidOn": "2026-11-02",
+     "paidOn": "2026-11-03",
      "project": "26127 Launch",
      "projectName": "Launch",
      "rate": {
@@ -8336,15 +8597,15 @@
       "unit": "day"
      },
      "role": "Shooter",
-     "sentAt": 1793678946043,
+     "sentAt": 1793721075687,
      "status": "paid",
      "totalCents": 16850,
-     "updatedAt": 1793678946085
+     "updatedAt": 1793721075729
     },
     {
      "_id": "000000000000010048vendorInvoices",
      "amount": "18 h",
-     "approvedAt": 1793678946080,
+     "approvedAt": 1793721075716,
      "bookingId": "000000000000010035vendorBookings",
      "declineReason": null,
      "declinedAt": null,
@@ -8374,10 +8635,10 @@
       "unit": "hour"
      },
      "role": "Editor",
-     "sentAt": 1793678946041,
+     "sentAt": 1793721075685,
      "status": "approved",
      "totalCents": 117000,
-     "updatedAt": 1793678946080
+     "updatedAt": 1793721075716
     },
     {
      "_id": "000000000000010046vendorInvoices",
@@ -8412,10 +8673,10 @@
       "unit": "day"
      },
      "role": "Shooter",
-     "sentAt": 1793678946034,
+     "sentAt": 1793721075683,
      "status": "sent",
      "totalCents": 170000,
-     "updatedAt": 1793678946034
+     "updatedAt": 1793721075683
     }
    ]
   },
@@ -8488,15 +8749,15 @@
     "unit": "day"
    },
    "role": "Shooter",
-   "sentAt": 1793678946034,
+   "sentAt": 1793721075683,
    "status": "sent",
    "totalCents": 170000,
-   "updatedAt": 1793678946034
+   "updatedAt": 1793721075683
   },
   "vendorPortal.invoice#000000000000010048vendorInvoices": {
    "_id": "000000000000010048vendorInvoices",
    "amount": "18 h",
-   "approvedAt": 1793678946080,
+   "approvedAt": 1793721075716,
    "bookingId": "000000000000010035vendorBookings",
    "business": "Wrangler Productions",
    "businessId": "0000000000000000010000businesses",
@@ -8529,15 +8790,15 @@
     "unit": "hour"
    },
    "role": "Editor",
-   "sentAt": 1793678946041,
+   "sentAt": 1793721075685,
    "status": "approved",
    "totalCents": 117000,
-   "updatedAt": 1793678946080
+   "updatedAt": 1793721075716
   },
   "vendorPortal.invoice#000000000000010050vendorInvoices": {
    "_id": "000000000000010050vendorInvoices",
    "amount": "2 lines",
-   "approvedAt": 1793678946082,
+   "approvedAt": 1793721075727,
    "bookingId": "000000000000010031vendorBookings",
    "business": "Wrangler Productions",
    "businessId": "0000000000000000010000businesses",
@@ -8559,10 +8820,10 @@
    "number": "JE-013",
    "onTheWay": null,
    "owner": "Wrangler Productions",
-   "paidAt": 1793678946085,
+   "paidAt": 1793721075729,
    "paidCents": 16850,
    "paidMethod": "Zelle",
-   "paidOn": "2026-11-02",
+   "paidOn": "2026-11-03",
    "project": "26127 Launch",
    "projectName": "Launch",
    "rate": {
@@ -8570,10 +8831,10 @@
     "unit": "day"
    },
    "role": "Shooter",
-   "sentAt": 1793678946043,
+   "sentAt": 1793721075687,
    "status": "paid",
    "totalCents": 16850,
-   "updatedAt": 1793678946085
+   "updatedAt": 1793721075729
   },
   "vendorPortal.settings": {
    "address": "1200 NW 16th St\nOklahoma City, OK 73106",
@@ -8658,7 +8919,7 @@
   "vendorPortal.invoice#000000000000010062vendorInvoices": {
    "_id": "000000000000010062vendorInvoices",
    "amount": "1 line",
-   "approvedAt": 1793678946088,
+   "approvedAt": 1793721075732,
    "bookingId": "000000000000010035vendorBookings",
    "business": "Wrangler Productions",
    "businessId": "0000000000000000010000businesses",
@@ -8689,10 +8950,10 @@
     "unit": "hour"
    },
    "role": "Editor",
-   "sentAt": 1793678946086,
+   "sentAt": 1793721075730,
    "status": "approved",
    "totalCents": 9000,
-   "updatedAt": 1793678946088
+   "updatedAt": 1793721075732
   }
  }
 }

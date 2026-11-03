@@ -192,6 +192,17 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
           feel: ["Warm", "Honest", "community"], colors: ["#3B2A20", "#F2E6D8"], refs: ["https://vimeo.com/76979871"], ready: inDays(18), launch: inDays(20), filming: "Weekdays before 9 AM, when the morning rush is on.", contact: "Maya Brooks, 512 555 0142" },
         history: [], createdAt: now - 3 * DAY, updatedAt: now - DAY });
     });
+    // Phase 5 (Nov 3): the raw footage offer on 26127, a testimonial request to Maya, and two answers from others.
+    const askId = await t.run(async (ctx) => {
+      const { postToInbox } = await import("../convex/lib/inbox");
+      await ctx.db.insert("footageStorage", { businessId: w.A, projectId: w.p1, clientId: w.harbor, priceCents: 10_000, offeredAt: now - DAY, keepUntil: inDays(29), status: "offered", history: [{ at: now - DAY, text: "Offered at delivery" }], createdAt: now - DAY, updatedAt: now - DAY });
+      const id = await ctx.db.insert("inboxNotes", { businessId: w.A, clientId: w.harbor, title: "A few words about 26127 Harbor Coffee Launch?", text: "Two quick questions, about a minute.", status: "sent", draftedBy: "owner", testimonialProjectId: w.p1, createdAt: now - 2 * HOUR, updatedAt: now - 2 * HOUR, sentAt: now - 2 * HOUR, recipients: 1 });
+      await ctx.db.patch(id, { link: `/words/${id}`, linkLabel: "Share a few words" });
+      await postToInbox(ctx as never, { businessId: w.A, clientId: w.harbor, email: "maya@harborcoffee.com", kind: "note", title: "A few words about 26127 Harbor Coffee Launch?", text: "Two quick questions, about a minute.", link: `/words/${id}`, linkLabel: "Share a few words", source: { module: "inbox", id }, key: `note:${id}`, noteId: id });
+      await ctx.db.insert("testimonials", { businessId: w.A, noteId: id, projectId: w.p1, clientId: w.harbor, email: "ava@harborcoffee.com", name: "Ava Chen", company: "Harbor Coffee", working: "Clear, fast, and they actually listened.", film: "We use the launch film on every pitch now.", permission: true, dropboxPath: "/Apps/Wrangler Review/Testimonials/2026-10-29 Ava Chen - 26127 Harbor Coffee Launch.md", savedAt: now - HOUR, createdAt: now - HOUR, updatedAt: now - HOUR });
+      await ctx.db.insert("testimonials", { businessId: w.A, noteId: id, projectId: w.p1, clientId: w.harbor, email: "jordan@harborcoffee.com", name: "Jordan Reyes", company: "Harbor Coffee", working: "Great to work with.", film: "Customers mention the recap.", permission: false, readAt: now - HOUR, saveError: "Dropbox isn't connected. Connect it in Settings › Dropbox drop folder, then Save again.", createdAt: now - 3 * DAY, updatedAt: now - 3 * DAY });
+      return id;
+    });
     const noteIds = await t.run(async (ctx) => (await ctx.db.query("inboxNotes").collect()).map((n) => n._id));
     const OWNER: [string, Record<string, unknown>][] = [
       ["users.me", {}], ["business.brand", {}], ["business.settings", {}], ["payments.settings", {}], ["library.overview", {}], ["activity.feed", { limit: 100 }], ["activity.recent", {}], ["home.needs", {}],
@@ -205,6 +216,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
 ["builder.getBuild#" + b1, { buildId: b1 }], ["builder.getProfile", {}], ["builder.listFonts", {}], ["builder.listStyles", {}],
       ["sign.get#" + w.d1, { documentId: w.d1 }], ["sign.get#" + w.d2, { documentId: w.d2 }], ["sign.get#" + w.d3, { documentId: w.d3 }],
       ["projects.page#" + w.p1, { projectId: w.p1 }], ["shoots.forProject#" + w.p1, { projectId: w.p1 }], ["fileRequests.forProject#" + w.p1, { projectId: w.p1 }], ["briefs.forProject#" + w.p1, { projectId: w.p1 }], ["briefs.settings", {}], ["calendar.settings", {}], ["projects.nextRound#" + w.harbor30.v, { videoId: w.harbor30.v }],
+      ["footage.settings", {}], ["footage.forProject#" + w.p1, { projectId: w.p1 }], ["testimonials.list", {}], ["testimonials.projectsFor#" + w.harbor, { clientId: w.harbor }],
       ["invoices.list", {}], ["invoices.overview", { tzOffsetMin: 300 }], ["invoices.options", {}], ["invoices.forProject#" + w.p1, { projectId: w.p1 }],
       ["invoices.get#" + invIds.paid, { invoiceId: invIds.paid }], ["invoices.get#" + invIds.due, { invoiceId: invIds.due }], ["invoices.get#" + invIds.draft, { invoiceId: invIds.draft }],
     ];
@@ -219,6 +231,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["approvals.forVideo#" + w.harbor30.v, { videoId: w.harbor30.v, share: { token: shareTokens[0] } }],
       ["projects.mine", {}], ["projects.forClient#" + w.p1, { projectId: w.p1 }], ["shoots.forClientProject#" + w.p1, { projectId: w.p1 }], ["shoots.page#" + shootId, { shootId }], ["fileRequests.forClientProject#" + w.p1, { projectId: w.p1 }], ["fileRequests.page#" + reqIds.a, { requestId: reqIds.a }], ["fileRequests.page#" + reqIds.b, { requestId: reqIds.b }],
       ["briefs.forClientProject#" + w.p1, { projectId: w.p1 }], ["briefs.page#" + briefId, { briefId }],
+      ["footage.forClientProject#" + w.p1, { projectId: w.p1 }], ["testimonials.ask#" + askId, { noteId: askId }],
       ["invoicePay.mine", {}], ...["kitpaidtoken000000001", "kitduetoken0000000002", "kitproctoken000000003"].map((tok): [string, Record<string, unknown>] => ["invoicePay.page#" + tok, { token: tok }])];
     const run = async (as: typeof owner, list: [string, Record<string, unknown>][]) => {
       const out: Record<string, unknown> = {};
