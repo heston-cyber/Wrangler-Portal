@@ -72,7 +72,7 @@ export function FootageCard({ projectId, show }: { projectId: string; show: (m: 
     actions = <Button size="sm" disabled={busy} onClick={() => void markDrive()}>Copied to their drive</Button>;
   } else if (s.status === "kept") {
     rows = <>
-      <Row title={`${who} is keeping it`} body={`${s.by ? `Pressed Keep it ${atDay(s.by.at)}. ` : ""}A year, until ${longDay(s.keptUntil!)}, once it's paid.`} chip={<StatusChip tone="success">Kept</StatusChip>} />
+      <Row title={`${who} is keeping it`} body={`${s.by ? `Pressed Keep it ${atDay(s.by.at)}. ` : ""}A year from the day it's paid; that date becomes the yearly renewal date.`} chip={<StatusChip tone="success">Kept</StatusChip>} />
       <Row title={s.invoice ? `Invoice ${s.invoice.number ?? "draft"} · ${usd(s.invoice.totalCents)}` : "Invoice"}
         body={s.invoice?.status === "draft" ? "A draft waiting for you in Payments. Nothing is charged until you send it." : s.invoice?.status === "paid" ? "Paid." : s.unpaidAt ? "Still not paid, and the keep date has passed. Remind them, or void the invoice: then it's treated as not kept." : "Sent. Kept for the year once it's paid."}
         chip={s.invoice?.status === "draft" ? <StatusChip tone="warning">To send</StatusChip> : s.unpaidAt ? <StatusChip tone="warning">Not paid</StatusChip> : undefined} />
@@ -144,7 +144,7 @@ export function ClientFootage({ projectId, show }: { projectId: string; show: (m
       </div>}
       {(d.status === "kept" || d.status === "paid") && <div className="cpj-ftbox yes">
         <Icon name="check-circle" size={20} />
-        <span className="txt"><b>{d.status === "paid" ? `Kept until ${longDay(d.paidUntil!)}` : `Kept for a year · until ${longDay(d.keptUntil!)}`}</b>
+        <span className="txt"><b>{d.status === "paid" ? `Kept until ${longDay(d.paidUntil!)}` : `Kept for a year · starts the day it's paid`}</b>
           <span className="secondary">{d.status === "paid" ? `${price}. Ask for new cuts any time.` : `The invoice for ${usd(d.invoiceCents)} is on its way.${d.by ? ` Thanks, ${d.by.split(/\s+/)[0]}.` : ""}`}</span></span>
       </div>}
       </div>

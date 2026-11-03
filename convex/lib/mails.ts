@@ -687,12 +687,12 @@ export function ownerFootageEndedMail(b: MailBrand, d: { client: string; project
 }
 
 /** To the owner (no frame: the owner-alert layout): a client pressed Keep it, or next year's invoice is drafted (D140). */
-export function ownerFootageMail(b: MailBrand, d: { what: "kept" | "renewal"; who: string; project: string; priceCents: number; until: string; link: string }): Mail {
+export function ownerFootageMail(b: MailBrand, d: { what: "kept" | "renewal"; who: string; project: string; priceCents: number; until: string | null; link: string }): Mail {
   const kept = d.what === "kept";
   return mk(b, "updates", kept ? `${d.who} is keeping their raw footage: ${d.project}` : `Next year's storage invoice is ready: ${d.project}`, [
     { t: "eyebrow", text: kept ? `${d.who} is keeping their raw footage` : "Raw footage storage renews soon" },
     { t: "title", text: `${d.project} · ${perYear(d.priceCents)}` },
-    { t: "p", text: kept ? `A ${usd(d.priceCents)} invoice draft is in Payments for you to check and send. It covers a year, until ${keepDay(d.until)}.` : `A ${usd(d.priceCents)} invoice draft for the next year is in Payments. The paid year runs until ${keepDay(d.until)}. Send it, or stop storing on the project's Delivery tab.` },
+    { t: "p", text: kept ? `A ${usd(d.priceCents)} invoice draft is in Payments for you to check and send. It covers a year from the day it's paid, and that date becomes the yearly renewal date.` : `A ${usd(d.priceCents)} invoice draft for the next year is in Payments. The paid year runs until ${keepDay(d.until!)}. Send it, or stop storing on the project's Delivery tab.` },
     { t: "button", label: "Open the project", href: d.link },
   ], ownerFoot(kept ? "a client keeps their raw footage" : "a storage year is about to renew"), `${d.project} · ${perYear(d.priceCents)}`);
 }

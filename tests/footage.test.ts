@@ -128,13 +128,34 @@ describe("raw footage storage", () => {
     const owner = mails.find((m) => m.subject === "Maya Brooks is keeping their raw footage: 26127 Launch")!;
     expect(owner.to).toBe("heston@wranglerproductions.com");
     expect(owner.text).toContain("invoice draft is in Payments");
-    expect(await w.maya.query(api.footage.forClientProject, { projectId: w.p })).toMatchObject({ status: "kept", keptUntil: addYear(r.keepUntil), invoiceSent: false, by: "Maya Brooks" });
+    expect(await w.maya.query(api.footage.forClientProject, { projectId: w.p })).toMatchObject({ status: "kept", keptUntil: null, invoiceSent: false, by: "Maya Brooks" });
     // The Dashboard asks the owner to send it.
     expect((await w.heston.query(api.home.needs, {})).filter((n: { kind: string }) => n.kind === "footage")).toEqual([expect.objectContaining({ what: "kept", projectId: w.p })]);
-    // Paid (the webhook's path): kept a year from the keep day.
+    // Paid (the webhook's path): kept a year from the day it is paid (that date is the renewal date).
     await w.t.run(async (ctx) => { const i = (await ctx.db.get(inv[0]._id))!; await ctx.db.patch(i._id, { status: "paid" }); await storagePaid(ctx as never, i); });
-    expect((await row(w))[0]).toMatchObject({ status: "paid", paidUntil: addYear(r.keepUntil) });
-    expect(await w.maya.query(api.footage.forClientProject, { projectId: w.p })).toMatchObject({ status: "paid", paidUntil: addYear(r.keepUntil) });
+    expect((await row(w))[0]).toMatchObject({ status: "paid", paidUntil: addYear(todayCentral()) });
+    expect(await w.maya.query(api.footage.forClientProject, { projectId: w.p })).toMatchObject({ status: "paid", paidUntil: addYear(todayCentral()) });
+  });
+
+  test("storage turned off in Settings: no renewal is drafted for that client, the paid year still runs", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    await setup(w);
+    await w.heston.mutation(api.projects.setDelivery, { projectId: w.p, unlocked: true });
+    await w.maya.mutation(api.footage.keep, { projectId: w.p });
+    const first = (await invoices(w))[0];
+    await w.t.run(async (ctx) => { const i = (await ctx.db.get(first._id))!; await ctx.db.patch(i._id, { status: "paid" }); await storagePaid(ctx as never, i); });
+    await w.t.run(async (ctx) => { const [r] = await ctx.db.query("footageStorage").collect(); await ctx.db.patch(r._id, { paidUntil: addDays(todayCentral(), 30) }); });
+    await w.heston.mutation(api.footage.saveSettings, { on: false, priceCents: 10_000, keepDays: 30 });
+    expect(await runDue(w)).toMatchObject({ renewed: 0 });
+    expect((await invoices(w))).toHaveLength(1); // only the first year's invoice
+    expect((await row(w))[0].status).toBe("paid");
+    expect((await row(w))[0].renewalFor).toBeUndefined();
+    // Turned back on inside the window: the renewal is drafted.
+    await w.heston.mutation(api.footage.saveSettings, { on: true, priceCents: 10_000, keepDays: 30 });
+    expect(await runDue(w)).toMatchObject({ renewed: 1 });
+    expect((await invoices(w))).toHaveLength(2);
   });
 
   test("a storage draft deleted goes back to an open offer (nobody named), and Keep it works again before the keep day", async () => {
@@ -307,9 +328,9 @@ describe("raw footage storage", () => {
     await markSent(w, j._id, "in_2");
     await webhook(w, "in_2", "paid");
     const r = (await row(w))[0];
-    expect(r).toMatchObject({ status: "paid", paidUntil: addYear(r.keepUntil) });
+    expect(r).toMatchObject({ status: "paid", paidUntil: addYear(todayCentral()) });
     await webhook(w, "in_2", "paid"); // a repeat changes nothing
-    expect((await row(w))[0].paidUntil).toBe(addYear(r.keepUntil));
+    expect((await row(w))[0].paidUntil).toBe(addYear(todayCentral()));
   });
 
   test("review H1: paid after it ended or was stopped changes nothing by itself; the owner is told and decides", async () => {

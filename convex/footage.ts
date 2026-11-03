@@ -150,8 +150,8 @@ export const forClientProject = query({
     const b = c.p.businessId ? await ctx.db.get(c.p.businessId) : null;
     return {
       status: r.status, priceCents: r.priceCents, keepUntil: r.keepUntil, paidUntil: r.paidUntil ?? null,
-      // Kept: the year it will cover once paid (from the keep day).
-      keptUntil: r.status === "kept" ? addYear(r.keepUntil > today ? r.keepUntil : today) : r.paidUntil ?? null,
+      // Kept: the year starts on the day it's paid (the payment date is the renewal date), so there is no end date yet.
+      keptUntil: null as string | null,
       invoiceCents: inv?.totalCents ?? r.priceCents, invoiceSent: !!inv && inv.status !== "draft", by: r.answeredBy?.name ?? null,
       business: b?.name ?? (await businessContact(ctx, c.p.businessId ?? null)).name,
     };
@@ -173,8 +173,7 @@ export const keep = mutation({
     const now = Date.now();
     const name = (me.name ?? "").trim() || me.email;
     const client = p.clientId ? await ctx.db.get(p.clientId) : null;
-    const until = addYear(r.keepUntil);
-    const invoiceId = await draftYear(ctx, r, p, { name, email: me.email, company: client?.name }, until, r.keepUntil);
+    const invoiceId = await draftYear(ctx, r, p, { name, email: me.email, company: client?.name }, null, r.keepUntil);
     await ctx.db.patch(r._id, { status: "kept", answeredBy: { email: me.email, name, at: now }, invoiceId, updatedAt: now, history: hist(r, `Kept by ${name}: invoice drafted`, now) });
     await ctx.scheduler.runAfter(0, internal.footage.mailOwner, { storageId: r._id, what: "kept", invoiceId });
     return { already: false };
@@ -199,17 +198,17 @@ export const decline = mutation({
 });
 
 /** A year's invoice draft (first year or renewal), for the owner to check and send from Payments. */
-async function draftYear(ctx: MutationCtx, r: Doc<"footageStorage">, p: Doc<"projects">, billTo: { name: string; email: string; company?: string }, until: string, dueBy: string) {
+async function draftYear(ctx: MutationCtx, r: Doc<"footageStorage">, p: Doc<"projects">, billTo: { name: string; email: string; company?: string }, until: string | null, dueBy: string) {
   const now = Date.now();
   const soonest = addDays(todayCentral(now), MIN_DUE_DAYS);
-  const lines = [{ id: "storage", description: `Raw footage storage, one year (until ${longDay(until)}) · ${label(p)}`.slice(0, 300), qty: 1, unitCents: r.priceCents }];
+  const lines = [{ id: "storage", description: `Raw footage storage, one year${until ? ` (until ${longDay(until)})` : " from the date paid"} · ${label(p)}`.slice(0, 300), qty: 1, unitCents: r.priceCents }];
   return await ctx.db.insert("invoices", {
     ...(r.businessId ? { businessId: r.businessId } : {}), projectId: p._id, ...(p.clientId ? { clientId: p.clientId } : {}), storageId: r._id,
     kind: "other", title: `Raw footage storage · ${label(p)}`.slice(0, 120),
     billTo: { name: billTo.name, email: billTo.email.toLowerCase(), ...(billTo.company ? { company: billTo.company } : {}) },
     lines, dueDate: dueBy > soonest ? dueBy : soonest, status: "draft",
     totalCents: r.priceCents, amountPaidCents: 0, amountRemainingCents: r.priceCents,
-    history: [{ kind: "created", at: now, detail: `raw footage storage until ${longDay(until)}` }], createdAt: now, updatedAt: now,
+    history: [{ kind: "created", at: now, detail: until ? `raw footage storage until ${longDay(until)}` : "raw footage storage, one year from the date paid" }], createdAt: now, updatedAt: now,
   });
 }
 
@@ -244,7 +243,7 @@ export const forProject = query({
         invoice: inv ? { _id: inv._id, status: inv.status, number: inv.number ?? inv.stripe?.number ?? null, totalCents: inv.totalCents } : null,
         renewing: !!r.renewalFor && r.renewalFor === r.paidUntil,
         latePaid: r.latePaid ? { at: r.latePaid.at, was: r.latePaid.was } : null, unpaidAt: r.unpaidAt ?? null,
-        keptUntil: r.status === "kept" ? addYear(r.keepUntil > todayCentral() ? r.keepUntil : todayCentral()) : null,
+        keptUntil: null as string | null, // the year starts the day it's paid
         history: r.history.slice(-8).reverse(),
       },
     };
@@ -349,7 +348,8 @@ export async function footageNeeds(ctx: QueryCtx) {
 // ---------- the invoice's side (called from invoices.applyStripeInvoice, recordSent and deleteDraft) ----------
 
 /**
- * A storage invoice paid: a year kept, from the keep day (first year) or the end of the last paid year (renewal).
+ * A storage invoice paid: a year kept, from the day it is paid (first year: the payment date becomes the renewal date,
+ * Heston's answer to review question 1) or from the end of the last paid year (renewal, so the anniversary never drifts).
  * Review H1: only for the invoice the year is waiting on. Paid after the footage ended, was stopped or marked deleted,
  * nothing changes by itself: the owner is told (email and Dashboard) and decides (keep it again, or refund it).
  */
@@ -360,7 +360,7 @@ export async function storagePaid(ctx: MutationCtx, i: Doc<"invoices">) {
   const renewing = r.status === "paid" && !!r.paidUntil && r.renewalFor === r.paidUntil;
   if ((r.status === "kept" || renewing) && !r.doneAt) {
     const today = todayCentral(now);
-    const from = renewing ? r.paidUntil! : r.keepUntil > today ? r.keepUntil : today;
+    const from = renewing ? r.paidUntil! : today;
     const paidUntil = addYear(from);
     await ctx.db.patch(r._id, { status: "paid", paidUntil, endedAt: undefined, unpaidAt: undefined, updatedAt: now, history: hist(r, `Paid: kept until ${longDay(paidUntil)}`, now) });
     return;
@@ -444,6 +444,8 @@ export const renewOne = internalMutation({
     if (!r || r.status !== "paid" || !r.paidUntil || r.renewalFor === r.paidUntil) return false;
     const p = await ctx.db.get(r.projectId);
     if (!p) return false;
+    // Storage turned off in Settings › Payments for this business: renewals are cancelled (the paid year still runs out).
+    if (!(await settingsFor(ctx, await businessOf(ctx, p))).on) return false;
     const who = r.answeredBy ?? (await portalPeople(ctx, p)).map((x) => ({ email: x.email, name: x.email }))[0];
     if (!who) return false;
     const client = p.clientId ? await ctx.db.get(p.clientId) : null;
@@ -524,9 +526,8 @@ export const mailOwner = internalAction({
   handler: async (ctx, { storageId, what, invoiceId }) => {
     const d = await ctx.runQuery(internal.footage.mailData, { storageId });
     if (!d?.owner) return;
-    const until = what === "kept" ? addYear(d.r.keepUntil) : d.r.paidUntil ? addYear(d.r.paidUntil) : d.r.keepUntil;
     await deliverOnce(ctx, `footage-${what}:${storageId}:${invoiceId}`, what === "kept" ? "footage_kept" : "footage_renewal", d.owner, ownerFootageMail(d.brand, {
-      what, who: d.r.answeredBy?.name ?? d.client, project: d.project, priceCents: d.r.priceCents, until: what === "kept" ? until : d.r.paidUntil ?? until, link: `${SITE()}/projects/${d.projectId}?tab=delivery`,
+      what, who: d.r.answeredBy?.name ?? d.client, project: d.project, priceCents: d.r.priceCents, until: what === "kept" ? null : d.r.paidUntil ? addYear(d.r.paidUntil) : d.r.keepUntil, link: `${SITE()}/projects/${d.projectId}?tab=delivery`,
     }), d.brand.replyTo, d.biz);
   },
 });
