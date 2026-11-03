@@ -14,5 +14,7 @@ crons.interval("subscription upcoming charges", { hours: 1 }, internal.subscript
 // Pay in portal (Nov 2): vendor payouts still on their way (or recently posted, in case the bank returns one).
 // Phase 4: email 32, the day before files are due (nothing uploaded yet).
 crons.interval("file request reminders", { hours: 1 }, internal.fileRequests.remindDue, {});
+// Phase 5 (Nov 3): raw footage keep days (email 36) and storage renewals (D140). Never deletes anything.
+crons.interval("raw footage keep days", { hours: 1 }, internal.footage.runDue, {});
 crons.interval("vendor payouts", { minutes: 15 }, internal.vendorPayouts.poll, {});
 export default crons;

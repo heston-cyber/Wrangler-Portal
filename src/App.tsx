@@ -12,6 +12,7 @@ import ClientProject, { type ClientProjectTab } from "./modules/projects/ClientP
 import { ClientShootPage } from "./modules/projects/Shoots";
 import { ClientRequestPage } from "./modules/projects/Requests";
 import { ClientBriefPage } from "./modules/projects/Brief";
+import { ClientTestimonialPage } from "./modules/clients/Testimonials";
 import { ClientSidePrompt, SideFromLink } from "./shell/SideSwitch";
 import ClientSettings from "./modules/clients/ClientSettings";
 import Home from "./modules/review/Home";
@@ -41,6 +42,7 @@ const PlansPage = lazy(() => import("./modules/payments/PlansPage"));
 const Pipeline = lazy(() => import("./modules/crm/Pipeline"));
 const DealPage = lazy(() => import("./modules/crm/DealPage"));
 const FollowUps = lazy(() => import("./modules/crm/FollowUps"));
+const TestimonialsPage = lazy(() => import("./modules/clients/Testimonials"));
 const EstimatePage = lazy(() => import("./modules/crm/EstimatePage"));
 const ContactPage = lazy(() => import("./modules/crm/ContactPage"));
 const SubscriptionsPage = lazy(() => import("./modules/payments/SubscriptionsPage"));
@@ -169,7 +171,7 @@ function SignedIn() {
   // Phase 3c step 4: vendors get the vendor side (their bookings, briefings and invoices), nothing else.
   if (me && !me.allowed && me.role === "vendor") {
     // A client page's address (from a client email) on the vendor side: offer the switch.
-    if ((me.sides ?? []).includes("client") && /^\/(projects|requests|shoots|briefs|inbox|docs|payments|sub)(\/|$)/.test(path) && !new URLSearchParams(search).get("side")) return <ClientSidePrompt />;
+    if ((me.sides ?? []).includes("client") && /^\/(projects|requests|shoots|briefs|words|inbox|docs|payments|sub)(\/|$)/.test(path) && !new URLSearchParams(search).get("side")) return <ClientSidePrompt />;
     return <><SideFromLink /><Suspense fallback={<Loading />}><VendorApp me={me} /></Suspense></>;
   }
   // Clients (C1): their own page, nothing of the owner's side.
@@ -236,6 +238,7 @@ function SignedIn() {
   else if (/^\/proposals\/[^/]+\/?$/.test(path)) { const id = path.split("/")[2]; page = <Suspense fallback={<Loading />}><ProposalBuilder key={id} proposalId={id} /></Suspense>; }
   else if (/^\/clients\/pipeline\/?$/.test(path)) page = <Suspense fallback={<Loading />}><Pipeline /></Suspense>;
   else if (/^\/clients\/follow-ups\/?$/.test(path)) page = <Suspense fallback={<Loading />}><FollowUps /></Suspense>;
+  else if (/^\/clients\/testimonials\/?$/.test(path)) page = <Suspense fallback={<Loading />}><TestimonialsPage /></Suspense>;
   else if (/^\/clients\/deals\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><DealPage key={id} dealId={id} /></Suspense>; }
   else if (/^\/clients\/people\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><ContactPage key={id} personId={id} /></Suspense>; }
   else if (/^\/clients\/estimates\/new\/?$/.test(path)) page = <Suspense fallback={<Loading />}><EstimatePage key={search} dealId={params.get("deal")} clientId={params.get("client")} projectId={params.get("project")} briefId={params.get("brief")} /></Suspense>;
@@ -296,6 +299,8 @@ function ClientRoutes({ me }: { me: { name: string | null; email: string } }) {
   if (req) return <ClientRequestPage key={req[1]} requestId={req[1]} />;
   const brief = /^\/briefs\/([^/]+)\/?$/.exec(path);
   if (brief) return <ClientBriefPage key={brief[1]} briefId={brief[1]} />;
+  const words = /^\/words\/([^/]+)\/?$/.exec(path); // Phase 5 (D139): the testimonial form, from the request note
+  if (words) return <ClientTestimonialPage key={words[1]} noteId={words[1]} />;
   const proj = /^\/projects\/([^/]+)\/?$/.exec(path);
   if (proj) { const t = params.get("tab"); return <ClientProject key={proj[1]} projectId={proj[1]} tab={(t === "videos" || t === "documents" ? t : "overview") as ClientProjectTab} />; }
   if (path.startsWith("/settings")) return <ClientSettings me={me} />;

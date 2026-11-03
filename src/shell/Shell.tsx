@@ -61,11 +61,12 @@ const OWNER_VENDORS: Sub[] = [
 ];
 const inVendors = (p: string) => starts(p, "/vendors");
 // Phase 3 (Heston, Oct 29): Clients becomes a layer: Pipeline · Companies · Follow-ups. Companies is the client list.
-const CRM = ["/clients/pipeline", "/clients/follow-ups", "/clients/deals", "/clients/estimates"];
+const CRM = ["/clients/pipeline", "/clients/follow-ups", "/clients/deals", "/clients/estimates", "/clients/testimonials"];
 const OWNER_CLIENTS: Sub[] = [
   { to: "/clients/pipeline", label: "Pipeline", match: (p) => starts(p, "/clients/pipeline", "/clients/deals", "/clients/estimates") },
   { to: "/clients", label: "Companies", match: (p) => starts(p, "/clients") && !CRM.some((x) => starts(p, x)) },
   { to: "/clients/follow-ups", label: "Follow-ups", match: (p) => starts(p, "/clients/follow-ups") },
+  { to: "/clients/testimonials", label: "Testimonials", match: (p) => starts(p, "/clients/testimonials") }, // Phase 5 (D99)
 ];
 const inClients = (p: string) => starts(p, "/clients");
 const inReview = (p: string) => starts(p, "/review", "/projects", "/activity", "/v");

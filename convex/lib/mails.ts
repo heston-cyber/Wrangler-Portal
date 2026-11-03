@@ -645,3 +645,67 @@ export function ownerBriefMail(b: MailBrand, d: { who: string; project: string; 
     { t: "button", label: "Open the project", href: d.link },
   ], ownerFoot("a client sends back the kickoff brief"), `${d.answers.length} ${d.answers.length === 1 ? "answer" : "answers"} · ${d.project}`);
 }
+
+// ---------- Phase 5 (Nov 3): raw footage storage (emails 34, 36) and the testimonial request (35) ----------
+
+const keepDay = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" });
+const keepShort = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
+const perYear = (cents: number) => `${usd(cents).replace(/\.00$/, "")} / year`;
+
+/** Email 34 (744:1854): "Keep your raw footage?", with the final files. */
+export function footageOfferMail(b: MailBrand, d: { name: string | null; project: string; priceCents: number; keepUntil: string; link: string }): Mail {
+  return mk(b, "updates", `Keep your raw footage? ${d.project}`, [
+    hi(d.name),
+    { t: "p", text: `Your final files for ${d.project} are ready, and we still have every raw clip.` },
+    { t: "sums", rows: [{ label: "Keep it for", value: perYear(d.priceCents), big: true }, { label: "Kept until", value: keepDay(d.keepUntil) }, { label: "Project", value: d.project }] },
+    { t: "p", text: `If you keep it, you can ask for new cuts any time. If not, we let it go after ${keepShort(d.keepUntil)}.` },
+    { t: "p", text: "Choose on your delivery page." },
+    { t: "button", label: "Keep my footage", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `Kept until ${keepShort(d.keepUntil)} · ${perYear(d.priceCents)}`);
+}
+
+/** Email 35 (744:1880): "A few words?", sent when the owner asks for a testimonial from the Inbox composer (D139). */
+export function testimonialAskMail(b: MailBrand, d: { name: string | null; project: string; link: string; unsub?: string }): Mail {
+  return mk(b, "updates", `How did ${d.project} go?`, [
+    hi(d.name),
+    { t: "p", text: `Thanks for working with us on ${d.project}. Could you tell us how it went?` },
+    { t: "sums", rows: [{ label: "Takes", value: "About a minute", big: true }, { label: "Questions", value: "Two" }, { label: "Project", value: d.project }] },
+    { t: "p", text: "Nothing is posted without your OK." },
+    { t: "p", text: "Answer in your portal." },
+    { t: "button", label: "Share a few words", href: d.link }, { t: "link", href: d.link },
+  ], [...signoff(b), ...(d.unsub ? [{ t: "small", text: "Stop emails about notes:", link: { label: "unsubscribe", href: d.unsub } } as Block] : [])], "About a minute · two questions");
+}
+
+/** Email 36 (744:1906), to the owner on the keep day: the raw footage wasn't kept (or a paid year ended unrenewed). */
+export function ownerFootageEndedMail(b: MailBrand, d: { client: string; project: string; day: string; lapsed: boolean; link: string }): Mail {
+  return mk(b, "updates", `Raw footage not kept: ${d.project}`, [
+    { t: "eyebrow", text: `Raw footage not kept · ${d.project}` },
+    { t: "title", text: d.lapsed ? `${d.client}'s storage year ended without renewal. Today is ${keepShort(d.day)}.` : `${d.client} didn't keep their raw footage. Today is ${keepShort(d.day)}.` },
+    { t: "p", text: "Delete it or move it to cold storage when you're ready. The portal never deletes files itself." },
+    { t: "button", label: "Open the project", href: d.link },
+  ], [{ t: "small", text: "Sent to you on the keep date · WranglerPortal ·", link: { label: "Email settings", href: `${SITE()}/settings/notifications` } }], `${d.client} · ${d.project}`);
+}
+
+/** To the owner (no frame: the owner-alert layout): a client pressed Keep it, or next year's invoice is drafted (D140). */
+export function ownerFootageMail(b: MailBrand, d: { what: "kept" | "renewal"; who: string; project: string; priceCents: number; until: string; link: string }): Mail {
+  const kept = d.what === "kept";
+  return mk(b, "updates", kept ? `${d.who} is keeping their raw footage: ${d.project}` : `Next year's storage invoice is ready: ${d.project}`, [
+    { t: "eyebrow", text: kept ? `${d.who} is keeping their raw footage` : "Raw footage storage renews soon" },
+    { t: "title", text: `${d.project} · ${perYear(d.priceCents)}` },
+    { t: "p", text: kept ? `A ${usd(d.priceCents)} invoice draft is in Payments for you to check and send. It covers a year, until ${keepDay(d.until)}.` : `A ${usd(d.priceCents)} invoice draft for the next year is in Payments. The paid year runs until ${keepDay(d.until)}. Send it, or stop storing on the project's Delivery tab.` },
+    { t: "button", label: "Open the project", href: d.link },
+  ], ownerFoot(kept ? "a client keeps their raw footage" : "a storage year is about to renew"), `${d.project} · ${perYear(d.priceCents)}`);
+}
+
+/** To the owner when a client sends a testimonial (no frame: the owner-alert layout). */
+export function ownerTestimonialMail(b: MailBrand, d: { who: string; company: string | null; project: string; working: string; film: string; permission: boolean; link: string }): Mail {
+  const q = (s: string) => (s.length > 220 ? `“${s.slice(0, 218).trimEnd()}…”` : `“${s}”`);
+  return mk(b, "updates", `${d.who} sent a few words: ${d.project}`, [
+    { t: "eyebrow", text: `${d.who}${d.company ? ` · ${d.company}` : ""} sent a few words` },
+    { t: "title", text: d.project },
+    ...(d.working ? [{ t: "p", text: q(d.working) } as Block] : []),
+    ...(d.film ? [{ t: "p", text: q(d.film) } as Block] : []),
+    { t: "p", text: d.permission ? "They said you can use their words and name." : "Private: they didn't give permission to use it publicly.", tone: "muted" },
+    { t: "button", label: "Open Testimonials", href: d.link },
+  ], ownerFoot("a client sends a testimonial"), `${d.who} · ${d.project}`);
+}

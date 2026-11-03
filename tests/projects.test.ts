@@ -167,7 +167,8 @@ describe("the client's projects and final files", () => {
     expect(c.delivery.open).toBe(true);
     expect(c.delivery.files.map((f: { name: string }) => f.name)).toEqual(["Harbor30s_v2.mp4", "Harbor_30s_FINAL.mov"]);
     const inbox = await w.t.run(async (ctx) => (await ctx.db.query("inboxItems").collect()).map((i) => [i.email, i.kind, i.title]));
-    expect(inbox).toEqual([["maya@harbor.example", "final_files", "Final files ready"]]);
+    // Phase 5 (D98): the first opening also offers to keep the raw footage.
+    expect(inbox).toEqual([["maya@harbor.example", "final_files", "Final files ready"], ["maya@harbor.example", "final_files", "Keep your raw footage?"]]);
 
     // The links expire after the set number of days.
     await w.t.run(async (ctx) => { await ctx.db.patch(w.p, { deliveryUnlockedAt: Date.now() - 8 * 86_400_000 }); });

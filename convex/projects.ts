@@ -17,6 +17,7 @@ import { coveredProjects, coveredVideos, sameBusiness, shareState } from "./lib/
 import { downloadFor, signedThumbUrl, signStillUrl } from "./lib/media";
 import { docLabel } from "./lib/wsLayout";
 import { crmProject } from "./crm";
+import { offerOnDelivery } from "./footage";
 
 export const STAGES = ["discovery", "strategy", "production", "polish", "delivery"] as const;
 export type Stage = (typeof STAGES)[number];
@@ -270,6 +271,7 @@ export async function openDelivery(ctx: MutationCtx, p: Doc<"projects">): Promis
   const files = await ctx.db.query("deliveryFiles").withIndex("by_project", (q) => q.eq("projectId", p._id)).first();
   if (!files) return null;
   const now = Date.now();
+  const firstTime = !p.deliveryUnlockedAt; // Phase 5 (D142): only a first opening offers raw footage storage
   await ctx.db.patch(p._id, { deliveryUnlockedAt: now, updatedAt: now });
   await crmProject(ctx, p._id, "delivered", "final files opened"); // Phase 3
   let posted = 0;
@@ -280,6 +282,7 @@ export async function openDelivery(ctx: MutationCtx, p: Doc<"projects">): Promis
       link: `/projects/${p._id}`, linkLabel: "Download", source: { module: "projects", id: p._id }, key: `final:${p._id}:${now}`,
     })) posted++;
   }
+  await offerOnDelivery(ctx, p, firstTime); // Phase 5: "Keep your raw footage?" (D98)
   return posted;
 }
 

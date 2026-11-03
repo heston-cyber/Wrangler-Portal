@@ -17,6 +17,7 @@ import { pageOf, totals as builderTotals } from "./lib/wsBuilder";
 import { announceSent } from "./invoicePay";
 import { nextReminder } from "./invoiceReminders";
 import { crmProject } from "./crm";
+import { storageDropped, storagePaid } from "./footage";
 
 const DAY = 86_400_000;
 const MIN_CENTS = 50; // Stripe's smallest card charge in USD
@@ -276,6 +277,7 @@ export const deleteDraft = mutation({
     const i = id ? await ctx.db.get(id) : null;
     if (!i) return null;
     if (i.status !== "draft") throw new ConvexError("Only a draft can be deleted. Void a sent invoice instead.");
+    if (i.storageId) await storageDropped(ctx, i, "deleted"); // Phase 5: a storage draft deleted goes back to not kept
     await ctx.db.delete(i._id);
     return null;
   },
@@ -612,6 +614,9 @@ export const applyStripeInvoice = internalMutation({
     });
     // Phase 3: the final invoice paid moves the pipeline card to Paid (forward only, D60).
     if (status === "paid" && i.status !== "paid" && i.kind === "final" && i.projectId) await crmProject(ctx, i.projectId, "paid", `${i.number ?? "final invoice"} paid`);
+    // Phase 5: a raw footage storage invoice paid keeps the footage a year; voided, it goes back to not kept.
+    if (i.storageId && status === "paid" && i.status !== "paid") await storagePaid(ctx, i);
+    if (i.storageId && status === "void" && i.status !== "void") await storageDropped(ctx, i, "voided");
     // A final invoice paid in full opens the project's final files (the Part A lock, now automatic).
     if (status === "paid" && i.status !== "paid" && i.kind === "final" && i.projectId) {
       const p = await ctx.db.get(i.projectId);

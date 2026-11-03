@@ -21,7 +21,7 @@ import { clientKey, sameBusiness, shareCovers, shareState } from "./lib/shareAcc
 import { emailThumbUrl } from "./lib/media";
 import { mailBrandOf } from "./lib/mail";
 import { switchFor } from "./lib/notify";
-import { type Mail, newVersionMail, noteMail, ownerAlertMail, portalInviteMail, replyMail } from "./lib/mails";
+import { type Mail, newVersionMail, noteMail, ownerAlertMail, portalInviteMail, replyMail, testimonialAskMail } from "./lib/mails";
 
 export const ALERT_DELAY_MS = 10 * 60_000;
 export const NEW_VERSION_DELAY_MS = 60_000;
@@ -382,7 +382,10 @@ export const noteEmailData = internalQuery({
     const n = await ctx.db.get(noteId);
     if (!n || n.status !== "sent" || n.emailThem === false) return null;
     const items = await ctx.db.query("inboxItems").withIndex("by_note", (q) => q.eq("noteId", noteId)).collect();
-    return { title: n.title, text: n.text, link: n.link ?? null, linkLabel: n.linkLabel ?? null, emails: items.map((i) => i.email), brand: await mailBrandOf(ctx, n.businessId) };
+    // Phase 5 (D139): a testimonial request goes out as email 35, about its project.
+    const p = n.testimonialProjectId ? await ctx.db.get(n.testimonialProjectId) : null;
+    const ask = p ? { project: p.jobNumber ? `${p.jobNumber} ${p.name}` : p.name } : null;
+    return { title: n.title, text: n.text, link: n.link ?? null, linkLabel: n.linkLabel ?? null, emails: items.map((i) => i.email), brand: await mailBrandOf(ctx, n.businessId), ask };
   },
 });
 
@@ -394,7 +397,9 @@ export const noteEmails = internalAction({
     const ok: Array<{ email: string; key: string }> = await ctx.runMutation(internal.emails.recipients, { emails: d.emails, kind: "notes" });
     let sent = 0;
     for (const r of ok) {
-      const m = noteMail(d.brand, { ...d, unsub: unsubUrl(r.key, "notes") });
+      const m = d.ask && d.link
+        ? testimonialAskMail(d.brand, { name: await ctx.runQuery(internal.shoots.nameOf, { email: r.email }), project: d.ask.project, link: `${SITE()}${d.link}`, unsub: unsubUrl(r.key, "notes") })
+        : noteMail(d.brand, { ...d, unsub: unsubUrl(r.key, "notes") });
       if (await deliver(ctx, `note:${noteId}:${r.email}`, "notes", r.email, m, unsubUrl(r.key, "notes"), d.brand.replyTo)) { sent++; await ctx.runMutation(internal.emails.markInboxEmailed, { key: `note:${noteId}`, email: r.email }); }
     }
     return { sent };

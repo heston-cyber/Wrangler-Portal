@@ -18,6 +18,7 @@ import { StageBar, stageName, dateText, bytes, STAGES, openFileLink, canZip } fr
 import { ComingUpShoots, useComingUpCount } from "./Shoots";
 import { ComingUpRequests, useRequestCount } from "./Requests";
 import { ComingUpBrief, useBriefCount } from "./Brief";
+import { ClientFootage } from "./Footage";
 
 type Data = NonNullable<ReturnType<typeof useQuery<typeof api.projects.forClient>>>;
 export type ClientProjectTab = "overview" | "videos" | "documents";
@@ -125,6 +126,7 @@ export default function ClientProject({ projectId, tab }: { projectId: string; t
         </div>
         {tab === "overview" && (
           <div className="cpj-overview">
+            <ClientFootage projectId={projectId} show={show} />
             <Card className="cpj-where" label="Where it's at" head={<SectionHead label="Where it's at" />}>
               <div className="pj-stagebody">
                 <StageBar stage={d.stage} />

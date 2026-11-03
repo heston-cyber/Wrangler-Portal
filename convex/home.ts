@@ -12,6 +12,8 @@ import { docLabel, OWNER_KEY } from "./lib/wsLayout";
 import { REQUEST_TTL, stillFits } from "./sign";
 import { quoteNeeds } from "./quotes";
 import { proposalNeeds } from "./proposals";
+import { footageNeeds } from "./footage";
+import { testimonialNeeds } from "./testimonials";
 
 const MAX_NOTE_GROUPS = 10;
 
@@ -22,7 +24,9 @@ export type Need =
   | { kind: "request"; at: number; documentId: Id<"wsDocuments">; label: string; title: string; what: "approve" | "send" | "cancel" }
   | { kind: "quote"; at: number; quoteId: Id<"quotes">; number: string; company: string; title: string; what: "accepted" | "declined"; who: string } // Phase 3b
   | { kind: "proposal"; at: number; proposalId: Id<"proposals">; number: string; company: string; title: string; what: "accepted" | "declined"; who: string } // Phase 3b
-  | { kind: "vendorInvoice"; at: number; invoiceId: Id<"vendorInvoices">; vendorId: Id<"vendors">; vendor: string; number: string; project: string; totalCents: number }; // Phase 3c
+  | { kind: "vendorInvoice"; at: number; invoiceId: Id<"vendorInvoices">; vendorId: Id<"vendors">; vendor: string; number: string; project: string; totalCents: number } // Phase 3c
+  | { kind: "footage"; at: number; what: "kept" | "renewal" | "ended"; projectId: Id<"projects">; project: string; client: string | null } // Phase 5
+  | { kind: "testimonial"; at: number; testimonialId: Id<"testimonials">; who: string; project: string }; // Phase 5
 
 /** The client a document belongs to: the client of its first signer that's one of a client's people. */
 export async function docClient(ctx: QueryCtx, emails: string[]) {
@@ -91,7 +95,10 @@ export const needs = query({
       const p = await ctx.db.get(x.projectId);
       out.push({ kind: "vendorInvoice", at: x.sentAt ?? x.updatedAt, invoiceId: x._id, vendorId: x.vendorId, vendor: vendor?.name ?? "A vendor", number: x.number, project: p?.name ?? "A project", totalCents: x.totalCents });
     }
-    const order = { proposal: 0, quote: 0, vendorInvoice: 0, notes: 1, doc: 2, draft: 3, request: 4 } as const;
+    // Phase 5: raw footage (an invoice draft to send, or past its keep day) and new testimonials.
+    out.push(...(await footageNeeds(ctx)));
+    out.push(...(await testimonialNeeds(ctx)));
+    const order = { proposal: 0, quote: 0, vendorInvoice: 0, footage: 0, testimonial: 0, notes: 1, doc: 2, draft: 3, request: 4 } as const;
     return out.sort((a, b) => order[a.kind] - order[b.kind] || b.at - a.at);
   },
 });

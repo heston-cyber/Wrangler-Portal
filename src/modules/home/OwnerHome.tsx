@@ -92,6 +92,22 @@ function NeedRow({ n, remind }: { n: Need; remind: (n: Extract<Need, { kind: "do
         action={<ButtonLink size="sm" variant={n.what === "accepted" ? "primary" : "secondary"} to={`/proposals/${n.proposalId}`}>{n.what === "accepted" ? "Start the contract" : "Open"}</ButtonLink>} />
     );
   }
+  if (n.kind === "footage") { // Phase 5: a storage invoice draft to send, or raw footage past its keep date
+    const t = n.what === "kept" ? `${n.client ?? "A client"} is keeping their raw footage` : n.what === "renewal" ? "Raw footage storage renews soon" : `${n.client ?? "A client"} didn't keep their raw footage`;
+    return (
+      <ListRow className="ilead" lead={{ icon: n.what === "ended" ? "alert" : "invoice" }} title={t}
+        meta={`${n.project} · ${n.what === "ended" ? "delete or move it when you're ready; the portal never deletes files" : "an invoice draft to check and send"}`}
+        titleChip={<span className="pc-only"><StatusChip tone="warning">{n.what === "ended" ? "Keep date" : "To send"}</StatusChip></span>}
+        action={<ButtonLink size="sm" variant="primary" to={`/projects/${n.projectId}?tab=delivery`}>Open</ButtonLink>} />
+    );
+  }
+  if (n.kind === "testimonial") { // Phase 5: a testimonial not read yet
+    return (
+      <ListRow className="ilead" lead={{ icon: "note" }} title={`${n.who} sent a few words`} meta={`${n.project} · ${dayWord(n.at)}`}
+        titleChip={<span className="pc-only"><StatusChip tone="accent">New</StatusChip></span>}
+        action={<ButtonLink size="sm" variant="primary" to="/clients/testimonials">Read</ButtonLink>} />
+    );
+  }
   if (n.kind === "draft") {
     return (
       <ListRow className="ilead" lead={{ icon: "mail" }}

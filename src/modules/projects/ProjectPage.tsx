@@ -18,6 +18,7 @@ import { LedgerTab } from "../crm/Ledger";
 import { CrewCard } from "../vendors/Bookings";
 import { ShootsCard } from "./Shoots";
 import { RequestsCard } from "./Requests";
+import { FootageCard } from "./Footage";
 import { StageBar, STAGES, stageName, type Stage, dateText, bytes, openFileLink } from "./common";
 
 type Page = NonNullable<ReturnType<typeof useQuery<typeof api.projects.page>>>;
@@ -350,6 +351,7 @@ function Delivery({ page, show, onAddFiles }: { page: Page; show: (m: string) =>
           <dt>Dropbox files</dt><dd>A fresh Dropbox link on every click (each lasts about 4 hours)</dd>
         </dl>
       </Card>
+      <FootageCard projectId={page._id} show={show} />
       {confirmDialog}
     </div>
   );

@@ -726,6 +726,8 @@ export default defineSchema({
     questionnaire: v.optional(v.any()),      // Phase 3b (D70): the business's own proposal questionnaire (lib/questionnaire.ts)
     // Phase 2b (D64): when Stripe's last retry of a subscription payment fails: keep it past due (default) or cancel it.
     subFailRule: v.optional(v.union(v.literal("past_due"), v.literal("cancel"))),
+    // Phase 5 (D98): Settings › Payments › Footage storage. Missing: Wrangler on, $100/year, kept 30 days; others off.
+    footage: v.optional(v.object({ on: v.boolean(), priceCents: v.number(), keepDays: v.number() })),
     // Phase 2 Part B step 4 (D51): automatic invoice reminders, off until the owner turns them on (that's their OK).
     reminders: v.optional(v.object({
       on: v.boolean(),
@@ -1083,6 +1085,7 @@ export default defineSchema({
     // Step 3: the client's link to their invoice page (/i/<token>, in the invoice email) and the payments Stripe has
     // on the invoice (method shown as "Visa •••• 4242" or "Bank •••• 6789"; never full numbers).
     fromContract: v.optional(v.string()),                // "contract:<document>:v<n>": the deposit drafted when a contract was signed
+    storageId: v.optional(v.id("footageStorage")),       // Phase 5: a year of raw footage storage (D33), first year or a renewal (D140)
     payToken: v.optional(v.string()),
     // Review fixes (Oct 30): a send in progress keeps what it has made in Stripe so far, so a failed send cleans up
     // and a retry neither duplicates nor gets stuck; syncedAt spaces out reads from Stripe.
@@ -1234,6 +1237,56 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_project", ["projectId"]),
 
+  // Phase 5 (Nov 3): raw footage after delivery (D33, D98, D140). One per project, made when its final files first open.
+  // The portal never deletes files: it only keeps the offer, the invoices and the dates, and reminds the owner.
+  footageStorage: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    projectId: v.id("projects"),
+    clientId: v.optional(v.id("clients")),
+    priceCents: v.number(),                    // the yearly price when it was offered
+    offeredAt: v.number(),
+    keepUntil: v.string(),                     // YYYY-MM-DD (Central): kept until this day unless they keep it (D98)
+    status: v.union(
+      v.literal("offered"),   // no answer yet
+      v.literal("declined"),  // No thanks (Keep it still works until keepUntil)
+      v.literal("kept"),      // Keep it pressed: the first year's invoice is drafted / sent, not paid yet
+      v.literal("paid"),      // a year paid: kept until paidUntil
+      v.literal("drive"),     // the owner copied it to the client's own drive (D98)
+      v.literal("ended"),     // the keep day (or the paid year) passed: the owner was reminded to delete or offload it
+      v.literal("stopped"),   // the owner stopped storing it
+    ),
+    answeredBy: v.optional(v.object({ email: v.string(), name: v.string(), at: v.number() })),
+    invoiceId: v.optional(v.id("invoices")),   // the year being paid now (first year, or the renewal)
+    paidUntil: v.optional(v.string()),         // YYYY-MM-DD: the paid year runs to here
+    renewalFor: v.optional(v.string()),        // the paidUntil a renewal draft was made for (D140): once per year
+    endedAt: v.optional(v.number()),           // the owner was told (email 36), once
+    doneAt: v.optional(v.number()),            // the owner marked it deleted or moved (clears the Dashboard alert)
+    history: v.array(v.object({ at: v.number(), text: v.string() })),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_project", ["projectId"]).index("by_status", ["status"]).index("by_invoice", ["invoiceId"]),
+
+  // Phase 5 (Nov 3): a client's answers to "Ask for a testimonial" (D34, D139, D141). One per person per ask; saved as
+  // a Markdown note in Dropbox (Apps/Wrangler Review/Testimonials/) for Heston's vault. Nothing is published.
+  testimonials: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    noteId: v.id("inboxNotes"),
+    projectId: v.id("projects"),
+    clientId: v.optional(v.id("clients")),
+    email: v.string(),
+    name: v.string(),
+    company: v.optional(v.string()),
+    working: v.string(),                       // "What was it like working with us?"
+    film: v.string(),                          // "What did the film do for you?"
+    permission: v.boolean(),                   // "You can use my words and name on your website."
+    readAt: v.optional(v.number()),
+    dropboxPath: v.optional(v.string()),       // where the note was saved
+    savedAt: v.optional(v.number()),
+    saveError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_note_email", ["noteId", "email"]).index("by_created", ["createdAt"]),
+
   inboxItems: defineTable({
     businessId: v.optional(v.id("businesses")),
     clientId: v.optional(v.id("clients")),
@@ -1265,6 +1318,7 @@ export default defineSchema({
     to: v.optional(v.array(v.string())), // picked people (emails); missing = everyone at the client with portal access
     emailThem: v.optional(v.boolean()),  // "Also email them" (on by default; the emails arrive with the one-email switch)
     linkLabel: v.optional(v.string()),
+    testimonialProjectId: v.optional(v.id("projects")), // Phase 5 (D139): "Ask for a testimonial": the note links to the form for this project
     createdAt: v.number(),
     updatedAt: v.number(),
     sentAt: v.optional(v.number()),
