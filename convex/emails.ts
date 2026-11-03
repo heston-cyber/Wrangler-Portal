@@ -4,7 +4,6 @@
 //   ownerAlert   clients or guests left notes → one email to Heston per sitting, 10 minutes after the last note
 // Every client email carries an unsubscribe link for that kind; each email is logged by key so it goes out once.
 // Bodies name the video and its project only, never other clients; links carry the share token, never a key.
-import { noteEvent } from "./siteWatch";
 import { isClientLogin } from "./lib/roles";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { requireSignedIn } from "./lib/access";
@@ -112,7 +111,8 @@ export const unclaim = internalMutation({
     const row = await ctx.db.query("emailLog").withIndex("by_key", (q) => q.eq("key", key)).unique();
     if (row && !row.resendId) {
       await ctx.db.delete(row._id);
-      await noteEvent(ctx, { key: `email:${row.kind.replace(/[^a-z0-9_.-]/gi, "").slice(0, 60) || "email"}`, area: "email", title: `Email didn't send: ${row.kind}`, ...(error ? { detail: error } : {}) }); // Phase 5c
+      // Phase 5c: Site watch counts it, as its own step, so nothing there can stop the retry (review L3).
+      await ctx.scheduler.runAfter(0, internal.siteWatch.emailFailed, { kind: row.kind, ...(error ? { error } : {}) });
     }
   },
 });
@@ -127,7 +127,7 @@ async function deliver(ctx: { runMutation: (ref: any, args: any) => Promise<any>
     await ctx.runMutation(internal.emails.sent, { key, resendId: id || "sent" });
     return true;
   } catch (e) {
-    await ctx.runMutation(internal.emails.unclaim, { key, error: String((e as Error)?.message ?? e).slice(0, 300) }); // let a retry try again
+    await ctx.runMutation(internal.emails.unclaim, { key, error: String((e as Error)?.message ?? e).slice(0, 2000) }); // let a retry try again
     throw e;
   }
 }

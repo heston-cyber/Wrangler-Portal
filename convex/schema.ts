@@ -1122,7 +1122,11 @@ export default defineSchema({
     firstAt: v.number(), lastAt: v.number(),
     status: v.union(v.literal("found"), v.literal("fix_ready"), v.literal("fixed"), v.literal("needs_you"), v.literal("cleared")),
     urgent: v.optional(v.boolean()),
-    branch: v.optional(v.string()),        // the fix's branch (watch/...), only ever on the preview
+    branch: v.optional(v.string()),        // the fix's branch (watch/...), never main
+    commit: v.optional(v.string()),        // the fix's exact commit: Heston's "go" refers to it (review H1)
+    quietAt: v.optional(v.number()),       // a fix waiting for Heston whose problem went quiet: stays open (review M3)
+    doneAt: v.optional(v.number()),        // Heston marked it done; reopens only if it gets worse or fails again (L1)
+    doneCount: v.optional(v.number()),
     note: v.optional(v.string()),
     updatedAt: v.number(),
   }).index("by_key", ["key"]).index("by_status", ["status"]),

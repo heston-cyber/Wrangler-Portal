@@ -21,7 +21,9 @@ const IGNORE = [/favicon/i, /ResizeObserver loop/i, /Download the React DevTools
 // password comes only from the environment (PREVIEW_PASSWORD, set by Heston in the environment's settings), never chat.
 const host = new URL(base).hostname;
 const cookies = [];
-if (process.env.PREVIEW_PASSWORD && host.startsWith("preview.")) {
+// Only to the real preview over https (review L5): never to a look-alike or mistyped address.
+const isPreview = host === "preview.wranglerportal.com" && new URL(base).protocol === "https:";
+if (process.env.PREVIEW_PASSWORD && isPreview) {
   const { createHmac } = await import("node:crypto");
   const value = createHmac("sha256", process.env.PREVIEW_PASSWORD).update("wrangler-preview-v1").digest("hex");
   cookies.push({ name: "wp_preview", value, domain: host, path: "/", secure: true, httpOnly: true, sameSite: "Lax" });
@@ -31,7 +33,7 @@ const browser = await chromium.launch();
 const problems = [];
 try {
   // Locked preview and no password: one clear problem, not one per page.
-  if (!cookies.length && host.startsWith("preview.")) {
+  if (!cookies.length && isPreview) {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
     const res = await page.goto(base + "/", { waitUntil: "domcontentloaded", timeout: 30_000 }).catch(() => null);
