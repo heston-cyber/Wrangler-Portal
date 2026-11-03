@@ -109,6 +109,7 @@ function NeedRow({ n, remind }: { n: Need; remind: (n: Extract<Need, { kind: "do
         action={<ButtonLink size="sm" variant="primary" to="/clients/testimonials">Read</ButtonLink>} />
     );
   }
+  if (n.kind === "shootMoved") return <ShootMovedRow n={n} />; // Phase 5b step 5 (D143): moved in Google Calendar, nobody emailed
   if (n.kind === "draft") {
     return (
       <ListRow className="ilead" lead={{ icon: "mail" }}
@@ -122,6 +123,30 @@ function NeedRow({ n, remind }: { n: Need; remind: (n: Extract<Need, { kind: "do
     <ListRow className="ilead" lead={{ icon: "sign" }} title={`Claude asks to ${VERB[n.what]} ${n.label}: confirm`}
       meta={`${n.title} · nothing happens unless you confirm`}
       action={<ButtonLink size="sm" variant="primary" to={`/sign/d/${n.documentId}`}>Review</ButtonLink>} />
+  );
+}
+
+/** Phase 5b step 5 (D143): a shoot someone moved in Google Calendar. The portal moved it too and emailed nobody: the
+ *  owner tells the crew (the call sheet's Send an update) and the client (Ask to confirm: the portal's usual move
+ *  message, Inbox and email 30), or presses Done. */
+function ShootMovedRow({ n }: { n: Extract<Need, { kind: "shootMoved" }> }) {
+  const ask = useMutation(api.calendarSync.askConfirmAgain);
+  const done = useMutation(api.calendarSync.shootMoveDone);
+  const [busy, setBusy] = useState<"ask" | "done" | null>(null);
+  const [toast, show] = useToast();
+  const run = async (k: "ask" | "done") => { setBusy(k); try { if (k === "ask") { const r = await ask({ shootId: n.shootId }); show(r.told ? `Asked ${r.told === 1 ? "the client" : `${r.told} people`} to confirm.` : "Done."); } else await done({ shootId: n.shootId }); } catch (e) { show(errText(e)); } finally { setBusy(null); } };
+  const who = [n.crew ? "the crew" : null, n.people ? "the client" : null].filter(Boolean).join(" and ") || "anyone coming";
+  return (
+    <ListRow className="ilead" lead={{ icon: "calendar" }}
+      title={<><span className="pc-only">Shoot moved in Google Calendar: tell {who}</span><span className="ph-only">Shoot moved in Google</span></>}
+      meta={`${n.project} · now ${shootDay(n.date)} ${clock(n.call)} (was ${shootDay(n.wasDate)} ${clock(n.wasCall)}) · nobody was emailed`}
+      titleChip={<span className="pc-only"><StatusChip tone="warning">Moved</StatusChip></span>}
+      action={<span className="need-acts">
+        {n.sheetId && <ButtonLink size="sm" to={`/production/call-sheets/${n.sheetId}`}>Call sheet</ButtonLink>}
+        {n.people > 0 && <Button size="sm" variant="primary" loading={busy === "ask"} onClick={() => run("ask")}>Ask to confirm</Button>}
+        <Button size="sm" variant={n.people > 0 ? "secondary" : "primary"} loading={busy === "done"} onClick={() => run("done")}>Done</Button>
+        {toast}
+      </span>} />
   );
 }
 

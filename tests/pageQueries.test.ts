@@ -139,6 +139,8 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "briefs.page": { pages: ["clientHome"], args: () => ({ briefId: "nope" }) }, // /briefs/<id>, the client's kickoff brief
   // Phase 5 (Nov 3): raw footage storage and testimonials
   "production.overview": { pages: ["owner"], args: () => ({}) }, // Production › Overview (Phase 5b)
+  "calendarSync.range": { pages: ["owner"], args: () => ({ from: "2026-11-01", to: "2026-12-12" }) }, // Production › Calendar (Phase 5b step 5)
+  "calendarSync.linkOptions": { pages: ["owner"], args: () => ({}) }, // New event › Link to a shoot or project
   "overviews.clients": { pages: ["owner"], args: () => ({}) }, // Clients › Overview (Phase 5b step 2)
   "overviews.review": { pages: ["owner"], args: () => ({}) }, // Review › Overview
   "overviews.docs": { pages: ["owner"], args: () => ({}) }, // Docs › Overview

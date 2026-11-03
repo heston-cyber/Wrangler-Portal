@@ -1,8 +1,9 @@
 // Phase 5b step 1 (Nov 3): Production › Overview (760:637; Empty 763:519; Loading 763:1067; Long 763:1713; phone
 // 769:6647, 771:8608, 771:8851) and Production › Shoots (763:2708). Step 3 added call sheets: the fourth tile, the Call
-// sheets card, each shoot's sheet chip and button, "Needs a call sheet". The synced calendar (step 5) comes later.
+// sheets card, each shoot's sheet chip and button, "Needs a call sheet". Step 5: the Google Calendar card's Last synced
+// and Sync now, and Production › Calendar (Calendar.tsx).
 import { useState } from "react";
-import { useQuery } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Button, ButtonLink, Card, DialogHeader, Divider, EmptyState, ListRow, PageHeader, PillTabs, SectionHead, SkeletonRows, StatusChip } from "../../ui/wp";
@@ -10,6 +11,7 @@ import { Icon } from "../../ui/Icon";
 import { Modal, useToast } from "../../ui/kit";
 import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps } from "../../lib/router";
+import { errText } from "../docs/pages/common";
 import { sheetBits } from "./sheetBits";
 import { ShootDialog, clock, shootDay } from "../projects/Shoots";
 
@@ -22,6 +24,19 @@ const dayLong = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString
 const plural = (n: number, one: string, many = `${one}s`) => `${n === 1 ? one : many}`;
 const shootTitle = (s: ShootRow) => (s.client ? `${s.project} · ${s.client}` : s.label);
 const editMeta = (e: Edit) => [e.round ? `Round ${e.round}` : null, e.nextStep ?? (e.next ? `${e.next.label} ${shootDay(e.next.date).replace(/^\w+, /, "")}` : null)].filter(Boolean).join(" · ");
+
+// Phase 5b step 5: the Google Calendar card's Last synced and Sync now.
+function lastSynced(t: number | null) {
+  if (!t) return "Not yet";
+  const m = Math.round((Date.now() - t) / 60_000);
+  return m < 1 ? "Just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)}h ago` : new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+function SyncNow() {
+  const sync = useAction(api.calendarSync.syncNow);
+  const [busy, setBusy] = useState(false);
+  const [toast, show] = useToast();
+  return <div className="prod-sync"><Button size="sm" loading={busy} onClick={async () => { setBusy(true); try { const r = await sync({}); show(r.state === "ok" ? "Synced." : r.state === "disconnected" ? "Google disconnected. Reconnect Google." : r.state === "busy" ? "Already syncing." : "Google didn't answer. Try again in a minute."); } catch (e) { show(errText(e)); } finally { setBusy(false); } }}>Sync now</Button>{toast}</div>;
+}
 
 function Tile({ label, n, sub, to, link }: { label: string; n: number; sub: string; to: string; link: string }) {
   return (
@@ -123,11 +138,12 @@ export default function ProductionOverview() {
                   {o.week.length === 0 ? <p className="pj-pad secondary">Nothing on this week.</p>
                     : <dl className="pov-paid prod-week">{o.week.map((w, i) => <div key={i} style={{ display: "contents" }}><dt>{dayLong(w.date)}</dt><dd><a {...linkProps(`/projects/${w.projectId}`)}>{w.text}</a></dd></div>)}</dl>}
                 </Card>
-                <Card label="Google Calendar" head={<SectionHead label="Google Calendar" />}>
-                  {o.calendar ? <dl className="pov-paid prod-week">
-                    <dt>{o.calendar.error ? "Needs reconnecting" : "Connected"}</dt><dd>{o.calendar.email}</dd>
+                <Card label="Google Calendar" head={<SectionHead label="Google Calendar" action={<ButtonLink size="sm" variant="ghost" to="/production/calendar" iconEnd={false}>Open calendar</ButtonLink>} />}>
+                  {o.calendar ? <><dl className="pov-paid prod-week">
+                    <dt>{o.calendar.disconnected ? "Disconnected" : o.calendar.error ? "Needs reconnecting" : "Connected"}</dt><dd>{o.calendar.email}</dd>
                     {o.calendar.calendar && <><dt>Shoots go on</dt><dd>{o.calendar.calendar}</dd></>}
-                  </dl>
+                    <dt>Last synced</dt><dd>{lastSynced(o.calendar.lastSyncedAt)}</dd>
+                  </dl>{!o.calendar.disconnected ? <SyncNow /> : <div className="prod-sync"><ButtonLink size="sm" to="/production/calendar" iconEnd={false}>Reconnect Google</ButtonLink></div>}</>
                     : <ListRow className="ilead quiet" lead={{ icon: "calendar" }} title="Not connected." meta="See your own events next to your shoots." action={<ButtonLink size="sm" to="/settings/calendar" iconEnd={false}>Connect</ButtonLink>} />}
                 </Card>
                 <Card label="Call sheets" head={<SectionHead label="Call sheets" action={<ButtonLink size="sm" variant="ghost" to="/production/call-sheets" iconEnd={false}>All call sheets</ButtonLink>} />}>

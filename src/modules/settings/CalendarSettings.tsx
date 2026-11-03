@@ -42,10 +42,11 @@ export function CalendarSettings({ show }: { show: (m: string) => void }) {
   useEffect(() => {
     if (!conn) { setCals(null); return; }
     setVendors(conn.inviteVendors); setClient(conn.inviteClient); setPick(conn.calendarId ?? "");
+    if (conn.disconnected) { setCals([]); return; } // Phase 5b step 5: Google won't list them until it's reconnected
     let live = true;
     list({}).then((c) => { if (!live) return; setCals(c); if (!conn.calendarId) setPick(c.find((x) => x.primary)?.id ?? c[0]?.id ?? ""); }, (e) => live && setErr(errText(e)));
     return () => { live = false; };
-  }, [conn?.email, conn?.calendarId, conn?.inviteVendors, conn?.inviteClient, list]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [conn?.email, conn?.calendarId, conn?.inviteVendors, conn?.inviteClient, conn?.disconnected, list]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const head = <SetHead eyebrow="Calendar" title="Shoots on your calendar." sub="Each business picks its own calendar. Shoots you schedule go on it, and move when you move them." />;
   if (s === undefined) return <>{head}<div className="panel"><SkeletonRows n={3} /></div></>;
@@ -74,8 +75,11 @@ export function CalendarSettings({ show }: { show: (m: string) => void }) {
       {head}
       <div className="panel pay-card cal-card">
         <span className="wp-eyebrow">Google Calendar</span>
-        <div className="cal-who"><Icon name="calendar" size={18} /><span>Connected as {conn.email}</span><StatusChip tone="success">Connected</StatusChip></div>
-        {conn.lastError && <p className="wp-small cal-err">{conn.lastError}</p>}
+        <div className="cal-who"><Icon name="calendar" size={18} /><span>Connected as {conn.email}</span>{conn.disconnected ? <StatusChip tone="warning">Disconnected</StatusChip> : <StatusChip tone="success">Connected</StatusChip>}</div>
+        {conn.disconnected ? <>
+          <p className="wp-small cal-err">Google stopped letting the portal in. Reconnect to keep Production › Calendar in step with Google; nothing was lost.</p>
+          <Button variant="primary" className="cal-off" loading={busy === "connect"} onClick={() => void connect()}>Reconnect Google</Button>
+        </> : conn.lastError && <p className="wp-small cal-err">{conn.lastError}</p>}
         <label className="wp-field"><span className="wp-field-label">Put shoots on</span>
           <select className="input" value={pick} disabled={!cals} onChange={(e) => setPick(e.target.value)}>
             {!cals && <option value="">Loading your calendars…</option>}

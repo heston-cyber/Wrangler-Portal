@@ -65,6 +65,7 @@ const OWNER_PRODUCTION: Sub[] = [
   { to: "/production", label: "Overview", match: (p) => p === "/production" || p === "/production/" },
   { to: "/production/shoots", label: "Shoots", match: (p) => starts(p, "/production/shoots") },
   { to: "/production/call-sheets", label: "Call sheets", match: (p) => starts(p, "/production/call-sheets") },
+  { to: "/production/calendar", label: "Calendar", match: (p) => starts(p, "/production/calendar") }, // Phase 5b step 5
 ];
 const inProduction = (p: string) => starts(p, "/production");
 // Phase 3 (Heston, Oct 29): Clients becomes a layer: Pipeline · Companies · Follow-ups. Companies is the client list.
