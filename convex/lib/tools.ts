@@ -1,9 +1,9 @@
 // Nov 2 (Heston): Settings › Tools. The owner's own side menu: its order, which tools are on it, and which widgets the
 // Dashboard (was Home) shows. Kept per login (users.tools); only that owner's menu changes, never a client's or a
 // vendor's, and a tool taken off the menu still works by its address. New tools join at their default place.
-export const TOOLS = ["dashboard", "clients", "review", "docs", "proposals", "payments", "vendors", "sent"] as const;
+export const TOOLS = ["dashboard", "clients", "review", "docs", "proposals", "payments", "vendors", "production", "sent"] as const; // Phase 5b: Production after Vendors (D126)
 export type ToolKey = (typeof TOOLS)[number];
-export const TOOL_LABEL: Record<ToolKey, string> = { dashboard: "Dashboard", clients: "Clients", review: "Review", docs: "Docs", proposals: "Proposals", payments: "Payments", vendors: "Vendors", sent: "Sent" };
+export const TOOL_LABEL: Record<ToolKey, string> = { dashboard: "Dashboard", clients: "Clients", review: "Review", docs: "Docs", proposals: "Proposals", payments: "Payments", vendors: "Vendors", production: "Production", sent: "Sent" };
 export const REQUIRED_TOOLS: ToolKey[] = ["dashboard"]; // always on the menu
 
 export const WIDGETS = ["needs", "followups", "clients", "activity", "recurring"] as const;

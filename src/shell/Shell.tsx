@@ -60,6 +60,12 @@ const OWNER_VENDORS: Sub[] = [
   { to: "/vendors/payments", label: "Payments", match: (p) => starts(p, "/vendors/payments") }, // step 5
 ];
 const inVendors = (p: string) => starts(p, "/vendors");
+// Phase 5b (D126): Production after Vendors: Overview · Shoots, then Call sheets (step 3) and Calendar (step 5).
+const OWNER_PRODUCTION: Sub[] = [
+  { to: "/production", label: "Overview", match: (p) => p === "/production" || p === "/production/" },
+  { to: "/production/shoots", label: "Shoots", match: (p) => starts(p, "/production/shoots") },
+];
+const inProduction = (p: string) => starts(p, "/production");
 // Phase 3 (Heston, Oct 29): Clients becomes a layer: Pipeline · Companies · Follow-ups. Companies is the client list.
 const CRM = ["/clients/pipeline", "/clients/follow-ups", "/clients/deals", "/clients/estimates", "/clients/testimonials"];
 const OWNER_CLIENTS: Sub[] = [
@@ -81,10 +87,11 @@ function ownerItems(payments = false, tools: Tools = DEFAULT_TOOLS): { main: Ite
   const docs: Item = { to: "/sign", label: "Docs", icon: "document", match: (p) => p === "/sign", tab: inDocs, layer: OWNER_DOCS, layerHas: inDocs };
   const proposals: Item = { to: "/proposals", label: "Proposals", icon: "quote", match: () => false, tab: inProposals, layer: OWNER_PROPOSALS, layerHas: inProposals };
   const vendors: Item = { to: "/vendors", label: "Vendors", icon: "user", match: () => false, tab: inVendors, layer: OWNER_VENDORS, layerHas: inVendors };
+  const production: Item = { to: "/production", label: "Production", icon: "video", match: () => false, tab: inProduction, layer: OWNER_PRODUCTION, layerHas: inProduction };
   const sent: Item = { to: "/sent", label: "Sent", icon: "send", match: (p) => starts(p, "/sent") };
   // Phase 2 Part B: Payments › Invoices once the business has connected Stripe (D45).
   const pay: Item = { to: "/payments", label: "Payments", icon: "invoice", match: () => false, tab: inPayments, layer: OWNER_PAYMENTS, layerHas: inPayments };
-  const byKey: Record<ToolKey, Item | null> = { dashboard: home, clients, review, docs, proposals, payments: payments ? pay : null, vendors, sent };
+  const byKey: Record<ToolKey, Item | null> = { dashboard: home, clients, review, docs, proposals, payments: payments ? pay : null, vendors, production, sent };
   const main = tools.order.filter((k) => !tools.hidden.includes(k)).map((k) => byKey[k]).filter((x): x is Item => !!x);
   const tabbed = main.slice(0, 4);
   const rest = main.slice(4);

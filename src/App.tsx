@@ -66,6 +66,9 @@ const ProposalBuilder = lazy(() => import("./modules/proposals/Proposals").then(
 const ClientProposal = lazy(() => import("./modules/proposals/ClientProposal"));
 // Phase 3c: Vendors (D95: its own layer).
 const VendorsPage = lazy(() => import("./modules/vendors/Vendors"));
+// Phase 5b: Production (D126).
+const ProductionOverview = lazy(() => import("./modules/production/Production"));
+const ProductionShoots = lazy(() => import("./modules/production/Production").then((m) => ({ default: m.ProductionShoots })));
 const VendorPage = lazy(() => import("./modules/vendors/Vendors").then((m) => ({ default: m.VendorPage })));
 const BookingsPage = lazy(() => import("./modules/vendors/Bookings"));
 const VendorPaymentsPage = lazy(() => import("./modules/vendors/Payments"));
@@ -219,6 +222,8 @@ function SignedIn() {
   else if (/^\/sign\/templates\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3] as Id<"wsTemplates">; page = <Suspense fallback={<Loading />}><Builder key={id} mode={{ kind: "template", templateId: id }} /></Suspense>; }
   else if (/^\/sign\/templates\/?$/.test(path)) page = <Suspense fallback={<Loading />}><SignTemplates /></Suspense>;
   else if (path.startsWith("/sign")) page = <Suspense fallback={<Loading />}><SignHome /></Suspense>;
+  else if (/^\/production\/?$/.test(path)) page = <Suspense fallback={<Loading />}><ProductionOverview /></Suspense>;
+  else if (/^\/production\/shoots\/?$/.test(path)) page = <Suspense fallback={<Loading />}><ProductionShoots key={search} /></Suspense>;
   else if (/^\/vendors\/?$/.test(path)) page = <Suspense fallback={<Loading />}><VendorsPage /></Suspense>;
   else if (/^\/vendors\/briefings\/?$/.test(path)) page = <Suspense fallback={<Loading />}><BriefingsPage /></Suspense>;
   else if (/^\/vendors\/briefings\/templates\/[^/]+\/?$/.test(path)) { const id = path.split("/")[4]; page = <Suspense fallback={<Loading />}><BriefingTemplateBuilder key={id} templateId={id} /></Suspense>; }

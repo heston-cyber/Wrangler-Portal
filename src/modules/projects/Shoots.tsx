@@ -47,7 +47,7 @@ export function ShootsCard({ projectId, client, label }: { projectId: Id<"projec
   );
 }
 
-function ShootDialog({ projectId, label, data, shoot, client, people, onClose, show }: { projectId: Id<"projects">; label: string; data: Owner; shoot: Shoot | null; client: string | null; people: number; onClose: () => void; show: (t: string) => void }) {
+export function ShootDialog({ projectId, label, data, shoot, client, people, onClose, show }: { projectId: Id<"projects">; label: string; data: Owner; shoot: Shoot | null; client: string | null; people: number; onClose: () => void; show: (t: string) => void }) {
   const schedule = useMutation(api.shoots.schedule);
   const update = useMutation(api.shoots.update);
   const cancel = useMutation(api.shoots.cancel);

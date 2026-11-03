@@ -138,6 +138,9 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "briefs.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Coming up
   "briefs.page": { pages: ["clientHome"], args: () => ({ briefId: "nope" }) }, // /briefs/<id>, the client's kickoff brief
   // Phase 5 (Nov 3): raw footage storage and testimonials
+  "production.overview": { pages: ["owner"], args: () => ({}) }, // Production › Overview (Phase 5b)
+  "production.shoots": { pages: ["owner"], args: () => ({}) }, // Production › Shoots
+  "production.projectsForShoot": { pages: ["owner"], args: () => ({}) }, // New shoot
   "footage.settings": { pages: ["owner"], args: () => ({}) }, // Settings › Payments › Footage storage
   "footage.forProject": { pages: ["owner"], args: () => "skip" }, // project › Delivery › Raw footage storage
   "footage.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Raw footage

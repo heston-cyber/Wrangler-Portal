@@ -150,6 +150,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "footage.reinstate": { projectId: ids.projectId }, "footage.dismissLatePaid": { projectId: ids.projectId },
     "footage.forClientProject": { projectId: "nope" }, "footage.keep": { projectId: ids.projectId }, "footage.decline": { projectId: ids.projectId },
     "testimonials.projectsFor": { clientId: ids.clientRecId }, "testimonials.ask": { noteId: "nope" }, "testimonials.send": { noteId: ids.inboxNoteId, working: "x", film: "", permission: false },
+    "production.overview": {}, "production.shoots": {}, "production.projectsForShoot": {},
     "siteWatch.report": {}, "siteWatch.summary": {}, "siteWatch.markDone": { id: "nope" },
     "testimonials.list": {}, "testimonials.markRead": { testimonialId: ids.testimonialId }, "testimonials.saveAgain": { testimonialId: ids.testimonialId },
   };
