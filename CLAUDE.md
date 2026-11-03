@@ -18,7 +18,7 @@ The plan isn't in this repo. Read it from Heston's vault (`AiOS/Wrangler Portal/
 2. **Test before moving on.** Numbered tests with a pass line; results go in the Master Plan. A failure gets a real fix, not a patch.
 3. **Nothing reaches a client without Heston's OK** in this chat: emails, Inbox notes, invoices, contracts, anything published.
 4. **Keys and secrets never go in chat or in the repo.** Heston pastes them into the dashboards.
-5. **The privacy test grows every phase.** `tests/access.test.ts` calls every public function as nobody, a stranger with an account, and an invited client, and fails the build if a function isn't classified; `tests/pageQueries.test.ts` checks every query the pages fire. Vendor and other-business checks live in each module's own tests for now (extending access.test.ts to vendor and other-business passes is an open item in the Master Plan).
+5. **The privacy test grows every phase.** `tests/access.test.ts` calls every public function as nobody, a stranger with an account and an invited client, and fails the build if a function isn't classified; `tests/isolation.test.ts` calls every one as another business's owner with this business's records (nothing may come back or change); `tests/pageQueries.test.ts` checks every query the pages fire. A vendor login isn't one of the matrix's callers yet (vendor checks live in each module's own tests); adding that pass is an open item in the Master Plan.
 6. **Independent review** of access and money code at the end of each phase that touches them (use `independent-reviewer`).
 7. **Back up before any data change** (`convex export`, kept in Dropbox).
 8. **Stripe test mode first** for anything that touches money.
@@ -34,7 +34,7 @@ The plan isn't in this repo. Read it from Heston's vault (`AiOS/Wrangler Portal/
 ## Commands (from package.json and .github/workflows/tests.yml)
 - **Install:** `npm ci`
 - **Unit tests (all of them, including the privacy test):** `npx vitest run` (same as `npm test`)
-- **Privacy test on its own:** `npx vitest run tests/access.test.ts tests/pageQueries.test.ts`
+- **Privacy test on its own:** `npx vitest run tests/access.test.ts tests/isolation.test.ts tests/tenancy.test.ts tests/pageQueries.test.ts`
 - **Type check, backend:** `npx tsc --noEmit -p convex`
 - **Type check, site:** `npm run typecheck` (`tsc -p tsconfig.json`)
 - **Site build (type check + build):** `npm run build`
