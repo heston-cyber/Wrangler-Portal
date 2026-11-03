@@ -25,7 +25,7 @@ export type Need =
   | { kind: "quote"; at: number; quoteId: Id<"quotes">; number: string; company: string; title: string; what: "accepted" | "declined"; who: string } // Phase 3b
   | { kind: "proposal"; at: number; proposalId: Id<"proposals">; number: string; company: string; title: string; what: "accepted" | "declined"; who: string } // Phase 3b
   | { kind: "vendorInvoice"; at: number; invoiceId: Id<"vendorInvoices">; vendorId: Id<"vendors">; vendor: string; number: string; project: string; totalCents: number } // Phase 3c
-  | { kind: "footage"; at: number; what: "kept" | "renewal" | "ended"; projectId: Id<"projects">; project: string; client: string | null } // Phase 5
+  | { kind: "footage"; at: number; what: "kept" | "renewal" | "ended" | "unpaid" | "paidLate"; projectId: Id<"projects">; project: string; client: string | null } // Phase 5
   | { kind: "testimonial"; at: number; testimonialId: Id<"testimonials">; who: string; project: string }; // Phase 5
 
 /** The client a document belongs to: the client of its first signer that's one of a client's people. */

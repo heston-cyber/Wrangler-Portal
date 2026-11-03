@@ -139,6 +139,7 @@ export default defineSchema({
     keyDates: v.optional(v.array(v.object({ label: v.string(), date: v.string() }))), // date: YYYY-MM-DD
     rounds: v.optional(v.number()),              // rounds per video on this project (missing: the client's, then the business's)
     deliveryUnlockedAt: v.optional(v.number()),  // final files open to the client from here (Part B: when the final invoice is paid)
+    deliveryFirstOpenedAt: v.optional(v.number()), // Phase 5 (D142): set the first time the files open, never cleared (Lock again doesn't reset it)
     deliveryLinkDays: v.optional(v.number()),    // how long download links work after unlock (missing: 7)
     updatedAt: v.optional(v.number()),
   }).index("by_name", ["name"]).index("by_dropbox_folder", ["dropboxFolder"]).index("by_client", ["clientId"]),
@@ -1261,6 +1262,10 @@ export default defineSchema({
     renewalFor: v.optional(v.string()),        // the paidUntil a renewal draft was made for (D140): once per year
     endedAt: v.optional(v.number()),           // the owner was told (email 36), once
     doneAt: v.optional(v.number()),            // the owner marked it deleted or moved (clears the Dashboard alert)
+    // Review fixes (Nov 3): a storage invoice paid after it ended or was stopped changes nothing by itself: the owner
+    // is told and decides (reinstate a year, or refund it); and Keep it pressed but never paid alerts the owner, once.
+    latePaid: v.optional(v.object({ invoiceId: v.id("invoices"), at: v.number(), was: v.string() })),
+    unpaidAt: v.optional(v.number()),
     history: v.array(v.object({ at: v.number(), text: v.string() })),
     createdAt: v.number(),
     updatedAt: v.number(),

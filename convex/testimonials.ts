@@ -14,7 +14,8 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireMe, requireSignedIn } from "./lib/access";
 import { businessContact } from "./lib/business";
-import { businessOf } from "./lib/inbox";
+import { businessOf, clientOfEmail, hasAccess } from "./lib/inbox";
+import { ownerEmailFor } from "./footage";
 import { label } from "./lib/bookingRows";
 import { mailBrandOf } from "./lib/mail";
 import { ownerTestimonialMail } from "./lib/mails";
@@ -63,6 +64,9 @@ async function clientAsk(ctx: Ctx, noteId: string) {
   // Only someone the request was sent to (their own Inbox item for this note) can answer it.
   const got = await ctx.db.query("inboxItems").withIndex("by_key", (q) => q.eq("key", `note:${n._id}:${me.email}`)).first();
   if (!got) return null;
+  // Review M2: and only while they still have portal access and are still one of that client's people.
+  const biz = await businessOf(ctx, n);
+  if (!biz || !(await hasAccess(ctx, biz, me.email)) || (await clientOfEmail(ctx, biz, me.email)) !== n.clientId) return null;
   const p = await ctx.db.get(n.testimonialProjectId);
   if (!p) return null;
   const client = await ctx.db.get(n.clientId);
@@ -168,10 +172,22 @@ const day = (ms: number) => new Date(ms).toLocaleDateString("en-CA", { timeZone:
 const safe = (s: string, max = 60) => s.replace(/[\\/:*?"<>|\u0000-\u001f#^[\]]/g, " ").replace(/\s+/g, " ").trim().slice(0, max).trim() || "Untitled";
 const yamlStr = (s: string) => JSON.stringify(s);
 
+/**
+ * Review M4: the client's words go into Heston's vault, where plugins may run code in a note (Templater's <% %>,
+ * Dataview's inline `$= `, dataviewjs blocks) and AI sessions read notes. So each answer sits in a fenced text block
+ * (fence longer than any run of backticks in it), the template markers are broken up, and the note says it's client-written.
+ */
+function fenced(s: string) {
+  if (!s) return "(no answer)";
+  const safe = s.replace(/<%/g, "<\u200b%").replace(/%>/g, "%\u200b>").replace(/\$=/g, "$\u200b=");
+  const longest = Math.max(2, ...[...safe.matchAll(/`+/g)].map((m) => m[0].length));
+  const fence = "`".repeat(longest + 1);
+  return `${fence}text\n${safe}\n${fence}`;
+}
+
 /** The Markdown note: frontmatter for the vault, then the two answers. */
 export function testimonialNote(t: Pick<Doc<"testimonials">, "name" | "company" | "email" | "working" | "film" | "permission" | "createdAt">, project: string, business: string) {
   const who = t.company ? `${t.name}, ${t.company}` : t.name;
-  const quote = (s: string) => (s ? s.split("\n").map((l) => `> ${l}`).join("\n") : "> (no answer)");
   return [
     "---",
     "type: testimonial",
@@ -183,16 +199,17 @@ export function testimonialNote(t: Pick<Doc<"testimonials">, "name" | "company" 
     `business: ${yamlStr(business)}`,
     `permission: ${t.permission ? "yes" : "no"}`,
     "source: Wrangler Portal",
+    "untrusted: client-written",
     "tags:",
     "  - testimonial",
     "---",
     `# ${who} · ${project}`,
     "",
     `**${QUESTIONS.working}**`,
-    quote(t.working),
+    fenced(t.working),
     "",
     `**${QUESTIONS.film}**`,
-    quote(t.film),
+    fenced(t.film),
     "",
     t.permission
       ? `Permission: yes. ${t.name} said: "You can use my words and name on your website." Shown as "${who}".`
@@ -271,6 +288,7 @@ export const ownerOf = internalQuery({
     const t = await ctx.db.get(testimonialId);
     if (!t) return null;
     const biz = await businessOf(ctx, t);
-    return { email: (await businessContact(ctx, biz)).ownerEmail, brand: await mailBrandOf(ctx, biz) };
+    const email = await ownerEmailFor(ctx, biz); // review L9: no owner login, no email
+    return email ? { email, brand: await mailBrandOf(ctx, biz) } : null;
   },
 });

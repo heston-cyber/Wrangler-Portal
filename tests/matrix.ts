@@ -147,6 +147,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     // Phase 5 (Nov 3): raw footage storage and testimonials
     "footage.settings": {}, "footage.saveSettings": { on: true, priceCents: 10000, keepDays: 30 }, "footage.forProject": { projectId: "nope" },
     "footage.recordDrive": { projectId: ids.projectId }, "footage.stop": { projectId: ids.projectId }, "footage.markDone": { projectId: ids.projectId },
+    "footage.reinstate": { projectId: ids.projectId }, "footage.dismissLatePaid": { projectId: ids.projectId },
     "footage.forClientProject": { projectId: "nope" }, "footage.keep": { projectId: ids.projectId }, "footage.decline": { projectId: ids.projectId },
     "testimonials.projectsFor": { clientId: ids.clientRecId }, "testimonials.ask": { noteId: "nope" }, "testimonials.send": { noteId: ids.inboxNoteId, working: "x", film: "", permission: false },
     "testimonials.list": {}, "testimonials.markRead": { testimonialId: ids.testimonialId }, "testimonials.saveAgain": { testimonialId: ids.testimonialId },
@@ -217,7 +218,9 @@ export async function setup() {
     // Phase 5: a testimonial, and a raw footage offer on the project.
     const testimonialId = await ctx.db.insert("testimonials", { noteId: inboxNoteId, projectId, email: "client@example.com", name: "Client", working: "w", film: "f", permission: false, createdAt: 0, updatedAt: 0 });
     await ctx.db.insert("footageStorage", { projectId, priceCents: 10000, offeredAt: 0, keepUntil: "2030-01-01", status: "offered", history: [], createdAt: 0, updatedAt: 0 });
-    // D133 (Phase 5): a vendor login (the vendor record's own email, booked on the project), the matrix's fourth caller.
+    // D133 (Phase 5): a vendor login with its own vendor record in this business (not booked on anything), the matrix's
+    // fourth caller. It proves a vendor is refused everything outside the vendor side; vendor-against-vendor checks are in
+    // vendorPortal.test.ts.
     const vendorUser = await ctx.db.insert("users", { email: "vee@x.example", name: "Vee", role: "vendor" });
     await ctx.db.insert("memberships", { businessId, email: "vee@x.example", userId: vendorUser, role: "vendor", createdAt: 0 });
     await ctx.db.insert("vendors", { businessId, name: "Vee", email: "vee@x.example", roles: [], rates: [], createdAt: 0, updatedAt: 0 });

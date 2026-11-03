@@ -17,7 +17,7 @@ import { coveredProjects, coveredVideos, sameBusiness, shareState } from "./lib/
 import { downloadFor, signedThumbUrl, signStillUrl } from "./lib/media";
 import { docLabel } from "./lib/wsLayout";
 import { crmProject } from "./crm";
-import { offerOnDelivery } from "./footage";
+import { deliveredBefore, offerOnDelivery } from "./footage";
 
 export const STAGES = ["discovery", "strategy", "production", "polish", "delivery"] as const;
 export type Stage = (typeof STAGES)[number];
@@ -254,7 +254,8 @@ export const setDelivery = mutation({
     const patch: Partial<Doc<"projects">> = { updatedAt: Date.now() };
     if (a.linkDays !== undefined) patch.deliveryLinkDays = Math.max(1, Math.min(90, Math.round(a.linkDays)));
     let posted = 0;
-    if (a.unlocked === false) patch.deliveryUnlockedAt = undefined;
+    // D142 (review M1): locking again keeps the fact that the files were opened, so a later Unlock offers no storage.
+    if (a.unlocked === false) { patch.deliveryUnlockedAt = undefined; if (p.deliveryUnlockedAt && !p.deliveryFirstOpenedAt) patch.deliveryFirstOpenedAt = p.deliveryUnlockedAt; }
     if (a.unlocked === true) {
       const files = await ctx.db.query("deliveryFiles").withIndex("by_project", (q) => q.eq("projectId", p._id)).first();
       if (!files) throw new ConvexError("Add the final files first.");
@@ -271,8 +272,11 @@ export async function openDelivery(ctx: MutationCtx, p: Doc<"projects">): Promis
   const files = await ctx.db.query("deliveryFiles").withIndex("by_project", (q) => q.eq("projectId", p._id)).first();
   if (!files) return null;
   const now = Date.now();
-  const firstTime = !p.deliveryUnlockedAt; // Phase 5 (D142): only a first opening offers raw footage storage
-  await ctx.db.patch(p._id, { deliveryUnlockedAt: now, updatedAt: now });
+  // Phase 5 (D142, review M1): only a project's very first opening offers raw footage storage. Earlier openings are
+  // known from the never-cleared deliveryFirstOpenedAt (from now on) or, for projects delivered before it existed, from
+  // their "Final files ready" Inbox items or a delivered pipeline card (checked before the new items are posted below).
+  const firstTime = !p.deliveryUnlockedAt && !p.deliveryFirstOpenedAt && !(await deliveredBefore(ctx, p._id));
+  await ctx.db.patch(p._id, { deliveryUnlockedAt: now, ...(p.deliveryFirstOpenedAt ? {} : { deliveryFirstOpenedAt: now }), updatedAt: now });
   await crmProject(ctx, p._id, "delivered", "final files opened"); // Phase 3
   let posted = 0;
   const biz = await businessOf(ctx, p);

@@ -28,6 +28,8 @@ export function FootageCard({ projectId, show }: { projectId: string; show: (m: 
   const drive = useMutation(api.footage.recordDrive);
   const stop = useMutation(api.footage.stop);
   const done = useMutation(api.footage.markDone);
+  const reinstate = useMutation(api.footage.reinstate);
+  const dismissLate = useMutation(api.footage.dismissLatePaid);
   const [confirm, confirmDialog] = useConfirm();
   const [busy, setBusy] = useState(false);
   if (!d) return null;
@@ -71,7 +73,9 @@ export function FootageCard({ projectId, show }: { projectId: string; show: (m: 
   } else if (s.status === "kept") {
     rows = <>
       <Row title={`${who} is keeping it`} body={`${s.by ? `Pressed Keep it ${atDay(s.by.at)}. ` : ""}A year, until ${longDay(s.keptUntil!)}, once it's paid.`} chip={<StatusChip tone="success">Kept</StatusChip>} />
-      <Row title={s.invoice ? `Invoice ${s.invoice.number ?? "draft"} · ${usd(s.invoice.totalCents)}` : "Invoice"} body={s.invoice?.status === "draft" ? "A draft waiting for you in Payments. Nothing is charged until you send it." : s.invoice?.status === "paid" ? "Paid." : "Sent. Kept for the year once it's paid."} chip={s.invoice?.status === "draft" ? <StatusChip tone="warning">To send</StatusChip> : undefined} />
+      <Row title={s.invoice ? `Invoice ${s.invoice.number ?? "draft"} · ${usd(s.invoice.totalCents)}` : "Invoice"}
+        body={s.invoice?.status === "draft" ? "A draft waiting for you in Payments. Nothing is charged until you send it." : s.invoice?.status === "paid" ? "Paid." : s.unpaidAt ? "Still not paid, and the keep date has passed. Remind them, or void the invoice: then it's treated as not kept." : "Sent. Kept for the year once it's paid."}
+        chip={s.invoice?.status === "draft" ? <StatusChip tone="warning">To send</StatusChip> : s.unpaidAt ? <StatusChip tone="warning">Not paid</StatusChip> : undefined} />
     </>;
     actions = invoiceLink;
   } else if (s.status === "paid") {
@@ -91,8 +95,20 @@ export function FootageCard({ projectId, show }: { projectId: string; show: (m: 
     </>;
     actions = <>{s.status === "ended" && !s.doneAt && <Button size="sm" disabled={busy} onClick={() => void markDrive()}>Copied to their drive</Button>}{!s.doneAt && <Button size="sm" variant="primary" disabled={busy} onClick={markDone}>Deleted or moved</Button>}</>;
   }
+  // Review H1: a storage invoice paid after it ended, was stopped or deleted. Nothing changed by itself: the owner decides.
+  const late = s.latePaid && (
+    <div className="ft-late">
+      <Row title={`${client} paid for storage after it ${s.latePaid.was === "deleted" ? "was deleted or moved" : s.latePaid.was === "stopped" ? "was stopped" : "ended"}`}
+        body={`Paid ${atDay(s.latePaid.at)}. ${s.latePaid.was === "deleted" ? "The footage is gone, so refund it in Stripe." : "Keep it for a year from today, or refund it in Stripe."}`} chip={<StatusChip tone="warning">Paid late</StatusChip>} />
+      <div className="ft-acts">
+        {s.latePaid.was !== "deleted" && !s.doneAt && <Button size="sm" variant="primary" disabled={busy} onClick={() => void run(() => reinstate({ projectId }), "Kept for a year from today.")}>Keep it for a year</Button>}
+        <Button size="sm" disabled={busy} onClick={() => void run(() => dismissLate({ projectId }), "Noted: not kept.")}>I'll refund it</Button>
+      </div>
+    </div>
+  );
   return (
     <Card className="ft-card" label="Raw footage storage" head={head}>
+      {late}
       <div className="ft-rows">{rows}</div>
       {actions && <div className="ft-acts">{actions}</div>}
       {confirmDialog}

@@ -36,7 +36,7 @@ export const NOTICES: Notice[] = [
   { key: "brief_answered", side: "owner", group: "Shoots and files", label: "A client sends back the kickoff brief", hint: "And when they change it afterwards.", kinds: ["brief_answered"] },
   // Phase 5 (Nov 3)
   { key: "footage", side: "owner", group: "Delivery", label: "A client keeps their raw footage, or a storage year is about to renew", hint: "With the invoice draft for you to send.", kinds: ["footage_kept", "footage_renewal"] },
-  { key: "footage_ended", side: "owner", group: "Delivery", label: "The keep date comes and the raw footage wasn't kept", hint: "The portal never deletes files, so this always arrives.", kinds: ["footage_ended"], always: true },
+  { key: "footage_ended", side: "owner", group: "Delivery", label: "The keep date comes and the raw footage wasn't kept", hint: "The portal never deletes files, so this always arrives.", kinds: ["footage_ended"], always: true }, // also: Keep it never paid, and a storage invoice paid late (review fixes)
   { key: "testimonials", side: "owner", group: "Delivery", label: "A client sends a testimonial", kinds: ["testimonial"] },
   { key: "owner_codes", side: "owner", group: "Your account", label: "Sign-in codes and password resets", kinds: ["code", "reset"], always: true },
 

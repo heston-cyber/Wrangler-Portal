@@ -319,7 +319,7 @@ export const sendNote = mutation({
     const audience = (await noteAudience(ctx, client)).filter((p) => p.access && (!n.to || n.to.includes(p.email)));
     if (!biz || !audience.length) throw new ConvexError(n.to ? "None of the people you picked has portal access yet." : `No one at ${client.name} has portal access yet. Invite someone first.`);
     // Phase 5 (D139): a testimonial request links to its form (the note's own page, /words/<note>).
-    if (n.testimonialProjectId && !(await ctx.db.get(n.testimonialProjectId))) throw new ConvexError("The project this asks about isn't here any more.");
+    if (n.testimonialProjectId && (await ctx.db.get(n.testimonialProjectId))?.clientId !== n.clientId) throw new ConvexError(`The project this asks about isn't one of ${client.name}'s any more.`);
     const { link, linkLabel } = n.testimonialProjectId ? askLink(noteId) : { link: n.link, linkLabel: n.linkLabel };
     let posted = 0;
     for (const p of audience) {

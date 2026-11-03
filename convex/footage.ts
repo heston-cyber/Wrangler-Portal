@@ -22,7 +22,7 @@ import { businessOf, postToInbox } from "./lib/inbox";
 import { label } from "./lib/bookingRows";
 import { todayCentral } from "./lib/bookings";
 import { mailBrandOf } from "./lib/mail";
-import { footageOfferMail, ownerFootageEndedMail, ownerFootageMail } from "./lib/mails";
+import { footageOfferMail, ownerFootageAlertMail, ownerFootageEndedMail, ownerFootageMail } from "./lib/mails";
 import { deliverOnce } from "./invoiceReminders";
 import { SITE } from "./lib/site";
 import { myProjects, portalPeople } from "./projects";
@@ -87,6 +87,14 @@ export const saveSettings = mutation({
 });
 
 // ---------- the offer, when the final files first open ----------
+
+/** Was this project delivered before (a "Final files ready" Inbox item, or its pipeline card at Delivered or Paid)? */
+export async function deliveredBefore(ctx: MutationCtx, projectId: Id<"projects">) {
+  const item = await ctx.db.query("inboxItems").withIndex("by_key", (q) => q.gte("key", `final:${projectId}:`).lt("key", `final:${projectId};`)).first();
+  if (item) return true;
+  const deals = await ctx.db.query("deals").withIndex("by_project", (q) => q.eq("projectId", projectId)).collect();
+  return deals.some((d) => d.stage === "delivered" || d.stage === "paid");
+}
 
 /**
  * Called by projects.openDelivery. `firstTime` is false when the files were open before (an "Unlock again", or a project
@@ -235,6 +243,7 @@ export const forProject = query({
         by: r.answeredBy ? { name: r.answeredBy.name, at: r.answeredBy.at } : null, endedAt: r.endedAt ?? null, doneAt: r.doneAt ?? null,
         invoice: inv ? { _id: inv._id, status: inv.status, number: inv.number ?? inv.stripe?.number ?? null, totalCents: inv.totalCents } : null,
         renewing: !!r.renewalFor && r.renewalFor === r.paidUntil,
+        latePaid: r.latePaid ? { at: r.latePaid.at, was: r.latePaid.was } : null, unpaidAt: r.unpaidAt ?? null,
         keptUntil: r.status === "kept" ? addYear(r.keepUntil > todayCentral() ? r.keepUntil : todayCentral()) : null,
         history: r.history.slice(-8).reverse(),
       },
@@ -257,7 +266,7 @@ export const recordDrive = mutation({
   },
 });
 
-/** Stop storing a paid year's footage (no renewal is drafted; an unsent renewal draft is left for the owner to delete). */
+/** Stop storing a paid year's footage: no renewal is drafted. Only while it's being paid for (review L8). */
 export const stop = mutation({
   args: { projectId: v.string() },
   handler: async (ctx, { projectId }) => {
@@ -266,6 +275,7 @@ export const stop = mutation({
     if (!r) throw new ConvexError("There's no raw footage offer on this project.");
     if (r.status === "stopped") return null;
     if (r.status === "kept") throw new ConvexError("There's an unpaid storage invoice. Void or delete it first.");
+    if (r.status !== "paid") throw new ConvexError("It isn't being stored for them, so there's nothing to stop.");
     const now = Date.now();
     await ctx.db.patch(r._id, { status: "stopped", updatedAt: now, history: hist(r, `Storing stopped by ${me.name}`, now) });
     return null;
@@ -286,16 +296,46 @@ export const markDone = mutation({
   },
 });
 
-/** Dashboard alerts (home.needs): a storage invoice draft to send, and footage past its keep day. */
+/** Review H1: a storage invoice paid after it ended or was stopped. The owner keeps it for another year from today... */
+export const reinstate = mutation({
+  args: { projectId: v.string() },
+  handler: async (ctx, { projectId }) => {
+    const me = await requireMe(ctx);
+    const { r } = await ownedRow(ctx, projectId);
+    if (!r?.latePaid) throw new ConvexError("There's no late payment to act on.");
+    if (r.doneAt) throw new ConvexError("You marked the footage as deleted or moved, so it can't be kept. Refund the payment in Stripe instead.");
+    const now = Date.now();
+    const paidUntil = addYear(todayCentral(now));
+    await ctx.db.patch(r._id, { status: "paid", paidUntil, renewalFor: undefined, invoiceId: r.latePaid.invoiceId, latePaid: undefined, endedAt: undefined, unpaidAt: undefined, updatedAt: now, history: hist(r, `Kept again by ${me.name} after the late payment: until ${longDay(paidUntil)}`, now) });
+    return null;
+  },
+});
+/** ...or has dealt with it another way (refunded it in Stripe). Clears the alert; the status stays as it was. */
+export const dismissLatePaid = mutation({
+  args: { projectId: v.string() },
+  handler: async (ctx, { projectId }) => {
+    const me = await requireMe(ctx);
+    const { r } = await ownedRow(ctx, projectId);
+    if (!r?.latePaid) return null;
+    const now = Date.now();
+    await ctx.db.patch(r._id, { latePaid: undefined, updatedAt: now, history: hist(r, `Late payment handled by ${me.name} (not kept)`, now) });
+    return null;
+  },
+});
+
+type What = "kept" | "renewal" | "ended" | "unpaid" | "paidLate";
+/** Dashboard alerts (home.needs): a storage invoice to send, footage past its keep day, Keep it never paid, a late payment. */
 export async function footageNeeds(ctx: QueryCtx) {
-  const out: Array<{ kind: "footage"; at: number; what: "kept" | "renewal" | "ended"; projectId: Id<"projects">; project: string; client: string | null }> = [];
-  for (const status of ["kept", "paid", "ended"] as const) {
+  const out: Array<{ kind: "footage"; at: number; what: What; projectId: Id<"projects">; project: string; client: string | null }> = [];
+  for (const status of ["kept", "paid", "ended", "stopped", "drive"] as const) {
     for (const r of await ctx.db.query("footageStorage").withIndex("by_status", (q) => q.eq("status", status)).collect()) {
-      let what: "kept" | "renewal" | "ended" | null = null;
-      if (status === "ended") what = r.doneAt ? null : "ended";
-      else {
+      let what: What | null = null;
+      if (r.latePaid) what = "paidLate";
+      else if (status === "ended") what = r.doneAt ? null : "ended";
+      else if (status === "kept" || status === "paid") {
         const inv = r.invoiceId ? await ctx.db.get(r.invoiceId) : null;
         if (inv?.status === "draft") what = status === "kept" ? "kept" : r.renewalFor === r.paidUntil ? "renewal" : null;
+        else if (status === "kept" && r.unpaidAt && inv && inv.status !== "paid") what = "unpaid";
       }
       if (!what) continue;
       const p = await ctx.db.get(r.projectId);
@@ -306,59 +346,93 @@ export async function footageNeeds(ctx: QueryCtx) {
   return out;
 }
 
-// ---------- the invoice's side (called from invoices.applyStripeInvoice and deleteDraft) ----------
+// ---------- the invoice's side (called from invoices.applyStripeInvoice, recordSent and deleteDraft) ----------
 
-/** A storage invoice paid: a year kept, from the keep day (first year) or the end of the last paid year (renewal). */
+/**
+ * A storage invoice paid: a year kept, from the keep day (first year) or the end of the last paid year (renewal).
+ * Review H1: only for the invoice the year is waiting on. Paid after the footage ended, was stopped or marked deleted,
+ * nothing changes by itself: the owner is told (email and Dashboard) and decides (keep it again, or refund it).
+ */
 export async function storagePaid(ctx: MutationCtx, i: Doc<"invoices">) {
   const r = i.storageId ? await ctx.db.get(i.storageId) : null;
   if (!r || r.invoiceId !== i._id) return;
-  const today = todayCentral();
-  const from = r.status === "paid" && r.paidUntil ? r.paidUntil : r.keepUntil > today ? r.keepUntil : today;
-  const paidUntil = addYear(from);
   const now = Date.now();
-  await ctx.db.patch(r._id, { status: "paid", paidUntil, endedAt: undefined, doneAt: undefined, updatedAt: now, history: hist(r, `Paid: kept until ${longDay(paidUntil)}`, now) });
+  const renewing = r.status === "paid" && !!r.paidUntil && r.renewalFor === r.paidUntil;
+  if ((r.status === "kept" || renewing) && !r.doneAt) {
+    const today = todayCentral(now);
+    const from = renewing ? r.paidUntil! : r.keepUntil > today ? r.keepUntil : today;
+    const paidUntil = addYear(from);
+    await ctx.db.patch(r._id, { status: "paid", paidUntil, endedAt: undefined, unpaidAt: undefined, updatedAt: now, history: hist(r, `Paid: kept until ${longDay(paidUntil)}`, now) });
+    return;
+  }
+  if (r.latePaid?.invoiceId === i._id) return;
+  await ctx.db.patch(r._id, { latePaid: { invoiceId: i._id, at: now, was: r.doneAt ? "deleted" : r.status }, updatedAt: now, history: hist(r, `Paid after it ${r.doneAt ? "was deleted or moved" : r.status === "stopped" ? "was stopped" : "ended"}: owner told`, now) });
+  await ctx.scheduler.runAfter(0, internal.footage.mailLatePaid, { storageId: r._id, invoiceId: i._id });
 }
 
-/** A storage invoice voided or its draft deleted: back to the offer (a renewal: the paid year still runs to its end). */
+/** A storage invoice voided or its draft deleted: back to an open offer (review L7); a renewal: the paid year still runs. */
 export async function storageDropped(ctx: MutationCtx, i: Doc<"invoices">, how: "voided" | "deleted") {
   const r = i.storageId ? await ctx.db.get(i.storageId) : null;
   if (!r || r.invoiceId !== i._id) return;
   const now = Date.now();
-  if (r.status === "kept") await ctx.db.patch(r._id, { status: "declined", invoiceId: undefined, updatedAt: now, history: hist(r, `Storage invoice ${how}: back to not kept`, now) });
-  else if (r.status === "paid") await ctx.db.patch(r._id, { invoiceId: undefined, updatedAt: now, history: hist(r, `Renewal invoice ${how}`, now) });
+  if (r.status === "kept") await ctx.db.patch(r._id, { status: "offered", invoiceId: undefined, answeredBy: undefined, unpaidAt: undefined, updatedAt: now, history: hist(r, `Storage invoice ${how}: back to an open offer`, now) });
+  else await ctx.db.patch(r._id, { invoiceId: undefined, updatedAt: now, history: hist(r, `${r.status === "paid" ? "Renewal" : "Storage"} invoice ${how}`, now) });
 }
 
-// ---------- the hourly job: keep days and renewals ----------
+// ---------- the hourly job: keep days, unpaid Keep it, renewals ----------
 
+type Due = { id: Id<"footageStorage">; biz: Id<"businesses"> | null };
 export const due = internalQuery({
   args: {},
   handler: async (ctx) => {
     const today = todayCentral();
-    const ended: Id<"footageStorage">[] = [], renew: Id<"footageStorage">[] = [], lapsed: Id<"footageStorage">[] = [];
+    const ended: Due[] = [], renew: Due[] = [], unpaid: Due[] = [];
+    const item = (r: Doc<"footageStorage">) => ({ id: r._id, biz: r.businessId ?? null });
     for (const s of ["offered", "declined"] as const) {
-      for (const r of await ctx.db.query("footageStorage").withIndex("by_status", (q) => q.eq("status", s)).collect()) if (r.keepUntil <= today) ended.push(r._id);
+      for (const r of await ctx.db.query("footageStorage").withIndex("by_status", (q) => q.eq("status", s)).collect()) if (r.keepUntil <= today) ended.push(item(r));
     }
     for (const r of await ctx.db.query("footageStorage").withIndex("by_status", (q) => q.eq("status", "paid")).collect()) {
       if (!r.paidUntil) continue;
-      if (r.paidUntil <= today) lapsed.push(r._id);
-      else if (addDays(r.paidUntil, -RENEW_DAYS) <= today && r.renewalFor !== r.paidUntil) renew.push(r._id);
+      if (r.paidUntil <= today) ended.push(item(r));
+      else if (addDays(r.paidUntil, -RENEW_DAYS) <= today && r.renewalFor !== r.paidUntil) renew.push(item(r));
     }
-    return { ended, renew, lapsed };
+    // Review M3: Keep it pressed, the invoice sent, the keep day and its due date gone by, still not paid.
+    for (const r of await ctx.db.query("footageStorage").withIndex("by_status", (q) => q.eq("status", "kept")).collect()) {
+      if (r.unpaidAt || r.keepUntil > today || !r.invoiceId) continue;
+      const inv = await ctx.db.get(r.invoiceId);
+      if (inv && (inv.status === "open" || inv.status === "uncollectible") && inv.dueDate < today) unpaid.push(item(r));
+    }
+    return { ended, renew, unpaid };
   },
 });
 
-/** The keep day came (or a paid year ended unrenewed): mark it, once, and tell the owner. */
+/** The keep day came (or a paid year ended unrenewed): mark it, once, and tell the owner (email 36, in the same write). */
 export const endOne = internalMutation({
   args: { storageId: v.id("footageStorage") },
   handler: async (ctx, { storageId }) => {
     const r = await ctx.db.get(storageId);
-    if (!r || r.endedAt) return null;
+    if (!r || r.endedAt) return false;
     const today = todayCentral();
     const lapsed = r.status === "paid";
-    if (lapsed ? !(r.paidUntil && r.paidUntil <= today) : !((r.status === "offered" || r.status === "declined") && r.keepUntil <= today)) return null;
+    if (lapsed ? !(r.paidUntil && r.paidUntil <= today) : !((r.status === "offered" || r.status === "declined") && r.keepUntil <= today)) return false;
     const now = Date.now();
+    const day = lapsed ? r.paidUntil! : r.keepUntil;
     await ctx.db.patch(r._id, { status: "ended", endedAt: now, updatedAt: now, history: hist(r, lapsed ? "The paid year ended without renewal: owner reminded" : "Not kept: owner reminded on the keep day", now) });
-    return { lapsed, day: lapsed ? r.paidUntil! : r.keepUntil };
+    await ctx.scheduler.runAfter(0, internal.footage.mailEnded, { storageId, day, lapsed });
+    return true;
+  },
+});
+
+/** Review M3: Keep it never paid. Told once; it stays "kept" until the invoice is paid or voided. */
+export const unpaidOne = internalMutation({
+  args: { storageId: v.id("footageStorage") },
+  handler: async (ctx, { storageId }) => {
+    const r = await ctx.db.get(storageId);
+    if (!r || r.status !== "kept" || r.unpaidAt || !r.invoiceId) return false;
+    const now = Date.now();
+    await ctx.db.patch(r._id, { unpaidAt: now, updatedAt: now, history: hist(r, "Keep it was pressed but the invoice isn't paid: owner told", now) });
+    await ctx.scheduler.runAfter(0, internal.footage.mailUnpaid, { storageId });
+    return true;
   },
 });
 
@@ -367,40 +441,49 @@ export const renewOne = internalMutation({
   args: { storageId: v.id("footageStorage") },
   handler: async (ctx, { storageId }) => {
     const r = await ctx.db.get(storageId);
-    if (!r || r.status !== "paid" || !r.paidUntil || r.renewalFor === r.paidUntil) return null;
+    if (!r || r.status !== "paid" || !r.paidUntil || r.renewalFor === r.paidUntil) return false;
     const p = await ctx.db.get(r.projectId);
-    if (!p) return null;
+    if (!p) return false;
     const who = r.answeredBy ?? (await portalPeople(ctx, p)).map((x) => ({ email: x.email, name: x.email }))[0];
-    if (!who) return null;
+    if (!who) return false;
     const client = p.clientId ? await ctx.db.get(p.clientId) : null;
     const until = addYear(r.paidUntil);
     const invoiceId = await draftYear(ctx, r, p, { name: who.name, email: who.email, company: client?.name }, until, r.paidUntil);
     const now = Date.now();
     await ctx.db.patch(r._id, { renewalFor: r.paidUntil, invoiceId, updatedAt: now, history: hist(r, `Renewal drafted (next year until ${longDay(until)})`, now) });
-    return invoiceId;
+    await ctx.scheduler.runAfter(0, internal.footage.mailOwner, { storageId, what: "renewal", invoiceId });
+    return true;
   },
 });
 
+/** Each row acts for its own business (review L12); one row failing doesn't stop the rest (L1). */
 export const runDue = internalAction({
   args: {},
-  handler: async (ctx): Promise<{ ended: number; renewed: number }> => {
+  handler: async (ctx): Promise<{ ended: number; renewed: number; unpaid: number }> => {
     const hour = Number(new Date().toLocaleString("en-US", { timeZone: "America/Chicago", hour: "numeric", hour12: false }));
-    if (hour < 9) return { ended: 0, renewed: 0 };
-    const d: { ended: Id<"footageStorage">[]; renew: Id<"footageStorage">[]; lapsed: Id<"footageStorage">[] } = await ctx.runQuery(internal.footage.due, {});
-    let ended = 0, renewed = 0;
-    for (const id of [...d.ended, ...d.lapsed]) {
-      const r: { lapsed: boolean; day: string } | null = await ctx.runMutation(internal.footage.endOne, { storageId: id });
-      if (r) { ended++; await ctx.runAction(internal.footage.mailEnded, { storageId: id, day: r.day, lapsed: r.lapsed }); }
-    }
-    for (const id of d.renew) {
-      const invoiceId: Id<"invoices"> | null = await ctx.runMutation(internal.footage.renewOne, { storageId: id });
-      if (invoiceId) { renewed++; await ctx.runAction(internal.footage.mailOwner, { storageId: id, what: "renewal", invoiceId }); }
-    }
-    return { ended, renewed };
+    if (hour < 9) return { ended: 0, renewed: 0, unpaid: 0 };
+    const d: { ended: Due[]; renew: Due[]; unpaid: Due[] } = await ctx.runQuery(internal.footage.due, {});
+    const as = (x: Due) => ({ storageId: x.id, ...(x.biz ? { asBusiness: x.biz } : {}) });
+    let ended = 0, renewed = 0, unpaid = 0;
+    for (const x of d.ended) try { if (await ctx.runMutation(internal.footage.endOne, as(x))) ended++; } catch (e) { console.error("footage end", String((e as Error).message).slice(0, 120)); }
+    for (const x of d.unpaid) try { if (await ctx.runMutation(internal.footage.unpaidOne, as(x))) unpaid++; } catch (e) { console.error("footage unpaid", String((e as Error).message).slice(0, 120)); }
+    for (const x of d.renew) try { if (await ctx.runMutation(internal.footage.renewOne, as(x))) renewed++; } catch (e) { console.error("footage renew", String((e as Error).message).slice(0, 120)); }
+    return { ended, renewed, unpaid };
   },
 });
 
 // ---------- emails ----------
+
+/**
+ * Where the owner's emails go. Review L9: a business other than Wrangler with no owner login gets none (rather than
+ * falling back to Wrangler's own address, which would carry another business's client details).
+ */
+export async function ownerEmailFor(ctx: QueryCtx, biz: Id<"businesses"> | null) {
+  const c = await businessContact(ctx, biz);
+  if (c.isDefault) return c.ownerEmail;
+  const owners = biz ? (await ctx.db.query("memberships").withIndex("by_business_email", (q) => q.eq("businessId", biz)).collect()).filter((m) => !m.revokedAt && m.role === "owner") : [];
+  return owners.length ? c.ownerEmail : null;
+}
 
 export const mailData = internalQuery({
   args: { storageId: v.id("footageStorage") },
@@ -411,7 +494,8 @@ export const mailData = internalQuery({
     if (!p) return null;
     const biz = await businessOf(ctx, p);
     const client = p.clientId ? await ctx.db.get(p.clientId) : null;
-    return { r, project: label(p), projectId: p._id, client: client?.name ?? "The client", biz, brand: await mailBrandOf(ctx, biz), owner: (await businessContact(ctx, biz)).ownerEmail };
+    const inv = r.invoiceId ? await ctx.db.get(r.invoiceId) : null;
+    return { r, project: label(p), projectId: p._id, client: client?.name ?? "The client", biz, brand: await mailBrandOf(ctx, biz), owner: await ownerEmailFor(ctx, biz), invoice: inv ? { number: inv.number ?? inv.stripe?.number ?? null, dueDate: inv.dueDate } : null };
   },
 });
 
@@ -425,8 +509,9 @@ export const mailOffer = internalAction({
     for (const email of emails) {
       const m = footageOfferMail(d.brand, { name: await ctx.runQuery(internal.shoots.nameOf, { email }), project: d.project, priceCents: d.r.priceCents, keepUntil: d.r.keepUntil, link: `${SITE()}/projects/${d.projectId}` });
       try {
-        if ((await deliverOnce(ctx, `footage-offer:${storageId}:${email.toLowerCase()}`, "footage_offer", email, m, d.brand.replyTo, d.biz)) === "sent") sent++;
-        await ctx.runMutation(internal.emails.markInboxEmailed, { key: `footage:${storageId}`, email });
+        const r = await deliverOnce(ctx, `footage-offer:${storageId}:${email.toLowerCase()}`, "footage_offer", email, m, d.brand.replyTo, d.biz);
+        if (r === "sent") sent++;
+        if (r === "sent" || r === "held") await ctx.runMutation(internal.emails.markInboxEmailed, { key: `footage:${storageId}`, email }); // review L6
       } catch (e) { console.error("footage email", String((e as Error).message).slice(0, 120)); }
     }
     return sent;
@@ -454,6 +539,28 @@ export const mailEnded = internalAction({
     if (!d?.owner) return;
     await deliverOnce(ctx, `footage-ended:${storageId}:${day}`, "footage_ended", d.owner, ownerFootageEndedMail(d.brand, {
       client: d.client, project: d.project, day, lapsed, link: `${SITE()}/projects/${d.projectId}?tab=delivery`,
+    }), d.brand.replyTo, d.biz);
+  },
+});
+
+/** Review M3 and H1: Keep it never paid, or a storage invoice paid after it ended. Always sent (like email 36). */
+export const mailUnpaid = internalAction({
+  args: { storageId: v.id("footageStorage") },
+  handler: async (ctx, { storageId }) => {
+    const d = await ctx.runQuery(internal.footage.mailData, { storageId });
+    if (!d?.owner) return;
+    await deliverOnce(ctx, `footage-unpaid:${storageId}`, "footage_ended", d.owner, ownerFootageAlertMail(d.brand, {
+      what: "unpaid", client: d.client, project: d.project, number: d.invoice?.number ?? null, link: `${SITE()}/projects/${d.projectId}?tab=delivery`,
+    }), d.brand.replyTo, d.biz);
+  },
+});
+export const mailLatePaid = internalAction({
+  args: { storageId: v.id("footageStorage"), invoiceId: v.id("invoices") },
+  handler: async (ctx, { storageId, invoiceId }) => {
+    const d = await ctx.runQuery(internal.footage.mailData, { storageId });
+    if (!d?.owner) return;
+    await deliverOnce(ctx, `footage-paid-late:${storageId}:${invoiceId}`, "footage_ended", d.owner, ownerFootageAlertMail(d.brand, {
+      what: "paidLate", client: d.client, project: d.project, number: null, link: `${SITE()}/projects/${d.projectId}?tab=delivery`,
     }), d.brand.replyTo, d.biz);
   },
 });

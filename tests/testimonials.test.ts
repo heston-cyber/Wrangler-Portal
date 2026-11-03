@@ -100,7 +100,7 @@ describe("testimonials", () => {
     expect(note.path.startsWith("/Testimonials/")).toBe(true);
     expect(note.body).toContain("type: testimonial");
     expect(note.body).toContain("permission: yes");
-    expect(note.body).toContain("> Easy from start to finish.");
+    expect(note.body).toContain("```text\nEasy from start to finish.\n```");
     expect(uploads.find((u) => u.path.includes("Jo"))!.body).toContain("permission: no");
 
     // Another business sees none of it.
@@ -126,14 +126,43 @@ describe("testimonials", () => {
     expect(await w.heston.mutation(api.testimonials.saveAgain, { testimonialId: r._id })).toEqual({ already: true });
   });
 
+  test("review M2: someone whose invite was revoked, or who was taken off the client, can't answer", async () => {
+    const w = await world();
+    stub([]);
+    const { noteId } = await ask(w);
+    const jo = await w.t.run(async (ctx) => (await ctx.db.query("invites").collect()).find((i) => i.email === "jo@harbor.example")!._id);
+    await w.heston.mutation(api.clients.revokeInvite, { inviteId: jo });
+    expect(await w.jo.query(api.testimonials.ask, { noteId })).toBeNull();
+    await expect(w.jo.mutation(api.testimonials.send, { noteId, working: "x", film: "", permission: true })).rejects.toThrow(/isn't here/);
+    await w.t.run(async (ctx) => { const p = (await ctx.db.query("clientPeople").collect()).find((x) => x.email === "maya@harbor.example")!; await ctx.db.patch(p._id, { removedAt: Date.now() }); });
+    expect(await w.maya.query(api.testimonials.ask, { noteId })).toBeNull();
+  });
+
+  test("review L10: a request whose project moved to another client isn't sent", async () => {
+    const w = await world();
+    stub([]);
+    const noteId = await w.heston.mutation(api.inbox.saveNote, { clientId: w.harbor, title: "A few words?", text: "x", testimonialProjectId: w.p });
+    await w.t.run(async (ctx) => { const c = await ctx.db.insert("clients", { businessId: w.A, name: "Northline", createdAt: 0 }); await ctx.db.patch(w.p, { clientId: c }); });
+    await expect(w.heston.mutation(api.inbox.sendNote, { noteId })).rejects.toThrow(/isn't one of Harbor Coffee's/);
+  });
+
+  test("review M4: the client's words can't run as a template or code in the vault", () => {
+    const md = testimonialNote({ name: "X", company: undefined, email: "x@y.example", working: "<%* app.vault.delete() %> and `$= dv.x` ```js\nhi\n```", film: "ok", permission: true, createdAt: 0 }, "P", "B");
+    expect(md).not.toContain("<%");
+    expect(md).not.toContain("%>");
+    expect(md).not.toContain("$=");
+    expect(md).toContain("untrusted: client-written");
+    expect(md).toContain("````text\n"); // a fence longer than the ``` inside
+  });
+
   test("the vault note's shape", () => {
     const md = testimonialNote({ name: "Ava Chen", company: "Northline", email: "ava@northline.example", working: "Clear, fast.\nThey listened.", film: "", permission: false, createdAt: Date.UTC(2026, 9, 4, 18) }, "26112 Northline", "Wrangler Productions");
     expect(md).toContain('date: 2026-10-04');
     expect(md).toContain('name: "Ava Chen"');
     expect(md).toContain("permission: no");
     expect(md).toContain("# Ava Chen, Northline · 26112 Northline");
-    expect(md).toContain("> Clear, fast.\n> They listened.");
-    expect(md).toContain("> (no answer)");
+    expect(md).toContain("```text\nClear, fast.\nThey listened.\n```");
+    expect(md).toContain("(no answer)");
     expect(md).toContain("Private: keep it for yourself");
   });
 });

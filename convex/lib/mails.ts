@@ -658,7 +658,7 @@ export function footageOfferMail(b: MailBrand, d: { name: string | null; project
     hi(d.name),
     { t: "p", text: `Your final files for ${d.project} are ready, and we still have every raw clip.` },
     { t: "sums", rows: [{ label: "Keep it for", value: perYear(d.priceCents), big: true }, { label: "Kept until", value: keepDay(d.keepUntil) }, { label: "Project", value: d.project }] },
-    { t: "p", text: `If you keep it, you can ask for new cuts any time. If not, we let it go after ${keepShort(d.keepUntil)}.` },
+    { t: "p", text: `If you keep it, you can ask for new cuts any time. If not, we let it go on ${keepShort(d.keepUntil)}.` },
     { t: "p", text: "Choose on your delivery page." },
     { t: "button", label: "Keep my footage", href: d.link }, { t: "link", href: d.link },
   ], signoff(b), `Kept until ${keepShort(d.keepUntil)} · ${perYear(d.priceCents)}`);
@@ -708,4 +708,16 @@ export function ownerTestimonialMail(b: MailBrand, d: { who: string; company: st
     { t: "p", text: d.permission ? "They said you can use their words and name." : "Private: they didn't give permission to use it publicly.", tone: "muted" },
     { t: "button", label: "Open Testimonials", href: d.link },
   ], ownerFoot("a client sends a testimonial"), `${d.who} · ${d.project}`);
+}
+
+/** To the owner (no frame: the owner-alert layout of 36): Keep it was pressed but the invoice isn't paid (review M3), or a
+ *  storage invoice was paid after the footage ended, was stopped or was deleted (review H1). */
+export function ownerFootageAlertMail(b: MailBrand, d: { what: "unpaid" | "paidLate"; client: string; project: string; number: string | null; link: string }): Mail {
+  const unpaid = d.what === "unpaid";
+  return mk(b, "updates", unpaid ? `Raw footage storage not paid: ${d.project}` : `A storage invoice was paid late: ${d.project}`, [
+    { t: "eyebrow", text: `${unpaid ? "Storage not paid" : "Paid late"} · ${d.project}` },
+    { t: "title", text: unpaid ? `${d.client} pressed Keep it, but the storage invoice${d.number ? ` ${d.number}` : ""} isn't paid and the keep date has passed.` : `${d.client} paid a storage invoice after their raw footage stopped being kept.` },
+    { t: "p", text: unpaid ? "The footage is still marked as kept. Remind them, or void the invoice: then it's treated as not kept and you get the usual reminder." : "Nothing changed by itself. On the project's Delivery tab, keep it for a year from today, or refund the payment in Stripe." },
+    { t: "button", label: "Open the project", href: d.link },
+  ], [{ t: "small", text: "Sent to you about raw footage · WranglerPortal ·", link: { label: "Email settings", href: `${SITE()}/settings/notifications` } }], `${d.client} · ${d.project}`);
 }

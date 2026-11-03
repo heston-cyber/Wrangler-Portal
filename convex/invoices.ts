@@ -335,6 +335,9 @@ export const recordSent = internalMutation({
     // Step 3: the client's link, their Inbox item and the invoice email (08).
     const sent = await ctx.db.get(invoiceId);
     if (sent && sent.status === "open") await announceSent(ctx, sent);
+    // Phase 5 (review L5): a storage invoice paid at send (a credit balance covered it): the webhook will see it already
+    // paid and skip, so the year is recorded here.
+    if (sent?.status === "paid" && sent.storageId) await storagePaid(ctx, sent);
   },
 });
 
