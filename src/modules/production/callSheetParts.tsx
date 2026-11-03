@@ -17,8 +17,8 @@ export type CallSheetInfo = NonNullable<FunctionReturnType<typeof api.callSheets
 export type Person = CallSheetInfo["people"][number];
 export const first = (n: string) => n.trim().split(/\s+/)[0] || n;
 const names = (ps: Person[]) => ps.map((p) => p.name).join(", ");
-/** Who it actually goes to now: ticked, able to read it in the portal, and not a guest (guests get access in step 4). */
-export const reachable = (ps: Person[]) => ps.filter((p) => p.on && p.access && p.kind !== "guest");
+/** Who it actually goes to now: ticked, and able to read it (crew and client people in the portal, guests by their link). */
+export const reachable = (ps: Person[]) => ps.filter((p) => p.on && p.access);
 export const groupsOf = (cs: CallSheetInfo) => ({
   crew: cs.people.filter((p) => p.kind === "crew"), client: cs.people.filter((p) => p.kind === "client"), guests: cs.people.filter((p) => p.kind === "guest"),
 });
@@ -39,7 +39,7 @@ export function PeoplePicker({ cs, show, compact }: { cs: CallSheetInfo; show: (
   const row = (p: Person) => (
     <div key={p.id} className="cs-person">
       <Checkbox checked={p.on} disabled={!p.access && p.kind !== "guest" && !p.on} onChange={(on) => void set(p, on)}
-        label={<>{p.name}{p.role ? ` · ${p.role}` : ""}</>} hint={p.kind === "guest" ? "Guest · gets access in the next update" : p.note ?? (p.kind === "client" ? p.email : undefined)} />
+        label={<>{p.name}{p.role ? ` · ${p.role}` : ""}</>} hint={p.kind === "guest" ? `Guest · ${p.access ? p.email : p.note ?? p.email}` : p.note ?? (p.kind === "client" ? p.email : undefined)} />
       {p.kind === "guest" && <IconButton icon="close" label={`Remove ${p.name}`} bare iconSize={14} onClick={() => void removeGuest({ callSheetId: cs._id, id: p.id }).catch((e) => show(errText(e)))} />}
     </div>
   );
@@ -53,13 +53,13 @@ export function PeoplePicker({ cs, show, compact }: { cs: CallSheetInfo; show: (
       {g.guests.map(row)}
       <button type="button" className="cs-addguest" onClick={() => setAdding(true)}><Icon name="plus" size={16} />Add a guest</button>
       {!compact && <div className="cs-info"><Icon name="info" size={18} /><span><b>Guests are one-off people for this shoot</b><br />
-        They get a light login that shows only this call sheet. It ends when the project is closed or its dates end, and they can be added to any number of shoots. Everyone on the sheet sees the whole sheet. Guest logins arrive in the next update: until then guests are on the sheet but aren’t sent it.</span></div>}
+        They get a light login that shows only this call sheet. It ends when the project is closed or its dates end, and they can be added to any number of shoots. Everyone on the sheet sees the whole sheet.</span></div>}
       {adding && <AddGuest callSheetId={cs._id} onClose={() => setAdding(false)} show={show} />}
     </div>
   );
 }
 
-/** Add a guest (766:6270). Stored on the sheet now; their login arrives in step 4. */
+/** Add a guest (766:6270). They get email 41 with their own link when the sheet is sent (step 4). */
 export function AddGuest({ callSheetId, onClose, show }: { callSheetId: Id<"callSheets">; onClose: () => void; show: (m: string) => void }) {
   const add = useMutation(api.callSheets.addGuest);
   const [name, setName] = useState("");
@@ -85,7 +85,7 @@ export function AddGuest({ callSheetId, onClose, show }: { callSheetId: Id<"call
           <div className="qz-chips">{(["Talent", "Other"] as const).map((k) => <button key={k} type="button" className={`qz-chip${kind === k ? " on" : ""}`} aria-pressed={kind === k} onClick={() => setKind(k)}>{k}</button>)}</div>
           {kind === "Other" && <input className="input" value={other} placeholder="Their role, e.g. Stylist" aria-label="Their role" onChange={(e) => setOther(e.target.value)} style={{ marginTop: 8 }} />}
         </div>
-        <div className="cs-info"><Icon name="info" size={18} /><span><b>Access ends when the project is closed or its dates end</b><br />You can also add them to other shoots, and end their access by hand from the call sheet. Their login arrives in the next update; until then they’re listed on the sheet but not sent it.</span></div>
+        <div className="cs-info"><Icon name="info" size={18} /><span><b>Access ends when the project is closed or its dates end</b><br />You can also add them to other shoots, and end their access by hand from the call sheet.</span></div>
         {err && <p className="error" role="alert">{err}</p>}
         <div className="dfoot"><button type="button" className="btn outline" onClick={onClose}>Cancel</button><Button variant="primary" loading={busy} disabled={!name.trim() || !email.trim()} onClick={() => void go()}>Add guest</Button></div>
       </div>
@@ -97,17 +97,17 @@ export function AddGuest({ callSheetId, onClose, show }: { callSheetId: Id<"call
 export function SendSheet({ cs, onClose, show, before, onSent }: { cs: CallSheetInfo; onClose: () => void; show: (m: string) => void; before?: () => Promise<void>; onSent?: () => void }) {
   const send = useMutation(api.callSheets.send);
   const g = groupsOf(cs);
-  const crew = reachable(g.crew), client = reachable(g.client), guests = g.guests.filter((p) => p.on);
-  const [on, setOn] = useState({ crew: crew.length > 0, client: client.length > 0 });
+  const crew = reachable(g.crew), client = reachable(g.client), guests = reachable(g.guests);
+  const [on, setOn] = useState({ crew: crew.length > 0, client: client.length > 0, guests: guests.length > 0 });
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const n = (on.crew ? crew.length : 0) + (on.client ? client.length : 0);
+  const n = (on.crew ? crew.length : 0) + (on.client ? client.length : 0) + (on.guests ? guests.length : 0);
   const go = async () => {
     setBusy(true);
     try {
       await before?.();
-      const r = await send({ callSheetId: cs._id, crew: on.crew, client: on.client, message: message.trim() || undefined });
-      show(`Sent to ${r.sent} ${r.sent === 1 ? "person" : "people"}${r.skipped.length ? `. Not sent to ${r.skipped.join(", ")} (no portal access yet)` : ""}`);
+      const r = await send({ callSheetId: cs._id, crew: on.crew, client: on.client, guests: on.guests, message: message.trim() || undefined });
+      show(`Sent to ${r.sent} ${r.sent === 1 ? "person" : "people"}${r.skipped.length ? `. Not sent to ${r.skipped.join(", ")} (can’t open it)` : ""}`);
       onSent?.(); onClose();
     } catch (e) { show(errText(e)); setBusy(false); }
   };
@@ -118,8 +118,8 @@ export function SendSheet({ cs, onClose, show, before, onSent }: { cs: CallSheet
         <div className="cs-groups">
           {crew.length > 0 && <Checkbox checked={on.crew} onChange={(v) => setOn({ ...on, crew: v })} label={`Crew · ${crew.length}`} hint={names(crew)} />}
           {client.length > 0 && <Checkbox checked={on.client} onChange={(v) => setOn({ ...on, client: v })} label={`${cs.client ?? "Client"} · ${client.length}`} hint={names(client)} />}
-          {guests.length > 0 && <Checkbox checked={false} disabled onChange={() => undefined} label={`Guests · ${guests.length}`} hint={`${names(guests)} · gets access in the next update`} />}
-          {!crew.length && !client.length && <p className="wp-small secondary">Nobody ticked can open the portal yet. Tick people in Details first.</p>}
+          {guests.length > 0 && <Checkbox checked={on.guests} onChange={(v) => setOn({ ...on, guests: v })} label={`Guests · ${guests.length}`} hint={`${names(guests)} · ${guests.length === 1 ? "gets a light login" : "get a light login"} for this shoot`} />}
+          {!crew.length && !client.length && !guests.length && <p className="wp-small secondary">Nobody ticked can open it yet. Tick people in Details first.</p>}
         </div>
         <TextArea label="Message (optional)" rows={2} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Looking forward to it. Questions, reply to this email." />
         <div className="dfoot"><button type="button" className="btn outline" onClick={onClose}>Cancel</button><Button variant="primary" loading={busy} disabled={!n} onClick={() => void go()}>Send call sheet</Button></div>

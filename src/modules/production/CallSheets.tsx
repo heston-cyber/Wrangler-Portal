@@ -183,7 +183,7 @@ export function CallSheetQuestions({ callSheetId }: { callSheetId: string }) {
   const rows: Array<[string, string]> = [
     ["Shoot", `${cs.title} · ${sheetDay(cs.shoot.date)}`], ["Crew call · Talent call · Wrap", [a.crewCall, a.talentCall, a.wrap].map((x) => (x ? clockOf(x) : "–")).join(" · ")],
     ["Location", [a.locationName, a.address].filter(Boolean).join(", ") || "–"],
-    ["Gets it", [`${reachable(g.crew).length} crew`, `${reachable(g.client).length} client ${reachable(g.client).length === 1 ? "person" : "people"}`, guests ? `${guests} ${guests === 1 ? "guest" : "guests"} (access in the next update)` : ""].filter(Boolean).join(", ")],
+    ["Gets it", [`${reachable(g.crew).length} crew`, `${reachable(g.client).length} client ${reachable(g.client).length === 1 ? "person" : "people"}`, reachable(g.guests).length ? `${reachable(g.guests).length} ${reachable(g.guests).length === 1 ? "guest" : "guests"}` : ""].filter(Boolean).join(", ")],
     ["Schedule", `${a.schedule.filter((r) => r.time || r.what).length} rows`], ["Weather", a.weather ? "Added the day before" : "Not added"], ["Starts from", tplName],
   ];
   return (
@@ -278,6 +278,7 @@ export function CallSheetTemplate({ templateId }: { templateId: string }) {
 export function CallSheetDetail({ callSheetId }: { callSheetId: string }) {
   const cs = useQuery(api.callSheets.get, { callSheetId });
   const remind = useMutation(api.callSheets.remind);
+  const endGuest = useMutation(api.callSheets.endGuest);
   const [dialog, setDialog] = useState<"update" | "preview" | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, show] = useToast();
@@ -289,11 +290,21 @@ export function CallSheetDetail({ callSheetId }: { callSheetId: string }) {
     try { const r = await remind({ callSheetId: cs._id, ...(id ? { id } : {}) }); show(r.sent ? `Reminder sent to ${r.sent === 1 ? (cs.people.find((p) => p.id === id)?.name ?? "1 person") : `${r.sent} people`}` : "Everyone it went to has opened it, or was just reminded."); }
     catch (e) { show(errText(e)); } finally { setBusy(null); }
   };
-  const sentTo = cs.people.filter((p) => p.sentAt || p.kind === "guest");
+  const sentTo = cs.people.filter((p) => p.sentAt || (p.kind === "guest" && p.on));
   const list = cs.status === "sent" ? sentTo : cs.people.filter((p) => p.on);
-  const sub = (p: CallSheetInfo["people"][number]) => p.kind === "crew" ? `Crew${p.role ? ` · ${p.role}` : ""}` : p.kind === "client" ? (cs.client ?? "Client") : `Guest · ${p.role ?? "Talent"} · gets access in the next update`;
+  type P = CallSheetInfo["people"][number];
+  // Step 4 (D127): a guest's line says where their access stands (769:7589 / 766:6342: "has not signed in yet").
+  const guestNote = (p: P) => p.endedAt ? "access ended" : !p.access ? (p.note ?? "can’t open it").replace(/^./, (c) => c.toLowerCase()) : p.sentAt && !p.openedAt ? "has not signed in yet" : "";
+  const sub = (p: P) => p.kind === "crew" ? `Crew${p.role ? ` · ${p.role}` : ""}` : p.kind === "client" ? (cs.client ?? "Client") : [`Guest · ${p.role ?? "Talent"}`, guestNote(p)].filter(Boolean).join(" · ");
   const guests = cs.people.filter((p) => p.kind === "guest" && p.on);
-  const notOpened = cs.people.filter((p) => p.sentAt && !p.openedAt && p.kind !== "guest" && p.access).length;
+  const notOpened = cs.people.filter((p) => p.sentAt && !p.openedAt && p.access).length;
+  const chipOf = (p: P) => p.kind === "guest" && p.endedAt ? <StatusChip tone="neutral">Access ended</StatusChip> : p.kind === "guest" && !p.sentAt ? (cs.status === "sent" ? <StatusChip tone="neutral">Not sent</StatusChip> : undefined)
+    : cs.status !== "sent" ? undefined : p.openedAt ? <StatusChip tone="success">Opened {opened(p.openedAt)}</StatusChip> : <StatusChip tone="warning">Not opened</StatusChip>;
+  const doEnd = async (p: P) => {
+    if (!window.confirm(`End ${p.name}’s access to this call sheet? Their link will show that it’s no longer available.`)) return;
+    setBusy(`end:${p.id}`);
+    try { await endGuest({ callSheetId: cs._id, id: p.id }); show(`${p.name}’s access ended`); } catch (e) { show(errText(e)); } finally { setBusy(null); }
+  };
   return (
     <>
       <Crumbs>{CS}<Sep /><span className="here">{cs.client ? `${cs.client} · ${short}` : short}</span></Crumbs>
@@ -311,9 +322,9 @@ export function CallSheetDetail({ callSheetId }: { callSheetId: string }) {
                 : list.map((p, i) => (
                   <Line key={p.id} first={i === 0}>
                     <ListRow className="ilead ovact cs-who" lead={{ icon: "user" }} title={p.name}
-                      meta={<><span className="hide-lg">{sub(p)}</span><span className="show-sm">{sub(p)}{p.kind !== "guest" ? (p.openedAt ? " · Opened" : cs.status === "sent" ? " · Not opened" : "") : ""}</span></>}
-                      chip={p.kind === "guest" ? <StatusChip tone="neutral">Next update</StatusChip> : cs.status !== "sent" ? undefined : p.openedAt ? <StatusChip tone="success">Opened {opened(p.openedAt)}</StatusChip> : <StatusChip tone="warning">Not opened</StatusChip>}
-                      action={cs.status === "sent" && p.kind !== "guest" && p.sentAt && !p.openedAt && p.access ? <Button size="sm" loading={busy === p.id} onClick={() => void doRemind(p.id)}>Remind</Button> : undefined} />
+                      meta={<><span className="hide-lg">{sub(p)}</span><span className="show-sm">{sub(p)}{p.sentAt && !p.endedAt ? (p.openedAt ? " · Opened" : cs.status === "sent" ? " · Not opened" : "") : ""}</span></>}
+                      chip={chipOf(p)}
+                      action={cs.status === "sent" && p.sentAt && !p.openedAt && p.access ? <Button size="sm" loading={busy === p.id} onClick={() => void doRemind(p.id)}>Remind</Button> : undefined} />
                   </Line>
                 ))}
             </Card>
@@ -327,8 +338,11 @@ export function CallSheetDetail({ callSheetId }: { callSheetId: string }) {
               </dl>
             </Card>
             {guests.length > 0 && <Card label="Guest access" head={<SectionHead label="Guest access" />}>
-              <dl className="pov-paid prod-week">{guests.map((g) => <Fragment key={g.id}><dt>{g.name}</dt><dd>Gets access in the next update</dd></Fragment>)}</dl>
-              <p className="wp-small secondary cs-pad">Guest logins arrive in the next update. Their access will end when the project closes or its dates end, and you’ll be able to end it by hand.</p>
+              <dl className="pov-paid prod-week cs-guests">{guests.map((g) => <Fragment key={g.id}><dt>{g.name}</dt><dd>
+                {g.endedAt ? "Access ended" : !g.access ? g.note : "Ends when the project closes"}
+                {!g.endedAt && g.access && <Button size="sm" variant="ghost" loading={busy === `end:${g.id}`} onClick={() => void doEnd(g)}>End access</Button>}
+              </dd></Fragment>)}</dl>
+              <p className="wp-small secondary cs-pad">Also ends when the project’s dates end. You can end it by hand.</p>
             </Card>}
           </div>
         </div>
