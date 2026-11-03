@@ -26,6 +26,7 @@ type Db = QueryCtx["db"];
 export type Pass = Doc<"guestPasses">;
 export const CODE_MINUTES = 10;
 export const MAX_TRIES = 5;
+export const MAX_WRONG_A_DAY = 15; // review L5: then the pass is locked until the owner sends it to them again
 export const TOKEN_RE = /^[A-Za-z0-9_-]{16,64}$/;
 
 /** A project is closed when it's in Delivery with the final files unlocked (as Production › New shoot reads it). */
@@ -39,6 +40,15 @@ export async function hasOwnLogin(db: Db, email: string): Promise<boolean> {
   if (allowedEmails().includes(e)) return true;
   if ((await db.query("memberships").withIndex("by_email", (q) => q.eq("email", e)).collect()).some((m) => !m.revokedAt)) return true;
   return (await db.query("users").withIndex("email", (q) => q.eq("email", e)).collect()).some((u) => u.role !== "guest");
+}
+
+/** Review L1: whether the login an email has belongs to this business (an owner, client or vendor membership here, or
+ *  Wrangler's allow list for the default business). Only then may the owner's page say why it can't be a guest; for a
+ *  login elsewhere it gets a neutral note, so one business can't learn who has logins with another. */
+export async function ownLoginHere(db: Db, email: string, biz: Id<"businesses">, defaultBiz: Id<"businesses"> | null): Promise<boolean> {
+  const e = email.trim().toLowerCase();
+  if (allowedEmails().includes(e) && biz === defaultBiz) return true;
+  return (await db.query("memberships").withIndex("by_email", (q) => q.eq("email", e)).collect()).some((m) => !m.revokedAt && m.businessId === biz);
 }
 
 export type Why = "gone" | "notSent" | "ended" | "cancelled" | "over" | "closed";

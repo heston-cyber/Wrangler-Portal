@@ -107,15 +107,15 @@ describe("access matrix", () => {
     expect(missing).toEqual([]);
   });
 
-  for (const who of ["nobody", "stranger", "client", "vendor", "guest"] as const) {
+  for (const who of ["nobody", "stranger", "client", "vendor", "guest", "guestInvited"] as const) {
     test(`${who}: every function refuses, except the ones meant to answer`, async () => {
       const { t, ids } = await setup();
       vi.stubGlobal("fetch", async () => new Response("{}", { status: 500 })); // nothing external may be reached
-      const as = who === "nobody" ? t : t.withIdentity({ subject: who === "stranger" ? ids.strangerSub : who === "vendor" ? ids.vendorSub : who === "guest" ? ids.guestSub : ids.clientSub });
+      const as = who === "nobody" ? t : t.withIdentity({ subject: who === "stranger" ? ids.strangerSub : who === "vendor" ? ids.vendorSub : who === "guest" ? ids.guestSub : who === "guestInvited" ? ids.guestInvitedSub : ids.clientSub });
       const table = argsFor(ids);
       const results: Record<string, string> = {};
       for (const f of publicFunctions()) {
-        const allowed = f.key in OPEN || (who === "client" && SIGNED_IN.has(f.key)) || (who === "vendor" && VENDOR.has(f.key)) || (who === "guest" && f.key in GUEST);
+        const allowed = f.key in OPEN || (who === "client" && SIGNED_IN.has(f.key)) || (who === "vendor" && VENDOR.has(f.key)) || ((who === "guest" || who === "guestInvited") && f.key in GUEST);
         if (KEYED.has(f.key)) { await expect(call(as, f.ref, table[f.key], "")).rejects.toThrow(/Not allowed/); results[f.key] = "denied (own key)"; continue; }
         try {
           await call(as, f.ref, table[f.key], "");
@@ -137,7 +137,7 @@ describe("access matrix", () => {
     const me = t.withIdentity({ subject: ids.ownerSub });
     expect(await me.query(api.library.overview, {})).toBeTruthy();
     expect((await me.query(api.users.me, {}))?.role).toBe("owner");
-    expect(await me.query(api.clients.listInvites, {})).toHaveLength(1);
+    expect(await me.query(api.clients.listInvites, {})).toHaveLength(2); // the client's, and the invited guest's (step 4 review)
   });
 
   test("a client sees their own identity and account, and nothing else", async () => {

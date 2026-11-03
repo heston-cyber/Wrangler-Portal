@@ -589,7 +589,8 @@ export const callSheets = query({
         const r = await sentToVendor(ctx, cs, vendor._id);
         const s = r ? await ctx.db.get(cs.shootId) : null;
         const p = s ? await ctx.db.get(s.projectId) : null;
-        if (r && s && p && s.status === "scheduled" && s.date >= todayCentral()) out.push({ _id: cs._id, project: label(p), date: s.date, opened: !!r.openedAt, sentAt: cs.sent!.at });
+        // The live date decides whether it's still coming up; the one shown is as sent (review L6).
+        if (r && s && p && s.status === "scheduled" && s.date >= todayCentral()) out.push({ _id: cs._id, project: cs.sent!.heading ?? label(p), date: cs.sent!.date ?? s.date, opened: !!r.openedAt, sentAt: cs.sent!.at });
       }
     }
     return out.sort((a, b) => a.date.localeCompare(b.date));

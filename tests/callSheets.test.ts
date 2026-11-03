@@ -134,7 +134,7 @@ describe("call sheets", () => {
     expect(m40.text).toContain(`https://app.wranglerportal.com/vendor/call-sheets/${csId}`);
     expect(sm.find((m) => m.to === "maya@harbor.example")!.text).toContain(`https://app.wranglerportal.com/call-sheets/${csId}`);
     // A retried job sends nothing twice.
-    const again = await w.t.action(internal.callSheets.mail, { callSheetId: csId, out: [{ id: `crew:${kJ}`, email: JORDAN, name: "Jordan Ellis", kind: "crew", mail: "first", key: `callsheet:${csId}:first:${JORDAN}`, call: "07:30" }] });
+    const again = await w.t.action(internal.callSheets.mail, { callSheetId: csId, out: [{ id: `crew:${kJ}`, email: JORDAN, name: "Jordan Ellis", kind: "crew", mail: "first", key: `callsheet:${csId}:first:crew:${kJ}`, call: "07:30" }] });
     expect(again).toBe(0);
     expect(sheetMails(mails)).toHaveLength(3);
     // Maya's Inbox.
@@ -202,7 +202,7 @@ describe("call sheets", () => {
     expect(m42.text).toContain("Nothing else changed for you.");
     expect(nodesOf((await w.maya.query(api.callSheets.forClient, { callSheetId: csId })).page, "location")[0].attrs.talentCall).toBe("10:00");
     expect((await w.heston.query(api.callSheets.get, { callSheetId: csId })).changed).toBe(false);
-    const retry = await w.t.action(internal.callSheets.mail, { callSheetId: csId, changed: "x", out: [{ id: "client:maya@harbor.example", email: "maya@harbor.example", name: "Maya Brooks", kind: "client", mail: "update", key: `callsheet:${csId}:update:1:maya@harbor.example`, call: "07:30", was: "07:30" }] });
+    const retry = await w.t.action(internal.callSheets.mail, { callSheetId: csId, changed: "x", out: [{ id: "client:maya@harbor.example", email: "maya@harbor.example", name: "Maya Brooks", kind: "client", mail: "update", key: `callsheet:${csId}:update:1:client:maya@harbor.example`, call: "07:30", was: "07:30" }] });
     expect(retry).toBe(0);
     // A second update is a second email each; Maya has switched call sheet emails off (her Inbox still gets it).
     await w.maya.mutation(api.notifications.setClient, { key: "call_sheets", on: false });

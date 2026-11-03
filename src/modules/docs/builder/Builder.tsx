@@ -569,7 +569,7 @@ export default function Builder({ mode }: { mode: Mode }) {
             style={{ width: pageW, minHeight: px(PAGE_PT[st.pageSize].h), background: st.page, color: st.text, fontFamily: B, fontSize: textPx, padding: `${padPx}px`, ["--wsb-accent" as string]: st.accent, ["--wsb-muted" as string]: st.muted, ["--wsb-heading" as string]: st.heading, ["--wsb-hfont" as string]: H, ["--wsb-bfont" as string]: B, ["--wsb-text" as string]: st.text, ["--wsb-pagebg" as string]: st.page }}>
             {st.cover && files[st.cover.fileId] && <div className="wsb-cover" style={{ height: px(st.cover.height), backgroundImage: `url(${files[st.cover.fileId]})`, margin: `-${padPx}px -${padPx}px ${px(18)}px` }} />}
             {st.logo && files[st.logo.fileId] && <div style={{ textAlign: st.logo.align, marginBottom: px(st.baseSize * 1.2) }}><img src={files[st.logo.fileId]!} alt="Logo" style={{ width: px(st.logo.width) }} /></div>}
-            <PageEditor page={doc.page} onChange={onPage} onEditor={setEditor} onSelectText={onSelectText} onMenu={(m) => { if (picking || Date.now() - justPicked.current < 1500) return; setMenu(m); }} missing={missing} />
+            <PageEditor page={doc.page} callBlocks={isCall} onChange={onPage} onEditor={setEditor} onSelectText={onSelectText} onMenu={(m) => { if (picking || Date.now() - justPicked.current < 1500) return; setMenu(m); }} missing={missing} />
             {st.footer && <div className="wsb-footer" style={{ color: st.muted, fontSize: textPx * 0.75 }}><span>{doc.title}</span><span>Page 1 of …</span></div>}
           </div>
         </div>

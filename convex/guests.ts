@@ -23,7 +23,8 @@ import { sha256Hex } from "./lib/hash";
 import { bump } from "./lib/rate";
 import { callFor, locationOf, sheetDay, sheetDayLong } from "./lib/callSheet";
 import { nodesOf, pageOf } from "./lib/wsBuilder";
-import { CODE_MINUTES, MAX_TRIES, TOKEN_RE, addPass, hasOwnLogin, masked, requireGuest, sheetState, type Pass } from "./lib/guests";
+import { CODE_MINUTES, MAX_TRIES, MAX_WRONG_A_DAY, TOKEN_RE, addPass, hasOwnLogin, masked, requireGuest, sheetState, type Pass } from "./lib/guests";
+import { todayCentral } from "./lib/bookings";
 import { markOpened, readerView, shootOf } from "./callSheets";
 
 type Ctx = QueryCtx | MutationCtx;
@@ -31,13 +32,15 @@ const OWN_LOGIN = "This email has its own WranglerPortal login. Sign in with you
 const NO_LINK = "This link doesn't work. Open the newest email about the call sheet.";
 const GONE = "This call sheet is no longer available.";
 const BAD_CODE = "That code didn't match, or it's older than 10 minutes. Ask for a new one.";
+const LOCKED = "Too many wrong codes. Reply to the email about the call sheet and ask for it to be sent to you again.";
 
 const passByToken = async (ctx: Ctx, token: string) =>
   TOKEN_RE.test(token) ? await ctx.db.query("guestPasses").withIndex("by_token", (q) => q.eq("token", token)).unique() : null;
 const defaultBiz = async (ctx: Ctx) => (await defaultBusiness(ctx))?._id ?? null;
 
-/** "Product shoot · Harbor Coffee" and "Tue Nov 3", for pages that show which sheet a link was for. */
+/** "Product shoot · Harbor Coffee" and "Tue Nov 3", for pages that show which sheet a link was for: as sent (review L6). */
 async function heading(ctx: Ctx, cs: Doc<"callSheets"> | null, shoot: Doc<"shoots"> | null) {
+  if (cs?.sent?.heading) return { title: cs.sent.heading, date: cs.sent.date ?? shoot?.date ?? null };
   const sh = cs ? await shootOf(ctx, cs.shootId) : null;
   return { title: sh?.title ?? "Call sheet", date: shoot?.date ?? sh?.s.date ?? null };
 }
@@ -57,7 +60,7 @@ export const intro = query({
     const b = await ctx.db.get(pass.businessId);
     const business = { name: b?.name ?? "Wrangler Productions", legalName: b?.legalName ?? null, owner: b?.ownerName?.trim() || null };
     if (!st.ok) return { state: "ended" as const, ...h, business };
-    return { state: "active" as const, ...h, dayLong: sheetDayLong(st.shoot.date), name: st.r.name, email: masked(pass.email), business };
+    return { state: "active" as const, ...h, dayLong: sheetDayLong(h.date ?? st.shoot.date), name: st.r.name, email: masked(pass.email), business };
   },
 });
 
@@ -86,6 +89,7 @@ export const issueCode = trustedMutation({
     if (await hasOwnLogin(ctx.db, pass.email)) return { error: OWN_LOGIN }; // first: never a guest login for them
     const st = await sheetState(ctx.db, pass, await defaultBiz(ctx));
     if (!st.ok) return { error: st.why === "gone" || st.why === "notSent" ? NO_LINK : GONE };
+    if (pass.lockedAt) return { error: LOCKED };
     const now = Date.now();
     if (pass.codeSentAt && now - pass.codeSentAt < 30_000) return { error: "A code is on its way. Wait half a minute before asking for another." };
     await bump(ctx, "guestCode", pass.email); // 6 an hour per email
@@ -113,13 +117,21 @@ export const redeem = trustedMutation({
     if (await hasOwnLogin(ctx.db, pass.email)) return { error: OWN_LOGIN }; // first: never a guest login for them
     const st = await sheetState(ctx.db, pass, await defaultBiz(ctx));
     if (!st.ok) return { error: st.why === "gone" || st.why === "notSent" ? NO_LINK : GONE };
+    if (pass.lockedAt) return { error: LOCKED };
     const now = Date.now();
     const tries = pass.codeTries ?? 0;
     if (!pass.codeHash || !pass.codeExpiresAt || pass.codeExpiresAt < now || tries >= MAX_TRIES || !/^\d{6}$/.test(code)) return { error: BAD_CODE };
     if ((await sha256Hex(`${pass._id}:${code}`)) !== pass.codeHash) {
-      // A wrong try counts; the fifth wipes the code.
-      await ctx.db.patch(pass._id, tries + 1 >= MAX_TRIES ? { codeHash: undefined, codeExpiresAt: undefined, codeTries: undefined } : { codeTries: tries + 1 });
-      return { error: BAD_CODE };
+      // A wrong try counts; the fifth wipes the code. Review L5: and 15 in a day lock the pass until the owner sends the
+      // sheet to them again (Send an update or Remind opens it; passesSent in callSheets.ts).
+      const today = todayCentral();
+      const wrong = (pass.wrongDay === today ? pass.wrongCount ?? 0 : 0) + 1;
+      const locked = wrong >= MAX_WRONG_A_DAY;
+      await ctx.db.patch(pass._id, {
+        ...(tries + 1 >= MAX_TRIES || locked ? { codeHash: undefined, codeExpiresAt: undefined, codeTries: undefined } : { codeTries: tries + 1 }),
+        wrongDay: today, wrongCount: wrong, ...(locked ? { lockedAt: now } : {}),
+      });
+      return { error: locked ? LOCKED : BAD_CODE };
     }
     await ctx.db.patch(pass._id, { codeHash: undefined, codeExpiresAt: undefined, codeTries: undefined });
     const rows = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", pass.email)).collect();
@@ -146,7 +158,12 @@ export const home = query({
   args: { businessId: v.optional(v.id("businesses")) },
   handler: async (ctx, a) => {
     const me = await requireGuest(ctx);
-    const passes = (await ctx.db.query("guestPasses").withIndex("by_email", (q) => q.eq("email", me.email)).collect()).sort((x, y) => y.createdAt - x.createdAt);
+    // Review L2: only businesses that have sent this guest something (a pass with sentAt; ended access clears it), soonest
+    // shoot first, so the default is one with sheets coming up. Passes are a hint for the list only: every sheet shown
+    // below is checked live (sheetState), and a business never appears just because it added them to a draft.
+    const today = todayCentral();
+    const rank = (p: Pass) => `${(p.date ?? "") >= today ? 0 : 1}:${(p.date ?? "") >= today ? p.date : String(9e15 - (p.sentAt ?? 0))}`;
+    const passes = (await ctx.db.query("guestPasses").withIndex("by_email", (q) => q.eq("email", me.email)).collect()).filter((p) => p.sentAt).sort((x, y) => rank(x).localeCompare(rank(y)));
     const ids = [...new Set(passes.map((p) => p.businessId))];
     const businesses = [];
     for (const id of ids) { const b = await ctx.db.get(id); businesses.push({ businessId: id, name: b?.name ?? "A business" }); }
@@ -160,7 +177,7 @@ export const home = query({
         if (!st.ok) continue;
         const page = pageOf(st.cs.sent!.page);
         const sh = await shootOf(ctx, st.cs.shootId);
-        sheets.push({ token: p.token, title: sh?.title ?? "Call sheet", date: st.shoot.date, call: callFor(page, st.r), place: locationOf(nodesOf(page, "location")[0]).name || st.shoot.location, updated: st.cs.sent!.round > 0 });
+        sheets.push({ token: p.token, title: st.cs.sent!.heading ?? sh?.title ?? "Call sheet", date: st.cs.sent!.date ?? st.shoot.date, call: callFor(page, st.r), place: locationOf(nodesOf(page, "location")[0]).name || st.shoot.location, updated: st.cs.sent!.round > 0 });
       }
     }
     return { name: me.name, email: me.email, businesses, businessId: biz, sheets: sheets.sort((x, y) => x.date.localeCompare(y.date)) };
@@ -184,7 +201,7 @@ export const sheet = query({
     if (!view) return null;
     const { project: _project, ...rest } = view; // a guest never gets a link into the project
     const last = [...st.cs.history].reverse().find((h) => h.kind === "update");
-    return { ended: false as const, ...rest, change: view.updated && last?.detail ? { at: last.at, text: last.detail } : null, day: sheetDay(st.shoot.date) };
+    return { ended: false as const, ...rest, change: view.updated && last?.detail ? { at: last.at, text: last.detail } : null, day: sheetDay(view.date) };
   },
 });
 
@@ -211,6 +228,12 @@ export const backfillPasses = internalMutation({
     for (const cs of await ctx.db.query("callSheets").collect()) {
       const have = new Set((await ctx.db.query("guestPasses").withIndex("by_sheet", (q) => q.eq("callSheetId", cs._id)).collect()).map((p) => p.personId));
       for (const r of cs.recipients) if (r.kind === "guest" && !have.has(r.id)) { await addPass(ctx, cs, r.id, r.email); added++; }
+      // Review L2: passes of guests it already went to get the "sent" hint the /guest list uses.
+      const shoot = await ctx.db.get(cs.shootId);
+      for (const p of await ctx.db.query("guestPasses").withIndex("by_sheet", (q) => q.eq("callSheetId", cs._id)).collect()) {
+        const r = cs.recipients.find((x) => x.id === p.personId);
+        if (r?.sentAt && !r.endedAt && !p.sentAt) await ctx.db.patch(p._id, { sentAt: r.sentAt, date: cs.sent?.date ?? shoot?.date });
+      }
     }
     return { added };
   },

@@ -111,7 +111,7 @@ describe("call-sheet guests", () => {
     expect(m41[0].text).toContain("See you there.");
     expect(sheetMails(mails, PAT)).toHaveLength(1);
     // A retried job sends nothing twice.
-    expect(await w.t.action(internal.callSheets.mail, { callSheetId: cs1, out: [{ id: riley, email: RILEY, name: "Riley Quinn", kind: "guest", mail: "first", key: `callsheet:${cs1}:first:${RILEY}`, call: "07:30" }] })).toBe(0);
+    expect(await w.t.action(internal.callSheets.mail, { callSheetId: cs1, out: [{ id: riley, email: RILEY, name: "Riley Quinn", kind: "guest", mail: "first", key: `callsheet:${cs1}:first:${riley}`, call: "07:30" }] })).toBe(0);
     expect(sheetMails(mails, RILEY)).toHaveLength(1);
 
     // The link, signed out: whose sheet it is, the email masked; nothing else.
@@ -335,6 +335,6 @@ describe("call-sheet guests", () => {
     expect(projectClosed({ stage: "polish", deliveryUnlockedAt: 1 })).toBe(false);
     const m = guestCallSheetMail(brandFrom(null, { ownerEmail: "h@w.co", logoUrl: null, isDefault: true }), { name: "Riley Quinn", title: "Product shoot · Harbor Coffee", dayLong: "Tuesday, Nov 3", call: "9:00 AM", where: "Studio B", from: "Heston Hill", link: "https://app.wranglerportal.com/guest/abc" });
     expect(m.subject).toBe("Call sheet for Tuesday, Nov 3: Product shoot · Harbor Coffee");
-    for (const line of ["Hi Riley,", "added you to the call sheet for Tuesday, Nov 3.", "Your call", "9:00 AM", "Studio B", "Heston Hill", "No account needed.", "Your access ends when the project is closed.", "Open the call sheet"]) expect(m.text).toContain(line);
+    for (const line of ["Hi Riley,", "added you to the call sheet for Tuesday, Nov 3.", "Your call", "9:00 AM", "Studio B", "Heston Hill", "No account needed.", "Your access ends the day after the shoot, or sooner if the project is closed, the shoot is cancelled or your access is ended.", "Open the call sheet"]) expect(m.text).toContain(line);
   });
 });

@@ -279,7 +279,9 @@ export const updateTemplate = mutation({
     if (!t0) throw new ConvexError("That template doesn't exist.");
     tooBig(a.blocks, a.fields, a.style);
     // A proposal template never keeps prices (review fix): they come from Settings › Pricing each time.
-    const blocks = isProposal(t0) && isPage(a.blocks) && !Array.isArray(a.blocks) ? withoutPrices(a.blocks as Page) : a.blocks;
+    // Review L8: a call-sheet template keeps the layout, never the people (as when it's first saved).
+    const blocks = isProposal(t0) && isPage(a.blocks) && !Array.isArray(a.blocks) ? withoutPrices(a.blocks as Page)
+      : isCallSheet(t0) && isPage(a.blocks) && !Array.isArray(a.blocks) ? withoutPeople(a.blocks as Page) : a.blocks;
     await ctx.db.patch(a.templateId, { name: clean(a.name) || "Untitled template", description: clean(a.description ?? "", 300) || undefined, blocks, fields: a.fields, style: a.style, updatedAt: Date.now() });
     return null;
   },

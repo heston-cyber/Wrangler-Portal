@@ -25,6 +25,8 @@ type Me = { name: string | null; email: string; role: string | null };
 type Intro = FunctionReturnType<typeof api.guests.intro>;
 type Sheet = Extract<NonNullable<FunctionReturnType<typeof api.guests.sheet>>, { ended: false }>;
 type Biz = { name: string; legalName: string | null };
+// Review L7: the rule as it is (lib/guests.ts sheetState).
+const ACCESS_LINE = "You can read this call sheet until the day after the shoot, or until the project is closed, the shoot is cancelled or your access is ended.";
 const legalLine = (b: Biz | null) => (b ? (b.legalName ? `${b.name}, a DBA of ${b.legalName}` : b.name) : "WranglerPortal");
 const errMsg = (e: unknown) => { const t = errText(e); return /^Uncaught|\[CONVEX|Server Error/.test(t) || !t ? "Something went wrong. Try again." : t; };
 
@@ -115,7 +117,7 @@ function GuestSignIn({ token, signedInAs }: { token: string; signedInAs: Me | nu
             <Button variant="ghost" disabled={busy !== null} onClick={() => void ask(true)}>Send another code</Button>
           </div>
         </>}
-        <p className="caption secondary gst-small">This link works until the project is closed.</p>
+        <p className="caption secondary gst-small">{ACCESS_LINE}</p>
       </form>
     </Center>
   );
@@ -172,7 +174,7 @@ function GuestHome({ me }: { me: Me }) {
             <Icon name="chevron-right" size={18} />
           </a>
         ))}
-        <p className="wp-small secondary">You can read each call sheet until its project is closed or the shoot day has passed.</p>
+        <p className="wp-small secondary">You can read each call sheet until the day after its shoot, or until its project is closed, the shoot is cancelled or your access is ended.</p>
       </main>
     </Page>
   );
@@ -234,7 +236,7 @@ function SheetBody({ d }: { d: Sheet }) {
         {producerCard}
         <details className="gst-card glass gst-narrow gst-whole"><summary><span className="wp-eyebrow">The whole sheet</span><Icon name="chevron-down" size={18} /></summary><SheetView page={page} values={d.values} accent={d.accent} /></details>
       </aside>
-      <p className="gst-foot">You can read this call sheet until the project is closed.</p>
+      <p className="gst-foot">{ACCESS_LINE}</p>
     </main>
   );
 }

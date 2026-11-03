@@ -279,6 +279,7 @@ export function CallSheetDetail({ callSheetId }: { callSheetId: string }) {
   const cs = useQuery(api.callSheets.get, { callSheetId });
   const remind = useMutation(api.callSheets.remind);
   const endGuest = useMutation(api.callSheets.endGuest);
+  const restoreGuest = useMutation(api.callSheets.restoreGuest);
   const [dialog, setDialog] = useState<"update" | "preview" | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, show] = useToast();
@@ -300,6 +301,10 @@ export function CallSheetDetail({ callSheetId }: { callSheetId: string }) {
   const notOpened = cs.people.filter((p) => p.sentAt && !p.openedAt && p.access).length;
   const chipOf = (p: P) => p.kind === "guest" && p.endedAt ? <StatusChip tone="neutral">Access ended</StatusChip> : p.kind === "guest" && !p.sentAt ? (cs.status === "sent" ? <StatusChip tone="neutral">Not sent</StatusChip> : undefined)
     : cs.status !== "sent" ? undefined : p.openedAt ? <StatusChip tone="success">Opened {opened(p.openedAt)}</StatusChip> : <StatusChip tone="warning">Not opened</StatusChip>;
+  const doRestore = async (p: P) => {
+    setBusy(`restore:${p.id}`);
+    try { await restoreGuest({ callSheetId: cs._id, id: p.id }); show(`${p.name}’s access is back. They get the sheet with your next update or reminder.`); } catch (e) { show(errText(e)); } finally { setBusy(null); }
+  };
   const doEnd = async (p: P) => {
     if (!window.confirm(`End ${p.name}’s access to this call sheet? Their link will show that it’s no longer available.`)) return;
     setBusy(`end:${p.id}`);
@@ -324,7 +329,7 @@ export function CallSheetDetail({ callSheetId }: { callSheetId: string }) {
                     <ListRow className="ilead ovact cs-who" lead={{ icon: "user" }} title={p.name}
                       meta={<><span className="hide-lg">{sub(p)}</span><span className="show-sm">{sub(p)}{p.sentAt && !p.endedAt ? (p.openedAt ? " · Opened" : cs.status === "sent" ? " · Not opened" : "") : ""}</span></>}
                       chip={chipOf(p)}
-                      action={cs.status === "sent" && p.sentAt && !p.openedAt && p.access ? <Button size="sm" loading={busy === p.id} onClick={() => void doRemind(p.id)}>Remind</Button> : undefined} />
+                      action={cs.status === "sent" && p.access && p.on && ((p.sentAt && !p.openedAt) || (p.kind === "guest" && !p.sentAt)) ? <Button size="sm" loading={busy === p.id} onClick={() => void doRemind(p.id)}>{p.sentAt ? "Remind" : "Send it"}</Button> : undefined} />
                   </Line>
                 ))}
             </Card>
@@ -339,10 +344,11 @@ export function CallSheetDetail({ callSheetId }: { callSheetId: string }) {
             </Card>
             {guests.length > 0 && <Card label="Guest access" head={<SectionHead label="Guest access" />}>
               <dl className="pov-paid prod-week cs-guests">{guests.map((g) => <Fragment key={g.id}><dt>{g.name}</dt><dd>
-                {g.endedAt ? "Access ended" : !g.access ? g.note : "Ends when the project closes"}
+                {g.endedAt ? "Access ended" : !g.access ? g.note : "Ends the day after the shoot"}
                 {!g.endedAt && g.access && <Button size="sm" variant="ghost" loading={busy === `end:${g.id}`} onClick={() => void doEnd(g)}>End access</Button>}
+                {g.endedAt && <Button size="sm" variant="ghost" loading={busy === `restore:${g.id}`} onClick={() => void doRestore(g)}>Restore access</Button>}
               </dd></Fragment>)}</dl>
-              <p className="wp-small secondary cs-pad">Also ends when the project’s dates end. You can end it by hand.</p>
+              <p className="wp-small secondary cs-pad">Also ends if the project closes or the shoot is cancelled. You can end it by hand, and restore it (they get the sheet again with the next update or reminder).</p>
             </Card>}
           </div>
         </div>

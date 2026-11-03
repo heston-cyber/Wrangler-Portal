@@ -760,7 +760,7 @@ export function guestCallSheetMail(b: MailBrand, d: { name: string | null; title
     { t: "sums", rows: [...(d.call ? [{ label: "Your call", value: d.call, big: true }] : []), ...(d.where ? [{ label: "Where", value: d.where }] : []), { label: "From", value: d.from }] },
     ...(d.message ? [{ t: "p", text: d.message } as Block] : []),
     { t: "p", text: "Open the link to read the whole sheet. You sign in with a 6-digit code we email you. No account needed." },
-    { t: "p", text: "Your access ends when the project is closed." },
+    { t: "p", text: "Your access ends the day after the shoot, or sooner if the project is closed, the shoot is cancelled or your access is ended." },
     { t: "button", label: "Open the call sheet", href: d.link }, { t: "link", href: d.link },
   ], signoff(b), `${d.call ? `${d.call} call · ` : ""}${d.where || d.title}`);
 }

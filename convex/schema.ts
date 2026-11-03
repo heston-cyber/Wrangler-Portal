@@ -1233,9 +1233,11 @@ export default defineSchema({
       openedAt: v.optional(v.number()), lastOpenedAt: v.optional(v.number()),
       remindedAt: v.optional(v.number()), reminders: v.optional(v.number()),
       endedAt: v.optional(v.number()),                  // Phase 5b step 4: a guest whose access the owner ended by hand
+      grant: v.optional(v.number()),                    // review L3: how many times a guest's access was restored (a new email 41 each time)
       addedAt: v.number(),
     })),
-    sent: v.optional(v.object({ title: v.string(), page: v.any(), fields: v.any(), style: v.any(), at: v.number(), round: v.number() })),
+    // review L6: heading ("Launch · Harbor Coffee") and date as they were when it was sent, for readers and Remind.
+    sent: v.optional(v.object({ title: v.string(), page: v.any(), fields: v.any(), style: v.any(), at: v.number(), round: v.number(), heading: v.optional(v.string()), date: v.optional(v.string()) })),
     sentAt: v.optional(v.number()),
     updates: v.optional(v.number()),                    // how many updates have gone out
     history: v.array(v.object({ at: v.number(), kind: v.string(), by: v.optional(v.string()), detail: v.optional(v.string()) })),
@@ -1409,6 +1411,11 @@ export default defineSchema({
     codeExpiresAt: v.optional(v.number()),
     codeTries: v.optional(v.number()),        // wrong tries on this code (5 and it's gone)
     codeSentAt: v.optional(v.number()),
+    wrongDay: v.optional(v.string()),         // review L5: wrong codes today (Central), 15 locks the pass…
+    wrongCount: v.optional(v.number()),
+    lockedAt: v.optional(v.number()),         // …until the owner sends it to them again (Send an update or Remind)
+    sentAt: v.optional(v.number()),           // review L2: the sheet went to them (cleared when access ends); a hint for /guest's
+    date: v.optional(v.string()),             //   business list only, never for access (lib/guests.ts sheetState decides that)
   }).index("by_token", ["token"]).index("by_email", ["email"]).index("by_sheet", ["callSheetId"]),
 
   memberships: defineTable({
