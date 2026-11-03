@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "ask": [
+      "Bash(git push *main*)",
+      "Bash(git push --force*)",
+      "Bash(gh pr merge *)",
+      "Bash(gh api *pulls*)",
+      "Bash(gh api *dispatches*)",
+      "Bash(gh workflow run *)",
+      "Bash(npx convex deploy*)",
+      "Bash(npx convex import*)",
+      "Bash(npx wrangler deploy*)"
+    ],
+    "disableBypassPermissionsMode": "disable"
+  }
+}
