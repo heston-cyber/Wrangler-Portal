@@ -1135,6 +1135,8 @@ export default defineSchema({
     by: v.union(v.literal("app"), v.literal("agent")),
     found: v.number(), cleared: v.number(),
     summary: v.optional(v.string()),
+    // Q47 (Heston, Nov 3): what was open at this run, so a history row opens that day's list. Cleared after 30 days.
+    open: v.optional(v.array(v.object({ key: v.string(), area: v.string(), title: v.string(), status: v.string(), urgent: v.boolean(), count: v.number() }))),
   }).index("by_at", ["at"]),
 
   stripeEvents: defineTable({

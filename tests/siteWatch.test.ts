@@ -235,6 +235,22 @@ test("the agent's door: shut without SITE_WATCH_KEY, refuses a wrong key, and ne
   }
 });
 
+test("Q47: each run keeps that day's open list for 30 days; only admins can open it", async () => {
+  const w = await setup();
+  await w.t.mutation(internal.siteWatch.agentFound, { key: "page:/:phone", title: "Blank on phone" });
+  await check(w);
+  const rep = await w.heston.query(api.siteWatch.report, {});
+  expect(rep.runs[0]).toMatchObject({ by: "app", open: 1 });
+  const day = await w.heston.query(api.siteWatch.run, { id: rep.runs[0]._id });
+  expect(day.open).toEqual([expect.objectContaining({ key: "page:/:phone", title: "Blank on phone", status: "found" })]);
+  for (const who of [w.boss, w.maya, w.stranger]) await expect(who.query(api.siteWatch.run, { id: rep.runs[0]._id })).rejects.toThrow();
+  // 31 days later: cleared by the next run.
+  await w.t.run(async (ctx) => { for (const r of await ctx.db.query("siteWatchRuns").collect()) await ctx.db.patch(r._id, { at: Date.now() - 31 * 86_400_000 }); });
+  expect(await w.heston.query(api.siteWatch.run, { id: rep.runs[0]._id })).toBeNull();
+  await check(w);
+  expect(await w.t.run((ctx) => ctx.db.query("siteWatchRuns").collect())).toHaveLength(1);
+});
+
 test("clean() and isUrgent()", () => {
   expect(clean("to a.b@c.example failed, key sk_live_ABCDEFGHIJ")).toBe("to …@… failed, key sk_…");
   expect(clean("x".repeat(500)).length).toBeLessThanOrEqual(240);

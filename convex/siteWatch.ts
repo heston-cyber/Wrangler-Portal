@@ -20,6 +20,7 @@ import { requireMe } from "./lib/access";
 import { allowedEmails } from "./lib/owners";
 
 const DAY = 24 * 60 * 60 * 1000;
+const KEEP_DAYS = 30; // Q47 (Heston, Nov 3): each run's list is kept 30 days, then cleared
 const OPEN = ["found", "fix_ready", "needs_you"] as const;
 const APP_AREAS = ["email", "job", "stored"];
 
@@ -170,13 +171,26 @@ export const apply = internalMutation({
     }
     // The look worked: a "check failed" problem from an earlier day closes.
     tally(await noteState(ctx, { key: "job:siteWatch.check", area: "job", title: "Site watch's own daily look failed", count: 0 }));
-    let open = 0;
-    for (const st of OPEN) open += (await ctx.db.query("siteWatchFindings").withIndex("by_status", (q) => q.eq("status", st)).collect()).length;
-    await ctx.db.insert("siteWatchRuns", { at: now, by: "app", found, cleared });
-    for (const r of (await ctx.db.query("siteWatchRuns").withIndex("by_at").order("desc").take(260)).slice(200)) await ctx.db.delete(r._id);
-    return { found, cleared, open };
+    const snap = await snapshot(ctx);
+    await ctx.db.insert("siteWatchRuns", { at: now, by: "app", found, cleared, open: snap });
+    await prune(ctx, now);
+    return { found, cleared, open: snap.length };
   },
 });
+
+/** What's open right now, for a run's row (Q47). */
+async function snapshot(ctx: MutationCtx) {
+  const rows: Doc<"siteWatchFindings">[] = [];
+  for (const st of OPEN) rows.push(...(await ctx.db.query("siteWatchFindings").withIndex("by_status", (q) => q.eq("status", st)).collect()));
+  rows.sort((a, b) => Number(!!b.urgent) - Number(!!a.urgent) || b.lastAt - a.lastAt);
+  return rows.slice(0, 100).map((r) => ({ key: r.key, area: r.area, title: r.title, status: r.status, urgent: !!r.urgent, count: r.count }));
+}
+
+/** Runs older than 30 days are cleared (Q47); never more than 500 kept. */
+async function prune(ctx: MutationCtx, now: number) {
+  for (const r of await ctx.db.query("siteWatchRuns").withIndex("by_at", (q) => q.lt("at", now - KEEP_DAYS * DAY)).take(200)) await ctx.db.delete(r._id);
+  for (const r of (await ctx.db.query("siteWatchRuns").withIndex("by_at").order("desc").take(560)).slice(500)) await ctx.db.delete(r._id);
+}
 
 /** The look itself failed: that's a problem too (review M2), so a broken watcher is never silent. */
 export const checkFailed = internalMutation({
@@ -237,8 +251,20 @@ export const report = query({
     for (const st of OPEN) rows.push(...(await ctx.db.query("siteWatchFindings").withIndex("by_status", (q) => q.eq("status", st)).collect()));
     rows.sort((a, b) => Number(!!b.urgent) - Number(!!a.urgent) || b.lastAt - a.lastAt);
     const recent = (await ctx.db.query("siteWatchFindings").order("desc").take(50)).filter((r) => r.status === "fixed" || r.status === "cleared");
-    const runs = await ctx.db.query("siteWatchRuns").withIndex("by_at").order("desc").take(10);
-    return { open: rows.map((r) => view(r)), recent: recent.map((r) => view(r)), runs: runs.map((r) => ({ at: r.at, by: r.by, found: r.found, cleared: r.cleared, summary: r.summary ?? null })) };
+    const runs = await ctx.db.query("siteWatchRuns").withIndex("by_at", (q) => q.gte("at", Date.now() - KEEP_DAYS * DAY)).order("desc").take(60);
+    return { open: rows.map((r) => view(r)), recent: recent.map((r) => view(r)), runs: runs.map((r) => ({ _id: r._id, at: r.at, by: r.by, found: r.found, cleared: r.cleared, summary: r.summary ?? null, open: r.open?.length ?? null })) };
+  },
+});
+
+/** A history row: what was open at that run (Q47). Gone after 30 days. */
+export const run = query({
+  args: { id: v.string() },
+  handler: async (ctx, { id }) => {
+    await requireAdmin(ctx);
+    const rid = ctx.db.normalizeId("siteWatchRuns", id);
+    const r = rid ? await ctx.db.get(rid) : null;
+    if (!r || r.at < Date.now() - KEEP_DAYS * DAY) return null;
+    return { at: r.at, by: r.by, found: r.found, cleared: r.cleared, summary: r.summary ?? null, open: r.open ?? [] };
   },
 });
 
@@ -250,7 +276,7 @@ export const summary = query({
     if (!me || !allowedEmails().includes(me.email.toLowerCase())) return null;
     let open = 0, urgent = 0;
     for (const st of OPEN) for (const r of await ctx.db.query("siteWatchFindings").withIndex("by_status", (q) => q.eq("status", st)).collect()) { open++; if (r.urgent) urgent++; }
-    return { open, urgent };
+    return { open, urgent }; // Q45 (Heston, Nov 3): the Dashboard hides the row when open is 0
   },
 });
 
@@ -340,7 +366,9 @@ export const agentNeedsYou = internalMutation({
 export const agentRun = internalMutation({
   args: { found: v.number(), cleared: v.number(), summary: v.string() },
   handler: async (ctx, a) => {
-    await ctx.db.insert("siteWatchRuns", { at: Date.now(), by: "agent", found: Math.max(0, Math.floor(a.found) || 0), cleared: Math.max(0, Math.floor(a.cleared) || 0), summary: clean(a.summary, 600) });
+    const now = Date.now();
+    await ctx.db.insert("siteWatchRuns", { at: now, by: "agent", found: Math.max(0, Math.floor(a.found) || 0), cleared: Math.max(0, Math.floor(a.cleared) || 0), summary: clean(a.summary, 600), open: await snapshot(ctx) });
+    await prune(ctx, now);
     return null;
   },
 });
