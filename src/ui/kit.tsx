@@ -235,3 +235,33 @@ export function useIsNarrow(px = 820) {
 export function Spinner({ size = 12 }: { size?: number }) {
   return <LoaderCircle size={size} className="spin" aria-hidden />;
 }
+
+/** Nov 2: a right-click menu. `open(e, items)` from an onContextMenu handler; render `node` once. Closes on a click
+ *  elsewhere, Escape, scroll or resize. Items use MenuItem, as in Menu. */
+export function useContextMenu(): [(e: React.MouseEvent, items: React.ReactNode, label?: string) => void, React.ReactNode] {
+  const [at, setAt] = useState<{ x: number; y: number; items: React.ReactNode; label?: string } | null>(null);
+  const pop = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const close = useCallback(() => setAt(null), []);
+  useLayoutEffect(() => {
+    if (!at || !pop.current) return;
+    const p = pop.current.getBoundingClientRect();
+    setPos({ left: Math.max(8, Math.min(at.x, window.innerWidth - p.width - 8)), top: Math.max(8, Math.min(at.y, window.innerHeight - p.height - 8)) });
+  }, [at]);
+  useEffect(() => {
+    if (!at) return;
+    const onDown = (e: PointerEvent) => { if (!pop.current?.contains(e.target as Node)) setAt(null); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setAt(null); };
+    window.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => { window.removeEventListener("pointerdown", onDown, true); window.removeEventListener("keydown", onKey, true); window.removeEventListener("resize", close); window.removeEventListener("scroll", close, true); };
+  }, [at, close]);
+  const open = (e: React.MouseEvent, items: React.ReactNode, label?: string) => { e.preventDefault(); e.stopPropagation(); setPos(null); setAt({ x: e.clientX, y: e.clientY, items, label }); };
+  const node = at ? createPortal(
+    <div ref={pop} className="menu" role="menu" aria-label={at.label} style={{ position: "fixed", zIndex: 1000, ...(pos ?? { left: -9999, top: -9999 }) }} onClick={(e) => e.stopPropagation()}>
+      <MenuContext.Provider value={{ close }}>{at.items}</MenuContext.Provider>
+    </div>, document.body) : null;
+  return [open, node];
+}

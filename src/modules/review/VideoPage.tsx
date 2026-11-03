@@ -7,6 +7,7 @@ import { useConvex, useMutation, useQuery } from "convex/react";
 import {
   AlertTriangle, ArrowUp, Brush, Check, ChevronDown, ChevronUp, Circle, CircleCheckBig, Copy, Download, ListOrdered, Ellipsis, EyeOff, Eye, Keyboard, Maximize, Minimize, MoveUpRight, PanelRight, Pause, Pencil, Play,
   Crosshair, Film, Mic, Plus, Settings, Share2, SlidersHorizontal, Square, Timer, Undo2, Upload, Volume2, VolumeX, X,
+  FolderOpen,
 } from "lucide-react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../convex/_generated/api";
@@ -29,7 +30,8 @@ import { canRecord, useVoiceRecorder } from "./voice/useVoiceRecorder";
 import { mapWords, playedRange, pointersFrom, transcriptText, type Pointer, type VoiceWord } from "../../../convex/lib/voice";
 import { secondsText } from "./notes/NotesPanel";
 import { Sep, TopBar } from "../../shell/Shell";
-import { Menu, MenuItem, MenuLabel, MenuSep, Modal, Spinner, useIsNarrow, useToast } from "../../ui/kit";
+import { Menu, MenuItem, MenuLabel, MenuSep, Modal, Spinner, useContextMenu, useIsNarrow, useToast } from "../../ui/kit";
+import { revealInFinder } from "../../lib/finder";
 import { Button, ButtonLink, DialogHeader, EmptyState } from "../../ui/wp";
 import { FileName, copyText } from "./Register";
 import { shortTitleFrom } from "../../../convex/lib/register";
@@ -156,6 +158,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const reportFrameCount = useMutation(api.library.reportFrameCount);
   const retryCopy = useMutation(api.library.retryCopy);
   const [toast, showToast] = useToast();
+  const [openCtx, ctxMenu] = useContextMenu(); // Nov 2: right-click "Reveal in Finder" on the breadcrumb
   const [uploadVersion, roundGate] = useRoundGate();
 
   const fps: Fps = useMemo(() => ({ num: version?.fpsNum ?? 24000, den: version?.fpsDen ?? 1001 }), [version?.fpsNum, version?.fpsDen]);
@@ -685,6 +688,10 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     </div>
   );
 
+  // Nov 2 (Heston): "Reveal in Finder": this version's render in Dropbox (else its project's folder), the project's
+  // folder, or the Wrangler Review folder for Projects. It copies the path for Finder's ⌘⇧G (lib/finder.ts).
+  const versionPath = (version as { dropboxPath?: string | null } | null)?.dropboxPath ?? data.projectFolder ?? null;
+  const revealMenu = (e: React.MouseEvent, inApp: string | null, what: string) => openCtx(e, <MenuItem icon={<FolderOpen size={16} />} onSelect={() => void revealInFinder(inApp, showToast, what)}>Reveal in Finder</MenuItem>, "Reveal in Finder");
   return (
     <div className={`review${fs ? " fs" : ""}${typing && narrow ? " typing" : ""}`} ref={rootRef}>
       <TopBar right={
@@ -702,12 +709,12 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       }>
         <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps(viewer.home)} aria-label="Home" style={{ display: "flex" }}><BrandImg name="wordmark" className="logo" alt="Wrangler Productions" /></a>
         <Sep /></span>
-        {owner && <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps("/projects")}>Projects</a><Sep /></span>}
+        {owner && <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps("/projects")} onContextMenu={(e) => revealMenu(e, "/", "the Wrangler Review folder")}>Projects</a><Sep /></span>}
         {data.project && (owner
-          ? <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps(`/projects/${data.project._id}`)}>{projectLabel(data.project)}</a><Sep /></span>
+          ? <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps(`/projects/${data.project._id}`)} onContextMenu={(e) => revealMenu(e, data.projectFolder, "this project's folder")}>{projectLabel(data.project)}</a><Sep /></span>
           : <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps(viewer.home)}>{projectLabel(data.project)}</a><Sep /></span>)}
         {data.number && <span className="chip num mono hide-sm" title="Register number">{String(data.number).padStart(5, "0")}</span>}
-        <span className="here">{data.title}</span>
+        <span className="here" onContextMenu={owner ? (e) => revealMenu(e, versionPath, "this video") : undefined}>{data.title}</span>
         <FinalBadge final={data.final} />
         {owner && verApprovals.length > 0 && <span className="wp-status success hide-sm" title={verApprovals.map((a) => `${a.name} · ${new Date(a.at).toLocaleString()}`).join("\n")}>Approved by {verApprovals.map((a) => a.name).join(", ")} · v{version!.number}</span>}
         {myApproval && <span className="wp-status success hide-sm" title={new Date(myApproval.at).toLocaleString()}>Approved by you · {new Date(myApproval.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>}
@@ -729,12 +736,14 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           {(libSettings.approveFinal || data.final) && data.versions.length > 0 && <MenuItem icon={<CircleCheckBig size={16} />} onSelect={() => setDialog("final")}>{data.final ? "Final version…" : "Approve final…"}</MenuItem>}
           {data.nextFileName && <MenuItem icon={<Copy size={16} />} onSelect={() => void copyText(`${data.nextFileName}.mp4`, showToast, "File name copied")}>Copy next render name</MenuItem>}
           <MenuItem icon={<Timer size={16} />} onSelect={() => setDialog("starttc")} disabled={!version}>Start timecode…</MenuItem>
+          <MenuItem icon={<FolderOpen size={16} />} onSelect={() => void revealInFinder(versionPath, showToast, "this video")}>Reveal in Finder</MenuItem>
           <MenuSep />
           <MenuItem icon={<Download size={16} />} onSelect={downloadEdl} disabled={!notes?.length}>Download Resolve markers</MenuItem>
           <MenuItem icon={<Keyboard size={16} />} onSelect={() => setDialog("keys")} kbd="?">Keyboard shortcuts</MenuItem>
         </Menu>
         )}
       </TopBar>
+      {ctxMenu}
       <input ref={fileRef} type="file" hidden accept="video/*,.mov,.mp4,.m4v,.mxf,.mkv"
         onChange={(e) => { const f = e.target.files?.[0]; if (f && isVideoFile(f)) { void uploadVersion(data._id, f, () => { setPanel("versions"); showToast("Uploading a new version…"); }); } e.target.value = ""; }} />
 
