@@ -111,8 +111,8 @@ export function ClientFootage({ projectId, show }: { projectId: string; show: (m
   const go = async (f: () => Promise<unknown>) => { setBusy(true); try { await f(); } catch (e) { show(errText(e)); } setBusy(false); };
   const price = perYear(d.priceCents);
   return (
-    <Card className="cpj-footage" label="Raw footage">
-      <span className="wp-eyebrow cpj-ft-eye">Raw footage</span>
+    <Card className="cpj-footage" label="Raw footage" head={<SectionHead label="Raw footage" />}>
+      <div className="cpj-ftbody">
       {d.status === "offered" && <div className="cpj-ft">
         <b className="q">Raw footage kept until {shortDay(d.keepUntil)}. Keep it for {price}?</b>
         <p className="secondary">We keep every clip from the shoot, safe and backed up, so you can ask for new cuts later. You'd get a yearly invoice; stop any time.</p>
@@ -131,6 +131,7 @@ export function ClientFootage({ projectId, show }: { projectId: string; show: (m
         <span className="txt"><b>{d.status === "paid" ? `Kept until ${longDay(d.paidUntil!)}` : `Kept for a year · until ${longDay(d.keptUntil!)}`}</b>
           <span className="secondary">{d.status === "paid" ? `${price}. Ask for new cuts any time.` : `The invoice for ${usd(d.invoiceCents)} is on its way.${d.by ? ` Thanks, ${d.by.split(/\s+/)[0]}.` : ""}`}</span></span>
       </div>}
+      </div>
     </Card>
   );
 }

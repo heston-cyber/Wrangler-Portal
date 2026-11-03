@@ -2516,8 +2516,7 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 .ft-acts { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 20px 18px; }
 .ft-grid { border-top: 0; padding-top: 8px; }
 .ft-switch { border-top: 1px solid var(--border-faint); padding-top: 14px; margin-top: 12px; }
-.cpj-footage { padding: 18px 20px 20px; display: grid; gap: 12px; }
-.cpj-ft-eye { margin: 0; }
+.cpj-ftbody { padding: 0 20px 20px; display: grid; gap: 12px; }
 .cpj-ft { display: grid; gap: 10px; }
 .cpj-ft .q { font-weight: 500; font-size: var(--fs-text-regular); color: var(--text-primary); }
 .cpj-ft p { margin: 0; font-size: var(--fs-text-small); }
