@@ -170,6 +170,7 @@ export const setKeyDates = mutation({
     }
     dates.sort((x, y) => x.date.localeCompare(y.date));
     await ctx.db.patch(p._id, { keyDates: dates, updatedAt: Date.now() });
+    await ctx.scheduler.runAfter(0, internal.calendarSync.pushDates, {}); // Phase 5b step 5: edit dates go to Google (portal → Google only)
     return null;
   },
 });

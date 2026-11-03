@@ -19,4 +19,6 @@ crons.interval("raw footage keep days", { hours: 1 }, internal.footage.runDue, {
 crons.interval("vendor payouts", { minutes: 15 }, internal.vendorPayouts.poll, {});
 // Phase 5c (Nov 3, D128): Site watch's own daily look (8 am Central in winter). The agent runs its own schedule too.
 crons.daily("site watch", { hourUTC: 14, minuteUTC: 7 }, internal.siteWatch.check, {});
+// Phase 5b step 5 (Nov 3, D143): Production › Calendar, two-way with Google Calendar (incremental pull; edit dates written).
+crons.interval("google calendar sync", { minutes: 5 }, internal.calendarSync.pullAll, {});
 export default crons;

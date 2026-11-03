@@ -86,7 +86,7 @@ export const overview = query({
       shootsTotal: upcoming.length,
       edits: edits.slice(0, 6),
       week: items.slice(0, 8),
-      calendar: cal ? { email: cal.email, calendar: cal.calendarName ?? null, error: !!cal.lastError } : null,
+      calendar: cal ? { email: cal.email, calendar: cal.calendarName ?? null, error: !!cal.lastError, lastSyncedAt: cal.lastSyncedAt ?? null, disconnected: !!cal.disconnectedAt } : null,
     };
   },
 });

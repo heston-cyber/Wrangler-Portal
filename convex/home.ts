@@ -18,6 +18,7 @@ import { testimonialNeeds } from "./testimonials";
 import { shootRows, scheduled, liveEdits } from "./production";
 import { overviewData } from "./invoices";
 import { todayCentral } from "./lib/bookings";
+import { shootMoveNeeds } from "./calendarSync";
 
 const MAX_NOTE_GROUPS = 10;
 
@@ -30,7 +31,8 @@ export type Need =
   | { kind: "proposal"; at: number; proposalId: Id<"proposals">; number: string; company: string; title: string; what: "accepted" | "declined"; who: string } // Phase 3b
   | { kind: "vendorInvoice"; at: number; invoiceId: Id<"vendorInvoices">; vendorId: Id<"vendors">; vendor: string; number: string; project: string; totalCents: number } // Phase 3c
   | { kind: "footage"; at: number; what: "kept" | "renewal" | "ended" | "unpaid" | "paidLate"; projectId: Id<"projects">; project: string; client: string | null } // Phase 5
-  | { kind: "testimonial"; at: number; testimonialId: Id<"testimonials">; who: string; project: string }; // Phase 5
+  | { kind: "testimonial"; at: number; testimonialId: Id<"testimonials">; who: string; project: string } // Phase 5
+  | { kind: "shootMoved"; at: number; shootId: Id<"shoots">; projectId: Id<"projects">; project: string; date: string; call: string; wasDate: string; wasCall: string; people: number; crew: number; sheetId: Id<"callSheets"> | null }; // Phase 5b step 5 (D143)
 
 /** The client a document belongs to: the client of its first signer that's one of a client's people. */
 export async function docClient(ctx: QueryCtx, emails: string[]) {
@@ -102,7 +104,9 @@ export const needs = query({
     // Phase 5: raw footage (an invoice draft to send, or past its keep day) and new testimonials.
     out.push(...(await footageNeeds(ctx)));
     out.push(...(await testimonialNeeds(ctx)));
-    const order = { proposal: 0, quote: 0, vendorInvoice: 0, footage: 0, testimonial: 0, notes: 1, doc: 2, draft: 3, request: 4 } as const;
+    // Phase 5b step 5 (D143): a shoot moved in Google Calendar (nobody was emailed): tell the crew and client.
+    out.push(...(await shootMoveNeeds(ctx)));
+    const order = { shootMoved: 0, proposal: 0, quote: 0, vendorInvoice: 0, footage: 0, testimonial: 0, notes: 1, doc: 2, draft: 3, request: 4 } as const;
     return out.sort((a, b) => order[a.kind] - order[b.kind] || b.at - a.at);
   },
 });

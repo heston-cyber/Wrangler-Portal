@@ -40,6 +40,7 @@ import type * as projects from "../projects.js";
 import type * as auth from "../auth.js";
 import type * as bunny from "../bunny.js";
 import type * as calendar from "../calendar.js";
+import type * as calendarSync from "../calendarSync.js";
 import type * as clients from "../clients.js";
 import type * as shares from "../shares.js";
 import type * as production from "../production.js";
@@ -170,6 +171,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   bunny: typeof bunny;
   calendar: typeof calendar;
+  calendarSync: typeof calendarSync;
   clients: typeof clients;
   shares: typeof shares;
   production: typeof production;

@@ -1183,7 +1183,52 @@ export default defineSchema({
     inviteClient: v.boolean(),
     lastError: v.optional(v.string()),
     connectedAt: v.number(),
+    // Phase 5b step 5 (Nov 3, D143): Production › Calendar. Every Google Calendar on the account, with whether it's
+    // shown (only the picked one at first) and its incremental-sync token; the picked one is always pulled (shoots and
+    // edit dates live there). disconnectedAt: Google stopped letting the portal in (Reconnect Google).
+    list: v.optional(v.array(v.object({
+      id: v.string(), name: v.string(), color: v.number(), on: v.boolean(), writable: v.boolean(), primary: v.boolean(),
+      syncToken: v.optional(v.string()), syncedAt: v.optional(v.number()),
+    }))),
+    lastSyncedAt: v.optional(v.number()),
+    pullingSince: v.optional(v.number()),
+    disconnectedAt: v.optional(v.number()),
   }),
+
+  // Phase 5b step 5 (Nov 3, D143): Google Calendar events kept in step with the portal. kind "google": an event on a
+  // shown Google Calendar (made in Google or in the portal); kind "date": a project's edit date the portal wrote to
+  // Google as an all-day event (portal → Google only). Shoots aren't rows here: they stay on `shoots` (calendarEvent).
+  // Times are the business's wall clock (America/Chicago); end/endDate are inclusive of the last day.
+  calendarEvents: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    kind: v.union(v.literal("google"), v.literal("date")),
+    calendarId: v.string(),
+    googleId: v.string(),
+    title: v.string(),
+    location: v.optional(v.string()),
+    date: v.string(),                         // YYYY-MM-DD, first day
+    endDate: v.string(),                      // YYYY-MM-DD, last day (inclusive)
+    start: v.optional(v.string()),            // HH:MM; absent: all day
+    end: v.optional(v.string()),              // HH:MM
+    guests: v.array(v.object({ email: v.string(), name: v.optional(v.string()) })),
+    recurring: v.optional(v.boolean()),       // one occurrence of a repeating event (edited as that occurrence only)
+    readOnly: v.optional(v.boolean()),        // someone else's invite, or a calendar the account can only read
+    htmlLink: v.optional(v.string()),
+    gUpdated: v.number(),                     // Google's `updated` for the version this row matches (echo check)
+    pending: v.optional(v.union(v.literal("create"), v.literal("update"), v.literal("delete"))),
+    pendingAt: v.optional(v.number()),
+    pushError: v.optional(v.string()),
+    sendUpdates: v.optional(v.union(v.literal("all"), v.literal("none"))),
+    guestsDirty: v.optional(v.boolean()),     // the guest list changed: send it with the next write
+    prev: v.optional(v.object({ date: v.string(), endDate: v.string(), start: v.optional(v.string()), end: v.optional(v.string()), at: v.number(), notify: v.boolean() })),
+    shootId: v.optional(v.id("shoots")),      // "Link to a shoot or project"
+    projectId: v.optional(v.id("projects")),  // the link, or (kind "date") the project the date belongs to
+    dateKey: v.optional(v.string()),          // kind "date": which of the project's dates
+    sig: v.optional(v.string()),              // kind "date": what was written ("" after a change in Google: write it again)
+    seen: v.optional(v.number()),             // the full sync that last saw it
+    syncedAt: v.number(),
+    createdAt: v.number(),
+  }).index("by_google", ["calendarId", "googleId"]).index("by_date", ["date"]).index("by_kind", ["kind", "projectId"]),
 
   // Phase 4 (Nov 2): shoots on a project (frames S5 · Phase 4). The client confirms one in their portal; moving its date,
   // call time or place clears the confirmation and asks again (email 30). Times are the business's local wall clock.
@@ -1201,7 +1246,12 @@ export default defineSchema({
     confirmed: v.optional(v.object({ name: v.string(), email: v.string(), at: v.number() })),
     moved: v.optional(v.object({ date: v.string(), call: v.string(), location: v.string(), at: v.number() })), // what it was before the last move
     calendar: v.optional(v.boolean()),        // "Add to {calendar}" was ticked (the event itself arrives with Settings › Calendar)
-    calendarEvent: v.optional(v.object({ id: v.string(), calendarId: v.string() })),
+    calendarEvent: v.optional(v.object({ id: v.string(), calendarId: v.string(), updated: v.optional(v.number()), at: v.optional(v.number()) })), // Phase 5b step 5: Google's `updated` for the version the portal wrote or took
+    // Phase 5b step 5 (D143): moved in Google Calendar. The shoot moved with it; nobody was emailed; the owner gets a
+    // Dashboard note (until Done, or Ask to confirm again).
+    googleMove: v.optional(v.object({ at: v.number(), was: v.object({ date: v.string(), call: v.string(), wrap: v.optional(v.string()), location: v.string() }), doneAt: v.optional(v.number()), told: v.optional(v.boolean()) })),
+    // Phase 5b step 5: a move made by dragging it on the calendar, for Undo (about 8 seconds).
+    dragUndo: v.optional(v.object({ at: v.number(), was: v.any() })),
     history: v.array(v.object({ at: v.number(), text: v.string() })),
     createdAt: v.number(),
     updatedAt: v.number(),

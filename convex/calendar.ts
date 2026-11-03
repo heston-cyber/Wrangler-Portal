@@ -16,8 +16,8 @@ import { SITE } from "./lib/site";
 
 const SCOPES = ["openid", "email", "https://www.googleapis.com/auth/calendar.calendarlist.readonly", "https://www.googleapis.com/auth/calendar.events"];
 const TZ = "America/Chicago"; // the businesses' wall clock (shoot times are local)
-const creds = () => ({ id: process.env.GOOGLE_CLIENT_ID ?? "", secret: process.env.GOOGLE_CLIENT_SECRET ?? "" });
-const hasKeys = () => !!(creds().id && creds().secret);
+export const creds = () => ({ id: process.env.GOOGLE_CLIENT_ID ?? "", secret: process.env.GOOGLE_CLIENT_SECRET ?? "" });
+export const hasKeys = () => !!(creds().id && creds().secret);
 export const redirectUri = () => `${(process.env.CONVEX_SITE_URL ?? "").replace(/\/+$/, "")}/calendar/callback`;
 const randomToken = () => { const b = new Uint8Array(24); crypto.getRandomValues(b); return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join(""); };
 
@@ -30,7 +30,7 @@ export const settings = query({
     const c = await ctx.db.query("calendars").first();
     return {
       keys: hasKeys(), redirect: redirectUri(),
-      connection: c ? { email: c.email, calendarId: c.calendarId ?? null, calendarName: c.calendarName ?? null, inviteVendors: c.inviteVendors, inviteClient: c.inviteClient, connectedAt: c.connectedAt, lastError: c.lastError ?? null } : null,
+      connection: c ? { email: c.email, calendarId: c.calendarId ?? null, calendarName: c.calendarName ?? null, inviteVendors: c.inviteVendors, inviteClient: c.inviteClient, connectedAt: c.connectedAt, lastError: c.lastError ?? null, disconnected: !!c.disconnectedAt } : null,
     };
   },
 });
@@ -79,6 +79,7 @@ export const finish = action({
       const email = emailOf(tok.id_token) || "your Google account";
       await ctx.runMutation(internal.calendar.saveConnection, { email, refreshToken: tok.refresh_token, accessToken: tok.access_token!, accessExpiresAt: Date.now() + (tok.expires_in ?? 3600) * 1000 });
       await ctx.runAction(internal.calendar.resync, {});
+      await ctx.scheduler.runAfter(0, internal.calendarSync.pull, {}); // Phase 5b step 5: the calendar page's events
       return { email };
     } catch (e) { throw new ConvexError(String((e as Error).message).replace(/^Uncaught Error: /, "").slice(0, 200)); }
   },
@@ -98,8 +99,10 @@ export const saveConnection = internalMutation({
   handler: async (ctx, a) => {
     const old = await ctx.db.query("calendars").first();
     const same = old && old.email.toLowerCase() === a.email.toLowerCase();
-    const keep = old ? { ...(same ? { calendarId: old.calendarId, calendarName: old.calendarName } : {}), inviteVendors: old.inviteVendors, inviteClient: old.inviteClient } : { inviteVendors: true, inviteClient: false };
+    // Phase 5b step 5: reconnecting the same account keeps the calendar list and where each calendar's sync had got to.
+    const keep = old ? { ...(same ? { calendarId: old.calendarId, calendarName: old.calendarName, list: old.list, lastSyncedAt: old.lastSyncedAt } : {}), inviteVendors: old.inviteVendors, inviteClient: old.inviteClient } : { inviteVendors: true, inviteClient: false };
     if (old) await ctx.db.delete(old._id);
+    if (old && !same) for (const r of await ctx.db.query("calendarEvents").collect()) await ctx.db.delete(r._id); // another account's events
     await ctx.db.insert("calendars", { ...a, ...keep, connectedAt: Date.now() });
   },
 });
@@ -113,15 +116,27 @@ export const patchConnection = internalMutation({
   },
 });
 
-async function accessToken(ctx: ActionCtx): Promise<string> {
+/** Phase 5b step 5: Google no longer lets the portal in (access removed, password changed, token expired). */
+export class Disconnected extends Error {}
+export async function accessToken(ctx: ActionCtx): Promise<string> {
   const c: Doc<"calendars"> | null = await ctx.runQuery(internal.calendar.getConnection, {});
   if (!c) throw new Error("Google Calendar isn't connected.");
   if (c.accessToken && (c.accessExpiresAt ?? 0) > Date.now() + 120_000) return c.accessToken;
-  const tok = await tokenRequest({ grant_type: "refresh_token", refresh_token: c.refreshToken });
+  let tok;
+  try { tok = await tokenRequest({ grant_type: "refresh_token", refresh_token: c.refreshToken }); }
+  catch (e) {
+    const m = String((e as Error).message);
+    if (/invalid_grant|unauthorized_client|revoked|expired/i.test(m)) { await ctx.runMutation(internal.calendar.markDisconnected, {}); throw new Disconnected(m); }
+    throw e;
+  }
   await ctx.runMutation(internal.calendar.patchConnection, { accessToken: tok.access_token, accessExpiresAt: Date.now() + (tok.expires_in ?? 3600) * 1000 });
   return tok.access_token!;
 }
-async function gcal(token: string, method: string, path: string, body?: unknown) {
+export const markDisconnected = internalMutation({
+  args: {},
+  handler: async (ctx) => { const c = await ctx.db.query("calendars").first(); if (c && !c.disconnectedAt) await ctx.db.patch(c._id, { disconnectedAt: Date.now(), accessToken: undefined, accessExpiresAt: undefined }); },
+});
+export async function gcal(token: string, method: string, path: string, body?: unknown) {
   const r = await fetch(`https://www.googleapis.com/calendar/v3${path}`, { method, headers: { authorization: `Bearer ${token}`, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
   const text = await r.text();
   let json: any = null;
@@ -148,8 +163,12 @@ export const save = mutation({
     await requireMe(ctx);
     const c = await ctx.db.query("calendars").first();
     if (!c) throw new ConvexError("Connect Google Calendar first.");
-    await ctx.db.patch(c._id, { calendarId: a.calendarId.slice(0, 300), calendarName: a.calendarName.slice(0, 120), inviteVendors: a.inviteVendors, inviteClient: a.inviteClient });
+    const calendarId = a.calendarId.slice(0, 300);
+    // Phase 5b step 5: the picked calendar is shown on Production › Calendar (and always pulled).
+    const list = (c.list ?? []).map((x) => (x.id === calendarId ? { ...x, on: true } : x));
+    await ctx.db.patch(c._id, { calendarId, calendarName: a.calendarName.slice(0, 120), inviteVendors: a.inviteVendors, inviteClient: a.inviteClient, ...(c.list ? { list } : {}) });
     await ctx.scheduler.runAfter(0, internal.calendar.resync, {}); // shoots ticked before, or on another calendar
+    if (c.calendarId !== calendarId) await ctx.scheduler.runAfter(0, internal.calendarSync.pull, {}); // and the edit dates move with it
     return null;
   },
 });
@@ -164,7 +183,10 @@ export const disconnect = action({
     return null;
   },
 });
-export const removeConnection = internalMutation({ args: {}, handler: async (ctx) => { for (const c of await ctx.db.query("calendars").collect()) await ctx.db.delete(c._id); } });
+export const removeConnection = internalMutation({ args: {}, handler: async (ctx) => {
+  for (const c of await ctx.db.query("calendars").collect()) await ctx.db.delete(c._id);
+  for (const r of await ctx.db.query("calendarEvents").collect()) await ctx.db.delete(r._id); // Phase 5b step 5: the copies of Google's events go too
+} });
 
 // ---------- shoots on the calendar ----------
 
@@ -197,7 +219,7 @@ export const eventFor = internalQuery({
   },
 });
 export const setEvent = internalMutation({
-  args: { shootId: v.id("shoots"), event: v.optional(v.object({ id: v.string(), calendarId: v.string() })) },
+  args: { shootId: v.id("shoots"), event: v.optional(v.object({ id: v.string(), calendarId: v.string(), updated: v.optional(v.number()), at: v.optional(v.number()) })) },
   handler: async (ctx, { shootId, event }) => { if (await ctx.db.get(shootId)) await ctx.db.patch(shootId, { calendarEvent: event }); },
 });
 
@@ -205,15 +227,17 @@ export const setEvent = internalMutation({
 export const eventId = (shootId: string) => `shoot${Array.from(new TextEncoder().encode(shootId), (b) => b.toString(16).padStart(2, "0")).join("")}`;
 
 /** Puts a shoot on the calendar, moves it, or takes it off: whatever its state calls for now (checked again after). */
+// Phase 5b step 5: sendUpdates "none" when the owner moved it on the calendar with "Move only" (default: Google emails
+// the guests, as before). The `updated` Google answers is saved, so the next pull knows this version is the portal's own.
 export const syncShoot = internalAction({
-  args: { shootId: v.id("shoots") },
-  handler: async (ctx, { shootId }): Promise<string> => {
+  args: { shootId: v.id("shoots"), sendUpdates: v.optional(v.union(v.literal("all"), v.literal("none"))) },
+  handler: async (ctx, { shootId, sendUpdates }): Promise<string> => {
     if (!hasKeys()) return "off";
     const conn = await ctx.runQuery(internal.calendar.getConnection, {});
-    if (!conn) return "off";
+    if (!conn || conn.disconnectedAt) return "off";
     try {
       const token = await accessToken(ctx);
-      const path = (cal: string, id?: string) => `/calendars/${encodeURIComponent(cal)}/events${id ? `/${encodeURIComponent(id)}` : ""}?sendUpdates=all`;
+      const path = (cal: string, id?: string) => `/calendars/${encodeURIComponent(cal)}/events${id ? `/${encodeURIComponent(id)}` : ""}?sendUpdates=${sendUpdates ?? "all"}`;
       const remove = async (ev: { id: string; calendarId: string }) => {
         const r = await gcal(token, "DELETE", path(ev.calendarId, ev.id));
         if (r.status >= 300 && r.status !== 404 && r.status !== 410) throw new Error(`delete ${r.status}`);
@@ -235,12 +259,13 @@ export const syncShoot = internalAction({
         if (r.status === 404 || r.status === 410) r = await gcal(token, "POST", path(d.calendarId), { ...d.body, id });
         if (r.status === 409) r = await gcal(token, "PATCH", path(d.calendarId, id), d.body); // made by a sync running at the same time
         if (r.status >= 300 || !r.json?.id) throw new Error(`${r.status}: ${r.json?.error?.message ?? r.text.slice(0, 120)}`);
-        await ctx.runMutation(internal.calendar.setEvent, { shootId, event: { id: String(r.json.id), calendarId: d.calendarId } });
+        await ctx.runMutation(internal.calendar.setEvent, { shootId, event: { id: String(r.json.id), calendarId: d.calendarId, updated: Date.parse(String(r.json.updated ?? "")) || Date.now(), at: Date.now() } });
         await ctx.runMutation(internal.calendar.patchConnection, { clearError: true });
         // pass 1: if the shoot was cancelled or unticked meanwhile, it comes off again.
       }
       return "added";
     } catch (e) {
+      if (e instanceof Disconnected) return "disconnected";
       const m = String((e as Error).message);
       await ctx.runMutation(internal.calendar.patchConnection, { lastError: `A shoot didn't reach your calendar: ${m}` });
       return "failed";
@@ -265,6 +290,6 @@ export const futureShoots = internalQuery({
 });
 
 /** For shoots.ts: line up a calendar sync (after the shoot's own write). */
-export async function queueCalendar(ctx: { scheduler: { runAfter: (d: number, f: any, a: any) => Promise<unknown> } }, shootId: Id<"shoots">) {
-  await ctx.scheduler.runAfter(0, internal.calendar.syncShoot, { shootId });
+export async function queueCalendar(ctx: { scheduler: { runAfter: (d: number, f: any, a: any) => Promise<unknown> } }, shootId: Id<"shoots">, sendUpdates?: "all" | "none") {
+  await ctx.scheduler.runAfter(0, internal.calendar.syncShoot, { shootId, ...(sendUpdates ? { sendUpdates } : {}) });
 }

@@ -81,8 +81,9 @@ const view = (s: Doc<"shoots">) => ({
   calendar: !!s.calendar, onCalendar: !!s.calendarEvent,
 });
 
-/** Tells the project's portal people: an Inbox item each, and email 29 or 30 (scheduled after the write). */
-async function tell(ctx: MutationCtx, p: Doc<"projects">, s: { _id: Id<"shoots">; date: string; call: string; location: string }, moved: Doc<"shoots">["moved"] | null, at: number) {
+/** Tells the project's portal people: an Inbox item each, and email 29 or 30 (scheduled after the write).
+ *  Phase 5b step 5: `delayMs` holds the email back (a move dragged on the calendar can be undone for a few seconds). */
+export async function tell(ctx: MutationCtx, p: Doc<"projects">, s: { _id: Id<"shoots">; date: string; call: string; location: string }, moved: Doc<"shoots">["moved"] | null, at: number, delayMs = 0) {
   const biz = await businessOf(ctx, p);
   if (!biz) return 0;
   const people = await portalPeople(ctx, p);
@@ -95,7 +96,7 @@ async function tell(ctx: MutationCtx, p: Doc<"projects">, s: { _id: Id<"shoots">
       link: `/shoots/${s._id}`, linkLabel: "Confirm", source: { module: "schedule", id: s._id }, key: `shoot:${s._id}:${at}`,
     });
   }
-  if (people.length) await ctx.scheduler.runAfter(0, internal.shoots.mail, { shootId: s._id, at, emails: people.map((x) => x.email), ...(moved ? { moved: { date: moved.date, call: moved.call, location: moved.location } } : {}) });
+  if (people.length) await ctx.scheduler.runAfter(delayMs, internal.shoots.mail, { shootId: s._id, at, emails: people.map((x) => x.email), ...(moved ? { moved: { date: moved.date, call: moved.call, location: moved.location } } : {}) });
   return people.length;
 }
 
@@ -263,6 +264,7 @@ export const mail = internalAction({
     const d = await ctx.runQuery(internal.shoots.mailData, { shootId });
     if (!d) return 0;
     if (d.s.updatedAt > at + 5_000 && d.s.moved && d.s.moved.at > at) return 0; // moved again since: that move's email says where it is now
+    if (m && d.s.moved?.at !== at) return 0; // Phase 5b step 5: that move was undone (or moved again since)
     const moved = m ?? null;
     let sent = 0;
     for (const email of emails) {

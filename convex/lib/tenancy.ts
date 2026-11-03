@@ -9,6 +9,7 @@ export const BUSINESS_TABLES = [
   "wsDocuments", "wsBuilds", "wsTemplates", "wsClauses", "wsStyles", "wsProfile", "wsFonts", "wsConnectorKeys",
   "wsDropbox", "wsSignings", "wsVersions", "wsRequests", "wsOwnerSignatures",
   "clientPeople", "inboxItems", "inboxNotes", "clientApprovals", "deliveryFiles", "invoices", "plans", "subscriptions", "deals", "estimates", "followUps", "ledgerEntries", "quotes", "proposals", "proposalFiles", "vendors", "vendorBookings", "briefings", "vendorInvoices", "shoots", "fileRequests", "fileUploads", "calendars", "briefs", "footageStorage", "testimonials", "callSheets",
+  "calendarEvents", // Phase 5b step 5
 ] as readonly string[];
 
 export const GLOBAL_TABLES = [
