@@ -579,7 +579,7 @@ export const forClientProject = query({
     for (const cs of await ctx.db.query("callSheets").withIndex("by_project", (q) => q.eq("projectId", id)).collect()) {
       const r = cs.status === "sent" && cs.sent ? cs.recipients.find((x) => x.kind === "client" && x.email === email && x.sentAt) : null;
       const s = r ? await ctx.db.get(cs.shootId) : null;
-      if (r && s && s.status === "scheduled") out.push({ _id: cs._id, date: s.date, call: callFor(pageOf(cs.sent!.page), r), opened: !!r.openedAt, sentAt: cs.sent!.at });
+      if (r && s && s.status === "scheduled" && s.date >= todayCentral()) out.push({ _id: cs._id, date: s.date, call: callFor(pageOf(cs.sent!.page), r), opened: !!r.openedAt, sentAt: cs.sent!.at });
     }
     return out.sort((a, b) => a.date.localeCompare(b.date));
   },

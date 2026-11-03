@@ -124,14 +124,19 @@ export function ShootDialog({ projectId, label, data, shoot, client, people, onC
 /** The shoots in the client project's Coming up card (with file requests and the brief, later steps). */
 export function ComingUpShoots({ projectId }: { projectId: string }) {
   const list = useQuery(api.shoots.forClientProject, { projectId });
+  const sheets = useQuery(api.callSheets.forClientProject, { projectId }); // Phase 5b step 3: a call sheet sent to them, under its shoot
   if (!list?.length) return null;
-  return <>{list.map((s, i) => (
-    <div key={s._id} className="wp-rowwrap">{i > 0 && <Divider />}
-      <ListRow className="ilead" lead={{ icon: "calendar" }} to={`/shoots/${s._id}`} title={`Shoot · ${shootDay(s.date)} · ${clock(s.call)} call`}
-        meta={`${s.location}${s.confirmed ? " · confirmed" : " · please confirm"}`}
-        action={s.confirmed ? <StatusChip tone="success">Confirmed</StatusChip> : <span className="btn sm" aria-hidden>Confirm</span>} />
-    </div>
-  ))}</>;
+  return <>{list.map((s, i) => {
+    const cs = (sheets ?? []).find((c) => c.date === s.date);
+    return (
+      <div key={s._id} className="wp-rowwrap">{i > 0 && <Divider />}
+        <ListRow className="ilead" lead={{ icon: "calendar" }} to={`/shoots/${s._id}`} title={`Shoot · ${shootDay(s.date)} · ${clock(s.call)} call`}
+          meta={`${s.location}${s.confirmed ? " · confirmed" : " · please confirm"}`}
+          action={s.confirmed ? <StatusChip tone="success">Confirmed</StatusChip> : <span className="btn sm" aria-hidden>Confirm</span>} />
+        {cs && <><Divider /><ListRow className="ilead" lead={{ icon: "document" }} to={`/call-sheets/${cs._id}`} title={`Call sheet · ${shootDay(cs.date)}`} meta={cs.call ? `Your call ${clock(cs.call)}` : undefined} chip={cs.opened ? undefined : <StatusChip tone="danger">New</StatusChip>} chevron /></>}
+      </div>
+    );
+  })}</>;
 }
 export const useComingUpCount = (projectId: string) => useQuery(api.shoots.forClientProject, { projectId })?.length ?? 0;
 

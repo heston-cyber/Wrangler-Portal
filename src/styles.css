@@ -1380,3 +1380,13 @@ button.ws-hubcard:disabled { opacity: .6; cursor: default; }
   .wsb-sizes .wsb-size { padding: 10px 4px; }
   .ws-seg button, .wsb-marks button { min-height: 38px; }
 }
+
+/* Phase 5b step 3: the call sheet's blocks in the builder (a contract never has them). */
+.wsb-cs-table td, .wsb-cs-table td:nth-child(n) { width: auto; }
+.wsb-cs-table td:last-child { width: 30px; }
+.wsb-cs-table input[type="time"] { min-width: 88px; }
+.wsb-cs-loc { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.wsb-cs-loc > div { display: grid; gap: 4px; align-content: start; }
+.wsb-cs-loc label:not(.wsb-check) { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.wsb-cs-loc input:not([type="checkbox"]) { border-bottom: 1px dashed color-mix(in srgb, var(--wsb-muted) 50%, transparent); }
+@media (max-width: 599px) { .wsb-cs-loc { grid-template-columns: 1fr; gap: 12px; } .wsb-cs-table th:nth-child(4), .wsb-cs-table td:nth-child(4) { display: none; } }

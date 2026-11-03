@@ -1,6 +1,6 @@
 // Phase 5b step 1 (Nov 3): Production › Overview (760:637; Empty 763:519; Loading 763:1067; Long 763:1713; phone
-// 769:6647, 771:8608, 771:8851) and Production › Shoots (763:2708). Call sheets (step 3: the fourth tile, the Call
-// sheets card, each shoot's sheet state and buttons) and the synced calendar (step 5) join as they're built.
+// 769:6647, 771:8608, 771:8851) and Production › Shoots (763:2708). Step 3 added call sheets: the fourth tile, the Call
+// sheets card, each shoot's sheet chip and button, "Needs a call sheet". The synced calendar (step 5) comes later.
 import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -10,6 +10,7 @@ import { Icon } from "../../ui/Icon";
 import { Modal, useToast } from "../../ui/kit";
 import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps } from "../../lib/router";
+import { sheetBits } from "./sheetBits";
 import { ShootDialog, clock, shootDay } from "../projects/Shoots";
 
 type Overview = NonNullable<ReturnType<typeof useQuery<typeof api.production.overview>>>;
@@ -33,13 +34,14 @@ function Tile({ label, n, sub, to, link }: { label: string; n: number; sub: stri
   );
 }
 
-function ShootLine({ s, today, first, phone }: { s: ShootRow; today: string; first: boolean; phone?: boolean }) {
+function ShootLine({ s, today, first, phone, onSheet }: { s: ShootRow; today: string; first: boolean; phone?: boolean; onSheet?: boolean }) {
+  const b = sheetBits(s, today);
   return (
     <div className="wp-rowwrap">{!first && <Divider />}
-      <ListRow className="ilead" lead={{ icon: "video" }} to={`/projects/${s.projectId}`} chevron={phone || s.date !== today}
+      <ListRow className="ilead ovact" lead={{ icon: "video" }} to={b.sent ? b.href : `/projects/${s.projectId}`} chevron={phone || b.sent}
         title={shootTitle(s)}
-        meta={[day(s.date, today), `Call ${clock(s.call)}`, s.location].filter(Boolean).join(" · ")}
-        chip={s.date === today ? <StatusChip tone="accent">Today</StatusChip> : s.confirmed ? <StatusChip tone="success">Confirmed</StatusChip> : <StatusChip tone="warning">{s.moved ? "Moved · to confirm" : "To confirm"}</StatusChip>} />
+        meta={[day(s.date, today), `Call ${clock(s.call)}`, s.location, onSheet && s.sheet ? `${s.sheet.people} on the sheet` : null].filter(Boolean).join(" · ")}
+        chip={b.chip} action={b.action} />
     </div>
   );
 }
@@ -88,9 +90,9 @@ export default function ProductionOverview() {
     <>
       <TopBar><span className="secondary">Production</span><Sep /><span className="here">Overview</span></TopBar>
       <div className="wp-page pov prod">
-        <PageHeader eyebrow="Production" title="Production." sub="Live shoots and edits, at a glance." />
+        <PageHeader eyebrow="Production" title="Production." sub="Live shoots and edits, at a glance." actions={<ButtonLink variant="primary" to="/production/call-sheets/new" iconEnd={false}>New call sheet</ButtonLink>} />
         {o === undefined ? <>
-          <div className="pov-stats prod-tiles">{[0, 1, 2].map((i) => <div key={i} className="pov-stat prod-tile"><SkeletonRows n={1} /></div>)}</div>
+          <div className="pov-stats prod-tiles">{[0, 1, 2, 3].map((i) => <div key={i} className="pov-stat prod-tile"><SkeletonRows n={1} /></div>)}</div>
           <Card label="Loading"><SkeletonRows n={4} /></Card>
         </>
           : o === null ? null
@@ -101,8 +103,9 @@ export default function ProductionOverview() {
             <div className="pov-stats prod-tiles">
               <Tile label="Today" n={o.tiles.today} sub={o.tiles.todayFirst ? `${plural(o.tiles.today, "shoot")} · ${o.tiles.todayFirst.client ?? o.tiles.todayFirst.project}` : "no shoots"}
                 to={o.tiles.todayFirst ? `/projects/${o.tiles.todayFirst.projectId}` : "/production/shoots?show=today"} link={o.tiles.todayFirst ? "Open shoot" : "See shoots"} />
-              <Tile label="This week" n={o.tiles.week} sub={plural(o.tiles.week, "shoot")} to="/production/shoots" link="See shoots" />
+              <Tile label="This week" n={o.tiles.week} sub={`${plural(o.tiles.week, "shoot")}${o.tiles.weekNoSheet ? `, ${o.tiles.weekNoSheet} without a call sheet` : ""}`} to="/production/shoots" link="See shoots" />
               <Tile label="Live edits" n={o.tiles.edits} sub="in Production or Polish" to="/review" link="See edits" />
+              <Tile label="Call sheets" n={o.callSheets.notSent} sub="not sent yet" to="/production/call-sheets" link={o.callSheets.notSent ? "Write them" : "See them"} />
             </div>
             <div className="pov-cols">
               <div className="col">
@@ -127,6 +130,12 @@ export default function ProductionOverview() {
                   </dl>
                     : <ListRow className="ilead quiet" lead={{ icon: "calendar" }} title="Not connected." meta="See your own events next to your shoots." action={<ButtonLink size="sm" to="/settings/calendar" iconEnd={false}>Connect</ButtonLink>} />}
                 </Card>
+                <Card label="Call sheets" head={<SectionHead label="Call sheets" action={<ButtonLink size="sm" variant="ghost" to="/production/call-sheets" iconEnd={false}>All call sheets</ButtonLink>} />}>
+                  <dl className="pov-paid prod-week">
+                    <dt>Not sent</dt><dd>{o.callSheets.notSent}</dd><dt>Sent this week</dt><dd>{o.callSheets.sentWeek}</dd>
+                    <dt>Saved templates</dt><dd><a {...linkProps("/production/call-sheets?tab=templates")}>{o.callSheets.templates}</a></dd>
+                  </dl>
+                </Card>
               </div>
             </div>
           </>}
@@ -136,14 +145,14 @@ export default function ProductionOverview() {
   );
 }
 
-type Show = "upcoming" | "today" | "past";
+type Show = "upcoming" | "today" | "past" | "needs";
 
 export function ProductionShoots() {
   const d = useQuery(api.production.shoots, {});
   const first = new URLSearchParams(location.search).get("show");
-  const [show, setShow] = useState<Show>(first === "today" || first === "past" ? first : "upcoming");
+  const [show, setShow] = useState<Show>(first === "today" || first === "past" || first === "needs" ? first : "upcoming");
   const [adding, setAdding] = useState(false);
-  const rows = !d ? [] : show === "past" ? d.past : show === "today" ? d.upcoming.filter((s) => s.date === d.today) : d.upcoming;
+  const rows = !d ? [] : show === "past" ? d.past : show === "today" ? d.upcoming.filter((s) => s.date === d.today) : show === "needs" ? d.upcoming.filter((s) => s.sheet?.state !== "sent") : d.upcoming;
   return (
     <>
       <TopBar><span className="secondary">Production</span><Sep /><span className="here">Shoots</span></TopBar>
@@ -154,10 +163,11 @@ export function ProductionShoots() {
             { key: "upcoming", label: "Upcoming", count: d.upcoming.length },
             { key: "today", label: "Today", count: d.upcoming.filter((s) => s.date === d.today).length },
             { key: "past", label: "Past", count: d.pastTotal },
+            { key: "needs", label: "Needs a call sheet", count: d.needsSheet },
           ]} />
-          {rows.length === 0 ? <EmptyState icon="video" title={show === "past" ? "No past shoots." : show === "today" ? "No shoots today." : "No shoots coming up."}
+          {rows.length === 0 ? <EmptyState icon="video" title={show === "past" ? "No past shoots." : show === "today" ? "No shoots today." : show === "needs" ? "Every shoot coming up has its call sheet." : "No shoots coming up."}
               actions={show === "past" ? undefined : <Button variant="primary" onClick={() => setAdding(true)}>New shoot</Button>} />
-            : <Card label="Shoots">{rows.map((s, i) => <ShootLine key={s._id} s={s} today={d.today} first={i === 0} />)}</Card>}
+            : <Card label="Shoots">{rows.map((s, i) => <ShootLine key={s._id} s={s} today={d.today} first={i === 0} onSheet />)}</Card>}
         </>}
       </div>
       {adding && <NewShoot onClose={() => setAdding(false)} />}

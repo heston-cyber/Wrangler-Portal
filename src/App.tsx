@@ -74,6 +74,14 @@ const ProposalsOverview = lazy(() => import("./modules/overviews/Overviews").the
 const VendorsOverview = lazy(() => import("./modules/overviews/Overviews").then((m) => ({ default: m.VendorsOverview })));
 const ProductionOverview = lazy(() => import("./modules/production/Production"));
 const ProductionShoots = lazy(() => import("./modules/production/Production").then((m) => ({ default: m.ProductionShoots })));
+// Phase 5b step 3: call sheets (the owner's pages), and the readers' page on the client side.
+const CallSheetsPage = lazy(() => import("./modules/production/CallSheets"));
+const NewCallSheet = lazy(() => import("./modules/production/CallSheets").then((m) => ({ default: m.NewCallSheet })));
+const CallSheetQuestions = lazy(() => import("./modules/production/CallSheets").then((m) => ({ default: m.CallSheetQuestions })));
+const CallSheetEditor = lazy(() => import("./modules/production/CallSheets").then((m) => ({ default: m.CallSheetEditor })));
+const CallSheetTemplate = lazy(() => import("./modules/production/CallSheets").then((m) => ({ default: m.CallSheetTemplate })));
+const CallSheetDetail = lazy(() => import("./modules/production/CallSheets").then((m) => ({ default: m.CallSheetDetail })));
+const ClientCallSheetPage = lazy(() => import("./modules/production/CallSheetRead").then((m) => ({ default: m.ClientCallSheetPage })));
 const VendorPage = lazy(() => import("./modules/vendors/Vendors").then((m) => ({ default: m.VendorPage })));
 const BookingsPage = lazy(() => import("./modules/vendors/Bookings"));
 const VendorPaymentsPage = lazy(() => import("./modules/vendors/Payments"));
@@ -179,7 +187,7 @@ function SignedIn() {
   // Phase 3c step 4: vendors get the vendor side (their bookings, briefings and invoices), nothing else.
   if (me && !me.allowed && me.role === "vendor") {
     // A client page's address (from a client email) on the vendor side: offer the switch.
-    if ((me.sides ?? []).includes("client") && /^\/(projects|requests|shoots|briefs|words|inbox|docs|payments|sub)(\/|$)/.test(path) && !new URLSearchParams(search).get("side")) return <ClientSidePrompt />;
+    if ((me.sides ?? []).includes("client") && /^\/(projects|requests|shoots|call-sheets|briefs|words|inbox|docs|payments|sub)(\/|$)/.test(path) && !new URLSearchParams(search).get("side")) return <ClientSidePrompt />;
     return <><SideFromLink /><Suspense fallback={<Loading />}><VendorApp me={me} /></Suspense></>;
   }
   // Clients (C1): their own page, nothing of the owner's side.
@@ -232,6 +240,12 @@ function SignedIn() {
   else if (path.startsWith("/sign")) page = <Suspense fallback={<Loading />}><SignHome /></Suspense>;
   else if (/^\/production\/?$/.test(path)) page = <Suspense fallback={<Loading />}><ProductionOverview /></Suspense>;
   else if (/^\/production\/shoots\/?$/.test(path)) page = <Suspense fallback={<Loading />}><ProductionShoots key={search} /></Suspense>;
+  else if (/^\/production\/call-sheets\/?$/.test(path)) page = <Suspense fallback={<Loading />}><CallSheetsPage key={search} /></Suspense>;
+  else if (/^\/production\/call-sheets\/new\/?$/.test(path)) page = <Suspense fallback={<Loading />}><NewCallSheet key={search} shootId={params.get("shoot")} templateId={params.get("template")} /></Suspense>;
+  else if (/^\/production\/call-sheets\/templates\/[^/]+\/?$/.test(path)) { const id = path.split("/")[4]; page = <Suspense fallback={<Loading />}><CallSheetTemplate key={id} templateId={id} /></Suspense>; }
+  else if (/^\/production\/call-sheets\/[^/]+\/questions\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><CallSheetQuestions key={id} callSheetId={id} /></Suspense>; }
+  else if (/^\/production\/call-sheets\/[^/]+\/edit\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><CallSheetEditor key={id} callSheetId={id} /></Suspense>; }
+  else if (/^\/production\/call-sheets\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><CallSheetDetail key={id} callSheetId={id} /></Suspense>; }
   else if (/^\/vendors\/?$/.test(path)) page = <Suspense fallback={<Loading />}><VendorsPage /></Suspense>;
   else if (/^\/vendors\/briefings\/?$/.test(path)) page = <Suspense fallback={<Loading />}><BriefingsPage /></Suspense>;
   else if (/^\/vendors\/briefings\/templates\/[^/]+\/?$/.test(path)) { const id = path.split("/")[4]; page = <Suspense fallback={<Loading />}><BriefingTemplateBuilder key={id} templateId={id} /></Suspense>; }
@@ -270,7 +284,7 @@ function SignedIn() {
   else if (/^\/review\/?$/.test(path)) page = <Home />; // Review's main page
   else page = <OwnerHome />; // "/": the back-office Home
   // Work surfaces get no background light, so nothing competes with the video or the document.
-  const workSurface = Boolean(video) || /^\/sign\/(b|d)\//.test(path) || /^\/sign\/templates\/[^/]+/.test(path);
+  const workSurface = Boolean(video) || /^\/sign\/(b|d)\//.test(path) || /^\/sign\/templates\/[^/]+/.test(path) || /^\/production\/call-sheets\/([^/]+\/edit|templates\/[^/]+)/.test(path);
   return (
     <UploadProvider>
       <Shell me={me} overlay={Boolean(video)} light={!workSurface}>{page}</Shell>
@@ -308,6 +322,8 @@ function ClientRoutes({ me }: { me: { name: string | null; email: string } }) {
   if (/^\/payments\/subscriptions\/?$/.test(path)) return <Suspense fallback={<Loading />}><ClientSubscriptions /></Suspense>;
   const shoot = /^\/shoots\/([^/]+)\/?$/.exec(path);
   if (shoot) return <ClientShootPage key={shoot[1]} shootId={shoot[1]} />;
+  const sheet = /^\/call-sheets\/([^/]+)\/?$/.exec(path); // Phase 5b step 3: a call sheet sent to them
+  if (sheet) return <Suspense fallback={<Loading />}><ClientCallSheetPage key={sheet[1]} callSheetId={sheet[1]} /></Suspense>;
   const req = /^\/requests\/([^/]+)\/?$/.exec(path);
   if (req) return <ClientRequestPage key={req[1]} requestId={req[1]} />;
   const brief = /^\/briefs\/([^/]+)\/?$/.exec(path);

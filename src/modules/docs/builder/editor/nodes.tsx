@@ -12,6 +12,7 @@ export type BuilderCtxValue = {
   px: (pt: number) => number;
   onDetails: () => void;
   onSaveClause: (section: PNode) => void;
+  callSheet?: boolean; // Phase 5b step 3: a call sheet's containers have no initials or clause library
 };
 export const BuilderCtx = createContext<BuilderCtxValue | null>(null);
 
@@ -21,10 +22,10 @@ export function SectionView({ node, updateAttributes }: NodeViewProps) {
   return (
     <NodeViewWrapper as="section" className={`wsb-sec ${a.look === "card" ? "wsb-card" : "wsb-plain"}`} data-look={a.look}>
       <NodeViewContent className="wsb-sec-body" />
-      <div className="wsb-secfoot" contentEditable={false}>
+      {!ctx?.callSheet && <div className="wsb-secfoot" contentEditable={false}>
         <label className="wsb-check"><input type="checkbox" checked={!!a.initials} onChange={(e) => updateAttributes({ initials: e.target.checked })} />Client initials here</label>
         <button type="button" className="btn ghost sm" onClick={() => ctx?.onSaveClause(node.toJSON() as PNode)}><BookmarkPlus size={13} />Save to clause library</button>
-      </div>
+      </div>}
     </NodeViewWrapper>
   );
 }

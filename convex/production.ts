@@ -28,7 +28,7 @@ export async function shootRows(ctx: QueryCtx, shoots: Shoot[]) {
     out.push({
       _id: s._id, projectId: p._id, project: p.name, label: label(p), client: clients.get(ck) ?? null,
       date: s.date, call: s.call, location: s.location, crew: s.crew.length, confirmed: !!s.confirmed, moved: !!s.moved,
-      sheet: cs ? { _id: cs._id, state: cs.status === "sent" ? "sent" as const : "draft" as const, opened: sentTo.filter((r) => r.openedAt).length, of: sentTo.length, people: cs.recipients.filter((r) => r.on).length } : null,
+      sheet: cs ? { _id: cs._id, state: cs.status === "sent" ? "sent" as const : "draft" as const, built: !!cs.buildId, opened: sentTo.filter((r) => r.openedAt).length, of: sentTo.length, people: cs.recipients.filter((r) => r.on).length } : null,
     });
   }
   return out;

@@ -2,6 +2,7 @@
 // activity across Review, Docs and the Inbox.
 import { money } from "../payments/common";
 import { Suspense, lazy, useState } from "react";
+import { sheetBits } from "../production/sheetBits";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -211,10 +212,11 @@ export default function OwnerHome() {
           : dash.coming.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "video" }} title="No shoots coming up." />
           : dash.coming.map((c, i) => (
             <div key={c._id} className="wp-rowwrap">{i > 0 && <Divider />}
-              <ListRow className="ilead" lead={{ icon: "video" }} to={`/projects/${c.projectId}`} chevron={c.date !== dash.today}
+              {(() => { const b = sheetBits(c, dash.today, true); return ( // Phase 5b step 3: its call sheet
+              <ListRow className="ilead ovact" lead={{ icon: "video" }} to={b.sent ? b.href : `/projects/${c.projectId}`} chevron={b.sent}
                 title={c.client ? `${c.project} · ${c.client}` : c.label}
                 meta={[c.date === dash.today ? "Today" : shootDay(c.date), `Call ${clock(c.call)}`].join(" · ")}
-                chip={c.date === dash.today ? <StatusChip tone="accent">Today</StatusChip> : c.confirmed ? <StatusChip tone="success">Confirmed</StatusChip> : <StatusChip tone="warning">{c.moved ? "Moved · to confirm" : "To confirm"}</StatusChip>} />
+                chip={b.chip} action={b.action} />); })()}
             </div>
           ))}
       </Card>
@@ -250,7 +252,7 @@ export default function OwnerHome() {
     <>
     <TopBar><span className="here">Dashboard</span></TopBar>
     <div className="wp-page wp-home pov">
-      <PageHeader eyebrow="Dashboard" title="Dashboard." sub="What needs you today." actions={<ButtonLink variant="secondary" to="/settings/tools" iconEnd={false}>Customize</ButtonLink>} />
+      <PageHeader eyebrow="Dashboard" title="Dashboard." sub="What needs you today." actions={<><ButtonLink variant="secondary" to="/settings/tools" iconEnd={false}>Customize</ButtonLink><ButtonLink variant="primary" to="/production/call-sheets/new" iconEnd={false}>New call sheet</ButtonLink></>} />
       <div className="pov-stats ov-tiles">
         <Tile label="Today" n={dash ? dash.tiles.today : "–"} sub={dash?.tiles.todayFirst ? `${dash.tiles.today === 1 ? "shoot" : "shoots"} · ${dash.tiles.todayFirst.client ?? dash.tiles.todayFirst.project}` : "no shoots"}
           to={dash?.tiles.todayFirst ? `/projects/${dash.tiles.todayFirst.projectId}` : "/production/shoots"} link={dash?.tiles.todayFirst ? "Open shoot" : "See shoots"} />

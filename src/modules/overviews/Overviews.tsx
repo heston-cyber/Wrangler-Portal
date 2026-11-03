@@ -205,7 +205,7 @@ export function DocsOverview() {
               </Card>
             </div>
             <div className="col">
-              <Side label="Templates" action="Manage" to="/sign/templates"><Rows rows={[["Contracts", o.templates.contracts]]} /></Side>
+              <Side label="Templates" action="Manage" to="/sign/templates"><Rows rows={[["Contracts", o.templates.contracts, "/sign/templates"], ["Call sheets", o.templates.callSheets, "/production/call-sheets?tab=templates"], ["Other", o.templates.other]]} /></Side>
               <Side label="Your signature" action={o.signature.adopted ? "Edit" : "Set up"} to="/sign/signature">
                 <Rows rows={[["Adopted", o.signature.adopted ? `Yes · ${o.signature.method}` : "No"]]} />
               </Side>

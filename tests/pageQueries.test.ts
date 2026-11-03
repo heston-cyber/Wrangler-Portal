@@ -147,6 +147,15 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "home.dashboard": { pages: ["owner"], args: () => ({ tzOffsetMin: 300 }) }, // Dashboard: Today, Coming up, Live edits, Money
   "production.shoots": { pages: ["owner"], args: () => ({}) }, // Production › Shoots
   "production.projectsForShoot": { pages: ["owner"], args: () => ({}) }, // New shoot
+  // Phase 5b step 3: call sheets. The owner's pages; the client's reader and project card (null / [] for anyone it wasn't
+  // sent to); the vendor's reader and Home list (the vendor side; tests/callSheets.test.ts fires them as vendors).
+  "callSheets.list": { pages: ["owner"], args: () => ({}) }, // Production › Call sheets
+  "callSheets.newOptions": { pages: ["owner"], args: () => ({}) }, // New call sheet
+  "callSheets.get": { pages: ["owner"], args: () => "skip" }, // the questions, the editor, Detail
+  "callSheets.forClient": { pages: ["clientHome"], args: () => ({ callSheetId: "nope" }) }, // /call-sheets/<id>
+  "callSheets.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Coming up
+  "vendorPortal.callSheet": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only)
+  "vendorPortal.callSheets": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only)
   "footage.settings": { pages: ["owner"], args: () => ({}) }, // Settings › Payments › Footage storage
   "footage.forProject": { pages: ["owner"], args: () => "skip" }, // project › Delivery › Raw footage storage
   "footage.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Raw footage

@@ -23,6 +23,7 @@ import { PdfPages } from "../proposals/ClientProposal";
 import wpLogo from "../../assets/d1/wp-logo.png";
 
 import { Ctx, type Biz } from "./ctx";
+import { VendorCallSheetPage } from "../production/CallSheetRead";
 import { InvoiceEditor, VendorInvoice, VendorInvoices, VendorReview, VendorSettings, HomeInvoices } from "./VendorWork";
 const KEY = "wr.vendorBiz";
 const read = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
@@ -77,6 +78,8 @@ export default function VendorApp({ me }: { me: { name: string | null; email: st
 function Routes({ path, me }: { path: string; me: { name: string | null; email: string } }) {
   const booking = /^\/vendor\/bookings\/([^/]+)\/?$/.exec(path);
   const brief = /^\/vendor\/briefings\/([^/]+)\/?$/.exec(path);
+  const sheet = /^\/vendor\/call-sheets\/([^/]+)\/?$/.exec(path); // Phase 5b step 3: a call sheet sent to them
+  if (sheet) return <VendorCallSheetPage key={sheet[1]} callSheetId={sheet[1]} />;
   if (booking) return <VendorBooking key={booking[1]} bookingId={booking[1]} />;
   if (/^\/vendor\/bookings\/?$/.test(path)) return <VendorBookings />;
   if (brief) return <VendorBriefing key={brief[1]} briefingId={brief[1]} />;
@@ -124,6 +127,7 @@ function VendorHome() {
   const { biz, list } = useContext(Ctx);
   const others = list.length > 1;
   const h = useQuery(api.vendorPortal.home, biz ? { businessId: biz } : "skip");
+  const sheets = useQuery(api.vendorPortal.callSheets, biz ? { businessId: biz } : "skip"); // Phase 5b step 3
   const [declining, setDeclining] = useState<Id<"vendorBookings"> | null>(null);
   const [toast, show] = useToast();
   const accept = useMutation(api.vendorPortal.accept);
@@ -156,6 +160,10 @@ function VendorHome() {
                 : h.toRead.map((b, i) => <div key={b._id} className="wp-rowwrap">{i > 0 && <Divider />}
                   <ListRow className="ilead" lead={{ icon: "note" }} to={`/vendor/briefings/${b._id}`} title={b.title} meta={`Sent ${when(b.sentAt)} by ${h.owner}`} chip={<StatusChip tone="danger">New</StatusChip>} chevron /></div>)}
             </Card>
+            {sheets && sheets.length > 0 && <Card label="Call sheets" head={<SectionHead label="Call sheets" count={sheets.length} />}>
+              {sheets.map((c, i) => <div key={c._id} className="wp-rowwrap">{i > 0 && <Divider />}
+                <ListRow className="ilead" lead={{ icon: "document" }} to={`/vendor/call-sheets/${c._id}`} title={c.project} meta={`${new Date(`${c.date}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" })} · sent ${when(c.sentAt)}`} chip={c.opened ? undefined : <StatusChip tone="danger">New</StatusChip>} chevron /></div>)}
+            </Card>}
             <Card label="Upcoming" head={<SectionHead label="Upcoming" count={h.upcoming.length} />}>
               {h.upcoming.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "calendar" }} title="Nothing booked yet." />
                 : h.upcoming.map((x, i) => <div key={x._id} className="wp-rowwrap">{i > 0 && <Divider />}
