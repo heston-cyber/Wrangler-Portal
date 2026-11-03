@@ -10,6 +10,8 @@ import { v, ConvexError } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireMe } from "./lib/access";
+import { httpAction } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { allowedEmails } from "./lib/owners";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -255,4 +257,46 @@ export const agentRun = internalMutation({
   handler: async (ctx, a) => {
     await ctx.db.insert("siteWatchRuns", { at: Date.now(), by: "agent", found: Math.max(0, a.found), cleared: Math.max(0, a.cleared), summary: clean(a.summary, 600) });
   },
+});
+
+// ---------- the agent's door: POST /site-watch (Authorization: Bearer <SITE_WATCH_KEY>) ----------
+// Least power (read-back, Nov 3): the agent reads and updates Site watch's own list and nothing else. A Convex deploy
+// key would also let it deploy to live, which D128 doesn't allow. SITE_WATCH_KEY is set by Heston in the Convex
+// dashboard and in the agent's environment settings, never in chat or the repo. Unset (or under 32 characters) = shut.
+
+async function sha(text: string) {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+export async function keyOk(given: string | null) {
+  const want = process.env.SITE_WATCH_KEY ?? "";
+  if (want.length < 32 || !given) return false;
+  const [a, b] = [await sha(given), await sha(want)]; // same length either way
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return d === 0;
+}
+
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
+
+export const agentHttp = httpAction(async (ctx, req) => {
+  const auth = req.headers.get("authorization") ?? "";
+  if (!(await keyOk(auth.startsWith("Bearer ") ? auth.slice(7).trim() : null))) return json({ error: "Not allowed." }, 401);
+  let body: Record<string, unknown>;
+  try { body = (await req.json()) as Record<string, unknown>; } catch { return json({ error: "Send JSON." }, 400); }
+  const s = (k: string) => (typeof body[k] === "string" ? (body[k] as string) : "");
+  try {
+    switch (body.action) {
+      case "check": return json(await ctx.runMutation(internal.siteWatch.check, {}));
+      case "open": return json(await ctx.runQuery(internal.siteWatch.agentOpen, {}));
+      case "found": return json(await ctx.runMutation(internal.siteWatch.agentFound, { key: s("key"), title: s("title"), ...(s("detail") ? { detail: s("detail") } : {}), ...(typeof body.count === "number" ? { count: body.count } : {}) }) ?? null);
+      case "clear": return json(await ctx.runMutation(internal.siteWatch.agentClear, { key: s("key") }));
+      case "fixReady": return json(await ctx.runMutation(internal.siteWatch.agentFixReady, { key: s("key"), branch: s("branch"), note: s("note") }) ?? null);
+      case "needsYou": return json(await ctx.runMutation(internal.siteWatch.agentNeedsYou, { key: s("key"), note: s("note") }) ?? null);
+      case "run": return json(await ctx.runMutation(internal.siteWatch.agentRun, { found: Number(body.found) || 0, cleared: Number(body.cleared) || 0, summary: s("summary") }) ?? null);
+      default: return json({ error: "Unknown action. Use check, open, found, clear, fixReady, needsYou or run." }, 400);
+    }
+  } catch (e) {
+    return json({ error: clean((e as { data?: string }).data ?? (e as Error).message, 200) }, 400);
+  }
 });

@@ -16,6 +16,7 @@ import { verifyHttp as wsVerify } from "./signDone";
 import { callback as wsDropboxCallback } from "./wsArchive";
 import { connectWebhook } from "./payments";
 import { webflow as webflowLeads } from "./leads";
+import { agentHttp as siteWatchAgent } from "./siteWatch";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);
@@ -76,5 +77,7 @@ http.route({ path: "/upload/chunk", method: "POST", handler: uploadChunk });
 http.route({ path: "/upload/chunk", method: "OPTIONS", handler: uploadChunkPreflight });
 http.route({ path: "/email/stop", method: "GET", handler: emailStop });
 http.route({ path: "/email/stop", method: "POST", handler: emailStop });
+// Phase 5c (Nov 3): the site-watch agent's door (key-locked; Site watch's own list only).
+http.route({ path: "/site-watch", method: "POST", handler: siteWatchAgent });
 
 export default http;

@@ -144,6 +144,33 @@ test("T5c.1 a background job that failed in the last day is found, grouped by fu
   // convex-test keeps no error text on a failed job (real Convex does: state.error), so only the count is checked here.
 });
 
+test("the agent's door: shut without SITE_WATCH_KEY, refuses a wrong key, and never records a fix from main", async () => {
+  const w = await setup();
+  const call = (key: string | null, body: unknown) => w.t.fetch("/site-watch", { method: "POST", headers: { "content-type": "application/json", ...(key ? { authorization: `Bearer ${key}` } : {}) }, body: JSON.stringify(body) });
+  const good = "k".repeat(40);
+  delete process.env.SITE_WATCH_KEY;
+  expect((await call(good, { action: "open" })).status).toBe(401); // no key set: shut
+  process.env.SITE_WATCH_KEY = "short";
+  expect((await call("short", { action: "open" })).status).toBe(401); // too short: shut
+  process.env.SITE_WATCH_KEY = good;
+  try {
+    expect((await call(null, { action: "open" })).status).toBe(401);
+    expect((await call("k".repeat(39), { action: "open" })).status).toBe(401);
+    expect((await call(good, { action: "found", key: "page:/:phone", title: "Blank on phone" })).status).toBe(200);
+    const open = await (await call(good, { action: "open" })).json();
+    expect(open).toEqual([expect.objectContaining({ key: "page:/:phone", status: "found" })]);
+    const main = await call(good, { action: "fixReady", key: "page:/:phone", branch: "main", note: "x" });
+    expect(main.status).toBe(400);
+    expect((await main.json()).error).toMatch(/watch/);
+    expect((await call(good, { action: "fixReady", key: "page:/:phone", branch: "watch/blank-phone", note: "on its branch" })).status).toBe(200);
+    expect((await call(good, { action: "check" })).status).toBe(200);
+    expect((await call(good, { action: "delete everything" })).status).toBe(400);
+    expect((await findings(w))[0]).toMatchObject({ status: "fix_ready", branch: "watch/blank-phone" });
+  } finally {
+    delete process.env.SITE_WATCH_KEY;
+  }
+});
+
 test("clean() and isUrgent()", () => {
   expect(clean("to a.b@c.example failed, key sk_live_ABCDEFGHIJ")).toBe("to …@… failed, key sk_…");
   expect(clean("x".repeat(500)).length).toBeLessThanOrEqual(240);
