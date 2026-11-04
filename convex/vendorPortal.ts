@@ -71,6 +71,7 @@ async function bookingRow(ctx: Ctx, x: Doc<"vendorBookings">, today: string) {
     const b = await ctx.db.get(r.briefingId);
     if (b && b.status === "sent" && b.projectId === x.projectId && !briefs.some((y) => y._id === b._id)) briefs.push({ ...b, readAt: r.readAt });
   }
+  for (let i = briefs.length - 1; i >= 0; i--) if (briefs[i].linkOff) briefs.splice(i, 1); // review M1
   const brief = briefs.sort((a, b) => (b.sentAt ?? 0) - (a.sentAt ?? 0))[0] ?? null;
   return {
     _id: x._id, project: p ? label(p) : "A project", projectName: p?.name ?? "A project", role: x.role, start: x.start, end: x.end, days: daysIn(x.start, x.end),
@@ -101,7 +102,8 @@ async function myBriefings(ctx: Ctx, vendorId: Id<"vendors">) {
     const b = await ctx.db.get(r.briefingId);
     if (b && b.status === "sent") out.set(b._id, { ...b, readAt: r.readAt });
   }
-  return [...out.values()].sort((a, b) => (b.sentAt ?? 0) - (a.sentAt ?? 0));
+  // Review M1 (D147, Q91 a): a briefing whose link the owner turned off is withdrawn here too.
+  return [...out.values()].filter((b) => !b.linkOff).sort((a, b) => (b.sentAt ?? 0) - (a.sentAt ?? 0));
 }
 
 // ---------- who they are, and the businesses they work for ----------
@@ -229,7 +231,7 @@ async function sentToMe(ctx: Ctx, briefingId: string) {
   const x = id ? await ctx.db.get(id) : null;
   // D147: emailed to them as a vendor on the list (their recipient row), or sent through a booking before D147.
   const rows = x ? await ctx.db.query("briefingRecipients").withIndex("by_briefing", (q) => q.eq("briefingId", x._id)).collect() : [];
-  const me = await mine(ctx, x, (vid) => x!.status === "sent" && (x!.sentTo?.vendorId === vid || rows.some((r) => r.vendorId === vid)));
+  const me = await mine(ctx, x, (vid) => x!.status === "sent" && !x!.linkOff && (x!.sentTo?.vendorId === vid || rows.some((r) => r.vendorId === vid))); // review M1: off is off here too
   if (!me || !x) return null;
   const r = rows.find((y) => y.vendorId === me.vendor._id) ?? null;
   return { me, x: r ? { ...x, readAt: r.readAt } : x, r };
@@ -241,7 +243,11 @@ export const briefing = query({
   handler: async (ctx, { briefingId }) => {
     const r = await sentToMe(ctx, briefingId);
     if (!r) return null;
-    return { businessId: r.me.biz, ...(await ownerOf(ctx, r.me.biz)), ...(await briefRow(ctx, r.x)), pdfUrl: r.x.pdfId ? await ctx.storage.getUrl(r.x.pdfId) : null };
+    // Review M1: emailed to them since D147, the PDF comes through their own link (/b-pdf/<token>), so turning the link
+    // off stops it; a briefing sent before D147 (no link of its own) keeps its file address.
+    const site = (process.env.CONVEX_SITE_URL ?? "").replace(/\/$/, "");
+    const pdfUrl = r.r && site ? `${site}/b-pdf/${r.r.token}` : r.x.pdfId ? await ctx.storage.getUrl(r.x.pdfId) : null;
+    return { businessId: r.me.biz, ...(await ownerOf(ctx, r.me.biz)), ...(await briefRow(ctx, r.x)), pdfUrl };
   },
 });
 

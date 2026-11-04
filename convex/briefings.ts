@@ -34,6 +34,7 @@ import { bump } from "./lib/rate";
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
 const MAX_TO = 25;
+const RESEND_GAP = 10 * 60_000;
 const TOKEN = /^[A-Za-z0-9_-]{16,64}$/;
 const EMAIL = /^[^\s@<>,;"']+@[^\s@<>,;"']+\.[^\s@<>,;"']{2,}$/;
 const fresh = (f: { _creationTime: number }) => Date.now() - f._creationTime < 30 * 60_000;
@@ -118,7 +119,7 @@ async function cleanTo(ctx: QueryCtx, list: To[]) {
     if (t.vendorId) {
       const vd = await ctx.db.get(t.vendorId); // another business's vendor reads as null (the business guard)
       if (!vd || vd.archivedAt) throw new ConvexError("That vendor isn't on your list.");
-      vendorId = vd._id; email = vd.email.trim().toLowerCase(); name = vd.name;
+      vendorId = vd._id; email = vd.email.trim().toLowerCase(); name = vd.name.replace(/\s+/g, " ").trim().slice(0, 80) || undefined; // review L6
     }
     if (!EMAIL.test(email) || email.length > 200) throw new ConvexError(`“${t.email.slice(0, 60)}” isn't an email address.`);
     if (seen.has(email)) continue;
@@ -310,23 +311,30 @@ export const shareStart = internalMutation({
     const now = Date.now();
     // As proposals (review fix): a file that isn't a fresh PDF upload is never touched; one this caller just uploaded
     // for this briefing is theirs, so a refusal deletes it (returned, not thrown, so the delete isn't rolled back).
-    const refuse = async (error: string) => { if (a.storageId) await ctx.storage.delete(a.storageId).catch(() => null); return { error }; };
+    // Review M2: a refusal deletes only after the file is shown to be a fresh PDF upload (below); a shared briefing
+    // never touches the file it's given (its PDF is already frozen, and the browser sends none).
+    let mayDrop = false;
+    const refuse = async (error: string) => { if (a.storageId && mayDrop) await ctx.storage.delete(a.storageId).catch(() => null); return { error }; };
     let patch: Partial<Doc<"briefings">> = { updatedAt: now };
     const hist = [...x.history];
     if (x.status === "draft") {
       if (!a.storageId) return { error: "The PDF didn't upload. Try again." };
       const file = await ctx.db.system.get(a.storageId);
       if (!file || !fresh(file) || (file.contentType && file.contentType !== "application/pdf") || file.size > MAX_PDF_BYTES) return { error: "The PDF didn't upload. Try again." };
+      if (await ctx.db.query("briefings").filter((q) => q.eq(q.field("pdfId"), a.storageId)).first()) return { error: "The PDF didn't upload. Try again." };
+      mayDrop = true;
       const problems = briefingProblems(docOf(build));
       if (problems.length) return refuse(problems[0]);
       patch = { ...patch, status: "sent", pdfId: a.storageId, sentAt: now };
       await ctx.db.patch(build._id, { renderedAt: now });
-    } else if (a.storageId) await ctx.storage.delete(a.storageId).catch(() => null); // already frozen: the extra upload isn't needed
+    }
     const sends: Array<{ recipientId: Id<"briefingRecipients">; email: string; name: string | null; token: string }> = [];
     const have = await recipientsOf(ctx, x._id);
     if (have.length + to.filter((t) => !have.some((r) => r.email === t.email)).length > 200) return refuse("That's a lot of people for one briefing. Make a copy for the rest.");
     for (const t of to) {
       const old = have.find((r) => r.email === t.email);
+      if (old && old.sentAt > now - RESEND_GAP) continue; // review L2: emailed in the last 10 minutes, not again
+      await bump(ctx, "briefingSend", String(x.businessId ?? "default")); // review L2: at most 200 briefing emails an hour per business
       if (old) { await ctx.db.patch(old._id, { sentAt: now }); sends.push({ recipientId: old._id, email: old.email, name: old.name ?? null, token: old.token }); continue; }
       const token = randomToken(18);
       const recipientId = await ctx.db.insert("briefingRecipients", { briefingId: x._id, email: t.email, ...(t.name ? { name: t.name } : {}), ...(t.vendorId ? { vendorId: t.vendorId } : {}), token, sentAt: now, opens: 0 });
@@ -432,12 +440,12 @@ export const opened = mutation({
     const f = await byToken(ctx, token);
     if (!f || f.x.linkOff || isOwnerCall(ctx)) return null;
     focusBusiness(ctx, f.x.businessId);
-    try { await bump(ctx, "briefingLink", token); } catch { return null; } // a page reloaded all hour stops counting
+    try { await bump(ctx, "briefingLink", `open:${token}`); } catch { return null; } // a page reloaded all hour stops counting
     const now = Date.now();
     if (f.r) {
       await ctx.db.patch(f.r._id, { opens: f.r.opens + 1, ...(f.r.openedAt ? {} : { openedAt: now }) });
       if (!f.r.openedAt) await ctx.db.patch(f.x._id, { history: [...f.x.history, { kind: "opened", at: now, by: f.r.name || f.r.email }].slice(-60) });
-    } else await ctx.db.patch(f.x._id, { linkOpens: (f.x.linkOpens ?? 0) + 1 });
+    } else await ctx.db.patch(f.x._id, { linkOpens: Math.min((f.x.linkOpens ?? 0) + 1, 1_000_000) });
     return null;
   },
 });
@@ -451,14 +459,17 @@ export const markRead = mutation({
     if (f.x.linkOff) throw new ConvexError("This briefing was withdrawn.");
     if (isOwnerCall(ctx)) return null; // the owner checking the page isn't the person reading it
     focusBusiness(ctx, f.x.businessId);
-    await bump(ctx, "briefingLink", token);
+    await bump(ctx, "briefingLink", `read:${token}`);
     const now = Date.now();
     if (f.r) {
       if (f.r.readAt) return null;
       await ctx.db.patch(f.r._id, { readAt: now, ...(f.r.openedAt ? {} : { openedAt: now }) });
       await ctx.db.patch(f.x._id, { updatedAt: now, history: [...f.x.history, { kind: "read", at: now, by: f.r.name || f.r.email }].slice(-60) });
       await ctx.scheduler.runAfter(0, internal.vendorPortal.mailOwner, { what: "recipient-read", id: f.r._id });
-    } else await ctx.db.patch(f.x._id, { linkReads: (f.x.linkReads ?? 0) + 1, history: [...f.x.history, { kind: "read", at: now, by: "someone with the link" }].slice(-60) });
+    } else { // review L1: counted; only the first goes in the history, so the link can't push the owner's own entries out
+      const n = f.x.linkReads ?? 0;
+      await ctx.db.patch(f.x._id, { linkReads: Math.min(n + 1, 100_000), ...(n ? {} : { history: [...f.x.history, { kind: "read", at: now, by: "someone with the link" }].slice(-60) }) });
+    }
     return null;
   },
 });
@@ -476,9 +487,10 @@ export const pdfFor = internalQuery({
 
 /** GET /b-pdf/<token>: the PDF the page shows and downloads. Turning the link off stops it (no lasting file URL). */
 export const pdfRoute = httpAction(async (ctx, req) => {
-  const token = decodeURIComponent(new URL(req.url).pathname.replace(/^\/b-pdf\//, "")).replace(/\.pdf$/, "");
   const cors = { "Access-Control-Allow-Origin": "*", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" };
-  const d = await ctx.runQuery(internal.briefings.pdfFor, { token });
+  let token = "";
+  try { token = decodeURIComponent(new URL(req.url).pathname.replace(/^\/b-pdf\//, "")).replace(/\.pdf$/, ""); } catch { token = ""; } // review L5
+  const d = TOKEN.test(token) ? await ctx.runQuery(internal.briefings.pdfFor, { token }) : null;
   const blob = d ? await ctx.storage.get(d.pdfId) : null;
   if (!d || !blob) return new Response("This briefing isn't here.", { status: 404, headers: { ...cors, "Content-Type": "text/plain" } });
   const download = new URL(req.url).searchParams.has("download");

@@ -85,7 +85,7 @@ describe("briefings", () => {
     await expect(w.heston.mutation(api.builder.saveBuild, { buildId: b.buildId, title: "X", blocks: build.blocks, fields: build.fields, signers: [], style: build.style })).rejects.toThrow(/has been sent/);
     await expect(w.heston.mutation(api.briefings.deleteDraft, { briefingId: id })).rejects.toThrow(/stays/);
     await expect(w.heston.mutation(api.briefings.setDetails, { briefingId: id, projectId: null, sendTo: [] })).rejects.toThrow(/Share again/);
-    vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(Date.now() + 1000);
+    vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(Date.now() + 11 * 60_000); // review L2: not again within 10 minutes
     await w.heston.action(api.briefings.share, { briefingId: id, to: [{ email: "JORDAN@ellisfilms.com" }] });
     vi.useRealTimers();
     const again = mails.filter((m) => m.subject.startsWith("Briefing:"));

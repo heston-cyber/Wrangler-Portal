@@ -168,4 +168,77 @@ describe("D147 briefings sent freely", () => {
     await expect(w.heston.mutation(api.briefings.setDetails, { briefingId: draft, projectId: null, sendTo: [{ vendorId: other, email: "ov@x.com" }] })).rejects.toThrow(/isn't on your list/);
     void internal;
   });
+
+  test("review M2: a shared briefing never deletes a file it's handed (another business's PDF stays)", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const a = await shared(w, mails);
+    const aPdf = await w.t.run(async (ctx) => (await ctx.db.get(a.id))!.pdfId!);
+    // B's own shared briefing, handed A's frozen PDF: refused or ignored, never deleted.
+    const bId = await w.boss.mutation(api.briefings.create, {}) as Id<"briefings">;
+    const bb = await w.boss.query(api.briefings.get, { briefingId: bId });
+    const bd = await w.boss.query(api.builder.getBuild, { buildId: bb.buildId });
+    const custom = bd.fields.custom.map((c: { key: string; label: string; value: string }) => (c.key === "dates" ? { ...c, value: "Dec 1, 2030" } : c));
+    await w.boss.mutation(api.builder.saveBuild, { buildId: bb.buildId, title: bd.title, blocks: bd.blocks, fields: { ...bd.fields, custom }, signers: [], style: bd.style });
+    await w.boss.action(api.briefings.share, { briefingId: bId, storageId: await pdf(w), to: [], copyLink: true });
+    await w.boss.action(api.briefings.share, { briefingId: bId, storageId: aPdf, to: [], copyLink: true }).catch(() => null);
+    await expect(w.boss.action(api.briefings.share, { briefingId: bId, storageId: aPdf, to: [{ email: "x" }] })).rejects.toThrow();
+    expect(await w.t.run(async (ctx) => (await ctx.storage.get(aPdf)) !== null)).toBe(true);
+    expect((await w.t.fetch(`/b-pdf/${a.priya}`)).status).toBe(200);
+    // A draft can't be frozen with a PDF that's already another briefing's.
+    const draft = await w.heston.mutation(api.briefings.create, { projectId: w.p }) as Id<"briefings">;
+    await expect(w.heston.action(api.briefings.share, { briefingId: draft, storageId: aPdf, to: [], copyLink: true })).rejects.toThrow(/didn't upload/);
+    expect(await w.t.run(async (ctx) => (await ctx.storage.get(aPdf)) !== null)).toBe(true);
+  });
+
+  test("review M1: turning the link off withdraws it from the vendor portal too; their PDF comes through their own link", async () => {
+    vi.useFakeTimers();
+    process.env.CONVEX_SITE_URL = "https://x.convex.site";
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const vendorId = await w.heston.mutation(api.vendors.add, { name: "Jordan Ellis", email: "jordan@ellisfilms.com", roles: ["Shooter"], rates: [], invite: false }) as Id<"vendors">;
+    const sub = await w.t.run(async (ctx) => {
+      const userId = await ctx.db.insert("users", { email: "jordan@ellisfilms.com", name: "Jordan Ellis", role: "vendor" });
+      await ctx.db.insert("memberships", { businessId: w.A, email: "jordan@ellisfilms.com", userId, role: "vendor", createdAt: Date.now() });
+      return `${userId}|${await ctx.db.insert("authSessions", { userId, expirationTime: Date.now() + 3_600_000 })}`;
+    });
+    const jordan = w.t.withIdentity({ subject: sub });
+    const id = await w.heston.mutation(api.briefings.create, { projectId: w.p }) as Id<"briefings">;
+    const g = await w.heston.query(api.briefings.get, { briefingId: id });
+    const bd = await w.heston.query(api.builder.getBuild, { buildId: g.buildId });
+    const custom = bd.fields.custom.map((c: { key: string; label: string; value: string }) => (c.key === "dates" ? { ...c, value: "Nov 6, 2030" } : c));
+    await w.heston.mutation(api.builder.saveBuild, { buildId: g.buildId, title: bd.title, blocks: bd.blocks, fields: { ...bd.fields, custom }, signers: [], style: bd.style });
+    await w.heston.action(api.briefings.share, { briefingId: id, storageId: await pdf(w), to: [{ vendorId, email: "" }] });
+    const tok = tokenIn(mails.find((m) => m.to === "jordan@ellisfilms.com")!);
+    expect((await jordan.query(api.vendorPortal.briefing, { briefingId: id })).pdfUrl).toBe(`https://x.convex.site/b-pdf/${tok}`);
+    expect((await jordan.query(api.vendorPortal.briefings, { businessId: w.A })).rows).toHaveLength(1);
+    await w.heston.mutation(api.briefings.setLinkOff, { briefingId: id, off: true });
+    expect(await jordan.query(api.vendorPortal.briefing, { briefingId: id })).toBeNull();
+    expect((await jordan.query(api.vendorPortal.briefings, { businessId: w.A })).rows).toEqual([]);
+    await expect(jordan.mutation(api.vendorPortal.markRead, { briefingId: id })).rejects.toThrow();
+    expect((await w.heston.query(api.briefings.get, { briefingId: id })).state).toBe("sent");
+    await w.heston.mutation(api.briefings.setLinkOff, { briefingId: id, off: false });
+    await jordan.mutation(api.vendorPortal.markRead, { briefingId: id });
+    expect((await w.heston.query(api.briefings.get, { briefingId: id })).state).toBe("read");
+    delete process.env.CONVEX_SITE_URL;
+  });
+
+  test("review L1, L2, L5: copied-link reads don't flood the history; no re-email within 10 minutes; a bad PDF address is a 404", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const { id, link, priya } = await shared(w, mails);
+    for (let i = 0; i < 70; i++) await w.t.mutation(api.briefings.markRead, { token: link });
+    const g = await w.heston.query(api.briefings.get, { briefingId: id });
+    expect(g.link.reads).toBe(70);
+    expect(g.history.filter((h: { kind: string }) => h.kind === "read")).toHaveLength(1);
+    expect(g.history.some((h: { kind: string }) => h.kind === "sent")).toBe(true);
+    await w.t.mutation(api.briefings.markRead, { token: priya }); // the person's own link has its own allowance
+    const before = mails.length;
+    await w.heston.action(api.briefings.share, { briefingId: id, to: [{ email: "priya@rao.example" }] });
+    expect(mails.length).toBe(before);
+    expect((await w.t.fetch("/b-pdf/%E0%A4%A")).status).toBe(404);
+  });
 });
