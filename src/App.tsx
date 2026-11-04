@@ -112,14 +112,18 @@ const KIT_ON = import.meta.env.DEV || import.meta.env.VITE_KIT === "1";
 const Kit = KIT_ON ? lazy(() => import("./dev/Kit")) : null;
 const KitApp = KIT_ON ? lazy(() => import("./dev/KitApp")) : null;
 // ?kit=owner or ?kit=client: the real pages with sample data (dev only); ?kit=off ends it.
-function kitSide(): "owner" | "client" | "vendor" | null {
+// Phone pass (Nov 4): also ?kit=guest (a signed-in call-sheet guest), ?kit=guestout (the same, signed out), ?kit=empty (an
+// owner with nothing yet) and ?kit=loading (an owner whose queries never answer, so every page shows its loading state).
+const KIT_SIDES = ["owner", "client", "vendor", "guest", "guestout", "empty", "loading"] as const;
+type KitSide = (typeof KIT_SIDES)[number];
+function kitSide(): KitSide | null {
   if (!KIT_ON) return null;
   try {
     const q = new URLSearchParams(location.search).get("kit");
-    if (q === "owner" || q === "client" || q === "vendor") sessionStorage.setItem("wr.kit", q);
+    if (KIT_SIDES.includes(q as KitSide)) sessionStorage.setItem("wr.kit", q!);
     if (q === "off") sessionStorage.removeItem("wr.kit");
     const s = sessionStorage.getItem("wr.kit");
-    return s === "owner" || s === "client" || s === "vendor" ? s : null;
+    return KIT_SIDES.includes(s as KitSide) ? (s as KitSide) : null;
   } catch { return null; }
 }
 const isSignHost = () => /^sign\./i.test(location.hostname);
@@ -133,6 +137,8 @@ export default function App() {
   if (Kit && path.startsWith("/__kit")) return <Suspense fallback={<Loading />}><Kit /></Suspense>;
   const kit = kitSide();
   if (KitApp && kit) {
+    const guestKit = /^\/guest(?:\/([A-Za-z0-9_-]{16,64}))?\/?$/.exec(path);
+    if (guestKit && (kit === "guest" || kit === "guestout")) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><GuestApp key={guestKit[1] ?? "home"} token={guestKit[1] ?? null} /></Suspense></KitApp></Suspense>;
     const sh = /^\/s\/([^/]+)(?:\/v\/([^/]+))?\/?$/.exec(path);
     const inv = /^\/i\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
     if (inv) {
