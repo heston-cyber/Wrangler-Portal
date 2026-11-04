@@ -492,3 +492,441 @@ describe("T5b.4 calendar sync", () => {
     expect(toGoogle({ date: "2026-11-26", endDate: "2026-11-27" })).toEqual({ start: { date: "2026-11-26" }, end: { date: "2026-11-28" } });
   });
 });
+
+// ======================= independent review fixes (Nov 4) =======================
+const internalApi = anyApi;
+const B_PROJECT = "Other Films Secret Feature";
+
+describe("T5b.4 review fixes", () => {
+  test("H1 two businesses connect and reconnect, the cron runs: each business's rows and Google writes stay its own", async () => {
+    const w = await world();
+    const g = fakeGoogle();
+    await connect(w); // Heston (A): Google account c1, Wrangler Productions picked
+    await connect(w, w.boss, "c2", BOSS_CAL); // Other Films (B): its own account
+    const bProject = await w.boss.mutation(api.library.createProject, { name: B_PROJECT }) as Id<"projects">;
+    await w.boss.mutation(api.projects.setKeyDates, { projectId: bProject, dates: [{ label: "Rough cut due", date: day(8) }] });
+    await w.heston.mutation(api.projects.setKeyDates, { projectId: w.p, dates: [{ label: "Cut 2 due", date: day(6) }] });
+    await w.boss.mutation(api.calendarSync.setShown, { calendarId: PICKED, on: true }); // B also shows the shared team calendar
+    await settle(w);
+    g.inGoogle.add(PICKED, { id: "teamcall1", summary: "Team call", ...toGoogle({ date: day(2), endDate: day(2), start: "10:00", end: "11:00" }) });
+    g.inGoogle.add(BOSS_CAL, { id: "bossdinner1", summary: "Boss: dinner with investor", ...toGoogle({ date: day(2), endDate: day(2), start: "19:00", end: "21:00" }) });
+    // Both lose Google and reconnect (the reconnect is what used to run an unscoped pull), then the cron runs.
+    await breakSignIn(w, g);
+    await connect(w);
+    g.refreshFails = true;
+    await w.t.run(async (ctx) => { for (const c of await ctx.db.query("calendars").collect()) await ctx.db.patch(c._id, { accessExpiresAt: 0 }); });
+    expect(await w.boss.action(api.calendarSync.syncNow, {})).toEqual({ state: "disconnected" });
+    g.refreshFails = false;
+    await connect(w, w.boss, "c2", BOSS_CAL);
+    expect(await w.t.action(internalApi.calendarSync.pullAll, {})).toBe(2);
+    await settle(w);
+    // B's project never reaches A's calendar, nor A's B's; each business's dates go on its own picked calendar.
+    const titles = (cal: string) => g.live(cal).map((e) => e.summary).sort();
+    expect(titles(PICKED)).toEqual(["Cut 2 due · Launch", "Team call"]);
+    expect(titles(BOSS_CAL)).toEqual(["Boss: dinner with investor", `Rough cut due · ${B_PROJECT}`]);
+    // Every write to a calendar used that business's own Google account.
+    for (const c of g.writes()) expect(c.acct).toBe(c.url.includes(encodeURIComponent(BOSS_CAL)) ? "c2" : "c1");
+    // The portal's rows: each business's own, from its own calendars.
+    const rows = await w.t.run(async (ctx) => (await ctx.db.query("calendarEvents").collect()).map((r) => [r.businessId === w.A ? "A" : "B", r.calendarId, r.kind, r.title]));
+    const B = await w.t.run(async (ctx) => (await ctx.db.query("businesses").collect()).find((b) => b._id !== w.A)!._id);
+    expect(rows.filter(([b]) => b === "A").every(([, cal]) => cal === PICKED)).toBe(true);
+    expect(rows.filter(([, , , t]) => String(t).includes(B_PROJECT)).every(([b]) => b === "B")).toBe(true);
+    expect(rows.filter(([, , , t]) => t === "Boss: dinner with investor").map(([b]) => b)).toEqual(["B"]);
+    expect(rows.filter(([b, , kind]) => b === "B" && kind === "date").map(([, cal]) => cal)).toEqual([BOSS_CAL]);
+    expect((await range(w)).events.map((e: any) => e.title)).toEqual(["Team call"]);
+    // B shows the shared team calendar too: there A's edit date is just a Google event to B, read-only.
+    expect((await range(w, w.boss)).events.map((e: any) => [e.title, e.readOnly]).sort()).toEqual([["Boss: dinner with investor", false], ["Cut 2 due · Launch", true], ["Team call", false]]);
+    expect(rows.filter(([b, , kind]) => b === "B" && kind === "date")).toHaveLength(1);
+    expect(B).not.toBe(w.A);
+  });
+
+  test("H1 calendar sync's internal functions refuse to run for no business", async () => {
+    const w = await world();
+    fakeGoogle();
+    await connect(w);
+    const [row] = await w.t.run(async (ctx) => [await ctx.db.insert("calendarEvents", { businessId: w.A, kind: "google", calendarId: PICKED, googleId: "abcdef12", title: "x", date: day(1), endDate: day(1), guests: [], gUpdated: 0, syncedAt: 0, createdAt: 0 })]);
+    const nobody = /one business at a time/;
+    await expect(w.t.action(internalApi.calendarSync.pull, {})).rejects.toThrow(nobody);
+    await expect(w.t.action(internalApi.calendarSync.push, { eventId: row })).rejects.toThrow(nobody);
+    await expect(w.t.action(internalApi.calendarSync.pushDates, {})).rejects.toThrow(nobody);
+    await expect(w.t.query(internalApi.calendarSync.datesPlan, {})).rejects.toThrow(nobody);
+    await expect(w.t.mutation(internalApi.calendarSync.apply, { calendarId: PICKED, items: [] })).rejects.toThrow(nobody);
+    await expect(w.t.mutation(internalApi.calendarSync.lock, {})).rejects.toThrow(nobody);
+    await expect(w.t.mutation(internalApi.calendarSync.purge, { why: "all", before: Date.now() })).rejects.toThrow(nobody);
+    await expect(w.t.query(internalApi.calendar.getConnection, {})).rejects.toThrow(nobody);
+    await expect(w.t.action(internalApi.calendar.resync, {})).rejects.toThrow(nobody);
+    // With the business, they run.
+    await expect(w.t.query(internalApi.calendarSync.datesPlan, { asBusiness: w.A })).resolves.toMatchObject({ calendarId: PICKED });
+  });
+
+  test("H1 no plain action in convex/ schedules a job without saying which business it's for", () => {
+    // Scheduled jobs don't carry the caller's sign-in, so a job scheduled from a plain action runs for no business unless
+    // the action schedules through forBusiness(...) or passes asBusiness. Known older ones, reviewed and listed here:
+    // they act on one record they name (a Stripe invoice, a subscription), not on "the business's" data.
+    const KNOWN: Record<string, string> = {
+      "subscriptions.ts setupDone": "importInvoice by Stripe account + invoice id",
+      "subscriptions.ts cancel": "sendCancelled by subscription id",
+    };
+    const offenders: string[] = [];
+    for (const f of readdirSync("convex").filter((x) => x.endsWith(".ts"))) {
+      const src = readFileSync(`convex/${f}`, "utf8");
+      for (const m of src.matchAll(/export const (\w+) = action\(/g)) {
+        const rest = src.slice(m.index! + m[0].length);
+        const end = rest.search(/\nexport (const|async function|function|class) /);
+        const body = end < 0 ? rest : rest.slice(0, end);
+        for (const line of body.split("\n").filter((l) => /ctx\.scheduler\./.test(l))) {
+          if (/forBusiness\(|asBusiness/.test(line) || /^\s*const ctx = forBusiness\(/m.test(body)) continue;
+          if (!KNOWN[`${f} ${m[1]}`]) offenders.push(`${f} ${m[1]}: ${line.trim().slice(0, 120)}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  test("H2 a client confirming between a Google move and the next pull doesn't undo the move; nobody is emailed", async () => {
+    const w = await world();
+    const g = fakeGoogle();
+    await connect(w);
+    await inviteMaya(w);
+    const { shootId, ev } = await withShoot(w, g);
+    g.inGoogle.change(PICKED, ev.id, toGoogle({ date: day(5), endDate: day(5), start: "10:00", end: "17:00" }));
+    g.cals.get(PICKED)!.get(ev.id)!.updated = new Date(Date.now()).toISOString(); // Google's change, now
+    await new Promise((r) => setTimeout(r, 5));
+    await w.maya.mutation(api.shoots.confirm, { shootId }); // Maya confirms after it, at the time she still sees
+    await settle(w);
+    const w0 = g.writes().length, e0 = g.emails.length;
+    await pull(w);
+    expect(g.writes().slice(w0).filter((c) => c.url.includes(ev.id))).toEqual([]); // Heston's Google move stands
+    expect(g.cals.get(PICKED)!.get(ev.id)!.start.dateTime).toBe(`${day(5)}T10:00:00`);
+    expect(await shootRow(w, shootId)).toMatchObject({ date: day(5), call: "10:00", confirmed: { email: "maya@harbor.example" } });
+    expect(await notes(w)).toEqual([expect.objectContaining({ shootId, kept: false })]);
+    expect(g.emails.length).toBe(e0);
+  });
+
+  test("H2 a portal change newer than Google's is written over it with sendUpdates=none, and the owner gets a note", async () => {
+    const w = await world();
+    const g = fakeGoogle();
+    await connect(w);
+    const { shootId, ev } = await withShoot(w, g); // Jordan (vendor) is a Google guest
+    g.inGoogle.change(PICKED, ev.id, toGoogle({ date: day(7), endDate: day(7), start: "12:00", end: "14:00" }));
+    // The portal changed the shoot after that (its own write not in Google yet).
+    await w.t.run(async (ctx) => { await ctx.db.patch(shootId, { calAt: Date.now() + 120_000 }); });
+    const w0 = g.writes().length;
+    await pull(w);
+    const mine = g.writes().slice(w0).filter((c) => c.url.includes(ev.id));
+    expect(mine.length).toBeGreaterThan(0);
+    expect(mine.map(sendUpdates)).toEqual(mine.map(() => "none"));
+    expect(g.cals.get(PICKED)!.get(ev.id)!.start.dateTime).toBe(`${day(4)}T09:00:00`);
+    expect(await shootRow(w, shootId)).toMatchObject({ date: day(4), call: "09:00" });
+    expect(await notes(w)).toEqual([expect.objectContaining({ shootId, kept: true, wasDate: day(7), wasCall: "12:00", date: day(4) })]);
+    expect(await w.heston.mutation(api.calendarSync.askConfirmAgain, { shootId })).toEqual({ told: 0 }); // nothing moved: just closes it
+    expect(await notes(w)).toEqual([]);
+    // Nothing else runs with "all" on its own: the next pulls write nothing.
+    const w1 = g.writes().length;
+    await pull(w);
+    expect(g.writes().length).toBe(w1);
+  });
+
+  test("H3 the ids the portal picks are base32hex, so Google takes them; the pull keeps an edit-date error pushDates just recorded", async () => {
+    expect(newEventId()).toMatch(GOOGLE_ID);
+    expect(dateEventId("j57abc", "cut 2 due")).toMatch(GOOGLE_ID);
+    expect(shootEventId("j57abc")).toMatch(GOOGLE_ID);
+    const w = await world();
+    const g = fakeGoogle(); // answers 400 to an id outside a-v, 0-9
+    await connect(w);
+    const id = await w.heston.mutation(api.calendarSync.create, { title: "Scout", date: day(9), endDate: day(9), start: "10:00", end: "11:00", guests: [] });
+    await w.heston.mutation(api.projects.setKeyDates, { projectId: w.p, dates: [{ label: "Cut 2 due", date: day(6) }] });
+    await settle(w);
+    expect((await range(w)).events.find((e: any) => e._id === id)).toMatchObject({ pending: false, pushError: null });
+    expect(g.live(PICKED).map((e) => e.summary).sort()).toEqual(["Cut 2 due · Launch", "Scout"]);
+    // Google refuses edit dates for a while: the error shows in Settings and a pull doesn't wipe it while it's true.
+    intercept((url, i) => (url.includes("/events") && url.includes("pdt") && i?.method === "PATCH" ? new Response(JSON.stringify({ error: { message: "Backend Error" } }), { status: 503 }) : null));
+    await w.heston.mutation(api.calendarSync.moveDate, { projectId: w.p, label: "Cut 2 due", from: day(6), to: day(7) });
+    await settle(w);
+    expect((await w.heston.query(api.calendar.settings, {})).connection.lastError).toMatch(/edit date didn't reach/);
+    expect(await pull(w)).toEqual({ state: "ok" });
+    expect((await w.heston.query(api.calendar.settings, {})).connection.lastError).toMatch(/edit date didn't reach/);
+    expect((await range(w)).dates).toEqual([expect.objectContaining({ date: day(7), saving: true })]);
+  });
+
+  test("M1 a shoot can't be dragged while Google is disconnected; the resync after Reconnect emails nobody", async () => {
+    const w = await world();
+    const g = fakeGoogle();
+    await connect(w);
+    const { shootId, ev, base } = await withShoot(w, g);
+    await breakSignIn(w, g);
+    await expect(w.heston.mutation(api.calendarSync.moveShoot, { shootId, date: day(6), call: "09:00", wrap: "16:00", notify: false })).rejects.toThrow(/disconnected\. Reconnect Google/);
+    // Edited from its project meanwhile (allowed): Google gets it after Reconnect, with nobody emailed.
+    await w.heston.mutation(api.shoots.update, { shootId, ...base, date: day(6) });
+    await settle(w);
+    const w0 = g.writes().length;
+    await connect(w);
+    const writes = g.writes().slice(w0).filter((c) => c.url.includes(ev.id));
+    expect(writes.length).toBeGreaterThan(0);
+    expect(writes.map(sendUpdates)).toEqual(writes.map(() => "none"));
+    expect(g.cals.get(PICKED)!.get(ev.id)!.start.dateTime).toBe(`${day(6)}T09:00:00`);
+  });
+
+  test("M2 a failed write is tried again by the next pull; a Google change only beats it when it changed the same things", async () => {
+    const w = await world();
+    const g = fakeGoogle();
+    g.inGoogle.add(PICKED, { id: "team01", summary: "Interviews", ...toGoogle({ date: day(2), endDate: day(2), start: "09:00", end: "10:00" }), attendees: [{ email: "sam@rivera.example" }] });
+    await connect(w);
+    let failing = true;
+    intercept((url, i) => (failing && i?.method === "PATCH" && url.includes("/events/team01") ? new Response(JSON.stringify({ error: { message: "Backend Error" } }), { status: 503 }) : null));
+    const ev = (await range(w)).events[0];
+    await w.heston.mutation(api.calendarSync.move, { eventId: ev._id, date: day(3), endDate: day(3), start: "14:00", end: "15:00", notify: false });
+    await settle(w);
+    expect((await range(w)).events[0]).toMatchObject({ date: day(3), start: "14:00", pending: true, pushError: expect.stringContaining("503") });
+    // Sam accepts in Google (a change to nothing the move touched), and Google renames it: the move stays, still waiting.
+    g.inGoogle.change(PICKED, "team01", { summary: "Interviews (Floor Trader)", attendees: [{ email: "sam@rivera.example", responseStatus: "accepted" }] });
+    await pull(w);
+    expect((await range(w)).events[0]).toMatchObject({ title: "Interviews (Floor Trader)", date: day(3), start: "14:00", pending: true });
+    // Google answers again: the next pull's retry writes the move (with Google's new title kept).
+    failing = false;
+    await pull(w);
+    expect((await range(w)).events[0]).toMatchObject({ title: "Interviews (Floor Trader)", date: day(3), start: "14:00", pending: false, pushError: null });
+    expect(g.cals.get(PICKED)!.get("team01")!).toMatchObject({ summary: "Interviews (Floor Trader)", start: { dateTime: `${day(3)}T14:00:00` } });
+    // A Google change to the same thing (the time) while a portal move is still waiting: Google's is later, so it wins.
+    failing = true;
+    const now = (await range(w)).events[0];
+    await w.heston.mutation(api.calendarSync.move, { eventId: now._id, date: day(4), endDate: day(4), start: "14:00", end: "15:00", notify: false });
+    await settle(w);
+    g.inGoogle.change(PICKED, "team01", toGoogle({ date: day(5), endDate: day(5), start: "08:00", end: "09:00" }));
+    await pull(w);
+    expect((await range(w)).events[0]).toMatchObject({ date: day(5), start: "08:00", pending: false, pushError: null });
+  });
+
+  test("M2 the calendar page can tell when a change has reached Google (shoots and edit dates)", async () => {
+    const w = await world();
+    const g = fakeGoogle();
+    await connect(w);
+    const { shootId } = await withShoot(w, g);
+    expect((await range(w)).shoots[0]).toMatchObject({ saving: false, calError: null });
+    await w.heston.mutation(api.calendarSync.moveShoot, { shootId, date: day(5), call: "10:00", wrap: "17:00", notify: false });
+    await w.heston.mutation(api.projects.setKeyDates, { projectId: w.p, dates: [{ label: "Cut 2 due", date: day(6) }] });
+    expect((await range(w)).shoots[0]).toMatchObject({ saving: true });
+    expect((await range(w)).dates[0]).toMatchObject({ saving: true });
+    await settle(w);
+    expect((await range(w)).shoots[0]).toMatchObject({ saving: false, calError: null });
+    expect((await range(w)).dates[0]).toMatchObject({ saving: false });
+    // A write Google refuses: the error is the shoot's own.
+    intercept((url, i) => (i?.method === "PATCH" && url.includes("/events/shoot") ? new Response(JSON.stringify({ error: { message: "Backend Error" } }), { status: 503 }) : null));
+    await w.heston.mutation(api.calendarSync.moveShoot, { shootId, date: day(6), call: "10:00", wrap: "17:00", notify: false });
+    await settle(w);
+    expect((await range(w)).shoots[0]).toMatchObject({ saving: false, calError: expect.stringContaining("503") });
+  });
+
+  test("M3 a cancelled copy of the shoot's event id on another calendar leaves the shoot alone", async () => {
+    const w = await world();
+    const g = fakeGoogle();
+    await connect(w);
+    const { shootId, ev } = await withShoot(w, g);
+    await w.heston.mutation(api.calendarSync.setShown, { calendarId: PERSONAL, on: true });
+    await settle(w);
+    g.inGoogle.add(PERSONAL, { id: ev.id, summary: "anything", ...toGoogle({ date: day(4), endDate: day(4), start: "09:00", end: "10:00" }), extendedProperties: { private: { portalShoot: shootId } } });
+    g.inGoogle.change(PERSONAL, ev.id, toGoogle({ date: day(9), endDate: day(9), start: "09:00", end: "10:00" }));
+    g.inGoogle.remove(PERSONAL, ev.id);
+    await pull(w);
+    expect(await shootRow(w, shootId)).toMatchObject({ calendar: true, date: day(4), calendarEvent: { id: ev.id, calendarId: PICKED } });
+    expect(await notes(w)).toEqual([]);
+  });
+
+  test("M4 overlapping reads: 'seen' never goes down; only the pull holding the lock lets it go", async () => {
+    const w = await world();
+    fakeGoogle();
+    await connect(w);
+    const A = { asBusiness: w.A };
+    const item = { id: "keep01", status: "confirmed", summary: "Still in Google", start: { dateTime: `${day(2)}T15:00:00Z` }, end: { dateTime: `${day(2)}T16:00:00Z` }, updated: new Date(Date.now() - 1000).toISOString() };
+    const R1 = Date.now(), R2 = R1 + 1;
+    await w.t.mutation(internalApi.calendarSync.apply, { ...A, calendarId: PICKED, items: [item], run: R2 }); // the newer read sees it
+    await w.t.mutation(internalApi.calendarSync.apply, { ...A, calendarId: PICKED, items: [item], run: R1 }); // the older, slower one after
+    await w.t.mutation(internalApi.calendarSync.sweep, { ...A, calendarId: PICKED, run: R2 }); // the newer one finishes
+    expect(await w.t.run(async (ctx) => (await ctx.db.query("calendarEvents").collect()).filter((r) => r.googleId === "keep01").map((r) => r.seen))).toEqual([R2]);
+    // A pull that ran past 3 minutes can't free the lock of the one that took over.
+    const first = await w.t.mutation(internalApi.calendarSync.lock, A);
+    expect(first).toBeTypeOf("string");
+    await w.t.run(async (ctx) => { const c = (await ctx.db.query("calendars").first())!; await ctx.db.patch(c._id, { pullingSince: Date.now() - 4 * 60_000 }); });
+    const second = await w.t.mutation(internalApi.calendarSync.lock, A);
+    expect(second).toBeTypeOf("string");
+    expect(await w.t.mutation(internalApi.calendarSync.unlock, { ...A, run: first, ok: true })).toBe(false);
+    expect(await w.t.mutation(internalApi.calendarSync.lock, A)).toBeNull(); // still the second one's
+    expect(await w.t.mutation(internalApi.calendarSync.unlock, { ...A, run: second, ok: true })).toBe(true);
+  });
+
+  test("M5 two businesses on one shared calendar: B never adopts or deletes A's edit dates (it sees them read-only)", async () => {
+    const w = await world();
+    const g = fakeGoogle();
+    await connect(w); // Heston (A)
+    await w.heston.mutation(api.projects.setKeyDates, { projectId: w.p, dates: [{ label: "Cut 2 due", date: day(6) }] });
+    await settle(w);
+    const aDates = () => g.live(PICKED).filter((e) => e.extendedProperties?.private?.portalDate === w.p);
+    expect(aDates()).toHaveLength(1);
+    await connect(w, w.boss, "c2", PICKED); // B picks the same shared calendar
+    await w.t.action(internalApi.calendarSync.pullAll, {}); await settle(w);
+    await w.t.action(internalApi.calendarSync.pullAll, {}); await settle(w);
+    expect(aDates()).toHaveLength(1);
+    expect(g.calls.filter((c) => c.method === "DELETE" && c.url.includes("/events/pdt"))).toEqual([]);
+    const bRows = await w.t.run(async (ctx) => (await ctx.db.query("calendarEvents").collect()).filter((x) => x.businessId !== w.A));
+    expect(bRows.map((r) => [r.kind, r.title, r.readOnly])).toEqual([["google", "Cut 2 due · Launch", true]]);
+    const bEvent = (await range(w, w.boss)).events[0];
+    await expect(w.boss.mutation(api.calendarSync.remove, { eventId: bEvent._id })).rejects.toThrow(/can't change this event/);
+  });
+
+  test("M6 a long full read (with timeMax) carries on from its saved page next time, and says 'partial' until it's done", async () => {
+    const w = await world();
+    fakeGoogle();
+    await connect(w);
+    // Google forgets the sync token, and the calendar now takes 50 pages to read in full.
+    await w.t.run(async (ctx) => { const x = (await ctx.db.query("calendars").first())!; await ctx.db.patch(x._id, { lastSyncedAt: undefined, list: x.list!.map((y) => ({ ...y, syncToken: undefined })) }); });
+    const urls: string[] = [];
+    let served = 0;
+    intercept((url, i) => {
+      if ((i?.method ?? "GET") !== "GET" || !url.includes(`/calendars/${encodeURIComponent(PICKED)}/events?`) || url.includes("syncToken=")) return null;
+      urls.push(url);
+      served++;
+      const n = Number(new URL(url).searchParams.get("pageToken") ?? 0) + 1;
+      return new Response(JSON.stringify(n < 50 ? { items: [], nextPageToken: String(n) } : { items: [], nextSyncToken: `${PICKED}:999` }), { status: 200 });
+    });
+    expect(await pull(w)).toEqual({ state: "partial" }); // 40 pages
+    expect(served).toBe(40);
+    const q = new URL(urls[0]).searchParams;
+    expect(Date.parse(q.get("timeMax")!) - Date.now()).toBeGreaterThan(380 * 86_400_000);
+    expect(Date.parse(q.get("timeMax")!) - Date.now()).toBeLessThan(400 * 86_400_000);
+    let c = await w.t.run(async (ctx) => (await ctx.db.query("calendars").first())!);
+    expect(c.list!.find((x) => x.id === PICKED)).toMatchObject({ page: { token: "40" } });
+    expect(c.list!.find((x) => x.id === PICKED)!.syncToken).toBeUndefined();
+    expect(c.lastSyncedAt).toBeUndefined();
+    expect(await pull(w)).toEqual({ state: "ok" }); // carries on from page 40 with the same query: 10 more pages
+    expect(served).toBe(50);
+    expect(new URL(urls[40]).searchParams.get("pageToken")).toBe("40");
+    expect(new URL(urls[40]).searchParams.get("timeMin")).toBe(q.get("timeMin"));
+    c = await w.t.run(async (ctx) => (await ctx.db.query("calendars").first())!);
+    expect(c.list!.find((x) => x.id === PICKED)).toMatchObject({ syncToken: `${PICKED}:999` });
+    expect(c.list!.find((x) => x.id === PICKED)!.page).toBeUndefined();
+    expect(c.lastSyncedAt).toBeTypeOf("number");
+  });
+
+  test("M7 Disconnect: marked disconnected before Google is revoked, then cleaned up in batches; pullAll is one job per business", async () => {
+    const w = await world();
+    const g = fakeGoogle();
+    await connect(w);
+    await inviteMaya(w);
+    const { shootId, ev } = await withShoot(w, g);
+    g.inGoogle.change(PICKED, ev.id, toGoogle({ date: day(5), endDate: day(5), start: "10:00", end: "17:00" }));
+    await pull(w); // an open moved-in-Google note
+    expect(await notes(w)).toHaveLength(1);
+    await w.t.run(async (ctx) => { for (let i = 0; i < 450; i++) await ctx.db.insert("calendarEvents", { businessId: w.A, kind: "google", calendarId: PICKED, googleId: `bulk${String(i).padStart(4, "0")}`, title: "x", date: day(1), endDate: day(1), guests: [], gUpdated: 0, syncedAt: 0, createdAt: 0 }); });
+    let atRevoke: any = null;
+    g.onRevoke = async () => { atRevoke = await w.t.run(async (ctx) => ({ c: await ctx.db.query("calendars").first(), s: await ctx.db.get(shootId) })); };
+    await w.heston.action(api.calendar.disconnect, {});
+    expect(atRevoke.c.disconnectedAt).toBeTypeOf("number"); // nothing could sync while Google was being revoked
+    expect(atRevoke.s.calendarEvent).toBeUndefined();
+    expect(atRevoke.s.googleMove).toBeUndefined();
+    expect(await w.t.run(async (ctx) => (await ctx.db.query("calendarEvents").collect()).length)).toBeGreaterThan(0); // still to go
+    await settle(w);
+    expect(await w.t.run(async (ctx) => (await ctx.db.query("calendarEvents").collect()).length)).toBe(0);
+    expect((await w.heston.query(api.calendar.settings, {})).connection).toBeNull();
+    expect(await notes(w)).toEqual([]);
+  });
+
+  test("L1 a dragged shoot's Undo closes once its email 30 could have gone", async () => {
+    const w = await world();
+    const g = fakeGoogle();
+    await connect(w);
+    const { shootId } = await withShoot(w, g);
+    await w.heston.mutation(api.calendarSync.moveShoot, { shootId, date: day(5), call: "10:00", wrap: "17:00", notify: false });
+    await w.t.run(async (ctx) => { const s = (await ctx.db.get(shootId))!; await ctx.db.patch(shootId, { dragUndo: { ...s.dragUndo!, at: Date.now() - 10_500 } }); });
+    expect((await range(w)).shoots[0].canUndo).toBe(false);
+    await expect(w.heston.mutation(api.calendarSync.undoShoot, { shootId })).rejects.toThrow(/too late/);
+  });
+
+  test("L2 the Move dialog's guests include the client's people when Settings › Calendar invites them", async () => {
+    const w = await world();
+    const g = fakeGoogle();
+    await connect(w);
+    await inviteMaya(w);
+    await w.heston.mutation(api.calendar.save, { calendarId: PICKED, calendarName: "Picked", inviteVendors: true, inviteClient: true });
+    await withShoot(w, g);
+    expect((await range(w)).shoots[0]).toMatchObject({ guests: ["Jordan Ellis", "maya@harbor.example"], people: 1 });
+  });
+
+  test("L3 a Google move within 12 seconds of a drag keeps the drag's email 30, unless it moved the shoot back", async () => {
+    for (const back of [false, true]) {
+      const w = await world();
+      const g = fakeGoogle();
+      await connect(w);
+      await inviteMaya(w);
+      const { shootId, ev } = await withShoot(w, g);
+      const sent = g.emails.length;
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+      await w.heston.mutation(api.calendarSync.moveShoot, { shootId, date: day(5), call: "10:00", wrap: "17:00", notify: false });
+      vi.advanceTimersByTime(50);
+      await w.t.finishInProgressScheduledFunctions(); // the drag's own write reaches Google; email 30 is still held
+      expect(g.cals.get(PICKED)!.get(ev.id)!.start.dateTime).toBe(`${day(5)}T10:00:00`);
+      g.inGoogle.change(PICKED, ev.id, back ? toGoogle({ date: day(4), endDate: day(4), start: "09:00", end: "16:00" }) : toGoogle({ date: day(6), endDate: day(6), start: "10:00", end: "17:00" }));
+      await w.heston.action(api.calendarSync.syncNow, {});
+      await w.t.finishAllScheduledFunctions(vi.runAllTimers);
+      vi.useRealTimers();
+      const moves = await w.t.run(async (ctx) => (await ctx.db.query("inboxItems").collect()).filter((i) => i.kind === "shoot" && i.title.startsWith("Shoot moved")));
+      if (back) {
+        expect(g.emails.length).toBe(sent);
+        expect(moves).toHaveLength(0);
+        expect(await shootRow(w, shootId)).toMatchObject({ date: day(4), call: "09:00" });
+        expect(await notes(w)).toEqual([]);
+      } else {
+        expect(g.emails.length).toBe(sent + 1);
+        expect(moves).toHaveLength(1);
+        expect(await shootRow(w, shootId)).toMatchObject({ date: day(6), call: "10:00" });
+      }
+    }
+  });
+
+  test("L4 a 401 gets one fresh token before the connection counts as disconnected", async () => {
+    const w = await world();
+    const g = fakeGoogle();
+    g.inGoogle.add(PICKED, { id: "teamcall1", summary: "Team call", ...toGoogle({ date: day(1), endDate: day(1), start: "10:00", end: "10:30" }) });
+    await connect(w);
+    const c = await w.t.run(async (ctx) => (await ctx.db.query("calendars").first())!);
+    g.stale.add(c.accessToken!); // Google stopped taking this token before it expired
+    expect(await pull(w)).toEqual({ state: "ok" });
+    expect((await range(w)).conn.state).toBe("ok");
+    // Refused again with the fresh token too: now it's disconnected.
+    intercept((url) => (url.includes("googleapis.com/calendar") ? new Response(JSON.stringify({ error: { message: "Invalid Credentials" } }), { status: 401 }) : null));
+    expect(await pull(w)).toEqual({ state: "disconnected" });
+  });
+
+  test("L5 connecting a different Google account clears the shoots' links and open notes; their events are made again with nobody emailed", async () => {
+    const w = await world();
+    const g = fakeGoogle();
+    await connect(w);
+    const { shootId, ev } = await withShoot(w, g);
+    g.inGoogle.change(PICKED, ev.id, toGoogle({ date: day(5), endDate: day(5), start: "10:00", end: "17:00" }));
+    await pull(w);
+    expect(await notes(w)).toHaveLength(1);
+    const w0 = g.writes().length;
+    await connect(w, w.heston, "c3", PICKED); // heston.studio@gmail.com
+    expect((await w.heston.query(api.calendar.settings, {})).connection.email).toBe("heston.studio@gmail.com");
+    expect(await notes(w)).toEqual([]);
+    const s = (await shootRow(w, shootId))!;
+    expect(s.calendarEvent).toMatchObject({ id: ev.id, calendarId: PICKED }); // made again by the new account
+    const again = g.writes().slice(w0).filter((c) => c.url.includes(ev.id));
+    expect(again.length).toBeGreaterThan(0);
+    expect(again.every((c) => c.acct === "c3" && sendUpdates(c) === "none")).toBe(true);
+  });
+
+  test("L6 an edit that changes the guests emails them only when the owner says so", async () => {
+    const w = await world();
+    const g = fakeGoogle();
+    await connect(w);
+    const id = await w.heston.mutation(api.calendarSync.create, { title: "Scout", date: day(9), endDate: day(9), start: "10:00", end: "11:00", guests: ["sam@rivera.example"] });
+    await settle(w);
+    await w.heston.mutation(api.calendarSync.update, { eventId: id, title: "Scout", date: day(9), endDate: day(9), start: "10:00", end: "11:00", location: "", guests: ["sam@rivera.example", "jo@harbor.example"], notify: false });
+    await settle(w);
+    expect(sendUpdates(g.writes().at(-1)!)).toBe("none");
+    expect(g.writes().at(-1)!.body.attendees).toEqual([{ email: "sam@rivera.example" }, { email: "jo@harbor.example" }]);
+    await w.heston.mutation(api.calendarSync.update, { eventId: id, title: "Scout", date: day(9), endDate: day(9), start: "10:00", end: "11:00", location: "", guests: ["sam@rivera.example"], notify: true });
+    await settle(w);
+    expect(sendUpdates(g.writes().at(-1)!)).toBe("all");
+  });
+});
