@@ -57,6 +57,11 @@ export function FootageCard({ projectId, show }: { projectId: string; show: (m: 
     await run(() => drive({ projectId }), "Recorded: copied to their drive.");
   };
   const markDone = () => void run(() => done({ projectId }), "Marked as deleted or moved.");
+  const runKeep = async () => {
+    setBusy(true);
+    try { const r = await reinstate({ projectId }); show(`Kept until ${longDay(r.paidUntil)}, a year from the day they paid.`); } catch (e) { show(errText(e)); }
+    setBusy(false);
+  };
   const invoiceLink = s.invoice ? <ButtonLink size="sm" to={`/payments/invoices/${s.invoice._id}`}>{s.invoice.status === "draft" ? "Check and send" : "Open invoice"}</ButtonLink> : null;
 
   let rows: React.ReactNode;
@@ -95,20 +100,35 @@ export function FootageCard({ projectId, show }: { projectId: string; show: (m: 
     </>;
     actions = <>{s.status === "ended" && !s.doneAt && <Button size="sm" disabled={busy} onClick={() => void markDrive()}>Copied to their drive</Button>}{!s.doneAt && <Button size="sm" variant="primary" disabled={busy} onClick={markDone}>Deleted or moved</Button>}</>;
   }
+  // Nov 4 (870:19197, 870:19547): after the owner's answer to a late payment, the box becomes a banner. Kept: a year from
+  // the day it was paid (Q93), no new invoice. Marked to refund: until Stripe reports the refund (Q94: a link to the
+  // invoice in Stripe; the portal never refunds anything itself). The card's own buttons stay below.
+  const lc = s.lateChoice;
+  if (lc?.kind === "kept") {
+    rows = <Row title={`Offered to ${client} at delivery`} body={`Kept until ${longDay(lc.until)} · ${perYear(s.priceCents)} · invoice paid ${atDay(lc.paidAt)}`} chip={<StatusChip tone="success">Kept</StatusChip>} />;
+  } else if (lc?.kind === "refund") {
+    rows = <Row title={`Offered to ${client} at delivery`} body={[lc.wasUntil ? `Was kept until ${shortDay(lc.wasUntil)}` : null, perYear(s.priceCents), `invoice paid ${atDay(lc.paidAt)}`, "refund pending in Stripe"].filter(Boolean).join(" · ")} chip={<StatusChip tone="warning">To refund</StatusChip>} />;
+  }
+  const chosen = lc && (lc.kind === "kept"
+    ? <div className="cpj-ftbox yes ft-banner" role="status"><Icon name="check-circle" size={20} />
+        <span className="txt"><b>Kept until {longDay(lc.until)}</b><span className="secondary">You chose to keep {client}’s raw footage for another year. The invoice stays paid.</span></span></div>
+    : <div className="cpj-ftbox no ft-banner" role="status"><Icon name="alert" size={20} />
+        <span className="txt"><b>Marked to refund</b><span className="secondary">{client}’s invoice stays paid until you refund it in Stripe. When it is refunded, this box closes.</span></span>
+        {lc.stripeUrl && <a className="btn outline sm" href={lc.stripeUrl} target="_blank" rel="noopener noreferrer">Open in Stripe<Icon name="external" size={14} className="end" /></a>}</div>);
   // Review H1: a storage invoice paid after it ended, was stopped or deleted. Nothing changed by itself: the owner decides.
   const late = s.latePaid && (
     <div className="ft-late">
       <Row title={`${client} paid for storage after it ${s.latePaid.was === "deleted" ? "was deleted or moved" : s.latePaid.was === "stopped" ? "was stopped" : "ended"}`}
-        body={`Paid ${atDay(s.latePaid.at)}. ${s.latePaid.was === "deleted" ? "The footage is gone, so refund it in Stripe." : "Keep it for a year from today, or refund it in Stripe."}`} chip={<StatusChip tone="warning">Paid late</StatusChip>} />
+        body={`Paid ${atDay(s.latePaid.at)}. ${s.latePaid.was === "deleted" ? "The footage is gone, so refund it in Stripe." : "Keep it for a year from the day they paid, or refund it in Stripe."}`} chip={<StatusChip tone="warning">Paid late</StatusChip>} />
       <div className="ft-acts">
-        {s.latePaid.was !== "deleted" && !s.doneAt && <Button size="sm" variant="primary" disabled={busy} onClick={() => void run(() => reinstate({ projectId }), "Kept for a year from today.")}>Keep it for a year</Button>}
-        <Button size="sm" disabled={busy} onClick={() => void run(() => dismissLate({ projectId }), "Noted: not kept.")}>I'll refund it</Button>
+        {s.latePaid.was !== "deleted" && !s.doneAt && <Button size="sm" variant="primary" disabled={busy} onClick={() => void runKeep()}>Keep it for a year</Button>}
+        <Button size="sm" disabled={busy} onClick={() => void run(() => dismissLate({ projectId }), "Marked to refund. Refund it in Stripe.")}>I'll refund it</Button>
       </div>
     </div>
   );
   return (
     <Card className="ft-card" label="Raw footage storage" head={head}>
-      {late}
+      {late}{!late && chosen}
       <div className="ft-rows">{rows}</div>
       {actions && <div className="ft-acts">{actions}</div>}
       {confirmDialog}

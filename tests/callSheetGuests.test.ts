@@ -148,7 +148,7 @@ describe("call-sheet guests", () => {
     expect(await rileyIn.query(api.users.me, {})).toMatchObject({ role: "guest", allowed: false, sides: [] });
     const home = await rileyIn.query(api.guests.home, {});
     expect(home.sheets).toEqual([expect.objectContaining({ token: rTok, title: "Launch · Harbor Coffee", date: day(4), call: "07:30", place: "Studio B" })]);
-    expect(home.businesses).toEqual([{ businessId: w.A, name: "Wrangler Productions" }]);
+    expect(home.businesses).toEqual([{ businessId: w.A, name: "Wrangler Productions", fresh: 1 }]); // Q88: not opened yet
     const view = await rileyIn.query(api.guests.sheet, { token: rTok });
     expect(view).toMatchObject({ ended: false, title: "Launch · Harbor Coffee", me: { name: "Riley Quinn", kind: "guest" }, business: "Wrangler Productions" });
     expect(view.project).toBeUndefined(); // no way into the project
@@ -203,7 +203,8 @@ describe("call-sheet guests", () => {
     // Ended by hand: Access ended (title and day only), nothing to read, no new code.
     await w.heston.mutation(api.callSheets.endGuest, { callSheetId: cs1, id: riley });
     expect(await rileyIn.query(api.guests.sheet, { token: rTok })).toEqual({ ended: true, title: "Launch · Harbor Coffee", date: day(4), business: { name: "Wrangler Productions", legalName: "Hill Creative LLC" } });
-    expect((await rileyIn.query(api.guests.home, {})).sheets).toEqual([]);
+    // Q88: it stays in her list under Ended (title and day only), and opens Access ended.
+    expect((await rileyIn.query(api.guests.home, {})).sheets).toEqual([{ token: rTok, title: "Launch · Harbor Coffee", date: day(4), call: "", place: "", state: "ended", endedOn: todayCentral(), updatedToday: false, isNew: false }]);
     await expect(rileyIn.mutation(api.guests.opened, { token: rTok })).rejects.toThrow(/isn't here/);
     expect(await w.t.query(api.guests.intro, { token: rTok })).toMatchObject({ state: "ended", title: "Launch · Harbor Coffee" });
     await expect(w.t.action(api.guests.sendCode, { token: rTok })).rejects.toThrow(/no longer available/);
@@ -235,7 +236,7 @@ describe("call-sheet guests", () => {
     expect((await patIn.query(api.guests.sheet, { token: pTok })).ended).toBe(false); // delivery stage alone isn't closed
     await w.t.run(async (ctx) => { await ctx.db.patch(w.p, { deliveryUnlockedAt: Date.now() }); });
     expect(await patIn.query(api.guests.sheet, { token: pTok })).toMatchObject({ ended: true });
-    expect((await patIn.query(api.guests.home, {})).sheets).toEqual([]);
+    expect((await patIn.query(api.guests.home, {})).sheets).toEqual([expect.objectContaining({ token: pTok, state: "ended", endedOn: todayCentral() })]); // closed today
     await expect(w.t.action(api.guests.sendCode, { token: pTok })).rejects.toThrow(/no longer available/);
     void s1;
   }, 60_000);

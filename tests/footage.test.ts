@@ -366,7 +366,7 @@ describe("raw footage storage", () => {
     expect((await w.heston.query(api.home.needs, {})).filter((n: { kind: string }) => n.kind === "footage")).toEqual([]);
   });
 
-  test("review H1: paid after Stop storing: the owner can keep it a year from today", async () => {
+  test("review H1: paid after Stop storing: the owner can keep it a year from the day it was paid (Q93)", async () => {
     const w = await world();
     stub([]);
     await setup(w);

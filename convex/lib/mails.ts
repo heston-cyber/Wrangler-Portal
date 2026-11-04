@@ -717,7 +717,7 @@ export function ownerFootageAlertMail(b: MailBrand, d: { what: "unpaid" | "paidL
   return mk(b, "updates", unpaid ? `Raw footage storage not paid: ${d.project}` : `A storage invoice was paid late: ${d.project}`, [
     { t: "eyebrow", text: `${unpaid ? "Storage not paid" : "Paid late"} · ${d.project}` },
     { t: "title", text: unpaid ? `${d.client} pressed Keep it, but the storage invoice${d.number ? ` ${d.number}` : ""} isn't paid and the keep date has passed.` : `${d.client} paid a storage invoice after their raw footage stopped being kept.` },
-    { t: "p", text: unpaid ? "The footage is still marked as kept. Remind them, or void the invoice: then it's treated as not kept and you get the usual reminder." : "Nothing changed by itself. On the project's Delivery tab, keep it for a year from today, or refund the payment in Stripe." },
+    { t: "p", text: unpaid ? "The footage is still marked as kept. Remind them, or void the invoice: then it's treated as not kept and you get the usual reminder." : "Nothing changed by itself. On the project's Delivery tab, keep it for a year from the day they paid, or refund the payment in Stripe." },
     { t: "button", label: "Open the project", href: d.link },
   ], [{ t: "small", text: "Sent to you about raw footage · WranglerPortal ·", link: { label: "Email settings", href: `${SITE()}/settings/notifications` } }], `${d.client} · ${d.project}`);
 }

@@ -17,6 +17,8 @@ export type CallSheetInfo = NonNullable<FunctionReturnType<typeof api.callSheets
 export type Person = CallSheetInfo["people"][number];
 export const first = (n: string) => n.trim().split(/\s+/)[0] || n;
 const names = (ps: Person[]) => ps.map((p) => p.name).join(", ");
+/** Q88 (Nov 4): plain words for how a guest gets in (no "light login"). */
+const guestHint = (gs: Person[]) => `${names(gs)} · ${gs.length === 1 ? "signs" : "sign"} in with their email and a 6-digit code`;
 /** Who it actually goes to now: ticked, and able to read it (crew and client people in the portal, guests by their link). */
 export const reachable = (ps: Person[]) => ps.filter((p) => p.on && p.access);
 export const groupsOf = (cs: CallSheetInfo) => ({
@@ -53,7 +55,7 @@ export function PeoplePicker({ cs, show, compact }: { cs: CallSheetInfo; show: (
       {g.guests.map(row)}
       <button type="button" className="cs-addguest" onClick={() => setAdding(true)}><Icon name="plus" size={16} />Add a guest</button>
       {!compact && <div className="cs-info"><Icon name="info" size={18} /><span><b>Guests are one-off people for this shoot</b><br />
-        They get a light login that shows only this call sheet. It ends when the project is closed or its dates end, and they can be added to any number of shoots. Everyone on the sheet sees the whole sheet.</span></div>}
+        They sign in with their email and a 6-digit code, and see only this call sheet. They can read it until the day after its shoot. They can be added to any number of shoots, and everyone on the sheet sees the whole sheet.</span></div>}
       {adding && <AddGuest callSheetId={cs._id} onClose={() => setAdding(false)} show={show} />}
     </div>
   );
@@ -85,7 +87,7 @@ export function AddGuest({ callSheetId, onClose, show }: { callSheetId: Id<"call
           <div className="qz-chips">{(["Talent", "Other"] as const).map((k) => <button key={k} type="button" className={`qz-chip${kind === k ? " on" : ""}`} aria-pressed={kind === k} onClick={() => setKind(k)}>{k}</button>)}</div>
           {kind === "Other" && <input className="input" value={other} placeholder="Their role, e.g. Stylist" aria-label="Their role" onChange={(e) => setOther(e.target.value)} style={{ marginTop: 8 }} />}
         </div>
-        <div className="cs-info"><Icon name="info" size={18} /><span><b>Access ends when the project is closed or its dates end</b><br />You can also add them to other shoots, and end their access by hand from the call sheet.</span></div>
+        <div className="cs-info"><Icon name="info" size={18} /><span><b>They can read it until the day after its shoot</b><br />They sign in with their email and a 6-digit code. You can also add them to other shoots, and end their access by hand from the call sheet.</span></div>
         {err && <p className="error" role="alert">{err}</p>}
         <div className="dfoot"><button type="button" className="btn outline" onClick={onClose}>Cancel</button><Button variant="primary" loading={busy} disabled={!name.trim() || !email.trim()} onClick={() => void go()}>Add guest</Button></div>
       </div>
@@ -118,7 +120,7 @@ export function SendSheet({ cs, onClose, show, before, onSent }: { cs: CallSheet
         <div className="cs-groups">
           {crew.length > 0 && <Checkbox checked={on.crew} onChange={(v) => setOn({ ...on, crew: v })} label={`Crew · ${crew.length}`} hint={names(crew)} />}
           {client.length > 0 && <Checkbox checked={on.client} onChange={(v) => setOn({ ...on, client: v })} label={`${cs.client ?? "Client"} · ${client.length}`} hint={names(client)} />}
-          {guests.length > 0 && <Checkbox checked={on.guests} onChange={(v) => setOn({ ...on, guests: v })} label={`Guests · ${guests.length}`} hint={`${names(guests)} · ${guests.length === 1 ? "gets a light login" : "get a light login"} for this shoot`} />}
+          {guests.length > 0 && <Checkbox checked={on.guests} onChange={(v) => setOn({ ...on, guests: v })} label={`Guests · ${guests.length}`} hint={guestHint(guests)} />}
           {!crew.length && !client.length && !guests.length && <p className="wp-small secondary">Nobody ticked can open it yet. Tick people in Details first.</p>}
         </div>
         <TextArea label="Message (optional)" rows={2} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Looking forward to it. Questions, reply to this email." />
@@ -128,26 +130,65 @@ export function SendSheet({ cs, onClose, show, before, onSent }: { cs: CallSheet
   );
 }
 
-/** Send an update (no frame of its own: Send's layout). Email 42 to everyone it went to, 40 to anyone new. */
+/** The groups a dialog sends to (Send an update 856:92031, Remind 856:92097): crew, the client's people, guests. */
+function GroupTicks({ cs, crew, client, guests, on, setOn }: { cs: CallSheetInfo; crew: Person[]; client: Person[]; guests: Person[]; on: { crew: boolean; client: boolean; guests: boolean }; setOn: (v: { crew: boolean; client: boolean; guests: boolean }) => void }) {
+  return (
+    <div className="cs-groups">
+      {crew.length > 0 && <Checkbox checked={on.crew} onChange={(v) => setOn({ ...on, crew: v })} label={`Crew · ${crew.length}`} hint={names(crew)} />}
+      {client.length > 0 && <Checkbox checked={on.client} onChange={(v) => setOn({ ...on, client: v })} label={`${cs.client ?? "Client"} · ${client.length}`} hint={names(client)} />}
+      {guests.length > 0 && <Checkbox checked={on.guests} onChange={(v) => setOn({ ...on, guests: v })} label={`Guests · ${guests.length}`} hint={guestHint(guests)} />}
+    </div>
+  );
+}
+
+/** Send an update (856:92031). Email 42 to the ticked groups it went to, 40 to anyone new; everyone reads the new copy. */
 export function SendUpdate({ cs, onClose, show, before }: { cs: CallSheetInfo; onClose: () => void; show: (m: string) => void; before?: () => Promise<void> }) {
   const update = useMutation(api.callSheets.sendUpdate);
-  const people = reachable(cs.people);
+  const g = groupsOf(cs);
+  const crew = reachable(g.crew), client = reachable(g.client), guests = reachable(g.guests);
+  const [on, setOn] = useState({ crew: true, client: true, guests: true });
+  const n = (on.crew ? crew.length : 0) + (on.client ? client.length : 0) + (on.guests ? guests.length : 0);
   const [changed, setChanged] = useState(cs.changes[0] ?? "");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const go = async () => {
     setBusy(true);
-    try { await before?.(); const r = await update({ callSheetId: cs._id, changed, message: message.trim() || undefined }); show(`Update sent to ${r.sent} ${r.sent === 1 ? "person" : "people"}`); onClose(); }
+    try { await before?.(); const r = await update({ callSheetId: cs._id, changed, message: message.trim() || undefined, crew: on.crew, client: on.client, guests: on.guests }); show(`Update sent to ${r.sent} ${r.sent === 1 ? "person" : "people"}`); onClose(); }
     catch (e) { show(errText(e)); setBusy(false); }
   };
   return (
     <Modal onClose={onClose} label="Send an update" width={560}>
       <div className="crm-dialog">
-        <DialogHeader eyebrow="Call sheet" title={`Send an update to ${people.length} ${people.length === 1 ? "person" : "people"}?`} body="Everyone gets an email saying what changed and their call time, with a link to the new sheet." onClose={onClose} />
+        <DialogHeader eyebrow="Call sheet" title={`Send an update to ${n} ${n === 1 ? "person" : "people"}?`} body="Each person gets an email saying the call sheet changed, with a link to read it. They always see the sheet as you last sent it. You’ll see who has opened it." onClose={onClose} />
+        <GroupTicks cs={cs} crew={crew} client={client} guests={guests} on={on} setOn={setOn} />
         {cs.changes.length > 1 && <p className="wp-small secondary">Changed since it was sent: {cs.changes.join(" · ")}.</p>}
-        <TextField label="What changed" value={changed} onChange={(e) => setChanged(e.target.value)} placeholder="Talent call moved to 9:00 AM" maxLength={120} />
+        <TextField label="What changed (shown at the top of the sheet)" value={changed} onChange={(e) => setChanged(e.target.value)} placeholder="The talent call moved to 9:00 AM." maxLength={120} />
         <TextArea label="Message (optional)" rows={2} value={message} onChange={(e) => setMessage(e.target.value)} />
-        <div className="dfoot"><button type="button" className="btn outline" onClick={onClose}>Cancel</button><Button variant="primary" loading={busy} disabled={!changed.trim() || !people.length} onClick={() => void go()}>Send update</Button></div>
+        <div className="dfoot"><button type="button" className="btn outline" onClick={onClose}>Cancel</button><Button variant="primary" loading={busy} disabled={!changed.trim() || !n} onClick={() => void go()}>Send update</Button></div>
+      </div>
+    </Modal>
+  );
+}
+
+/** Remind (856:92097): the people it went to who haven't opened it, by group; the same email and link again. */
+export function RemindSheet({ cs, onClose, show }: { cs: CallSheetInfo; onClose: () => void; show: (m: string) => void }) {
+  const remind = useMutation(api.callSheets.remind);
+  const waiting = cs.people.filter((p) => p.on && p.access && ((p.sentAt && !p.openedAt) || (p.kind === "guest" && !p.sentAt)));
+  const crew = waiting.filter((p) => p.kind === "crew"), client = waiting.filter((p) => p.kind === "client"), guests = waiting.filter((p) => p.kind === "guest");
+  const [on, setOn] = useState({ crew: true, client: true, guests: true });
+  const n = (on.crew ? crew.length : 0) + (on.client ? client.length : 0) + (on.guests ? guests.length : 0);
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true);
+    try { const r = await remind({ callSheetId: cs._id, crew: on.crew, client: on.client, guests: on.guests }); show(r.sent ? `Reminder sent to ${r.sent} ${r.sent === 1 ? "person" : "people"}` : "Everyone it went to has opened it, or was just reminded."); onClose(); }
+    catch (e) { show(errText(e)); setBusy(false); }
+  };
+  return (
+    <Modal onClose={onClose} label="Remind" width={560}>
+      <div className="crm-dialog">
+        <DialogHeader eyebrow="Call sheet" title={`Remind ${n} ${n === 1 ? "person" : "people"}?`} body="These people have not opened the call sheet yet. Each one gets the email again, with the same link. People who have opened it are left out." onClose={onClose} />
+        <GroupTicks cs={cs} crew={crew} client={client} guests={guests} on={on} setOn={setOn} />
+        <div className="dfoot"><button type="button" className="btn outline" onClick={onClose}>Cancel</button><Button variant="primary" loading={busy} disabled={!n} onClick={() => void go()}>Send reminder</Button></div>
       </div>
     </Modal>
   );

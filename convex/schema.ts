@@ -1398,6 +1398,13 @@ export default defineSchema({
     // is told and decides (reinstate a year, or refund it); and Keep it pressed but never paid alerts the owner, once.
     latePaid: v.optional(v.object({ invoiceId: v.id("invoices"), at: v.number(), was: v.string() })),
     unpaidAt: v.optional(v.number()),
+    // Nov 4 (Q93, Q94): the owner's answer to a late payment, kept for the card's banner. "kept": a year from the day it
+    // was paid (until). "refund": marked to refund in Stripe; the box closes once Stripe reports a refund on that invoice
+    // (invoices.refundedCents, from the charge.refunded webhook). The portal never refunds anything itself.
+    lateChoice: v.optional(v.object({
+      kind: v.union(v.literal("kept"), v.literal("refund")), invoiceId: v.id("invoices"), paidAt: v.number(), at: v.number(), by: v.string(),
+      until: v.optional(v.string()), was: v.optional(v.string()), wasUntil: v.optional(v.string()),
+    })),
     history: v.array(v.object({ at: v.number(), text: v.string() })),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1479,8 +1486,9 @@ export default defineSchema({
     wrongDay: v.optional(v.string()),         // review L5: wrong codes today (Central), 15 locks the pass…
     wrongCount: v.optional(v.number()),
     lockedAt: v.optional(v.number()),         // …until the owner sends it to them again (Send an update or Remind)
-    sentAt: v.optional(v.number()),           // review L2: the sheet went to them (cleared when access ends); a hint for /guest's
+    sentAt: v.optional(v.number()),           // review L2: the sheet went to them (Q88: kept when access ends); a hint for /guest's
     date: v.optional(v.string()),             //   business list only, never for access (lib/guests.ts sheetState decides that)
+    openedAt: v.optional(v.number()),         // Q88: the guest opened it (the switcher's "N new"); a hint like sentAt
   }).index("by_token", ["token"]).index("by_email", ["email"]).index("by_sheet", ["callSheetId"]),
 
   memberships: defineTable({

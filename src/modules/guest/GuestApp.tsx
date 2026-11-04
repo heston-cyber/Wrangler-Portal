@@ -13,20 +13,21 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { BrandImg } from "../../ui/BrandImg";
 import { Icon } from "../../ui/Icon";
 import { Avatar, Button, Spinner } from "../../ui/wp";
+import { Menu, MenuItem } from "../../ui/kit";
 import { linkProps } from "../../lib/router";
 import smear from "../../assets/portal/light-smear.jpg";
 import softblob from "../../assets/portal/light-softblob.jpg";
-import { clockOf, locationOf, rowsOf, sheetDay, type ContactRow, type CrewRow, type ScheduleRow } from "../../../convex/lib/callSheet";
-import { fill, nodesOf, pageOf, type Page } from "../../../convex/lib/wsBuilder";
-import { SheetView } from "../production/callSheetParts";
+import { clockOf, sheetDay } from "../../../convex/lib/callSheet";
+import { SheetReader } from "../production/SheetReader";
 import { errText } from "../docs/pages/common";
 
 type Me = { name: string | null; email: string; role: string | null };
 type Intro = FunctionReturnType<typeof api.guests.intro>;
-type Sheet = Extract<NonNullable<FunctionReturnType<typeof api.guests.sheet>>, { ended: false }>;
+type Home = FunctionReturnType<typeof api.guests.home>;
 type Biz = { name: string; legalName: string | null };
-// Review L7: the rule as it is (lib/guests.ts sheetState).
-const ACCESS_LINE = "You can read this call sheet until the day after the shoot, or until the project is closed, the shoot is cancelled or your access is ended.";
+// Q88 (Nov 4): the access wording Heston approved.
+const ACCESS_LINE = "You can read this call sheet until the day after its shoot.";
+const mdOf = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
 const legalLine = (b: Biz | null) => (b ? (b.legalName ? `${b.name}, a DBA of ${b.legalName}` : b.name) : "WranglerPortal");
 const errMsg = (e: unknown) => { const t = errText(e); return /^Uncaught|\[CONVEX|Server Error/.test(t) || !t ? "Something went wrong. Try again." : t; };
 
@@ -63,6 +64,7 @@ function Notice({ icon, title, sub, text, children }: { icon: "clock" | "alert" 
 function Ended({ title, date, biz, children }: { title?: string | null; date?: string | null; biz?: Biz | null; children?: React.ReactNode }) {
   return <Center biz={biz ?? null}><Notice icon="clock" title="This call sheet is no longer available." sub={[title, date ? sheetDay(date) : null].filter(Boolean).join(" · ") || undefined} text="Your access to it has ended. Questions? Reply to the email that brought you here.">{children}</Notice></Center>;
 }
+const BackToList = () => <p className="caption"><a className="wp-link" {...linkProps("/guest")}>All your call sheets</a></p>;
 
 /** Sign in · Before code (768:6282) and Code sent (768:6309, 768:6342). */
 function GuestSignIn({ token, signedInAs }: { token: string; signedInAs: Me | null }) {
@@ -126,7 +128,7 @@ function GuestSignIn({ token, signedInAs }: { token: string; signedInAs: Me | nu
 // ---------- signed in ----------
 
 /** The signed-in pages' frame (769:6274): the softblob light, the logo, who's signed in, Sign out. */
-function Page({ me, children, back }: { me: Me; children: React.ReactNode; back?: boolean }) {
+function Page({ me, children, back, switcher }: { me: Me; children: React.ReactNode; back?: boolean; switcher?: React.ReactNode }) {
   const { signOut } = useAuthActions();
   const [menu, setMenu] = useState(false);
   const out = () => void signOut();
@@ -134,7 +136,7 @@ function Page({ me, children, back }: { me: Me; children: React.ReactNode; back?
     <div className="gst-page">
       <div className="wp-light back" aria-hidden><i style={{ backgroundImage: `url(${softblob})` }} /></div>
       <header className="gst-top">
-        <a {...linkProps("/guest")} aria-label="Your call sheets"><BrandImg name="wordmark" alt="WranglerPortal" /></a>
+        <span className="gst-brand"><a {...linkProps("/guest")} aria-label="Your call sheets"><BrandImg name="wordmark" alt="WranglerPortal" /></a>{switcher && <span className="gst-wide">{switcher}</span>}</span>
         <span className="gst-who gst-wide">{back && <a {...linkProps("/guest")} className="gst-backlink">All your call sheets</a>}<span>{me.name ?? me.email} · Guest</span><button type="button" className="wp-link" onClick={out}>Sign out</button></span>
         <span className="gst-avatar gst-narrow">
           <button type="button" aria-label={`${me.name ?? me.email} · Guest`} aria-expanded={menu} onClick={() => setMenu(!menu)}><Avatar name={me.name ?? me.email} size={32} /></button>
@@ -145,36 +147,67 @@ function Page({ me, children, back }: { me: Me; children: React.ReactNode; back?
           </span>}
         </span>
       </header>
+      {switcher && <div className="gst-narrow gst-swphone">{switcher}</div>}
       {children}
     </div>
   );
 }
 
-/** /guest: their active sheets; one goes straight to it, none is Access ended. */
+/** "Sheets from" (859:9250, phone 859:9572): the vendor switcher's menu, only when more than one business has sent them
+ *  a sheet; "N new" is how many of that business's sheets they haven't opened yet. */
+function SheetsFrom({ d, onPick }: { d: Home; onPick: (b: Id<"businesses">) => void }) {
+  const current = d.businesses.find((b) => b.businessId === d.businessId);
+  if (d.businesses.length < 2 || !current) return null;
+  return (
+    <Menu label="Businesses you work for" trigger={(p) => (
+      <button {...p} className="vp-switch gst-switch" type="button"><span className="wp-label">Sheets from</span><b>{current.name}</b><Icon name="chevron-down" size={16} /></button>
+    )}>
+      <div className="mlabel">Businesses you work for</div>
+      {d.businesses.map((b) => (
+        <MenuItem key={b.businessId} onSelect={() => onPick(b.businessId)}>
+          <span className="vp-swrow"><span>{b.name}</span>{b.businessId === d.businessId ? <Icon name="check" size={14} plain /> : b.fresh ? <span className="secondary">{b.fresh} new</span> : null}</span>
+        </MenuItem>
+      ))}
+    </Menu>
+  );
+}
+
+/** /guest (858:94294, phone 859:9381): their sheets in Today, Upcoming and Ended (Q88: ended ones stay, dimmed, and open
+ *  Access ended). Just one active sheet and nothing else goes straight to it. */
 function GuestHome({ me }: { me: Me }) {
   const [biz, setBiz] = useState<Id<"businesses"> | undefined>(undefined);
   const d = useQuery(api.guests.home, biz ? { businessId: biz } : {});
-  const one = d && d.sheets.length === 1 && d.businesses.length <= 1 ? d.sheets[0].token : null;
+  const one = d && d.sheets.length === 1 && d.sheets[0].state !== "ended" && d.businesses.length <= 1 ? d.sheets[0].token : null;
   useEffect(() => { if (one) { history.replaceState(null, "", `/guest/${one}`); window.dispatchEvent(new Event("wr:navigate")); } }, [one]);
   if (d === undefined || one) return <Center><p className="wsx-wait"><Spinner /> Opening…</p></Center>;
-  const switcher = d.businesses.length > 1 && (
-    <div className="gst-biz" role="group" aria-label="Working with">{d.businesses.map((b) => <button key={b.businessId} type="button" className={`qz-chip${b.businessId === d.businessId ? " on" : ""}`} aria-pressed={b.businessId === d.businessId} onClick={() => setBiz(b.businessId)}>{b.name}</button>)}</div>
-  );
-  if (!d.sheets.length) return <Ended>{switcher}</Ended>;
+  const switcher = <SheetsFrom d={d} onPick={setBiz} />;
+  if (!d.sheets.length) return <Ended>{d.businesses.length > 1 && switcher}</Ended>;
+  const groups = ([["today", "Today"], ["upcoming", "Upcoming"], ["ended", "Ended"]] as const).map(([k, label]) => [label, d.sheets.filter((x) => x.state === k)] as const).filter(([, xs]) => xs.length);
   return (
-    <Page me={me}>
+    <Page me={me} switcher={d.businesses.length > 1 ? switcher : undefined}>
       <main className="gst-list">
-        <span className="wp-eyebrow">Call sheets</span>
         <h1 className="wp-h2">Your call sheets</h1>
-        {switcher}
-        {d.sheets.map((s) => (
-          <a key={s.token} {...linkProps(`/guest/${s.token}`)} className="gst-row glass">
-            <span className="txt"><b>{s.title}</b><span className="secondary">{sheetDay(s.date)}{s.place ? ` · ${s.place}` : ""}</span></span>
-            <span className="call">{s.call ? <><span className="secondary">Your call</span><b>{clockOf(s.call)}</b></> : null}{s.updated && <span className="gst-upd">Updated</span>}</span>
-            <Icon name="chevron-right" size={18} />
-          </a>
+        <p className="secondary gst-lede">Every shoot you have been added to.<span className="gst-wide"> Each sheet opens until the day after its shoot.</span></p>
+        {groups.map(([label, xs]) => (
+          <section key={label} className="gst-group glass" aria-label={label}>
+            <span className="wp-eyebrow">{label} <span className="n">{xs.length}</span></span>
+            {xs.map((s) => {
+              const ended = s.state === "ended";
+              const sub = ended
+                ? [sheetDay(s.date), s.endedOn ? `access ended ${mdOf(s.endedOn)}` : "access ended"]
+                : [sheetDay(s.date), s.place, s.call ? `your call ${clockOf(s.call)}` : null];
+              return (
+                <a key={s.token} {...linkProps(`/guest/${s.token}`)} className={`gst-item${ended ? " ended" : ""}`}>
+                  <Icon name="document" size={20} />
+                  <span className="txt"><span className="t"><b>{s.title}</b>{s.updatedToday && <span className="gst-chip warn">Updated today</span>}{ended && <span className="gst-chip">Ended</span>}</span>
+                    <span className="secondary">{sub.filter(Boolean).join(" · ")}</span></span>
+                  <Icon name="chevron-right" size={18} />
+                </a>
+              );
+            })}
+          </section>
         ))}
-        <p className="wp-small secondary">You can read each call sheet until the day after its shoot, or until its project is closed, the shoot is cancelled or your access is ended.</p>
+        <p className="wp-small secondary">You can read each call sheet until the day after its shoot.</p>
       </main>
     </Page>
   );
@@ -190,53 +223,6 @@ function GuestSheet({ token, me }: { token: string; me: Me }) {
   useEffect(() => { if (d && !d.ended) document.title = `Call sheet · ${d.title}`; }, [d]);
   if (d === undefined) return <Center><p className="wsx-wait"><Spinner /> Opening…</p></Center>;
   if (d === null) return <GuestSignIn token={token} signedInAs={me} />; // someone else's link: sign in as them, or not at all
-  if (d.ended) return <Ended title={d.title} date={d.date} biz={d.business} />;
-  return <Page me={me} back={(many?.sheets.length ?? 0) > 1}><SheetBody d={d} /></Page>;
-}
-
-function SheetBody({ d }: { d: Sheet }) {
-  const page = pageOf(d.page) as Page;
-  const loc = locationOf(nodesOf(page, "location")[0]);
-  const t = (s: string) => fill(s ?? "", d.values, "");
-  const schedule = nodesOf(page, "schedule").flatMap((n) => rowsOf<ScheduleRow>(n));
-  const crew = nodesOf(page, "crew").flatMap((n) => rowsOf<CrewRow>(n));
-  const contacts = nodesOf(page, "contacts").flatMap((n) => rowsOf<ContactRow>(n));
-  const producer = contacts.find((c) => /producer/i.test(c.label));
-  const phone = producer?.phone ? t(producer.phone) : "";
-  const place = t(loc.name) || "";
-  const mail = `mailto:${d.replyTo}?${new URLSearchParams({ subject: `Call sheet for ${d.day}: ${d.title}` }).toString().replace(/\+/g, "%20")}`;
-  const when = d.change ? (new Date(d.change.at).toDateString() === new Date().toDateString() ? "Updated today" : `Updated ${new Date(d.change.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`) : null;
-  const dl = (rows: Array<[string, React.ReactNode]>) => <dl className="gst-dl">{rows.filter(([, v]) => v).map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>;
-  const updated = d.change && <section className="gst-card glass"><span className="wp-eyebrow">{when}</span><p>{/[.!?]$/.test(d.change.text) ? d.change.text : `${d.change.text}.`}{d.me.call ? (d.change.text.includes(clockOf(d.me.call)) ? " That’s your call time." : ` Your call is ${clockOf(d.me.call)}.`) : ""}</p></section>;
-  const yours = (
-    <section className="gst-card glass gst-yours"><span className="wp-eyebrow">Your call</span>
-      {dl([["Call", d.me.call ? <b className="big">{clockOf(d.me.call)}</b> : "See the sheet"], ["Wrap", loc.wrap ? clockOf(loc.wrap) : ""], ["Where", place]])}
-    </section>
-  );
-  const producerCard = (
-    <section className="gst-card glass"><span className="wp-eyebrow">Producer</span>
-      {dl([[producer ? t(producer.name) || d.owner : d.owner, d.business]])}
-      <div className="gst-btns"><a className="btn outline sm" href={mail}>Email</a>{phone && <a className="btn outline sm" href={`tel:${phone.replace(/[^\d+]/g, "")}`}>Call</a>}</div>
-    </section>
-  );
-  return (
-    <main className="gst-main">
-      <header className="gst-head gst-narrow">
-        <span className="wp-eyebrow">Call sheet</span>
-        <h1 className="wp-h2">{d.title}</h1>
-        <span className="secondary">{[d.day, place].filter(Boolean).join(" · ")}</span>
-      </header>
-      <div className="gst-paper gst-wide"><SheetView page={page} values={d.values} accent={d.accent} /></div>
-      <aside className="gst-side">
-        {updated}{yours}
-        {/* Phone (769:6466): the sheet's parts as cards, then the whole sheet. */}
-        {schedule.length > 0 && <section className="gst-card glass gst-narrow"><span className="wp-eyebrow">Schedule</span>{dl(schedule.map((r) => [clockOf(r.time) || "·", t(r.what)] as [string, string]))}</section>}
-        {(place || loc.address || loc.parking) && <section className="gst-card glass gst-narrow"><span className="wp-eyebrow">Where</span>{dl([[place || "Location", t(loc.address)], ["Parking", t(loc.parking)]])}</section>}
-        {crew.length > 0 && <section className="gst-card glass gst-narrow"><span className="wp-eyebrow">Who’s on it</span>{dl(crew.map((r) => [t(r.name), t(r.role).replace(/ \(guest\)$/, "")] as [string, string]))}</section>}
-        {producerCard}
-        <details className="gst-card glass gst-narrow gst-whole"><summary><span className="wp-eyebrow">The whole sheet</span><Icon name="chevron-down" size={18} /></summary><SheetView page={page} values={d.values} accent={d.accent} /></details>
-      </aside>
-      <p className="gst-foot">{ACCESS_LINE}</p>
-    </main>
-  );
+  if (d.ended) return <Ended title={d.title} date={d.date} biz={d.business}>{(many?.sheets.length ?? 0) > 1 && <BackToList />}</Ended>;
+  return <Page me={me} back={(many?.sheets.length ?? 0) > 1}><SheetReader d={d} /><p className="gst-foot gst-footline">{ACCESS_LINE}</p></Page>;
 }
