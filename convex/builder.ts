@@ -23,7 +23,7 @@ import { applyScan } from "./lib/wsMarkers";
 import { OWNER_KEY, docLabel, type LayoutBox, type LayoutSigner } from "./lib/wsLayout";
 import { safeFileName } from "./lib/wsFinal";
 import { withoutPrices } from "./lib/wsProposal";
-import { withoutPeople } from "./lib/callSheet";
+import { migrateWeather, withoutPeople } from "./lib/callSheet";
 
 const errText = (e: unknown) => String((e as Error)?.message ?? e).replace(/^.*ConvexError: /, "").split("\n")[0].slice(0, 300);
 function tooBig(...xs: unknown[]) { if (JSON.stringify(xs).length > MAX_BUILD_JSON) throw new ConvexError("That's too much content for one document."); }
@@ -93,7 +93,9 @@ export const getBuild = query({
     const b = await ctx.db.get(buildId);
     if (!b) return null;
     const doc = b.documentId ? await ctx.db.get(b.documentId) : null;
-    return { ...b, document: doc ? { _id: doc._id, label: docLabel(doc.number), status: doc.status } : null };
+    // D148: a call sheet's old "Add the weather the day before" tick opens as a Weather block (saved with the next edit).
+    const blocks = isCallSheet(b) ? migrateWeather(pageOf(b.blocks)).page : b.blocks;
+    return { ...b, blocks, document: doc ? { _id: doc._id, label: docLabel(doc.number), status: doc.status } : null };
   },
 });
 
@@ -249,7 +251,11 @@ export const listTemplates = query({
 
 export const getTemplate = query({
   args: { templateId: v.id("wsTemplates") },
-  handler: async (ctx, { templateId }) => { await requireMe(ctx); return ctx.db.get(templateId); },
+  handler: async (ctx, { templateId }) => {
+    await requireMe(ctx);
+    const t = await ctx.db.get(templateId);
+    return t && isCallSheet(t) ? { ...t, blocks: migrateWeather(pageOf(t.blocks)).page } : t; // D148, as getBuild
+  },
 });
 
 export const saveAsTemplate = mutation({

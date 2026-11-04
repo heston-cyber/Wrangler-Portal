@@ -109,6 +109,15 @@ function NeedRow({ n, remind }: { n: Need; remind: (n: Extract<Need, { kind: "do
         action={<ButtonLink size="sm" variant="primary" to="/clients/testimonials">Read</ButtonLink>} />
     );
   }
+  if (n.kind === "weatherChanged") { // D148: a sent call sheet's forecast changed; readers still have the sent line, nobody was emailed
+    return (
+      <ListRow className="ilead" lead={{ icon: "calendar" }}
+        title={<><span className="pc-only">Weather changed for {n.title}: Send an update</span><span className="ph-only">Weather changed</span></>}
+        meta={`${shootDay(n.date)} · now ${n.line}${n.was ? ` (was ${n.was})` : ""} · nobody was emailed`}
+        titleChip={<span className="pc-only"><StatusChip tone="warning">Weather</StatusChip></span>}
+        action={<ButtonLink size="sm" variant="primary" to={`/production/call-sheets/${n.callSheetId}?update=1`}>Send an update</ButtonLink>} />
+    );
+  }
   if (n.kind === "shootMoved") return <ShootMovedRow n={n} />; // Phase 5b step 5 (D143): moved in Google Calendar, nobody emailed
   if (n.kind === "draft") {
     return (

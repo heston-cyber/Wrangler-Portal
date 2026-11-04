@@ -184,7 +184,7 @@ export function CallSheetQuestions({ callSheetId }: { callSheetId: string }) {
     ["Shoot", `${cs.title} · ${sheetDay(cs.shoot.date)}`], ["Crew call · Talent call · Wrap", [a.crewCall, a.talentCall, a.wrap].map((x) => (x ? clockOf(x) : "–")).join(" · ")],
     ["Location", [a.locationName, a.address].filter(Boolean).join(", ") || "–"],
     ["Gets it", [`${reachable(g.crew).length} crew`, `${reachable(g.client).length} client ${reachable(g.client).length === 1 ? "person" : "people"}`, reachable(g.guests).length ? `${reachable(g.guests).length} ${reachable(g.guests).length === 1 ? "guest" : "guests"}` : ""].filter(Boolean).join(", ")],
-    ["Schedule", `${a.schedule.filter((r) => r.time || r.what).length} rows`], ["Weather", a.weather ? "Added the day before" : "Not added"], ["Starts from", tplName],
+    ["Schedule", `${a.schedule.filter((r) => r.time || r.what).length} rows`], ["Weather", a.weather ? "From the forecast" : "Not added"], ["Starts from", tplName],
   ];
   return (
     <>
@@ -220,7 +220,7 @@ export function CallSheetQuestions({ callSheetId }: { callSheetId: string }) {
                 <TextField label="Location name" value={a.locationName} onChange={(e) => set({ locationName: e.target.value })} />
                 <TextField label="Address" value={a.address} onChange={(e) => set({ address: e.target.value })} />
                 <TextField label="Parking and load-in" value={a.parking} onChange={(e) => set({ parking: e.target.value })} />
-                <div className="cs-toggle"><span><b>Add the weather the day before</b><span className="wp-small secondary">Saved with the sheet. The forecast itself arrives in a later update.</span></span><Toggle checked={a.weather} onChange={(v) => set({ weather: v })} label="Add the weather the day before" /></div>
+                <div className="cs-toggle"><span><b>Fill in the weather from the forecast</b><span className="wp-small secondary">The sheet gets a Weather line from the US National Weather Service: it fills in within a week of the shoot and refreshes the day before. You can type over it.</span></span><Toggle checked={a.weather} onChange={(v) => set({ weather: v })} label="Fill in the weather from the forecast" /></div>
               </>}
               {step === 2 && <PeoplePicker cs={cs} show={show} />}
               {step === 3 && <>
@@ -283,6 +283,8 @@ export function CallSheetDetail({ callSheetId }: { callSheetId: string }) {
   const [dialog, setDialog] = useState<"update" | "remind" | "preview" | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, show] = useToast();
+  // D148: the Dashboard's "Weather changed … Send an update" opens here with ?update=1.
+  useEffect(() => { if (cs?.status === "sent" && new URLSearchParams(location.search).get("update") === "1") { history.replaceState(null, "", location.pathname); setDialog("update"); } }, [cs?.status]);
   if (cs === undefined) return <><Crumbs /><div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
   if (cs === null) return <><Crumbs /><div className="wp-page"><EmptyState icon="document" title="This call sheet isn't here." actions={<ButtonLink to="/production/call-sheets">All call sheets</ButtonLink>} /></div></>;
   const short = sheetDay(cs.shoot.date).replace(/^\w+ /, "");
@@ -318,7 +320,7 @@ export function CallSheetDetail({ callSheetId }: { callSheetId: string }) {
         <PageHeader eyebrow="Call sheet" title={cs.title} sub={[sheetDay(cs.shoot.date), `Crew call ${clockOf(cs.crewCall)}`, cs.place].filter(Boolean).join(" · ")}
           actions={<><ButtonLink to={`/production/call-sheets/${cs._id}/edit`} iconEnd={false} className="hide-sm">Open in editor</ButtonLink>
             {cs.status === "sent" ? <Button variant="primary" onClick={() => setDialog("update")}>Send an update</Button> : <ButtonLink variant="primary" to={`/production/call-sheets/${cs._id}/edit?send=1`} iconEnd={false}>Send call sheet</ButtonLink>}</>} />
-        {cs.changed && <section className="wp-notice warn cs-warn"><Icon name="alert" size={20} /><span className="txt"><b>You changed the sheet after sending it</b><br />{cs.changes.length ? `${cs.changes.join(". ")}. ` : ""}Send an update so everyone sees it.</span><Button size="sm" className="hide-sm" onClick={() => setDialog("update")}>Send an update</Button></section>}
+        {cs.changed && <section className="wp-notice warn cs-warn"><Icon name="alert" size={20} /><span className="txt"><b>{cs.changes.length && cs.changes.every((c) => /^Weather: /.test(c)) ? "The forecast changed after you sent it" : "You changed the sheet after sending it"}</b><br />{cs.changes.length ? `${cs.changes.join(". ")}. ` : ""}Send an update so everyone sees it.</span><Button size="sm" className="hide-sm" onClick={() => setDialog("update")}>Send an update</Button></section>}
         {cs.status === "draft" && <section className="wp-notice"><Icon name="info" size={20} /><span className="txt"><b>Not sent yet</b><br />Finish it in the editor, then send it from there.</span></section>}
         <div className="pov-cols">
           <div className="col">

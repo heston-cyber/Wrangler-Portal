@@ -3,7 +3,7 @@
 // The sheet as sent on the left; on the right "Updated today" (only on the day of the update, Central time), Your call
 // and Producer. On a phone: the parts as cards, then the whole sheet behind "Read the whole sheet".
 import { Icon } from "../../ui/Icon";
-import { clockOf, locationOf, rowsOf, sheetDay, type ContactRow, type CrewRow, type ScheduleRow } from "../../../convex/lib/callSheet";
+import { clockOf, locationOf, rowsOf, sheetDay, weatherLine, type ContactRow, type CrewRow, type ScheduleRow } from "../../../convex/lib/callSheet";
 import { fill, nodesOf, pageOf, type Page } from "../../../convex/lib/wsBuilder";
 import { SheetView } from "./callSheetParts";
 
@@ -35,7 +35,7 @@ export function SheetReader({ d, head = false }: { d: ReaderData; head?: boolean
   );
   const yours = (
     <section className="gst-card glass gst-yours"><span className="wp-eyebrow">Your call</span>
-      {dl([["Call", d.me.call ? <b className="big">{clockOf(d.me.call)}</b> : "See the sheet"], ["Wrap", loc.wrap ? clockOf(loc.wrap) : ""], ["Where", place]])}
+      {dl([["Call", d.me.call ? <b className="big">{clockOf(d.me.call)}</b> : "See the sheet"], ["Wrap", loc.wrap ? clockOf(loc.wrap) : ""], ["Where", place], ["Weather", weatherLine(page) ?? ""]])}
     </section>
   );
   const producerCard = (

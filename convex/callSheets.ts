@@ -11,7 +11,7 @@
 //     it; Send an update freezes the new copy and sends email 42 once per person per update.
 //   - Readers: a client person (client side, /call-sheets/<id>) or a booked vendor (vendor side, vendorPortal.ts), each
 //     only for a sheet that was sent to them, on a project or booking they still have.
-import { focusBusiness, internalAction, internalQuery, mutation, query } from "./lib/functions";
+import { focusBusiness, internalAction, internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -32,9 +32,11 @@ import { defaultStyle, insertBuild } from "./builder";
 import { randomToken } from "./lib/hash";
 import { fieldValues, newId, nodesOf, pageOf, type BuildDoc, type ExtraSigner, type Fields, type Page, type Style } from "./lib/wsBuilder";
 import {
-  STARTER_TEMPLATES, callFor, callSheetProblems, clockOf, defaultAnswers, fillSheet, locationOf, rowsOf, samePage, sheetDay, sheetDayLong, sheetFields, whatChanged,
-  type Answers, type ContactRow, type CrewRow, type LocationAttrs, type ScheduleRow,
+  STARTER_TEMPLATES, WEATHER_DAYS, addDay, bakeWeather, callFor, callSheetProblems, clockOf, daysBetween, defaultAnswers, fillSheet, locationOf, migrateWeather, rowsOf, samePage,
+  sheetDay, sheetDayLong, sheetFields, weatherAddress, weatherLine, weatherOf, weatherView, whatChanged,
+  type Answers, type ContactRow, type CrewRow, type LocationAttrs, type ScheduleRow, type WeatherView,
 } from "./lib/callSheet";
+import { forecast, geocode } from "./lib/weather";
 
 type Ctx = QueryCtx | MutationCtx;
 type Sheet = Doc<"callSheets">;
@@ -135,7 +137,7 @@ async function ownerName(ctx: Ctx, p: Doc<"projects">, me?: { name: string | nul
 async function sheetData(ctx: Ctx, sh: NonNullable<Awaited<ReturnType<typeof shootOf>>>, people: Array<Person>, a: Answers | null, me: { name: string | null }) {
   const s = sh.s;
   const location: LocationAttrs = a
-    ? { crewCall: a.crewCall, talentCall: a.talentCall, wrap: a.wrap, name: a.locationName, address: a.address, parking: a.parking, weather: !!a.weather }
+    ? { crewCall: a.crewCall, talentCall: a.talentCall, wrap: a.wrap, name: a.locationName, address: a.address, parking: a.parking, weather: false } // D148: a Weather block instead
     : { crewCall: s.call, talentCall: "", wrap: s.wrap ?? "", name: s.location, address: "", parking: s.parking ?? "", weather: false };
   const schedule: ScheduleRow[] = a ? a.schedule.filter((r) => r.time || r.what).map((r) => ({ id: r.id || newId(), time: r.time, what: r.what, who: r.who, notes: "" })) : [];
   const on = firstOn(people);
@@ -152,7 +154,7 @@ async function makeBuild(ctx: MutationCtx, cs: { shootId: Id<"shoots"> }, sh: No
   const d = await sheetData(ctx, sh, people, a, me);
   if (!a && t) { const rows = nodesOf(pageOf(t.blocks), "schedule").flatMap((n) => rowsOf<ScheduleRow>(n)); if (rows.length) d.schedule = rows.map((r) => ({ ...r, id: newId() })); }
   if (!d.schedule.length) d.schedule = [{ id: newId(), time: d.location.crewCall, what: "Crew call and load-in", who: "Crew", notes: "" }];
-  const page = fillSheet(t ? pageOf(t.blocks) : null, d);
+  const page = fillSheet(t ? pageOf(t.blocks) : null, { ...d, ...(a ? { weather: !!a.weather } : {}) });
   const fields = sheetFields((t?.fields as Partial<Fields> | undefined)?.custom, { title: sh.title, date: sh.s.date, client: sh.client ?? "", project: label(sh.p) });
   const buildId = await insertBuild(ctx, { title: `${sh.title} · ${sheetDay(sh.s.date).replace(/^\w+ /, "")}`, page, fields, ...(t ? { style: t.style as Style, templateId: t._id } : {}) });
   await ctx.db.patch(buildId, { kind: "callsheet" });
@@ -236,8 +238,13 @@ export const get = query({
     if (!sh) return null;
     const build = cs.buildId ? await ctx.db.get(cs.buildId) : null;
     const people = await peopleOf(ctx, cs, sh.s, sh.p);
-    const page = build ? pageOf(build.blocks) : null;
-    const changed = !!(cs.sent && build && (!samePage(cs.sent.page, page) || cs.sent.title !== build.title || !samePage((cs.sent.fields as Fields)?.custom, (build.fields as Fields)?.custom)));
+    const raw = build ? migrateWeather(pageOf(build.blocks)).page : null;
+    // D148: the page as it would be sent (the Weather block's line as shown), against the copy that was sent.
+    const page = raw ? bakeWeather(raw, viewOf(cs, raw, sh.s)) : null;
+    // The editor's Weather block: the forecast's own state (it puts the block's typed line over it as you type).
+    const weather = raw ? viewOf(cs, raw, sh.s, true) : null;
+    const sentPage = cs.sent ? migrateWeather(pageOf(cs.sent.page)).page : null;
+    const changed = !!(cs.sent && build && (!samePage(sentPage, page) || cs.sent.title !== build.title || !samePage((cs.sent.fields as Fields)?.custom, (build.fields as Fields)?.custom)));
     const values = build ? fieldValues(build.fields as Fields, page!) : {};
     const loc = page ? locationOf(nodesOf(page, "location")[0]) : null;
     return {
@@ -249,7 +256,8 @@ export const get = query({
         sentAt: x.sentAt ?? null, openedAt: x.openedAt ?? null, lastOpenedAt: x.lastOpenedAt ?? null, remindedAt: x.remindedAt ?? null, endedAt: x.endedAt ?? null })),
       templates: await templateRows(ctx),
       sent: cs.sent ? { at: cs.sent.at, round: cs.sent.round } : null, sentAt: cs.sentAt ?? null, updates: cs.updates ?? 0,
-      changed, changes: changed && cs.sent && page ? whatChanged(pageOf(cs.sent.page), page, values) : [],
+      changed, changes: changed && sentPage && page ? whatChanged(sentPage, page, values) : [],
+      weather, // D148: the Weather block's state for the editor (null: the sheet has none)
       history: cs.history.slice(-20),
     };
   },
@@ -456,10 +464,12 @@ async function passesSent(ctx: MutationCtx, cs: Sheet, ids: string[], date: stri
 }
 const guestIds = (xs: Array<{ id: string; kind: string }>) => xs.filter((x) => x.kind === "guest").map((x) => x.id);
 
-async function frozenCopy(ctx: MutationCtx, cs: Sheet) {
+async function frozenCopy(ctx: MutationCtx, cs: Sheet, s: Doc<"shoots">) {
   const build = cs.buildId ? await ctx.db.get(cs.buildId) : null;
   if (!build) throw new ConvexError("Make the call sheet first.");
-  const doc: BuildDoc = { title: build.title, page: pageOf(build.blocks), fields: build.fields as Fields, signers: (build.signers as ExtraSigner[]) ?? [], style: build.style as Style };
+  // D148: the copy everyone reads carries the Weather block's line as shown now (typed, or the forecast).
+  const raw = migrateWeather(pageOf(build.blocks)).page;
+  const doc: BuildDoc = { title: build.title, page: bakeWeather(raw, viewOf(cs, raw, s)), fields: build.fields as Fields, signers: (build.signers as ExtraSigner[]) ?? [], style: build.style as Style };
   const problems = callSheetProblems(doc);
   if (problems.length) throw new ConvexError(problems[0]);
   return { build, doc };
@@ -482,7 +492,7 @@ export const send = mutation({
     const me = await requireMe(ctx);
     const { cs, sh } = await sheetFor(ctx, a.callSheetId);
     if (cs.status === "sent") throw new ConvexError("It's already been sent. Use Send an update.");
-    const { build, doc } = await frozenCopy(ctx, cs);
+    const { build, doc } = await frozenCopy(ctx, cs, sh.s);
     const people = await peopleOf(ctx, cs, sh.s, sh.p);
     const left = (k: string) => (k === "crew" && !a.crew) || (k === "client" && !a.client) || (k === "guest" && !a.guests);
     const go = reachable(people).filter((x) => !left(x.kind));
@@ -514,8 +524,8 @@ export const sendUpdate = mutation({
     const me = await requireMe(ctx);
     const { cs, sh } = await sheetFor(ctx, a.callSheetId);
     if (cs.status !== "sent" || !cs.sent) throw new ConvexError("Send it first.");
-    const { build, doc } = await frozenCopy(ctx, cs);
-    const changed = tidy(a.changed, 120) || whatChanged(pageOf(cs.sent.page), doc.page, fieldValues(doc.fields, doc.page))[0] || "";
+    const { build, doc } = await frozenCopy(ctx, cs, sh.s);
+    const changed = tidy(a.changed, 120) || whatChanged(migrateWeather(pageOf(cs.sent.page)).page, doc.page, fieldValues(doc.fields, doc.page))[0] || "";
     if (!changed) throw new ConvexError("Say what changed.");
     const people = await peopleOf(ctx, cs, sh.s, sh.p);
     const left = (k: string) => (k === "crew" && a.crew === false) || (k === "client" && a.client === false) || (k === "guest" && a.guests === false);
@@ -733,3 +743,167 @@ export async function sentToVendor(ctx: Ctx, cs: Sheet | null, vendorId: Id<"ven
   const s = await ctx.db.get(cs.shootId);
   return k && s && s.status === "scheduled" && k.vendorId === vendorId && k.projectId === cs.projectId && coversShoot(k, s) ? r : null;
 }
+
+// ---------- D148 (Nov 4): the Weather block's forecast ----------
+// The forecast fills once the shoot is within a week and refreshes the day before (the daily cron, crons.ts), or when the
+// owner presses Refresh forecast. It's kept on the sheet (callSheets.weather), never in the page: the editor shows it, and
+// Send / Send an update bake it into the copy everyone reads. A typed-over line is the owner's and nothing changes it.
+// Readers keep the copy that was sent: a refresh that changes the line after sending only nudges the owner (Dashboard
+// "Needs you", weatherNeeds); nobody is emailed.
+
+/** The Weather block's state on this page (null: the page has none). */
+function viewOf(cs: Sheet, page: Page, s: Doc<"shoots">, forecastOnly = false): WeatherView | null {
+  const n = nodesOf(page, "weather")[0];
+  if (!n) return null;
+  const { address, place } = weatherAddress(page, s.location);
+  return weatherView(forecastOnly ? { typed: false, line: "" } : weatherOf(n), cs.weather, { date: s.date, address, place, today: todayCentral() });
+}
+
+/** Whether the forecast should be looked up now: within a week of the shoot (today included), and not filled yet for
+ *  this address and day, or not refreshed yet on the day before. `force` (Refresh forecast): whenever it's within a week. */
+function needsForecast(cs: Sheet, page: Page, s: Doc<"shoots">, today: string, force = false) {
+  if (s.status !== "scheduled" || !nodesOf(page, "weather").length) return false;
+  const days = daysBetween(today, s.date);
+  if (days < 0 || days > WEATHER_DAYS) return false;
+  if (force) return true;
+  const { address } = weatherAddress(page, s.location);
+  const w = cs.weather;
+  if (!w || w.date !== s.date || w.address !== address || w.state !== "forecast") return true;
+  return days <= 1 && !w.dayBefore;
+}
+
+/** The cron's list: every business's sheets that need a forecast now. Trusted server code (it sees every business, and
+ *  reads nothing but which sheets); each sheet's lookup then runs as its own business (weatherOne with asBusiness). */
+export const weatherDue = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const today = todayCentral();
+    const out: Array<{ callSheetId: Id<"callSheets">; biz: Id<"businesses"> | null }> = [];
+    for (const s of await ctx.db.query("shoots").withIndex("by_date", (q) => q.gte("date", today).lte("date", addDay(today, WEATHER_DAYS))).collect()) {
+      const cs = await ctx.db.query("callSheets").withIndex("by_shoot", (q) => q.eq("shootId", s._id)).first();
+      const build = cs?.buildId ? await ctx.db.get(cs.buildId) : null;
+      if (cs && build && needsForecast(cs, migrateWeather(pageOf(build.blocks)).page, s, today)) out.push({ callSheetId: cs._id, biz: cs.businessId ?? null });
+    }
+    return out;
+  },
+});
+
+/** What one lookup needs: the address (to Census, unless its geocode is kept), the day, and the kept point (to NWS). */
+export const weatherInput = internalQuery({
+  args: { callSheetId: v.id("callSheets"), force: v.optional(v.boolean()) },
+  handler: async (ctx, { callSheetId, force }) => {
+    const cs = await ctx.db.get(callSheetId);
+    const s = cs ? await ctx.db.get(cs.shootId) : null;
+    const build = cs?.buildId ? await ctx.db.get(cs.buildId) : null;
+    if (!cs || !s || !build) return null;
+    const page = migrateWeather(pageOf(build.blocks)).page;
+    if (!needsForecast(cs, page, s, todayCentral(), !!force)) return null;
+    const { address } = weatherAddress(page, s.location);
+    const geo = cs.geo && cs.geo.address === address ? { lat: cs.geo.lat ?? null, lon: cs.geo.lon ?? null } : null;
+    return { address, date: s.date, geo };
+  },
+});
+
+const kindArg = v.union(v.literal("forecast"), v.literal("early"), v.literal("none"), v.literal("error"));
+export const weatherStore = internalMutation({
+  args: { callSheetId: v.id("callSheets"), address: v.string(), date: v.string(), kind: kindArg, line: v.optional(v.string()), geo: v.optional(v.object({ lat: v.optional(v.number()), lon: v.optional(v.number()) })) },
+  handler: async (ctx, a) => {
+    const cs = await ctx.db.get(a.callSheetId);
+    if (!cs) return null;
+    const now = Date.now();
+    const w = cs.weather;
+    const same = !!w && w.address === a.address && w.date === a.date;
+    // The service didn't answer: a forecast already here for this address and day stays (tried again next run).
+    const keep = a.kind === "error" && same && w!.state === "forecast";
+    const weather = keep ? w! : {
+      address: a.address, date: a.date, state: a.kind === "forecast" ? "forecast" as const : a.kind === "early" ? "early" as const : "none" as const,
+      line: a.kind === "forecast" ? (a.line ?? "").slice(0, 160) : "", at: now,
+      ...(a.kind === "forecast" && daysBetween(todayCentral(), a.date) <= 1 ? { dayBefore: true } : {}),
+    };
+    await ctx.db.patch(cs._id, { weather, ...(a.geo ? { geo: { address: a.address, ...a.geo, at: now } } : {}) });
+    return weather.state;
+  },
+});
+
+/** One sheet's lookup: Census (the address only, once per address) → NWS (the point only) → kept on the sheet. */
+export const weatherOne = internalAction({
+  args: { callSheetId: v.id("callSheets"), force: v.optional(v.boolean()) },
+  handler: async (ctx, { callSheetId, force }): Promise<string | null> => {
+    const inp: { address: string; date: string; geo: { lat: number | null; lon: number | null } | null } | null = await ctx.runQuery(internal.callSheets.weatherInput, { callSheetId, force });
+    if (!inp) return null;
+    let point = inp.geo;
+    let found: { lat?: number; lon?: number } | undefined;
+    if (!point) {
+      const g = await geocode(inp.address);
+      if (g.kind === "error") return await ctx.runMutation(internal.callSheets.weatherStore, { callSheetId, address: inp.address, date: inp.date, kind: "error" });
+      found = g.kind === "found" ? { lat: g.geo.lat, lon: g.geo.lon } : {};
+      point = { lat: found.lat ?? null, lon: found.lon ?? null };
+    }
+    const r = point.lat !== null && point.lon !== null ? await forecast({ lat: point.lat, lon: point.lon }, inp.date) : { kind: "none" as const };
+    return await ctx.runMutation(internal.callSheets.weatherStore, { callSheetId, address: inp.address, date: inp.date, kind: r.kind, ...(r.kind === "forecast" ? { line: r.line } : {}), ...(found ? { geo: found } : {}) });
+  },
+});
+
+/** The daily cron (crons.ts): each sheet that needs it gets its own lookup, as its own business. */
+export const weatherAll = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const due: Array<{ callSheetId: Id<"callSheets">; biz: Id<"businesses"> | null }> = await ctx.runQuery(internal.callSheets.weatherDue, {});
+    for (const d of due) await ctx.scheduler.runAfter(0, internal.callSheets.weatherOne, { callSheetId: d.callSheetId, ...(d.biz ? { asBusiness: d.biz } : {}) });
+    return due.length;
+  },
+});
+
+/** Refresh forecast (the editor's Weather block): looks it up again now, when the shoot is within a week. */
+export const refreshWeather = mutation({
+  args: { callSheetId: v.id("callSheets") },
+  handler: async (ctx, { callSheetId }) => {
+    await requireMe(ctx);
+    const { cs, sh } = await sheetFor(ctx, callSheetId);
+    if (!cs.buildId) throw new ConvexError("Make the call sheet first.");
+    const days = daysBetween(todayCentral(), sh.s.date);
+    if (days > WEATHER_DAYS) return { state: "early" as const };
+    if (days < 0) throw new ConvexError("The shoot is over.");
+    if (cs.weather && Date.now() - cs.weather.at < 30_000) return { state: "recent" as const }; // a double press
+    await ctx.scheduler.runAfter(0, internal.callSheets.weatherOne, { callSheetId, force: true });
+    return { state: "looking" as const };
+  },
+});
+
+/** Dashboard "Needs you": a sent sheet whose forecast changed after it was sent ("Weather changed for {shoot}: Send an
+ *  update"). Readers still see the sent line until the owner sends an update; nobody is emailed. */
+export async function weatherNeeds(ctx: QueryCtx) {
+  const today = todayCentral();
+  const out: Array<{ kind: "weatherChanged"; at: number; callSheetId: Id<"callSheets">; title: string; date: string; line: string; was: string }> = [];
+  for (const cs of await ctx.db.query("callSheets").withIndex("by_status", (q) => q.eq("status", "sent")).collect()) {
+    if (!cs.sent || !cs.buildId || cs.weather?.state !== "forecast" || cs.weather.at <= cs.sent.at) continue;
+    const was = weatherLine(pageOf(cs.sent.page));
+    if (was === null) continue;
+    const sh = await shootOf(ctx, cs.shootId);
+    const build = await ctx.db.get(cs.buildId);
+    if (!sh || !build || sh.s.status !== "scheduled" || sh.s.date < today) continue;
+    const view = viewOf(cs, migrateWeather(pageOf(build.blocks)).page, sh.s);
+    if (!view || view.state !== "forecast" || view.line === was) continue;
+    out.push({ kind: "weatherChanged", at: cs.weather.at, callSheetId: cs._id, title: cs.sent.heading ?? sh.title, date: sh.s.date, line: view.line, was });
+  }
+  return out;
+}
+
+/** D148 migration: call sheets and call-sheet templates whose location block had "Add the weather the day before" ticked
+ *  get a Weather block (lib/callSheet.ts migrateWeather). Pages are also migrated as they're opened; this does the rest.
+ *  Safe to run again: a page already done is left alone. */
+export const migrateWeatherBlocks = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    let builds = 0, templates = 0;
+    for (const b of (await ctx.db.query("wsBuilds").collect()).filter((x) => x.kind === "callsheet")) {
+      const m = migrateWeather(pageOf(b.blocks));
+      if (m.changed) { await ctx.db.patch(b._id, { blocks: m.page }); builds++; }
+    }
+    for (const t of (await ctx.db.query("wsTemplates").collect()).filter((x) => x.kind === "callsheet")) {
+      const m = migrateWeather(pageOf(t.blocks));
+      if (m.changed) { await ctx.db.patch(t._id, { blocks: m.page }); templates++; }
+    }
+    return { builds, templates };
+  },
+});

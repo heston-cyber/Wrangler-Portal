@@ -112,7 +112,9 @@ describe("call sheets", () => {
     const build = await w.heston.query(api.builder.getBuild, { buildId });
     expect(build.kind).toBe("callsheet");
     const page = pageOf(build.blocks);
-    expect(nodesOf(page, "location")[0].attrs).toMatchObject({ crewCall: "07:30", talentCall: "09:00", wrap: "13:00", name: "Studio B", weather: true });
+    // D148: the weather answer is a Weather block now (the old tick box stays off); its tests are in callSheetWeather.test.ts.
+    expect(nodesOf(page, "location")[0].attrs).toMatchObject({ crewCall: "07:30", talentCall: "09:00", wrap: "13:00", name: "Studio B", weather: false });
+    expect(nodesOf(page, "weather")).toHaveLength(1);
     expect((nodesOf(page, "schedule")[0].attrs!.rows as Array<{ what: string }>).map((r) => r.what)).toEqual(["Crew call and load-in", "Talent call, hair and makeup", "Lunch"]);
     expect((nodesOf(page, "crew")[0].attrs!.rows as Array<{ name: string; call: string }>).map((r) => [r.name, r.call])).toEqual([["Jordan Ellis", "07:30"], ["Maya Brooks", "07:30"], ["Riley Quinn", "09:00"]]);
     expect(JSON.stringify(page)).toContain("Bring water and a layer.");

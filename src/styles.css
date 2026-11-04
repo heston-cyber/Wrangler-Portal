@@ -1389,4 +1389,12 @@ button.ws-hubcard:disabled { opacity: .6; cursor: default; }
 .wsb-cs-loc > div { display: grid; gap: 4px; align-content: start; }
 .wsb-cs-loc label:not(.wsb-check) { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .wsb-cs-loc input:not([type="checkbox"]) { border-bottom: 1px dashed color-mix(in srgb, var(--wsb-muted) 50%, transparent); }
+/* D148: the Weather block on the page, and its settings in Format (865:11023 / 865:11728) */
+.wsb-cs-wx { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; cursor: pointer; }
+.wsb-cs-wx .wsb-cap { display: inline; margin: 0; }
+.wsb-cs-wx .secondary { color: var(--wsb-muted); }
+.wsb-cs-wx .wp-status { align-self: center; }
+.wsb-wx-panel { display: grid; gap: 10px; justify-items: start; }
+.wsb-wx-panel .field { width: 100%; }
+.wsb-wx-panel .input { width: 100%; }
 @media (max-width: 599px) { .wsb-cs-loc { grid-template-columns: 1fr; gap: 12px; } .wsb-cs-table th:nth-child(4), .wsb-cs-table td:nth-child(4) { display: none; } }

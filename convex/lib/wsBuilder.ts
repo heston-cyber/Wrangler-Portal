@@ -40,11 +40,11 @@ export type PNode = RichNode;
 export type Page = { type: "doc"; content: PNode[] };
 
 // Phase 5b step 3: the call sheet's own blocks (lib/callSheet.ts) come last; contracts never use them.
-export const ATOMS = ["parties", "items", "payment", "signatures", "divider", "pagebreak", "spacer", "location", "schedule", "crew", "contacts"] as const;
+export const ATOMS = ["parties", "items", "payment", "signatures", "divider", "pagebreak", "spacer", "location", "schedule", "crew", "contacts", "weather"] as const;
 export type AtomType = (typeof ATOMS)[number];
 export const isAtom = (t: string): t is AtomType => (ATOMS as readonly string[]).includes(t);
 /** Review L8: the call sheet's own blocks (lib/callSheet.ts CALL_ATOMS), which never belong in a contract. */
-export const CALL_ONLY = ["location", "schedule", "crew", "contacts"] as const;
+export const CALL_ONLY = ["location", "schedule", "crew", "contacts", "weather"] as const;
 const isCallOnly = (t: string) => (CALL_ONLY as readonly string[]).includes(t);
 
 /** What the Insert panel adds. */
@@ -52,7 +52,7 @@ export type InsertKind = "title" | "heading" | "text" | "section" | "card" | Ato
 export const INSERT_LABEL: Record<InsertKind, string> = {
   title: "Title", heading: "Heading", text: "Text", section: "Section", card: "Card", parties: "Parties", items: "Line items",
   payment: "Payment schedule", signatures: "Signatures", divider: "Divider", pagebreak: "Page break", spacer: "Space",
-  location: "Location", schedule: "Schedule", crew: "Crew list", contacts: "Contacts",
+  location: "Location", schedule: "Schedule", crew: "Crew list", contacts: "Contacts", weather: "Weather",
 };
 export const BLOCK_LABEL = INSERT_LABEL;
 
@@ -81,6 +81,7 @@ export function newNodes(kind: InsertKind): PNode[] {
     case "schedule": return [line("Schedule", { size: "heading" }), atom("schedule", { rows: [{ id: newId(), time: "", what: "", who: "", notes: "" }] })];
     case "crew": return [line("Crew and talent", { size: "heading" }), atom("crew", { rows: [{ id: newId(), name: "", role: "", call: "", phone: "" }] })];
     case "contacts": return [line("Contacts", { size: "heading" }), atom("contacts", { rows: [{ id: newId(), label: "Producer", name: "", phone: "" }] })];
+    case "weather": return [atom("weather", { typed: false, line: "" })]; // D148: fills from the forecast (lib/callSheet.ts)
   }
 }
 
@@ -299,7 +300,7 @@ export function buildProblems(d: BuildDoc): string[] {
   const out: string[] = [];
   if (!d.title.trim()) out.push("Give the document a title.");
   if (!textOf(d.page as PNode).trim() && !(d.page.content ?? []).some((n) => isAtom(n.type) && !isCallOnly(n.type))) out.push("Add some content.");
-  if (CALL_ONLY.some((t) => nodesOf(d.page, t).length)) out.push("Call sheet blocks (call times, schedule, crew, contacts) can't go in a contract: remove them.");
+  if (CALL_ONLY.some((t) => nodesOf(d.page, t).length)) out.push("Call sheet blocks (call times, weather, schedule, crew, contacts) can't go in a contract: remove them.");
   const keys = signerKeys(d.page);
   if (!nodesOf(d.page, "signatures").length) out.push("Add a signature block.");
   if (keys.includes("client")) {
