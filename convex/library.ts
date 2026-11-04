@@ -1,13 +1,14 @@
 // Projects, videos and versions: what the home page and the video page read.
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
+import { action } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { requireMe } from "./lib/access";
 import { isValidTc } from "./lib/frames";
 import type { Doc, Id } from "./_generated/dataModel";
 import { insertVideo, nextFileName } from "./lib/register";
-import { downloadFor, signStillUrl, signedThumbUrl, versionMedia } from "./lib/media";
+import { downloadFileUrl, downloadInfo, downloadName, signStillUrl, signedThumbUrl, versionMedia } from "./lib/media";
 import { stillOk } from "./lib/stillOk";
 import { accessToVideo, accessToVersion, shareArg, versionShown } from "./lib/viewer";
 import { roundsFor } from "./lib/rounds";
@@ -60,7 +61,8 @@ export const overview = query({
           frameCount: latest.frameCount ?? null, fpsNum: latest.fpsNum ?? 24000, fpsDen: latest.fpsDen ?? 1001,
           startTimecode: latest.startTimecode, width: latest.width ?? null, height: latest.height ?? null,
           transcript: tr?.status ?? null,
-          download: await downloadFor(latest), // C3: for "Download selected" on the Projects page
+          // C3: for "Download selected" on the Projects page (the owner's own). D152 fix: no link here; made per click.
+          download: (() => { const d = downloadInfo(latest); return d ? { versionId: latest._id, name: downloadName(latest, d.ext, { owner: true, title: vid.title }), bytes: d.bytes } : null; })(),
         },
       });
     }
@@ -196,14 +198,15 @@ export const video = query({
     const out = [];
     for (const x of versions.sort((a, b) => a.number - b.number)) {
       const pv = await publicVersion(x);
-      // D152: the full-resolution file (render or original), only for those allowed to download it.
-      const dl = mayDownload ? await downloadFor(x) : null;
+      // D152: what Download gives (the render, or the master from Dropbox), only for those allowed; the link itself is
+      // made per click by downloadLink (review fix H1).
+      const dl = mayDownload ? downloadInfo(x) : null;
       // Clients and guests get what the player needs, not the owner's details (security review, Oct 23).
       const slim = owner ? pv : { ...pv, fileName: `v${x.number}`, uploaderName: null, bunnyGuid: "", error: null, storageBytes: null, streamOnly: false, scrubStatus: pv.scrub ? "ready" as const : null, dropboxPath: null };
       out.push({
         ...slim,
         dropboxPath: owner ? x.dropboxPath ?? null : null,
-        download: dl ? { url: dl.url, ext: /\.([A-Za-z0-9]{2,5})$/.exec(dl.name)?.[1]?.toLowerCase() ?? null, bytes: dl.bytes } : null,
+        download: dl ? { ext: dl.ext, bytes: dl.bytes, name: downloadName(x, dl.ext, { owner, title: vid.title }) } : null,
         noteCount: notes.filter((n) => n.versionId === x._id).length,
         openCount: notes.filter((n) => n.versionId === x._id && n.status === "open").length,
         transcript: (trs.get(x._id) ?? null) as "pending" | "running" | "done" | "failed" | null,
@@ -583,3 +586,66 @@ export const versionsForStorage = internalQuery({
       .map((x) => ({ _id: x._id, bunnyGuid: x.bunnyGuid, scrubGuid: x.source === "file" ? x.scrubGuid ?? null : null, fileSize: x.fileSize ?? 0 }));
   },
 });
+
+// ---------- Download, per click (D152; review fix H1, Nov 4) ----------
+
+/** May the caller download this version? Runs behind the business guard: the owner of its business, or a share that
+ *  shows this version and allows downloads. Gives what the file is, never where it lives. */
+export const downloadCheck = query({
+  args: { versionId: v.id("versions"), share: shareArg },
+  handler: async (ctx, { versionId, share }) => {
+    const x = await ctx.db.get(versionId);
+    const vid = x ? await ctx.db.get(x.videoId) : null;
+    if (!x || !vid) throw new ConvexError("That file isn't available.");
+    const access = await accessToVideo(ctx, vid._id, share);
+    const owner = access.kind === "owner";
+    if (!owner && (!access.share?.downloads || !(await versionShown(ctx, access.share, x)))) throw new ConvexError("Downloads aren't on for this link.");
+    const d = downloadInfo(x);
+    if (!d) throw new ConvexError("That file isn't ready yet.");
+    return { from: d.from, ext: d.ext, name: downloadName(x, d.ext, { owner, title: vid.title }) };
+  },
+});
+
+/** Trusted: where a version's file is (only after downloadCheck said yes). */
+export const downloadSource = internalQuery({
+  args: { versionId: v.id("versions"), expiresAt: v.optional(v.number()) },
+  handler: async (ctx, { versionId, expiresAt }) => {
+    const x = await ctx.db.get(versionId);
+    if (!x) return null;
+    const d = downloadInfo(x);
+    if (!d) return null;
+    const vid = await ctx.db.get(x.videoId);
+    const project = vid ? await ctx.db.get(vid.projectId) : null;
+    return {
+      from: d.from,
+      url: d.from === "dropbox" ? null : await downloadFileUrl(x, d.from, expiresAt),
+      copyUrl: d.from === "dropbox" ? await downloadFileUrl(x, "copy", expiresAt) : null, // if the master has left Dropbox
+      path: d.from === "dropbox" ? x.dropboxPath ?? null : null,
+      businessId: project?.businessId ?? vid?.businessId ?? null,
+    };
+  },
+});
+
+/** The link Download fetches: made per click, after the check. A master from Dropbox gets a 4-hour Dropbox link; if
+ *  it isn't in Dropbox any more, the largest MP4 copy instead (and `fallback` says so). */
+export const downloadLink = action({
+  args: { versionId: v.id("versions"), share: shareArg },
+  handler: async (ctx, a): Promise<{ url: string; name: string; fallback: boolean }> => {
+    const c: { from: string; ext: string; name: string } = await ctx.runQuery(api.library.downloadCheck, a);
+    return await resolveDownload(ctx, a.versionId, c.name);
+  },
+});
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function resolveDownload(ctx: { runQuery: any; runAction: any }, versionId: Id<"versions">, name: string, expiresAt?: number): Promise<{ url: string; name: string; fallback: boolean }> {
+  const s: { from: string; url: string | null; copyUrl: string | null; path: string | null; businessId: Id<"businesses"> | null } | null = await ctx.runQuery(internal.library.downloadSource, { versionId, ...(expiresAt ? { expiresAt } : {}) });
+  if (!s) throw new ConvexError("That file isn't available.");
+  if (s.from !== "dropbox") { if (!s.url) throw new ConvexError("That file isn't available."); return { url: s.url, name, fallback: false }; }
+  try {
+    const url: string = await ctx.runAction(internal.dropbox.temporaryLink, { path: s.path!, ...(s.businessId ? { asBusiness: s.businessId } : {}) });
+    return { url, name, fallback: false };
+  } catch {
+    if (!s.copyUrl) throw new ConvexError("The master file isn't in Dropbox any more, and there's no copy to download.");
+    return { url: s.copyUrl, name: name.replace(/\.[A-Za-z0-9]{2,5}$/, ".mp4"), fallback: true };
+  }
+}

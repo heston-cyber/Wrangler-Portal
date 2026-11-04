@@ -3,7 +3,7 @@
 import { Button, ButtonLink, EmptyState } from "../../ui/wp";
 import { useState } from "react";
 import { BrandImg } from "../../ui/BrandImg";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { Building2, FolderPlus, LayoutGrid, List, ListOrdered, Pencil, Rows3, Share2, SquareCheck, Trash2, Upload, X } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -107,7 +107,10 @@ export default function Projects({ projectId, embedded }: { projectId?: Id<"proj
   });
   const toggle = (k: string) => setCollapsed((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
   const picked = vids.filter((x) => sel.has(x._id));
-  const pickedFiles = picked.map((x) => x.latest?.download).filter((d): d is { url: string; name: string; bytes: number | null } => !!d);
+  const downloadLink = useAction(api.library.downloadLink);
+  // D152 fix (H1): each file's link is made just before it's fetched, after the save box.
+  const pickedFiles = picked.map((x) => x.latest?.download).filter((d): d is NonNullable<typeof d> => !!d)
+    .map((d) => ({ url: async () => (await downloadLink({ versionId: d.versionId as Id<"versions"> })).url, name: d.name, bytes: d.bytes }));
   const pickedSize = pickedFiles.length && pickedFiles.every((f) => f.bytes) ? bytesText(pickedFiles.reduce((a, f) => a + (f.bytes ?? 0), 0)) : null;
   async function downloadSelected() {
     if (!pickedFiles.length) { showToast("Nothing playable is selected."); return; }

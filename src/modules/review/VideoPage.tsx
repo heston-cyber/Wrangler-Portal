@@ -3,7 +3,7 @@
 // Frame-exact: every note is stored as integer frames from frame 0 of its version.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BrandImg } from "../../ui/BrandImg";
-import { useConvex, useMutation, useQuery } from "convex/react";
+import { useAction, useConvex, useMutation, useQuery } from "convex/react";
 import {
   AlertTriangle, ArrowUp, Brush, Check, ChevronDown, ChevronUp, Circle, CircleCheckBig, Copy, Download, ListOrdered, Ellipsis, EyeOff, Eye, Keyboard, Maximize, Minimize, MoveUpRight, PanelRight, Pause, Pencil, Play,
   Crosshair, Film, Mic, Plus, Settings, Share2, SlidersHorizontal, Square, Timer, Undo2, Upload, Volume2, VolumeX, X,
@@ -591,22 +591,26 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   }
 
   const newVersion = () => fileRef.current?.click();
-  // Download (C3; full resolution since D152): the render itself, or the original as uploaded, when the share allows
-  // it (the owner always may). The server sends it only to those allowed.
-  const downloadUrl = version?.download?.url ?? null;
-  const canDownload = !!downloadUrl && (owner || viewer.downloads);
+  // Download (C3; full resolution since D152): the render itself, or the master from Dropbox, when the share allows it
+  // (the owner always may). Review fix H1: the link is made per click by a server check, never sent with the page.
+  const downloadLink = useAction(api.library.downloadLink);
+  const canDownload = !!version?.download && (owner || viewer.downloads);
   // A plain link to another domain only plays the file, so it's fetched and saved here (lib/download), with progress.
   const [dl, setDl] = useState<{ pct: number } | null>(null);
   async function downloadFile() {
-    if (!downloadUrl || !version || dl) return;
-    const name = `${(data.title || "video").replace(/[^\w\- ]+/g, "").trim() || "video"}_v${version.number}.${version.download?.ext ?? "mp4"}`;
+    if (!version?.download || dl) return;
+    const v = version;
+    let got: { url: string; fallback: boolean } | null = null;
+    const link = async () => { got = await downloadLink({ versionId: v._id as Id<"versions">, ...shareArgs }); return got.url; };
     setDl({ pct: 0 });
     try {
-      const ok = await downloadOne(downloadUrl, name, version.download?.bytes ?? null, (p) => setDl({ pct: p.total ? Math.round((100 * p.done) / p.total) : 0 }));
-      if (ok) showToast("Downloaded");
-    } catch {
-      window.open(downloadUrl, "_blank", "noopener");
-      showToast("Opened the file in a new tab; save it from there.");
+      const ok = await downloadOne(link, v.download!.name, v.download!.bytes ?? null, (p) => setDl({ pct: p.total ? Math.round((100 * p.done) / p.total) : 0 }));
+      const g = got as { url: string; fallback: boolean } | null;
+      if (ok) showToast(g?.fallback ? "Downloaded the MP4 copy: the master isn't in Dropbox any more." : "Downloaded");
+    } catch (e) {
+      const g = got as { url: string; fallback: boolean } | null;
+      if (g?.url) { window.open(g.url, "_blank", "noopener"); showToast("Opened the file in a new tab; save it from there."); }
+      else showToast(String((e as Error)?.message ?? "Download didn't work.").replace(/^.*ConvexError: /, ""));
     } finally {
       setDl(null);
     }

@@ -51,11 +51,12 @@ const MIME: Record<string, string> = { mp4: "video/mp4", m4v: "video/x-m4v", mov
 const mimeOf = (name: string) => MIME[(/\.([A-Za-z0-9]+)$/.exec(name)?.[1] ?? "").toLowerCase()] ?? "application/octet-stream";
 
 /** Saves one file. `onProgress` gets bytes so far and the total when known. Returns false when the user cancelled the save box. */
-export async function downloadOne(url: string, name: string, total: number | null, onProgress: (p: Progress) => void): Promise<boolean> {
+export async function downloadOne(url: string | (() => Promise<string>), name: string, total: number | null, onProgress: (p: Progress) => void): Promise<boolean> {
   let sink: Sink;
   try { sink = await openSink(safeName(name), mimeOf(name)); } catch (e) { if ((e as Error).name === "AbortError") return false; throw e; }
   try {
-    await pump(url, (c) => sink.write(c), (n) => onProgress({ done: n, total: total ?? 0, file: name, files: 1, ofFiles: 1 }));
+    // The link is made after the save box (D152 fix: per click, so the click still counts and no link goes stale).
+    await pump(typeof url === "string" ? url : await url(), (c) => sink.write(c), (n) => onProgress({ done: n, total: total ?? 0, file: name, files: 1, ofFiles: 1 }));
     await sink.close();
     return true;
   } catch (e) { await sink.abort().catch(() => {}); throw e; }

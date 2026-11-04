@@ -14,7 +14,8 @@ import { requireMe, requireSignedIn } from "./lib/access";
 import { clampRounds, roundOf, roundsFor } from "./lib/rounds";
 import { postToInbox, businessOf, hasAccess } from "./lib/inbox";
 import { coveredProjects, coveredVideos, sameBusiness, shareState } from "./lib/shareAccess";
-import { downloadFor, signedThumbUrl, signStillUrl } from "./lib/media";
+import { downloadInfo, signedThumbUrl, signStillUrl } from "./lib/media";
+import { resolveDownload } from "./library";
 import { docLabel } from "./lib/wsLayout";
 import { crmProject } from "./crm";
 import { deliveredBefore, offerOnDelivery } from "./footage";
@@ -387,11 +388,12 @@ export const deliveryLink = action({
       const url: string = await ctx.runAction(internal.dropbox.temporaryLink, { path: f.path!, ...(f.businessId ? { asBusiness: f.businessId } : {}) });
       return { url, name: f.name };
     }
-    const url: { file: string; name: string } | null = await ctx.runQuery(internal.projects.versionFileUrl, { versionId: f.versionId!, until: f.until });
-    if (!url) throw new ConvexError("That file isn't available.");
-    // The file is the render or the original as uploaded (D152), so it may be a .mov rather than an MP4: name it by what it is.
-    const ext = /\.(mp4|mov|m4v|mxf)$/i.exec(new URL(url.file).pathname)?.[1]?.toLowerCase() ?? /\.(mp4|mov|m4v|mxf)$/i.exec(url.name)?.[1]?.toLowerCase();
-    return { url: url.file, name: ext ? f.name.replace(/\.[^.]+$/, `.${ext}`) : f.name };
+    // D152: the render itself, or the master from Dropbox (never a Stream link: review fix H1). Review fix L1: a Bunny
+    // link ends when the delivery window does (Dropbox's own links last 4 hours, inside the window's 4-hour cap).
+    const ext: string | null = await ctx.runQuery(internal.projects.versionExt, { versionId: f.versionId! });
+    if (!ext) throw new ConvexError("That file isn't available.");
+    const r = await resolveDownload(ctx, f.versionId!, f.name.replace(/\.[^.]+$/, "") + `.${ext}`, Math.floor(f.until / 1000));
+    return { url: r.url, name: r.name };
   },
 });
 export const canDownload = internalQuery({
@@ -411,13 +413,10 @@ export const canDownload = internalQuery({
     return { kind: f.kind, path: f.dropboxPath ?? null, versionId: f.versionId ?? null, name: f.name, until, businessId: p.businessId ?? null };
   },
 });
-export const versionFileUrl = internalQuery({
-  args: { versionId: v.id("versions"), until: v.number() },
+export const versionExt = internalQuery({
+  args: { versionId: v.id("versions") },
   handler: async (ctx, { versionId }) => {
-    // The same file "Download" saves (the render itself, or the original as uploaded: D152); its signature lasts a
-    // few hours, and a fresh one is made on every click while the files are open.
     const ver = await ctx.db.get(versionId);
-    const d = ver ? await downloadFor(ver) : null;
-    return d ? { file: d.url, name: d.name } : null;
+    return ver ? downloadInfo(ver)?.ext ?? null : null;
   },
 });
