@@ -611,6 +611,7 @@ export const addVersion = internalMutation({
     const versionId = await ctx.db.insert("versions", {
       videoId: a.videoId, number, status: "processing", pollCount: 0, bunnyGuid: a.bunnyGuid, fileName: a.fileName.slice(0, 300),
       fileSize: a.fileSize, startTimecode: "01:00:00:00", uploaderName: "Dropbox", dropboxPath: a.dropboxPath, createdAt: now,
+      qualityMenu: true, // Nov 4: 1080p by default, 4K when there is one
     });
     await ctx.db.patch(a.videoId, { updatedAt: now, final: undefined }); // a new version reopens an approved video
     await ctx.db.patch(a.fileId, { status: "imported", versionId, shareUrl: a.shareUrl, importedAt: now, lastChangeAt: now, reason: a.note });
@@ -706,6 +707,7 @@ export const addFileVersion = internalMutation({
       videoId: a.videoId, number, status: "processing", source: "file", bunnyGuid: "", storagePath, fileName: a.fileName.slice(0, 300), fileSize: a.fileSize,
       fpsNum: a.fpsNum, fpsDen: a.fpsDen, frameCount: a.frames, frameCountFrom: "file", width: a.width, height: a.height, lengthSeconds: a.seconds,
       mp4Heights: [], startTimecode: "01:00:00:00", uploaderName: "Dropbox", dropboxPath: a.dropboxPath, createdAt: now, encodeProgress: 0,
+      qualityMenu: true, // Nov 4: a render bigger than 1080p plays at 1080p (scrub library copy) once that's made; 4K on choice
     });
     await ctx.db.patch(a.videoId, { updatedAt: now, final: undefined });
     await ctx.db.patch(a.fileId, { status: "imported", versionId, importedAt: now, lastChangeAt: now, reason: a.note });

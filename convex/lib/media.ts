@@ -8,6 +8,7 @@
 // query that re-runs mid-review hands the page the same URL and the player doesn't reload.
 import type { Doc } from "../_generated/dataModel";
 import { renderFolder, signBunnyUrl, streamFolder } from "./bunnySign";
+import { copySize, isBig, type Size } from "./quality";
 
 export const streamCdn = () => process.env.BUNNY_STREAM_CDN || "vz-3ba0610b-f90.b-cdn.net";
 export const scrubCdn = () => process.env.BUNNY_SCRUB_CDN || "";
@@ -70,12 +71,50 @@ export type VersionMedia = {
   /** The 360p scrub copy (file versions, when made). */
   scrub: { mp4: string; hls: string } | null;
   thumb: string | null;
+  /** Nov 4 (Heston): the 1080p / 4K choice. Null for versions made before it (they play exactly as before). */
+  quality: Quality | null;
 };
+
+/** What the player may offer. Every link is signed for its one file (review fix H1), never a folder. */
+export type Quality = {
+  /** The 1080p picture: the render itself when it's 1080p or smaller; otherwise the 1080p copy (the scrub library's for
+   *  a render, Bunny Stream's for a converted file). Null until that copy is ready. */
+  q1080: string | null;
+  /** The high-resolution picture: the render itself when it's bigger than 1080p, or Bunny Stream's copy taller than
+   *  1080p. Null when there isn't one (yet). */
+  q4k: string | null;
+  /** The high-resolution picture's real size (for its label), when q4k is set. */
+  hi: Size | null;
+  /** The source is bigger than 1080p: a high-resolution choice exists or is on its way. */
+  big: boolean;
+};
+
+/** The 1080p and 4K links for a version made since Nov 4 (null for older ones). */
+export async function qualityOf(v: Doc<"versions">, expiresAt = stepExpiry()): Promise<Quality | null> {
+  if (!v.qualityMenu) return null;
+  if (isFile(v)) {
+    const big = isBig(v.width, v.height);
+    const render = v.fileUrl ? await signUrl(v.fileUrl, { expiresAt }) : null;
+    if (!big) return { q1080: render, q4k: null, hi: null, big };
+    const copy = (v.scrubHeights ?? []).includes(1080) && v.scrubGuid && scrubCdn() ? await signUrl(`https://${scrubCdn()}/${v.scrubGuid}/play_1080p.mp4`, { expiresAt }) : null;
+    return { q1080: copy, q4k: render, hi: render ? { width: v.width!, height: v.height! } : null, big };
+  }
+  if (!v.bunnyGuid) return { q1080: null, q4k: null, hi: null, big: isBig(v.width, v.height) };
+  const base = `https://${streamCdn()}/${v.bunnyGuid}`;
+  const hs = v.mp4Heights ?? [];
+  const top = Math.max(0, ...hs.filter((h) => h > 1080));
+  return {
+    q1080: hs.includes(1080) ? await signUrl(`${base}/play_1080p.mp4`, { expiresAt }) : null,
+    q4k: top ? await signUrl(`${base}/play_${top}p.mp4`, { expiresAt }) : null,
+    hi: top ? copySize(top, v) : null,
+    big: isBig(v.width, v.height) || top > 0,
+  };
+}
 
 /** Every link the player may need for a version, signed where the zone has a key. */
 export async function versionMedia(v: Doc<"versions">): Promise<VersionMedia> {
   const expiresAt = stepExpiry();
-  const out: VersionMedia = { hls: null, mp4: {}, file: null, scrub: null, thumb: null };
+  const out: VersionMedia = { hls: null, mp4: {}, file: null, scrub: null, thumb: null, quality: await qualityOf(v, expiresAt) };
   if (isFile(v)) {
     if (v.fileUrl && v.storagePath) out.file = await signUrl(v.fileUrl, { folder: renderFolder(v.storagePath), expiresAt });
     else if (v.fileUrl) out.file = await signUrl(v.fileUrl, { expiresAt });

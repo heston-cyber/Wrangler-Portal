@@ -11,6 +11,7 @@ import type { Id } from "./_generated/dataModel";
 import { signUrl } from "./lib/media";
 import { NEW_VERSION_DELAY_MS } from "./emails";
 import { SITE_SLASH } from "./lib/site";
+import { isBig, listedResolutions } from "./lib/quality";
 
 async function sha256Hex(text: string) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -154,8 +155,10 @@ const streamCdn = () => process.env.BUNNY_STREAM_CDN || "vz-3ba0610b-f90.b-cdn.n
 // that size, so the CDN isn't asked for files that can't exist yet.
 type Stage = { t: number; s: number; p: number; res: string; mp4: number[] };
 const CHECK_HEIGHTS = [360, 1080];
+// Nov 4 (Heston): plus any copy taller than 1080p (2160p, or 1440p), the 4K choice. Bunny names copies by height
+// ("2160p" also for a 3840×1600 source), so any listed height above 1080 counts.
 const listedHeights = (res: string | null | undefined) =>
-  (res || "").split(",").map((x) => parseInt(x, 10)).filter((h) => CHECK_HEIGHTS.includes(h));
+  listedResolutions(res).filter((h) => CHECK_HEIGHTS.includes(h) || h > 1080);
 
 // The MP4 copies that actually answer right now (Bunny lists a resolution before its MP4 fallback file exists, and
 // may never make one for 2160p). Only these go on the version, so the player is never handed a file that isn't there.
@@ -163,7 +166,8 @@ export async function answeringHeights(guid: string, b: Pick<BunnyVideo, "availa
   if (!b.hasMP4Fallback) return [];
   const site = SITE_SLASH();
   const out: number[] = [];
-  for (const h of MP4_HEIGHTS.filter((h) => listedHeights(b.availableResolutions).includes(h))) {
+  const listed = listedHeights(b.availableResolutions);
+  for (const h of [...new Set([...MP4_HEIGHTS.filter((h) => listed.includes(h)), ...listed])].sort((a, c) => a - c)) {
     if (known.includes(h)) { out.push(h); continue; } // seen already; files don't disappear
     try {
       const r = await fetch(await signUrl(`https://${streamCdn()}/${guid}/play_${h}p.mp4`), { method: "HEAD", headers: { Referer: site, Origin: new URL(site).origin } });
@@ -184,9 +188,14 @@ export async function nextStages(version: { bunnyGuid: string; stages?: Stage[] 
   return [...prev, e].slice(-80);
 }
 
+// Nov 4: a version bigger than 1080p (made since the quality choice) is checked until Bunny has finished (status 3;
+// 4 means only some resolutions are done) and its copies answer, for up to an hour, plus 3 minutes after finishing.
+const STAGE_MAX_BIG = 360;
+const STAGE_AFTER_DONE = 18;
+
 export const stageCheck = internalAction({
-  args: { versionId: v.id("versions"), attempt: v.number() },
-  handler: async (ctx, { versionId, attempt }): Promise<void> => {
+  args: { versionId: v.id("versions"), attempt: v.number(), doneAt: v.optional(v.number()) },
+  handler: async (ctx, { versionId, attempt, doneAt }): Promise<void> => {
     const row = await ctx.runQuery(internal.library.getVersionInternal, { versionId });
     if (!row) return;
     let b: BunnyVideo | null = null;
@@ -205,7 +214,11 @@ export const stageCheck = internalAction({
     const last = stages[stages.length - 1];
     const listed = listedHeights(last?.res);
     const settled = !!b && b.status === 3 && listed.length > 0 && listed.every((h) => last.mp4.includes(h));
-    if (!settled && attempt < 18) await ctx.scheduler.runAfter(10_000, internal.uploads.stageCheck, { versionId, attempt: attempt + 1 });
+    if (settled) return;
+    const big = !!row.version.qualityMenu && (isBig(b?.width ?? row.version.width, b?.height ?? row.version.height) || listed.some((h) => h > 1080));
+    const finishedAt = doneAt ?? (b?.status === 3 ? attempt : undefined);
+    const more = attempt < 18 || (big && attempt < STAGE_MAX_BIG && (finishedAt === undefined || attempt < finishedAt + STAGE_AFTER_DONE));
+    if (more) await ctx.scheduler.runAfter(10_000, internal.uploads.stageCheck, { versionId, attempt: attempt + 1, ...(finishedAt !== undefined ? { doneAt: finishedAt } : {}) });
   },
 });
 

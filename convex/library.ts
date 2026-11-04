@@ -337,6 +337,7 @@ export const insertVersion = internalMutation({
       startTimecode: "01:00:00:00",
       uploaderName: a.uploaderName,
       createdAt: Date.now(),
+      qualityMenu: true, // Nov 4: 1080p by default, 4K when there is one
     });
     await ctx.db.patch(a.videoId, { updatedAt: Date.now(), final: undefined }); // a new version reopens an approved video
     return { versionId: id as Id<"versions">, number };
@@ -388,7 +389,7 @@ export const retryCopy = mutation({
 export const patchVersion = internalMutation({
   args: { versionId: v.id("versions"), patch: v.any() },
   handler: async (ctx, { versionId, patch }) => {
-    const allowed = ["status", "fpsNum", "fpsDen", "width", "height", "lengthSeconds", "mp4Heights", "encodeProgress", "pollCount", "error", "readyAt", "frameCount", "frameCountFrom", "stages", "storageBytes", "storageCheckedAt", "fileUrl", "copyError", "scrubGuid", "scrubStatus", "scrubPolls", "scrubReadyAt"];
+    const allowed = ["status", "fpsNum", "fpsDen", "width", "height", "lengthSeconds", "mp4Heights", "encodeProgress", "pollCount", "error", "readyAt", "frameCount", "frameCountFrom", "stages", "storageBytes", "storageCheckedAt", "fileUrl", "copyError", "scrubGuid", "scrubStatus", "scrubPolls", "scrubReadyAt", "scrubHeights"];
     const p: Record<string, unknown> = {};
     for (const k of allowed) if (k in patch) p[k] = patch[k];
     await ctx.db.patch(versionId, p);
