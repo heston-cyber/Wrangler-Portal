@@ -80,7 +80,7 @@ describe("calendar", () => {
     expect(ev).toMatchObject({ summary: "Shoot · 26127 Launch", location: "Harbor Coffee, 412 Main St.", start: { dateTime: `${day(4)}T07:00:00`, timeZone: "America/Chicago" }, end: { dateTime: `${day(4)}T17:00:00` }, attendees: [{ email: "jordan@ellisfilms.com" }] });
     expect(s.calls.find((c) => c.method === "POST" && c.url.includes("/events"))!.url).toContain("/calendars/heston-cal%40group/events?sendUpdates=all");
     // Two syncs at once make one event, not two.
-    await Promise.all([w.t.action(anyApi.calendar.syncShoot, { shootId }), w.t.action(anyApi.calendar.syncShoot, { shootId })]);
+    await Promise.all([w.t.action(anyApi.calendar.syncShoot, { shootId, asBusiness: w.A }), w.t.action(anyApi.calendar.syncShoot, { shootId, asBusiness: w.A })]);
     expect(s.events.size).toBe(1);
     // Moved: the same event moves.
     await w.heston.mutation(api.shoots.update, { shootId, ...base, date: day(5) });

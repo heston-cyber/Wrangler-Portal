@@ -74,6 +74,13 @@ const ownerName = async (ctx: Ctx, p: Doc<"projects">, me?: { name: string | nul
   return b?.ownerName?.trim() || me?.name?.trim() || b?.name || "The director";
 };
 
+/** Review fix H2: does this edit change what's on the shoot's calendar event? (A confirmation, history or parking don't.) */
+function calendarChanged(s: Doc<"shoots">, f: { date: string; call: string; wrap?: string; location: string; prepare: string[]; crew: Doc<"shoots">["crew"]; calendar: boolean }) {
+  const crew = (c: Doc<"shoots">["crew"]) => JSON.stringify(c.map((m) => [m.name, m.role, m.vendorId ?? null]));
+  return f.date !== s.date || f.call !== s.call || (f.wrap ?? null) !== (s.wrap ?? null) || f.location !== s.location
+    || JSON.stringify(f.prepare) !== JSON.stringify(s.prepare) || crew(f.crew) !== crew(s.crew) || f.calendar !== !!s.calendar;
+}
+
 const view = (s: Doc<"shoots">) => ({
   _id: s._id, date: s.date, call: s.call, wrap: s.wrap ?? null, location: s.location, parking: s.parking ?? null, prepare: s.prepare,
   crew: s.crew.map((c) => ({ name: c.name, role: c.role, owner: !!c.owner, bookingId: c.bookingId ?? null })), status: s.status,
@@ -131,9 +138,9 @@ export const schedule = mutation({
     const f = await clean(ctx, p, a, await ownerName(ctx, p, me));
     if (f.date < todayCentral()) throw new ConvexError("That date has passed.");
     const now = Date.now();
-    const shootId = await ctx.db.insert("shoots", { projectId: p._id, ...f, status: "scheduled", history: [{ at: now, text: "Scheduled" }], createdAt: now, updatedAt: now });
+    const shootId = await ctx.db.insert("shoots", { projectId: p._id, ...f, status: "scheduled", history: [{ at: now, text: "Scheduled" }], createdAt: now, updatedAt: now, calAt: now });
     const told = await tell(ctx, p, { _id: shootId, ...f }, null, now);
-    if (f.calendar) await queueCalendar(ctx, shootId);
+    if (f.calendar) await queueCalendar(ctx, shootId, "all"); // the owner's own edit: Google sends the invites (Phase 4)
     return { shootId, told };
   },
 });
@@ -151,12 +158,12 @@ export const update = mutation({
     const now = Date.now();
     const was = { date: s.date, call: s.call, location: s.location, at: now };
     await ctx.db.patch(s._id, {
-      ...f, wrap: f.wrap, parking: f.parking, updatedAt: now,
+      ...f, wrap: f.wrap, parking: f.parking, updatedAt: now, ...(calendarChanged(s, f) ? { calAt: now } : {}),
       ...(moved ? { moved: was, confirmed: undefined } : {}),
       history: [...s.history, { at: now, text: moved ? `Moved from ${shortDay(s.date)} ${clock(s.call)}${f.location !== s.location ? `, ${s.location}` : ""}` : "Details changed" }],
     });
     const told = moved ? await tell(ctx, p, { _id: s._id, ...f }, was, now) : 0;
-    await queueCalendar(ctx, s._id);
+    await queueCalendar(ctx, s._id, "all");
     return { moved, told };
   },
 });
@@ -168,8 +175,8 @@ export const cancel = mutation({
     const { s, p } = await ownedShoot(ctx, shootId);
     if (s.status === "cancelled") return null;
     const now = Date.now();
-    await ctx.db.patch(s._id, { status: "cancelled", updatedAt: now, history: [...s.history, { at: now, text: "Cancelled" }] });
-    await queueCalendar(ctx, s._id);
+    await ctx.db.patch(s._id, { status: "cancelled", updatedAt: now, calAt: now, history: [...s.history, { at: now, text: "Cancelled" }] });
+    await queueCalendar(ctx, s._id, "all");
     const biz = await businessOf(ctx, p);
     if (biz) for (const person of await portalPeople(ctx, p)) {
       await postToInbox(ctx, { businessId: biz, clientId: p.clientId, email: person.email, kind: "shoot", title: `Shoot cancelled: ${shootDay(s.date)}`,
