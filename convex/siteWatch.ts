@@ -283,10 +283,17 @@ export const checkFailed = internalMutation({
   },
 });
 
-/** The daily look (cron, 8 am Central) and the agent's first step. */
+/** The "Run the checks" switch (Settings › Site watch). */
+export const isPaused = internalQuery({
+  args: {},
+  handler: async (ctx) => !!(await ctx.db.query("siteWatchSettings").first())?.paused,
+});
+
+/** The daily look (cron, 8 am Central) and the agent's first step. Off (paused) it does nothing. */
 export const check = internalAction({
   args: {},
-  handler: async (ctx): Promise<{ found: number; cleared: number; open: number } | { failed: true }> => {
+  handler: async (ctx): Promise<{ found: number; cleared: number; open: number } | { failed: true } | { paused: true }> => {
+    if (await ctx.runQuery(internal.siteWatch.isPaused, {})) return { paused: true };
     try {
       const stored: Seen[] = [];
       for (const [key, c] of Object.entries(CHECKS)) {
@@ -322,7 +329,7 @@ export const emailFailed = internalMutation({
 const view = (r: Doc<"siteWatchFindings">, withDetail = true) => ({
   _id: r._id, key: r.key, area: r.area, title: r.title, detail: withDetail ? r.detail ?? null : null, count: r.count, hits: r.hits ?? null,
   firstAt: r.firstAt, lastAt: r.lastAt, status: r.status, urgent: !!r.urgent, branch: r.branch ?? null, commit: r.commit ?? null,
-  note: r.note ?? null, quiet: !!r.quietAt,
+  note: r.note ?? null, quiet: !!r.quietAt, quietAt: r.quietAt ?? null, fixedAt: r.status === "fixed" || r.status === "cleared" ? r.doneAt ?? r.updatedAt : null,
 });
 
 /** Settings › Site watch (screen waits for the design chat): open problems first, urgent first, then the last runs. */
@@ -335,7 +342,31 @@ export const report = query({
     rows.sort((a, b) => Number(!!b.urgent) - Number(!!a.urgent) || b.lastAt - a.lastAt);
     const recent = (await ctx.db.query("siteWatchFindings").order("desc").take(50)).filter((r) => r.status === "fixed" || r.status === "cleared");
     const runs = await ctx.db.query("siteWatchRuns").withIndex("by_at", (q) => q.gte("at", Date.now() - KEEP_DAYS * DAY)).order("desc").take(60);
-    return { open: rows.map((r) => view(r)), recent: recent.map((r) => view(r)), runs: runs.map((r) => ({ _id: r._id, at: r.at, by: r.by, found: r.found, cleared: r.cleared, summary: r.summary ?? null, open: r.open?.length ?? null })) };
+    const paused = !!(await ctx.db.query("siteWatchSettings").first())?.paused;
+    return { paused, support: SUPPORT(), open: rows.map((r) => view(r)), recent: recent.map((r) => view(r)), runs: runs.map((r) => ({ _id: r._id, at: r.at, by: r.by, found: r.found, cleared: r.cleared, summary: r.summary ?? null, open: r.open?.length ?? null })) };
+  },
+});
+
+/** One problem's page. Error text only for the agent's own problems (tests, pages, builds), never the app's (review M1). */
+export const finding = query({
+  args: { id: v.string() },
+  handler: async (ctx, { id }) => {
+    await requireAdmin(ctx);
+    const fid = ctx.db.normalizeId("siteWatchFindings", id);
+    const r = fid ? await ctx.db.get(fid) : null;
+    return r ? view(r, !APP_AREAS.includes(r.area)) : null;
+  },
+});
+
+/** "Run the checks" on or off. */
+export const setPaused = mutation({
+  args: { paused: v.boolean() },
+  handler: async (ctx, { paused }) => {
+    await requireAdmin(ctx);
+    const row = await ctx.db.query("siteWatchSettings").first();
+    if (row) await ctx.db.patch(row._id, { paused, updatedAt: Date.now() });
+    else await ctx.db.insert("siteWatchSettings", { paused, updatedAt: Date.now() });
+    return null;
   },
 });
 
@@ -357,9 +388,10 @@ export const summary = query({
   handler: async (ctx) => {
     const me = await requireMe(ctx).catch(() => null);
     if (!me || !allowedEmails().includes(me.email.toLowerCase())) return null;
-    let open = 0, urgent = 0;
-    for (const st of OPEN) for (const r of await ctx.db.query("siteWatchFindings").withIndex("by_status", (q) => q.eq("status", st)).collect()) { open++; if (r.urgent) urgent++; }
-    return { open, urgent }; // Q45 (Heston, Nov 3): the Dashboard hides the row when open is 0
+    let open = 0, urgent = 0, fixReady = 0;
+    for (const st of OPEN) for (const r of await ctx.db.query("siteWatchFindings").withIndex("by_status", (q) => q.eq("status", st)).collect()) { open++; if (r.urgent || r.status === "needs_you") urgent++; else if (r.status === "fix_ready") fixReady++; }
+    const last = await ctx.db.query("siteWatchRuns").withIndex("by_at").order("desc").first();
+    return { open, urgent, fixReady, checkedAt: last?.at ?? null }; // Q45 (Heston, Nov 3): the Dashboard hides the row when open is 0
   },
 });
 

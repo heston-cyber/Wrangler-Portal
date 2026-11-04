@@ -6,6 +6,7 @@ import { sheetBits } from "../production/sheetBits";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { SwRow } from "../settings/SiteWatch";
 import { Button, ButtonLink, Card, Divider, EmptyState, InboxItem, ListRow, PageHeader, SectionHead, SkeletonRows, StatusChip } from "../../ui/wp";
 import type { IconName } from "../../ui/Icon";
 import { useToast } from "../../ui/kit";
@@ -202,11 +203,29 @@ function waitingChip(c: ClientRow) {
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 type Dash = NonNullable<ReturnType<typeof useQuery<typeof api.home.dashboard>>>;
 
+/** "Site watch found N things" (frame 786:10853). Opens the report. Not drawn at all when nothing is found. */
+function SiteWatchRow({ w }: { w: { open: number; urgent: number; fixReady: number; checkedAt: number | null } }) {
+  const found = w.open - w.urgent - w.fixReady;
+  const meta = [
+    w.urgent > 0 && `${w.urgent} ${w.urgent === 1 ? "needs" : "need"} you`,
+    w.fixReady > 0 && `${plural(w.fixReady, "fix", "fixes")} ready, waiting for your go`,
+    found > 0 && `${found} found`,
+    w.checkedAt && `checked ${new Date(w.checkedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`,
+  ].filter(Boolean).join(" · ");
+  const chip = w.urgent > 0 ? <StatusChip tone="danger">Needs you</StatusChip> : w.fixReady > 0 ? <StatusChip tone="warning">Fix ready</StatusChip> : <StatusChip tone="neutral">Found</StatusChip>;
+  return (
+    <Card className="sw-dash" label="Site watch">
+      <SwRow lead="activity" to="/settings/sitewatch" title={`Site watch found ${plural(w.open, "thing", "things")}`} meta={meta} chip={chip} />
+    </Card>
+  );
+}
+
 export default function OwnerHome() {
   const needs = useQuery(api.home.needs);
   const recent = useQuery(api.activity.recent, { limit: 8 });
   const clients = useQuery(api.clients.directory);
   const due = useQuery(api.crm.due, {}); // Phase 3: follow-ups due today or overdue
+  const watch = useQuery(api.siteWatch.summary); // Phase 5c: null unless one of the portal's admins; the row hides when nothing is found (Q45)
   const dash = useQuery(api.home.dashboard, { tzOffsetMin: new Date().getTimezoneOffset() }); // Phase 5b: Today, Coming up, Live edits, Money this month
   const resend = useMutation(api.sign.resend);
   const [toast, show] = useToast();
@@ -299,6 +318,7 @@ export default function OwnerHome() {
     <TopBar><span className="here">Dashboard</span></TopBar>
     <div className="wp-page wp-home pov">
       <PageHeader eyebrow="Dashboard" title="Dashboard." sub="What needs you today." actions={<><ButtonLink variant="secondary" to="/settings/tools" iconEnd={false}>Customize</ButtonLink><ButtonLink variant="primary" to="/production/call-sheets/new" iconEnd={false}>New call sheet</ButtonLink></>} />
+      {watch && watch.open > 0 && <SiteWatchRow w={watch} />}
       <div className="pov-stats ov-tiles">
         <Tile label="Today" n={dash ? dash.tiles.today : "–"} sub={dash?.tiles.todayFirst ? `${dash.tiles.today === 1 ? "shoot" : "shoots"} · ${dash.tiles.todayFirst.client ?? dash.tiles.todayFirst.project}` : "no shoots"}
           to={dash?.tiles.todayFirst ? `/projects/${dash.tiles.todayFirst.projectId}` : "/production/shoots"} link={dash?.tiles.todayFirst ? "Open shoot" : "See shoots"} />

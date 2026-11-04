@@ -64,7 +64,7 @@ test("T5c.5 a clean day: the check finds nothing, writes one run, and sends noth
   expect(await findings(w)).toHaveLength(0);
   expect(await w.t.run((ctx) => ctx.db.query("siteWatchRuns").collect())).toHaveLength(1);
   expect(await w.t.run((ctx) => ctx.db.query("emailLog").collect())).toHaveLength(0);
-  expect(await w.heston.query(api.siteWatch.summary, {})).toEqual({ open: 0, urgent: 0 });
+  expect(await w.heston.query(api.siteWatch.summary, {})).toMatchObject({ open: 0, urgent: 0 });
 });
 
 test("T5c.1 a broken record is found and reported once, counted (never its text), and cleared when it's gone", async () => {
@@ -146,7 +146,7 @@ test("review M3: the agent can't record, rewrite or close the app's problems, or
   }
   await expect(w.t.mutation(internal.siteWatch.agentFixReady, { key: "email:invoice", branch: "watch/invoice-mail", commit: C, note: "x" })).rejects.toThrow(/Heston/);
   expect((await findings(w))[0]).toMatchObject({ key: "email:invoice", count: 5, status: "found", title: "Email didn't send: invoice" });
-  expect(await w.heston.query(api.siteWatch.summary, {})).toEqual({ open: 1, urgent: 1 });
+  expect(await w.heston.query(api.siteWatch.summary, {})).toMatchObject({ open: 1, urgent: 1 });
   // A fix for an app problem that isn't money: when it goes quiet, it stays open until Heston marks it done.
   await fail(w, "testimonial");
   await w.t.mutation(internal.siteWatch.agentFixReady, { key: "email:testimonial", branch: "watch/testimonial-mail", commit: C, note: "x" });
@@ -194,9 +194,12 @@ test("T5c.3 nobody but the portal's admins sees or changes it: not another busin
     await expect(who.query(api.siteWatch.report, {})).rejects.toThrow();
     expect(await who.query(api.siteWatch.summary, {})).toBeNull();
     await expect(who.mutation(api.siteWatch.markDone, { id })).rejects.toThrow();
+    await expect(who.query(api.siteWatch.finding, { id })).rejects.toThrow(); // the finding page
+    await expect(who.mutation(api.siteWatch.setPaused, { paused: true })).rejects.toThrow(); // "Run the checks"
   }
+  expect(await w.t.run((ctx) => ctx.db.query("siteWatchSettings").collect())).toHaveLength(0);
   expect((await findings(w))[0].status).toBe("found");
-  expect(await w.heston.query(api.siteWatch.summary, {})).toEqual({ open: 1, urgent: 0 });
+  expect(await w.heston.query(api.siteWatch.summary, {})).toEqual({ open: 1, urgent: 0, fixReady: 0, checkedAt: null });
   await w.heston.mutation(api.siteWatch.markDone, { id });
   expect((await findings(w))[0].status).toBe("cleared");
 });
@@ -215,7 +218,7 @@ test("T5c.4 (D151) an urgent problem is emailed once to the support address, mas
   expect(sent[0].text).not.toContain("abcdefghijklmnop");
   expect(sent[0].text).not.toContain("maya@harbor.example");
   expect(sent[0].reply_to).toBeUndefined();
-  expect(await w.heston.query(api.siteWatch.summary, {})).toEqual({ open: 1, urgent: 1 });
+  expect(await w.heston.query(api.siteWatch.summary, {})).toMatchObject({ open: 1, urgent: 1 });
 });
 test("T5c.1 a background job that failed in the last day is found, grouped by function", async () => {
   vi.useFakeTimers();
@@ -282,4 +285,41 @@ test("clean() and isUrgent()", () => {
   expect(isUrgent("job:footage.renewOne", 1)).toBe(true);
   expect(isUrgent("email:subscription", 1)).toBe(true);
   expect(isUrgent("page:/design:phone", 1)).toBe(false); // review L7: "design" isn't signing
+});
+
+test("5c screens: the finding page shows the agent's own text but never the app's; unknown or odd ids give null", async () => {
+  vi.useFakeTimers();
+  const w = await setup();
+  await w.t.mutation(internal.siteWatch.agentFound, { key: "tests:footage", title: "Footage tests fail", detail: "expected 3 got 2" });
+  await fail(w, "invoice");
+  const rows = await findings(w);
+  const agent = rows.find((r) => r.key === "tests:footage")!, app = rows.find((r) => r.key === "email:invoice")!;
+  expect(await w.heston.query(api.siteWatch.finding, { id: agent._id })).toMatchObject({ title: "Footage tests fail", detail: "expected 3 got 2", status: "found" });
+  expect((await w.heston.query(api.siteWatch.finding, { id: app._id })).detail).toBeNull();
+  expect(await w.heston.query(api.siteWatch.finding, { id: "nope" })).toBeNull();
+});
+
+test("5c screens: Run the checks off stops the daily look (nothing is written); on again, it runs", async () => {
+  const w = await setup();
+  expect((await w.heston.query(api.siteWatch.report, {})).paused).toBe(false);
+  await w.heston.mutation(api.siteWatch.setPaused, { paused: true });
+  expect((await w.heston.query(api.siteWatch.report, {})).paused).toBe(true);
+  expect(await check(w)).toEqual({ paused: true });
+  expect(await w.t.run((ctx) => ctx.db.query("siteWatchRuns").collect())).toHaveLength(0);
+  await w.heston.mutation(api.siteWatch.setPaused, { paused: false });
+  expect(await check(w)).toMatchObject({ found: 0 });
+  expect(await w.t.run((ctx) => ctx.db.query("siteWatchRuns").collect())).toHaveLength(1);
+  expect(await w.t.run((ctx) => ctx.db.query("siteWatchSettings").collect())).toHaveLength(1); // one row, edited
+});
+
+test("5c screens: the Dashboard summary counts needs-you and fix-ready apart, and says when it last looked", async () => {
+  const w = await setup();
+  await w.t.mutation(internal.siteWatch.agentFound, { key: "tests:a", title: "A" });
+  await w.t.mutation(internal.siteWatch.agentFound, { key: "tests:b", title: "B" });
+  await w.t.mutation(internal.siteWatch.agentNeedsYou, { key: "tests:a", note: "yours" });
+  await w.t.mutation(internal.siteWatch.agentFixReady, { key: "tests:b", branch: "watch/b-fix", commit: "a1b2c3d", note: "Retry added." });
+  await check(w);
+  const s = (await w.heston.query(api.siteWatch.summary, {}))!;
+  expect(s).toMatchObject({ open: 2, urgent: 1, fixReady: 1 });
+  expect(s.checkedAt).toBeTypeOf("number");
 });

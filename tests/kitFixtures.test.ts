@@ -336,7 +336,35 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
     // Calendar events for the whole stretch Production › Calendar may ask for (the kit answers any month, week or agenda from this).
     const calRange = { from: inDays(-60), to: inDays(35) };
     const noteIds = await t.run(async (ctx) => (await ctx.db.query("inboxNotes").collect()).map((n) => n._id));
+    // Phase 5c screens (Nov 4): a Site watch report with one of each status, and four mornings of history.
+    const sw = await t.run(async (ctx) => {
+      const f = async (key: string, area: string, title: string, count: number, status: "found" | "fix_ready" | "fixed" | "needs_you", extra: Record<string, unknown> = {}) =>
+        ctx.db.insert("siteWatchFindings", { key, area, title, count, status, firstAt: now - 7 * DAY, lastAt: now - 3 * HOUR, updatedAt: now - 3 * HOUR, ...extra } as never);
+      const ids = [
+        await f("stored:wsDocuments.signDone", "stored", "Signed copies are not saving", 3, "needs_you", { urgent: true, hits: 2, note: "Touches signing: yours to decide." }),
+        await f("email:invoice", "email", "Emails not sending: invoice reminder", 14, "fix_ready", { hits: 6, branch: "watch/invoice-reminder-retry", commit: "a1b2c3d4e5f6", note: "Retries once after Resend answers 5xx." }),
+        await f("job:dropbox.poll", "job", "Dropbox connection failed", 2, "found", { hits: 1 }),
+        await f("stored:transcripts.failed", "stored", "Transcripts left failed", 5, "fixed", { doneAt: now - 2 * DAY }),
+        await f("stored:waveforms.failed", "stored", "Waveform not built", 1, "fixed", { doneAt: now - 2 * DAY }),
+        await f("page:/s/phone", "page", "Page check: Client share on a phone", 1, "fixed", { doneAt: now - 2 * DAY, detail: "1 load at 390 px" }),
+      ];
+      const open = (n: number) => [
+        { key: "stored:wsDocuments.signDone", area: "stored", title: "Signed copies are not saving", status: "needs_you", urgent: true, count: 3 },
+        { key: "email:invoice", area: "email", title: "Emails not sending: invoice reminder", status: "fix_ready", urgent: false, count: 14 },
+        { key: "job:dropbox.poll", area: "job", title: "Dropbox connection failed", status: "found", urgent: false, count: 2 },
+      ].slice(0, n);
+      const runs = [
+        await ctx.db.insert("siteWatchRuns", { at: now - 8 * HOUR, by: "app", found: 6, cleared: 0, open: open(3) }),
+        await ctx.db.insert("siteWatchRuns", { at: now - 1 * DAY - 8 * HOUR, by: "app", found: 4, cleared: 4, open: open(2) }),
+        await ctx.db.insert("siteWatchRuns", { at: now - 2 * DAY - 8 * HOUR, by: "app", found: 0, cleared: 0, open: [] }),
+        await ctx.db.insert("siteWatchRuns", { at: now - 3 * DAY - 8 * HOUR, by: "app", found: 2, cleared: 2, open: open(1) }),
+      ];
+      return { ids, runs };
+    });
     const OWNER: [string, Record<string, unknown>][] = [
+      ["siteWatch.summary", {}], ["siteWatch.report", {}],
+      ...sw.ids.map((id): [string, Record<string, unknown>] => ["siteWatch.finding#" + id, { id }]),
+      ...sw.runs.map((id): [string, Record<string, unknown>] => ["siteWatch.run#" + id, { id }]),
       ["users.me", {}], ["business.brand", {}], ["business.settings", {}], ["payments.settings", {}], ["library.overview", {}], ["activity.feed", { limit: 100 }], ["activity.recent", {}], ["home.needs", {}],
       ["sign.list", {}], ["builder.listBuilds", {}], ["builder.listTemplates", {}], ["builder.listClauses", {}], ["sign.ownerSignature", {}],
       ["clients.listInvites", {}], ["clients.directory", {}], ["clients.page", { clientId: w.harbor }], ["clients.people", { clientId: w.harbor }],

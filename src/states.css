@@ -50,3 +50,43 @@
 .ft-banner { margin: 0 20px 16px; }
 .ft-banner > .btn { flex: none; }
 .gst-whole[open] summary .csr-whole > .wp-icon:first-child { transform: none; }
+
+/* ---------- Phase 5c screens (Nov 4): Settings › Site watch (783:8815 …, phone 787:11594), the finding page (785:11372)
+   and the Dashboard row (786:10853) ---------- */
+.sw-banner { display: flex; align-items: flex-start; gap: 12px; padding: 16px 20px; border-radius: 16px; background: rgba(16, 11, 13, .55); box-shadow: inset 0 0 0 1px var(--border-hairline); }
+.sw-banner > .wp-icon { flex: none; margin-top: 2px; }
+.sw-banner b { display: block; font-weight: 500; }
+.sw-banner p { margin: 2px 0 0; font-size: var(--fs-text-small); color: var(--text-secondary); overflow-wrap: anywhere; }
+.sw-banner.danger { background: rgba(255, 59, 48, .10); box-shadow: inset 0 0 0 1px rgba(255, 59, 48, .55); } .sw-banner.danger > .wp-icon { color: var(--text-danger, #ff6a5e); }
+.sw-banner.warning { background: rgba(245, 180, 0, .08); box-shadow: inset 0 0 0 1px rgba(245, 180, 0, .5); } .sw-banner.warning > .wp-icon { color: var(--text-warning, #f5b400); }
+.sw-banner.success { background: rgba(52, 199, 89, .08); box-shadow: inset 0 0 0 1px rgba(52, 199, 89, .5); } .sw-banner.success > .wp-icon { color: var(--text-success, #34c759); }
+.sw-banner.skeleton { min-height: 66px; }
+.sw-stats { margin: 0; }
+.sw-stat { cursor: default; }
+.sw-nothing { display: grid; gap: 6px; justify-items: center; text-align: center; padding: 36px 16px; color: var(--text-secondary); font-size: var(--fs-text-small); }
+.sw-nothing b { font-weight: 500; font-size: var(--fs-text-regular); color: var(--text-primary); }
+.sw-more { display: flex; justify-content: center; padding: 12px 0 4px; }
+.sw-item { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto 16px; column-gap: 14px; align-items: center; }
+.sw-item:not(:has(> .chev)) { grid-template-columns: 24px minmax(0, 1fr) auto; }
+.sw-item .ttl { overflow-wrap: anywhere; }
+.sw-item .chev { justify-self: end; }
+.sw-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.sw-find { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.sw-when { font-size: var(--fs-text-small); color: var(--text-primary); white-space: nowrap; }
+.sw-switch { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 20px 8px; border-top: 1px solid var(--border-hairline); }
+.sw-switch > span:first-child { display: grid; gap: 2px; }
+.sw-switch b { font-weight: 500; }
+.sw-switch .secondary { font-size: var(--fs-text-small); }
+.sw-back { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-text-small); color: var(--text-primary); text-decoration: none; justify-self: start; }
+.sw-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.sw-note { margin: 0; padding: 12px 20px 16px; font-size: var(--fs-text-small); color: var(--text-secondary); border-top: 1px solid var(--border-hairline); overflow-wrap: anywhere; }
+.sw-dash { margin: 0 0 4px; }
+@media (max-width: 820px) {
+  .sw-stats { grid-template-columns: 1fr 1fr; }
+  .sw-two, .sw-find { grid-template-columns: minmax(0, 1fr); }
+  /* On a phone each row's chip sits under its title (787:11594). */
+  .sw-item, .sw-item:not(:has(> .chev)) { grid-template-columns: 24px minmax(0, 1fr) 16px; align-items: start; }
+  .sw-item > .lead-icon { grid-row: 1 / span 2; margin-top: 2px; }
+  .sw-item > .sw-chip { grid-column: 2; grid-row: 2; justify-self: start; margin-top: 6px; }
+  .sw-item > .chev { grid-column: 3; grid-row: 1 / span 2; align-self: center; }
+}

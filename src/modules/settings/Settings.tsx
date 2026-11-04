@@ -22,6 +22,7 @@ import { ago } from "../../lib/format";
 import { DropboxSettings } from "./DropboxSettings";
 import { PaymentsSettings } from "./PaymentsSettings";
 import { CalendarSettings } from "./CalendarSettings";
+import { SiteWatchSettings } from "./SiteWatch";
 import { KickoffSettings } from "../projects/Brief";
 import { ToolsSettings } from "./ToolsSettings";
 import RatesSection from "./RatesSection";
@@ -87,7 +88,7 @@ export default function Settings({ me }: { me: { name: string | null; email: str
   const section = sectionOf(path, search, location.hash);
   // Old addresses (#claude, /register, /sign/connector, Dropbox's ?dropbox=…) move to the section's own address.
   useEffect(() => {
-    if (!section || path === `/settings/${section}`) return;
+    if (!section || path === `/settings/${section}` || path.startsWith(`/settings/${section}/`)) return; // a section's own pages (Site watch's finding) stay put
     history.replaceState(null, "", `/settings/${section}${search}`);
     window.dispatchEvent(new Event("wr:navigate"));
   }, [section, path, search]);
@@ -110,6 +111,7 @@ export default function Settings({ me }: { me: { name: string | null; email: str
       {key === "rates" && <RatesSection show={show} />}
       {key === "brand" && <><SetHead eyebrow="Brand kit" title="Your brand, for decks." sub="Claude uses this when it makes a pitch deck in your brand. Each client can have their own kit on their company page." /><BrandKitEditor show={show} /></>}
       {key === "calendar" && <CalendarSettings show={show} />}
+      {key === "sitewatch" && <SiteWatchGate show={show} />}
       {key === "brief" && <KickoffSettings />}
       {key === "tools" && <ToolsSettings show={show} />}
       {key === "account" && <AccountSection me={me} show={show} />}
@@ -126,6 +128,14 @@ export default function Settings({ me }: { me: { name: string | null; email: str
       {toast}
     </SettingsFrame>
   );
+}
+
+/** Site watch is the portal's admins' only: anyone else opening its address gets nothing (the backend refuses them too). */
+function SiteWatchGate({ show }: { show: (m: string) => void }) {
+  const admin = useQuery(api.siteWatch.summary);
+  if (admin === undefined) return null;
+  if (admin === null) return <SetHead eyebrow="Settings" title="Not available." sub="Site watch is for the portal's own admins." />;
+  return <SiteWatchSettings show={show} />;
 }
 
 function useNarrow() {

@@ -11957,6 +11957,369 @@
     "last4": "6789",
     "state": "ready"
    }
+  },
+  "siteWatch.summary": {
+   "checkedAt": 1793260800000,
+   "fixReady": 1,
+   "open": 3,
+   "urgent": 1
+  },
+  "siteWatch.report": {
+   "open": [
+    {
+     "_id": "000000000010225siteWatchFindings",
+     "area": "stored",
+     "branch": null,
+     "commit": null,
+     "count": 3,
+     "detail": null,
+     "firstAt": 1792684800000,
+     "fixedAt": null,
+     "hits": 2,
+     "key": "stored:wsDocuments.signDone",
+     "lastAt": 1793278800000,
+     "note": "Touches signing: yours to decide.",
+     "quiet": false,
+     "quietAt": null,
+     "status": "needs_you",
+     "title": "Signed copies are not saving",
+     "urgent": true
+    },
+    {
+     "_id": "000000000010227siteWatchFindings",
+     "area": "job",
+     "branch": null,
+     "commit": null,
+     "count": 2,
+     "detail": null,
+     "firstAt": 1792684800000,
+     "fixedAt": null,
+     "hits": 1,
+     "key": "job:dropbox.poll",
+     "lastAt": 1793278800000,
+     "note": null,
+     "quiet": false,
+     "quietAt": null,
+     "status": "found",
+     "title": "Dropbox connection failed",
+     "urgent": false
+    },
+    {
+     "_id": "000000000010226siteWatchFindings",
+     "area": "email",
+     "branch": "watch/invoice-reminder-retry",
+     "commit": "a1b2c3d4e5f6",
+     "count": 14,
+     "detail": null,
+     "firstAt": 1792684800000,
+     "fixedAt": null,
+     "hits": 6,
+     "key": "email:invoice",
+     "lastAt": 1793278800000,
+     "note": "Retries once after Resend answers 5xx.",
+     "quiet": false,
+     "quietAt": null,
+     "status": "fix_ready",
+     "title": "Emails not sending: invoice reminder",
+     "urgent": false
+    }
+   ],
+   "paused": false,
+   "recent": [
+    {
+     "_id": "000000000010230siteWatchFindings",
+     "area": "page",
+     "branch": null,
+     "commit": null,
+     "count": 1,
+     "detail": "1 load at 390 px",
+     "firstAt": 1792684800000,
+     "fixedAt": 1793116800000,
+     "hits": null,
+     "key": "page:/s/phone",
+     "lastAt": 1793278800000,
+     "note": null,
+     "quiet": false,
+     "quietAt": null,
+     "status": "fixed",
+     "title": "Page check: Client share on a phone",
+     "urgent": false
+    },
+    {
+     "_id": "000000000010229siteWatchFindings",
+     "area": "stored",
+     "branch": null,
+     "commit": null,
+     "count": 1,
+     "detail": null,
+     "firstAt": 1792684800000,
+     "fixedAt": 1793116800000,
+     "hits": null,
+     "key": "stored:waveforms.failed",
+     "lastAt": 1793278800000,
+     "note": null,
+     "quiet": false,
+     "quietAt": null,
+     "status": "fixed",
+     "title": "Waveform not built",
+     "urgent": false
+    },
+    {
+     "_id": "000000000010228siteWatchFindings",
+     "area": "stored",
+     "branch": null,
+     "commit": null,
+     "count": 5,
+     "detail": null,
+     "firstAt": 1792684800000,
+     "fixedAt": 1793116800000,
+     "hits": null,
+     "key": "stored:transcripts.failed",
+     "lastAt": 1793278800000,
+     "note": null,
+     "quiet": false,
+     "quietAt": null,
+     "status": "fixed",
+     "title": "Transcripts left failed",
+     "urgent": false
+    }
+   ],
+   "runs": [
+    {
+     "_id": "0000000000000010231siteWatchRuns",
+     "at": 1793260800000,
+     "by": "app",
+     "cleared": 0,
+     "found": 6,
+     "open": 3,
+     "summary": null
+    },
+    {
+     "_id": "0000000000000010232siteWatchRuns",
+     "at": 1793174400000,
+     "by": "app",
+     "cleared": 4,
+     "found": 4,
+     "open": 2,
+     "summary": null
+    },
+    {
+     "_id": "0000000000000010233siteWatchRuns",
+     "at": 1793088000000,
+     "by": "app",
+     "cleared": 0,
+     "found": 0,
+     "open": 0,
+     "summary": null
+    },
+    {
+     "_id": "0000000000000010234siteWatchRuns",
+     "at": 1793001600000,
+     "by": "app",
+     "cleared": 2,
+     "found": 2,
+     "open": 1,
+     "summary": null
+    }
+   ],
+   "support": "support@wranglerproductions.com"
+  },
+  "siteWatch.finding#000000000010225siteWatchFindings": {
+   "_id": "000000000010225siteWatchFindings",
+   "area": "stored",
+   "branch": null,
+   "commit": null,
+   "count": 3,
+   "detail": null,
+   "firstAt": 1792684800000,
+   "fixedAt": null,
+   "hits": 2,
+   "key": "stored:wsDocuments.signDone",
+   "lastAt": 1793278800000,
+   "note": "Touches signing: yours to decide.",
+   "quiet": false,
+   "quietAt": null,
+   "status": "needs_you",
+   "title": "Signed copies are not saving",
+   "urgent": true
+  },
+  "siteWatch.finding#000000000010226siteWatchFindings": {
+   "_id": "000000000010226siteWatchFindings",
+   "area": "email",
+   "branch": "watch/invoice-reminder-retry",
+   "commit": "a1b2c3d4e5f6",
+   "count": 14,
+   "detail": null,
+   "firstAt": 1792684800000,
+   "fixedAt": null,
+   "hits": 6,
+   "key": "email:invoice",
+   "lastAt": 1793278800000,
+   "note": "Retries once after Resend answers 5xx.",
+   "quiet": false,
+   "quietAt": null,
+   "status": "fix_ready",
+   "title": "Emails not sending: invoice reminder",
+   "urgent": false
+  },
+  "siteWatch.finding#000000000010227siteWatchFindings": {
+   "_id": "000000000010227siteWatchFindings",
+   "area": "job",
+   "branch": null,
+   "commit": null,
+   "count": 2,
+   "detail": null,
+   "firstAt": 1792684800000,
+   "fixedAt": null,
+   "hits": 1,
+   "key": "job:dropbox.poll",
+   "lastAt": 1793278800000,
+   "note": null,
+   "quiet": false,
+   "quietAt": null,
+   "status": "found",
+   "title": "Dropbox connection failed",
+   "urgent": false
+  },
+  "siteWatch.finding#000000000010228siteWatchFindings": {
+   "_id": "000000000010228siteWatchFindings",
+   "area": "stored",
+   "branch": null,
+   "commit": null,
+   "count": 5,
+   "detail": null,
+   "firstAt": 1792684800000,
+   "fixedAt": 1793116800000,
+   "hits": null,
+   "key": "stored:transcripts.failed",
+   "lastAt": 1793278800000,
+   "note": null,
+   "quiet": false,
+   "quietAt": null,
+   "status": "fixed",
+   "title": "Transcripts left failed",
+   "urgent": false
+  },
+  "siteWatch.finding#000000000010229siteWatchFindings": {
+   "_id": "000000000010229siteWatchFindings",
+   "area": "stored",
+   "branch": null,
+   "commit": null,
+   "count": 1,
+   "detail": null,
+   "firstAt": 1792684800000,
+   "fixedAt": 1793116800000,
+   "hits": null,
+   "key": "stored:waveforms.failed",
+   "lastAt": 1793278800000,
+   "note": null,
+   "quiet": false,
+   "quietAt": null,
+   "status": "fixed",
+   "title": "Waveform not built",
+   "urgent": false
+  },
+  "siteWatch.finding#000000000010230siteWatchFindings": {
+   "_id": "000000000010230siteWatchFindings",
+   "area": "page",
+   "branch": null,
+   "commit": null,
+   "count": 1,
+   "detail": "1 load at 390 px",
+   "firstAt": 1792684800000,
+   "fixedAt": 1793116800000,
+   "hits": null,
+   "key": "page:/s/phone",
+   "lastAt": 1793278800000,
+   "note": null,
+   "quiet": false,
+   "quietAt": null,
+   "status": "fixed",
+   "title": "Page check: Client share on a phone",
+   "urgent": false
+  },
+  "siteWatch.run#0000000000000010231siteWatchRuns": {
+   "at": 1793260800000,
+   "by": "app",
+   "cleared": 0,
+   "found": 6,
+   "open": [
+    {
+     "area": "stored",
+     "count": 3,
+     "key": "stored:wsDocuments.signDone",
+     "status": "needs_you",
+     "title": "Signed copies are not saving",
+     "urgent": true
+    },
+    {
+     "area": "email",
+     "count": 14,
+     "key": "email:invoice",
+     "status": "fix_ready",
+     "title": "Emails not sending: invoice reminder",
+     "urgent": false
+    },
+    {
+     "area": "job",
+     "count": 2,
+     "key": "job:dropbox.poll",
+     "status": "found",
+     "title": "Dropbox connection failed",
+     "urgent": false
+    }
+   ],
+   "summary": null
+  },
+  "siteWatch.run#0000000000000010232siteWatchRuns": {
+   "at": 1793174400000,
+   "by": "app",
+   "cleared": 4,
+   "found": 4,
+   "open": [
+    {
+     "area": "stored",
+     "count": 3,
+     "key": "stored:wsDocuments.signDone",
+     "status": "needs_you",
+     "title": "Signed copies are not saving",
+     "urgent": true
+    },
+    {
+     "area": "email",
+     "count": 14,
+     "key": "email:invoice",
+     "status": "fix_ready",
+     "title": "Emails not sending: invoice reminder",
+     "urgent": false
+    }
+   ],
+   "summary": null
+  },
+  "siteWatch.run#0000000000000010233siteWatchRuns": {
+   "at": 1793088000000,
+   "by": "app",
+   "cleared": 0,
+   "found": 0,
+   "open": [],
+   "summary": null
+  },
+  "siteWatch.run#0000000000000010234siteWatchRuns": {
+   "at": 1793001600000,
+   "by": "app",
+   "cleared": 2,
+   "found": 2,
+   "open": [
+    {
+     "area": "stored",
+     "count": 3,
+     "key": "stored:wsDocuments.signDone",
+     "status": "needs_you",
+     "title": "Signed copies are not saving",
+     "urgent": true
+    }
+   ],
+   "summary": null
   }
  },
  "client": {
@@ -15066,7 +15429,20 @@
    },
    "today": "2026-10-29"
   },
-  "crm.due": []
+  "crm.due": [],
+  "siteWatch.summary": {
+   "checkedAt": null,
+   "fixReady": 0,
+   "open": 0,
+   "urgent": 0
+  },
+  "siteWatch.report": {
+   "open": [],
+   "paused": false,
+   "recent": [],
+   "runs": [],
+   "support": "support@wranglerproductions.com"
+  }
  },
  "ids": {
   "prod": {

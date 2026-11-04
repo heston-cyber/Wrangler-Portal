@@ -1144,6 +1144,9 @@ export default defineSchema({
     // Q47 (Heston, Nov 3): what was open at this run, so a history row opens that day's list. Cleared after 30 days.
     open: v.optional(v.array(v.object({ key: v.string(), area: v.string(), title: v.string(), status: v.string(), urgent: v.boolean(), count: v.number() }))),
   }).index("by_at", ["at"]),
+  // Phase 5c screens (Nov 4): the "Run the checks" switch on Settings › Site watch. One row, global. Off = the daily
+  // look doesn't run (findings stay as they are).
+  siteWatchSettings: defineTable({ paused: v.boolean(), updatedAt: v.number() }),
 
   stripeEvents: defineTable({
     eventId: v.string(), type: v.string(), account: v.optional(v.string()), livemode: v.boolean(), receivedAt: v.number(),

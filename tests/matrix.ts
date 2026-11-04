@@ -153,6 +153,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "production.overview": {}, "production.shoots": {}, "production.projectsForShoot": {},
     "overviews.clients": {}, "overviews.review": {}, "overviews.docs": {}, "overviews.proposals": {}, "overviews.vendors": {}, "home.dashboard": {}, // Phase 5b step 2
     "siteWatch.report": {}, "siteWatch.run": { id: "nope" }, "siteWatch.summary": {}, "siteWatch.markDone": { id: "nope" },
+    "siteWatch.finding": { id: "nope" }, "siteWatch.setPaused": { paused: true }, // Phase 5c screens (Nov 4)
     "testimonials.list": {}, "testimonials.markRead": { testimonialId: ids.testimonialId }, "testimonials.saveAgain": { testimonialId: ids.testimonialId },
     // Phase 5b step 3: call sheets (the owner's; the client's reader; the vendor's reader in vendorPortal)
     "callSheets.ensureStarters": {}, "callSheets.list": {}, "callSheets.newOptions": {}, "callSheets.get": { callSheetId: ids.callSheetId },
