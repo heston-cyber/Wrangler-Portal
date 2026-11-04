@@ -66,7 +66,39 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures (Phase 3c)", () => {
     await w.heston.mutation(api.callSheets.make, { callSheetId: sheet });
     await w.heston.mutation(api.callSheets.send, { callSheetId: sheet, crew: true, client: false, guests: false, message: "See you Friday." });
 
+    // D147 (Nov 4): briefings sent freely. Read by its one booked vendor; emailed to two (one opened); a draft with no
+    // project; and one only shared by a copied link (4 opens). Each one's page, and the no-login page by a link.
+    const pdfId = () => w.t.run((ctx) => ctx.storage.store(new Blob(["%PDF-1.4 kit"], { type: "application/pdf" })));
+    const fill = async (id: Id<"briefings">) => {
+      const g = await w.heston.query(api.briefings.get, { briefingId: id });
+      const bd = await w.heston.query(api.builder.getBuild, { buildId: g.buildId });
+      const custom = bd.fields.custom.map((c: { key: string; label: string; value: string }) => (c.key === "dates" && !c.value ? { ...c, value: "Nov 6 – 7, 2026" } : c));
+      await w.heston.mutation(api.builder.saveBuild, { buildId: g.buildId, title: bd.title, blocks: bd.blocks, fields: { ...bd.fields, custom }, signers: [], style: bd.style });
+    };
+    const b1 = await w.heston.mutation(api.briefings.create, { bookingId: k1 }) as Id<"briefings">;
+    await w.heston.action(api.briefings.share, { briefingId: b1, storageId: await pdfId(), to: [{ vendorId: a, email: JORDAN }] });
+    await jordan.mutation(api.vendorPortal.markRead, { briefingId: b1 });
+    const b2 = await w.heston.mutation(api.briefings.create, { projectId: w.p, starter: "edit" }) as Id<"briefings">;
+    await fill(b2);
+    await w.heston.action(api.briefings.share, { briefingId: b2, storageId: await pdfId(), to: [{ vendorId: r, email: "riley@chen.example" }, { email: "sam@ortega.example", name: "Sam Ortega" }], copyLink: true });
+    const b2who = await w.t.run((ctx) => ctx.db.query("briefingRecipients").collect());
+    const samTok = b2who.find((x) => x.email === "sam@ortega.example")!.token;
+    await w.t.mutation(api.briefings.opened, { token: samTok });
+    const b3 = await w.heston.mutation(api.briefings.create, {}) as Id<"briefings">;
+    await w.heston.mutation(api.briefings.setDetails, { briefingId: b3, projectId: null, sendTo: [{ vendorId: r, email: "" }, { email: "ana@studiofour.com" }] });
+    const b4 = await w.heston.mutation(api.briefings.create, { projectId: w.p }) as Id<"briefings">;
+    await fill(b4);
+    const l4 = await w.heston.action(api.briefings.share, { briefingId: b4, storageId: await pdfId(), to: [], copyLink: true });
+    const linkTok = String(l4.link).split("/b/")[1];
+    for (let i = 0; i < 4; i++) await w.t.mutation(api.briefings.opened, { token: linkTok });
+    const briefs = [b1, b2, b3, b4];
+    const builds: string[] = [];
+    for (const id of briefs) builds.push((await w.heston.query(api.briefings.get, { briefingId: id })).buildId);
+
     const OWNER: [string, Record<string, unknown>][] = [
+      ...briefs.map((id): [string, Record<string, unknown>] => ["briefings.get#" + id, { briefingId: id }]),
+      ...builds.map((id): [string, Record<string, unknown>] => ["builder.getBuild#" + id, { buildId: id }]),
+      ["briefings.page#" + samTok, { token: samTok }], ["briefings.page#" + linkTok, { token: linkTok }], ["bookings.form", {}],
       ["vendors.list", {}], ["vendors.get#" + a, { vendorId: a }], ["vendors.get#" + r, { vendorId: r }], ["vendors.invoices#" + a, { vendorId: a }], ["vendors.invoices#" + r, { vendorId: r }],
       ["bookings.list", {}], ["bookings.forVendor#" + a, { vendorId: a }], ["bookings.forVendor#" + r, { vendorId: r }], ["bookings.get#" + k1, { bookingId: k1 }], ["bookings.forProject#" + w.p, { projectId: w.p }],
       ["briefings.forVendor#" + a, { vendorId: a }], ["briefings.forVendor#" + r, { vendorId: r }], ["briefings.list", {}], ["briefings.templates", {}],
@@ -94,7 +126,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures (Phase 3c)", () => {
     Object.assign(fx.owner, await run(w.heston, OWNER));
     fx.vendor = await run(jordan, VENDOR);
     Object.assign(fx.client, await run(w.maya, [["notifications.client", {}]]));
-    fx.ids = { ...fx.ids, vendor: { jordan: a, riley: r, bookings: [k1, k2, k3], invoices: { toApprove: inv1, approved: inv2, paid: inv3, paying: inv4 }, callSheet: sheet } };
+    fx.ids = { ...fx.ids, vendor: { jordan: a, riley: r, bookings: [k1, k2, k3], invoices: { toApprove: inv1, approved: inv2, paid: inv3, paying: inv4 }, callSheet: sheet }, briefings: { ids: briefs, emailed: samTok, link: linkTok } };
     delete process.env.STRIPE_PAYOUTS_KEY;
     writeFileSync(file, JSON.stringify(fx, null, 1));
   });

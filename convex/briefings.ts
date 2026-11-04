@@ -189,7 +189,9 @@ export const get = query({
     const projects = (await ctx.db.query("projects").collect()).filter((pr) => !(pr as { archivedAt?: number }).archivedAt)
       .sort((a, b) => b._creationTime - a._creationTime).slice(0, 200).map((pr) => ({ _id: pr._id, label: label(pr) }));
     const byId = new Map(vendors.map((vd) => [String(vd._id), vd]));
+    const build = await ctx.db.get(x.buildId);
     return {
+      dates: fieldOf(build, "dates"),
       ...(await rowOf(ctx, x)), starter: x.starter ?? null, kindName: x.starter ? STARTERS[x.starter].name : "Briefing",
       project: p ? { _id: p._id, label: label(p) } : null,
       sendTo: (x.sendTo ?? []).map((t) => ({ ...t, label: t.vendorId ? byId.get(String(t.vendorId))?.name ?? t.name ?? t.email : t.name || t.email, booked: !!t.vendorId && booked.has(String(t.vendorId)) })),
@@ -213,7 +215,7 @@ export const create = mutation({
     const t = a.templateId ? await ctx.db.get(a.templateId) : null;
     if (a.templateId && (!t || t.kind !== "briefing")) throw new ConvexError("That briefing template isn't here.");
     const starter: Starter | undefined = t ? undefined : a.starter ?? (bk ? starterFor(bk.k.role) : "shoot");
-    const page: Page = t ? pageOf(t.blocks) : briefingStarterPage(starter!);
+    const page: Page = t ? pageOf(t.blocks) : briefingStarterPage(starter!, !!p);
     const who = bk ? forWho(bk.vendor.name, bk.k) : { vendor: "your crew", dates: "" };
     const fields = briefingFields((t?.fields as Partial<Fields> | undefined)?.custom, { project: p ? label(p) : "", ...who });
     const name = t ? t.name : STARTERS[starter!].name;

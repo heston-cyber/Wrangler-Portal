@@ -110,6 +110,7 @@ describe("briefings", () => {
     const free = await w.heston.mutation(api.briefings.create, {}) as Id<"briefings">;
     const fb = await w.heston.query(api.briefings.get, { briefingId: free });
     expect(fb).toMatchObject({ title: "Shoot brief", project: null, sendTo: [], state: "draft" });
+    expect(JSON.stringify((await w.heston.query(api.builder.getBuild, { buildId: fb.buildId })).blocks)).not.toContain("{project}"); // no project, none in the title
     expect((await w.heston.query(api.builder.getBuild, { buildId: fb.buildId })).fields.custom[0]).toEqual({ key: "vendor", label: "Vendor", value: "your crew" });
     // Send to: a vendor from the list (their own address is used), and a typed email; duplicates and junk.
     const vendorId = (await w.heston.query(api.bookings.get, { bookingId })).vendorId;

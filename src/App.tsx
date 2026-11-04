@@ -64,6 +64,8 @@ const NewProposal = lazy(() => import("./modules/proposals/Proposals").then((m) 
 const ProposalTemplates = lazy(() => import("./modules/proposals/Proposals").then((m) => ({ default: m.ProposalTemplates })));
 const ProposalBuilder = lazy(() => import("./modules/proposals/Proposals").then((m) => ({ default: m.ProposalBuilder })));
 const ClientProposal = lazy(() => import("./modules/proposals/ClientProposal"));
+// D147: a briefing's no-login page /b/<token> (email 58, or a copied link).
+const BriefingLink = lazy(() => import("./modules/vendors/BriefingLink"));
 // Phase 3c: Vendors (D95: its own layer).
 const VendorsPage = lazy(() => import("./modules/vendors/Vendors"));
 // Phase 5b: Production (D126).
@@ -140,6 +142,8 @@ export default function App() {
     const guestKit = /^\/guest(?:\/([A-Za-z0-9_-]{16,64}))?\/?$/.exec(path);
     if (guestKit && (kit === "guest" || kit === "guestout")) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><GuestApp key={guestKit[1] ?? "home"} token={guestKit[1] ?? null} /></Suspense></KitApp></Suspense>;
     const sh = /^\/s\/([^/]+)(?:\/v\/([^/]+))?\/?$/.exec(path);
+    const brief = /^\/b\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path); // D147: the no-login briefing page
+    if (brief) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><BriefingLink token={brief[1]} /></Suspense></KitApp></Suspense>;
     const inv = /^\/i\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
     if (inv) {
       const page = (inShell: boolean) => <Suspense fallback={<Loading />}><ClientInvoice token={inv[1]} inShell={inShell} /></Suspense>;
@@ -172,6 +176,9 @@ export default function App() {
   // Phase 3b: a proposal link (email 19's "View proposal"), no account needed; the same page signed in or out.
   const proposalLink = /^\/p\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
   if (proposalLink) return <Suspense fallback={<Loading />}><ClientProposal key={proposalLink[1]} token={proposalLink[1]} /></Suspense>;
+  // D147: a briefing link (email 58's "Read the briefing", or a copied link), no account needed; the same page signed in or out.
+  const briefingLink = /^\/b\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
+  if (briefingLink) return <Suspense fallback={<Loading />}><BriefingLink key={briefingLink[1]} token={briefingLink[1]} /></Suspense>;
   // An invoice link (Part B step 3, the "View and pay" button in email 08) works signed in or out too.
   const invoice = /^\/i\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
   if (invoice) {

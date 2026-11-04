@@ -34,6 +34,7 @@ import { Icon } from "../../../ui/Icon";
 import { Button, IconButton, SkeletonRows, EmptyState, ButtonLink, StatusChip as Chip, Checkbox, DialogHeader, TextArea } from "../../../ui/wp";
 import { proposalProblems } from "../../../../convex/lib/wsProposal";
 import { briefingProblems } from "../../../../convex/lib/wsBriefing";
+import { BriefingPanel, ShareBriefing, type BriefingInfo } from "../../vendors/BriefingShare";
 import { CALL_BLOCKS, bakeWeather, blockCard, callSheetProblems, isCallAtom, shownWeather, weatherOf } from "../../../../convex/lib/callSheet";
 import { PeoplePicker, SendSheet, SendUpdate, type CallSheetInfo } from "../../production/callSheetParts";
 
@@ -42,7 +43,7 @@ import { PeoplePicker, SendSheet, SendUpdate, type CallSheetInfo } from "../../p
 export type ProposalInfo = NonNullable<FunctionReturnType<typeof api.proposals.get>>;
 // Phase 3c: briefings too (D97, 731:3904): no signature boxes, "Send to {vendor}" (a vendor booked on the project),
 // locked once sent, "Sent · Read" in the top row.
-export type BriefingInfo = NonNullable<FunctionReturnType<typeof api.briefings.get>>;
+export type { BriefingInfo };
 // Phase 5b step 3: call sheets too (765:2056): no signature boxes, the call sheet's own blocks and block library,
 // "Send call sheet", and "Send an update" once it's sent (it stays editable; readers see the copy that was sent).
 type Mode = { kind: "build"; buildId: Id<"wsBuilds">; proposal?: ProposalInfo; briefing?: BriefingInfo; callSheet?: CallSheetInfo } | { kind: "template"; templateId: Id<"wsTemplates">; proposal?: boolean; briefing?: boolean; callSheet?: boolean };
@@ -109,12 +110,10 @@ export default function Builder({ mode }: { mode: Mode }) {
   const withdrawProposal = useMutation(api.proposals.withdraw);
   const copyProposal = useMutation(api.proposals.copy);
   const dismissDrafted = useMutation(api.proposals.dismissDrafted);
-  const sendBriefing = useAction(api.briefings.send);
   const copyBriefing = useMutation(api.briefings.copy);
-  const setBriefingBooking = useMutation(api.briefings.setBooking);
   const [toast, show] = useToast();
   const [sending, setSending] = useState(false);
-  const [askBrief, setAskBrief] = useState(false); // Heston, Nov 2: ask before a briefing goes out, as proposals do
+  const [askBrief, setAskBrief] = useState(false); // D147: the Share dialog (Send, Copy link, Download PDF)
   const [contracting, setContracting] = useState(false);
   const [csDialog, setCsDialog] = useState<"send" | "update" | null>(null);
 
@@ -427,43 +426,15 @@ export default function Builder({ mode }: { mode: Mode }) {
       show(r.held ? "Saved as sent, but the email was held (email sending is limited on this site)." : `Sent to ${doc.fields.client.name.split(" ")[0] || doc.fields.client.email}`);
     } catch (e) { show(errText(e)); }
   };
-  // Briefings: Send to {vendor} (731:3904) checks it, saves, freezes the PDF and emails them (email 25).
-  const recipient = brief?.recipients.find((r) => r._id === brief.bookingId) ?? null;
+  // D147: Share (863:16118) checks it; the dialog saves, freezes the PDF the first time, and sends or copies the link.
   const onAskBriefing = () => {
     if (!brief) return;
-    const p = [...(recipient ? [] : ["Pick who it's for (Send to, under Insert)."]), ...briefingProblems(doc)];
-    if (p.length) { setProblems(p); setTab(recipient ? "details" : "insert"); if (phone) setSheet(true); show(p[0]); return; }
+    const p = briefingProblems(doc);
+    if (p.length) { setProblems(p); setTab("details"); if (phone) setSheet(true); show(p[0]); return; }
     setProblems(null); setAskBrief(true);
   };
-  const onSendBriefing = async () => {
-    if (!brief || !recipient) return;
-    setBusy("brief");
-    try {
-      const sent = doc;
-      await saveBuild({ buildId: brief.buildId, title: sent.title, blocks: sent.page, fields: sent.fields, signers: sent.signers, style: sent.style });
-      if (docRef.current === sent) setDirty(false);
-      const blob = await render();
-      const storageId = await uploadToStorage(await uploadUrl({}), new File([blob], `${doc.title}.pdf`, { type: "application/pdf" }));
-      const r = await sendBriefing({ briefingId: brief._id, storageId });
-      setAskBrief(false);
-      show(r.held ? "Saved as sent, but the email was held (email sending is limited on this site)." : r.off ? `Sent to ${recipient.name.split(" ")[0]}’s portal. They’ve switched off briefing emails, so no email went out.` : `Sent to ${recipient.name.split(" ")[0]}`);
-    } catch (e) { show(errText(e)); } finally { setBusy(null); }
-  };
-  const onPickRecipient = async (bookingId: string) => {
-    if (!brief) return;
-    const r = brief.recipients.find((x) => x._id === bookingId);
-    if (!r) return;
-    try {
-      await setBriefingBooking({ briefingId: brief._id, bookingId: r._id });
-      setDoc((d) => ({ ...d, fields: { ...d.fields, custom: [{ key: "vendor", label: "Vendor", value: r.vendor }, { key: "dates", label: "Dates", value: r.dates }, ...d.fields.custom.filter((c) => c.key !== "vendor" && c.key !== "dates")] } }));
-    } catch (e) { show(errText(e)); }
-  };
+  const briefPdf = async () => { await saveNow(); return render(); };
   const onResend = async () => {
-    if (brief) {
-      setBusy("resend");
-      try { const r = await sendBriefing({ briefingId: brief._id, resend: true }); show(r.held ? "The email was held (email sending is limited on this site)." : r.off ? "They’ve switched off briefing emails, so no email went out. It’s in their portal." : "Sent the email again"); } catch (e) { show(errText(e)); } finally { setBusy(null); }
-      return;
-    }
     if (!prop) return;
     setBusy("resend");
     try { const r = await sendProposal({ proposalId: prop._id, resend: true }); show(r.held ? "The email was held (email sending is limited on this site)." : "Sent the email again"); } catch (e) { show(errText(e)); } finally { setBusy(null); }
@@ -519,8 +490,8 @@ export default function Builder({ mode }: { mode: Mode }) {
           <Button variant="primary" size="sm" onClick={onAskCallSheet}>{call.status === "sent" ? "Send an update" : "Send call sheet"}</Button>
         </> : brief ? <>
           {!locked && <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setAsTemplate(true)}>Save as briefing template</Button>}
-          {!locked ? <Button variant="primary" size="sm" onClick={onAskBriefing}>{recipient ? `Send to ${recipient.name.split(" ")[0]}` : "Send"}</Button>
-            : <><Button variant="ghost" size="sm" className="hide-sm" loading={busy === "copy"} onClick={() => void onCopy()}>Make a copy</Button><Button variant="secondary" size="sm" loading={busy === "resend"} onClick={() => void onResend()}>Send again</Button></>}
+          {!locked ? <Button variant="primary" size="sm" onClick={onAskBriefing}>Share</Button>
+            : <Button variant="ghost" size="sm" className="hide-sm" loading={busy === "copy"} onClick={() => void onCopy()}>Make a copy</Button>}
         </> : prop ? <>
           {!locked && <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setAsTemplate(true)}>Save as proposal template</Button>}
           {!locked ? <Button variant="primary" size="sm" disabled={prop.status === "waiting"} title={prop.status === "waiting" ? "Claude is still drafting it" : undefined} onClick={onAskSend}>Send</Button>
@@ -591,7 +562,7 @@ export default function Builder({ mode }: { mode: Mode }) {
               <span className="wsb-hint">{phone ? "Tap to add after the cursor, or press and hold to drag onto the page" : "Drag onto the page (or into a container), or click to add after the cursor"}</span>
               {INSERT.filter((x) => (isCall ? !CALL_HIDES.has(x.kind) : !isCallAtom(x.kind)) && (!side || (x.kind !== "parties" && x.kind !== "signatures"))).map((x) => <button key={x.kind} className="wsb-insert" draggable onDragStart={(e) => dragNodes(e, newNodes(x.kind))} onDragEnd={() => endInsertDrag(editor)} {...touch.item(() => newNodes(x.kind), INSERT_LABEL[x.kind])} onClick={() => { if (touch.justDropped()) return; if (editor) insertKind(editor, x.kind); if (phone) setSheet(false); }}>{x.icon}<span><b>{INSERT_LABEL[x.kind]}</b><span className="secondary">{x.hint}</span></span></button>)}
               {prop && <PitchDeck p={prop} show={show} />}
-              {brief && <BriefingSendTo b={brief} locked={locked} onPick={(id) => void onPickRecipient(id)} />}
+              {brief && !locked && <BriefingPanel b={brief} show={show} onProject={(label) => setDoc((d) => ({ ...d, fields: { ...d.fields, project: label } }))} />}
               {isCall && <BlockLibrary onInsert={(b) => { if (touch.justDropped()) return; if (editor) insertNodes(editor, [blockCard(b)]); if (phone) setSheet(false); }} onDragStart={(e, b) => dragNodes(e, [blockCard(b)])} onDragEnd={() => endInsertDrag(editor)} touchProps={(b) => touch.item(() => [blockCard(b)], b.title)} />}
               {!side && <ClauseLibrary clauses={clauses} onInsert={(c) => { if (touch.justDropped()) return; if (editor) insertNodes(editor, [clauseSection(c)]); if (phone) setSheet(false); }} onDragStart={(e, c) => dragNodes(e, [clauseSection(c)])} onDragEnd={() => endInsertDrag(editor)} touchProps={(c) => touch.item(() => [clauseSection(c)], c.title)} />}
             </div>
@@ -651,7 +622,7 @@ export default function Builder({ mode }: { mode: Mode }) {
       }} />}
       {csDialog === "send" && call && <SendSheet cs={call} before={saveNow} onClose={() => setCsDialog(null)} show={show} onSent={() => navigate(`/production/call-sheets/${call._id}`)} />}
       {csDialog === "update" && call && <SendUpdate cs={call} before={saveNow} onClose={() => setCsDialog(null)} show={show} />}
-      {askBrief && brief && recipient && <SendBriefing b={brief} to={recipient} busy={busy === "brief"} onClose={() => setAskBrief(false)} onSend={() => void onSendBriefing()} />}
+      {askBrief && brief && <ShareBriefing b={brief} initial={brief.sendTo} makePdf={briefPdf} onClose={() => setAskBrief(false)} show={show} />}
       {sending && prop && <SendProposal p={prop} doc={doc} onClose={() => setSending(false)} onSend={onSend} />}
       {contracting && prop && <StartContract p={prop} doc={doc} onClose={() => setContracting(false)} onStart={onStartContract} />}
       {tdrag && <>
@@ -717,7 +688,7 @@ function DetailsPane({ doc, setDoc, extraKeys, mode, proposal, briefing, callShe
         <p className="caption secondary">The crew list on the page doesn't change when you tick people here; edit its rows on the page.</p>
       </> : briefing ? <>
         {input("Briefing title", doc.title, (v) => setDoc((d) => ({ ...d, title: v })))}
-        <p className="caption secondary">Who it's for ({"{vendor}"}, {"{dates}"}) comes from the booking you send it to (Send to, under Insert).</p>
+        <p className="caption secondary">Who it's for ({"{vendor}"}) and the dates ({"{dates}"}) are filled in below; from a booking they start filled. Who gets it is Send to, under Insert.</p>
       </> : <>
         {input(proposal ? "Proposal title" : "Document title", doc.title, (v) => setDoc((d) => ({ ...d, title: v })))}
         <span className="label">Client</span>
@@ -920,39 +891,3 @@ function PitchDeck({ p, show }: { p: ProposalInfo; show: (m: string) => void }) 
   );
 }
 
-// ---------- Phase 3c: a briefing's Send to (731:3904, under Insert) ----------
-
-function BriefingSendTo({ b, locked, onPick }: { b: BriefingInfo; locked: boolean; onPick: (bookingId: string) => void }) {
-  return (
-    <div className="wsb-brief">
-      <span className="label">Briefing</span>
-      {locked ? <>
-        <p className="caption">Sent to {b.sentTo?.name ?? b.vendor}{b.sentTo ? ` (${b.sentTo.email})` : ""}{b.readAt ? `. Read ${longDay(b.readAt)}.` : ". Not read yet."}</p>
-        {b.pdfUrl && <a className="btn ghost sm" href={b.pdfUrl} target="_blank" rel="noopener noreferrer">Open the PDF they got</a>}
-      </> : <>
-        <label className="field"><span className="ws-flabel">Send to</span>
-          <select className="input sm" value={b.bookingId ?? ""} onChange={(e) => onPick(e.target.value)}>
-            {!b.bookingId && <option value="" disabled>Pick a booked vendor</option>}
-            {b.recipients.map((r) => <option key={r._id} value={r._id}>{r.name} · {r.role} ({r.state === "accepted" ? "booked" : "offered"})</option>)}
-          </select></label>
-        <p className="caption secondary">{b.recipients.length ? "Only vendors booked on this project can get it. They see it in their portal and press “I’ve read it”." : "No one is booked on this project now. Book a vendor first."}</p>
-      </>}
-    </div>
-  );
-}
-
-function SendBriefing({ b, to, busy, onClose, onSend }: { b: BriefingInfo; to: BriefingInfo["recipients"][number]; busy: boolean; onClose: () => void; onSend: () => void }) {
-  const first = to.name.split(" ")[0];
-  return (
-    <Modal onClose={onClose} label="Send the briefing" width={520}>
-      <div className="crm-dialog">
-        <DialogHeader eyebrow={`Send · ${b.kindName}`} title={`Send the briefing to ${first}?`} body={`${first} gets an email with a link to read it in their vendor portal and press “I’ve read it”. It can’t change once it’s sent; make a copy to send a new version.`} onClose={onClose} />
-        <div className="wp-field"><span className="wp-field-label">To</span><div className="pr-to"><Icon name="mail" size={16} />{to.name} · {to.role} · {to.dates}</div></div>
-        <div className="dfoot">
-          <button className="btn ghost" type="button" onClick={onClose}>Cancel</button>
-          <Button variant="primary" loading={busy} onClick={onSend}>Send briefing</Button>
-        </div>
-      </div>
-    </Modal>
-  );
-}

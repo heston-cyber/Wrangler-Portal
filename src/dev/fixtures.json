@@ -11336,9 +11336,184 @@
     "vendorId": "0000000000000000000010024vendors"
    }
   ],
-  "briefings.forVendor#0000000000000000000010024vendors": [],
-  "briefings.forVendor#0000000000000000000010026vendors": [],
-  "briefings.list": [],
+  "briefings.forVendor#0000000000000000000010024vendors": [
+   {
+    "_id": "00000000000000000010083briefings",
+    "buildId": "000000000000000000010082wsBuilds",
+    "kindName": "Shoot brief",
+    "link": {
+     "copied": false,
+     "off": false,
+     "opens": 0,
+     "reads": 0
+    },
+    "people": [
+     {
+      "booked": true,
+      "label": "Jordan Ellis",
+      "openedAt": 1793820926639,
+      "readAt": 1793820926639,
+      "vendor": true
+     }
+    ],
+    "project": "26127 Launch",
+    "projectId": "000000000000000000010018projects",
+    "readAt": 1793820926639,
+    "sentAt": 1793820926629,
+    "state": "read",
+    "title": "Shoot brief · 26127 Launch",
+    "updatedAt": 1793820926639,
+    "vendor": "Jordan Ellis",
+    "vendorId": null
+   }
+  ],
+  "briefings.forVendor#0000000000000000000010026vendors": [
+   {
+    "_id": "00000000000000000010088briefings",
+    "buildId": "000000000000000000010087wsBuilds",
+    "kindName": "Edit brief",
+    "link": {
+     "copied": true,
+     "off": false,
+     "opens": 0,
+     "reads": 0
+    },
+    "people": [
+     {
+      "booked": true,
+      "label": "Riley Chen",
+      "openedAt": null,
+      "readAt": null,
+      "vendor": true
+     },
+     {
+      "booked": false,
+      "label": "Sam Ortega",
+      "openedAt": 1793820926658,
+      "readAt": null,
+      "vendor": false
+     }
+    ],
+    "project": "26127 Launch",
+    "projectId": "000000000000000000010018projects",
+    "readAt": null,
+    "sentAt": 1793820926650,
+    "state": "sent",
+    "title": "Edit brief · 26127 Launch",
+    "updatedAt": 1793820926650,
+    "vendor": "Riley Chen",
+    "vendorId": null
+   }
+  ],
+  "briefings.list": [
+   {
+    "_id": "00000000000000000010098briefings",
+    "buildId": "000000000000000000010097wsBuilds",
+    "kindName": "Shoot brief",
+    "link": {
+     "copied": true,
+     "off": false,
+     "opens": 4,
+     "reads": 0
+    },
+    "people": [],
+    "project": "26127 Launch",
+    "projectId": "000000000000000000010018projects",
+    "readAt": null,
+    "sentAt": 1793820926672,
+    "state": "sent",
+    "title": "Shoot brief · 26127 Launch",
+    "updatedAt": 1793820926672,
+    "vendor": null,
+    "vendorId": null
+   },
+   {
+    "_id": "00000000000000000010096briefings",
+    "buildId": "000000000000000000010095wsBuilds",
+    "kindName": "Shoot brief",
+    "link": {
+     "copied": false,
+     "off": false,
+     "opens": 0,
+     "reads": 0
+    },
+    "people": [],
+    "project": null,
+    "projectId": null,
+    "readAt": null,
+    "sentAt": null,
+    "state": "draft",
+    "title": "Shoot brief",
+    "updatedAt": 1793820926663,
+    "vendor": null,
+    "vendorId": null
+   },
+   {
+    "_id": "00000000000000000010088briefings",
+    "buildId": "000000000000000000010087wsBuilds",
+    "kindName": "Edit brief",
+    "link": {
+     "copied": true,
+     "off": false,
+     "opens": 0,
+     "reads": 0
+    },
+    "people": [
+     {
+      "booked": true,
+      "label": "Riley Chen",
+      "openedAt": null,
+      "readAt": null,
+      "vendor": true
+     },
+     {
+      "booked": false,
+      "label": "Sam Ortega",
+      "openedAt": 1793820926658,
+      "readAt": null,
+      "vendor": false
+     }
+    ],
+    "project": "26127 Launch",
+    "projectId": "000000000000000000010018projects",
+    "readAt": null,
+    "sentAt": 1793820926650,
+    "state": "sent",
+    "title": "Edit brief · 26127 Launch",
+    "updatedAt": 1793820926650,
+    "vendor": "Riley Chen",
+    "vendorId": null
+   },
+   {
+    "_id": "00000000000000000010083briefings",
+    "buildId": "000000000000000000010082wsBuilds",
+    "kindName": "Shoot brief",
+    "link": {
+     "copied": false,
+     "off": false,
+     "opens": 0,
+     "reads": 0
+    },
+    "people": [
+     {
+      "booked": true,
+      "label": "Jordan Ellis",
+      "openedAt": 1793820926639,
+      "readAt": 1793820926639,
+      "vendor": true
+     }
+    ],
+    "project": "26127 Launch",
+    "projectId": "000000000000000000010018projects",
+    "readAt": 1793820926639,
+    "sentAt": 1793820926629,
+    "state": "read",
+    "title": "Shoot brief · 26127 Launch",
+    "updatedAt": 1793820926639,
+    "vendor": "Jordan Ellis",
+    "vendorId": null
+   }
+  ],
   "briefings.templates": {
    "saved": [],
    "starters": [
@@ -12320,6 +12495,1543 @@
     }
    ],
    "summary": null
+  },
+  "briefings.get#00000000000000000010083briefings": {
+   "_id": "00000000000000000010083briefings",
+   "buildId": "000000000000000000010082wsBuilds",
+   "dates": "Nov 6 – 7, 2026",
+   "history": [
+    {
+     "at": 1793820926626,
+     "by": "Heston",
+     "detail": "Shoot brief",
+     "kind": "created"
+    },
+    {
+     "at": 1793820926629,
+     "by": "Heston",
+     "detail": "jordan@ellisfilms.com",
+     "kind": "sent"
+    },
+    {
+     "at": 1793820926639,
+     "by": "Jordan Ellis",
+     "kind": "read"
+    }
+   ],
+   "kindName": "Shoot brief",
+   "link": {
+    "copied": false,
+    "off": false,
+    "opens": 0,
+    "reads": 0,
+    "url": null
+   },
+   "pdfUrl": "https://some-deployment.convex.cloud/api/storage/76XS0bDzGyA0/We7JCrK+4ss9yqlL464ndUe700uOHc=",
+   "people": [
+    {
+     "booked": true,
+     "label": "Jordan Ellis",
+     "openedAt": 1793820926639,
+     "readAt": 1793820926639,
+     "vendor": true
+    }
+   ],
+   "project": {
+    "_id": "000000000000000000010018projects",
+    "label": "26127 Launch"
+   },
+   "projectId": "000000000000000000010018projects",
+   "projects": [
+    {
+     "_id": "000000000000000000010018projects",
+     "label": "26127 Launch"
+    }
+   ],
+   "readAt": 1793820926639,
+   "sendTo": [],
+   "sentAt": 1793820926629,
+   "starter": "shoot",
+   "state": "read",
+   "title": "Shoot brief · 26127 Launch",
+   "updatedAt": 1793820926639,
+   "vendor": "Jordan Ellis",
+   "vendorId": null,
+   "vendors": [
+    {
+     "_id": "0000000000000000000010024vendors",
+     "booked": true,
+     "email": "jordan@ellisfilms.com",
+     "name": "Jordan Ellis"
+    },
+    {
+     "_id": "0000000000000000000010026vendors",
+     "booked": true,
+     "email": "riley@chen.example",
+     "name": "Riley Chen"
+    }
+   ],
+   "who": [
+    {
+     "_id": "00000000010085briefingRecipients",
+     "booked": true,
+     "email": "jordan@ellisfilms.com",
+     "label": "Jordan Ellis",
+     "name": "Jordan Ellis",
+     "openedAt": 1793820926639,
+     "opens": 0,
+     "readAt": 1793820926639,
+     "sentAt": 1793820926629,
+     "vendor": true
+    }
+   ]
+  },
+  "briefings.get#00000000000000000010088briefings": {
+   "_id": "00000000000000000010088briefings",
+   "buildId": "000000000000000000010087wsBuilds",
+   "dates": "Nov 6 – 7, 2026",
+   "history": [
+    {
+     "at": 1793820926641,
+     "by": "Heston",
+     "detail": "Edit brief",
+     "kind": "created"
+    },
+    {
+     "at": 1793820926650,
+     "by": "Heston",
+     "detail": "riley@chen.example, sam@ortega.example",
+     "kind": "sent"
+    },
+    {
+     "at": 1793820926650,
+     "by": "Heston",
+     "kind": "link_copied"
+    },
+    {
+     "at": 1793820926658,
+     "by": "Sam Ortega",
+     "kind": "opened"
+    }
+   ],
+   "kindName": "Edit brief",
+   "link": {
+    "copied": true,
+    "off": false,
+    "opens": 0,
+    "reads": 0,
+    "url": "https://app.wranglerportal.com/b/60UnKFkk3lcIGYBSIBy2DBOp"
+   },
+   "pdfUrl": "https://some-deployment.convex.cloud/api/storage/76XS0bDzGyA0/We7JCrK+4ss9yqlL464ndUe700uOHc=",
+   "people": [
+    {
+     "booked": true,
+     "label": "Riley Chen",
+     "openedAt": null,
+     "readAt": null,
+     "vendor": true
+    },
+    {
+     "booked": false,
+     "label": "Sam Ortega",
+     "openedAt": 1793820926658,
+     "readAt": null,
+     "vendor": false
+    }
+   ],
+   "project": {
+    "_id": "000000000000000000010018projects",
+    "label": "26127 Launch"
+   },
+   "projectId": "000000000000000000010018projects",
+   "projects": [
+    {
+     "_id": "000000000000000000010018projects",
+     "label": "26127 Launch"
+    }
+   ],
+   "readAt": null,
+   "sendTo": [],
+   "sentAt": 1793820926650,
+   "starter": "edit",
+   "state": "sent",
+   "title": "Edit brief · 26127 Launch",
+   "updatedAt": 1793820926650,
+   "vendor": "Riley Chen",
+   "vendorId": null,
+   "vendors": [
+    {
+     "_id": "0000000000000000000010024vendors",
+     "booked": true,
+     "email": "jordan@ellisfilms.com",
+     "name": "Jordan Ellis"
+    },
+    {
+     "_id": "0000000000000000000010026vendors",
+     "booked": true,
+     "email": "riley@chen.example",
+     "name": "Riley Chen"
+    }
+   ],
+   "who": [
+    {
+     "_id": "00000000010090briefingRecipients",
+     "booked": true,
+     "email": "riley@chen.example",
+     "label": "Riley Chen",
+     "name": "Riley Chen",
+     "openedAt": null,
+     "opens": 0,
+     "readAt": null,
+     "sentAt": 1793820926650,
+     "vendor": true
+    },
+    {
+     "_id": "00000000010091briefingRecipients",
+     "booked": false,
+     "email": "sam@ortega.example",
+     "label": "Sam Ortega",
+     "name": "Sam Ortega",
+     "openedAt": 1793820926658,
+     "opens": 1,
+     "readAt": null,
+     "sentAt": 1793820926650,
+     "vendor": false
+    }
+   ]
+  },
+  "briefings.get#00000000000000000010096briefings": {
+   "_id": "00000000000000000010096briefings",
+   "buildId": "000000000000000000010095wsBuilds",
+   "dates": null,
+   "history": [
+    {
+     "at": 1793820926662,
+     "by": "Heston",
+     "detail": "Shoot brief",
+     "kind": "created"
+    }
+   ],
+   "kindName": "Shoot brief",
+   "link": {
+    "copied": false,
+    "off": false,
+    "opens": 0,
+    "reads": 0,
+    "url": null
+   },
+   "pdfUrl": null,
+   "people": [],
+   "project": null,
+   "projectId": null,
+   "projects": [
+    {
+     "_id": "000000000000000000010018projects",
+     "label": "26127 Launch"
+    }
+   ],
+   "readAt": null,
+   "sendTo": [
+    {
+     "booked": false,
+     "email": "riley@chen.example",
+     "label": "Riley Chen",
+     "name": "Riley Chen",
+     "vendorId": "0000000000000000000010026vendors"
+    },
+    {
+     "booked": false,
+     "email": "ana@studiofour.com",
+     "label": "ana@studiofour.com"
+    }
+   ],
+   "sentAt": null,
+   "starter": "shoot",
+   "state": "draft",
+   "title": "Shoot brief",
+   "updatedAt": 1793820926663,
+   "vendor": null,
+   "vendorId": null,
+   "vendors": [
+    {
+     "_id": "0000000000000000000010024vendors",
+     "booked": false,
+     "email": "jordan@ellisfilms.com",
+     "name": "Jordan Ellis"
+    },
+    {
+     "_id": "0000000000000000000010026vendors",
+     "booked": false,
+     "email": "riley@chen.example",
+     "name": "Riley Chen"
+    }
+   ],
+   "who": []
+  },
+  "briefings.get#00000000000000000010098briefings": {
+   "_id": "00000000000000000010098briefings",
+   "buildId": "000000000000000000010097wsBuilds",
+   "dates": "Nov 6 – 7, 2026",
+   "history": [
+    {
+     "at": 1793820926665,
+     "by": "Heston",
+     "detail": "Shoot brief",
+     "kind": "created"
+    },
+    {
+     "at": 1793820926672,
+     "by": "Heston",
+     "kind": "link_copied"
+    }
+   ],
+   "kindName": "Shoot brief",
+   "link": {
+    "copied": true,
+    "off": false,
+    "opens": 4,
+    "reads": 0,
+    "url": "https://app.wranglerportal.com/b/_YThBcz4OO3xRAbVPgXHTB8P"
+   },
+   "pdfUrl": "https://some-deployment.convex.cloud/api/storage/76XS0bDzGyA0/We7JCrK+4ss9yqlL464ndUe700uOHc=",
+   "people": [],
+   "project": {
+    "_id": "000000000000000000010018projects",
+    "label": "26127 Launch"
+   },
+   "projectId": "000000000000000000010018projects",
+   "projects": [
+    {
+     "_id": "000000000000000000010018projects",
+     "label": "26127 Launch"
+    }
+   ],
+   "readAt": null,
+   "sendTo": [],
+   "sentAt": 1793820926672,
+   "starter": "shoot",
+   "state": "sent",
+   "title": "Shoot brief · 26127 Launch",
+   "updatedAt": 1793820926672,
+   "vendor": null,
+   "vendorId": null,
+   "vendors": [
+    {
+     "_id": "0000000000000000000010024vendors",
+     "booked": true,
+     "email": "jordan@ellisfilms.com",
+     "name": "Jordan Ellis"
+    },
+    {
+     "_id": "0000000000000000000010026vendors",
+     "booked": true,
+     "email": "riley@chen.example",
+     "name": "Riley Chen"
+    }
+   ],
+   "who": []
+  },
+  "briefings.page#gXuIENa5GKw6S5Pe4KVPlDzz": {
+   "business": {
+    "accent": null,
+    "background": null,
+    "email": "heston@wranglerproductions.com",
+    "logoUrl": null,
+    "name": "Wrangler Productions",
+    "owner": null
+   },
+   "dates": "Nov 6 – 7, 2026",
+   "kind": "Edit brief",
+   "name": "Sam Ortega",
+   "named": true,
+   "project": "26127 Launch",
+   "readAt": null,
+   "sentAt": 1793820803783,
+   "title": "Edit brief · 26127 Launch",
+   "withdrawn": false
+  },
+  "briefings.page#o-0G0v6fSTOXbD-kfxb2ZD5w": {
+   "business": {
+    "accent": null,
+    "background": null,
+    "email": "heston@wranglerproductions.com",
+    "logoUrl": null,
+    "name": "Wrangler Productions",
+    "owner": null
+   },
+   "dates": "Nov 6 – 7, 2026",
+   "kind": "Shoot brief",
+   "name": null,
+   "named": false,
+   "project": "26127 Launch",
+   "readAt": null,
+   "sentAt": 1793820803812,
+   "title": "Shoot brief · 26127 Launch",
+   "withdrawn": false
+  },
+  "bookings.form": {
+   "project": null,
+   "projects": [
+    {
+     "_id": "000000000000000000010018projects",
+     "label": "26127 Launch"
+    }
+   ],
+   "rates": {
+    "costs": [
+     {
+      "cents": 12500,
+      "id": "shooter",
+      "kindId": "shooting",
+      "name": "Shooter"
+     },
+     {
+      "cents": 9000,
+      "id": "editor",
+      "kindId": "editing",
+      "name": "Editor"
+     },
+     {
+      "cents": 50000,
+      "id": "travel",
+      "kindId": "travel",
+      "name": "Travel"
+     }
+    ],
+    "fullDayHours": 8,
+    "kinds": [
+     {
+      "clientCents": 20000,
+      "id": "shooting",
+      "name": "Shooting",
+      "unit": "hour"
+     },
+     {
+      "clientCents": 20000,
+      "id": "editing",
+      "name": "Editing",
+      "unit": "hour"
+     },
+     {
+      "clientCents": 67500,
+      "id": "travel",
+      "name": "Travel day",
+      "unit": "day"
+     }
+    ]
+   },
+   "vendors": [
+    {
+     "_id": "0000000000000000000010024vendors",
+     "name": "Jordan Ellis",
+     "rates": [
+      {
+       "cents": 85000,
+       "role": "Shooter",
+       "unit": "day"
+      }
+     ],
+     "roles": [
+      "Shooter",
+      "Editor"
+     ]
+    },
+    {
+     "_id": "0000000000000000000010026vendors",
+     "name": "Riley Chen",
+     "rates": [
+      {
+       "cents": 6500,
+       "role": "Editor",
+       "unit": "hour"
+      }
+     ],
+     "roles": [
+      "Editor"
+     ]
+    }
+   ]
+  },
+  "builder.getBuild#000000000000000000010082wsBuilds": {
+   "_creationTime": 1793820926625,
+   "_id": "000000000000000000010082wsBuilds",
+   "blocks": {
+    "content": [
+     {
+      "attrs": {
+       "size": "title"
+      },
+      "content": [
+       {
+        "text": "Shoot brief · {project}",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "subtitle"
+      },
+      "content": [
+       {
+        "text": "For {vendor} · {dates}",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Call sheet",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "Call time and place, parking, and when you wrap.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Schedule",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "The day, hour by hour.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Shot list",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "What to get, and anything to avoid.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Gear",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "What they bring and what you bring.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Contacts",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "Who's on set and how to reach them.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Deliverables",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "How and when to hand over the footage, and how to label it.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Notes",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "Anything else: brand colours, references, releases.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     }
+    ],
+    "type": "doc"
+   },
+   "businessId": "0000000000000000010000businesses",
+   "createdAt": 1793820926625,
+   "document": null,
+   "fields": {
+    "business": {
+     "address": "Oklahoma City, OK",
+     "contact": "Heston Hill",
+     "email": "heston@wranglerproductions.com",
+     "legalName": "Hill Creative LLC",
+     "name": "Wrangler Productions",
+     "phone": "",
+     "title": "Founder"
+    },
+    "client": {
+     "address": "",
+     "company": "",
+     "email": "",
+     "name": "",
+     "phone": ""
+    },
+    "custom": [
+     {
+      "key": "vendor",
+      "label": "Vendor",
+      "value": "Jordan Ellis, Shooter"
+     },
+     {
+      "key": "dates",
+      "label": "Dates",
+      "value": "Nov 6 – 7, 2026"
+     }
+    ],
+    "date": "2026-11-04",
+    "project": "26127 Launch"
+   },
+   "kind": "briefing",
+   "renderedAt": 1793820926629,
+   "signers": [],
+   "style": {
+    "accent": "#d60000",
+    "backdrop": "#e9e7e2",
+    "baseSize": 10.5,
+    "cover": null,
+    "fonts": {
+     "body": {
+      "family": "Inter",
+      "source": "google"
+     },
+     "heading": {
+      "family": "Inter",
+      "source": "google"
+     }
+    },
+    "footer": true,
+    "heading": "#111111",
+    "logo": null,
+    "margin": 60,
+    "muted": "#6b6862",
+    "name": "Wrangler",
+    "page": "#ffffff",
+    "pageSize": "LETTER",
+    "separator": "line",
+    "text": "#1d1d1f"
+   },
+   "title": "Shoot brief · 26127 Launch",
+   "updatedAt": 1793820926625
+  },
+  "builder.getBuild#000000000000000000010087wsBuilds": {
+   "_creationTime": 1793820926641,
+   "_id": "000000000000000000010087wsBuilds",
+   "blocks": {
+    "content": [
+     {
+      "attrs": {
+       "size": "title"
+      },
+      "content": [
+       {
+        "text": "Edit brief · {project}",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "subtitle"
+      },
+      "content": [
+       {
+        "text": "For {vendor} · {dates}",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Story",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "What the film is about and who it's for.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Cuts and lengths",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "Each cut, its length and its aspect ratio.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Music",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "Licensed tracks, or where to find them.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "References",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "Links to films it should feel like.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Files",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "Where the footage, project files and assets are.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Deadlines",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "First cut, revisions and final delivery.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     }
+    ],
+    "type": "doc"
+   },
+   "businessId": "0000000000000000010000businesses",
+   "createdAt": 1793820926640,
+   "document": null,
+   "fields": {
+    "business": {
+     "address": "Oklahoma City, OK",
+     "contact": "Heston Hill",
+     "email": "heston@wranglerproductions.com",
+     "legalName": "Hill Creative LLC",
+     "name": "Wrangler Productions",
+     "phone": "",
+     "title": "Founder"
+    },
+    "client": {
+     "address": "",
+     "company": "",
+     "email": "",
+     "name": "",
+     "phone": ""
+    },
+    "custom": [
+     {
+      "key": "vendor",
+      "label": "Vendor",
+      "value": "your crew"
+     },
+     {
+      "key": "dates",
+      "label": "Dates",
+      "value": "Nov 6 – 7, 2026"
+     }
+    ],
+    "date": "2026-11-04",
+    "project": "26127 Launch"
+   },
+   "kind": "briefing",
+   "renderedAt": 1793820926650,
+   "signers": [],
+   "style": {
+    "accent": "#d60000",
+    "backdrop": "#e9e7e2",
+    "baseSize": 10.5,
+    "cover": null,
+    "fonts": {
+     "body": {
+      "family": "Inter",
+      "source": "google"
+     },
+     "heading": {
+      "family": "Inter",
+      "source": "google"
+     }
+    },
+    "footer": true,
+    "heading": "#111111",
+    "logo": null,
+    "margin": 60,
+    "muted": "#6b6862",
+    "name": "Wrangler",
+    "page": "#ffffff",
+    "pageSize": "LETTER",
+    "separator": "line",
+    "text": "#1d1d1f"
+   },
+   "title": "Edit brief · 26127 Launch",
+   "updatedAt": 1793820926647
+  },
+  "builder.getBuild#000000000000000000010095wsBuilds": {
+   "_creationTime": 1793820926661,
+   "_id": "000000000000000000010095wsBuilds",
+   "blocks": {
+    "content": [
+     {
+      "attrs": {
+       "size": "title"
+      },
+      "content": [
+       {
+        "text": "Shoot brief · {project}",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "subtitle"
+      },
+      "content": [
+       {
+        "text": "For {vendor} · {dates}",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Call sheet",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "Call time and place, parking, and when you wrap.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Schedule",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "The day, hour by hour.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Shot list",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "What to get, and anything to avoid.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Gear",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "What they bring and what you bring.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Contacts",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "Who's on set and how to reach them.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Deliverables",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "How and when to hand over the footage, and how to label it.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Notes",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "Anything else: brand colours, references, releases.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     }
+    ],
+    "type": "doc"
+   },
+   "businessId": "0000000000000000010000businesses",
+   "createdAt": 1793820926661,
+   "document": null,
+   "fields": {
+    "business": {
+     "address": "Oklahoma City, OK",
+     "contact": "Heston Hill",
+     "email": "heston@wranglerproductions.com",
+     "legalName": "Hill Creative LLC",
+     "name": "Wrangler Productions",
+     "phone": "",
+     "title": "Founder"
+    },
+    "client": {
+     "address": "",
+     "company": "",
+     "email": "",
+     "name": "",
+     "phone": ""
+    },
+    "custom": [
+     {
+      "key": "vendor",
+      "label": "Vendor",
+      "value": "your crew"
+     },
+     {
+      "key": "dates",
+      "label": "Dates",
+      "value": ""
+     }
+    ],
+    "date": "2026-11-04",
+    "project": ""
+   },
+   "kind": "briefing",
+   "signers": [],
+   "style": {
+    "accent": "#d60000",
+    "backdrop": "#e9e7e2",
+    "baseSize": 10.5,
+    "cover": null,
+    "fonts": {
+     "body": {
+      "family": "Inter",
+      "source": "google"
+     },
+     "heading": {
+      "family": "Inter",
+      "source": "google"
+     }
+    },
+    "footer": true,
+    "heading": "#111111",
+    "logo": null,
+    "margin": 60,
+    "muted": "#6b6862",
+    "name": "Wrangler",
+    "page": "#ffffff",
+    "pageSize": "LETTER",
+    "separator": "line",
+    "text": "#1d1d1f"
+   },
+   "title": "Shoot brief",
+   "updatedAt": 1793820926661
+  },
+  "builder.getBuild#000000000000000000010097wsBuilds": {
+   "_creationTime": 1793820926664,
+   "_id": "000000000000000000010097wsBuilds",
+   "blocks": {
+    "content": [
+     {
+      "attrs": {
+       "size": "title"
+      },
+      "content": [
+       {
+        "text": "Shoot brief · {project}",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "subtitle"
+      },
+      "content": [
+       {
+        "text": "For {vendor} · {dates}",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Call sheet",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "Call time and place, parking, and when you wrap.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Schedule",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "The day, hour by hour.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Shot list",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "What to get, and anything to avoid.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Gear",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "What they bring and what you bring.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Contacts",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "Who's on set and how to reach them.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Deliverables",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "How and when to hand over the footage, and how to label it.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "heading"
+      },
+      "content": [
+       {
+        "text": "Notes",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     },
+     {
+      "attrs": {
+       "size": "body"
+      },
+      "content": [
+       {
+        "text": "Anything else: brand colours, references, releases.",
+        "type": "text"
+       }
+      ],
+      "type": "paragraph"
+     }
+    ],
+    "type": "doc"
+   },
+   "businessId": "0000000000000000010000businesses",
+   "createdAt": 1793820926664,
+   "document": null,
+   "fields": {
+    "business": {
+     "address": "Oklahoma City, OK",
+     "contact": "Heston Hill",
+     "email": "heston@wranglerproductions.com",
+     "legalName": "Hill Creative LLC",
+     "name": "Wrangler Productions",
+     "phone": "",
+     "title": "Founder"
+    },
+    "client": {
+     "address": "",
+     "company": "",
+     "email": "",
+     "name": "",
+     "phone": ""
+    },
+    "custom": [
+     {
+      "key": "vendor",
+      "label": "Vendor",
+      "value": "your crew"
+     },
+     {
+      "key": "dates",
+      "label": "Dates",
+      "value": "Nov 6 – 7, 2026"
+     }
+    ],
+    "date": "2026-11-04",
+    "project": "26127 Launch"
+   },
+   "kind": "briefing",
+   "renderedAt": 1793820926672,
+   "signers": [],
+   "style": {
+    "accent": "#d60000",
+    "backdrop": "#e9e7e2",
+    "baseSize": 10.5,
+    "cover": null,
+    "fonts": {
+     "body": {
+      "family": "Inter",
+      "source": "google"
+     },
+     "heading": {
+      "family": "Inter",
+      "source": "google"
+     }
+    },
+    "footer": true,
+    "heading": "#111111",
+    "logo": null,
+    "margin": 60,
+    "muted": "#6b6862",
+    "name": "Wrangler",
+    "page": "#ffffff",
+    "pageSize": "LETTER",
+    "separator": "line",
+    "text": "#1d1d1f"
+   },
+   "title": "Shoot brief · 26127 Launch",
+   "updatedAt": 1793820926669
+  },
+  "briefings.page#Dbvy2LL-JKVPvU4t3_eASCqP": {
+   "business": {
+    "accent": null,
+    "background": null,
+    "email": "heston@wranglerproductions.com",
+    "logoUrl": null,
+    "name": "Wrangler Productions",
+    "owner": null
+   },
+   "dates": "Nov 6 – 7, 2026",
+   "kind": "Edit brief",
+   "name": "Sam Ortega",
+   "named": true,
+   "project": "26127 Launch",
+   "readAt": null,
+   "sentAt": 1793820926650,
+   "title": "Edit brief · 26127 Launch",
+   "withdrawn": false
+  },
+  "briefings.page#_YThBcz4OO3xRAbVPgXHTB8P": {
+   "business": {
+    "accent": null,
+    "background": null,
+    "email": "heston@wranglerproductions.com",
+    "logoUrl": null,
+    "name": "Wrangler Productions",
+    "owner": null
+   },
+   "dates": "Nov 6 – 7, 2026",
+   "kind": "Shoot brief",
+   "name": null,
+   "named": false,
+   "project": "26127 Launch",
+   "readAt": null,
+   "sentAt": 1793820926672,
+   "title": "Shoot brief · 26127 Launch",
+   "withdrawn": false
   }
  },
  "client": {
@@ -15537,6 +17249,16 @@
     "paying": "000000000000010062vendorInvoices"
    },
    "callSheet": "0000000000000000010078callSheets"
+  },
+  "briefings": {
+   "ids": [
+    "00000000000000000010083briefings",
+    "00000000000000000010088briefings",
+    "00000000000000000010096briefings",
+    "00000000000000000010098briefings"
+   ],
+   "emailed": "Dbvy2LL-JKVPvU4t3_eASCqP",
+   "link": "_YThBcz4OO3xRAbVPgXHTB8P"
   }
  },
  "vendor": {
@@ -15580,7 +17302,11 @@
     {
      "_id": "000000000000010033vendorBookings",
      "answeredAt": null,
-     "brief": null,
+     "brief": {
+      "_id": "00000000000000000010083briefings",
+      "readAt": 1793820803772,
+      "sentAt": 1793820803766
+     },
      "days": 1,
      "declineReason": null,
      "end": "2026-12-02",
@@ -15588,7 +17314,7 @@
      "hours": null,
      "location": "Harbor Coffee, Plaza District",
      "note": "Run and gun. Bring the gimbal.",
-     "offeredAt": 1793812816917,
+     "offeredAt": 1793820803487,
      "project": "26127 Launch",
      "projectName": "Launch",
      "rate": {
@@ -15605,8 +17331,12 @@
    "upcoming": [
     {
      "_id": "000000000000010031vendorBookings",
-     "answeredAt": 1793812816978,
-     "brief": null,
+     "answeredAt": 1793820803593,
+     "brief": {
+      "_id": "00000000000000000010083briefings",
+      "readAt": 1793820803772,
+      "sentAt": 1793820803766
+     },
      "days": 2,
      "declineReason": null,
      "end": "2026-11-07",
@@ -15614,7 +17344,7 @@
      "hours": null,
      "location": "Harbor Coffee, Plaza District",
      "note": "Run and gun. Bring the gimbal.",
-     "offeredAt": 1793812816913,
+     "offeredAt": 1793820803483,
      "project": "26127 Launch",
      "projectName": "Launch",
      "rate": {
@@ -15627,8 +17357,12 @@
     },
     {
      "_id": "000000000000010035vendorBookings",
-     "answeredAt": 1793812816982,
-     "brief": null,
+     "answeredAt": 1793820803595,
+     "brief": {
+      "_id": "00000000000000000010083briefings",
+      "readAt": 1793820803772,
+      "sentAt": 1793820803766
+     },
      "days": 5,
      "declineReason": null,
      "end": "2026-11-14",
@@ -15636,7 +17370,7 @@
      "hours": 18,
      "location": "Harbor Coffee, Plaza District",
      "note": "Run and gun. Bring the gimbal.",
-     "offeredAt": 1793812816918,
+     "offeredAt": 1793820803489,
      "project": "26127 Launch",
      "projectName": "Launch",
      "rate": {
@@ -15772,7 +17506,19 @@
   },
   "vendorPortal.briefings": {
    "businessId": "0000000000000000010000businesses",
-   "rows": []
+   "rows": [
+    {
+     "_id": "00000000000000000010083briefings",
+     "end": "2026-11-07",
+     "kind": "Shoot brief",
+     "project": "26127 Launch",
+     "readAt": 1793820803772,
+     "role": "Shooter",
+     "sentAt": 1793820803766,
+     "start": "2026-11-06",
+     "title": "Shoot brief · 26127 Launch"
+    }
+   ]
   },
   "vendorPortal.reviews": {
    "businessId": "0000000000000000010000businesses",

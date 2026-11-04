@@ -41,7 +41,7 @@ export function PdfPages({ url, title }: { url: string; title: string }) {
   }, []);
   return (
     <div className="pr-pages" ref={box} aria-label={title}>
-      {failed ? <p className="wp-small">The proposal couldn't be shown here. <a href={url} target="_blank" rel="noopener noreferrer">Open the PDF</a>.</p>
+      {failed ? <p className="wp-small">The PDF couldn't be shown here. <a href={url} target="_blank" rel="noopener noreferrer">Open the PDF</a>.</p>
         : !pdf || !width ? <Card label="Loading"><SkeletonRows n={6} /></Card>
         : Array.from({ length: pdf.numPages as number }, (_, i) => <PdfPage key={`${i}-${width}`} pdf={pdf} index={i} width={width} />)}
     </div>
