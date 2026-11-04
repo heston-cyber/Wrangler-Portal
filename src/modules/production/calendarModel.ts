@@ -64,6 +64,7 @@ export type Item = {
   where: string | null;
   source: string;                             // "Portal", or the Google Calendar's name
   guests: string[];
+  people?: number;                            // a shoot: the client's people who are asked to confirm again when it moves
   canDrag: boolean;
   hasEnd?: boolean;                           // a shoot with a wrap time (without one, its end is call + 2 hours)
   ref: { eventId?: string; shootId?: string; projectId?: string; label?: string };

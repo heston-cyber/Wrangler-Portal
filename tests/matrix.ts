@@ -258,9 +258,9 @@ export async function setup() {
         { id: "guest:invited", kind: "guest", name: "Ivy", email: "ivy@x.example", role: "Talent", on: true, sentAt: 1, addedAt: 0 }],
       sent: { title: "CS", page: { type: "doc", content: [] }, fields: {}, style: {}, at: 0, round: 0 }, history: [], createdAt: 0, updatedAt: 0 });
     // Phase 5b step 5: a Google Calendar connection with one event, and the shoot moved in Google (its Dashboard note).
-    await ctx.db.insert("calendars", { email: "heston@gmail.example", refreshToken: "rt", calendarId: "cal@x", calendarName: "Wrangler", inviteVendors: true, inviteClient: false, connectedAt: 0,
+    await ctx.db.insert("calendars", { businessId, email: "heston@gmail.example", refreshToken: "rt", calendarId: "cal@x", calendarName: "Wrangler", inviteVendors: true, inviteClient: false, connectedAt: 0,
       list: [{ id: "cal@x", name: "Wrangler", color: 0, on: true, writable: true, primary: true }] });
-    const calendarEventId = await ctx.db.insert("calendarEvents", { kind: "google", calendarId: "cal@x", googleId: "wpabc123", title: "Team call", date: "2030-01-02", endDate: "2030-01-02", start: "10:00", end: "11:00",
+    const calendarEventId = await ctx.db.insert("calendarEvents", { businessId, kind: "google", calendarId: "cal@x", googleId: "pevabc123", title: "Team call", date: "2030-01-02", endDate: "2030-01-02", start: "10:00", end: "11:00",
       guests: [{ email: "g@x.example" }], gUpdated: 1, syncedAt: 0, createdAt: 0, prev: { date: "2030-01-01", endDate: "2030-01-01", start: "10:00", end: "11:00", at: Date.now(), notify: false } });
     await ctx.db.patch(shootId, { googleMove: { at: 0, was: { date: "2030-01-01", call: "07:00", location: "X" } }, dragUndo: { at: Date.now(), was: { date: "2030-01-01", call: "07:00", wrap: null, moved: null, confirmed: null, notify: false } } });
     // Phase 5b step 4 (D127): a call-sheet guest, signed in, on that sheet: the matrix's fifth caller. It proves a guest login

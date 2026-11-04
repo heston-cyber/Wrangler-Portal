@@ -136,6 +136,18 @@ function ShootMovedRow({ n }: { n: Extract<Need, { kind: "shootMoved" }> }) {
   const [toast, show] = useToast();
   const run = async (k: "ask" | "done") => { setBusy(k); try { if (k === "ask") { const r = await ask({ shootId: n.shootId }); show(r.told ? `Asked ${r.told === 1 ? "the client" : `${r.told} people`} to confirm.` : "Done."); } else await done({ shootId: n.shootId }); } catch (e) { show(errText(e)); } finally { setBusy(null); } };
   const who = [n.crew ? "the crew" : null, n.people ? "the client" : null].filter(Boolean).join(" and ") || "anyone coming";
+  // Review fix H2: the other way round: someone changed it in Google, but the portal's later change won and was written
+  // back over it (nobody was emailed). Nothing moved, so there's only Done.
+  if (n.kept) return (
+    <ListRow className="ilead" lead={{ icon: "calendar" }}
+      title={<><span className="pc-only">A Google Calendar change to a shoot was put back</span><span className="ph-only">Google change put back</span></>}
+      meta={`${n.project} · Google had ${shootDay(n.wasDate)} ${clock(n.wasCall)}; your later change in the portal (${shootDay(n.date)} ${clock(n.call)}) is on Google now · nobody was emailed`}
+      titleChip={<span className="pc-only"><StatusChip tone="warning">Put back</StatusChip></span>}
+      action={<span className="need-acts">
+        <Button size="sm" variant="primary" loading={busy === "done"} onClick={() => run("done")}>Done</Button>
+        {toast}
+      </span>} />
+  );
   return (
     <ListRow className="ilead" lead={{ icon: "calendar" }}
       title={<><span className="pc-only">Shoot moved in Google Calendar: tell {who}</span><span className="ph-only">Shoot moved in Google</span></>}
