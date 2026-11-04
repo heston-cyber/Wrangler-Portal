@@ -23,6 +23,9 @@ jobs:
   smoke:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-24.04  # Oct 28: ubuntu-latest became 26.04, where Playwright cannot install its browser yet
+    # Nov 4 (Heston): the live Convex key lives only in GitHub environments, used only from main (D150).
+    # Daily and after each deploy: "production-checks" (no approval, main only).
+    environment: production-checks
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4

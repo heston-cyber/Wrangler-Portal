@@ -39,6 +39,8 @@ jobs:
         # Heston, Oct 29: "yes copy the keys". Live is only read here (env get); dev is written. Only what playback and
         # sending need: no Bunny API, upload or storage keys (dev can't change or delete anything in Bunny), and nothing
         # for Dropbox, Stripe or Slack. The email key is copied only once dev's email is locked to Heston (EMAIL_ONLY_TO).
+        # Nov 4 (D150): once the repo-level live key is removed, phase2 can't read live: this step then skips (values
+        # already on dev stay). A new live value dev needs is set on dev by hand in the Convex dashboard.
         env:
           LIVE_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
           DEV_KEY: ${{ secrets.CONVEX_DEV_DEPLOY_KEY }}
