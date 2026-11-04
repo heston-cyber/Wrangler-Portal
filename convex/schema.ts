@@ -4,6 +4,12 @@ import { v } from "convex/values";
 
 // Frames are always stored as integers counted from the first frame of the version (frame 0).
 // Timecode is derived from frames + the version's start timecode, never from seconds.
+// D149: an answer to a quote or proposal. Name always; email and company when given (a copied link asks for both).
+const responseV = v.object({
+  kind: v.union(v.literal("accepted"), v.literal("declined")), name: v.string(), email: v.optional(v.string()), company: v.optional(v.string()),
+  reason: v.optional(v.string()), at: v.number(), ip: v.optional(v.string()), userAgent: v.optional(v.string()), via: v.optional(v.union(v.literal("email"), v.literal("link"))),
+});
+
 export default defineSchema({
   ...authTables,
   // Client side (C1, Oct 23): the auth users table with a role. Owners are the ALLOWED_EMAILS list (Heston);
@@ -757,7 +763,8 @@ export default defineSchema({
     estimateId: v.optional(v.id("estimates")),
     valueCents: v.optional(v.number()),
     stage: v.union(v.literal("lead"), v.literal("quoted"), v.literal("contract_sent"), v.literal("signed"), v.literal("in_production"), v.literal("delivered"), v.literal("paid")),
-    source: v.union(v.literal("website"), v.literal("hand"), v.literal("estimate")),
+    source: v.union(v.literal("website"), v.literal("hand"), v.literal("estimate"), v.literal("accepted")), // accepted: D149's quiet lead
+    quiet: v.optional(v.boolean()),               // D149: someone who isn't a client accepted; kept off the Pipeline board until "Move to Quoted?"
     lead: v.optional(v.object({ name: v.string(), email: v.string(), company: v.optional(v.string()), phone: v.optional(v.string()), message: v.optional(v.string()),
       fields: v.array(v.object({ label: v.string(), value: v.string() })), at: v.number() })),
     closedAt: v.optional(v.number()),            // "Not a lead", or taken off the board
@@ -812,7 +819,7 @@ export default defineSchema({
     clientId: v.optional(v.id("clients")),
     dealId: v.optional(v.id("deals")),
     projectId: v.optional(v.id("projects")),
-    contact: v.object({ name: v.string(), email: v.string(), company: v.optional(v.string()) }),
+    contact: v.optional(v.object({ name: v.string(), email: v.string(), company: v.optional(v.string()) })), // D149: optional ("No client yet"); whoever accepts once accepted
     title: v.string(),
     lines: v.array(v.object({ id: v.string(), description: v.string(), qty: v.number(), unitCents: v.number(), suggestedCents: v.optional(v.number()), note: v.optional(v.string()) })),
     discountCents: v.optional(v.number()),
@@ -822,10 +829,12 @@ export default defineSchema({
     terms: v.optional(v.string()),
     questions: v.optional(v.any()),               // the quick questions' answers (what's the job, days, level)
     totalCents: v.number(),
-    token: v.optional(v.string()),
+    token: v.optional(v.string()),                // the one link of a quote sent before D149
+    linkToken: v.optional(v.string()),            // D149: Copy link (anyone with it)
+    linkOpens: v.optional(v.number()),
     sentAt: v.optional(v.number()),
     viewedAt: v.optional(v.number()),
-    response: v.optional(v.object({ kind: v.union(v.literal("accepted"), v.literal("declined")), name: v.string(), reason: v.optional(v.string()), at: v.number(), ip: v.optional(v.string()), userAgent: v.optional(v.string()) })),
+    response: v.optional(responseV), // D149: who answered (name, and email and company when given)
     asked: v.optional(v.object({ move: v.optional(v.union(v.literal("yes"), v.literal("no"))), draft: v.optional(v.union(v.literal("done"), v.literal("later"))), seen: v.optional(v.boolean()) })),
     made: v.optional(v.object({ buildId: v.optional(v.id("wsBuilds")), invoiceId: v.optional(v.id("invoices")) })),
     voidedAt: v.optional(v.number()),
@@ -833,7 +842,7 @@ export default defineSchema({
     createdBy: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_token", ["token"]).index("by_client", ["clientId"]).index("by_deal", ["dealId"]).index("by_updated", ["updatedAt"]),
+  }).index("by_token", ["token"]).index("by_client", ["clientId"]).index("by_deal", ["dealId"]).index("by_updated", ["updatedAt"]).index("by_link_token", ["linkToken"]),
 
   // Phase 3b · Proposals (D69): a written pitch made in the builder (its wsBuilds row, kind "proposal"), numbered
   // {prefix}-P-0001 (D85). Sending freezes the PDF, the contact and the totals; the client reads it at /p/<token> and
@@ -861,10 +870,12 @@ export default defineSchema({
     answers: v.optional(v.any()),                // the questionnaire's answers, by question id (and __lines, the priced lines)
     qStep: v.optional(v.number()),               // the step they were on ("Save and finish later")
     deck: v.optional(v.object({ kit: v.union(v.literal("business"), v.literal("client")), note: v.optional(v.string()), askedAt: v.optional(v.number()) })), // D72
-    token: v.optional(v.string()),
+    token: v.optional(v.string()),                // the one link of a proposal sent before D149
+    linkToken: v.optional(v.string()),            // D149: Copy link (anyone with it)
+    linkOpens: v.optional(v.number()),
     sentAt: v.optional(v.number()),
     viewedAt: v.optional(v.number()),
-    response: v.optional(v.object({ kind: v.union(v.literal("accepted"), v.literal("declined")), name: v.string(), reason: v.optional(v.string()), at: v.number(), ip: v.optional(v.string()), userAgent: v.optional(v.string()) })),
+    response: v.optional(responseV), // D149: who answered (name, and email and company when given)
     asked: v.optional(v.object({ move: v.optional(v.union(v.literal("yes"), v.literal("no"))), contract: v.optional(v.union(v.literal("done"), v.literal("later"))), seen: v.optional(v.boolean()) })),
     made: v.optional(v.object({ buildId: v.optional(v.id("wsBuilds")) })),
     voidedAt: v.optional(v.number()),
@@ -872,7 +883,22 @@ export default defineSchema({
     createdBy: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_token", ["token"]).index("by_build", ["buildId"]).index("by_client", ["clientId"]).index("by_deal", ["dealId"]).index("by_updated", ["updatedAt"]),
+  }).index("by_token", ["token"]).index("by_build", ["buildId"]).index("by_client", ["clientId"]).index("by_deal", ["dealId"]).index("by_updated", ["updatedAt"]).index("by_link_token", ["linkToken"]),
+  // D149 (Nov 4): each person a quote or proposal was emailed to, with their own link: opens, and their accept or
+  // decline. One person accepting closes every other link ("Already accepted on {date}", never who).
+  offerRecipients: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    quoteId: v.optional(v.id("quotes")),
+    proposalId: v.optional(v.id("proposals")),
+    email: v.string(),                             // lower-case
+    name: v.optional(v.string()),
+    token: v.string(),
+    sentAt: v.number(),
+    openedAt: v.optional(v.number()),
+    opens: v.number(),
+    stoppedAt: v.optional(v.number()),             // "Stop this person's link"
+    response: v.optional(responseV),
+  }).index("by_quote", ["quoteId"]).index("by_proposal", ["proposalId"]).index("by_token", ["token"]),
 
   // Phase 3c · Vendors (D91–D104): the subcontractors a business hires. One row per business per vendor (D94: the same
   // person working for two businesses has two rows, each seen only by its business). W-9 per business (D100); payment

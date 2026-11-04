@@ -8,6 +8,7 @@ import { dateRange } from "./bookings";
 export type Mail = { from: string; subject: string; html: string; text: string };
 const first = (name: string | null | undefined) => (name ?? "").trim().split(/\s+/)[0] || "";
 const hi = (name: string | null | undefined): Block => ({ t: "p", text: first(name) ? `Hi ${first(name)},` : "Hi," });
+const hello = (name: string | null | undefined): Block => ({ t: "p", text: first(name) ? `Hi ${first(name)},` : "Hello," }); // D149 (Q98)
 /** "Heston at Wrangler Productions" (or just the business when no owner name is set). */
 const byline = (b: MailBrand, full = false) => (b.ownerName ? `${full ? b.ownerName : first(b.ownerName)} at ${b.name}` : b.name);
 const SIGN_HOST = "sign.wranglerportal.com";
@@ -312,7 +313,7 @@ export function ownerSubscriptionFailedMail(b: MailBrand, d: { client: string; p
 /** 18 · the quote, to the person it's for (no account needed, D81). */
 export function quoteMail(b: MailBrand, d: { name: string; number: string; title: string; totalCents: number; validUntil: string; terms: string | null; link: string }): Mail {
   return mk(b, "updates", `Quote ${d.number} from ${b.name}: ${usd(d.totalCents)}`, [
-    hi(d.name),
+    hello(d.name), // Q98: "Hi {name},", or "Hello," with no name
     { t: "p", text: `Here’s quote ${d.number} for ${d.title}.` },
     { t: "sums", rows: [{ label: "Total", value: usd(d.totalCents), big: true }, { label: "Valid until", value: longDate(d.validUntil) }, { label: "Quote", value: `${d.number} · ${d.title}` }] },
     ...(d.terms ? [{ t: "p", text: d.terms, tone: "muted" } as Block] : []),
@@ -325,7 +326,7 @@ export function quoteMail(b: MailBrand, d: { name: string; number: string; title
 export function proposalMail(b: MailBrand, d: { name: string; number: string; title: string; totalCents: number; sentAt: number; message: string | null; link: string }): Mail {
   const sent = new Date(d.sentAt).toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", year: "numeric" });
   return mk(b, "updates", `Proposal from ${b.name}: ${d.title}`, [
-    hi(d.name),
+    hello(d.name), // Q98: "Hi {name},", or "Hello," with no name
     { t: "p", text: `Here’s our proposal for ${d.title}.` },
     { t: "sums", rows: [{ label: "Investment", value: usd(d.totalCents), big: true }, { label: "Sent", value: sent }, { label: "Proposal", value: `${d.number} · ${d.title}` }] },
     ...(d.message ? [{ t: "p", text: d.message } as Block] : []),

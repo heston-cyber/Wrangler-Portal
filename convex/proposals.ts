@@ -28,6 +28,7 @@ import { proposalProblems, proposalStarterPage, sectionCount, withoutPrices } fr
 import { WRANGLER_QUESTIONNAIRE, answerList, bound, cleanQuestionnaire, linesTotal, outlineFromAnswers, type Answers, type ClientAnswer, type FileAnswer, type PLine, type Questionnaire } from "./lib/questionnaire";
 import { EMPTY_KIT, MAX_FILE_BYTES, MAX_FILES, linkLabel, type Kit } from "./brandKit";
 import { pageToMarkdown } from "./lib/wsPageMd";
+import { addPeople, answer, forWho, newCopiedLink, noteOpen, parseTo, peopleOf, resolve, rowsOf, stateFor, stopPerson } from "./lib/offers";
 
 const TOKEN = /^[A-Za-z0-9_-]{16,64}$/;
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
@@ -95,9 +96,11 @@ export const get = query({
     const client = p.clientId ? await ctx.db.get(p.clientId) : null;
     return {
       _id: p._id, buildId: p.buildId, number: p.number, status: p.status, drafted: p.drafted ?? null, who: whoOf(p, build), money: money(p, build),
-      link: p.token && p.status !== "draft" ? proposalLink(p.token) : null, sentAt: p.sentAt ?? null, viewedAt: p.viewedAt ?? null, message: p.message ?? null,
-      response: p.response ? { kind: p.response.kind, name: p.response.name, at: p.response.at, reason: p.response.reason ?? null } : null, asked: p.asked ?? {}, voidedAt: p.voidedAt ?? null,
-      deal: deal ? { _id: deal._id, stage: deal.stage, title: deal.title } : null, client: client ? { _id: client._id, name: client.name } : null,
+      link: await (async () => { const rows = await rowsOf(ctx, "proposal", p._id); const own = rows.find((r) => r.email === p.contact?.email) ?? rows[0]; return own ? proposalLink(own.token) : p.token && p.status !== "draft" ? proposalLink(p.token) : null; })(),
+      people: await peopleOf(ctx, "proposal", p), linkUrl: p.linkToken ? proposalLink(p.linkToken) : null, // D149: Opened and accepted
+      sentAt: p.sentAt ?? null, viewedAt: p.viewedAt ?? null, message: p.message ?? null,
+      response: p.response ? { kind: p.response.kind, name: p.response.name, email: p.response.email ?? null, company: p.response.company ?? null, at: p.response.at, reason: p.response.reason ?? null } : null, asked: p.asked ?? {}, voidedAt: p.voidedAt ?? null,
+      deal: deal ? { _id: deal._id, stage: deal.stage, title: deal.title, quiet: !!deal.quiet } : null, client: client ? { _id: client._id, name: client.name } : null,
       contract: contract ? { _id: contract._id, title: contract.title } : null, history: p.history,
       source: p.source ?? null, filling: !!p.filling, answers: (p.answers ?? null) as Answers | null, qStep: p.qStep ?? 0, deck: p.deck ?? null, title: build?.title ?? "Proposal",
     };
@@ -224,45 +227,61 @@ export const newTemplate = mutation({
 
 /** Send (or resend): checks the proposal, keeps the PDF the page rendered, freezes the contact and totals, gives it its
  *  link, and moves the card to Quoted only when the owner ticked the box (D84). Then email 19 goes out. */
+/** Send (D149): each address in To gets their own link and email 19; Copy link makes the one copied link. The PDF is
+ *  frozen the first time. With no To, the client in Details. A proposal sent before D149 resends on its one link. */
 export const markSent = internalMutation({
-  args: { proposalId: v.id("proposals"), storageId: v.optional(v.id("_storage")), message: v.optional(v.string()), move: v.optional(v.boolean()), resend: v.boolean() },
-  handler: async (ctx, a) => {
+  args: { proposalId: v.id("proposals"), storageId: v.optional(v.id("_storage")), message: v.optional(v.string()), move: v.optional(v.boolean()), resend: v.boolean(),
+    to: v.optional(v.string()), name: v.optional(v.string()), copyLink: v.optional(v.boolean()) },
+  handler: async (ctx, a): Promise<{ error?: string; at?: number; legacy?: string | null; sends?: Array<{ rowId: Id<"offerRecipients">; email: string; name: string | null; token: string }>; link?: string | null }> => {
     const { me } = await ownerBiz(ctx);
     const p = await ctx.db.get(a.proposalId);
     const build = p ? await ctx.db.get(p.buildId) : null;
     if (!p || !build) throw new ConvexError("That proposal isn't here.");
     const now = Date.now();
-    if (a.resend) {
+    if (a.resend && p.token && a.to === undefined && !a.copyLink) {
       if (p.status !== "sent") throw new ConvexError("Only an open proposal can be sent again.");
       await ctx.db.patch(p._id, { updatedAt: now, history: [...p.history, { kind: "resent", at: now, by: by(me), detail: p.contact?.email }].slice(-60) });
-      return { key: `proposal-sent:${p._id}:${now}` };
+      return { at: now, legacy: `proposal-sent:${p._id}:${now}`, sends: [], link: null };
+    }
+    const d = docOf(build);
+    const anyone = a.to !== undefined || !!a.copyLink;
+    const list = a.to !== undefined ? parseTo(a.to, a.name) : a.copyLink ? [] : [{ email: d.fields.client.email.trim().toLowerCase(), name: d.fields.client.name.trim() || undefined }];
+    if (!list.length && !a.copyLink) throw new ConvexError("Add who it goes to.");
+    if (p.status === "sent") { // already out: more people, or the copied link
+      if (a.storageId) return { error: "It's already been sent." }; // review M2 (D147): a file handed to a sent one is never touched
+      const sends = await addPeople(ctx, "proposal", p, list, now);
+      const linkToken = a.copyLink ? p.linkToken ?? randomToken(18) : p.linkToken;
+      await ctx.db.patch(p._id, { updatedAt: now, ...(linkToken ? { linkToken } : {}), history: [...p.history, ...(sends.length ? [{ kind: "resent", at: now, by: by(me), detail: sends.map((x) => x.email).join(", ").slice(0, 400) }] : []), ...(a.copyLink && !p.linkToken ? [{ kind: "link_copied", at: now, by: by(me) }] : [])].slice(-60) });
+      return { at: now, legacy: null, sends, link: a.copyLink && linkToken ? proposalLink(linkToken) : null };
     }
     // Review fix: from here the caller owns this proposal, so a refused upload is theirs to drop. Refusals return an
     // error (a throw would roll the delete back); a file that isn't a fresh PDF upload is never touched or used.
     if (!a.storageId) return { error: "The PDF didn't upload. Try again." };
     const file = await ctx.db.system.get(a.storageId);
     if (!file || !fresh(file) || (file.contentType && file.contentType !== "application/pdf") || file.size > MAX_PDF_BYTES) return { error: "The PDF didn't upload. Try again." };
+    if (await ctx.db.query("proposals").filter((q) => q.eq(q.field("pdfId"), a.storageId)).first()) return { error: "The PDF didn't upload. Try again." };
     const refuse = async (error: string) => { await ctx.storage.delete(a.storageId!).catch(() => null); return { error }; };
     if (p.filling) return refuse("Finish the questionnaire first.");
     if (p.status === "waiting") return refuse("Claude is still drafting this one.");
     if (!OPEN.has(p.status)) return refuse("This proposal has already been sent.");
-    const d = docOf(build);
-    const problems = proposalProblems(d);
+    const problems = proposalProblems(d, { anyone });
     if (problems.length) return refuse(problems[0]);
     const t = totals(d.page);
-    const contact = { name: d.fields.client.name.trim().slice(0, 120), email: d.fields.client.email.trim().toLowerCase().slice(0, 254), ...(d.fields.client.company.trim() ? { company: d.fields.client.company.trim().slice(0, 120) } : {}) };
+    const hasClient = !!d.fields.client.email.trim() && !!d.fields.client.name.trim();
+    const contact = hasClient ? { name: d.fields.client.name.trim().slice(0, 120), email: d.fields.client.email.trim().toLowerCase().slice(0, 254), ...(d.fields.client.company.trim() ? { company: d.fields.client.company.trim().slice(0, 120) } : {}) } : undefined;
     let dealId = p.dealId ?? null;
-    if (a.move) dealId = await moveCardFor(ctx, { dealId, clientId: p.clientId ?? null, title: d.fields.project || d.title, contactEmail: contact.email, valueCents: cents(t.total), stage: "quoted", detail: `proposal ${p.number} sent`, by: by(me) });
-    const token = p.token ?? randomToken(18);
+    if (a.move && (p.clientId || p.dealId)) dealId = await moveCardFor(ctx, { dealId, clientId: p.clientId ?? null, title: d.fields.project || d.title, contactEmail: contact?.email ?? null, valueCents: cents(t.total), stage: "quoted", detail: `proposal ${p.number} sent`, by: by(me) });
+    const sends = await addPeople(ctx, "proposal", p, list, now);
+    const linkToken = a.copyLink ? randomToken(18) : undefined;
     await ctx.db.patch(p._id, {
-      status: "sent", token, pdfId: a.storageId, contact, fromName: d.fields.business.contact?.trim().slice(0, 120) || undefined,
+      status: "sent", pdfId: a.storageId, contact, fromName: d.fields.business.contact?.trim().slice(0, 120) || undefined,
       totalCents: cents(t.total), depositCents: cents(t.deposit), depositPct: t.depositPct, lineCount: itemRows(d.page).length,
-      message: a.message?.trim().slice(0, 2000) || undefined, sentAt: now, updatedAt: now, ...(dealId ? { dealId } : {}),
+      message: a.message?.trim().slice(0, 2000) || undefined, sentAt: now, updatedAt: now, ...(dealId ? { dealId } : {}), ...(linkToken ? { linkToken } : {}),
       asked: { ...(p.asked ?? {}), move: a.move ? "yes" : "no" },
-      history: [...p.history, { kind: "sent", at: now, by: by(me), detail: contact.email }, ...(a.move ? [{ kind: "moved", at: now, by: by(me), detail: "Quoted" }] : [])].slice(-60),
+      history: [...p.history, { kind: "sent", at: now, by: by(me), detail: sends.length ? sends.map((x) => x.email).join(", ").slice(0, 400) : "copied link" }, ...(a.move && dealId ? [{ kind: "moved", at: now, by: by(me), detail: "Quoted" }] : [])].slice(-60),
     });
     await ctx.db.patch(build._id, { renderedAt: now });
-    return { key: `proposal-sent:${p._id}:first` };
+    return { at: now, legacy: null, sends, link: linkToken ? proposalLink(linkToken) : null };
   },
 });
 
@@ -271,23 +290,53 @@ export const mailData = internalQuery({
   handler: async (ctx, { proposalId }) => {
     const p = await ctx.db.get(proposalId);
     const build = p ? await ctx.db.get(p.buildId) : null;
-    if (!p?.token || !p.contact || !build) return null;
+    if (!p || !build) return null;
     const c = await businessContact(ctx, p.businessId ?? null);
-    return { p, contact: p.contact, title: build.title, brand: await mailBrandOf(ctx, p.businessId ?? null), owner: c.ownerEmail, link: proposalLink(p.token) };
+    return { p, contact: p.contact ?? null, title: build.title, brand: await mailBrandOf(ctx, p.businessId ?? null), owner: c.ownerEmail, link: p.token ? proposalLink(p.token) : null };
   },
 });
 
 export const send = action({
-  args: { proposalId: v.id("proposals"), storageId: v.optional(v.id("_storage")), message: v.optional(v.string()), move: v.optional(v.boolean()), resend: v.optional(v.boolean()) },
-  handler: async (ctx, a): Promise<{ held: boolean }> => {
-    const m = await ctx.runMutation(internal.proposals.markSent, { proposalId: a.proposalId, storageId: a.storageId, message: a.message, move: a.move, resend: !!a.resend });
-    if (m.error !== undefined || !m.key) throw new ConvexError(m.error ?? "That didn't send. Try again.");
-    const key = m.key;
+  args: { proposalId: v.id("proposals"), storageId: v.optional(v.id("_storage")), message: v.optional(v.string()), move: v.optional(v.boolean()), resend: v.optional(v.boolean()),
+    to: v.optional(v.string()), name: v.optional(v.string()), copyLink: v.optional(v.boolean()) },
+  handler: async (ctx, a): Promise<{ held: boolean; sent: number; failed: string[]; link: string | null }> => {
+    const m = await ctx.runMutation(internal.proposals.markSent, { proposalId: a.proposalId, storageId: a.storageId, message: a.message, move: a.move, resend: !!a.resend, to: a.to, name: a.name, copyLink: a.copyLink });
+    if (m.error !== undefined || !m.at) throw new ConvexError(m.error ?? "That didn't send. Try again.");
     const d = (await ctx.runQuery(internal.proposals.mailData, { proposalId: a.proposalId }))!;
-    const r = await deliverOnce(ctx, key, "proposal", d.contact.email,
-      proposalMail(d.brand, { name: d.contact.name, number: d.p.number, title: d.title, totalCents: d.p.totalCents ?? 0, sentAt: d.p.sentAt ?? Date.now(), message: d.p.message ?? null, link: d.link }), d.brand.replyTo);
-    if (r === "held") await ctx.runMutation(internal.proposals.note, { proposalId: a.proposalId, kind: "email_held", detail: d.contact.email });
-    return { held: r === "held" };
+    const mail = (name: string | null, link: string) => proposalMail(d.brand, { name: name ?? "", number: d.p.number, title: d.title, totalCents: d.p.totalCents ?? 0, sentAt: d.p.sentAt ?? Date.now(), message: d.p.message ?? null, link });
+    const out = { held: false, sent: 0, failed: [] as string[], link: m.link ?? null };
+    const jobs = m.legacy && d.contact && d.link ? [{ key: m.legacy, email: d.contact.email, name: d.contact.name, link: d.link }]
+      : (m.sends ?? []).map((x) => ({ key: `proposal-sent:${a.proposalId}:${x.rowId}:${m.at}`, email: x.email, name: x.name, link: proposalLink(x.token) }));
+    for (const j of jobs) {
+      try {
+        const r = await deliverOnce(ctx, j.key, "proposal", j.email, mail(j.name, j.link), d.brand.replyTo, d.p.businessId ?? null);
+        if (r === "held") { out.held = true; await ctx.runMutation(internal.proposals.note, { proposalId: a.proposalId, kind: "email_held", detail: j.email }); } else out.sent++;
+      } catch { out.failed.push(j.email); }
+    }
+    return out;
+  },
+});
+
+/** "Stop this person's link" (Nov 4). */
+export const stopLink = mutation({
+  args: { proposalId: v.id("proposals"), personId: v.id("offerRecipients") },
+  handler: async (ctx, a) => {
+    const { me } = await ownerBiz(ctx);
+    const p = await ctx.db.get(a.proposalId);
+    if (!p) throw new ConvexError("That proposal isn't here.");
+    await stopPerson(ctx, "proposal", p, a.personId, by(me));
+    return null;
+  },
+});
+
+/** "New copied link" (Nov 4): the old copied link stops working. */
+export const newLink = mutation({
+  args: { proposalId: v.id("proposals") },
+  handler: async (ctx, { proposalId }) => {
+    const { me } = await ownerBiz(ctx);
+    const p = await ctx.db.get(proposalId);
+    if (!p) throw new ConvexError("That proposal isn't here.");
+    return proposalLink(await newCopiedLink(ctx, p, by(me)));
   },
 });
 
@@ -360,7 +409,7 @@ export const startContract = action({
   handler: async (ctx, { proposalId }): Promise<Id<"wsBuilds">> => {
     const t = await ctx.runQuery(internal.proposals.contractTarget, { proposalId });
     if (t.existing) return t.existing;
-    const who = t.p.contact!;
+    const who = t.p.contact ?? { name: t.p.response?.name ?? "", email: t.p.response?.email ?? "", company: t.p.response?.company }; // Q100: whoever accepted
     const buildId = await newAgreementDraft(ctx, who.company || who.name);
     await fillAgreement(ctx, buildId, {
       company: who.company ?? "", signer: { name: who.name, email: who.email }, project: t.project, depositPercent: t.depositPct,
@@ -372,26 +421,20 @@ export const startContract = action({
 
 // ---------- the client's page: /p/<token> (no account, D73) ----------
 
-async function byToken(ctx: QueryCtx | MutationCtx, token: string) {
-  if (!TOKEN.test(token)) return null;
-  const p = await ctx.db.query("proposals").withIndex("by_token", (x) => x.eq("token", token)).first();
-  return p && !OPEN.has(p.status) && p.contact ? p : null;
-}
-
 export const page = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    const p = await byToken(ctx, token);
-    if (!p) return null;
+    const f = await resolve(ctx, "proposal", token);
+    if (!f) return null;
+    const p = f.doc as Doc<"proposals">;
     focusBusiness(ctx, p.businessId);
     const b = p.businessId ? await ctx.db.get(p.businessId) : null;
     const build = await ctx.db.get(p.buildId);
     return {
-      number: p.number, title: build?.title ?? "Proposal", status: p.status as "sent" | "accepted" | "declined" | "void", contact: { name: p.contact!.name, company: p.contact!.company ?? null },
+      number: p.number, title: build?.title ?? "Proposal", status: p.status as "sent" | "accepted" | "declined" | "void", for: forWho(f), via: f.via === "link" ? "link" as const : "email" as const,
       totalCents: p.totalCents ?? 0, depositCents: p.depositCents ?? 0, depositPct: p.depositPct ?? 0, sentAt: p.sentAt ?? p.createdAt, fromName: p.fromName ?? null,
-      pdfUrl: p.pdfId ? await ctx.storage.getUrl(p.pdfId) : null,
-      response: p.response ? { kind: p.response.kind, name: p.response.name, at: p.response.at } : null,
-      business: { name: b?.name ?? "", logoUrl: b?.logoFileId ? await ctx.storage.getUrl(b.logoFileId) : null },
+      pdfUrl: p.pdfId ? await ctx.storage.getUrl(p.pdfId) : null, answer: stateFor(f),
+      business: { name: b?.name ?? "", logoUrl: b?.logoFileId ? await ctx.storage.getUrl(b.logoFileId) : null, email: b?.replyTo ?? null },
     };
   },
 });
@@ -399,45 +442,36 @@ export const page = query({
 export const markViewed = mutation({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    const p = await byToken(ctx, token);
-    if (!p || p.viewedAt || p.status !== "sent") return null;
-    const scope = (ctx as unknown as { scope?: { isOwner: boolean } }).scope;
-    if (scope?.isOwner) return null; // the owner checking the page isn't the client reading it
-    focusBusiness(ctx, p.businessId);
-    const now = Date.now();
-    await ctx.db.patch(p._id, { viewedAt: now, history: [...p.history, { kind: "viewed", at: now, detail: p.contact!.name }].slice(-60) });
+    const f = await resolve(ctx, "proposal", token);
+    if (!f || f.doc.status !== "sent") return null;
+    focusBusiness(ctx, f.doc.businessId);
+    await noteOpen(ctx, f);
     return null;
   },
 });
 
 /** Accept or decline, from the HTTP endpoint below (so the IP is known). */
 export const respondInternal = internalMutation({
-  args: { token: v.string(), kind: v.union(v.literal("accepted"), v.literal("declined")), name: v.string(), reason: v.optional(v.string()), ip: v.optional(v.string()), userAgent: v.optional(v.string()) },
+  args: { token: v.string(), kind: v.union(v.literal("accepted"), v.literal("declined")), name: v.string(), email: v.optional(v.string()), company: v.optional(v.string()), reason: v.optional(v.string()), ip: v.optional(v.string()), userAgent: v.optional(v.string()) },
   handler: async (ctx, a) => {
-    const p = await byToken(ctx, a.token);
-    if (!p) return { error: "This proposal isn't here." };
-    focusBusiness(ctx, p.businessId);
-    if (p.status === "accepted" || p.status === "declined") return { error: `This proposal was already ${p.status}.` };
-    if (p.status === "void") return { error: "This proposal was withdrawn." };
-    const name = a.name.trim().replace(/\s+/g, " ");
-    if (a.kind === "accepted" && (name.length < 2 || name.length > 120)) return { error: "Type your full name to accept." };
-    const now = Date.now();
-    const response = { kind: a.kind, name: (name || p.contact!.name).slice(0, 120), at: now, ...(a.reason?.trim() ? { reason: a.reason.trim().slice(0, 1000) } : {}), ...(a.ip ? { ip: a.ip } : {}), ...(a.userAgent ? { userAgent: a.userAgent.slice(0, 300) } : {}) };
-    await ctx.db.patch(p._id, { status: a.kind, response, updatedAt: now, history: [...p.history, { kind: a.kind, at: now, detail: `${response.name}${a.kind === "accepted" ? " (typed name)" : ""}` }].slice(-60) });
-    await ctx.scheduler.runAfter(0, internal.proposals.tellOwner, { proposalId: p._id });
-    return { ok: true, status: a.kind };
+    const f = await resolve(ctx, "proposal", a.token);
+    if (!f) return { error: "This proposal isn't here." };
+    focusBusiness(ctx, f.doc.businessId);
+    const r = await answer(ctx, "proposal", f, a, f.doc.status === "void" ? "This proposal was withdrawn." : null);
+    if ("error" in r) return r;
+    await ctx.scheduler.runAfter(0, internal.proposals.tellOwner, { proposalId: f.doc._id as Id<"proposals">, ...r.tell, company: r.tell.company ?? undefined, reason: r.tell.reason ?? undefined });
+    return { ok: true, status: r.status };
   },
 });
 
 /** Emails 22 and 23 to the owner. */
 export const tellOwner = internalAction({
-  args: { proposalId: v.id("proposals") },
-  handler: async (ctx, { proposalId }) => {
+  args: { proposalId: v.id("proposals"), key: v.string(), kind: v.union(v.literal("accepted"), v.literal("declined")), who: v.string(), company: v.optional(v.string()), reason: v.optional(v.string()), at: v.number() },
+  handler: async (ctx, { proposalId, ...r }) => {
     const d = await ctx.runQuery(internal.proposals.mailData, { proposalId });
-    if (!d?.p.response) return;
-    const r = d.p.response;
-    await deliverOnce(ctx, `proposal-${r.kind}:${proposalId}`, `proposal-${r.kind}`, d.owner, ownerProposalAnsweredMail(d.brand, {
-      kind: r.kind, who: r.name, number: d.p.number, company: d.contact.company || d.contact.name, title: d.title, totalCents: d.p.totalCents ?? 0,
+    if (!d) return;
+    await deliverOnce(ctx, r.key, `proposal-${r.kind}`, d.owner, ownerProposalAnsweredMail(d.brand, {
+      kind: r.kind, who: r.who, number: d.p.number, company: r.company || d.contact?.company || d.contact?.name || r.who, title: d.title, totalCents: d.p.totalCents ?? 0,
       at: when(r.at), reason: r.reason ?? null, link: `${SITE()}/proposals/${proposalId}`,
     }), d.brand.replyTo, d.p.businessId ?? null); // the proposal's business decides its owner's switches
   },
@@ -446,11 +480,12 @@ export const tellOwner = internalAction({
 /** POST /p-respond { token, action: "accept" | "decline", name, reason }: CORS like the signing endpoints. */
 export const respond = httpAction(async (ctx, req) => {
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store", ...corsHeaders(req) } });
-  let b: { token?: unknown; action?: unknown; name?: unknown; reason?: unknown };
+  let b: { token?: unknown; action?: unknown; name?: unknown; email?: unknown; company?: unknown; reason?: unknown };
   try { b = await req.json(); } catch { return json({ error: "Bad request." }, 400); }
   if (typeof b.token !== "string" || (b.action !== "accept" && b.action !== "decline")) return json({ error: "Bad request." }, 400);
   const r = await ctx.runMutation(internal.proposals.respondInternal, {
     token: b.token, kind: b.action === "accept" ? "accepted" : "declined", name: typeof b.name === "string" ? b.name.slice(0, 200) : "",
+    email: typeof b.email === "string" ? b.email.slice(0, 254) : undefined, company: typeof b.company === "string" ? b.company.slice(0, 200) : undefined,
     reason: typeof b.reason === "string" ? b.reason.slice(0, 1200) : undefined, ip: callerIp(req.headers), userAgent: req.headers.get("user-agent") ?? undefined,
   });
   return json(r, "error" in r && r.error ? 409 : 200);

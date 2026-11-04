@@ -11,6 +11,7 @@ export const BUSINESS_TABLES = [
   "clientPeople", "inboxItems", "inboxNotes", "clientApprovals", "deliveryFiles", "invoices", "plans", "subscriptions", "deals", "estimates", "followUps", "ledgerEntries", "quotes", "proposals", "proposalFiles", "vendors", "vendorBookings", "briefings", "vendorInvoices", "shoots", "fileRequests", "fileUploads", "calendars", "briefs", "footageStorage", "testimonials", "callSheets",
   "calendarEvents", // Phase 5b step 5
   "briefingRecipients", // D147 (Nov 4)
+  "offerRecipients", // D149 (Nov 4)
 ] as readonly string[];
 
 export const GLOBAL_TABLES = [

@@ -107,7 +107,7 @@ export const board = query({
   args: {},
   handler: async (ctx) => {
     await ownerBiz(ctx);
-    const deals = (await ctx.db.query("deals").collect()).filter((d) => !d.closedAt);
+    const deals = (await ctx.db.query("deals").collect()).filter((d) => !d.closedAt && !d.quiet); // D149: quiet leads stay off the board
     const fus = (await ctx.db.query("followUps").collect()).filter((f) => !f.doneAt && !f.draft);
     const names = new Map<string, string>();
     const out: Array<{ _id: Id<"deals">; title: string; stage: Stage; company: string | null; project: string | null; valueCents: number | null; website: boolean; followUp: string | null; updatedAt: number }> = [];
@@ -474,6 +474,7 @@ export async function moveCardFor(ctx: MutationCtx, d: { dealId?: Id<"deals"> | 
       ...(d.valueCents ? { valueCents: d.valueCents } : {}), stage: "lead", source: "hand", history: [{ kind: "created", at: now, by: d.by, detail: d.detail }], createdAt: now, updatedAt: now });
     deal = (await ctx.db.get(id))!;
   } else if (d.valueCents && !deal.valueCents) await ctx.db.patch(deal._id, { valueCents: d.valueCents });
+  if (deal.quiet) await ctx.db.patch(deal._id, { quiet: undefined }); // D149: a quiet lead goes on the board once you say so
   await advanceDeal(ctx, (await ctx.db.get(deal._id))!, d.stage, d.detail);
   return deal._id;
 }
