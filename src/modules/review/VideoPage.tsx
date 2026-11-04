@@ -819,7 +819,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
               {data.watermark && version && ready && <Watermark look={data.watermark} />}
               {noticeOn && qNotice && (
                 <div className="vquality" role="status">
-                  <span>{qNotice.split("⚙").map((part, i) => <span key={i}>{i > 0 && <Settings size={13} aria-label="settings" className="cog" />}{part}</span>)}</span>
+                  <span>{qNotice.split("⚙").map((part, i) => <span key={i}>{i > 0 && <><Settings size={13} aria-hidden className="cog" /><span className="sr-only">settings</span></>}{part}</span>)}</span>
                   <button type="button" className="icon-btn bare sm" onClick={() => setNoticeOn(false)} aria-label="Dismiss"><X size={14} /></button>
                 </div>
               )}
