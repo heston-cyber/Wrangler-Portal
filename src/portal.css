@@ -1669,6 +1669,14 @@ button.wp-hubcard[aria-busy], button.wp-tplcard[aria-busy] { opacity: 1; }
 .vlast b { font: 500 var(--fs-text-body, 15px)/1.35 var(--font-body); }
 .vlast span { font-size: var(--fs-text-small); color: var(--text-secondary); line-height: 1.45; }
 @media (max-width: 820px) { .vlast { top: 6px; left: 6px; right: 6px; padding: 8px 10px; gap: 8px; } .vlast > div { gap: 1px; } .vlast b { font-size: 14px; } .vlast span { font-size: 12px; } }
+/* Nov 4 (Heston): clients and guests playing 1080p while a 4K is there: a small note along the bottom of the picture
+   for a few seconds (the toast's look, inside the player). */
+.vquality { position: absolute; z-index: 4; left: 50%; bottom: 14px; transform: translateX(-50%); width: max-content; max-width: calc(100% - 24px); display: flex; gap: 6px; align-items: center; padding: 7px 6px 7px 14px; border-radius: 12px; background: rgba(0,0,0,.78); border: 1px solid var(--border-strong, rgba(255,255,255,.2)); color: var(--text-primary); font: 500 var(--fs-text-small, 13px)/1.4 var(--font-body); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); animation: wp-vquality-in 200ms var(--ease-out, ease-out); }
+.vquality .cog { vertical-align: -2px; margin: 0 2px; }
+.vquality .icon-btn { flex: 0 0 auto; color: var(--text-secondary); }
+@keyframes wp-vquality-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@media (max-width: 820px) { .vquality { bottom: 8px; max-width: calc(100% - 16px); padding: 5px 4px 5px 10px; font-size: 12px; line-height: 1.35; border-radius: 10px; } }
+@media (prefers-reduced-motion: reduce) { .vquality { animation: none; } }
 .vlast > .ph-only { display: none; }
 @media (max-width: 820px) { .vlast > .pc-only { display: none; } .vlast > .ph-only { display: grid; } }
 .dialog .dfoot .btn.outline { border-color: var(--border-strong, rgba(255,255,255,.4)) !important; }

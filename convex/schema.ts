@@ -231,6 +231,11 @@ export default defineSchema({
     scrubPolls: v.optional(v.number()),
     scrubReadyAt: v.optional(v.number()),
     copyMs: v.optional(v.number()), // R3: how long the Dropbox → Bunny Storage copy took
+    // Nov 4 (Heston): versions made since the 1080p / 4K quality choice. Older versions (no flag) play exactly as before.
+    qualityMenu: v.optional(v.boolean()),
+    // Nov 4: the MP4 copies the scrub library has made that answer on its CDN (360 for dragging; 1080 for a render
+    // bigger than 1080p, which plays by default). File versions with qualityMenu only.
+    scrubHeights: v.optional(v.array(v.number())),
   })
     .index("by_video", ["videoId", "number"])
     .index("by_guid", ["bunnyGuid"]),

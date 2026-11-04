@@ -47,6 +47,7 @@ import { ViewsChip, ViewsDialog } from "./Views";
 import { RoundChip } from "./VideoRows";
 import { Watermark } from "./player/Watermark";
 import { useRoundGate } from "../projects/RoundGate";
+import { QUALITY_PREF_KEY, defaultQuality, noticeKey, noticeText, qualityOptions, switchTo, type QualityId } from "./player/quality";
 
 export default function VideoPage({ videoId, versionNumber, noteId }: { videoId: Id<"videos">; versionNumber: number | null; noteId: string | null }) {
   const viewer = useViewer();
@@ -176,7 +177,13 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   // A version whose 1080p file failed before opens on the stream (remembered per browser; see the fallback below).
   // (Renamed Oct 22: flags saved by a false error on the iPhone are ignored.)
   const streamOnlyKey = version ? `wr.streamOnly2.${version.bunnyGuid || version._id}` : "";
-  const [quality, setQuality] = useState<"file" | "stream">(() => (mp4H && !(version?.streamOnly && !isFile) && !readFlag(streamOnlyKey) ? "file" : "stream"));
+  // Nov 4 (Heston): versions made since then list only 1080p and, when there is one, 4K; 1080p plays by default and a
+  // viewer's own 4K choice (one key per browser) wins. Older versions keep the menu and picture below (see player/quality.ts).
+  const qOptions = useMemo(() => qualityOptions(version?.media.quality), [version?.media.quality]);
+  const [qPick, setQPick] = useState<QualityId | null>(() => defaultQuality(qOptions, readPref(QUALITY_PREF_KEY, "")));
+  const qPicked = qOptions.find((o) => o.id === qPick) ?? null;
+  const chose = useRef(false); // the viewer picked in this visit: the default never takes over again
+  const [quality, setQuality] = useState<"file" | "stream">(() => ((qPicked || mp4H) && !(version?.streamOnly && !isFile) && !readFlag(streamOnlyKey) ? "file" : "stream"));
   const ready = version?.status === "ready";
   // C8: the owner's browser makes a version's preview picture the first time it opens it (once per version).
   const posterTried = useRef<string | null>(null);
@@ -188,7 +195,9 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   }, [owner, version?._id, ready, version?.needsPoster]);
   // One quiet retry of the full file before falling back (see the error handler below).
   const [retryN, setRetryN] = useState(0);
+  const fallbackSrc = !version ? null : isFile ? scrubHls : version.media.hls; // the 360p copy, or the stream
   const src = !version || !ready ? null
+    : qPicked ? (quality === "stream" && fallbackSrc ? fallbackSrc : isFile && retryN ? `${qPicked.url}#retry${retryN}` : qPicked.url)
     : isFile ? (quality === "stream" && scrubHls ? scrubHls : fileUrl && retryN ? `${fileUrl}#retry${retryN}` : fileUrl)
     : quality === "file" && mp4H ? version.media.mp4[mp4H] : version.media.hls;
   // Scrub copy: the best MP4 copy up to 720p that fits (80 MB on computers, 30 MB on phones), downloaded once the video is ready.
@@ -253,13 +262,48 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       return;
     }
     writeFlag(streamOnlyKey);
-    // A review render's fallback is only 360p, so other devices keep trying the full file.
-    if (!isFile) void markFileFailed({ versionId: version._id, code: player.errorCode ?? undefined, ...shareArgs }).catch(() => {});
+    // A review render's fallback is only 360p, so other devices keep trying the full file. (Nov 4: so do they when it
+    // was a 4K copy that failed here; the 1080p copy may still play there.)
+    if (!isFile && qPicked?.id !== "4k") void markFileFailed({ versionId: version._id, code: player.errorCode ?? undefined, ...shareArgs }).catch(() => {});
     void logPlayback({ versionId: version._id, kind: "fallback", t: d?.t, src: "stream", ua: navigator.userAgent, ...shareArgs }).catch(() => {});
     setQuality("stream");
-    showToast(isFile ? "The full-size render hit a playback error here, so this version switched to its 360p copy. Same frames." : "The 1080p file hit a playback error here, so this version switched to the stream. Same frames.");
+    const what = !qPicked ? null : isFile ? (qPicked.id === "4k" ? `${qPicked.label} render` : "1080p copy") : `${qPicked.label} file`;
+    showToast(isFile
+      ? `The ${what ?? "full-size render"} hit a playback error here, so this version switched to its 360p copy. Same frames.`
+      : `The ${what ?? "1080p file"} hit a playback error here, so this version switched to the stream. Same frames.`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player.errorCode]);
+  // Nov 4: picking 1080p or 4K in the cog keeps the frame (and keeps playing), the way the fallback above does.
+  const chooseQuality = (id: QualityId) => {
+    chose.current = true;
+    writePref(QUALITY_PREF_KEY, id);
+    if (id === qPick && quality === "file") return;
+    resumeAt.current = { f: player.clock.get(), play: player.playing };
+    setRetryN(0);
+    setQPick(id);
+    setQuality("file");
+  };
+  // When a copy becomes ready (a 4K render's 1080p copy), the default takes over only while the video is paused at its
+  // very start, never mid-play; a viewer's own choice stays.
+  const qKey = qOptions.map((o) => o.id).join();
+  useEffect(() => {
+    const next = switchTo({ options: qOptions, current: qPick, pref: readPref(QUALITY_PREF_KEY, ""), chose: chose.current, playing: player.playing, frame: player.clock.get() });
+    if (next) setQPick(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qKey, player.playing]);
+  // Clients and guests: playing 1080p while a 4K is there gets a small note for a few seconds when playback starts,
+  // once per version per browser.
+  const qNotice = owner ? null : noticeText(qOptions);
+  const [noticeOn, setNoticeOn] = useState(false);
+  const noticeDone = useRef(false);
+  useEffect(() => {
+    if (!player.playing || !qNotice || !version || quality !== "file" || qPick !== "1080" || noticeDone.current) return;
+    noticeDone.current = true;
+    if (readFlag(noticeKey(version._id))) return;
+    writeFlag(noticeKey(version._id));
+    setNoticeOn(true);
+  }, [player.playing, qNotice, version, quality, qPick]);
+  useEffect(() => { if (!noticeOn) return; const t = setTimeout(() => setNoticeOn(false), 5000); return () => clearTimeout(t); }, [noticeOn]);
   useEffect(() => {
     if (!player.ready || resumeAt.current === null) return;
     const { f, play } = resumeAt.current;
@@ -635,8 +679,9 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       {SPEEDS.map((s) => <MenuItem key={s} keepOpen checked={rate === s} onSelect={() => setRate(s)}>{s}×</MenuItem>)}
       <MenuSep />
       <MenuLabel>Picture</MenuLabel>
-      {mp4H > 0 && <MenuItem checked={quality === "file" || (isFile && !scrubHls)} onSelect={() => setQuality("file")}>{isFile ? `The render, ${mp4H}p (exact frames)` : `${mp4H}p file (exact frames)`}</MenuItem>}
-      {hasStream && <MenuItem checked={quality === "stream" && !(isFile && !scrubHls)} onSelect={() => setQuality("stream")}>{isFile ? "Small copy, 360p (slow connections)" : player.streamTop ? `Stream, ${player.streamTop}p (highest; frames approximate)` : version?.height && version.height > mp4H ? `Stream, up to ${version.height}p (adapts to connection)` : "Stream (adapts to connection)"}</MenuItem>}
+      {qOptions.length > 0 && qOptions.map((o) => <MenuItem key={o.id} checked={quality === "file" && qPick === o.id} onSelect={() => chooseQuality(o.id)}>{o.label}</MenuItem>)}
+      {qOptions.length === 0 && mp4H > 0 && <MenuItem checked={quality === "file" || (isFile && !scrubHls)} onSelect={() => setQuality("file")}>{isFile ? `The render, ${mp4H}p (exact frames)` : `${mp4H}p file (exact frames)`}</MenuItem>}
+      {qOptions.length === 0 && hasStream && <MenuItem checked={quality === "stream" && !(isFile && !scrubHls)} onSelect={() => setQuality("stream")}>{isFile ? "Small copy, 360p (slow connections)" : player.streamTop ? `Stream, ${player.streamTop}p (highest; frames approximate)` : version?.height && version.height > mp4H ? `Stream, up to ${version.height}p (adapts to connection)` : "Stream (adapts to connection)"}</MenuItem>}
       <MenuSep />
       {!noNotes && <MenuItem checked={showDrawings} onSelect={() => setShowDrawings(!showDrawings)}>Show note drawings</MenuItem>}
       <MenuItem icon={<Keyboard size={16} />} kbd="?" onSelect={() => setDialog("keys")}>Keyboard shortcuts</MenuItem>
@@ -772,6 +817,12 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                 );
               }}</AtFrame>
               {data.watermark && version && ready && <Watermark look={data.watermark} />}
+              {noticeOn && qNotice && (
+                <div className="vquality" role="status">
+                  <span>{qNotice.split("⚙").map((part, i) => <span key={i}>{i > 0 && <Settings size={13} aria-label="settings" className="cog" />}{part}</span>)}</span>
+                  <button type="button" className="icon-btn bare sm" onClick={() => setNoticeOn(false)} aria-label="Dismiss"><X size={14} /></button>
+                </div>
+              )}
               {lastNotice && (
                 <div className="vlast" role="status">
                   <AlertTriangle size={18} />
