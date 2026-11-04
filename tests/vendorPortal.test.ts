@@ -96,7 +96,8 @@ describe("the vendor side", () => {
     // A briefing sent to Jordan: on Home to read, then "I've read it"; the owner sees Read.
     const brief = await w.heston.mutation(api.briefings.create, { bookingId: kA }) as Id<"briefings">;
     expect(await jordan.query(api.vendorPortal.briefing, { briefingId: brief })).toBeNull(); // a draft isn't theirs to see
-    await w.heston.action(api.briefings.send, { briefingId: brief, storageId: await pdf(w) });
+    const jordanId = (await w.heston.query(api.bookings.get, { bookingId: kA })).vendorId;
+    await w.heston.action(api.briefings.share, { briefingId: brief, storageId: await pdf(w), to: [{ vendorId: jordanId, email: "ignored@example.com" }] }); // D147: Share
     expect((await jordan.query(api.vendorPortal.home, { businessId: A })).toRead.map((x: { _id: string }) => x._id)).toEqual([brief]);
     expect(await jordan.query(api.vendorPortal.briefing, { briefingId: brief })).toMatchObject({ title: "Shoot brief · 26127 Launch", kind: "Shoot brief", readAt: null, pdfUrl: expect.any(String) });
     await jordan.mutation(api.vendorPortal.markRead, { briefingId: brief });

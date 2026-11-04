@@ -398,6 +398,23 @@ export function briefingMail(b: MailBrand, d: { name: string; kind: string; proj
   ], signoff(b), `${d.title} · ${dateRange(d.start, d.end)}`);
 }
 
+// ---------- 58: a briefing sent to anyone (D147, S5 · Phase 3c 863:17928): a no-login link, one per person ----------
+// The rows come from the briefing itself (Q91 g): its dates field and its project when they're set, and its title.
+export function briefingLinkMail(b: MailBrand, d: { name: string | null; kind: string; project: string | null; title: string; dates: string | null; headings: string[]; note: string | null; link: string }): Mail {
+  const sender = first(b.ownerName) || b.name;
+  const parts = d.headings.slice(0, 4).map((h, i) => (i === 0 ? h : h.toLowerCase()));
+  const rows = [...(d.dates ? [{ label: "Dates", value: d.dates, big: true }] : []), ...(d.project ? [{ label: "Project", value: d.project }] : []), { label: "Brief", value: d.title }];
+  return mk(b, "updates", d.project ? `Briefing: ${d.project}` : `Briefing from ${b.name}`, [
+    { t: "p", text: first(d.name) ? `Hi ${first(d.name)},` : "Hello," },
+    { t: "p", text: `${sender} sent you a briefing: the ${d.kind.toLowerCase()}${d.project ? ` for ${d.project}` : ""}.` },
+    ...(d.note ? [{ t: "p", text: d.note } as Block] : []),
+    { t: "sums", rows },
+    ...(parts.length ? [{ t: "p", text: `${andList(parts)} ${parts.length === 1 ? "is" : "are"} in the brief.`, tone: "muted" } as Block] : []),
+    { t: "p", text: "Read it on the page. No login needed. You can press “I’ve read it” there, and download it as a PDF." },
+    { t: "button", label: "Read the briefing", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), d.dates ? `${d.title} · ${d.dates}` : d.title);
+}
+
 // ---------- the vendor portal invite (Phase 3c step 4; the portal invite's layout, 03b) ----------
 export function vendorInviteMail(b: MailBrand, d: { name: string; email: string; hasAccount: boolean }): Mail {
   const link = `${SITE()}/?invited=${encodeURIComponent(d.email).replace(/%40/g, "@")}&side=vendor`; // lands on the vendor side

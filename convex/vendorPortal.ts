@@ -67,6 +67,10 @@ const ownerOf = async (ctx: Ctx, biz: Id<"businesses">) => { const b = await ctx
 async function bookingRow(ctx: Ctx, x: Doc<"vendorBookings">, today: string) {
   const p = await ctx.db.get(x.projectId);
   const briefs = (await ctx.db.query("briefings").withIndex("by_booking", (q) => q.eq("bookingId", x._id)).collect()).filter((b) => b.status === "sent" && b.sentTo?.vendorId === x.vendorId);
+  for (const r of await ctx.db.query("briefingRecipients").withIndex("by_vendor", (q) => q.eq("vendorId", x.vendorId)).collect()) { // D147: emailed to them
+    const b = await ctx.db.get(r.briefingId);
+    if (b && b.status === "sent" && b.projectId === x.projectId && !briefs.some((y) => y._id === b._id)) briefs.push({ ...b, readAt: r.readAt });
+  }
   const brief = briefs.sort((a, b) => (b.sentAt ?? 0) - (a.sentAt ?? 0))[0] ?? null;
   return {
     _id: x._id, project: p ? label(p) : "A project", projectName: p?.name ?? "A project", role: x.role, start: x.start, end: x.end, days: daysIn(x.start, x.end),
@@ -80,19 +84,24 @@ const myBookings = async (ctx: Ctx, vendorId: Id<"vendors">) => ctx.db.query("ve
 async function briefRow(ctx: Ctx, x: Doc<"briefings">) {
   const build = await ctx.db.get(x.buildId);
   const k = x.bookingId ? await ctx.db.get(x.bookingId) : null;
-  const p = await ctx.db.get(x.projectId);
+  const p = x.projectId ? await ctx.db.get(x.projectId) : null;
   return {
-    _id: x._id, title: build?.title ?? "Briefing", kind: x.starter === "edit" ? "Edit brief" : x.starter === "shoot" ? "Shoot brief" : "Brief", project: p ? label(p) : "A project",
+    _id: x._id, title: build?.title ?? "Briefing", kind: x.starter === "edit" ? "Edit brief" : x.starter === "shoot" ? "Shoot brief" : "Brief", project: p ? label(p) : null,
     role: k?.role ?? null, start: k?.start ?? null, end: k?.end ?? null, sentAt: x.sentAt ?? 0, readAt: x.readAt ?? null,
   };
 }
-/** Briefings sent to this vendor, newest first. */
+/** Briefings sent to this vendor, newest first: through a booking before D147, or emailed to them since (their own
+ *  "I've read it" is on their recipient row). */
 async function myBriefings(ctx: Ctx, vendorId: Id<"vendors">) {
-  const out = [];
+  const out = new Map<string, Doc<"briefings">>();
   for (const k of await myBookings(ctx, vendorId))
     for (const b of await ctx.db.query("briefings").withIndex("by_booking", (q) => q.eq("bookingId", k._id)).collect())
-      if (b.status === "sent" && b.sentTo?.vendorId === vendorId) out.push(b);
-  return out.sort((a, b) => (b.sentAt ?? 0) - (a.sentAt ?? 0));
+      if (b.status === "sent" && b.sentTo?.vendorId === vendorId) out.set(b._id, b);
+  for (const r of await ctx.db.query("briefingRecipients").withIndex("by_vendor", (q) => q.eq("vendorId", vendorId)).collect()) {
+    const b = await ctx.db.get(r.briefingId);
+    if (b && b.status === "sent") out.set(b._id, { ...b, readAt: r.readAt });
+  }
+  return [...out.values()].sort((a, b) => (b.sentAt ?? 0) - (a.sentAt ?? 0));
 }
 
 // ---------- who they are, and the businesses they work for ----------
@@ -218,8 +227,12 @@ export const briefings = query({
 async function sentToMe(ctx: Ctx, briefingId: string) {
   const id = ctx.db.normalizeId("briefings", briefingId);
   const x = id ? await ctx.db.get(id) : null;
-  const me = await mine(ctx, x, (vid) => x!.status === "sent" && x!.sentTo?.vendorId === vid);
-  return me && x ? { me, x } : null;
+  // D147: emailed to them as a vendor on the list (their recipient row), or sent through a booking before D147.
+  const rows = x ? await ctx.db.query("briefingRecipients").withIndex("by_briefing", (q) => q.eq("briefingId", x._id)).collect() : [];
+  const me = await mine(ctx, x, (vid) => x!.status === "sent" && (x!.sentTo?.vendorId === vid || rows.some((r) => r.vendorId === vid)));
+  if (!me || !x) return null;
+  const r = rows.find((y) => y.vendorId === me.vendor._id) ?? null;
+  return { me, x: r ? { ...x, readAt: r.readAt } : x, r };
 }
 
 /** One briefing (733:3985): the PDF that was sent, read-only. */
@@ -240,7 +253,14 @@ export const markRead = mutation({
     if (!r) throw new ConvexError("That briefing isn't here.");
     if (r.x.readAt) return null;
     const now = Date.now();
-    await ctx.db.patch(r.x._id, { readAt: now, updatedAt: now, history: [...r.x.history, { kind: "read", at: now, by: r.me.vendor.name }].slice(-60) });
+    const x = (await ctx.db.get(r.x._id))!;
+    if (r.r) { // D147: emailed to them; the same "I've read it" as on their link
+      await ctx.db.patch(r.r._id, { readAt: now, ...(r.r.openedAt ? {} : { openedAt: now }) });
+      await ctx.db.patch(x._id, { updatedAt: now, history: [...x.history, { kind: "read", at: now, by: r.me.vendor.name }].slice(-60) });
+      await ctx.scheduler.runAfter(0, internal.vendorPortal.mailOwner, { what: "recipient-read", id: r.r._id });
+      return null;
+    }
+    await ctx.db.patch(x._id, { readAt: now, updatedAt: now, history: [...x.history, { kind: "read", at: now, by: r.me.vendor.name }].slice(-60) });
     await ctx.scheduler.runAfter(0, internal.vendorPortal.mailOwner, { what: "read", id: r.x._id }); // Nov 2
     return null;
   },
@@ -290,10 +310,20 @@ export const ownerMailData = internalQuery({
       const rid = ctx.db.normalizeId("briefings", id);
       const x = rid ? await ctx.db.get(rid) : null;
       if (!x || !x.readAt || !x.sentTo) return null;
-      const p = await ctx.db.get(x.projectId);
+      const p = x.projectId ? await ctx.db.get(x.projectId) : null;
       const build = await ctx.db.get(x.buildId);
       return { ...(await brandOf(x.businessId ?? null)), key: `briefing-read:${x._id}:${x.sentAt ?? 0}`, kind: "briefing_read",
         mail: { k: "read" as const, vendor: x.sentTo.name, title: build?.title ?? "The brief", project: p ? label(p) : "a project", link: `${SITE()}/vendors/briefings/${x._id}` } };
+    }
+    if (what === "recipient-read") { // D147: someone it was emailed to pressed "I've read it" (their link or their portal)
+      const rid = ctx.db.normalizeId("briefingRecipients", id);
+      const r = rid ? await ctx.db.get(rid) : null;
+      const x = r ? await ctx.db.get(r.briefingId) : null;
+      if (!r || !r.readAt || !x) return null;
+      const p = x.projectId ? await ctx.db.get(x.projectId) : null;
+      const build = await ctx.db.get(x.buildId);
+      return { ...(await brandOf(x.businessId ?? null)), key: `briefing-read:${r._id}`, kind: "briefing_read",
+        mail: { k: "read" as const, vendor: r.name || r.email, title: build?.title ?? "The brief", project: p ? label(p) : "no project", link: `${SITE()}/vendors/briefings/${x._id}` } };
     }
     if (what === "w9" || what === "w9-replaced") {
       const vendor = (await ctx.db.query("vendors").collect()).find((x) => x.w9 && String(x.w9.fileId) === id);

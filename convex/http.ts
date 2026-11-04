@@ -17,6 +17,7 @@ import { callback as wsDropboxCallback } from "./wsArchive";
 import { connectWebhook } from "./payments";
 import { webflow as webflowLeads } from "./leads";
 import { agentHttp as siteWatchAgent } from "./siteWatch";
+import { pdfRoute as briefingPdf } from "./briefings";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);
@@ -75,6 +76,8 @@ http.route({ path: "/calendar/callback", method: "GET", handler: calendarCallbac
 // Phase 4: big files for a file request, in pieces (fileRequests.ts).
 http.route({ path: "/upload/chunk", method: "POST", handler: uploadChunk });
 http.route({ path: "/upload/chunk", method: "OPTIONS", handler: uploadChunkPreflight });
+// D147 (Nov 4): a shared briefing's PDF by its link (/b/<token> shows it); off when the link is turned off.
+http.route({ pathPrefix: "/b-pdf/", method: "GET", handler: briefingPdf });
 http.route({ path: "/email/stop", method: "GET", handler: emailStop });
 http.route({ path: "/email/stop", method: "POST", handler: emailStop });
 // Phase 5c (Nov 3): the site-watch agent's door (key-locked; Site watch's own list only).

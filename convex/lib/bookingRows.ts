@@ -18,7 +18,13 @@ export async function rowOf(ctx: QueryCtx, x: Doc<"vendorBookings">, today: stri
   const p = await ctx.db.get(x.projectId);
   const briefs = await ctx.db.query("briefings").withIndex("by_booking", (q) => q.eq("bookingId", x._id)).collect();
   const sent = briefs.filter((b) => b.status === "sent");
-  const brief = sent.some((b) => b.readAt) ? "read" : sent.length ? "sent" : briefs.length ? "draft" : "none";
+  // D147: this vendor's own "I've read it" on a briefing emailed to them (their recipient row) counts too.
+  let read = sent.some((b) => b.readAt);
+  if (!read) for (const b of sent) {
+    const r = (await ctx.db.query("briefingRecipients").withIndex("by_briefing", (q) => q.eq("briefingId", b._id)).collect()).find((y) => y.vendorId === x.vendorId);
+    if (r?.readAt) { read = true; break; }
+  }
+  const brief = read ? "read" : sent.length ? "sent" : briefs.length ? "draft" : "none";
   return {
     brief,
     _id: x._id, vendorId: x.vendorId, vendor: vendor?.name ?? "A vendor", projectId: x.projectId, project: p ? label(p) : "A project",

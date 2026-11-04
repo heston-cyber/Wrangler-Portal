@@ -236,6 +236,7 @@ export const vendors = query({
     const booked = new Set(bookings.map((b) => String(b.vendorId)));
     const noW9 = vendorRows.filter((v) => !v.w9 && booked.has(String(v._id)));
     const briefings = (await ctx.db.query("briefings").collect()).filter((b) => b.status === "sent");
+    const opened = new Set((await ctx.db.query("briefingRecipients").collect()).filter((r) => r.openedAt).map((r) => String(r.briefingId)));
 
     const needs: Array<{ kind: "waiting" | "invoice" | "w9"; id: string; vendor: string; role: string | null; meta: string; at: number }> = [];
     for (const b of waiting.slice(0, 3)) {
@@ -266,7 +267,7 @@ export const vendors = query({
       tiles: { booked: inWeek.length, shoots: new Set(inWeek.map((b) => String(b.projectId))).size, waiting: waiting.length, invoices: toApprove.length + toPay.length, w9: noW9.length },
       needs: needs.slice(0, 3).sort((a, b) => a.at - b.at), needsTotal,
       week: week.slice(0, 4), weekTotal: week.length,
-      briefings: { sent: briefings.length, notOpened: briefings.filter((b) => !b.readAt).length },
+      briefings: { sent: briefings.length, notOpened: briefings.filter((b) => !b.readAt && !b.linkOpens && !opened.has(String(b._id))).length }, // D147: emailed people and the copied link count
       payments: { toApprove: toApprove.length, toPay: toPay.length, paidMonth: paidMonth.length },
     };
   },

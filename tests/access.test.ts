@@ -55,6 +55,10 @@ const OPEN: Record<string, string> = {
   "subscriptions.setupStart": "the same link: a SetupIntent for that subscription's customer only; a missing token is refused",
   "subscriptions.setupDone": "the same link: checks the SetupIntent is that subscription's own before using it; a missing token is refused",
   "subscriptions.mine": "a client's subscriptions, found by their own email; anyone else gets []",
+  // D147 (Nov 4): a briefing's no-login link (/b/<token>, email 58). Tested in briefingsShare.test.ts.
+  "briefings.page": "a briefing link: answers only for a shared briefing's own long random token (a person's own, or the copied link); a turned-off link answers Withdrawn with the business and title only",
+  "briefings.opened": "the same link: counts an open of that briefing only; a missing token, a draft or a turned-off link does nothing; rate-limited",
+  "briefings.markRead": "the same link: records \"I've read it\" for that briefing only (named only on a person's own link); a missing token is refused; rate-limited",
   "siteWatch.summary": "Phase 5c: open and urgent counts for the portal's admins (ALLOWED_EMAILS); null for anyone else, tested in siteWatch.test.ts",
   // Phase 5b step 4 (D127): a call-sheet guest's link (/guest/<token>, email 41), signed out.
   "guests.intro": "a guest's link: answers only for that pass's own long random token, with the sheet's title, day, the guest's first name and a masked email; tested in callSheetGuests.test.ts",

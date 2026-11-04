@@ -110,8 +110,11 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "bookings.form": {}, "bookings.list": {}, "bookings.forProject": { projectId: "nope" }, "bookings.forVendor": { vendorId: "nope" }, "bookings.get": { bookingId: "nope" },
     "bookings.create": { vendorId: ids.vendorId, projectId: ids.projectId, role: "Shooter", start: "2030-01-01", end: "2030-01-02", cents: 100000, unit: "day" }, "bookings.cancel": { bookingId: ids.bookingId },
     "briefings.templates": {}, "briefings.list": {}, "briefings.forVendor": { vendorId: "nope" }, "briefings.get": { briefingId: "nope" }, "briefings.create": { bookingId: ids.bookingId },
-    "briefings.setBooking": { briefingId: ids.briefingId, bookingId: ids.bookingId }, "briefings.deleteDraft": { briefingId: ids.briefingId }, "briefings.copy": { briefingId: ids.briefingId },
-    "briefings.send": { briefingId: ids.briefingId, resend: true },
+    "briefings.deleteDraft": { briefingId: ids.briefingId }, "briefings.copy": { briefingId: ids.briefingId },
+    // D147 (Nov 4): briefings sent freely: Send to, Share (email 58 and Copy link), the link switch, and the no-login page
+    "briefings.setDetails": { briefingId: ids.briefingId, projectId: null, sendTo: [{ email: "pat@example.com" }] }, "briefings.setLinkOff": { briefingId: ids.briefingId, off: true },
+    "briefings.share": { briefingId: ids.briefingId, to: [{ email: "pat@example.com" }], copyLink: true },
+    "briefings.page": { token: "nope-nope-nope-nope" }, "briefings.opened": { token: "nope-nope-nope-nope" }, "briefings.markRead": { token: "nope-nope-nope-nope" },
     "vendors.invite": { vendorId: ids.vendorId },
     "vendorPortal.businesses": {}, "vendorPortal.counts": { businessId: ids.businessId }, "vendorPortal.home": {}, "vendorPortal.bookings": {}, "vendorPortal.booking": { bookingId: "nope" },
     "vendorPortal.accept": { bookingId: ids.bookingId }, "vendorPortal.decline": { bookingId: ids.bookingId, reason: "Too far" }, "vendorPortal.briefings": {},

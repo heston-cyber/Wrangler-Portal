@@ -906,21 +906,42 @@ export default defineSchema({
   // Phase 3c step 3 · briefings (D97, S5 · Phase 3c 730:4522, 731:3904): a shoot or edit brief made in the builder (its
   // wsBuilds row, kind "briefing"), sent to a vendor booked on the project (email 25). The vendor reads the PDF that was
   // sent and presses "I've read it" in their portal (step 4). Never signed.
+  // D147 (Nov 3, built Nov 4): a briefing no longer needs a booked vendor. The project is optional; "Send to" holds
+  // vendors (booked or not) and typed emails; Share emails each of them their own link (briefingRecipients), and a
+  // copied link (linkToken) counts opens without names. linkOff turns every link off (and back on).
   briefings: defineTable({
     businessId: v.optional(v.id("businesses")),
     buildId: v.id("wsBuilds"),
-    projectId: v.id("projects"),
+    projectId: v.optional(v.id("projects")),
     bookingId: v.optional(v.id("vendorBookings")),      // who it's for (a booking on this project)
     starter: v.optional(v.union(v.literal("shoot"), v.literal("edit"))),
     status: v.union(v.literal("draft"), v.literal("sent")),
     pdfId: v.optional(v.id("_storage")),                // frozen at send: what the vendor reads
     sentAt: v.optional(v.number()),
     sentTo: v.optional(v.object({ vendorId: v.id("vendors"), name: v.string(), email: v.string() })),
-    readAt: v.optional(v.number()),                     // "I've read it" (the vendor side, step 4)
+    readAt: v.optional(v.number()),                     // "I've read it" (the vendor side, step 4; briefings sent before D147)
+    sendTo: v.optional(v.array(v.object({ vendorId: v.optional(v.id("vendors")), email: v.string(), name: v.optional(v.string()) }))), // the draft's Send to
+    linkToken: v.optional(v.string()),                  // Copy link: anyone with it can read; opens counted, not named
+    linkOff: v.optional(v.boolean()),                   // Q91 (a)(b): off stops every link, emailed ones too; can be turned back on
+    linkOpens: v.optional(v.number()),
+    linkReads: v.optional(v.number()),                  // "I've read it" pressed on the copied link (no name)
     history: v.array(v.object({ kind: v.string(), at: v.number(), by: v.optional(v.string()), detail: v.optional(v.string()) })),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_build", ["buildId"]).index("by_project", ["projectId"]).index("by_booking", ["bookingId"]),
+  }).index("by_build", ["buildId"]).index("by_project", ["projectId"]).index("by_booking", ["bookingId"]).index("by_link_token", ["linkToken"]),
+  // D147 (Q91 d): each person a briefing was emailed to, with their own link (/b/<token>): who opened it and who read it.
+  briefingRecipients: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    briefingId: v.id("briefings"),
+    email: v.string(),                                  // lower-case
+    name: v.optional(v.string()),
+    vendorId: v.optional(v.id("vendors")),              // picked from the vendor list (also shows in their vendor portal)
+    token: v.string(),
+    sentAt: v.number(),
+    openedAt: v.optional(v.number()),
+    opens: v.number(),
+    readAt: v.optional(v.number()),
+  }).index("by_briefing", ["briefingId"]).index("by_token", ["token"]).index("by_vendor", ["vendorId"]),
 
   // Phase 3c step 2 · bookings (S5 · Phase 3c 732:3051 Book a vendor, 730:2326 Crew card, 730:3942 Vendors › Bookings).
   // A vendor offered work on a project: role, dates, the agreed rate. Offered and accepted bookings show on the
