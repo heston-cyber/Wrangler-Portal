@@ -58,11 +58,11 @@ export default function VendorsPage() {
 
 // ---------- Add vendor / edit details (732:2909) ----------
 
-export function VendorDialog({ onClose, vendor }: { onClose: () => void; vendor?: Details & { _id: Id<"vendors"> } }) {
+export function VendorDialog({ onClose, vendor, invite: inviteFirst = true }: { onClose: () => void; vendor?: Details & { _id: Id<"vendors"> }; invite?: boolean }) {
   const add = useMutation(api.vendors.add);
   const update = useMutation(api.vendors.update);
   const [d, setD] = useState<Details>(vendor ? { ...vendor } : { name: "", email: "", roles: [], rates: [] });
-  const [invite, setInvite] = useState(true);
+  const [invite, setInvite] = useState(inviteFirst); // the Vendors overview's Add a vendor starts unticked, Invite a vendor ticked
   const [other, setOther] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);

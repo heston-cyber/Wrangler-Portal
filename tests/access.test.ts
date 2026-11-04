@@ -65,7 +65,7 @@ const KEYED = new Set(["r1results.report"]);
 // Phase 5b step 4 (D127): the only functions a call-sheet guest's login may call, and why. Each finds the guest's own pass
 // by its token and re-checks the sheet on every call (lib/guests.ts); tested in callSheetGuests.test.ts.
 const GUEST: Record<string, string> = {
-  "guests.home": "the guest's own active call sheets (passes found by their own email), one business at a time",
+  "guests.home": "the guest's own call sheets (passes found by their own email), one business at a time: active ones, and ended ones that went to them (title and day only); the switcher's businesses and their unopened counts from their own passes",
   "guests.sheet": "one of the guest's own sheets by its link token: the sent copy while active, else Access ended (title and day only)",
   "guests.opened": "records the guest opening their own sheet, only while it's active",
 };

@@ -1,0 +1,52 @@
+/* Nov 4 (Q88, Q89, Q93/Q94): screen states. Kept in its own file so it doesn't collide with other work on portal.css. */
+
+/* ---------- the guest's list: Today, Upcoming, Ended (858:94294, phone 859:9381) and "Sheets from" (859:9250) ---------- */
+.gst-brand { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.gst-switch.vp-switch { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 12px; text-align: left; min-width: 216px; padding: 8px 12px; border-radius: 12px; background: rgba(16, 11, 13, .55); box-shadow: inset 0 0 0 1px var(--border-hairline); color: var(--text-primary); cursor: pointer; border: 0; }
+.gst-switch .wp-label { grid-column: 1; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-secondary); }
+.gst-switch b { grid-column: 1; font-weight: 500; font-size: var(--fs-text-small); }
+.gst-switch > .wp-icon { grid-column: 2; grid-row: 1 / 3; color: var(--accent); }
+.gst-swphone { padding: 0 16px 8px; }
+.gst-swphone .gst-switch { width: 100%; }
+.gst-lede { margin: 0 0 8px; font-size: var(--fs-text-small); }
+.gst-group.glass { display: grid; gap: 4px; padding: 18px 20px 10px; border-radius: 20px; box-shadow: none; background-color: rgba(16, 11, 13, .72); }
+.gst-group .wp-eyebrow .n { margin-left: 4px; color: var(--text-secondary); }
+.gst-item { display: flex; align-items: center; gap: 14px; padding: 12px 0; color: var(--text-primary); text-decoration: none; }
+.gst-item + .gst-item { border-top: 1px solid var(--border-hairline); }
+.gst-item > .wp-icon:first-child { color: var(--accent); flex: none; }
+.gst-item > .wp-icon:last-child { color: var(--accent); flex: none; margin-left: auto; }
+.gst-item .txt { flex: 1; min-width: 0; display: grid; gap: 2px; overflow-wrap: anywhere; }
+.gst-item .txt .t { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+.gst-item .txt b { font-weight: 500; }
+.gst-item .txt .secondary { font-size: var(--fs-text-small); }
+.gst-item.ended { opacity: .5; }
+.gst-item.ended:hover, .gst-item.ended:focus-visible { opacity: .75; }
+.gst-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); background: var(--surface-block); }
+.gst-chip::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.gst-chip.warn { color: var(--text-warning, #f5b400); background: rgba(245, 180, 0, .14); }
+.gst-footline { width: min(1188px, 100%); margin: 0 auto; padding: 0 4px 40px; box-sizing: border-box; }
+@media (max-width: 1240px) { .gst-footline { padding-left: 24px; padding-right: 24px; } }
+@media (max-width: 900px) { .gst-footline { padding: 0 16px 32px; } .gst-group.glass { padding: 16px 16px 8px; } }
+
+/* ---------- the reader pages inside the portal (857:8881, 857:9240; phone 857:9610, 857:9736) ---------- */
+.cs-read .gst-main.csr { width: 100%; padding: 0; grid-template-columns: minmax(0, 1fr) 320px; }
+.csr-head { grid-column: 1 / -1; display: grid; gap: 4px; }
+.csr-head .wp-h2 { margin: 0; overflow-wrap: anywhere; }
+.csr-whole { display: flex; align-items: center; gap: 12px; width: 100%; }
+.csr-whole > .wp-icon:first-child { color: var(--accent); flex: none; }
+.csr-whole .txt { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.csr-whole .txt b { font-weight: 500; }
+.csr-whole .txt .secondary { font-size: var(--fs-text-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gst-whole summary { flex-direction: column; align-items: stretch; gap: 12px; }
+@media (max-width: 900px) {
+  .cs-read .gst-main.csr { grid-template-columns: minmax(0, 1fr); }
+  .csr-head .wp-h2 { font-size: 26px; line-height: 1.2; }
+}
+
+/* ---------- overviews loading (Q89): a dash for each number ---------- */
+.ov-wait b { color: var(--text-faint); }
+
+/* ---------- raw footage: the banner after a late payment's choice (870:19197, 870:19547) ---------- */
+.ft-banner { margin: 0 20px 16px; }
+.ft-banner > .btn { flex: none; }
+.gst-whole[open] summary .csr-whole > .wp-icon:first-child { transform: none; }

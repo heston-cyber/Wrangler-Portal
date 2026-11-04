@@ -14,7 +14,7 @@ import { linkProps, navigate } from "../../lib/router";
 import { errText } from "../docs/pages/common";
 import { fieldValues, newId, pageOf, type Fields } from "../../../convex/lib/wsBuilder";
 import { clockOf, sheetDay, type Answers } from "../../../convex/lib/callSheet";
-import { PeoplePicker, SendUpdate, SheetView, groupsOf, opened, reachable, type CallSheetInfo } from "./callSheetParts";
+import { PeoplePicker, RemindSheet, SendUpdate, SheetView, groupsOf, opened, reachable, type CallSheetInfo } from "./callSheetParts";
 
 const Builder = lazy(() => import("../docs/builder/Builder"));
 type Row = NonNullable<ReturnType<typeof useQuery<typeof api.callSheets.list>>>["rows"][number];
@@ -280,7 +280,7 @@ export function CallSheetDetail({ callSheetId }: { callSheetId: string }) {
   const remind = useMutation(api.callSheets.remind);
   const endGuest = useMutation(api.callSheets.endGuest);
   const restoreGuest = useMutation(api.callSheets.restoreGuest);
-  const [dialog, setDialog] = useState<"update" | "preview" | null>(null);
+  const [dialog, setDialog] = useState<"update" | "remind" | "preview" | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, show] = useToast();
   if (cs === undefined) return <><Crumbs /><div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
@@ -322,7 +322,7 @@ export function CallSheetDetail({ callSheetId }: { callSheetId: string }) {
         {cs.status === "draft" && <section className="wp-notice"><Icon name="info" size={20} /><span className="txt"><b>Not sent yet</b><br />Finish it in the editor, then send it from there.</span></section>}
         <div className="pov-cols">
           <div className="col">
-            <Card label="Who has opened it" head={<SectionHead label={cs.status === "sent" ? "Who has opened it" : "Who gets it"} count={list.length || undefined} action={cs.status === "sent" && notOpened > 1 ? <Button size="sm" variant="ghost" loading={busy === "all"} onClick={() => void doRemind()}>Remind everyone</Button> : undefined} />}>
+            <Card label="Who has opened it" head={<SectionHead label={cs.status === "sent" ? "Who has opened it" : "Who gets it"} count={list.length || undefined} action={cs.status === "sent" && notOpened > 1 ? <Button size="sm" variant="ghost" onClick={() => setDialog("remind")}>Remind everyone</Button> : undefined} />}>
               {list.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "user" }} title="Nobody yet." meta="Tick people in the editor's Details." />
                 : list.map((p, i) => (
                   <Line key={p.id} first={i === 0}>
@@ -354,6 +354,7 @@ export function CallSheetDetail({ callSheetId }: { callSheetId: string }) {
         </div>
       </div>
       {dialog === "update" && <SendUpdate cs={cs} onClose={() => setDialog(null)} show={show} />}
+      {dialog === "remind" && <RemindSheet cs={cs} onClose={() => setDialog(null)} show={show} />}
       {dialog === "preview" && <SheetPreview cs={cs} onClose={() => setDialog(null)} />}
       {toast}
     </>

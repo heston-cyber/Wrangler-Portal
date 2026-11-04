@@ -397,7 +397,7 @@ export const endGuest = mutation({
     if (g.endedAt) return null;
     const now = Date.now();
     await ctx.db.patch(cs._id, { recipients: cs.recipients.map((r) => (r.id === a.id ? { ...r, endedAt: now } : r)), updatedAt: now, history: hist(cs, "guest-ended", me, g.name) });
-    for (const p of await ctx.db.query("guestPasses").withIndex("by_sheet", (q) => q.eq("callSheetId", cs._id)).collect()) if (p.personId === a.id) await ctx.db.patch(p._id, { sentAt: undefined });
+    // Q88 (Nov 4): the pass keeps its "sent" hint, so the sheet stays in the guest's list under Ended.
     return null;
   },
 });
@@ -418,6 +418,7 @@ export const restoreGuest = mutation({
       return { ...rest, on: true, grant: (r.grant ?? 0) + 1 };
     };
     await ctx.db.patch(cs._id, { recipients: cs.recipients.map((r) => (r.id === a.id ? back(r) : r)), updatedAt: now, history: hist(cs, "guest-restored", me, g.name) });
+    for (const p of await ctx.db.query("guestPasses").withIndex("by_sheet", (q) => q.eq("callSheetId", cs._id)).collect()) if (p.personId === a.id) await ctx.db.patch(p._id, { openedAt: undefined });
     return null;
   },
 });
@@ -507,7 +508,8 @@ export const send = mutation({
 
 /** Send an update: the new copy for everyone; email 42 once per person per update (40 for anyone new on it). */
 export const sendUpdate = mutation({
-  args: { callSheetId: v.id("callSheets"), changed: v.string(), message: v.optional(v.string()) },
+  // Nov 4 (856:92031): each group can be left out of the email; everyone still reads the new copy. Left out = false.
+  args: { callSheetId: v.id("callSheets"), changed: v.string(), message: v.optional(v.string()), crew: v.optional(v.boolean()), client: v.optional(v.boolean()), guests: v.optional(v.boolean()) },
   handler: async (ctx, a) => {
     const me = await requireMe(ctx);
     const { cs, sh } = await sheetFor(ctx, a.callSheetId);
@@ -516,8 +518,10 @@ export const sendUpdate = mutation({
     const changed = tidy(a.changed, 120) || whatChanged(pageOf(cs.sent.page), doc.page, fieldValues(doc.fields, doc.page))[0] || "";
     if (!changed) throw new ConvexError("Say what changed.");
     const people = await peopleOf(ctx, cs, sh.s, sh.p);
-    const go = reachable(people);
-    if (!go.length) throw new ConvexError("Nobody on it can open it.");
+    const left = (k: string) => (k === "crew" && a.crew === false) || (k === "client" && a.client === false) || (k === "guest" && a.guests === false);
+    if (!reachable(people).length) throw new ConvexError("Nobody on it can open it.");
+    const go = reachable(people).filter((x) => !left(x.kind));
+    if (!go.length) throw new ConvexError("Tick at least one group to tell.");
     const now = Date.now();
     const round = (cs.updates ?? 0) + 1;
     const before = pageOf(cs.sent.page);
@@ -541,7 +545,8 @@ export const sendUpdate = mutation({
 
 /** Remind (766:6342): email 40 again, only to people it went to who haven't opened it (one person, or all of them). */
 export const remind = mutation({
-  args: { callSheetId: v.id("callSheets"), id: v.optional(v.string()) },
+  // Nov 4 (856:92097): Remind everyone asks first, and each group can be left out (left out = false).
+  args: { callSheetId: v.id("callSheets"), id: v.optional(v.string()), crew: v.optional(v.boolean()), client: v.optional(v.boolean()), guests: v.optional(v.boolean()) },
   handler: async (ctx, a) => {
     const me = await requireMe(ctx);
     const { cs, sh } = await sheetFor(ctx, a.callSheetId);
@@ -551,7 +556,8 @@ export const remind = mutation({
     const people = await peopleOf(ctx, cs, sh.s, sh.p);
     // Review L3: a guest it hasn't gone to (access restored, or added after Send) gets email 41 from Remind too.
     const restored = (x: Person) => x.kind === "guest" && !x.sentAt;
-    const go = people.filter((x) => ((x.sentAt && !x.openedAt) || restored(x)) && x.on && x.access && (!a.id || x.id === a.id) && !(x.remindedAt && now - x.remindedAt < 10 * 60_000));
+    const left = (k: string) => (k === "crew" && a.crew === false) || (k === "client" && a.client === false) || (k === "guest" && a.guests === false);
+    const go = people.filter((x) => ((x.sentAt && !x.openedAt) || restored(x)) && x.on && x.access && (!a.id || x.id === a.id) && !left(x.kind) && !(x.remindedAt && now - x.remindedAt < 10 * 60_000));
     if (a.id && !go.length) {
       const x = people.find((r) => r.id === a.id);
       throw new ConvexError(!x ? "That person isn't on this call sheet." : x.openedAt ? "They've opened it already." : x.remindedAt && now - x.remindedAt < 10 * 60_000 ? "You reminded them a moment ago." : "They can't be reminded.");
@@ -632,10 +638,14 @@ export async function readerView(ctx: QueryCtx, cs: Sheet, me: Person) {
   const contact = await businessContact(ctx, cs.businessId ?? null);
   const b = cs.businessId ? await ctx.db.get(cs.businessId) : null;
   const st = cs.sent.style as Partial<Style> | undefined;
+  const updatedToday = cs.sent.round > 0 && todayCentral(cs.sent.at) === todayCentral();
+  const last = [...cs.history].reverse().find((h) => h.kind === "update");
   return {
     // Review L6: the heading and date as sent, not the project or shoot as they are now.
     _id: cs._id, title: cs.sent.heading ?? sh.title, docTitle: cs.sent.title, date: cs.sent.date ?? sh.s.date, project: { _id: sh.p._id, label: label(sh.p) }, page, values,
     accent: typeof st?.accent === "string" ? st.accent : null, sentAt: cs.sent.at, updated: cs.sent.round > 0,
+    // Q88 (Nov 4): the "Updated today" banner shows only on the day of the update (Central time), with what changed.
+    updatedToday, change: updatedToday && last?.detail ? { at: last.at, text: last.detail } : null,
     business: b?.name ?? contact.name, owner: b?.ownerName?.trim() || contact.name, replyTo: b?.replyTo || contact.ownerEmail,
     me: { name: me.name, kind: me.kind, role: me.role ?? null, call: callFor(page, me) }, openedAt: me.openedAt ?? null,
   };

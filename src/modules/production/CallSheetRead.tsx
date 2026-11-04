@@ -6,28 +6,23 @@ import { useEffect, useRef } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../convex/_generated/api";
-import { ButtonLink, Card, EmptyState, SkeletonRows, StatusChip } from "../../ui/wp";
+import { ButtonLink, Card, EmptyState, SkeletonRows } from "../../ui/wp";
 import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps } from "../../lib/router";
-import { clockOf, sheetDay } from "../../../convex/lib/callSheet";
-import { pageOf } from "../../../convex/lib/wsBuilder";
-import { SheetView } from "./callSheetParts";
+import { sheetDay } from "../../../convex/lib/callSheet";
+import { SheetReader } from "./SheetReader";
 
 type View = NonNullable<FunctionReturnType<typeof api.callSheets.forClient>>;
 
+/** Q88 (Nov 4): the reader pages 857:8881 (client), 857:9240 (vendor), phone 857:9610 / 857:9736: the guest page's
+ *  layout inside the portal, with "Updated today" only on the day of the update. */
 function Reader({ d, home, homeLabel }: { d: View; home: string; homeLabel: string }) {
   const mail = `mailto:${d.replyTo}?${new URLSearchParams({ subject: `Call sheet for ${sheetDay(d.date)}: ${d.title}` }).toString().replace(/\+/g, "%20")}`;
   return (
     <>
       <TopBar><a {...linkProps(home)}>{homeLabel}</a><Sep /><span className="here">Call sheet · {sheetDay(d.date).replace(/^\w+ /, "")}</span></TopBar>
       <div className="wp-page cs-read">
-        <header className="pj-head sh-head">
-          <span className="wp-eyebrow">Call sheet · {d.business}</span>
-          <h1 className="wp-h2">{d.title}</h1>
-          <span className="sh-sub"><span className="secondary">{sheetDay(d.date)}{d.me.call ? ` · Your call ${clockOf(d.me.call)}` : ""}</span>
-            {d.updated ? <StatusChip tone="warning">Updated {new Date(d.sentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</StatusChip> : null}</span>
-        </header>
-        <SheetView page={pageOf(d.page)} values={d.values} accent={d.accent} />
+        <SheetReader d={d} head />
         <p className="wp-small secondary cs-askline">Questions about the day? <a href={mail} className="cs-link">Email {d.owner}</a>, or reply to the email it came with.</p>
       </div>
     </>

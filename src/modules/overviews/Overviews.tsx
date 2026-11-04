@@ -15,6 +15,7 @@ import { Tile } from "./Tile";
 import { useUpload } from "../../shell/UploadDialog";
 import { NewClient } from "../review/Projects";
 import { BookDialog } from "../vendors/Bookings";
+import { VendorDialog } from "../vendors/Vendors";
 import { errText } from "../docs/pages/common";
 
 const TZ = "America/Chicago";
@@ -35,6 +36,14 @@ const Loading = () => <>
   <div className="pov-stats ov-tiles">{[0, 1, 2, 3].map((i) => <div key={i} className="pov-stat prod-tile"><SkeletonRows n={1} /></div>)}</div>
   <Card label="Loading"><SkeletonRows n={4} /></Card>
 </>;
+/** Q89 (Nov 4, 860:9857 …): an overview loading: its tiles with a dash for each number, and its cards with grey rows. */
+function Skeleton({ tiles, left, right }: { tiles: string[]; left: Array<[string, number]>; right: Array<[string, number]> }) {
+  const card = ([label, n]: [string, number]) => <Card key={label} label={label} head={<SectionHead label={label} />}><SkeletonRows n={n} label={`Loading ${label.toLowerCase()}`} /></Card>;
+  return <div aria-busy="true">
+    <Tiles>{tiles.map((t) => <div key={t} className="pov-stat prod-tile ov-wait"><span className="lbl">{t}</span><b aria-label="Loading">–</b></div>)}</Tiles>
+    <div className="pov-cols"><div className="col">{left.map(card)}</div><div className="col">{right.map(card)}</div></div>
+  </div>;
+}
 const Crumb = ({ tool }: { tool: string }) => <TopBar><span className="secondary">{tool}</span><Sep /><span className="here">Overview</span></TopBar>;
 
 /** A card's number rows (Pipeline, Briefings, Templates …). */
@@ -111,8 +120,8 @@ export function ReviewOverview() {
       <Crumb tool="Review" />
       <div className="wp-page pov prod">
         <PageHeader eyebrow="Review" title="Review." sub="Cuts, notes and who’s watching." actions={<Button variant="primary" onClick={() => openUpload({ newProject: true })}>New project</Button>} />
-        {o === undefined ? <Loading /> : o === null ? null : o.empty ? (
-          <EmptyState icon="review" title="No projects yet" body="Upload a cut and share it. Notes, views and what’s waiting on clients show up here."
+        {o === undefined ? <Skeleton tiles={["Waiting on clients", "New notes", "In progress", "Delivered"]} left={[["Notes to look at", 3], ["Waiting on clients", 2]]} right={[["Last opened", 2], ["Delivered this month", 2]]} /> : o === null ? null : o.empty ? (
+          <EmptyState icon="review" title="No cuts out for review" body="Send a cut to a client and it will show up here. Notes, versions and who has watched it all gather in one place."
             actions={<Button variant="primary" onClick={() => openUpload({ newProject: true })}>New project</Button>} />
         ) : <>
           <Tiles>
@@ -172,9 +181,9 @@ export function DocsOverview() {
       <Crumb tool="Docs" />
       <div className="wp-page pov prod">
         <PageHeader eyebrow="Docs" title="Docs." sub="Contracts and documents, out for signature and signed." actions={<ButtonLink variant="primary" to="/sign/new" iconEnd={false}>New document</ButtonLink>} />
-        {o === undefined ? <Loading /> : o === null ? null : o.empty ? (
-          <EmptyState icon="document" title="No documents yet" body="Write a contract, send it for signature, and it shows up here with who has signed."
-            actions={<ButtonLink variant="primary" to="/sign/new" iconEnd={false}>New document</ButtonLink>} />
+        {o === undefined ? <Skeleton tiles={["To sign", "Signed", "Drafts", "Templates"]} left={[["Waiting on signatures", 3], ["Recently signed", 2]]} right={[["Templates", 2], ["Your signature", 1]]} /> : o === null ? null : o.empty ? (
+          <EmptyState icon="document" title="No documents yet" body="Make a contract or another document and send it for signature. What is waiting and what is signed show up here."
+            actions={<><ButtonLink variant="primary" to="/sign/new" iconEnd={false}>New document</ButtonLink><ButtonLink to="/sign/templates" iconEnd={false}>Start from a template</ButtonLink></>} />
         ) : <>
           <Tiles>
             <Tile label="To sign" n={o.tiles.toSign} sub="waiting on clients" to="/sign/docs" link="See them" />
@@ -226,9 +235,9 @@ export function ProposalsOverview() {
       <Crumb tool="Proposals" />
       <div className="wp-page pov prod">
         <PageHeader eyebrow="Proposals" title="Proposals." sub="Pitches out for review, and what to do with the accepted ones." actions={<ButtonLink variant="primary" to="/proposals/new" iconEnd={false}>New proposal</ButtonLink>} />
-        {o === undefined ? <Loading /> : o === null ? null : o.empty ? (
-          <EmptyState icon="quote" title="No proposals yet" body="Answer the questionnaire or start from a template. Sent proposals and their answers show up here."
-            actions={<ButtonLink variant="primary" to="/proposals/new" iconEnd={false}>New proposal</ButtonLink>} />
+        {o === undefined ? <Skeleton tiles={["Out for review", "Accepted", "Drafts", "Declined"]} left={[["Needs you", 3], ["Out for review", 2]]} right={[["Templates", 1], ["Questionnaire", 1]]} /> : o === null ? null : o.empty ? (
+          <EmptyState icon="document" title="No proposals yet" body="Write a proposal to pitch a client. Sent, accepted and declined ones show up here."
+            actions={<><ButtonLink variant="primary" to="/proposals/new" iconEnd={false}>New proposal</ButtonLink><ButtonLink to="/proposals/templates" iconEnd={false}>Start from a template</ButtonLink></>} />
         ) : <>
           <Tiles>
             <Tile label="Out for review" n={o.tiles.out} sub="sent, not answered" to="/proposals" link="See them" />
@@ -274,14 +283,15 @@ const NEED_BTN = { waiting: "Open", invoice: "Review", w9: "Open" } as const;
 export function VendorsOverview() {
   const o = useQuery(api.overviews.vendors, {});
   const [booking, setBooking] = useState(false);
+  const [adding, setAdding] = useState<"add" | "invite" | null>(null);
   return (
     <>
       <Crumb tool="Vendors" />
       <div className="wp-page pov prod">
         <PageHeader eyebrow="Vendors" title="Vendors." sub="Your crew: bookings, briefings and invoices." actions={<Button variant="primary" onClick={() => setBooking(true)}>Book a vendor</Button>} />
-        {o === undefined ? <Loading /> : o === null ? null : o.empty ? (
-          <EmptyState icon="user" title="No vendors yet" body="Add the shooters, editors and crew you hire, then book them on a project."
-            actions={<ButtonLink variant="primary" to="/vendors" iconEnd={false}>See vendors</ButtonLink>} />
+        {o === undefined ? <Skeleton tiles={["Booked this week", "Waiting to accept", "Invoices to pay", "W-9 missing"]} left={[["Needs you", 3], ["Bookings this week", 2]]} right={[["Briefings", 2], ["Payments to vendors", 2]]} /> : o === null ? null : o.empty ? (
+          <EmptyState icon="users" title="No vendors yet" body="Add your first vendor, or invite one. Their bookings, briefings and invoices all show up here."
+            actions={<><Button variant="primary" onClick={() => setAdding("add")}>Add a vendor</Button><Button onClick={() => setAdding("invite")}>Invite a vendor</Button></>} />
         ) : <>
           <Tiles>
             <Tile label="Booked this week" n={o.tiles.booked} sub={o.tiles.shoots ? `on ${o.tiles.shoots} ${plural(o.tiles.shoots, "project")}` : "no bookings"} to="/vendors/bookings" link="See bookings" />
@@ -320,6 +330,7 @@ export function VendorsOverview() {
         </>}
       </div>
       {booking && <BookDialog onClose={() => setBooking(false)} />}
+      {adding && <VendorDialog onClose={() => setAdding(null)} invite={adding === "invite"} />}
     </>
   );
 }

@@ -243,6 +243,7 @@ export const forProject = query({
         invoice: inv ? { _id: inv._id, status: inv.status, number: inv.number ?? inv.stripe?.number ?? null, totalCents: inv.totalCents } : null,
         renewing: !!r.renewalFor && r.renewalFor === r.paidUntil,
         latePaid: r.latePaid ? { at: r.latePaid.at, was: r.latePaid.was } : null, unpaidAt: r.unpaidAt ?? null,
+        lateChoice: await lateChoiceView(ctx as QueryCtx, r),
         keptUntil: null as string | null, // the year starts the day it's paid
         history: r.history.slice(-8).reverse(),
       },
@@ -295,7 +296,15 @@ export const markDone = mutation({
   },
 });
 
-/** Review H1: a storage invoice paid after it ended or was stopped. The owner keeps it for another year from today... */
+/** The day a late storage invoice was paid (Central), from the invoice's own paid time when Stripe gave one. */
+async function latePaidAt(ctx: Ctx, late: NonNullable<Doc<"footageStorage">["latePaid"]>) {
+  const inv = await ctx.db.get(late.invoiceId);
+  return inv?.paidAt ?? late.at;
+}
+
+/** Review H1: a storage invoice paid after it ended or was stopped. The owner keeps it for another year... Q93 (Nov 4):
+ *  the year runs from the day they paid, not from the button press, so the payment date stays the yearly renewal date
+ *  (renewals then run on from paidUntil, as storagePaid does). No new invoice: the paid one covers the year. */
 export const reinstate = mutation({
   args: { projectId: v.string() },
   handler: async (ctx, { projectId }) => {
@@ -304,12 +313,18 @@ export const reinstate = mutation({
     if (!r?.latePaid) throw new ConvexError("There's no late payment to act on.");
     if (r.doneAt) throw new ConvexError("You marked the footage as deleted or moved, so it can't be kept. Refund the payment in Stripe instead.");
     const now = Date.now();
-    const paidUntil = addYear(todayCentral(now));
-    await ctx.db.patch(r._id, { status: "paid", paidUntil, renewalFor: undefined, invoiceId: r.latePaid.invoiceId, latePaid: undefined, endedAt: undefined, unpaidAt: undefined, updatedAt: now, history: hist(r, `Kept again by ${me.name} after the late payment: until ${longDay(paidUntil)}`, now) });
-    return null;
+    const paidAt = await latePaidAt(ctx, r.latePaid);
+    const paidUntil = addYear(todayCentral(paidAt));
+    await ctx.db.patch(r._id, {
+      status: "paid", paidUntil, renewalFor: undefined, invoiceId: r.latePaid.invoiceId, latePaid: undefined, endedAt: undefined, unpaidAt: undefined,
+      lateChoice: { kind: "kept", invoiceId: r.latePaid.invoiceId, paidAt, at: now, by: me.name ?? "the owner", until: paidUntil },
+      updatedAt: now, history: hist(r, `Kept again by ${me.name} after the late payment: until ${longDay(paidUntil)} (a year from the day it was paid)`, now),
+    });
+    return { paidUntil };
   },
 });
-/** ...or has dealt with it another way (refunded it in Stripe). Clears the alert; the status stays as it was. */
+/** ...or will refund it in Stripe (Q94): marked to refund. The status stays as it was; the box shows "Marked to refund"
+ *  with a link to the invoice in Stripe until Stripe reports a refund on it. The portal never refunds anything itself. */
 export const dismissLatePaid = mutation({
   args: { projectId: v.string() },
   handler: async (ctx, { projectId }) => {
@@ -317,10 +332,31 @@ export const dismissLatePaid = mutation({
     const { r } = await ownedRow(ctx, projectId);
     if (!r?.latePaid) return null;
     const now = Date.now();
-    await ctx.db.patch(r._id, { latePaid: undefined, updatedAt: now, history: hist(r, `Late payment handled by ${me.name} (not kept)`, now) });
+    const paidAt = await latePaidAt(ctx, r.latePaid);
+    await ctx.db.patch(r._id, {
+      latePaid: undefined,
+      lateChoice: { kind: "refund", invoiceId: r.latePaid.invoiceId, paidAt, at: now, by: me.name ?? "the owner", was: r.latePaid.was, wasUntil: r.paidUntil ?? r.keepUntil },
+      updatedAt: now, history: hist(r, `Marked to refund in Stripe by ${me.name} (not kept)`, now),
+    });
     return null;
   },
 });
+
+/** The owner's card's banner after a late payment's choice (870:19197 Kept, 870:19547 Marked to refund), or null once it's
+ *  over: a kept year that has since moved on (renewed or ended), or a refund Stripe has reported. */
+async function lateChoiceView(ctx: QueryCtx, r: Doc<"footageStorage">) {
+  const c = r.lateChoice;
+  if (!c) return null;
+  const inv = await ctx.db.get(c.invoiceId);
+  // Only that invoice, on this storage row (another business's invoice id is invisible here anyway).
+  if (!inv || inv.storageId !== r._id) return null;
+  if (c.kind === "kept") return r.status === "paid" && r.paidUntil === c.until ? { kind: "kept" as const, until: c.until!, paidAt: c.paidAt, at: c.at } : null;
+  const refunded = (inv.refundedCents ?? 0) > 0;
+  if (refunded) return null;
+  // Q94: the invoice in the business's own Stripe account (test-mode dashboard in test mode), as Payments' invoice page links it.
+  const stripeUrl = inv.stripe ? `https://dashboard.stripe.com/${inv.stripe.livemode ? "" : "test/"}invoices/${inv.stripe.invoiceId}` : null;
+  return { kind: "refund" as const, paidAt: c.paidAt, at: c.at, wasUntil: c.wasUntil ?? null, invoice: { _id: inv._id, number: inv.number ?? inv.stripe?.number ?? null }, stripeUrl };
+}
 
 type What = "kept" | "renewal" | "ended" | "unpaid" | "paidLate";
 /** Dashboard alerts (home.needs): a storage invoice to send, footage past its keep day, Keep it never paid, a late payment. */
