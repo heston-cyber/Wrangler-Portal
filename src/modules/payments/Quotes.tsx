@@ -413,7 +413,7 @@ export function QuoteDetail({ quoteId }: { quoteId: string }) {
   if (q.status === "draft") return <QuoteEditor key={q._id} quoteId={q._id} />;
   const s = q.display as Status;
   const company = q.contact?.company || q.contact?.name || "No client yet";
-  const doc: QuoteDoc = { business: q.business, number: q.number, issued: longMs(q.sentAt ?? q.createdAt), validUntil: longIso(q.validUntil), contact: q.contact ?? { name: "Anyone it was sent to" }, project: q.title, lines: q.lines, totals: q.totals, taxPercent: q.taxPercent, deposit: q.deposit, terms: q.terms ?? null, acceptUrl: q.linkUrl ?? q.link };
+  const doc: QuoteDoc = { business: q.business, number: q.number, issued: longMs(q.sentAt ?? q.createdAt), validUntil: longIso(q.validUntil), contact: q.contact ?? { name: "Anyone it was sent to" }, project: q.title, lines: q.lines, totals: q.totals, taxPercent: q.taxPercent, deposit: q.deposit, terms: q.terms ?? null, acceptUrl: q.linkUrl ?? null }; // D149 review M4: a PDF never carries one person's own link
   const copy = async () => {
     try { const r2 = await send({ quoteId: q._id, copyLink: true }); await navigator.clipboard.writeText(r2.link ?? ""); show("Link copied. Anyone with it can open and accept the quote; opens are counted, not named."); }
     catch (e) { show(errText(e)); }
@@ -473,7 +473,7 @@ export function QuoteDetail({ quoteId }: { quoteId: string }) {
           </div>
         )}
         <div className="q-cols">
-          <div className="col"><QuotePaper q={doc} /></div>
+          <div className="col"><QuotePaper q={doc} showAccept={!!doc.acceptUrl} /></div>
           <div className="col right">
             <Card label="Actions" head={<SectionHead label="Actions" />}>
               <div className="crm-steps">

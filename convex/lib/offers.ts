@@ -56,8 +56,10 @@ export async function addPeople(ctx: MutationCtx, kind: Kind, doc: Offer, list: 
     if (old && !old.stoppedAt && old.sentAt > now - RESEND_GAP) continue;
     await bump(ctx, "offerSend", String(doc.businessId ?? "default"));
     if (old) {
-      await ctx.db.patch(old._id, { sentAt: now, stoppedAt: undefined, ...(t.name && !old.name ? { name: t.name } : {}) });
-      sends.push({ rowId: old._id, email: old.email, name: old.name ?? t.name ?? null, token: old.token });
+      // L1 (review): a stopped link stays stopped. Sending to that person again gives them a new link.
+      const token = old.stoppedAt ? randomToken(18) : old.token;
+      await ctx.db.patch(old._id, { sentAt: now, stoppedAt: undefined, token, ...(t.name && !old.name ? { name: t.name } : {}) });
+      sends.push({ rowId: old._id, email: old.email, name: old.name ?? t.name ?? null, token });
       continue;
     }
     const token = randomToken(18);
@@ -65,6 +67,22 @@ export async function addPeople(ctx: MutationCtx, kind: Kind, doc: Offer, list: 
     sends.push({ rowId, email: t.email, name: t.name ?? null, token });
   }
   return sends;
+}
+
+/** M1/M2 (review): the first time D149 sends to more people or copies a link for one sent before D149, its contact
+ *  moves onto a person row with the same link (their opens and answer come too), so they show on the owner's card,
+ *  can be stopped, and one accept closes every link. Returns the doc as it now is. */
+export async function adoptLegacy<T extends Offer>(ctx: MutationCtx, kind: Kind, doc: T): Promise<T> {
+  if (!doc.token || !doc.contact || doc.status === "draft") return doc;
+  const have = await rowsOf(ctx, kind, doc._id);
+  if (!have.some((r) => r.token === doc.token)) {
+    const resp = doc.response && doc.response.via !== "link" ? { ...doc.response, via: "email" as const } : undefined;
+    await ctx.db.insert("offerRecipients", { ...(kind === "quote" ? { quoteId: doc._id as Id<"quotes"> } : { proposalId: doc._id as Id<"proposals"> }),
+      email: doc.contact.email.toLowerCase(), name: doc.contact.name, token: doc.token, sentAt: doc.sentAt ?? doc.updatedAt ?? Date.now(),
+      ...(doc.viewedAt ? { openedAt: doc.viewedAt } : {}), opens: doc.viewedAt ? 1 : 0, ...(resp ? { response: resp } : {}) });
+  }
+  await ctx.db.patch(doc._id, { token: undefined } as never);
+  return (await ctx.db.get(doc._id)) as T;
 }
 
 export type Found = { doc: Offer; r: Row | null; via: "legacy" | "email" | "link" };
@@ -134,8 +152,11 @@ export async function answer(ctx: MutationCtx, kind: Kind, f: Found, a: Answer, 
   if (f.via === "email" && f.r!.response) return { error: `You already ${f.r!.response.kind} this ${thing}.` };
   if (closed) return { error: closed };
   if (d.status !== "sent") return { error: `This ${thing} was already ${d.status}.` };
-  await bump(ctx, "offerLink", `answer:${f.r?.token ?? d.linkToken ?? d.token}`);
-  const name = clean(a.name), company = clean(a.company) || undefined;
+  await bump(ctx, "offerAnswer", `${f.r?.token ?? d.linkToken ?? d.token}`); // M3: at most 20 tries an hour per link
+  // M5 (review): a typed name or company lands in contracts, invoices and emails, so no braces (template markers),
+  // angle brackets or control characters.
+  const plain = (s?: string) => clean((s ?? "").replace(/[{}<>\u0000-\u001f\u007f]/g, " "));
+  const name = plain(a.name), company = plain(a.company) || undefined;
   let email = f.via === "email" ? f.r!.email : f.via === "legacy" ? d.contact!.email : clean(a.email, 254).toLowerCase();
   if (a.kind === "accepted") {
     if (name.length < 2) return { error: "Type your full name to accept." };
@@ -151,7 +172,9 @@ export async function answer(ctx: MutationCtx, kind: Kind, f: Found, a: Answer, 
     const contact = { name: response.name, email: email || d.contact?.email || "", ...(company ? { company } : d.contact?.company && f.via !== "link" ? { company: d.contact.company } : {}) };
     let dealId = d.dealId;
     if (!d.clientId && !d.dealId) {
-      dealId = await ctx.db.insert("deals", { title: (d as { title?: string }).title?.slice(0, 160) || `Accepted ${thing}`, ...(contact.email ? { contactEmail: contact.email } : {}), stage: "lead", source: "accepted", quiet: true,
+      // H1 (review): stamp the quote's own business. The link pages run with no identity, where an unstamped insert
+      // would land in the default business.
+      dealId = await ctx.db.insert("deals", { ...(d.businessId ? { businessId: d.businessId } : {}), title: (d as { title?: string }).title?.slice(0, 160) || `Accepted ${thing}`, ...(contact.email ? { contactEmail: contact.email } : {}), stage: "lead", source: "accepted", quiet: true,
         lead: { name: contact.name, email: contact.email, ...(company ? { company } : {}), fields: [], at: now }, history: [{ kind: "created", at: now, detail: `accepted ${thing} ${d.number}` }], createdAt: now, updatedAt: now });
     }
     await ctx.db.patch(d._id, { status: "accepted", response, contact, ...(dealId ? { dealId } : {}), updatedAt: now, history: hist("accepted", `${response.name}${company ? `, for ${company}` : ""}`) } as never);
@@ -159,9 +182,13 @@ export async function answer(ctx: MutationCtx, kind: Kind, f: Found, a: Answer, 
     // Declined: closes only once every person it was emailed to has declined (a copied link never closes it).
     const rows = (await rowsOf(ctx, kind, d._id)).filter((r) => !r.stoppedAt).map((r) => (f.r && r._id === f.r._id ? { ...r, response } : r));
     const all = f.via === "legacy" || (f.via === "email" && rows.length > 0 && rows.every((r) => r.response?.kind === "declined"));
-    await ctx.db.patch(d._id, { ...(all ? { status: "declined", response } : {}), updatedAt: now, history: hist("declined", response.name) } as never);
+    // M3 (review): declines on the copied link can't fill the history. The first one is written; later ones aren't.
+    const LINK_DECLINE = " (copied link)";
+    const repeat = f.via === "link" && d.history.some((h) => h.kind === "declined" && (h as { detail?: string }).detail?.endsWith(LINK_DECLINE));
+    await ctx.db.patch(d._id, { ...(all ? { status: "declined", response } : {}), updatedAt: now, ...(repeat ? {} : { history: hist("declined", `${response.name}${f.via === "link" ? LINK_DECLINE : ""}`) }) } as never);
   }
-  const key = `${thing}-${a.kind}:${d._id}:${f.r?._id ?? (f.via === "link" ? `link:${now}` : "legacy")}`;
+  // M3: the owner hears about copied-link declines at most once an hour per link.
+  const key = `${thing}-${a.kind}:${d._id}:${f.r?._id ?? (f.via === "link" ? `link:${d.linkToken}:${Math.floor(now / 3_600_000)}` : "legacy")}`;
   return { ok: true, status: a.kind === "accepted" ? "accepted" : (await ctx.db.get(d._id))!.status, tell: { key, kind: a.kind, who: response.name, company: company ?? (f.via === "legacy" ? d.contact?.company ?? null : null), reason: response.reason ?? null, at: now } };
 }
 
@@ -181,6 +208,9 @@ export async function stopPerson(ctx: MutationCtx, kind: Kind, d: Offer, rowId: 
   const r = await ctx.db.get(rowId);
   if (!r || (kind === "quote" ? r.quoteId : r.proposalId) !== d._id) throw new ConvexError("That person isn't on it.");
   if (r.stoppedAt) return;
+  // L3 (review): only while it's open, and never the link someone accepted on (their page shows what they accepted).
+  if (r.response?.kind === "accepted") throw new ConvexError("They accepted on that link, so it stays.");
+  if (d.status !== "sent") throw new ConvexError(`Links can only be stopped while it's open.`);
   const now = Date.now();
   await ctx.db.patch(r._id, { stoppedAt: now });
   await ctx.db.patch(d._id, { updatedAt: now, history: [...d.history, { kind: "link_stopped", at: now, by, detail: r.email }].slice(-60) } as never);
@@ -189,6 +219,7 @@ export async function stopPerson(ctx: MutationCtx, kind: Kind, d: Offer, rowId: 
 /** Owner: a new copied link; the old one stops working (Nov 4). */
 export async function newCopiedLink(ctx: MutationCtx, d: Offer, by: string) {
   if (!d.linkToken) throw new ConvexError("There's no copied link yet. Use Copy link.");
+  if (d.status !== "sent") throw new ConvexError("A new copied link can only be made while it's open."); // L3
   const now = Date.now();
   const linkToken = randomToken(18);
   await ctx.db.patch(d._id, { linkToken, linkOpens: 0, updatedAt: now, history: [...d.history, { kind: "link_replaced", at: now, by }].slice(-60) } as never);

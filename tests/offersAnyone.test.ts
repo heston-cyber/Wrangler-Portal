@@ -199,4 +199,109 @@ describe("D149 quotes and proposals to anyone", () => {
     await expect(w.boss.mutation(api.quotes.stopLink, { quoteId: bq, personId: person._id })).rejects.toThrow();
     expect((await w.heston.query(api.quotes.get, { quoteId: id })).who.people[0].stopped).toBe(false);
   });
+
+  // ---- independent review fixes (Nov 4) ----
+  test("H1: a quiet lead from another business's quote lands in that business, never the default one", async () => {
+    vi.useFakeTimers();
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const bq = await w.boss.mutation(api.quotes.save, { title: "B's job", lines: [{ id: "a", description: "X", qty: 1, unitCents: 50_000 }], deposit: { kind: "percent", value: 0 } }) as Id<"quotes">;
+    const r = await w.boss.action(api.quotes.send, { quoteId: bq, copyLink: true });
+    const link = (r.link as string).split("/q/")[1];
+    expect((await qpost(w, { token: link, action: "accept", name: "Ana Diaz", email: "ana@diaz.example" })).status).toBe(200);
+    const g = await w.boss.query(api.quotes.get, { quoteId: bq });
+    expect(g).toMatchObject({ status: "accepted", deal: { quiet: true } });
+    const both = await w.t.run(async (ctx) => { const q = await ctx.db.get(bq); const d = await ctx.db.get(q!.dealId!); return { q: q!.businessId, d: d!.businessId }; });
+    expect(both.d).toBeDefined();
+    expect(both.d).toBe(both.q);
+    expect(await w.heston.query(api.crm.deal, { dealId: g.dealId })).toBeNull();
+    expect(await w.boss.query(api.crm.deal, { dealId: g.dealId })).not.toBeNull();
+    expect(JSON.stringify(await w.heston.query(api.crm.board, {}))).not.toMatch(/ana@diaz/);
+  });
+
+  test("M1/M2: one sent before D149 moves its contact onto a person row the first time more people are added", async () => {
+    vi.useFakeTimers();
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const id = await quote(w, { name: "Priya Rao", email: "priya@rao.example", company: "Rao Foods" });
+    await w.heston.action(api.quotes.send, { quoteId: id });
+    const tok = tokenTo(mails, "priya@rao.example");
+    // Make it look like it was sent before D149: no person rows, the link on the quote itself.
+    await w.t.run(async (ctx) => {
+      for (const r of await ctx.db.query("offerRecipients").collect()) await ctx.db.delete(r._id);
+      await ctx.db.patch(id, { token: tok });
+    });
+    await w.t.mutation(api.quotes.markViewed, { token: tok });
+    expect((await w.heston.query(api.quotes.get, { quoteId: id })).who.people).toEqual([expect.objectContaining({ _id: `legacy:${id}`, email: "priya@rao.example" })]);
+    await w.heston.action(api.quotes.send, { quoteId: id, to: "lee@parkstudio.example" });
+    const q = await w.heston.query(api.quotes.get, { quoteId: id });
+    expect(q.who.people.map((p: { email: string }) => p.email).sort()).toEqual(["lee@parkstudio.example", "priya@rao.example"]);
+    expect(q.who.people.find((p: { email: string }) => p.email === "priya@rao.example")).toMatchObject({ name: "Priya Rao", openedAt: expect.any(Number), stopped: false });
+    expect(q.who.people.some((p: { _id: string }) => p._id.startsWith("legacy:"))).toBe(false);
+    expect((await w.t.run((ctx) => ctx.db.get(id)))!.token).toBeUndefined();
+    // Her old link still works, as her own, and her accept closes Lee's.
+    expect(await w.t.query(api.quotes.page, { token: tok })).toMatchObject({ via: "email", for: { name: "Priya Rao", company: "Rao Foods" } });
+    expect((await qpost(w, { token: tok, action: "accept", name: "Priya Rao" })).status).toBe(200);
+    expect((await w.t.query(api.quotes.page, { token: tokenTo(mails, "lee@parkstudio.example") })).answer).toMatchObject({ kind: "already_accepted", name: null });
+    expect(await (await qpost(w, { token: tokenTo(mails, "lee@parkstudio.example"), action: "accept", name: "Lee Park" })).json()).toEqual({ error: "This quote was already accepted." });
+  });
+
+  test("M3: declines on the copied link write history once and email the owner at most once an hour; 20 tries an hour", async () => {
+    vi.useFakeTimers();
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const id = await quote(w);
+    const r = await w.heston.action(api.quotes.send, { quoteId: id, copyLink: true });
+    const link = (r.link as string).split("/q/")[1];
+    for (let i = 0; i < 5; i++) await qpost(w, { token: link, action: "decline", name: `Spam ${i}` });
+    const q = await w.heston.query(api.quotes.get, { quoteId: id });
+    expect(q.history.filter((h: { kind: string }) => h.kind === "declined")).toHaveLength(1);
+    expect(q.history.find((h: { kind: string }) => h.kind === "declined").detail).toBe("Spam 0 (copied link)");
+    await settle(w);
+    expect(mails.filter((m) => m.to === "heston@wranglerproductions.com" && /declined/i.test(m.subject))).toHaveLength(1);
+    for (let i = 5; i < 20; i++) await qpost(w, { token: link, action: "decline", name: "x" });
+    const over = await (await qpost(w, { token: link, action: "accept", name: "Real Person", email: "real@person.example" })).json();
+    expect(over.error).toMatch(/a lot in one hour/);
+    expect((await w.heston.query(api.quotes.get, { quoteId: id })).status).toBe("sent");
+  });
+
+  test("M5: a typed name or company loses braces, angle brackets and control characters", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const id = await quote(w);
+    const r = await w.heston.action(api.quotes.send, { quoteId: id, copyLink: true });
+    const link = (r.link as string).split("/q/")[1];
+    expect((await qpost(w, { token: link, action: "accept", name: "Jo {{sign:heston}} <b>Doe</b>\u0007", email: "jo@doe.example", company: "{{client.company}} Films" })).status).toBe(200);
+    const q = await w.heston.query(api.quotes.get, { quoteId: id });
+    expect(q.contact.name).not.toMatch(/[{}<>\u0000-\u001f]/);
+    expect(q.contact.name).toContain("Jo");
+    expect(q.contact.company).toBe("client.company Films");
+  });
+
+  test("L1 and L3: a stopped person sent again gets a new link; no stopping once accepted or closed", async () => {
+    vi.useFakeTimers();
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const id = await quote(w);
+    await w.heston.action(api.quotes.send, { quoteId: id, to: "a@one.example, b@two.example", copyLink: true });
+    const oldB = tokenTo(mails, "b@two.example");
+    const people = (await w.heston.query(api.quotes.get, { quoteId: id })).who.people;
+    const b = people.find((p: { email: string }) => p.email === "b@two.example"), a = people.find((p: { email: string }) => p.email === "a@one.example");
+    await w.heston.mutation(api.quotes.stopLink, { quoteId: id, personId: b._id });
+    vi.setSystemTime(Date.now() + 60_000);
+    await w.heston.action(api.quotes.send, { quoteId: id, to: "b@two.example" });
+    const newB = tokenTo(mails, "b@two.example");
+    expect(newB).not.toBe(oldB);
+    expect(await w.t.query(api.quotes.page, { token: oldB })).toBeNull();
+    expect(await w.t.query(api.quotes.page, { token: newB })).not.toBeNull();
+    expect((await qpost(w, { token: tokenTo(mails, "a@one.example"), action: "accept", name: "A Person" })).status).toBe(200);
+    await expect(w.heston.mutation(api.quotes.stopLink, { quoteId: id, personId: a._id })).rejects.toThrow(/accepted on that link/);
+    await expect(w.heston.mutation(api.quotes.stopLink, { quoteId: id, personId: b._id })).rejects.toThrow(/while it's open/);
+    await expect(w.heston.mutation(api.quotes.newLink, { quoteId: id })).rejects.toThrow(/while it's open/);
+  });
 });

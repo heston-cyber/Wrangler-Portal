@@ -28,7 +28,7 @@ import { proposalProblems, proposalStarterPage, sectionCount, withoutPrices } fr
 import { WRANGLER_QUESTIONNAIRE, answerList, bound, cleanQuestionnaire, linesTotal, outlineFromAnswers, type Answers, type ClientAnswer, type FileAnswer, type PLine, type Questionnaire } from "./lib/questionnaire";
 import { EMPTY_KIT, MAX_FILE_BYTES, MAX_FILES, linkLabel, type Kit } from "./brandKit";
 import { pageToMarkdown } from "./lib/wsPageMd";
-import { addPeople, answer, forWho, newCopiedLink, noteOpen, parseTo, peopleOf, resolve, rowsOf, stateFor, stopPerson } from "./lib/offers";
+import { addPeople, adoptLegacy, answer, forWho, newCopiedLink, noteOpen, parseTo, peopleOf, resolve, rowsOf, stateFor, stopPerson } from "./lib/offers";
 
 const TOKEN = /^[A-Za-z0-9_-]{16,64}$/;
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
@@ -234,7 +234,7 @@ export const markSent = internalMutation({
     to: v.optional(v.string()), name: v.optional(v.string()), copyLink: v.optional(v.boolean()) },
   handler: async (ctx, a): Promise<{ error?: string; at?: number; legacy?: string | null; sends?: Array<{ rowId: Id<"offerRecipients">; email: string; name: string | null; token: string }>; link?: string | null }> => {
     const { me } = await ownerBiz(ctx);
-    const p = await ctx.db.get(a.proposalId);
+    let p = await ctx.db.get(a.proposalId);
     const build = p ? await ctx.db.get(p.buildId) : null;
     if (!p || !build) throw new ConvexError("That proposal isn't here.");
     const now = Date.now();
@@ -249,18 +249,19 @@ export const markSent = internalMutation({
     if (!list.length && !a.copyLink) throw new ConvexError("Add who it goes to.");
     if (p.status === "sent") { // already out: more people, or the copied link
       if (a.storageId) return { error: "It's already been sent." }; // review M2 (D147): a file handed to a sent one is never touched
+      p = await adoptLegacy(ctx, "proposal", p); // D149 review M1/M2: its contact becomes a person row
       const sends = await addPeople(ctx, "proposal", p, list, now);
       const linkToken = a.copyLink ? p.linkToken ?? randomToken(18) : p.linkToken;
       await ctx.db.patch(p._id, { updatedAt: now, ...(linkToken ? { linkToken } : {}), history: [...p.history, ...(sends.length ? [{ kind: "resent", at: now, by: by(me), detail: sends.map((x) => x.email).join(", ").slice(0, 400) }] : []), ...(a.copyLink && !p.linkToken ? [{ kind: "link_copied", at: now, by: by(me) }] : [])].slice(-60) });
       return { at: now, legacy: null, sends, link: a.copyLink && linkToken ? proposalLink(linkToken) : null };
     }
-    // Review fix: from here the caller owns this proposal, so a refused upload is theirs to drop. Refusals return an
-    // error (a throw would roll the delete back); a file that isn't a fresh PDF upload is never touched or used.
+    // Refusals return an error rather than throw. D149 review L2: a refused file is never deleted here (a storage id
+    // proves nothing about who uploaded it); an unused upload is only a stray file.
     if (!a.storageId) return { error: "The PDF didn't upload. Try again." };
     const file = await ctx.db.system.get(a.storageId);
     if (!file || !fresh(file) || (file.contentType && file.contentType !== "application/pdf") || file.size > MAX_PDF_BYTES) return { error: "The PDF didn't upload. Try again." };
     if (await ctx.db.query("proposals").filter((q) => q.eq(q.field("pdfId"), a.storageId)).first()) return { error: "The PDF didn't upload. Try again." };
-    const refuse = async (error: string) => { await ctx.storage.delete(a.storageId!).catch(() => null); return { error }; };
+    const refuse = async (error: string) => ({ error });
     if (p.filling) return refuse("Finish the questionnaire first.");
     if (p.status === "waiting") return refuse("Claude is still drafting this one.");
     if (!OPEN.has(p.status)) return refuse("This proposal has already been sent.");
@@ -483,11 +484,16 @@ export const respond = httpAction(async (ctx, req) => {
   let b: { token?: unknown; action?: unknown; name?: unknown; email?: unknown; company?: unknown; reason?: unknown };
   try { b = await req.json(); } catch { return json({ error: "Bad request." }, 400); }
   if (typeof b.token !== "string" || (b.action !== "accept" && b.action !== "decline")) return json({ error: "Bad request." }, 400);
-  const r = await ctx.runMutation(internal.proposals.respondInternal, {
-    token: b.token, kind: b.action === "accept" ? "accepted" : "declined", name: typeof b.name === "string" ? b.name.slice(0, 200) : "",
-    email: typeof b.email === "string" ? b.email.slice(0, 254) : undefined, company: typeof b.company === "string" ? b.company.slice(0, 200) : undefined,
-    reason: typeof b.reason === "string" ? b.reason.slice(0, 1200) : undefined, ip: callerIp(req.headers), userAgent: req.headers.get("user-agent") ?? undefined,
-  });
+  let r: { error?: string; ok?: boolean; status?: string };
+  try {
+    r = await ctx.runMutation(internal.proposals.respondInternal, {
+      token: b.token, kind: b.action === "accept" ? "accepted" : "declined", name: typeof b.name === "string" ? b.name.slice(0, 200) : "",
+      email: typeof b.email === "string" ? b.email.slice(0, 254) : undefined, company: typeof b.company === "string" ? b.company.slice(0, 200) : undefined,
+      reason: typeof b.reason === "string" ? b.reason.slice(0, 1200) : undefined, ip: callerIp(req.headers), userAgent: req.headers.get("user-agent") ?? undefined,
+    });
+  } catch (e) { // D149 review M3: too many tries an hour
+    return json({ error: e instanceof ConvexError ? String(e.data) : "Something went wrong. Try again." }, 429);
+  }
   return json(r, "error" in r && r.error ? 409 : 200);
 });
 

@@ -21,7 +21,7 @@ import { deliverOnce } from "./invoiceReminders";
 import { callerIp } from "./lib/wsSigning";
 import { corsHeaders } from "./signing";
 import { fillAgreement, moveCardFor, newAgreementDraft } from "./crm";
-import { addPeople, answer, forWho, newCopiedLink, noteOpen, parseTo, peopleOf, resolve, rowsOf, stateFor, stopPerson } from "./lib/offers";
+import { addPeople, adoptLegacy, answer, forWho, newCopiedLink, noteOpen, parseTo, peopleOf, resolve, rowsOf, stateFor, stopPerson } from "./lib/offers";
 
 const DAY = 86_400_000;
 export const quoteLink = (token: string) => `${SITE()}/q/${token}`;
@@ -199,15 +199,16 @@ export const markSent = internalMutation({
   args: { quoteId: v.id("quotes"), resend: v.boolean(), to: v.optional(v.string()), name: v.optional(v.string()), copyLink: v.optional(v.boolean()) },
   handler: async (ctx, a): Promise<{ at: number; legacy: string | null; sends: Array<{ rowId: Id<"offerRecipients">; email: string; name: string | null; token: string }>; link: string | null }> => {
     const { me } = await ownerBiz(ctx);
-    const q = await ctx.db.get(a.quoteId);
-    if (!q) throw new ConvexError("That quote isn't here.");
+    const q0 = await ctx.db.get(a.quoteId);
+    if (!q0) throw new ConvexError("That quote isn't here.");
     const now = Date.now();
     // Before D149: Send again goes to the contact on the quote's own link.
-    if (a.resend && q.token && a.to === undefined && !a.copyLink) {
-      if (q.status !== "sent") throw new ConvexError("Only an open quote can be resent.");
-      await ctx.db.patch(a.quoteId, { updatedAt: now, history: [...q.history, { kind: "resent", at: now, by: by(me), detail: q.contact?.email }].slice(-60) });
+    if (a.resend && q0.token && a.to === undefined && !a.copyLink) {
+      if (q0.status !== "sent") throw new ConvexError("Only an open quote can be resent.");
+      await ctx.db.patch(a.quoteId, { updatedAt: now, history: [...q0.history, { kind: "resent", at: now, by: by(me), detail: q0.contact?.email }].slice(-60) });
       return { at: now, legacy: `quote-sent:${a.quoteId}:${now}`, sends: [], link: null };
     }
+    const q = q0.status === "sent" ? await adoptLegacy(ctx, "quote", q0) : q0; // M1/M2: its contact becomes a person row
     if (q.status !== "draft" && q.status !== "sent") throw new ConvexError(q.status === "void" ? "This quote was voided." : `This quote was ${q.status}.`);
     if (q.status === "sent" && displayStatus(q) === "expired") throw new ConvexError("Its Valid until date has passed. Make a new quote.");
     if (!q.lines.length || q.totalCents <= 0) throw new ConvexError("Add at least one line with a price.");
@@ -480,11 +481,16 @@ export const respond = httpAction(async (ctx, req) => {
   let b: { token?: unknown; action?: unknown; name?: unknown; email?: unknown; company?: unknown; reason?: unknown };
   try { b = await req.json(); } catch { return json({ error: "Bad request." }, 400); }
   if (typeof b.token !== "string" || (b.action !== "accept" && b.action !== "decline")) return json({ error: "Bad request." }, 400);
-  const r = await ctx.runMutation(internal.quotes.respondInternal, {
-    token: b.token, kind: b.action === "accept" ? "accepted" : "declined", name: typeof b.name === "string" ? b.name.slice(0, 200) : "",
-    email: typeof b.email === "string" ? b.email.slice(0, 254) : undefined, company: typeof b.company === "string" ? b.company.slice(0, 200) : undefined,
-    reason: typeof b.reason === "string" ? b.reason.slice(0, 1200) : undefined, ip: callerIp(req.headers), userAgent: req.headers.get("user-agent") ?? undefined,
-  });
+  let r: { error?: string; ok?: boolean; status?: string };
+  try {
+    r = await ctx.runMutation(internal.quotes.respondInternal, {
+      token: b.token, kind: b.action === "accept" ? "accepted" : "declined", name: typeof b.name === "string" ? b.name.slice(0, 200) : "",
+      email: typeof b.email === "string" ? b.email.slice(0, 254) : undefined, company: typeof b.company === "string" ? b.company.slice(0, 200) : undefined,
+      reason: typeof b.reason === "string" ? b.reason.slice(0, 1200) : undefined, ip: callerIp(req.headers), userAgent: req.headers.get("user-agent") ?? undefined,
+    });
+  } catch (e) { // D149 review M3: too many tries an hour
+    return json({ error: e instanceof ConvexError ? String(e.data) : "Something went wrong. Try again." }, 429);
+  }
   return json(r, "error" in r && r.error ? 409 : 200);
 });
 
