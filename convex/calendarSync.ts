@@ -959,7 +959,7 @@ export const pushed = internalMutation({
     const r = await ctx.db.get(a.eventId);
     if (!r) return;
     const same = (r.pendingAt ?? 0) === a.pendingAt; // nothing newer waiting (a newer edit has its own push queued)
-    await ctx.db.patch(r._id, { gUpdated: Math.max(r.gUpdated, a.updated), syncedAt: Date.now(), pushError: undefined, ...(a.htmlLink ? { htmlLink: a.htmlLink } : {}), ...(same ? { pending: undefined, pendingAt: undefined, guestsDirty: undefined, base: undefined } : r.pending === "create" ? { pending: "update" as const, base: shapeOf(r) } : {}) });
+    await ctx.db.patch(r._id, { gUpdated: Math.max(r.gUpdated, a.updated), syncedAt: Date.now(), pushError: undefined, ...(a.htmlLink ? { htmlLink: a.htmlLink } : {}), ...(same ? { pending: undefined, pendingAt: undefined, guestsDirty: undefined, base: undefined } : r.pending === "create" ? { pending: "update" as const, base: undefined } : {}) }); // (what Google has isn't known here: a later Google change simply wins)
   },
 });
 export const pushFailed = internalMutation({
