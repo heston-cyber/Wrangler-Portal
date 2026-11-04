@@ -1,7 +1,8 @@
 // Phase 5c (Nov 3): Site watch. Checks the portal for problems, keeps one row per problem, and lets the scheduled
 // site-watch agent (docs/SITE-WATCH.md) read them and record what it did.
 // D128 (Heston, Nov 3): it finds, fixes on a watch/… branch and reports; nothing goes live without Heston's "go"; it
-// runs on its own schedule. Alerts wait for the support address (Master Plan § 4b): no email from here yet.
+// runs on its own schedule. D151 (Nov 4): an urgent problem is emailed once to the portal's support address
+// (support@wranglerproductions.com), never to a business; it can email again only after it closes and comes back.
 //
 // What it keeps: counts, function names, email kinds, and (for jobs and emails) error text with addresses, names in
 // "Name <address>", link tokens and keys masked. Records left failed are counted only: their own error text (which
@@ -18,6 +19,7 @@ import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireMe } from "./lib/access";
 import { allowedEmails } from "./lib/owners";
+import { PORTAL_FROM, SITE, SUPPORT, sendEmail } from "./lib/email";
 
 const DAY = 24 * 60 * 60 * 1000;
 const KEEP_DAYS = 30; // Q47 (Heston, Nov 3): each run's list is kept 30 days, then cleared
@@ -37,7 +39,7 @@ export function clean(text: string | undefined | null, max = 240) {
     .slice(0, max);
 }
 
-/** Money and signing can't wait for the next look: shown first (and emailed once the support address exists). */
+/** Money and signing can't wait for the next look: shown first, and emailed to the support address (D151). */
 export const isUrgent = (key: string, count: number) =>
   /invoice|stripe|payment|payout|subscription|renew|webhook|wsDocuments|signDone|signing|to_sign|signed|paid|receipt|refund|overdue|past_due|uncollectible/i.test(key) || count >= 10;
 
@@ -52,6 +54,10 @@ const urgentFor = (r: Doc<"siteWatchFindings"> | null, key: string, count: numbe
 
 /** One event (an email that didn't send): adds to the count. A new one after "done" opens it again. */
 export async function noteEvent(ctx: MutationCtx, s: Omit<Seen, "count">) {
+  await noteEventRow(ctx, s);
+  await syncAlert(ctx, s.key);
+}
+async function noteEventRow(ctx: MutationCtx, s: Omit<Seen, "count">) {
   const now = Date.now();
   const r = await ctx.db.query("siteWatchFindings").withIndex("by_key", (q) => q.eq("key", s.key)).unique();
   const detail = s.detail ? { detail: clean(s.detail) } : {};
@@ -61,7 +67,7 @@ export async function noteEvent(ctx: MutationCtx, s: Omit<Seen, "count">) {
   }
   const back = r.status === "cleared" || r.status === "fixed";
   const count = back ? 1 : r.count + 1;
-  await ctx.db.patch(r._id, { title: s.title, ...detail, count, lastAt: now, status: back ? "found" : r.status, urgent: urgentFor(r, s.key, count), doneAt: undefined, doneCount: undefined, quietAt: undefined, updatedAt: now });
+  await ctx.db.patch(r._id, { title: s.title, ...detail, count, lastAt: now, status: back ? "found" : r.status, urgent: urgentFor(r, s.key, count), doneAt: undefined, doneCount: undefined, quietAt: undefined, ...(back ? { alertedAt: undefined } : {}), updatedAt: now });
 }
 
 /**
@@ -70,6 +76,11 @@ export async function noteEvent(ctx: MutationCtx, s: Omit<Seen, "count">) {
  * when it gets worse or fails again later (review L1).
  */
 async function noteState(ctx: MutationCtx, s: Seen): Promise<"found" | "cleared" | null> {
+  const out = await noteStateRow(ctx, s);
+  await syncAlert(ctx, s.key);
+  return out;
+}
+async function noteStateRow(ctx: MutationCtx, s: Seen): Promise<"found" | "cleared" | null> {
   const now = Date.now();
   const r = await ctx.db.query("siteWatchFindings").withIndex("by_key", (q) => q.eq("key", s.key)).unique();
   const detail = s.detail ? { detail: clean(s.detail) } : {};
@@ -92,10 +103,82 @@ async function noteState(ctx: MutationCtx, s: Seen): Promise<"found" | "cleared"
   await ctx.db.patch(r._id, {
     title: s.title, ...detail, count: s.count, ...hits, lastAt: s.lastAt ?? (back || s.count !== r.count ? now : r.lastAt),
     status: back ? "found" : r.status, urgent: urgentFor(back ? null : r, s.key, s.count), quietAt: undefined,
-    ...(back ? { doneAt: undefined, doneCount: undefined } : {}), updatedAt: now,
+    ...(back ? { doneAt: undefined, doneCount: undefined, alertedAt: undefined } : {}), updatedAt: now,
   });
   return back ? "found" : null;
 }
+
+// ---------- the urgent email (D151) ----------
+
+/**
+ * After every write: an open, urgent problem not yet emailed gets one email to the portal's support address. A closed
+ * one forgets it was emailed, so if it comes back it's emailed again. Never to a business, never with client data
+ * (titles are the app's own; detail and note are already masked by clean()).
+ */
+async function syncAlert(ctx: MutationCtx, key: string) {
+  const r = await ctx.db.query("siteWatchFindings").withIndex("by_key", (q) => q.eq("key", key)).unique();
+  if (!r) return;
+  if (!(OPEN as readonly string[]).includes(r.status)) { if (r.alertedAt) await ctx.db.patch(r._id, { alertedAt: undefined }); return; }
+  if (!r.urgent || r.alertedAt) return;
+  const at = Date.now();
+  await ctx.db.patch(r._id, { alertedAt: at });
+  await ctx.scheduler.runAfter(0, internal.siteWatch.urgentMail, { findingId: r._id, at });
+}
+
+export const urgentData = internalQuery({
+  args: { findingId: v.id("siteWatchFindings"), at: v.number() },
+  handler: async (ctx, { findingId, at }) => {
+    const r = await ctx.db.get(findingId);
+    if (!r || r.alertedAt !== at || !r.urgent) return null; // closed (or re-sent) in the meantime
+    return { key: r.key, area: r.area, title: r.title, detail: r.detail ?? null, note: r.note ?? null, count: r.count, hits: r.hits ?? null, status: r.status, firstAt: r.firstAt };
+  },
+});
+
+/** The email didn't go: forget it was sent, so the next look (or write) tries again. */
+export const alertFailed = internalMutation({
+  args: { findingId: v.id("siteWatchFindings"), at: v.number() },
+  handler: async (ctx, { findingId, at }) => {
+    const r = await ctx.db.get(findingId);
+    if (r && r.alertedAt === at) await ctx.db.patch(r._id, { alertedAt: undefined });
+  },
+});
+
+export function urgentMailText(d: { title: string; area: string; detail: string | null; note: string | null; count: number; hits: number | null; status: string }) {
+  const lines = [
+    `Site watch found an urgent problem on Wrangler Portal.`,
+    ``,
+    d.title,
+    `Area: ${d.area} · ${d.count === 1 ? "seen once" : `count ${d.count}`}${d.hits ? ` · ${d.hits} ${d.hits === 1 ? "business" : "businesses"} affected` : ""}`,
+    ...(d.detail ? [`Detail: ${d.detail}`] : []),
+    ...(d.status === "needs_you" && d.note ? [`The site-watch agent: ${d.note}`] : []),
+    ``,
+    `Money and signing problems aren't fixed on their own: they wait for you. Open the portal: ${SITE()}`,
+    ``,
+    `You get one email per problem. Another comes only if it's closed and then happens again.`,
+  ];
+  return { subject: `Site watch: urgent · ${d.title}`.slice(0, 140), text: lines.join("\n") };
+}
+
+export const urgentMail = internalAction({
+  args: { findingId: v.id("siteWatchFindings"), at: v.number() },
+  handler: async (ctx, { findingId, at }): Promise<"sent" | "held" | "gone" | "already"> => {
+    const d = await ctx.runQuery(internal.siteWatch.urgentData, { findingId, at });
+    if (!d) return "gone";
+    const to = SUPPORT();
+    const key = `site-watch-urgent:${findingId}:${at}`;
+    if (!(await ctx.runMutation(internal.emails.claim, { key, kind: "site_watch_urgent", to }))) return "already";
+    const m = urgentMailText(d);
+    try {
+      const id = await sendEmail({ from: PORTAL_FROM(), to, subject: m.subject, text: m.text, tag: "site_watch_urgent", replyTo: null });
+      await ctx.runMutation(internal.emails.sent, { key, resendId: id || "sent" });
+      return id === "held" ? "held" : "sent";
+    } catch (e) {
+      await ctx.runMutation(internal.siteWatch.alertFailed, { findingId, at });
+      await ctx.runMutation(internal.emails.unclaim, { key, error: String((e as Error)?.message ?? e).slice(0, 2000) });
+      return "gone";
+    }
+  },
+});
 
 // ---------- the app's own look (paged, so it can't outgrow Convex's read limits: review M2) ----------
 
@@ -166,7 +249,7 @@ export const apply = internalMutation({
       for (const r of await ctx.db.query("siteWatchFindings").withIndex("by_status", (q) => q.eq("status", st)).collect()) {
         if (r.area === "job" && !seen.has(r.key)) tally(await noteState(ctx, { key: r.key, area: r.area, title: r.title, count: 0 }));
         // Emails: no new failure in 7 days closes it (a fix waiting for Heston stays).
-        if (r.area === "email" && r.status !== "fix_ready" && r.lastAt < now - 7 * DAY) { await ctx.db.patch(r._id, { status: "cleared", updatedAt: now }); cleared++; }
+        if (r.area === "email" && r.status !== "fix_ready" && r.lastAt < now - 7 * DAY) { await ctx.db.patch(r._id, { status: "cleared", updatedAt: now }); await syncAlert(ctx, r.key); cleared++; }
       }
     }
     // The look worked: a "check failed" problem from an earlier day closes.
@@ -290,6 +373,7 @@ export const markDone = mutation({
     if (!r) return null;
     const now = Date.now();
     await ctx.db.patch(r._id, { status: r.status === "fix_ready" ? "fixed" : "cleared", doneAt: now, doneCount: r.count, quietAt: undefined, updatedAt: now });
+    await syncAlert(ctx, r.key);
     return null;
   },
 });
@@ -329,6 +413,7 @@ export const agentClear = internalMutation({
     const r = await ctx.db.query("siteWatchFindings").withIndex("by_key", (q) => q.eq("key", key)).unique();
     if (!r || r.status === "cleared" || r.status === "fixed") return false;
     await ctx.db.patch(r._id, { status: r.status === "fix_ready" ? "fixed" : "cleared", count: 0, quietAt: undefined, updatedAt: Date.now() });
+    await syncAlert(ctx, key);
     return true;
   },
 });
@@ -358,6 +443,7 @@ export const agentNeedsYou = internalMutation({
     const r = await ctx.db.query("siteWatchFindings").withIndex("by_key", (q) => q.eq("key", key)).unique();
     if (!r) throw new ConvexError("No such problem.");
     await ctx.db.patch(r._id, { status: "needs_you", note: clean(note, 400), urgent: true, updatedAt: Date.now() });
+    await syncAlert(ctx, key);
     return null;
   },
 });

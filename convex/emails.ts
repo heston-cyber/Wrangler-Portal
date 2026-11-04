@@ -12,11 +12,10 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { allowedEmails } from "./auth";
 import { frameTc } from "./lib/frames";
 import { randomToken } from "./lib/hash";
 import { businessInScope, defaultBusiness } from "./lib/business";
-import { REPLY_TO, SITE, sendEmail } from "./lib/email";
+import { SITE, sendEmail } from "./lib/email";
 import { clientKey, sameBusiness, shareCovers, shareState } from "./lib/shareAccess";
 import { emailThumbUrl } from "./lib/media";
 import { mailBrandOf } from "./lib/mail";
@@ -28,8 +27,6 @@ export const NEW_VERSION_DELAY_MS = 60_000;
 type Kind = "versions" | "replies" | "notes";
 const projectLabel = (p: { name: string; jobNumber?: string } | null) => (p ? (p.jobNumber ? `${p.jobNumber} ${p.name}` : p.name) : "");
 
-/** Where Heston's own alerts go: ALERT_EMAIL, else the first owner email, else the reply-to address. */
-export const alertEmail = () => process.env.ALERT_EMAIL || allowedEmails()[0] || REPLY_TO();
 
 // ---------- preferences and the log ----------
 
@@ -261,9 +258,10 @@ export const ownerAlert = internalAction({
     if (!d) return { sent: 0, reason: "nothing new" };
     if (Date.now() - d.newest < ALERT_DELAY_MS - 5_000) return { sent: 0, reason: "still writing" };
     const m = ownerAlertMail(d.brand, d);
-    // Phase 0.5d step 4: the owner of this video's business (Wrangler keeps ALERT_EMAIL if it's set).
+    // Phase 0.5d step 4: the owner of this video's business. D151 (Nov 4): Wrangler Productions too, like any
+    // business (the old ALERT_EMAIL copy for the first business is gone).
     const biz = await ctx.runQuery(internal.business.contact, {});
-    const to = (biz.isDefault && process.env.ALERT_EMAIL) || biz.ownerEmail;
+    const to = biz.ownerEmail;
     // Review fix: switched off (Settings › Notifications): these notes count as told, so they don't pile up for later.
     if (await ctx.runQuery(internal.emails.isOff, { email: to, kind: "alert", ...(biz.businessId ? { businessId: biz.businessId } : {}) })) {
       await ctx.runMutation(internal.emails.markAlerted, { noteIds: d.noteIds });

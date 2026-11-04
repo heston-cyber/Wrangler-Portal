@@ -2,8 +2,9 @@
 
 Wrangler Portal's site-watch agent checks the portal on its own schedule, records what's wrong in Site watch, and
 fixes what it safely can on a branch. **D128 (Heston, Nov 3): it finds, fixes on a `watch/…` branch and reports; nothing goes
-live without Heston's "go".** It runs on its own schedule. Alerts wait for the support address (Master Plan § 4b),
-so it sends no email.
+live without Heston's "go".** It runs on its own schedule. The app itself emails an urgent problem (money,
+signing, 10+ repeats, or one you hand to Heston with needsYou) once to support@wranglerproductions.com (D151); you send
+no email yourself.
 
 This file is the scheduled task's standing instructions. Every run starts fresh, so everything it needs is here.
 

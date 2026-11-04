@@ -1,6 +1,6 @@
 // Phase 5c (Nov 3): Site watch. Tests T5c.1–T5c.5 from the read-back (Heston approved, 12:02).
 import { convexTest } from "convex-test";
-import { afterEach, beforeAll, expect, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { anyApi } from "convex/server";
 import schema from "../convex/schema";
 import type { Id } from "../convex/_generated/dataModel";
@@ -10,8 +10,23 @@ const modules = import.meta.glob("../convex/**/*.ts");
 const api = anyApi;
 const internal = anyApi;
 
-beforeAll(() => { process.env.ALLOWED_EMAILS = "heston@wranglerproductions.com"; });
-afterEach(() => { vi.useRealTimers(); });
+beforeAll(() => { process.env.ALLOWED_EMAILS = "heston@wranglerproductions.com"; process.env.RESEND_API_KEY = "re_test"; delete process.env.SUPPORT_EMAIL; });
+// D151 (Nov 4): urgent problems now email the support address; every test catches what Resend would have sent.
+type Sent = { from: string; to: string; subject: string; text: string; reply_to?: string };
+let sent: Sent[] = [];
+let resendDown = false;
+beforeEach(() => {
+  sent = []; resendDown = false;
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (url !== "https://api.resend.com/emails") return new Response("{}", { status: 500 });
+    if (resendDown) return new Response(JSON.stringify({ message: "down" }), { status: 503 });
+    const b = JSON.parse(String(init?.body));
+    sent.push({ from: b.from, to: b.to[0], subject: b.subject, text: b.text, reply_to: b.reply_to });
+    return new Response(JSON.stringify({ id: `em_${sent.length}` }), { status: 200 });
+  });
+});
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 async function setup() {
   const t = convexTest(schema, modules);
@@ -92,7 +107,9 @@ test("T5c.1 an email that fails is counted per kind; urgent for money; quiet aft
   await w.t.mutation(internal.emails.unclaim, { key: "ok" });
   await w.t.finishAllScheduledFunctions(vi.runAllTimers);
   expect((await findings(w)).find((x) => x.key === "email:footage_offer")!.count).toBe(2);
-  expect((await w.t.run((ctx) => ctx.db.query("emailLog").collect())).map((l) => l.key)).toEqual(["ok"]);
+  const log = (await w.t.run((ctx) => ctx.db.query("emailLog").collect())).map((l) => l.key);
+  expect(log.filter((k) => !k.startsWith("site-watch-urgent:"))).toEqual(["ok"]);
+  expect(log.filter((k) => k.startsWith("site-watch-urgent:"))).toHaveLength(1); // D151: the invoice one, once
   await w.t.run(async (ctx) => { for (const r of await ctx.db.query("siteWatchFindings").collect()) await ctx.db.patch(r._id, { lastAt: Date.now() - 8 * 86_400_000 }); });
   await check(w);
   expect((await findings(w)).filter((x) => x.area === "email").every((x) => x.status === "cleared")).toBe(true);
@@ -184,17 +201,22 @@ test("T5c.3 nobody but the portal's admins sees or changes it: not another busin
   expect((await findings(w))[0].status).toBe("cleared");
 });
 
-test("T5c.4 urgent problems are marked urgent and sent nowhere until the support address exists", async () => {
+test("T5c.4 (D151) an urgent problem is emailed once to the support address, masked, never to a business", async () => {
   vi.useFakeTimers();
   const w = await setup();
-  await fail(w, "invoice", "Stripe said no: whsec_abcdefghijklmnop");
-  const f = (await findings(w))[0];
+  await fail(w, "invoice", "Stripe said no: whsec_abcdefghijklmnop for maya@harbor.example");
+  const f = (await findings(w)).find((x) => x.key === "email:invoice")!;
   expect(f.urgent).toBe(true);
   expect(f.detail).not.toContain("abcdefghijklmnop");
-  expect((await w.t.run((ctx) => ctx.db.query("emailLog").collect())).length).toBe(0);
+  expect(sent).toHaveLength(1);
+  expect(sent[0].to).toBe("support@wranglerproductions.com");
+  expect(sent[0].from).toBe("Wrangler Portal <review@wranglerportal.com>");
+  expect(sent[0].subject).toBe("Site watch: urgent · Email didn't send: invoice");
+  expect(sent[0].text).not.toContain("abcdefghijklmnop");
+  expect(sent[0].text).not.toContain("maya@harbor.example");
+  expect(sent[0].reply_to).toBeUndefined();
   expect(await w.heston.query(api.siteWatch.summary, {})).toEqual({ open: 1, urgent: 1 });
 });
-
 test("T5c.1 a background job that failed in the last day is found, grouped by function", async () => {
   vi.useFakeTimers();
   const w = await setup();

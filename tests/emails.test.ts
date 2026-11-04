@@ -184,12 +184,13 @@ describe("Heston's alert", () => {
     await t.run(async (ctx) => ctx.db.patch(c, { createdAt: Date.now() - 11 * 60_000 }));
     expect((await t.action(internal.emails.ownerAlert, { videoId: ids.brand })).sent).toBe(1);
     expect(mails[1].subject).toBe("1 new note on Brand Film from Maya Chen");
-    // ALERT_EMAIL overrides where it goes.
+    // D151 (Nov 4): the old ALERT_EMAIL setting no longer redirects it: Wrangler Productions' alerts go to its owner,
+    // like any business's (the portal's own mail goes to the support address instead).
     process.env.ALERT_EMAIL = "alerts@wranglerproductions.com";
     const d = await maya.mutation(api.notes.create, { versionId: ids.v1, kind: "general", text: "again", share: { token: share.token } });
     await t.run(async (ctx) => ctx.db.patch(d, { createdAt: Date.now() - 11 * 60_000 }));
     await t.action(internal.emails.ownerAlert, { videoId: ids.brand });
-    expect(mails[2].to).toBe("alerts@wranglerproductions.com");
+    expect(mails[2].to).toBe("heston@wranglerproductions.com");
     delete process.env.ALERT_EMAIL;
   });
 

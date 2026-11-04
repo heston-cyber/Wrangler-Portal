@@ -1,7 +1,14 @@
-// Outgoing email through Resend (client side, Oct 23). From review@wranglerportal.com (verified domain); replies
-// go to Heston. RESEND_API_KEY is in the Convex dashboard. Returns the Resend id or throws.
+// Outgoing email through Resend (client side, Oct 23). From review@wranglerportal.com (verified domain).
+// RESEND_API_KEY is in the Convex dashboard. Returns the Resend id or throws.
 export const FROM = () => process.env.EMAIL_FROM || "Wrangler Review <review@wranglerportal.com>";
-export const REPLY_TO = () => process.env.EMAIL_REPLY_TO || "heston@wranglerproductions.com";
+/** D151 (Heston, Nov 4): Wrangler Portal is its own business. Its own mail (Site watch, failed emails and jobs,
+ *  servicing, the portal's support contact) goes to its support address, never to a business that uses the portal.
+ *  A business's own mail uses that business's settings (its reply-to and owner), Wrangler Productions included. */
+export const SUPPORT = () => (process.env.SUPPORT_EMAIL ?? "").trim() || "support@wranglerproductions.com";
+/** Replies to an email that names no reply-to: the portal's support address (every business email names its own). */
+export const REPLY_TO = SUPPORT;
+/** The portal's own sender name, for its system mail (same verified address). */
+export const PORTAL_FROM = () => FROM().replace(/^[^<]*</, "Wrangler Portal <");
 export { SITE } from "./site";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");

@@ -8,7 +8,7 @@ import type { Id } from "./_generated/dataModel";
 import { ConvexError } from "convex/values";
 import { brandFrom } from "./lib/mail";
 import { resetMail, signInCodeMail } from "./lib/mails";
-import { sendEmail, sixDigits } from "./lib/email";
+import { SUPPORT, sendEmail, sixDigits } from "./lib/email";
 import type { MutationCtx } from "./_generated/server";
 import { SITE_HOST } from "./lib/site";
 import { allowedEmails } from "./lib/owners";
@@ -34,7 +34,7 @@ function codeByEmail(id: string, kind: "verify" | "reset") {
       // Sign-in happens before we know whose client this is, so these come from the portal's default business.
       const b = brandFrom({ name: "Wrangler Productions", legalName: "Hill Creative LLC", ownerName: "Heston Hill" }, { ownerEmail: "heston@wranglerproductions.com", logoUrl: null, isDefault: true });
       const m = kind === "verify" ? signInCodeMail(b, { code: token, minutes: CODE_MINUTES }) : resetMail(b, { code: token, minutes: CODE_MINUTES });
-      await sendEmail({ from: m.from, to: email, tag: kind === "verify" ? "code" : "reset", replyTo: null, subject: m.subject, text: m.text, html: m.html });
+      await sendEmail({ from: m.from, to: email, tag: kind === "verify" ? "code" : "reset", replyTo: SUPPORT(), subject: m.subject, text: m.text, html: m.html }); // D151: replies reach the portal's support
     },
   });
 }

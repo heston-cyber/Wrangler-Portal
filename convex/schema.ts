@@ -1128,6 +1128,7 @@ export default defineSchema({
     doneAt: v.optional(v.number()),        // Heston marked it done; reopens only if it gets worse or fails again (L1)
     doneCount: v.optional(v.number()),
     note: v.optional(v.string()),
+    alertedAt: v.optional(v.number()),     // D151: when its urgent email went to the support address (once per opening)
     updatedAt: v.number(),
   }).index("by_key", ["key"]).index("by_status", ["status"]),
   siteWatchRuns: defineTable({
