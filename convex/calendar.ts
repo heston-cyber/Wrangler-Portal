@@ -4,11 +4,11 @@
 // Needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Convex (Heston's own Google Cloud sign-in setup) and the
 // redirect address below added to it. Until then the section says so and shoots save without a calendar event.
 import { action, httpAction } from "./_generated/server";
-import { internalAction, internalMutation, internalQuery, mutation, query } from "./lib/functions";
+import { forBusiness, internalAction, internalMutation, internalQuery, mutation, query, type Scope } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import type { ActionCtx } from "./_generated/server";
+import type { ActionCtx, MutationCtx } from "./_generated/server";
 import { requireMe } from "./lib/access";
 import { portalPeople } from "./projects";
 import { label } from "./lib/bookingRows";
@@ -19,6 +19,18 @@ const TZ = "America/Chicago"; // the businesses' wall clock (shoot times are loc
 export const creds = () => ({ id: process.env.GOOGLE_CLIENT_ID ?? "", secret: process.env.GOOGLE_CLIENT_SECRET ?? "" });
 export const hasKeys = () => !!(creds().id && creds().secret);
 export const redirectUri = () => `${(process.env.CONVEX_SITE_URL ?? "").replace(/\/+$/, "")}/calendar/callback`;
+/** Review fix H1: every internal function here acts for one business. A job with none (the old unscoped way) would read
+ *  whichever business's connection comes first, so it's refused. Queries and mutations: a signed-in owner or asBusiness. */
+export function scoped(ctx: object) {
+  const s = (ctx as { scope?: Scope | null }).scope;
+  if (!s?.owner) throw new Error("Google Calendar work runs for one business at a time.");
+  return s.owner;
+}
+/** Actions: asBusiness (the scheduler and forBusiness carry it). */
+export function scopedAction(ctx: { asBusiness?: Id<"businesses"> }) {
+  if (!ctx.asBusiness) throw new Error("Google Calendar work runs for one business at a time.");
+  return ctx.asBusiness;
+}
 const randomToken = () => { const b = new Uint8Array(24); crypto.getRandomValues(b); return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join(""); };
 
 // ---------- the owner's settings ----------
@@ -69,8 +81,10 @@ export const callback = httpAction(async (_ctx, req) => {
 
 export const finish = action({
   args: { code: v.string(), state: v.string() },
-  handler: async (ctx, { code, state }): Promise<{ email: string }> => {
-    const me: { userId: string } = await ctx.runQuery(internal.users.assertAllowed, {});
+  handler: async (raw, { code, state }): Promise<{ email: string }> => {
+    const me: { userId: string; businessId: Id<"businesses"> | null } = await raw.runQuery(internal.users.assertAllowed, {});
+    if (!me.businessId) throw new ConvexError("Which business this is for isn't clear.");
+    const ctx = forBusiness(raw, me.businessId); // review fix H1: everything from here on, scheduled jobs too, is this business's
     const ok = await ctx.runMutation(internal.calendar.takeState, { state, userId: me.userId });
     if (!ok) throw new ConvexError("That sign-in expired or was started by someone else. Press Connect Google Calendar again.");
     try {
@@ -78,7 +92,7 @@ export const finish = action({
       if (!tok.refresh_token) throw new Error("Google didn't send a refresh token. Remove the portal from your Google account's third-party access, then connect again.");
       const email = emailOf(tok.id_token) || "your Google account";
       await ctx.runMutation(internal.calendar.saveConnection, { email, refreshToken: tok.refresh_token, accessToken: tok.access_token!, accessExpiresAt: Date.now() + (tok.expires_in ?? 3600) * 1000 });
-      await ctx.runAction(internal.calendar.resync, {});
+      await ctx.runAction(internal.calendar.resync, {}); // sendUpdates "none" (review fixes M1, L5)
       await ctx.scheduler.runAfter(0, internal.calendarSync.pull, {}); // Phase 5b step 5: the calendar page's events
       return { email };
     } catch (e) { throw new ConvexError(String((e as Error).message).replace(/^Uncaught Error: /, "").slice(0, 200)); }
@@ -97,19 +111,31 @@ export const takeState = internalMutation({
 export const saveConnection = internalMutation({
   args: { email: v.string(), refreshToken: v.string(), accessToken: v.string(), accessExpiresAt: v.number() },
   handler: async (ctx, a) => {
+    scoped(ctx);
     const old = await ctx.db.query("calendars").first();
     const same = old && old.email.toLowerCase() === a.email.toLowerCase();
     // Phase 5b step 5: reconnecting the same account keeps the calendar list and where each calendar's sync had got to.
     const keep = old ? { ...(same ? { calendarId: old.calendarId, calendarName: old.calendarName, list: old.list, lastSyncedAt: old.lastSyncedAt } : {}), inviteVendors: old.inviteVendors, inviteClient: old.inviteClient } : { inviteVendors: true, inviteClient: false };
     if (old) await ctx.db.delete(old._id);
-    if (old && !same) for (const r of await ctx.db.query("calendarEvents").collect()) await ctx.db.delete(r._id); // another account's events
+    if (old && !same) await forgetGoogle(ctx); // another account: its events and the shoots' links to them go (review fixes L5, M7)
     await ctx.db.insert("calendars", { ...a, ...keep, connectedAt: Date.now() });
   },
 });
-export const getConnection = internalQuery({ args: {}, handler: async (ctx) => ctx.db.query("calendars").first() });
+/** The portal's copies of one Google account: the shoots stop pointing at its events and the moved-in-Google notes go
+ *  (review fix L5), and the copied events are deleted in batches after (review fix M7; rows made from now on stay). */
+async function forgetGoogle(ctx: MutationCtx) {
+  const now = Date.now();
+  for (const s of await ctx.db.query("shoots").collect()) {
+    const openNote = s.googleMove && !s.googleMove.doneAt;
+    if (s.calendarEvent || openNote || s.calError) await ctx.db.patch(s._id, { calendarEvent: undefined, calError: undefined, ...(openNote ? { googleMove: undefined } : {}) });
+  }
+  await ctx.scheduler.runAfter(0, internal.calendarSync.purge, { why: "all", before: now });
+}
+export const getConnection = internalQuery({ args: {}, handler: async (ctx) => { scoped(ctx); return await ctx.db.query("calendars").first(); } });
 export const patchConnection = internalMutation({
   args: { accessToken: v.optional(v.string()), accessExpiresAt: v.optional(v.number()), lastError: v.optional(v.string()), clearError: v.optional(v.boolean()) },
   handler: async (ctx, a) => {
+    scoped(ctx);
     const c = await ctx.db.query("calendars").first();
     if (!c) return;
     await ctx.db.patch(c._id, { ...(a.accessToken ? { accessToken: a.accessToken, accessExpiresAt: a.accessExpiresAt } : {}), ...(a.lastError ? { lastError: a.lastError.slice(0, 300) } : {}), ...(a.clearError ? { lastError: undefined } : {}) });
@@ -118,10 +144,12 @@ export const patchConnection = internalMutation({
 
 /** Phase 5b step 5: Google no longer lets the portal in (access removed, password changed, token expired). */
 export class Disconnected extends Error {}
-export async function accessToken(ctx: ActionCtx): Promise<string> {
+type Runner = Pick<ActionCtx, "runQuery" | "runMutation">;
+/** `fresh`: ask Google for a new access token even when the saved one looks valid (after a 401: review fix L4). */
+export async function accessToken(ctx: Runner, fresh = false): Promise<string> {
   const c: Doc<"calendars"> | null = await ctx.runQuery(internal.calendar.getConnection, {});
   if (!c) throw new Error("Google Calendar isn't connected.");
-  if (c.accessToken && (c.accessExpiresAt ?? 0) > Date.now() + 120_000) return c.accessToken;
+  if (!fresh && c.accessToken && (c.accessExpiresAt ?? 0) > Date.now() + 120_000) return c.accessToken;
   let tok;
   try { tok = await tokenRequest({ grant_type: "refresh_token", refresh_token: c.refreshToken }); }
   catch (e) {
@@ -134,7 +162,7 @@ export async function accessToken(ctx: ActionCtx): Promise<string> {
 }
 export const markDisconnected = internalMutation({
   args: {},
-  handler: async (ctx) => { const c = await ctx.db.query("calendars").first(); if (c && !c.disconnectedAt) await ctx.db.patch(c._id, { disconnectedAt: Date.now(), accessToken: undefined, accessExpiresAt: undefined }); },
+  handler: async (ctx) => { scoped(ctx); const c = await ctx.db.query("calendars").first(); if (c && !c.disconnectedAt) await ctx.db.patch(c._id, { disconnectedAt: Date.now(), accessToken: undefined, accessExpiresAt: undefined }); },
 });
 export async function gcal(token: string, method: string, path: string, body?: unknown) {
   const r = await fetch(`https://www.googleapis.com/calendar/v3${path}`, { method, headers: { authorization: `Bearer ${token}`, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
@@ -142,6 +170,23 @@ export async function gcal(token: string, method: string, path: string, body?: u
   let json: any = null;
   try { json = text ? JSON.parse(text) : null; } catch { /* not JSON */ }
   return { status: r.status, json, text };
+}
+export type Google = (method: string, path: string, body?: unknown) => Promise<{ status: number; json: any; text: string }>;
+/** Calls Google with the saved sign-in. Review fix L4: a 401 first gets a fresh access token and one more try; only a
+ *  second 401 (or Google refusing the refresh) marks the connection disconnected. Throws Disconnected then. */
+export async function google(ctx: Runner): Promise<Google> {
+  let token = await accessToken(ctx);
+  let refreshed = false;
+  return async (method, path, body) => {
+    let r = await gcal(token, method, path, body);
+    if (r.status === 401 && !refreshed) {
+      refreshed = true;
+      token = await accessToken(ctx, true);
+      r = await gcal(token, method, path, body);
+    }
+    if (r.status === 401) { await ctx.runMutation(internal.calendar.markDisconnected, {}); throw new Disconnected("401"); }
+    return r;
+  };
 }
 
 /** The calendars to pick from (ones the account can add events to). */
@@ -173,19 +218,34 @@ export const save = mutation({
   },
 });
 
+// Review fix M7: in three steps, so a cleanup that fails can be run again (press Disconnect again): the connection is
+// marked disconnected first (nothing syncs from then on, the shoots stop pointing at its events), then Google's access
+// is revoked, then the connection and the copies of its events are removed (the events in batches).
 export const disconnect = action({
   args: {},
-  handler: async (ctx) => {
-    await ctx.runQuery(internal.users.assertAllowed, {});
+  handler: async (raw) => {
+    const me: { businessId: Id<"businesses"> | null } = await raw.runQuery(internal.users.assertAllowed, {});
+    if (!me.businessId) throw new ConvexError("Which business this is for isn't clear.");
+    const ctx = forBusiness(raw, me.businessId);
     const c: Doc<"calendars"> | null = await ctx.runQuery(internal.calendar.getConnection, {});
-    if (c) { try { await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(c.refreshToken)}`, { method: "POST" }); } catch { /* already gone */ } }
+    if (!c) return null;
+    await ctx.runMutation(internal.calendar.beginDisconnect, {});
+    try { await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(c.refreshToken)}`, { method: "POST" }); } catch { /* already gone */ }
     await ctx.runMutation(internal.calendar.removeConnection, {});
     return null;
   },
 });
+export const beginDisconnect = internalMutation({ args: {}, handler: async (ctx) => {
+  scoped(ctx);
+  const c = await ctx.db.query("calendars").first();
+  if (!c) return;
+  await ctx.db.patch(c._id, { disconnectedAt: c.disconnectedAt ?? Date.now(), accessToken: undefined, accessExpiresAt: undefined, pullingSince: undefined, pullRun: undefined });
+  await forgetGoogle(ctx);
+} });
 export const removeConnection = internalMutation({ args: {}, handler: async (ctx) => {
+  scoped(ctx);
   for (const c of await ctx.db.query("calendars").collect()) await ctx.db.delete(c._id);
-  for (const r of await ctx.db.query("calendarEvents").collect()) await ctx.db.delete(r._id); // Phase 5b step 5: the copies of Google's events go too
+  await ctx.scheduler.runAfter(0, internal.calendarSync.purge, { why: "all", before: Date.now() }); // and anything made meanwhile
 } });
 
 // ---------- shoots on the calendar ----------
@@ -194,6 +254,7 @@ export const removeConnection = internalMutation({ args: {}, handler: async (ctx
 export const eventFor = internalQuery({
   args: { shootId: v.id("shoots") },
   handler: async (ctx, { shootId }) => {
+    scoped(ctx);
     const s = await ctx.db.get(shootId);
     if (!s) return null;
     const c = await ctx.db.query("calendars").first();
@@ -220,26 +281,33 @@ export const eventFor = internalQuery({
 });
 export const setEvent = internalMutation({
   args: { shootId: v.id("shoots"), event: v.optional(v.object({ id: v.string(), calendarId: v.string(), updated: v.optional(v.number()), at: v.optional(v.number()) })) },
-  handler: async (ctx, { shootId, event }) => { if (await ctx.db.get(shootId)) await ctx.db.patch(shootId, { calendarEvent: event }); },
+  handler: async (ctx, { shootId, event }) => { scoped(ctx); if (await ctx.db.get(shootId)) await ctx.db.patch(shootId, { calendarEvent: event, calError: undefined }); },
+});
+/** Review fix M2: the shoot's last write to Google failed (the calendar page's toast says so). */
+export const shootError = internalMutation({
+  args: { shootId: v.id("shoots"), error: v.string() },
+  handler: async (ctx, { shootId, error }) => { scoped(ctx); if (await ctx.db.get(shootId)) await ctx.db.patch(shootId, { calError: error.slice(0, 200) }); },
 });
 
 /** The event's own id: fixed per shoot (Google takes base32hex ids), so two syncs at once can't make two events. */
 export const eventId = (shootId: string) => `shoot${Array.from(new TextEncoder().encode(shootId), (b) => b.toString(16).padStart(2, "0")).join("")}`;
 
 /** Puts a shoot on the calendar, moves it, or takes it off: whatever its state calls for now (checked again after). */
-// Phase 5b step 5: sendUpdates "none" when the owner moved it on the calendar with "Move only" (default: Google emails
-// the guests, as before). The `updated` Google answers is saved, so the next pull knows this version is the portal's own.
+// Phase 5b step 5: the `updated` Google answers is saved, so the next pull knows this version is the portal's own.
+// Review fixes H2, M1, L5: Google emails the guests ("all") only when the owner's own edit asks for it (scheduling,
+// editing or cancelling a shoot, or "Move and notify"); anything the portal does on its own writes with "none".
 export const syncShoot = internalAction({
   args: { shootId: v.id("shoots"), sendUpdates: v.optional(v.union(v.literal("all"), v.literal("none"))) },
   handler: async (ctx, { shootId, sendUpdates }): Promise<string> => {
+    scopedAction(ctx);
     if (!hasKeys()) return "off";
     const conn = await ctx.runQuery(internal.calendar.getConnection, {});
     if (!conn || conn.disconnectedAt) return "off";
     try {
-      const token = await accessToken(ctx);
-      const path = (cal: string, id?: string) => `/calendars/${encodeURIComponent(cal)}/events${id ? `/${encodeURIComponent(id)}` : ""}?sendUpdates=${sendUpdates ?? "all"}`;
+      const call = await google(ctx);
+      const path = (cal: string, id?: string) => `/calendars/${encodeURIComponent(cal)}/events${id ? `/${encodeURIComponent(id)}` : ""}?sendUpdates=${sendUpdates ?? "none"}`;
       const remove = async (ev: { id: string; calendarId: string }) => {
-        const r = await gcal(token, "DELETE", path(ev.calendarId, ev.id));
+        const r = await call("DELETE", path(ev.calendarId, ev.id));
         if (r.status >= 300 && r.status !== 404 && r.status !== 410) throw new Error(`delete ${r.status}`);
       };
       const id = eventId(shootId);
@@ -255,9 +323,9 @@ export const syncShoot = internalAction({
         }
         if (pass === 1) return "added";
         if (d.event && d.event.calendarId !== d.calendarId) await remove(d.event); // another calendar picked since
-        let r = await gcal(token, "PATCH", path(d.calendarId, id), d.body);
-        if (r.status === 404 || r.status === 410) r = await gcal(token, "POST", path(d.calendarId), { ...d.body, id });
-        if (r.status === 409) r = await gcal(token, "PATCH", path(d.calendarId, id), d.body); // made by a sync running at the same time
+        let r = await call("PATCH", path(d.calendarId, id), d.body);
+        if (r.status === 404 || r.status === 410) r = await call("POST", path(d.calendarId), { ...d.body, id });
+        if (r.status === 409) r = await call("PATCH", path(d.calendarId, id), d.body); // made by a sync running at the same time
         if (r.status >= 300 || !r.json?.id) throw new Error(`${r.status}: ${r.json?.error?.message ?? r.text.slice(0, 120)}`);
         await ctx.runMutation(internal.calendar.setEvent, { shootId, event: { id: String(r.json.id), calendarId: d.calendarId, updated: Date.parse(String(r.json.updated ?? "")) || Date.now(), at: Date.now() } });
         await ctx.runMutation(internal.calendar.patchConnection, { clearError: true });
@@ -268,28 +336,34 @@ export const syncShoot = internalAction({
       if (e instanceof Disconnected) return "disconnected";
       const m = String((e as Error).message);
       await ctx.runMutation(internal.calendar.patchConnection, { lastError: `A shoot didn't reach your calendar: ${m}` });
+      await ctx.runMutation(internal.calendar.shootError, { shootId, error: m });
       return "failed";
     }
   },
 });
 /** Every scheduled shoot from today on that's ticked or already on a calendar (after connecting or Settings change). */
+// Review fixes M1, L5: the portal does this on its own (a reconnect, a new account, another calendar picked), so Google
+// emails nobody.
 export const resync = internalAction({
   args: {},
   handler: async (ctx): Promise<number> => {
+    scopedAction(ctx);
     const ids: Array<Id<"shoots">> = await ctx.runQuery(internal.calendar.futureShoots, {});
-    for (const id of ids) await ctx.runAction(internal.calendar.syncShoot, { shootId: id });
+    for (const id of ids) await ctx.runAction(internal.calendar.syncShoot, { shootId: id, sendUpdates: "none" });
     return ids.length;
   },
 });
 export const futureShoots = internalQuery({
   args: {},
   handler: async (ctx) => {
+    scoped(ctx);
     const today = new Date().toLocaleDateString("en-CA", { timeZone: TZ });
     return (await ctx.db.query("shoots").withIndex("by_date", (q) => q.gte("date", today)).collect()).filter((s) => s.calendar || s.calendarEvent).map((s) => s._id);
   },
 });
 
-/** For shoots.ts: line up a calendar sync (after the shoot's own write). */
-export async function queueCalendar(ctx: { scheduler: { runAfter: (d: number, f: any, a: any) => Promise<unknown> } }, shootId: Id<"shoots">, sendUpdates?: "all" | "none") {
-  await ctx.scheduler.runAfter(0, internal.calendar.syncShoot, { shootId, ...(sendUpdates ? { sendUpdates } : {}) });
+/** For shoots.ts: line up a calendar sync (after the shoot's own write). Review fix H2: who Google emails is always
+ *  said: "all" only for the owner's own edit that asks for it, "none" for anything the portal does on its own. */
+export async function queueCalendar(ctx: { scheduler: { runAfter: (d: number, f: any, a: any) => Promise<unknown> } }, shootId: Id<"shoots">, sendUpdates: "all" | "none") {
+  await ctx.scheduler.runAfter(0, internal.calendar.syncShoot, { shootId, sendUpdates });
 }

@@ -51,7 +51,7 @@ function toItems(d: Data, layers: Layers): Item[] {
   const out: Item[] = [];
   if (layers.shoots) for (const s of d.shoots) {
     out.push({ key: `s:${s._id}`, kind: "shoot", title: `${s.client ?? s.project} shoot`, date: s.date, endDate: s.date, start: s.call, end: s.wrap ?? plusTwo(s.call), color: "shoot",
-      where: s.location, source: "Portal", guests: s.guests, canDrag: true, hasEnd: !!s.wrap, ref: { shootId: s._id, projectId: s.projectId } });
+      where: s.location, source: "Portal", guests: s.guests, people: s.people, canDrag: true, hasEnd: !!s.wrap, ref: { shootId: s._id, projectId: s.projectId } });
   }
   if (layers.dates) for (const x of d.dates) {
     out.push({ key: `d:${x.projectId}:${x.label}:${x.date}`, kind: "date", title: `Edit dates · ${x.project}`, date: x.date, endDate: x.date, start: null, end: null, color: "date",
@@ -86,7 +86,7 @@ export default function CalendarPage() {
   const [open, setOpen] = useState<{ item: Item; rect: DOMRect | null } | null>(null);
   const [form, setForm] = useState<{ edit?: Item; init?: Partial<Span> } | null>(null);
   const [editShoot, setEditShoot] = useState<Item | null>(null);
-  const moves = useMover();
+  const moves = useMover(d);
   const step = (n: number) => setAnchor(view === "month" ? addMonths(anchor, n) : addDays(view === "week" ? startOfWeek(anchor) : anchor, 7 * n));
   const title = view === "month" ? monthTitle(anchor) : view === "week" ? weekTitle(startOfWeek(anchor)) : `${dayShort(anchor).replace(/^\w+ /, "")} – ${dayShort(addDays(anchor, 6)).replace(/^\w+ /, "")}`;
   const today = d?.today ?? nowLocal().date;
@@ -172,30 +172,69 @@ export default function CalendarPage() {
 
 // ---------- moving (drag and drop, Undo) ----------
 
-function useMover() {
+// Review fix M2: the toast follows the change to Google: "Saving…" until Google has it, then "Saved to Google", or
+// Google's error. Undo stays for about 8 seconds (a shoot's only while its email 30 is still held).
+type Watch = { kind: "event"; id: string } | { kind: "shoot"; id: string } | { kind: "date"; projectId: string; label: string; date: string };
+type MoveToast = { text: string; undo?: () => Promise<unknown>; undoUntil?: number; watch?: Watch; error?: boolean };
+type SaveState = "saving" | "saved" | "local" | "later" | { error: string } | null;
+const UNDO_FOR = 8000;
+function saveState(d: Data | undefined, w: Watch | undefined): SaveState {
+  if (!d || !w) return null;
+  if (w.kind === "event") {
+    const e = d.events.find((x) => x._id === w.id);
+    if (!e) return null;
+    return e.pushError ? { error: e.pushError } : e.pending ? "saving" : "saved";
+  }
+  if (w.kind === "shoot") {
+    const x = d.shoots.find((y) => y._id === w.id);
+    if (!x) return null;
+    return x.calError ? { error: x.calError } : x.saving ? "saving" : x.onGoogle ? "saved" : "local";
+  }
+  if (d.conn.state !== "ok") return "later";
+  const x = d.dates.find((y) => y.projectId === w.projectId && y.label === w.label && y.date === w.date);
+  if (!x) return null;
+  if (x.saving && d.conn.lastError?.startsWith("An edit date")) return { error: d.conn.lastError.replace(/^An edit date didn't reach your calendar: /, "") };
+  return x.saving ? "saving" : "saved";
+}
+const saveText = (st: SaveState) => st === "saving" ? "Saving…" : st === "saved" ? "Saved to Google." : st === "later" ? "Google gets it when you reconnect." : st && typeof st === "object" ? `Not saved to Google: ${st.error}` : "";
+
+function useMover(d: Data | undefined) {
   const move = useMutation(api.calendarSync.move);
   const undoMove = useMutation(api.calendarSync.undoMove);
   const moveShoot = useMutation(api.calendarSync.moveShoot);
   const undoShoot = useMutation(api.calendarSync.undoShoot);
   const moveDate = useMutation(api.calendarSync.moveDate);
   const [ask, setAsk] = useState<{ item: Item; span: Span } | null>(null);
-  const [toast, setToast] = useState<{ text: string; undo?: () => Promise<unknown>; error?: boolean } | null>(null);
-  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), toast.undo ? 8000 : 4000); return () => clearTimeout(t); }, [toast]);
+  const [toast, setToast] = useState<MoveToast | null>(null);
+  const [, tick] = useState(0);
+  const st = toast ? saveState(d, toast.watch) : null;
+  const failed = !!toast?.error || (!!st && typeof st === "object");
+  const stKey = st && typeof st === "object" ? "error" : st;
+  useEffect(() => {
+    if (!toast) return;
+    const left = (toast.undoUntil ?? 0) - Date.now();
+    const t = setTimeout(() => setToast(null), stKey === "saving" ? 60_000 : failed ? 10_000 : Math.max(4000, left));
+    const u = left > 0 ? setTimeout(() => tick((n) => n + 1), left) : null; // the Undo button goes when its time is up
+    return () => { clearTimeout(t); if (u) clearTimeout(u); };
+  }, [toast, stKey, failed]);
+  const offer = (text: string, watch: Watch, undo: () => Promise<unknown>) => setToast({ text, watch, undo, undoUntil: Date.now() + UNDO_FOR });
 
   const commit = useCallback(async (item: Item, span: Span, notify: boolean) => {
     const where = spanText(span);
     try {
       if (item.kind === "event") {
         await move({ eventId: item.ref.eventId!, ...span, notify });
-        setToast({ text: `Moved to ${where}. Saved to Google.`, undo: () => undoMove({ eventId: item.ref.eventId! }) });
+        offer(`Moved to ${where}.`, { kind: "event", id: item.ref.eventId! }, () => undoMove({ eventId: item.ref.eventId! }));
       } else if (item.kind === "shoot") {
         const wrapWas = item.hasEnd; // a shoot with no wrap keeps none when only moved
         const resized = span.end !== undefined && toMin(span.end) - toMin(span.start!) !== toMin(item.end!) - toMin(item.start!);
-        await moveShoot({ shootId: item.ref.shootId!, date: span.date, call: span.start!, ...(wrapWas || resized ? { wrap: span.end } : {}), notify });
-        setToast({ text: `Moved to ${where}. Saved to Google.`, undo: () => undoShoot({ shootId: item.ref.shootId! }) });
+        const r = await moveShoot({ shootId: item.ref.shootId!, date: span.date, call: span.start!, ...(wrapWas || resized ? { wrap: span.end } : {}), notify });
+        // Review fix L2: whenever the client's people are asked to confirm again, the toast says so (guests or not).
+        offer(`Moved to ${where}.${r.told ? " The client is asked to confirm again." : ""}`, { kind: "shoot", id: item.ref.shootId! }, () => undoShoot({ shootId: item.ref.shootId! }));
       } else {
         await moveDate({ projectId: item.ref.projectId!, label: item.ref.label!, from: item.date, to: span.date });
-        setToast({ text: `Moved to ${dayShort(span.date)}. Saved to Google.`, undo: () => moveDate({ projectId: item.ref.projectId!, label: item.ref.label!, from: span.date, to: item.date }) });
+        offer(`Moved to ${dayShort(span.date)}.`, { kind: "date", projectId: item.ref.projectId!, label: item.ref.label!, date: span.date },
+          () => moveDate({ projectId: item.ref.projectId!, label: item.ref.label!, from: span.date, to: item.date }));
       }
     } catch (e) { setToast({ text: errText(e), error: true }); }
   }, [move, undoMove, moveShoot, undoShoot, moveDate]);
@@ -205,12 +244,13 @@ function useMover() {
     if (moveNeedsAsk(item)) setAsk({ item, span }); else void commit(item, span, false);
   }, [commit]);
 
+  const canUndo = !!toast?.undo && !failed && Date.now() < (toast.undoUntil ?? 0);
   const node = <>
     {ask && <MoveDialog item={ask.item} span={ask.span} onCancel={() => setAsk(null)} onMove={(notify) => { const a = ask; setAsk(null); void commit(a.item, a.span, notify); }} />}
     {toast && createPortal(
-      <div className={`toast cal-toast${toast.error ? " error" : ""}`} role="status">
-        {!toast.error && <span className="cal-ok" aria-hidden />}<span>{toast.text}</span>
-        {toast.undo && <button className="cal-undo" type="button" onClick={async () => { const u = toast.undo!; setToast(null); try { await u(); setToast({ text: "Moved back." }); } catch (e) { setToast({ text: errText(e), error: true }); } }}>Undo</button>}
+      <div className={`toast cal-toast${failed ? " error" : ""}`} role="status">
+        {!failed && stKey !== "saving" && <span className="cal-ok" aria-hidden />}<span>{toast.error ? toast.text : `${toast.text} ${saveText(st)}`.trim()}</span>
+        {canUndo && <button className="cal-undo" type="button" onClick={async () => { const u = toast.undo!; const w = toast.watch; setToast(null); try { await u(); setToast({ text: "Moved back.", watch: w }); } catch (e) { setToast({ text: errText(e), error: true }); } }}>Undo</button>}
       </div>, document.body)}
   </>;
   return { drop, node, asking: !!ask };
@@ -229,6 +269,30 @@ function MoveDialog({ item, span, onCancel, onMove }: { item: Item; span: Span; 
           <button className="btn ghost" type="button" onClick={onCancel}>Cancel</button>
           <Button onClick={() => onMove(false)}>Move only</Button>
           <Button variant="primary" onClick={() => onMove(true)}>Move and notify</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** Review fix L6: an edit that Google could email guests about says who, and asks first. */
+function NotifyDialog({ title, added, removed, kept, timeChanged, onCancel, onSave }: { title: string; added: string[]; removed: string[]; kept: string[]; timeChanged: boolean; onCancel: () => void; onSave: (notify: boolean) => void }) {
+  const list = (xs: string[]) => xs.join(", ");
+  const who = [
+    added.length ? `${list(added)} get${added.length === 1 ? "s" : ""} an invite` : null,
+    removed.length ? `${list(removed)} hear${removed.length === 1 ? "s" : ""} it's cancelled for them` : null,
+    kept.length && timeChanged ? `${list(kept)} get${kept.length === 1 ? "s" : ""} the new time` : kept.length ? `${list(kept)} get${kept.length === 1 ? "s" : ""} the update` : null,
+  ].filter(Boolean).join("; ");
+  return (
+    <Modal onClose={onCancel} label={`Email the guests about “${title}”?`} width={520}>
+      <div className="crm-dialog">
+        <DialogHeader eyebrow="Calendar" title="Email the guests?" body={title} onClose={onCancel} />
+        <p className="secondary cal-dtext">Save and email: Google emails them. {who}.</p>
+        <p className="secondary cal-dtext">Save only: nobody is emailed{added.length ? `, and ${list(added)} won't get an invite` : ""}.</p>
+        <div className="dfoot">
+          <button className="btn ghost" type="button" onClick={onCancel}>Cancel</button>
+          <Button onClick={() => onSave(false)}>Save only</Button>
+          <Button variant="primary" onClick={() => onSave(true)}>Save and email</Button>
         </div>
       </div>
     </Modal>
@@ -510,7 +574,7 @@ function SyncCard({ d }: { d: Data }) {
     <Card className="cal-sync" label="Google Calendar">
       <div className="cal-synch"><span className="calx-dot" />Synced with Google</div>
       <p className="secondary">{c.email} · {ago(c.lastSyncedAt)}. Changes here and in Google stay in step.{!c.picked ? " Pick the calendar for new events in Settings › Calendar." : ""}</p>
-      <div><Button size="sm" loading={busy} onClick={async () => { setBusy(true); try { const r = await sync({}); show(r.state === "ok" ? "Synced." : r.state === "busy" ? "Already syncing." : r.state === "disconnected" ? "Google disconnected. Reconnect Google." : "Google didn't answer. Try again in a minute."); } catch (e) { show(errText(e)); } finally { setBusy(false); } }}>Sync now</Button></div>
+      <div><Button size="sm" loading={busy} onClick={async () => { setBusy(true); try { const r = await sync({}); show(r.state === "ok" ? "Synced." : r.state === "partial" ? "Synced part of your calendar. The rest comes in with the next sync." : r.state === "busy" ? "Already syncing." : r.state === "disconnected" ? "Google disconnected. Reconnect Google." : "Google didn't answer. Try again in a minute."); } catch (e) { show(errText(e)); } finally { setBusy(false); } }}>Sync now</Button></div>
       {toast}
     </Card>
   );
@@ -568,7 +632,7 @@ function Popover({ item, rect, d, narrow, onClose, onEdit }: { item: Item; rect:
     ref.current?.querySelector<HTMLElement>("button, a")?.focus();
     return () => { window.removeEventListener("keydown", k, true); clearTimeout(t); window.removeEventListener("pointerdown", click); };
   }, [onClose]);
-  const synced = item.kind === "date" ? null : item.kind === "shoot" ? (shoot?.onGoogle ? `Synced to Google ${ago(shoot.syncedAt)}` : null)
+  const synced = item.kind === "date" ? null : item.kind === "shoot" ? (shoot?.calError ? `Not saved to Google: ${shoot.calError}` : shoot?.saving ? "Saving to Google…" : shoot?.onGoogle ? `Synced to Google ${ago(shoot.syncedAt)}` : null)
     : ev?.pushError ? `Not saved to Google: ${ev.pushError}` : ev?.pending ? "Saving to Google…" : `Synced to Google ${ago(ev?.syncedAt)}`;
   const people = item.kind === "shoot" ? shoot?.crew ?? [] : item.guests;
   const W = 340;
@@ -600,7 +664,7 @@ function Popover({ item, rect, d, narrow, onClose, onEdit }: { item: Item; rect:
         {ev?.readOnly && <li><Icon name="lock" size={16} />Read only here: someone else's invite, or a calendar you can only read.</li>}
         {item.kind === "date" && <li><Icon name="info" size={16} />Written to Google from the portal. Change it here: a change made in Google is put back.</li>}
       </ul>
-      {synced && <div className={`cal-synced${ev?.pushError ? " bad" : ""}`}><i />{synced}</div>}
+      {synced && <div className={`cal-synced${ev?.pushError || shoot?.calError ? " bad" : ""}`}><i />{synced}</div>}
       <div className="cal-popacts">
         {item.kind === "shoot" && (shoot?.sheetId ? <ButtonLink size="sm" variant="primary" to={`/production/call-sheets/${shoot.sheetId}`} iconEnd={false}>Open call sheet</ButtonLink>
           : <ButtonLink size="sm" variant="primary" to={`/projects/${item.ref.projectId}`} iconEnd={false}>Open project</ButtonLink>)}
@@ -652,6 +716,9 @@ function EventForm({ data, edit, init, onClose, page }: { data: Data | undefined
   const [err, setErr] = useState<string | null>(null);
   const [ask, setAsk] = useState<Span | null>(null);
   const emails = guests.split(/[,;\s]+/).map((g) => g.trim()).filter(Boolean);
+  const before = (ev?.guestEmails ?? []).map((g) => g.toLowerCase());
+  const now_ = [...new Set(emails.map((g) => g.toLowerCase()))];
+  const added = now_.filter((g) => !before.includes(g)), removed = before.filter((g) => !now_.includes(g)), kept = now_.filter((g) => before.includes(g));
   const span = (): Span => ({ date, endDate: endDate < date ? date : endDate, ...(allDay ? {} : { start, end }) });
   const save = async (notify?: boolean) => {
     setBusy(true); setErr(null);
@@ -660,7 +727,7 @@ function EventForm({ data, edit, init, onClose, page }: { data: Data | undefined
     try {
       if (edit) {
         const timeChanged = s.date !== edit.date || s.endDate !== edit.endDate || (s.start ?? null) !== edit.start || (s.end ?? null) !== edit.end;
-        if (notify === undefined && timeChanged && emails.length) { setAsk(s); setBusy(false); return; }
+        if (notify === undefined && ((timeChanged && emails.length) || added.length || removed.length)) { setAsk(s); setBusy(false); return; }
         await update({ eventId: edit.ref.eventId!, ...base, notify: !!notify });
       } else await create({ ...base, ...(calendarId ? { calendarId } : {}) });
       onClose();
@@ -693,7 +760,10 @@ function EventForm({ data, edit, init, onClose, page }: { data: Data | undefined
       {err && <p className="calx-err" role="alert">{err}</p>}
     </>
   );
-  const askNode = ask && edit && <MoveDialog item={{ ...edit, guests: emails }} span={ask} onCancel={() => setAsk(null)} onMove={(n) => { setAsk(null); void save(n); }} />;
+  const timeMoved = !!ask && !!edit && (ask.date !== edit.date || ask.endDate !== edit.endDate || (ask.start ?? null) !== edit.start || (ask.end ?? null) !== edit.end);
+  const askNode = ask && edit && (added.length || removed.length
+    ? <NotifyDialog title={title || edit.title} added={added} removed={removed} kept={kept} timeChanged={timeMoved} onCancel={() => setAsk(null)} onSave={(n) => { setAsk(null); void save(n); }} />
+    : <MoveDialog item={{ ...edit, guests: emails }} span={ask} onCancel={() => setAsk(null)} onMove={(n) => { setAsk(null); void save(n); }} />);
   if (page) return (
     <>
       <div className="wp-page cal cal-newpage">

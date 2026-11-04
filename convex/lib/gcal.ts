@@ -86,13 +86,16 @@ export function spanError(s: Span): string | null {
   return null;
 }
 
-/** A Google event id the portal picks itself (base32hex: 0-9 a-v), so a retried write can't make two events. */
-export function newEventId(prefix = "wp") {
+/** Google's own rule for event ids: base32hex (0-9 and a-v), 5 to 1024 characters. */
+export const ID_OK = /^[a-v0-9]{5,1024}$/;
+/** A Google event id the portal picks itself (base32hex: 0-9 a-v), so a retried write can't make two events.
+ *  Review fix H3: the prefix ("pev", portal event) is base32hex too; "wp" wasn't ("w" is past "v"). */
+export function newEventId(prefix = "pev") {
   const b = new Uint8Array(12);
   crypto.getRandomValues(b);
   return prefix + Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 }
-/** A fixed id for one of a project's edit dates (same project + key → same event). */
+/** A fixed id for one of a project's edit dates (same project + key → same event). Prefix "pdt" (portal date). */
 export function dateEventId(projectId: string, key: string) {
-  return `wpd${Array.from(new TextEncoder().encode(`${projectId}|${key}`), (b) => b.toString(16).padStart(2, "0")).join("")}`.slice(0, 1000);
+  return `pdt${Array.from(new TextEncoder().encode(`${projectId}|${key}`), (b) => b.toString(16).padStart(2, "0")).join("")}`.slice(0, 1000);
 }

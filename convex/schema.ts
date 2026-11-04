@@ -1189,9 +1189,12 @@ export default defineSchema({
     list: v.optional(v.array(v.object({
       id: v.string(), name: v.string(), color: v.number(), on: v.boolean(), writable: v.boolean(), primary: v.boolean(),
       syncToken: v.optional(v.string()), syncedAt: v.optional(v.number()),
+      // Review fix M6: a read cut short at the page cap carries on from here with the next pull (same query, same run).
+      page: v.optional(v.object({ token: v.string(), run: v.number(), timeMin: v.optional(v.string()), timeMax: v.optional(v.string()) })),
     }))),
     lastSyncedAt: v.optional(v.number()),
     pullingSince: v.optional(v.number()),
+    pullRun: v.optional(v.string()),          // review fix M4: whose lock it is (only that pull releases it)
     disconnectedAt: v.optional(v.number()),
   }),
 
@@ -1221,6 +1224,9 @@ export default defineSchema({
     sendUpdates: v.optional(v.union(v.literal("all"), v.literal("none"))),
     guestsDirty: v.optional(v.boolean()),     // the guest list changed: send it with the next write
     prev: v.optional(v.object({ date: v.string(), endDate: v.string(), start: v.optional(v.string()), end: v.optional(v.string()), at: v.number(), notify: v.boolean() })),
+    // Review fix M2: what Google had when the portal's edit (still waiting to go) started, so a later Google change only
+    // wins over it when it changed the same things.
+    base: v.optional(v.object({ title: v.string(), location: v.optional(v.string()), date: v.string(), endDate: v.string(), start: v.optional(v.string()), end: v.optional(v.string()), guests: v.array(v.string()) })),
     shootId: v.optional(v.id("shoots")),      // "Link to a shoot or project"
     projectId: v.optional(v.id("projects")),  // the link, or (kind "date") the project the date belongs to
     dateKey: v.optional(v.string()),          // kind "date": which of the project's dates
@@ -1228,7 +1234,9 @@ export default defineSchema({
     seen: v.optional(v.number()),             // the full sync that last saw it
     syncedAt: v.number(),
     createdAt: v.number(),
-  }).index("by_google", ["calendarId", "googleId"]).index("by_date", ["date"]).index("by_kind", ["kind", "projectId"]),
+  }) // review fix M7: every index starts with the business
+    .index("by_biz_google", ["businessId", "calendarId", "googleId"]).index("by_biz_date", ["businessId", "date"])
+    .index("by_biz_kind", ["businessId", "kind", "projectId"]).index("by_biz_pending", ["businessId", "pending"]),
 
   // Phase 4 (Nov 2): shoots on a project (frames S5 · Phase 4). The client confirms one in their portal; moving its date,
   // call time or place clears the confirmation and asks again (email 30). Times are the business's local wall clock.
@@ -1249,7 +1257,13 @@ export default defineSchema({
     calendarEvent: v.optional(v.object({ id: v.string(), calendarId: v.string(), updated: v.optional(v.number()), at: v.optional(v.number()) })), // Phase 5b step 5: Google's `updated` for the version the portal wrote or took
     // Phase 5b step 5 (D143): moved in Google Calendar. The shoot moved with it; nobody was emailed; the owner gets a
     // Dashboard note (until Done, or Ask to confirm again).
-    googleMove: v.optional(v.object({ at: v.number(), was: v.object({ date: v.string(), call: v.string(), wrap: v.optional(v.string()), location: v.string() }), doneAt: v.optional(v.number()), told: v.optional(v.boolean()) })),
+    // kept (review fix H2): the other way round: a change made in Google was written over by the portal's newer one;
+    // `was` is then what Google had.
+    googleMove: v.optional(v.object({ at: v.number(), was: v.object({ date: v.string(), call: v.string(), wrap: v.optional(v.string()), location: v.string() }), doneAt: v.optional(v.number()), told: v.optional(v.boolean()), kept: v.optional(v.boolean()) })),
+    // Review fix H2: when the portal last changed what's on the calendar event (date, call, wrap, place, crew, what to
+    // prepare, the calendar tick). A client confirming doesn't change it, so it never beats a newer change made in Google.
+    calAt: v.optional(v.number()),
+    calError: v.optional(v.string()),         // the last write to Google Calendar failed (cleared by the next good one)
     // Phase 5b step 5: a move made by dragging it on the calendar, for Undo (about 8 seconds).
     dragUndo: v.optional(v.object({ at: v.number(), was: v.any() })),
     history: v.array(v.object({ at: v.number(), text: v.string() })),

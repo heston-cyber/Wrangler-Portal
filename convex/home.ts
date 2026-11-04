@@ -32,7 +32,7 @@ export type Need =
   | { kind: "vendorInvoice"; at: number; invoiceId: Id<"vendorInvoices">; vendorId: Id<"vendors">; vendor: string; number: string; project: string; totalCents: number } // Phase 3c
   | { kind: "footage"; at: number; what: "kept" | "renewal" | "ended" | "unpaid" | "paidLate"; projectId: Id<"projects">; project: string; client: string | null } // Phase 5
   | { kind: "testimonial"; at: number; testimonialId: Id<"testimonials">; who: string; project: string } // Phase 5
-  | { kind: "shootMoved"; at: number; shootId: Id<"shoots">; projectId: Id<"projects">; project: string; date: string; call: string; wasDate: string; wasCall: string; people: number; crew: number; sheetId: Id<"callSheets"> | null }; // Phase 5b step 5 (D143)
+  | { kind: "shootMoved"; at: number; shootId: Id<"shoots">; projectId: Id<"projects">; project: string; date: string; call: string; wasDate: string; wasCall: string; people: number; crew: number; sheetId: Id<"callSheets"> | null; kept: boolean }; // Phase 5b step 5 (D143); kept: review fix H2
 
 /** The client a document belongs to: the client of its first signer that's one of a client's people. */
 export async function docClient(ctx: QueryCtx, emails: string[]) {
