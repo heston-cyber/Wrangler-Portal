@@ -174,6 +174,8 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "calendarSync.shootMoveDone": { shootId: ids.shootId }, "calendarSync.askConfirmAgain": { shootId: ids.shootId }, "calendarSync.syncNow": {},
     // Phase 5b step 4: call-sheet guests (the owner's End access; the guest's link, code and pages)
     "callSheets.endGuest": { callSheetId: ids.callSheetId, id: "guest:matrix" }, "callSheets.restoreGuest": { callSheetId: ids.callSheetId, id: "guest:matrix" },
+    // D148: Refresh forecast (owner only; looks the forecast up again for one of the owner's own sheets).
+    "callSheets.refreshWeather": { callSheetId: ids.callSheetId },
     "guests.intro": { token: ids.guestToken }, "guests.sendCode": { token: "nope-nope-nope-nope" },
     "guests.home": {}, "guests.sheet": { token: ids.guestToken }, "guests.opened": { token: ids.guestToken },
   };

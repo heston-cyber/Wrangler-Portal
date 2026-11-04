@@ -11,7 +11,7 @@ import { Icon } from "../../ui/Icon";
 import { Button, Checkbox, DialogHeader, IconButton, TextArea, TextField } from "../../ui/wp";
 import { errText } from "../docs/pages/common";
 import { fill, type PNode, type Page } from "../../../convex/lib/wsBuilder";
-import { clockOf, locationOf, rowsOf, sheetDay, type ContactRow, type CrewRow, type ScheduleRow } from "../../../convex/lib/callSheet";
+import { clockOf, locationOf, rowsOf, sheetDay, weatherOf, type ContactRow, type CrewRow, type ScheduleRow } from "../../../convex/lib/callSheet";
 
 export type CallSheetInfo = NonNullable<FunctionReturnType<typeof api.callSheets.get>>;
 export type Person = CallSheetInfo["people"][number];
@@ -197,6 +197,11 @@ function Block({ n, values }: { n: PNode; values: Record<string, string> }) {
             {(l.address || l.name) && <a className="cs-maps" href={maps(l.address || l.name)} target="_blank" rel="noopener noreferrer"><Icon name="map-pin" size={14} />Open in Maps</a>}</div>
         </div>
       );
+    }
+    // D148: the Weather line as it was sent (nothing when it was empty).
+    case "weather": {
+      const w = weatherOf(n);
+      return w.line ? <p className="cs-l body cs-wx"><span className="cs-cap">Weather</span>{w.line}</p> : null;
     }
     case "schedule": {
       const rows = rowsOf<ScheduleRow>(n);

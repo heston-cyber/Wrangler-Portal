@@ -16,7 +16,7 @@ import { Avatar, Button, Spinner } from "../../ui/wp";
 import { linkProps } from "../../lib/router";
 import smear from "../../assets/portal/light-smear.jpg";
 import softblob from "../../assets/portal/light-softblob.jpg";
-import { clockOf, locationOf, rowsOf, sheetDay, type ContactRow, type CrewRow, type ScheduleRow } from "../../../convex/lib/callSheet";
+import { clockOf, locationOf, rowsOf, sheetDay, weatherLine, type ContactRow, type CrewRow, type ScheduleRow } from "../../../convex/lib/callSheet";
 import { fill, nodesOf, pageOf, type Page } from "../../../convex/lib/wsBuilder";
 import { SheetView } from "../production/callSheetParts";
 import { errText } from "../docs/pages/common";
@@ -210,7 +210,7 @@ function SheetBody({ d }: { d: Sheet }) {
   const updated = d.change && <section className="gst-card glass"><span className="wp-eyebrow">{when}</span><p>{/[.!?]$/.test(d.change.text) ? d.change.text : `${d.change.text}.`}{d.me.call ? (d.change.text.includes(clockOf(d.me.call)) ? " That’s your call time." : ` Your call is ${clockOf(d.me.call)}.`) : ""}</p></section>;
   const yours = (
     <section className="gst-card glass gst-yours"><span className="wp-eyebrow">Your call</span>
-      {dl([["Call", d.me.call ? <b className="big">{clockOf(d.me.call)}</b> : "See the sheet"], ["Wrap", loc.wrap ? clockOf(loc.wrap) : ""], ["Where", place]])}
+      {dl([["Call", d.me.call ? <b className="big">{clockOf(d.me.call)}</b> : "See the sheet"], ["Wrap", loc.wrap ? clockOf(loc.wrap) : ""], ["Where", place], ["Weather", weatherLine(page) ?? ""]])}
     </section>
   );
   const producerCard = (

@@ -12,7 +12,7 @@ import {
   type BuildDoc, type ItemRow, type LineAttrs, type PNode, type TextSize,
 } from "../../../../convex/lib/wsBuilder";
 import type { FontRow } from "../../../../convex/lib/wsBuilder";
-import { clockOf, locationOf, rowsOf, type ContactRow, type CrewRow, type ScheduleRow } from "../../../../convex/lib/callSheet";
+import { clockOf, locationOf, rowsOf, weatherOf, type ContactRow, type CrewRow, type ScheduleRow } from "../../../../convex/lib/callSheet";
 
 export type Assets = { fonts: FontRow[]; files: Record<string, string | null> };
 
@@ -194,6 +194,11 @@ export function DocPdf({ d, assets, label }: { d: BuildDoc; assets: Assets; labe
           {times.length > 0 && <View style={{ flex: 1 }}>{cap("Call times")}{times.map(([t, v]) => <Text key={t}>{t} · {clockOf(v)}</Text>)}</View>}
           <View style={{ flex: 1 }}>{cap("Location")}{[[l.name, l.address].filter(Boolean).join(" · "), l.parking ? `Parking · ${l.parking}` : ""].filter(Boolean).map((t, i) => <Text key={i}>{fill(t, values)}</Text>)}</View>
         </View>;
+      }
+      // D148: the Weather line (the preview bakes in the forecast; an empty line isn't shown).
+      case "weather": {
+        const w = weatherOf(n);
+        return w.line ? <View key={k} wrap={false} style={{ marginBottom: base * 0.9 }}><Text style={{ fontSize: base * 0.8, color: st.muted, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>Weather</Text><Text>{w.line}</Text></View> : null;
       }
       case "schedule": case "crew": case "contacts": {
         const cols: Array<[string, number]> = n.type === "schedule" ? [["Time", 1], ["What", 2.4], ["Who", 1.2], ["Notes", 1.4]] : n.type === "crew" ? [["Name", 1.8], ["Role", 1.4], ["Call", 1], ["Phone", 1.4]] : [["", 1.2], ["Name", 1.8], ["Phone", 1.4]];

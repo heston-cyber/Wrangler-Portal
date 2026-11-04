@@ -21,4 +21,7 @@ crons.interval("vendor payouts", { minutes: 15 }, internal.vendorPayouts.poll, {
 crons.daily("site watch", { hourUTC: 14, minuteUTC: 7 }, internal.siteWatch.check, {});
 // Phase 5b step 5 (Nov 3, D143): Production › Calendar, two-way with Google Calendar (incremental pull; edit dates written).
 crons.interval("google calendar sync", { minutes: 5 }, internal.calendarSync.pullAll, {});
+// D148 (Nov 4): call sheets' Weather blocks: the forecast fills within a week of the shoot and refreshes the day before
+// (about 5 PM Central; NWS and the Census geocoder, no key).
+crons.daily("call sheet weather", { hourUTC: 23, minuteUTC: 13 }, internal.callSheets.weatherAll, {});
 export default crons;

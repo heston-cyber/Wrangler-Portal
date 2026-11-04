@@ -8,7 +8,7 @@ import type { Editor } from "@tiptap/react";
 import { TextSelection } from "@tiptap/pm/state";
 import {
   BookmarkPlus, Check, Eye, FileSignature, Palette, Heading, Heading1, LayoutTemplate, List, Minus, PanelTop, PenLine, Plus, Receipt, Redo2, Undo2,
-  ScrollText, Send, SeparatorHorizontal, Space, TriangleAlert, Type, Users, X, CircleCheck, Trash2, Ellipsis, ArrowUp, ArrowDown, Copy, CopyPlus, ListChecks, CircleSlash,
+  ScrollText, Send, SeparatorHorizontal, Space, TriangleAlert, Type, Users, X, CircleCheck, Trash2, Ellipsis, ArrowUp, ArrowDown, Copy, CopyPlus, ListChecks, CircleSlash, CloudSun,
 } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -16,7 +16,7 @@ import { Sep, TopBar } from "../../../shell/Shell";
 import { linkProps, navigate } from "../../../lib/router";
 import { Modal, Spinner, useToast } from "../../../ui/kit";
 import {
-  FIELD_HELP, INSERT_LABEL, PAGE_PT, buildProblems, clauseSection, emptyFields, fieldValues, fill, missingFields, money, newNodes, pageOf, sectionClause, signerKeys, totals,
+  FIELD_HELP, INSERT_LABEL, PAGE_PT, buildProblems, clauseSection, emptyFields, fieldValues, fill, missingFields, money, newNodes, nodesOf, pageOf, sectionClause, signerKeys, totals,
   type BuildDoc, type ExtraSigner, type Fields, type InsertKind, type PNode, type Style,
 } from "../../../../convex/lib/wsBuilder";
 import { cssFamily, loadForScreen, type FontRow } from "./fonts";
@@ -34,7 +34,7 @@ import { Icon } from "../../../ui/Icon";
 import { Button, IconButton, SkeletonRows, EmptyState, ButtonLink, StatusChip as Chip, Checkbox, DialogHeader, TextArea } from "../../../ui/wp";
 import { proposalProblems } from "../../../../convex/lib/wsProposal";
 import { briefingProblems } from "../../../../convex/lib/wsBriefing";
-import { CALL_BLOCKS, blockCard, callSheetProblems, isCallAtom } from "../../../../convex/lib/callSheet";
+import { CALL_BLOCKS, bakeWeather, blockCard, callSheetProblems, isCallAtom, shownWeather, weatherOf } from "../../../../convex/lib/callSheet";
 import { PeoplePicker, SendSheet, SendUpdate, type CallSheetInfo } from "../../production/callSheetParts";
 
 // Phase 3b: proposals open here too (S5 · Phase 3b 716:4980 / 718:4495): no signature boxes, Send instead of
@@ -76,6 +76,7 @@ const INSERT: Array<{ kind: InsertKind; icon: React.ReactNode; hint: string }> =
   { kind: "schedule", icon: <Icon name="calendar" size={18} />, hint: "Times, and what happens" },
   { kind: "location", icon: <Icon name="map-pin" size={18} />, hint: "Call times, address, parking and a map link" },
   { kind: "contacts", icon: <Icon name="phone" size={18} />, hint: "Who to call on the day" },
+  { kind: "weather", icon: <CloudSun size={18} />, hint: "The forecast for the shoot's address, or your own line" },
 ];
 const CALL_HIDES = new Set<InsertKind>(["parties", "items", "payment", "signatures"]);
 
@@ -373,7 +374,12 @@ export default function Builder({ mode }: { mode: Mode }) {
   const dragNodes = (e: React.DragEvent, nodes: PNode[]) => startInsertDrag(e, nodes);
 
   const assets = () => ({ fonts: fontRows, files: files as Record<string, string | null> });
-  const render = async () => { const { renderPdf } = await import("./pdf"); return renderPdf(doc, assets(), prop ? prop.number : brief ? undefined : build?.document?.label); };
+  // D148: a call sheet's preview shows the Weather block's line as it would be sent (typed, or the forecast).
+  const render = async () => {
+    const { renderPdf } = await import("./pdf");
+    const wx = call?.weather ? shownWeather(weatherOf(nodesOf(doc.page, "weather")[0]), call.weather) : null;
+    return renderPdf(wx ? { ...doc, page: bakeWeather(doc.page, wx) } : doc, assets(), prop ? prop.number : brief ? undefined : build?.document?.label);
+  };
   const onPreview = async () => {
     setBusy("preview");
     try { const blob = await render(); setPreview(URL.createObjectURL(blob)); }
@@ -495,7 +501,7 @@ export default function Builder({ mode }: { mode: Mode }) {
   const extraKeys = keys.filter((k) => k !== "heston" && k !== "client");
 
   return (
-    <BuilderCtx.Provider value={{ doc, values, px, onDetails: () => setTab("details"), onSaveClause: (sec) => void onSaveClause(sec), callSheet: isCall }}>
+    <BuilderCtx.Provider value={{ doc, values, px, onDetails: () => setTab("details"), onSaveClause: (sec) => void onSaveClause(sec), callSheet: isCall, weather: call?.weather ?? null, callSheetId: call?._id ?? null, onWeather: () => setTab("format") }}>
       <TopBar right={<>
         <span className="wsb-undo">
           <button className="icon-btn sm" aria-label="Undo" title={`Undo (${mac ? "⌘Z" : "Ctrl+Z"})`} disabled={!hist.current.past.length} onClick={() => step("undo")}><Icon name="arrow-left" size={18} /></button>

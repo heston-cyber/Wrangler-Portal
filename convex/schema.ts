@@ -1305,10 +1305,14 @@ export default defineSchema({
     sent: v.optional(v.object({ title: v.string(), page: v.any(), fields: v.any(), style: v.any(), at: v.number(), round: v.number(), heading: v.optional(v.string()), date: v.optional(v.string()) })),
     sentAt: v.optional(v.number()),
     updates: v.optional(v.number()),                    // how many updates have gone out
+    // D148 (Nov 4): the Weather block's forecast (lib/callSheet.ts SheetWeather), for one address and shoot day, and the
+    // geocode of that address (kept so the address goes to the Census geocoder once; lat/lon left out = not found).
+    weather: v.optional(v.object({ address: v.string(), date: v.string(), state: v.union(v.literal("forecast"), v.literal("early"), v.literal("none")), line: v.string(), at: v.number(), dayBefore: v.optional(v.boolean()) })),
+    geo: v.optional(v.object({ address: v.string(), lat: v.optional(v.number()), lon: v.optional(v.number()), at: v.number() })),
     history: v.array(v.object({ at: v.number(), kind: v.string(), by: v.optional(v.string()), detail: v.optional(v.string()) })),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_shoot", ["shootId"]).index("by_project", ["projectId"]).index("by_build", ["buildId"]),
+  }).index("by_shoot", ["shootId"]).index("by_project", ["projectId"]).index("by_build", ["buildId"]).index("by_status", ["status"]),
 
   // Phase 4 (Nov 2): file requests. The client uploads straight into the business's Dropbox, under
   // Apps/Wrangler Review/File requests/<Client>/<Project>/<Request> (Heston, Nov 2), which the render watcher ignores.

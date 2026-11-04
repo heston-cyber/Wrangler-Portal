@@ -4,7 +4,8 @@ import { createContext, useContext } from "react";
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import { BookmarkPlus, Plus, X } from "lucide-react";
 import { fill, money, type BuildDoc, type ItemRow, type PNode, newId, totals } from "../../../../../convex/lib/wsBuilder";
-import { locationOf, type LocationAttrs } from "../../../../../convex/lib/callSheet";
+import { locationOf, shownWeather, weatherOf, type LocationAttrs, type WeatherView } from "../../../../../convex/lib/callSheet";
+import { StatusChip, type Tone } from "../../../../ui/wp";
 
 export type BuilderCtxValue = {
   doc: BuildDoc;
@@ -13,7 +14,20 @@ export type BuilderCtxValue = {
   onDetails: () => void;
   onSaveClause: (section: PNode) => void;
   callSheet?: boolean; // Phase 5b step 3: a call sheet's containers have no initials or clause library
+  // D148: the call sheet's forecast (callSheets.get's `weather`: the forecast's own state, before a typed line), and its id
+  // for Refresh forecast. Absent in a template (no shoot yet). onWeather opens the block's settings (the Format tab).
+  weather?: WeatherView | null;
+  callSheetId?: string | null;
+  onWeather?: () => void;
 };
+
+/** The Weather block's four states (865:11728): its chip. */
+export const WX_CHIP: Record<WeatherView["state"], { text: string; tone: Tone }> = {
+  forecast: { text: "Forecast", tone: "success" }, typed: { text: "Typed by you", tone: "neutral" }, early: { text: "Not yet", tone: "warning" }, none: { text: "No forecast", tone: "neutral" },
+};
+/** What the block shows now: its own typed line over the forecast (null in a template, which has no shoot yet). */
+export const weatherNow = (ctx: BuilderCtxValue | null, attrs: Record<string, unknown>): WeatherView | null =>
+  ctx?.weather ? shownWeather(weatherOf({ type: "weather", attrs }), ctx.weather) : null;
 export const BuilderCtx = createContext<BuilderCtxValue | null>(null);
 
 export function SectionView({ node, updateAttributes }: NodeViewProps) {
@@ -113,8 +127,19 @@ function Atom({ node, updateAttributes, ctx }: NodeViewProps & { ctx: BuilderCtx
           <div><span className="wsb-cap">Call times</span>
             <label>Crew {inp("crewCall", "Crew call", "time")}</label><label>Talent {inp("talentCall", "Talent call", "time")}</label><label>Wrap {inp("wrap", "Wrap", "time")}</label></div>
           <div><span className="wsb-cap">Location</span>
-            {inp("name", "Place name")}{inp("address", "Address")}{inp("parking", "Parking and load-in")}
-            <label className="wsb-check"><input type="checkbox" checked={!!l.weather} onChange={(e) => set({ weather: e.target.checked })} />Add the weather the day before</label></div>
+            {inp("name", "Place name")}{inp("address", "Address")}{inp("parking", "Parking and load-in")}</div>
+        </div>
+      );
+    }
+    // D148: the Weather block: one line, from the forecast or typed over; its settings are in the Format tab.
+    case "weather": {
+      const w = weatherNow(ctx, a);
+      const line = w ? w.line : weatherOf({ type: "weather", attrs: a }).line;
+      return (
+        <div className="wsb-cs-wx" onClick={ctx.onWeather} title="Weather: its settings are in Format">
+          <span className="wsb-cap">Weather</span>
+          <span className={line ? "" : "secondary"}>{line || (w ? "(empty)" : "Fills in from the forecast once it's a shoot's call sheet")}</span>
+          {w && <StatusChip tone={WX_CHIP[w.state].tone}>{WX_CHIP[w.state].text}</StatusChip>}
         </div>
       );
     }
