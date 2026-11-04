@@ -249,6 +249,7 @@ function WeatherPanel({ editor, pos, attrs }: { editor: Editor; pos: number; att
     : w.state === "forecast" ? `From the National Weather Service${w.at ? ` · updated ${updated(w.at)}` : ""}. Refreshes by itself the day before.`
     : w.state === "typed" ? "You typed this, so the forecast no longer changes it."
     : w.state === "early" ? (w.due ? "The forecast fills in with the daily check (about 5 PM), or press Refresh forecast." : `The forecast reaches about a week ahead. This shoot is ${monthDay(w.date)}, so it fills on ${monthDay(w.fillsOn)}.`)
+    : w.noAddress ? "There is no address on the sheet. Add one to the Location block to get the forecast, or type the weather in."
     : "There is no forecast for this address. It needs a US address. Type it in, or remove the block.";
   const act = (label: string, run: () => void, primary = false) => <button type="button" className={primary ? "btn outline sm" : "btn ghost sm"} onMouseDown={keep} onClick={run}>{label}</button>;
   return (

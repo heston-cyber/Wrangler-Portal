@@ -22,6 +22,7 @@ import { clock, ownerShootConfirmedMail, shootDay, shootMail } from "./lib/mails
 import { deliverOnce } from "./invoiceReminders";
 import { SITE } from "./lib/site";
 import { queueCalendar } from "./calendar";
+import { passesOff } from "./lib/guests";
 
 type Ctx = QueryCtx | MutationCtx;
 const isDay = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T12:00:00Z`));
@@ -177,6 +178,8 @@ export const cancel = mutation({
     const now = Date.now();
     await ctx.db.patch(s._id, { status: "cancelled", updatedAt: now, calAt: now, history: [...s.history, { at: now, text: "Cancelled" }] });
     await queueCalendar(ctx, s._id, "all");
+    // Review L12: its call sheet's guests can't open it any more (out of their "N new" for this business).
+    for (const cs of await ctx.db.query("callSheets").withIndex("by_shoot", (q) => q.eq("shootId", s._id)).collect()) await passesOff(ctx, cs._id, true);
     const biz = await businessOf(ctx, p);
     if (biz) for (const person of await portalPeople(ctx, p)) {
       await postToInbox(ctx, { businessId: biz, clientId: p.clientId, email: person.email, kind: "shoot", title: `Shoot cancelled: ${shootDay(s.date)}`,

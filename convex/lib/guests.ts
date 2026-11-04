@@ -102,4 +102,9 @@ export async function addPass(ctx: MutationCtx, cs: Doc<"callSheets">, personId:
 export async function dropPasses(ctx: MutationCtx, callSheetId: Id<"callSheets">, personId?: string) {
   for (const p of await ctx.db.query("guestPasses").withIndex("by_sheet", (q) => q.eq("callSheetId", callSheetId)).collect()) if (!personId || p.personId === personId) await ctx.db.delete(p._id);
 }
-
+/** Review L12: a guest's pass while they can't open the sheet (or, `false`, can again): the switcher's "N new" hint. */
+export async function passesOff(ctx: MutationCtx, callSheetId: Id<"callSheets">, off: boolean, personId?: string) {
+  const now = Date.now();
+  for (const p of await ctx.db.query("guestPasses").withIndex("by_sheet", (q) => q.eq("callSheetId", callSheetId)).collect())
+    if ((!personId || p.personId === personId) && !!p.offAt !== off) await ctx.db.patch(p._id, { offAt: off ? now : undefined });
+}

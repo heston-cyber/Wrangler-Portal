@@ -44,6 +44,9 @@ async function heading(ctx: Ctx, cs: Doc<"callSheets"> | null, shoot: Doc<"shoot
   const sh = cs ? await shootOf(ctx, cs.shootId) : null;
   return { title: sh?.title ?? "Call sheet", date: shoot?.date ?? sh?.s.date ?? null };
 }
+/** Review L13: once access has ended, only what was last sent to THIS guest (kept on their pass by passesSent), never a
+ *  later update's heading or day. A pass from before this was kept shows nothing extra: just "Call sheet". */
+const endedHeading = (pass: Pass) => ({ title: pass.heading?.title ?? "Call sheet", date: pass.heading?.date ?? null });
 
 // ---------- signed out: the link, and the code ----------
 
@@ -56,10 +59,10 @@ export const intro = query({
     focusBusiness(ctx, pass.businessId); // the rest of this call sees only the pass's business
     const st = await sheetState(ctx.db, pass, await defaultBiz(ctx));
     if (!st.ok && (st.why === "gone" || st.why === "notSent")) return { state: "missing" as const };
-    const h = await heading(ctx, st.cs, st.shoot);
     const b = await ctx.db.get(pass.businessId);
     const business = { name: b?.name ?? "Wrangler Productions", legalName: b?.legalName ?? null, owner: b?.ownerName?.trim() || null };
-    if (!st.ok) return { state: "ended" as const, ...h, business };
+    if (!st.ok) return { state: "ended" as const, ...endedHeading(pass), business };
+    const h = await heading(ctx, st.cs, st.shoot);
     return { state: "active" as const, ...h, dayLong: sheetDayLong(h.date ?? st.shoot.date), name: st.r.name, email: masked(pass.email), business };
   },
 });
@@ -153,12 +156,12 @@ async function myPass(ctx: Ctx, token: string, email: string): Promise<Pass | nu
   return pass;
 }
 
-/** An ended sheet's last day of access (Q88: "access ended Oct 21"), when the reason has a day: ended by hand, the shoot's
- *  day passed, or the project closed. Cancelled or taken off the sheet: no day. */
-async function endedOn(ctx: Ctx, cs: Doc<"callSheets">, r: Doc<"callSheets">["recipients"][number] | undefined, shoot: Doc<"shoots"> | null, why: string) {
+/** An ended sheet's last day of access (Q88: "access ended Oct 21"), when the reason has a day the guest already knew:
+ *  ended by hand, or the shoot's day passed. Review L13: a closed project shows no day (it would be the client's
+ *  delivery day); cancelled or taken off the sheet: no day either. */
+function endedOn(r: Doc<"callSheets">["recipients"][number] | undefined, shoot: Doc<"shoots"> | null, why: string) {
   if (r?.endedAt) return todayCentral(r.endedAt);
   if (why === "over" && shoot) { const t = new Date(`${shoot.date}T12:00:00Z`); t.setUTCDate(t.getUTCDate() + 1); return t.toISOString().slice(0, 10); }
-  if (why === "closed") { const p = await ctx.db.get(cs.projectId); return p?.deliveryUnlockedAt ? todayCentral(p.deliveryUnlockedAt) : null; }
   return null;
 }
 
@@ -179,11 +182,12 @@ export const home = query({
     const all = await ctx.db.query("guestPasses").withIndex("by_email", (q) => q.eq("email", me.email)).collect();
     const passes = all.filter((p) => p.sentAt).sort((x, y) => rank(x).localeCompare(rank(y)));
     const ids = [...new Set(passes.map((p) => p.businessId))];
-    // "N new": sheets sent and not opened yet, shoot still to come (the passes' hint; the business shown is counted live below).
+    // "N new": sheets they can open now and haven't yet: sent, not ended, cancelled or restored-and-not-sent-again (offAt,
+    // review L12), shoot today or later, not opened (the passes' hint; the business shown is counted live below).
     const businesses: Array<{ businessId: Id<"businesses">; name: string; fresh: number }> = [];
     for (const id of ids) {
       const b = await ctx.db.get(id);
-      businesses.push({ businessId: id, name: b?.name ?? "A business", fresh: passes.filter((p) => p.businessId === id && !p.openedAt && (p.date ?? "") >= today).length });
+      businesses.push({ businessId: id, name: b?.name ?? "A business", fresh: passes.filter((p) => p.businessId === id && !p.openedAt && !p.offAt && (p.date ?? "") >= today).length });
     }
     const biz = a.businessId && ids.includes(a.businessId) ? a.businessId : ids[0] ?? null;
     const sheets: ListRow[] = [];
@@ -207,8 +211,8 @@ export const home = query({
         // Ended (by hand, the day after the shoot, cancelled, closed): only a sheet that actually went to them.
         const r = st.cs.recipients.find((x) => x.id === p.personId && x.kind === "guest" && x.email === p.email);
         if (!r?.sentAt || st.cs.status !== "sent" || !st.cs.sent) continue;
-        const h = await heading(ctx, st.cs, st.shoot);
-        sheets.push({ token: p.token, title: h.title, date: h.date ?? "", call: "", place: "", state: "ended", endedOn: await endedOn(ctx, st.cs, r, st.shoot, st.why), updatedToday: false, isNew: false });
+        const h = endedHeading(p);
+        sheets.push({ token: p.token, title: h.title, date: h.date ?? "", call: "", place: "", state: "ended", endedOn: endedOn(r, st.shoot, st.why), updatedToday: false, isNew: false });
       }
       const here = businesses.find((b) => b.businessId === biz);
       if (here) here.fresh = sheets.filter((x) => x.state !== "ended" && x.isNew).length;
@@ -230,7 +234,7 @@ export const sheet = query({
     if (!st.ok) {
       if (st.why === "gone" || st.why === "notSent") return null;
       const b = await ctx.db.get(pass.businessId);
-      return { ended: true as const, ...(await heading(ctx, st.cs, st.shoot)), business: { name: b?.name ?? "Wrangler Productions", legalName: b?.legalName ?? null } };
+      return { ended: true as const, ...endedHeading(pass), business: { name: b?.name ?? "Wrangler Productions", legalName: b?.legalName ?? null } };
     }
     const view = await readerView(ctx as QueryCtx, st.cs, st.r);
     if (!view) return null;
@@ -270,6 +274,8 @@ export const backfillPasses = internalMutation({
         // Q88: ended sheets stay in the list now, so a pass whose access was ended by hand gets its hint back too.
         if (r?.sentAt && !p.sentAt) await ctx.db.patch(p._id, { sentAt: r.sentAt, date: cs.sent?.date ?? shoot?.date });
         if (r?.openedAt && !p.openedAt) await ctx.db.patch(p._id, { openedAt: r.openedAt });
+        // Review L12: a pass they can't open now (ended, unticked, restored and not sent again, or the shoot cancelled).
+        if (!p.offAt && (!r || r.endedAt || !r.on || !r.sentAt || shoot?.status === "cancelled")) await ctx.db.patch(p._id, { offAt: Date.now() });
       }
     }
     return { added };

@@ -1,5 +1,6 @@
 // D148 (Nov 4): the forecast for a call sheet's Weather block. Free, no key:
-//   1. the US Census geocoder turns the shoot's address into a latitude and longitude (only the address goes to Census);
+//   1. the US Census geocoder turns the Location block's address into a latitude and longitude (only that address goes to
+//      Census: never the place name or the shoot's location text, review L10);
 //   2. the US National Weather Service (api.weather.gov) gives the forecast for that point (only the coordinates go to
 //      NWS, always with our User-Agent, which NWS asks every caller to send).
 // The line: "Sunny · 62°/48° · 10% rain · wind 8 mph" (the shoot day's daytime period; the night after it for the low).
@@ -25,7 +26,8 @@ export async function geocode(address: string, f: Fetch = fetch): Promise<GeoRes
   if (!a) return { kind: "notfound" };
   const url = `${CENSUS}?${new URLSearchParams({ address: a, benchmark: "Public_AR_Current", format: "json" }).toString()}`;
   try {
-    const r = await f(url, { ...signal() });
+    // Review L9: never follow a redirect (the address would go wherever it pointed).
+    const r = await f(url, { redirect: "error", ...signal() });
     if (!r.ok) return { kind: "error" };
     const j = (await r.json()) as { result?: { addressMatches?: Array<{ coordinates?: { x?: number; y?: number } }> } };
     const m = j.result?.addressMatches?.[0]?.coordinates;
@@ -38,7 +40,8 @@ export async function geocode(address: string, f: Fetch = fetch): Promise<GeoRes
 }
 
 type Period = { startTime?: string; isDaytime?: boolean; temperature?: number; windSpeed?: string; shortForecast?: string; probabilityOfPrecipitation?: { value?: number | null } | null };
-const nwsGet = (f: Fetch, url: string) => f(url, { headers: { "User-Agent": NWS_USER_AGENT, Accept: "application/geo+json" }, ...signal() });
+// Review L9: a redirect is an error (NWS's own redirects are avoided by rounding: see coord), never followed elsewhere.
+const nwsGet = (f: Fetch, url: string) => f(url, { redirect: "error", headers: { "User-Agent": NWS_USER_AGENT, Accept: "application/geo+json" }, ...signal() });
 // NWS wants at most four decimals (more redirects); four is about 11 m.
 const coord = (n: number) => String(Math.round(n * 10_000) / 10_000);
 

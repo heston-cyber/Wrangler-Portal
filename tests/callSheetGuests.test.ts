@@ -236,7 +236,7 @@ describe("call-sheet guests", () => {
     expect((await patIn.query(api.guests.sheet, { token: pTok })).ended).toBe(false); // delivery stage alone isn't closed
     await w.t.run(async (ctx) => { await ctx.db.patch(w.p, { deliveryUnlockedAt: Date.now() }); });
     expect(await patIn.query(api.guests.sheet, { token: pTok })).toMatchObject({ ended: true });
-    expect((await patIn.query(api.guests.home, {})).sheets).toEqual([expect.objectContaining({ token: pTok, state: "ended", endedOn: todayCentral() })]); // closed today
+    expect((await patIn.query(api.guests.home, {})).sheets).toEqual([expect.objectContaining({ token: pTok, state: "ended", endedOn: null })]); // closed: no day (review L13: it would be the client's delivery day)
     await expect(w.t.action(api.guests.sendCode, { token: pTok })).rejects.toThrow(/no longer available/);
     void s1;
   }, 60_000);
