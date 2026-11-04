@@ -107,14 +107,22 @@ export function FootageCard({ projectId, show }: { projectId: string; show: (m: 
   if (lc?.kind === "kept") {
     rows = <Row title={`Offered to ${client} at delivery`} body={`Kept until ${longDay(lc.until)} · ${perYear(s.priceCents)} · invoice paid ${atDay(lc.paidAt)}`} chip={<StatusChip tone="success">Kept</StatusChip>} />;
   } else if (lc?.kind === "refund") {
-    rows = <Row title={`Offered to ${client} at delivery`} body={[lc.wasUntil ? `Was kept until ${shortDay(lc.wasUntil)}` : null, perYear(s.priceCents), `invoice paid ${atDay(lc.paidAt)}`, "refund pending in Stripe"].filter(Boolean).join(" · ")} chip={<StatusChip tone="warning">To refund</StatusChip>} />;
+    rows = <Row title={`Offered to ${client} at delivery`} body={[lc.wasUntil ? `Was kept until ${shortDay(lc.wasUntil)}` : null, perYear(s.priceCents), `invoice paid ${atDay(lc.paidAt)}`, lc.partly ? "partly refunded in Stripe" : "refund pending in Stripe"].filter(Boolean).join(" · ")} chip={<StatusChip tone="warning">To refund</StatusChip>} />;
   }
+  // Review L6: closes the box by hand, for a refund Stripe can't report (paid from their credit balance, so no charge).
+  const closeRefund = async () => {
+    if (!(await confirm({ title: "Close this box?", body: "Do this once you've refunded it, or credited it back, in Stripe. The portal doesn't check Stripe for this.", yes: "It's refunded", danger: false }))) return;
+    await run(() => dismissLate({ projectId, close: true }), "Marked as refunded.");
+  };
   const chosen = lc && (lc.kind === "kept"
     ? <div className="cpj-ftbox yes ft-banner" role="status"><Icon name="check-circle" size={20} />
         <span className="txt"><b>Kept until {longDay(lc.until)}</b><span className="secondary">You chose to keep {client}’s raw footage for another year. The invoice stays paid.</span></span></div>
     : <div className="cpj-ftbox no ft-banner" role="status"><Icon name="alert" size={20} />
-        <span className="txt"><b>Marked to refund</b><span className="secondary">{client}’s invoice stays paid until you refund it in Stripe. When it is refunded, this box closes.</span></span>
-        {lc.stripeUrl && <a className="btn outline sm" href={lc.stripeUrl} target="_blank" rel="noopener noreferrer">Open in Stripe<Icon name="external" size={14} className="end" /></a>}</div>);
+        <span className="txt"><b>Marked to refund</b>
+          {lc.partly && <span className="secondary"><b>Partly refunded: {usd(lc.partly.refundedCents)} of {usd(lc.partly.paidCents)}</b></span>}
+          <span className="secondary">{lc.partly ? "When all of it is refunded in Stripe, this box closes." : `${client}’s invoice stays paid until you refund it in Stripe. When it is refunded, this box closes.`}</span></span>
+        {lc.stripeUrl && <a className="btn outline sm" href={lc.stripeUrl} target="_blank" rel="noopener noreferrer">Open in Stripe<Icon name="external" size={14} className="end" /></a>}
+        <Button size="sm" variant="ghost" disabled={busy} onClick={() => void closeRefund()}>It's refunded</Button></div>);
   // Review H1: a storage invoice paid after it ended, was stopped or deleted. Nothing changed by itself: the owner decides.
   const late = s.latePaid && (
     <div className="ft-late">

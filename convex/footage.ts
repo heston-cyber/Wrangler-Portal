@@ -296,6 +296,9 @@ export const markDone = mutation({
   },
 });
 
+/** Stripe dispute outcomes that leave the payment with the business (review L5). */
+const SETTLED_FOR_US = ["won", "warning_closed"];
+
 /** The day a late storage invoice was paid (Central), from the invoice's own paid time when Stripe gave one. */
 async function latePaidAt(ctx: Ctx, late: NonNullable<Doc<"footageStorage">["latePaid"]>) {
   const inv = await ctx.db.get(late.invoiceId);
@@ -312,6 +315,11 @@ export const reinstate = mutation({
     const { r } = await ownedRow(ctx, projectId);
     if (!r?.latePaid) throw new ConvexError("There's no late payment to act on.");
     if (r.doneAt) throw new ConvexError("You marked the footage as deleted or moved, so it can't be kept. Refund the payment in Stripe instead.");
+    // Review L5: a payment already refunded or disputed in Stripe (the charge webhooks record both on the invoice) leaves
+    // nothing to keep it for. A dispute the business won (or an inquiry closed without a chargeback) keeps the money.
+    const inv = await ctx.db.get(r.latePaid.invoiceId);
+    if ((inv?.refundedCents ?? 0) > 0) throw new ConvexError("This invoice was refunded in Stripe, so there's nothing to keep it for.");
+    if (inv?.disputed && !SETTLED_FOR_US.includes(inv.disputed.status)) throw new ConvexError("This invoice's payment was disputed in Stripe, so there's nothing to keep it for.");
     const now = Date.now();
     const paidAt = await latePaidAt(ctx, r.latePaid);
     const paidUntil = addYear(todayCentral(paidAt));
@@ -324,12 +332,22 @@ export const reinstate = mutation({
   },
 });
 /** ...or will refund it in Stripe (Q94): marked to refund. The status stays as it was; the box shows "Marked to refund"
- *  with a link to the invoice in Stripe until Stripe reports a refund on it. The portal never refunds anything itself. */
+ *  with a link to the invoice in Stripe until Stripe reports a refund of the whole amount paid on it. The portal never
+ *  refunds anything itself. Review L6: `close` (the box's "It's refunded") closes that box by hand, for a refund Stripe
+ *  never reports (paid from the customer's credit balance: no charge to refund). Same owner-only guards. */
 export const dismissLatePaid = mutation({
-  args: { projectId: v.string() },
-  handler: async (ctx, { projectId }) => {
+  args: { projectId: v.string(), close: v.optional(v.boolean()) },
+  handler: async (ctx, { projectId, close }) => {
     const me = await requireMe(ctx);
     const { r } = await ownedRow(ctx, projectId);
+    if (close) {
+      const c = r?.lateChoice;
+      if (!r || c?.kind !== "refund") throw new ConvexError("There's no refund box to close.");
+      if (c.closedAt) return null;
+      const now = Date.now();
+      await ctx.db.patch(r._id, { lateChoice: { ...c, closedAt: now, closedBy: me.name ?? "the owner" }, updatedAt: now, history: hist(r, `Refund box closed by ${me.name} (refunded outside the portal's view)`, now) });
+      return null;
+    }
     if (!r?.latePaid) return null;
     const now = Date.now();
     const paidAt = await latePaidAt(ctx, r.latePaid);
@@ -351,11 +369,16 @@ async function lateChoiceView(ctx: QueryCtx, r: Doc<"footageStorage">) {
   // Only that invoice, on this storage row (another business's invoice id is invisible here anyway).
   if (!inv || inv.storageId !== r._id) return null;
   if (c.kind === "kept") return r.status === "paid" && r.paidUntil === c.until ? { kind: "kept" as const, until: c.until!, paidAt: c.paidAt, at: c.at } : null;
-  const refunded = (inv.refundedCents ?? 0) > 0;
-  if (refunded) return null;
+  if (c.closedAt) return null; // review L6: closed by hand
+  // Review L4: closed only once Stripe reports the whole amount paid on that invoice refunded; a part refund keeps it open.
+  const refundedCents = inv.refundedCents ?? 0;
+  if (refundedCents > 0 && refundedCents >= inv.amountPaidCents) return null;
   // Q94: the invoice in the business's own Stripe account (test-mode dashboard in test mode), as Payments' invoice page links it.
   const stripeUrl = inv.stripe ? `https://dashboard.stripe.com/${inv.stripe.livemode ? "" : "test/"}invoices/${inv.stripe.invoiceId}` : null;
-  return { kind: "refund" as const, paidAt: c.paidAt, at: c.at, wasUntil: c.wasUntil ?? null, invoice: { _id: inv._id, number: inv.number ?? inv.stripe?.number ?? null }, stripeUrl };
+  return {
+    kind: "refund" as const, paidAt: c.paidAt, at: c.at, wasUntil: c.wasUntil ?? null, invoice: { _id: inv._id, number: inv.number ?? inv.stripe?.number ?? null }, stripeUrl,
+    partly: refundedCents > 0 ? { refundedCents, paidCents: inv.amountPaidCents } : null,
+  };
 }
 
 type What = "kept" | "renewal" | "ended" | "unpaid" | "paidLate";

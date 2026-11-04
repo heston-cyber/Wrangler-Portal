@@ -336,6 +336,8 @@ export const recordSent = internalMutation({
       status: s.invoice.status === "paid" ? "paid" : "open",
       stripe: { accountId: s.accountId, invoiceId: s.invoice.id, customerId: s.customerId, number: s.invoice.number ?? i.number, hostedUrl: s.invoice.hosted_invoice_url ?? undefined, pdfUrl: s.invoice.invoice_pdf ?? undefined, livemode: !!s.invoice.livemode },
       totalCents: Number(s.invoice.total ?? i.totalCents), amountPaidCents: Number(s.invoice.amount_paid ?? 0), amountRemainingCents: Number(s.invoice.amount_remaining ?? s.invoice.total ?? i.totalCents),
+      // Review L7: paid at send (a credit balance covered it): Stripe's paid time, as the webhook records it.
+      ...(s.invoice.status === "paid" && !i.paidAt ? { paidAt: stripePaidAt(s.invoice, now) } : {}),
       sentAt: now, updatedAt: now,
       history: [...i.history, { kind: "sent", at: now, by, detail: i.billTo.email }],
     });
@@ -584,6 +586,13 @@ export const voidInvoice = action({
 
 // ---------- the webhook's side ----------
 
+/** Review L7: when Stripe says the invoice was paid (status_transitions.paid_at, in seconds), not when its webhook arrived
+ *  (a retried or delayed event can come days later). `now` when Stripe gives none. */
+export function stripePaidAt(s: StripeResult, now: number): number {
+  const t = Number(s?.status_transitions?.paid_at);
+  return Number.isFinite(t) && t > 0 ? Math.min(t * 1000, now) : now;
+}
+
 async function byStripe(ctx: QueryCtx | MutationCtx, accountId: string, stripeId: string) {
   const i = await ctx.db.query("invoices").withIndex("by_stripe", (q) => q.eq("stripe.invoiceId", stripeId)).first();
   return i && i.stripe?.accountId === accountId ? i : null;
@@ -617,7 +626,7 @@ export const applyStripeInvoice = internalMutation({
       ...(status === "paid" || paid > i.amountPaidCents ? { processing: false } : {}),
       // Keep a reason the portal already read from Stripe for this same attempt (within ten minutes).
       ...(eventType === "invoice.payment_failed" ? { lastFailure: i.lastFailure && now - i.lastFailure.at < 10 * 60_000 ? i.lastFailure : { at: now, message: "A payment attempt failed" }, processing: false } : {}),
-      ...(status === "paid" && !i.paidAt ? { paidAt: now } : {}),
+      ...(status === "paid" && !i.paidAt ? { paidAt: stripePaidAt(s, now) } : {}),
       ...(status === "void" && !i.voidedAt ? { voidedAt: now } : {}),
       stripe: { ...i.stripe!, number: s.number ?? i.stripe!.number, hostedUrl: s.hosted_invoice_url ?? i.stripe!.hostedUrl, pdfUrl: s.invoice_pdf ?? i.stripe!.pdfUrl },
       history: history.slice(-60), updatedAt: now,

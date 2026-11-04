@@ -24,7 +24,7 @@ import { todayCentral } from "./lib/bookings";
 import { businessContact } from "./lib/business";
 import { mailBrandOf } from "./lib/mail";
 import { callSheetMail, callSheetUpdateMail, guestCallSheetMail } from "./lib/mails";
-import { addPass, dropPasses, hasOwnLogin, ownLoginHere, projectClosed, sheetBusiness } from "./lib/guests";
+import { addPass, dropPasses, hasOwnLogin, passesOff, ownLoginHere, projectClosed, sheetBusiness } from "./lib/guests";
 import { defaultBusiness } from "./lib/business";
 import { deliverOnce } from "./invoiceReminders";
 import { SITE } from "./lib/site";
@@ -358,6 +358,9 @@ export const toggle = mutation({
     const recipients = stored ? cs.recipients.map((r) => (r.id === a.id ? { ...r, on: a.on } : r)) : [...cs.recipients, { ...row, on: a.on, addedAt: Date.now() }];
     if (recipients.length > MAX_PEOPLE) throw new ConvexError(`A call sheet can go to up to ${MAX_PEOPLE} people.`);
     await ctx.db.patch(cs._id, { recipients, updatedAt: Date.now() });
+    // Review L12: an unticked guest can't open it; ticked again, they can if it already went to them (and wasn't ended).
+    const was = cs.recipients.find((r) => r.id === a.id);
+    if (x.kind === "guest") await passesOff(ctx, cs._id, !(a.on && !!was?.sentAt && !was.endedAt), a.id);
     return null;
   },
 });
@@ -405,7 +408,9 @@ export const endGuest = mutation({
     if (g.endedAt) return null;
     const now = Date.now();
     await ctx.db.patch(cs._id, { recipients: cs.recipients.map((r) => (r.id === a.id ? { ...r, endedAt: now } : r)), updatedAt: now, history: hist(cs, "guest-ended", me, g.name) });
-    // Q88 (Nov 4): the pass keeps its "sent" hint, so the sheet stays in the guest's list under Ended.
+    // Q88 (Nov 4): the pass keeps its "sent" hint, so the sheet stays in the guest's list under Ended. Review L12: off
+    // until it's sent to them again (a restore alone doesn't open it).
+    await passesOff(ctx, cs._id, true, a.id);
     return null;
   },
 });
@@ -426,7 +431,8 @@ export const restoreGuest = mutation({
       return { ...rest, on: true, grant: (r.grant ?? 0) + 1 };
     };
     await ctx.db.patch(cs._id, { recipients: cs.recipients.map((r) => (r.id === a.id ? back(r) : r)), updatedAt: now, history: hist(cs, "guest-restored", me, g.name) });
-    for (const p of await ctx.db.query("guestPasses").withIndex("by_sheet", (q) => q.eq("callSheetId", cs._id)).collect()) if (p.personId === a.id) await ctx.db.patch(p._id, { openedAt: undefined });
+    // Review L12: still off (not in their "N new") until the next Send an update or Remind sends it to them.
+    for (const p of await ctx.db.query("guestPasses").withIndex("by_sheet", (q) => q.eq("callSheetId", cs._id)).collect()) if (p.personId === a.id) await ctx.db.patch(p._id, { openedAt: undefined, offAt: p.offAt ?? now });
     return null;
   },
 });
@@ -455,12 +461,13 @@ const updateKey = (cs: Sheet, round: number, x: Person) => `callsheet:${cs._id}:
 const remindKey = (cs: Sheet, x: Person) => `callsheet:${cs._id}:remind:${(x.reminders ?? 0) + 1}:${x.id}`;
 
 /** Review L2/L5: a guest it was just sent to: their pass says so (the /guest list's hint), and a pass locked by wrong
- *  codes opens again. */
-async function passesSent(ctx: MutationCtx, cs: Sheet, ids: string[], date: string) {
+ *  codes opens again. Review L12/L13: they can open it now (offAt cleared), and the pass keeps the heading and day as
+ *  sent to them (their Ended row shows those, never a later update's). */
+async function passesSent(ctx: MutationCtx, cs: Sheet, ids: string[], date: string, title: string) {
   if (!ids.length) return;
   const now = Date.now();
   for (const p of await ctx.db.query("guestPasses").withIndex("by_sheet", (q) => q.eq("callSheetId", cs._id)).collect())
-    if (ids.includes(p.personId)) await ctx.db.patch(p._id, { sentAt: now, date, lockedAt: undefined, wrongCount: undefined, wrongDay: undefined });
+    if (ids.includes(p.personId)) await ctx.db.patch(p._id, { sentAt: now, date, heading: { title: title.slice(0, 200), date }, offAt: undefined, lockedAt: undefined, wrongCount: undefined, wrongDay: undefined });
 }
 const guestIds = (xs: Array<{ id: string; kind: string }>) => xs.filter((x) => x.kind === "guest").map((x) => x.id);
 
@@ -509,7 +516,7 @@ export const send = mutation({
       history: hist(cs, "sent", me, `${go.length} ${go.length === 1 ? "person" : "people"}`),
     });
     await ctx.db.patch(build._id, { renderedAt: now });
-    await passesSent(ctx, cs, guestIds(go), sh.s.date);
+    await passesSent(ctx, cs, guestIds(go), sh.s.date, sh.title);
     await tellClients(ctx, cs, sh.p, out, `callsheet:${cs._id}:first`, `Call sheet: ${sheetDay(sh.s.date)}`, (o) => `${sh.title}${o.call ? ` · your call ${clockOf(o.call)}` : ""}`);
     await ctx.scheduler.runAfter(0, internal.callSheets.mail, { callSheetId: cs._id, out, message: tidy(a.message, 500) || undefined });
     return { sent: go.length, skipped: people.filter((x) => x.on && !x.access && !left(x.kind)).map((x) => x.name), guests: go.filter((x) => x.kind === "guest").length };
@@ -546,7 +553,7 @@ export const sendUpdate = mutation({
       recipients, updates: round, updatedAt: now, sent: { title: build.title, page: doc.page, fields: doc.fields, style: doc.style, at: now, round, heading: sh.title, date: sh.s.date },
       history: hist(cs, "update", me, changed),
     });
-    await passesSent(ctx, cs, guestIds(go), sh.s.date);
+    await passesSent(ctx, cs, guestIds(go), sh.s.date, sh.title);
     await tellClients(ctx, cs, sh.p, out, `callsheet:${cs._id}:update:${round}`, `Call sheet updated: ${sheetDay(sh.s.date)}`, () => `${changed}.`);
     await ctx.scheduler.runAfter(0, internal.callSheets.mail, { callSheetId: cs._id, out, changed, message: tidy(a.message, 500) || undefined });
     return { sent: out.length };
@@ -582,7 +589,7 @@ export const remind = mutation({
       recipients: cs.recipients.map((r) => (fresh.has(r.id) ? { ...r, sentAt: now, round: cs.sent!.round } : ids.has(r.id) ? { ...r, remindedAt: now, reminders: (r.reminders ?? 0) + 1 } : r)), updatedAt: now,
       history: hist(cs, "remind", me, go.map((x) => x.name).join(", ")),
     });
-    await passesSent(ctx, cs, guestIds(go), sh.s.date);
+    await passesSent(ctx, cs, guestIds(go), sh.s.date, sh.title);
     await ctx.scheduler.runAfter(0, internal.callSheets.mail, { callSheetId: cs._id, out });
     return { sent: go.length };
   },
@@ -765,8 +772,9 @@ function needsForecast(cs: Sheet, page: Page, s: Doc<"shoots">, today: string, f
   if (s.status !== "scheduled" || !nodesOf(page, "weather").length) return false;
   const days = daysBetween(today, s.date);
   if (days < 0 || days > WEATHER_DAYS) return false;
-  if (force) return true;
   const { address } = weatherAddress(page, s.location);
+  if (!address) return false; // review L10: only the Location block's address is ever looked up
+  if (force) return true;
   const w = cs.weather;
   if (!w || w.date !== s.date || w.address !== address || w.state !== "forecast") return true;
   return days <= 1 && !w.dayBefore;
@@ -799,6 +807,7 @@ export const weatherInput = internalQuery({
     const page = migrateWeather(pageOf(build.blocks)).page;
     if (!needsForecast(cs, page, s, todayCentral(), !!force)) return null;
     const { address } = weatherAddress(page, s.location);
+    if (!address) return null;
     const geo = cs.geo && cs.geo.address === address ? { lat: cs.geo.lat ?? null, lon: cs.geo.lon ?? null } : null;
     return { address, date: s.date, geo };
   },
@@ -820,7 +829,7 @@ export const weatherStore = internalMutation({
       line: a.kind === "forecast" ? (a.line ?? "").slice(0, 160) : "", at: now,
       ...(a.kind === "forecast" && daysBetween(todayCentral(), a.date) <= 1 ? { dayBefore: true } : {}),
     };
-    await ctx.db.patch(cs._id, { weather, ...(a.geo ? { geo: { address: a.address, ...a.geo, at: now } } : {}) });
+    await ctx.db.patch(cs._id, { weather, weatherTriedAt: now, ...(a.geo ? { geo: { address: a.address, ...a.geo, at: now } } : {}) });
     return weather.state;
   },
 });
@@ -864,7 +873,14 @@ export const refreshWeather = mutation({
     const days = daysBetween(todayCentral(), sh.s.date);
     if (days > WEATHER_DAYS) return { state: "early" as const };
     if (days < 0) throw new ConvexError("The shoot is over.");
-    if (cs.weather && Date.now() - cs.weather.at < 30_000) return { state: "recent" as const }; // a double press
+    const build = await ctx.db.get(cs.buildId);
+    if (build && !weatherAddress(migrateWeather(pageOf(build.blocks)).page, sh.s.location).address) throw new ConvexError("There is no address on the sheet. Add one to get the forecast.");
+    // Review L11: a double press, or a press within 30 seconds of the last try: keyed on each try (stamped here and by
+    // every lookup), not on the forecast's own time, which doesn't move when a lookup fails.
+    const now = Date.now();
+    const last = Math.max(cs.weatherTriedAt ?? 0, cs.weather?.at ?? 0);
+    if (now - last < 30_000) return { state: "recent" as const };
+    await ctx.db.patch(cs._id, { weatherTriedAt: now });
     await ctx.scheduler.runAfter(0, internal.callSheets.weatherOne, { callSheetId, force: true });
     return { state: "looking" as const };
   },

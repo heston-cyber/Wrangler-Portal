@@ -5,7 +5,9 @@
 // from the day it was PAID, no new invoice. T6.5: I'll refund it: marked to refund with a link to that invoice in
 // Stripe (test mode), and the box closes when Stripe reports the refund (an existing, signature-checked webhook);
 // another Stripe account's refund doesn't close it. T6.6: another business's owner sees and changes none of it;
-// clients and vendors can't call the owner's functions.
+// clients and vendors can't call the owner's functions. Review fixes (Nov 4): T6.7 L12 "N new" for other businesses;
+// T6.8 L13 Ended rows as sent to that guest; T6.9 L4 part refunds; T6.10 L5 refunded or disputed can't be kept;
+// T6.11 L6 closing the refund box by hand; T6.12-13 L7 Stripe's paid time.
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { anyApi } from "convex/server";
 import type { Id } from "../convex/_generated/dataModel";
@@ -190,6 +192,76 @@ describe("Q88 call-sheet details", () => {
       await expect(who.mutation(api.callSheets.remind, { callSheetId: cs })).rejects.toThrow();
     }
   }, 60_000);
+
+  test("T6.7 review L12: another business's 'N new' counts only sheets the guest can open now (not ended, restored-and-unsent, unticked or cancelled)", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const { cs, shootId } = await sheetSetup(w);
+    const riley = await w.heston.mutation(api.callSheets.addGuest, { callSheetId: cs, name: "Riley Quinn", email: RILEY, role: "Talent" }) as string;
+    await w.heston.mutation(api.callSheets.send, { callSheetId: cs, crew: true, client: true, guests: true });
+    await settle(w);
+    const rileyIn = await signInAsGuest(w, mails, await tokenOf(w, cs, riley), RILEY);
+    const { B } = await bSheet(w, day(9));
+    // Viewing B's sheets: A's count comes from the passes' hints, not a live read of A's sheet.
+    const freshA = async () => ((await rileyIn.query(api.guests.home, { businessId: B })).businesses as Array<{ businessId: string; fresh: number }>).find((b) => b.businessId === w.A)!.fresh;
+    expect(await freshA()).toBe(1);
+    // Ended by hand: not new any more (it was counted before the fix).
+    await w.heston.mutation(api.callSheets.endGuest, { callSheetId: cs, id: riley });
+    expect(await freshA()).toBe(0);
+    // Restored but not sent again: still nothing she can open.
+    await w.heston.mutation(api.callSheets.restoreGuest, { callSheetId: cs, id: riley });
+    expect(await freshA()).toBe(0);
+    // Sent to her again (Remind sends a restored guest the sheet): new again.
+    await w.heston.mutation(api.callSheets.remind, { callSheetId: cs, id: riley });
+    await settle(w);
+    expect(await freshA()).toBe(1);
+    // Unticked: she can't open it; ticked again (it went to her already): she can.
+    await w.heston.mutation(api.callSheets.toggle, { callSheetId: cs, id: riley, on: false });
+    expect(await freshA()).toBe(0);
+    await w.heston.mutation(api.callSheets.toggle, { callSheetId: cs, id: riley, on: true });
+    expect(await freshA()).toBe(1);
+    // The shoot cancelled: never openable again.
+    await w.heston.mutation(api.shoots.cancel, { shootId });
+    expect(await freshA()).toBe(0);
+    // The hints always agree with the live list for the business shown (A, read live: nothing to open).
+    expect((await rileyIn.query(api.guests.home, { businessId: w.A })).sheets.filter((x: { state: string }) => x.state !== "ended")).toEqual([]);
+    // The backfill sets the hint on passes from before it existed, and is safe to run again.
+    await w.t.run(async (ctx) => { for (const p of await ctx.db.query("guestPasses").collect()) await ctx.db.patch(p._id, { offAt: undefined }); });
+    await w.t.mutation(internal.guests.backfillPasses, {});
+    await w.t.mutation(internal.guests.backfillPasses, {});
+    expect(await freshA()).toBe(0);
+  }, 60_000);
+
+  test("T6.8 review L13: an Ended row shows the heading and day as last sent to that guest, never a later update's; a closed project shows no day", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const { cs, shootId } = await sheetSetup(w);
+    const riley = await w.heston.mutation(api.callSheets.addGuest, { callSheetId: cs, name: "Riley Quinn", email: RILEY, role: "Talent" }) as string;
+    await w.heston.mutation(api.callSheets.send, { callSheetId: cs, crew: true, client: true, guests: true });
+    await settle(w);
+    const tok = await tokenOf(w, cs, riley);
+    const rileyIn = await signInAsGuest(w, mails, tok, RILEY);
+    expect(await w.t.run(async (ctx) => (await ctx.db.query("guestPasses").withIndex("by_token", (q) => q.eq("token", tok)).unique())!.heading)).toEqual({ title: "Launch · Harbor Coffee", date: day(4) });
+    await w.heston.mutation(api.callSheets.endGuest, { callSheetId: cs, id: riley });
+    // After her access ended: the project is renamed and the shoot moved, and an update goes to everyone else.
+    await w.t.run(async (ctx) => { await ctx.db.patch(w.p, { name: "Relaunch" }); await ctx.db.patch(shootId, { date: day(6) }); });
+    await w.heston.mutation(api.callSheets.sendUpdate, { callSheetId: cs, changed: "Moved to a new day" });
+    await settle(w);
+    const sent = await w.t.run(async (ctx) => (await ctx.db.get(cs))!.sent!);
+    expect([sent.heading, sent.date]).toEqual(["Relaunch · Harbor Coffee", day(6)]);
+    // Her row, her Access ended page and the link's own page: what she was sent, not the update.
+    expect((await rileyIn.query(api.guests.home, { businessId: w.A })).sheets).toEqual([{ token: tok, title: "Launch · Harbor Coffee", date: day(4), call: "", place: "", state: "ended", endedOn: todayCentral(), updatedToday: false, isNew: false }]);
+    expect(await rileyIn.query(api.guests.sheet, { token: tok })).toMatchObject({ ended: true, title: "Launch · Harbor Coffee", date: day(4) });
+    expect(await w.t.query(api.guests.intro, { token: tok })).toMatchObject({ state: "ended", title: "Launch · Harbor Coffee", date: day(4) });
+    expect(JSON.stringify(await rileyIn.query(api.guests.home, { businessId: w.A }))).not.toContain("Relaunch");
+    // A pass from before the heading was kept: nothing extra, just "Call sheet · Ended".
+    await w.t.run(async (ctx) => { const p = (await ctx.db.query("guestPasses").withIndex("by_token", (q) => q.eq("token", tok)).unique())!; await ctx.db.patch(p._id, { heading: undefined }); });
+    expect((await rileyIn.query(api.guests.home, { businessId: w.A })).sheets).toEqual([expect.objectContaining({ title: "Call sheet", date: "", state: "ended" })]);
+    expect(await w.t.query(api.guests.intro, { token: tok })).toMatchObject({ state: "ended", title: "Call sheet", date: null });
+    expect(JSON.stringify(await w.t.query(api.guests.intro, { token: tok }))).not.toContain("Relaunch");
+  }, 60_000);
 });
 
 // ---------- Q93 / Q94: raw footage paid late ----------
@@ -212,8 +284,9 @@ const runDue = async (w: W) => {
   vi.useRealTimers();
   await settle(w);
 };
-/** Keep it, the first year paid, the renewal drafted and sent, Stop storing, then the renewal paid late (5 days ago). */
-async function paidLate(w: W) {
+/** Keep it, the first year paid, the renewal drafted and sent, Stop storing, then the renewal paid late (5 days ago).
+ *  `stripePaidAt`: the renewal's paid time comes from Stripe's own status_transitions.paid_at instead (review L7). */
+async function paidLate(w: W, stripePaidAt?: number) {
   await footageSetup(w);
   await w.heston.mutation(api.projects.setDelivery, { projectId: w.p, unlocked: true });
   await w.maya.mutation(api.footage.keep, { projectId: w.p });
@@ -225,10 +298,11 @@ async function paidLate(w: W) {
   const renewal = (await invoices(w)).find((x) => x._id !== first._id)!;
   await markSent(w, renewal._id, "in_r");
   await w.heston.mutation(api.footage.stop, { projectId: w.p });
-  await webhook(w, "in_r", "paid");
+  if (stripePaidAt) await w.t.mutation(internal.invoices.applyStripeInvoice, { accountId: "acct_A", invoice: { id: "in_r", status: "paid", total: 10000, amount_paid: 10000, amount_remaining: 0, status_transitions: { paid_at: Math.floor(stripePaidAt / 1000) } }, eventType: "invoice.paid" });
+  else await webhook(w, "in_r", "paid");
   await settle(w);
-  const paidAt = Date.now() - 5 * 86_400_000;
-  await w.t.run(async (ctx) => { await ctx.db.patch(renewal._id, { paidAt }); });
+  const paidAt = stripePaidAt ? Math.floor(stripePaidAt / 1000) * 1000 : Date.now() - 5 * 86_400_000;
+  if (!stripePaidAt) await w.t.run(async (ctx) => { await ctx.db.patch(renewal._id, { paidAt }); });
   expect(await row(w)).toMatchObject({ status: "stopped", latePaid: { invoiceId: renewal._id, was: "stopped" } });
   return { renewal, paidAt };
 }
@@ -275,7 +349,7 @@ describe("Q93/Q94 raw footage paid late: after the choice", () => {
     expect(r).toMatchObject({ status: "stopped", lateChoice: { kind: "refund", invoiceId: renewal._id, paidAt, was: "stopped" } });
     expect(r.latePaid).toBeUndefined();
     let card = (await w.heston.query(api.footage.forProject, { projectId: w.p })).storage;
-    expect(card.lateChoice).toEqual({ kind: "refund", paidAt, at: expect.any(Number), wasUntil: r.paidUntil, invoice: { _id: renewal._id, number: null }, stripeUrl: "https://dashboard.stripe.com/test/invoices/in_r" });
+    expect(card.lateChoice).toEqual({ kind: "refund", paidAt, at: expect.any(Number), wasUntil: r.paidUntil, invoice: { _id: renewal._id, number: null }, stripeUrl: "https://dashboard.stripe.com/test/invoices/in_r", partly: null });
     expect(await w.boss.query(api.footage.forProject, { projectId: w.p })).toBeNull();
     expect((await w.heston.query(api.home.needs, {})).filter((n: { kind: string }) => n.kind === "footage")).toEqual([]);
 
@@ -299,5 +373,116 @@ describe("Q93/Q94 raw footage paid late: after the choice", () => {
     await w.t.run(async (ctx) => { const i = (await ctx.db.get(renewal._id))!; await ctx.db.patch(renewal._id, { stripe: { ...i.stripe!, livemode: true } }); });
     await w.heston.mutation(api.footage.dismissLatePaid, { projectId: w.p });
     expect((await w.heston.query(api.footage.forProject, { projectId: w.p })).storage.lateChoice.stripeUrl).toBe("https://dashboard.stripe.com/invoices/in_r");
+  }, 60_000);
+
+  const withPayment = (w: W, id: Id<"invoices">, at: number) => w.t.run(async (ctx) => { await ctx.db.patch(id, { payments: [{ id: "pi_1", at, method: "Visa •••• 4242", cents: 10_000, status: "paid" }] }); });
+  const charge = (w: W, type: string, object: Record<string, unknown>) => w.t.mutation(internal.invoicePay.applyChargeEvent, { accountId: "acct_A", type, object: { payment_intent: "pi_1", ...object } });
+
+  test("T6.9 review L4: a part refund keeps the Marked to refund box open, showing how much; the whole amount paid closes it", async () => {
+    const w = await world();
+    stub([]);
+    const { renewal, paidAt } = await paidLate(w);
+    await w.heston.mutation(api.footage.dismissLatePaid, { projectId: w.p });
+    await withPayment(w, renewal._id, paidAt);
+    await charge(w, "charge.refunded", { amount_refunded: 4_000 });
+    let lc = (await w.heston.query(api.footage.forProject, { projectId: w.p })).storage.lateChoice;
+    expect(lc).toMatchObject({ kind: "refund", partly: { refundedCents: 4_000, paidCents: 10_000 } });
+    await charge(w, "charge.refunded", { amount_refunded: 9_999 });
+    lc = (await w.heston.query(api.footage.forProject, { projectId: w.p })).storage.lateChoice;
+    expect(lc).toMatchObject({ kind: "refund", partly: { refundedCents: 9_999, paidCents: 10_000 } });
+    await charge(w, "charge.refunded", { amount_refunded: 10_000 });
+    expect((await w.heston.query(api.footage.forProject, { projectId: w.p })).storage.lateChoice).toBeNull();
+  }, 60_000);
+
+  test("T6.10 review L5: Keep it for a year is refused once the payment was refunded or disputed in Stripe (a won dispute keeps the money)", async () => {
+    // Refunded (even in part): refused, nothing changes.
+    let w = await world();
+    stub([]);
+    let late = await paidLate(w);
+    await withPayment(w, late.renewal._id, late.paidAt);
+    await charge(w, "charge.refunded", { amount_refunded: 2_500 });
+    await expect(w.heston.mutation(api.footage.reinstate, { projectId: w.p })).rejects.toThrow("This invoice was refunded in Stripe, so there's nothing to keep it for.");
+    expect(await row(w)).toMatchObject({ status: "stopped", latePaid: { invoiceId: late.renewal._id } });
+    expect((await row(w)).lateChoice).toBeUndefined();
+
+    // Disputed: refused while open or lost; allowed once the business won it.
+    w = await world();
+    stub([]);
+    late = await paidLate(w);
+    await withPayment(w, late.renewal._id, late.paidAt);
+    await charge(w, "charge.dispute.created", { status: "needs_response", amount: 10_000, reason: "fraudulent" });
+    await expect(w.heston.mutation(api.footage.reinstate, { projectId: w.p })).rejects.toThrow("This invoice's payment was disputed in Stripe, so there's nothing to keep it for.");
+    await charge(w, "charge.dispute.closed", { status: "lost", amount: 10_000 });
+    await expect(w.heston.mutation(api.footage.reinstate, { projectId: w.p })).rejects.toThrow(/disputed/);
+    expect(await row(w)).toMatchObject({ status: "stopped", latePaid: { invoiceId: late.renewal._id } });
+    await charge(w, "charge.dispute.closed", { status: "won", amount: 10_000 });
+    expect(await w.heston.mutation(api.footage.reinstate, { projectId: w.p })).toEqual({ paidUntil: addYear(todayCentral(late.paidAt)) });
+  }, 60_000);
+
+  test("T6.11 review L6: the owner can close the Marked to refund box by hand (a refund Stripe never reports); owners of this business only", async () => {
+    const w = await world();
+    stub([]);
+    await paidLate(w);
+    // Nothing marked to refund yet: nothing to close.
+    await expect(w.heston.mutation(api.footage.dismissLatePaid, { projectId: w.p, close: true })).rejects.toThrow(/no refund box/);
+    expect((await row(w)).latePaid).toBeTruthy();
+    await w.heston.mutation(api.footage.dismissLatePaid, { projectId: w.p });
+    expect((await w.heston.query(api.footage.forProject, { projectId: w.p })).storage.lateChoice).toMatchObject({ kind: "refund" });
+    // A client and another business's owner can't close it.
+    await expect(w.maya.mutation(api.footage.dismissLatePaid, { projectId: w.p, close: true })).rejects.toThrow();
+    await expect(w.boss.mutation(api.footage.dismissLatePaid, { projectId: w.p, close: true })).rejects.toThrow();
+    expect((await row(w)).lateChoice!.closedAt).toBeUndefined();
+    await w.heston.mutation(api.footage.dismissLatePaid, { projectId: w.p, close: true });
+    const r = await row(w);
+    expect(r).toMatchObject({ status: "stopped", lateChoice: { kind: "refund", closedAt: expect.any(Number), closedBy: expect.any(String) } });
+    expect((await w.heston.query(api.footage.forProject, { projectId: w.p })).storage.lateChoice).toBeNull();
+    expect(await w.heston.mutation(api.footage.dismissLatePaid, { projectId: w.p, close: true })).toBeNull(); // again: nothing changes
+    expect((await row(w)).lateChoice!.closedAt).toBe(r.lateChoice!.closedAt);
+    // A kept year's banner isn't a refund box.
+    const w2 = await world();
+    stub([]);
+    await paidLate(w2);
+    await w2.heston.mutation(api.footage.reinstate, { projectId: w2.p });
+    await expect(w2.heston.mutation(api.footage.dismissLatePaid, { projectId: w2.p, close: true })).rejects.toThrow(/no refund box/);
+  }, 60_000);
+
+  test("T6.12 review L7: the paid time is Stripe's status_transitions.paid_at (not when the webhook arrived), and Keep it for a year runs from it", async () => {
+    const w = await world();
+    stub([]);
+    const stripeAt = Date.now() - 9 * 86_400_000;
+    const { renewal, paidAt } = await paidLate(w, stripeAt);
+    expect((await invoices(w)).find((i) => i._id === renewal._id)!.paidAt).toBe(paidAt);
+    expect(Math.abs(paidAt - stripeAt)).toBeLessThan(1000);
+    const r = await w.heston.mutation(api.footage.reinstate, { projectId: w.p });
+    expect(r).toEqual({ paidUntil: addYear(todayCentral(paidAt)) });
+    expect(await row(w)).toMatchObject({ lateChoice: { kind: "kept", paidAt } });
+  }, 60_000);
+
+  test("T6.13 review L7: without a paid_at from Stripe the time it was recorded is kept; a later event never moves it; paid at send uses Stripe's time too", async () => {
+    const w = await world();
+    stub([]);
+    await footageSetup(w);
+    await w.heston.mutation(api.projects.setDelivery, { projectId: w.p, unlocked: true });
+    await w.maya.mutation(api.footage.keep, { projectId: w.p });
+    const [inv] = await invoices(w);
+    await markSent(w, inv._id, "in_1");
+    const before = Date.now();
+    await webhook(w, "in_1", "paid");
+    const first = (await invoices(w))[0].paidAt!;
+    expect(first).toBeGreaterThanOrEqual(before);
+    // A retried event, now with Stripe's paid time: the paid time already recorded stays.
+    await w.t.mutation(internal.invoices.applyStripeInvoice, { accountId: "acct_A", invoice: { id: "in_1", status: "paid", total: 10000, amount_paid: 10000, amount_remaining: 0, status_transitions: { paid_at: 1_700_000_000 } }, eventType: "invoice.paid" });
+    expect((await invoices(w))[0].paidAt).toBe(first);
+
+    // Paid at send (a credit balance covered it): recordSent keeps Stripe's paid time.
+    const w2 = await world();
+    stub([]);
+    await footageSetup(w2);
+    await w2.heston.mutation(api.projects.setDelivery, { projectId: w2.p, unlocked: true });
+    await w2.maya.mutation(api.footage.keep, { projectId: w2.p });
+    const [d] = await invoices(w2);
+    const at = Date.now() - 3_600_000;
+    await w2.t.mutation(internal.invoices.recordSent, { invoiceId: d._id, by: "Heston", stripe: { accountId: "acct_A", customerId: "cus_1", invoice: { id: "in_c", status: "paid", total: 10000, amount_paid: 10000, amount_remaining: 0, livemode: false, status_transitions: { paid_at: Math.floor(at / 1000) } } } });
+    expect((await invoices(w2))[0].paidAt).toBe(Math.floor(at / 1000) * 1000);
   }, 60_000);
 });

@@ -179,17 +179,19 @@ export function migrateWeather(page: Page): { page: Page; changed: boolean } {
   return { page: nodesOf(cleared, "weather").length ? cleared : withWeatherBlock(cleared), changed: true };
 }
 
-/** What the forecast is looked up for: the location block's address, else its place name, else the shoot's location. */
+/** What the forecast is looked up for: the location block's address, and only that (review L10: never the place name
+ *  or the shoot's location text, which may be a home or a client's name, not an address). No address: no lookup, and
+ *  the block shows "no forecast" asking for one. `place` is only the panel's label. */
 export function weatherAddress(page: Page, fallback: string): { address: string; place: string } {
   const loc = locationOf(nodesOf(page, "location")[0]);
-  const address = (loc.address.trim() || loc.name.trim() || fallback.trim()).replace(/\s+/g, " ").slice(0, 300);
-  return { address, place: loc.name.trim() || address };
+  const address = loc.address.trim().replace(/\s+/g, " ").slice(0, 300);
+  return { address, place: loc.name.trim() || address || fallback.trim() };
 }
 
 /** The forecast as the call sheet keeps it (callSheets.weather): for one address and one shoot day. */
 export type SheetWeather = { address: string; date: string; state: "forecast" | "early" | "none"; line: string; at: number; dayBefore?: boolean };
 export type WeatherState = "forecast" | "typed" | "early" | "none";
-export type WeatherView = { state: WeatherState; line: string; forecast: string; at: number | null; place: string; date: string; fillsOn: string; due: boolean };
+export type WeatherView = { state: WeatherState; line: string; forecast: string; at: number | null; place: string; date: string; fillsOn: string; due: boolean; noAddress: boolean };
 
 /** Days from `a` to `b` (YYYY-MM-DD). */
 export const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86_400_000);
@@ -202,8 +204,10 @@ export const WEATHER_DAYS = 7;
 export function weatherView(block: WeatherAttrs, w: SheetWeather | null | undefined, at: { date: string; address: string; place: string; today: string }): WeatherView {
   const fresh = !!w && w.date === at.date && w.address === at.address;
   const forecast = fresh && w!.state === "forecast" ? w!.line : "";
-  const base = { forecast, at: fresh ? w!.at : null, place: at.place, date: at.date, fillsOn: addDay(at.date, -WEATHER_DAYS), due: daysBetween(at.today, at.date) <= WEATHER_DAYS };
-  const own: WeatherView = forecast ? { ...base, state: "forecast", line: forecast } : fresh && w!.state === "none" && base.due ? { ...base, state: "none", line: "" } : { ...base, state: "early", line: "" };
+  const noAddress = !at.address.trim();
+  const base = { forecast, at: fresh ? w!.at : null, place: at.place, date: at.date, fillsOn: addDay(at.date, -WEATHER_DAYS), due: daysBetween(at.today, at.date) <= WEATHER_DAYS, noAddress };
+  // Review L10: no address on the sheet is "no forecast" (nothing is looked up), whenever the shoot is.
+  const own: WeatherView = forecast ? { ...base, state: "forecast", line: forecast } : noAddress || (fresh && w!.state === "none" && base.due) ? { ...base, state: "none", line: "" } : { ...base, state: "early", line: "" };
   return shownWeather(block, own);
 }
 /** A block's own line over the forecast's view (the editor: the block as it is now, unsaved edits included). */

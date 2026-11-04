@@ -3,7 +3,9 @@
 // forecast; an address Census can't place, or NWS failing, gives "no forecast" without breaking the sheet; every NWS
 // request carries our User-Agent and nothing but coordinates; a forecast that changes after the sheet was sent nudges the
 // owner (Dashboard "Needs you"), never anyone else, while readers keep the line that was sent; another business's owner
-// can't read or change it; the old "Add the weather the day before" tick becomes a Weather block, once.
+// can't read or change it; the old "Add the weather the day before" tick becomes a Weather block, once. Review fixes
+// (Nov 4): W10 L9 no redirects followed; W11 L10 only the Location block's address is ever looked up; W12 L11 the
+// Refresh guard counts each try.
 // Census and NWS are stubbed: nothing real is reached.
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { anyApi } from "convex/server";
@@ -12,8 +14,8 @@ import { internal } from "../convex/_generated/api";
 import { world } from "./payHarness";
 import { todayCentral } from "../convex/lib/bookings";
 import { nodesOf, pageOf, type Page, type PNode } from "../convex/lib/wsBuilder";
-import { fillSheet, emptyLocation, migrateWeather, weatherLine, weatherOf, whatChanged } from "../convex/lib/callSheet";
-import { NWS_USER_AGENT, forecastLine } from "../convex/lib/weather";
+import { fillSheet, emptyLocation, migrateWeather, weatherAddress, weatherLine, weatherOf, whatChanged } from "../convex/lib/callSheet";
+import { NWS_USER_AGENT, forecast, forecastLine, geocode } from "../convex/lib/weather";
 
 const api = anyApi;
 beforeAll(() => {
@@ -25,7 +27,7 @@ beforeAll(() => {
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 type W = Awaited<ReturnType<typeof world>>;
-type Req = { url: string; headers: Record<string, string>; body: unknown };
+type Req = { url: string; headers: Record<string, string>; body: unknown; redirect: RequestRedirect | undefined };
 const START = Date.parse("2026-11-10T18:00:00Z"); // noon in Chicago
 const DAY = 86_400_000;
 const ymd = (base: string, n: number) => { const d = new Date(`${base}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
@@ -46,7 +48,7 @@ function periods() {
 function stub(reqs: Req[]) {
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-    reqs.push({ url, headers: Object.fromEntries(new Headers(init?.headers).entries()), body: init?.body ?? null });
+    reqs.push({ url, headers: Object.fromEntries(new Headers(init?.headers).entries()), body: init?.body ?? null, redirect: init?.redirect });
     if (url.startsWith("https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?")) {
       const a = new URL(url).searchParams.get("address") ?? "";
       return json({ result: { addressMatches: /Film Row/.test(a) ? [{ coordinates: { x: -97.743061, y: 30.267153 } }] : [] } });
@@ -252,6 +254,8 @@ describe("weather on call sheets (D148)", () => {
     expect([...new URL(census[0].url).searchParams.keys()].sort()).toEqual(["address", "benchmark", "format"]);
     expect(new URL(census[0].url).searchParams.get("address")).toBe(ADDRESS);
     expect(census[0].body).toBeNull();
+    // Review L9: no request follows a redirect.
+    for (const r of [...nws, ...census]) expect(r.redirect).toBe("error");
     expect(reqs.filter((r) => !r.url.startsWith("https://api.weather.gov/") && !r.url.startsWith("https://geocoding.geo.census.gov/") && !r.url.startsWith("https://api.resend.com/"))).toEqual([]);
   });
 
@@ -370,5 +374,81 @@ describe("weather on call sheets (D148)", () => {
     const b: Page = { type: "doc", content: [{ type: "weather", attrs: { typed: false, line: "Rain" } }] };
     expect(whatChanged(a, b)).toEqual(["Weather: Rain"]);
     expect(whatChanged(a, a)).toEqual([]);
+  });
+
+  test("W10 review L9: Census and NWS are asked never to follow a redirect; a refused redirect is 'try again later'", async () => {
+    const seen: Array<RequestRedirect | undefined> = [];
+    // fetch with redirect "error" rejects (TypeError) when the server answers with a redirect.
+    const redirecting = (async (_u: string | URL | Request, init?: RequestInit) => { seen.push(init?.redirect); throw new TypeError("redirect mode is set to error"); }) as typeof fetch;
+    expect(await geocode(ADDRESS, redirecting)).toEqual({ kind: "error" });
+    expect(await forecast({ lat: 30.2672, lon: -97.7431 }, "2026-11-13", redirecting)).toEqual({ kind: "error" });
+    expect(seen).toEqual(["error", "error"]);
+  });
+
+  test("W11 review L10: only the Location block's address goes to Census; no address is 'no forecast', asking for one", async () => {
+    // The pure rule: the place name and the shoot's location text are never the address.
+    const page = (attrs: Partial<ReturnType<typeof emptyLocation>>): Page => ({ type: "doc", content: [{ type: "location", attrs: { ...emptyLocation(), ...attrs } }, { type: "weather", attrs: { typed: false, line: "" } }] });
+    expect(weatherAddress(page({ name: "The Hills' house", address: "" }), "Riverside Loft")).toEqual({ address: "", place: "The Hills' house" });
+    expect(weatherAddress(page({ name: "", address: "" }), "Riverside Loft")).toEqual({ address: "", place: "Riverside Loft" });
+    expect(weatherAddress(page({ name: "Studio B", address: ` ${ADDRESS} ` }), "x").address).toBe(ADDRESS);
+
+    vi.useFakeTimers({ now: START });
+    const w = await world();
+    const reqs: Req[] = [];
+    stub(reqs);
+    wx.nwsDown = false;
+    const { csId, buildId } = await sheet(w, 3);
+    await edit(w, buildId, (p) => { nodesOf(p, "location")[0].attrs!.address = ""; }); // place name "Studio B" and the shoot's "Studio B" stay
+    await settle(w);
+    reqs.length = 0;
+    await cron(w);
+    expect(outside(reqs)).toEqual([]); // nothing looked up: not the place name, not the shoot's location
+    expect(await view(w, csId)).toMatchObject({ state: "none", line: "", noAddress: true, place: "Studio B" });
+    await expect(w.heston.mutation(api.callSheets.refreshWeather, { callSheetId: csId })).rejects.toThrow("There is no address on the sheet. Add one to get the forecast.");
+    expect(await w.t.query(internal.callSheets.weatherInput, { callSheetId: csId, force: true })).toBeNull();
+    await settle(w);
+    expect(outside(reqs)).toEqual([]);
+    // More than a week away with no address: still "no forecast" (it would never fill), not "not yet".
+    const far = await sheet(w, 10);
+    await edit(w, far.buildId, (p) => { nodesOf(p, "location")[0].attrs!.address = ""; });
+    expect(await view(w, far.csId)).toMatchObject({ state: "none", noAddress: true });
+    // The address added: looked up as usual (the address only).
+    await edit(w, buildId, (p) => { nodesOf(p, "location")[0].attrs!.address = ADDRESS; });
+    await cron(w);
+    expect(await view(w, csId)).toMatchObject({ state: "forecast", noAddress: false });
+    const census = outside(reqs).filter((r) => r.url.startsWith("https://geocoding.geo.census.gov/"));
+    expect(census.map((r) => new URL(r.url).searchParams.get("address"))).toEqual([ADDRESS]);
+  });
+
+  test("W12 review L11: Refresh's 30-second guard keys on each try, so a lookup that failed (forecast kept) still counts", async () => {
+    vi.useFakeTimers({ now: START });
+    const w = await world();
+    const reqs: Req[] = [];
+    stub(reqs);
+    wx.nwsDown = false; wx.temp = 62; wx.short = "Sunny";
+    const { csId } = await sheet(w, 3);
+    await cron(w);
+    const filled = (await w.t.run(async (ctx) => ctx.db.get(csId)))!.weather!.at;
+    // A minute on, NWS is down: Refresh tries, fails, and the forecast (and its time) stay.
+    vi.setSystemTime(Date.now() + 60_000);
+    wx.nwsDown = true;
+    expect(await w.heston.mutation(api.callSheets.refreshWeather, { callSheetId: csId })).toEqual({ state: "looking" });
+    // A double press before the lookup has even run: refused.
+    expect(await w.heston.mutation(api.callSheets.refreshWeather, { callSheetId: csId })).toEqual({ state: "recent" });
+    await settle(w);
+    const after = (await w.t.run(async (ctx) => ctx.db.get(csId)))!;
+    expect(after.weather!.at).toBe(filled); // didn't move: the old guard would let the next press through
+    expect(after.weatherTriedAt).toBeGreaterThan(filled);
+    reqs.length = 0;
+    vi.setSystemTime(Date.now() + 10_000);
+    expect(await w.heston.mutation(api.callSheets.refreshWeather, { callSheetId: csId })).toEqual({ state: "recent" });
+    await settle(w);
+    expect(outside(reqs)).toEqual([]);
+    // 30 seconds after the last try: it may look again.
+    vi.setSystemTime(Date.now() + 31_000);
+    wx.nwsDown = false; wx.temp = 70;
+    expect(await w.heston.mutation(api.callSheets.refreshWeather, { callSheetId: csId })).toEqual({ state: "looking" });
+    await settle(w);
+    expect((await view(w, csId)).line).toMatch(/^Sunny · 70°/);
   });
 });

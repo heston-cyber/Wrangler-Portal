@@ -1308,6 +1308,7 @@ export default defineSchema({
     // D148 (Nov 4): the Weather block's forecast (lib/callSheet.ts SheetWeather), for one address and shoot day, and the
     // geocode of that address (kept so the address goes to the Census geocoder once; lat/lon left out = not found).
     weather: v.optional(v.object({ address: v.string(), date: v.string(), state: v.union(v.literal("forecast"), v.literal("early"), v.literal("none")), line: v.string(), at: v.number(), dayBefore: v.optional(v.boolean()) })),
+    weatherTriedAt: v.optional(v.number()),   // review L11: the last lookup asked for (Refresh pressed or tried), even one that failed
     geo: v.optional(v.object({ address: v.string(), lat: v.optional(v.number()), lon: v.optional(v.number()), at: v.number() })),
     history: v.array(v.object({ at: v.number(), kind: v.string(), by: v.optional(v.string()), detail: v.optional(v.string()) })),
     createdAt: v.number(),
@@ -1408,6 +1409,9 @@ export default defineSchema({
     lateChoice: v.optional(v.object({
       kind: v.union(v.literal("kept"), v.literal("refund")), invoiceId: v.id("invoices"), paidAt: v.number(), at: v.number(), by: v.string(),
       until: v.optional(v.string()), was: v.optional(v.string()), wasUntil: v.optional(v.string()),
+      // Review L6: the owner closed the "Marked to refund" box by hand (a refund Stripe never reports, e.g. paid from
+      // the customer's credit balance, so no charge to refund).
+      closedAt: v.optional(v.number()), closedBy: v.optional(v.string()),
     })),
     history: v.array(v.object({ at: v.number(), text: v.string() })),
     createdAt: v.number(),
@@ -1493,6 +1497,11 @@ export default defineSchema({
     sentAt: v.optional(v.number()),           // review L2: the sheet went to them (Q88: kept when access ends); a hint for /guest's
     date: v.optional(v.string()),             //   business list only, never for access (lib/guests.ts sheetState decides that)
     openedAt: v.optional(v.number()),         // Q88: the guest opened it (the switcher's "N new"); a hint like sentAt
+    // Review L12: they can't open it until it's sent to them again (access ended by hand, unticked, or restored and not
+    // sent yet) or ever (the shoot was cancelled). Set and cleared with the sheet; a hint for "N new" only.
+    offAt: v.optional(v.number()),
+    // Review L13: the heading and day as last sent to this guest, for their Ended row (never a later update's).
+    heading: v.optional(v.object({ title: v.string(), date: v.string() })),
   }).index("by_token", ["token"]).index("by_email", ["email"]).index("by_sheet", ["callSheetId"]),
 
   memberships: defineTable({
