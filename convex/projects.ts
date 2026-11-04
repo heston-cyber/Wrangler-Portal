@@ -387,11 +387,11 @@ export const deliveryLink = action({
       const url: string = await ctx.runAction(internal.dropbox.temporaryLink, { path: f.path!, ...(f.businessId ? { asBusiness: f.businessId } : {}) });
       return { url, name: f.name };
     }
-    const url: string | null = await ctx.runQuery(internal.projects.versionFileUrl, { versionId: f.versionId!, until: f.until });
+    const url: { file: string; name: string } | null = await ctx.runQuery(internal.projects.versionFileUrl, { versionId: f.versionId!, until: f.until });
     if (!url) throw new ConvexError("That file isn't available.");
-    // The site's copy may be the render as uploaded (a .mov, say) rather than an MP4: name it by what it is.
-    const ext = /\.(mp4|mov|m4v|mxf)$/i.exec(new URL(url).pathname)?.[1]?.toLowerCase();
-    return { url, name: ext ? f.name.replace(/\.[^.]+$/, `.${ext}`) : f.name };
+    // The file is the render or the original as uploaded (D152), so it may be a .mov rather than an MP4: name it by what it is.
+    const ext = /\.(mp4|mov|m4v|mxf)$/i.exec(new URL(url.file).pathname)?.[1]?.toLowerCase() ?? /\.(mp4|mov|m4v|mxf)$/i.exec(url.name)?.[1]?.toLowerCase();
+    return { url: url.file, name: ext ? f.name.replace(/\.[^.]+$/, `.${ext}`) : f.name };
   },
 });
 export const canDownload = internalQuery({
@@ -414,9 +414,10 @@ export const canDownload = internalQuery({
 export const versionFileUrl = internalQuery({
   args: { versionId: v.id("versions"), until: v.number() },
   handler: async (ctx, { versionId }) => {
-    // The same file "Download" saves (the render itself, or the largest MP4 copy); its signature lasts a few hours,
-    // and a fresh one is made on every click while the files are open.
+    // The same file "Download" saves (the render itself, or the original as uploaded: D152); its signature lasts a
+    // few hours, and a fresh one is made on every click while the files are open.
     const ver = await ctx.db.get(versionId);
-    return ver ? (await downloadFor(ver))?.url ?? null : null;
+    const d = ver ? await downloadFor(ver) : null;
+    return d ? { file: d.url, name: d.name } : null;
   },
 });

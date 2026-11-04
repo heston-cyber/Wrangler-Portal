@@ -192,14 +192,18 @@ export const video = query({
       if (t) trs.set(x._id, t.status);
     }
     const owner = access.kind === "owner";
+    const mayDownload = owner || !!access.share?.downloads;
     const out = [];
     for (const x of versions.sort((a, b) => a.number - b.number)) {
       const pv = await publicVersion(x);
+      // D152: the full-resolution file (render or original), only for those allowed to download it.
+      const dl = mayDownload ? await downloadFor(x) : null;
       // Clients and guests get what the player needs, not the owner's details (security review, Oct 23).
       const slim = owner ? pv : { ...pv, fileName: `v${x.number}`, uploaderName: null, bunnyGuid: "", error: null, storageBytes: null, streamOnly: false, scrubStatus: pv.scrub ? "ready" as const : null, dropboxPath: null };
       out.push({
         ...slim,
         dropboxPath: owner ? x.dropboxPath ?? null : null,
+        download: dl ? { url: dl.url, ext: /\.([A-Za-z0-9]{2,5})$/.exec(dl.name)?.[1]?.toLowerCase() ?? null, bytes: dl.bytes } : null,
         noteCount: notes.filter((n) => n.versionId === x._id).length,
         openCount: notes.filter((n) => n.versionId === x._id && n.status === "open").length,
         transcript: (trs.get(x._id) ?? null) as "pending" | "running" | "done" | "failed" | null,

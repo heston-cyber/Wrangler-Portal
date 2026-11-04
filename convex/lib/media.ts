@@ -97,15 +97,30 @@ export async function versionMedia(v: Doc<"versions">): Promise<VersionMedia> {
   return out;
 }
 
-/** What "Download" saves for a version: the render itself (file versions) or the largest MP4 copy up to 1080p. */
+/**
+ * What "Download" saves for a version, always at full resolution (D152, Heston Nov 4: "clients should be able to
+ * download the full res"): the render itself (file versions), or, for a converted version, the original file as it
+ * was uploaded, which the main Stream library keeps ("Keep original files" on, R2). The 1080p MP4 copy is used only
+ * when a converted version has no original on record (no Bunny id).
+ */
 export async function downloadFor(x: Doc<"versions">): Promise<{ url: string; name: string; bytes: number | null } | null> {
   if (x.status !== "ready") return null;
   const m = await versionMedia(x);
+  if (m.file) return { url: m.file, name: x.fileName || `video_v${x.number}.mp4`, bytes: x.fileSize ?? null };
+  if (x.bunnyGuid) {
+    const url = await signUrl(`https://${streamCdn()}/${x.bunnyGuid}/original`, { folder: streamFolder(x.bunnyGuid), expiresAt: stepExpiry() });
+    return { url, name: originalName(x), bytes: x.fileSize ?? null };
+  }
   const h = Math.max(0, ...(x.mp4Heights ?? []).filter((n) => n <= 2160));
-  const url = m.file ?? (h ? m.mp4[h] : null);
+  const url = h ? m.mp4[h] : null;
   if (!url) return null;
-  const name = x.fileName && /\.mp4$/i.test(x.fileName) ? x.fileName : `${(x.fileName || "video").replace(/\.[^.]+$/, "")}_v${x.number}.mp4`;
-  return { url, name, bytes: x.fileSize ?? null };
+  return { url, name: `${(x.fileName || "video").replace(/\.[^.]+$/, "")}_v${x.number}.mp4`, bytes: null };
+}
+
+/** The original's name: the file name as uploaded (it keeps its own extension: .mov, .mp4, .mxf…). */
+export function originalName(x: Pick<Doc<"versions">, "fileName" | "number">) {
+  const n = (x.fileName ?? "").trim();
+  return /\.[A-Za-z0-9]{2,5}$/.test(n) ? n : `${n || "video"}_v${x.number}`;
 }
 
 /** A version's picture for an email: signed for 60 days, since an email is opened long after it's sent. */

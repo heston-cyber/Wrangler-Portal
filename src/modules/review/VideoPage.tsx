@@ -591,17 +591,18 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   }
 
   const newVersion = () => fileRef.current?.click();
-  // Download (C3): the render itself, or the best MP4 copy, when the share allows it (the owner always may).
-  const downloadUrl = version?.media.file ?? (version && mp4H ? version.media.mp4[mp4H] : null) ?? null;
+  // Download (C3; full resolution since D152): the render itself, or the original as uploaded, when the share allows
+  // it (the owner always may). The server sends it only to those allowed.
+  const downloadUrl = version?.download?.url ?? null;
   const canDownload = !!downloadUrl && (owner || viewer.downloads);
   // A plain link to another domain only plays the file, so it's fetched and saved here (lib/download), with progress.
   const [dl, setDl] = useState<{ pct: number } | null>(null);
   async function downloadFile() {
     if (!downloadUrl || !version || dl) return;
-    const name = `${(data.title || "video").replace(/[^\w\- ]+/g, "").trim() || "video"}_v${version.number}.mp4`;
+    const name = `${(data.title || "video").replace(/[^\w\- ]+/g, "").trim() || "video"}_v${version.number}.${version.download?.ext ?? "mp4"}`;
     setDl({ pct: 0 });
     try {
-      const ok = await downloadOne(downloadUrl, name, version.fileSize ?? null, (p) => setDl({ pct: p.total ? Math.round((100 * p.done) / p.total) : 0 }));
+      const ok = await downloadOne(downloadUrl, name, version.download?.bytes ?? null, (p) => setDl({ pct: p.total ? Math.round((100 * p.done) / p.total) : 0 }));
       if (ok) showToast("Downloaded");
     } catch {
       window.open(downloadUrl, "_blank", "noopener");

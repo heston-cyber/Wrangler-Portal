@@ -46,7 +46,7 @@ export default defineSchema({
     access: v.union(v.literal("view"), v.literal("comment")),
     who: v.union(v.literal("link"), v.literal("invited")),
     allVersions: v.boolean(),    // off = only the latest version
-    downloads: v.boolean(),      // allow downloading the 1080p file (C3)
+    downloads: v.boolean(),      // allow downloading the full-resolution file (C3; D152: the render or the original)
     emailNewVersions: v.boolean(), // email the people on it when a new version lands (C4)
     expiresAt: v.optional(v.number()),
     passcodeHash: v.optional(v.string()), // link shares only; SHA-256 of token + passcode

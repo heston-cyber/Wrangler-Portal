@@ -116,7 +116,7 @@ export function ShareDialog({ target, label, onClose, show }: { target: ShareTar
             )}
             <div className="sharechecks">
               {access === "comment" ? <Toggle on={allVersions} onChange={setAllVersions} label="Show all versions" hint="off shows only the latest" /> : <span className="caption" style={{ margin: 0 }}>View only: just the player, latest version only. No notes, versions or transcript.</span>}
-              <Toggle on={downloads} onChange={setDownloads} label="Allow downloads" hint="the 1080p file" />
+              <Toggle on={downloads} onChange={setDownloads} label="Allow downloads" hint="the full-resolution file" />
               <Toggle on={emailNew} onChange={setEmailNew} label="Email them when a new version lands" hint={who === "link" ? "invited shares only" : undefined} />
               <label className="expires">
                 <span>Expires</span>
@@ -251,7 +251,7 @@ export function EditShare({ s, onClose, show }: { s: PublicShare; onClose: () =>
         )}
         <div className="sharechecks">
           {access === "comment" ? <Toggle on={allVersions} onChange={setAllVersions} label="Show all versions" hint="off shows only the latest" /> : <span className="caption" style={{ margin: 0 }}>View only: just the player, latest version only. No notes, versions or transcript.</span>}
-          <Toggle on={downloads} onChange={setDownloads} label="Allow downloads" hint="the 1080p file" />
+          <Toggle on={downloads} onChange={setDownloads} label="Allow downloads" hint="the full-resolution file" />
           <Toggle on={emailNew} onChange={setEmailNew} label="Email them when a new version lands" hint={s.who === "link" ? "invited shares only" : undefined} />
           <label className="expires">
             <span>Expires</span>
