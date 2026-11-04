@@ -7,7 +7,7 @@ import type { PdfData } from "./pdfDownload";
 
 export type QuoteDoc = {
   business: { name: string; legalName: string | null; logoUrl?: string | null; logoLightUrl?: string | null; email?: string | null; address?: string | null; privacyUrl?: string | null };
-  number: string; issued: string; validUntil: string; contact: { name: string; email: string; company?: string }; project?: string | null;
+  number: string; issued: string; validUntil: string; contact: { name: string; email?: string; company?: string }; project?: string | null;
   lines: Line[]; totals: { subtotal: number; discount: number; tax: number; total: number; deposit: number };
   taxPercent?: number; deposit: { kind: "percent" | "amount"; value: number }; terms?: string | null; acceptUrl?: string | null;
 };
@@ -53,7 +53,7 @@ export function QuotePaper({ q, showAccept = true }: { q: QuoteDoc; showAccept?:
 export function quotePdf(q: QuoteDoc): PdfData {
   return {
     kind: "quote", business: { name: q.business.name, legalName: q.business.legalName, email: q.business.email ?? null, logoLightUrl: q.business.logoLightUrl ?? null, address: q.business.address ?? null, privacyUrl: q.business.privacyUrl ?? null },
-    number: q.number, issued: q.issued, due: q.validUntil, billTo: q.contact, project: q.project ?? null, lines: q.lines,
+    number: q.number, issued: q.issued, due: q.validUntil, billTo: { name: q.contact.name, email: q.contact.email ?? "", ...(q.contact.company ? { company: q.contact.company } : {}) }, project: q.project ?? null, lines: q.lines,
     discountCents: q.totals.discount, taxPercent: q.taxPercent, totalCents: q.totals.total, amountPaidCents: 0, memo: q.terms ?? null, payUrl: null,
     quote: { validUntil: q.validUntil, depositLabel: depositLabel(q.deposit), depositCents: q.totals.deposit, acceptUrl: q.acceptUrl ?? null },
   };

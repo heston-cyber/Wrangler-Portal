@@ -95,7 +95,21 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures (Phase 3c)", () => {
     const builds: string[] = [];
     for (const id of briefs) builds.push((await w.heston.query(api.briefings.get, { briefingId: id })).buildId);
 
+    // D149 (Nov 4): a quote to anyone: two emailed people and a copied link; Lee accepts for Park Studio LLC.
+    const qId = await w.heston.mutation(api.quotes.save, { title: "Menu board refresh", lines: [{ id: "a", description: "Shooting · 1 day (8 h)", qty: 1, unitCents: 160_000 }, { id: "b", description: "Editing · simple (12 h)", qty: 1, unitCents: 240_000 }], deposit: { kind: "percent", value: 50 } }) as Id<"quotes">;
+    const qs = await w.heston.action(api.quotes.send, { quoteId: qId, to: "priya@rao.example, lee@parkstudio.example", copyLink: true });
+    const qRows = await w.t.run((ctx) => ctx.db.query("offerRecipients").collect());
+    const priyaTok = qRows.find((x) => x.email === "priya@rao.example")!.token, leeTok = qRows.find((x) => x.email === "lee@parkstudio.example")!.token;
+    const qLink = String(qs.link).split("/q/")[1];
+    await w.t.mutation(api.quotes.markViewed, { token: priyaTok });
+    const q2 = await w.heston.mutation(api.quotes.save, { title: "Spring promo", lines: [{ id: "a", description: "Shooting · 2 days", qty: 2, unitCents: 160_000 }], deposit: { kind: "percent", value: 25 } }) as Id<"quotes">;
+    const q2s = await w.heston.action(api.quotes.send, { quoteId: q2, to: "", copyLink: true }).catch(() => w.heston.action(api.quotes.send, { quoteId: q2, copyLink: true }));
+    const q2Link = String(q2s.link).split("/q/")[1];
+    const openQuote = { id: q2, link: q2Link };
+    await w.t.fetch("/q-respond", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: leeTok, action: "accept", name: "Lee Park", company: "Park Studio LLC" }) });
+
     const OWNER: [string, Record<string, unknown>][] = [
+      ["quotes.get#" + qId, { quoteId: qId }], ["quotes.get#" + q2, { quoteId: q2 }], ["quotes.page#" + priyaTok, { token: priyaTok }], ["quotes.page#" + leeTok, { token: leeTok }], ["quotes.page#" + openQuote.link, { token: openQuote.link }], ["quotes.list", {}],
       ...briefs.map((id): [string, Record<string, unknown>] => ["briefings.get#" + id, { briefingId: id }]),
       ...builds.map((id): [string, Record<string, unknown>] => ["builder.getBuild#" + id, { buildId: id }]),
       ["briefings.page#" + samTok, { token: samTok }], ["briefings.page#" + linkTok, { token: linkTok }], ["bookings.form", {}],
@@ -126,7 +140,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures (Phase 3c)", () => {
     Object.assign(fx.owner, await run(w.heston, OWNER));
     fx.vendor = await run(jordan, VENDOR);
     Object.assign(fx.client, await run(w.maya, [["notifications.client", {}]]));
-    fx.ids = { ...fx.ids, vendor: { jordan: a, riley: r, bookings: [k1, k2, k3], invoices: { toApprove: inv1, approved: inv2, paid: inv3, paying: inv4 }, callSheet: sheet }, briefings: { ids: briefs, emailed: samTok, link: linkTok } };
+    fx.ids = { ...fx.ids, vendor: { jordan: a, riley: r, bookings: [k1, k2, k3], invoices: { toApprove: inv1, approved: inv2, paid: inv3, paying: inv4 }, callSheet: sheet }, briefings: { ids: briefs, emailed: samTok, link: linkTok }, offers: { quote: qId, priya: priyaTok, lee: leeTok, link: qLink, open: openQuote.link } };
     delete process.env.STRIPE_PAYOUTS_KEY;
     writeFileSync(file, JSON.stringify(fx, null, 1));
   });

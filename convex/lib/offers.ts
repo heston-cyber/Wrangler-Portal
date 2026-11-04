@@ -91,7 +91,7 @@ export function forWho(f: Found): { name: string | null; company: string | null;
   if (f.via === "legacy") return { name: f.doc.contact?.name ?? null, company: f.doc.contact?.company ?? null, anyone: false };
   if (f.via === "email") { // the client's own link shows their company; anyone else's shows only their own name
     const mine = !!f.doc.contact && f.r!.email === f.doc.contact.email && f.doc.status !== "accepted";
-    return { name: f.r!.name ?? (mine ? f.doc.contact!.name : null), company: mine ? f.doc.contact!.company ?? null : null, anyone: false };
+    return { name: f.r!.name ?? (mine ? f.doc.contact!.name : f.r!.email), company: mine ? f.doc.contact!.company ?? null : null, anyone: false }; // their own address at most
   }
   return { name: null, company: null, anyone: true };
 }
@@ -154,7 +154,7 @@ export async function answer(ctx: MutationCtx, kind: Kind, f: Found, a: Answer, 
       dealId = await ctx.db.insert("deals", { title: (d as { title?: string }).title?.slice(0, 160) || `Accepted ${thing}`, ...(contact.email ? { contactEmail: contact.email } : {}), stage: "lead", source: "accepted", quiet: true,
         lead: { name: contact.name, email: contact.email, ...(company ? { company } : {}), fields: [], at: now }, history: [{ kind: "created", at: now, detail: `accepted ${thing} ${d.number}` }], createdAt: now, updatedAt: now });
     }
-    await ctx.db.patch(d._id, { status: "accepted", response, contact, ...(dealId ? { dealId } : {}), updatedAt: now, history: hist("accepted", `${response.name}${company ? `, for ${company}` : ""} (typed name)`) } as never);
+    await ctx.db.patch(d._id, { status: "accepted", response, contact, ...(dealId ? { dealId } : {}), updatedAt: now, history: hist("accepted", `${response.name}${company ? `, for ${company}` : ""}`) } as never);
   } else {
     // Declined: closes only once every person it was emailed to has declined (a copied link never closes it).
     const rows = (await rowsOf(ctx, kind, d._id)).filter((r) => !r.stoppedAt).map((r) => (f.r && r._id === f.r._id ? { ...r, response } : r));

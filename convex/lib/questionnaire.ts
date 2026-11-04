@@ -123,7 +123,8 @@ export function cleanQuestionnaire(x: unknown, kind: "proposal" | "kickoff" = "p
 
 // ---------- answers ----------
 
-export type ClientAnswer = { mode: "existing" | "new"; key?: string; clientId?: string; dealId?: string; company: string; website?: string; name: string; email: string; phone?: string; saveAs?: "lead" | "company" };
+export type ClientAnswer = { mode: "existing" | "new" | "none"; // D149: none = "No client yet"
+  key?: string; clientId?: string; dealId?: string; company: string; website?: string; name: string; email: string; phone?: string; saveAs?: "lead" | "company" };
 export type FileAnswer = { fileId: string; name: string; size: number; type: string };
 export type PLine = { id: string; description: string; qty: number; unitCents: number; suggestedCents?: number; note?: string; auto?: string };
 export type Answers = Record<string, unknown> & { __lines?: PLine[] };

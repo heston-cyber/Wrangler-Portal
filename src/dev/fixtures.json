@@ -14032,6 +14032,578 @@
    "sentAt": 1793820926672,
    "title": "Shoot brief · 26127 Launch",
    "withdrawn": false
+  },
+  "quotes.get#00000000000000000000010102quotes": {
+   "_creationTime": 1793823256165,
+   "_id": "00000000000000000000010102quotes",
+   "business": {
+    "address": null,
+    "email": "heston@wranglerproductions.com",
+    "legalName": "Hill Creative LLC",
+    "logoLightUrl": null,
+    "logoUrl": null,
+    "name": "Wrangler Productions",
+    "privacyUrl": null
+   },
+   "businessId": "0000000000000000010000businesses",
+   "contact": {
+    "company": "Park Studio LLC",
+    "email": "lee@parkstudio.example",
+    "name": "Lee Park"
+   },
+   "createdAt": 1793823256165,
+   "createdBy": "Heston",
+   "deal": {
+    "_id": "000000000000000000000010111deals",
+    "quiet": true,
+    "stage": "lead"
+   },
+   "dealId": "000000000000000000000010111deals",
+   "deposit": {
+    "kind": "percent",
+    "value": 50
+   },
+   "display": "accepted",
+   "history": [
+    {
+     "at": 1793823256165,
+     "by": "Heston",
+     "kind": "created"
+    },
+    {
+     "at": 1793823256167,
+     "by": "Heston",
+     "detail": "priya@rao.example, lee@parkstudio.example",
+     "kind": "sent"
+    },
+    {
+     "at": 1793823256167,
+     "by": "Heston",
+     "kind": "link_copied"
+    },
+    {
+     "at": 1793823256174,
+     "detail": "priya@rao.example",
+     "kind": "viewed"
+    },
+    {
+     "at": 1793823256398,
+     "detail": "Lee Park, for Park Studio LLC",
+     "kind": "accepted"
+    }
+   ],
+   "lines": [
+    {
+     "description": "Shooting · 1 day (8 h)",
+     "id": "a",
+     "qty": 1,
+     "unitCents": 160000
+    },
+    {
+     "description": "Editing · simple (12 h)",
+     "id": "b",
+     "qty": 1,
+     "unitCents": 240000
+    }
+   ],
+   "link": "https://app.wranglerportal.com/q/85A6A02_SHzf4c6KpvJTWtBb",
+   "linkToken": "fZRY3OFeG7Z7HZGXQhh7ZEVC",
+   "linkUrl": "https://app.wranglerportal.com/q/fZRY3OFeG7Z7HZGXQhh7ZEVC",
+   "made": {
+    "build": null,
+    "invoice": null
+   },
+   "number": "WRNGLR-Q-0001",
+   "response": {
+    "at": 1793823256398,
+    "company": "Park Studio LLC",
+    "email": "lee@parkstudio.example",
+    "kind": "accepted",
+    "name": "Lee Park",
+    "via": "email"
+   },
+   "sentAt": 1793823256167,
+   "seq": 1,
+   "status": "accepted",
+   "title": "Menu board refresh",
+   "totalCents": 400000,
+   "totals": {
+    "deposit": 200000,
+    "discount": 0,
+    "subtotal": 400000,
+    "tax": 0,
+    "total": 400000
+   },
+   "updatedAt": 1793823256398,
+   "validUntil": "2026-12-04",
+   "viewedAt": 1793823256174,
+   "who": {
+    "link": {
+     "answer": null,
+     "copied": true,
+     "opens": 0
+    },
+    "people": [
+     {
+      "_id": "00000000000010104offerRecipients",
+      "email": "priya@rao.example",
+      "name": null,
+      "openedAt": 1793823256174,
+      "opens": 1,
+      "response": null,
+      "stopped": false
+     },
+     {
+      "_id": "00000000000010105offerRecipients",
+      "email": "lee@parkstudio.example",
+      "name": null,
+      "openedAt": 1793823256398,
+      "opens": 0,
+      "response": {
+       "at": 1793823256398,
+       "company": "Park Studio LLC",
+       "kind": "accepted",
+       "name": "Lee Park"
+      },
+      "stopped": false
+     }
+    ]
+   }
+  },
+  "quotes.page#RRWHi9NXZnSQpREjioPyxwiE": {
+   "answer": {
+    "at": 1793823175451,
+    "kind": "already_accepted",
+    "name": null
+   },
+   "business": {
+    "address": null,
+    "email": "heston@wranglerproductions.com",
+    "legalName": "Hill Creative LLC",
+    "logoLightUrl": null,
+    "logoUrl": null,
+    "name": "Wrangler Productions",
+    "privacyUrl": null
+   },
+   "deposit": {
+    "kind": "percent",
+    "value": 50
+   },
+   "discountCents": 0,
+   "for": {
+    "anyone": false,
+    "company": null,
+    "name": null
+   },
+   "issued": 1793823175202,
+   "lines": [
+    {
+     "description": "Shooting · 1 day (8 h)",
+     "id": "a",
+     "qty": 1,
+     "unitCents": 160000
+    },
+    {
+     "description": "Editing · simple (12 h)",
+     "id": "b",
+     "qty": 1,
+     "unitCents": 240000
+    }
+   ],
+   "number": "WRNGLR-Q-0001",
+   "project": "Menu board refresh",
+   "status": "accepted",
+   "taxPercent": 0,
+   "terms": null,
+   "title": "Menu board refresh",
+   "totals": {
+    "deposit": 200000,
+    "discount": 0,
+    "subtotal": 400000,
+    "tax": 0,
+    "total": 400000
+   },
+   "validUntil": "2026-12-04",
+   "via": "email",
+   "voidedAt": null
+  },
+  "quotes.page#_3crXBtmX_FnjPE5Tn69ksfA": {
+   "answer": {
+    "at": 1793823175451,
+    "kind": "accepted_by_you",
+    "name": "Lee Park"
+   },
+   "business": {
+    "address": null,
+    "email": "heston@wranglerproductions.com",
+    "legalName": "Hill Creative LLC",
+    "logoLightUrl": null,
+    "logoUrl": null,
+    "name": "Wrangler Productions",
+    "privacyUrl": null
+   },
+   "deposit": {
+    "kind": "percent",
+    "value": 50
+   },
+   "discountCents": 0,
+   "for": {
+    "anyone": false,
+    "company": null,
+    "name": null
+   },
+   "issued": 1793823175202,
+   "lines": [
+    {
+     "description": "Shooting · 1 day (8 h)",
+     "id": "a",
+     "qty": 1,
+     "unitCents": 160000
+    },
+    {
+     "description": "Editing · simple (12 h)",
+     "id": "b",
+     "qty": 1,
+     "unitCents": 240000
+    }
+   ],
+   "number": "WRNGLR-Q-0001",
+   "project": "Menu board refresh",
+   "status": "accepted",
+   "taxPercent": 0,
+   "terms": null,
+   "title": "Menu board refresh",
+   "totals": {
+    "deposit": 200000,
+    "discount": 0,
+    "subtotal": 400000,
+    "tax": 0,
+    "total": 400000
+   },
+   "validUntil": "2026-12-04",
+   "via": "email",
+   "voidedAt": null
+  },
+  "quotes.page#hmuoVZEdJ-n-grbCdTTo0j1T": {
+   "answer": null,
+   "business": {
+    "address": null,
+    "email": "heston@wranglerproductions.com",
+    "legalName": "Hill Creative LLC",
+    "logoLightUrl": null,
+    "logoUrl": null,
+    "name": "Wrangler Productions",
+    "privacyUrl": null
+   },
+   "deposit": {
+    "kind": "percent",
+    "value": 25
+   },
+   "discountCents": 0,
+   "for": {
+    "anyone": true,
+    "company": null,
+    "name": null
+   },
+   "issued": 1793823175213,
+   "lines": [
+    {
+     "description": "Shooting · 2 days",
+     "id": "a",
+     "qty": 2,
+     "unitCents": 160000
+    }
+   ],
+   "number": "WRNGLR-Q-0002",
+   "project": "Spring promo",
+   "status": "sent",
+   "taxPercent": 0,
+   "terms": null,
+   "title": "Spring promo",
+   "totals": {
+    "deposit": 80000,
+    "discount": 0,
+    "subtotal": 320000,
+    "tax": 0,
+    "total": 320000
+   },
+   "validUntil": "2026-12-04",
+   "via": "link",
+   "voidedAt": null
+  },
+  "quotes.list": [
+   {
+    "_id": "00000000000000000000010102quotes",
+    "company": "Park Studio LLC",
+    "number": "WRNGLR-Q-0001",
+    "response": {
+     "at": 1793823256398,
+     "company": "Park Studio LLC",
+     "email": "lee@parkstudio.example",
+     "kind": "accepted",
+     "name": "Lee Park",
+     "via": "email"
+    },
+    "sentAt": 1793823256167,
+    "status": "accepted",
+    "title": "Menu board refresh",
+    "totalCents": 400000,
+    "updatedAt": 1793823256398,
+    "validUntil": "2026-12-04",
+    "viewedAt": 1793823256174
+   },
+   {
+    "_id": "00000000000000000000010109quotes",
+    "company": "No client yet",
+    "number": "WRNGLR-Q-0002",
+    "response": null,
+    "sentAt": 1793823256177,
+    "status": "sent",
+    "title": "Spring promo",
+    "totalCents": 320000,
+    "updatedAt": 1793823256177,
+    "validUntil": "2026-12-04",
+    "viewedAt": null
+   }
+  ],
+  "quotes.get#00000000000000000000010109quotes": {
+   "_creationTime": 1793823256176,
+   "_id": "00000000000000000000010109quotes",
+   "business": {
+    "address": null,
+    "email": "heston@wranglerproductions.com",
+    "legalName": "Hill Creative LLC",
+    "logoLightUrl": null,
+    "logoUrl": null,
+    "name": "Wrangler Productions",
+    "privacyUrl": null
+   },
+   "businessId": "0000000000000000010000businesses",
+   "createdAt": 1793823256176,
+   "createdBy": "Heston",
+   "deal": null,
+   "deposit": {
+    "kind": "percent",
+    "value": 25
+   },
+   "display": "sent",
+   "history": [
+    {
+     "at": 1793823256176,
+     "by": "Heston",
+     "kind": "created"
+    },
+    {
+     "at": 1793823256177,
+     "by": "Heston",
+     "detail": "copied link",
+     "kind": "sent"
+    },
+    {
+     "at": 1793823256177,
+     "by": "Heston",
+     "kind": "link_copied"
+    }
+   ],
+   "lines": [
+    {
+     "description": "Shooting · 2 days",
+     "id": "a",
+     "qty": 2,
+     "unitCents": 160000
+    }
+   ],
+   "link": null,
+   "linkToken": "TaseslGKBCrejfbDtDbJ1afP",
+   "linkUrl": "https://app.wranglerportal.com/q/TaseslGKBCrejfbDtDbJ1afP",
+   "made": {
+    "build": null,
+    "invoice": null
+   },
+   "number": "WRNGLR-Q-0002",
+   "sentAt": 1793823256177,
+   "seq": 2,
+   "status": "sent",
+   "title": "Spring promo",
+   "totalCents": 320000,
+   "totals": {
+    "deposit": 80000,
+    "discount": 0,
+    "subtotal": 320000,
+    "tax": 0,
+    "total": 320000
+   },
+   "updatedAt": 1793823256177,
+   "validUntil": "2026-12-04",
+   "who": {
+    "link": {
+     "answer": null,
+     "copied": true,
+     "opens": 0
+    },
+    "people": []
+   }
+  },
+  "quotes.page#elqky9E6rFJj_OnQSy0AkZCr": {
+   "answer": {
+    "at": 1793823256398,
+    "kind": "already_accepted",
+    "name": null
+   },
+   "business": {
+    "address": null,
+    "email": "heston@wranglerproductions.com",
+    "legalName": "Hill Creative LLC",
+    "logoLightUrl": null,
+    "logoUrl": null,
+    "name": "Wrangler Productions",
+    "privacyUrl": null
+   },
+   "deposit": {
+    "kind": "percent",
+    "value": 50
+   },
+   "discountCents": 0,
+   "for": {
+    "anyone": false,
+    "company": null,
+    "name": "priya@rao.example"
+   },
+   "issued": 1793823256167,
+   "lines": [
+    {
+     "description": "Shooting · 1 day (8 h)",
+     "id": "a",
+     "qty": 1,
+     "unitCents": 160000
+    },
+    {
+     "description": "Editing · simple (12 h)",
+     "id": "b",
+     "qty": 1,
+     "unitCents": 240000
+    }
+   ],
+   "number": "WRNGLR-Q-0001",
+   "project": "Menu board refresh",
+   "status": "accepted",
+   "taxPercent": 0,
+   "terms": null,
+   "title": "Menu board refresh",
+   "totals": {
+    "deposit": 200000,
+    "discount": 0,
+    "subtotal": 400000,
+    "tax": 0,
+    "total": 400000
+   },
+   "validUntil": "2026-12-04",
+   "via": "email",
+   "voidedAt": null
+  },
+  "quotes.page#85A6A02_SHzf4c6KpvJTWtBb": {
+   "answer": {
+    "at": 1793823256398,
+    "kind": "accepted_by_you",
+    "name": "Lee Park"
+   },
+   "business": {
+    "address": null,
+    "email": "heston@wranglerproductions.com",
+    "legalName": "Hill Creative LLC",
+    "logoLightUrl": null,
+    "logoUrl": null,
+    "name": "Wrangler Productions",
+    "privacyUrl": null
+   },
+   "deposit": {
+    "kind": "percent",
+    "value": 50
+   },
+   "discountCents": 0,
+   "for": {
+    "anyone": false,
+    "company": null,
+    "name": "lee@parkstudio.example"
+   },
+   "issued": 1793823256167,
+   "lines": [
+    {
+     "description": "Shooting · 1 day (8 h)",
+     "id": "a",
+     "qty": 1,
+     "unitCents": 160000
+    },
+    {
+     "description": "Editing · simple (12 h)",
+     "id": "b",
+     "qty": 1,
+     "unitCents": 240000
+    }
+   ],
+   "number": "WRNGLR-Q-0001",
+   "project": "Menu board refresh",
+   "status": "accepted",
+   "taxPercent": 0,
+   "terms": null,
+   "title": "Menu board refresh",
+   "totals": {
+    "deposit": 200000,
+    "discount": 0,
+    "subtotal": 400000,
+    "tax": 0,
+    "total": 400000
+   },
+   "validUntil": "2026-12-04",
+   "via": "email",
+   "voidedAt": null
+  },
+  "quotes.page#TaseslGKBCrejfbDtDbJ1afP": {
+   "answer": null,
+   "business": {
+    "address": null,
+    "email": "heston@wranglerproductions.com",
+    "legalName": "Hill Creative LLC",
+    "logoLightUrl": null,
+    "logoUrl": null,
+    "name": "Wrangler Productions",
+    "privacyUrl": null
+   },
+   "deposit": {
+    "kind": "percent",
+    "value": 25
+   },
+   "discountCents": 0,
+   "for": {
+    "anyone": true,
+    "company": null,
+    "name": null
+   },
+   "issued": 1793823256177,
+   "lines": [
+    {
+     "description": "Shooting · 2 days",
+     "id": "a",
+     "qty": 2,
+     "unitCents": 160000
+    }
+   ],
+   "number": "WRNGLR-Q-0002",
+   "project": "Spring promo",
+   "status": "sent",
+   "taxPercent": 0,
+   "terms": null,
+   "title": "Spring promo",
+   "totals": {
+    "deposit": 80000,
+    "discount": 0,
+    "subtotal": 320000,
+    "tax": 0,
+    "total": 320000
+   },
+   "validUntil": "2026-12-04",
+   "via": "link",
+   "voidedAt": null
   }
  },
  "client": {
@@ -17259,6 +17831,13 @@
    ],
    "emailed": "Dbvy2LL-JKVPvU4t3_eASCqP",
    "link": "_YThBcz4OO3xRAbVPgXHTB8P"
+  },
+  "offers": {
+   "quote": "00000000000000000000010102quotes",
+   "priya": "elqky9E6rFJj_OnQSy0AkZCr",
+   "lee": "85A6A02_SHzf4c6KpvJTWtBb",
+   "link": "fZRY3OFeG7Z7HZGXQhh7ZEVC",
+   "open": "TaseslGKBCrejfbDtDbJ1afP"
   }
  },
  "vendor": {

@@ -142,6 +142,8 @@ export default function App() {
     const guestKit = /^\/guest(?:\/([A-Za-z0-9_-]{16,64}))?\/?$/.exec(path);
     if (guestKit && (kit === "guest" || kit === "guestout")) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><GuestApp key={guestKit[1] ?? "home"} token={guestKit[1] ?? null} /></Suspense></KitApp></Suspense>;
     const sh = /^\/s\/([^/]+)(?:\/v\/([^/]+))?\/?$/.exec(path);
+    const qk = /^\/q\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path); // D149: the no-account quote page
+    if (qk) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><ClientQuote token={qk[1]} /></Suspense></KitApp></Suspense>;
     const brief = /^\/b\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path); // D147: the no-login briefing page
     if (brief) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><BriefingLink token={brief[1]} /></Suspense></KitApp></Suspense>;
     const inv = /^\/i\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);

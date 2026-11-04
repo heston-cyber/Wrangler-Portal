@@ -337,8 +337,9 @@ function ClientField({ v, set, who }: { v: ClientAnswer | undefined; set: (v: Cl
   return (
     <div className="qz-client">
       <span className="wp-field-label">Client</span>
-      <Segmented label="Client" value={c.mode} onChange={(m) => set(m === "new" ? { mode: "new", company: "", name: "", email: "", saveAs: "lead" } : { mode: "existing", company: "", name: "", email: "" })} items={[{ key: "existing", label: "Existing company or lead" }, { key: "new", label: "New" }]} />
-      {c.mode === "existing" ? (
+      <Segmented label="Client" value={c.mode} onChange={(m) => set(m === "new" ? { mode: "new", company: "", name: "", email: "", saveAs: "lead" } : m === "none" ? { mode: "none", company: "", name: "", email: "" } : { mode: "existing", company: "", name: "", email: "" })} items={[{ key: "existing", label: "Existing company or lead" }, { key: "new", label: "New" }, { key: "none", label: "No client yet" }]} />
+      {c.mode === "none" ? <p className="wp-small secondary">Leave the client out for now. You can add one later; sending needs a recipient, added in the Send dialog. They don’t have to be a client, and nothing is saved as a client.</p>
+      : c.mode === "existing" ? (
         <label className="wp-field"><span className="wp-field-label">Company or lead</span>
           <select className="input" value={key} onChange={(e) => { const w = who.find((x) => x.key === e.target.value); if (w) set({ mode: "existing", key: w.key, ...(w.clientId ? { clientId: w.clientId } : {}), ...(w.dealId ? { dealId: w.dealId } : {}), company: w.company ?? "", name: w.name, email: w.email }); }}>
             <option value="">Pick a person</option>

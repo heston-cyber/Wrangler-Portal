@@ -217,7 +217,7 @@ export const markSent = internalMutation({
     const sends = await addPeople(ctx, "quote", q, list, now);
     const linkToken = a.copyLink ? q.linkToken ?? randomToken(18) : q.linkToken;
     const hist = [...q.history];
-    if (q.status === "draft") hist.push({ kind: "sent", at: now, by: by(me), detail: sends.length ? sends.map((x) => x.email).join(", ").slice(0, 400) : "copied link" });
+    if (q.status === "draft") hist.push({ kind: "sent", at: now, by: by(me), detail: sends.length ? sends.map((x) => x.email).join(", ").slice(0, 400) : "anyone with the link" });
     else if (sends.length) hist.push({ kind: "resent", at: now, by: by(me), detail: sends.map((x) => x.email).join(", ").slice(0, 400) });
     if (a.copyLink && !q.linkToken) hist.push({ kind: "link_copied", at: now, by: by(me) });
     await ctx.db.patch(a.quoteId, { status: "sent", sentAt: q.sentAt ?? now, updatedAt: now, ...(linkToken ? { linkToken } : {}), history: hist.slice(-60) });

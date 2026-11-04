@@ -278,7 +278,7 @@ export const markSent = internalMutation({
       totalCents: cents(t.total), depositCents: cents(t.deposit), depositPct: t.depositPct, lineCount: itemRows(d.page).length,
       message: a.message?.trim().slice(0, 2000) || undefined, sentAt: now, updatedAt: now, ...(dealId ? { dealId } : {}), ...(linkToken ? { linkToken } : {}),
       asked: { ...(p.asked ?? {}), move: a.move ? "yes" : "no" },
-      history: [...p.history, { kind: "sent", at: now, by: by(me), detail: sends.length ? sends.map((x) => x.email).join(", ").slice(0, 400) : "copied link" }, ...(a.move && dealId ? [{ kind: "moved", at: now, by: by(me), detail: "Quoted" }] : [])].slice(-60),
+      history: [...p.history, { kind: "sent", at: now, by: by(me), detail: sends.length ? sends.map((x) => x.email).join(", ").slice(0, 400) : "anyone with the link" }, ...(a.move && dealId ? [{ kind: "moved", at: now, by: by(me), detail: "Quoted" }] : [])].slice(-60),
     });
     await ctx.db.patch(build._id, { renderedAt: now });
     return { at: now, legacy: null, sends, link: linkToken ? proposalLink(linkToken) : null };
@@ -618,6 +618,7 @@ export const fileUrls = query({
  *  (a new lead card, or a new company with its person). */
 async function resolveClient(ctx: MutationCtx, me: { name?: string | null; email: string }, c: ClientAnswer | undefined, title: string): Promise<{ clientId?: Id<"clients">; dealId?: Id<"deals">; name: string; email: string; company: string }> {
   if (!c) throw new ConvexError("Answer Client first: who it's for.");
+  if (c.mode === "none") return { name: "", email: "", company: "" }; // D149: no client yet; who it goes to is picked in the Send dialog
   const email = (c.email ?? "").trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email) || email.length > 254) throw new ConvexError("Add the client's email (step 1).");
   if (!(c.name ?? "").trim()) throw new ConvexError("Add the client's name (step 1).");
@@ -688,7 +689,7 @@ export const finish = mutation({
     if (cAns?.mode === "new" && (p.dealId || p.clientId)) cAns = { ...cAns, mode: "existing", ...(p.clientId ? { clientId: p.clientId } : {}), ...(p.dealId ? { dealId: p.dealId } : {}) };
     const who = await resolveClient(ctx, me, cAns, title);
     const clientQ = qn.steps.flatMap((s) => s.questions).find((x) => x.bind === "client");
-    const newAnswers = clientQ && cAns ? { ...ans, [clientQ.id]: { ...cAns, mode: "existing", ...(who.clientId ? { clientId: who.clientId } : {}), ...(who.dealId ? { dealId: who.dealId } : {}) } } : ans;
+    const newAnswers = clientQ && cAns && cAns.mode !== "none" ? { ...ans, [clientQ.id]: { ...cAns, mode: "existing", ...(who.clientId ? { clientId: who.clientId } : {}), ...(who.dealId ? { dealId: who.dealId } : {}) } } : ans;
     const clientId = who.clientId ?? p.clientId;
     if (clientId) await fillKit(ctx, clientId, qn, ans, await ownFiles(ctx, p._id));
     const f = build.fields as Fields;

@@ -70,8 +70,8 @@ describe("D149 quotes and proposals to anyone", () => {
     const r = await w.heston.action(api.quotes.send, { quoteId: id, to: "priya@rao.example, lee@parkstudio.example", copyLink: true });
     const priya = tokenTo(mails, "priya@rao.example"), lee = tokenTo(mails, "lee@parkstudio.example"), link = (r.link as string).split("/q/")[1];
     const pp = await w.t.query(api.quotes.page, { token: priya });
-    expect(pp).toMatchObject({ status: "sent", for: { name: null, company: null, anyone: false }, via: "email", answer: null });
-    expect(JSON.stringify(pp)).not.toMatch(/lee@|parkstudio|priya@/);
+    expect(pp).toMatchObject({ status: "sent", for: { name: "priya@rao.example", company: null, anyone: false }, via: "email", answer: null }); // their own address only
+    expect(JSON.stringify(pp)).not.toMatch(/lee@|parkstudio/);
     expect((await w.t.query(api.quotes.page, { token: link })).for).toEqual({ name: null, company: null, anyone: true });
     await w.t.mutation(api.quotes.markViewed, { token: priya });
     await w.t.mutation(api.quotes.markViewed, { token: link });

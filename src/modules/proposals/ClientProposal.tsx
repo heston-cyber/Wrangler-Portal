@@ -7,18 +7,12 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Button, Card, DialogHeader, EmptyState, SkeletonRows, StatusChip, TextArea } from "../../ui/wp";
 import { Icon } from "../../ui/Icon";
-import { Modal } from "../../ui/kit";
+import { OfferAnswer } from "../payments/OfferAnswer";
 import { CONVEX_SITE } from "../docs/lib/client";
 import { openPdf, renderPage, type PdfDoc } from "../docs/lib/pdf";
 import { money } from "../payments/common";
 import { Banner, Frame } from "../payments/ClientInvoice";
 
-async function respond(body: { token: string; action: "accept" | "decline"; name: string; reason?: string }): Promise<{ ok?: boolean; error?: string }> {
-  try {
-    const r = await fetch(`${CONVEX_SITE}/p-respond`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    return (await r.json()) as { ok?: boolean; error?: string };
-  } catch { return { error: "Couldn't reach the server. Check your connection and try again." }; }
-}
 const longMs = (ms: number) => new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 /** The sent PDF, every page drawn to the column's width. */
@@ -57,31 +51,20 @@ export default function ClientProposal({ token }: { token: string }) {
   const p = useQuery(api.proposals.page, { token });
   const viewed = useMutation(api.proposals.markViewed);
   const once = useRef(false);
-  const [name, setName] = useState("");
-  const [busy, setBusy] = useState<null | "accept" | "decline">(null);
-  const [error, setError] = useState<string | null>(null);
-  const [declining, setDeclining] = useState(false);
-  const [reason, setReason] = useState("");
   useEffect(() => { if (p && !once.current) { once.current = true; void viewed({ token }).catch(() => undefined); } }, [p, token, viewed]);
   if (p === undefined) return <Frame inShell={false} bar={null}><Card label="Loading"><SkeletonRows n={5} /></Card></Frame>;
   if (p === null) return <Frame inShell={false} bar={null}><EmptyState icon="lock" title="This link doesn't work any more." body="It may have been mistyped or replaced by a newer version. Open the link in the email again, or reply to that email to ask for it." /></Frame>;
   const biz = p.business.name || "the business";
-  const go = async (action: "accept" | "decline") => {
-    setBusy(action); setError(null);
-    const r = await respond({ token, action, name: action === "accept" ? name : name || p.contact.name, ...(action === "decline" && reason.trim() ? { reason } : {}) });
-    setBusy(null);
-    if (r.error) setError(r.error); else setDeclining(false);
-  };
   const s = p.status;
   const chip = s === "sent" ? <StatusChip tone="accent">Open</StatusChip> : s === "accepted" ? <StatusChip tone="success">Accepted</StatusChip> : s === "declined" ? <StatusChip tone="danger">Declined</StatusChip> : <StatusChip tone="neutral">Withdrawn</StatusChip>;
-  const first = p.contact.name.split(" ")[0];
+  const forName = p.for.anyone ? "Anyone with the link" : p.for.name; // D149: this viewer only
   return (
     <Frame inShell={false} bar={null} brand={{ name: p.business.name, logoUrl: p.business.logoUrl }}>
       <div className="q-public-top"><span className="wp-small">Proposal from {biz}</span><span className="sp" />
         {p.pdfUrl && <a className="btn sm" href={p.pdfUrl} target="_blank" rel="noopener noreferrer" download={`${p.number} ${p.title}.pdf`}>Download PDF</a>}</div>
       <header className="wp-pagehead inv-head">
         <div className="txt"><span className="wp-eyebrow">Proposal · {p.number}</span><h1 className="wp-h2">{p.title.replace(/\.$/, "")}.</h1>
-          <p className="wp-body">For {[p.contact.name, p.contact.company].filter(Boolean).join(", ")} · sent {longMs(p.sentAt)}</p></div>
+          <p className="wp-body">{forName ? `For ${[forName, p.for.company].filter(Boolean).join(", ")} · ` : ""}sent {longMs(p.sentAt)}</p></div>
         {chip}
       </header>
       <div className="q-cols">
@@ -89,38 +72,15 @@ export default function ClientProposal({ token }: { token: string }) {
         <div className="col right">
           <section className="inv-pay" aria-label={s === "sent" ? "Accept this proposal" : "Status"}>
             <span className="wp-eyebrow">{s === "sent" ? "Accept this proposal" : "Status"}</span>
-            {s === "accepted" && p.response && <Banner tone="success" icon="check-circle" title={`Accepted by ${p.response.name} · ${longMs(p.response.at)}`} text={`Thank you, ${first}. ${biz} will send the contract to sign next.`} />}
-            {s === "declined" && p.response && <Banner tone="neutral" icon="info" title={`Declined · ${longMs(p.response.at)}`} text={`${biz} has been told. If you change your mind, reply to their email.`} />}
-            {s === "void" && <Banner tone="neutral" icon="info" title="This proposal was withdrawn." text={`${biz} may send you a new one.`} />}
             <dl className="crm-dl q-sum">
               <dt className="big">Investment</dt><dd className="big">{money(p.totalCents)}</dd>
               {s === "sent" && p.depositCents > 0 && <><dt>Deposit to book ({p.depositPct}%)</dt><dd>{money(p.depositCents)}</dd></>}
             </dl>
-            {s === "sent" && <>
-              <label className="wp-field"><span className="wp-field-label">Your full name</span>
-                <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Type your name" autoComplete="name" /></label>
-              <p className="wp-small">By accepting, you agree to the scope and price above. This isn't a contract; {biz} will send one to sign.</p>
-              {error && <p className="error" role="alert">{error}</p>}
-              <Button variant="primary" className="q-big" loading={busy === "accept"} disabled={!!busy || name.trim().length < 2} onClick={() => void go("accept")}>Accept proposal</Button>
-              <button type="button" className="btn ghost q-big" disabled={!!busy} onClick={() => setDeclining(true)}>Decline</button>
-              <p className="wp-small">Questions? Reply to the email; it goes to {p.fromName || biz}. No account needed. Your name, the time and your device are recorded.</p>
-            </>}
+            <OfferAnswer kind="proposal" token={token} via={p.via} answer={p.answer} open={s === "sent"} biz={biz} number={p.number} replyTo={p.business.email ?? null}
+              closedNote={s === "void" ? <Banner tone="neutral" icon="info" title="This proposal was withdrawn." text={`${biz} may send you a new one.`} /> : null} />
           </section>
         </div>
       </div>
-      {declining && (
-        <Modal onClose={() => setDeclining(false)} label="Decline this proposal" width={480}>
-          <div className="crm-dialog">
-            <DialogHeader eyebrow={p.number} title="Decline this proposal?" body={`${biz} will be told. You can add a reason if you like.`} onClose={() => setDeclining(false)} />
-            <TextArea label="Reason (optional)" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. We've gone another way for now." />
-            {error && <p className="error" role="alert">{error}</p>}
-            <div className="dfoot">
-              <button className="btn ghost" type="button" onClick={() => setDeclining(false)}>Keep it open</button>
-              <Button variant="primary" loading={busy === "decline"} onClick={() => void go("decline")}><Icon name="close" size={14} />Decline proposal</Button>
-            </div>
-          </div>
-        </Modal>
-      )}
     </Frame>
   );
 }
