@@ -10,6 +10,9 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import schema from "../convex/schema";
 import type { Id } from "../convex/_generated/dataModel";
+import { internal } from "../convex/_generated/api";
+import { nodesOf, pageOf, type Page } from "../convex/lib/wsBuilder";
+import { weatherAddress } from "../convex/lib/callSheet";
 
 const api = anyApi;
 const modules = import.meta.glob("../convex/**/*.ts");
@@ -114,7 +117,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       }
       await appendEvent(ctx as never, d1, { kind: "opened", actor: "signer:client", versionNumber: 1, email: "maya@harborcoffee.com", ip: "198.51.100.4", userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari" });
       await appendEvent(ctx as never, d3, { kind: "created", actor: "heston", versionNumber: 1, detail: "Uploaded (2 pages)", ip: "203.0.113.8", userAgent: "Mozilla/5.0 (Macintosh) Chrome" });
-      return { A, harbor, heston, maya, p1, harbor30, d1, d2, d3, hestonSub: await sess(heston), mayaSub: await sess(maya) };
+      return { A, harbor, heston, maya, p1, p2, p3, p4, harbor30, d1, d2, d3, hestonSub: await sess(heston), mayaSub: await sess(maya) };
     });
     const owner = t.withIdentity({ subject: w.hestonSub });
     const client = t.withIdentity({ subject: w.mayaSub });
@@ -203,6 +206,135 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       await ctx.db.insert("testimonials", { businessId: w.A, noteId: id, projectId: w.p1, clientId: w.harbor, email: "jordan@harborcoffee.com", name: "Jordan Reyes", company: "Harbor Coffee", working: "Great to work with.", film: "Customers mention the recap.", permission: false, readAt: now - HOUR, saveError: "Dropbox isn't connected. Connect it in Settings › Dropbox drop folder, then Save again.", createdAt: now - 3 * DAY, updatedAt: now - 3 * DAY });
       return id;
     });
+
+    // ---- Phone pass (Nov 4): a Production world. Projects in production/polish, shoots (today, this week, next week, one
+    // past), call sheets in every state (questions, draft, sent, updated today) with a Weather block in each of its four
+    // states, crew, client people and guests, and a connected Google Calendar with events. ----
+    const PICKED = "wrangler@group.calendar.google.com", PERSONAL = "heston.hill@gmail.com", HOLIDAYS = "holidays@group.v.calendar.google.com";
+    const prod = await (async () => {
+      for (const p of [w.p2, w.p3, w.p4]) await owner.mutation(api.projects.setStage, { projectId: p, stage: "production", post: false });
+      await owner.mutation(api.projects.setNextStep, { projectId: w.p3, text: "Rough cut of the Arizona highlights by Nov 10." });
+      await owner.mutation(api.projects.setNextStep, { projectId: w.p4, text: "Shoot the backrooms scenes Saturday night." });
+      await owner.mutation(api.projects.setKeyDates, { projectId: w.p3, dates: [{ label: "Shoot", date: inDays(0) }, { label: "First cut", date: inDays(12) }, { label: "Final due", date: inDays(25) }] });
+      await owner.mutation(api.projects.setKeyDates, { projectId: w.p4, dates: [{ label: "Shoot", date: inDays(2) }, { label: "First cut", date: inDays(5) }] });
+      await owner.mutation(api.projects.setKeyDates, { projectId: w.p2, dates: [{ label: "Rough cut", date: inDays(3) }, { label: "Final due", date: inDays(20) }] });
+      // Crew: two vendors, invited to the portal, booked on the shoot days.
+      const vend = async (name: string, email: string, role: string) => {
+        const id = await owner.mutation(api.vendors.add, { name, email, roles: [role], rates: [], invite: false }) as Id<"vendors">;
+        await t.run(async (ctx) => { await ctx.db.patch(id, { invitedAt: now - 5 * DAY }); });
+        return id;
+      };
+      const jordanV = await vend("Jordan Ellis", "jordan@ellisfilms.com", "Shooter"), samV = await vend("Sam Rivera", "sam@riverasound.example", "Sound");
+      const book = (vendorId: Id<"vendors">, projectId: Id<"projects">, role: string, start: string, end = start) =>
+        owner.mutation(api.bookings.create, { vendorId, projectId, role, start, end, cents: 85_000, unit: "day" }) as Promise<Id<"vendorBookings">>;
+      const bAz = await book(jordanV, w.p3, "Shooter", inDays(0));
+      const bBack = await book(jordanV, w.p4, "Shooter", inDays(2));
+      await book(jordanV, w.p1, "Shooter", inDays(4));
+      await book(samV, w.p1, "Sound", inDays(4));
+      const shoot = async (projectId: Id<"projects">, n: number, call: string, wrap: string, location: string, bookingIds: Id<"vendorBookings">[] = []) =>
+        (await owner.mutation(api.shoots.schedule, { projectId, date: inDays(n), call, wrap, location, parking: "", prepare: [], withOwner: true, bookingIds, calendar: false }) as { shootId: Id<"shoots"> }).shootId;
+      const sA = await shoot(w.p3, 0, "08:00", "17:00", "Chase Field loading dock, Phoenix", [bAz]);
+      const sB = await shoot(w.p4, 2, "18:00", "23:00", "Floor Trader HQ, Oklahoma City", [bBack]);
+      const sD = await shoot(w.p4, 5, "19:00", "23:30", "Floor Trader HQ, Oklahoma City");
+      const sE = await shoot(w.p2, 6, "09:00", "14:00", "Northline Church, Edmond");
+      const sF = await shoot(w.p2, 8, "10:00", "15:00", "Northline Church, Edmond");
+      const sG = await shoot(w.p1, 11, "07:00", "12:00", "Harbor Coffee, 412 Main St.");
+      await shoot(w.p3, 14, "08:00", "16:00", "Camelback Mountain trailhead, Phoenix");
+      const ADDR = { A: "1 Chase Field Way, Phoenix, AZ 85004", B: "100 N Broadway Ave, Oklahoma City, OK 73102", C: "412 Main St, Oklahoma City, OK 73102", D: "100 N Broadway Ave, Oklahoma City, OK 73102", E: "1 Church Rd, Edmond, OK 73034", F: "1 Church Rd, Edmond, OK 73034" };
+      const rows = (call: string) => [
+        { id: "r1", time: call, what: "Crew call and load-in", who: "Crew" }, { id: "r2", time: "09:30", what: "Talent call, hair and makeup", who: "Talent" },
+        { id: "r3", time: "11:00", what: "First setup", who: "Everyone" }, { id: "r4", time: "13:00", what: "Lunch", who: "Everyone" }, { id: "r5", time: "15:30", what: "Pickups and wrap", who: "Crew" },
+      ];
+      const mk = async (shootId: Id<"shoots">, call: string, wrap: string, place: string, address: string, weather: boolean, notes = "", step = 4, make = true) => {
+        const id = await owner.mutation(api.callSheets.create, { shootId, how: "questions" }) as Id<"callSheets">;
+        await owner.mutation(api.callSheets.saveAnswers, { callSheetId: id, step, answers: { templateId: null, crewCall: call, talentCall: "09:30", wrap, locationName: place, address, parking: "Park behind the building. Load-in is through the side door.", weather, schedule: rows(call), notes } });
+        const buildId = make ? await owner.mutation(api.callSheets.make, { callSheetId: id }) as Id<"wsBuilds"> : null;
+        return { id, buildId };
+      };
+      const edit = async (buildId: Id<"wsBuilds">, fn: (page: Page) => void) => {
+        const b = await owner.query(api.builder.getBuild, { buildId });
+        const page = JSON.parse(JSON.stringify(pageOf(b.blocks))) as Page;
+        fn(page);
+        await owner.mutation(api.builder.saveBuild, { buildId, title: b.title, blocks: page, fields: b.fields, signers: [], style: b.style });
+      };
+      const wx = async (csId: Id<"callSheets">, kind: "forecast" | "none", date: string, buildId: Id<"wsBuilds">, location: string, line = "") => {
+        const page = pageOf((await owner.query(api.builder.getBuild, { buildId })).blocks);
+        await t.mutation(internal.callSheets.weatherStore, { callSheetId: csId, address: weatherAddress(page, location).address, date, kind, ...(line ? { line } : {}) });
+      };
+      await owner.mutation(api.callSheets.ensureStarters, {});
+      const RILEY = "riley@talent.example", PAT = "pat@stylist.example";
+      // The Chase Field sheet from a week ago, sent to Riley while the shoot was still ahead (the guest's Ended list).
+      vi.setSystemTime(now - 7 * DAY);
+      const sP = await shoot(w.p3, -5, "08:00", "16:00", "Chase Field loading dock, Phoenix");
+      const P = await mk(sP, "08:00", "16:00", "Chase Field loading dock, Phoenix", ADDR.A, true);
+      const rP = await owner.mutation(api.callSheets.addGuest, { callSheetId: P.id, name: "Riley Quinn", email: RILEY, role: "Talent" }) as string;
+      await owner.mutation(api.callSheets.send, { callSheetId: P.id, crew: false, client: false, guests: true });
+      vi.setSystemTime(now);
+      // Today: the Chase Field sheet, sent to the crew and Riley, with an update this morning.
+      const A = await mk(sA, "08:00", "17:00", "Chase Field loading dock, Phoenix", ADDR.A, true, "Hydrate. It will be 90 degrees by noon.");
+      await wx(A.id, "forecast", inDays(0), A.buildId!, "Chase Field loading dock, Phoenix", "Sunny · 91°/68° · 0% rain · wind 5 mph");
+      const rA = await owner.mutation(api.callSheets.addGuest, { callSheetId: A.id, name: "Riley Quinn", email: RILEY, role: "Talent" }) as string;
+      await owner.mutation(api.callSheets.send, { callSheetId: A.id, crew: true, client: true, guests: true, message: "See you at the dock." });
+      await edit(A.buildId!, (pg) => { nodesOf(pg, "location")[0].attrs!.talentCall = "10:00"; });
+      vi.setSystemTime(now + 60_000);
+      await owner.mutation(api.callSheets.sendUpdate, { callSheetId: A.id, changed: "Talent call moved to 10:00 AM" });
+      vi.setSystemTime(now);
+      // Halloween: a built draft with the forecast in.
+      const B = await mk(sB, "18:00", "23:00", "Floor Trader HQ, Oklahoma City", ADDR.B, true);
+      await wx(B.id, "forecast", inDays(2), B.buildId!, "Floor Trader HQ, Oklahoma City", "Mostly cloudy · 58°/44° · 20% rain · wind 8 mph");
+      // Monday: the Harbor Coffee sheet, sent to Maya, both crew and two guests; Pat's access ended by hand; the forecast changed after it went out.
+      const C = await mk(shootId as Id<"shoots">, "07:00", "17:00", "Harbor Coffee, 412 Main St.", ADDR.C, true, "Shop opens at 7:00. Keep the espresso machine warm.");
+      await wx(C.id, "forecast", inDays(4), C.buildId!, "Harbor Coffee, 412 Main St.", "Partly cloudy · 64°/47° · 10% rain · wind 7 mph");
+      const rC = await owner.mutation(api.callSheets.addGuest, { callSheetId: C.id, name: "Riley Quinn", email: RILEY, role: "Talent" }) as string;
+      const pC = await owner.mutation(api.callSheets.addGuest, { callSheetId: C.id, name: "Pat Lee", email: PAT, role: "Stylist" }) as string;
+      await owner.mutation(api.callSheets.send, { callSheetId: C.id, crew: true, client: true, guests: true, message: "Looking forward to it." });
+      await owner.mutation(api.callSheets.endGuest, { callSheetId: C.id, id: pC });
+      vi.setSystemTime(now + 3 * HOUR);
+      await wx(C.id, "forecast", inDays(4), C.buildId!, "Harbor Coffee, 412 Main St.", "Light rain · 58°/46° · 60% rain · wind 12 mph");
+      vi.setSystemTime(now);
+      await t.run(async (ctx) => {
+        for (const [id, who] of [[C.id, ["maya@harborcoffee.com", "jordan@ellisfilms.com"]], [A.id, ["jordan@ellisfilms.com"]]] as const) {
+          const cs = (await ctx.db.get(id))!;
+          await ctx.db.patch(id, { recipients: cs.recipients.map((r) => (who.includes(r.email as never) ? { ...r, openedAt: now - 2 * HOUR, lastOpenedAt: now - 2 * HOUR } : r)) });
+        }
+      });
+      // A typed-over line, no forecast, and "too early".
+      const D = await mk(sD, "19:00", "23:30", "Floor Trader HQ, Oklahoma City", ADDR.D, true);
+      await edit(D.buildId!, (pg) => { nodesOf(pg, "weather")[0].attrs = { typed: true, line: "Overcast, around 55°. Bring layers and rain covers." }; });
+      const E = await mk(sE, "09:00", "14:00", "Northline Church, Edmond", ADDR.E, true);
+      await wx(E.id, "none", inDays(6), E.buildId!, "Northline Church, Edmond");
+      const F = await mk(sF, "10:00", "15:00", "Northline Church, Edmond", ADDR.F, true);
+      // Next week: still on the questions (step 3).
+      const G = await mk(sG, "07:00", "12:00", "Harbor Coffee, 412 Main St.", "412 Main St, Oklahoma City, OK 73102", false, "", 2, false);
+      // A connected Google Calendar with events around the shoots.
+      await t.run(async (ctx) => {
+        await ctx.db.insert("calendars", { businessId: w.A, email: "heston.hill@gmail.com", refreshToken: "kit", calendarId: PICKED, calendarName: "Wrangler Productions", inviteVendors: true, inviteClient: false, connectedAt: now - 20 * DAY, lastSyncedAt: now - 4 * 60_000,
+          list: [{ id: PERSONAL, name: "Personal", color: 4, on: true, writable: true, primary: true }, { id: PICKED, name: "Wrangler Productions", color: 7, on: true, writable: true, primary: false }, { id: HOLIDAYS, name: "Holidays", color: 2, on: true, writable: false, primary: false }] });
+        const ev = (cal: string, id: string, title: string, d0: number, d1: number, start?: string, end?: string, extra: Record<string, unknown> = {}) =>
+          ctx.db.insert("calendarEvents", { businessId: w.A, kind: "google", calendarId: cal, googleId: id, title, date: inDays(d0), endDate: inDays(d1), ...(start ? { start, end } : {}), guests: [], gUpdated: 1, syncedAt: now, createdAt: now, ...extra } as never);
+        await ev(PICKED, "kit0001", "Team call", 1, 1, "10:00", "10:30", { guests: [{ email: "sam@riverasound.example", name: "Sam Rivera" }, { email: "jordan@ellisfilms.com", name: "Jordan Ellis" }], recurring: true });
+        await ev(PICKED, "kit0002", "Studio rental: Stage 4", 3, 4, undefined, undefined, { location: "Stage 4, Oklahoma Film Studios" });
+        await ev(PICKED, "kit0003", "Edit session: Harbor Coffee 30s", 0, 0, "13:00", "16:30", { projectId: w.p1 });
+        await ev(PICKED, "kit0004", "Color review with Maya", 6, 6, "15:00", "16:00", { guests: [{ email: "maya@harborcoffee.com", name: "Maya Brooks" }], location: "Video call" });
+        await ev(PICKED, "kit0005", "Gear pickup", 2, 2, "09:00", "10:00", { location: "Rental House, Bricktown" });
+        await ev(PERSONAL, "kit0006", "Dentist", 4, 4, "14:00", "15:00");
+        await ev(PERSONAL, "kit0007", "Dinner with Emily-Rose", 1, 1, "18:30", "20:00", { location: "Cheever's Cafe" });
+        await ev(PERSONAL, "kit0008", "Move-in weekend", 9, 10);
+        await ev(HOLIDAYS, "kit0009", "Halloween", 2, 2, undefined, undefined, { readOnly: true });
+        await ev(HOLIDAYS, "kit0010", "Daylight saving time ends", 3, 3, undefined, undefined, { readOnly: true });
+        await ev(PICKED, "kit0011", "Edit week: Spirit Days", 7, 11, undefined, undefined, { projectId: w.p2 });
+      });
+      return { A, B, C, D, E, F, G, P, shoots: { sA, sB, sD, sE, sF, sG, sP }, riley: { A: rA, C: rC, P: rP }, RILEY, bookings: { bAz, bBack } };
+    })();
+    const sheetIds = [prod.A, prod.B, prod.C, prod.D, prod.E, prod.F, prod.G, prod.P];
+    const guest = await t.run(async (ctx) => {
+      const userId = await ctx.db.insert("users", { email: prod.RILEY, name: "Riley Quinn", role: "guest" });
+      const passes = await ctx.db.query("guestPasses").collect();
+      const tok = (id: Id<"callSheets">) => passes.find((x) => x.callSheetId === id && x.email === prod.RILEY)!.token;
+      return { sub: `${userId}|${await ctx.db.insert("authSessions", { userId, expirationTime: now + 30 * DAY })}`, tokens: { A: tok(prod.A.id), C: tok(prod.C.id), P: tok(prod.P.id) } };
+    });
+    // Calendar events for the whole stretch Production › Calendar may ask for (the kit answers any month, week or agenda from this).
+    const calRange = { from: inDays(-60), to: inDays(35) };
     const noteIds = await t.run(async (ctx) => (await ctx.db.query("inboxNotes").collect()).map((n) => n._id));
     const OWNER: [string, Record<string, unknown>][] = [
       ["users.me", {}], ["business.brand", {}], ["business.settings", {}], ["payments.settings", {}], ["library.overview", {}], ["activity.feed", { limit: 100 }], ["activity.recent", {}], ["home.needs", {}],
@@ -218,6 +350,11 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["projects.page#" + w.p1, { projectId: w.p1 }], ["shoots.forProject#" + w.p1, { projectId: w.p1 }], ["fileRequests.forProject#" + w.p1, { projectId: w.p1 }], ["briefs.forProject#" + w.p1, { projectId: w.p1 }], ["briefs.settings", {}], ["calendar.settings", {}], ["projects.nextRound#" + w.harbor30.v, { videoId: w.harbor30.v }],
       ["footage.settings", {}], ["footage.forProject#" + w.p1, { projectId: w.p1 }], ["testimonials.list", {}], ["testimonials.projectsFor#" + w.harbor, { clientId: w.harbor }],
       ["invoices.list", {}], ["invoices.overview", { tzOffsetMin: 300 }], ["invoices.options", {}], ["invoices.forProject#" + w.p1, { projectId: w.p1 }],
+      ["production.overview", {}], ["production.shoots", {}], ["production.projectsForShoot", {}], ["callSheets.list", {}], ["callSheets.newOptions", {}], ["calendarSync.range", calRange], ["calendarSync.linkOptions", {}],
+      ["overviews.clients", {}], ["overviews.review", {}], ["overviews.docs", {}], ["overviews.proposals", {}], ["overviews.vendors", {}], ["home.dashboard", { tzOffsetMin: 300 }], ["crm.due", {}],
+      ...sheetIds.map(({ id }): [string, Record<string, unknown>] => ["callSheets.get#" + id, { callSheetId: id }]),
+      ...sheetIds.filter((x) => x.buildId).map(({ buildId }): [string, Record<string, unknown>] => ["builder.getBuild#" + buildId, { buildId }]),
+      ...[w.p2, w.p3, w.p4].map((p): [string, Record<string, unknown>] => ["shoots.forProject#" + p, { projectId: p }]),
       ["invoices.get#" + invIds.paid, { invoiceId: invIds.paid }], ["invoices.get#" + invIds.due, { invoiceId: invIds.due }], ["invoices.get#" + invIds.draft, { invoiceId: invIds.draft }],
     ];
     const shareTokens = await t.run(async (ctx) => (await ctx.db.query("shares").collect()).map((x) => (x as unknown as { token: string }).token));
@@ -232,7 +369,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["projects.mine", {}], ["projects.forClient#" + w.p1, { projectId: w.p1 }], ["shoots.forClientProject#" + w.p1, { projectId: w.p1 }], ["shoots.page#" + shootId, { shootId }], ["fileRequests.forClientProject#" + w.p1, { projectId: w.p1 }], ["fileRequests.page#" + reqIds.a, { requestId: reqIds.a }], ["fileRequests.page#" + reqIds.b, { requestId: reqIds.b }],
       ["briefs.forClientProject#" + w.p1, { projectId: w.p1 }], ["briefs.page#" + briefId, { briefId }],
       ["footage.forClientProject#" + w.p1, { projectId: w.p1 }], ["testimonials.ask#" + askId, { noteId: askId }],
-      ["invoicePay.mine", {}], ...["kitpaidtoken000000001", "kitduetoken0000000002", "kitproctoken000000003"].map((tok): [string, Record<string, unknown>] => ["invoicePay.page#" + tok, { token: tok }])];
+      ["callSheets.forClient#" + prod.C.id, { callSheetId: prod.C.id }], ["callSheets.forClientProject#" + w.p1, { projectId: w.p1 }], ["invoicePay.mine", {}], ...["kitpaidtoken000000001", "kitduetoken0000000002", "kitproctoken000000003"].map((tok): [string, Record<string, unknown>] => ["invoicePay.page#" + tok, { token: tok }])];
     const run = async (as: typeof owner, list: [string, Record<string, unknown>][]) => {
       const out: Record<string, unknown> = {};
       for (const [key, args] of list) {
@@ -246,7 +383,22 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
     // The PDFs in convex-test storage can't be fetched by a browser: point them at the kit's sample PDF.
     const pdfs = (v: unknown): unknown => JSON.parse(JSON.stringify(v), (k, x) => ((k === "fileUrl" || k === "finalUrl") && typeof x === "string" ? "/kit-pdf/" : x));
     for (const k of Object.keys(owned)) if (k.startsWith("sign.get#")) owned[k] = pdfs(owned[k]);
-    const fixtures = { owner: owned, client: await run(client, CLIENT), ids: { invoices: invIds, shares: shareTokens, harbor: w.harbor, video: w.harbor30.v, docSent: w.d1, docSigned: w.d2, docDraft: w.d3, notes: noteIds, shoot: shootId, project: w.p1, requests: reqIds, brief: briefId } };
+    // The call-sheet guest (signed in), and the link's own page for a guest who isn't (guests.intro answers anyone).
+    const GUEST: [string, Record<string, unknown>][] = [["users.me", {}], ["business.brand", {}], ["guests.home", {}],
+      ...(["A", "C", "P"] as const).map((k): [string, Record<string, unknown>] => ["guests.sheet#" + guest.tokens[k], { token: guest.tokens[k] }])];
+    const guestOwn = await run(t.withIdentity({ subject: guest.sub }) as never, GUEST);
+    Object.assign(guestOwn, await run(t as never, (["A", "C", "P"] as const).map((k): [string, Record<string, unknown>] => ["guests.intro#" + guest.tokens[k], { token: guest.tokens[k] }])));
+    if (!guestOwn["business.brand"]) guestOwn["business.brand"] = owned["business.brand"];
+    // An owner with nothing yet: every page that can be asked without a record's id, answered by a business with no records.
+    const empty = convexTest(schema, modules);
+    const esub = await empty.run(async (ctx) => {
+      const A = await ctx.db.insert("businesses", { slug: "wrangler", name: "Wrangler Productions", legalName: "Hill Creative LLC", ownerName: "Heston Hill", createdAt: 0 });
+      const heston = await ctx.db.insert("users", { email: "heston@wranglerproductions.com", name: "Heston Hill", role: "owner" });
+      await ctx.db.insert("memberships", { businessId: A, email: "heston@wranglerproductions.com", userId: heston, role: "owner", createdAt: 0 });
+      return `${heston}|${await ctx.db.insert("authSessions", { userId: heston, expirationTime: now + 30 * DAY })}`;
+    });
+    const emptyOwn = await run(empty.withIdentity({ subject: esub }) as never, OWNER.filter(([k, a]) => !k.includes("#") && (k === "calendarSync.range" || Object.values(a).every((x) => typeof x === "number" || typeof x === "boolean"))));
+    const fixtures = { owner: owned, client: await run(client, CLIENT), guest: guestOwn, empty: emptyOwn, ids: { prod: { sheets: Object.fromEntries(Object.entries({ A: prod.A, B: prod.B, C: prod.C, D: prod.D, E: prod.E, F: prod.F, G: prod.G, P: prod.P }).map(([k, x]) => [k, { id: x.id, buildId: x.buildId }])), guest: guest.tokens, shoots: prod.shoots },  invoices: invIds, shares: shareTokens, harbor: w.harbor, video: w.harbor30.v, docSent: w.d1, docSigned: w.d2, docDraft: w.d3, notes: noteIds, shoot: shootId, project: w.p1, requests: reqIds, brief: briefId } };
     writeFileSync(join(__dirname, "..", "src", "dev", "fixtures.json"), JSON.stringify(fixtures, null, 1));
     vi.useRealTimers();
   });

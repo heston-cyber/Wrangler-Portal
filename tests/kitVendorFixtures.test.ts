@@ -57,6 +57,15 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures (Phase 3c)", () => {
     await jordan.mutation(api.vendorPortal.setNotification, { businessId: w.A, key: "briefings", on: false });
     await w.maya.mutation(api.notifications.setClient, { key: "invoice_reminders", on: false });
 
+    // Phone pass (Nov 4): the Nov 6 shoot has a call sheet, sent to Jordan (the vendor side's reader page and home list).
+    const { shootId } = await w.heston.mutation(api.shoots.schedule, { projectId: w.p, date: "2026-11-06", call: "07:30", wrap: "16:00", location: "Harbor Coffee, Plaza District", parking: "Behind the shop", prepare: [], withOwner: true, bookingIds: [k1], calendar: false }) as { shootId: Id<"shoots"> };
+    await w.heston.mutation(api.callSheets.ensureStarters, {});
+    const sheet = await w.heston.mutation(api.callSheets.create, { shootId, how: "questions" }) as Id<"callSheets">;
+    await w.heston.mutation(api.callSheets.saveAnswers, { callSheetId: sheet, step: 4, answers: { templateId: null, crewCall: "07:30", talentCall: "09:00", wrap: "16:00", locationName: "Harbor Coffee", address: "412 Main St, Oklahoma City, OK 73102", parking: "Behind the shop. Load-in is through the side door.", weather: true,
+      schedule: [{ id: "r1", time: "07:30", what: "Crew call and load-in", who: "Crew" }, { id: "r2", time: "09:00", what: "Talent call", who: "Talent" }, { id: "r3", time: "12:30", what: "Lunch", who: "Everyone" }, { id: "r4", time: "15:30", what: "Wrap", who: "Crew" }], notes: "Run and gun. Bring the gimbal." } });
+    await w.heston.mutation(api.callSheets.make, { callSheetId: sheet });
+    await w.heston.mutation(api.callSheets.send, { callSheetId: sheet, crew: true, client: false, guests: false, message: "See you Friday." });
+
     const OWNER: [string, Record<string, unknown>][] = [
       ["vendors.list", {}], ["vendors.get#" + a, { vendorId: a }], ["vendors.get#" + r, { vendorId: r }], ["vendors.invoices#" + a, { vendorId: a }], ["vendors.invoices#" + r, { vendorId: r }],
       ["bookings.list", {}], ["bookings.forVendor#" + a, { vendorId: a }], ["bookings.forVendor#" + r, { vendorId: r }], ["bookings.get#" + k1, { bookingId: k1 }], ["bookings.forProject#" + w.p, { projectId: w.p }],
@@ -69,7 +78,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures (Phase 3c)", () => {
       ["users.me", {}], ["vendorPortal.businesses", {}], ["vendorPortal.counts", { businessId: w.A }], ["vendorPortal.home", { businessId: w.A }], ["vendorPortal.bookings", { businessId: w.A }],
       ["vendorPortal.booking#" + k1, { bookingId: k1 }], ["vendorPortal.booking#" + k2, { bookingId: k2 }], ["vendorPortal.briefings", { businessId: w.A }], ["vendorPortal.reviews", { businessId: w.A }],
       ["vendorPortal.invoices", { businessId: w.A }], ["vendorPortal.invoiceForm", { businessId: w.A }], ["vendorPortal.invoice#" + inv1, { invoiceId: inv1 }], ["vendorPortal.invoice#" + inv2, { invoiceId: inv2 }], ["vendorPortal.invoice#" + inv3, { invoiceId: inv3 }],
-      ["vendorPortal.settings", { businessId: w.A }], ["vendorPortal.notifications", { businessId: w.A }], ["business.brand", {}], ["vendorPayouts.mine", { businessId: w.A }], ["vendorPortal.invoice#" + inv4, { invoiceId: inv4 }],
+      ["vendorPortal.settings", { businessId: w.A }], ["vendorPortal.notifications", { businessId: w.A }], ["business.brand", {}], ["vendorPayouts.mine", { businessId: w.A }], ["vendorPortal.invoice#" + inv4, { invoiceId: inv4 }], ["vendorPortal.callSheet#" + sheet, { callSheetId: sheet }],
     ];
     const run = async (as: typeof w.heston, list: [string, Record<string, unknown>][]) => {
       const out: Record<string, unknown> = {};
@@ -85,7 +94,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures (Phase 3c)", () => {
     Object.assign(fx.owner, await run(w.heston, OWNER));
     fx.vendor = await run(jordan, VENDOR);
     Object.assign(fx.client, await run(w.maya, [["notifications.client", {}]]));
-    fx.ids = { ...fx.ids, vendor: { jordan: a, riley: r, bookings: [k1, k2, k3], invoices: { toApprove: inv1, approved: inv2, paid: inv3, paying: inv4 } } };
+    fx.ids = { ...fx.ids, vendor: { jordan: a, riley: r, bookings: [k1, k2, k3], invoices: { toApprove: inv1, approved: inv2, paid: inv3, paying: inv4 }, callSheet: sheet } };
     delete process.env.STRIPE_PAYOUTS_KEY;
     writeFileSync(file, JSON.stringify(fx, null, 1));
   });
