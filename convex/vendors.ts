@@ -12,7 +12,7 @@ import { deliverOnce } from "./invoiceReminders";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import type { Rates } from "./lib/estimate";
 import { ratesOf } from "./crm";
@@ -23,7 +23,7 @@ const EMAIL = /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i;
 const clip = (s: string | undefined, n: number) => (s ?? "").trim().slice(0, n);
 
 async function ownerBiz(ctx: QueryCtx | MutationCtx) {
-  await requireMe(ctx);
+  await requireAll(ctx, "production");
   const id = businessInScope(ctx);
   const b = id ? await ctx.db.get(id) : null;
   if (!b) throw new ConvexError("Not allowed.");

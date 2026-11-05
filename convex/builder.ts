@@ -12,7 +12,7 @@ import { internalAction, internalMutation, internalQuery, mutation, query } from
 import { internal } from "./_generated/api";
 import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll } from "./lib/access";
 import {
   DEFAULT_BUSINESS, DEFAULT_STYLE, MAX_BUILD_JSON, PRESET_STYLES, buildProblems, emptyFields, newId, totals,
   line, pageOf, textOf, type Business, type BuildDoc, type ExtraSigner, type Fields, type ItemRow, type Page, type PNode, type Style,
@@ -65,7 +65,7 @@ export async function defaultStyle(ctx: QueryCtx): Promise<Style> {
   return PRESET_STYLES[preset] ?? DEFAULT_STYLE;
 }
 
-export const getProfile = query({ args: {}, handler: async (ctx) => { await requireMe(ctx); return profile(ctx); } });
+export const getProfile = query({ args: {}, handler: async (ctx) => { await requireAll(ctx, "docs"); return profile(ctx); } });
 export const saveProfile = mutation({
   args: { business: v.object({ name: v.string(), legalName: v.string(), contact: v.string(), title: v.string(), email: v.string(), phone: v.string(), address: v.string() }) },
   handler: async (ctx, { business }) => {
@@ -82,7 +82,7 @@ export const saveProfile = mutation({
 export const listBuilds = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const rows = (await ctx.db.query("wsBuilds").withIndex("by_updated").order("desc").take(300)).filter((b) => !isSide(b));
     return rows.map((b) => ({ _id: b._id, title: b.title, updatedAt: b.updatedAt, createdAt: b.createdAt, documentId: b.documentId ?? null, client: ((b.fields as Fields)?.client?.name) || "" }));
   },
@@ -91,7 +91,7 @@ export const listBuilds = query({
 export const getBuild = query({
   args: { buildId: v.id("wsBuilds") },
   handler: async (ctx, { buildId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const b = await ctx.db.get(buildId);
     if (!b) return null;
     const doc = b.documentId ? await ctx.db.get(b.documentId) : null;
@@ -104,7 +104,7 @@ export const getBuild = query({
 export const createBuild = mutation({
   args: { templateId: v.optional(v.id("wsTemplates")), blank: v.optional(v.boolean()) },
   handler: async (ctx, { templateId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const now = Date.now();
     const business = await profile(ctx);
     const t = templateId ? await ctx.db.get(templateId) : null;
@@ -136,7 +136,7 @@ const docArgs = { title: v.string(), blocks: v.any(), fields: v.any(), signers: 
 export const saveBuild = mutation({
   args: { buildId: v.id("wsBuilds"), ...docArgs },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const b = await ctx.db.get(a.buildId);
     if (!b) throw new ConvexError("That document doesn't exist.");
     await assertEditable(ctx, b);
@@ -150,7 +150,7 @@ export const saveBuild = mutation({
 export const deleteBuild = mutation({
   args: { buildId: v.id("wsBuilds") },
   handler: async (ctx, { buildId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const b = await ctx.db.get(buildId);
     if (!b) return null;
     if (isProposal(b)) throw new ConvexError("This is a proposal. Delete it from Proposals.");
@@ -189,7 +189,7 @@ export const linkBuild = internalMutation({
 export const toSigning = action({
   args: { buildId: v.id("wsBuilds"), storageId: v.id("_storage") },
   handler: async (ctx, { buildId, storageId }): Promise<{ documentId: Id<"wsDocuments">; label: string; rebuilt: boolean }> => {
-    await ctx.runQuery(internal.users.assertAllowed, { ids: [buildId] });
+    await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs"], ids: [buildId] });
     try { return await toSigningCore(ctx, buildId, storageId); }
     catch (e) { throw new ConvexError(errText(e)); }
   },
@@ -245,7 +245,7 @@ export async function toSigningCore(ctx: ActionCtx, buildId: Id<"wsBuilds">, sto
 export const listTemplates = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const rows = (await ctx.db.query("wsTemplates").withIndex("by_updated").order("desc").collect()).filter((t) => !isSide(t));
     return rows.map((t) => ({ _id: t._id, name: t.name, description: t.description ?? "", updatedAt: t.updatedAt, blocks: pageOf(t.blocks).content.length, styleName: (t.style as Style)?.name ?? "" }));
   },
@@ -254,7 +254,7 @@ export const listTemplates = query({
 export const getTemplate = query({
   args: { templateId: v.id("wsTemplates") },
   handler: async (ctx, { templateId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const t = await ctx.db.get(templateId);
     return t && isCallSheet(t) ? { ...t, blocks: migrateWeather(pageOf(t.blocks)).page } : t; // D148, as getBuild
   },
@@ -263,7 +263,7 @@ export const getTemplate = query({
 export const saveAsTemplate = mutation({
   args: { name: v.string(), description: v.optional(v.string()), kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"), v.literal("callsheet"))), ...docArgs },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     tooBig(a.blocks, a.fields, a.style);
     const name = clean(a.name);
     if (!name) throw new ConvexError("Name the template.");
@@ -282,7 +282,7 @@ export const saveAsTemplate = mutation({
 export const updateTemplate = mutation({
   args: { templateId: v.id("wsTemplates"), name: v.string(), description: v.optional(v.string()), blocks: v.any(), fields: v.any(), style: v.any() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const t0 = await ctx.db.get(a.templateId);
     if (!t0) throw new ConvexError("That template doesn't exist.");
     tooBig(a.blocks, a.fields, a.style);
@@ -298,7 +298,7 @@ export const updateTemplate = mutation({
 export const duplicateTemplate = mutation({
   args: { templateId: v.id("wsTemplates") },
   handler: async (ctx, { templateId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const t = await ctx.db.get(templateId);
     if (!t) throw new ConvexError("That template doesn't exist.");
     const now = Date.now();
@@ -309,7 +309,7 @@ export const duplicateTemplate = mutation({
 export const deleteTemplate = mutation({
   args: { templateId: v.id("wsTemplates") },
   handler: async (ctx, { templateId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     await ctx.db.delete(templateId); // documents made from it keep their own copy
     return null;
   },
@@ -319,7 +319,7 @@ export const deleteTemplate = mutation({
 export const ensureStarter = mutation({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const done = await ctx.db.query("counters").withIndex("by_key", (q) => q.eq("key", "wsStarterMade")).first();
     if (done) return { added: false };
     await ctx.db.insert("counters", { key: "wsStarterMade", value: 1 });
@@ -335,7 +335,7 @@ export const ensureStarter = mutation({
 export const listClauses = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     return (await ctx.db.query("wsClauses").withIndex("by_updated").order("desc").collect()).sort((a, b) => a.title.localeCompare(b.title));
   },
 });
@@ -343,7 +343,7 @@ export const listClauses = query({
 export const saveClause = mutation({
   args: { clauseId: v.optional(v.id("wsClauses")), title: v.string(), body: v.any(), initials: v.boolean() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     tooBig(a.body);
     const title = clean(a.title);
     if (!title) throw new ConvexError("Give the clause a title.");
@@ -356,7 +356,7 @@ export const saveClause = mutation({
 export const duplicateClause = mutation({
   args: { clauseId: v.id("wsClauses") },
   handler: async (ctx, { clauseId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const c = await ctx.db.get(clauseId);
     if (!c) throw new ConvexError("That clause doesn't exist.");
     const now = Date.now();
@@ -366,7 +366,7 @@ export const duplicateClause = mutation({
 
 export const deleteClause = mutation({
   args: { clauseId: v.id("wsClauses") },
-  handler: async (ctx, { clauseId }) => { await requireMe(ctx); await ctx.db.delete(clauseId); return null; },
+  handler: async (ctx, { clauseId }) => { await requireAll(ctx, "docs"); await ctx.db.delete(clauseId); return null; },
 });
 
 // ---------- styles ----------
@@ -374,7 +374,7 @@ export const deleteClause = mutation({
 export const listStyles = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const saved = await ctx.db.query("wsStyles").withIndex("by_updated").order("desc").collect();
     const preset = (await ctx.db.query("counters").withIndex("by_key", (q) => q.eq("key", "wsDefaultPreset")).first())?.value ?? 0;
     const anySaved = saved.some((s) => s.isDefault);
@@ -388,7 +388,7 @@ export const listStyles = query({
 export const saveStyle = mutation({
   args: { styleId: v.optional(v.id("wsStyles")), name: v.string(), style: v.any() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     tooBig(a.style);
     const name = clean(a.name, 60);
     if (!name) throw new ConvexError("Name the style.");
@@ -402,7 +402,7 @@ export const saveStyle = mutation({
 export const setDefaultStyle = mutation({
   args: { styleId: v.optional(v.id("wsStyles")), preset: v.optional(v.number()) },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     for (const s of await ctx.db.query("wsStyles").collect()) if (s.isDefault && s._id !== a.styleId) await ctx.db.patch(s._id, { isDefault: false });
     if (a.styleId) { await ctx.db.patch(a.styleId, { isDefault: true }); return null; }
     const i = Math.max(0, Math.min(PRESET_STYLES.length - 1, a.preset ?? 0));
@@ -414,18 +414,18 @@ export const setDefaultStyle = mutation({
 
 export const deleteStyle = mutation({
   args: { styleId: v.id("wsStyles") },
-  handler: async (ctx, { styleId }) => { await requireMe(ctx); await ctx.db.delete(styleId); return null; },
+  handler: async (ctx, { styleId }) => { await requireAll(ctx, "docs"); await ctx.db.delete(styleId); return null; },
 });
 
 // ---------- files: images (logo, cover) and fonts ----------
 
-export const uploadUrl = mutation({ args: {}, handler: async (ctx) => { await requireMe(ctx); return ctx.storage.generateUploadUrl(); } });
+export const uploadUrl = mutation({ args: {}, handler: async (ctx) => { await requireAll(ctx, "docs"); return ctx.storage.generateUploadUrl(); } });
 
 /** Links for files a style uses (logo, cover image). */
 export const fileUrls = query({
   args: { ids: v.array(v.id("_storage")) },
   handler: async (ctx, { ids }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const out: Record<string, string | null> = {};
     for (const id of ids.slice(0, 20)) out[id] = await ctx.storage.getUrl(id);
     return out;
@@ -435,7 +435,7 @@ export const fileUrls = query({
 export const checkImage = action({
   args: { storageId: v.id("_storage") },
   handler: async (ctx, { storageId }): Promise<{ ok: true }> => {
-    await ctx.runQuery(internal.users.assertAllowed, {});
+    await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs"] });
     const b = await ctx.storage.get(storageId);
     const bad = async (m: string) => { await ctx.storage.delete(storageId); throw new ConvexError(m); };
     if (!b) return bad("The upload didn't arrive.");
@@ -450,7 +450,7 @@ export const checkImage = action({
 export const listFonts = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const rows = await ctx.db.query("wsFonts").collect();
     return Promise.all(rows.map(async (f) => ({ _id: f._id, family: f.family, weight: f.weight, italic: f.italic, source: f.source, fileName: f.fileName, url: await ctx.storage.getUrl(f.fileId) })));
   },
@@ -471,7 +471,7 @@ function fontKind(h: Uint8Array): "ttf" | "otf" | "ttc" | "woff" | "woff2" | nul
 export const addFont = action({
   args: { storageId: v.id("_storage"), family: v.string(), weight: v.number(), italic: v.boolean(), fileName: v.string(), source: v.union(v.literal("upload"), v.literal("local")) },
   handler: async (ctx, a): Promise<{ ok: true }> => {
-    await ctx.runQuery(internal.users.assertAllowed, {});
+    await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs"] });
     const b = await ctx.storage.get(a.storageId);
     const bad = async (m: string) => { await ctx.storage.delete(a.storageId); throw new ConvexError(m); };
     if (!b) return bad("The font didn't arrive.");
@@ -500,7 +500,7 @@ export const insertFont = internalMutation({
 export const deleteFont = mutation({
   args: { family: v.string() },
   handler: async (ctx, { family }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     for (const f of await ctx.db.query("wsFonts").withIndex("by_family", (q) => q.eq("family", family)).collect()) { await ctx.storage.delete(f.fileId); await ctx.db.delete(f._id); }
     return null;
   },
@@ -519,7 +519,7 @@ export const TTF_UA = "curl/8";
 export const ensureGoogleFont = action({
   args: { family: v.string() },
   handler: async (ctx, { family }): Promise<{ added: number }> => {
-    await ctx.runQuery(internal.users.assertAllowed, {});
+    await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs"] });
     return googleFont(ctx, family);
   },
 });
@@ -692,7 +692,7 @@ export async function importPdfCore(ctx: ActionCtx, storageId: Id<"_storage">, t
 export const importPdf = action({
   args: { storageId: v.id("_storage"), title: v.optional(v.string()) },
   handler: async (ctx, { storageId, title }): Promise<{ buildId: Id<"wsBuilds">; notes: string[] }> => {
-    await ctx.runQuery(internal.users.assertAllowed, {});
+    await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs"] });
     try { const r = await importPdfCore(ctx, storageId, title); return { buildId: r.buildId, notes: r.notes }; }
     catch (e) { throw new ConvexError(errText(e)); }
   },

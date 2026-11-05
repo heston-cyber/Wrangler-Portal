@@ -11,7 +11,7 @@ import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll } from "./lib/access";
 import { businessContact, businessInScope, defaultBusiness } from "./lib/business";
 import { PayoutsError, financialAccount, payoutsCall, payoutsKey, payoutsMode, recipientState } from "./lib/payoutsApi";
 import { todayCentral } from "./lib/bookings";
@@ -31,7 +31,7 @@ async function enabledFor(ctx: Ctx, biz: Id<"businesses"> | null | undefined) {
   return !!payoutsKey() && !!biz && biz === def;
 }
 async function ownerBiz(ctx: Ctx) {
-  const me = await requireMe(ctx);
+  const me = await requireAll(ctx, "vendorPayments");
   const biz = businessInScope(ctx);
   if (!biz) throw new ConvexError("Not allowed.");
   return { me, biz };

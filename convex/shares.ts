@@ -7,7 +7,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { viewsForShare } from "./views";
-import { requireMe, requireSignedIn } from "./lib/access";
+import { requireMe, requireSignedIn, requireAll } from "./lib/access";
 import { accessToVersion, limitKey, shareArg } from "./lib/viewer";
 import { bump } from "./lib/rate";
 import { ensureInvite } from "./clients";
@@ -77,7 +77,7 @@ export type PublicShare = Awaited<ReturnType<typeof publicShare>>;
 export const create = mutation({
   args: { target, ...settings, who: v.union(v.literal("link"), v.literal("invited")), emails: v.optional(v.array(v.string())) },
   handler: async (ctx, a) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "review");
     const t = await targetFields(ctx, a.target);
     const pass = a.who === "link" ? cleanPass(a.passcode) : "";
     if (a.expiresAt !== undefined && a.expiresAt <= Date.now()) throw new ConvexError("The expiry date is already in the past.");
@@ -108,7 +108,7 @@ export const update = mutation({
   args: { shareId: v.id("shares"), access: v.optional(settings.access), allVersions: v.optional(v.boolean()), downloads: v.optional(v.boolean()), emailNewVersions: v.optional(v.boolean()),
     expiresAt: v.optional(v.union(v.number(), v.null())), passcode: v.optional(v.union(v.string(), v.null())) },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "review");
     const s = await ctx.db.get(a.shareId);
     if (!s) throw new ConvexError("That share is gone.");
     const patch: Partial<Doc<"shares">> = {};
@@ -132,7 +132,7 @@ export const update = mutation({
 export const setOff = mutation({
   args: { shareId: v.id("shares"), off: v.boolean() },
   handler: async (ctx, { shareId, off }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "review");
     const s = await ctx.db.get(shareId);
     if (!s) throw new ConvexError("That share is gone.");
     await ctx.db.patch(shareId, { offAt: off ? Date.now() : undefined });
@@ -142,7 +142,7 @@ export const setOff = mutation({
 export const remove = mutation({
   args: { shareId: v.id("shares") },
   handler: async (ctx, { shareId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "review");
     if (!(await ctx.db.get(shareId))) return;
     for (const m of await membersOf(ctx, shareId)) await ctx.db.delete(m._id);
     for (const a of await ctx.db.query("shareActivity").withIndex("by_share", (q) => q.eq("shareId", shareId)).collect()) await ctx.db.delete(a._id);
@@ -153,7 +153,7 @@ export const remove = mutation({
 export const addMember = mutation({
   args: { shareId: v.id("shares"), email: v.string(), name: v.optional(v.string()) },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "review");
     const s = await ctx.db.get(a.shareId);
     if (!s) throw new ConvexError("That share is gone.");
     if (s.who !== "invited") throw new ConvexError("This share is open to anyone with the link; there's no list to add to.");
@@ -165,7 +165,7 @@ export const addMember = mutation({
 export const resendInvite = mutation({
   args: { shareId: v.id("shares"), email: v.string() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "review");
     const email = a.email.trim().toLowerCase();
     const m = (await membersOf(ctx, a.shareId)).find((x) => x.email === email);
     if (!m) throw new ConvexError("That person isn't on this share.");
@@ -177,7 +177,7 @@ export const resendInvite = mutation({
 export const removeMember = mutation({
   args: { shareId: v.id("shares"), email: v.string() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "review");
     const email = a.email.trim().toLowerCase();
     for (const m of await membersOf(ctx, a.shareId)) if (m.email === email) await ctx.db.delete(m._id);
   },
@@ -187,7 +187,7 @@ export const removeMember = mutation({
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "review");
     const rows = await ctx.db.query("shares").collect();
     const out = [];
     for (const s of rows.sort((a, b) => b.createdAt - a.createdAt || b._creationTime - a._creationTime)) out.push(await publicShare(ctx, s));
@@ -199,7 +199,7 @@ export const list = query({
 export const forTarget = query({
   args: { target },
   handler: async (ctx, { target: t }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "review");
     const rows = (await ctx.db.query("shares").collect()).filter((s) =>
       t.kind === "client" ? s.kind === "client" && clientKey(s.client) === clientKey(t.client)
         : t.kind === "project" ? s.kind === "project" && s.projectId === t.projectId
@@ -214,7 +214,7 @@ export const forTarget = query({
 export const coveringVideo = query({
   args: { videoId: v.id("videos") },
   handler: async (ctx, { videoId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "review");
     const vid = await ctx.db.get(videoId);
     if (!vid) return [];
     const p = await ctx.db.get(vid.projectId);
@@ -228,7 +228,7 @@ export const coveringVideo = query({
 export const activity = query({
   args: { shareId: v.id("shares"), limit: v.optional(v.number()) },
   handler: async (ctx, { shareId, limit }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "review");
     const n = Math.min(limit ?? 50, 200);
     const rows = await ctx.db.query("shareActivity").withIndex("by_share", (q) => q.eq("shareId", shareId)).order("desc").take(n);
     const out: Array<{ _id: string; kind: "opened" | "viewed" | "note" | "watched"; who: string; at: number; videoId: Id<"videos"> | null; videoTitle: string | null; noteId: Id<"notes"> | null; watch?: { version: number; watchedSec: number; maxSec: number; lengthSec: number; completed: boolean } }> = [];

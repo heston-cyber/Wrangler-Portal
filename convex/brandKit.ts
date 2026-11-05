@@ -7,7 +7,7 @@ import { mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll } from "./lib/access";
 import { businessInScope } from "./lib/business";
 
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
@@ -25,7 +25,7 @@ export type Kit = {
 export const EMPTY_KIT: Kit = { colors: [], fonts: {}, files: [], links: [], tone: [] };
 
 async function ownerBiz(ctx: QueryCtx | MutationCtx) {
-  await requireMe(ctx);
+  await requireAll(ctx, "settings");
   const id = businessInScope(ctx);
   const b = id ? await ctx.db.get(id) : null;
   if (!b) throw new ConvexError("Not allowed.");

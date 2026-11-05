@@ -16,7 +16,7 @@ import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe, requireSignedIn } from "./lib/access";
+import { requireMe, requireSignedIn, requireAll } from "./lib/access";
 import { businessContact, businessInScope, defaultBusiness } from "./lib/business";
 import { businessOf, postToInbox } from "./lib/inbox";
 import { label } from "./lib/bookingRows";
@@ -67,7 +67,7 @@ function hist(r: Doc<"footageStorage">, text: string, at = Date.now()) {
 export const settings = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     return { ...(await settingsFor(ctx, businessInScope(ctx))), keepDayChoices: KEEP_DAYS };
   },
 });
@@ -75,7 +75,7 @@ export const settings = query({
 export const saveSettings = mutation({
   args: { on: v.boolean(), priceCents: v.number(), keepDays: v.number() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     const biz = businessInScope(ctx);
     if (!biz) throw new ConvexError("Not allowed.");
     const priceCents = Math.round(a.priceCents);
@@ -226,7 +226,7 @@ async function ownedRow(ctx: Ctx, projectId: string) {
 export const forProject = query({
   args: { projectId: v.string() },
   handler: async (ctx, { projectId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     const id = ctx.db.normalizeId("projects", projectId);
     const p = id ? await ctx.db.get(id) : null;
     if (!p) return null;
@@ -255,7 +255,7 @@ export const forProject = query({
 export const recordDrive = mutation({
   args: { projectId: v.string() },
   handler: async (ctx, { projectId }) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "payments");
     const { r } = await ownedRow(ctx, projectId);
     if (!r) throw new ConvexError("There's no raw footage offer on this project.");
     if (r.status === "drive") return null;
@@ -270,7 +270,7 @@ export const recordDrive = mutation({
 export const stop = mutation({
   args: { projectId: v.string() },
   handler: async (ctx, { projectId }) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "payments");
     const { r } = await ownedRow(ctx, projectId);
     if (!r) throw new ConvexError("There's no raw footage offer on this project.");
     if (r.status === "stopped") return null;
@@ -286,7 +286,7 @@ export const stop = mutation({
 export const markDone = mutation({
   args: { projectId: v.string() },
   handler: async (ctx, { projectId }) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "payments");
     const { r } = await ownedRow(ctx, projectId);
     if (!r) throw new ConvexError("There's no raw footage offer on this project.");
     if (r.status !== "ended" && r.status !== "drive" && r.status !== "stopped") throw new ConvexError("It's still being kept.");
@@ -311,7 +311,7 @@ async function latePaidAt(ctx: Ctx, late: NonNullable<Doc<"footageStorage">["lat
 export const reinstate = mutation({
   args: { projectId: v.string() },
   handler: async (ctx, { projectId }) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "payments");
     const { r } = await ownedRow(ctx, projectId);
     if (!r?.latePaid) throw new ConvexError("There's no late payment to act on.");
     if (r.doneAt) throw new ConvexError("You marked the footage as deleted or moved, so it can't be kept. Refund the payment in Stripe instead.");
@@ -338,7 +338,7 @@ export const reinstate = mutation({
 export const dismissLatePaid = mutation({
   args: { projectId: v.string(), close: v.optional(v.boolean()) },
   handler: async (ctx, { projectId, close }) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "payments");
     const { r } = await ownedRow(ctx, projectId);
     if (close) {
       const c = r?.lateChoice;

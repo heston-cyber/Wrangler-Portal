@@ -10,7 +10,7 @@ import { expectedForProject } from "./lib/bookingRows";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { ActionCtx, MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll, seesValue } from "./lib/access";
 import { businessInScope, defaultBusiness } from "./lib/business";
 import { EMPTY_RATES, WRANGLER_RATES, estimate, primaryKind, ratesProblems, type EstimateInput, type Rates } from "./lib/estimate";
 import { applyArgs } from "./wsMcp";
@@ -30,7 +30,10 @@ const todayIso = () => {
 };
 
 async function ownerBiz(ctx: QueryCtx | MutationCtx) {
-  const me = await requireMe(ctx);
+  // Phase 5e: the pipeline, estimates and the job ledger are what a job is worth, so a team member needs both
+  // Clients and leads and "See what a project is worth" (the owner and, if Heston turns Clients on for them, the Bookkeeper).
+  const me = await requireAll(ctx, "clients");
+  if (!seesValue(me)) throw new ConvexError("Not allowed.");
   const id = businessInScope(ctx);
   const b = id ? await ctx.db.get(id) : null;
   if (!b) throw new ConvexError("Not allowed.");

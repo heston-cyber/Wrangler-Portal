@@ -1,3 +1,4 @@
+import { requireAll } from "./lib/access";
 // Phase 2 Part B, step 4: reminders and the after-payment emails.
 //   - Reminders (D51): "Send reminder" on an invoice always works. Automatic reminders are a business setting, off
 //     until the owner turns them on (turning them on is their OK for those emails, rule 3): one before the due date,
@@ -56,7 +57,6 @@ function ownBusiness(ctx: unknown): Id<"businesses"> {
   if (!id) throw new ConvexError("Not allowed.");
   return id;
 }
-const isOwner = (ctx: unknown) => !!(ctx as { scope?: { isOwner: boolean } }).scope?.isOwner;
 
 // ---------- the setting ----------
 
@@ -65,7 +65,7 @@ const clampInt = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi
 export const setReminders = mutation({
   args: { on: v.boolean(), beforeDays: v.number(), afterDays: v.number(), everyDays: v.number(), stopAfter: v.number() },
   handler: async (ctx, a) => {
-    if (!isOwner(ctx)) throw new ConvexError("Not allowed.");
+    await requireAll(ctx, "payments"); // Phase 5e: the owner, or Payments on
     const id = ownBusiness(ctx);
     await ctx.db.patch(id, { reminders: { on: a.on, beforeDays: clampInt(a.beforeDays, 0, 30), afterDays: clampInt(a.afterDays, 0, 30), everyDays: clampInt(a.everyDays, 1, 60), stopAfter: clampInt(a.stopAfter, 1, 12) }, updatedAt: Date.now() });
     return null;
@@ -85,7 +85,7 @@ async function logReminder(ctx: MutationCtx, i: Doc<"invoices">, kind: "before" 
 export const sendReminder = mutation({
   args: { invoiceId: v.id("invoices") },
   handler: async (ctx, { invoiceId }) => {
-    if (!isOwner(ctx)) throw new ConvexError("Not allowed.");
+    await requireAll(ctx, "payments"); // Phase 5e: the owner, or Payments on
     const i = await ctx.db.get(invoiceId);
     if (!i || i.status === "draft" || i.status === "sending") throw new ConvexError("Send the invoice first.");
     if (i.status !== "open" || i.amountRemainingCents <= 0) throw new ConvexError("There's nothing left to pay on this invoice.");

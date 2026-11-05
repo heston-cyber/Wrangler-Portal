@@ -10,7 +10,7 @@ import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll } from "./lib/access";
 import { businessContact, businessInScope } from "./lib/business";
 import { invoicePrefix } from "./lib/invoiceNumber";
 import { randomToken } from "./lib/hash";
@@ -49,7 +49,7 @@ export function displayStatus(q: Doc<"quotes">, today = todayIso()): QuoteStatus
 }
 
 async function ownerBiz(ctx: QueryCtx | MutationCtx) {
-  const me = await requireMe(ctx);
+  const me = await requireAll(ctx, "payments");
   const id = businessInScope(ctx);
   const b = id ? await ctx.db.get(id) : null;
   if (!b) throw new ConvexError("Not allowed.");

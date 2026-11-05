@@ -10,7 +10,7 @@ import { internal } from "./_generated/api";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll } from "./lib/access";
 import { appendEvent, eventsOf, verifyChain } from "./lib/wsAudit";
 import { approvalProblems, docLabel, lockText, OWNER_KEY, shapeProblems, type LayoutBox, type LayoutSigner } from "./lib/wsLayout";
 import { inspect, sha256Bytes, stamp, type Stamp } from "./lib/wsPdf";
@@ -68,7 +68,7 @@ function withOwner(signers: LayoutSigner[], sig: Doc<"wsOwnerSignatures"> | null
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const docs = await ctx.db.query("wsDocuments").withIndex("by_updated").order("desc").take(500);
     return Promise.all(docs.map(async (d) => {
       const ver = await currentVersion(ctx, d);
@@ -86,7 +86,7 @@ export const list = query({
 
 export const get = query({
   args: { documentId: v.id("wsDocuments"), versionNumber: v.optional(v.number()) },
-  handler: async (ctx, a) => { await requireMe(ctx); return getCore(ctx, a.documentId, a.versionNumber); },
+  handler: async (ctx, a) => { await requireAll(ctx, "docs"); return getCore(ctx, a.documentId, a.versionNumber); },
 });
 
 // S4: the same, for the Claude connector.
@@ -138,7 +138,7 @@ export const ownerSignature = query({
 
 export const uploadUrl = mutation({
   args: {},
-  handler: async (ctx) => { await requireMe(ctx); return ctx.storage.generateUploadUrl(); },
+  handler: async (ctx) => { await requireAll(ctx, "docs"); return ctx.storage.generateUploadUrl(); },
 });
 
 async function readPdf(ctx: { storage: { get: (id: Id<"_storage">) => Promise<Blob | null>; delete: (id: Id<"_storage">) => Promise<void> } }, storageId: Id<"_storage">) {
@@ -161,7 +161,7 @@ const titleFromFile = (f: string) => f.replace(/\.pdf$/i, "").replace(/[_]+/g, "
 export const create = action({
   args: { storageId: v.id("_storage"), fileName: v.string(), title: v.optional(v.string()) },
   handler: async (ctx, { storageId, fileName, title }): Promise<{ documentId: Id<"wsDocuments">; label: string }> => {
-    await ctx.runQuery(internal.users.assertAllowed, {});
+    await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs"] });
     const pdf = await readPdf(ctx, storageId);
     return ctx.runMutation(internal.sign.insertDocument, {
       storageId, fileName: fileName.slice(0, 200), title: (title?.trim() || titleFromFile(fileName)).slice(0, 120),
@@ -206,7 +206,7 @@ export const saveLayout = mutation({
     versionId: v.id("wsVersions"), title: v.string(), signers: v.array(signerV), boxes: v.array(boxV),
     signingOrder: v.union(v.literal("any"), v.literal("sequence")), payment: paymentV, hasTextLayer: v.optional(v.boolean()),
   },
-  handler: async (ctx, a) => { await requireMe(ctx); return saveLayoutCore(ctx, a); },
+  handler: async (ctx, a) => { await requireAll(ctx, "docs"); return saveLayoutCore(ctx, a); },
 });
 
 // S4: the same, for the Claude connector.
@@ -261,7 +261,7 @@ async function approveCore(ctx: MutationCtx, versionId: Id<"wsVersions">, actor:
 export const revise = mutation({
   args: { documentId: v.id("wsDocuments") },
   handler: async (ctx, { documentId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const doc = await ctx.db.get(documentId);
     if (!doc) throw new ConvexError("That document doesn't exist.");
     if (doc.status !== "approved" && doc.status !== "voided") throw new ConvexError(doc.status === "draft" ? "This draft can be edited as it is." : doc.status === "sent" ? "Cancel (void) it first; then make the changes as a new version and send that." : "A signed document can't be changed.");
@@ -282,7 +282,7 @@ export const revise = mutation({
 export const replaceFile = action({
   args: { documentId: v.id("wsDocuments"), storageId: v.id("_storage"), fileName: v.string() },
   handler: async (ctx, { documentId, storageId, fileName }): Promise<{ versionNumber: number }> => {
-    await ctx.runQuery(internal.users.assertAllowed, { ids: [documentId] });
+    await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs"], ids: [documentId] });
     const pdf = await readPdf(ctx, storageId);
     return ctx.runMutation(internal.sign.insertReplacement, { documentId, storageId, fileName: fileName.slice(0, 200), sha: pdf.sha, bytes: pdf.bytes.length, pages: pdf.pages });
   },
@@ -342,7 +342,7 @@ export const insertReplacement = internalMutation({
 export const setHidden = mutation({
   args: { documentId: v.id("wsDocuments"), hidden: v.boolean() },
   handler: async (ctx, { documentId, hidden }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const doc = await ctx.db.get(documentId);
     if (!doc) throw new ConvexError("That document doesn't exist.");
     if (!!doc.hiddenAt === hidden) return null;
@@ -565,7 +565,7 @@ export const currentVersionId = internalQuery({
 export const preview = action({
   args: { versionId: v.id("wsVersions") },
   handler: async (ctx, { versionId }): Promise<{ url: string; fileName: string }> => {
-    await ctx.runQuery(internal.users.assertAllowed, { ids: [versionId] });
+    await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs"], ids: [versionId] });
     return buildPreview(ctx, versionId);
   },
 });
@@ -683,7 +683,7 @@ async function pendingOf(ctx: QueryCtx, documentId: Id<"wsDocuments">) {
 export const requestsFor = query({
   args: { documentId: v.id("wsDocuments") },
   handler: async (ctx, { documentId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     return (await pendingOf(ctx, documentId)).map((r) => ({ _id: r._id, what: r.what, versionNumber: r.versionNumber, expiresInDays: r.expiresInDays ?? null, reason: r.reason ?? null, said: r.said, createdAt: r.createdAt }));
   },
 });
@@ -691,7 +691,7 @@ export const requestsFor = query({
 export const pendingRequests = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const now = Date.now();
     const rows = (await ctx.db.query("wsRequests").withIndex("by_status", (q) => q.eq("status", "pending")).order("desc").take(50)).filter((r) => now - r.createdAt < REQUEST_TTL);
     const out = [];

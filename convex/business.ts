@@ -2,7 +2,7 @@
 // Its output is counts only (the repo and its CI logs are public).
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
-import { requireMe, requireSignedIn } from "./lib/access";
+import { requireMe, requireSignedIn, requireAll, viewerOf } from "./lib/access";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { businessContact, businessInScope, defaultBusiness, ensureDefaultBusiness, ensureMembership, syncClientMemberships } from "./lib/business";
@@ -98,7 +98,7 @@ async function settingsOf(ctx: QueryCtx, b: Doc<"businesses">) {
 export const settings = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "settings");
     const b = await ctx.db.get(ownBusiness(ctx));
     if (!b) throw new ConvexError("Not allowed.");
     return await settingsOf(ctx, b);
@@ -117,7 +117,7 @@ export const updateSettings = mutation({
     watermark: v.optional(v.object({ corner: v.union(v.literal("tl"), v.literal("tr"), v.literal("bl"), v.literal("br"), v.literal("c")), size: v.union(v.literal("small"), v.literal("large")), opacity: v.number(), mark: v.optional(v.union(v.literal("logo"), v.literal("text"), v.literal("both"))), text: v.optional(v.string()) })),
   },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "settings");
     const id = ownBusiness(ctx);
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
     const text = (k: string, val: string | null | undefined, max: number, required = false) => {
@@ -164,14 +164,14 @@ export const updateSettings = mutation({
 
 export const logoUploadUrl = mutation({
   args: {},
-  handler: async (ctx) => { await requireMe(ctx); ownBusiness(ctx); return await ctx.storage.generateUploadUrl(); },
+  handler: async (ctx) => { await requireAll(ctx, "settings"); ownBusiness(ctx); return await ctx.storage.generateUploadUrl(); },
 });
 
 /** The logo for dark backgrounds (the portal), or with which: "light", the one for light backgrounds (emails, PDFs). */
 export const setLogo = mutation({
   args: { storageId: v.union(v.id("_storage"), v.null()), which: v.optional(v.union(v.literal("dark"), v.literal("light"))) },
   handler: async (ctx, { storageId, which }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "settings");
     const id = ownBusiness(ctx);
     const b = await ctx.db.get(id);
     if (!b) throw new ConvexError("Not allowed.");
@@ -193,9 +193,9 @@ export const setLogo = mutation({
 export const brand = query({
   args: {},
   handler: async (ctx) => {
-    await requireSignedIn(ctx);
-    const scope = (ctx as { scope?: { isOwner: boolean; owner: Id<"businesses"> | null; members: Set<string> } }).scope;
-    const ids = scope?.isOwner ? [scope.owner] : [...(scope?.members ?? [])];
+    if ((await viewerOf(ctx)).kind !== "team") await requireSignedIn(ctx); // Phase 5e: a team member too
+    const scope = (ctx as { scope?: { isOwner: boolean; isTeam?: boolean; owner: Id<"businesses"> | null; members: Set<string> } }).scope;
+    const ids = scope?.isOwner || scope?.isTeam ? [scope.owner] : [...(scope?.members ?? [])]; // Phase 5e: a team member wears their business's look
     const out = [];
     for (const id of ids) {
       const b = id ? await ctx.db.get(id as Id<"businesses">) : null;

@@ -16,7 +16,7 @@ import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll } from "./lib/access";
 import { bump, bumpDay } from "./lib/rate";
 import { randomToken, sha256Hex } from "./lib/hash";
 import { SITE } from "./lib/site";
@@ -649,7 +649,7 @@ export const mail = internalAction({
 export const settings = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "settings");
     const { row, conn, open, checkId } = await openState(ctx);
     const mine = (ctx as { scope?: Scope | null }).scope?.owner ?? null;
     const slug = (mine ? await ctx.db.get(mine) : null)?.slug ?? "";
@@ -665,7 +665,7 @@ export const settings = query({
 export const saveSettings = mutation({
   args: { lengthMin: v.number(), bufferMin: v.number(), aheadDays: v.number(), noticeHours: v.number(), hours: v.array(v.object({ on: v.boolean(), start: v.string(), end: v.string() })), calendarId: v.optional(v.string()) },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "settings");
     let p: CallPrefs;
     try { p = checkPrefs(a); } catch (e) { throw new ConvexError((e as Error).message); }
     const conn = await connection(ctx);
@@ -685,7 +685,7 @@ export const saveSettings = mutation({
 export const setPaused = mutation({
   args: { paused: v.boolean() },
   handler: async (ctx, { paused }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "settings");
     const row = await settingsRow(ctx);
     if (!row) throw new ConvexError("Save your booking settings first.");
     await ctx.db.patch(row._id, { paused, updatedAt: Date.now() });
@@ -696,7 +696,7 @@ export const setPaused = mutation({
 export const forDeal = query({
   args: { dealId: v.string() },
   handler: async (ctx, { dealId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const id = ctx.db.normalizeId("deals", dealId);
     if (!id) return [];
     const now = Date.now();
@@ -711,7 +711,7 @@ export const forDeal = query({
 export const done = mutation({
   args: { callId: v.id("calls") },
   handler: async (ctx, { callId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const c = await ctx.db.get(callId);
     if (!c?.notice || c.notice.doneAt) return;
     await ctx.db.patch(c._id, { notice: { ...c.notice, doneAt: Date.now() } });

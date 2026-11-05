@@ -13,7 +13,7 @@ import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { ActionCtx, MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe, requireSignedIn } from "./lib/access";
+import { requireMe, requireSignedIn, requireAll } from "./lib/access";
 import { businessOf, postToInbox } from "./lib/inbox";
 import { myProjects, portalPeople } from "./projects";
 import { label } from "./lib/bookingRows";
@@ -62,7 +62,7 @@ const view = (r: Doc<"fileRequests">) => ({
 export const forProject = query({
   args: { projectId: v.string() },
   handler: async (ctx, { projectId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "projects");
     const id = ctx.db.normalizeId("projects", projectId);
     const p = id ? await ctx.db.get(id) : null;
     if (!p) return null;
@@ -76,7 +76,7 @@ export const forProject = query({
 export const create = mutation({
   args: { projectId: v.string(), title: v.string(), details: v.optional(v.string()), due: v.string(), folderName: v.optional(v.string()), remind: v.boolean() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "projects");
     const p = await ownedProject(ctx, a.projectId);
     const title = tidy(a.title, 120);
     if (!title) throw new ConvexError("Say what you need.");
@@ -107,7 +107,7 @@ export const create = mutation({
 export const setStatus = mutation({
   args: { requestId: v.id("fileRequests"), status: v.union(v.literal("open"), v.literal("closed"), v.literal("cancelled")) },
   handler: async (ctx, { requestId, status }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "projects");
     const r = await ctx.db.get(requestId);
     if (!r) throw new ConvexError("That request isn't here any more.");
     if (r.status === "cancelled") throw new ConvexError("That request was cancelled.");

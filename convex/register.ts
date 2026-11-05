@@ -5,7 +5,7 @@ import { internalMutation, internalQuery, mutation, query } from "./lib/function
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll } from "./lib/access";
 import type { Id } from "./_generated/dataModel";
 import { highestVersion, insertVideo, nextFileName, pad5, shortTitleError, shortTitleFrom, takeNumber, videoByNumber } from "./lib/register";
 import { pickProject, splitJob } from "./lib/dropboxPath";
@@ -54,7 +54,7 @@ async function rows(ctx: QueryCtx): Promise<{ rows: Row[]; unnumbered: number }>
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "review");
     return await rows(ctx);
   },
 });
@@ -63,7 +63,7 @@ export const list = query({
 export const nextName = query({
   args: { videoId: v.id("videos") },
   handler: async (ctx, { videoId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "review");
     const vid = await ctx.db.get(videoId);
     if (!vid?.number) return null;
     return { number: pad5(vid.number), shortTitle: vid.shortTitle ?? "", fileName: nextFileName(vid, await highestVersion(ctx, videoId)) };
@@ -111,7 +111,7 @@ const regArgs = {
 export const newVideo = mutation({
   args: regArgs,
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "review");
     return await register(ctx, a);
   },
 });
@@ -123,7 +123,7 @@ export const newVideoInternal = internalMutation({ args: regArgs, handler: async
 export const setShortTitle = mutation({
   args: { videoId: v.id("videos"), shortTitle: v.string() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "review");
     const s = a.shortTitle.trim();
     const bad = shortTitleError(s);
     if (bad) throw new ConvexError(bad);
@@ -167,7 +167,7 @@ export const numberExisting = internalMutation({
 export const addToRegister = mutation({
   args: { videoId: v.id("videos"), number: v.optional(v.number()), shortTitle: v.string() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "review");
     return await numberVideo(ctx, a);
   },
 });

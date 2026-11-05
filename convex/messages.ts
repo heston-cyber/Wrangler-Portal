@@ -14,7 +14,7 @@ import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe, requireSignedIn, viewerOf } from "./lib/access";
+import { requireMe, requireSignedIn, viewerOf, requireAll } from "./lib/access";
 import { bump } from "./lib/rate";
 import { randomToken } from "./lib/hash";
 import { SITE } from "./lib/site";
@@ -42,7 +42,7 @@ const fileArg = v.array(v.object({ storageId: v.id("_storage"), name: v.string()
 // ---------- who may see a thread ----------
 
 async function ownerThread(ctx: Ctx, threadId: string) {
-  const me = await requireMe(ctx);
+  const me = await requireAll(ctx, "clients"); // Phase 5e: the owner, or a team member with Clients and leads on
   const id = ctx.db.normalizeId("msgThreads", threadId);
   const t = id ? await ctx.db.get(id) : null;
   return { me, t };
@@ -120,7 +120,7 @@ async function threadHead(ctx: Ctx, t: Doc<"msgThreads">) {
 export const threads = query({
   args: { q: v.optional(v.string()) },
   handler: async (ctx, { q }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     // Review M4: bounded: the newest 150 conversations, and the newest 200 messages of each when searching.
     const words = (q ?? "").toLowerCase().split(/\s+/).filter((w) => w.length >= 2).slice(0, 6);
     const out = [];
@@ -394,7 +394,7 @@ export async function threadForDeal(ctx: MutationCtx, d: Doc<"deals">) {
 export const startOptions = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const projects = [];
     for (const p of await ctx.db.query("projects").order("desc").take(200)) {
       const people = await portalPeople(ctx, p);
@@ -408,7 +408,7 @@ export const startOptions = query({
 export const start = mutation({
   args: { projectId: v.optional(v.id("projects")), dealId: v.optional(v.id("deals")) },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     if (a.projectId) {
       const p = await ctx.db.get(a.projectId);
       if (!p) throw new ConvexError("That project isn't here any more.");

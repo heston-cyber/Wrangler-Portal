@@ -5,7 +5,7 @@ import { query } from "./lib/functions";
 import type { Doc } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { projectClosed } from "./lib/guests";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll } from "./lib/access";
 import { todayCentral } from "./lib/bookings";
 import { label } from "./lib/bookingRows";
 import { roundsFor } from "./lib/rounds";
@@ -59,7 +59,7 @@ export async function liveEdits(ctx: QueryCtx, today: string) {
 export const overview = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "production");
     const today = todayCentral();
     const weekEnd = addDays(today, 6);
     const upcoming = (await scheduled(ctx)).filter((s) => s.date >= today);
@@ -96,7 +96,7 @@ export const overview = query({
 export const shoots = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "production");
     const today = todayCentral();
     const all = await scheduled(ctx);
     const upcoming = all.filter((s) => s.date >= today);
@@ -110,7 +110,7 @@ export const shoots = query({
 export const projectsForShoot = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "production");
     const out = [];
     for (const p of await ctx.db.query("projects").order("desc").take(300)) {
       if (projectClosed(p)) continue;

@@ -6,7 +6,7 @@ import { mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll } from "./lib/access";
 import { todayCentral } from "./lib/bookings";
 
 type Ctx = QueryCtx | MutationCtx;
@@ -57,7 +57,7 @@ async function photoOf(ctx: Ctx, g: Doc<"gear">) { return g.photoId ? await ctx.
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "production");
     const today = todayCentral();
     const all = await ctx.db.query("gear").collect();
     const items = [];
@@ -82,7 +82,7 @@ export const list = query({
 export const get = query({
   args: { gearId: v.string() },
   handler: async (ctx, { gearId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "production");
     const id = ctx.db.normalizeId("gear", gearId);
     const g = id ? await ctx.db.get(id) : null;
     if (!g) return null;
@@ -109,7 +109,7 @@ export const get = query({
 export const add = mutation({
   args: fields,
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "production");
     const now = Date.now();
     const f = cleanFields(a);
     const serial = tidy(a.serial, 80) || undefined;
@@ -121,7 +121,7 @@ export const add = mutation({
 export const update = mutation({
   args: { gearId: v.id("gear"), ...fields },
   handler: async (ctx, { gearId, ...a }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "production");
     const g = await owned(ctx, gearId);
     const f = cleanFields(a);
     const serial = tidy(a.serial, 80);
@@ -132,7 +132,7 @@ export const update = mutation({
 export const setStatus = mutation({
   args: { gearId: v.id("gear"), status: statusV },
   handler: async (ctx, { gearId, status }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "production");
     const g = await owned(ctx, gearId);
     await ctx.db.patch(g._id, { status, updatedAt: Date.now() });
   },
@@ -140,14 +140,14 @@ export const setStatus = mutation({
 
 export const uploadUrl = mutation({
   args: {},
-  handler: async (ctx) => { await requireMe(ctx); return await ctx.storage.generateUploadUrl(); },
+  handler: async (ctx) => { await requireAll(ctx, "production"); return await ctx.storage.generateUploadUrl(); },
 });
 
 /** After the browser uploads a photo: an image up to 10 MB. A refused file is deleted and the reason returned. */
 export const setPhoto = mutation({
   args: { gearId: v.id("gear"), storageId: v.id("_storage") },
   handler: async (ctx, { gearId, storageId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "production");
     const meta = await ctx.db.system.get(storageId);
     if (!meta) return "The photo didn't upload. Try again.";
     const g = await ctx.db.get(gearId);
@@ -164,7 +164,7 @@ export const setPhoto = mutation({
 export const removePhoto = mutation({
   args: { gearId: v.id("gear") },
   handler: async (ctx, { gearId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "production");
     const g = await owned(ctx, gearId);
     if (g.photoId) await ctx.storage.delete(g.photoId).catch(() => null);
     await ctx.db.patch(g._id, { photoId: undefined, updatedAt: Date.now() });
@@ -174,7 +174,7 @@ export const removePhoto = mutation({
 export const logMaintenance = mutation({
   args: { gearId: v.id("gear"), date: v.string(), what: v.string(), costCents: v.optional(v.number()), nextDue: v.optional(v.string()) },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "production");
     const g = await owned(ctx, a.gearId);
     if (!isDay(a.date)) throw new ConvexError("Pick the date it was done.");
     const what = tidy(a.what, 300);
@@ -199,7 +199,7 @@ const dollars = (c?: number) => (c === undefined ? "" : (c / 100).toFixed(2));
 export const exportCsv = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "production");
     const rows = (await ctx.db.query("gear").collect()).filter((g) => g.status !== "retired").sort((a, b) => a.name.localeCompare(b.name));
     const lines = [["Name", "Kind", "Serial", "Bought", "Price", "Insurance value"].join(",")];
     for (const g of rows) lines.push([cell(g.name), cell(g.kind), cell(g.serial), cell(g.boughtOn), cell(dollars(g.priceCents)), cell(dollars(g.insuredCents))].join(","));
@@ -222,7 +222,7 @@ async function ownedShoot(ctx: Ctx, shootId: string) {
 export const forShoot = query({
   args: { shootId: v.string() },
   handler: async (ctx, { shootId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "production");
     const id = ctx.db.normalizeId("shoots", shootId);
     const s = id ? await ctx.db.get(id) : null;
     if (!s) return null;
@@ -251,7 +251,7 @@ export const forShoot = query({
 export const addToShoot = mutation({
   args: { shootId: v.id("shoots"), gearId: v.id("gear") },
   handler: async (ctx, { shootId, gearId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "production");
     const s = await ownedShoot(ctx, shootId);
     const g = await owned(ctx, gearId);
     if (s.status !== "scheduled") throw new ConvexError("That shoot is cancelled.");
@@ -265,7 +265,7 @@ export const addToShoot = mutation({
 export const removeFromShoot = mutation({
   args: { shootId: v.id("shoots"), gearId: v.id("gear") },
   handler: async (ctx, { shootId, gearId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "production");
     const s = await ownedShoot(ctx, shootId);
     const g = await owned(ctx, gearId);
     for (const b of await ctx.db.query("gearBookings").withIndex("by_shoot", (q) => q.eq("shootId", s._id)).collect()) if (b.gearId === g._id) await ctx.db.delete(b._id);

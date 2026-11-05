@@ -7,7 +7,7 @@ import { internalAction, internalMutation, internalQuery, mutation, query } from
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import { SITE, siteHost } from "./lib/site";
 import { invoicePrefix } from "./lib/invoiceNumber";
@@ -25,7 +25,7 @@ function ownBusiness(ctx: unknown): Id<"businesses"> {
 export const settings = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     const b = await ctx.db.get(ownBusiness(ctx));
     if (!b) return null;
     const s = b.stripe;

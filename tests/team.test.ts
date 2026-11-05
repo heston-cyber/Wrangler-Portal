@@ -235,4 +235,33 @@ describe("Phase 5e · team members", () => {
     await expect(ed.as.query(api.library.video, { videoId: ids.mine.videoId })).rejects.toThrow(/Not allowed/);
     await expect(ed.as.query(api.library.overview, {})).rejects.toThrow(/Not allowed/);
   }, 30_000);
+
+  test("T5e.7 money: a Producer sees no invoices, pipeline or Stripe; a Bookkeeper sees Payments but not shoots, Review or clients", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const pr = await join(w, mails, RILEY, "producer");
+    await expect(pr.as.query(api.invoices.list, {})).rejects.toThrow(/Not allowed/);
+    await expect(pr.as.query(api.invoices.forProject, { projectId: w.p })).rejects.toThrow(/Not allowed/);
+    await expect(pr.as.query(api.crm.board, {})).rejects.toThrow(/Not allowed/); // the pipeline is what jobs are worth
+    await expect(pr.as.query(api.payments.settings, {})).rejects.toThrow(/Not allowed/);
+    await expect(pr.as.mutation(api.payments.disconnect, {})).rejects.toThrow(/Not allowed/);
+    expect(await pr.as.query(api.projects.page, { projectId: w.p })).toMatchObject({ name: "Launch" });
+    // Even with Clients on, the pipeline needs "See what a project is worth", which a Producer can't have.
+    const bk = await join(w, mails, "bea@books.example", "bookkeeper");
+    expect(Array.isArray(await bk.as.query(api.invoices.list, {}))).toBe(true);
+    await expect(bk.as.query(api.crm.board, {})).rejects.toThrow(/Not allowed/); // Clients is off for a Bookkeeper
+    await expect(bk.as.query(api.projects.page, { projectId: w.p })).rejects.toThrow(/Not allowed/);
+    await expect(bk.as.query(api.library.overview, {})).rejects.toThrow(/Not allowed/);
+    await expect(bk.as.query(api.clients.directory, {})).rejects.toThrow(/Not allowed/);
+    const bkm = (await w.heston.query(api.team.page, {})).members.find((m: { email: string }) => m.email === "bea@books.example").membershipId;
+    await w.heston.mutation(api.team.setPerm, { membershipId: bkm, perm: "clients", on: true });
+    expect(await bk.as.query(api.crm.board, {})).toBeTruthy();
+    // Signing as Heston, sending and voiding stay the owner's whatever the switches say.
+    const all = (await w.heston.query(api.team.page, {})).members.find((m: { email: string }) => m.email === RILEY).membershipId;
+    for (const p of ["docs", "settings", "payments"]) await w.heston.mutation(api.team.setPerm, { membershipId: all, perm: p, on: true });
+    await expect(pr.as.query(api.sign.ownerSignature, {})).rejects.toThrow(/Not allowed/);
+    await expect(pr.as.action(api.payments.connect, {})).rejects.toThrow(/Not allowed/);
+    await expect(pr.as.query(api.team.page, {})).rejects.toThrow(/Not allowed/);
+  }, 30_000);
 });

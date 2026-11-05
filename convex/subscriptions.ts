@@ -10,7 +10,7 @@
 // Stripe makes an invoice each period and charges it; the portal mirrors each one into Payments › Invoices (kind
 // "subscription"), so receipts (email 11, D66) and the invoice page work as for any invoice. The subscription's own
 // state is read back from Stripe after each of its events (never trusting an old payload).
-import { viewerOf } from "./lib/access";
+import { viewerOf, requireAll } from "./lib/access";
 import { action } from "./_generated/server";
 import { internalAction, internalMutation, internalQuery, query, focusBusiness } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
@@ -89,7 +89,7 @@ export function nextCharge(s: Doc<"subscriptions">, now = Date.now()): number | 
 export const startTarget = internalQuery({
   args: { clientId: v.id("clients"), planId: v.id("plans"), projectId: v.optional(v.id("projects")), email: v.string() },
   handler: async (ctx, { clientId, planId, projectId, email }) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "payments");
     const bizId = businessInScope(ctx);
     const b = bizId ? await ctx.db.get(bizId) : null;
     if (!b) throw new ConvexError("Not allowed.");
@@ -242,7 +242,7 @@ function ownerRow(s: Doc<"subscriptions">, client: string | null, now = Date.now
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     const subs = await ctx.db.query("subscriptions").collect();
     const names = new Map<string, string>();
     for (const s of subs) if (s.clientId && !names.has(s.clientId)) names.set(s.clientId, (await ctx.db.get(s.clientId))?.name ?? "");
@@ -262,7 +262,7 @@ export const list = query({
 export const get = query({
   args: { subscriptionId: v.string() },
   handler: async (ctx, { subscriptionId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     const id = ctx.db.normalizeId("subscriptions", subscriptionId);
     const s = id ? await ctx.db.get(id) : null;
     if (!s) return null;
@@ -630,7 +630,7 @@ export const importInvoice = internalAction({
 export const changeTarget = internalQuery({
   args: { subscriptionId: v.id("subscriptions"), planId: v.optional(v.id("plans")) },
   handler: async (ctx, { subscriptionId, planId }) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "payments");
     const s = await ctx.db.get(subscriptionId);
     if (!s || !s.stripe) throw new ConvexError("That subscription isn't here.");
     const b = s.businessId ? await ctx.db.get(s.businessId) : null;
@@ -782,7 +782,7 @@ export const sendCancelled = internalAction({
 export const setFailRule = mutation({
   args: { rule: v.union(v.literal("past_due"), v.literal("cancel")) },
   handler: async (ctx, { rule }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     const id = businessInScope(ctx);
     if (!id) throw new ConvexError("Not allowed.");
     await ctx.db.patch(id, { subFailRule: rule });
@@ -794,7 +794,7 @@ export const setFailRule = mutation({
 export const setClientFailRule = mutation({
   args: { clientId: v.id("clients"), rule: v.union(v.literal("business"), v.literal("past_due"), v.literal("cancel")) },
   handler: async (ctx, { clientId, rule }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     const c = await ctx.db.get(clientId);
     if (!c) throw new ConvexError("That client isn't here.");
     await ctx.db.patch(clientId, { subFailRule: rule === "business" ? undefined : rule });
@@ -805,7 +805,7 @@ export const setClientFailRule = mutation({
 export const failRules = query({
   args: { clientId: v.optional(v.id("clients")) },
   handler: async (ctx, { clientId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     const id = businessInScope(ctx);
     const b = id ? await ctx.db.get(id) : null;
     const c = clientId ? await ctx.db.get(clientId) : null;

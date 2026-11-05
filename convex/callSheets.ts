@@ -16,7 +16,7 @@ import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe, requireSignedIn } from "./lib/access";
+import { requireMe, requireSignedIn, requireAll } from "./lib/access";
 import { businessOf, postToInbox } from "./lib/inbox";
 import { myProjects, portalPeople } from "./projects";
 import { label } from "./lib/bookingRows";
@@ -167,7 +167,7 @@ async function makeBuild(ctx: MutationCtx, cs: { shootId: Id<"shoots"> }, sh: No
 export const ensureStarters = mutation({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "shoots");
     if (await ctx.db.query("counters").withIndex("by_key", (q) => q.eq("key", "callSheetStarters")).first()) return { added: 0 };
     await ctx.db.insert("counters", { key: "callSheetStarters", value: 1 });
     const style = await defaultStyle(ctx);
@@ -200,7 +200,7 @@ export async function sheetRow(ctx: QueryCtx, cs: Sheet): Promise<Row | null> {
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "shoots");
     const today = todayCentral();
     const rows: Row[] = [];
     for (const cs of await ctx.db.query("callSheets").collect()) { const r = await sheetRow(ctx, cs); if (r) rows.push(r); }
@@ -214,7 +214,7 @@ export const list = query({
 export const newOptions = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "shoots");
     const today = todayCentral();
     const taken = new Set((await ctx.db.query("callSheets").collect()).map((c) => String(c.shootId)));
     const shoots = [];
@@ -230,7 +230,7 @@ export const newOptions = query({
 export const get = query({
   args: { callSheetId: v.string() },
   handler: async (ctx, { callSheetId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "shoots");
     const id = ctx.db.normalizeId("callSheets", callSheetId);
     const cs = id ? await ctx.db.get(id) : null;
     if (!cs) return null;
@@ -277,7 +277,7 @@ async function sheetFor(ctx: Ctx, callSheetId: Id<"callSheets">) {
 export const create = mutation({
   args: { shootId: v.id("shoots"), how: v.union(v.literal("questions"), v.literal("template"), v.literal("blank")), templateId: v.optional(v.id("wsTemplates")) },
   handler: async (ctx, a) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "shoots");
     const sh = await shootOf(ctx, a.shootId);
     if (!sh || sh.s.status !== "scheduled") throw new ConvexError("That shoot isn't here any more.");
     const had = await ctx.db.query("callSheets").withIndex("by_shoot", (q) => q.eq("shootId", a.shootId)).first();
@@ -316,7 +316,7 @@ function cleanAnswers(a: Answers): Answers {
 export const saveAnswers = mutation({
   args: { callSheetId: v.id("callSheets"), answers: answersArg, step: v.number() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "shoots");
     const { cs } = await sheetFor(ctx, a.callSheetId);
     if (cs.buildId) throw new ConvexError("This call sheet is already made. Change it in the editor.");
     const ans = cleanAnswers(a.answers as Answers);
@@ -330,7 +330,7 @@ export const saveAnswers = mutation({
 export const make = mutation({
   args: { callSheetId: v.id("callSheets") },
   handler: async (ctx, { callSheetId }) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "shoots");
     const { cs, sh } = await sheetFor(ctx, callSheetId);
     if (cs.buildId) return cs.buildId;
     const a = cs.answers as Answers | undefined;
@@ -347,7 +347,7 @@ export const make = mutation({
 export const toggle = mutation({
   args: { callSheetId: v.id("callSheets"), id: v.string(), on: v.boolean() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "shoots");
     const { cs, sh } = await sheetFor(ctx, a.callSheetId);
     const people = await peopleOf(ctx, cs, sh.s, sh.p);
     const x = people.find((r) => r.id === a.id);
@@ -369,7 +369,7 @@ export const toggle = mutation({
 export const addGuest = mutation({
   args: { callSheetId: v.id("callSheets"), name: v.string(), email: v.string(), role: v.string() },
   handler: async (ctx, a) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "shoots");
     const { cs } = await sheetFor(ctx, a.callSheetId);
     const name = tidy(a.name, 120), email = a.email.trim().toLowerCase(), role = tidy(a.role, 60) || "Talent";
     if (!name) throw new ConvexError("Enter their name.");
@@ -388,7 +388,7 @@ export const addGuest = mutation({
 export const removeGuest = mutation({
   args: { callSheetId: v.id("callSheets"), id: v.string() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "shoots");
     const { cs } = await sheetFor(ctx, a.callSheetId);
     if (!cs.recipients.some((r) => r.id === a.id && r.kind === "guest")) throw new ConvexError("That guest isn't on this call sheet.");
     await ctx.db.patch(cs._id, { recipients: cs.recipients.filter((r) => r.id !== a.id), updatedAt: Date.now() });
@@ -401,7 +401,7 @@ export const removeGuest = mutation({
 export const endGuest = mutation({
   args: { callSheetId: v.id("callSheets"), id: v.string() },
   handler: async (ctx, a) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "shoots");
     const { cs } = await sheetFor(ctx, a.callSheetId);
     const g = cs.recipients.find((r) => r.id === a.id && r.kind === "guest");
     if (!g) throw new ConvexError("That guest isn't on this call sheet.");
@@ -420,7 +420,7 @@ export const endGuest = mutation({
 export const restoreGuest = mutation({
   args: { callSheetId: v.id("callSheets"), id: v.string() },
   handler: async (ctx, a) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "shoots");
     const { cs } = await sheetFor(ctx, a.callSheetId);
     const g = cs.recipients.find((r) => r.id === a.id && r.kind === "guest");
     if (!g) throw new ConvexError("That guest isn't on this call sheet.");
@@ -440,7 +440,7 @@ export const restoreGuest = mutation({
 export const deleteDraft = mutation({
   args: { callSheetId: v.id("callSheets") },
   handler: async (ctx, { callSheetId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "shoots");
     const cs = await ctx.db.get(callSheetId);
     if (!cs) return null;
     if (cs.status !== "draft") throw new ConvexError("A sent call sheet stays, so you can see who opened it.");
@@ -496,7 +496,7 @@ async function tellClients(ctx: MutationCtx, cs: Sheet, p: Doc<"projects">, out:
 export const send = mutation({
   args: { callSheetId: v.id("callSheets"), crew: v.boolean(), client: v.boolean(), guests: v.optional(v.boolean()), message: v.optional(v.string()) },
   handler: async (ctx, a) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "shoots");
     const { cs, sh } = await sheetFor(ctx, a.callSheetId);
     if (cs.status === "sent") throw new ConvexError("It's already been sent. Use Send an update.");
     const { build, doc } = await frozenCopy(ctx, cs, sh.s);
@@ -528,7 +528,7 @@ export const sendUpdate = mutation({
   // Nov 4 (856:92031): each group can be left out of the email; everyone still reads the new copy. Left out = false.
   args: { callSheetId: v.id("callSheets"), changed: v.string(), message: v.optional(v.string()), crew: v.optional(v.boolean()), client: v.optional(v.boolean()), guests: v.optional(v.boolean()) },
   handler: async (ctx, a) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "shoots");
     const { cs, sh } = await sheetFor(ctx, a.callSheetId);
     if (cs.status !== "sent" || !cs.sent) throw new ConvexError("Send it first.");
     const { build, doc } = await frozenCopy(ctx, cs, sh.s);
@@ -565,7 +565,7 @@ export const remind = mutation({
   // Nov 4 (856:92097): Remind everyone asks first, and each group can be left out (left out = false).
   args: { callSheetId: v.id("callSheets"), id: v.optional(v.string()), crew: v.optional(v.boolean()), client: v.optional(v.boolean()), guests: v.optional(v.boolean()) },
   handler: async (ctx, a) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "shoots");
     const { cs, sh } = await sheetFor(ctx, a.callSheetId);
     if (cs.status !== "sent" || !cs.sent) throw new ConvexError("Send it first.");
     const now = Date.now();
@@ -867,7 +867,7 @@ export const weatherAll = internalAction({
 export const refreshWeather = mutation({
   args: { callSheetId: v.id("callSheets") },
   handler: async (ctx, { callSheetId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "shoots");
     const { cs, sh } = await sheetFor(ctx, callSheetId);
     if (!cs.buildId) throw new ConvexError("Make the call sheet first.");
     const days = daysBetween(todayCentral(), sh.s.date);

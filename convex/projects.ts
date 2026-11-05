@@ -10,7 +10,7 @@ import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe, requireSignedIn } from "./lib/access";
+import { requireAll, requireFor, requireMe, requireProject, requireSignedIn } from "./lib/access";
 import { clampRounds, roundOf, roundsFor } from "./lib/rounds";
 import { postToInbox, businessOf, hasAccess } from "./lib/inbox";
 import { coveredProjects, coveredVideos, sameBusiness, shareState } from "./lib/shareAccess";
@@ -84,10 +84,11 @@ async function filesOf(ctx: QueryCtx | MutationCtx, projectId: Id<"projects">) {
 export const page = query({
   args: { projectId: v.string() },
   handler: async (ctx, { projectId }) => {
-    await requireMe(ctx);
+    const me = await requireMe(ctx, "projects");
     const id = ctx.db.normalizeId("projects", projectId);
     const p = id ? await ctx.db.get(id) : null;
     if (!p) return null;
+    await requireProject(ctx, me, p._id); // Phase 5e: an Editor's assigned projects only
     const client = p.clientId ? await ctx.db.get(p.clientId) : null;
     const r = await roundsFor(ctx, p);
     const videos = [];
@@ -123,7 +124,7 @@ export const page = query({
 export const setStage = mutation({
   args: { projectId: v.string(), stage: stageArg, post: v.boolean(), note: v.optional(v.string()) },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "projects"); // Phase 5e: not an Editor
     const p = await ownedProject(ctx, a.projectId);
     const now = Date.now();
     await ctx.db.patch(p._id, { stage: a.stage, updatedAt: now });
@@ -146,7 +147,7 @@ export const setStage = mutation({
 export const setNextStep = mutation({
   args: { projectId: v.string(), text: v.string() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "projects"); // Phase 5e: not an Editor
     const p = await ownedProject(ctx, a.projectId);
     const t = a.text.trim().replace(/\s+/g, " ");
     if (t.length > 200) throw new ConvexError("Keep the next step under 200 characters.");
@@ -158,7 +159,7 @@ export const setNextStep = mutation({
 export const setKeyDates = mutation({
   args: { projectId: v.string(), dates: v.array(v.object({ label: v.string(), date: v.string() })) },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "projects"); // Phase 5e: not an Editor
     const p = await ownedProject(ctx, a.projectId);
     if (a.dates.length > 12) throw new ConvexError("Up to 12 key dates.");
     const dates = [];
@@ -180,7 +181,7 @@ export const setKeyDates = mutation({
 export const setRounds = mutation({
   args: { projectId: v.string(), rounds: v.union(v.number(), v.null()) },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "projects"); // Phase 5e: not an Editor
     const p = await ownedProject(ctx, a.projectId);
     await ctx.db.patch(p._id, { rounds: a.rounds === null ? undefined : clampRounds(a.rounds), updatedAt: Date.now() });
     return null;
@@ -191,7 +192,7 @@ export const setRounds = mutation({
 export const nextRound = query({
   args: { videoId: v.id("videos") },
   handler: async (ctx, { videoId }) => {
-    await requireMe(ctx);
+    await requireFor(ctx, ["projects", "review"], videoId);
     const vid = await ctx.db.get(videoId);
     if (!vid) return null;
     const p = await ctx.db.get(vid.projectId);
@@ -214,7 +215,7 @@ export const addDeliveryFile = mutation({
     ),
   },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "projects");
     const p = await ownedProject(ctx, a.projectId);
     const existing = await ctx.db.query("deliveryFiles").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect();
     if (existing.length >= 50) throw new ConvexError("Up to 50 final files per project.");
@@ -239,7 +240,7 @@ export const addDeliveryFile = mutation({
 export const removeDeliveryFile = mutation({
   args: { fileId: v.id("deliveryFiles") },
   handler: async (ctx, { fileId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "projects");
     const f = await ctx.db.get(fileId);
     if (f) await ctx.db.delete(f._id);
     return null;
@@ -251,7 +252,7 @@ export const removeDeliveryFile = mutation({
 export const setDelivery = mutation({
   args: { projectId: v.string(), unlocked: v.optional(v.boolean()), linkDays: v.optional(v.number()) },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "projects"); // Phase 5e: not an Editor
     const p = await ownedProject(ctx, a.projectId);
     const patch: Partial<Doc<"projects">> = { updatedAt: Date.now() };
     if (a.linkDays !== undefined) patch.deliveryLinkDays = Math.max(1, Math.min(90, Math.round(a.linkDays)));
@@ -296,7 +297,7 @@ export async function openDelivery(ctx: MutationCtx, p: Doc<"projects">): Promis
 export const dropboxFiles = action({
   args: { projectId: v.id("projects") },
   handler: async (ctx, { projectId }): Promise<{ path: string; name: string; size: number }[]> => {
-    const me: { businessId: Id<"businesses"> | null } = await ctx.runQuery(internal.users.assertAllowed, {});
+    const me: { businessId: Id<"businesses"> | null } = await ctx.runQuery(internal.users.assertAllowed, { perm: ["projects"] });
     const folder: string | null = await ctx.runQuery(internal.projects.folderOf, { projectId });
     if (!folder) throw new ConvexError("This project has no Dropbox folder.");
     return await ctx.runAction(internal.dropbox.listFolder, { path: folder, ...(me.businessId ? { asBusiness: me.businessId } : {}) });

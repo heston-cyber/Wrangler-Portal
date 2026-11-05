@@ -14,7 +14,7 @@ import { internalAction, internalMutation, internalQuery, mutation } from "./lib
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll } from "./lib/access";
 import { appendEvent, eventsOf, verifyChain } from "./lib/wsAudit";
 import { OWNER_KEY, docLabel, type LayoutBox } from "./lib/wsLayout";
 import { sha256Bytes, stamp } from "./lib/wsPdf";
@@ -141,7 +141,7 @@ export const stepFailed = internalMutation({
 export const retry = mutation({
   args: { documentId: v.id("wsDocuments"), step: v.union(v.literal("pdf"), v.literal("invoice"), v.literal("copies"), v.literal("archive")) },
   handler: async (ctx, { documentId, step }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const doc = await ctx.db.get(documentId);
     if (!doc || doc.status !== "completed") throw new ConvexError("Only a document everyone has signed.");
     if (step !== "pdf" && !doc.final) throw new ConvexError("Make the signed copy first.");
@@ -315,7 +315,7 @@ export async function auditJson(ctx: ActionCtx, documentId: Id<"wsDocuments">): 
 export const downloadAudit = action({
   args: { documentId: v.id("wsDocuments") },
   handler: async (ctx, { documentId }): Promise<{ json: string; name: string }> => {
-    await ctx.runQuery(internal.users.assertAllowed, { ids: [documentId] });
+    await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs"], ids: [documentId] });
     try { const r = await auditJson(ctx, documentId); return { json: r.json, name: r.name }; }
     catch (e) { throw new ConvexError(errText(e)); }
   },

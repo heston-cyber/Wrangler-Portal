@@ -6,7 +6,7 @@
 //   - After a payment (and on every invoice event from the Connect webhook) the portal reads the invoice's payments
 //     back from Stripe: paid, processing (a bank payment clearing) or failed, each with "Visa •••• 4242".
 //   - Send (the owner's confirm) emails the invoice (email 08) and posts "Invoice to pay" to the person's Inbox.
-import { viewerOf } from "./lib/access";
+import { viewerOf, requireAll } from "./lib/access";
 import { action } from "./_generated/server";
 import { internalAction, internalMutation, internalQuery, mutation, query, focusBusiness, forBusiness } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
@@ -311,8 +311,7 @@ export const applyPayments = internalMutation({
 export const ownerLink = mutation({
   args: { invoiceId: v.id("invoices") },
   handler: async (ctx, { invoiceId }) => {
-    const scope = (ctx as unknown as { scope?: { isOwner: boolean } }).scope;
-    if (!scope?.isOwner) throw new ConvexError("Not allowed.");
+    await requireAll(ctx, "payments"); // Phase 5e: the owner, or Payments on
     const i = await ctx.db.get(invoiceId);
     if (!i || i.status === "draft" || i.status === "sending") throw new ConvexError("Send the invoice first.");
     const token = i.payToken ?? randomToken(18);

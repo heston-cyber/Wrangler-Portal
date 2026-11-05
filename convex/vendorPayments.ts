@@ -8,7 +8,7 @@ import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import { PAY_METHODS, expectedCents, isDate, looksLikeAccount, todayCentral } from "./lib/bookings";
 import { label, paidAmount, paidDay } from "./lib/bookingRows";
@@ -21,7 +21,7 @@ type Ctx = QueryCtx | MutationCtx;
 const clip = (s: string | undefined, n: number) => (s ?? "").trim().slice(0, n);
 
 async function ownerBiz(ctx: Ctx) {
-  const me = await requireMe(ctx);
+  const me = await requireAll(ctx, "vendorPayments");
   const id = businessInScope(ctx);
   const b = id ? await ctx.db.get(id) : null;
   if (!b) throw new ConvexError("Not allowed.");
