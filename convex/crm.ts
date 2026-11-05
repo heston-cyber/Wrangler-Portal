@@ -31,7 +31,7 @@ const todayIso = () => {
 
 async function ownerBiz(ctx: QueryCtx | MutationCtx) {
   // Phase 5e: the pipeline, estimates and the job ledger are what a job is worth, so a team member needs both
-  // Clients and leads and "See what a project is worth" (the owner and, if Heston turns Clients on for them, the Bookkeeper).
+  // Clients and leads and "See what a project is worth" (a Producer has both by default, Heston Nov 5).
   const me = await requireAll(ctx, "clients");
   if (!seesValue(me)) throw new ConvexError("Not allowed.");
   const id = businessInScope(ctx);

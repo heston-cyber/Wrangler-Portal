@@ -135,6 +135,7 @@ const DOCS = "Docs: drafts, templates, clauses and documents up to approval, and
 const PAYMENTS = "Payments: invoices, reminders, quotes, plans, subscriptions and footage storage (not an Editor)";
 const VENDORPAY = "Vendor payments: vendor invoices and payouts (not an Editor)";
 const SETTINGS = "Settings: booking-call settings (when Settings is on for the role)";
+const BUDGETS = "Clients and leads with See what a project is worth: the pipeline, estimates and the job ledger (a Producer by default, Heston Nov 5)";
 const BRAND = "their business's look (name, logo, colours), like every signed-in account";
 const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>> = {
   producer: {
@@ -238,6 +239,29 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "clients.page": CLIENTS,
     "clients.setSettings": CLIENTS,
     "clients.directory": CLIENTS,
+    "crm.rates": BUDGETS,
+    "crm.saveRates": BUDGETS,
+    "crm.board": BUDGETS,
+    "crm.addDeal": BUDGETS,
+    "crm.moveDeal": BUDGETS,
+    "crm.linkProject": BUDGETS,
+    "crm.closeDeal": BUDGETS,
+    "crm.deal": BUDGETS,
+    "crm.companies": BUDGETS,
+    "crm.company": BUDGETS,
+    "crm.contact": BUDGETS,
+    "crm.followUps": BUDGETS,
+    "crm.addFollowUp": BUDGETS,
+    "crm.doneFollowUp": BUDGETS,
+    "crm.getEstimate": BUDGETS,
+    "crm.saveEstimate": BUDGETS,
+    "crm.makeContract": BUDGETS,
+    "crm.ledger": BUDGETS,
+    "crm.logEntry": BUDGETS,
+    "crm.entryAction": BUDGETS,
+    "crm.setLedgerExport": BUDGETS,
+    "crm.setLedgerExportAll": BUDGETS,
+    "crm.due": BUDGETS,
     "fileRequests.forProject": PROJECTS,
     "fileRequests.create": PROJECTS,
     "fileRequests.setStatus": PROJECTS,

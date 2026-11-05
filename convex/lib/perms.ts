@@ -25,14 +25,23 @@ const none: Perms = { projects: false, shoots: false, production: false, clients
 
 /** The suggested switches (the Roles frame, 814:11079; "Reset all to suggested"). */
 export const SUGGESTED: Record<TeamRole, Perms> = {
-  producer: { ...none, projects: true, shoots: true, production: true, clients: true, review: true, docs: true },
+  // Heston (Nov 5, 17:30): "Producer can see budgets": what a project is worth is on for a Producer too.
+  producer: { ...none, projects: true, shoots: true, production: true, clients: true, review: true, docs: true, value: true },
   // Projects is "Assigned only" for an Editor: they see Review on the projects they're assigned to, nothing else.
   editor: { ...none, projects: true, review: true },
   bookkeeper: { ...none, payments: true, reports: true, vendorPayments: true, value: true },
 };
 
-/** Heston (Nov 3): only the owner and the Bookkeeper see what a project is worth. Locked off for Producer and Editor. */
-export const LOCKED_OFF: Record<TeamRole, Perm[]> = { producer: ["value"], editor: ["value"], bookkeeper: [] };
+/**
+ * Switches a role can't have. Heston (Nov 3): an Editor never sees what a project is worth (Nov 5: a Producer now may).
+ * Heston (Nov 5, 17:31, option A): an Editor works in Review on their assigned projects only, so every other switch is
+ * locked off for Editors (those areas aren't split by project; a broader role is a Producer).
+ */
+export const LOCKED_OFF: Record<TeamRole, Perm[]> = {
+  producer: [],
+  editor: ["shoots", "production", "clients", "docs", "payments", "reports", "vendorPayments", "settings", "value"],
+  bookkeeper: [],
+};
 
 /** An Editor only ever sees the projects they're assigned to (the Roles frame's "Assigned only"). */
 export const assignedOnly = (role: TeamRole) => role === "editor";

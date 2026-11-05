@@ -31,6 +31,7 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TOKEN = /^[A-Za-z0-9_-]{20,64}$/;
 type Ctx = QueryCtx | MutationCtx;
 
+const lockedText = (role: TeamRole) => (role === "editor" ? "Editors work in Review on their assigned projects only." : "That switch can't be turned on for this role.");
 const tokenHash = (token: string) => sha256Hex(`team-invite:${token}`);
 const untilText = (ms: number) => new Date(ms).toLocaleDateString("en-US", { timeZone: TZ, month: "short", day: "numeric" });
 
@@ -194,7 +195,7 @@ export const setPerm = mutation({
   handler: async (ctx, { membershipId, perm, on }) => {
     await requireOwner(ctx);
     const m = await mine(ctx, membershipId);
-    if (on && LOCKED_OFF[m.teamRole].includes(perm)) throw new ConvexError("Only the owner and the Bookkeeper can see what a project is worth.");
+    if (on && LOCKED_OFF[m.teamRole].includes(perm)) throw new ConvexError(lockedText(m.teamRole));
     await ctx.db.patch(m._id, { perms: { ...cleanPerms(m.teamRole, m.perms), [perm]: on } });
     return { ok: true as const };
   },
@@ -223,7 +224,7 @@ export const setRolePerm = mutation({
   args: { role: roleArg, perm: permArg, on: v.boolean() },
   handler: async (ctx, { role, perm, on }) => {
     await requireOwner(ctx);
-    if (on && LOCKED_OFF[role].includes(perm)) throw new ConvexError("Only the owner and the Bookkeeper can see what a project is worth.");
+    if (on && LOCKED_OFF[role].includes(perm)) throw new ConvexError(lockedText(role));
     const biz = myBusiness(ctx);
     const b = await ctx.db.get(biz);
     const roles = Object.fromEntries(TEAM_ROLES.map((r) => [r, rolePerms(b?.teamRoles, r)])) as Record<TeamRole, Record<Perm, boolean>>;

@@ -84,7 +84,7 @@ describe("Phase 5e · team members", () => {
       return `${u._id}|${await ctx.db.insert("authSessions", { userId: u._id, expirationTime: Date.now() + 3_600_000 })}`;
     });
     const riley = w.t.withIdentity({ subject: sub });
-    expect(await riley.query(api.users.me, {})).toMatchObject({ role: "team", allowed: false, team: { role: "producer", perms: { projects: true, review: true, payments: false, value: false } } });
+    expect(await riley.query(api.users.me, {})).toMatchObject({ role: "team", allowed: false, team: { role: "producer", perms: { projects: true, review: true, payments: false, value: true } } }); // Heston Nov 5: a Producer sees budgets
     // A switch that's on opens the functions that name it; the team pages and unlabelled functions stay the owner's.
     expect(await riley.query(api.team.projectPeople, { projectId: w.p })).toMatchObject({ people: [], canAssign: false });
     await expect(riley.query(api.team.page, {})).rejects.toThrow(/Not allowed/);
@@ -132,8 +132,10 @@ describe("Phase 5e · team members", () => {
     stub(mails);
     await join(w, mails);
     const mid = (await w.heston.query(api.team.page, {})).members[0].membershipId as Id<"memberships">;
-    await expect(w.heston.mutation(api.team.setPerm, { membershipId: mid, perm: "value", on: true })).rejects.toThrow(/owner and the Bookkeeper/);
-    await expect(w.heston.mutation(api.team.setRolePerm, { role: "editor", perm: "value", on: true })).rejects.toThrow(/owner and the Bookkeeper/);
+    // Heston (Nov 5): a Producer's value switch can be turned off and on; an Editor's switches other than Projects and Review are locked.
+    await w.heston.mutation(api.team.setPerm, { membershipId: mid, perm: "value", on: false });
+    await w.heston.mutation(api.team.setPerm, { membershipId: mid, perm: "value", on: true });
+    for (const perm of ["value", "shoots", "docs", "payments", "settings"]) await expect(w.heston.mutation(api.team.setRolePerm, { role: "editor", perm, on: true })).rejects.toThrow(/Editors work in Review/);
     await w.heston.mutation(api.team.setPerm, { membershipId: mid, perm: "payments", on: true });
     expect(await w.heston.query(api.team.member, { membershipId: mid })).toMatchObject({ perms: { payments: true }, matchesRole: false });
     await w.heston.mutation(api.team.resetToRole, { membershipId: mid });
@@ -236,18 +238,21 @@ describe("Phase 5e · team members", () => {
     await expect(ed.as.query(api.library.overview, {})).rejects.toThrow(/Not allowed/);
   }, 30_000);
 
-  test("T5e.7 money: a Producer sees no invoices, pipeline or Stripe; a Bookkeeper sees Payments but not shoots, Review or clients", async () => {
+  test("T5e.7 money: a Producer sees budgets (the pipeline) but no invoices or Stripe; a Bookkeeper sees Payments but not shoots, Review or clients", async () => {
     const w = await world();
     const mails: Sent[] = [];
     stub(mails);
     const pr = await join(w, mails, RILEY, "producer");
     await expect(pr.as.query(api.invoices.list, {})).rejects.toThrow(/Not allowed/);
     await expect(pr.as.query(api.invoices.forProject, { projectId: w.p })).rejects.toThrow(/Not allowed/);
-    await expect(pr.as.query(api.crm.board, {})).rejects.toThrow(/Not allowed/); // the pipeline is what jobs are worth
+    expect(await pr.as.query(api.crm.board, {})).toBeTruthy(); // Heston (Nov 5): a Producer sees budgets, so the pipeline too
     await expect(pr.as.query(api.payments.settings, {})).rejects.toThrow(/Not allowed/);
     await expect(pr.as.mutation(api.payments.disconnect, {})).rejects.toThrow(/Not allowed/);
     expect(await pr.as.query(api.projects.page, { projectId: w.p })).toMatchObject({ name: "Launch" });
-    // Even with Clients on, the pipeline needs "See what a project is worth", which a Producer can't have.
+    // The pipeline needs Clients and leads and "See what a project is worth": off for her, closed.
+    const prm = (await w.heston.query(api.team.page, {})).members.find((m: { email: string }) => m.email === RILEY).membershipId;
+    await w.heston.mutation(api.team.setPerm, { membershipId: prm, perm: "value", on: false });
+    await expect(pr.as.query(api.crm.board, {})).rejects.toThrow(/Not allowed/);
     const bk = await join(w, mails, "bea@books.example", "bookkeeper");
     expect(Array.isArray(await bk.as.query(api.invoices.list, {}))).toBe(true);
     await expect(bk.as.query(api.crm.board, {})).rejects.toThrow(/Not allowed/); // Clients is off for a Bookkeeper
