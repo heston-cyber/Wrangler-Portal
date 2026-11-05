@@ -1362,6 +1362,37 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_token", ["token"]).index("by_start", ["start"]).index("by_deal", ["dealId", "start"]).index("by_email", ["email", "start"]),
 
+  // Phase 5d step 2 (Nov 4, D121, D144/58): Messages. One thread per project (the business and the client's people who
+  // can open the project) and one per lead (deal). A lead has no login: they read and reply from a private link (token).
+  // Booked vendors are never in a thread. A booked call is a line in its lead's thread (side "system").
+  msgThreads: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    kind: v.union(v.literal("project"), v.literal("lead")),
+    projectId: v.optional(v.id("projects")),
+    dealId: v.optional(v.id("deals")),
+    token: v.optional(v.string()),               // a lead's private link
+    leadName: v.optional(v.string()), leadEmail: v.optional(v.string()),
+    lastAt: v.number(), lastText: v.string(), lastSide: v.optional(v.string()), lastName: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_project", ["projectId"]).index("by_deal", ["dealId"]).index("by_token", ["token"]).index("by_last", ["lastAt"]),
+  messages: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    threadId: v.id("msgThreads"),
+    side: v.union(v.literal("owner"), v.literal("client"), v.literal("lead"), v.literal("system")),
+    name: v.string(),
+    email: v.optional(v.string()),
+    text: v.string(),
+    files: v.array(v.object({ storageId: v.id("_storage"), name: v.string(), size: v.number(), type: v.string() })),
+    call: v.optional(v.object({ callId: v.id("calls"), what: v.union(v.literal("booked"), v.literal("moved"), v.literal("cancelled")), start: v.number(), end: v.number(), meet: v.optional(v.boolean()) })),
+    createdAt: v.number(),
+  }).index("by_thread", ["threadId", "createdAt"]),
+  // Who read a thread up to when: "owner" for the business, or the client's / lead's email.
+  msgReads: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    threadId: v.id("msgThreads"),
+    who: v.string(), name: v.string(), readAt: v.number(),
+  }).index("by_thread", ["threadId"]).index("by_who", ["who", "threadId"]),
+
   // Phase 5d step 3 (Nov 4): gear (Q57). Owner-only. The full serial is stored; screens show the last 4.
   gear: defineTable({
     businessId: v.optional(v.id("businesses")),
@@ -1565,12 +1596,12 @@ export default defineSchema({
     businessId: v.optional(v.id("businesses")),
     clientId: v.optional(v.id("clients")),
     email: v.string(),                 // the recipient, lower-case (a person with a live invite in this business)
-    kind: v.union(v.literal("cut_ready"), v.literal("reply"), v.literal("to_sign"), v.literal("signed"), v.literal("cancelled"), v.literal("note"), v.literal("stage"), v.literal("final_files"), v.literal("invoice"), v.literal("payment"), v.literal("subscription"), v.literal("shoot"), v.literal("files"), v.literal("brief")),
+    kind: v.union(v.literal("cut_ready"), v.literal("reply"), v.literal("to_sign"), v.literal("signed"), v.literal("cancelled"), v.literal("note"), v.literal("stage"), v.literal("final_files"), v.literal("invoice"), v.literal("payment"), v.literal("subscription"), v.literal("shoot"), v.literal("files"), v.literal("brief"), v.literal("message")),
     title: v.string(),
     text: v.string(),                  // a short line, shown under the title
     link: v.optional(v.string()),      // a path in the portal or a signing link
     linkLabel: v.optional(v.string()), // a note's link button ("Watch Harbor Coffee 30s v2")
-    source: v.object({ module: v.union(v.literal("review"), v.literal("sign"), v.literal("inbox"), v.literal("projects"), v.literal("payments"), v.literal("schedule")), id: v.string() }),
+    source: v.object({ module: v.union(v.literal("review"), v.literal("sign"), v.literal("inbox"), v.literal("projects"), v.literal("payments"), v.literal("schedule"), v.literal("messages")), id: v.string() }),
     key: v.string(),
     noteId: v.optional(v.id("inboxNotes")),
     createdAt: v.number(),

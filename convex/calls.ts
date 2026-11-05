@@ -27,6 +27,7 @@ import { businessContact } from "./lib/business";
 import { mailBrandOf } from "./lib/mail";
 import { callBookedMail, callCancelledMail, callMovedMail, ownerCallMail } from "./lib/mails";
 import { deliverOnce } from "./invoiceReminders";
+import { callLine } from "./messages";
 
 type Ctx = QueryCtx | MutationCtx;
 const TOKEN = /^[A-Za-z0-9_-]{16,64}$/;
@@ -205,6 +206,7 @@ export const cancel = mutation({
     const now = Date.now();
     await ctx.db.patch(c._id, { status: "cancelled", cancelledBy: "lead", moving: undefined, notice: { kind: "cancelled", at: now }, history: [...c.history, { at: now, text: "Cancelled by the lead" }], updatedAt: now });
     if (c.dealId) { const d = await ctx.db.get(c.dealId); if (d) await ctx.db.patch(d._id, { history: [...d.history, { kind: "call", at: now, detail: `Cancelled their call: ${centralWhen(c.start)}` }], updatedAt: now }); }
+    await callLine(ctx, { ...c, status: "cancelled" }, "cancelled"); // Phase 5d step 2: a line in the lead's thread
     await ctx.scheduler.runAfter(0, internal.calls.dropEvent, { callId: c._id });
     await ctx.scheduler.runAfter(0, internal.calls.mail, { callId: c._id, what: "cancelled", at: now });
   },
@@ -346,6 +348,7 @@ export const booked = internalMutation({
       status: "booked", ...(a.event ? { event: a.event } : {}), ...(a.meet ? { meet: a.meet } : {}), ...(a.error ? { calError: a.error.slice(0, 200) } : {}),
       notice: { kind: "booked", at: now }, history: [...c.history, { at: now, text: a.error ? "Booked (it didn't reach your calendar)" : "Booked" }], updatedAt: now,
     });
+    await callLine(ctx, { ...c, ...(a.meet ? { meet: a.meet } : {}) }, "booked");
     await ctx.scheduler.runAfter(0, internal.calls.mail, { callId: c._id, what: "booked", at: now });
   },
 });
@@ -404,6 +407,7 @@ export const moved = internalMutation({
       notice: { kind: "moved", at: now }, history: [...c.history, { at: now, text: `Moved by the lead (was ${centralWhen(c.start)})` }], updatedAt: now,
     });
     if (c.dealId) { const d = await ctx.db.get(c.dealId); if (d) await ctx.db.patch(d._id, { history: [...d.history, { kind: "call", at: now, detail: `Moved their call: ${centralWhen(c.moving.start)}` }], updatedAt: now }); }
+    await callLine(ctx, { ...c, start: c.moving.start, end: c.moving.end }, "moved");
     await ctx.scheduler.runAfter(0, internal.calls.mail, { callId: c._id, what: "moved", at: now });
   },
 });

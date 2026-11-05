@@ -842,3 +842,27 @@ export function ownerCallMail(b: MailBrand, d: { kind: "booked" | "cancelled" | 
     { t: "button", label: "Open the lead", href: d.link },
   ], ownerFoot("a lead books, moves or cancels a call"), `${d.who} · ${callWhen(d.start, d.end, tz)}`);
 }
+
+// ---------- Phase 5d step 2: Messages (emails 44 to the client or lead, 45 to the owner) ----------
+const snippet = (t: string) => (t.length > 400 ? `${t.slice(0, 400).trim()}…` : t);
+/** 44 · a message from the business. */
+export function messageMail(b: MailBrand, d: { name: string | null; sender: string; about: string; text: string; files: number; more: number; link: string; lead: boolean }): Mail {
+  return mk(b, "updates", `${first(d.sender) || d.sender} sent you a message about ${d.about}`, [
+    hello(d.name),
+    { t: "p", text: `${d.sender} sent you a message about ${d.about}.` },
+    { t: "quote", rows: [{ who: d.sender, text: snippet(d.text) || (d.files ? `${d.files} ${d.files === 1 ? "file" : "files"}` : "") }] },
+    ...(d.more > 0 ? [{ t: "p", text: `And ${d.more} more ${d.more === 1 ? "message" : "messages"}.`, tone: "muted" } as Block] : []),
+    { t: "button", label: "Read and reply", href: d.link },
+    ...(d.lead ? [{ t: "p", text: "No login needed: the link opens your conversation.", tone: "muted" } as Block] : []),
+  ], d.lead ? signoff(b) : [...signoff(b), { t: "small", text: "You can switch these emails off in your portal's Settings › Notifications." }], snippet(d.text).slice(0, 90));
+}
+/** 45 · to the owner: a client or lead wrote. */
+export function ownerMessageMail(b: MailBrand, d: { who: string; about: string; text: string; files: number; more: number; link: string }): Mail {
+  return mk(b, "updates", `${d.who} sent a message about ${d.about}`, [
+    { t: "eyebrow", text: `${d.who} sent a message` },
+    { t: "title", text: d.about },
+    { t: "quote", rows: [{ who: d.who, text: snippet(d.text) || (d.files ? `${d.files} ${d.files === 1 ? "file" : "files"}` : "") }] },
+    ...(d.more > 0 ? [{ t: "p", text: `And ${d.more} more ${d.more === 1 ? "message" : "messages"}.`, tone: "muted" } as Block] : []),
+    { t: "button", label: "Read and reply", href: d.link },
+  ], ownerFoot("a client or lead sends you a message"), snippet(d.text).slice(0, 90));
+}

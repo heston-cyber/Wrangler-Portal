@@ -14,6 +14,7 @@ import { errText } from "../docs/pages/common";
 import { dateShort, money } from "../payments/common";
 import { AddFollowUp, FollowUpRow, STAGES, type Stage } from "./common";
 import { UpcomingCall } from "../calls/Calls";
+import { MessageLeadButton } from "../messages/Messages";
 
 const when = (t: number) => new Date(t).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
@@ -87,6 +88,7 @@ export default function DealPage({ dealId }: { dealId: string }) {
                   <ButtonLink variant="primary" to={newEstimate}>New estimate</ButtonLink>
                   <ButtonLink to={`/payments/quotes/new?${d.clientId ? `client=${d.clientId}` : `deal=${id}`}`}>Quick quote</ButtonLink>
                   <ButtonLink to={`/proposals/new?${d.clientId ? `client=${d.clientId}&deal=${id}` : `deal=${id}`}`}>New proposal</ButtonLink>
+                  {d.stage === "lead" && (d.lead?.email || d.contactEmail) && <MessageLeadButton dealId={id} />}
                   <Button onClick={() => setAdding(true)}>Add follow-up</Button>
                   <button type="button" className="btn ghost" disabled={busy} onClick={() => void notLead()}>{web && d.stage === "lead" ? "Not a lead" : "Take off the board"}</button>
                   <p className="wp-small">{web && d.stage === "lead" ? "Not a lead archives the card. Spam is filtered before a card is made." : "The card is kept, just off the board."}</p>

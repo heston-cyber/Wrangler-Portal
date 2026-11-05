@@ -15892,6 +15892,197 @@
    "start": 1793372400000,
    "status": "booked",
    "tz": "America/New_York"
+  },
+  "messages.threads": [
+   {
+    "_id": "0000000000000000010249msgThreads",
+    "kind": "lead",
+    "lastAt": 1793289300000,
+    "lastSide": "lead",
+    "lastText": "Looking forward to Friday. Should I send the brief ahead?",
+    "sub": "Lead · Tom Silva",
+    "title": "Tom Silva",
+    "unread": true
+   },
+   {
+    "_id": "0000000000000000010241msgThreads",
+    "kind": "project",
+    "lastAt": 1793288460000,
+    "lastSide": "owner",
+    "lastText": "Got them, thank you.",
+    "sub": "Harbor Coffee · Harbor Coffee Launch",
+    "title": "Harbor Coffee",
+    "unread": false
+   }
+  ],
+  "messages.unread": 1,
+  "messages.thread#0000000000000000010241msgThreads": {
+   "_id": "0000000000000000010241msgThreads",
+   "about": "Harbor Coffee Launch",
+   "dealId": null,
+   "kind": "project",
+   "leadEmail": null,
+   "messages": [
+    {
+     "_id": "000000000000000000010243messages",
+     "call": null,
+     "createdAt": 1793286720000,
+     "files": [],
+     "mine": false,
+     "name": "Maya Brooks",
+     "side": "client",
+     "text": "Hi Heston, can we move the Thursday shoot start to 10?"
+    },
+    {
+     "_id": "000000000000000000010244messages",
+     "call": null,
+     "createdAt": 1793287200000,
+     "files": [],
+     "mine": true,
+     "name": "Heston Hill",
+     "side": "owner",
+     "text": "Yes, 10 works. I will update the call sheet."
+    },
+    {
+     "_id": "000000000000000000010245messages",
+     "call": null,
+     "createdAt": 1793288040000,
+     "files": [
+      {
+       "name": "Logo-files.zip",
+       "size": 4400000,
+       "type": "application/zip",
+       "url": "https://some-deployment.convex.cloud/api/storage/3oqrQISncMXvSJAyyIc2sIIffTMjcnc7EUItq+LPIvg="
+      }
+     ],
+     "mine": false,
+     "name": "Maya Brooks",
+     "side": "client",
+     "text": "Here are the logo files."
+    },
+    {
+     "_id": "000000000000000000010246messages",
+     "call": null,
+     "createdAt": 1793288460000,
+     "files": [],
+     "mine": true,
+     "name": "Heston Hill",
+     "side": "owner",
+     "text": "Got them, thank you."
+    }
+   ],
+   "more": false,
+   "people": 2,
+   "projectId": "000000000000000000010020projects",
+   "readBy": {
+    "messageId": "000000000000000000010246messages",
+    "names": [
+     {
+      "at": 1793289120000,
+      "name": "Maya"
+     }
+    ]
+   },
+   "sub": "Harbor Coffee · Harbor Coffee Launch",
+   "title": "Harbor Coffee"
+  },
+  "messages.thread#0000000000000000010249msgThreads": {
+   "_id": "0000000000000000010249msgThreads",
+   "about": "Tom Silva",
+   "dealId": "000000000000000000000010239deals",
+   "kind": "lead",
+   "leadEmail": "tom@silvaroasters.example",
+   "messages": [
+    {
+     "_id": "000000000000000000010250messages",
+     "call": {
+      "end": 1793374200000,
+      "meet": true,
+      "start": 1793372400000,
+      "what": "booked"
+     },
+     "createdAt": 1793282400000,
+     "files": [],
+     "mine": false,
+     "name": "",
+     "side": "system",
+     "text": ""
+    },
+    {
+     "_id": "000000000000000000010251messages",
+     "call": null,
+     "createdAt": 1793289300000,
+     "files": [],
+     "mine": false,
+     "name": "Tom Silva",
+     "side": "lead",
+     "text": "Looking forward to Friday. Should I send the brief ahead?"
+    }
+   ],
+   "more": false,
+   "people": 1,
+   "projectId": null,
+   "readBy": null,
+   "sub": "Lead · Tom Silva",
+   "title": "Tom Silva"
+  },
+  "messages.leadPage#kitleadthreadtoken000001": {
+   "about": "Tom Silva",
+   "business": {
+    "legalName": "Hill Creative LLC",
+    "logoUrl": null,
+    "name": "Wrangler Productions",
+    "owner": "Heston Hill"
+   },
+   "messages": [
+    {
+     "_id": "000000000000000000010250messages",
+     "call": {
+      "end": 1793374200000,
+      "meet": true,
+      "start": 1793372400000,
+      "what": "booked"
+     },
+     "createdAt": 1793282400000,
+     "files": [],
+     "mine": false,
+     "name": "",
+     "side": "system",
+     "text": ""
+    },
+    {
+     "_id": "000000000000000000010251messages",
+     "call": null,
+     "createdAt": 1793289300000,
+     "files": [],
+     "mine": true,
+     "name": "Tom Silva",
+     "side": "lead",
+     "text": "Looking forward to Friday. Should I send the brief ahead?"
+    }
+   ],
+   "more": false,
+   "name": "Tom Silva",
+   "readBy": {
+    "messageId": "000000000000000000010251messages",
+    "names": []
+   }
+  },
+  "messages.startOptions": {
+   "leads": [
+    {
+     "_id": "000000000000000000000010239deals",
+     "sub": "Tom Silva",
+     "title": "Tom Silva"
+    }
+   ],
+   "projects": [
+    {
+     "_id": "000000000000000000010020projects",
+     "people": 2,
+     "title": "26127 Harbor Coffee Launch"
+    }
+   ]
   }
  },
  "client": {
@@ -17817,6 +18008,87 @@
    "slug": "paying-an-invoice",
    "summary": "Pay by card or bank account, and find your receipt.",
    "title": "Paying an invoice"
+  },
+  "messages.mine": {
+   "projects": [],
+   "threads": [
+    {
+     "_id": "0000000000000000010241msgThreads",
+     "lastAt": 1793288460000,
+     "lastText": "Heston: Got them, thank you.",
+     "projectId": "000000000000000000010020projects",
+     "sub": "Wrangler Productions",
+     "title": "Harbor Coffee Launch",
+     "unread": false
+    }
+   ]
+  },
+  "messages.unread": 0,
+  "messages.clientThreadPage#0000000000000000010241msgThreads": {
+   "_id": "0000000000000000010241msgThreads",
+   "business": "Wrangler Productions",
+   "messages": [
+    {
+     "_id": "000000000000000000010243messages",
+     "call": null,
+     "createdAt": 1793286720000,
+     "files": [],
+     "mine": true,
+     "name": "Maya Brooks",
+     "side": "client",
+     "text": "Hi Heston, can we move the Thursday shoot start to 10?"
+    },
+    {
+     "_id": "000000000000000000010244messages",
+     "call": null,
+     "createdAt": 1793287200000,
+     "files": [],
+     "mine": false,
+     "name": "Heston Hill",
+     "side": "owner",
+     "text": "Yes, 10 works. I will update the call sheet."
+    },
+    {
+     "_id": "000000000000000000010245messages",
+     "call": null,
+     "createdAt": 1793288040000,
+     "files": [
+      {
+       "name": "Logo-files.zip",
+       "size": 4400000,
+       "type": "application/zip",
+       "url": "https://some-deployment.convex.cloud/api/storage/3oqrQISncMXvSJAyyIc2sIIffTMjcnc7EUItq+LPIvg="
+      }
+     ],
+     "mine": true,
+     "name": "Maya Brooks",
+     "side": "client",
+     "text": "Here are the logo files."
+    },
+    {
+     "_id": "000000000000000000010246messages",
+     "call": null,
+     "createdAt": 1793288460000,
+     "files": [],
+     "mine": false,
+     "name": "Heston Hill",
+     "side": "owner",
+     "text": "Got them, thank you."
+    }
+   ],
+   "more": false,
+   "projectId": "000000000000000000010020projects",
+   "readBy": {
+    "messageId": "000000000000000000010245messages",
+    "names": [
+     {
+      "at": 1793288460000,
+      "name": "Heston"
+     }
+    ]
+   },
+   "sub": "With Wrangler Productions",
+   "title": "Harbor Coffee Launch"
   }
  },
  "guest": {
@@ -19377,6 +19649,11 @@
    "dealId": "000000000000000000000010239deals",
    "slug": "wrangler",
    "token": "kitcalltoken0000000000001"
+  },
+  "messages": {
+   "lead": "0000000000000000010249msgThreads",
+   "tid": "0000000000000000010241msgThreads",
+   "token": "kitleadthreadtoken000001"
   }
  },
  "vendor": {

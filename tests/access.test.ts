@@ -55,6 +55,12 @@ const OPEN: Record<string, string> = {
   "subscriptions.setupStart": "the same link: a SetupIntent for that subscription's customer only; a missing token is refused",
   "subscriptions.setupDone": "the same link: checks the SetupIntent is that subscription's own before using it; a missing token is refused",
   "subscriptions.mine": "a client's subscriptions, found by their own email; anyone else gets []",
+  // Phase 5d step 2: Messages. A lead's conversation answers only for that thread's own long random token (/m/<token>).
+  "messages.leadPage": "a lead's message link: that conversation only (tested in messages.test.ts)",
+  "messages.leadSend": "the same link: writes in that conversation only; rate-limited",
+  "messages.leadRead": "the same link: marks that conversation read; a missing token does nothing",
+  "messages.leadUploadUrl": "the same link: an upload address for a file to attach there; rate-limited",
+  "messages.unread": "the caller's own unread count (owner or client); 0 for anyone else",
   // Phase 5d step 1: booking calls. The page answers by the business's slug (closed unless Google Calendar is connected
   // and the settings are saved); the private link (/call/<token>) only for that call's own long random token. Booking,
   // moving and cancelling are rate-limited. Tested in calls.test.ts.
@@ -83,7 +89,7 @@ const GUEST: Record<string, string> = {
   "guests.opened": "records the guest opening their own sheet, only while it's active",
 };
 // Functions any signed-in account may call (owner or client), never a stranger.
-const SIGNED_IN = new Set(["help.list", "help.guide", "users.setName", "users.switchSide", "clients.account", "shares.mine",
+const SIGNED_IN = new Set(["help.list", "help.guide", "messages.mine", "messages.clientThreadPage", "messages.clientSend", "messages.uploadUrl", "messages.read", "users.setName", "users.switchSide", "clients.account", "shares.mine",
   // Phase 1: a client's own Inbox, Documents and their businesses' look
   "inbox.mine", "inbox.unreadCount", "inbox.markRead", "inbox.markAllRead", "documents.mine", "business.brand",
   "portal.waiting", "emails.myPrefs", "emails.setMine",

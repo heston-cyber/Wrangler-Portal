@@ -132,6 +132,7 @@ import type * as lib_inbox from "../lib/inbox.js";
 import type * as lib_business from "../lib/business.js";
 import type * as lib_owners from "../lib/owners.js";
 import type * as lib_site from "../lib/site.js";
+import type * as messages from "../messages.js";
 import type * as migrations from "../migrations.js";
 import type * as lib_functions from "../lib/functions.js";
 import type * as lib_tenancy from "../lib/tenancy.js";
@@ -241,6 +242,7 @@ declare const fullApi: ApiFromModules<{
   "lib/business": typeof lib_business;
   "lib/owners": typeof lib_owners;
   "lib/site": typeof lib_site;
+  messages: typeof messages;
   migrations: typeof migrations;
   "lib/functions": typeof lib_functions;
   "lib/tenancy": typeof lib_tenancy;

@@ -150,6 +150,13 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "siteWatch.report": { pages: ["owner"], args: () => "skip" }, "siteWatch.run": { pages: ["owner"], args: () => "skip" }, "siteWatch.finding": { pages: ["owner"], args: () => "skip" }, // Settings › Site watch (admins only; the page asks only after summary says so)
   "home.dashboard": { pages: ["owner"], args: () => ({ tzOffsetMin: 300 }) }, // Dashboard: Today, Coming up, Live edits, Money
   "production.shoots": { pages: ["owner"], args: () => ({}) }, // Production › Shoots
+  "messages.unread": { pages: ["owner", "clientHome"], args: () => ({}) }, // the side menu's Messages count (Phase 5d)
+  "messages.threads": { pages: ["owner"], args: () => ({}) }, // Messages
+  "messages.thread": { pages: ["owner"], args: () => "skip" }, // a conversation
+  "messages.startOptions": { pages: ["owner"], args: () => "skip" }, // New message
+  "messages.mine": { pages: ["clientHome"], args: () => ({}) }, // the client's Messages
+  "messages.clientThreadPage": { pages: ["clientHome"], args: () => "skip" }, // a client's conversation
+  "messages.leadPage": { pages: ["share", "signin"], args: () => ({ token: "x".repeat(24) }) }, // /m/<token>, no account
   "calls.page": { pages: ["share", "signin"], args: () => ({ slug: "nope" }) }, // /book/<business>, no account (Phase 5d)
   "calls.manage": { pages: ["share", "signin"], args: () => ({ token: "x".repeat(24) }) }, // /call/<token>, the lead's own call
   "calls.settings": { pages: ["owner"], args: () => ({}) }, // Settings › Booking calls; the lead page's Copy booking link

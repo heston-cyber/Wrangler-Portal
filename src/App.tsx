@@ -67,6 +67,9 @@ const ClientProposal = lazy(() => import("./modules/proposals/ClientProposal"));
 // D147: a briefing's no-login page /b/<token> (email 58, or a copied link).
 const BriefingLink = lazy(() => import("./modules/vendors/BriefingLink"));
 const CallBookingPage = lazy(() => import("./modules/calls/Calls").then((m) => ({ default: m.BookingPage }))); // Phase 5d step 1
+const OwnerMessages = lazy(() => import("./modules/messages/Messages").then((m) => ({ default: m.OwnerMessages }))); // Phase 5d step 2
+const ClientMessages = lazy(() => import("./modules/messages/Messages").then((m) => ({ default: m.ClientMessages })));
+const LeadMessages = lazy(() => import("./modules/messages/Messages").then((m) => ({ default: m.LeadMessages })));
 const CallPage = lazy(() => import("./modules/calls/Calls").then((m) => ({ default: m.CallPage })));
 // Phase 3c: Vendors (D95: its own layer).
 const VendorsPage = lazy(() => import("./modules/vendors/Vendors"));
@@ -155,6 +158,8 @@ export default function App() {
     const bk = /^\/book\/([a-z0-9-]{1,64})\/?$/.exec(path), ck = /^\/call\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path); // Phase 5d: booking calls
     if (bk) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><CallBookingPage slug={bk[1]} /></Suspense></KitApp></Suspense>;
     if (ck) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><CallPage token={ck[1]} /></Suspense></KitApp></Suspense>;
+    const mk = /^\/m\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
+    if (mk) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><LeadMessages token={mk[1]} /></Suspense></KitApp></Suspense>;
     if (brief) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><BriefingLink token={brief[1]} /></Suspense></KitApp></Suspense>;
     const inv = /^\/i\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
     if (inv) {
@@ -193,6 +198,9 @@ export default function App() {
   if (bookLink) return <Suspense fallback={<Loading />}><CallBookingPage key={bookLink[1]} slug={bookLink[1]} /></Suspense>;
   const callLink = /^\/call\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
   if (callLink) return <Suspense fallback={<Loading />}><CallPage key={callLink[1]} token={callLink[1]} /></Suspense>;
+  // Phase 5d step 2: a lead's conversation (/m/<token>, email 44). No account.
+  const leadMsg = /^\/m\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
+  if (leadMsg) return <Suspense fallback={<Loading />}><LeadMessages key={leadMsg[1]} token={leadMsg[1]} /></Suspense>;
   // D147: a briefing link (email 58's "Read the briefing", or a copied link), no account needed; the same page signed in or out.
   const briefingLink = /^\/b\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
   if (briefingLink) return <Suspense fallback={<Loading />}><BriefingLink key={briefingLink[1]} token={briefingLink[1]} /></Suspense>;
@@ -278,6 +286,7 @@ function SignedIn() {
   else if (path.startsWith("/sign")) page = <Suspense fallback={<Loading />}><SignHome /></Suspense>;
   else if (/^\/production\/?$/.test(path)) page = <Suspense fallback={<Loading />}><ProductionOverview /></Suspense>;
   else if (/^\/production\/shoots\/?$/.test(path)) page = <Suspense fallback={<Loading />}><ProductionShoots key={search} /></Suspense>;
+  else if (/^\/messages\/?$/.test(path)) page = <Suspense fallback={<Loading />}><OwnerMessages /></Suspense>;
   else if (/^\/production\/(pre-pro|prin-pro|post-pro)\/?$/.test(path)) { const k = path.split("/")[2] as "pre-pro" | "prin-pro" | "post-pro"; page = <Suspense fallback={<Loading />}><ProductionStage key={k} stage={k} /></Suspense>; }
   else if (/^\/production\/delivery\/?$/.test(path)) page = <Suspense fallback={<Loading />}><ProductionDelivery /></Suspense>;
   else if (/^\/production\/gear\/?$/.test(path)) page = <Suspense fallback={<Loading />}><GearPage /></Suspense>;
@@ -359,6 +368,7 @@ function ClientRoutes({ me }: { me: { name: string | null; email: string } }) {
   const { path, search } = useLocation();
   const params = new URLSearchParams(search);
   if (/^\/more\/?$/.test(path)) return <MorePage me={me as never} side="client" />;
+  if (/^\/messages\/?$/.test(path)) return <Suspense fallback={<Loading />}><ClientMessages /></Suspense>; // Phase 5d step 2
   if (/^\/inbox\/?$/.test(path)) return <ClientInbox itemId={params.get("item")} />;
   if (/^\/(docs|documents)\/?$/.test(path)) { const t = params.get("tab"); return <ClientDocuments tab={(t === "signed" || t === "cancelled" ? t : "to_sign") as DocTab} />; }
   if (/^\/review\/?$/.test(path)) return <ClientReview me={me} />;

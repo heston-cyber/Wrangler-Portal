@@ -403,6 +403,26 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
         notice: { kind: "booked", at: now - 2 * HOUR }, history: [], createdAt: now - 2 * HOUR, updatedAt: now - 2 * HOUR });
       return { slug: biz.slug, dealId, token };
     });
+    // Phase 5d step 2: Messages. Harbor Coffee's project thread (Maya, with a file and a read receipt) and Tom Silva's
+    // lead thread (his booked call is a line in it).
+    const msgKit = await t.run(async (ctx) => {
+      const m = (min: number) => now - min * 60_000;
+      const tid = await ctx.db.insert("msgThreads", { businessId: w.A, kind: "project", projectId: w.p1, lastAt: m(19), lastText: "Got them, thank you.", lastSide: "owner", lastName: "Heston Hill", createdAt: m(60) });
+      const file = await ctx.storage.store(new Blob([new Uint8Array(4_400_000)], { type: "application/zip" }));
+      const msg = (threadId: typeof tid, side: "owner" | "client" | "lead", name: string, email: string, text: string, at: number, files: Array<{ storageId: typeof file; name: string; size: number; type: string }> = []) =>
+        ctx.db.insert("messages", { businessId: w.A, threadId, side, name, email, text, files, createdAt: at });
+      await msg(tid, "client", "Maya Brooks", "maya@harborcoffee.com", "Hi Heston, can we move the Thursday shoot start to 10?", m(48));
+      await msg(tid, "owner", "Heston Hill", "heston@wranglerproductions.com", "Yes, 10 works. I will update the call sheet.", m(40));
+      await msg(tid, "client", "Maya Brooks", "maya@harborcoffee.com", "Here are the logo files.", m(26), [{ storageId: file, name: "Logo-files.zip", size: 4_400_000, type: "application/zip" }]);
+      await msg(tid, "owner", "Heston Hill", "heston@wranglerproductions.com", "Got them, thank you.", m(19));
+      await ctx.db.insert("msgReads", { businessId: w.A, threadId: tid, who: "maya@harborcoffee.com", name: "Maya Brooks", readAt: m(8) });
+      await ctx.db.insert("msgReads", { businessId: w.A, threadId: tid, who: "owner", name: "Heston Hill", readAt: m(19) });
+      const lead = await ctx.db.insert("msgThreads", { businessId: w.A, kind: "lead", dealId: callKit.dealId, token: "kitleadthreadtoken000001", leadName: "Tom Silva", leadEmail: "tom@silvaroasters.example", lastAt: m(5), lastText: "Looking forward to Friday. Should I send the brief ahead?", lastSide: "lead", lastName: "Tom Silva", createdAt: m(120) });
+      const call = (await ctx.db.query("calls").collect())[0];
+      await ctx.db.insert("messages", { businessId: w.A, threadId: lead, side: "system", name: "", text: "", files: [], call: { callId: call._id, what: "booked", start: call.start, end: call.end, meet: true }, createdAt: m(120) });
+      await msg(lead, "lead", "Tom Silva", "tom@silvaroasters.example", "Looking forward to Friday. Should I send the brief ahead?", m(5));
+      return { tid, lead, token: "kitleadthreadtoken000001" };
+    });
     const OWNER: [string, Record<string, unknown>][] = [
       ["siteWatch.summary", {}], ["siteWatch.report", {}],
       ...sw.ids.map((id): [string, Record<string, unknown>] => ["siteWatch.finding#" + id, { id }]),
@@ -420,7 +440,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["projects.page#" + w.p1, { projectId: w.p1 }], ["shoots.forProject#" + w.p1, { projectId: w.p1 }], ["fileRequests.forProject#" + w.p1, { projectId: w.p1 }], ["briefs.forProject#" + w.p1, { projectId: w.p1 }], ["briefs.settings", {}], ["calendar.settings", {}], ["projects.nextRound#" + w.harbor30.v, { videoId: w.harbor30.v }],
       ["footage.settings", {}], ["footage.forProject#" + w.p1, { projectId: w.p1 }], ["testimonials.list", {}], ["testimonials.projectsFor#" + w.harbor, { clientId: w.harbor }],
       ["invoices.list", {}], ["invoices.overview", { tzOffsetMin: 300 }], ["invoices.options", {}], ["invoices.forProject#" + w.p1, { projectId: w.p1 }],
-      ["production.overview", {}], ["production.shoots", {}], ["calls.settings", {}], ["calls.forDeal#" + callKit.dealId, { dealId: callKit.dealId }], ["crm.deal#" + callKit.dealId, { dealId: callKit.dealId }], ["calls.page#" + callKit.slug, { slug: callKit.slug }], ["calls.manage#" + callKit.token, { token: callKit.token }], ["help.list", {}], ["help.guide#signing-in", { slug: "signing-in" }], ["help.guide#paying-an-invoice", { slug: "paying-an-invoice" }], ["gear.list", {}], ["gear.exportCsv", {}], ["gear.forShoot#" + shootId, { shootId }], ...Object.values(gearIds).map((id): [string, Record<string, unknown>] => ["gear.get#" + id, { gearId: id }]), ["production.projectsForShoot", {}], ["callSheets.list", {}], ["callSheets.newOptions", {}], ["calendarSync.range", calRange], ["calendarSync.linkOptions", {}],
+      ["production.overview", {}], ["production.shoots", {}], ["messages.threads", {}], ["messages.unread", {}], ["messages.thread#" + msgKit.tid, { threadId: msgKit.tid }], ["messages.thread#" + msgKit.lead, { threadId: msgKit.lead }], ["messages.leadPage#" + msgKit.token, { token: msgKit.token }], ["messages.startOptions", {}], ["calls.settings", {}], ["calls.forDeal#" + callKit.dealId, { dealId: callKit.dealId }], ["crm.deal#" + callKit.dealId, { dealId: callKit.dealId }], ["calls.page#" + callKit.slug, { slug: callKit.slug }], ["calls.manage#" + callKit.token, { token: callKit.token }], ["help.list", {}], ["help.guide#signing-in", { slug: "signing-in" }], ["help.guide#paying-an-invoice", { slug: "paying-an-invoice" }], ["gear.list", {}], ["gear.exportCsv", {}], ["gear.forShoot#" + shootId, { shootId }], ...Object.values(gearIds).map((id): [string, Record<string, unknown>] => ["gear.get#" + id, { gearId: id }]), ["production.projectsForShoot", {}], ["callSheets.list", {}], ["callSheets.newOptions", {}], ["calendarSync.range", calRange], ["calendarSync.linkOptions", {}],
       ["overviews.clients", {}], ["overviews.review", {}], ["overviews.docs", {}], ["overviews.proposals", {}], ["overviews.vendors", {}], ["home.dashboard", { tzOffsetMin: 300 }], ["crm.due", {}],
       ...sheetIds.map(({ id }): [string, Record<string, unknown>] => ["callSheets.get#" + id, { callSheetId: id }]),
       ...sheetIds.filter((x) => x.buildId).map(({ buildId }): [string, Record<string, unknown>] => ["builder.getBuild#" + buildId, { buildId }]),
@@ -436,7 +456,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["waveforms.forVersion#" + w.harbor30.last, { versionId: w.harbor30.last, share: { token: shareTokens[0] } }],
       ["transcripts.forVersion#" + w.harbor30.last, { versionId: w.harbor30.last, share: { token: shareTokens[0] } }],
       ["approvals.forVideo#" + w.harbor30.v, { videoId: w.harbor30.v, share: { token: shareTokens[0] } }],
-      ["help.list", {}], ["help.guide#paying-an-invoice", { slug: "paying-an-invoice" }], ["projects.mine", {}], ["projects.forClient#" + w.p1, { projectId: w.p1 }], ["shoots.forClientProject#" + w.p1, { projectId: w.p1 }], ["shoots.page#" + shootId, { shootId }], ["fileRequests.forClientProject#" + w.p1, { projectId: w.p1 }], ["fileRequests.page#" + reqIds.a, { requestId: reqIds.a }], ["fileRequests.page#" + reqIds.b, { requestId: reqIds.b }],
+      ["messages.mine", {}], ["messages.unread", {}], ["messages.clientThreadPage#" + msgKit.tid, { threadId: msgKit.tid }], ["help.list", {}], ["help.guide#paying-an-invoice", { slug: "paying-an-invoice" }], ["projects.mine", {}], ["projects.forClient#" + w.p1, { projectId: w.p1 }], ["shoots.forClientProject#" + w.p1, { projectId: w.p1 }], ["shoots.page#" + shootId, { shootId }], ["fileRequests.forClientProject#" + w.p1, { projectId: w.p1 }], ["fileRequests.page#" + reqIds.a, { requestId: reqIds.a }], ["fileRequests.page#" + reqIds.b, { requestId: reqIds.b }],
       ["briefs.forClientProject#" + w.p1, { projectId: w.p1 }], ["briefs.page#" + briefId, { briefId }],
       ["footage.forClientProject#" + w.p1, { projectId: w.p1 }], ["testimonials.ask#" + askId, { noteId: askId }],
       ["callSheets.forClient#" + prod.C.id, { callSheetId: prod.C.id }], ["callSheets.forClientProject#" + w.p1, { projectId: w.p1 }], ["invoicePay.mine", {}], ...["kitpaidtoken000000001", "kitduetoken0000000002", "kitproctoken000000003"].map((tok): [string, Record<string, unknown>] => ["invoicePay.page#" + tok, { token: tok }])];
@@ -468,7 +488,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       return `${heston}|${await ctx.db.insert("authSessions", { userId: heston, expirationTime: now + 30 * DAY })}`;
     });
     const emptyOwn = await run(empty.withIdentity({ subject: esub }) as never, OWNER.filter(([k, a]) => !k.includes("#") && (k === "calendarSync.range" || Object.values(a).every((x) => typeof x === "number" || typeof x === "boolean"))));
-    const fixtures = { owner: owned, client: await run(client, CLIENT), guest: guestOwn, empty: emptyOwn, ids: { prod: { sheets: Object.fromEntries(Object.entries({ A: prod.A, B: prod.B, C: prod.C, D: prod.D, E: prod.E, F: prod.F, G: prod.G, P: prod.P }).map(([k, x]) => [k, { id: x.id, buildId: x.buildId }])), guest: guest.tokens, shoots: prod.shoots },  invoices: invIds, shares: shareTokens, harbor: w.harbor, video: w.harbor30.v, docSent: w.d1, docSigned: w.d2, docDraft: w.d3, notes: noteIds, gear: gearIds, calls: callKit, shoot: shootId, project: w.p1, requests: reqIds, brief: briefId } };
+    const fixtures = { owner: owned, client: await run(client, CLIENT), guest: guestOwn, empty: emptyOwn, ids: { prod: { sheets: Object.fromEntries(Object.entries({ A: prod.A, B: prod.B, C: prod.C, D: prod.D, E: prod.E, F: prod.F, G: prod.G, P: prod.P }).map(([k, x]) => [k, { id: x.id, buildId: x.buildId }])), guest: guest.tokens, shoots: prod.shoots },  invoices: invIds, shares: shareTokens, harbor: w.harbor, video: w.harbor30.v, docSent: w.d1, docSigned: w.d2, docDraft: w.d3, notes: noteIds, gear: gearIds, calls: callKit, messages: msgKit, shoot: shootId, project: w.p1, requests: reqIds, brief: briefId } };
     writeFileSync(join(__dirname, "..", "src", "dev", "fixtures.json"), JSON.stringify(fixtures, null, 1));
     vi.useRealTimers();
   });

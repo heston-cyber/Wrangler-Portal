@@ -26,6 +26,7 @@ export const NOTICES: Notice[] = [
   { key: "proposal_answers", side: "owner", group: "Quotes and proposals", label: "A client accepts or declines a proposal", kinds: ["proposal-accepted", "proposal-declined"] },
   { key: "client_paid", side: "owner", group: "Payments", label: "A client pays an invoice", kinds: ["owner-paid"] },
   { key: "subscription_failed", side: "owner", group: "Payments", label: "A subscription payment fails", kinds: ["subscription-failed-owner"] },
+  { key: "messages_owner", side: "owner", group: "Clients", label: "A client or lead sends you a message", hint: "One email when they write, not one per message, and only if you haven't read it yet.", kinds: ["message_owner"] }, // Phase 5d (email 45)
   { key: "booked_calls", side: "owner", group: "Clients", label: "A lead books, moves or cancels a call", hint: "It also shows under Needs you on your Dashboard.", kinds: ["call_booked_owner", "call_cancelled_owner", "call_moved_owner"] }, // Phase 5d (Q86)
   { key: "booking_answers", side: "owner", group: "Vendors", label: "A vendor accepts or declines a booking", kinds: ["booking_accepted", "booking_declined"] },
   { key: "briefing_read", side: "owner", group: "Vendors", label: "A vendor reads a briefing", kinds: ["briefing_read"] },
@@ -58,6 +59,7 @@ export const NOTICES: Notice[] = [
   { key: "subscription_upcoming", side: "client", group: "Payments", label: "A subscription charge is coming up", kinds: ["subscription-upcoming"] },
   { key: "client_bills", side: "client", group: "Payments", label: "Invoices, receipts, overdue notices and failed payments", kinds: ["invoice", "invoice-reminder-overdue", "invoice-reminder-manual", "receipt", "payment-failed", "subscription", "subscription-failed", "subscription-cancelled"], always: true },
   { key: "client_shoots", side: "client", group: "Shoots and files", label: "Shoots scheduled or moved, files asked for, and the kickoff brief", hint: "They ask you to confirm, upload or answer, so they always arrive.", kinds: ["shoot", "file_request", "brief"], always: true },
+  { key: "client_messages", side: "client", group: "Messages", label: "A message from the business", hint: "One email when they write, and only if you haven't read it yet.", kinds: ["message"] }, // Phase 5d (email 44)
   { key: "call_sheets", side: "client", group: "Shoots and files", label: "A call sheet is sent to you, or updated", hint: "With reminders when you haven't opened one yet.", kinds: ["callsheet", "callsheet_update"] }, // Phase 5b step 3
   { key: "files_due", side: "client", group: "Shoots and files", label: "A reminder the day before files are due", hint: "Only when nothing has been uploaded yet.", kinds: ["files_due"] },
   { key: "footage_offer", side: "client", group: "Delivery", label: "An offer to keep your raw footage after delivery", kinds: ["footage_offer"] },
