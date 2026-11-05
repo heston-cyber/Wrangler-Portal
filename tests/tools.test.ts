@@ -11,12 +11,12 @@ describe("tools", () => {
     process.env.ALLOWED_EMAILS = "heston@wranglerproductions.com";
     const w = await world();
     expect((await w.heston.query(api.users.me, {})).tools).toEqual(DEFAULT_TOOLS);
-    await w.heston.mutation(api.users.setTools, { tools: { order: ["vendors", "dashboard", "nope", "vendors"], hidden: ["dashboard", "sent"], widgets: [{ id: "activity", on: false }, { id: "x", on: true }] } });
+    await w.heston.mutation(api.users.setTools, { tools: { order: ["sent", "dashboard", "nope", "sent"], hidden: ["dashboard", "sent"], widgets: [{ id: "activity", on: false }, { id: "x", on: true }] } });
     const t = (await w.heston.query(api.users.me, {})).tools;
-    expect(t.order[0]).toBe("vendors");
-    expect(t.order.indexOf("dashboard")).toBeLessThan(t.order.indexOf("clients")); // missing ones join after their default neighbour
+    expect(t.order[0]).toBe("sent");
+    expect(t.order.indexOf("dashboard")).toBeLessThan(t.order.indexOf("people")); // missing ones join after their default neighbour
     expect([...t.order].sort()).toEqual([...TOOLS].sort());
-    expect(t.hidden).toEqual(["sent"]);
+    expect(t.hidden).toEqual(["sent"]); // Dashboard can't be hidden
     expect(t.widgets[0]).toEqual({ id: "activity", on: false });
     expect(t.widgets.map((x: { id: string }) => x.id).sort()).toEqual([...WIDGETS].sort());
     // Another owner's menu is their own.
@@ -26,11 +26,12 @@ describe("tools", () => {
   });
   test("a new tool joins at its default place", () => {
     const old = toolsOf({ order: ["sent", "dashboard", "clients", "review", "docs", "payments", "vendors"] }); // saved before Proposals existed
-    expect(old.order).toEqual(["sent", "dashboard", "clients", "messages", "production", "docs", "proposals", "payments", "vendors"]);
+    expect(old.order).toEqual(["sent", "dashboard", "people", "messages", "production", "docs", "payments"]);
     // D150: a menu saved with Review puts Production where Review was (and only once).
     expect(toolsOf({ order: ["dashboard", "review", "clients", "docs", "proposals", "payments", "vendors", "production", "sent"], hidden: ["review"] }))
-      .toMatchObject({ order: ["dashboard", "production", "clients", "messages", "docs", "proposals", "payments", "vendors", "sent"], hidden: [] });
-    // A menu saved without Production gets it right after Clients, its default place.
-    expect(toolsOf({ order: ["dashboard", "vendors", "clients", "sent"] }).order.slice(0, 5)).toEqual(["dashboard", "vendors", "clients", "messages", "production"]);
+      .toMatchObject({ order: ["dashboard", "production", "people", "messages", "docs", "payments", "sent"], hidden: [] });
+    // D151: Clients and Vendors become People where the first of them was; Proposals goes inside Docs; their hiding is dropped.
+    expect(toolsOf({ order: ["dashboard", "docs", "vendors", "proposals", "clients", "sent"], hidden: ["vendors", "proposals"] }))
+      .toMatchObject({ order: ["dashboard", "docs", "payments", "people", "messages", "production", "sent"], hidden: [] });
   });
 });

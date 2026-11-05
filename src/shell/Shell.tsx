@@ -27,7 +27,9 @@ export const useShell = () => useContext(Ctx);
 
 // ---------- what goes where ----------
 // D150 (Heston, Nov 4): a layer can be split into groups (Production's Pre-pro · Prin-pro · Post-pro · Delivery).
-type Sub = { to: string; label: string; match: (p: string) => boolean; group?: string };
+// D151 (Nov 4, 21:40): Docs (Proposals · Contracts) and People (Clients · Vendors) are grouped the same way.
+// `only`: a group with no pages under it yet (Delivery): it names the group, and isn't listed itself.
+type Sub = { to: string; label: string; match: (p: string) => boolean; group?: string; only?: boolean };
 export type Item = { to: string; label: string; icon: IconName; match: (p: string) => boolean; tab?: (p: string) => boolean; layer?: Sub[]; layerHas?: (p: string) => boolean; badge?: number };
 
 const starts = (p: string, ...pre: string[]) => pre.some((x) => p === x || p.startsWith(x + "/"));
@@ -70,12 +72,15 @@ const OWNER_PRODUCTION: Sub[] = [
   { group: "Prin-pro", to: "/production/gear", label: "Gear", match: (p) => starts(p, "/production/gear") },
   { group: "Post-pro", to: "/review/overview", label: "Review", match: (p) => starts(p, "/review", "/v") },
   { group: "Post-pro", to: "/activity", label: "Activity", match: (p) => starts(p, "/activity") },
+  { group: "Delivery", to: "/production/delivery", label: "Delivery", match: (p) => starts(p, "/production/delivery"), only: true },
 ];
 // Heston (Nov 4, 21:01): each stage folds with an arrow, and its name opens the stage's own overview. Delivery is only
 // its "Coming soon" page for now, so it has no pages under it.
-export const STAGE_TO: Record<string, string> = { "Pre-pro": "/production/pre-pro", "Prin-pro": "/production/prin-pro", "Post-pro": "/production/post-pro", Delivery: "/production/delivery" };
-const STAGE_ORDER = ["Pre-pro", "Prin-pro", "Post-pro", "Delivery"];
-const stageItems = (layer: Sub[], g: string) => layer.filter((s) => s.group === g);
+// D151: the same for Docs (Proposals · Contracts) and People (Clients · Vendors): each name opens that tool's overview.
+export const STAGE_TO: Record<string, string> = { "Pre-pro": "/production/pre-pro", "Prin-pro": "/production/prin-pro", "Post-pro": "/production/post-pro", Delivery: "/production/delivery",
+  Proposals: "/proposals/overview", Contracts: "/sign/overview", Clients: "/clients/overview", Vendors: "/vendors/overview" };
+const groupsOf = (layer: Sub[]) => [...new Set(layer.map((s) => s.group).filter((g): g is string => !!g))];
+const stageItems = (layer: Sub[], g: string) => layer.filter((s) => s.group === g && !s.only);
 const inStage = (layer: Sub[], g: string, p: string) => starts(p, STAGE_TO[g]) || stageItems(layer, g).some((s) => s.match(p));
 const inProduction = (p: string) => starts(p, "/production", "/projects", "/review", "/activity", "/v", "/vendors/bookings", "/vendors/briefings");
 // Phase 3 (Heston, Oct 29): Clients becomes a layer: Pipeline · Companies · Follow-ups. Companies is the client list.
@@ -88,23 +93,26 @@ const OWNER_CLIENTS: Sub[] = [
 ];
 const inClients = (p: string) => starts(p, "/clients");
 const inDocs = (p: string) => starts(p, "/sign", "/docs");
+// D151 (Heston, Nov 4): Docs holds Proposals and Contracts (what Docs was); People holds Clients and Vendors.
+const OWNER_DOCS_ALL: Sub[] = [...OWNER_PROPOSALS.map((x) => ({ ...x, group: "Proposals" })), ...OWNER_DOCS.map((x) => ({ ...x, label: x.label === "All docs" ? "All contracts" : x.label === "New document" ? "New contract" : x.label, group: "Contracts" }))];
+const inDocsAll = (p: string) => inDocs(p) || inProposals(p);
+const OWNER_PEOPLE: Sub[] = [...OWNER_CLIENTS.map((x) => ({ ...x, group: "Clients" })), ...OWNER_VENDORS.map((x) => ({ ...x, group: "Vendors" }))];
+const inPeople = (p: string) => inClients(p) || inVendors(p);
 
 // Nov 2 (Heston): Settings › Tools sets this owner's menu: the order, which tools are on it, and Home is now Dashboard.
 // Phones: the first four tools on the menu, then More (the rest, then Settings).
 function ownerItems(payments = false, saved: Tools = DEFAULT_TOOLS, msgs = 0): { main: Item[]; tabs: Item[] } {
   const tools = toolsOf(saved); // D150: a menu saved with Review shows Production in its place, even before the server re-saves it
   const home: Item = { to: "/", label: "Dashboard", icon: "home", match: (p) => p === "/" };
-  const clients: Item = { to: "/clients/overview", label: "Clients", icon: "users", match: (p) => p === "/clients/overview", tab: inClients, layer: OWNER_CLIENTS, layerHas: inClients };
+  const people: Item = { to: "/clients/overview", label: "People", icon: "users", match: () => false, tab: inPeople, layer: OWNER_PEOPLE, layerHas: inPeople };
   // Phase 5d step 2 (D144/58): Messages is its own item, after Clients.
   const messages: Item = { to: "/messages", label: "Messages", icon: "mail", match: (p) => starts(p, "/messages"), badge: msgs };
-  const docs: Item = { to: "/sign/overview", label: "Docs", icon: "document", match: (p) => p === "/sign" || p === "/sign/overview", tab: inDocs, layer: OWNER_DOCS, layerHas: inDocs };
-  const proposals: Item = { to: "/proposals/overview", label: "Proposals", icon: "quote", match: (p) => p === "/proposals/overview", tab: inProposals, layer: OWNER_PROPOSALS, layerHas: inProposals };
-  const vendors: Item = { to: "/vendors/overview", label: "Vendors", icon: "user", match: (p) => p === "/vendors/overview", tab: inVendors, layer: OWNER_VENDORS, layerHas: inVendors };
+  const docs: Item = { to: "/sign/overview", label: "Docs", icon: "document", match: () => false, tab: inDocsAll, layer: OWNER_DOCS_ALL, layerHas: inDocsAll };
   const production: Item = { to: "/production", label: "Production", icon: "video", match: () => false, tab: inProduction, layer: OWNER_PRODUCTION, layerHas: inProduction };
   const sent: Item = { to: "/sent", label: "Sent", icon: "send", match: (p) => starts(p, "/sent") };
   // Phase 2 Part B: Payments › Invoices once the business has connected Stripe (D45).
   const pay: Item = { to: "/payments", label: "Payments", icon: "invoice", match: () => false, tab: inPayments, layer: OWNER_PAYMENTS, layerHas: inPayments };
-  const byKey: Record<ToolKey, Item | null> = { dashboard: home, clients, messages, docs, proposals, payments: payments ? pay : null, vendors, production, sent };
+  const byKey: Record<ToolKey, Item | null> = { dashboard: home, people, messages, docs, payments: payments ? pay : null, production, sent };
   const main = tools.order.filter((k) => !tools.hidden.includes(k)).map((k) => byKey[k]).filter((x): x is Item => !!x);
   const tabbed = main.slice(0, 4);
   const rest = main.slice(4);
@@ -276,7 +284,7 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
                 {it.layer.filter((s) => !s.group).map((s) => (
                   <a key={s.to} className={`wp-sub${it.layer!.some((x) => x.group) ? " wp-stage wp-stagetop" : ""}`} aria-current={s.match(path) ? "page" : undefined} {...linkProps(s.to)} title={s.label}><span>{s.label}</span></a>
                 ))}
-                {it.layer.some((s) => s.group) && STAGE_ORDER.map((g) => {
+                {it.layer.some((s) => s.group) && groupsOf(it.layer).map((g) => {
                   const kids = stageItems(it.layer!, g);
                   const key = `${it.to}#${g}`;
                   const on = open[key] ?? inStage(it.layer!, g, path);
@@ -347,7 +355,7 @@ function PhoneTop({ me, side, items, logo, bizName, onSearch }: { me: Me; side: 
   const section = items.find((it) => (it.tab ?? it.match)(path));
   const grouped = !!section?.layer?.some((s) => s.group);
   // D150: a grouped layer (Production) shows its stages as chips, and the current stage's pages in a second row.
-  const stages = grouped ? STAGE_ORDER : [];
+  const stages = grouped ? groupsOf(section!.layer!) : [];
   const stageOf = (g: string) => stageItems(section!.layer!, g);
   const current = stages.find((g) => inStage(section!.layer!, g, path)) ?? null;
   const chips = !section?.layer ? null : grouped
