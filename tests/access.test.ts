@@ -136,6 +136,7 @@ const PAYMENTS = "Payments: invoices, reminders, quotes, plans, subscriptions an
 const VENDORPAY = "Vendor payments: vendor invoices and payouts (not an Editor)";
 const SETTINGS = "Settings: booking-call settings (when Settings is on for the role)";
 const BUDGETS = "Clients and leads with See what a project is worth: the pipeline, estimates and the job ledger (a Producer by default, Heston Nov 5)";
+const ACCOUNT = "Settings › Account: their own name";
 const BRAND = "their business's look (name, logo, colours), like every signed-in account";
 const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>> = {
   producer: {
@@ -407,6 +408,7 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "uploads.startUpload": REVIEW,
     "uploads.uploadFinished": REVIEW,
     "uploads.uploadFailed": REVIEW,
+    "users.setName": ACCOUNT,
     "vendors.invoices": PRODUCTION,
     "vendors.list": PRODUCTION,
     "vendors.get": PRODUCTION,
@@ -424,6 +426,7 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "library.overview": REVIEW,
     "notes.voiceUploadUrl": REVIEW,
     "notes.discardVoice": REVIEW,
+    "users.setName": ACCOUNT,
   },
   bookkeeper: {
     "business.brand": BRAND,
@@ -477,6 +480,7 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "subscriptions.setFailRule": PAYMENTS,
     "subscriptions.setClientFailRule": PAYMENTS,
     "subscriptions.failRules": PAYMENTS,
+    "users.setName": ACCOUNT,
     "vendorPayments.list": VENDORPAY,
     "vendorPayments.totals1099": VENDORPAY,
     "vendorPayments.get": VENDORPAY,

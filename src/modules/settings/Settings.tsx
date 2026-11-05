@@ -33,6 +33,7 @@ import { ClientsSettings } from "../clients/Clients";
 import { SharesSettings } from "../review/Share";
 import { NotificationList } from "./Notifications";
 import { errText } from "../docs/pages/common";
+import { TeamSection } from "../team/TeamSettings";
 
 // The connector lives on the Convex site host: <deployment>.convex.site/mcp
 const CONVEX = (import.meta.env.VITE_CONVEX_URL as string | undefined) || "https://handsome-hummingbird-11.convex.cloud";
@@ -109,6 +110,7 @@ export default function Settings({ me }: { me: { name: string | null; email: str
   return (
     <SettingsFrame section={key}>
       {key === "business" && <BusinessSection show={show} />}
+      {key === "team" && <TeamSection path={path} show={show} />}
       {key === "payments" && <PaymentsSettings show={show} />}
       {key === "rates" && <RatesSection show={show} />}
       {key === "brand" && <><SetHead eyebrow="Brand kit" title="Your brand, for decks." sub="Claude uses this when it makes a pitch deck in your brand. Each client can have their own kit on their company page." /><BrandKitEditor show={show} /></>}

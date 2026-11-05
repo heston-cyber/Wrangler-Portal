@@ -152,6 +152,11 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "production.shoots": { pages: ["owner"], args: () => ({}) }, // Production › Shoots
   "messages.unread": { pages: ["owner", "clientHome"], args: () => ({}) }, // the side menu's Messages count (Phase 5d)
   "messages.threads": { pages: ["owner"], args: () => ({}) }, // Messages
+  // Phase 5e step 1: Settings › Team (owner only), the project page's Assigned people, and the Join page (no account).
+  "team.page": { pages: ["owner"], args: () => ({}) },
+  "team.member": { pages: ["owner"], args: () => "skip" },
+  "team.projectPeople": { pages: ["owner"], args: () => "skip" },
+  "team.joinPage": { pages: ["share", "signin"], args: () => ({ token: "x".repeat(32) }) }, // /team/join/<token>
   "messages.thread": { pages: ["owner"], args: () => "skip" }, // a conversation
   "messages.startOptions": { pages: ["owner"], args: () => "skip" }, // New message
   "messages.mine": { pages: ["clientHome"], args: () => ({}) }, // the client's Messages

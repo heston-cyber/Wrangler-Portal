@@ -19,6 +19,8 @@ import { CrewCard } from "../vendors/Bookings";
 import { ShootsCard } from "./Shoots";
 import { RequestsCard } from "./Requests";
 import { FootageCard } from "./Footage";
+import { usePerms } from "../../lib/teamAccess";
+import { AssignedCard } from "../team/Assigned";
 import { StageBar, STAGES, stageName, type Stage, dateText, bytes, openFileLink } from "./common";
 
 type Page = NonNullable<ReturnType<typeof useQuery<typeof api.projects.page>>>;
@@ -240,6 +242,7 @@ function Overview({ page, onMove, onRounds, onNext, onDates, postDefault, setPos
   page: Page; onMove: (s: Stage) => void; onRounds: () => void; onNext: () => void; onDates: () => void;
   postDefault: boolean; setPostDefault: (b: boolean) => void; goTab: (t: ProjectTab) => void; onAddFiles: () => void;
 }) {
+  const { perms } = usePerms();
   const i = STAGES.indexOf(page.stage);
   const next = STAGES[i + 1] as Stage | undefined;
   const client = page.client?.name ?? "the client";
@@ -258,7 +261,8 @@ function Overview({ page, onMove, onRounds, onNext, onDates, postDefault, setPos
         <Card className="pj-next" label="Next step" head={<SectionHead label="Next step" action={<Button size="sm" variant="ghost" onClick={onNext} iconEnd="edit">Edit</Button>} />}>
           <p className="pj-nexttext">{page.nextStep || <span className="secondary">No next step yet.</span>}</p>
         </Card>
-        <ShootsCard projectId={page._id} client={page.client?.name ?? null} label={page.label} />
+        <AssignedCard projectId={page._id} />
+        {perms.shoots && <ShootsCard projectId={page._id} client={page.client?.name ?? null} label={page.label} />}
         <RequestsCard projectId={page._id} client={page.client?.name ?? null} label={page.label} />
         <Card className="pj-cuts" label="Cuts" head={<SectionHead label="Cuts" count={page.videos.length} action={<Button size="sm" variant="ghost" onClick={() => goTab("cuts")} iconEnd="arrow-right">Open Cuts</Button>} />}>
           {page.videos.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "video" }} title="No cuts yet." />
@@ -297,13 +301,14 @@ function Overview({ page, onMove, onRounds, onNext, onDates, postDefault, setPos
           {page.people.length === 0 ? <p className="pj-pad secondary">{page.client ? `No one at ${client} yet.` : "This project has no client."}</p>
             : page.people.map((p) => <ListRow key={p._id} lead={{ avatar: p.name ?? p.email, two: true }} title={p.name ?? p.email} meta={p.name ? p.email : undefined} />)}
         </Card>
-        <CrewCard projectId={page._id} />
+        {perms.production && <CrewCard projectId={page._id} />}
       </div>
     </div>
   );
 }
 
 function Delivery({ page, show, onAddFiles }: { page: Page; show: (m: string) => void; onAddFiles: () => void }) {
+  const { perms } = usePerms();
   const setDelivery = useMutation(api.projects.setDelivery);
   const remove = useMutation(api.projects.removeDeliveryFile);
   const link = useAction(api.projects.deliveryLink);
@@ -351,7 +356,7 @@ function Delivery({ page, show, onAddFiles }: { page: Page; show: (m: string) =>
           <dt>Dropbox files</dt><dd>A fresh Dropbox link on every click (each lasts about 4 hours)</dd>
         </dl>
       </Card>
-      <FootageCard projectId={page._id} show={show} />
+      {perms.payments && <FootageCard projectId={page._id} show={show} />}
       {confirmDialog}
     </div>
   );
@@ -377,8 +382,9 @@ export default function ProjectPage({ projectId, tab }: { projectId: Id<"project
   const [moving, setMoving] = useState<Stage | null>(null);
   const [dialog, setDialog] = useState<"rounds" | "next" | "dates" | "files" | "share" | null>(null);
   const [postDefault, setPostDefault] = useState(true);
-  const pay = useQuery(api.payments.settings, {});
-  const payOn = !!pay?.stripe; // Phase 2 Part B: the Invoices tab once Stripe is connected
+  const { perms } = usePerms(); // Phase 5e: a team member's tabs and cards follow their switches
+  const pay = useQuery(api.payments.settings, perms.payments ? {} : "skip");
+  const payOn = !!pay?.stripe && perms.payments; // Phase 2 Part B: the Invoices tab once Stripe is connected
   const setTab = (k: ProjectTab) => navigate(`/projects/${projectId}${k === "overview" ? "" : `?tab=${k}`}`);
   if (page === undefined) return <><TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/projects")}>Projects</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
   if (page === null) return <><TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/projects")}>Projects</a></TopBar><div className="wp-page"><EmptyState icon="folder" title="This project doesn't exist any more." actions={<ButtonLink to="/projects">All projects</ButtonLink>} /></div></>;
@@ -410,15 +416,15 @@ export default function ProjectPage({ projectId, tab }: { projectId: Id<"project
           <Tabs label="Project" value={tab} onChange={setTab} items={[
             { key: "overview", label: "Overview" }, { key: "cuts", label: "Cuts", count: page.videos.length },
             { key: "documents", label: "Documents", count: page.documents.length },
-            ...(payOn ? [{ key: "invoices" as ProjectTab, label: "Invoices" }] : []), { key: "delivery", label: "Delivery" }, { key: "ledger", label: "Ledger" },
+            ...(payOn ? [{ key: "invoices" as ProjectTab, label: "Invoices" }] : []), { key: "delivery", label: "Delivery" }, ...(perms.clients && perms.value ? [{ key: "ledger" as ProjectTab, label: "Ledger" }] : []),
           ]} />
         </div>
         {tab === "overview" && <Overview page={page} onMove={setMoving} onRounds={() => setDialog("rounds")} onNext={() => setDialog("next")} onDates={() => setDialog("dates")} postDefault={postDefault} setPostDefault={setPostDefault} goTab={setTab} onAddFiles={() => setDialog("files")} />}
         {tab === "cuts" && <div className="pj-cutsTab"><Projects projectId={projectId} embedded /></div>}
         {tab === "documents" && <Documents page={page} />}
-        {tab === "invoices" && <ProjectInvoices projectId={projectId} clientId={page.client?._id ?? null} />}
+        {tab === "invoices" && payOn && <ProjectInvoices projectId={projectId} clientId={page.client?._id ?? null} />}
         {tab === "delivery" && <Delivery page={page} show={show} onAddFiles={() => setDialog("files")} />}
-        {tab === "ledger" && <LedgerTab projectId={projectId} show={show} />}
+        {tab === "ledger" && perms.clients && perms.value && <LedgerTab projectId={projectId} show={show} />}
       </div>
       {moving && <MoveStage page={page} to={moving} post={postDefault} onClose={() => setMoving(null)} show={show} />}
       {dialog === "rounds" && <RoundsDialog page={page} onClose={() => setDialog(null)} show={show} />}

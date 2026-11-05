@@ -1,3 +1,5 @@
+import { NotAllowedBoundary } from "./ErrorBoundary";
+import { canOpen, type Perms } from "./lib/teamAccess";
 import { useConvexAuth, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../convex/_generated/api";
@@ -117,6 +119,10 @@ const HelpScreen = lazy(() => import("./modules/help/Help").then((m) => ({ defau
 const SignDoc = lazy(() => import("./modules/docs/pages/SignDoc"));
 const SignSignature = lazy(() => import("./modules/docs/pages/SignSignature"));
 // S2: the client's signing page. sign.wranglerportal.com/<token>, or /x/<token> on any host (a fallback).
+const JoinTeam = lazy(() => import("./modules/team/JoinTeam")); // Phase 5e: /team/join/<token>
+const TeamHome = lazy(() => import("./modules/team/TeamPages").then((m) => ({ default: m.TeamHome }))); // Phase 5e
+const NoAccess = lazy(() => import("./modules/team/TeamPages").then((m) => ({ default: m.NoAccess })));
+const TeamAccount = lazy(() => import("./modules/team/TeamPages").then((m) => ({ default: m.TeamAccount })));
 const SignerApp = lazy(() => import("./modules/docs/signer/SignerApp"));
 const VerifyPage = lazy(() => import("./modules/docs/signer/VerifyPage"));
 // Dev only: the component page (never part of the live build).
@@ -152,6 +158,8 @@ export default function App() {
     const guestKit = /^\/guest(?:\/([A-Za-z0-9_-]{16,64}))?\/?$/.exec(path);
     if (guestKit && (kit === "guest" || kit === "guestout")) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><GuestApp key={guestKit[1] ?? "home"} token={guestKit[1] ?? null} /></Suspense></KitApp></Suspense>;
     const sh = /^\/s\/([^/]+)(?:\/v\/([^/]+))?\/?$/.exec(path);
+    const jk = /^\/team\/join\/([A-Za-z0-9_-]{20,64})\/?$/.exec(path); // Phase 5e: the Join page
+    if (jk) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><JoinTeam token={jk[1]} /></Suspense></KitApp></Suspense>;
     const qk = /^\/q\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path); // D149: the no-account quote page
     if (qk) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><ClientQuote token={qk[1]} /></Suspense></KitApp></Suspense>;
     const brief = /^\/b\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path); // D147: the no-login briefing page
@@ -211,6 +219,9 @@ export default function App() {
     const page = (inShell: boolean) => <Suspense fallback={<Loading />}><ClientInvoice key={invoice[1]} token={invoice[1]} inShell={inShell} /></Suspense>;
     return isAuthenticated ? <ShareForMember video={false} page={page} /> : page(false);
   }
+  // Phase 5e: a team invite's link (email 46), no account yet.
+  const joinLink = /^\/team\/join\/([A-Za-z0-9_-]{20,64})\/?$/.exec(path);
+  if (joinLink) return <Suspense fallback={<Loading />}><JoinTeam key={joinLink[1]} token={joinLink[1]} /></Suspense>;
   // Phase 5b step 4: a call-sheet guest's link (email 41), signed in or out; the page decides.
   const guestLink = /^\/guest(?:\/([A-Za-z0-9_-]{16,64}))?\/?$/.exec(path);
   if (guestLink) return <Suspense fallback={<Loading />}><GuestApp key={guestLink[1] ?? "home"} token={guestLink[1] ?? null} /></Suspense>;
@@ -242,7 +253,9 @@ function SignedIn() {
       <><SideFromLink /><ClientShell me={me} /></>
     );
   }
-  if (!me || !me.allowed) {
+  // Phase 5e: a team member works in the back office, with what their role allows.
+  const team = !!me && me.role === "team" && !!me.team;
+  if (!me || (!me.allowed && !team)) {
     return (
       <SystemPage icon="lock" eyebrow="Wrangler Review" title="Not allowed." body="This account isn't on Wrangler Review's list.">
         <Button style={{ alignSelf: "flex-start" }} onClick={() => void signOut()}>Sign out</Button>
@@ -336,6 +349,15 @@ function SignedIn() {
   else if (/^\/more\/?$/.test(path)) page = <MorePage me={me} side="owner" />;
   else if (/^\/review\/?$/.test(path)) page = <Home />; // Review's main page
   else page = <OwnerHome />; // "/": the back-office Home
+  // Phase 5e: a team member's Dashboard and Account are their own; a page their role can't use is the no-access page,
+  // and a page that still asks for something the role can't have falls back to it too.
+  if (team) {
+    const perms = me.team!.perms as Perms;
+    if (path === "/" || path === "") page = <Suspense fallback={<Loading />}><TeamHome name={me.name} /></Suspense>;
+    else if ((/^\/settings\/?$/.test(path) && !perms.settings) || /^\/settings\/account\/?$/.test(path)) page = <Suspense fallback={<Loading />}><TeamAccount me={me} /></Suspense>;
+    else if (!canOpen(path, perms, true, me.team!.role)) page = <Suspense fallback={<Loading />}><NoAccess /></Suspense>;
+    page = <NotAllowedBoundary key={path} fallback={<Suspense fallback={<Loading />}><NoAccess /></Suspense>}>{page}</NotAllowedBoundary>;
+  }
   // Work surfaces get no background light, so nothing competes with the video or the document.
   const workSurface = Boolean(video) || /^\/sign\/(b|d)\//.test(path) || /^\/sign\/templates\/[^/]+/.test(path) || /^\/production\/call-sheets\/([^/]+\/edit|templates\/[^/]+)/.test(path) || /^\/settings\/help\/edit\//.test(path);
   return (

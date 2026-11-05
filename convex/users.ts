@@ -90,7 +90,9 @@ export const setTools = mutation({
 export const setName = mutation({
   args: { name: v.string() },
   handler: async (ctx, { name }) => {
-    const me = await requireSignedIn(ctx);
+    // Phase 5e: a team member names themselves too (Settings › Account).
+    const who = await viewerOf(ctx);
+    const me = who.kind === "team" ? { userId: who.userId, kind: "team" as const } : await requireSignedIn(ctx);
     const n = name.trim().replace(/\s+/g, " ").slice(0, 60);
     if (!n) throw new ConvexError("Enter a name.");
     if (me.kind !== "owner" && ownerNames().has(n.toLowerCase())) throw new ConvexError("That name is taken.");

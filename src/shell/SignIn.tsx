@@ -159,7 +159,7 @@ export default function SignIn({ invitedEmail, note: lead }: { invitedEmail?: st
 }
 
 /** Six boxes over one real field, so paste, autofill and screen readers work as with any code input. */
-function CodeBoxes({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function CodeBoxes({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [focus, setFocus] = useState(true);
   return (
     <div className="wp-code">

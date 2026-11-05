@@ -6,11 +6,13 @@ import { useSignOutAsk } from "../../shell/SignOut";
 import { Sep, TopBar } from "../../shell/Shell";
 import { Icon, type IconName } from "../../ui/Icon";
 import { linkProps } from "../../lib/router";
+import { usePerms } from "../../lib/teamAccess";
 
-export type SectionKey = "business" | "payments" | "rates" | "brand" | "calendar" | "sitewatch" | "brief" | "tools" | "account" | "notifications" | "register" | "dropbox" | "connectors" | "sheet" | "clients" | "shares" | "help" | "calls";
+export type SectionKey = "business" | "team" | "payments" | "rates" | "brand" | "calendar" | "sitewatch" | "brief" | "tools" | "account" | "notifications" | "register" | "dropbox" | "connectors" | "sheet" | "clients" | "shares" | "help" | "calls";
 
 export const SECTIONS: Array<{ key: SectionKey; label: string; icon: IconName }> = [
   { key: "business", label: "Business", icon: "users" },
+  { key: "team", label: "Team", icon: "users" }, // Phase 5e (D146: after Business), the owner's only
   { key: "payments", label: "Payments", icon: "invoice" },
   { key: "rates", label: "Pricing", icon: "activity" }, // Phase 3 (263:1382), renamed Pricing in 3b (D76)
   { key: "brand", label: "Brand kit", icon: "folder" }, // Phase 3b (708:1235)
@@ -45,12 +47,18 @@ export function sectionOf(path: string, search: string, hash: string): SectionKe
   return h ?? null;
 }
 
+/** Phase 5e: the sections a team member's Settings switch opens (the rest stay the owner's). */
+const TEAM_SECTIONS: SectionKey[] = ["business", "brand", "calls"];
+
 export function SectionMenu({ active, list }: { active: SectionKey | null; list?: boolean }) {
   const [signOut, signOutDialog] = useSignOutAsk();
   const admin = useQuery(api.siteWatch.summary); // null for anyone who isn't one of the portal's admins: Site watch stays out of their menu
+  // Phase 5e: a team member sees Account, and with Settings on, the sections their switch opens.
+  const { team, perms } = usePerms();
+  const shown = SECTIONS.filter((s) => (s.key !== "sitewatch" || admin) && (!team || s.key === "account" || (perms.settings && TEAM_SECTIONS.includes(s.key))));
   return (
     <nav className={`wp-setmenu glass${list ? " list" : ""}`} aria-label="Settings">
-      {SECTIONS.filter((s) => s.key !== "sitewatch" || admin).map((s) => (
+      {shown.map((s) => (
         <a key={s.key} className="item" aria-current={active === s.key ? "page" : undefined} {...linkProps(`/settings/${s.key}`)}>
           <Icon name={s.icon} size={16} /><span>{s.label}</span>{list && <Icon name="chevron-right" size={16} className="go" />}
         </a>
