@@ -380,8 +380,8 @@ export default function ProjectPage({ projectId, tab }: { projectId: Id<"project
   const pay = useQuery(api.payments.settings, {});
   const payOn = !!pay?.stripe; // Phase 2 Part B: the Invoices tab once Stripe is connected
   const setTab = (k: ProjectTab) => navigate(`/projects/${projectId}${k === "overview" ? "" : `?tab=${k}`}`);
-  if (page === undefined) return <><TopBar><a {...linkProps("/projects")}>Projects</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
-  if (page === null) return <><TopBar><a {...linkProps("/projects")}>Projects</a></TopBar><div className="wp-page"><EmptyState icon="folder" title="This project doesn't exist any more." actions={<ButtonLink to="/projects">All projects</ButtonLink>} /></div></>;
+  if (page === undefined) return <><TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/projects")}>Projects</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
+  if (page === null) return <><TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/projects")}>Projects</a></TopBar><div className="wp-page"><EmptyState icon="folder" title="This project doesn't exist any more." actions={<ButtonLink to="/projects">All projects</ButtonLink>} /></div></>;
   return (
     <>
       <TopBar right={<>
@@ -393,7 +393,7 @@ export default function ProjectPage({ projectId, tab }: { projectId: Id<"project
         <Button size="sm" onClick={() => setDialog("share")}>Share</Button>
         {page.client && <ButtonLink size="sm" variant="primary" to={`/sent/new?client=${page.client._id}`}>Post a note</ButtonLink>}
       </>}>
-        <a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/projects")}>Projects</a><Sep /><span className="here">{page.label}</span>
+        <a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/projects")}>Projects</a><Sep /><span className="here">{page.label}</span>
       </TopBar>
       <div className="wp-page cp pj">
         <a className="wp-setback" {...linkProps("/projects")}><Icon name="arrow-left" size={20} />Projects</a>

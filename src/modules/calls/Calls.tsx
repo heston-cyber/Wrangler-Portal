@@ -241,7 +241,7 @@ function CodeStep({ token, email, when, code, slug }: { token: string; email: st
   const [value, setValue] = useState(""), [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 15_000); return () => clearInterval(t); }, []);
-  const minsLeft = Math.max(0, Math.ceil((code.until - now) / 60_000));
+  const minsLeft = Math.min(10, Math.max(0, Math.ceil((code.until - now) / 60_000)));
   const go = async () => {
     setBusy(true); setErr(null);
     try { const r = await verify({ token, code: value }); if (r.error) { setErr(r.error); setValue(""); } } catch (e) { setErr(errText(e)); } finally { setBusy(false); }

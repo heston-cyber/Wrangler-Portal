@@ -41,7 +41,7 @@ export default function SignSignature() {
   const showForm = cur !== undefined && (!cur.adopted || editing);
   return (
     <>
-      <TopBar><a {...linkProps("/sign")}>Docs</a><Sep /><span className="here">Your signature</span></TopBar>
+      <TopBar><span className="secondary">Docs</span><Sep /><a {...linkProps("/sign")}>Contracts</a><Sep /><span className="here">Your signature</span></TopBar>
       <div className="wp-page docs">
         <PageHeader eyebrow="Wrangler Sign" title="Your signature." sub="It goes on every document you approve and send, as Wrangler Productions, a DBA of Hill Creative LLC." />
 

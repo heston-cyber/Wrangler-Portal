@@ -62,7 +62,7 @@ export default function EstimatePage({ estimateId, dealId, clientId, projectId, 
   const who = saved?.company ?? deal?.company?.name ?? deal?.lead?.company ?? deal?.lead?.name ?? company?.name ?? null;
   const dealRef = (saved?.dealId ?? (dealId || null)) as Id<"deals"> | null;
   const top = (
-    <TopBar><a {...linkProps("/clients")}>Clients</a><Sep />
+    <TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/clients")}>Clients</a><Sep />
       {dealRef ? <><a {...linkProps("/clients/pipeline")}>Pipeline</a><Sep />{who && <><a {...linkProps(`/clients/deals/${dealRef}`)}>{who}</a><Sep /></>}</> : who && <><a {...linkProps("/clients")}>Companies</a><Sep /></>}
       <span className="here">Estimate</span></TopBar>
   );

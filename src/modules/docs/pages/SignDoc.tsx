@@ -30,8 +30,8 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), h
 
 export default function SignDoc({ documentId, versionNumber }: { documentId: Id<"wsDocuments">; versionNumber: number | null }) {
   const data = useGetDoc(documentId, versionNumber);
-  if (data === undefined) return <><TopBar><a {...linkProps("/sign")}>Docs</a></TopBar><div className="wp-page docs"><div className="wp-tablecard glass"><SkeletonRows n={3} /></div></div></>;
-  if (data === null) return <><TopBar><a {...linkProps("/sign")}>Docs</a></TopBar><div className="wp-page docs"><EmptyState icon="document" title="This document doesn't exist (or was deleted)." actions={<ButtonLink to="/sign/docs">All docs</ButtonLink>} /></div></>;
+  if (data === undefined) return <><TopBar><span className="secondary">Docs</span><Sep /><a {...linkProps("/sign")}>Contracts</a></TopBar><div className="wp-page docs"><div className="wp-tablecard glass"><SkeletonRows n={3} /></div></div></>;
+  if (data === null) return <><TopBar><span className="secondary">Docs</span><Sep /><a {...linkProps("/sign")}>Contracts</a></TopBar><div className="wp-page docs"><EmptyState icon="document" title="This document doesn't exist (or was deleted)." actions={<ButtonLink to="/sign/docs">All docs</ButtonLink>} /></div></>;
   return <Editor key={data.version._id} data={data} />;
 }
 
@@ -213,7 +213,7 @@ function Editor({ data }: { data: Data }) {
           {(doc.status === "draft" || doc.status === "approved") && <MenuItem icon={<Icon name="close" size={16} />} danger onSelect={() => setConfirmDelete(true)}>Delete document</MenuItem>}
         </Menu>
       </>}>
-        <a {...linkProps("/sign")}>Docs</a><Sep /><span className="here">{doc.label} · {layout.title}</span>
+        <span className="secondary">Docs</span><Sep /><a {...linkProps("/sign")}>Contracts</a><Sep /><span className="here">{doc.label} · {layout.title}</span>
       </TopBar>
       <input ref={fileInput} type="file" accept="application/pdf,.pdf" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void onReplace(f); }} />
 
@@ -743,7 +743,7 @@ function FinishedCard({ data, show }: { data: Data; show: (m: string) => void })
           <li>
             <Icon name="folder" size={16} />
             {doc.archive?.status === "archived" ? <><span>In Dropbox › Apps/Wrangler Sign{doc.archive.pdfPath}{doc.archive.verified ? <><br /><span className="ws-sub">checked</span></> : ""}</span><Done /></>
-              : doc.archive?.status === "waiting" ? <span className="secondary">Waiting for the archive to be connected (<a {...linkProps("/sign")}>Docs</a>). It's copied as soon as it is.</span>
+              : doc.archive?.status === "waiting" ? <span className="secondary">Waiting for the archive to be connected (<span className="secondary">Docs</span><Sep /><a {...linkProps("/sign")}>Contracts</a>). It's copied as soon as it is.</span>
               : doc.archive?.status === "failed" ? <><span className="ws-err">Archive failed: {doc.archive.error}</span><Retry step="archive" /></>
               : <span className="secondary"><Spinner /> Archiving…</span>}
           </li>

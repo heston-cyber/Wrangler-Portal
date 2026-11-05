@@ -32,7 +32,7 @@ export default function Home() {
   const rows = shownTab === "opened" ? opened : latest;
   return (
     <>
-      <TopBar><a {...linkProps("/production")}>Production</a><Sep /><span className="here">Review</span></TopBar>
+      <TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/post-pro")}>Post-pro</a><Sep /><span className="here">Review</span></TopBar>
       <div className="wp-page"
         onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setOver(true); } }}
         onDragLeave={(e) => { if (e.currentTarget === e.target) setOver(false); }}

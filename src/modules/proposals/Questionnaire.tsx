@@ -114,9 +114,9 @@ export function QuestionnaireRunner({ proposalId, preview }: { proposalId?: stri
     return () => clearTimeout(t);
   }, [a, dirty, step]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (proposalId && p === null) return <><TopBar><a {...linkProps("/proposals")}>Proposals</a></TopBar><div className="wp-page"><EmptyState icon="quote" title="This proposal isn't here." actions={<ButtonLink to="/proposals">All proposals</ButtonLink>} /></div></>;
-  if (!qn || !a || !ratesQ || !options) return <><TopBar><a {...linkProps("/proposals")}>Proposals</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={6} /></Card></div></>;
-  if (p && !["draft", "waiting", "ready"].includes(p.status)) return <><TopBar><a {...linkProps("/proposals")}>Proposals</a></TopBar><div className="wp-page"><EmptyState icon="lock" title="This proposal has been sent." body="Its answers can't change now." actions={<ButtonLink to={`/proposals/${p._id}`}>Open it</ButtonLink>} /></div></>;
+  if (proposalId && p === null) return <><TopBar><span className="secondary">Docs</span><Sep /><a {...linkProps("/proposals")}>Proposals</a></TopBar><div className="wp-page"><EmptyState icon="quote" title="This proposal isn't here." actions={<ButtonLink to="/proposals">All proposals</ButtonLink>} /></div></>;
+  if (!qn || !a || !ratesQ || !options) return <><TopBar><span className="secondary">Docs</span><Sep /><a {...linkProps("/proposals")}>Proposals</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={6} /></Card></div></>;
+  if (p && !["draft", "waiting", "ready"].includes(p.status)) return <><TopBar><span className="secondary">Docs</span><Sep /><a {...linkProps("/proposals")}>Proposals</a></TopBar><div className="wp-page"><EmptyState icon="lock" title="This proposal has been sent." body="Its answers can't change now." actions={<ButtonLink to={`/proposals/${p._id}`}>Open it</ButtonLink>} /></div></>;
 
   const steps = qn.steps;
   const reviewAt = steps.length;
@@ -151,7 +151,7 @@ export function QuestionnaireRunner({ proposalId, preview }: { proposalId?: stri
   return (
     <>
       <TopBar right={preview ? <StatusChip tone="warning">Preview · nothing is saved</StatusChip> : savedAt ? <span className="wp-small">Saved · {timeWord(savedAt)}</span> : undefined}>
-        <a {...linkProps("/proposals")}>Proposals</a><Sep />{preview ? <><a {...linkProps("/proposals/questionnaire")}>Questionnaire</a><Sep /><span className="here">Preview</span></> : <><a {...linkProps("/proposals/new")}>New proposal</a><Sep /><span className="here">Questionnaire{p ? ` · ${p.number}` : ""}</span></>}
+        <span className="secondary">Docs</span><Sep /><a {...linkProps("/proposals")}>Proposals</a><Sep />{preview ? <><a {...linkProps("/proposals/questionnaire")}>Questionnaire</a><Sep /><span className="here">Preview</span></> : <><a {...linkProps("/proposals/new")}>New proposal</a><Sep /><span className="here">Questionnaire{p ? ` · ${p.number}` : ""}</span></>}
       </TopBar>
       <div className="wp-page qz" ref={top}>
         <header className="wp-pagehead"><div className="txt">
@@ -437,7 +437,7 @@ export function ProposalWaiting({ p }: { p: ProposalInfo }) {
   return (
     <>
       <TopBar right={<Button size="sm" loading={busy} onClick={async () => { setBusy(true); try { await fillInstead({ proposalId: p._id }); } catch (e) { show(errText(e)); setBusy(false); } }}>Fill in myself instead</Button>}>
-        <a {...linkProps("/proposals")}>Proposals</a><Sep /><a {...linkProps("/proposals")}>All proposals</a><Sep /><span className="here">{p.title}</span>
+        <span className="secondary">Docs</span><Sep /><a {...linkProps("/proposals")}>Proposals</a><Sep /><a {...linkProps("/proposals")}>All proposals</a><Sep /><span className="here">{p.title}</span>
       </TopBar>
       <div className="wp-page">
         <header className="wp-pagehead"><div className="txt">
@@ -479,7 +479,7 @@ export function QuestionnaireEditor({ kind = "proposal" }: { kind?: "proposal" |
   const save = brief ? saveB : saveP, reset = brief ? resetB : resetP;
   const addable = brief ? KICKOFF_ADDABLE : ADDABLE;
   const crumbs = brief ? <><a {...linkProps("/settings/brief")}>Settings</a><Sep /><a {...linkProps("/settings/brief")}>Kickoff brief</a><Sep /><span className="here">Questions</span></>
-    : <><a {...linkProps("/proposals")}>Proposals</a><Sep /><span className="here">Questionnaire</span></>;
+    : <><span className="secondary">Docs</span><Sep /><a {...linkProps("/proposals")}>Proposals</a><Sep /><span className="here">Questionnaire</span></>;
   const [toast, show] = useToast();
   const [confirm, confirmNode] = useConfirm();
   const [qn, setQn] = useState<Questionnaire | null>(null);

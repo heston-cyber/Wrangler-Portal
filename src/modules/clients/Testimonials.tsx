@@ -108,7 +108,7 @@ export default function TestimonialsPage() {
   const shown = (rows ?? []).filter((r) => tab === "all" || (tab === "new" ? !r.read : tab === "can" ? r.permission : !r.permission));
   return (
     <>
-      <TopBar><a {...linkProps("/clients")}>Clients</a><Sep /><span className="here">Testimonials</span></TopBar>
+      <TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/clients")}>Clients</a><Sep /><span className="here">Testimonials</span></TopBar>
       <div className="wp-page tm-list">
         <header className="wp-pagehead"><div className="txt">
           <span className="wp-eyebrow">Clients</span>

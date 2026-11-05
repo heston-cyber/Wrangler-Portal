@@ -7,7 +7,7 @@ import { Icon, type IconName } from "../../../ui/Icon";
 import { ButtonLink, PageHeader } from "../../../ui/wp";
 import { DocMenu, menuOpeners, type MenuAt, type MenuDoc } from "./DocMenu";
 import { api } from "../../../../convex/_generated/api";
-import { TopBar } from "../../../shell/Shell";
+import { Sep, TopBar } from "../../../shell/Shell";
 import { linkProps, navigate } from "../../../lib/router";
 import { central, shortWhen, StatusChip } from "./common";
 import { countByStatus } from "../lib/docFilter";
@@ -35,7 +35,7 @@ export default function SignHome() {
         <ButtonLink variant="ghost" size="sm" className="hide-sm" to="/settings/connectors">Claude connector</ButtonLink>
         <ButtonLink variant="ghost" size="sm" className="hide-sm" to="/sign/signature">Your signature</ButtonLink>
       </>}>
-        <span className="here">Docs</span>
+        <span className="secondary">Docs</span><Sep /><span className="here">Contracts</span>
       </TopBar>
       <div className="wp-page docs home">
         <PageHeader eyebrow="Wrangler Sign" title="Contracts." sub="Write it, send it, get it signed." />

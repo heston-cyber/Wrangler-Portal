@@ -16086,6 +16086,31 @@
      "title": "26127 Harbor Coffee Launch"
     }
    ]
+  },
+  "calls.manage#kitcalltokenverify000000001": {
+   "business": {
+    "legalName": "Hill Creative LLC",
+    "logoUrl": null,
+    "name": "Wrangler Productions",
+    "owner": "Heston Hill"
+   },
+   "canChange": false,
+   "email": "tom@silvaroasters.example",
+   "end": 1793374200000,
+   "meet": null,
+   "moveTaken": null,
+   "moving": false,
+   "name": "Tom Silva",
+   "past": false,
+   "slug": "wrangler",
+   "start": 1793372400000,
+   "status": "verifying",
+   "tz": "America/New_York",
+   "code": {
+    "until": 4102444800000,
+    "triesLeft": 5,
+    "sentAt": 1793300000000
+   }
   }
  },
  "client": {

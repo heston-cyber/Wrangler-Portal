@@ -26,7 +26,7 @@ export default function DealPage({ dealId }: { dealId: string }) {
   const [toast, show] = useToast();
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
-  const top = <TopBar><a {...linkProps("/clients")}>Clients</a><Sep /><a {...linkProps("/clients/pipeline")}>Pipeline</a>{d && <><Sep /><span className="here">{d.company?.name ?? d.lead?.company ?? d.title}</span></>}</TopBar>;
+  const top = <TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/clients")}>Clients</a><Sep /><a {...linkProps("/clients/pipeline")}>Pipeline</a>{d && <><Sep /><span className="here">{d.company?.name ?? d.lead?.company ?? d.title}</span></>}</TopBar>;
   if (d === undefined) return <>{top}<div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
   if (d === null) return <>{top}<div className="wp-page"><EmptyState icon="activity" title="This card isn't here." body="It may have been taken off the board." actions={<ButtonLink to="/clients/pipeline">Pipeline</ButtonLink>} /></div></>;
   const id = d._id as Id<"deals">;

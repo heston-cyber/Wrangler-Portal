@@ -171,7 +171,7 @@ export function ProductionShoots() {
   const rows = !d ? [] : show === "past" ? d.past : show === "today" ? d.upcoming.filter((s) => s.date === d.today) : show === "needs" ? d.upcoming.filter((s) => s.sheet?.state !== "sent") : d.upcoming;
   return (
     <>
-      <TopBar><span className="secondary">Production</span><Sep /><span className="here">Shoots</span></TopBar>
+      <TopBar><span className="secondary">Production</span><Sep /><a {...linkProps("/production/prin-pro")}>Prin-pro</a><Sep /><span className="here">Shoots</span></TopBar>
       <div className="wp-page prod">
         <PageHeader eyebrow="Production" title="Shoots." sub="Every shoot, with its call sheet." actions={<Button variant="primary" onClick={() => setAdding(true)}>New shoot</Button>} />
         {d === undefined ? <Card label="Loading"><SkeletonRows n={4} /></Card> : d === null ? null : <>

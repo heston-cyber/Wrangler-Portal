@@ -57,7 +57,7 @@ export default function BriefingsPage() {
   const shown = (rows ?? []).filter((x) => pill === "all" || x.state === pill);
   return (
     <>
-      <TopBar><a {...linkProps("/production")}>Production</a><Sep /><span className="here">Briefings</span></TopBar>
+      <TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><span className="here">Briefings</span></TopBar>
       <div className="wp-page">
         <PageHeader eyebrow="Production · Pre-pro" title="Briefings." sub="Shoot and edit briefs, made in the builder. Email one to a booked vendor or to anyone else, or copy a link; see who has opened it." actions={<Button variant="primary" onClick={() => setNew({})}>New briefing</Button>} />
         {rows === undefined ? <Card label="Loading"><SkeletonRows n={4} /></Card> : (
@@ -101,8 +101,8 @@ export default function BriefingsPage() {
 export function BriefingBuilder({ briefingId }: { briefingId: string }) {
   const b = useQuery(api.briefings.get, { briefingId });
   const [toast, show] = useToast();
-  if (b === undefined) return <><TopBar><a {...linkProps("/vendors/briefings")}>Briefings</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
-  if (b === null) return <><TopBar><a {...linkProps("/vendors/briefings")}>Briefings</a></TopBar><div className="wp-page"><EmptyState icon="note" title="This briefing isn't here." body="It may have been a draft that was deleted." actions={<ButtonLink to="/vendors/briefings">All briefings</ButtonLink>} /></div></>;
+  if (b === undefined) return <><TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/vendors/briefings")}>Briefings</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
+  if (b === null) return <><TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/vendors/briefings")}>Briefings</a></TopBar><div className="wp-page"><EmptyState icon="note" title="This briefing isn't here." body="It may have been a draft that was deleted." actions={<ButtonLink to="/vendors/briefings">All briefings</ButtonLink>} /></div></>;
   if (b.state !== "draft") return <BriefingPage b={b} show={show} toast={toast} />; // shared: its own page (863:16685)
   return <Builder key={b.buildId} mode={{ kind: "build", buildId: b.buildId, briefing: b }} />;
 }

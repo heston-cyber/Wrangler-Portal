@@ -188,7 +188,7 @@ export function BriefingPage({ b, show, toast }: { b: BriefingInfo; show: (m: st
   };
   return (
     <>
-      <TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/vendors/briefings")}>Briefings</a><Sep /><span className="here">{b.kindName}</span></TopBar>
+      <TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/vendors/briefings")}>Briefings</a><Sep /><span className="here">{b.kindName}</span></TopBar>
       <div className="wp-page bf-page">
         <header className="wp-pagehead">
           <div className="txt"><span className="wp-eyebrow">Briefing{b.project ? ` · ${b.project.label}` : ""}</span><h1 className="wp-h2">{b.kindName}.</h1>

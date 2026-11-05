@@ -49,7 +49,7 @@ export default function ProposalsPage() {
   ];
   return (
     <>
-      <TopBar><a {...linkProps("/proposals")}>Proposals</a><Sep /><span className="here">All proposals</span></TopBar>
+      <TopBar><span className="secondary">Docs</span><Sep /><a {...linkProps("/proposals")}>Proposals</a><Sep /><span className="here">All proposals</span></TopBar>
       <div className="wp-page">
         <PageHeader eyebrow="Proposals" title="All proposals." sub="Written pitches, made in the builder. Clients read and accept them from a link." actions={<><ButtonLink to="/proposals/questionnaire">Questionnaire</ButtonLink><ButtonLink variant="primary" to="/proposals/new">New proposal</ButtonLink></>} />
         {rows === undefined ? <Card label="Loading"><SkeletonRows n={4} /></Card> : rows.length === 0 ? (
@@ -94,7 +94,7 @@ export function NewProposal({ clientId, dealId }: { clientId: string | null; dea
   const scrollToTemplates = () => document.getElementById("pr-templates")?.scrollIntoView({ behavior: "smooth", block: "start" });
   return (
     <>
-      <TopBar><a {...linkProps("/proposals")}>Proposals</a><Sep /><span className="here">New proposal</span></TopBar>
+      <TopBar><span className="secondary">Docs</span><Sep /><a {...linkProps("/proposals")}>Proposals</a><Sep /><span className="here">New proposal</span></TopBar>
       <div className="wp-page">
         <PageHeader title="New proposal." sub="Start from one of your templates, answer the questionnaire, or begin with a blank page." />
         <div className="pr-choose">
@@ -160,7 +160,7 @@ export function ProposalTemplates() {
   };
   return (
     <>
-      <TopBar><a {...linkProps("/proposals")}>Proposals</a><Sep /><span className="here">Templates</span></TopBar>
+      <TopBar><span className="secondary">Docs</span><Sep /><a {...linkProps("/proposals")}>Proposals</a><Sep /><span className="here">Templates</span></TopBar>
       <div className="wp-page">
         <PageHeader eyebrow="Proposals" title="Proposal templates." sub="Sections and wording you reuse. Kept apart from contract templates in Docs."
           actions={<Button variant="primary" loading={busy === "new"} onClick={async () => { setBusy("new"); try { navigate(`/proposals/templates/${await newTemplate({})}`); } catch (e) { show(errText(e)); setBusy(null); } }}>New template</Button>} />
@@ -200,8 +200,8 @@ export function ProposalTemplates() {
 
 export function ProposalBuilder({ proposalId }: { proposalId: string }) {
   const p = useQuery(api.proposals.get, { proposalId });
-  if (p === undefined) return <><TopBar><a {...linkProps("/proposals")}>Proposals</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
-  if (p === null) return <><TopBar><a {...linkProps("/proposals")}>Proposals</a></TopBar><div className="wp-page"><EmptyState icon="quote" title="This proposal isn't here." body="It may have been a draft that was deleted." actions={<ButtonLink to="/proposals">All proposals</ButtonLink>} /></div></>;
+  if (p === undefined) return <><TopBar><span className="secondary">Docs</span><Sep /><a {...linkProps("/proposals")}>Proposals</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
+  if (p === null) return <><TopBar><span className="secondary">Docs</span><Sep /><a {...linkProps("/proposals")}>Proposals</a></TopBar><div className="wp-page"><EmptyState icon="quote" title="This proposal isn't here." body="It may have been a draft that was deleted." actions={<ButtonLink to="/proposals">All proposals</ButtonLink>} /></div></>;
   if (p.filling) return <QuestionnaireRunner key={p._id} proposalId={p._id} />;
   if (p.status === "waiting") return <ProposalWaiting p={p} />;
   return <Builder key={p.buildId} mode={{ kind: "build", buildId: p.buildId, proposal: p }} />;

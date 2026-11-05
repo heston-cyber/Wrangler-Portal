@@ -22,7 +22,7 @@ const md = (t: number) => new Date(t).toLocaleDateString("en-US", { month: "shor
 const edited = (t: number) => (new Date(t).toDateString() === new Date().toDateString() ? "Edited today" : `Edited ${md(t)}`);
 const Line = ({ first, children }: { first: boolean; children: React.ReactNode }) => <div className="wp-rowwrap">{!first && <Divider />}{children}</div>;
 const go = (to: string) => (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); navigate(to); };
-const Crumbs = ({ children }: { children?: React.ReactNode }) => <TopBar><a {...linkProps("/production")}>Production</a><Sep />{children ?? <span className="here">Call sheets</span>}</TopBar>;
+const Crumbs = ({ children }: { children?: React.ReactNode }) => <TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep />{children ?? <span className="here">Call sheets</span>}</TopBar>;
 const CS = <a {...linkProps("/production/call-sheets")}>Call sheets</a>;
 
 /** The chip and next step for a sheet (list, Production, Dashboard). */

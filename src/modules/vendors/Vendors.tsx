@@ -32,7 +32,7 @@ export default function VendorsPage() {
   const shown = (rows ?? []).filter((r) => pill === "all" || (pill === "w9" ? !r.w9 : r.roles.includes(pill)));
   return (
     <>
-      <TopBar><a {...linkProps("/vendors")}>Vendors</a><Sep /><span className="here">All vendors</span></TopBar>
+      <TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/vendors")}>Vendors</a><Sep /><span className="here">All vendors</span></TopBar>
       <div className="wp-page">
         <PageHeader eyebrow="Vendors" title="All vendors." sub="Shooters, editors and anyone else you hire. They get their own portal to accept bookings and send invoices." actions={<Button variant="primary" onClick={() => setAdding(true)}>Add vendor</Button>} />
         {rows === undefined ? <Card label="Loading"><SkeletonRows n={4} /></Card> : rows.length === 0 ? (
@@ -123,14 +123,14 @@ export function VendorPage({ vendorId }: { vendorId: string }) {
   const [briefing, setBriefing] = useState(false);
   const [toast, show] = useToast();
   const [confirm, confirmNode] = useConfirm();
-  if (x === undefined) return <><TopBar><a {...linkProps("/vendors")}>Vendors</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={5} /></Card></div></>;
-  if (x === null) return <><TopBar><a {...linkProps("/vendors")}>Vendors</a></TopBar><div className="wp-page"><EmptyState icon="user" title="This vendor isn't here." actions={<ButtonLink to="/vendors">All vendors</ButtonLink>} /></div></>;
+  if (x === undefined) return <><TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/vendors")}>Vendors</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={5} /></Card></div></>;
+  if (x === null) return <><TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/vendors")}>Vendors</a></TopBar><div className="wp-page"><EmptyState icon="user" title="This vendor isn't here." actions={<ButtonLink to="/vendors">All vendors</ButtonLink>} /></div></>;
   const first = x.name.split(" ")[0];
   const t = x.totals;
   const details: Array<[string, React.ReactNode]> = ([["Email", x.email], ["Business", x.businessName], ["Phone", x.phone], ["Based in", x.basedIn], ["Mailing address", x.address], ["Paid by", x.payMethod ? `${x.payMethod.method}${x.payMethod.note ? ` · ${x.payMethod.note}` : ""}` : null], ["Portfolio", x.portfolio ? <a href={/^https?:\/\//.test(x.portfolio) ? x.portfolio : `https://${x.portfolio}`} target="_blank" rel="noopener noreferrer">{x.portfolio.replace(/^https?:\/\//, "")}</a> : null]] as Array<[string, React.ReactNode]>).filter(([, v]) => v);
   return (
     <>
-      <TopBar><a {...linkProps("/vendors")}>Vendors</a><Sep /><a {...linkProps("/vendors")}>All vendors</a><Sep /><span className="here">{x.name}</span></TopBar>
+      <TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/vendors")}>Vendors</a><Sep /><a {...linkProps("/vendors")}>All vendors</a><Sep /><span className="here">{x.name}</span></TopBar>
       <div className="wp-page cp">
         <header className="cp-head">
           <Avatar name={x.name} two size={56} />

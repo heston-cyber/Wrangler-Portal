@@ -332,8 +332,8 @@ export default function ClientPage({ clientId, tab: tabParam }: { clientId: Id<"
   const [adding, setAdding] = useState(false);
   const tab = tabParam;
   const setTab = (k: ClientTab) => navigate(`/clients/${clientId}${k === "overview" ? "" : `?tab=${k}`}`);
-  if (page === undefined) return <><TopBar><a {...linkProps("/clients")}>Clients</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
-  if (page === null) return <><TopBar><a {...linkProps("/clients")}>Clients</a></TopBar><div className="wp-page"><EmptyState icon="users" title="This client isn't here." body="It may have been deleted." actions={<ButtonLink to="/clients">All clients</ButtonLink>} /></div></>;
+  if (page === undefined) return <><TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/clients")}>Clients</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
+  if (page === null) return <><TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/clients")}>Clients</a></TopBar><div className="wp-page"><EmptyState icon="users" title="This client isn't here." body="It may have been deleted." actions={<ButtonLink to="/clients">All clients</ButtonLink>} /></div></>;
   const names = new Map(page.people.map((p) => [p.email, p.name ?? p.email]));
   const business = biz?.name ?? "your business";
   const name = page.client.name;
@@ -347,7 +347,7 @@ export default function ClientPage({ clientId, tab: tabParam }: { clientId: Id<"
   );
   return (
     <>
-      <TopBar><a {...linkProps("/clients")}>Clients</a><Sep /><a {...linkProps("/clients")}>Companies</a><Sep /><span className="here">{name}</span></TopBar>
+      <TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/clients")}>Clients</a><Sep /><a {...linkProps("/clients")}>Companies</a><Sep /><span className="here">{name}</span></TopBar>
       <div className="wp-page cp">
         <a className="wp-setback" {...linkProps("/clients")}><Icon name="arrow-left" size={20} />Clients</a>
         <header className="cp-head">

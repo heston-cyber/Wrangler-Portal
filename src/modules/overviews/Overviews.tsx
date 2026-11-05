@@ -44,7 +44,8 @@ function Skeleton({ tiles, left, right }: { tiles: string[]; left: Array<[string
     <div className="pov-cols"><div className="col">{left.map(card)}</div><div className="col">{right.map(card)}</div></div>
   </div>;
 }
-const Crumb = ({ tool }: { tool: string }) => <TopBar><span className="secondary">{tool}</span><Sep /><span className="here">Overview</span></TopBar>;
+// D151 + Heston's pick (Nov 4): the crumbs use the menu's names, e.g. People › Clients › Overview.
+const Crumb = ({ tool }: { tool: string }) => <TopBar>{tool.split(" › ").flatMap((t, i) => [<span key={`t${i}`} className="secondary">{t}</span>, <Sep key={`s${i}`} />])}<span className="here">Overview</span></TopBar>;
 
 /** A card's number rows (Pipeline, Briefings, Templates …). */
 function Rows({ rows }: { rows: Array<[string, React.ReactNode, string?]> }) {
@@ -66,7 +67,7 @@ export function ClientsOverview() {
   const [toast, show] = useToast();
   return (
     <>
-      <Crumb tool="Clients" />
+      <Crumb tool="People › Clients" />
       <div className="wp-page pov prod">
         <PageHeader eyebrow="Clients" title="Clients." sub="Who you work with, and who’s next." actions={<Button variant="primary" onClick={() => setAdding(true)}>New client</Button>} />
         {o === undefined ? <Loading /> : o === null ? null : o.empty ? (
@@ -117,7 +118,7 @@ export function ReviewOverview() {
   const { openUpload } = useUpload();
   return (
     <>
-      <TopBar><a {...linkProps("/production")}>Production</a><Sep /><span className="here">Review</span></TopBar>
+      <TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/post-pro")}>Post-pro</a><Sep /><span className="here">Review</span></TopBar>
       <div className="wp-page pov prod">
         <PageHeader eyebrow="Production · Post-pro" title="Review." sub="Cuts, notes and who’s watching." actions={<Button variant="primary" onClick={() => openUpload({ newProject: true })}>New project</Button>} />
         {o === undefined ? <Skeleton tiles={["Waiting on clients", "New notes", "In progress", "Delivered"]} left={[["Notes to look at", 3], ["Waiting on clients", 2]]} right={[["Last opened", 2], ["Delivered this month", 2]]} /> : o === null ? null : o.empty ? (
@@ -178,7 +179,7 @@ export function DocsOverview() {
   };
   return (
     <>
-      <Crumb tool="Docs" />
+      <Crumb tool="Docs › Contracts" />
       <div className="wp-page pov prod">
         <PageHeader eyebrow="Docs" title="Docs." sub="Contracts and documents, out for signature and signed." actions={<ButtonLink variant="primary" to="/sign/new" iconEnd={false}>New document</ButtonLink>} />
         {o === undefined ? <Skeleton tiles={["To sign", "Signed", "Drafts", "Templates"]} left={[["Waiting on signatures", 3], ["Recently signed", 2]]} right={[["Templates", 2], ["Your signature", 1]]} /> : o === null ? null : o.empty ? (
@@ -232,7 +233,7 @@ export function ProposalsOverview() {
   const o = useQuery(api.overviews.proposals, {});
   return (
     <>
-      <Crumb tool="Proposals" />
+      <Crumb tool="Docs › Proposals" />
       <div className="wp-page pov prod">
         <PageHeader eyebrow="Proposals" title="Proposals." sub="Pitches out for review, and what to do with the accepted ones." actions={<ButtonLink variant="primary" to="/proposals/new" iconEnd={false}>New proposal</ButtonLink>} />
         {o === undefined ? <Skeleton tiles={["Out for review", "Accepted", "Drafts", "Declined"]} left={[["Needs you", 3], ["Out for review", 2]]} right={[["Templates", 1], ["Questionnaire", 1]]} /> : o === null ? null : o.empty ? (
@@ -286,7 +287,7 @@ export function VendorsOverview() {
   const [adding, setAdding] = useState<"add" | "invite" | null>(null);
   return (
     <>
-      <Crumb tool="Vendors" />
+      <Crumb tool="People › Vendors" />
       <div className="wp-page pov prod">
         <PageHeader eyebrow="Vendors" title="Vendors." sub="Your crew: bookings, briefings and invoices." actions={<Button variant="primary" onClick={() => setBooking(true)}>Book a vendor</Button>} />
         {o === undefined ? <Skeleton tiles={["Booked this week", "Waiting to accept", "Invoices to pay", "W-9 missing"]} left={[["Needs you", 3], ["Bookings this week", 2]]} right={[["Briefings", 2], ["Payments to vendors", 2]]} /> : o === null ? null : o.empty ? (

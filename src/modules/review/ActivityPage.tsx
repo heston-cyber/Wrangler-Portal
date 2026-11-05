@@ -31,7 +31,7 @@ export default function ActivityPage() {
           <MenuItem keepOpen checked={show.shares} onSelect={() => setShow({ ...show, shares: !show.shares })}>Shared links opened</MenuItem>
         </Menu>
       }>
-        <a {...linkProps("/production")}>Production</a><Sep /><span className="here">Activity</span>
+        <a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/post-pro")}>Post-pro</a><Sep /><span className="here">Activity</span>
       </TopBar>
       <div className="content">
         <div className="toolbar">

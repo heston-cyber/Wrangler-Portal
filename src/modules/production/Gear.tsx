@@ -48,7 +48,7 @@ export default function GearPage() {
   const rows = !d ? [] : d.items.filter((i) => i.status === show);
   return (
     <>
-      <TopBar><span className="secondary">Production</span><Sep /><span className="here">Gear</span></TopBar>
+      <TopBar><span className="secondary">Production</span><Sep /><a {...linkProps("/production/prin-pro")}>Prin-pro</a><Sep /><span className="here">Gear</span></TopBar>
       <div className="wp-page prod">
         <PageHeader eyebrow="Production" title="Gear." sub="What you own, what it's insured for, and what's booked on a shoot."
           actions={<><Button onClick={() => setExporting(true)} disabled={!d || d.tiles.items === 0}>Export for insurer</Button><Button variant="primary" onClick={() => setAdding(true)}>Add gear</Button></>} />
@@ -207,7 +207,7 @@ export function GearItem({ gearId }: { gearId: string }) {
       say(r ?? "Photo saved.");
     } catch (e) { say(errText(e)); } finally { setBusy(false); }
   };
-  const crumbs = <TopBar><a {...linkProps("/production")} className="secondary">Production</a><Sep /><a {...linkProps("/production/gear")} className="secondary">Gear</a><Sep /><span className="here">{d?.name ?? ""}</span></TopBar>;
+  const crumbs = <TopBar><a {...linkProps("/production")} className="secondary">Production</a><Sep /><a {...linkProps("/production/prin-pro")}>Prin-pro</a><Sep /><a {...linkProps("/production/gear")} className="secondary">Gear</a><Sep /><span className="here">{d?.name ?? ""}</span></TopBar>;
   if (d === undefined) return <>{crumbs}<div className="wp-page prod"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
   if (d === null) return <>{crumbs}<div className="wp-page prod"><EmptyState icon="video" title="That gear isn't here any more." actions={<a {...linkProps("/production/gear")} className="btn">Back to Gear</a>} /></div></>;
   const pick = async (s: Status) => { try { await setStatus({ gearId: d._id as Id<"gear">, status: s }); say(s === "retired" ? "Retired. It won't show when you book a shoot." : `Marked ${STATUS_LABEL[s].toLowerCase()}.`); } catch (e) { say(errText(e)); } };

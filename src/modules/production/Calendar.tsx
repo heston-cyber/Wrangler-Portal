@@ -13,6 +13,7 @@ import { Button, ButtonLink, Card, DialogHeader, PageHeader, PillTabs, SkeletonR
 import { Icon } from "../../ui/Icon";
 import { Modal, useConfirm, useIsNarrow, useToast } from "../../ui/kit";
 import { Sep, TopBar } from "../../shell/Shell";
+import { linkProps } from "../../lib/router";
 import { errText } from "../docs/pages/common";
 import { ShootDialog } from "../projects/Shoots";
 import {
@@ -121,7 +122,7 @@ export default function CalendarPage() {
 
   return (
     <>
-      <TopBar><span className="secondary">Production</span><Sep /><span className="here">Calendar</span></TopBar>
+      <TopBar><span className="secondary">Production</span><Sep /><a {...linkProps("/production/prin-pro")}>Prin-pro</a><Sep /><span className="here">Calendar</span></TopBar>
       <div className="wp-page cal">
         <PageHeader eyebrow="Production" title="Calendar." sub={narrow ? (view === "agenda" ? "Next 7 days" : view === "week" ? weekTitle(startOfWeek(anchor)) : monthTitle(anchor)) : "Your shoots and edit dates, and your Google Calendars, in one place."} actions={newEvent} />
         {d && d.conn.state === "disconnected" && <Disconnected />}
