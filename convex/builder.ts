@@ -36,7 +36,9 @@ const isBriefing = (x: { kind?: string } | null | undefined) => x?.kind === "bri
 // Phase 5b step 3: call sheets too: their own kind, kept out of Docs, never signed. They stay editable after they're
 // sent (everyone reads the copy frozen at Send; "Send an update" sends the new one).
 const isCallSheet = (x: { kind?: string } | null | undefined) => x?.kind === "callsheet";
-const isSide = (x: { kind?: string } | null | undefined) => isProposal(x) || isBriefing(x) || isCallSheet(x);
+// Phase 5d step 4: a Help guide a business has edited (kind "guide"): its own kind, kept out of Docs, never signed.
+const isGuide = (x: { kind?: string } | null | undefined) => x?.kind === "guide";
+const isSide = (x: { kind?: string } | null | undefined) => isProposal(x) || isBriefing(x) || isCallSheet(x) || isGuide(x);
 async function assertEditable(ctx: QueryCtx, b: { _id: Id<"wsBuilds">; kind?: string }) {
   if (isCallSheet(b)) return;
   if (isBriefing(b)) {

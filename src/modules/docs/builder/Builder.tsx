@@ -47,7 +47,7 @@ export type ProposalInfo = NonNullable<FunctionReturnType<typeof api.proposals.g
 export type { BriefingInfo };
 // Phase 5b step 3: call sheets too (765:2056): no signature boxes, the call sheet's own blocks and block library,
 // "Send call sheet", and "Send an update" once it's sent (it stays editable; readers see the copy that was sent).
-type Mode = { kind: "build"; buildId: Id<"wsBuilds">; proposal?: ProposalInfo; briefing?: BriefingInfo; callSheet?: CallSheetInfo } | { kind: "template"; templateId: Id<"wsTemplates">; proposal?: boolean; briefing?: boolean; callSheet?: boolean };
+type Mode = { kind: "build"; buildId: Id<"wsBuilds">; proposal?: ProposalInfo; briefing?: BriefingInfo; callSheet?: CallSheetInfo } | { kind: "template"; templateId: Id<"wsTemplates">; proposal?: boolean; briefing?: boolean; callSheet?: boolean; guide?: string };
 const B_CHIP: Record<string, { tone: "neutral" | "accent" | "success"; text: string }> = { draft: { tone: "neutral", text: "Draft" }, sent: { tone: "accent", text: "Sent" }, read: { tone: "success", text: "Read" } };
 const P_OPEN = new Set(["draft", "waiting", "ready"]);
 const P_CHIP: Record<string, { tone: "neutral" | "accent" | "success" | "danger" | "warning"; text: string }> = {
@@ -89,7 +89,8 @@ export default function Builder({ mode }: { mode: Mode }) {
   const isBrief = !!brief || (mode.kind === "template" && !!mode.briefing);
   const call = mode.kind === "build" ? mode.callSheet ?? null : null;
   const isCall = !!call || (mode.kind === "template" && !!mode.callSheet);
-  const side = isProp || isBrief || isCall; // never signed: no parties or signature blocks, no clause library
+  const isGuide = mode.kind === "template" && !!mode.guide; // Phase 5d step 4: a Help guide, edited like any page
+  const side = isProp || isBrief || isCall || isGuide; // never signed: no parties or signature blocks, no clause library
   const locked = (!!prop && !P_OPEN.has(prop.status)) || (!!brief && brief.state !== "draft");
   const build = useQuery(api.builder.getBuild, mode.kind === "build" ? { buildId: mode.buildId } : "skip");
   const tpl = useQuery(api.builder.getTemplate, mode.kind === "template" ? { templateId: mode.templateId } : "skip");
@@ -483,7 +484,7 @@ export default function Builder({ mode }: { mode: Mode }) {
           : <span className={`ws-save hide-sm ${saveState}`}>{saveState === "saving" ? <><Spinner /> Saving</> : saveState === "error" ? <><Icon name="alert" size={14} /> Not saved</> : <><Icon name="check" size={14} plain /> Saved</>}</span>}
         {prop && <span className="hide-sm"><ProposalChip status={prop.status} /></span>}
         {brief && <span className="hide-sm"><Chip tone={B_CHIP[brief.state].tone}>{B_CHIP[brief.state].text}</Chip></span>}
-        <Button variant="ghost" size="sm" className="hide-sm" loading={busy === "preview"} onClick={() => void onPreview()} iconEnd="external">{isCall ? "Preview" : "Preview PDF"}</Button>
+        {!isGuide && <Button variant="ghost" size="sm" className="hide-sm" loading={busy === "preview"} onClick={() => void onPreview()} iconEnd="external">{isCall ? "Preview" : "Preview PDF"}</Button>}
         {call ? <>
           <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setAsTemplate(true)}>Save as template</Button>
           {call.status === "sent" && <ButtonLink variant="ghost" size="sm" className="hide-sm" to={`/production/call-sheets/${call._id}`} iconEnd={false}>Who opened it</ButtonLink>}
@@ -501,10 +502,11 @@ export default function Builder({ mode }: { mode: Mode }) {
         </> : mode.kind === "build" ? <>
           <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setAsTemplate(true)} iconEnd="chevron-right">Save as template</Button>
           <Button variant="primary" size="sm" loading={busy === "continue"} disabled={!!sent} onClick={() => void onContinue()} title={sent ? "It's out for signature or signed" : undefined}>{build?.document ? "Update the PDF" : "Continue to signing"}</Button>
-        </> : <Button variant="primary" size="sm" loading={busy === "use"} onClick={() => void onUseTemplate()}>{isProp ? "New proposal from this" : isBrief ? "New briefing from this" : isCall ? "New call sheet from this" : "New document from this"}</Button>}
+        </> : isGuide ? <ButtonLink variant="primary" size="sm" to={`/settings/help/${mode.kind === "template" ? mode.guide : ""}`} iconEnd={false}>Done</ButtonLink>
+          : <Button variant="primary" size="sm" loading={busy === "use"} onClick={() => void onUseTemplate()}>{isProp ? "New proposal from this" : isBrief ? "New briefing from this" : isCall ? "New call sheet from this" : "New document from this"}</Button>}
       </>}>
-        {isCall ? <><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/call-sheets")}>Call sheets</a><Sep />{mode.kind === "template" && <><a {...linkProps("/production/call-sheets?tab=templates")}>Templates</a><Sep /></>}</> : isProp ? <><a {...linkProps("/proposals")}>Proposals</a><Sep /></> : isBrief ? <><a {...linkProps("/vendors")}>Vendors</a><Sep /><a {...linkProps("/vendors/briefings")}>Briefings</a><Sep /></> : <><a {...linkProps("/sign")}>Docs</a><Sep /></>}
-        {mode.kind === "template" && !isBrief && !isCall ? <><a {...linkProps(isProp ? "/proposals/templates" : "/sign/templates")}>Templates</a><Sep /></> : null}
+        {isGuide ? <><a {...linkProps("/settings")}>Settings</a><Sep /><a {...linkProps("/settings/help")}>Help</a><Sep /></> : isCall ? <><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/call-sheets")}>Call sheets</a><Sep />{mode.kind === "template" && <><a {...linkProps("/production/call-sheets?tab=templates")}>Templates</a><Sep /></>}</> : isProp ? <><a {...linkProps("/proposals")}>Proposals</a><Sep /></> : isBrief ? <><a {...linkProps("/vendors")}>Vendors</a><Sep /><a {...linkProps("/vendors/briefings")}>Briefings</a><Sep /></> : <><a {...linkProps("/sign")}>Docs</a><Sep /></>}
+        {mode.kind === "template" && !isBrief && !isCall && !isGuide ? <><a {...linkProps(isProp ? "/proposals/templates" : "/sign/templates")}>Templates</a><Sep /></> : null}
         <span className="here">{mode.kind === "template" ? meta.name || doc.title : doc.title}{prop ? ` · ${prop.number}` : build?.document ? ` · ${build.document.label}` : ""}</span>
       </TopBar>
 
@@ -571,7 +573,7 @@ export default function Builder({ mode }: { mode: Mode }) {
           {tab === "format" && <FormatPanel editor={editor} accent={st.accent} onSaveClause={(sec) => void onSaveClause(sec)} />}
           {tab === "style" && <StylePanel style={st} onChange={(s) => setDoc((d) => ({ ...d, style: s }))} fonts={fontRows} files={files as Record<string, string | null>} show={show} />}
           {tab === "details" && (
-            <DetailsPane doc={doc} setDoc={setDoc} extraKeys={side ? [] : extraKeys} mode={mode.kind} proposal={isProp} briefing={isBrief} callSheet={call} meta={meta} setMeta={(m) => { setMeta(m); setDirty(true); }} total={t} problems={problems ?? (mode.kind === "build" ? (locked ? [] : isProp ? proposalProblems(doc) : isBrief ? briefingProblems(doc) : call ? callSheetProblems(doc) : buildProblems(doc)) : [])} show={show} />
+            <DetailsPane doc={doc} setDoc={setDoc} extraKeys={side ? [] : extraKeys} mode={mode.kind} proposal={isProp} briefing={isBrief} guide={isGuide} callSheet={call} meta={meta} setMeta={(m) => { setMeta(m); setDirty(true); }} total={t} problems={problems ?? (mode.kind === "build" ? (locked ? [] : isProp ? proposalProblems(doc) : isBrief ? briefingProblems(doc) : call ? callSheetProblems(doc) : buildProblems(doc)) : [])} show={show} />
           )}
         </aside>
       </div>
@@ -665,8 +667,8 @@ function BlockLibrary({ onInsert, onDragStart, onDragEnd, touchProps }: { onInse
   );
 }
 
-function DetailsPane({ doc, setDoc, extraKeys, mode, proposal, briefing, callSheet, meta, setMeta, total, problems, show }: {
-  doc: BuildDoc; setDoc: (f: (d: BuildDoc) => BuildDoc) => void; extraKeys: string[]; mode: "build" | "template"; proposal: boolean; briefing?: boolean; callSheet?: CallSheetInfo | null; meta: Meta; setMeta: (m: Meta) => void;
+function DetailsPane({ doc, setDoc, extraKeys, mode, proposal, briefing, guide, callSheet, meta, setMeta, total, problems, show }: {
+  doc: BuildDoc; setDoc: (f: (d: BuildDoc) => BuildDoc) => void; extraKeys: string[]; mode: "build" | "template"; proposal: boolean; briefing?: boolean; guide?: boolean; callSheet?: CallSheetInfo | null; meta: Meta; setMeta: (m: Meta) => void;
   total: ReturnType<typeof totals>; problems: string[]; show: (m: string) => void;
 }) {
   const saveProfile = useMutation(api.builder.saveProfile);
@@ -675,6 +677,13 @@ function DetailsPane({ doc, setDoc, extraKeys, mode, proposal, briefing, callShe
   const setClient = (k: keyof Fields["client"], v: string) => setF({ client: { ...f.client, [k]: v } });
   const setBiz = (k: keyof Fields["business"], v: string) => setF({ business: { ...f.business, [k]: v } });
   const input = (label: string, value: string, on: (v: string) => void, type = "text", ph = "") => <label className="field"><span className="ws-flabel">{label}</span><input className="input sm" type={type} value={value} placeholder={ph} onChange={(e) => on(e.target.value)} /></label>;
+  if (guide) return (
+    <div className="wsb-pane">
+      {input("Guide title", meta.name, (v) => setMeta({ ...meta, name: v }))}
+      {input("One-line summary", meta.description, (v) => setMeta({ ...meta, description: v }))}
+      <p className="caption secondary">This is a Help guide. Whoever reads Help sees it as you write it here. Press Done when you're finished; Reset on the guide's page brings Wrangler's version back.</p>
+    </div>
+  );
   return (
     <div className="wsb-pane">
       {problems.length > 0 && mode === "build" && <ul className="ws-problems">{problems.map((p) => <li key={p}><TriangleAlert size={13} />{p}</li>)}</ul>}

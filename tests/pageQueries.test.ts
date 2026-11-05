@@ -150,6 +150,8 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "siteWatch.report": { pages: ["owner"], args: () => "skip" }, "siteWatch.run": { pages: ["owner"], args: () => "skip" }, "siteWatch.finding": { pages: ["owner"], args: () => "skip" }, // Settings › Site watch (admins only; the page asks only after summary says so)
   "home.dashboard": { pages: ["owner"], args: () => ({ tzOffsetMin: 300 }) }, // Dashboard: Today, Coming up, Live edits, Money
   "production.shoots": { pages: ["owner"], args: () => ({}) }, // Production › Shoots
+  "help.list": { pages: ["owner", "clientHome"], args: () => ({}) }, // Help (Phase 5d): owner Settings › Help, the client's /help
+  "help.guide": { pages: ["owner", "clientHome"], args: () => ({ slug: "signing-in" }) }, // a guide
   "gear.list": { pages: ["owner"], args: () => ({}) }, // Production › Gear (Phase 5d)
   "gear.get": { pages: ["owner"], args: () => "skip" }, // a gear item page
   "gear.exportCsv": { pages: ["owner"], args: () => "skip" }, // Export for insurer (fired on the button)

@@ -84,7 +84,7 @@ export default function ClientInbox({ itemId }: { itemId: string | null }) {
         </div>
       )}
       <div className="ci-main">
-        <PageHeader title="Inbox." sub="Everything new, newest first." />
+        <PageHeader help="/help/your-files" title="Inbox." sub="Everything new, newest first." />
         <div className="ci-bar">
           <PillTabs label="Show" value={tab} onChange={setTab} items={[{ key: "unread", label: "Unread", count: data?.unread ?? 0 }, { key: "all", label: "All" }]} />
           <span className="sp" />

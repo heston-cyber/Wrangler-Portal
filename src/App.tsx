@@ -106,6 +106,7 @@ const SignDocs = lazy(() => import("./modules/docs/pages/SignDocs"));
 const SignNew = lazy(() => import("./modules/docs/pages/SignNew"));
 const SignTemplates = lazy(() => import("./modules/docs/pages/SignTemplates"));
 const Builder = lazy(() => import("./modules/docs/builder/Builder"));
+const HelpScreen = lazy(() => import("./modules/help/Help").then((m) => ({ default: m.HelpScreen }))); // Phase 5d step 4
 const SignDoc = lazy(() => import("./modules/docs/pages/SignDoc"));
 const SignSignature = lazy(() => import("./modules/docs/pages/SignSignature"));
 // S2: the client's signing page. sign.wranglerportal.com/<token>, or /x/<token> on any host (a fallback).
@@ -305,6 +306,7 @@ function SignedIn() {
   else if (clientRec) { const t = params.get("tab"); page = <ClientPage key={clientRec[1]} clientId={clientRec[1] as Id<"clients">} tab={(["projects", "shared", "documents", "inbox", "brand", "settings"].includes(t ?? "") ? t : "overview") as ClientTab} />; }
   else if (path.startsWith("/activity")) page = <ActivityPage />;
   else if (path.startsWith("/register")) page = <Settings me={me} />; // now Settings › Register
+  else if (/^\/settings\/help\/edit\/[^/]+\/?$/.test(path)) { const id = path.split("/")[4]; page = <Suspense fallback={<Loading />}><Builder key={id} mode={{ kind: "template", templateId: id as Id<"wsTemplates">, guide: params.get("guide") ?? "" }} /></Suspense>; }
   else if (/^\/settings\/brief\/questions\/?$/.test(path)) page = <Suspense fallback={<Loading />}><QuestionnaireEditor kind="kickoff" /></Suspense>;
   else if (/^\/settings\/brief\/preview\/?$/.test(path)) page = <ClientBriefPage key="preview" preview />;
   else if (path.startsWith("/settings")) page = <Settings me={me} />;
@@ -312,7 +314,7 @@ function SignedIn() {
   else if (/^\/review\/?$/.test(path)) page = <Home />; // Review's main page
   else page = <OwnerHome />; // "/": the back-office Home
   // Work surfaces get no background light, so nothing competes with the video or the document.
-  const workSurface = Boolean(video) || /^\/sign\/(b|d)\//.test(path) || /^\/sign\/templates\/[^/]+/.test(path) || /^\/production\/call-sheets\/([^/]+\/edit|templates\/[^/]+)/.test(path);
+  const workSurface = Boolean(video) || /^\/sign\/(b|d)\//.test(path) || /^\/sign\/templates\/[^/]+/.test(path) || /^\/production\/call-sheets\/([^/]+\/edit|templates\/[^/]+)/.test(path) || /^\/settings\/help\/edit\//.test(path);
   return (
     <UploadProvider>
       <Shell me={me} overlay={Boolean(video)} light={!workSurface}>{page}</Shell>
@@ -360,6 +362,8 @@ function ClientRoutes({ me }: { me: { name: string | null; email: string } }) {
   if (words) return <ClientTestimonialPage key={words[1]} noteId={words[1]} />;
   const proj = /^\/projects\/([^/]+)\/?$/.exec(path);
   if (proj) { const t = params.get("tab"); return <ClientProject key={proj[1]} projectId={proj[1]} tab={(t === "videos" || t === "documents" ? t : "overview") as ClientProjectTab} />; }
+  const help = /^\/help(?:\/([a-z0-9-]+))?\/?$/.exec(path);
+  if (help) return <Suspense fallback={<Loading />}><HelpScreen key={help[1] ?? ""} base="/help" slug={help[1]} /></Suspense>;
   if (path.startsWith("/settings")) return <ClientSettings me={me} />;
   return <ClientHome />;
 }

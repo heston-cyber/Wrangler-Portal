@@ -133,6 +133,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "briefs.remind": { briefId: ids.briefId }, "briefs.forEstimate": { briefId: "nope" }, "briefs.forClientProject": { projectId: "nope" }, "briefs.page": { briefId: "nope" },
     "briefs.save": { briefId: ids.briefId, changes: {}, step: 0 }, "briefs.submit": { briefId: ids.briefId, changes: {} },
     "fileRequests.forClientProject": { projectId: "nope" }, "fileRequests.page": { requestId: "nope" }, "fileRequests.start": { requestId: ids.fileRequestId, name: "x.pdf", size: 10 }, "fileRequests.finishDirect": { uploadId: ids.fileUploadId },
+    "help.list": {}, "help.guide": { slug: "signing-in" }, "help.edit": { slug: "signing-in" }, "help.reset": { slug: "signing-in" },
     "gear.list": {}, "gear.get": { gearId: "nope" }, "gear.add": { name: "G", kind: "lens" }, "gear.update": { gearId: ids.gearId, name: "G", kind: "lens" }, "gear.setStatus": { gearId: ids.gearId, status: "in_repair" },
     "gear.uploadUrl": {}, "gear.setPhoto": { gearId: ids.gearId, storageId: ids.storageId }, "gear.removePhoto": { gearId: ids.gearId },
     "gear.logMaintenance": { gearId: ids.gearId, date: "2030-02-01", what: "Serviced" }, "gear.exportCsv": {},

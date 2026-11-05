@@ -201,6 +201,8 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       await owner.mutation(api.gear.addToShoot, { shootId: shootId as Id<"shoots">, gearId: rode });
       return { fx3, a7, gm, aput, rode, mavic, tripod, mac, old };
     })();
+    // Phase 5d step 4: one guide the business has edited (so the owner's list shows the Edited chip).
+    await owner.mutation(api.help.edit, { slug: "paying-an-invoice" });
     // Phase 4: two file requests, one with files in (made directly: the kit has no Dropbox).
     const reqIds = await t.run(async (ctx) => {
       const folder = "/File requests/Harbor Coffee/26127 Harbor Coffee Launch";
@@ -400,7 +402,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["projects.page#" + w.p1, { projectId: w.p1 }], ["shoots.forProject#" + w.p1, { projectId: w.p1 }], ["fileRequests.forProject#" + w.p1, { projectId: w.p1 }], ["briefs.forProject#" + w.p1, { projectId: w.p1 }], ["briefs.settings", {}], ["calendar.settings", {}], ["projects.nextRound#" + w.harbor30.v, { videoId: w.harbor30.v }],
       ["footage.settings", {}], ["footage.forProject#" + w.p1, { projectId: w.p1 }], ["testimonials.list", {}], ["testimonials.projectsFor#" + w.harbor, { clientId: w.harbor }],
       ["invoices.list", {}], ["invoices.overview", { tzOffsetMin: 300 }], ["invoices.options", {}], ["invoices.forProject#" + w.p1, { projectId: w.p1 }],
-      ["production.overview", {}], ["production.shoots", {}], ["gear.list", {}], ["gear.exportCsv", {}], ["gear.forShoot#" + shootId, { shootId }], ...Object.values(gearIds).map((id): [string, Record<string, unknown>] => ["gear.get#" + id, { gearId: id }]), ["production.projectsForShoot", {}], ["callSheets.list", {}], ["callSheets.newOptions", {}], ["calendarSync.range", calRange], ["calendarSync.linkOptions", {}],
+      ["production.overview", {}], ["production.shoots", {}], ["help.list", {}], ["help.guide#signing-in", { slug: "signing-in" }], ["help.guide#paying-an-invoice", { slug: "paying-an-invoice" }], ["gear.list", {}], ["gear.exportCsv", {}], ["gear.forShoot#" + shootId, { shootId }], ...Object.values(gearIds).map((id): [string, Record<string, unknown>] => ["gear.get#" + id, { gearId: id }]), ["production.projectsForShoot", {}], ["callSheets.list", {}], ["callSheets.newOptions", {}], ["calendarSync.range", calRange], ["calendarSync.linkOptions", {}],
       ["overviews.clients", {}], ["overviews.review", {}], ["overviews.docs", {}], ["overviews.proposals", {}], ["overviews.vendors", {}], ["home.dashboard", { tzOffsetMin: 300 }], ["crm.due", {}],
       ...sheetIds.map(({ id }): [string, Record<string, unknown>] => ["callSheets.get#" + id, { callSheetId: id }]),
       ...sheetIds.filter((x) => x.buildId).map(({ buildId }): [string, Record<string, unknown>] => ["builder.getBuild#" + buildId, { buildId }]),
@@ -416,7 +418,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["waveforms.forVersion#" + w.harbor30.last, { versionId: w.harbor30.last, share: { token: shareTokens[0] } }],
       ["transcripts.forVersion#" + w.harbor30.last, { versionId: w.harbor30.last, share: { token: shareTokens[0] } }],
       ["approvals.forVideo#" + w.harbor30.v, { videoId: w.harbor30.v, share: { token: shareTokens[0] } }],
-      ["projects.mine", {}], ["projects.forClient#" + w.p1, { projectId: w.p1 }], ["shoots.forClientProject#" + w.p1, { projectId: w.p1 }], ["shoots.page#" + shootId, { shootId }], ["fileRequests.forClientProject#" + w.p1, { projectId: w.p1 }], ["fileRequests.page#" + reqIds.a, { requestId: reqIds.a }], ["fileRequests.page#" + reqIds.b, { requestId: reqIds.b }],
+      ["help.list", {}], ["help.guide#paying-an-invoice", { slug: "paying-an-invoice" }], ["projects.mine", {}], ["projects.forClient#" + w.p1, { projectId: w.p1 }], ["shoots.forClientProject#" + w.p1, { projectId: w.p1 }], ["shoots.page#" + shootId, { shootId }], ["fileRequests.forClientProject#" + w.p1, { projectId: w.p1 }], ["fileRequests.page#" + reqIds.a, { requestId: reqIds.a }], ["fileRequests.page#" + reqIds.b, { requestId: reqIds.b }],
       ["briefs.forClientProject#" + w.p1, { projectId: w.p1 }], ["briefs.page#" + briefId, { briefId }],
       ["footage.forClientProject#" + w.p1, { projectId: w.p1 }], ["testimonials.ask#" + askId, { noteId: askId }],
       ["callSheets.forClient#" + prod.C.id, { callSheetId: prod.C.id }], ["callSheets.forClientProject#" + w.p1, { projectId: w.p1 }], ["invoicePay.mine", {}], ...["kitpaidtoken000000001", "kitduetoken0000000002", "kitproctoken000000003"].map((tok): [string, Record<string, unknown>] => ["invoicePay.page#" + tok, { token: tok }])];

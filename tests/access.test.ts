@@ -74,7 +74,7 @@ const GUEST: Record<string, string> = {
   "guests.opened": "records the guest opening their own sheet, only while it's active",
 };
 // Functions any signed-in account may call (owner or client), never a stranger.
-const SIGNED_IN = new Set(["users.setName", "users.switchSide", "clients.account", "shares.mine",
+const SIGNED_IN = new Set(["help.list", "help.guide", "users.setName", "users.switchSide", "clients.account", "shares.mine",
   // Phase 1: a client's own Inbox, Documents and their businesses' look
   "inbox.mine", "inbox.unreadCount", "inbox.markRead", "inbox.markAllRead", "documents.mine", "business.brand",
   "portal.waiting", "emails.myPrefs", "emails.setMine",
@@ -92,7 +92,7 @@ const SIGNED_IN = new Set(["users.setName", "users.switchSide", "clients.account
   "callSheets.forClient", "callSheets.forClientProject", "callSheets.opened"]);
 // D133 (Phase 5): functions a vendor login may call: their own side of the portal (each checks the vendor's own records,
 // tested in vendorPortal.test.ts and vendorPayouts.test.ts), their own identity, and nothing of the owner's or a client's.
-const VENDOR = new Set(["users.switchSide",
+const VENDOR = new Set(["help.list", "help.guide", "users.switchSide",
   "vendorPortal.businesses", "vendorPortal.counts", "vendorPortal.home", "vendorPortal.bookings", "vendorPortal.booking", "vendorPortal.accept", "vendorPortal.decline",
   "vendorPortal.briefings", "vendorPortal.briefing", "vendorPortal.markRead", "vendorPortal.reviews", "vendorPortal.invoices", "vendorPortal.invoiceForm", "vendorPortal.invoice",
   "vendorPortal.saveInvoice", "vendorPortal.deleteInvoice", "vendorPortal.settings", "vendorPortal.notifications", "vendorPortal.setNotification", "vendorPortal.saveDetails",

@@ -124,7 +124,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures (Phase 3c)", () => {
       ["users.me", {}], ["vendorPortal.businesses", {}], ["vendorPortal.counts", { businessId: w.A }], ["vendorPortal.home", { businessId: w.A }], ["vendorPortal.bookings", { businessId: w.A }],
       ["vendorPortal.booking#" + k1, { bookingId: k1 }], ["vendorPortal.booking#" + k2, { bookingId: k2 }], ["vendorPortal.briefings", { businessId: w.A }], ["vendorPortal.reviews", { businessId: w.A }],
       ["vendorPortal.invoices", { businessId: w.A }], ["vendorPortal.invoiceForm", { businessId: w.A }], ["vendorPortal.invoice#" + inv1, { invoiceId: inv1 }], ["vendorPortal.invoice#" + inv2, { invoiceId: inv2 }], ["vendorPortal.invoice#" + inv3, { invoiceId: inv3 }],
-      ["vendorPortal.settings", { businessId: w.A }], ["vendorPortal.notifications", { businessId: w.A }], ["business.brand", {}], ["vendorPayouts.mine", { businessId: w.A }], ["vendorPortal.invoice#" + inv4, { invoiceId: inv4 }], ["vendorPortal.callSheet#" + sheet, { callSheetId: sheet }],
+      ["help.list", { businessId: w.A }], ["help.guide#adding-a-w9", { slug: "adding-a-w9", businessId: w.A }], ["vendorPortal.settings", { businessId: w.A }], ["vendorPortal.notifications", { businessId: w.A }], ["business.brand", {}], ["vendorPayouts.mine", { businessId: w.A }], ["vendorPortal.invoice#" + inv4, { invoiceId: inv4 }], ["vendorPortal.callSheet#" + sheet, { callSheetId: sheet }],
     ];
     const run = async (as: typeof w.heston, list: [string, Record<string, unknown>][]) => {
       const out: Record<string, unknown> = {};

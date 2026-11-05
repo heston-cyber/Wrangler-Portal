@@ -252,12 +252,13 @@ export function SkeletonRows({ n = 3, label = "Loading" }: { n?: number; label?:
 }
 
 // ---------- Page header, empty state, dialog header ----------
-export function PageHeader({ eyebrow, title, sub, actions }: { eyebrow?: React.ReactNode; title: React.ReactNode; sub?: React.ReactNode; actions?: React.ReactNode }) {
+/** `help` is a guide's address (Phase 5d step 4): a small "?" beside the heading opens it. */
+export function PageHeader({ eyebrow, title, sub, actions, help }: { eyebrow?: React.ReactNode; title: React.ReactNode; sub?: React.ReactNode; actions?: React.ReactNode; help?: string }) {
   return (
     <header className="wp-pagehead">
       <div className="txt">
         {eyebrow && <span className="wp-eyebrow">{eyebrow}</span>}
-        <h1 className="wp-h2">{title}</h1>
+        <h1 className="wp-h2">{title}{help && <a {...linkProps(help)} className="help-mark" aria-label="Help for this page" title="Help for this page">?</a>}</h1>
         {sub && <p className="wp-body">{sub}</p>}
       </div>
       {actions && <div className="acts">{actions}</div>}

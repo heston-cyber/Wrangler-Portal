@@ -506,7 +506,8 @@ export default defineSchema({
     businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     name: v.string(),
     description: v.optional(v.string()),
-    kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"), v.literal("callsheet"))),  // a proposal, briefing or call-sheet template, kept apart from contract templates
+    kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"), v.literal("callsheet"), v.literal("guide"))),  // a proposal, briefing, call-sheet or Help-guide template, kept apart from contract templates
+    guideSlug: v.optional(v.string()),       // Phase 5d step 4: which of Wrangler's Help guides this business has edited
     blocks: v.any(),
     fields: v.any(),
     style: v.any(),

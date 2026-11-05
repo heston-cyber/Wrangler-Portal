@@ -2926,3 +2926,24 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 .gear-add { display: flex; gap: 8px; align-items: center; }
 .gear-add .input { flex: 1; min-width: 0; }
 @media (max-width: 640px) { .gear-photo { flex-direction: column; align-items: flex-start; } }
+
+/* Phase 5d step 4: Help */
+.help-mark { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-left: 10px; border-radius: 50%; vertical-align: middle; font: 600 12px/1 var(--font-title); color: var(--text-secondary); text-decoration: none; box-shadow: inset 0 0 0 1px var(--border-faint); }
+.help-mark:hover, .help-mark:focus-visible { color: var(--text-primary); box-shadow: inset 0 0 0 1px var(--accent-ring); background: var(--accent-tint); }
+.help { display: grid; gap: 16px; max-width: 760px; width: 100%; min-width: 0; }
+.help > * { min-width: 0; }
+.help-bar { display: flex; gap: 10px; align-items: center; }
+.help-search { flex: 1; min-width: 0; }
+.help-note { margin: 0; }
+.help-back { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); text-decoration: none; font: 400 var(--fs-text-small)/1.4 var(--font-body); }
+.help-back:hover { color: var(--text-primary); }
+.help-guide { display: grid; gap: 18px; padding: 24px; border-radius: var(--radius-card); border: 1px solid var(--border-hairline); background: color-mix(in srgb, var(--surface-block) 72%, transparent); }
+.help-head { display: grid; gap: 8px; }
+.help-head p { margin: 0; }
+.help-owner { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 4px; }
+.help-body { display: grid; gap: 12px; font: 400 var(--fs-text)/1.6 var(--font-body); color: var(--text-primary); }
+.help-body p, .help-body ul, .help-body ol { margin: 0; }
+.help-body ul, .help-body ol { padding-left: 22px; display: grid; gap: 6px; }
+.help-body .wp-h3 { display: none; } /* the title is already the page heading */
+.help-h { margin: 10px 0 0; font: 600 18px/1.35 var(--font-title); color: var(--text-primary); }
+@media (max-width: 640px) { .help-guide { padding: 18px; } .help-bar { flex-wrap: wrap; } .help-bar .btn { width: 100%; } }

@@ -22,7 +22,7 @@ export default function ClientDocuments({ tab }: { tab: DocTab }) {
   const counts = { to_sign: docs?.toSign.length ?? 0, signed: docs?.signed.length ?? 0, cancelled: docs?.cancelled.length ?? 0 };
   return (
     <div className="wp-page notop cdocs">
-      <PageHeader title="Documents." sub={<span className="pc-only">Everything {business} has sent you to sign.</span>} />
+      <PageHeader help="/help/signing-a-document" title="Documents." sub={<span className="pc-only">Everything {business} has sent you to sign.</span>} />
       <div className="cdocs-tabs">
         <Tabs label="Documents" value={tab} onChange={setTab} items={[
           { key: "to_sign", label: "To sign", count: counts.to_sign || undefined }, { key: "signed", label: "Signed", count: counts.signed || undefined },

@@ -13,6 +13,7 @@ import { Watermark } from "../review/player/Watermark";
 import lightArcs from "../../assets/d1/light-arcs.jpg";
 import { Icon } from "../../ui/Icon";
 import { useLocation } from "../../lib/router";
+import { HelpSection } from "../help/Help";
 import { SectionMenu, sectionOf, SettingsFrame, SetHead, type SectionKey } from "./Frame";
 import { SignConnectorPanel } from "../docs/pages/SignConnector";
 import Register from "../review/Register";
@@ -125,6 +126,7 @@ export default function Settings({ me }: { me: { name: string | null; email: str
       {key === "sheet" && <SheetCopy show={show} />}
       {key === "clients" && <ClientsSettings show={show} />}
       {key === "shares" && <SharesSettings show={show} />}
+      {key === "help" && <><SetHead eyebrow="Help" title="Guides." sub="Short guides for your clients and vendors. Edit any of them, and what you write is what they read." /><HelpSection path={path} /></>}
       {toast}
     </SettingsFrame>
   );

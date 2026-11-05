@@ -7,7 +7,7 @@ import { Sep, TopBar } from "../../shell/Shell";
 import { Icon, type IconName } from "../../ui/Icon";
 import { linkProps } from "../../lib/router";
 
-export type SectionKey = "business" | "payments" | "rates" | "brand" | "calendar" | "sitewatch" | "brief" | "tools" | "account" | "notifications" | "register" | "dropbox" | "connectors" | "sheet" | "clients" | "shares";
+export type SectionKey = "business" | "payments" | "rates" | "brand" | "calendar" | "sitewatch" | "brief" | "tools" | "account" | "notifications" | "register" | "dropbox" | "connectors" | "sheet" | "clients" | "shares" | "help";
 
 export const SECTIONS: Array<{ key: SectionKey; label: string; icon: IconName }> = [
   { key: "business", label: "Business", icon: "users" },
@@ -26,6 +26,7 @@ export const SECTIONS: Array<{ key: SectionKey; label: string; icon: IconName }>
   { key: "sheet", label: "Google Sheet copy", icon: "document" },
   { key: "clients", label: "Clients", icon: "users" },
   { key: "shares", label: "Shares", icon: "send" },
+  { key: "help", label: "Help", icon: "info" }, // Phase 5d step 4 (Q59): the last item, the guides
 ];
 
 // Old addresses still land on the right section: /register, /sign/connector, /settings#claude and the like, and
