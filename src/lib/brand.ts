@@ -37,6 +37,8 @@ export function useBrand(b: Brand | null) {
     const root = document.documentElement;
     const vars = brandVars(b);
     for (const [k, val] of Object.entries(vars)) root.style.setProperty(k, val);
-    return () => { for (const k of VARS) root.style.removeProperty(k); };
+    // another business's colours keep the old page light; the red cactus scene is Wrangler's own (Heston, Nov 5)
+    if (Object.keys(vars).length) root.setAttribute("data-brand", "custom");
+    return () => { for (const k of VARS) root.style.removeProperty(k); root.removeAttribute("data-brand"); };
   }, [b?.accent, b?.background]);
 }
