@@ -53,6 +53,7 @@ function Picker({ slots, tz, setTz, lengthMin, value, onPick, onCheckAgain, busy
     return [...m.entries()];
   }, [slots, tz]);
   const [day, setDay] = useState<string | null>(null);
+  const [monthPick, setMonthPick] = useState<string | null>(null);
   const [zoneOpen, setZoneOpen] = useState(false);
   const current = days.find(([k]) => k === day) ?? days.find(([, xs]) => value !== null && xs.includes(value)) ?? days[0];
   if (!days.length) return (
@@ -62,17 +63,46 @@ function Picker({ slots, tz, setTz, lengthMin, value, onPick, onCheckAgain, busy
       <Button onClick={onCheckAgain}>Check again</Button>
     </div>
   );
+  // the month calendar (Heston, Nov 5: a calendar instead of the day chips; the week starts on Sunday)
+  const open = new Map(days);
+  const months = [...new Set(days.map(([k]) => k.slice(0, 7)))];
+  const month = monthPick && months.includes(monthPick) ? monthPick : (current?.[0] ?? days[0][0]).slice(0, 7);
+  const mi = months.indexOf(month);
+  const today = dayKey(Date.now(), tz);
+  const [yy, mm] = month.split("-").map(Number);
+  const lead = new Date(Date.UTC(yy, mm - 1, 1)).getUTCDay();
+  const count = new Date(Date.UTC(yy, mm, 0)).getUTCDate();
+  const monthName = (ym: string) => new Date(`${ym}-01T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", month: "long" });
+  const skipped = months[0] !== today.slice(0, 7);
   return (
     <>
       <p className="wp-small secondary">Pick a time that suits you. Times are shown in your time zone: {zoneName(tz)}{zoneShort(tz) ? ` (${zoneShort(tz)})` : ""}.</p>
-      <span className="bc-label">Day</span>
-      <div className="qz-chips bc-days" role="group" aria-label="Day">
-        {days.slice(0, 30).map(([k, xs]) => <button key={k} type="button" className={`qz-chip${current?.[0] === k ? " on" : ""}`} aria-pressed={current?.[0] === k} onClick={() => setDay(k)}>{dayLabel(xs[0], tz)}</button>)}
-      </div>
-      <span className="bc-label">Time</span>
-      <div className="qz-chips bc-times" role="group" aria-label="Time">
-        {(current?.[1] ?? []).map((s) => <button key={s} type="button" className={`qz-chip${value === s ? " on" : ""}`} aria-pressed={value === s} onClick={() => onPick(s)}>{timeLabel(s, tz)}</button>)}
-      </div>
+      {skipped && <p className="wp-small secondary bc-skip">Nothing is open in {monthName(today.slice(0, 7))}, so {monthName(months[0])} is shown.</p>}
+      <div className="bc-pick">
+        <div className="bc-cal" role="group" aria-label="Day">
+          <div className="bc-calhead">
+            <b>{monthName(month)} {yy}</b>
+            <span className="sp" />
+            <button type="button" className="bc-arrow prev" aria-label="Previous month" disabled={mi <= 0} onClick={() => setMonthPick(months[mi - 1])}><Icon name="chevron-right" /></button>
+            <button type="button" className="bc-arrow" aria-label="Next month" disabled={mi >= months.length - 1} onClick={() => setMonthPick(months[mi + 1])}><Icon name="chevron-right" /></button>
+          </div>
+          <div className="bc-grid">
+            {["S", "M", "T", "W", "T", "F", "S"].map((w, i) => <span key={i} className="bc-wd" aria-hidden>{w}</span>)}
+            {Array.from({ length: lead }, (_, i) => <span key={`b${i}`} />)}
+            {Array.from({ length: count }, (_, i) => {
+              const k = `${month}-${String(i + 1).padStart(2, "0")}`;
+              const xs = open.get(k);
+              const on = current?.[0] === k;
+              return <button key={k} type="button" disabled={!xs} aria-pressed={on} aria-label={xs ? dayLabel(xs[0], tz) : `${monthName(month)} ${i + 1}, nothing open`}
+                className={`bc-day${on ? " on" : ""}${k === today ? " today" : ""}`} onClick={() => setDay(k)}>{i + 1}</button>;
+            })}
+          </div>
+        </div>
+        <div className="bc-side">
+          <span className="bc-label">{current ? dayLabel(current[1][0], tz) : "Time"}</span>
+          <div className="qz-chips bc-times" role="group" aria-label="Time">
+            {(current?.[1] ?? []).map((s) => <button key={s} type="button" className={`qz-chip${value === s ? " on" : ""}`} aria-pressed={value === s} onClick={() => onPick(s)}>{timeLabel(s, tz)}</button>)}
+          </div>
       <div className="bc-foot">
         {zoneOpen ? (
           <select className="input bc-zone" aria-label="Your time zone" value={tz} onChange={(e) => { setTz(e.target.value); setZoneOpen(false); }}>
@@ -81,6 +111,8 @@ function Picker({ slots, tz, setTz, lengthMin, value, onPick, onCheckAgain, busy
         ) : <button type="button" className="linkbtn wp-small secondary" onClick={() => setZoneOpen(true)}>Not in {zoneName(tz)}? Change time zone</button>}
         <span className="sp" />
         <Button variant="primary" disabled={value === null} onClick={onContinue}>{busyLabel ?? "Continue"}</Button>
+      </div>
+        </div>
       </div>
       <p className="wp-small secondary bc-len">{lengthMin}-minute call</p>
     </>
@@ -102,7 +134,7 @@ export function BookingPage({ slug }: { slug: string }) {
   useEffect(() => { if (p?.state === "open" && !asked.current) { asked.current = true; void refresh({ slug }).catch(() => undefined); } }, [p?.state, slug, refresh]);
   const brand = p && "business" in p ? { name: p.business.name, logoUrl: p.business.logoUrl } : null;
   const shell = (body: React.ReactNode) => (
-    <Frame inShell={false} bar={null} brand={brand}>
+    <Frame inShell={false} bar={null} brand={brand} curtain>
       <section className="bc-card glass">{body}</section>
       {p && "business" in p && <p className="wp-small secondary bc-legal">{legalLine(p.business)}</p>}
     </Frame>
@@ -165,7 +197,7 @@ export function CallPage({ token }: { token: string }) {
   useEffect(() => { if (moving && c) void refresh({ slug: c.slug }).catch(() => undefined); }, [moving, c?.slug, refresh]); // eslint-disable-line react-hooks/exhaustive-deps
   const brand = c ? { name: c.business.name, logoUrl: c.business.logoUrl } : null;
   const shell = (body: React.ReactNode) => (
-    <Frame inShell={false} bar={null} brand={brand}>
+    <Frame inShell={false} bar={null} brand={brand} curtain>
       <section className="bc-card glass">{body}</section>
       {c && <p className="wp-small secondary bc-legal">{legalLine(c.business)}</p>}
       {askDialog}

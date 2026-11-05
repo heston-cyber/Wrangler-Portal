@@ -3082,3 +3082,30 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 .wp-sub.wp-stagetop { color: var(--accent); font-weight: 600; } /* Heston (Nov 4, 21:30): Overview in red too */
 .msg-closed { margin: 0; padding: 14px 22px 18px; border-top: 1px solid var(--border-hairline); }
 .msg-acts { display: flex; gap: 8px; align-items: center; }
+
+/* ---------- the booking month calendar (Design Log, Lead · Book a call › Pick a time; Sunday first) ---------- */
+.bc-card:has(.bc-pick) { width: min(900px, 100%); }
+.bc-pick { display: grid; grid-template-columns: 332px 1fr; gap: 0 28px; align-items: start; }
+.bc-cal { display: grid; gap: 10px; padding-right: 28px; border-right: 1px solid var(--border-hairline); }
+.bc-calhead { display: flex; align-items: center; gap: 8px; }
+.bc-calhead b { font: 400 var(--fs-h4)/var(--lh-h4) var(--font-serif); -webkit-text-stroke: .03em currentColor; }
+.bc-calhead .sp { flex: 1; }
+.bc-arrow { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--border-strong); background: none; color: var(--text-primary); display: grid; place-items: center; cursor: pointer; }
+.bc-arrow .wp-icon { width: 16px; height: 16px; }
+.bc-arrow.prev .wp-icon { transform: rotate(180deg); }
+.bc-arrow:disabled { opacity: .3; cursor: default; }
+.bc-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px 0; justify-items: center; }
+.bc-wd { font: 400 var(--fs-label-small)/var(--lh-label-small) var(--font-title); letter-spacing: var(--ls-label); color: var(--text-secondary); padding: 6px 0; }
+.bc-day { position: relative; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--border-hairline); background: none; color: var(--text-primary); font: 500 var(--fs-text-small)/1 var(--font-body); cursor: pointer; }
+.bc-day:disabled { border-color: transparent; color: var(--text-secondary); opacity: .45; cursor: default; }
+.bc-day.on { background: var(--accent-tint); border-color: var(--accent-ring); }
+.bc-day.today::after { content: ""; position: absolute; left: 50%; bottom: 5px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--accent); }
+.bc-day:focus-visible, .bc-arrow:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 4px; }
+.bc-side { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.bc-times .qz-chip { flex: 1 0 calc(33.3% - 10px); justify-content: center; max-width: calc(33.3% - 7px); }
+.bc-skip { margin: 0; }
+@media (max-width: 820px) {
+  .bc-pick { grid-template-columns: 1fr; gap: 20px; }
+  .bc-cal { padding-right: 0; border-right: 0; }
+  .bc-side .bc-foot .btn { width: 100%; }
+}

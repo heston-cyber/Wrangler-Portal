@@ -59,12 +59,12 @@
    Wider than 1440 the scene scales to cover the width; narrower it is centred. The black-hole sign-in, the share gate and the
    signing curtain use other light classes and keep their own background. Another business's colours keep the old light. */
 :root:not([data-brand]) .wp-light.back,
-:root:not([data-brand]) .wp-light.client {
+:root:not([data-brand]) .wp-light.client:not(.curtain) {
   background: var(--surface-base) url("/bg/cactus-desktop.jpg") center top / max(100%, 1440px) auto no-repeat;
 }
 :root:not([data-brand]) .wp-light.back > i,
-:root:not([data-brand]) .wp-light.client > i { display: none; }
+:root:not([data-brand]) .wp-light.client:not(.curtain) > i { display: none; }
 @media (max-width: 820px) {
   :root:not([data-brand]) .wp-light.back,
-  :root:not([data-brand]) .wp-light.client { background-image: url("/bg/cactus-phone.jpg"); background-size: 100% auto; }
+  :root:not([data-brand]) .wp-light.client:not(.curtain) { background-image: url("/bg/cactus-phone.jpg"); background-size: 100% auto; }
 }
