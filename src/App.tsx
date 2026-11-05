@@ -66,6 +66,8 @@ const ProposalBuilder = lazy(() => import("./modules/proposals/Proposals").then(
 const ClientProposal = lazy(() => import("./modules/proposals/ClientProposal"));
 // D147: a briefing's no-login page /b/<token> (email 58, or a copied link).
 const BriefingLink = lazy(() => import("./modules/vendors/BriefingLink"));
+const CallBookingPage = lazy(() => import("./modules/calls/Calls").then((m) => ({ default: m.BookingPage }))); // Phase 5d step 1
+const CallPage = lazy(() => import("./modules/calls/Calls").then((m) => ({ default: m.CallPage })));
 // Phase 3c: Vendors (D95: its own layer).
 const VendorsPage = lazy(() => import("./modules/vendors/Vendors"));
 // Phase 5b: Production (D126).
@@ -150,6 +152,9 @@ export default function App() {
     const qk = /^\/q\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path); // D149: the no-account quote page
     if (qk) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><ClientQuote token={qk[1]} /></Suspense></KitApp></Suspense>;
     const brief = /^\/b\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path); // D147: the no-login briefing page
+    const bk = /^\/book\/([a-z0-9-]{1,64})\/?$/.exec(path), ck = /^\/call\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path); // Phase 5d: booking calls
+    if (bk) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><CallBookingPage slug={bk[1]} /></Suspense></KitApp></Suspense>;
+    if (ck) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><CallPage token={ck[1]} /></Suspense></KitApp></Suspense>;
     if (brief) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><BriefingLink token={brief[1]} /></Suspense></KitApp></Suspense>;
     const inv = /^\/i\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
     if (inv) {
@@ -183,6 +188,11 @@ export default function App() {
   // Phase 3b: a proposal link (email 19's "View proposal"), no account needed; the same page signed in or out.
   const proposalLink = /^\/p\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
   if (proposalLink) return <Suspense fallback={<Loading />}><ClientProposal key={proposalLink[1]} token={proposalLink[1]} /></Suspense>;
+  // Phase 5d step 1: the booking page (/book/<business>) and a lead's own call (/call/<token>, email 43). No account.
+  const bookLink = /^\/book\/([a-z0-9-]{1,64})\/?$/.exec(path);
+  if (bookLink) return <Suspense fallback={<Loading />}><CallBookingPage key={bookLink[1]} slug={bookLink[1]} /></Suspense>;
+  const callLink = /^\/call\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
+  if (callLink) return <Suspense fallback={<Loading />}><CallPage key={callLink[1]} token={callLink[1]} /></Suspense>;
   // D147: a briefing link (email 58's "Read the briefing", or a copied link), no account needed; the same page signed in or out.
   const briefingLink = /^\/b\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
   if (briefingLink) return <Suspense fallback={<Loading />}><BriefingLink key={briefingLink[1]} token={briefingLink[1]} /></Suspense>;

@@ -150,6 +150,10 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "siteWatch.report": { pages: ["owner"], args: () => "skip" }, "siteWatch.run": { pages: ["owner"], args: () => "skip" }, "siteWatch.finding": { pages: ["owner"], args: () => "skip" }, // Settings › Site watch (admins only; the page asks only after summary says so)
   "home.dashboard": { pages: ["owner"], args: () => ({ tzOffsetMin: 300 }) }, // Dashboard: Today, Coming up, Live edits, Money
   "production.shoots": { pages: ["owner"], args: () => ({}) }, // Production › Shoots
+  "calls.page": { pages: ["share", "signin"], args: () => ({ slug: "nope" }) }, // /book/<business>, no account (Phase 5d)
+  "calls.manage": { pages: ["share", "signin"], args: () => ({ token: "x".repeat(24) }) }, // /call/<token>, the lead's own call
+  "calls.settings": { pages: ["owner"], args: () => ({}) }, // Settings › Booking calls; the lead page's Copy booking link
+  "calls.forDeal": { pages: ["owner"], args: () => "skip" }, // the lead page's Upcoming call card
   "help.list": { pages: ["owner", "clientHome"], args: () => ({}) }, // Help (Phase 5d): owner Settings › Help, the client's /help
   "help.guide": { pages: ["owner", "clientHome"], args: () => ({ slug: "signing-in" }) }, // a guide
   "gear.list": { pages: ["owner"], args: () => ({}) }, // Production › Gear (Phase 5d)

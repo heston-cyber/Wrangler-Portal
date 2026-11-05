@@ -782,3 +782,63 @@ export function guestCallSheetMail(b: MailBrand, d: { name: string | null; title
     { t: "button", label: "Open the call sheet", href: d.link }, { t: "link", href: d.link },
   ], signoff(b), `${d.call ? `${d.call} call · ` : ""}${d.where || d.title}`);
 }
+
+// ---------- Phase 5d step 1: booking calls (emails 43, 52–56; S5 · Phase 5d "Call notice emails") ----------
+/** "Thu, Nov 5 · 10:00 – 10:30 AM (Central Time)" in a time zone. */
+export function callWhen(start: number, end: number, tz: string): string {
+  let zone = tz;
+  try { new Intl.DateTimeFormat("en-US", { timeZone: zone }); } catch { zone = "America/Chicago"; }
+  const day = new Date(start).toLocaleDateString("en-US", { timeZone: zone, weekday: "short", month: "short", day: "numeric" });
+  const t = (ms: number, ap: boolean) => new Date(ms).toLocaleTimeString("en-US", { timeZone: zone, hour: "numeric", minute: "2-digit" }).replace(ap ? /$^/ : / ?[AP]M$/, "");
+  const sameHalf = t(start, true).slice(-2) === t(end, true).slice(-2);
+  const name = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "longGeneric" }).formatToParts(new Date(start)).find((p) => p.type === "timeZoneName")?.value ?? zone;
+  return `${day} · ${sameHalf ? t(start, false) : t(start, true)} – ${t(end, true)} (${name})`;
+}
+const minutes = (start: number, end: number) => `${Math.round((end - start) / 60_000)} minutes`;
+const withWho = (b: MailBrand) => (b.ownerName ? `${b.ownerName}, ${b.name}` : b.name);
+
+/** 43 · to the lead: booked (and the same layout again after a reschedule is 56). */
+export function callBookedMail(b: MailBrand, d: { name: string; start: number; end: number; tz: string; meet: string | null; link: string }): Mail {
+  const len = Math.round((d.end - d.start) / 60_000);
+  return mk(b, "updates", `Your call with ${b.name} is booked`, [
+    hello(d.name),
+    { t: "p", text: `Your ${len}-minute call with ${b.name} is booked.` },
+    { t: "sums", rows: [{ label: "When", value: callWhen(d.start, d.end, d.tz), big: true }, { label: "Length", value: minutes(d.start, d.end) }, { label: "With", value: withWho(b) }, ...(d.meet ? [{ label: "Video", value: "Google Meet" }] : [])] },
+    ...(d.meet ? [{ t: "p", text: `Join on Google Meet: ${d.meet}` } as Block] : [{ t: "p", text: "The details are in the calendar invite.", tone: "muted" } as Block]),
+    { t: "p", text: "Need another time? You can move or cancel it from this link." },
+    { t: "button", label: "Reschedule or cancel", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), callWhen(d.start, d.end, d.tz));
+}
+/** 56 · to the lead: moved. */
+export function callMovedMail(b: MailBrand, d: { name: string; start: number; end: number; wasStart: number; wasEnd: number; tz: string; meet: string | null; link: string }): Mail {
+  return mk(b, "updates", `Your call with ${b.name} is moved`, [
+    hello(d.name),
+    { t: "p", text: `Your call with ${b.name} is now at a new time.` },
+    { t: "sums", rows: [{ label: "When", value: callWhen(d.start, d.end, d.tz), big: true }, { label: "Was", value: callWhen(d.wasStart, d.wasEnd, d.tz) }, { label: "With", value: withWho(b) }, ...(d.meet ? [{ label: "Video", value: "Google Meet" }] : [])] },
+    ...(d.meet ? [{ t: "p", text: `Join on Google Meet: ${d.meet}` } as Block] : []),
+    { t: "button", label: "Reschedule or cancel", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), callWhen(d.start, d.end, d.tz));
+}
+/** 55 · to the lead: cancelled. */
+export function callCancelledMail(b: MailBrand, d: { name: string; start: number; end: number; tz: string; bookLink: string }): Mail {
+  return mk(b, "updates", `Your call with ${b.name} is cancelled`, [
+    hello(d.name),
+    { t: "p", text: `Your call with ${b.name} on ${callWhen(d.start, d.end, d.tz)} is cancelled. It's off the calendar.` },
+    { t: "p", text: "Want to talk after all? Pick another time." },
+    { t: "button", label: "Book another time", href: d.bookLink },
+  ], signoff(b), "Cancelled");
+}
+/** 52, 53, 54 · to the owner: a lead booked, cancelled or moved a call. */
+export function ownerCallMail(b: MailBrand, d: { kind: "booked" | "cancelled" | "moved"; who: string; email: string; start: number; end: number; wasStart?: number; wasEnd?: number; note: string | null; link: string }): Mail {
+  const tz = "America/Chicago";
+  const head = d.kind === "booked" ? `${d.who} booked a call` : d.kind === "cancelled" ? `${d.who} cancelled their call` : `${d.who} moved their call`;
+  return mk(b, "updates", `${head}: ${callWhen(d.start, d.end, tz).split(" (")[0]}`, [
+    { t: "eyebrow", text: head },
+    { t: "title", text: callWhen(d.start, d.end, tz) },
+    ...(d.kind === "moved" && d.wasStart && d.wasEnd ? [{ t: "p", text: `Was ${callWhen(d.wasStart, d.wasEnd, tz)}.`, tone: "muted" } as Block] : []),
+    { t: "p", text: d.kind === "cancelled" ? "It's off your calendar." : "It's on your calendar with a Google Meet link." },
+    ...(d.note ? [{ t: "box", text: `Their note: ${d.note}` } as Block] : []),
+    { t: "p", text: `${d.who} · ${d.email}`, tone: "muted" },
+    { t: "button", label: "Open the lead", href: d.link },
+  ], ownerFoot("a lead books, moves or cancels a call"), `${d.who} · ${callWhen(d.start, d.end, tz)}`);
+}

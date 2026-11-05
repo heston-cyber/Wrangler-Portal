@@ -1,5 +1,6 @@
 // The back-office Home (P1 / Owner / Home, page "S5 · Phase 1"): what needs you today, your clients, and recent
 // activity across Review, Docs and the Inbox.
+import { CallNeedRow } from "../calls/Calls";
 import { money } from "../payments/common";
 import { Suspense, lazy, useState } from "react";
 import { sheetBits } from "../production/sheetBits";
@@ -119,6 +120,7 @@ function NeedRow({ n, remind }: { n: Need; remind: (n: Extract<Need, { kind: "do
         action={<ButtonLink size="sm" variant="primary" to={`/production/call-sheets/${n.callSheetId}?update=1`}>Send an update</ButtonLink>} />
     );
   }
+  if (n.kind === "call") return <CallNeedRow n={n} />; // Phase 5d (Q86): a lead booked, moved or cancelled a call
   if (n.kind === "shootMoved") return <ShootMovedRow n={n} />; // Phase 5b step 5 (D143): moved in Google Calendar, nobody emailed
   if (n.kind === "draft") {
     return (

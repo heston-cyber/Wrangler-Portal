@@ -20,6 +20,7 @@ import { overviewData } from "./invoices";
 import { todayCentral } from "./lib/bookings";
 import { shootMoveNeeds } from "./calendarSync";
 import { weatherNeeds } from "./callSheets";
+import { callNeeds } from "./calls";
 
 const MAX_NOTE_GROUPS = 10;
 
@@ -34,6 +35,7 @@ export type Need =
   | { kind: "footage"; at: number; what: "kept" | "renewal" | "ended" | "unpaid" | "paidLate"; projectId: Id<"projects">; project: string; client: string | null } // Phase 5
   | { kind: "testimonial"; at: number; testimonialId: Id<"testimonials">; who: string; project: string } // Phase 5
   | { kind: "shootMoved"; at: number; shootId: Id<"shoots">; projectId: Id<"projects">; project: string; date: string; call: string; wasDate: string; wasCall: string; people: number; crew: number; sheetId: Id<"callSheets"> | null; kept: boolean } // Phase 5b step 5 (D143); kept: review fix H2
+  | { kind: "call"; at: number; callId: Id<"calls">; dealId: Id<"deals"> | null; who: string; what: "booked" | "moved" | "cancelled"; start: number; end: number; was: number | null; calError: string | null } // Phase 5d (Q86)
   | { kind: "weatherChanged"; at: number; callSheetId: Id<"callSheets">; title: string; date: string; line: string; was: string }; // D148: the forecast changed after the sheet was sent
 
 /** The client a document belongs to: the client of its first signer that's one of a client's people. */
@@ -110,7 +112,8 @@ export const needs = query({
     out.push(...(await shootMoveNeeds(ctx)));
     // D148 (Nov 4): a sent call sheet's forecast changed: readers still have the sent line until an update goes out.
     out.push(...(await weatherNeeds(ctx)));
-    const order = { shootMoved: 0, weatherChanged: 0, proposal: 0, quote: 0, vendorInvoice: 0, footage: 0, testimonial: 0, notes: 1, doc: 2, draft: 3, request: 4 } as const;
+    out.push(...(await callNeeds(ctx))); // Phase 5d (Q86): a lead booked, moved or cancelled a call, until Done
+    const order = { call: 0, shootMoved: 0, weatherChanged: 0, proposal: 0, quote: 0, vendorInvoice: 0, footage: 0, testimonial: 0, notes: 1, doc: 2, draft: 3, request: 4 } as const;
     return out.sort((a, b) => order[a.kind] - order[b.kind] || b.at - a.at);
   },
 });

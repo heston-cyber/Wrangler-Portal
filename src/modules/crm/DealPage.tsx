@@ -13,6 +13,7 @@ import { linkProps, navigate } from "../../lib/router";
 import { errText } from "../docs/pages/common";
 import { dateShort, money } from "../payments/common";
 import { AddFollowUp, FollowUpRow, STAGES, type Stage } from "./common";
+import { UpcomingCall } from "../calls/Calls";
 
 const when = (t: number) => new Date(t).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
@@ -72,13 +73,14 @@ export default function DealPage({ dealId }: { dealId: string }) {
             <Card label="History" head={<SectionHead label="History" />}>
               {[...d.history].reverse().slice(0, 12).map((h, i) => (
                 <div key={i} className="wp-rowwrap">{i > 0 && <Divider />}
-                  <ListRow className="ilead" lead={{ icon: "activity" }} title={h.detail ? `${STAGES.find((s) => s.key === h.kind)?.name ?? (h.kind === "moved" ? "Moved" : h.kind === "created" ? "Added" : h.kind === "closed" ? "Taken off the board" : h.kind === "website" ? "From the website" : h.kind)} · ${h.detail}` : (STAGES.find((s) => s.key === h.kind)?.name ?? (h.kind === "created" ? "Added" : h.kind === "website" ? "From the website" : h.kind))}
+                  <ListRow className="ilead" lead={{ icon: "activity" }} title={h.detail ? `${STAGES.find((s) => s.key === h.kind)?.name ?? (h.kind === "moved" ? "Moved" : h.kind === "created" ? "Added" : h.kind === "closed" ? "Taken off the board" : h.kind === "website" ? "From the website" : h.kind === "call" ? "Call" : h.kind)} · ${h.detail}` : (STAGES.find((s) => s.key === h.kind)?.name ?? (h.kind === "created" ? "Added" : h.kind === "website" ? "From the website" : h.kind))}
                     meta={`${when(h.at)}${h.by ? ` · ${h.by}` : ""}`} />
                 </div>
               ))}
             </Card>
           </div>
           <div className="col right">
+            <UpcomingCall dealId={id} />
             {!d.closedAt && (
               <Card label="Next steps" head={<SectionHead label="Next steps" />}>
                 <div className="crm-steps">

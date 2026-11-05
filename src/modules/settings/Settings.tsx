@@ -14,6 +14,7 @@ import lightArcs from "../../assets/d1/light-arcs.jpg";
 import { Icon } from "../../ui/Icon";
 import { useLocation } from "../../lib/router";
 import { HelpSection } from "../help/Help";
+import { CallSettings } from "../calls/Calls";
 import { SectionMenu, sectionOf, SettingsFrame, SetHead, type SectionKey } from "./Frame";
 import { SignConnectorPanel } from "../docs/pages/SignConnector";
 import Register from "../review/Register";
@@ -112,6 +113,7 @@ export default function Settings({ me }: { me: { name: string | null; email: str
       {key === "rates" && <RatesSection show={show} />}
       {key === "brand" && <><SetHead eyebrow="Brand kit" title="Your brand, for decks." sub="Claude uses this when it makes a pitch deck in your brand. Each client can have their own kit on their company page." /><BrandKitEditor show={show} /></>}
       {key === "calendar" && <CalendarSettings show={show} />}
+      {key === "calls" && <CallSettings show={show} />}
       {key === "sitewatch" && <SiteWatchGate show={show} />}
       {key === "brief" && <KickoffSettings />}
       {key === "tools" && <ToolsSettings show={show} />}

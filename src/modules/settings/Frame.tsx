@@ -7,7 +7,7 @@ import { Sep, TopBar } from "../../shell/Shell";
 import { Icon, type IconName } from "../../ui/Icon";
 import { linkProps } from "../../lib/router";
 
-export type SectionKey = "business" | "payments" | "rates" | "brand" | "calendar" | "sitewatch" | "brief" | "tools" | "account" | "notifications" | "register" | "dropbox" | "connectors" | "sheet" | "clients" | "shares" | "help";
+export type SectionKey = "business" | "payments" | "rates" | "brand" | "calendar" | "sitewatch" | "brief" | "tools" | "account" | "notifications" | "register" | "dropbox" | "connectors" | "sheet" | "clients" | "shares" | "help" | "calls";
 
 export const SECTIONS: Array<{ key: SectionKey; label: string; icon: IconName }> = [
   { key: "business", label: "Business", icon: "users" },
@@ -15,6 +15,7 @@ export const SECTIONS: Array<{ key: SectionKey; label: string; icon: IconName }>
   { key: "rates", label: "Pricing", icon: "activity" }, // Phase 3 (263:1382), renamed Pricing in 3b (D76)
   { key: "brand", label: "Brand kit", icon: "folder" }, // Phase 3b (708:1235)
   { key: "calendar", label: "Calendar", icon: "calendar" }, // Phase 4 (741:1953)
+  { key: "calls", label: "Booking calls", icon: "calendar" }, // Phase 5d step 1 (801:8966)
   { key: "sitewatch", label: "Site watch", icon: "activity" }, // Phase 5c screens (Nov 4): the portal's admins only
   { key: "brief", label: "Kickoff brief", icon: "note" }, // Phase 4 (Nov 2, option B)
   { key: "tools", label: "Tools", icon: "menu" }, // Nov 2 (Heston): your menu's order, tools on it, Dashboard widgets

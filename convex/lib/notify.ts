@@ -26,6 +26,7 @@ export const NOTICES: Notice[] = [
   { key: "proposal_answers", side: "owner", group: "Quotes and proposals", label: "A client accepts or declines a proposal", kinds: ["proposal-accepted", "proposal-declined"] },
   { key: "client_paid", side: "owner", group: "Payments", label: "A client pays an invoice", kinds: ["owner-paid"] },
   { key: "subscription_failed", side: "owner", group: "Payments", label: "A subscription payment fails", kinds: ["subscription-failed-owner"] },
+  { key: "booked_calls", side: "owner", group: "Clients", label: "A lead books, moves or cancels a call", hint: "It also shows under Needs you on your Dashboard.", kinds: ["call_booked_owner", "call_cancelled_owner", "call_moved_owner"] }, // Phase 5d (Q86)
   { key: "booking_answers", side: "owner", group: "Vendors", label: "A vendor accepts or declines a booking", kinds: ["booking_accepted", "booking_declined"] },
   { key: "briefing_read", side: "owner", group: "Vendors", label: "A vendor reads a briefing", kinds: ["briefing_read"] },
   { key: "vendor_invoices", side: "owner", group: "Vendors", label: "A vendor sends an invoice", kinds: ["vendor_invoice"] },

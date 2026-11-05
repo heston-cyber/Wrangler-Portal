@@ -764,7 +764,7 @@ export default defineSchema({
     estimateId: v.optional(v.id("estimates")),
     valueCents: v.optional(v.number()),
     stage: v.union(v.literal("lead"), v.literal("quoted"), v.literal("contract_sent"), v.literal("signed"), v.literal("in_production"), v.literal("delivered"), v.literal("paid")),
-    source: v.union(v.literal("website"), v.literal("hand"), v.literal("estimate"), v.literal("accepted")), // accepted: D149's quiet lead
+    source: v.union(v.literal("website"), v.literal("hand"), v.literal("estimate"), v.literal("accepted"), v.literal("call")), // accepted: D149's quiet lead; call: booked a call (5d)
     quiet: v.optional(v.boolean()),               // D149: someone who isn't a client accepted; kept off the Pipeline board until "Move to Quoted?"
     lead: v.optional(v.object({ name: v.string(), email: v.string(), company: v.optional(v.string()), phone: v.optional(v.string()), message: v.optional(v.string()),
       fields: v.array(v.object({ label: v.string(), value: v.string() })), at: v.number() })),
@@ -1327,6 +1327,40 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_project", ["projectId", "date"]).index("by_date", ["date"]),
+
+  // Phase 5d step 1 (Nov 4, D119/D144): booking calls. One settings row per business (Settings › Booking calls), with the
+  // busy times last read from the calendar it checks (read again when a lead opens the page, at most once a minute).
+  callSettings: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    lengthMin: v.number(), bufferMin: v.number(), aheadDays: v.number(), noticeHours: v.number(),
+    hours: v.array(v.object({ on: v.boolean(), start: v.string(), end: v.string() })), // Monday first; the business's wall clock
+    calendarId: v.optional(v.string()),          // the calendar checked for busy times (default: the one shoots go on)
+    busy: v.optional(v.object({ at: v.number(), s: v.number(), e: v.number(), spans: v.array(v.object({ s: v.number(), e: v.number() })), error: v.optional(v.string()) })),
+    readingAt: v.optional(v.number()),           // a read of the calendar is on its way
+    updatedAt: v.number(),
+  }),
+  // A booked call. "holding": just picked; the calendar is read again for that time before it's booked (or "taken").
+  // The lead manages it from a private link (token) in email 43. notice: the owner's Dashboard row until Done.
+  calls: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    dealId: v.optional(v.id("deals")),
+    name: v.string(), email: v.string(), note: v.optional(v.string()),
+    start: v.number(), end: v.number(),
+    tz: v.string(),                              // the lead's time zone, for their emails
+    status: v.union(v.literal("holding"), v.literal("booked"), v.literal("taken"), v.literal("cancelled")),
+    token: v.string(),
+    moving: v.optional(v.object({ start: v.number(), end: v.number(), at: v.number() })), // a new time, being checked
+    moveTaken: v.optional(v.number()),           // the last new time picked was taken meanwhile (shown once)
+    was: v.optional(v.object({ start: v.number(), end: v.number() })), // before the last move
+    event: v.optional(v.object({ id: v.string(), calendarId: v.string() })),
+    meet: v.optional(v.string()),
+    calError: v.optional(v.string()),
+    notice: v.optional(v.object({ kind: v.union(v.literal("booked"), v.literal("moved"), v.literal("cancelled")), at: v.number(), doneAt: v.optional(v.number()) })),
+    cancelledBy: v.optional(v.union(v.literal("lead"), v.literal("owner"))),
+    history: v.array(v.object({ at: v.number(), text: v.string() })),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_token", ["token"]).index("by_start", ["start"]).index("by_deal", ["dealId", "start"]).index("by_email", ["email", "start"]),
 
   // Phase 5d step 3 (Nov 4): gear (Q57). Owner-only. The full serial is stored; screens show the last 4.
   gear: defineTable({

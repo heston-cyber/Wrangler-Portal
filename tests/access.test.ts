@@ -55,6 +55,15 @@ const OPEN: Record<string, string> = {
   "subscriptions.setupStart": "the same link: a SetupIntent for that subscription's customer only; a missing token is refused",
   "subscriptions.setupDone": "the same link: checks the SetupIntent is that subscription's own before using it; a missing token is refused",
   "subscriptions.mine": "a client's subscriptions, found by their own email; anyone else gets []",
+  // Phase 5d step 1: booking calls. The page answers by the business's slug (closed unless Google Calendar is connected
+  // and the settings are saved); the private link (/call/<token>) only for that call's own long random token. Booking,
+  // moving and cancelling are rate-limited. Tested in calls.test.ts.
+  "calls.page": "the booking page /book/<slug>: the business's name and open times only, or closed",
+  "calls.refresh": "the same page: asks for busy times to be read again; at most once a minute, rate-limited",
+  "calls.book": "the same page: books an open time; checked again with Google; rate-limited, with a hidden field for robots",
+  "calls.manage": "a call's own private link: that call only",
+  "calls.cancel": "the same link: cancels that call only; rate-limited",
+  "calls.reschedule": "the same link: moves that call to an open time only; rate-limited",
   // D147 (Nov 4): a briefing's no-login link (/b/<token>, email 58). Tested in briefingsShare.test.ts.
   "briefings.page": "a briefing link: answers only for a shared briefing's own long random token (a person's own, or the copied link); a turned-off link answers Withdrawn with the business and title only",
   "briefings.opened": "the same link: counts an open of that briefing only; a missing token, a draft or a turned-off link does nothing; rate-limited",

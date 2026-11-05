@@ -2959,3 +2959,47 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 .wp-soon { margin-left: 8px; font: 500 10px/1 var(--font-title); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-muted); }
 .wp-chips2 { margin-top: 8px; }
 .wp-chips2 .wp-layerchip { padding: 5px 12px; }
+
+/* Phase 5d step 1: booking calls */
+.bc-card { width: min(740px, 100%); margin: 40px auto 0; display: grid; gap: 14px; padding: 32px; border-radius: 24px; background: color-mix(in srgb, #0b0506 78%, transparent); }
+.bc-card .qz-chip { color: var(--text-primary); }
+.bc-title { margin: 0; font: 500 20px/1.3 var(--font-title); color: var(--text-primary); }
+.bc-card .wp-small, .bc-card p { margin: 0; }
+.bc-label { font: 400 var(--fs-text-small)/1.4 var(--font-body); color: var(--text-secondary); margin-top: 4px; }
+.bc-days, .bc-times { gap: 10px; }
+.bc-days { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.bc-days .qz-chip { flex: 0 0 auto; }
+.bc-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+.bc-foot .sp { flex: 1; }
+.bc-zone { max-width: 280px; }
+.bc-len { display: none; }
+.linkbtn { border: 0; background: none; padding: 0; color: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; font: inherit; }
+.bc-legal { text-align: center; margin: 28px auto 0; }
+.bc-form { margin-top: 4px; }
+.bc-hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.bc-dl { display: grid; grid-template-columns: auto 1fr; gap: 10px 24px; margin: 6px 0; font: 400 var(--fs-text-small)/1.4 var(--font-body); }
+.bc-dl dt { color: var(--text-secondary); } .bc-dl dd { margin: 0; text-align: right; color: var(--text-primary); }
+.bc-acts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+.bc-ok { color: var(--accent); }
+.bc-reading, .bc-none { display: grid; gap: 10px; }
+.bc-banner { display: grid; gap: 12px; justify-items: start; margin-bottom: 16px; }
+.bc-set { border: 0; padding: 0; margin: 0; display: grid; gap: 16px; min-width: 0; }
+.bc-set.off { opacity: .55; }
+.bc-panel { display: grid; gap: 4px; padding: 20px; }
+.bc-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 0; }
+.bc-row .l { display: grid; gap: 2px; min-width: 0; }
+.bc-row .l b { font: 400 var(--fs-text)/1.4 var(--font-body); color: var(--text-primary); }
+.bc-row .l small { font: 400 var(--fs-text-small)/1.4 var(--font-body); color: var(--text-secondary); overflow-wrap: anywhere; }
+.bc-row .v { display: flex; align-items: center; gap: 8px; flex: none; }
+.bc-hours .input { width: 150px; }
+.bc-sel { min-width: 140px; }
+.bc-note { margin: 6px 0 0; }
+.bc-save { display: flex; justify-content: flex-end; margin-top: 16px; }
+.bc-cnote { margin: 0; }
+@media (max-width: 640px) {
+  .bc-card { padding: 22px 18px; margin-top: 16px; }
+  .bc-row { flex-direction: column; align-items: stretch; }
+  .bc-row .v { flex-wrap: wrap; }
+  .bc-hours .input { width: 110px; }
+  .bc-dl { grid-template-columns: 1fr; gap: 2px; } .bc-dl dd { text-align: left; margin-bottom: 8px; }
+}

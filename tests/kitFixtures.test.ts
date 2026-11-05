@@ -385,6 +385,24 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ];
       return { ids, runs };
     });
+    // Phase 5d step 1: booking calls. Settings saved, busy times just read (the Team call and Gear pickup), a lead who
+    // booked a call (their card, the Upcoming call card and a Needs you row), and their private link.
+    process.env.GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "kit"; process.env.GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "kit";
+    const callKit = await t.run(async (ctx) => {
+      const biz = (await ctx.db.get(w.A))!;
+      const hours = [0, 1, 2, 3, 4, 5, 6].map((d) => ({ on: d < 5, start: "09:00", end: d === 4 ? "15:00" : "17:00" }));
+      const z = (dd: number, h: number, m = 0) => Date.UTC(2026, 9, 29 + dd, h + 5, m); // Central (CDT) wall clock
+      await ctx.db.insert("callSettings", { businessId: w.A, lengthMin: 30, bufferMin: 10, aheadDays: 30, noticeHours: 4, hours, calendarId: PICKED,
+        busy: { at: Date.now() + 10 * 365 * DAY, s: now, e: now + 31 * DAY, spans: [{ s: z(1, 10), e: z(1, 10, 30) }, { s: z(2, 9), e: z(2, 10) }] }, updatedAt: now });
+      const dealId = await ctx.db.insert("deals", { businessId: w.A, title: "Tom Silva", stage: "lead", source: "call", contactEmail: "tom@silvaroasters.example",
+        lead: { name: "Tom Silva", email: "tom@silvaroasters.example", message: "We're opening a second shop in the spring and want a launch video.", fields: [], at: now - 2 * HOUR },
+        history: [{ kind: "call", at: now - 2 * HOUR, detail: "Booked a call: Fri, Oct 30, 10:00 AM" }], createdAt: now - 2 * HOUR, updatedAt: now - 2 * HOUR });
+      const token = "kitcalltoken0000000000001";
+      await ctx.db.insert("calls", { businessId: w.A, dealId, name: "Tom Silva", email: "tom@silvaroasters.example", note: "We're opening a second shop in the spring and want a launch video.",
+        start: z(1, 10), end: z(1, 10, 30), tz: "America/New_York", status: "booked", token, event: { id: "kitcall1", calendarId: PICKED }, meet: "https://meet.google.com/abc-defg-hij",
+        notice: { kind: "booked", at: now - 2 * HOUR }, history: [], createdAt: now - 2 * HOUR, updatedAt: now - 2 * HOUR });
+      return { slug: biz.slug, dealId, token };
+    });
     const OWNER: [string, Record<string, unknown>][] = [
       ["siteWatch.summary", {}], ["siteWatch.report", {}],
       ...sw.ids.map((id): [string, Record<string, unknown>] => ["siteWatch.finding#" + id, { id }]),
@@ -402,7 +420,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["projects.page#" + w.p1, { projectId: w.p1 }], ["shoots.forProject#" + w.p1, { projectId: w.p1 }], ["fileRequests.forProject#" + w.p1, { projectId: w.p1 }], ["briefs.forProject#" + w.p1, { projectId: w.p1 }], ["briefs.settings", {}], ["calendar.settings", {}], ["projects.nextRound#" + w.harbor30.v, { videoId: w.harbor30.v }],
       ["footage.settings", {}], ["footage.forProject#" + w.p1, { projectId: w.p1 }], ["testimonials.list", {}], ["testimonials.projectsFor#" + w.harbor, { clientId: w.harbor }],
       ["invoices.list", {}], ["invoices.overview", { tzOffsetMin: 300 }], ["invoices.options", {}], ["invoices.forProject#" + w.p1, { projectId: w.p1 }],
-      ["production.overview", {}], ["production.shoots", {}], ["help.list", {}], ["help.guide#signing-in", { slug: "signing-in" }], ["help.guide#paying-an-invoice", { slug: "paying-an-invoice" }], ["gear.list", {}], ["gear.exportCsv", {}], ["gear.forShoot#" + shootId, { shootId }], ...Object.values(gearIds).map((id): [string, Record<string, unknown>] => ["gear.get#" + id, { gearId: id }]), ["production.projectsForShoot", {}], ["callSheets.list", {}], ["callSheets.newOptions", {}], ["calendarSync.range", calRange], ["calendarSync.linkOptions", {}],
+      ["production.overview", {}], ["production.shoots", {}], ["calls.settings", {}], ["calls.forDeal#" + callKit.dealId, { dealId: callKit.dealId }], ["crm.deal#" + callKit.dealId, { dealId: callKit.dealId }], ["calls.page#" + callKit.slug, { slug: callKit.slug }], ["calls.manage#" + callKit.token, { token: callKit.token }], ["help.list", {}], ["help.guide#signing-in", { slug: "signing-in" }], ["help.guide#paying-an-invoice", { slug: "paying-an-invoice" }], ["gear.list", {}], ["gear.exportCsv", {}], ["gear.forShoot#" + shootId, { shootId }], ...Object.values(gearIds).map((id): [string, Record<string, unknown>] => ["gear.get#" + id, { gearId: id }]), ["production.projectsForShoot", {}], ["callSheets.list", {}], ["callSheets.newOptions", {}], ["calendarSync.range", calRange], ["calendarSync.linkOptions", {}],
       ["overviews.clients", {}], ["overviews.review", {}], ["overviews.docs", {}], ["overviews.proposals", {}], ["overviews.vendors", {}], ["home.dashboard", { tzOffsetMin: 300 }], ["crm.due", {}],
       ...sheetIds.map(({ id }): [string, Record<string, unknown>] => ["callSheets.get#" + id, { callSheetId: id }]),
       ...sheetIds.filter((x) => x.buildId).map(({ buildId }): [string, Record<string, unknown>] => ["builder.getBuild#" + buildId, { buildId }]),
@@ -450,7 +468,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       return `${heston}|${await ctx.db.insert("authSessions", { userId: heston, expirationTime: now + 30 * DAY })}`;
     });
     const emptyOwn = await run(empty.withIdentity({ subject: esub }) as never, OWNER.filter(([k, a]) => !k.includes("#") && (k === "calendarSync.range" || Object.values(a).every((x) => typeof x === "number" || typeof x === "boolean"))));
-    const fixtures = { owner: owned, client: await run(client, CLIENT), guest: guestOwn, empty: emptyOwn, ids: { prod: { sheets: Object.fromEntries(Object.entries({ A: prod.A, B: prod.B, C: prod.C, D: prod.D, E: prod.E, F: prod.F, G: prod.G, P: prod.P }).map(([k, x]) => [k, { id: x.id, buildId: x.buildId }])), guest: guest.tokens, shoots: prod.shoots },  invoices: invIds, shares: shareTokens, harbor: w.harbor, video: w.harbor30.v, docSent: w.d1, docSigned: w.d2, docDraft: w.d3, notes: noteIds, gear: gearIds, shoot: shootId, project: w.p1, requests: reqIds, brief: briefId } };
+    const fixtures = { owner: owned, client: await run(client, CLIENT), guest: guestOwn, empty: emptyOwn, ids: { prod: { sheets: Object.fromEntries(Object.entries({ A: prod.A, B: prod.B, C: prod.C, D: prod.D, E: prod.E, F: prod.F, G: prod.G, P: prod.P }).map(([k, x]) => [k, { id: x.id, buildId: x.buildId }])), guest: guest.tokens, shoots: prod.shoots },  invoices: invIds, shares: shareTokens, harbor: w.harbor, video: w.harbor30.v, docSent: w.d1, docSigned: w.d2, docDraft: w.d3, notes: noteIds, gear: gearIds, calls: callKit, shoot: shootId, project: w.p1, requests: reqIds, brief: briefId } };
     writeFileSync(join(__dirname, "..", "src", "dev", "fixtures.json"), JSON.stringify(fixtures, null, 1));
     vi.useRealTimers();
   });
