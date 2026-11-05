@@ -17,7 +17,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireMe } from "./lib/access";
-import { bump } from "./lib/rate";
+import { bump, bumpDay } from "./lib/rate";
 import { randomToken } from "./lib/hash";
 import { SITE } from "./lib/site";
 import { TZ, momentOf } from "./lib/gcal";
@@ -36,6 +36,9 @@ const EMAIL = /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i;
 const READ_EVERY = 60_000;          // the calendar is read again at most once a minute
 const FRESH_FOR = 10 * 60_000;      // a booking needs busy times read in the last 10 minutes
 const MAX_UPCOMING = 3;             // per email address
+const HOLD_FOR = 5 * 60_000;        // review L1: a held time or a move still unchecked after this is let go
+/** Review M2: the Google event's id is fixed up front (lower-case hex is valid for Google), so it can always be removed. */
+export const callEventId = (callId: string) => `call${Array.from(new TextEncoder().encode(callId), (b) => b.toString(16).padStart(2, "0")).join("")}`.slice(0, 1000);
 const tidy = (s: string | undefined, max: number) => (s ?? "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, " ").trim().slice(0, max);
 const validZone = (tz: string) => { try { new Intl.DateTimeFormat("en-US", { timeZone: tz }); return true; } catch { return false; } };
 
@@ -70,7 +73,7 @@ async function takenSpans(ctx: Ctx, now: number, except?: Id<"calls">): Promise<
 }
 
 async function brandBits(ctx: Ctx, biz: Doc<"businesses">) {
-  return { name: biz.name, legalName: biz.legalName ?? null, owner: biz.ownerName ?? null, logoUrl: biz.logoFileId ? await ctx.storage.getUrl(biz.logoFileId) : null };
+  return { name: biz.name, legalName: biz.legalName ?? null, owner: null as string | null, logoUrl: biz.logoFileId ? await ctx.storage.getUrl(biz.logoFileId) : null };
 }
 
 // ---------- the lead's page (no login) ----------
@@ -90,10 +93,10 @@ export const page = query({
     const now = Date.now();
     const mine = token && TOKEN.test(token) ? await ctx.db.query("calls").withIndex("by_token", (q) => q.eq("token", token)).unique() : null;
     const busy = row.busy && row.busy.at > now - FRESH_FOR ? row.busy.spans : null;
-    const slots = busy ? openSlots(prefsOf(row), now, busy, await takenSpans(ctx, now, mine?._id)) : [];
+    const slots = busy ? openSlots(prefsOf(row), now, busy, await takenSpans(ctx, now, mine?._id), 600, row.busy!.e) : [];
     return {
       state: "open" as const, business, lengthMin: row.lengthMin,
-      reading: !busy || (!!row.readingAt && row.readingAt > now - 30_000), readAt: row.busy?.at ?? null, error: busy ? null : row.busy?.error ?? null, slots,
+      reading: !busy || (!!row.readingAt && row.readingAt > now - 30_000), readAt: row.busy?.at ?? null, error: !busy && !!row.busy?.error, slots,
     };
   },
 });
@@ -149,21 +152,24 @@ export const book = mutation({
     if (email.length > 254 || !EMAIL.test(email)) throw new ConvexError("Check your email address.");
     const tz = validZone(a.tz) ? a.tz : TZ;
     await bump(ctx, "callBook", `${biz._id}:${email}`);
-    await bump(ctx, "callBookBiz", String(biz._id));
     const now = Date.now();
     // Not thrown: a throw would undo the read of the calendar this asks for.
     if (!row.busy || row.busy.at < now - FRESH_FOR) {
       await ctx.scheduler.runAfter(0, internal.calls.readBusy, {});
       return { token: null, error: "The open times have changed. Pick a time again." };
     }
-    if (!openSlots(prefsOf(row), now, row.busy.spans, await takenSpans(ctx, now)).includes(a.start)) return { token: null, error: "That time was just taken. Pick another." };
+    if (!openSlots(prefsOf(row), now, row.busy.spans, await takenSpans(ctx, now), 600, row.busy.e).includes(a.start)) return { token: null, error: "That time was just taken. Pick another." };
     const upcoming = (await ctx.db.query("calls").withIndex("by_email", (q) => q.eq("email", email).gte("start", now)).collect()).filter((c) => c.status === "booked" || c.status === "holding");
     if (upcoming.length >= MAX_UPCOMING) throw new ConvexError("You already have calls booked. Move one of those instead.");
+    // Review M1: the business-wide limits count only calls actually made, so junk attempts can't use them up.
+    await bump(ctx, "callBookBiz", String(biz._id));
+    await bumpDay(ctx, "callBookDay", String(biz._id));
     const end = a.start + row.lengthMin * 60_000;
     const dealId = await dealFor(ctx, name, email, note, centralWhen(a.start));
     const token = randomToken(18);
     const callId = await ctx.db.insert("calls", { dealId, name, email, ...(note ? { note } : {}), start: a.start, end, tz, status: "holding", token, history: [{ at: now, text: "Picked on the booking page" }], createdAt: now, updatedAt: now });
     await ctx.scheduler.runAfter(0, internal.calls.confirm, { callId });
+    await ctx.scheduler.runAfter(HOLD_FOR, internal.calls.expire, { callId }); // review L1: a hold that never resolves
     return { token, error: null };
   },
 });
@@ -187,7 +193,7 @@ export const manage = query({
     const now = Date.now();
     return {
       status: c.status, name: c.name, email: c.email, start: c.start, end: c.end, tz: c.tz, meet: c.meet ?? null, slug: biz.slug,
-      business: await brandBits(ctx, biz), moving: !!c.moving, moveTaken: c.moveTaken ?? null, past: c.end <= now,
+      business: { ...(await brandBits(ctx, biz)), owner: biz.ownerName ?? null }, moving: !!c.moving, moveFailed: c.moveFailed ?? null, moveTaken: c.moveTaken ?? null, past: c.end <= now,
       canChange: (c.status === "booked") && c.start > now && !c.moving,
     };
   },
@@ -201,7 +207,8 @@ export const cancel = mutation({
     if (!c) throw new ConvexError("This link doesn't work.");
     await bump(ctx, "callChange", token);
     if (c.status === "cancelled") return;
-    if (c.status !== "booked" && c.status !== "holding") throw new ConvexError("This call isn't booked.");
+    if (c.status === "holding") throw new ConvexError("Your call is still being booked. Try again in a moment.");
+    if (c.status !== "booked") throw new ConvexError("This call isn't booked.");
     if (c.start <= Date.now()) throw new ConvexError("This call has already started.");
     const now = Date.now();
     await ctx.db.patch(c._id, { status: "cancelled", cancelledBy: "lead", moving: undefined, notice: { kind: "cancelled", at: now }, history: [...c.history, { at: now, text: "Cancelled by the lead" }], updatedAt: now });
@@ -219,6 +226,7 @@ export const reschedule = mutation({
     const c = await callByToken(ctx, a.token);
     if (!c) throw new ConvexError("This link doesn't work.");
     await bump(ctx, "callChange", a.token);
+    await bump(ctx, "callChangeBiz", String(c.businessId ?? "default"));
     if (c.status !== "booked") throw new ConvexError("This call isn't booked.");
     if (c.moving) throw new ConvexError("A new time is already being checked.");
     const now = Date.now();
@@ -229,10 +237,11 @@ export const reschedule = mutation({
       await ctx.scheduler.runAfter(0, internal.calls.readBusy, {});
       return { error: "The open times have changed. Pick a time again." };
     }
-    if (!openSlots(prefsOf(row), now, row.busy.spans, await takenSpans(ctx, now, c._id)).includes(a.start)) return { error: "That time was just taken. Pick another." };
+    if (!openSlots(prefsOf(row), now, row.busy.spans, await takenSpans(ctx, now, c._id), 600, row.busy.e).includes(a.start)) return { error: "That time was just taken. Pick another." };
     const tz = a.tz && validZone(a.tz) ? a.tz : c.tz;
-    await ctx.db.patch(c._id, { moving: { start: a.start, end: a.start + (c.end - c.start), at: now }, moveTaken: undefined, tz, updatedAt: now });
+    await ctx.db.patch(c._id, { moving: { start: a.start, end: a.start + (c.end - c.start), at: now }, moveTaken: undefined, moveFailed: undefined, tz, updatedAt: now });
     await ctx.scheduler.runAfter(0, internal.calls.confirmMove, { callId: c._id });
+    await ctx.scheduler.runAfter(HOLD_FOR, internal.calls.expire, { callId: c._id });
     return { error: null };
   },
 });
@@ -317,16 +326,20 @@ export const confirm = internalAction({
       }
     } catch { /* couldn't read: the time was free a few minutes ago, so it's booked */ }
     if (!d.writeId) { await ctx.runMutation(internal.calls.booked, { callId, error: "No calendar picked in Settings › Calendar." }); return "booked without calendar"; }
+    // Review H1: Google sends this invite from the owner's account to an address nobody has checked, so nothing the lead
+    // typed goes in it (their name and note stay in the portal and email 52).
     const body = {
-      summary: `Call with ${c.name}`,
-      description: [c.note ? `Their note: ${c.note}` : null, `Booked on the ${d.business} booking page. ${c.email}`].filter(Boolean).join("\n\n"),
+      id: callEventId(callId),
+      summary: `Call with ${d.business}`,
+      description: `Booked on the ${d.business} booking page. The lead's details are in Wrangler Portal.`,
       start: { dateTime: new Date(c.start).toISOString(), timeZone: TZ }, end: { dateTime: new Date(c.end).toISOString(), timeZone: TZ },
       attendees: [{ email: c.email, displayName: c.name }],
       conferenceData: { createRequest: { requestId: `call-${callId}`, conferenceSolutionKey: { type: "hangoutsMeet" } } },
       guestsCanModify: false, guestsCanInviteOthers: false,
     };
     try {
-      const r = await call("POST", `/calendars/${encodeURIComponent(d.writeId)}/events?conferenceDataVersion=1&sendUpdates=all`, body);
+      let r = await call("POST", `/calendars/${encodeURIComponent(d.writeId)}/events?conferenceDataVersion=1&sendUpdates=all`, body);
+      if (r.status === 409) r = await call("GET", `/calendars/${encodeURIComponent(d.writeId)}/events/${encodeURIComponent(body.id)}`); // a retry: it was made already
       if (r.status >= 300 || !r.json?.id) throw new Error(`${r.status}: ${r.json?.error?.message ?? r.text.slice(0, 120)}`);
       const meet = (r.json.hangoutLink as string | undefined) ?? ((r.json.conferenceData?.entryPoints ?? []) as Array<{ entryPointType?: string; uri?: string }>).find((x) => x.entryPointType === "video")?.uri;
       await ctx.runMutation(internal.calls.booked, { callId, event: { id: String(r.json.id), calendarId: d.writeId }, ...(meet ? { meet } : {}) });
@@ -342,7 +355,11 @@ export const booked = internalMutation({
   args: { callId: v.id("calls"), event: v.optional(v.object({ id: v.string(), calendarId: v.string() })), meet: v.optional(v.string()), error: v.optional(v.string()) },
   handler: async (ctx, a) => {
     const c = await ctx.db.get(a.callId);
-    if (!c || c.status !== "holding") return;
+    if (!c) return;
+    if (c.status !== "holding") { // let go meanwhile (review L1, M2): the event made for it comes off again
+      if (a.event) { await ctx.db.patch(c._id, { event: a.event }); await ctx.scheduler.runAfter(0, internal.calls.dropEvent, { callId: c._id, force: true }); }
+      return;
+    }
     const now = Date.now();
     await ctx.db.patch(c._id, {
       status: "booked", ...(a.event ? { event: a.event } : {}), ...(a.meet ? { meet: a.meet } : {}), ...(a.error ? { calError: a.error.slice(0, 200) } : {}),
@@ -385,25 +402,27 @@ export const confirmMove = internalAction({
       }
       await ctx.runMutation(internal.calls.moved, { callId });
       return "moved";
-    } catch (e) {
-      await ctx.runMutation(internal.calls.moved, { callId, error: e instanceof Disconnected ? "Google Calendar isn't connected." : String((e as Error).message) });
-      return "moved without calendar";
+    } catch {
+      // Review M3: the portal and the calendar must agree: the call stays where it was, and the lead is told to try again.
+      await ctx.runMutation(internal.calls.moved, { callId, failed: true });
+      return "not moved";
     }
   },
 });
 export const moved = internalMutation({
-  args: { callId: v.id("calls"), taken: v.optional(v.boolean()), error: v.optional(v.string()) },
+  args: { callId: v.id("calls"), taken: v.optional(v.boolean()), failed: v.optional(v.boolean()) },
   handler: async (ctx, a) => {
     const c = await ctx.db.get(a.callId);
     if (!c || c.status !== "booked" || !c.moving) return;
     const now = Date.now();
+    if (a.failed) { await ctx.db.patch(c._id, { moving: undefined, moveFailed: now, updatedAt: now }); return; }
     if (a.taken) {
       await ctx.db.patch(c._id, { moving: undefined, moveTaken: now, updatedAt: now });
       await ctx.scheduler.runAfter(0, internal.calls.readBusy, {});
       return;
     }
     await ctx.db.patch(c._id, {
-      was: { start: c.start, end: c.end }, start: c.moving.start, end: c.moving.end, moving: undefined, ...(a.error ? { calError: a.error.slice(0, 200) } : {}),
+      was: { start: c.start, end: c.end }, start: c.moving.start, end: c.moving.end, moving: undefined, calError: undefined,
       notice: { kind: "moved", at: now }, history: [...c.history, { at: now, text: `Moved by the lead (was ${centralWhen(c.start)})` }], updatedAt: now,
     });
     if (c.dealId) { const d = await ctx.db.get(c.dealId); if (d) await ctx.db.patch(d._id, { history: [...d.history, { kind: "call", at: now, detail: `Moved their call: ${centralWhen(c.moving.start)}` }], updatedAt: now }); }
@@ -414,18 +433,37 @@ export const moved = internalMutation({
 
 /** A cancelled call comes off the calendar (Google tells the lead too). */
 export const dropEvent = internalAction({
-  args: { callId: v.id("calls") },
-  handler: async (ctx, { callId }): Promise<string> => {
+  args: { callId: v.id("calls"), force: v.optional(v.boolean()) },
+  handler: async (ctx, { callId, force }): Promise<string> => {
     scopedAction(ctx);
     const d = await ctx.runQuery(internal.calls.readInputs, { callId });
-    const ev = d.call?.event;
-    if (!ev || d.call?.status !== "cancelled") return "nothing";
+    if (!d.call || (!force && d.call.status !== "cancelled")) return "nothing";
+    const ev = d.call.event ?? (d.writeId ? { id: callEventId(callId), calendarId: d.writeId } : null);
+    if (!ev) return "nothing";
     try {
       const call = await google(ctx);
       const r = await call("DELETE", `/calendars/${encodeURIComponent(ev.calendarId)}/events/${encodeURIComponent(ev.id)}?sendUpdates=all`);
       if (r.status >= 300 && r.status !== 404 && r.status !== 410) throw new Error(`${r.status}`);
       return "removed";
-    } catch { return "failed"; }
+    } catch (e) {
+      await ctx.runMutation(internal.calls.calFailed, { callId, error: `It didn't come off your calendar: ${String((e as Error).message).slice(0, 120)}` }); // review L5
+      return "failed";
+    }
+  },
+});
+export const calFailed = internalMutation({
+  args: { callId: v.id("calls"), error: v.string() },
+  handler: async (ctx, { callId, error }) => { const c = await ctx.db.get(callId); if (c) await ctx.db.patch(c._id, { calError: error.slice(0, 200) }); },
+});
+/** Review L1: a hold or a move nobody resolved (a job that died) is let go after five minutes. */
+export const expire = internalMutation({
+  args: { callId: v.id("calls") },
+  handler: async (ctx, { callId }) => {
+    const c = await ctx.db.get(callId);
+    if (!c) return;
+    const now = Date.now();
+    if (c.status === "holding" && now - c.createdAt >= HOLD_FOR - 1000) await ctx.db.patch(c._id, { status: "taken", history: [...c.history, { at: now, text: "Not booked: the calendar couldn't be checked" }], updatedAt: now });
+    else if (c.moving && now - c.moving.at >= HOLD_FOR - 1000) await ctx.db.patch(c._id, { moving: undefined, moveFailed: now, updatedAt: now });
   },
 });
 
@@ -448,11 +486,11 @@ export const mail = internalAction({
     if (!d) return;
     const { c, brand } = d;
     const manage = `${SITE()}/call/${c.token}`;
-    const lead = what === "booked" ? callBookedMail(brand, { name: c.name, start: c.start, end: c.end, tz: c.tz, meet: c.meet ?? null, link: manage })
+    const lead = what === "booked" ? callBookedMail(brand, { name: c.name, start: c.start, end: c.end, tz: c.tz, meet: c.meet ?? null, invite: !!c.event, link: manage })
       : what === "moved" ? callMovedMail(brand, { name: c.name, start: c.start, end: c.end, wasStart: c.was?.start ?? c.start, wasEnd: c.was?.end ?? c.end, tz: c.tz, meet: c.meet ?? null, link: manage })
       : callCancelledMail(brand, { name: c.name, start: c.start, end: c.end, tz: c.tz, bookLink: `${SITE()}/book/${d.slug}` });
     await deliverOnce(ctx, `call:${what}:lead:${callId}:${at}`, `call_${what}_lead`, c.email, lead, brand.replyTo, d.businessId);
-    const owner = ownerCallMail(brand, { kind: what, who: c.name, email: c.email, start: c.start, end: c.end, ...(what === "moved" && c.was ? { wasStart: c.was.start, wasEnd: c.was.end } : {}), note: what === "booked" ? c.note ?? null : null, link: `${SITE()}/clients/deals/${c.dealId ?? ""}` });
+    const owner = ownerCallMail(brand, { kind: what, who: c.name, email: c.email, start: c.start, end: c.end, ...(what === "moved" && c.was ? { wasStart: c.was.start, wasEnd: c.was.end } : {}), note: what === "booked" ? c.note ?? null : null, onCalendar: !!c.event && !c.calError, link: `${SITE()}/clients/deals/${c.dealId ?? ""}` });
     await deliverOnce(ctx, `call:${what}:owner:${callId}:${at}`, `call_${what}_owner`, d.ownerEmail, owner, c.email, d.businessId);
   },
 });

@@ -42,7 +42,8 @@ export const weekday = (ymd: string) => (new Date(`${ymd}T12:00:00Z`).getUTCDay(
 
 /** Every open start time from (now + notice) to the end of the last day offered. `busy` and `taken` block the call
  *  and the buffer kept free on each side of it. Capped, so a page never gets thousands. */
-export function openSlots(p: CallPrefs, now: number, busy: Span[], taken: Span[], cap = 600): number[] {
+/** `until`: the end of the period busy times were read for (review L2): nothing past it is offered. */
+export function openSlots(p: CallPrefs, now: number, busy: Span[], taken: Span[], cap = 600, until = Infinity): number[] {
   const len = p.lengthMin * 60_000, buf = p.bufferMin * 60_000;
   const earliest = now + p.noticeHours * 3_600_000;
   const blocks = [...busy, ...taken];
@@ -55,6 +56,7 @@ export function openSlots(p: CallPrefs, now: number, busy: Span[], taken: Span[]
     const dayEnd = zonedMs(`${day}T${h.end}:00`, TZ);
     for (let s = zonedMs(`${day}T${h.start}:00`, TZ); s + len <= dayEnd; s += len) {
       if (s < earliest) continue;
+      if (s + len > until) return out;
       const guard = { s: s - buf, e: s + len + buf };
       if (blocks.some((b) => overlaps(guard, b))) continue;
       out.push(s);

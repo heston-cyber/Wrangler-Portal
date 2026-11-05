@@ -216,6 +216,7 @@ export function CallPage({ token }: { token: string }) {
       : <><span className="wp-eyebrow">{c.past ? "Past call" : "Your call"} · {biz}</span><h1 className="bc-title">{c.past ? "This call has passed." : "Your call"}</h1></>}
     {c.moving && <Banner tone="neutral" icon="clock" title="Moving your call…" text="Checking the new time is still free." />}
     {c.moveTaken && !c.moving && <Banner tone="danger" icon="alert" title="That new time was just taken." text="Your call is still at the time below. Pick another if you like." />}
+    {c.moveFailed && !c.moving && (!c.moveTaken || c.moveFailed > c.moveTaken) && <Banner tone="danger" icon="alert" title="Your call couldn't be moved just now." text="It's still at the time below. Try again in a few minutes." />}
     {dl}
     {err && <p className="error" role="alert">{err}</p>}
     {!c.past && <div className="bc-acts">

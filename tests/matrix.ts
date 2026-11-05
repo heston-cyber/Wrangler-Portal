@@ -135,7 +135,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "fileRequests.forClientProject": { projectId: "nope" }, "fileRequests.page": { requestId: "nope" }, "fileRequests.start": { requestId: ids.fileRequestId, name: "x.pdf", size: 10 }, "fileRequests.finishDirect": { uploadId: ids.fileUploadId },
     "calls.page": { slug: "matrix" }, "calls.refresh": { slug: "matrix" }, "calls.book": { slug: "matrix", start: 0, name: "N", email: "n@x.example", tz: "America/Chicago" },
     // The private link is the lead's own key (like a quote link): the matrix uses a made-up one; calls.test.ts uses real ones.
-    "calls.manage": { token: "x".repeat(24) }, "calls.cancel": { token: "x".repeat(24) }, "calls.reschedule": { token: "x".repeat(24), start: 0 },
+    "calls.manage": { token: ids.callToken }, "calls.cancel": { token: "x".repeat(24) }, "calls.reschedule": { token: "x".repeat(24), start: 0 }, // manage is read-only, so it gets the real link (review L7)
     "calls.settings": {}, "calls.saveSettings": { lengthMin: 30, bufferMin: 10, aheadDays: 30, noticeHours: 4, hours: [0, 1, 2, 3, 4, 5, 6].map((d) => ({ on: d < 5, start: "09:00", end: "17:00" })) },
     "calls.forDeal": { dealId: "nope" }, "calls.done": { callId: ids.callId },
     "messages.threads": {}, "messages.thread": { threadId: ids.threadId }, "messages.send": { threadId: ids.threadId, text: "x" }, "messages.unread": {},

@@ -20,7 +20,7 @@ beforeAll(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
-const MON = Date.parse("2030-01-07T14:00:00Z"); // Monday 8:00 AM Central
+const MON = Date.parse("2030-01-07T13:57:00Z"); // Monday 7:57 AM Central (settling moves the clock a minute at a time)
 const at = (iso: string) => Date.parse(iso);
 type Sent = { to: string; subject: string; text: string };
 type Google = { busy: Array<{ id: string; start: string; end: string; transparency?: string }>; made: any[]; patched: any[]; deleted: string[]; down?: boolean };
@@ -62,7 +62,8 @@ async function world(opts: { busy?: Google["busy"] } = {}) {
     for (const c of await ctx.db.query("calendars").collect()) await ctx.db.patch(c._id, { businessId: def._id });
     return def.slug;
   });
-  const settle = () => t.finishAllScheduledFunctions(vi.runAllTimers);
+  // A minute at a time, so a check with Google finishes before the five-minute hold runs out (as it does for real).
+  const settle = () => t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(60_000));
   const open = async () => { await t.mutation(api.calls.refresh, { slug }); await settle(); return await t.query(api.calls.page, { slug }); };
   return { t, ids, mails, g, slug, owner, settle, open };
 }
@@ -100,7 +101,11 @@ describe("booking calls", () => {
     expect(w.g.made).toHaveLength(1);
     expect(w.g.made[0].url).toContain("conferenceDataVersion=1");
     expect(w.g.made[0].url).toContain("sendUpdates=all");
-    expect(w.g.made[0].body).toMatchObject({ summary: "Call with Tom Silva", attendees: [{ email: "tom@lead.example", displayName: "Tom Silva" }], conferenceData: { createRequest: { conferenceSolutionKey: { type: "hangoutsMeet" } } } });
+    expect(w.g.made[0].body).toMatchObject({ attendees: [{ email: "tom@lead.example", displayName: "Tom Silva" }], conferenceData: { createRequest: { conferenceSolutionKey: { type: "hangoutsMeet" } } } });
+    // Review H1: nothing the lead typed goes into the invite Google sends from the owner's account.
+    expect(w.g.made[0].body.summary).toMatch(/^Call with /);
+    expect(JSON.stringify(w.g.made[0].body)).not.toContain("A launch video.");
+    expect(w.g.made[0].body.id).toMatch(/^call[0-9a-f]+$/);
     const deal = await w.t.run(async (ctx) => (await ctx.db.query("deals").collect()).find((d) => d.contactEmail === "tom@lead.example"));
     expect(deal).toMatchObject({ stage: "lead", source: "call", lead: { name: "Tom Silva", email: "tom@lead.example", message: "A launch video." } });
     const lead = w.mails.find((x) => x.to === "tom@lead.example")!;
@@ -150,7 +155,7 @@ describe("booking calls", () => {
     expect(await w.t.run(async (ctx) => (await ctx.db.query("calls").collect()).length)).toBe(before);
     await w.settle();
     // Busy times older than 10 minutes: pick again (and they're read again).
-    vi.setSystemTime(MON + 11 * 60_000);
+    vi.setSystemTime(Date.now() + 11 * 60_000);
     expect(await book(w, at("2030-01-08T17:30:00Z"), { name: "Cy", email: "cy@lead.example" })).toMatchObject({ token: null, error: "The open times have changed. Pick a time again." });
     await w.settle();
     expect((await book(w, at("2030-01-08T17:30:00Z"), { name: "Cy", email: "cy@lead.example" })).token).toBeTruthy();
@@ -159,6 +164,15 @@ describe("booking calls", () => {
     await expect(book(w, at("2030-01-11T16:00:00Z"), { name: "Cy", email: "cy@lead.example" })).rejects.toThrow(/already have calls booked/);
     await expect(book(w, at("2030-01-08T19:30:00Z"), { name: "", email: "x@lead.example" })).rejects.toThrow(/name/);
     await expect(book(w, at("2030-01-08T19:30:00Z"), { name: "X", email: "nope" })).rejects.toThrow(/email/);
+  });
+
+  test("Junk picks don't use up the business's limit (review M1); nothing is offered past the period read from Google (L2)", async () => {
+    const w = await world();
+    const p = await w.open();
+    for (let i = 0; i < 25; i++) expect((await book(w, 0, { name: "J", email: `j${i}@x.example` })).error).toMatch(/just taken/);
+    expect((await book(w, p.slots[0])).token).toBeTruthy();
+    const read = await w.t.run(async (ctx) => (await ctx.db.query("callSettings").first())!.busy!.e);
+    expect(p.slots.every((x: number) => x + 30 * 60_000 <= read)).toBe(true);
   });
 
   test("The lead moves it (the event moves, emails 56 and 54), then cancels (off the calendar, emails 55 and 53)", async () => {
@@ -177,12 +191,30 @@ describe("booking calls", () => {
     expect(w.mails.find((x) => x.to === "tom@lead.example")!.subject).toMatch(/is moved/);
     expect(w.mails.find((x) => x.to === "heston@wranglerproductions.com")!.subject).toMatch(/^Tom Silva moved their call/);
     // A time someone took in Google meanwhile: the call stays where it was, and the page says so.
+    await w.open(); // busy times read again now (settling ran the clock on)
     w.g.busy.push({ id: "late", start: "2030-01-10T16:00:00Z", end: "2030-01-10T17:00:00Z" });
-    await w.t.mutation(api.calls.reschedule, { token, start: at("2030-01-10T16:00:00Z") });
+    expect(await w.t.mutation(api.calls.reschedule, { token, start: at("2030-01-10T16:00:00Z") })).toEqual({ error: null });
     await w.settle();
     const m2 = await w.t.query(api.calls.manage, { token });
     expect(m2.start).toBe(at("2030-01-09T17:00:00Z"));
     expect(m2.moveTaken).toBeTruthy();
+    // Google failing during a move: the call stays put (review M3), and the lead is told.
+    await w.open();
+    w.g.down = true;
+    expect(await w.t.mutation(api.calls.reschedule, { token, start: at("2030-01-10T19:00:00Z") })).toEqual({ error: null });
+    await w.settle();
+    w.g.down = false;
+    const m3 = await w.t.query(api.calls.manage, { token });
+    expect(m3).toMatchObject({ start: at("2030-01-09T17:00:00Z"), moving: false });
+    expect(m3.moveFailed).toBeTruthy();
+    // No cancelling while a new booking is still being checked (review M2).
+    const held = await book(w, at("2030-01-11T16:00:00Z"), { name: "Ann", email: "ann@lead.example" });
+    await expect(w.t.mutation(api.calls.cancel, { token: held.token })).rejects.toThrow(/still being booked/);
+    // A hold nobody resolved is let go after five minutes (review L1).
+    const stuck = await w.t.run(async (ctx) => (await ctx.db.query("calls").withIndex("by_token", (q) => q.eq("token", held.token)).unique())!._id);
+    vi.setSystemTime(Date.now() + 6 * 60_000);
+    await w.t.mutation(api.calls.expire as never, { callId: stuck } as never);
+    expect((await w.t.query(api.calls.manage, { token: held.token })).status).toBe("taken");
     w.mails.length = 0;
     await w.t.mutation(api.calls.cancel, { token });
     await w.settle();

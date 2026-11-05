@@ -798,13 +798,13 @@ const minutes = (start: number, end: number) => `${Math.round((end - start) / 60
 const withWho = (b: MailBrand) => (b.ownerName ? `${b.ownerName}, ${b.name}` : b.name);
 
 /** 43 · to the lead: booked (and the same layout again after a reschedule is 56). */
-export function callBookedMail(b: MailBrand, d: { name: string; start: number; end: number; tz: string; meet: string | null; link: string }): Mail {
+export function callBookedMail(b: MailBrand, d: { name: string; start: number; end: number; tz: string; meet: string | null; invite?: boolean; link: string }): Mail {
   const len = Math.round((d.end - d.start) / 60_000);
   return mk(b, "updates", `Your call with ${b.name} is booked`, [
     hello(d.name),
     { t: "p", text: `Your ${len}-minute call with ${b.name} is booked.` },
     { t: "sums", rows: [{ label: "When", value: callWhen(d.start, d.end, d.tz), big: true }, { label: "Length", value: minutes(d.start, d.end) }, { label: "With", value: withWho(b) }, ...(d.meet ? [{ label: "Video", value: "Google Meet" }] : [])] },
-    ...(d.meet ? [{ t: "p", text: `Join on Google Meet: ${d.meet}` } as Block] : [{ t: "p", text: "The details are in the calendar invite.", tone: "muted" } as Block]),
+    ...(d.meet ? [{ t: "p", text: `Join on Google Meet: ${d.meet}` } as Block] : d.invite ? [{ t: "p", text: "The details are in the calendar invite.", tone: "muted" } as Block] : [{ t: "p", text: `${b.name} will send you the details for joining.`, tone: "muted" } as Block]),
     { t: "p", text: "Need another time? You can move or cancel it from this link." },
     { t: "button", label: "Reschedule or cancel", href: d.link }, { t: "link", href: d.link },
   ], signoff(b), callWhen(d.start, d.end, d.tz));
@@ -829,14 +829,14 @@ export function callCancelledMail(b: MailBrand, d: { name: string; start: number
   ], signoff(b), "Cancelled");
 }
 /** 52, 53, 54 · to the owner: a lead booked, cancelled or moved a call. */
-export function ownerCallMail(b: MailBrand, d: { kind: "booked" | "cancelled" | "moved"; who: string; email: string; start: number; end: number; wasStart?: number; wasEnd?: number; note: string | null; link: string }): Mail {
+export function ownerCallMail(b: MailBrand, d: { kind: "booked" | "cancelled" | "moved"; who: string; email: string; start: number; end: number; wasStart?: number; wasEnd?: number; note: string | null; onCalendar?: boolean; link: string }): Mail {
   const tz = "America/Chicago";
   const head = d.kind === "booked" ? `${d.who} booked a call` : d.kind === "cancelled" ? `${d.who} cancelled their call` : `${d.who} moved their call`;
   return mk(b, "updates", `${head}: ${callWhen(d.start, d.end, tz).split(" (")[0]}`, [
     { t: "eyebrow", text: head },
     { t: "title", text: callWhen(d.start, d.end, tz) },
     ...(d.kind === "moved" && d.wasStart && d.wasEnd ? [{ t: "p", text: `Was ${callWhen(d.wasStart, d.wasEnd, tz)}.`, tone: "muted" } as Block] : []),
-    { t: "p", text: d.kind === "cancelled" ? "It's off your calendar." : "It's on your calendar with a Google Meet link." },
+    { t: "p", text: d.kind === "cancelled" ? "It's off your calendar." : d.onCalendar === false ? "It didn't reach your Google Calendar. Check Settings › Calendar, and send them the details yourself." : "It's on your calendar with a Google Meet link." },
     ...(d.note ? [{ t: "box", text: `Their note: ${d.note}` } as Block] : []),
     { t: "p", text: `${d.who} · ${d.email}`, tone: "muted" },
     { t: "button", label: "Open the lead", href: d.link },

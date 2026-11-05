@@ -1351,6 +1351,7 @@ export default defineSchema({
     token: v.string(),
     moving: v.optional(v.object({ start: v.number(), end: v.number(), at: v.number() })), // a new time, being checked
     moveTaken: v.optional(v.number()),           // the last new time picked was taken meanwhile (shown once)
+    moveFailed: v.optional(v.number()),          // review M3: the move couldn't be made on the calendar; the call stayed put
     was: v.optional(v.object({ start: v.number(), end: v.number() })), // before the last move
     event: v.optional(v.object({ id: v.string(), calendarId: v.string() })),
     meet: v.optional(v.string()),
