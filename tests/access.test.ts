@@ -70,6 +70,8 @@ const OPEN: Record<string, string> = {
   "calls.manage": "a call's own private link: that call only",
   "calls.cancel": "the same link: cancels that call only; rate-limited",
   "calls.reschedule": "the same link: moves that call to an open time only; rate-limited",
+  "calls.verify": "the same link: the 6-digit code emailed to the lead; five wrong tries and the pick is let go; rate-limited",
+  "calls.resendCode": "the same link: a new code to the email given; three an hour, shared with the lead's pick limit",
   // D147 (Nov 4): a briefing's no-login link (/b/<token>, email 58). Tested in briefingsShare.test.ts.
   "briefings.page": "a briefing link: answers only for a shared briefing's own long random token (a person's own, or the copied link); a turned-off link answers Withdrawn with the business and title only",
   "briefings.opened": "the same link: counts an open of that briefing only; a missing token, a draft or a turned-off link does nothing; rate-limited",

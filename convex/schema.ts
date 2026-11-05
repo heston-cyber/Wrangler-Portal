@@ -1335,6 +1335,7 @@ export default defineSchema({
     lengthMin: v.number(), bufferMin: v.number(), aheadDays: v.number(), noticeHours: v.number(),
     hours: v.array(v.object({ on: v.boolean(), start: v.string(), end: v.string() })), // Monday first; the business's wall clock
     calendarId: v.optional(v.string()),          // the calendar checked for busy times (default: the one shoots go on)
+    paused: v.optional(v.boolean()),             // Heston (Nov 4, 21:57): the owner switched the booking page off
     busy: v.optional(v.object({ at: v.number(), s: v.number(), e: v.number(), spans: v.array(v.object({ s: v.number(), e: v.number() })), error: v.optional(v.string()) })),
     readingAt: v.optional(v.number()),           // a read of the calendar is on its way
     updatedAt: v.number(),
@@ -1347,8 +1348,12 @@ export default defineSchema({
     name: v.string(), email: v.string(), note: v.optional(v.string()),
     start: v.number(), end: v.number(),
     tz: v.string(),                              // the lead's time zone, for their emails
-    status: v.union(v.literal("holding"), v.literal("booked"), v.literal("taken"), v.literal("cancelled")),
+    // "verifying" (Heston, Nov 4, 21:57): the time is held while the lead types the 6-digit code emailed to them; nothing
+    // else happens (no card, no calendar event, no other email) until it's right. "lapsed": the code never came back.
+    status: v.union(v.literal("verifying"), v.literal("holding"), v.literal("booked"), v.literal("taken"), v.literal("cancelled"), v.literal("lapsed")),
     token: v.string(),
+    code: v.optional(v.object({ hash: v.string(), tries: v.number(), sent: v.number(), until: v.number() })),
+    heldAt: v.optional(v.number()),               // when the code was right and the time was held for Google's check
     moving: v.optional(v.object({ start: v.number(), end: v.number(), at: v.number() })), // a new time, being checked
     moveTaken: v.optional(v.number()),           // the last new time picked was taken meanwhile (shown once)
     moveFailed: v.optional(v.number()),          // review M3: the move couldn't be made on the calendar; the call stayed put

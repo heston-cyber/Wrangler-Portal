@@ -18,14 +18,14 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireMe } from "./lib/access";
 import { bump, bumpDay } from "./lib/rate";
-import { randomToken } from "./lib/hash";
+import { randomToken, sha256Hex } from "./lib/hash";
 import { SITE } from "./lib/site";
 import { TZ, momentOf } from "./lib/gcal";
 import { DEFAULT_PREFS, busyFrom, checkPrefs, openSlots, window, type CallPrefs, type Span } from "./lib/callSlots";
 import { Disconnected, google, hasKeys, scopedAction } from "./calendar";
 import { businessContact } from "./lib/business";
 import { mailBrandOf } from "./lib/mail";
-import { callBookedMail, callCancelledMail, callMovedMail, ownerCallMail } from "./lib/mails";
+import { callBookedMail, callCancelledMail, callCodeMail, callMovedMail, ownerCallMail } from "./lib/mails";
 import { deliverOnce } from "./invoiceReminders";
 import { callLine } from "./messages";
 
@@ -37,6 +37,16 @@ const READ_EVERY = 60_000;          // the calendar is read again at most once a
 const FRESH_FOR = 10 * 60_000;      // a booking needs busy times read in the last 10 minutes
 const MAX_UPCOMING = 3;             // per email address
 const HOLD_FOR = 5 * 60_000;        // review L1: a held time or a move still unchecked after this is let go
+const CODE_FOR = 10 * 60_000;       // Heston (Nov 4, 21:57): the emailed code works for 10 minutes; the time is held till then
+const CODE_TRIES = 5;               // wrong codes before the pick is let go
+const CODE = /^\d{6}$/;
+/** A 6-digit code, every digit equally likely. */
+function newCode() {
+  const b = new Uint32Array(1);
+  for (;;) { crypto.getRandomValues(b); if (b[0] < 4_294_000_000) return String(b[0] % 1_000_000).padStart(6, "0"); }
+}
+const codeHash = async (callId: string, code: string) => sha256Hex(`call-code:${callId}:${code}`);
+const LIVE = (c: Doc<"calls">) => c.status === "booked" || c.status === "holding" || c.status === "verifying";
 /** Review M2: the Google event's id is fixed up front (lower-case hex is valid for Google), so it can always be removed. */
 export const callEventId = (callId: string) => `call${Array.from(new TextEncoder().encode(callId), (b) => b.toString(16).padStart(2, "0")).join("")}`.slice(0, 1000);
 const tidy = (s: string | undefined, max: number) => (s ?? "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, " ").trim().slice(0, max);
@@ -49,7 +59,8 @@ const connection = (ctx: Ctx) => ctx.db.query("calendars").first();
 async function openState(ctx: Ctx) {
   const row = await settingsRow(ctx);
   const conn = await connection(ctx);
-  const open = !!row && hasKeys() && !!conn && !conn.disconnectedAt && !!conn.calendarId;
+  // Heston (Nov 4, 21:57): the owner can switch the page off; calls already booked can still be moved or cancelled.
+  const open = !!row && !row.paused && hasKeys() && !!conn && !conn.disconnectedAt && !!conn.calendarId;
   return { row, conn, open, checkId: row?.calendarId ?? conn?.calendarId ?? null };
 }
 
@@ -66,7 +77,7 @@ async function takenSpans(ctx: Ctx, now: number, except?: Id<"calls">): Promise<
   const out: Span[] = [];
   for (const c of await ctx.db.query("calls").withIndex("by_start", (q) => q.gte("start", now - 86_400_000)).collect()) {
     if (c._id === except) continue;
-    if (c.status === "booked" || c.status === "holding") out.push({ s: c.start, e: c.end });
+    if (LIVE(c)) out.push({ s: c.start, e: c.end }); // a time waiting for its code is held too
     if (c.moving) out.push({ s: c.moving.start, e: c.moving.end });
   }
   return out;
@@ -136,7 +147,8 @@ async function dealFor(ctx: MutationCtx, name: string, email: string, note: stri
 }
 const centralWhen = (ms: number) => new Date(ms).toLocaleString("en-US", { timeZone: TZ, weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
-/** Book a time. It's held while Google is read once more for it; the page follows the call by its token. */
+/** Pick a time. Heston (Nov 4, 21:57): it's held for 10 minutes while the lead types the 6-digit code emailed to them
+ *  (verify); nothing else is made until then. The page follows the call by its token. */
 export const book = mutation({
   args: { slug: v.string(), start: v.number(), name: v.string(), email: v.string(), note: v.optional(v.string()), tz: v.string(), website: v.optional(v.string()) },
   handler: async (ctx, a) => {
@@ -159,20 +171,26 @@ export const book = mutation({
       return { token: null, error: "The open times have changed. Pick a time again." };
     }
     if (!openSlots(prefsOf(row), now, row.busy.spans, await takenSpans(ctx, now), 600, row.busy.e).includes(a.start)) return { token: null, error: "That time was just taken. Pick another." };
-    const upcoming = (await ctx.db.query("calls").withIndex("by_email", (q) => q.eq("email", email).gte("start", now)).collect()).filter((c) => c.status === "booked" || c.status === "holding");
+    const upcoming = (await ctx.db.query("calls").withIndex("by_email", (q) => q.eq("email", email).gte("start", now)).collect()).filter(LIVE);
     if (upcoming.length >= MAX_UPCOMING) throw new ConvexError("You already have calls booked. Move one of those instead.");
     // Review M1: the business-wide limits count only calls actually made, so junk attempts can't use them up.
     await bump(ctx, "callBookBiz", String(biz._id));
     await bumpDay(ctx, "callBookDay", String(biz._id));
     const end = a.start + row.lengthMin * 60_000;
-    const dealId = await dealFor(ctx, name, email, note, centralWhen(a.start));
     const token = randomToken(18);
-    const callId = await ctx.db.insert("calls", { dealId, name, email, ...(note ? { note } : {}), start: a.start, end, tz, status: "holding", token, history: [{ at: now, text: "Picked on the booking page" }], createdAt: now, updatedAt: now });
-    await ctx.scheduler.runAfter(0, internal.calls.confirm, { callId });
-    await ctx.scheduler.runAfter(HOLD_FOR, internal.calls.expire, { callId }); // review L1: a hold that never resolves
+    const callId = await ctx.db.insert("calls", { name, email, ...(note ? { note } : {}), start: a.start, end, tz, status: "verifying", token, history: [{ at: now, text: "Picked on the booking page" }], createdAt: now, updatedAt: now });
+    await sendCode(ctx, callId, now);
     return { token, error: null };
   },
 });
+
+/** A new code for a call waiting on one: saved as a hash, emailed, and let go after 10 minutes. */
+async function sendCode(ctx: MutationCtx, callId: Id<"calls">, now: number) {
+  const code = newCode();
+  await ctx.db.patch(callId, { code: { hash: await codeHash(callId, code), tries: 0, sent: now, until: now + CODE_FOR } });
+  await ctx.scheduler.runAfter(0, internal.calls.codeMail, { callId, code, at: now });
+  await ctx.scheduler.runAfter(CODE_FOR, internal.calls.expire, { callId });
+}
 
 async function callByToken(ctx: Ctx, token: string) {
   if (!TOKEN.test(token)) return null;
@@ -195,7 +213,56 @@ export const manage = query({
       status: c.status, name: c.name, email: c.email, start: c.start, end: c.end, tz: c.tz, meet: c.meet ?? null, slug: biz.slug,
       business: { ...(await brandBits(ctx, biz)), owner: biz.ownerName ?? null }, moving: !!c.moving, moveFailed: c.moveFailed ?? null, moveTaken: c.moveTaken ?? null, past: c.end <= now,
       canChange: (c.status === "booked") && c.start > now && !c.moving,
+      code: c.status === "verifying" && c.code ? { until: c.code.until, triesLeft: CODE_TRIES - c.code.tries, sentAt: c.code.sent } : null,
     };
+  },
+});
+
+/** The lead types the code from their email. Right: the time is held and checked with Google, then booked (the card is
+ *  made now). Wrong five times, or too late: the pick is let go. Answers come back as `error`, not thrown, so a wrong
+ *  try is still counted. */
+export const verify = mutation({
+  args: { token: v.string(), code: v.string() },
+  handler: async (ctx, a) => {
+    const c = await callByToken(ctx, a.token);
+    if (!c) throw new ConvexError("This link doesn't work.");
+    await bump(ctx, "callVerify", a.token);
+    if (c.status !== "verifying" || !c.code) return { error: c.status === "lapsed" ? "This pick has run out. Pick a time again." : null };
+    const now = Date.now();
+    if (now >= c.code.until) {
+      await ctx.db.patch(c._id, { status: "lapsed", code: undefined, history: [...c.history, { at: now, text: "Not booked: the code ran out" }], updatedAt: now });
+      return { error: "That code has run out. Pick a time again." };
+    }
+    const code = a.code.replace(/\s/g, "");
+    if (!CODE.test(code) || (await codeHash(c._id, code)) !== c.code.hash) {
+      const tries = c.code.tries + 1;
+      if (tries >= CODE_TRIES) {
+        await ctx.db.patch(c._id, { status: "lapsed", code: undefined, history: [...c.history, { at: now, text: "Not booked: wrong code too many times" }], updatedAt: now });
+        return { error: "That code was wrong too many times. Pick a time again." };
+      }
+      await ctx.db.patch(c._id, { code: { ...c.code, tries }, updatedAt: now });
+      return { error: `That code isn't right. ${CODE_TRIES - tries} ${CODE_TRIES - tries === 1 ? "try" : "tries"} left.` };
+    }
+    const dealId = await dealFor(ctx, c.name, c.email, c.note ?? "", centralWhen(c.start));
+    await ctx.db.patch(c._id, { status: "holding", dealId, code: undefined, heldAt: now, history: [...c.history, { at: now, text: "Email confirmed with the code" }], updatedAt: now });
+    await ctx.scheduler.runAfter(0, internal.calls.confirm, { callId: c._id });
+    await ctx.scheduler.runAfter(HOLD_FOR, internal.calls.expire, { callId: c._id }); // review L1: a hold that never resolves
+    return { error: null };
+  },
+});
+
+/** Send code again: a new code (the old one stops working) and another 10 minutes. Three an hour per pick. */
+export const resendCode = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const c = await callByToken(ctx, token);
+    if (!c) throw new ConvexError("This link doesn't work.");
+    if (c.status !== "verifying" || !c.code) throw new ConvexError("This pick has run out. Pick a time again.");
+    await bump(ctx, "callCode", token);
+    await bump(ctx, "callBook", `${c.businessId}:${c.email}`); // shares the lead's hourly limit on picks
+    const now = Date.now();
+    if (now - c.code.sent < 30_000) throw new ConvexError("A code was just sent. Check your inbox, and your spam folder.");
+    await sendCode(ctx, c._id, now);
   },
 });
 
@@ -462,12 +529,28 @@ export const expire = internalMutation({
     const c = await ctx.db.get(callId);
     if (!c) return;
     const now = Date.now();
-    if (c.status === "holding" && now - c.createdAt >= HOLD_FOR - 1000) await ctx.db.patch(c._id, { status: "taken", history: [...c.history, { at: now, text: "Not booked: the calendar couldn't be checked" }], updatedAt: now });
+    if (c.status === "verifying" && (!c.code || now >= c.code.until - 1000)) await ctx.db.patch(c._id, { status: "lapsed", code: undefined, history: [...c.history, { at: now, text: "Not booked: the code wasn't entered" }], updatedAt: now });
+    else if (c.status === "holding" && now - (c.heldAt ?? c.createdAt) >= HOLD_FOR - 1000) await ctx.db.patch(c._id, { status: "taken", history: [...c.history, { at: now, text: "Not booked: the calendar couldn't be checked" }], updatedAt: now });
     else if (c.moving && now - c.moving.at >= HOLD_FOR - 1000) await ctx.db.patch(c._id, { moving: undefined, moveFailed: now, updatedAt: now });
   },
 });
 
 // ---------- emails 43, 52–56 ----------
+
+/** The code email. Sent only while the pick still waits for it. */
+export const codeMail = internalAction({
+  args: { callId: v.id("calls"), code: v.string(), at: v.number() },
+  handler: async (ctx, { callId, code, at }): Promise<void> => {
+    const d = await ctx.runQuery(internal.calls.mailData, { callId });
+    if (!d || d.c.status !== "verifying" || d.c.code?.sent !== at) return;
+    const when = callWhenShort(d.c.start, d.c.tz);
+    await deliverOnce(ctx, `call:code:${callId}:${at}`, "call_code", d.c.email, callCodeMail(d.brand, { code, minutes: CODE_FOR / 60_000, when }), d.brand.replyTo, d.businessId);
+  },
+});
+const callWhenShort = (ms: number, tz: string) => {
+  const z = validZone(tz) ? tz : TZ;
+  return `${new Date(ms).toLocaleString("en-US", { timeZone: z, weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} ${new Intl.DateTimeFormat("en-US", { timeZone: z, timeZoneName: "short" }).formatToParts(ms).find((x) => x.type === "timeZoneName")?.value ?? ""}`.trim();
+};
 
 export const mailData = internalQuery({
   args: { callId: v.id("calls") },
@@ -507,7 +590,7 @@ export const settings = query({
     const slug = (mine ? await ctx.db.get(mine) : null)?.slug ?? "";
     const list = (conn?.list ?? []).map((c) => ({ id: c.id, name: c.name, primary: c.primary }));
     return {
-      prefs: prefsOf(row), saved: !!row, open, link: `${SITE()}/book/${slug}`,
+      prefs: prefsOf(row), saved: !!row, open, paused: !!row?.paused, link: `${SITE()}/book/${slug}`,
       calendar: conn && !conn.disconnectedAt && hasKeys() ? { email: conn.email, checkId, checkName: list.find((c) => c.id === checkId)?.name ?? conn.calendarName ?? checkId, writeName: conn.calendarName ?? null, list } : null,
       readError: row?.busy?.error ?? null,
     };
@@ -533,6 +616,17 @@ export const saveSettings = mutation({
   },
 });
 
+/** Heston (Nov 4, 21:57): switch the booking page on or off. Off, it says no times are open; booked calls stay. */
+export const setPaused = mutation({
+  args: { paused: v.boolean() },
+  handler: async (ctx, { paused }) => {
+    await requireMe(ctx);
+    const row = await settingsRow(ctx);
+    if (!row) throw new ConvexError("Save your booking settings first.");
+    await ctx.db.patch(row._id, { paused, updatedAt: Date.now() });
+  },
+});
+
 /** The lead page's Upcoming call card (and past ones). */
 export const forDeal = query({
   args: { dealId: v.string() },
@@ -542,7 +636,7 @@ export const forDeal = query({
     if (!id) return [];
     const now = Date.now();
     return (await ctx.db.query("calls").withIndex("by_deal", (q) => q.eq("dealId", id)).collect())
-      .filter((c) => c.status !== "taken")
+      .filter((c) => c.status !== "taken" && c.status !== "lapsed" && c.status !== "verifying")
       .sort((a, b) => b.start - a.start)
       .map((c) => ({ _id: c._id, start: c.start, end: c.end, status: c.status, meet: c.meet ?? null, onCalendar: !!c.event, calError: c.calError ?? null, upcoming: c.end > now && c.status !== "cancelled", note: c.note ?? null, was: c.was ?? null }));
   },
@@ -563,7 +657,7 @@ export const done = mutation({
 export async function callNeeds(ctx: QueryCtx) {
   const out = [];
   for (const c of await ctx.db.query("calls").withIndex("by_start", (q) => q.gte("start", Date.now() - 7 * 86_400_000)).collect()) {
-    if (!c.notice || c.notice.doneAt || c.status === "taken" || c.status === "holding") continue;
+    if (!c.notice || c.notice.doneAt || c.status === "taken" || c.status === "holding" || c.status === "verifying" || c.status === "lapsed") continue;
     out.push({ kind: "call" as const, at: c.notice.at, callId: c._id, dealId: c.dealId ?? null, who: c.name, what: c.notice.kind, start: c.start, end: c.end, was: c.was?.start ?? null, calError: c.calError ?? null });
   }
   return out;

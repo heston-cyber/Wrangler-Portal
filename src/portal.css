@@ -2981,6 +2981,8 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 .bc-dl { display: grid; grid-template-columns: auto 1fr; gap: 10px 24px; margin: 6px 0; font: 400 var(--fs-text-small)/1.4 var(--font-body); }
 .bc-dl dt { color: var(--text-secondary); } .bc-dl dd { margin: 0; text-align: right; color: var(--text-primary); }
 .bc-acts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+.bc-code { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin: 6px 0; } .bc-code .wp-field { flex: 0 1 200px; }
+.bc-code-input { font: 500 22px/1 var(--font-mono, ui-monospace, monospace); letter-spacing: 0.3em; text-align: center; }
 .bc-ok { color: var(--accent); }
 .bc-reading, .bc-none { display: grid; gap: 10px; }
 .bc-banner { display: grid; gap: 12px; justify-items: start; margin-bottom: 16px; }

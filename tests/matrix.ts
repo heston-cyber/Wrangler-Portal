@@ -138,6 +138,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "calls.manage": { token: ids.callToken }, "calls.cancel": { token: "x".repeat(24) }, "calls.reschedule": { token: "x".repeat(24), start: 0 }, // manage is read-only, so it gets the real link (review L7)
     "calls.settings": {}, "calls.saveSettings": { lengthMin: 30, bufferMin: 10, aheadDays: 30, noticeHours: 4, hours: [0, 1, 2, 3, 4, 5, 6].map((d) => ({ on: d < 5, start: "09:00", end: "17:00" })) },
     "calls.forDeal": { dealId: "nope" }, "calls.done": { callId: ids.callId },
+    "calls.verify": { token: "x".repeat(24), code: "123456" }, "calls.resendCode": { token: "x".repeat(24) }, "calls.setPaused": { paused: false },
     "messages.threads": {}, "messages.thread": { threadId: ids.threadId }, "messages.send": { threadId: ids.threadId, text: "x" }, "messages.unread": {},
     "messages.mine": {}, "messages.clientThreadPage": { threadId: ids.threadId }, "messages.clientSend": { threadId: ids.threadId, text: "x" },
     "messages.leadPage": { token: "x".repeat(24) }, "messages.leadSend": { token: "x".repeat(24), text: "x" }, "messages.leadRead": { token: "x".repeat(24) }, "messages.leadUploadUrl": { token: "x".repeat(24) },

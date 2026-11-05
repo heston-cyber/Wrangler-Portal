@@ -67,8 +67,27 @@ async function world(opts: { busy?: Google["busy"] } = {}) {
   const open = async () => { await t.mutation(api.calls.refresh, { slug }); await settle(); return await t.query(api.calls.page, { slug }); };
   return { t, ids, mails, g, slug, owner, settle, open };
 }
-const book = (w: Awaited<ReturnType<typeof world>>, start: number, who = { name: "Tom Silva", email: "tom@lead.example" }, extra: Record<string, unknown> = {}) =>
+type W = Awaited<ReturnType<typeof world>>;
+/** The pick only: the code email goes out; nothing else happens yet. */
+const pick = (w: W, start: number, who = { name: "Tom Silva", email: "tom@lead.example" }, extra: Record<string, unknown> = {}) =>
   w.t.mutation(api.calls.book, { slug: w.slug, start, tz: "America/New_York", note: "A launch video.", ...who, ...extra });
+/** Runs the code email (not the 10-minute let-go) and takes the code out of the mails seen. */
+async function codeFor(w: W, email: string) {
+  vi.advanceTimersByTime(1);
+  await w.t.finishInProgressScheduledFunctions();
+  const i = w.mails.map((m, j) => [m, j] as const).filter(([m]) => m.to === email && /is your code to book/.test(m.subject)).pop();
+  if (!i) return null;
+  w.mails.splice(i[1], 1);
+  return i[0].subject.slice(0, 6);
+}
+/** Pick, then type the emailed code (Heston, Nov 4: the email is confirmed before a time is booked). */
+async function book(w: W, start: number, who = { name: "Tom Silva", email: "tom@lead.example" }, extra: Record<string, unknown> = {}) {
+  const r = await pick(w, start, who, extra);
+  if (!r.token) return r;
+  const code = await codeFor(w, who.email);
+  expect((await w.t.mutation(api.calls.verify, { token: r.token, code })).error).toBeNull();
+  return r;
+}
 
 describe("booking calls", () => {
   test("Closed until Google is set up; open times follow the hours, the notice, Google's busy times with the buffer, and calls booked", async () => {
@@ -180,6 +199,7 @@ describe("booking calls", () => {
     await w.open();
     const { token } = await book(w, at("2030-01-08T16:00:00Z"));
     await w.settle();
+    await w.open(); // the code's 10 minutes have passed by now: the page reads the calendar again
     w.mails.length = 0;
     expect(await w.t.mutation(api.calls.reschedule, { token, start: at("2030-01-09T17:00:00Z") })).toEqual({ error: null });
     expect((await w.t.query(api.calls.manage, { token })).moving).toBe(true);
@@ -258,6 +278,89 @@ describe("booking calls", () => {
     expect(await boss.query(api.calls.page, { slug: w.slug })).toMatchObject({ state: "otherOwner" });
     await expect(boss.mutation(api.calls.book, { slug: w.slug, start: at("2030-01-08T16:00:00Z"), name: "B", email: "b@x.example", tz: "UTC" })).rejects.toThrow(/isn't open/);
     expect(await boss.query(api.calls.manage, { token: "matrixcalltoken0123456789" })).toBeNull();
+  });
+
+  test("T5d.7 The emailed code: nothing is made until it's right; the time is held meanwhile; wrong 5 times or 10 minutes and it's let go; Send a new code", async () => {
+    const w = await world();
+    await w.open();
+    const slot = at("2030-01-08T16:00:00Z");
+    const deals = () => w.t.run(async (ctx) => (await ctx.db.query("deals").collect()).filter((d) => d.contactEmail === "tom@lead.example").length);
+    const r = await pick(w, slot);
+    const code = (await codeFor(w, "tom@lead.example"))!;
+    expect(code).toMatch(/^\d{6}$/);
+    expect(w.mails).toHaveLength(0); // only the code email: no owner email, no booked email yet
+    const m = await w.t.query(api.calls.manage, { token: r.token });
+    expect(m).toMatchObject({ status: "verifying", code: { triesLeft: 5 } });
+    expect(w.g.made).toHaveLength(0);
+    expect(await deals()).toBe(0);
+    // The time is held for them: nobody else is offered it.
+    expect((await w.t.query(api.calls.page, { slug: w.slug })).slots).not.toContain(slot);
+    // The code is stored as a hash only.
+    const row = await w.t.run(async (ctx) => (await ctx.db.query("calls").withIndex("by_token", (q) => q.eq("token", r.token)).unique())!);
+    expect(JSON.stringify(row)).not.toContain(code);
+    // Wrong codes count down; the right one books.
+    const wrong = code === "000000" ? "111111" : "000000";
+    expect((await w.t.mutation(api.calls.verify, { token: r.token, code: wrong })).error).toMatch(/4 tries left/);
+    expect((await w.t.mutation(api.calls.verify, { token: r.token, code: "12" })).error).toMatch(/3 tries left/);
+    expect((await w.t.mutation(api.calls.verify, { token: r.token, code: code.slice(0, 3) + " " + code.slice(3) })).error).toBeNull();
+    await w.settle();
+    expect((await w.t.query(api.calls.manage, { token: r.token })).status).toBe("booked");
+    expect(await deals()).toBe(1);
+    expect(w.mails.map((x) => x.to).sort()).toEqual(["heston@wranglerproductions.com", "tom@lead.example"]);
+
+    // Five wrong codes: let go, the time is offered again, and the right code no longer works.
+    await w.open();
+    const r2 = await pick(w, at("2030-01-08T17:00:00Z"), { name: "Ann", email: "ann@lead.example" });
+    const c2 = (await codeFor(w, "ann@lead.example"))!;
+    const bad = c2 === "000000" ? "111111" : "000000";
+    for (let i = 0; i < 4; i++) await w.t.mutation(api.calls.verify, { token: r2.token, code: bad });
+    expect((await w.t.mutation(api.calls.verify, { token: r2.token, code: bad })).error).toMatch(/too many times/);
+    expect((await w.t.mutation(api.calls.verify, { token: r2.token, code: c2 })).error).toMatch(/run out/);
+    expect((await w.t.query(api.calls.manage, { token: r2.token })).status).toBe("lapsed");
+    expect((await w.t.query(api.calls.page, { slug: w.slug })).slots).toContain(at("2030-01-08T17:00:00Z"));
+
+    // Send a new code: the old one stops working, the new one books. Not twice in 30 seconds; three an hour.
+    const r3 = await pick(w, at("2030-01-08T18:00:00Z"), { name: "Bo", email: "bo@lead.example" });
+    const old = (await codeFor(w, "bo@lead.example"))!;
+    await expect(w.t.mutation(api.calls.resendCode, { token: r3.token })).rejects.toThrow(/just sent/);
+    vi.advanceTimersByTime(31_000);
+    await w.t.mutation(api.calls.resendCode, { token: r3.token });
+    const fresh = (await codeFor(w, "bo@lead.example"))!;
+    if (fresh !== old) expect((await w.t.mutation(api.calls.verify, { token: r3.token, code: old })).error).toMatch(/isn't right/);
+    expect((await w.t.mutation(api.calls.verify, { token: r3.token, code: fresh })).error).toBeNull();
+
+    // Ten minutes without the code: let go (no card, no event, no other email).
+    await w.settle();
+    await w.open();
+    const made = w.g.made.length;
+    w.mails.length = 0;
+    const r4 = await pick(w, at("2030-01-09T16:00:00Z"), { name: "Cy", email: "cy@lead.example" });
+    const c4 = (await codeFor(w, "cy@lead.example"))!;
+    await w.settle(); // the 10 minutes pass
+    expect((await w.t.query(api.calls.manage, { token: r4.token })).status).toBe("lapsed");
+    expect((await w.t.mutation(api.calls.verify, { token: r4.token, code: c4 })).error).toMatch(/run out/);
+    expect(w.g.made.length).toBe(made);
+    expect(w.mails).toHaveLength(0);
+    expect(await w.t.run(async (ctx) => (await ctx.db.query("deals").collect()).some((d) => d.contactEmail === "cy@lead.example"))).toBe(false);
+    // A made-up link does nothing.
+    await expect(w.t.mutation(api.calls.verify, { token: "nosuchtoken0123456789", code: "123456" })).rejects.toThrow(/doesn't work/);
+    await expect(w.t.mutation(api.calls.resendCode, { token: "nosuchtoken0123456789" })).rejects.toThrow(/doesn't work/);
+  });
+
+  test("T5d.8 The On/Off switch: off, the page is closed and nothing can be picked; booked calls can still be cancelled; only the owner switches it", async () => {
+    const w = await world();
+    await w.open();
+    const { token } = await book(w, at("2030-01-08T16:00:00Z"));
+    await w.settle();
+    await expect(w.t.mutation(api.calls.setPaused, { paused: true })).rejects.toThrow();
+    await w.owner.mutation(api.calls.setPaused, { paused: true });
+    expect((await w.owner.query(api.calls.settings, {})).paused).toBe(true);
+    expect((await w.t.query(api.calls.page, { slug: w.slug })).state).toBe("closed");
+    await expect(pick(w, at("2030-01-08T17:00:00Z"), { name: "Ann", email: "ann@lead.example" })).rejects.toThrow(/isn't open/);
+    await w.t.mutation(api.calls.cancel, { token });
+    expect((await w.t.query(api.calls.manage, { token })).status).toBe("cancelled");
+    await w.owner.mutation(api.calls.setPaused, { paused: false });
+    expect((await w.open()).state).toBe("open");
   });
 
   test("Open times keep the business's 9 AM through a daylight-saving change", () => {

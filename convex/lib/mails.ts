@@ -867,3 +867,13 @@ export function ownerMessageMail(b: MailBrand, d: { who: string; about: string; 
     { t: "button", label: "Read and reply", href: d.link },
   ], ownerFoot("a client or lead sends you a message"), snippet(d.text).slice(0, 90));
 }
+
+/** Booking calls (Heston, Nov 4, 21:57): the 6-digit code that confirms a lead's email before their time is booked. */
+export function callCodeMail(b: MailBrand, d: { code: string; minutes: number; when: string }): Mail {
+  return mk(b, "updates", `${d.code} is your code to book with ${b.name}`, [
+    { t: "p", text: `To book your call with ${b.name} (${d.when}), enter this code on the booking page:` },
+    { t: "code", code: d.code },
+    { t: "p", text: `It works for ${d.minutes} minutes. Your time is held until then.` },
+    { t: "small", text: "If you didn't try to book a call, ignore this email. Nothing is booked without the code." },
+  ], [{ t: "small", text: `${b.name} · sent through WranglerPortal` }], `It works for ${d.minutes} minutes.`);
+}

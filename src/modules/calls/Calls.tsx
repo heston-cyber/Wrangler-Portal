@@ -137,7 +137,7 @@ export function BookingPage({ slug }: { slug: string }) {
     </div>
     {err && <p className="error" role="alert">{err}</p>}
     <div className="bc-foot"><button type="button" className="btn ghost" onClick={() => setStep("pick")}>Back</button><span className="sp" />
-      <Button variant="primary" loading={busy} disabled={!name.trim() || !email.trim()} onClick={() => void go()}>Book the call</Button></div>
+      <Button variant="primary" loading={busy} disabled={!name.trim() || !email.trim()} onClick={() => void go()}>Continue</Button></div>
   </>);
   return shell(<>
     {eyebrow}
@@ -177,6 +177,11 @@ export function CallPage({ token }: { token: string }) {
   const withWho = c.business.owner ? `${c.business.owner}, ${biz}` : biz;
   const len = Math.round((c.end - c.start) / 60_000);
   const dl = <dl className="bc-dl"><dt>When</dt><dd>{whenLabel(c.start, c.end, tz)}</dd><dt>Length</dt><dd>{len} minutes</dd><dt>With</dt><dd>{withWho}</dd>{c.meet && <><dt>Video</dt><dd><a href={c.meet} target="_blank" rel="noopener noreferrer">Google Meet</a></dd></>}</dl>;
+  if (c.status === "verifying" && c.code) return shell(<CodeStep token={token} email={c.email} when={whenLabel(c.start, c.end, tz)} code={c.code} slug={c.slug} />);
+  if (c.status === "lapsed" || c.status === "verifying") return shell(<>
+    <Banner tone="danger" icon="alert" title="Nothing was booked." text="The code wasn't entered in time, so the time was let go." />
+    <ButtonLink variant="primary" to={`/book/${c.slug}`}>Pick a time again</ButtonLink>
+  </>);
   if (c.status === "holding") return shell(<div className="bc-reading"><SkeletonRows n={2} label="Booking" /><p className="wp-body">Booking your call…</p><p className="wp-small secondary">Checking the time is still free. This takes a moment.</p></div>);
   if (c.status === "taken") return shell(<>
     <Banner tone="danger" icon="alert" title="That time was just taken." text="Someone booked it a moment before you. Nothing was booked for you." />
@@ -228,6 +233,39 @@ export function CallPage({ token }: { token: string }) {
   </>);
 }
 
+/** Heston (Nov 4, 21:57): the lead types the 6-digit code from their email before the time is booked. */
+function CodeStep({ token, email, when, code, slug }: { token: string; email: string; when: string; code: { until: number; triesLeft: number; sentAt: number }; slug: string }) {
+  const verify = useMutation(api.calls.verify);
+  const resend = useMutation(api.calls.resendCode);
+  const [toastNode, toast] = useToast();
+  const [value, setValue] = useState(""), [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 15_000); return () => clearInterval(t); }, []);
+  const minsLeft = Math.max(0, Math.ceil((code.until - now) / 60_000));
+  const go = async () => {
+    setBusy(true); setErr(null);
+    try { const r = await verify({ token, code: value }); if (r.error) { setErr(r.error); setValue(""); } } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
+  };
+  const again = async () => {
+    setErr(null);
+    try { await resend({ token }); setValue(""); toast("A new code is on its way."); } catch (e) { setErr(errText(e)); }
+  };
+  return (<>
+    <span className="wp-eyebrow">Almost booked</span>
+    <h1 className="bc-title">Check your email</h1>
+    <p className="wp-small secondary">We sent a 6-digit code to <b>{email}</b>. Enter it to book {when}.</p>
+    <form className="bc-code" onSubmit={(e) => { e.preventDefault(); if (value.replace(/\D/g, "").length === 6) void go(); }}>
+      <label className="wp-field"><span className="wp-field-label">Code</span>
+        <input className="input bc-code-input" inputMode="numeric" autoComplete="one-time-code" maxLength={7} value={value} onChange={(e) => setValue(e.target.value.replace(/[^\d ]/g, ""))} autoFocus aria-describedby="bc-code-help" /></label>
+      <Button variant="primary" type="submit" loading={busy} disabled={value.replace(/\D/g, "").length !== 6}>Book the call</Button>
+    </form>
+    {err && <p className="error" role="alert">{err}</p>}
+    <p id="bc-code-help" className="wp-small secondary">Your time is held for {minsLeft} more minute{minsLeft === 1 ? "" : "s"}. No email? Check your spam folder, or <button type="button" className="linkbtn" onClick={() => void again()}>send a new code</button>.</p>
+    <div className="bc-foot"><ButtonLink variant="ghost" to={`/book/${slug}`}>Pick a different time</ButtonLink></div>
+    {toastNode}
+  </>);
+}
+
 // ---------- Settings › Booking calls ----------
 
 type Prefs = { lengthMin: number; bufferMin: number; aheadDays: number; noticeHours: number; hours: Array<{ on: boolean; start: string; end: string }> };
@@ -236,6 +274,7 @@ const clock = (hhmm: string) => { const [h, m] = hhmm.split(":").map(Number); re
 export function CallSettings({ show }: { show: (m: string) => void }) {
   const s = useQuery(api.calls.settings, {});
   const save = useMutation(api.calls.saveSettings);
+  const setPaused = useMutation(api.calls.setPaused);
   const [p, setP] = useState<Prefs | null>(null);
   const [cal, setCal] = useState<string>("");
   const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
@@ -291,6 +330,9 @@ export function CallSettings({ show }: { show: (m: string) => void }) {
         </div>
         <div className="panel bc-panel">
           <span className="wp-eyebrow">The link leads get</span>
+          {/* Heston (Nov 4, 21:57): an On/Off switch. Off, the page says booking isn't open; booked calls stay as they are. */}
+          {s.saved && <div className="bc-row"><span className="l"><b>Booking page</b><small>{s.paused ? "Off: leads see that booking isn't open. Calls already booked stay." : "On: leads can book from the link below"}</small></span>
+            <span className="v"><Toggle checked={!s.paused} label="Booking page on" disabled={off} onChange={(on) => { void setPaused({ paused: !on }).then(() => show(on ? "Your booking page is on." : "Your booking page is off.")).catch((e) => setErr(errText(e))); }} /></span></div>}
           <div className="bc-row"><span className="l"><b>Booking link</b><small className="bc-link">{s.link}</small></span><span className="v"><Button size="sm" onClick={() => void copy()} disabled={off}>Copy link</Button></span></div>
           <div className="bc-row"><span className="l"><b>Where leads find it</b><small>The website form's thank-you page, your emails, and the lead's page in Clients</small></span><span className="v">{s.open ? <StatusChip tone="success">Open</StatusChip> : <StatusChip tone="neutral">Off</StatusChip>}</span></div>
         </div>
