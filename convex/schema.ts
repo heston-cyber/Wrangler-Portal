@@ -22,7 +22,7 @@ export default defineSchema({
     phone: v.optional(v.string()),
     phoneVerificationTime: v.optional(v.number()),
     isAnonymous: v.optional(v.boolean()),
-    role: v.optional(v.union(v.literal("owner"), v.literal("client"), v.literal("vendor"), v.literal("guest"))), // Phase 3c: vendors (D94). Nov 2: for a client-and-vendor login, the side it's on now (users.switchSide). Phase 5b step 4 (D127): "guest", a call-sheet guest's code-only login: never an owner, client or vendor (lib/access.ts)
+    role: v.optional(v.union(v.literal("owner"), v.literal("client"), v.literal("vendor"), v.literal("guest"), v.literal("team"))), // Phase 5e (Nov 5): "team", a team member (lib/perms.ts) // Phase 3c: vendors (D94). Nov 2: for a client-and-vendor login, the side it's on now (users.switchSide). Phase 5b step 4 (D127): "guest", a call-sheet guest's code-only login: never an owner, client or vendor (lib/access.ts)
     lastSignInAt: v.optional(v.number()),
     tools: v.optional(v.any()),                // Nov 2: an owner's Settings › Tools (menu order, tools off the menu, Dashboard widgets; lib/tools.ts)
   }).index("email", ["email"]).index("phone", ["phone"]),
@@ -710,6 +710,7 @@ export default defineSchema({
     background: v.optional(v.string()),    // #rrggbb
     // Which modules the business uses. Menu items only show when on (and only once something is in them).
     modules: v.optional(v.object({ review: v.boolean(), docs: v.boolean(), payments: v.boolean(), projects: v.optional(v.boolean()) })),
+    teamRoles: v.optional(v.any()), // Phase 5e: each role's switches (Settings › Team › Roles; lib/perms.ts rolePerms)
     updatedAt: v.optional(v.number()),
     // Phase 2 Part A (Oct 29): revision rounds (each version is a round, D23; default 2, D23b) and the watermark look
     // on review copies (D24: on for every client unless switched off on the client).
@@ -1678,8 +1679,37 @@ export default defineSchema({
     businessId: v.id("businesses"),
     email: v.string(),              // lower-case
     userId: v.optional(v.id("users")),
-    role: v.union(v.literal("owner"), v.literal("client"), v.literal("vendor")), // vendor: Phase 3c, one per business they work for (D94)
+    role: v.union(v.literal("owner"), v.literal("client"), v.literal("vendor"), v.literal("team")), // vendor: Phase 3c, one per business they work for (D94); team: Phase 5e
     createdAt: v.number(),
     revokedAt: v.optional(v.number()),
+    // Phase 5e (Nov 5): a team member's role and switches (lib/perms.ts). Made only by team.ts when their invite is accepted.
+    teamRole: v.optional(v.union(v.literal("producer"), v.literal("editor"), v.literal("bookkeeper"))),
+    perms: v.optional(v.any()),
+    invitedBy: v.optional(v.string()),
   }).index("by_email", ["email"]).index("by_business_email", ["businessId", "email"]).index("by_user", ["userId"]),
+
+  // Phase 5e (Nov 5): an invite to join a business's team (Settings › Team, email 46). The link carries a long random
+  // token; only its hash is kept. Lasts 14 days (D146). Accepting makes a team membership (team.ts, auth.ts).
+  teamInvites: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    email: v.string(),              // lower-case
+    name: v.optional(v.string()),
+    teamRole: v.union(v.literal("producer"), v.literal("editor"), v.literal("bookkeeper")),
+    tokenHash: v.string(),
+    invitedBy: v.string(),          // the owner's name, for the email and the Join page
+    createdAt: v.number(),
+    sentAt: v.number(),
+    expiresAt: v.number(),
+    revokedAt: v.optional(v.number()),
+    acceptedAt: v.optional(v.number()),
+    userId: v.optional(v.id("users")),
+  }).index("by_email", ["email"]).index("by_token", ["tokenHash"]).index("by_business", ["businessId"]),
+
+  // Phase 5e (Nov 5): who is assigned to a project (Project page › Assigned people). Team members only (D146).
+  projectTeam: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    projectId: v.id("projects"),
+    userId: v.id("users"),
+    createdAt: v.number(),
+  }).index("by_project", ["projectId"]).index("by_user", ["userId"]),
 });

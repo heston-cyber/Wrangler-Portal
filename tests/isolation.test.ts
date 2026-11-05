@@ -28,7 +28,7 @@ const STEP4 = new Set<string>([]);
 async function twoBusinesses() {
   const { t, ids } = await setup();
   const extra = await t.run(async (ctx) => {
-    const a = await ctx.db.insert("businesses", { slug: "wrangler", name: "Wrangler Productions", createdAt: 0 });
+    const a = (await ctx.db.query("businesses").withIndex("by_slug", (q) => q.eq("slug", "wrangler")).unique())?._id ?? await ctx.db.insert("businesses", { slug: "wrangler", name: "Wrangler Productions", createdAt: 0 });
     await ctx.db.insert("memberships", { businessId: a, email: "heston@wranglerproductions.com", role: "owner", createdAt: 0 });
     const b = await ctx.db.insert("businesses", { slug: "other", name: "Other Films", createdAt: 1 });
     const bOwner = await ctx.db.insert("users", { email: "boss@otherfilms.example", name: "Boss", role: "owner" });
@@ -73,6 +73,39 @@ describe("two businesses", () => {
     const after = await snapshot(t, a, true);
     const changed = Object.keys(before).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]));
     expect(changed).toEqual([]);
+  });
+
+  test("Phase 5e: a team member of B with every switch on gets nothing of A, and neither B's owner nor B's team changes A's team", async () => {
+    const { t, ids, a, b, bSub } = await twoBusinesses();
+    vi.stubGlobal("fetch", async () => new Response("{}", { status: 500 }));
+    const { PERMS } = await import("../convex/lib/perms");
+    const all = Object.fromEntries(PERMS.map((p) => [p, true]));
+    const tSub = await t.run(async (ctx) => {
+      const u = await ctx.db.insert("users", { email: "bteam@otherfilms.example", name: "B Team", role: "team", emailVerificationTime: 0 });
+      await ctx.db.insert("memberships", { businessId: b, email: "bteam@otherfilms.example", userId: u, role: "team", teamRole: "bookkeeper", perms: all, createdAt: 1 });
+      return `${u}|${await ctx.db.insert("authSessions", { userId: u, expirationTime: Date.now() + 3_600_000 })}`;
+    });
+    const aTeam = () => t.run(async (ctx) => (await ctx.db.query("memberships").collect()).filter((m) => m.businessId === a || m.businessId === undefined).map((m) => JSON.stringify(m)).sort());
+    const teamBefore = await aTeam();
+    const before = await snapshot(t, a, true);
+    const table = argsFor(ids);
+    const aIds = Object.entries(ids).filter(([k]) => !/Sub$/.test(k) && k !== "storageId").map(([, v]) => String(v));
+    const leaks: string[] = [];
+    for (const sub of [tSub, bSub]) {
+      const as = t.withIdentity({ subject: sub });
+      for (const f of publicFunctions()) {
+        if (STEP4.has(f.key)) continue;
+        let out: unknown;
+        try { out = await call(as, f.ref, table[f.key], ""); } catch { continue; }
+        const json = JSON.stringify(out ?? null);
+        const hit = aIds.find((id) => json.includes(id));
+        if (hit) leaks.push(`${sub === tSub ? "B's team" : "B's owner"}: ${f.key} returned A's ${hit}`);
+      }
+    }
+    expect(leaks).toEqual([]);
+    const after = await snapshot(t, a, true);
+    expect(Object.keys(before).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))).toEqual([]);
+    expect(await aTeam()).toEqual(teamBefore);
   });
 
   test("a call-sheet guest of B (signed in) gets nothing of A from any function, and changes nothing of A", async () => {

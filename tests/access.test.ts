@@ -81,6 +81,8 @@ const OPEN: Record<string, string> = {
   // Phase 5b step 4 (D127): a call-sheet guest's link (/guest/<token>, email 41), signed out.
   "guests.intro": "a guest's link: answers only for that pass's own long random token, with the sheet's title, day, the guest's first name and a masked email; tested in callSheetGuests.test.ts",
   "guests.sendCode": "the same link's \"Email me a code\": emails a code to the pass's own address only (never shown), rate-limited; a missing token is refused",
+  // Phase 5e step 1: the Join page (/team/join/<token>, email 46).
+  "team.joinPage": "a team invite's link: answers only for that invite's own long random token (its hash is stored), with the business, role, inviter and the invited email; tested in team.test.ts",
 };
 // Functions with their own gate (a key in the arguments): refused with the wrong key, whoever calls.
 const KEYED = new Set(["r1results.report"]);
@@ -118,6 +120,17 @@ const VENDOR = new Set(["help.list", "help.guide", "users.switchSide",
   // Phase 5b step 3: call sheets sent to them (only while booked on the project; tested in callSheets.test.ts)
   "vendorPortal.callSheet", "vendorPortal.callSheets", "vendorPortal.openCallSheet"]);
 
+// Phase 5e step 1: what each team role may call with its suggested switches (lib/perms.ts SUGGESTED), and why. A
+// function names the switch that opens it (requireMe(ctx, "review")); one that names none stays the owner's. The matrix
+// Editor is assigned to no project, so the project functions refuse them too. Tested further in team.test.ts.
+const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>> = {
+  producer: {
+    "team.projectPeople": "Projects: who is assigned to a project (names and roles only; the owner alone assigns)",
+  },
+  editor: {},
+  bookkeeper: {},
+};
+
 import { argsFor, call, publicFunctions, setup } from "./matrix";
 const denied = (e: unknown) => /Sign in first|Not allowed/.test(String((e as Error).message ?? e));
 
@@ -129,15 +142,17 @@ describe("access matrix", () => {
     expect(missing).toEqual([]);
   });
 
-  for (const who of ["nobody", "stranger", "client", "vendor", "guest", "guestInvited"] as const) {
+  for (const who of ["nobody", "stranger", "client", "vendor", "guest", "guestInvited", "producer", "editor", "bookkeeper"] as const) {
     test(`${who}: every function refuses, except the ones meant to answer`, async () => {
       const { t, ids } = await setup();
       vi.stubGlobal("fetch", async () => new Response("{}", { status: 500 })); // nothing external may be reached
-      const as = who === "nobody" ? t : t.withIdentity({ subject: who === "stranger" ? ids.strangerSub : who === "vendor" ? ids.vendorSub : who === "guest" ? ids.guestSub : who === "guestInvited" ? ids.guestInvitedSub : ids.clientSub });
+      const subs: Record<string, string> = { stranger: ids.strangerSub, vendor: ids.vendorSub, guest: ids.guestSub, guestInvited: ids.guestInvitedSub, client: ids.clientSub, producer: ids.producerSub, editor: ids.editorSub, bookkeeper: ids.bookkeeperSub };
+      const as = who === "nobody" ? t : t.withIdentity({ subject: subs[who] });
       const table = argsFor(ids);
       const results: Record<string, string> = {};
       for (const f of publicFunctions()) {
-        const allowed = f.key in OPEN || (who === "client" && SIGNED_IN.has(f.key)) || (who === "vendor" && VENDOR.has(f.key)) || ((who === "guest" || who === "guestInvited") && f.key in GUEST);
+        const allowed = f.key in OPEN || (who === "client" && SIGNED_IN.has(f.key)) || (who === "vendor" && VENDOR.has(f.key)) || ((who === "guest" || who === "guestInvited") && f.key in GUEST)
+          || ((who === "producer" || who === "editor" || who === "bookkeeper") && f.key in TEAM[who]);
         if (KEYED.has(f.key)) { await expect(call(as, f.ref, table[f.key], "")).rejects.toThrow(/Not allowed/); results[f.key] = "denied (own key)"; continue; }
         try {
           await call(as, f.ref, table[f.key], "");

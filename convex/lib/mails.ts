@@ -877,3 +877,13 @@ export function callCodeMail(b: MailBrand, d: { code: string; minutes: number; w
     { t: "small", text: "If you didn't try to book a call, ignore this email. Nothing is booked without the code." },
   ], [{ t: "small", text: `${b.name} · sent through WranglerPortal` }], `It works for ${d.minutes} minutes.`);
 }
+
+// ---------- 46: team invite (Phase 5e, frame 816:12391) ----------
+export function teamInviteMail(b: MailBrand, d: { invitedBy: string; role: string; until: string; link: string }): Mail {
+  return mk(b, "review", `${d.invitedBy} invited you to join ${b.name} on the portal`, [
+    { t: "p", text: `${d.invitedBy} invited you to join ${b.name} on the portal. The link works until ${d.until}.` },
+    { t: "sums", rows: [{ label: "Business", value: b.name }, { label: "Your role", value: d.role }, { label: "Invited by", value: d.invitedBy }] },
+    { t: "p", text: "The first time, you'll create your account: a password, then a six-digit code we send once to confirm your email. After that, you sign in with your email and password." },
+    { t: "button", label: "Join the team", href: d.link }, { t: "link", href: d.link },
+  ], clientFooter(b), `The link works until ${d.until}.`);
+}

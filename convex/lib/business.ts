@@ -5,6 +5,7 @@
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { allowedEmails } from "./owners";
+import { rolePerms } from "./perms";
 
 export const DEFAULT_SLUG = "wrangler";
 const DEFAULT = { slug: DEFAULT_SLUG, name: "Wrangler Productions", legalName: "Wrangler Productions, a DBA of Hill Creative LLC" };
@@ -114,4 +115,38 @@ export async function syncVendorMemberships(ctx: MutationCtx, email: string, use
     if (userId && !x.joinedAt) await ctx.db.patch(x._id, { joinedAt: Date.now() });
   }
   return made;
+}
+
+/** Phase 5e: a team invite that can still be accepted (not cancelled, not used, not past its 14 days). */
+export async function liveTeamInvite(ctx: QueryCtx | MutationCtx, email: string): Promise<Doc<"teamInvites"> | null> {
+  const e = email.trim().toLowerCase();
+  const now = Date.now();
+  const rows = (await ctx.db.query("teamInvites").withIndex("by_email", (q) => q.eq("email", e)).collect())
+    .filter((i) => !i.revokedAt && !i.acceptedAt && i.expiresAt > now).sort((a, b) => a.createdAt - b.createdAt);
+  // Two businesses can each invite the same email (neither can see the other's invites); the first invite wins, and a
+  // team login only ever belongs to one business (syncTeamMembership).
+  return rows[0] ?? null;
+}
+
+/**
+ * Phase 5e: a team login's membership comes from its invite. Run only once the email is proved (the 6-digit code), and
+ * at later sign-ins: the newest live invite becomes a team membership in its business with that role's switches, and is
+ * marked accepted (the oldest live one, if two businesses invited the same email). One business per team login. Trusted code only (auth.ts). Returns true if it made one.
+ */
+export async function syncTeamMembership(ctx: MutationCtx, email: string, userId: Id<"users">): Promise<boolean> {
+  const e = email.trim().toLowerCase();
+  const inv = await liveTeamInvite(ctx, e);
+  if (!inv?.businessId) return false;
+  const now = Date.now();
+  const ms = await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", e)).collect();
+  // never alongside an owner, client or vendor membership (team.invite refuses those emails; this is the backstop)
+  if (ms.some((m) => !m.revokedAt && m.role !== "team")) return false;
+  const live = ms.find((m) => !m.revokedAt && m.role === "team");
+  if (live && live.businessId !== inv.businessId) return false; // one business per team login
+  const biz = await ctx.db.get(inv.businessId);
+  const perms = rolePerms(biz?.teamRoles, inv.teamRole);
+  if (live) await ctx.db.patch(live._id, { teamRole: inv.teamRole, perms, userId, invitedBy: inv.invitedBy });
+  else await ctx.db.insert("memberships", { businessId: inv.businessId, email: e, role: "team", teamRole: inv.teamRole, perms, userId, invitedBy: inv.invitedBy, createdAt: now });
+  await ctx.db.patch(inv._id, { acceptedAt: now, userId });
+  return true;
 }

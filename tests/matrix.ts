@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 export const modules = import.meta.glob("../convex/**/*.ts");
 
-export type Ids = { requestId: Id<"wsRequests">; buildId: Id<"wsBuilds">; templateId: Id<"wsTemplates">; clauseId: Id<"wsClauses">; styleId: Id<"wsStyles">; docId: Id<"wsDocuments">; wsVersionId: Id<"wsVersions">; projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage">; clientRecId: Id<"clients">; personId: Id<"clientPeople">; inboxItemId: Id<"inboxItems">; inboxNoteId: Id<"inboxNotes">; deliveryFileId: Id<"deliveryFiles">; invoiceId: Id<"invoices">; planId: Id<"plans">; subscriptionId: Id<"subscriptions">; dealId: Id<"deals">; followUpId: Id<"followUps">; estimateId: Id<"estimates">; entryId: Id<"ledgerEntries">; quoteId: Id<"quotes">; proposalId: Id<"proposals">; offerPersonId: Id<"offerRecipients">; vendorId: Id<"vendors">; bookingId: Id<"vendorBookings">; briefingId: Id<"briefings">; businessId: Id<"businesses">; vendorInvoiceId: Id<"vendorInvoices">; shootId: Id<"shoots">; fileRequestId: Id<"fileRequests">; fileUploadId: Id<"fileUploads">; briefId: Id<"briefs">; testimonialId: Id<"testimonials">; callSheetId: Id<"callSheets">; calendarEventId: Id<"calendarEvents">; gearId: Id<"gear">; callId: Id<"calls">; callToken: string; threadId: Id<"msgThreads">; guestToken: string; guestInvitedSub: string };
+export type Ids = { requestId: Id<"wsRequests">; buildId: Id<"wsBuilds">; templateId: Id<"wsTemplates">; clauseId: Id<"wsClauses">; styleId: Id<"wsStyles">; docId: Id<"wsDocuments">; wsVersionId: Id<"wsVersions">; projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage">; clientRecId: Id<"clients">; personId: Id<"clientPeople">; inboxItemId: Id<"inboxItems">; inboxNoteId: Id<"inboxNotes">; deliveryFileId: Id<"deliveryFiles">; invoiceId: Id<"invoices">; planId: Id<"plans">; subscriptionId: Id<"subscriptions">; dealId: Id<"deals">; followUpId: Id<"followUps">; estimateId: Id<"estimates">; entryId: Id<"ledgerEntries">; quoteId: Id<"quotes">; proposalId: Id<"proposals">; offerPersonId: Id<"offerRecipients">; vendorId: Id<"vendors">; bookingId: Id<"vendorBookings">; briefingId: Id<"briefings">; businessId: Id<"businesses">; vendorInvoiceId: Id<"vendorInvoices">; shootId: Id<"shoots">; fileRequestId: Id<"fileRequests">; fileUploadId: Id<"fileUploads">; briefId: Id<"briefs">; testimonialId: Id<"testimonials">; callSheetId: Id<"callSheets">; calendarEventId: Id<"calendarEvents">; gearId: Id<"gear">; callId: Id<"calls">; callToken: string; threadId: Id<"msgThreads">; guestToken: string; guestInvitedSub: string; teamInviteId: Id<"teamInvites">; teamMemberId: Id<"memberships">; producerSub: string; editorSub: string; bookkeeperSub: string };
 
 // Minimal valid arguments for each function, so the access check (not argument validation) is what refuses.
 export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
@@ -199,6 +199,11 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "callSheets.refreshWeather": { callSheetId: ids.callSheetId },
     "guests.intro": { token: ids.guestToken }, "guests.sendCode": { token: "nope-nope-nope-nope" },
     "guests.home": {}, "guests.sheet": { token: ids.guestToken }, "guests.opened": { token: ids.guestToken },
+    // Phase 5e step 1: the team
+    "team.page": {}, "team.member": { membershipId: ids.teamMemberId }, "team.invite": { email: "new@x.example", role: "editor" }, "team.resendInvite": { inviteId: ids.teamInviteId },
+    "team.cancelInvite": { inviteId: ids.teamInviteId }, "team.remove": { membershipId: ids.teamMemberId }, "team.setRole": { membershipId: ids.teamMemberId, role: "editor" },
+    "team.setPerm": { membershipId: ids.teamMemberId, perm: "docs", on: false }, "team.resetToRole": { membershipId: ids.teamMemberId }, "team.setRolePerm": { role: "editor", perm: "docs", on: false },
+    "team.resetRoles": {}, "team.projectPeople": { projectId: ids.projectId }, "team.assign": { projectId: ids.projectId, userIds: [] }, "team.joinPage": { token: "nope" },
   };
 }
 
@@ -309,7 +314,22 @@ export async function setup() {
     await ctx.db.insert("guestPasses", { businessId, callSheetId, personId: "guest:invited", email: "ivy@x.example", token: "matrixinvitedtoken01234567", createdAt: 0, sentAt: 1 });
     const invitedGuest = await ctx.db.insert("users", { email: "ivy@x.example", name: "Ivy", role: "guest" });
     await ctx.db.insert("invites", { email: "ivy@x.example", createdAt: 0 });
-    return { threadId, callId, callToken, gearId, offerPersonId, calendarEventId, guestToken, guestInvitedSub: await sess(invitedGuest), guestSub: await sess(guestUser), callSheetId, testimonialId, vendorSub: await sess(vendorUser), briefId, fileRequestId, fileUploadId, shootId, vendorInvoiceId, businessId, briefingId, bookingId, vendorId, proposalId, quoteId, dealId, followUpId, estimateId, entryId, subscriptionId, planId, invoiceId, deliveryFileId, clientRecId, personId, inboxItemId, inboxNoteId, requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
+    // Phase 5e step 1: the team. A pending invite, and one team member of each role (the role's suggested switches; the
+    // Editor assigned to no project). The access test calls every function as each of them.
+    const { SUGGESTED } = await import("../convex/lib/perms");
+    // The default business (untagged records are its records), made here if the setup has none, so the team sees what the owner sees.
+    const teamBiz = (await ctx.db.query("businesses").withIndex("by_slug", (q) => q.eq("slug", "wrangler")).unique())?._id
+      ?? await ctx.db.insert("businesses", { slug: "wrangler", name: "Wrangler Productions", createdAt: 0 });
+    const teamInviteId = await ctx.db.insert("teamInvites", { businessId: teamBiz, email: "jules@x.example", teamRole: "editor", tokenHash: "h", invitedBy: "Heston", createdAt: 0, sentAt: 0, expiresAt: Date.now() + 86_400_000 });
+    const teamUser = async (email: string, teamRole: "producer" | "editor" | "bookkeeper") => {
+      const u = await ctx.db.insert("users", { email, name: teamRole, role: "team", emailVerificationTime: 0 });
+      const m = await ctx.db.insert("memberships", { businessId: teamBiz, email, userId: u, role: "team", teamRole, perms: { ...SUGGESTED[teamRole] }, createdAt: 0 });
+      return { sub: await sess(u), m };
+    };
+    const producer = await teamUser("team-producer@x.example", "producer");
+    const editor = await teamUser("team-editor@x.example", "editor");
+    const bookkeeper = await teamUser("team-bookkeeper@x.example", "bookkeeper");
+    return { teamInviteId, teamMemberId: producer.m, producerSub: producer.sub, editorSub: editor.sub, bookkeeperSub: bookkeeper.sub, threadId, callId, callToken, gearId, offerPersonId, calendarEventId, guestToken, guestInvitedSub: await sess(invitedGuest), guestSub: await sess(guestUser), callSheetId, testimonialId, vendorSub: await sess(vendorUser), briefId, fileRequestId, fileUploadId, shootId, vendorInvoiceId, businessId, briefingId, bookingId, vendorId, proposalId, quoteId, dealId, followUpId, estimateId, entryId, subscriptionId, planId, invoiceId, deliveryFileId, clientRecId, personId, inboxItemId, inboxNoteId, requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
   });
   return { t, ids };
 }

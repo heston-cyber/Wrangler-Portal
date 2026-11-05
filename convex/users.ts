@@ -22,10 +22,12 @@ export const me = query({
     const v = await viewerOf(ctx);
     const owner = v.kind === "owner";
     // Phase 5b step 4: a call-sheet guest's login (D127): the page shows it the guest pages and nothing else.
-    const role: "owner" | "client" | "vendor" | "guest" | null = owner ? "owner" : v.kind === "client" ? "client" : v.kind === "vendor" ? "vendor" : user.role === "guest" ? "guest" : null;
+    const role: "owner" | "client" | "vendor" | "guest" | "team" | null = owner ? "owner" : v.kind === "client" ? "client" : v.kind === "vendor" ? "vendor" : v.kind === "team" ? "team" : user.role === "guest" ? "guest" : null;
     // Nov 2: a login that is a client and a vendor shows a switch between the two sides.
-    const sides = owner || role === "guest" ? [] : await sidesOf(ctx, email);
-    return { id: userId, email, name: (user.name as string | undefined) || fallback, allowed: owner, role, sides, ...(owner ? { tools: toolsOf(user.tools) } : {}) };
+    const sides = owner || role === "guest" || role === "team" ? [] : await sidesOf(ctx, email);
+    // Phase 5e: a team member's role and switches decide their menu (the server checks every call again).
+    const team = v.kind === "team" ? { role: v.team.role, perms: v.team.perms } : null;
+    return { id: userId, email, name: (user.name as string | undefined) || fallback, allowed: owner, role, sides, team, ...(owner ? { tools: toolsOf(user.tools) } : {}) };
   },
 });
 
@@ -39,7 +41,7 @@ export const switchSide = mutation({
     const email = (user?.email ?? "").toLowerCase();
     if (!user || !email) throw new ConvexError("Sign in first.");
     const kind = (await viewerOf(ctx)).kind;
-    if (kind === "owner" || kind === "nobody") throw new ConvexError("Not allowed.");
+    if (kind === "owner" || kind === "nobody" || kind === "team" || user.role === "team") throw new ConvexError("Not allowed."); // Phase 5e: a team login has no other side
     if (!(await sidesOf(ctx, email)).includes(side)) throw new ConvexError(side === "vendor" ? "No business has you as a vendor." : "No business has you as a client.");
     if (user.role !== side) await ctx.db.patch(userId, { role: side });
     return side;
