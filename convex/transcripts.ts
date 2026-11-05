@@ -2,7 +2,7 @@
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
-import { requireMe } from "./lib/access";
+import { requireFor, requireMe } from "./lib/access";
 import { accessToVersion, shareArg } from "./lib/viewer";
 import { findVideo, pickVersion, versionInfo } from "./connector";
 
@@ -79,7 +79,7 @@ export const summary = internalQuery({
 export const retry = mutation({
   args: { versionId: v.id("versions") },
   handler: async (ctx, { versionId }) => {
-    await requireMe(ctx);
+    await requireFor(ctx, "review", versionId);
     const row = await ctx.db.query("transcripts").withIndex("by_version", (q) => q.eq("versionId", versionId)).first();
     if (row) await ctx.db.patch(row._id, { status: "pending", error: undefined, updatedAt: Date.now() });
     else await ctx.db.insert("transcripts", { versionId, status: "pending", attempts: 0, updatedAt: Date.now() });

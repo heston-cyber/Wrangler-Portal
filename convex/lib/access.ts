@@ -106,3 +106,47 @@ export async function requireMeInAction(ctx: ActionCtx): Promise<Id<"users">> {
   if (!userId) throw new ConvexError("Sign in first.");
   return userId;
 }
+
+/**
+ * Phase 5e: the project a record belongs to: a project itself, or anything carrying projectId, videoId, versionId,
+ * noteId or shootId (followed up to its project). undefined when the record isn't tied to a project at all.
+ */
+export async function projectOf(ctx: QueryCtx | MutationCtx, id: string): Promise<Id<"projects"> | null | undefined> {
+  const asProject = ctx.db.normalizeId("projects", id);
+  if (asProject) return (await ctx.db.get(asProject)) ? asProject : null;
+  const doc = (await ctx.db.get(id as Id<"videos">)) as Record<string, unknown> | null;
+  if (!doc) return null;
+  return projectOfDoc(ctx, doc);
+}
+export async function projectOfDoc(ctx: QueryCtx | MutationCtx, doc: Record<string, unknown>): Promise<Id<"projects"> | null | undefined> {
+  if (typeof doc.projectId === "string") return doc.projectId as Id<"projects">;
+  for (const k of ["videoId", "versionId", "noteId", "shootId"]) {
+    if (typeof doc[k] === "string") {
+      const parent = (await ctx.db.get(doc[k] as Id<"videos">)) as Record<string, unknown> | null;
+      return parent ? projectOfDoc(ctx, parent) : null;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Phase 5e: requireMe for a function that works on particular records. An Editor (assigned projects only) passes only
+ * when every record named belongs to a project they're assigned to; a record tied to no project refuses them.
+ */
+export async function requireFor(ctx: QueryCtx | MutationCtx, perm: Perm | readonly Perm[], ...ids: Array<string | null | undefined>): Promise<Me> {
+  const me = await requireMe(ctx, perm);
+  const only = await projectsFor(ctx, me);
+  if (only) for (const id of ids) {
+    if (!id) throw new ConvexError("Not allowed.");
+    const p = await projectOf(ctx, id);
+    if (!p || !only.has(p)) throw new ConvexError("Not allowed.");
+  }
+  return me;
+}
+
+/** Phase 5e: the owner or a team member who sees every project with this switch (not an Editor, who sees assigned ones). */
+export async function requireAll(ctx: QueryCtx | MutationCtx, perm: Perm | readonly Perm[]): Promise<Me> {
+  const me = await requireMe(ctx, perm);
+  if (me.team && assignedOnly(me.team.role)) throw new ConvexError("Not allowed.");
+  return me;
+}

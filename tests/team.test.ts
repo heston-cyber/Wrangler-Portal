@@ -195,4 +195,44 @@ describe("Phase 5e · team members", () => {
     await expect(after.query(api.team.projectPeople, { projectId: w.p })).rejects.toThrow(/Not allowed/);
     expect((await w.heston.query(api.team.projectPeople, { projectId: w.p })).people).toEqual([]);
   }, 30_000);
+
+  test("T5e.6 Review: an Editor works only on assigned projects; a Producer on every project; nobody else on the team", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const ids = await w.t.run(async (ctx) => {
+      const other = await ctx.db.insert("projects", { businessId: w.A, name: "Other job", createdAt: 1 });
+      const mk = async (projectId: Id<"projects">, title: string) => {
+        const videoId = await ctx.db.insert("videos", { businessId: w.A, projectId, title, createdAt: 0, updatedAt: 0 });
+        const versionId = await ctx.db.insert("versions", { businessId: w.A, videoId, number: 1, status: "ready", bunnyGuid: "g", fileName: "a.mp4", startTimecode: "01:00:00:00", createdAt: 0 } as never);
+        return { videoId, versionId };
+      };
+      return { other, mine: await mk(w.p, "Launch cut"), theirs: await mk(other, "Other cut") };
+    });
+    const ed = await join(w, mails, RILEY, "editor");
+    await w.heston.mutation(api.team.assign, { projectId: w.p, userIds: [ed.userId] });
+    const ov = await ed.as.query(api.library.overview, {});
+    expect(ov.projects.map((p: { name: string }) => p.name)).toEqual(["Launch"]);
+    expect(ov.videos.map((v: { title: string }) => v.title)).toEqual(["Launch cut"]);
+    expect(ov.clients).toEqual([]);
+    expect((await ed.as.query(api.library.video, { videoId: ids.mine.videoId }))?.video?.title ?? "seen").toBeTruthy();
+    await ed.as.mutation(api.notes.create, { versionId: ids.mine.versionId, kind: "general", text: "Trim the open" });
+    await expect(ed.as.query(api.library.video, { videoId: ids.theirs.videoId })).rejects.toThrow(/Not allowed/);
+    await expect(ed.as.mutation(api.notes.create, { versionId: ids.theirs.versionId, kind: "general", text: "x" })).rejects.toThrow(/Not allowed/);
+    await expect(ed.as.mutation(api.library.renameVideo, { videoId: ids.theirs.videoId, title: "x" })).rejects.toThrow(/Not allowed/);
+    await expect(ed.as.mutation(api.library.createVideo, { projectId: ids.other, title: "x" })).rejects.toThrow(/Not allowed/);
+    await expect(ed.as.mutation(api.library.createProject, { name: "Mine now" })).rejects.toThrow(/Not allowed/);
+    await ed.as.mutation(api.library.createVideo, { projectId: w.p, title: "Teaser" });
+    // Owner-only still: deleting, and Approve final.
+    await expect(ed.as.mutation(api.library.deleteVideo, { videoId: ids.mine.videoId })).rejects.toThrow(/Not allowed/);
+    await expect(ed.as.mutation(api.library.approveFinal, { videoId: ids.mine.videoId, keep: 1 })).rejects.toThrow(/Not allowed/);
+    // The owner sees the Editor's note under her own name.
+    const notes = await w.heston.query(api.notes.forVersion, { versionId: ids.mine.versionId });
+    expect(JSON.stringify(notes)).toContain("Riley Chen");
+    // With Review switched off for her, the assigned project closes too.
+    const mid = (await w.heston.query(api.team.page, {})).members[0].membershipId as Id<"memberships">;
+    await w.heston.mutation(api.team.setPerm, { membershipId: mid, perm: "review", on: false });
+    await expect(ed.as.query(api.library.video, { videoId: ids.mine.videoId })).rejects.toThrow(/Not allowed/);
+    await expect(ed.as.query(api.library.overview, {})).rejects.toThrow(/Not allowed/);
+  }, 30_000);
 });

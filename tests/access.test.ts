@@ -123,11 +123,57 @@ const VENDOR = new Set(["help.list", "help.guide", "users.switchSide",
 // Phase 5e step 1: what each team role may call with its suggested switches (lib/perms.ts SUGGESTED), and why. A
 // function names the switch that opens it (requireMe(ctx, "review")); one that names none stays the owner's. The matrix
 // Editor is assigned to no project, so the project functions refuse them too. Tested further in team.test.ts.
+// Review (lib/viewer.ts accessToVideo, and requireFor): the owner's view of a video and its notes, versions and uploads.
+const REVIEW = "Review: works on a video, its versions, notes and uploads as the owner does (an Editor only on assigned projects; team.test.ts)";
 const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>> = {
   producer: {
     "team.projectPeople": "Projects: who is assigned to a project (names and roles only; the owner alone assigns)",
+    "library.createProject": "Projects: a new project (not an Editor, who only works on assigned ones)",
+    "library.renameProject": "Projects: rename a project (not an Editor)",
+    "library.createClient": "Clients and leads: \"New client\" from Review (not an Editor)",
+    "approvals.approve": REVIEW,
+    "approvals.forVideo": REVIEW,
+    "library.projectNames": REVIEW,
+    "library.overview": REVIEW,
+    "library.markOpened": REVIEW,
+    "library.setVersionDescription": REVIEW,
+    "library.createVideo": REVIEW,
+    "library.renameVideo": REVIEW,
+    "library.video": REVIEW,
+    "library.setPoster": REVIEW,
+    "library.setStartTimecode": REVIEW,
+    "library.reportFrameCount": REVIEW,
+    "library.retryCopy": REVIEW,
+    "library.downloadCheck": REVIEW,
+    "library.downloadLink": REVIEW,
+    "notes.forVersion": REVIEW,
+    "notes.create": REVIEW,
+    "notes.editText": REVIEW,
+    "notes.setStatus": REVIEW,
+    "notes.setVisibility": REVIEW,
+    "notes.setReplyHidden": REVIEW,
+    "notes.remove": REVIEW,
+    "notes.reply": REVIEW,
+    "notes.voiceUploadUrl": REVIEW,
+    "notes.discardVoice": REVIEW,
+    "player.log": REVIEW,
+    "player.fileFailed": REVIEW,
+    "transcripts.retry": REVIEW,
+    "transcripts.forVersion": REVIEW,
+    "uploads.startUpload": REVIEW,
+    "uploads.uploadFinished": REVIEW,
+    "uploads.uploadFailed": REVIEW,
+    "views.beat": REVIEW,
+    "views.forVideo": REVIEW,
+    "waveforms.forVersion": REVIEW,
   },
-  editor: {},
+  // Assigned to no project: only the lists (which come back empty) and a voice-note upload address.
+  editor: {
+    "library.projectNames": "Review: the names of their assigned projects (none here)",
+    "library.overview": "Review: their assigned projects and videos (none here)",
+    "notes.voiceUploadUrl": "Review: an upload address for a voice note before it has a version (no record is touched)",
+    "notes.discardVoice": "Review: throws away their own unused voice recording only (voiceUploads row, unused by any note)",
+  },
   bookkeeper: {},
 };
 

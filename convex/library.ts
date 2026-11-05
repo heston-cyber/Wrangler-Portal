@@ -4,7 +4,7 @@ import { action } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { api, internal } from "./_generated/api";
-import { requireMe } from "./lib/access";
+import { projectsFor, requireAll, requireFor, requireMe } from "./lib/access";
 import { isValidTc } from "./lib/frames";
 import type { Doc, Id } from "./_generated/dataModel";
 import { insertVideo, nextFileName } from "./lib/register";
@@ -18,8 +18,9 @@ const clean = (s: string, max = 200) => s.trim().replace(/\s+/g, " ").slice(0, m
 export const projectNames = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
-    const projects = await ctx.db.query("projects").collect();
+    const me = await requireMe(ctx, ["review", "projects"]);
+    const only = await projectsFor(ctx, me); // Phase 5e: an Editor's assigned projects
+    const projects = (await ctx.db.query("projects").collect()).filter((p) => !only || only.has(p._id));
     return projects.sort((a, b) => b.createdAt - a.createdAt).map((p) => ({ _id: p._id, name: p.name }));
   },
 });
@@ -28,9 +29,10 @@ export const projectNames = query({
 export const overview = query({
   args: {},
   handler: async (ctx) => {
-    const me = await requireMe(ctx);
-    const projects = await ctx.db.query("projects").collect();
-    const videos = await ctx.db.query("videos").collect();
+    const me = await requireMe(ctx, "review");
+    const only = await projectsFor(ctx, me); // Phase 5e: an Editor sees only the projects they're assigned to
+    const projects = (await ctx.db.query("projects").collect()).filter((p) => !only || only.has(p._id));
+    const videos = (await ctx.db.query("videos").collect()).filter((x) => !only || only.has(x.projectId));
     const opens = await ctx.db.query("opens").withIndex("by_user", (q) => q.eq("userId", me.userId)).collect();
     const openedAt = new Map(opens.map((o) => [o.videoId as string, o.openedAt]));
     const vidsOut = [];
@@ -76,7 +78,7 @@ export const overview = query({
       }))),
       videos: vidsOut,
       // Clients made with "New client" (they show even before they have projects).
-      clients: (await ctx.db.query("clients").collect()).filter((c) => !c.fromProjects).map((c) => c.name).sort((a, b) => a.localeCompare(b)),
+      clients: only ? [] : (await ctx.db.query("clients").collect()).filter((c) => !c.fromProjects).map((c) => c.name).sort((a, b) => a.localeCompare(b)),
     };
   },
 });
@@ -85,7 +87,7 @@ export const overview = query({
 export const createClient = mutation({
   args: { name: v.string() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const name = clean(a.name, 120);
     if (!name) throw new ConvexError("Give the client a name.");
     const key = name.toLowerCase();
@@ -104,7 +106,7 @@ export const createClient = mutation({
 export const markOpened = mutation({
   args: { videoId: v.id("videos") },
   handler: async (ctx, { videoId }) => {
-    const me = await requireMe(ctx);
+    const me = await requireFor(ctx, "review", videoId);
     const row = await ctx.db.query("opens").withIndex("by_user_video", (q) => q.eq("userId", me.userId).eq("videoId", videoId)).unique();
     if (row) await ctx.db.patch(row._id, { openedAt: Date.now() });
     else await ctx.db.insert("opens", { userId: me.userId, videoId, openedAt: Date.now() });
@@ -114,7 +116,7 @@ export const markOpened = mutation({
 export const renameProject = mutation({
   args: { projectId: v.id("projects"), name: v.string(), jobNumber: v.optional(v.string()), client: v.optional(v.string()) },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "projects");
     const name = clean(a.name, 120);
     if (!name) throw new ConvexError("Give the project a name.");
     const p = await ctx.db.get(a.projectId);
@@ -130,7 +132,7 @@ export const renameProject = mutation({
 export const setVersionDescription = mutation({
   args: { versionId: v.id("versions"), description: v.string() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireFor(ctx, "review", a.versionId);
     await ctx.db.patch(a.versionId, { description: a.description.trim().slice(0, 2000) || undefined });
   },
 });
@@ -138,7 +140,7 @@ export const setVersionDescription = mutation({
 export const createProject = mutation({
   args: { name: v.string(), jobNumber: v.optional(v.string()), client: v.optional(v.string()) },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "projects");
     const name = clean(a.name, 120);
     if (!name) throw new ConvexError("Give the project a name.");
     return await ctx.db.insert("projects", {
@@ -153,7 +155,7 @@ export const createProject = mutation({
 export const createVideo = mutation({
   args: { projectId: v.id("projects"), title: v.string() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireFor(ctx, "review", a.projectId);
     const title = clean(a.title, 160);
     if (!title) throw new ConvexError("Give the video a title.");
     if (!(await ctx.db.get(a.projectId))) throw new ConvexError("That project no longer exists.");
@@ -164,7 +166,7 @@ export const createVideo = mutation({
 export const renameVideo = mutation({
   args: { videoId: v.id("videos"), title: v.string() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireFor(ctx, "review", a.videoId);
     const title = clean(a.title, 160);
     if (!title) throw new ConvexError("Give the video a title.");
     await ctx.db.patch(a.videoId, { title, updatedAt: Date.now() });
@@ -177,7 +179,7 @@ export const video = query({
   args: { videoId: v.id("videos"), share: shareArg },
   handler: async (ctx, { videoId, share }) => {
     const vid = await ctx.db.get(videoId);
-    if (!vid) { await requireMe(ctx); return null; }
+    if (!vid) { await requireMe(ctx, "review"); return null; }
     const access = await accessToVideo(ctx, videoId, share);
     const project = await ctx.db.get(vid.projectId);
     let versions = await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", videoId)).collect();
@@ -290,7 +292,7 @@ export async function publicVersion(x: Doc<"versions">) {
 export const setPoster = mutation({
   args: { versionId: v.id("versions"), url: v.string() },
   handler: async (ctx, { versionId, url }) => {
-    await requireMe(ctx);
+    await requireFor(ctx, "review", versionId);
     if (!stillOk(url)) throw new ConvexError("That picture isn't one of ours.");
     const ver = await ctx.db.get(versionId);
     if (!ver) throw new ConvexError("That version no longer exists.");
@@ -301,7 +303,7 @@ export const setPoster = mutation({
 export const setStartTimecode = mutation({
   args: { versionId: v.id("versions"), startTimecode: v.string() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireFor(ctx, "review", a.versionId);
     const tc = a.startTimecode.trim().replace(";", ":");
     if (!isValidTc(tc)) throw new ConvexError("Use HH:MM:SS:FF, like 01:00:00:00.");
     await ctx.db.patch(a.versionId, { startTimecode: tc });
@@ -376,7 +378,7 @@ export const versionsForHeights = internalQuery({
 export const retryCopy = mutation({
   args: { versionId: v.id("versions") },
   handler: async (ctx, { versionId }) => {
-    await requireMe(ctx);
+    await requireFor(ctx, "review", versionId);
     const ver = await ctx.db.get(versionId);
     if (!ver) throw new ConvexError("That version isn't here.");
     if (ver.status !== "failed" || !ver.dropboxPath || !ver.storagePath) throw new ConvexError("Only a render that failed to copy from Dropbox can be tried again.");
