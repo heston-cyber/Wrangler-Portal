@@ -14604,6 +14604,401 @@
    "validUntil": "2026-12-04",
    "via": "link",
    "voidedAt": null
+  },
+  "gear.list": {
+   "counts": {
+    "in_repair": 1,
+    "in_service": 7,
+    "retired": 1
+   },
+   "items": [
+    {
+     "_id": "0000000000000000000000010139gear",
+     "due": false,
+     "insuredCents": 90000,
+     "kind": "lighting",
+     "name": "Aputure 300d II",
+     "nextDue": "2027-03-28",
+     "photoUrl": null,
+     "serialLast4": null,
+     "status": "in_service"
+    },
+    {
+     "_id": "0000000000000000000000010144gear",
+     "due": false,
+     "insuredCents": 0,
+     "kind": "camera",
+     "name": "Canon C100",
+     "nextDue": null,
+     "photoUrl": null,
+     "serialLast4": null,
+     "status": "retired"
+    },
+    {
+     "_id": "0000000000000000000000010141gear",
+     "due": false,
+     "insuredCents": 230000,
+     "kind": "drone",
+     "name": "DJI Mavic 3 Pro",
+     "nextDue": null,
+     "photoUrl": null,
+     "serialLast4": "JB22",
+     "status": "in_service"
+    },
+    {
+     "_id": "0000000000000000000000010143gear",
+     "due": false,
+     "insuredCents": 350000,
+     "kind": "computer",
+     "name": "MacBook Pro 16\"",
+     "nextDue": null,
+     "photoUrl": null,
+     "serialLast4": "MD6T",
+     "status": "in_service"
+    },
+    {
+     "_id": "0000000000000000000000010140gear",
+     "due": false,
+     "insuredCents": 40000,
+     "kind": "audio",
+     "name": "Rode Wireless PRO",
+     "nextDue": null,
+     "photoUrl": null,
+     "serialLast4": "0931",
+     "status": "in_service"
+    },
+    {
+     "_id": "0000000000000000000000010142gear",
+     "due": false,
+     "insuredCents": 120000,
+     "kind": "grip",
+     "name": "Sachtler Aktiv8 tripod",
+     "nextDue": null,
+     "photoUrl": null,
+     "serialLast4": null,
+     "status": "in_service"
+    },
+    {
+     "_id": "0000000000000000000000010138gear",
+     "due": false,
+     "insuredCents": 240000,
+     "kind": "lens",
+     "name": "Sony 24-70mm f/2.8 GM II",
+     "nextDue": null,
+     "photoUrl": null,
+     "serialLast4": "9455",
+     "status": "in_repair"
+    },
+    {
+     "_id": "0000000000000000000000010137gear",
+     "due": false,
+     "insuredCents": 260000,
+     "kind": "camera",
+     "name": "Sony A7 IV",
+     "nextDue": null,
+     "photoUrl": null,
+     "serialLast4": "9374",
+     "status": "in_service"
+    },
+    {
+     "_id": "0000000000000000000000010136gear",
+     "due": true,
+     "insuredCents": 420000,
+     "kind": "camera",
+     "name": "Sony FX3",
+     "nextDue": "2026-10-24",
+     "photoUrl": null,
+     "serialLast4": "8831",
+     "status": "in_service"
+    }
+   ],
+   "tiles": {
+    "due": 1,
+    "inRepair": 1,
+    "insuredCents": 1750000,
+    "items": 8
+   },
+   "today": "2026-10-29"
+  },
+  "gear.exportCsv": {
+   "count": 8,
+   "csv": "Name,Kind,Serial,Bought,Price,Insurance value\nAputure 300d II,lighting,,2027-06-20,1075.00,900.00\nDJI Mavic 3 Pro,drone,1581F5FJB22,2029-01-11,2199.00,2300.00\n\"MacBook Pro 16\"\"\",computer,C02ZK3XYMD6T,2029-02-20,3499.00,3500.00\nRode Wireless PRO,audio,RWP-20931,,399.00,400.00\nSachtler Aktiv8 tripod,grip,,,1399.00,1200.00\nSony 24-70mm f/2.8 GM II,lens,1829455,2028-03-14,2298.00,2400.00\nSony A7 IV,camera,5100229374,2028-09-02,2498.00,2600.00\nSony FX3,camera,4402158831,2028-03-14,3898.00,4200.00\nTotal,,,,,17500.00\n",
+   "filename": "gear-2026-10-29.csv",
+   "totalCents": 1750000
+  },
+  "gear.forShoot#00000000000000000000010126shoots": {
+   "available": [
+    {
+     "_id": "0000000000000000000000010141gear",
+     "kind": "drone",
+     "name": "DJI Mavic 3 Pro",
+     "status": "in_service"
+    },
+    {
+     "_id": "0000000000000000000000010143gear",
+     "kind": "computer",
+     "name": "MacBook Pro 16\"",
+     "status": "in_service"
+    },
+    {
+     "_id": "0000000000000000000000010142gear",
+     "kind": "grip",
+     "name": "Sachtler Aktiv8 tripod",
+     "status": "in_service"
+    },
+    {
+     "_id": "0000000000000000000000010138gear",
+     "kind": "lens",
+     "name": "Sony 24-70mm f/2.8 GM II",
+     "status": "in_repair"
+    },
+    {
+     "_id": "0000000000000000000000010137gear",
+     "kind": "camera",
+     "name": "Sony A7 IV",
+     "status": "in_service"
+    }
+   ],
+   "date": "2026-11-02",
+   "items": [
+    {
+     "bookingId": "00000000000000010149gearBookings",
+     "clash": [],
+     "gearId": "0000000000000000000000010139gear",
+     "kind": "lighting",
+     "name": "Aputure 300d II",
+     "status": "in_service"
+    },
+    {
+     "bookingId": "00000000000000010150gearBookings",
+     "clash": [],
+     "gearId": "0000000000000000000000010140gear",
+     "kind": "audio",
+     "name": "Rode Wireless PRO",
+     "status": "in_service"
+    },
+    {
+     "bookingId": "00000000000000010148gearBookings",
+     "clash": [],
+     "gearId": "0000000000000000000000010136gear",
+     "kind": "camera",
+     "name": "Sony FX3",
+     "status": "in_service"
+    }
+   ],
+   "total": 8
+  },
+  "gear.get#0000000000000000000000010136gear": {
+   "_id": "0000000000000000000000010136gear",
+   "boughtOn": "2028-03-14",
+   "due": true,
+   "insuredCents": 420000,
+   "kind": "camera",
+   "maintenance": [
+    {
+     "_id": "00000000000010145gearMaintenance",
+     "costCents": 8500,
+     "date": "2026-07-01",
+     "nextDue": "2026-10-24",
+     "what": "Sensor cleaned and firmware updated"
+    },
+    {
+     "_id": "00000000000010146gearMaintenance",
+     "costCents": 12000,
+     "date": "2025-09-24",
+     "nextDue": null,
+     "what": "Fan replaced"
+    }
+   ],
+   "name": "Sony FX3",
+   "nextDue": "2026-10-24",
+   "notes": "A-camera. Cage and top handle on.",
+   "past": [],
+   "photoUrl": null,
+   "priceCents": 389800,
+   "serialLast4": "8831",
+   "status": "in_service",
+   "today": "2026-10-29",
+   "upcoming": [
+    {
+     "call": "07:00",
+     "date": "2026-11-02",
+     "location": "Harbor Coffee, 412 Main St.",
+     "project": "Harbor Coffee Launch",
+     "projectId": "000000000000000000010020projects",
+     "shootId": "00000000000000000000010126shoots"
+    }
+   ]
+  },
+  "gear.get#0000000000000000000000010137gear": {
+   "_id": "0000000000000000000000010137gear",
+   "boughtOn": "2028-09-02",
+   "due": false,
+   "insuredCents": 260000,
+   "kind": "camera",
+   "maintenance": [],
+   "name": "Sony A7 IV",
+   "nextDue": null,
+   "notes": "",
+   "past": [],
+   "photoUrl": null,
+   "priceCents": 249800,
+   "serialLast4": "9374",
+   "status": "in_service",
+   "today": "2026-10-29",
+   "upcoming": []
+  },
+  "gear.get#0000000000000000000000010138gear": {
+   "_id": "0000000000000000000000010138gear",
+   "boughtOn": "2028-03-14",
+   "due": false,
+   "insuredCents": 240000,
+   "kind": "lens",
+   "maintenance": [],
+   "name": "Sony 24-70mm f/2.8 GM II",
+   "nextDue": null,
+   "notes": "",
+   "past": [],
+   "photoUrl": null,
+   "priceCents": 229800,
+   "serialLast4": "9455",
+   "status": "in_repair",
+   "today": "2026-10-29",
+   "upcoming": []
+  },
+  "gear.get#0000000000000000000000010139gear": {
+   "_id": "0000000000000000000000010139gear",
+   "boughtOn": "2027-06-20",
+   "due": false,
+   "insuredCents": 90000,
+   "kind": "lighting",
+   "maintenance": [
+    {
+     "_id": "00000000000010147gearMaintenance",
+     "costCents": null,
+     "date": "2026-09-29",
+     "nextDue": "2027-03-28",
+     "what": "Fresnel lens cleaned"
+    }
+   ],
+   "name": "Aputure 300d II",
+   "nextDue": "2027-03-28",
+   "notes": "",
+   "past": [],
+   "photoUrl": null,
+   "priceCents": 107500,
+   "serialLast4": null,
+   "status": "in_service",
+   "today": "2026-10-29",
+   "upcoming": [
+    {
+     "call": "07:00",
+     "date": "2026-11-02",
+     "location": "Harbor Coffee, 412 Main St.",
+     "project": "Harbor Coffee Launch",
+     "projectId": "000000000000000000010020projects",
+     "shootId": "00000000000000000000010126shoots"
+    }
+   ]
+  },
+  "gear.get#0000000000000000000000010140gear": {
+   "_id": "0000000000000000000000010140gear",
+   "boughtOn": null,
+   "due": false,
+   "insuredCents": 40000,
+   "kind": "audio",
+   "maintenance": [],
+   "name": "Rode Wireless PRO",
+   "nextDue": null,
+   "notes": "",
+   "past": [],
+   "photoUrl": null,
+   "priceCents": 39900,
+   "serialLast4": "0931",
+   "status": "in_service",
+   "today": "2026-10-29",
+   "upcoming": [
+    {
+     "call": "07:00",
+     "date": "2026-11-02",
+     "location": "Harbor Coffee, 412 Main St.",
+     "project": "Harbor Coffee Launch",
+     "projectId": "000000000000000000010020projects",
+     "shootId": "00000000000000000000010126shoots"
+    }
+   ]
+  },
+  "gear.get#0000000000000000000000010141gear": {
+   "_id": "0000000000000000000000010141gear",
+   "boughtOn": "2029-01-11",
+   "due": false,
+   "insuredCents": 230000,
+   "kind": "drone",
+   "maintenance": [],
+   "name": "DJI Mavic 3 Pro",
+   "nextDue": null,
+   "notes": "",
+   "past": [],
+   "photoUrl": null,
+   "priceCents": 219900,
+   "serialLast4": "JB22",
+   "status": "in_service",
+   "today": "2026-10-29",
+   "upcoming": []
+  },
+  "gear.get#0000000000000000000000010142gear": {
+   "_id": "0000000000000000000000010142gear",
+   "boughtOn": null,
+   "due": false,
+   "insuredCents": 120000,
+   "kind": "grip",
+   "maintenance": [],
+   "name": "Sachtler Aktiv8 tripod",
+   "nextDue": null,
+   "notes": "",
+   "past": [],
+   "photoUrl": null,
+   "priceCents": 139900,
+   "serialLast4": null,
+   "status": "in_service",
+   "today": "2026-10-29",
+   "upcoming": []
+  },
+  "gear.get#0000000000000000000000010143gear": {
+   "_id": "0000000000000000000000010143gear",
+   "boughtOn": "2029-02-20",
+   "due": false,
+   "insuredCents": 350000,
+   "kind": "computer",
+   "maintenance": [],
+   "name": "MacBook Pro 16\"",
+   "nextDue": null,
+   "notes": "",
+   "past": [],
+   "photoUrl": null,
+   "priceCents": 349900,
+   "serialLast4": "MD6T",
+   "status": "in_service",
+   "today": "2026-10-29",
+   "upcoming": []
+  },
+  "gear.get#0000000000000000000000010144gear": {
+   "_id": "0000000000000000000000010144gear",
+   "boughtOn": "2022-05-02",
+   "due": false,
+   "insuredCents": 0,
+   "kind": "camera",
+   "maintenance": [],
+   "name": "Canon C100",
+   "nextDue": null,
+   "notes": "Sold to a friend.",
+   "past": [],
+   "photoUrl": null,
+   "priceCents": 349900,
+   "serialLast4": null,
+   "status": "retired",
+   "today": "2026-10-29",
+   "upcoming": []
   }
  },
  "client": {
@@ -17726,6 +18121,27 @@
    "recent": [],
    "runs": [],
    "support": "support@wranglerproductions.com"
+  },
+  "gear.list": {
+   "counts": {
+    "in_repair": 0,
+    "in_service": 0,
+    "retired": 0
+   },
+   "items": [],
+   "tiles": {
+    "due": 0,
+    "inRepair": 0,
+    "insuredCents": 0,
+    "items": 0
+   },
+   "today": "2026-10-29"
+  },
+  "gear.exportCsv": {
+   "count": 0,
+   "csv": "Name,Kind,Serial,Bought,Price,Insurance value\nTotal,,,,,0.00\n",
+   "filename": "gear-2026-10-29.csv",
+   "totalCents": 0
   }
  },
  "ids": {
@@ -17838,6 +18254,17 @@
    "lee": "85A6A02_SHzf4c6KpvJTWtBb",
    "link": "fZRY3OFeG7Z7HZGXQhh7ZEVC",
    "open": "TaseslGKBCrejfbDtDbJ1afP"
+  },
+  "gear": {
+   "fx3": "0000000000000000000000010136gear",
+   "a7": "0000000000000000000000010137gear",
+   "gm": "0000000000000000000000010138gear",
+   "aput": "0000000000000000000000010139gear",
+   "rode": "0000000000000000000000010140gear",
+   "mavic": "0000000000000000000000010141gear",
+   "tripod": "0000000000000000000000010142gear",
+   "mac": "0000000000000000000000010143gear",
+   "old": "0000000000000000000000010144gear"
   }
  },
  "vendor": {

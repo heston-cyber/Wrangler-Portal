@@ -179,6 +179,28 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
     const inDays = (n: number) => new Date(now + n * DAY).toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
     const { shootId } = await owner.mutation(api.shoots.schedule, { projectId: w.p1, date: inDays(4), call: "07:00", wrap: "17:00", location: "Harbor Coffee, 412 Main St.", parking: "Behind the shop",
       prepare: ["Shop open and lights on by 7:00", "Two baristas on shift for B-roll", "Menu boards up to date", "Signed releases from anyone on camera"], withOwner: true, bookingIds: [], calendar: true }) as { shootId: string };
+    // Phase 5d step 3: gear. Nine items across the kinds (one in repair, one retired, one with maintenance due), two on the shoot.
+    const gearIds = await (async () => {
+      const mk = async (name: string, kind: string, extra: Record<string, unknown> = {}) => await owner.mutation(api.gear.add, { name, kind, ...extra }) as Id<"gear">;
+      const fx3 = await mk("Sony FX3", "camera", { serial: "4402158831", boughtOn: "2028-03-14", priceCents: 389800, insuredCents: 420000, notes: "A-camera. Cage and top handle on." });
+      const a7 = await mk("Sony A7 IV", "camera", { serial: "5100229374", boughtOn: "2028-09-02", priceCents: 249800, insuredCents: 260000 });
+      const gm = await mk("Sony 24-70mm f/2.8 GM II", "lens", { serial: "1829455", boughtOn: "2028-03-14", priceCents: 229800, insuredCents: 240000 });
+      const aput = await mk("Aputure 300d II", "lighting", { boughtOn: "2027-06-20", priceCents: 107500, insuredCents: 90000 });
+      const rode = await mk("Rode Wireless PRO", "audio", { serial: "RWP-20931", priceCents: 39900, insuredCents: 40000 });
+      const mavic = await mk("DJI Mavic 3 Pro", "drone", { serial: "1581F5FJB22", boughtOn: "2029-01-11", priceCents: 219900, insuredCents: 230000 });
+      const tripod = await mk("Sachtler Aktiv8 tripod", "grip", { priceCents: 139900, insuredCents: 120000 });
+      const mac = await mk("MacBook Pro 16\"", "computer", { serial: "C02ZK3XYMD6T", boughtOn: "2029-02-20", priceCents: 349900, insuredCents: 350000 });
+      const old = await mk("Canon C100", "camera", { boughtOn: "2022-05-02", priceCents: 349900, insuredCents: 0, notes: "Sold to a friend." });
+      await owner.mutation(api.gear.setStatus, { gearId: gm, status: "in_repair" });
+      await owner.mutation(api.gear.setStatus, { gearId: old, status: "retired" });
+      await owner.mutation(api.gear.logMaintenance, { gearId: fx3, date: inDays(-120), what: "Sensor cleaned and firmware updated", costCents: 8500, nextDue: inDays(-5) });
+      await owner.mutation(api.gear.logMaintenance, { gearId: fx3, date: inDays(-400), what: "Fan replaced", costCents: 12000 });
+      await owner.mutation(api.gear.logMaintenance, { gearId: aput, date: inDays(-30), what: "Fresnel lens cleaned", nextDue: inDays(150) });
+      await owner.mutation(api.gear.addToShoot, { shootId: shootId as Id<"shoots">, gearId: fx3 });
+      await owner.mutation(api.gear.addToShoot, { shootId: shootId as Id<"shoots">, gearId: aput });
+      await owner.mutation(api.gear.addToShoot, { shootId: shootId as Id<"shoots">, gearId: rode });
+      return { fx3, a7, gm, aput, rode, mavic, tripod, mac, old };
+    })();
     // Phase 4: two file requests, one with files in (made directly: the kit has no Dropbox).
     const reqIds = await t.run(async (ctx) => {
       const folder = "/File requests/Harbor Coffee/26127 Harbor Coffee Launch";
@@ -378,7 +400,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["projects.page#" + w.p1, { projectId: w.p1 }], ["shoots.forProject#" + w.p1, { projectId: w.p1 }], ["fileRequests.forProject#" + w.p1, { projectId: w.p1 }], ["briefs.forProject#" + w.p1, { projectId: w.p1 }], ["briefs.settings", {}], ["calendar.settings", {}], ["projects.nextRound#" + w.harbor30.v, { videoId: w.harbor30.v }],
       ["footage.settings", {}], ["footage.forProject#" + w.p1, { projectId: w.p1 }], ["testimonials.list", {}], ["testimonials.projectsFor#" + w.harbor, { clientId: w.harbor }],
       ["invoices.list", {}], ["invoices.overview", { tzOffsetMin: 300 }], ["invoices.options", {}], ["invoices.forProject#" + w.p1, { projectId: w.p1 }],
-      ["production.overview", {}], ["production.shoots", {}], ["production.projectsForShoot", {}], ["callSheets.list", {}], ["callSheets.newOptions", {}], ["calendarSync.range", calRange], ["calendarSync.linkOptions", {}],
+      ["production.overview", {}], ["production.shoots", {}], ["gear.list", {}], ["gear.exportCsv", {}], ["gear.forShoot#" + shootId, { shootId }], ...Object.values(gearIds).map((id): [string, Record<string, unknown>] => ["gear.get#" + id, { gearId: id }]), ["production.projectsForShoot", {}], ["callSheets.list", {}], ["callSheets.newOptions", {}], ["calendarSync.range", calRange], ["calendarSync.linkOptions", {}],
       ["overviews.clients", {}], ["overviews.review", {}], ["overviews.docs", {}], ["overviews.proposals", {}], ["overviews.vendors", {}], ["home.dashboard", { tzOffsetMin: 300 }], ["crm.due", {}],
       ...sheetIds.map(({ id }): [string, Record<string, unknown>] => ["callSheets.get#" + id, { callSheetId: id }]),
       ...sheetIds.filter((x) => x.buildId).map(({ buildId }): [string, Record<string, unknown>] => ["builder.getBuild#" + buildId, { buildId }]),
@@ -426,7 +448,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       return `${heston}|${await ctx.db.insert("authSessions", { userId: heston, expirationTime: now + 30 * DAY })}`;
     });
     const emptyOwn = await run(empty.withIdentity({ subject: esub }) as never, OWNER.filter(([k, a]) => !k.includes("#") && (k === "calendarSync.range" || Object.values(a).every((x) => typeof x === "number" || typeof x === "boolean"))));
-    const fixtures = { owner: owned, client: await run(client, CLIENT), guest: guestOwn, empty: emptyOwn, ids: { prod: { sheets: Object.fromEntries(Object.entries({ A: prod.A, B: prod.B, C: prod.C, D: prod.D, E: prod.E, F: prod.F, G: prod.G, P: prod.P }).map(([k, x]) => [k, { id: x.id, buildId: x.buildId }])), guest: guest.tokens, shoots: prod.shoots },  invoices: invIds, shares: shareTokens, harbor: w.harbor, video: w.harbor30.v, docSent: w.d1, docSigned: w.d2, docDraft: w.d3, notes: noteIds, shoot: shootId, project: w.p1, requests: reqIds, brief: briefId } };
+    const fixtures = { owner: owned, client: await run(client, CLIENT), guest: guestOwn, empty: emptyOwn, ids: { prod: { sheets: Object.fromEntries(Object.entries({ A: prod.A, B: prod.B, C: prod.C, D: prod.D, E: prod.E, F: prod.F, G: prod.G, P: prod.P }).map(([k, x]) => [k, { id: x.id, buildId: x.buildId }])), guest: guest.tokens, shoots: prod.shoots },  invoices: invIds, shares: shareTokens, harbor: w.harbor, video: w.harbor30.v, docSent: w.d1, docSigned: w.d2, docDraft: w.d3, notes: noteIds, gear: gearIds, shoot: shootId, project: w.p1, requests: reqIds, brief: briefId } };
     writeFileSync(join(__dirname, "..", "src", "dev", "fixtures.json"), JSON.stringify(fixtures, null, 1));
     vi.useRealTimers();
   });

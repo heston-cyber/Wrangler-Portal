@@ -150,6 +150,10 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "siteWatch.report": { pages: ["owner"], args: () => "skip" }, "siteWatch.run": { pages: ["owner"], args: () => "skip" }, "siteWatch.finding": { pages: ["owner"], args: () => "skip" }, // Settings › Site watch (admins only; the page asks only after summary says so)
   "home.dashboard": { pages: ["owner"], args: () => ({ tzOffsetMin: 300 }) }, // Dashboard: Today, Coming up, Live edits, Money
   "production.shoots": { pages: ["owner"], args: () => ({}) }, // Production › Shoots
+  "gear.list": { pages: ["owner"], args: () => ({}) }, // Production › Gear (Phase 5d)
+  "gear.get": { pages: ["owner"], args: () => "skip" }, // a gear item page
+  "gear.exportCsv": { pages: ["owner"], args: () => "skip" }, // Export for insurer (fired on the button)
+  "gear.forShoot": { pages: ["owner"], args: () => "skip" }, // a shoot's Gear on this shoot card
   "production.projectsForShoot": { pages: ["owner"], args: () => ({}) }, // New shoot
   // Phase 5b step 3: call sheets. The owner's pages; the client's reader and project card (null / [] for anyone it wasn't
   // sent to); the vendor's reader and Home list (the vendor side; tests/callSheets.test.ts fires them as vendors).

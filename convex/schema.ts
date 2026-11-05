@@ -1327,6 +1327,38 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_project", ["projectId", "date"]).index("by_date", ["date"]),
 
+  // Phase 5d step 3 (Nov 4): gear (Q57). Owner-only. The full serial is stored; screens show the last 4.
+  gear: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    name: v.string(),
+    kind: v.union(v.literal("camera"), v.literal("lens"), v.literal("audio"), v.literal("lighting"), v.literal("grip"), v.literal("drone"), v.literal("computer"), v.literal("other")),
+    serial: v.optional(v.string()),
+    boughtOn: v.optional(v.string()),            // YYYY-MM-DD
+    priceCents: v.optional(v.number()),
+    insuredCents: v.optional(v.number()),
+    photoId: v.optional(v.id("_storage")),
+    notes: v.optional(v.string()),
+    status: v.union(v.literal("in_service"), v.literal("in_repair"), v.literal("retired")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_status", ["status", "name"]),
+  gearMaintenance: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    gearId: v.id("gear"),
+    date: v.string(),                            // YYYY-MM-DD
+    what: v.string(),
+    costCents: v.optional(v.number()),
+    nextDue: v.optional(v.string()),             // YYYY-MM-DD
+    createdAt: v.number(),
+  }).index("by_gear", ["gearId", "date"]),
+  // Gear on a shoot. A same-day clash is named on the shoot page and never blocks.
+  gearBookings: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    gearId: v.id("gear"),
+    shootId: v.id("shoots"),
+    createdAt: v.number(),
+  }).index("by_shoot", ["shootId"]).index("by_gear", ["gearId"]),
+
   // Phase 5b step 3 (Nov 3): call sheets (D126, S5 · Phase 5b 765:2852 …). One per shoot. The page is a builder document
   // (its wsBuilds row, kind "callsheet"); until the quick questionnaire is finished there's no build yet, only answers.
   // `sent` is the copy everyone on it reads: frozen at Send, replaced by each Send an update. Each person on it has

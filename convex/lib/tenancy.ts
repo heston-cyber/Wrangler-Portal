@@ -12,6 +12,7 @@ export const BUSINESS_TABLES = [
   "calendarEvents", // Phase 5b step 5
   "briefingRecipients", // D147 (Nov 4)
   "offerRecipients", // D149 (Nov 4)
+  "gear", "gearMaintenance", "gearBookings", // Phase 5d step 3 (Nov 4)
 ] as readonly string[];
 
 export const GLOBAL_TABLES = [

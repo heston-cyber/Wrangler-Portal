@@ -10,6 +10,7 @@ import { Modal, useConfirm, useToast } from "../../ui/kit";
 import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps } from "../../lib/router";
 import { errText } from "../docs/pages/common";
+import { GearOnShoot } from "../production/Gear";
 
 export const clock = (hhmm: string) => { const [h, m] = hhmm.split(":").map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
 export const shootDay = (ymd: string, long = false) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", weekday: long ? "long" : "short", month: "short", day: "numeric" });
@@ -104,6 +105,7 @@ export function ShootDialog({ projectId, label, data, shoot, client, people, onC
             </div>
             {data.crew.length === 0 && <span className="wp-field-hint">Book vendors on this project (the Crew card) to add them here.</span>}
           </div>
+          {shoot && <GearOnShoot shootId={shoot._id} />}
           <div className="qz-q wide"><Checkbox checked={calendar} onChange={setCalendar} label={data.calendar ? `Add to ${data.calendar}` : "Add to your calendar"} hint={data.calendar ? "Set in Settings › Calendar." : "Once Settings › Calendar is connected, shoots you tick go on it and move with it."} /></div>
         </div>
         {err && <p className="error" role="alert">{err}</p>}
