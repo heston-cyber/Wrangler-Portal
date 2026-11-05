@@ -57,9 +57,9 @@ export default function BriefingsPage() {
   const shown = (rows ?? []).filter((x) => pill === "all" || x.state === pill);
   return (
     <>
-      <TopBar><a {...linkProps("/vendors")}>Vendors</a><Sep /><span className="here">Briefings</span></TopBar>
+      <TopBar><a {...linkProps("/production")}>Production</a><Sep /><span className="here">Briefings</span></TopBar>
       <div className="wp-page">
-        <PageHeader eyebrow="Vendors" title="Briefings." sub="Shoot and edit briefs, made in the builder. Email one to a booked vendor or to anyone else, or copy a link; see who has opened it." actions={<Button variant="primary" onClick={() => setNew({})}>New briefing</Button>} />
+        <PageHeader eyebrow="Production · Pre-pro" title="Briefings." sub="Shoot and edit briefs, made in the builder. Email one to a booked vendor or to anyone else, or copy a link; see who has opened it." actions={<Button variant="primary" onClick={() => setNew({})}>New briefing</Button>} />
         {rows === undefined ? <Card label="Loading"><SkeletonRows n={4} /></Card> : (
           <>
             {rows.length > 0 && <PillTabs label="Show" value={pill} onChange={setPill} items={[{ key: "all", label: "All", count: count("all") }, { key: "draft", label: "Draft", count: count("draft") }, { key: "sent", label: "Sent", count: count("sent") }, { key: "read", label: "Read", count: count("read") }]} />}

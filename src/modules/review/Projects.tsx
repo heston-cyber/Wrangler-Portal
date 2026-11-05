@@ -217,7 +217,7 @@ export default function Projects({ projectId, embedded }: { projectId?: Id<"proj
   return (
     <>
       {embedded ? <div className="pj-cutsbar">{topRight}</div> : <TopBar right={topRight}>
-        <a {...linkProps("/review")}>Review</a><Sep />
+        <a {...linkProps("/production")}>Production</a><Sep />
         {projectId ? <><a {...linkProps("/projects")}>Projects</a><Sep /><span className="here">{project ? projectLabel(project) : "…"}</span></> : <span className="here">Projects</span>}
       </TopBar>}
 

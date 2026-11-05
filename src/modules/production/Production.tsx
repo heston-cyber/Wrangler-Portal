@@ -190,3 +190,16 @@ export function ProductionShoots() {
     </>
   );
 }
+
+// D150 (Heston, Nov 4): Production › Delivery, a placeholder. Later: the catalog of each client's stored media.
+export function ProductionDelivery() {
+  return (
+    <>
+      <TopBar><a {...linkProps("/production")}>Production</a><Sep /><span className="here">Delivery</span></TopBar>
+      <div className="wp-page prod">
+        <PageHeader eyebrow="Production · Delivery" title="Delivery." sub="Coming soon." />
+        <EmptyState icon="folder" title="Coming soon." body="This will be the catalog of the media you store for each client: finished videos, raw footage and stills, ready to find and send." />
+      </div>
+    </>
+  );
+}

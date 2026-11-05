@@ -26,8 +26,11 @@ describe("tools", () => {
   });
   test("a new tool joins at its default place", () => {
     const old = toolsOf({ order: ["sent", "dashboard", "clients", "review", "docs", "payments", "vendors"] }); // saved before Proposals existed
-    expect(old.order).toEqual(["sent", "dashboard", "clients", "review", "docs", "proposals", "payments", "vendors", "production"]);
-    // Phase 5b: a menu saved before Production gets it right after Vendors (D126).
-    expect(toolsOf({ order: ["dashboard", "vendors", "clients", "sent"] }).order.slice(0, 3)).toEqual(["dashboard", "vendors", "production"]);
+    expect(old.order).toEqual(["sent", "dashboard", "clients", "production", "docs", "proposals", "payments", "vendors"]);
+    // D150: a menu saved with Review puts Production where Review was (and only once).
+    expect(toolsOf({ order: ["dashboard", "review", "clients", "docs", "proposals", "payments", "vendors", "production", "sent"], hidden: ["review"] }))
+      .toMatchObject({ order: ["dashboard", "production", "clients", "docs", "proposals", "payments", "vendors", "sent"], hidden: [] });
+    // A menu saved without Production gets it right after Clients, its default place.
+    expect(toolsOf({ order: ["dashboard", "vendors", "clients", "sent"] }).order.slice(0, 4)).toEqual(["dashboard", "vendors", "clients", "production"]);
   });
 });

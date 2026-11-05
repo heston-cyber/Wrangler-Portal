@@ -393,7 +393,7 @@ export default function ProjectPage({ projectId, tab }: { projectId: Id<"project
         <Button size="sm" onClick={() => setDialog("share")}>Share</Button>
         {page.client && <ButtonLink size="sm" variant="primary" to={`/sent/new?client=${page.client._id}`}>Post a note</ButtonLink>}
       </>}>
-        <a {...linkProps("/review")}>Review</a><Sep /><a {...linkProps("/projects")}>Projects</a><Sep /><span className="here">{page.label}</span>
+        <a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/projects")}>Projects</a><Sep /><span className="here">{page.label}</span>
       </TopBar>
       <div className="wp-page cp pj">
         <a className="wp-setback" {...linkProps("/projects")}><Icon name="arrow-left" size={20} />Projects</a>

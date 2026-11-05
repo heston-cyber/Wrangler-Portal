@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useQuery } from "convex/react";
 import { Link2 } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
-import { TopBar, useShell } from "../../shell/Shell";
+import { Sep, TopBar, useShell } from "../../shell/Shell";
 import { useUpload } from "../../shell/UploadDialog";
 import { isVideoFile, useUploads } from "../../lib/uploads";
 import { linkProps } from "../../lib/router";
@@ -32,7 +32,7 @@ export default function Home() {
   const rows = shownTab === "opened" ? opened : latest;
   return (
     <>
-      <TopBar><span className="here">Review</span></TopBar>
+      <TopBar><a {...linkProps("/production")}>Production</a><Sep /><span className="here">Review</span></TopBar>
       <div className="wp-page"
         onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setOver(true); } }}
         onDragLeave={(e) => { if (e.currentTarget === e.target) setOver(false); }}

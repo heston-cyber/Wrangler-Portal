@@ -2947,3 +2947,9 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 .help-body .wp-h3 { display: none; } /* the title is already the page heading */
 .help-h { margin: 10px 0 0; font: 600 18px/1.35 var(--font-title); color: var(--text-primary); }
 @media (max-width: 640px) { .help-guide { padding: 18px; } .help-bar { flex-wrap: wrap; } .help-bar .btn { width: 100%; } }
+
+/* D150: Production's stages (Pre-pro · Prin-pro · Post-pro · Delivery) */
+.wp-layerlabel.wp-layergroup { padding: 8px 0 2px 48px; }
+.wp-sub.soon span { color: var(--text-muted); font-style: italic; }
+.wp-chips2 { margin-top: 8px; }
+.wp-chips2 .wp-layerchip { padding: 5px 12px; }

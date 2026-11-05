@@ -2,11 +2,11 @@
 // clicking a layer item opens its main page, the chevron opens its layer. Phone: the layers become chips under the
 // top bar and a glass tab bar is fixed at the bottom. The back office and the client side share it; the client side
 // wears its business's look (lib/brand.ts). Work surfaces (the review page) hide the sidebar and open it as a drawer.
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "convex/react";
 import { useSignOutAsk } from "./SignOut";
 import { sideWord, useSideSwitch } from "./SideSwitch";
-import { DEFAULT_TOOLS, type ToolKey, type Tools } from "../../convex/lib/tools";
+import { DEFAULT_TOOLS, toolsOf, type ToolKey, type Tools } from "../../convex/lib/tools";
 import { api } from "../../convex/_generated/api";
 import { linkProps, navigate, useLocation } from "../lib/router";
 import { useUploads } from "../lib/uploads";
@@ -26,14 +26,11 @@ const Ctx = createContext<ShellCtx>({ openSidebar: () => {}, peekSidebar: () => 
 export const useShell = () => useContext(Ctx);
 
 // ---------- what goes where ----------
-type Sub = { to: string; label: string; match: (p: string) => boolean };
+// D150 (Heston, Nov 4): a layer can be split into groups (Production's Pre-pro · Prin-pro · Post-pro · Delivery).
+type Sub = { to: string; label: string; match: (p: string) => boolean; group?: string };
 export type Item = { to: string; label: string; icon: IconName; match: (p: string) => boolean; tab?: (p: string) => boolean; layer?: Sub[]; layerHas?: (p: string) => boolean; badge?: number };
 
 const starts = (p: string, ...pre: string[]) => pre.some((x) => p === x || p.startsWith(x + "/"));
-const OWNER_REVIEW: Sub[] = [
-  { to: "/projects", label: "Projects", match: (p) => starts(p, "/projects") },
-  { to: "/activity", label: "Activity", match: (p) => starts(p, "/activity") },
-];
 const OWNER_DOCS: Sub[] = [
   { to: "/sign/new", label: "New document", match: (p) => starts(p, "/sign/new", "/sign/b") },
   { to: "/sign/docs", label: "All docs", match: (p) => starts(p, "/sign/docs", "/sign/d") },
@@ -55,20 +52,27 @@ const inProposals = (p: string) => starts(p, "/proposals");
 // Phase 3c (D95): Vendors is its own layer after Payments. Bookings, Briefings and Payments join as they're built.
 const OWNER_VENDORS: Sub[] = [
   { to: "/vendors", label: "All vendors", match: (p) => starts(p, "/vendors") && !starts(p, "/vendors/overview", "/vendors/bookings", "/vendors/briefings", "/vendors/payments") },
-  { to: "/vendors/bookings", label: "Bookings", match: (p) => starts(p, "/vendors/bookings") },
-  { to: "/vendors/briefings", label: "Briefings", match: (p) => starts(p, "/vendors/briefings") },
   { to: "/vendors/payments", label: "Payments", match: (p) => starts(p, "/vendors/payments") }, // step 5
 ];
-const inVendors = (p: string) => starts(p, "/vendors");
+// D150: Bookings and Briefings moved to Production › Pre-pro (their addresses stay).
+const inVendors = (p: string) => starts(p, "/vendors") && !starts(p, "/vendors/bookings", "/vendors/briefings");
 // Phase 5b (D126): Production after Vendors: Overview · Shoots, then Call sheets (step 3) and Calendar (step 5).
+// D150 (Heston, Nov 4): Production holds the whole pipeline, in four stages. Projects and Review (cuts) moved in from
+// Review, Bookings and Briefings from Vendors; every address stays as it was, so links already sent keep working.
 const OWNER_PRODUCTION: Sub[] = [
   { to: "/production", label: "Overview", match: (p) => p === "/production" || p === "/production/" },
-  { to: "/production/shoots", label: "Shoots", match: (p) => starts(p, "/production/shoots") },
-  { to: "/production/call-sheets", label: "Call sheets", match: (p) => starts(p, "/production/call-sheets") },
-  { to: "/production/calendar", label: "Calendar", match: (p) => starts(p, "/production/calendar") }, // Phase 5b step 5
-  { to: "/production/gear", label: "Gear", match: (p) => starts(p, "/production/gear") }, // Phase 5d step 3
+  { group: "Pre-pro", to: "/projects", label: "Projects", match: (p) => starts(p, "/projects") },
+  { group: "Pre-pro", to: "/vendors/bookings", label: "Bookings", match: (p) => starts(p, "/vendors/bookings") },
+  { group: "Pre-pro", to: "/vendors/briefings", label: "Briefings", match: (p) => starts(p, "/vendors/briefings") },
+  { group: "Pre-pro", to: "/production/call-sheets", label: "Call sheets", match: (p) => starts(p, "/production/call-sheets") },
+  { group: "Prin-pro", to: "/production/shoots", label: "Shoots", match: (p) => starts(p, "/production/shoots") },
+  { group: "Prin-pro", to: "/production/calendar", label: "Calendar", match: (p) => starts(p, "/production/calendar") },
+  { group: "Prin-pro", to: "/production/gear", label: "Gear", match: (p) => starts(p, "/production/gear") },
+  { group: "Post-pro", to: "/review/overview", label: "Review", match: (p) => starts(p, "/review", "/v") },
+  { group: "Post-pro", to: "/activity", label: "Activity", match: (p) => starts(p, "/activity") },
+  { group: "Delivery", to: "/production/delivery", label: "Coming soon", match: (p) => starts(p, "/production/delivery") },
 ];
-const inProduction = (p: string) => starts(p, "/production");
+const inProduction = (p: string) => starts(p, "/production", "/projects", "/review", "/activity", "/v", "/vendors/bookings", "/vendors/briefings");
 // Phase 3 (Heston, Oct 29): Clients becomes a layer: Pipeline · Companies · Follow-ups. Companies is the client list.
 const CRM = ["/clients/overview", "/clients/pipeline", "/clients/follow-ups", "/clients/deals", "/clients/estimates", "/clients/testimonials"];
 const OWNER_CLIENTS: Sub[] = [
@@ -78,15 +82,14 @@ const OWNER_CLIENTS: Sub[] = [
   { to: "/clients/testimonials", label: "Testimonials", match: (p) => starts(p, "/clients/testimonials") }, // Phase 5 (D99)
 ];
 const inClients = (p: string) => starts(p, "/clients");
-const inReview = (p: string) => starts(p, "/review", "/projects", "/activity", "/v");
 const inDocs = (p: string) => starts(p, "/sign", "/docs");
 
 // Nov 2 (Heston): Settings › Tools sets this owner's menu: the order, which tools are on it, and Home is now Dashboard.
 // Phones: the first four tools on the menu, then More (the rest, then Settings).
-function ownerItems(payments = false, tools: Tools = DEFAULT_TOOLS): { main: Item[]; tabs: Item[] } {
+function ownerItems(payments = false, saved: Tools = DEFAULT_TOOLS): { main: Item[]; tabs: Item[] } {
+  const tools = toolsOf(saved); // D150: a menu saved with Review shows Production in its place, even before the server re-saves it
   const home: Item = { to: "/", label: "Dashboard", icon: "home", match: (p) => p === "/" };
   const clients: Item = { to: "/clients/overview", label: "Clients", icon: "users", match: (p) => p === "/clients/overview", tab: inClients, layer: OWNER_CLIENTS, layerHas: inClients };
-  const review: Item = { to: "/review/overview", label: "Review", icon: "review", match: (p) => p === "/review" || p === "/review/overview", tab: inReview, layer: OWNER_REVIEW, layerHas: inReview };
   const docs: Item = { to: "/sign/overview", label: "Docs", icon: "document", match: (p) => p === "/sign" || p === "/sign/overview", tab: inDocs, layer: OWNER_DOCS, layerHas: inDocs };
   const proposals: Item = { to: "/proposals/overview", label: "Proposals", icon: "quote", match: (p) => p === "/proposals/overview", tab: inProposals, layer: OWNER_PROPOSALS, layerHas: inProposals };
   const vendors: Item = { to: "/vendors/overview", label: "Vendors", icon: "user", match: (p) => p === "/vendors/overview", tab: inVendors, layer: OWNER_VENDORS, layerHas: inVendors };
@@ -94,7 +97,7 @@ function ownerItems(payments = false, tools: Tools = DEFAULT_TOOLS): { main: Ite
   const sent: Item = { to: "/sent", label: "Sent", icon: "send", match: (p) => starts(p, "/sent") };
   // Phase 2 Part B: Payments › Invoices once the business has connected Stripe (D45).
   const pay: Item = { to: "/payments", label: "Payments", icon: "invoice", match: () => false, tab: inPayments, layer: OWNER_PAYMENTS, layerHas: inPayments };
-  const byKey: Record<ToolKey, Item | null> = { dashboard: home, clients, review, docs, proposals, payments: payments ? pay : null, vendors, production, sent };
+  const byKey: Record<ToolKey, Item | null> = { dashboard: home, clients, docs, proposals, payments: payments ? pay : null, vendors, production, sent };
   const main = tools.order.filter((k) => !tools.hidden.includes(k)).map((k) => byKey[k]).filter((x): x is Item => !!x);
   const tabbed = main.slice(0, 4);
   const rest = main.slice(4);
@@ -195,12 +198,25 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
             onHover={overlay && drawer === "peek" ? peek : undefined} />
         )}
         {overlay && drawer && <div className="wp-scrim" onClick={() => setDrawer(false)} />}
-        <PhoneTop me={me} side={side} items={nav.tabs} logo={logo} bizName={bizName} onSearch={onSearch} />
+        <PhoneTop me={me} side={side} items={[...nav.main, ...nav.tabs]} logo={logo} bizName={bizName} onSearch={onSearch} />
         <div className="main">{children}</div>
         <TabBar items={nav.tabs} />
       </div>
       {search && <SearchPalette onClose={() => setSearch(false)} />}
     </Ctx.Provider>
+  );
+}
+
+function LastOpened({ recent, path }: { recent: Recent[]; path: string }) {
+  return (
+    <>
+      <div className="wp-layerlabel"><span className="wp-label">Last opened</span></div>
+      {recent.map((x) => (
+        <a key={x._id} className="wp-recent" aria-current={path === `/v/${x._id}` ? "page" : undefined} {...linkProps(`/v/${x._id}`)} title={x.title}>
+          <Thumb src={x.thumb} className="th" /><span>{x.title}</span>
+        </a>
+      ))}
+    </>
   );
 }
 
@@ -248,19 +264,15 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
             </div>
             {it.layer && isOpen(it) && (
               <>
-                {it.layer.map((s) => (
-                  <a key={s.to} className="wp-sub" aria-current={s.match(path) ? "page" : undefined} {...linkProps(s.to)} title={s.label}><span>{s.label}</span></a>
+                {it.layer.map((s, i) => (
+                  <Fragment key={s.to}>
+                    {s.group && s.group !== it.layer![i - 1]?.group && <div className="wp-layerlabel wp-layergroup"><span className="wp-label">{s.group}</span></div>}
+                    <a className={`wp-sub${s.group === "Delivery" ? " soon" : ""}`} aria-current={s.match(path) ? "page" : undefined} {...linkProps(s.to)} title={s.label}><span>{s.label}</span></a>
+                    {/* D150: the last-opened cuts sit under Post-pro, while you're in Post-pro */}
+                    {s.to === "/activity" && side === "owner" && starts(path, "/review", "/v", "/activity") && recent.length > 0 && <LastOpened recent={recent} path={path} />}
+                  </Fragment>
                 ))}
-                {(it.to === "/review" || it.to === "/review/overview") && recent.length > 0 && (
-                  <>
-                    <div className="wp-layerlabel"><span className="wp-label">Last opened</span></div>
-                    {recent.map((x) => (
-                      <a key={x._id} className="wp-recent" aria-current={path === `/v/${x._id}` ? "page" : undefined} {...linkProps(`/v/${x._id}`)} title={x.title}>
-                        <Thumb src={x.thumb} className="th" /><span>{x.title}</span>
-                      </a>
-                    ))}
-                  </>
-                )}
+                {it.to === "/review" && recent.length > 0 && <LastOpened recent={recent} path={path} />}
               </>
             )}
           </div>
@@ -303,7 +315,15 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
 function PhoneTop({ me, side, items, logo, bizName, onSearch }: { me: Me; side: Side; items: Item[]; logo: string; bizName: string; onSearch?: () => void }) {
   const { path } = useLocation();
   const section = items.find((it) => (it.tab ?? it.match)(path));
-  const chips = section?.layer ? [{ to: section.to, label: section.label, match: section.match }, ...section.layer.filter((s) => !(side === "client" && s.to === "/review"))] : null;
+  const grouped = !!section?.layer?.some((s) => s.group);
+  // D150: a grouped layer (Production) shows its stages as chips, and the current stage's pages in a second row.
+  const stages = grouped ? [...new Set(section!.layer!.map((s) => s.group).filter((g): g is string => !!g))] : [];
+  const stageOf = (g: string) => section!.layer!.filter((s) => s.group === g);
+  const current = stages.find((g) => stageOf(g).some((s) => s.match(path))) ?? null;
+  const chips = !section?.layer ? null : grouped
+    ? [...section.layer.filter((s) => !s.group), ...stages.map((g) => ({ to: stageOf(g)[0].to, label: g, match: (p: string) => stageOf(g).some((s) => s.match(p)) }))]
+    : [{ to: section.to, label: section.label, match: section.match }, ...section.layer.filter((s) => !(side === "client" && s.to === "/review"))];
+  const second = current && stageOf(current).length > 1 ? stageOf(current) : null;
   // the client's "All shared" is the Review chip itself
   return (
     <div className="wp-ptop">
@@ -316,6 +336,11 @@ function PhoneTop({ me, side, items, logo, bizName, onSearch }: { me: Me; side: 
       {chips && (
         <nav className="wp-chips" aria-label={`${section!.label} pages`}>
           {chips.map((c) => <a key={c.to} className="wp-layerchip" aria-current={c.match(path) || (c.to === section!.to && side === "client" && path === "/review") ? "page" : undefined} {...linkProps(c.to)}>{c.label}</a>)}
+        </nav>
+      )}
+      {second && (
+        <nav className="wp-chips wp-chips2" aria-label={`${current} pages`}>
+          {second.map((c) => <a key={c.to} className="wp-layerchip" aria-current={c.match(path) ? "page" : undefined} {...linkProps(c.to)}>{c.label}</a>)}
         </nav>
       )}
     </div>

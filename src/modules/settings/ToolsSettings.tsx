@@ -10,10 +10,10 @@ import { Icon, type IconName } from "../../ui/Icon";
 import { errText } from "../docs/pages/common";
 import { SetHead } from "./Frame";
 
-const TOOL_ICON: Record<ToolKey, IconName> = { dashboard: "home", clients: "users", review: "review", docs: "document", proposals: "quote", payments: "invoice", vendors: "user", production: "video", sent: "send" };
+const TOOL_ICON: Record<ToolKey, IconName> = { dashboard: "home", clients: "users", docs: "document", proposals: "quote", payments: "invoice", vendors: "user", production: "video", sent: "send" };
 const TOOL_SUB: Record<ToolKey, string> = {
-  dashboard: "Today, clients and activity", clients: "Pipeline, companies, follow-ups", review: "Projects and activity", docs: "Documents and templates",
-  proposals: "Written pitches, templates", payments: "Shows once Stripe is connected", vendors: "Shooters, editors and crew you hire", production: "Shoots, live edits, call sheets, calendar", sent: "Notes and items you sent",
+  dashboard: "Today, clients and activity", clients: "Pipeline, companies, follow-ups", docs: "Documents and templates",
+  proposals: "Written pitches, templates", payments: "Shows once Stripe is connected", vendors: "Shooters, editors and crew you hire", production: "Pre-pro, shoots, Review and delivery", sent: "Notes and items you sent",
 };
 
 /** A list you can drag to reorder (mouse), or move with the arrow buttons (keyboard, phones). */
