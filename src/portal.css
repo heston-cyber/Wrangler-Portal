@@ -2949,7 +2949,13 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 @media (max-width: 640px) { .help-guide { padding: 18px; } .help-bar { flex-wrap: wrap; } .help-bar .btn { width: 100%; } }
 
 /* D150: Production's stages (Pre-pro · Prin-pro · Post-pro · Delivery) */
-.wp-layerlabel.wp-layergroup { padding: 8px 0 2px 48px; }
-.wp-sub.soon span { color: var(--text-muted); font-style: italic; }
+.wp-stagewrap { position: relative; display: flex; align-items: center; }
+.wp-stagewrap .wp-stage { flex: 1; min-width: 0; font-weight: 600; }
+.wp-stagewrap .stage-toggle { position: absolute; right: 4px; display: grid; place-items: center; width: 28px; height: 28px; border: 0; background: none; border-radius: 8px; padding: 0; color: var(--accent); cursor: pointer; }
+.wp-stagewrap .stage-toggle:hover { background: var(--surface-block-hover); }
+.wp-stagewrap .stage-toggle:focus-visible { outline: 2px solid var(--accent-ring); }
+.wp-stagewrap .wp-stage { color: var(--text-secondary); }
+.wp-sub.wp-stagesub { padding-left: 64px; }
+.wp-soon { margin-left: 8px; font: 500 10px/1 var(--font-title); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-muted); }
 .wp-chips2 { margin-top: 8px; }
 .wp-chips2 .wp-layerchip { padding: 5px 12px; }

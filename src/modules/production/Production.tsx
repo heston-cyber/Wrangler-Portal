@@ -203,3 +203,131 @@ export function ProductionDelivery() {
     </>
   );
 }
+
+// Heston (Nov 4, 21:01): each stage of Production has its own overview, opened from the stage's name in the menu.
+// Built from the pages' own data (no new reads): what's waiting in the stage, and a link to each of its pages.
+type StageKey = "pre-pro" | "prin-pro" | "post-pro";
+const STAGE_NAME: Record<StageKey, string> = { "pre-pro": "Pre-pro", "prin-pro": "Prin-pro", "post-pro": "Post-pro" };
+const STAGE_SUB: Record<StageKey, string> = {
+  "pre-pro": "Planning: projects, the crew you book, their briefings and call sheets.",
+  "prin-pro": "Shooting: the shoots, the calendar and the gear.",
+  "post-pro": "Editing: cuts out for review, notes to look at and who's watching.",
+};
+const shortDate = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
+
+export function ProductionStage({ stage }: { stage: StageKey }) {
+  return (
+    <>
+      <TopBar><a {...linkProps("/production")}>Production</a><Sep /><span className="here">{STAGE_NAME[stage]}</span></TopBar>
+      <div className="wp-page prod">
+        <PageHeader eyebrow="Production" title={`${STAGE_NAME[stage]}.`} sub={STAGE_SUB[stage]} />
+        {stage === "pre-pro" ? <PrePro /> : stage === "prin-pro" ? <PrinPro /> : <PostPro />}
+      </div>
+    </>
+  );
+}
+
+function PrePro() {
+  const o = useQuery(api.production.overview, {});
+  const bookings = useQuery(api.bookings.list, {});
+  const briefings = useQuery(api.briefings.list, {});
+  if (o === undefined || bookings === undefined || briefings === undefined) return <Card label="Loading"><SkeletonRows n={4} /></Card>;
+  if (!o || !bookings || !briefings) return null;
+  const offered = bookings.filter((b) => b.state === "offered");
+  const upcoming = bookings.filter((b) => b.state === "accepted" && b.end >= o.today);
+  const drafts = briefings.filter((b) => b.state === "draft");
+  return (
+    <>
+      <div className="pov-stats prod-tiles">
+        <Tile label="Waiting on vendors" n={offered.length} sub={`${plural(offered.length, "booking")} not answered yet`} to="/vendors/bookings" link="See bookings" />
+        <Tile label="Crew booked" n={upcoming.length} sub="accepted, coming up" to="/vendors/bookings" link="See bookings" />
+        <Tile label="Briefings" n={drafts.length} sub={`${plural(drafts.length, "draft")} not shared yet`} to="/vendors/briefings" link={drafts.length ? "Finish them" : "See them"} />
+        <Tile label="Call sheets" n={o.callSheets.notSent} sub="not sent yet" to="/production/call-sheets" link={o.callSheets.notSent ? "Write them" : "See them"} />
+      </div>
+      <div className="pov-cols">
+        <div className="col">
+          <Card label="Waiting on vendors" head={<SectionHead label="Waiting on vendors" count={offered.length || undefined} action={<ButtonLink size="sm" variant="ghost" to="/vendors/bookings" iconEnd={false}>All bookings</ButtonLink>} />}>
+            {offered.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "user" }} title="No booking is waiting for an answer." />
+              : offered.slice(0, 6).map((b, i) => <div key={b._id} className="wp-rowwrap">{i > 0 && <Divider />}<ListRow className="ilead" lead={{ icon: "user" }} to={`/vendors/bookings/${b._id}`} chevron title={`${b.vendor} · ${b.role}`} meta={`${b.project} · ${shortDate(b.start)}${b.end !== b.start ? ` – ${shortDate(b.end)}` : ""}`} chip={<StatusChip tone="warning">Offered</StatusChip>} /></div>)}
+          </Card>
+          <Card label="Briefings not shared" head={<SectionHead label="Briefings not shared" count={drafts.length || undefined} action={<ButtonLink size="sm" variant="ghost" to="/vendors/briefings" iconEnd={false}>All briefings</ButtonLink>} />}>
+            {drafts.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "note" }} title="Every briefing has been shared." />
+              : drafts.slice(0, 6).map((b, i) => <div key={b._id} className="wp-rowwrap">{i > 0 && <Divider />}<ListRow className="ilead" lead={{ icon: "note" }} to={`/vendors/briefings/${b._id}`} chevron title={b.title} meta={[b.kindName, b.project].filter(Boolean).join(" · ")} chip={<StatusChip tone="neutral">Draft</StatusChip>} /></div>)}
+          </Card>
+        </div>
+        <div className="col">
+          <Card label="Pre-pro pages" head={<SectionHead label="Pages" />}>
+            {[["/projects", "Projects", "folder", "Every project, its cuts, documents and dates"], ["/vendors/bookings", "Bookings", "user", "The crew you've booked"], ["/vendors/briefings", "Briefings", "note", "Shoot and edit briefs"], ["/production/call-sheets", "Call sheets", "document", "Who, where and when, for each shoot"]].map(([to, t, icon, m], i) => (
+              <div key={to} className="wp-rowwrap">{i > 0 && <Divider />}<ListRow className="ilead" lead={{ icon: icon as "folder" }} to={to} chevron title={t} meta={m} /></div>))}
+          </Card>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function PrinPro() {
+  const o = useQuery(api.production.overview, {});
+  const gear = useQuery(api.gear.list, {});
+  if (o === undefined || gear === undefined) return <Card label="Loading"><SkeletonRows n={4} /></Card>;
+  if (!o || !gear) return null;
+  const attention = gear.items.filter((g) => g.status === "in_repair" || g.due);
+  return (
+    <>
+      <div className="pov-stats prod-tiles">
+        <Tile label="Today" n={o.tiles.today} sub={o.tiles.todayFirst ? `${plural(o.tiles.today, "shoot")} · ${o.tiles.todayFirst.client ?? o.tiles.todayFirst.project}` : "no shoots"} to="/production/shoots?show=today" link="See shoots" />
+        <Tile label="This week" n={o.tiles.week} sub={`${plural(o.tiles.week, "shoot")}${o.tiles.weekNoSheet ? `, ${o.tiles.weekNoSheet} without a call sheet` : ""}`} to="/production/shoots" link="See shoots" />
+        <Tile label="Gear in repair" n={gear.tiles.inRepair} sub={gear.tiles.inRepair ? `${plural(gear.tiles.inRepair, "item")} away` : "nothing away"} to="/production/gear" link="See gear" />
+        <Tile label="Maintenance due" n={gear.tiles.due} sub={gear.tiles.due ? "on or past the date" : "all up to date"} to="/production/gear" link="See gear" />
+      </div>
+      <div className="pov-cols">
+        <div className="col">
+          <Card label="Shoots" head={<SectionHead label="Shoots coming up" count={o.shootsTotal || undefined} action={<ButtonLink size="sm" variant="ghost" to="/production/shoots" iconEnd={false}>See all</ButtonLink>} />}>
+            {o.shoots.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "video" }} title="No shoots coming up." />
+              : o.shoots.map((s, i) => <ShootLine key={s._id} s={s} today={o.today} first={i === 0} />)}
+          </Card>
+        </div>
+        <div className="col">
+          <Card label="Gear to look at" head={<SectionHead label="Gear to look at" count={attention.length || undefined} action={<ButtonLink size="sm" variant="ghost" to="/production/gear" iconEnd={false}>All gear</ButtonLink>} />}>
+            {attention.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "check-circle" }} title="Nothing in repair or due." />
+              : attention.slice(0, 6).map((g, i) => <div key={g._id} className="wp-rowwrap">{i > 0 && <Divider />}<ListRow className="ilead" lead={{ icon: "video" }} to={`/production/gear/${g._id}`} chevron title={g.name} chip={g.status === "in_repair" ? <StatusChip tone="warning">In repair</StatusChip> : <StatusChip tone="warning">Maintenance due</StatusChip>} /></div>)}
+          </Card>
+          <Card label="Google Calendar" head={<SectionHead label="Calendar" action={<ButtonLink size="sm" variant="ghost" to="/production/calendar" iconEnd={false}>Open calendar</ButtonLink>} />}>
+            <ListRow className="ilead" lead={{ icon: "calendar" }} to="/production/calendar" chevron title={o.calendar ? (o.calendar.calendar ?? o.calendar.email) : "Not connected"} meta={o.calendar ? `Last synced ${lastSynced(o.calendar.lastSyncedAt)}` : "Connect Google Calendar in Settings › Calendar"} />
+          </Card>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function PostPro() {
+  const r = useQuery(api.overviews.review, {});
+  const o = useQuery(api.production.overview, {});
+  if (r === undefined || o === undefined) return <Card label="Loading"><SkeletonRows n={4} /></Card>;
+  if (!r || !o) return null;
+  return (
+    <>
+      <div className="pov-stats prod-tiles">
+        <Tile label="Live edits" n={o.tiles.edits} sub="in Production or Polish" to="/review/overview" link="See edits" />
+        <Tile label="Waiting on clients" n={r.tiles.waiting} sub={`${plural(r.tiles.waiting, "cut")} out for review`} to="/review/overview" link="Open Review" />
+        <Tile label="New notes" n={r.tiles.notes} sub="to look at" to="/activity" link="Open notes" />
+        <Tile label="Delivered" n={r.tiles.delivered} sub="this month" to="/projects" link="See projects" />
+      </div>
+      <div className="pov-cols">
+        <div className="col">
+          <Card label="Live edits" head={<SectionHead label="Live edits" count={o.edits.length || undefined} action={<ButtonLink size="sm" variant="ghost" to="/review/overview" iconEnd={false}>Open Review</ButtonLink>} />}>
+            {o.edits.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "review" }} title="No projects in Production or Polish." />
+              : o.edits.map((e, i) => <EditLine key={e._id} e={e} first={i === 0} />)}
+          </Card>
+        </div>
+        <div className="col">
+          <Card label="Post-pro pages" head={<SectionHead label="Pages" />}>
+            {[["/review/overview", "Review", "review", "Cuts, notes and who's watching"], ["/activity", "Activity", "activity", "Views, notes and versions as they happen"]].map(([to, t, icon, m], i) => (
+              <div key={to} className="wp-rowwrap">{i > 0 && <Divider />}<ListRow className="ilead" lead={{ icon: icon as "review" }} to={to} chevron title={t} meta={m} /></div>))}
+          </Card>
+        </div>
+      </div>
+    </>
+  );
+}

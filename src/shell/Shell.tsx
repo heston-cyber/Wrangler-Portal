@@ -70,8 +70,13 @@ const OWNER_PRODUCTION: Sub[] = [
   { group: "Prin-pro", to: "/production/gear", label: "Gear", match: (p) => starts(p, "/production/gear") },
   { group: "Post-pro", to: "/review/overview", label: "Review", match: (p) => starts(p, "/review", "/v") },
   { group: "Post-pro", to: "/activity", label: "Activity", match: (p) => starts(p, "/activity") },
-  { group: "Delivery", to: "/production/delivery", label: "Coming soon", match: (p) => starts(p, "/production/delivery") },
 ];
+// Heston (Nov 4, 21:01): each stage folds with an arrow, and its name opens the stage's own overview. Delivery is only
+// its "Coming soon" page for now, so it has no pages under it.
+export const STAGE_TO: Record<string, string> = { "Pre-pro": "/production/pre-pro", "Prin-pro": "/production/prin-pro", "Post-pro": "/production/post-pro", Delivery: "/production/delivery" };
+const STAGE_ORDER = ["Pre-pro", "Prin-pro", "Post-pro", "Delivery"];
+const stageItems = (layer: Sub[], g: string) => layer.filter((s) => s.group === g);
+const inStage = (layer: Sub[], g: string, p: string) => starts(p, STAGE_TO[g]) || stageItems(layer, g).some((s) => s.match(p));
 const inProduction = (p: string) => starts(p, "/production", "/projects", "/review", "/activity", "/v", "/vendors/bookings", "/vendors/briefings");
 // Phase 3 (Heston, Oct 29): Clients becomes a layer: Pipeline · Companies · Follow-ups. Companies is the client list.
 const CRM = ["/clients/overview", "/clients/pipeline", "/clients/follow-ups", "/clients/deals", "/clients/estimates", "/clients/testimonials"];
@@ -264,14 +269,35 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
             </div>
             {it.layer && isOpen(it) && (
               <>
-                {it.layer.map((s, i) => (
-                  <Fragment key={s.to}>
-                    {s.group && s.group !== it.layer![i - 1]?.group && <div className="wp-layerlabel wp-layergroup"><span className="wp-label">{s.group}</span></div>}
-                    <a className={`wp-sub${s.group === "Delivery" ? " soon" : ""}`} aria-current={s.match(path) ? "page" : undefined} {...linkProps(s.to)} title={s.label}><span>{s.label}</span></a>
-                    {/* D150: the last-opened cuts sit under Post-pro, while you're in Post-pro */}
-                    {s.to === "/activity" && side === "owner" && starts(path, "/review", "/v", "/activity") && recent.length > 0 && <LastOpened recent={recent} path={path} />}
-                  </Fragment>
+                {it.layer.filter((s) => !s.group).map((s) => (
+                  <a key={s.to} className="wp-sub" aria-current={s.match(path) ? "page" : undefined} {...linkProps(s.to)} title={s.label}><span>{s.label}</span></a>
                 ))}
+                {it.layer.some((s) => s.group) && STAGE_ORDER.map((g) => {
+                  const kids = stageItems(it.layer!, g);
+                  const key = `${it.to}#${g}`;
+                  const on = open[key] ?? inStage(it.layer!, g, path);
+                  return (
+                    <Fragment key={g}>
+                      <div className="wp-stagewrap">
+                        <a className={`wp-sub wp-stage${kids.length ? "" : " soon"}`} aria-current={starts(path, STAGE_TO[g]) ? "page" : undefined} {...linkProps(STAGE_TO[g])} title={`${g} overview`}>
+                          <span>{g}</span>{!kids.length && <span className="wp-soon">Soon</span>}
+                        </a>
+                        {kids.length > 0 && (
+                          <button type="button" className="layer-toggle stage-toggle" aria-expanded={on} aria-label={`${on ? "Close" : "Open"} ${g}`} onClick={() => setOpen((o) => ({ ...o, [key]: !on }))}>
+                            <Icon name={on ? "chevron-down" : "chevron-right"} size={14} />
+                          </button>
+                        )}
+                      </div>
+                      {on && kids.map((s) => (
+                        <Fragment key={s.to}>
+                          <a className="wp-sub wp-stagesub" aria-current={s.match(path) ? "page" : undefined} {...linkProps(s.to)} title={s.label}><span>{s.label}</span></a>
+                          {/* D150: the last-opened cuts sit under Post-pro, while you're in Post-pro */}
+                          {s.to === "/activity" && side === "owner" && starts(path, "/review", "/v", "/activity") && recent.length > 0 && <LastOpened recent={recent} path={path} />}
+                        </Fragment>
+                      ))}
+                    </Fragment>
+                  );
+                })}
                 {it.to === "/review" && recent.length > 0 && <LastOpened recent={recent} path={path} />}
               </>
             )}
@@ -317,11 +343,11 @@ function PhoneTop({ me, side, items, logo, bizName, onSearch }: { me: Me; side: 
   const section = items.find((it) => (it.tab ?? it.match)(path));
   const grouped = !!section?.layer?.some((s) => s.group);
   // D150: a grouped layer (Production) shows its stages as chips, and the current stage's pages in a second row.
-  const stages = grouped ? [...new Set(section!.layer!.map((s) => s.group).filter((g): g is string => !!g))] : [];
-  const stageOf = (g: string) => section!.layer!.filter((s) => s.group === g);
-  const current = stages.find((g) => stageOf(g).some((s) => s.match(path))) ?? null;
+  const stages = grouped ? STAGE_ORDER : [];
+  const stageOf = (g: string) => stageItems(section!.layer!, g);
+  const current = stages.find((g) => inStage(section!.layer!, g, path)) ?? null;
   const chips = !section?.layer ? null : grouped
-    ? [...section.layer.filter((s) => !s.group), ...stages.map((g) => ({ to: stageOf(g)[0].to, label: g, match: (p: string) => stageOf(g).some((s) => s.match(p)) }))]
+    ? [...section.layer.filter((s) => !s.group), ...stages.map((g) => ({ to: STAGE_TO[g], label: g, match: (p: string) => inStage(section!.layer!, g, p) }))]
     : [{ to: section.to, label: section.label, match: section.match }, ...section.layer.filter((s) => !(side === "client" && s.to === "/review"))];
   const second = current && stageOf(current).length > 1 ? stageOf(current) : null;
   // the client's "All shared" is the Review chip itself
