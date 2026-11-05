@@ -179,7 +179,7 @@ export function CallPage({ token }: { token: string }) {
   const dl = <dl className="bc-dl"><dt>When</dt><dd>{whenLabel(c.start, c.end, tz)}</dd><dt>Length</dt><dd>{len} minutes</dd><dt>With</dt><dd>{withWho}</dd>{c.meet && <><dt>Video</dt><dd><a href={c.meet} target="_blank" rel="noopener noreferrer">Google Meet</a></dd></>}</dl>;
   if (c.status === "verifying" && c.code) return shell(<CodeStep token={token} email={c.email} when={whenLabel(c.start, c.end, tz)} code={c.code} slug={c.slug} />);
   if (c.status === "lapsed" || c.status === "verifying") return shell(<>
-    <Banner tone="danger" icon="alert" title="Nothing was booked." text="The code wasn't entered in time, so the time was let go." />
+    <Banner tone="danger" icon="alert" title="Nothing was booked." text="The code wasn't entered, so the time was let go." />
     <ButtonLink variant="primary" to={`/book/${c.slug}`}>Pick a time again</ButtonLink>
   </>);
   if (c.status === "holding") return shell(<div className="bc-reading"><SkeletonRows n={2} label="Booking" /><p className="wp-body">Booking your call…</p><p className="wp-small secondary">Checking the time is still free. This takes a moment.</p></div>);
@@ -237,6 +237,7 @@ export function CallPage({ token }: { token: string }) {
 function CodeStep({ token, email, when, code, slug }: { token: string; email: string; when: string; code: { until: number; triesLeft: number; sentAt: number }; slug: string }) {
   const verify = useMutation(api.calls.verify);
   const resend = useMutation(api.calls.resendCode);
+  const release = useMutation(api.calls.release);
   const [toastNode, toast] = useToast();
   const [value, setValue] = useState(""), [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
@@ -261,7 +262,7 @@ function CodeStep({ token, email, when, code, slug }: { token: string; email: st
     </form>
     {err && <p className="error" role="alert">{err}</p>}
     <p id="bc-code-help" className="wp-small secondary">Your time is held for {minsLeft} more minute{minsLeft === 1 ? "" : "s"}. No email? Check your spam folder, or <button type="button" className="linkbtn" onClick={() => void again()}>send a new code</button>.</p>
-    <div className="bc-foot"><ButtonLink variant="ghost" to={`/book/${slug}`}>Pick a different time</ButtonLink></div>
+    <div className="bc-foot"><Button variant="ghost" onClick={() => { void release({ token }).catch(() => undefined).finally(() => navigate(`/book/${slug}`)); }}>Pick a different time</Button></div>
     {toastNode}
   </>);
 }

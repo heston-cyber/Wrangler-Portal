@@ -1352,7 +1352,8 @@ export default defineSchema({
     // else happens (no card, no calendar event, no other email) until it's right. "lapsed": the code never came back.
     status: v.union(v.literal("verifying"), v.literal("holding"), v.literal("booked"), v.literal("taken"), v.literal("cancelled"), v.literal("lapsed")),
     token: v.string(),
-    code: v.optional(v.object({ hash: v.string(), tries: v.number(), sent: v.number(), until: v.number() })),
+    code: v.optional(v.object({ hash: v.string(), tries: v.number(), resends: v.optional(v.number()), sent: v.number(), until: v.number() })),
+    noHold: v.optional(v.boolean()),             // review M1: past five picks waiting for a code, a new one doesn't hold its time
     heldAt: v.optional(v.number()),               // when the code was right and the time was held for Google's check
     moving: v.optional(v.object({ start: v.number(), end: v.number(), at: v.number() })), // a new time, being checked
     moveTaken: v.optional(v.number()),           // the last new time picked was taken meanwhile (shown once)

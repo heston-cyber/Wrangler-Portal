@@ -24,4 +24,6 @@ crons.interval("google calendar sync", { minutes: 5 }, internal.calendarSync.pul
 // D148 (Nov 4): call sheets' Weather blocks: the forecast fills within a week of the shoot and refreshes the day before
 // (about 5 PM Central; NWS and the Census geocoder, no key).
 crons.daily("call sheet weather", { hourUTC: 23, minuteUTC: 13 }, internal.callSheets.weatherAll, {});
+// Review L5 (Nov 4): booking picks never confirmed with their code are deleted a week after they were let go.
+crons.daily("lapsed call picks", { hourUTC: 9, minuteUTC: 41 }, internal.calls.purgeLapsed, {});
 export default crons;

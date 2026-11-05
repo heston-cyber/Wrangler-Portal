@@ -363,6 +363,86 @@ describe("booking calls", () => {
     expect((await w.open()).state).toBe("open");
   });
 
+  test("T5d.9 Review fixes: unconfirmed picks don't use up bookings or hold every time (M1); 30 minutes and 3 new codes at most, tries carry over (L1, L2); a new pick replaces the old one, Pick a different time lets go (L3); moves work while the page is off (L4); lapsed picks keep no note and go after a week (L5); another business can't touch a pick (L6)", async () => {
+    const w = await world();
+    const p = await w.open();
+    const call = (token: string) => w.t.run(async (ctx) => (await ctx.db.query("calls").withIndex("by_token", (q) => q.eq("token", token)).unique())!);
+    // M1: 25 picks never confirmed (more than the 20 bookings an hour) don't stop a real lead; only the first five
+    // waiting hold their time.
+    const junk: string[] = [];
+    const spread: number[] = [];
+    for (const x of p.slots) if (!spread.length || x - spread[spread.length - 1] >= 60 * 60_000) spread.push(x); // apart from each other's buffer
+    for (let i = 0; i < 25; i++) junk.push((await pick(w, spread[i % 10], { name: "J", email: `j${i}@x.example` })).token ?? "");
+    expect(junk.filter(Boolean)).toHaveLength(15); // the first five times are held; the next five aren't, so they're picked again
+    expect((await call(junk[5])).noHold).toBe(true);
+    const page = await w.t.query(api.calls.page, { slug: w.slug });
+    expect(page.slots).not.toContain(spread[0]);
+    expect(page.slots).toContain(spread[5]); // the sixth waiting pick doesn't hold its time
+    const real = await book(w, spread[5], { name: "Real", email: "real@lead.example" });
+    expect(real.token).toBeTruthy();
+    expect((await w.t.mutation(api.calls.verify, { token: junk[5], code: "000000" })).error).toBeTruthy();
+    // L5: a lapsed pick keeps no note or name.
+    const lapsed = await w.t.run(async (ctx) => (await ctx.db.query("calls").collect()).find((c) => c.status === "lapsed" && c.email === "j5@x.example") ?? null);
+    expect(lapsed === null || (lapsed.name === "" && !lapsed.note)).toBe(true);
+
+    await w.settle(); // the junk picks' 10 minutes pass
+    await w.open();
+    // L1, L2: three new codes at most, tries carry over, never past 30 minutes from the pick.
+    const r = await pick(w, at("2030-01-09T16:00:00Z"), { name: "Bo", email: "bo@lead.example" });
+    await codeFor(w, "bo@lead.example");
+    await w.t.mutation(api.calls.verify, { token: r.token, code: "000000" });
+    await w.t.mutation(api.calls.verify, { token: r.token, code: "000001" });
+    for (let i = 0; i < 3; i++) { vi.advanceTimersByTime(31_000); await w.t.mutation(api.calls.resendCode, { token: r.token }); }
+    vi.advanceTimersByTime(31_000);
+    await expect(w.t.mutation(api.calls.resendCode, { token: r.token })).rejects.toThrow(/No more codes/);
+    const row = await call(r.token);
+    expect(row.code!.tries).toBe(2);
+    expect(row.code!.until).toBeLessThanOrEqual(row.createdAt + 30 * 60_000);
+    // L3: a new pick from the same address replaces the one waiting (no "You already have calls booked").
+    const r2 = await pick(w, at("2030-01-09T17:00:00Z"), { name: "Bo", email: "bo@lead.example" });
+    expect((await call(r.token)).status).toBe("lapsed");
+    expect((await call(r.token)).note).toBeUndefined();
+    // Pick a different time lets the time go at once.
+    expect((await w.t.query(api.calls.page, { slug: w.slug })).slots).not.toContain(at("2030-01-09T17:00:00Z"));
+    await w.t.mutation(api.calls.release, { token: r2.token });
+    expect((await w.t.query(api.calls.page, { slug: w.slug })).slots).toContain(at("2030-01-09T17:00:00Z"));
+
+    // L6: another business's owner can't verify, resend or let go of a real pick here.
+    const r3 = await pick(w, at("2030-01-09T18:00:00Z"), { name: "Cy", email: "cy@lead.example" });
+    const c3 = (await codeFor(w, "cy@lead.example"))!;
+    const other = await w.t.run(async (ctx) => {
+      const bz = await ctx.db.insert("businesses", { slug: "other", name: "Other Co", createdAt: 0 });
+      const u = await ctx.db.insert("users", { email: "boss@other.example", name: "Boss" });
+      await ctx.db.insert("memberships", { businessId: bz, email: "boss@other.example", userId: u, role: "owner", createdAt: 0 });
+      return `${u}|${await ctx.db.insert("authSessions", { userId: u, expirationTime: Date.now() + 3_600_000 })}`;
+    });
+    const boss = w.t.withIdentity({ subject: other });
+    const before = JSON.stringify(await call(r3.token));
+    await expect(boss.mutation(api.calls.verify, { token: r3.token, code: c3 })).rejects.toThrow(/doesn't work/);
+    vi.advanceTimersByTime(31_000);
+    await expect(boss.mutation(api.calls.resendCode, { token: r3.token })).rejects.toThrow(/doesn't work/);
+    await expect(boss.mutation(api.calls.release, { token: r3.token })).rejects.toThrow(/doesn't work/);
+    expect(JSON.stringify(await call(r3.token))).toBe(before);
+
+    // L4: switched off, a pick waiting for its code can't finish, but a booked call can still move.
+    await w.owner.mutation(api.calls.setPaused, { paused: true });
+    expect((await w.t.mutation(api.calls.verify, { token: r3.token, code: c3 })).error).toMatch(/isn't open/);
+    expect((await call(r3.token)).status).toBe("lapsed");
+    await w.settle();
+    await w.t.mutation(api.calls.refresh, { slug: w.slug });
+    await w.settle();
+    expect((await w.t.query(api.calls.page, { slug: w.slug })).state).toBe("closed");
+    expect((await w.t.query(api.calls.page, { slug: w.slug, token: real.token })).state).toBe("open");
+    expect((await w.t.mutation(api.calls.reschedule, { token: real.token, start: at("2030-01-10T16:00:00Z") })).error).toBeNull();
+
+    // L5: a week later, picks never confirmed are deleted; booked calls stay.
+    vi.advanceTimersByTime(8 * 86_400_000);
+    const { internal } = await import("../convex/_generated/api");
+    expect(await w.t.action(internal.calls.purgeLapsed, {})).toBeGreaterThan(0);
+    expect(await w.t.run(async (ctx) => (await ctx.db.query("calls").collect()).filter((c) => c.status === "lapsed").length)).toBe(0);
+    expect((await call(real.token)).status).toBe("booked");
+  });
+
   test("Open times keep the business's 9 AM through a daylight-saving change", () => {
     const sat = Date.parse("2030-03-09T18:00:00Z"); // Saturday before the change (Mar 10)
     const s = openSlots({ ...DEFAULT_PREFS, noticeHours: 1, aheadDays: 7 }, sat, [], []);

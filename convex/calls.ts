@@ -38,7 +38,11 @@ const FRESH_FOR = 10 * 60_000;      // a booking needs busy times read in the la
 const MAX_UPCOMING = 3;             // per email address
 const HOLD_FOR = 5 * 60_000;        // review L1: a held time or a move still unchecked after this is let go
 const CODE_FOR = 10 * 60_000;       // Heston (Nov 4, 21:57): the emailed code works for 10 minutes; the time is held till then
-const CODE_TRIES = 5;               // wrong codes before the pick is let go
+const CODE_TRIES = 5;               // wrong codes before the pick is let go (a new code doesn't reset them: review L2)
+const CODE_MAX = 30 * 60_000;       // review L1: a pick waits for its code 30 minutes at most, new codes included
+const RESENDS = 3;                  // new codes per pick
+const WAITING_HOLD = 5;             // review M1: picks waiting for a code that hold their time, per business
+const PURGE_AFTER = 7 * 86_400_000; // review L5: a pick that was never confirmed is deleted after a week
 const CODE = /^\d{6}$/;
 /** A 6-digit code, every digit equally likely. */
 function newCode() {
@@ -47,6 +51,8 @@ function newCode() {
 }
 const codeHash = async (callId: string, code: string) => sha256Hex(`call-code:${callId}:${code}`);
 const LIVE = (c: Doc<"calls">) => c.status === "booked" || c.status === "holding" || c.status === "verifying";
+/** A pick waiting for its code holds its time while the code still works (and it's one of the first five waiting). */
+const holds = (c: Doc<"calls">, now: number) => c.status !== "verifying" || (!c.noHold && !!c.code && c.code.until > now);
 /** Review M2: the Google event's id is fixed up front (lower-case hex is valid for Google), so it can always be removed. */
 export const callEventId = (callId: string) => `call${Array.from(new TextEncoder().encode(callId), (b) => b.toString(16).padStart(2, "0")).join("")}`.slice(0, 1000);
 const tidy = (s: string | undefined, max: number) => (s ?? "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, " ").trim().slice(0, max);
@@ -60,8 +66,8 @@ async function openState(ctx: Ctx) {
   const row = await settingsRow(ctx);
   const conn = await connection(ctx);
   // Heston (Nov 4, 21:57): the owner can switch the page off; calls already booked can still be moved or cancelled.
-  const open = !!row && !row.paused && hasKeys() && !!conn && !conn.disconnectedAt && !!conn.calendarId;
-  return { row, conn, open, checkId: row?.calendarId ?? conn?.calendarId ?? null };
+  const ready = !!row && hasKeys() && !!conn && !conn.disconnectedAt && !!conn.calendarId; // booked calls can still move
+  return { row, conn, ready, open: ready && !row?.paused, checkId: row?.calendarId ?? conn?.calendarId ?? null };
 }
 
 async function bizBySlug(ctx: Ctx, slug: string) {
@@ -77,7 +83,7 @@ async function takenSpans(ctx: Ctx, now: number, except?: Id<"calls">): Promise<
   const out: Span[] = [];
   for (const c of await ctx.db.query("calls").withIndex("by_start", (q) => q.gte("start", now - 86_400_000)).collect()) {
     if (c._id === except) continue;
-    if (LIVE(c)) out.push({ s: c.start, e: c.end }); // a time waiting for its code is held too
+    if (LIVE(c) && holds(c, now)) out.push({ s: c.start, e: c.end }); // a time waiting for its code is held too
     if (c.moving) out.push({ s: c.moving.start, e: c.moving.end });
   }
   return out;
@@ -98,11 +104,12 @@ export const page = query({
     if (!biz) return null;
     if (otherOwner(ctx, biz._id)) return { state: "otherOwner" as const, business: await brandBits(ctx, biz) };
     focusBusiness(ctx, biz._id);
-    const { row, open } = await openState(ctx);
+    const { row, open, ready } = await openState(ctx);
     const business = await brandBits(ctx, biz);
-    if (!open || !row) return { state: "closed" as const, business };
-    const now = Date.now();
     const mine = token && TOKEN.test(token) ? await ctx.db.query("calls").withIndex("by_token", (q) => q.eq("token", token)).unique() : null;
+    // Switched off, the page is closed, except to a lead moving a call already booked (review L4).
+    if (!row || !(open || (ready && mine?.status === "booked"))) return { state: "closed" as const, business };
+    const now = Date.now();
     const busy = row.busy && row.busy.at > now - FRESH_FOR ? row.busy.spans : null;
     const slots = busy ? openSlots(prefsOf(row), now, busy, await takenSpans(ctx, now, mine?._id), 600, row.busy!.e) : [];
     return {
@@ -119,8 +126,8 @@ export const refresh = mutation({
     const biz = await bizBySlug(ctx, slug);
     if (!biz || otherOwner(ctx, biz._id)) return null;
     focusBusiness(ctx, biz._id);
-    const { row, open } = await openState(ctx);
-    if (!open || !row) return null;
+    const { row, ready } = await openState(ctx);
+    if (!ready || !row) return null; // a booked call can still be moved while the page is off
     const now = Date.now();
     if (row.busy && row.busy.at > now - READ_EVERY) return "fresh";
     if (row.readingAt && row.readingAt > now - 30_000) return "reading";
@@ -170,26 +177,38 @@ export const book = mutation({
       await ctx.scheduler.runAfter(0, internal.calls.readBusy, {});
       return { token: null, error: "The open times have changed. Pick a time again." };
     }
+    const mineAll = await ctx.db.query("calls").withIndex("by_email", (q) => q.eq("email", email)).collect();
+    // Review L3: only calls actually booked count; a pick still waiting for its code is replaced by this one.
+    if (mineAll.filter((c) => (c.status === "booked" || c.status === "holding") && c.start >= now).length >= MAX_UPCOMING) throw new ConvexError("You already have calls booked. Move one of those instead.");
+    // Review M1, L2: picks and code emails have their own limits (per business, per address, per day); the business's
+    // booking limits are counted when a call is really made (verify).
+    await bump(ctx, "callPickBiz", String(biz._id));
+    await bumpDay(ctx, "callPickDay", String(biz._id));
+    await bumpDay(ctx, "callCodeDay", `${biz._id}:${email}`);
+    await bumpDay(ctx, "callCodeAddr", email);
+    for (const c of mineAll) if (c.status === "verifying") await lapse(ctx, c, "Let go: the lead picked another time", now);
     if (!openSlots(prefsOf(row), now, row.busy.spans, await takenSpans(ctx, now), 600, row.busy.e).includes(a.start)) return { token: null, error: "That time was just taken. Pick another." };
-    const upcoming = (await ctx.db.query("calls").withIndex("by_email", (q) => q.eq("email", email).gte("start", now)).collect()).filter(LIVE);
-    if (upcoming.length >= MAX_UPCOMING) throw new ConvexError("You already have calls booked. Move one of those instead.");
-    // Review M1: the business-wide limits count only calls actually made, so junk attempts can't use them up.
-    await bump(ctx, "callBookBiz", String(biz._id));
-    await bumpDay(ctx, "callBookDay", String(biz._id));
+    const waiting = (await ctx.db.query("calls").withIndex("by_start", (q) => q.gte("start", now)).collect()).filter((c) => c.status === "verifying" && holds(c, now)).length;
     const end = a.start + row.lengthMin * 60_000;
     const token = randomToken(18);
-    const callId = await ctx.db.insert("calls", { name, email, ...(note ? { note } : {}), start: a.start, end, tz, status: "verifying", token, history: [{ at: now, text: "Picked on the booking page" }], createdAt: now, updatedAt: now });
-    await sendCode(ctx, callId, now);
+    const callId = await ctx.db.insert("calls", { name, email, ...(note ? { note } : {}), start: a.start, end, tz, status: "verifying", ...(waiting >= WAITING_HOLD ? { noHold: true } : {}), token, history: [{ at: now, text: "Picked on the booking page" }], createdAt: now, updatedAt: now });
+    await sendCode(ctx, callId, now, now);
     return { token, error: null };
   },
 });
 
-/** A new code for a call waiting on one: saved as a hash, emailed, and let go after 10 minutes. */
-async function sendCode(ctx: MutationCtx, callId: Id<"calls">, now: number) {
+/** A new code for a pick waiting on one: saved as a hash, emailed, and let go after 10 minutes (never more than 30
+ *  minutes after the pick). Wrong tries carry over to the new code. */
+async function sendCode(ctx: MutationCtx, callId: Id<"calls">, pickedAt: number, now: number, keep?: { tries: number; resends: number }) {
   const code = newCode();
-  await ctx.db.patch(callId, { code: { hash: await codeHash(callId, code), tries: 0, sent: now, until: now + CODE_FOR } });
+  const until = Math.min(now + CODE_FOR, pickedAt + CODE_MAX);
+  await ctx.db.patch(callId, { code: { hash: await codeHash(callId, code), tries: keep?.tries ?? 0, resends: keep?.resends ?? 0, sent: now, until } });
   await ctx.scheduler.runAfter(0, internal.calls.codeMail, { callId, code, at: now });
-  await ctx.scheduler.runAfter(CODE_FOR, internal.calls.expire, { callId });
+  await ctx.scheduler.runAfter(until - now, internal.calls.expire, { callId });
+}
+/** Review L5: a pick that's let go keeps no note or name, and is deleted after a week. */
+async function lapse(ctx: MutationCtx, c: Doc<"calls">, text: string, now: number) {
+  await ctx.db.patch(c._id, { status: "lapsed", code: undefined, note: undefined, name: "", history: [...c.history, { at: now, text }], updatedAt: now });
 }
 
 async function callByToken(ctx: Ctx, token: string) {
@@ -230,19 +249,30 @@ export const verify = mutation({
     if (c.status !== "verifying" || !c.code) return { error: c.status === "lapsed" ? "This pick has run out. Pick a time again." : null };
     const now = Date.now();
     if (now >= c.code.until) {
-      await ctx.db.patch(c._id, { status: "lapsed", code: undefined, history: [...c.history, { at: now, text: "Not booked: the code ran out" }], updatedAt: now });
+      await lapse(ctx, c, "Not booked: the code ran out", now);
       return { error: "That code has run out. Pick a time again." };
     }
     const code = a.code.replace(/\s/g, "");
     if (!CODE.test(code) || (await codeHash(c._id, code)) !== c.code.hash) {
+      await bumpDay(ctx, "callWrongDay", `${c.businessId}:${c.email}`); // review L2: wrong codes per address per day
       const tries = c.code.tries + 1;
       if (tries >= CODE_TRIES) {
-        await ctx.db.patch(c._id, { status: "lapsed", code: undefined, history: [...c.history, { at: now, text: "Not booked: wrong code too many times" }], updatedAt: now });
+        await lapse(ctx, c, "Not booked: wrong code too many times", now);
         return { error: "That code was wrong too many times. Pick a time again." };
       }
       await ctx.db.patch(c._id, { code: { ...c.code, tries }, updatedAt: now });
       return { error: `That code isn't right. ${CODE_TRIES - tries} ${CODE_TRIES - tries === 1 ? "try" : "tries"} left.` };
     }
+    // Review L1, L4: the time is checked again: the page still on, the notice still kept, nobody else on it.
+    const { row, open } = await openState(ctx);
+    if (!open || !row) { await lapse(ctx, c, "Not booked: the booking page was switched off", now); return { error: "Booking isn't open right now. Nothing was booked." }; }
+    // The notice is judged from when the time was picked (the code takes a minute or two); the pick waits 30 minutes at most.
+    if (c.start <= now || !openSlots(prefsOf(row), c.createdAt, row.busy?.spans ?? [], await takenSpans(ctx, now, c._id), 600).includes(c.start)) {
+      await lapse(ctx, c, "Not booked: the time was no longer open", now);
+      return { error: "That time isn't open any more. Pick another." };
+    }
+    await bump(ctx, "callBookBiz", String(c.businessId)); // review M1: the business's limits count calls really made
+    await bumpDay(ctx, "callBookDay", String(c.businessId));
     const dealId = await dealFor(ctx, c.name, c.email, c.note ?? "", centralWhen(c.start));
     await ctx.db.patch(c._id, { status: "holding", dealId, code: undefined, heldAt: now, history: [...c.history, { at: now, text: "Email confirmed with the code" }], updatedAt: now });
     await ctx.scheduler.runAfter(0, internal.calls.confirm, { callId: c._id });
@@ -251,18 +281,33 @@ export const verify = mutation({
   },
 });
 
-/** Send code again: a new code (the old one stops working) and another 10 minutes. Three an hour per pick. */
+/** Send code again: a new code (the old one stops working), up to 10 more minutes but never past 30 from the pick.
+ *  Three per pick; wrong tries carry over. */
 export const resendCode = mutation({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
     const c = await callByToken(ctx, token);
     if (!c) throw new ConvexError("This link doesn't work.");
-    if (c.status !== "verifying" || !c.code) throw new ConvexError("This pick has run out. Pick a time again.");
+    const now = Date.now();
+    if (c.status !== "verifying" || !c.code || now >= c.code.until) throw new ConvexError("This pick has run out. Pick a time again.");
+    if ((c.code.resends ?? 0) >= RESENDS) throw new ConvexError("No more codes for this pick. Pick a time again.");
+    if (now - c.code.sent < 30_000) throw new ConvexError("A code was just sent. Check your inbox, and your spam folder.");
     await bump(ctx, "callCode", token);
     await bump(ctx, "callBook", `${c.businessId}:${c.email}`); // shares the lead's hourly limit on picks
-    const now = Date.now();
-    if (now - c.code.sent < 30_000) throw new ConvexError("A code was just sent. Check your inbox, and your spam folder.");
-    await sendCode(ctx, c._id, now);
+    await bumpDay(ctx, "callCodeDay", `${c.businessId}:${c.email}`);
+    await bumpDay(ctx, "callCodeAddr", c.email);
+    await sendCode(ctx, c._id, c.createdAt, now, { tries: c.code.tries, resends: (c.code.resends ?? 0) + 1 });
+  },
+});
+
+/** Pick a different time: the pick waiting for its code lets its time go (review L3). */
+export const release = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const c = await callByToken(ctx, token);
+    if (!c) throw new ConvexError("This link doesn't work.");
+    await bump(ctx, "callChange", token);
+    if (c.status === "verifying") await lapse(ctx, c, "Let go: the lead picked another time", Date.now());
   },
 });
 
@@ -298,8 +343,8 @@ export const reschedule = mutation({
     if (c.moving) throw new ConvexError("A new time is already being checked.");
     const now = Date.now();
     if (c.start <= now) throw new ConvexError("This call has already started.");
-    const { row, open } = await openState(ctx);
-    if (!open || !row) throw new ConvexError("Calls can't be moved here right now. Reply to the email instead.");
+    const { row, ready } = await openState(ctx);
+    if (!ready || !row) throw new ConvexError("Calls can't be moved here right now. Reply to the email instead."); // the switch doesn't stop moves (review L4)
     if (!row.busy || row.busy.at < now - FRESH_FOR) {
       await ctx.scheduler.runAfter(0, internal.calls.readBusy, {});
       return { error: "The open times have changed. Pick a time again." };
@@ -529,9 +574,29 @@ export const expire = internalMutation({
     const c = await ctx.db.get(callId);
     if (!c) return;
     const now = Date.now();
-    if (c.status === "verifying" && (!c.code || now >= c.code.until - 1000)) await ctx.db.patch(c._id, { status: "lapsed", code: undefined, history: [...c.history, { at: now, text: "Not booked: the code wasn't entered" }], updatedAt: now });
+    if (c.status === "verifying" && (!c.code || now >= c.code.until - 1000)) await lapse(ctx, c, "Not booked: the code wasn't entered", now);
     else if (c.status === "holding" && now - (c.heldAt ?? c.createdAt) >= HOLD_FOR - 1000) await ctx.db.patch(c._id, { status: "taken", history: [...c.history, { at: now, text: "Not booked: the calendar couldn't be checked" }], updatedAt: now });
     else if (c.moving && now - c.moving.at >= HOLD_FOR - 1000) await ctx.db.patch(c._id, { moving: undefined, moveFailed: now, updatedAt: now });
+  },
+});
+
+/** Review L5: once a day, picks never confirmed are deleted a week after they were let go (each in its own business). */
+export const lapsedDue = internalQuery({
+  args: {},
+  handler: async (ctx) => (await ctx.db.query("calls").collect()).filter((c) => c.status === "lapsed" && c.updatedAt < Date.now() - PURGE_AFTER).slice(0, 500).map((c) => ({ id: c._id, biz: c.businessId ?? null })),
+});
+export const purge = internalMutation({
+  args: { callId: v.id("calls") },
+  handler: async (ctx, { callId }) => { const c = await ctx.db.get(callId); if (c?.status === "lapsed" && c.updatedAt < Date.now() - PURGE_AFTER) await ctx.db.delete(c._id); },
+});
+export const purgeLapsed = internalAction({
+  args: {},
+  handler: async (ctx): Promise<number> => {
+    let n = 0;
+    for (const x of await ctx.runQuery(internal.calls.lapsedDue, {})) {
+      try { await ctx.runMutation(internal.calls.purge, { callId: x.id, ...(x.biz ? { asBusiness: x.biz } : {}) }); n++; } catch (e) { console.error("call purge", String((e as Error).message).slice(0, 120)); }
+    }
+    return n;
   },
 });
 
