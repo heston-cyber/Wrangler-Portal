@@ -1,0 +1,54 @@
+/* Wrangler Portal typography, Nov 5 (Design Log, approved Nov 4–5). Loaded after portal.css and states.css.
+   Headings: Instrument Serif Regular, normal case, letter-spacing 0, a thin 0.03em stroke so the single weight reads bolder.
+   Labels, tags and buttons keep Industry; body text stays Inter. A number that stands on its own goes one weight heavier.
+   The glow belongs to red text only, so headings no longer glow. */
+
+:root {
+  --font-head: var(--font-serif);
+  --head-stroke: 0.03em;
+  --fs-display: 56px; --lh-display: 56px;
+  --fs-h1: 40px; --lh-h1: 41.6px;
+  --fs-number: 44px; --lh-number: 44px;
+}
+
+.display, .wp-display { font-size: var(--fs-display); line-height: var(--lh-display); }
+
+.title, .wp-h1, .wp-h2, .wp-h3, .wp-h4, .headline,
+.wp-setbody .headline, .wsx-card .headline, .dialog .headline,
+.pj-block .chead .ctitle, .wp-hubcard .ttl, .wst-card .ttl, .wst-clause .wst-head .ttl,
+.pj-head h1, .cp-head h1, .ch-projname, .bc-title, .help-h, .pn-email .mail b, .pr-choice b,
+.pj-lock .txt b, .gst-dl .big, .ws-hubtext b, .wp-bizprev .frame .main b {
+  font-family: var(--font-head);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  text-shadow: none;
+  -webkit-text-stroke: var(--head-stroke) currentColor;
+}
+
+/* the phone's page title sits in the top bar (the desktop breadcrumb stays a small label) */
+@media (max-width: 820px) {
+  .wp-shell:not(.overlay) .topbar .crumbs .here, .wp-shell.overlay .topbar .crumbs .here { font-family: var(--font-head); font-weight: 400; letter-spacing: 0; -webkit-text-stroke: var(--head-stroke) currentColor; }
+}
+
+/* the size scale (Typography variables); sizes that already matched stay as they were */
+.wp-h1 { font-size: var(--fs-h1); line-height: var(--lh-h1); }
+.title, .wp-h2 { font-size: var(--fs-h2); line-height: var(--lh-h2); }
+.wp-h3, .wp-setbody .headline, .wsx-card .headline, .dialog .headline { font-size: var(--fs-h3); line-height: var(--lh-h3); }
+.headline, .wp-h4 { font-size: var(--fs-h4); line-height: var(--lh-h4); }
+.pj-block .chead .ctitle, .wp-hubcard .ttl, .wst-card .ttl, .wst-clause .wst-head .ttl, .pn-email .mail b {
+  font-size: var(--fs-h5); line-height: var(--lh-h5);
+}
+@media (max-width: 820px) { .wp-h1 { font-size: 30px; line-height: 32px; } }
+
+/* serif is lighter than Industry, so the rest of a headline keeps its quieter tone */
+.headline .rest { font-weight: 400; }
+
+/* numbers on their own: one weight heavier (Industry 600→700, 700→800; Inter tops out at 700) */
+.inv-pay .amt b, .pov-stat b, .vd-tile b, .qz-total .amt, .inv-sums .tot, .inv-sums .rem, .inv-edit-sums .tot,
+.gst-row .call b { font-weight: 700; }
+.plan-preview .price { font-weight: 800; }
+.wp-table td.num, .wp-regtable td.num, .crm-sum b { font-weight: 500; }
+
+/* the glow stays on red text */
+.text-accent, .accent-text { text-shadow: var(--glow-text); }
