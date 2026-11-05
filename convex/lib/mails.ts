@@ -847,9 +847,10 @@ export function ownerCallMail(b: MailBrand, d: { kind: "booked" | "cancelled" | 
 const snippet = (t: string) => (t.length > 400 ? `${t.slice(0, 400).trim()}…` : t);
 /** 44 · a message from the business. */
 export function messageMail(b: MailBrand, d: { name: string | null; sender: string; about: string; text: string; files: number; more: number; link: string; lead: boolean }): Mail {
-  return mk(b, "updates", `${first(d.sender) || d.sender} sent you a message about ${d.about}`, [
+  const about = d.about ? ` about ${d.about}` : ""; // a lead's email names no project (review M2)
+  return mk(b, "updates", `${first(d.sender) || d.sender} sent you a message${about}`, [
     hello(d.name),
-    { t: "p", text: `${d.sender} sent you a message about ${d.about}.` },
+    { t: "p", text: `${d.sender} sent you a message${about}.` },
     { t: "quote", rows: [{ who: d.sender, text: snippet(d.text) || (d.files ? `${d.files} ${d.files === 1 ? "file" : "files"}` : "") }] },
     ...(d.more > 0 ? [{ t: "p", text: `And ${d.more} more ${d.more === 1 ? "message" : "messages"}.`, tone: "muted" } as Block] : []),
     { t: "button", label: "Read and reply", href: d.link },

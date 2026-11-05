@@ -55,7 +55,9 @@ async function clientThread(ctx: Ctx, threadId: string) {
   const t = id ? await ctx.db.get(id) : null;
   if (!t || t.kind !== "project" || !t.projectId) return { me, t: null };
   const mine = await myProjects(ctx as QueryCtx, me.email.toLowerCase());
-  return { me, t: mine.has(t.projectId) ? t : null };
+  if (!mine.has(t.projectId)) return { me, t: null };
+  focusBusiness(ctx, t.businessId); // review M1: a client of several businesses acts for this thread's one
+  return { me, t };
 }
 /** A lead, by their private link. */
 async function leadThread(ctx: Ctx, token: string) {
@@ -64,6 +66,12 @@ async function leadThread(ctx: Ctx, token: string) {
   if (!t || t.kind !== "lead") return null;
   focusBusiness(ctx, t.businessId);
   return t;
+}
+/** Review M3: a lead's link stops working for writing once the owner turns it off or the lead is closed. */
+async function leadOpen(ctx: Ctx, t: Doc<"msgThreads">) {
+  if (t.linkOff) return false;
+  const d = t.dealId ? await ctx.db.get(t.dealId) : null;
+  return !!d && !d.closedAt;
 }
 
 // ---------- reading ----------
@@ -99,7 +107,8 @@ async function pageOf(ctx: Ctx, t: Doc<"msgThreads">, viewer: { side: "owner" | 
 async function threadHead(ctx: Ctx, t: Doc<"msgThreads">) {
   if (t.kind === "lead") {
     const d = t.dealId ? await ctx.db.get(t.dealId) : null;
-    return { title: t.leadName ?? d?.lead?.name ?? "A lead", sub: `Lead · ${d?.title ?? t.leadEmail ?? ""}`, projectId: null, dealId: t.dealId ?? null, about: d?.title ?? "your call" };
+    // Review M2: the deal's title is the owner's own note; a lead is never shown it (`about` goes to them).
+    return { title: t.leadName ?? d?.lead?.name ?? "A lead", sub: `Lead · ${d?.title ?? t.leadEmail ?? ""}`, projectId: null, dealId: t.dealId ?? null, about: "" };
   }
   const p = t.projectId ? await ctx.db.get(t.projectId) : null;
   const client = p?.clientId ? (await ctx.db.get(p.clientId))?.name ?? null : null;
@@ -112,16 +121,17 @@ export const threads = query({
   args: { q: v.optional(v.string()) },
   handler: async (ctx, { q }) => {
     await requireMe(ctx);
-    const words = (q ?? "").toLowerCase().split(/\s+/).filter(Boolean).slice(0, 6);
+    // Review M4: bounded: the newest 150 conversations, and the newest 200 messages of each when searching.
+    const words = (q ?? "").toLowerCase().split(/\s+/).filter((w) => w.length >= 2).slice(0, 6);
     const out = [];
-    for (const t of await ctx.db.query("msgThreads").withIndex("by_last").order("desc").take(300)) {
+    for (const t of await ctx.db.query("msgThreads").withIndex("by_last").order("desc").take(150)) {
       const h = await threadHead(ctx, t);
       const mine = (await readsOf(ctx, t)).find((r) => r.who === OWNER);
-      const unread = t.lastSide !== "owner" && t.lastSide !== "system" && t.lastAt > (mine?.readAt ?? 0);
+      const unread = (t.inAt ?? 0) > (mine?.readAt ?? 0);
       if (words.length) {
         let hay = `${h.title} ${h.sub} ${t.lastText} ${t.leadEmail ?? ""}`.toLowerCase();
         if (!words.every((w) => hay.includes(w))) {
-          hay += " " + (await ctx.db.query("messages").withIndex("by_thread", (x) => x.eq("threadId", t._id)).take(500)).map((m) => m.text.toLowerCase()).join(" ");
+          hay += " " + (await ctx.db.query("messages").withIndex("by_thread", (x) => x.eq("threadId", t._id)).order("desc").take(200)).map((m) => m.text.toLowerCase()).join(" ");
           if (!words.every((w) => hay.includes(w))) continue;
         }
       }
@@ -139,7 +149,7 @@ export const thread = query({
     if (!t) return null;
     const h = await threadHead(ctx, t);
     const people = t.kind === "project" && t.projectId ? (await portalPeople(ctx, (await ctx.db.get(t.projectId))!)).length : t.leadEmail ? 1 : 0;
-    return { _id: t._id, kind: t.kind, ...h, people, leadEmail: t.leadEmail ?? null, ...(await pageOf(ctx, t, { side: "owner", who: OWNER }, before)) };
+    return { _id: t._id, kind: t.kind, ...h, people, leadEmail: t.leadEmail ?? null, linkOff: !!t.linkOff, ...(await pageOf(ctx, t, { side: "owner", who: OWNER }, before)) };
   },
 });
 
@@ -151,9 +161,9 @@ export const unread = query({
     if (v0.kind === "owner") {
       let n = 0;
       for (const t of await ctx.db.query("msgThreads").withIndex("by_last").order("desc").take(300)) {
-        if (t.lastSide === "owner" || t.lastSide === "system") continue;
+        if (!t.inAt) continue;
         const r = (await readsOf(ctx, t)).find((x) => x.who === OWNER);
-        if (t.lastAt > (r?.readAt ?? 0)) n++;
+        if (t.inAt > (r?.readAt ?? 0)) n++;
       }
       return n;
     }
@@ -170,7 +180,7 @@ async function clientList(ctx: Ctx, email: string) {
     if (!t) continue;
     const r = (await readsOf(ctx, t)).find((x) => x.who === e);
     const biz = p.businessId ? await ctx.db.get(p.businessId) : null;
-    out.push({ _id: t._id, title: p.name, sub: biz?.name ?? "", lastAt: t.lastAt, lastText: t.lastSide === "owner" ? `${firstName(t.lastName ?? "")}: ${t.lastText}` : t.lastText, unread: t.lastSide === "owner" && t.lastAt > (r?.readAt ?? 0), projectId: p._id });
+    out.push({ _id: t._id, title: p.name, sub: biz?.name ?? "", lastAt: t.lastAt, lastText: t.lastSide === "owner" ? `${firstName(t.lastName ?? "")}: ${t.lastText}` : t.lastText, unread: (t.outAt ?? 0) > (r?.readAt ?? 0), projectId: p._id });
   }
   return out.sort((a, b) => b.lastAt - a.lastAt);
 }
@@ -208,38 +218,50 @@ export const leadPage = query({
     const t = await leadThread(ctx, token);
     if (!t) return null;
     const biz = t.businessId ? await ctx.db.get(t.businessId) : null;
-    const d = t.dealId ? await ctx.db.get(t.dealId) : null;
     return {
       business: { name: biz?.name ?? "", legalName: biz?.legalName ?? null, owner: biz?.ownerName ?? null, logoUrl: biz?.logoFileId ? await ctx.storage.getUrl(biz.logoFileId) : null },
-      name: t.leadName ?? "", about: d?.title ?? null, ...(await pageOf(ctx, t, { side: "lead", who: (t.leadEmail ?? "").toLowerCase() }, before)),
+      name: t.leadName ?? "", about: null, open: await leadOpen(ctx, t), ...(await pageOf(ctx, t, { side: "lead", who: (t.leadEmail ?? "").toLowerCase() }, before)),
     };
   },
 });
 
 // ---------- writing ----------
 
-/** Files a message carries: each must be an upload of this request (in storage), 25 MB at most, 10 at most. */
-async function checkFiles(ctx: MutationCtx, files: Array<{ storageId: Id<"_storage">; name: string }>) {
-  const drop = async (msg: string) => { for (const f of files) await ctx.storage.delete(f.storageId).catch(() => null); return { error: msg, files: [] as Doc<"messages">["files"] }; };
-  if (files.length > MAX_FILES) return drop(`Up to ${MAX_FILES} files a message.`);
+/** Files a message carries (review H1): each must be an upload made in the last 30 minutes that nobody has attached
+ *  before; attaching claims it for this caller. 25 MB at most each, 10 at most. A refused file is left alone: it may
+ *  not be the caller's, so it's never deleted here. */
+const FRESH_UPLOAD = 30 * 60_000;
+async function checkFiles(ctx: MutationCtx, files: Array<{ storageId: Id<"_storage">; name: string }>, by: string) {
+  const no = (msg: string) => ({ error: msg, files: [] as Doc<"messages">["files"] });
+  if (files.length > MAX_FILES) return no(`Up to ${MAX_FILES} files a message.`);
+  if (new Set(files.map((f) => f.storageId)).size !== files.length) return no("The same file is attached twice.");
   const out: Doc<"messages">["files"] = [];
+  const now = Date.now();
   for (const f of files) {
     const meta = await ctx.db.system.get(f.storageId);
-    if (!meta) return drop("A file didn't upload. Try again.");
-    if (meta.size > MAX_FILE_BYTES) return drop(`${f.name.slice(0, 80)} is over 25 MB. Share a link to big files instead.`);
+    if (!meta || meta._creationTime < now - FRESH_UPLOAD) return no("A file didn't upload. Attach it again.");
+    if (await ctx.db.query("msgUploads").withIndex("by_storage", (q) => q.eq("storageId", f.storageId)).first()) return no("A file didn't upload. Attach it again.");
+    if (meta.size > MAX_FILE_BYTES) return no(`${f.name.slice(0, 80)} is over 25 MB. Share a link to big files instead.`);
     out.push({ storageId: f.storageId, name: (f.name.trim() || "File").slice(0, 140), size: meta.size, type: (meta.contentType ?? "").slice(0, 100) });
   }
+  for (const f of out) await ctx.db.insert("msgUploads", { storageId: f.storageId, by, at: now });
   return { error: null, files: out };
 }
 
 async function post(ctx: MutationCtx, t: Doc<"msgThreads">, m: { side: "owner" | "client" | "lead"; name: string; email?: string; text: string; files: Doc<"messages">["files"] }) {
-  const now = Date.now();
+  const now = await nextAt(ctx, t._id);
   const id = await ctx.db.insert("messages", { threadId: t._id, side: m.side, name: m.name, ...(m.email ? { email: m.email } : {}), text: m.text, files: m.files, createdAt: now });
   const preview = m.text ? m.text.replace(/\s+/g, " ").slice(0, 140) : `${m.files.length} ${m.files.length === 1 ? "file" : "files"}`;
-  await ctx.db.patch(t._id, { lastAt: now, lastText: preview, lastSide: m.side, lastName: m.name });
+  await ctx.db.patch(t._id, { lastAt: now, lastText: preview, lastSide: m.side, lastName: m.name, ...(m.side === "owner" ? { outAt: now } : { inAt: now }) });
   await markRead(ctx, t, m.side === "owner" ? OWNER : (m.email ?? "").toLowerCase(), m.name, now); // writing reads it
   await ctx.scheduler.runAfter(NOTIFY_AFTER, internal.messages.notify, { threadId: t._id, messageId: id });
   return id;
+}
+
+/** Review L2: every message in a thread gets its own time, so "Show earlier messages" never skips one. */
+async function nextAt(ctx: MutationCtx, threadId: Id<"msgThreads">) {
+  const last = await ctx.db.query("messages").withIndex("by_thread", (q) => q.eq("threadId", threadId)).order("desc").first();
+  return Math.max(Date.now(), (last?.createdAt ?? 0) + 1);
 }
 
 async function markRead(ctx: MutationCtx, t: Doc<"msgThreads">, who: string, name: string, at = Date.now()) {
@@ -258,9 +280,9 @@ export const send = mutation({
     const { me, t } = await ownerThread(ctx, a.threadId);
     if (!t) throw new ConvexError("This conversation isn't here any more.");
     const text = tidy(a.text);
-    const f = await checkFiles(ctx, a.files ?? []);
+    if (!text && !(a.files ?? []).length) throw new ConvexError("Write a message.");
+    const f = await checkFiles(ctx, a.files ?? [], `user:${me.userId}`);
     if (f.error) return { error: f.error };
-    if (!text && !f.files.length) throw new ConvexError("Write a message.");
     await bump(ctx, "msgSend", String(me.userId));
     const biz = t.businessId ? await ctx.db.get(t.businessId) : null;
     await post(ctx, t, { side: "owner", name: biz?.ownerName?.trim() || me.name, email: me.email, text, files: f.files });
@@ -284,9 +306,9 @@ export const clientSend = mutation({
     }
     if (!t) throw new ConvexError("This conversation isn't here any more.");
     const text = tidy(a.text);
-    const f = await checkFiles(ctx, a.files ?? []);
+    if (!text && !(a.files ?? []).length) throw new ConvexError("Write a message.");
+    const f = await checkFiles(ctx, a.files ?? [], `user:${me.userId}`);
     if (f.error) return { error: f.error, threadId: t._id };
-    if (!text && !f.files.length) throw new ConvexError("Write a message.");
     await bump(ctx, "msgSend", String(me.userId));
     await post(ctx, t, { side: "client", name: me.name, email, text, files: f.files });
     return { error: null, threadId: t._id };
@@ -299,11 +321,12 @@ export const leadSend = mutation({
   handler: async (ctx, a) => {
     const t = await leadThread(ctx, a.token);
     if (!t) throw new ConvexError("This link doesn't work.");
+    if (!(await leadOpen(ctx, t))) throw new ConvexError("This conversation is closed. Reply to the email instead.");
     await bump(ctx, "msgLead", a.token);
     const text = tidy(a.text);
-    const f = await checkFiles(ctx, a.files ?? []);
+    if (!text && !(a.files ?? []).length) throw new ConvexError("Write a message.");
+    const f = await checkFiles(ctx, a.files ?? [], `lead:${t._id}`);
     if (f.error) return { error: f.error };
-    if (!text && !f.files.length) throw new ConvexError("Write a message.");
     await post(ctx, t, { side: "lead", name: t.leadName ?? "Lead", email: t.leadEmail, text, files: f.files });
     return { error: null };
   },
@@ -314,6 +337,7 @@ export const uploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
     const me = await requireSignedIn(ctx);
+    if (me.kind === "client" && (await myProjects(ctx as unknown as QueryCtx, me.email.toLowerCase())).size === 0) throw new ConvexError("Not allowed."); // review L3
     await bump(ctx, "msgUpload", String(me.userId));
     return await ctx.storage.generateUploadUrl();
   },
@@ -323,6 +347,7 @@ export const leadUploadUrl = mutation({
   handler: async (ctx, { token }) => {
     const t = await leadThread(ctx, token);
     if (!t) throw new ConvexError("This link doesn't work.");
+    if (!(await leadOpen(ctx, t))) throw new ConvexError("This conversation is closed.");
     await bump(ctx, "msgUpload", token);
     return await ctx.storage.generateUploadUrl();
   },
@@ -398,12 +423,22 @@ export const start = mutation({
   },
 });
 
+/** Owner: turn a lead's link off (it then opens read-only, and they can't write), or back on. Review M3. */
+export const setLeadLink = mutation({
+  args: { threadId: v.id("msgThreads"), off: v.boolean() },
+  handler: async (ctx, { threadId, off }) => {
+    const { t } = await ownerThread(ctx, threadId);
+    if (!t || t.kind !== "lead") throw new ConvexError("That conversation isn't here any more.");
+    await ctx.db.patch(t._id, { linkOff: off });
+  },
+});
+
 /** Booking calls: a booked, moved or cancelled call is a line in its lead's thread. */
 export async function callLine(ctx: MutationCtx, c: Doc<"calls">, what: "booked" | "moved" | "cancelled") {
   const d = c.dealId ? await ctx.db.get(c.dealId) : null;
   if (!d) return;
   const t = await threadForDeal(ctx, d);
-  const now = Date.now();
+  const now = await nextAt(ctx, t._id);
   await ctx.db.insert("messages", { threadId: t._id, side: "system", name: "", text: "", files: [], call: { callId: c._id, what, start: c.start, end: c.end, ...(c.meet ? { meet: true } : {}) }, createdAt: now });
   const when = new Date(c.start).toLocaleString("en-US", { timeZone: TZ, weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   await ctx.db.patch(t._id, { lastAt: now, lastText: `Call ${what === "booked" ? "booked" : what === "moved" ? "moved to" : "cancelled:"} ${when}`, lastSide: "system", lastName: "" });
@@ -440,7 +475,8 @@ export const notifyData = internalQuery({
     const first = (await ctx.db.query("messages").withIndex("by_thread", (q) => q.eq("threadId", t._id).gt("createdAt", r)).collect()).find((x) => x.side !== "owner" && x.side !== "system");
     if (!first || first._id !== m._id) return null;
     const contact = await businessContact(ctx, biz);
-    return { kind: "toOwner" as const, t: { _id: t._id }, businessId: biz, brand: await mailBrandOf(ctx, biz), about: head.about, who: m.name, text: m.text, files: m.files.length, more: await later(""), ownerEmail: contact.ownerEmail, readAt: r };
+    const ownerAbout = t.kind === "lead" ? (t.dealId ? (await ctx.db.get(t.dealId))?.title : null) ?? head.title : head.about;
+    return { kind: "toOwner" as const, t: { _id: t._id }, businessId: biz, brand: await mailBrandOf(ctx, biz), about: ownerAbout, who: m.name, text: m.text, files: m.files.length, more: await later(""), ownerEmail: contact.ownerEmail, readAt: r };
   },
 });
 export const inboxRow = internalMutation({

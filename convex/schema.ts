@@ -1374,6 +1374,9 @@ export default defineSchema({
     token: v.optional(v.string()),               // a lead's private link
     leadName: v.optional(v.string()), leadEmail: v.optional(v.string()),
     lastAt: v.number(), lastText: v.string(), lastSide: v.optional(v.string()), lastName: v.optional(v.string()),
+    inAt: v.optional(v.number()),                // review L1: the latest message from the client's people or the lead
+    outAt: v.optional(v.number()),               // and from the business (call lines are neither)
+    linkOff: v.optional(v.boolean()),            // review M3: the owner turned the lead's link off
     createdAt: v.number(),
   }).index("by_project", ["projectId"]).index("by_deal", ["dealId"]).index("by_token", ["token"]).index("by_last", ["lastAt"]),
   messages: defineTable({
@@ -1387,6 +1390,13 @@ export default defineSchema({
     call: v.optional(v.object({ callId: v.id("calls"), what: v.union(v.literal("booked"), v.literal("moved"), v.literal("cancelled")), start: v.number(), end: v.number(), meet: v.optional(v.boolean()) })),
     createdAt: v.number(),
   }).index("by_thread", ["threadId", "createdAt"]),
+  // Review H1: a file attached to a message is claimed here once: only a fresh upload nobody has claimed can be attached.
+  msgUploads: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    storageId: v.id("_storage"),
+    by: v.string(),                              // "user:<id>" or "lead:<thread id>"
+    at: v.number(),
+  }).index("by_storage", ["storageId"]),
   // Who read a thread up to when: "owner" for the business, or the client's / lead's email.
   msgReads: defineTable({
     businessId: v.optional(v.id("businesses")),

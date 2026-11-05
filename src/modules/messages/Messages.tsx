@@ -155,7 +155,7 @@ function Composer({ mode, onSent }: { mode: Mode; onSent?: () => void }) {
 }
 
 /** The thread: header, messages (newest at the bottom), composer. Opening it marks it read. */
-export function Thread({ mode, head, empty }: { mode: Mode; head: React.ReactNode; empty?: string }) {
+export function Thread({ mode, head, empty, closed }: { mode: Mode; head: React.ReactNode; empty?: string; closed?: string }) {
   const p = usePage(mode);
   const read = useMutation(api.messages.read);
   const leadRead = useMutation(api.messages.leadRead);
@@ -183,7 +183,7 @@ export function Thread({ mode, head, empty }: { mode: Mode; head: React.ReactNod
           </>}
         <div ref={end} />
       </div>
-      {p && <Composer mode={mode} />}
+      {p && (closed ? <p className="msg-closed wp-small secondary">{closed}</p> : <Composer mode={mode} />)}
     </section>
   );
 }
@@ -226,7 +226,7 @@ export function OwnerMessages() {
         ))}
     </Card>
   );
-  const head = t ? <ThreadHead back="/messages" title={t.title} sub={t.sub} action={t.kind === "lead" ? (t.dealId ? <ButtonLink size="sm" to={`/clients/deals/${t.dealId}`} iconEnd={false}>Open lead</ButtonLink> : undefined) : t.projectId ? <ButtonLink size="sm" to={`/projects/${t.projectId}`} iconEnd={false}>Open project</ButtonLink> : undefined} /> : null;
+  const head = t ? <ThreadHead back="/messages" title={t.title} sub={t.sub} action={t.kind === "lead" ? <span className="msg-acts"><LeadLinkButton threadId={t._id} off={t.linkOff} />{t.dealId && <ButtonLink size="sm" to={`/clients/deals/${t.dealId}`} iconEnd={false}>Open lead</ButtonLink>}</span> : t.projectId ? <ButtonLink size="sm" to={`/projects/${t.projectId}`} iconEnd={false}>Open project</ButtonLink> : undefined} /> : null;
   return (
     <>
       <TopBar><a {...linkProps("/")} className="secondary">Dashboard</a><Sep /><span className="here">Messages</span></TopBar>
@@ -243,6 +243,13 @@ export function OwnerMessages() {
       {starting && <NewMessage onClose={() => setStarting(false)} />}
     </>
   );
+}
+
+/** Review M3: the lead's link can be turned off (they can still read it, not write), and back on. */
+function LeadLinkButton({ threadId, off }: { threadId: string; off: boolean }) {
+  const set = useMutation(api.messages.setLeadLink);
+  const [toast, show] = useToast();
+  return <><Button size="sm" variant="ghost" onClick={async () => { try { await set({ threadId: threadId as Id<"msgThreads">, off: !off }); show(off ? "Their link works again." : "Link turned off. They can read the conversation but can't write."); } catch (e) { show(errText(e)); } }}>{off ? "Turn link on" : "Turn link off"}</Button>{toast}</>;
 }
 
 function NewMessage({ onClose }: { onClose: () => void }) {
@@ -349,7 +356,8 @@ export function LeadMessages({ token }: { token: string }) {
   return (
     <Frame inShell={false} bar={null} brand={brand}>
       <div className="msg-lead">
-        <Thread mode={{ kind: "lead", token }} head={<ThreadHead title={p.business.name} sub={`With ${who}${p.about ? ` · ${p.about}` : ""}`} />} empty={`Write to ${p.business.name}. They'll reply here and by email.`} />
+        <Thread mode={{ kind: "lead", token }} head={<ThreadHead title={p.business.name} sub={`With ${who}`} />} empty={`Write to ${p.business.name}. They'll reply here and by email.`}
+          closed={p.open ? undefined : `This conversation is closed. To get in touch, reply to the email from ${p.business.name}.`} />
         <p className="wp-small secondary bc-legal">{legal} · No login needed: this link is your conversation. Keep it to yourself.</p>
       </div>
     </Frame>

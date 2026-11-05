@@ -3078,3 +3078,5 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 }
 .msg-thread .wp-empty { background: none; box-shadow: none; border: 0; backdrop-filter: none; }
 .wp-sub.wp-stagetop { color: var(--accent); font-weight: 600; } /* Heston (Nov 4, 21:30): Overview in red too */
+.msg-closed { margin: 0; padding: 14px 22px 18px; border-top: 1px solid var(--border-hairline); }
+.msg-acts { display: flex; gap: 8px; align-items: center; }

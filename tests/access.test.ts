@@ -89,7 +89,7 @@ const GUEST: Record<string, string> = {
   "guests.opened": "records the guest opening their own sheet, only while it's active",
 };
 // Functions any signed-in account may call (owner or client), never a stranger.
-const SIGNED_IN = new Set(["help.list", "help.guide", "messages.mine", "messages.clientThreadPage", "messages.clientSend", "messages.uploadUrl", "messages.read", "users.setName", "users.switchSide", "clients.account", "shares.mine",
+const SIGNED_IN = new Set(["help.list", "help.guide", "messages.mine", "messages.clientThreadPage", "messages.clientSend", "messages.read", /* messages.uploadUrl: only a client who can open a project (the matrix client can't; messages.test.ts) */ "users.setName", "users.switchSide", "clients.account", "shares.mine",
   // Phase 1: a client's own Inbox, Documents and their businesses' look
   "inbox.mine", "inbox.unreadCount", "inbox.markRead", "inbox.markAllRead", "documents.mine", "business.brand",
   "portal.waiting", "emails.myPrefs", "emails.setMine",

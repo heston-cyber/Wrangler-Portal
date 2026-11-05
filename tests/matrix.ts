@@ -141,7 +141,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "messages.threads": {}, "messages.thread": { threadId: ids.threadId }, "messages.send": { threadId: ids.threadId, text: "x" }, "messages.unread": {},
     "messages.mine": {}, "messages.clientThreadPage": { threadId: ids.threadId }, "messages.clientSend": { threadId: ids.threadId, text: "x" },
     "messages.leadPage": { token: "x".repeat(24) }, "messages.leadSend": { token: "x".repeat(24), text: "x" }, "messages.leadRead": { token: "x".repeat(24) }, "messages.leadUploadUrl": { token: "x".repeat(24) },
-    "messages.uploadUrl": {}, "messages.read": { threadId: ids.threadId }, "messages.startOptions": {}, "messages.start": { projectId: ids.projectId },
+    "messages.uploadUrl": {}, "messages.read": { threadId: ids.threadId }, "messages.startOptions": {}, "messages.start": { projectId: ids.projectId }, "messages.setLeadLink": { threadId: ids.threadId, off: true },
     "help.list": {}, "help.guide": { slug: "signing-in" }, "help.edit": { slug: "signing-in" }, "help.reset": { slug: "signing-in" },
     "gear.list": {}, "gear.get": { gearId: "nope" }, "gear.add": { name: "G", kind: "lens" }, "gear.update": { gearId: ids.gearId, name: "G", kind: "lens" }, "gear.setStatus": { gearId: ids.gearId, status: "in_repair" },
     "gear.uploadUrl": {}, "gear.setPhoto": { gearId: ids.gearId, storageId: ids.storageId }, "gear.removePhoto": { gearId: ids.gearId },

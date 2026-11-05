@@ -15984,7 +15984,8 @@
     ]
    },
    "sub": "Harbor Coffee · Harbor Coffee Launch",
-   "title": "Harbor Coffee"
+   "title": "Harbor Coffee",
+   "linkOff": false
   },
   "messages.thread#0000000000000000010249msgThreads": {
    "_id": "0000000000000000010249msgThreads",
@@ -16024,10 +16025,11 @@
    "projectId": null,
    "readBy": null,
    "sub": "Lead · Tom Silva",
-   "title": "Tom Silva"
+   "title": "Tom Silva",
+   "linkOff": false
   },
   "messages.leadPage#kitleadthreadtoken000001": {
-   "about": "Tom Silva",
+   "about": null,
    "business": {
     "legalName": "Hill Creative LLC",
     "logoUrl": null,
@@ -16066,7 +16068,8 @@
    "readBy": {
     "messageId": "000000000000000000010251messages",
     "names": []
-   }
+   },
+   "open": true
   },
   "messages.startOptions": {
    "leads": [
