@@ -9,7 +9,6 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireMe } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import { ratesOf } from "./crm";
-import { assertNotClient } from "./lib/roles";
 import { daysIn, isDate, todayCentral } from "./lib/bookings";
 import { type BookingRow, label, order, rowOf } from "./lib/bookingRows";
 import { mailBrandOf } from "./lib/mail";
@@ -112,7 +111,6 @@ export const create = mutation({
     const { me } = await ownerBiz(ctx);
     const vendor = await ctx.db.get(a.vendorId);
     if (!vendor || vendor.archivedAt) throw new ConvexError("That vendor isn't on your list.");
-    await assertNotClient(ctx, vendor.email); // D102
     if (!(await ctx.db.get(a.projectId))) throw new ConvexError("That project isn't here.");
     const role = clip(a.role, 40);
     if (!role) throw new ConvexError("Pick a role.");

@@ -1,6 +1,13 @@
 // Formatting the page (E1, Oct 27): the Format tab and the right-click menu. Both act on every line in the selection
 // (or the line with the cursor), like Craft's Format sidebar.
-import { useEffect, useReducer } from "react";
+import { useContext, useEffect, useReducer, useRef, useState } from "react";
+import { useMutation } from "convex/react";
+import { api } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
+import { sheetDay } from "../../../../convex/lib/callSheet";
+import { StatusChip } from "../../../ui/wp";
+import { errText } from "../pages/common";
+import { BuilderCtx, WX_CHIP, weatherNow } from "./editor/nodes";
 import type { Editor } from "@tiptap/react";
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight, ArrowDown, ArrowUp, BookmarkPlus, Bold, ClipboardPaste, Copy, Indent, Italic, List, ListOrdered, Outdent,
@@ -81,6 +88,7 @@ function FormatBody({ editor, accent, onSaveClause }: { editor: Editor; accent: 
   if (atom && atom.node.type.name === "spacer") {
     return <label className="field"><span className="ws-flabel">Space height (pt)</span><input className="input sm" type="number" min={4} max={200} value={Number(atom.node.attrs.size) || 18} onChange={(e) => setAtom(editor, atom.pos, { size: Math.max(4, Math.min(200, Number(e.target.value) || 18)) })} /></label>;
   }
+  if (atom && atom.node.type.name === "weather") return <WeatherPanel key={atom.pos} editor={editor} pos={atom.pos} attrs={atom.node.attrs} />;
   if (atom) return <p className="caption secondary">{atom.node.type.name === "divider" ? "Divider lines are styled in Style › Separator." : atom.node.type.name === "pagebreak" ? "A new page starts here in the PDF." : "This block's settings are on the block itself."}</p>;
   const size = lineAttr(editor, "size", "body");
   const align = lineAttr(editor, "align", "left");
@@ -208,5 +216,59 @@ export function QuickMenu({ editor, at, accent, onClose, onMore, onSaveClause }:
       <MenuSep />
       <MenuItem icon={<SlidersHorizontal size={15} />} onSelect={onMore}>More in Format…</MenuItem>
     </ContextMenu>
+  );
+}
+
+// ---------- D148: the Weather block's settings (865:11023, states 865:11728) ----------
+
+const updated = (at: number) => new Date(at).toLocaleString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+const monthDay = (ymd: string) => sheetDay(ymd).replace(/^\w+ /, "");
+
+function WeatherPanel({ editor, pos, attrs }: { editor: Editor; pos: number; attrs: Record<string, unknown> }) {
+  const ctx = useContext(BuilderCtx);
+  const refresh = useMutation(api.callSheets.refreshWeather);
+  const input = useRef<HTMLInputElement>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const w = weatherNow(ctx, attrs);
+  const line = w ? w.line : String(attrs.line ?? "");
+  const type = (text: string) => setAtom(editor, pos, { typed: true, line: text.slice(0, 160) });
+  const typeOver = () => { if (w && w.state !== "typed") type(line); requestAnimationFrame(() => input.current?.focus()); };
+  const remove = () => { editor.chain().setNodeSelection(pos).run(); deleteBlock(editor); };
+  const lookUp = async () => {
+    if (!ctx?.callSheetId) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await refresh({ callSheetId: ctx.callSheetId as Id<"callSheets"> });
+      setNote(r.state === "early" ? "The shoot is more than a week away: the forecast doesn't reach it yet." : r.state === "recent" ? "It was looked up a moment ago." : "Looking it up. It shows here in a few seconds.");
+    } catch (e) { setNote(errText(e)); } finally { setBusy(false); }
+  };
+  const again = () => { setAtom(editor, pos, { typed: false, line: "" }); if (w && !w.forecast && w.due) void lookUp(); };
+  const place = w?.place || "the shoot's address";
+  const caption = !w ? "This is a template: on a shoot's call sheet the line fills in from the forecast for its address."
+    : w.state === "forecast" ? `From the National Weather Service${w.at ? ` · updated ${updated(w.at)}` : ""}. Refreshes by itself the day before.`
+    : w.state === "typed" ? "You typed this, so the forecast no longer changes it."
+    : w.state === "early" ? (w.due ? "The forecast fills in with the daily check (about 5 PM), or press Refresh forecast." : `The forecast reaches about a week ahead. This shoot is ${monthDay(w.date)}, so it fills on ${monthDay(w.fillsOn)}.`)
+    : w.noAddress ? "There is no address on the sheet. Add one to the Location block to get the forecast, or type the weather in."
+    : "There is no forecast for this address. It needs a US address. Type it in, or remove the block.";
+  const act = (label: string, run: () => void, primary = false) => <button type="button" className={primary ? "btn outline sm" : "btn ghost sm"} onMouseDown={keep} onClick={run}>{label}</button>;
+  return (
+    <div className="wsb-wx-panel">
+      <span className="ws-flabel">Weather block</span>
+      <p className="caption secondary">Filled in from the forecast for {place}. It appears when the shoot is within a week and refreshes the day before. Type over it any time; it is optional.</p>
+      {w && <StatusChip tone={WX_CHIP[w.state].tone}>{WX_CHIP[w.state].text}</StatusChip>}
+      <label className="field"><span className="ws-flabel">Shows on the sheet</span>
+        <input ref={input} className="input" value={line} placeholder={w?.state === "early" || w?.state === "none" ? "Sunny · 62°/48° · 10% rain · wind 8 mph" : ""} maxLength={160} onChange={(e) => type(e.target.value)} aria-label="Weather line" />
+      </label>
+      <p className="caption secondary">{caption}</p>
+      {note && <p className="caption">{note}</p>}
+      <div className="wsb-row">
+        {w?.state === "forecast" && <>{ctx?.callSheetId && <button type="button" className="btn outline sm" disabled={busy} onMouseDown={keep} onClick={() => void lookUp()}>Refresh forecast</button>}{act("Type over it", typeOver)}</>}
+        {w?.state === "typed" && act("Use the forecast again", again, true)}
+        {w?.state === "early" && <>{act("Type it in now", typeOver, true)}{w.due && ctx?.callSheetId && <button type="button" className="btn ghost sm" disabled={busy} onMouseDown={keep} onClick={() => void lookUp()}>Refresh forecast</button>}{act("Remove the block", remove)}</>}
+        {w?.state === "none" && <>{act("Type it in", typeOver, true)}{act("Remove the block", remove)}</>}
+        {!w && act("Remove the block", remove)}
+      </div>
+    </div>
   );
 }

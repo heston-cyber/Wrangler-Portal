@@ -8,6 +8,7 @@ import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { ATOMS, TEXT_SIZES, type AtomType, type TextSize } from "../../../../../convex/lib/wsBuilder";
+import { CALL_DEFAULTS } from "../../../../../convex/lib/callSheet";
 import { AtomView, SectionView } from "./nodes";
 import { blockSelectionPlugin, pickPlugin } from "./blockSelection";
 
@@ -124,6 +125,7 @@ const ATOM_DEFAULTS: Record<AtomType, Record<string, unknown>> = {
   divider: {},
   pagebreak: {},
   spacer: { size: 18 },
+  ...CALL_DEFAULTS, // Phase 5b step 3: the call sheet's blocks
 };
 export const Atoms = ATOMS.map((n) => atomNode(n, ATOM_DEFAULTS[n]));
 /** The page's nodes without React views, for tests and anything headless. */

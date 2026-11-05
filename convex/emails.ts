@@ -4,6 +4,7 @@
 //   ownerAlert   clients or guests left notes → one email to Heston per sitting, 10 minutes after the last note
 // Every client email carries an unsubscribe link for that kind; each email is logged by key so it goes out once.
 // Bodies name the video and its project only, never other clients; links carry the share token, never a key.
+import { isClientLogin } from "./lib/roles";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { requireSignedIn } from "./lib/access";
 import { httpAction } from "./_generated/server";
@@ -11,24 +12,21 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { allowedEmails } from "./auth";
 import { frameTc } from "./lib/frames";
 import { randomToken } from "./lib/hash";
 import { businessInScope, defaultBusiness } from "./lib/business";
-import { REPLY_TO, SITE, sendEmail } from "./lib/email";
+import { SITE, sendEmail } from "./lib/email";
 import { clientKey, sameBusiness, shareCovers, shareState } from "./lib/shareAccess";
 import { emailThumbUrl } from "./lib/media";
 import { mailBrandOf } from "./lib/mail";
 import { switchFor } from "./lib/notify";
-import { type Mail, newVersionMail, noteMail, ownerAlertMail, portalInviteMail, replyMail } from "./lib/mails";
+import { type Mail, newVersionMail, noteMail, ownerAlertMail, portalInviteMail, replyMail, testimonialAskMail } from "./lib/mails";
 
 export const ALERT_DELAY_MS = 10 * 60_000;
 export const NEW_VERSION_DELAY_MS = 60_000;
 type Kind = "versions" | "replies" | "notes";
 const projectLabel = (p: { name: string; jobNumber?: string } | null) => (p ? (p.jobNumber ? `${p.jobNumber} ${p.name}` : p.name) : "");
 
-/** Where Heston's own alerts go: ALERT_EMAIL, else the first owner email, else the reply-to address. */
-export const alertEmail = () => process.env.ALERT_EMAIL || allowedEmails()[0] || REPLY_TO();
 
 // ---------- preferences and the log ----------
 
@@ -105,10 +103,14 @@ export const sent = internalMutation({
 });
 
 export const unclaim = internalMutation({
-  args: { key: v.string() },
-  handler: async (ctx, { key }) => {
+  args: { key: v.string(), error: v.optional(v.string()) },
+  handler: async (ctx, { key, error }) => {
     const row = await ctx.db.query("emailLog").withIndex("by_key", (q) => q.eq("key", key)).unique();
-    if (row && !row.resendId) await ctx.db.delete(row._id);
+    if (row && !row.resendId) {
+      await ctx.db.delete(row._id);
+      // Phase 5c: Site watch counts it, as its own step, so nothing there can stop the retry (review L3).
+      await ctx.scheduler.runAfter(0, internal.siteWatch.emailFailed, { kind: row.kind, ...(error ? { error } : {}) });
+    }
   },
 });
 
@@ -122,7 +124,7 @@ async function deliver(ctx: { runMutation: (ref: any, args: any) => Promise<any>
     await ctx.runMutation(internal.emails.sent, { key, resendId: id || "sent" });
     return true;
   } catch (e) {
-    await ctx.runMutation(internal.emails.unclaim, { key }); // let a retry try again
+    await ctx.runMutation(internal.emails.unclaim, { key, error: String((e as Error)?.message ?? e).slice(0, 2000) }); // let a retry try again
     throw e;
   }
 }
@@ -181,7 +183,7 @@ export const replyData = internalQuery({
     const n = await ctx.db.get(r.noteId);
     if (!n || n.visibility !== "shared" || !n.authorId) return null; // guests have no email; private notes have no client
     const author = await ctx.db.get(n.authorId);
-    if (!author?.email || author.role !== "client") return null;
+    if (!author?.email || (author.role !== "client" && !(author.role === "vendor" && await isClientLogin(ctx, author.email)))) return null;
     if (r.authorId && r.authorId === n.authorId) return null; // their own reply
     const ver = await ctx.db.get(n.versionId);
     const vid = ver ? await ctx.db.get(ver.videoId) : null;
@@ -256,9 +258,10 @@ export const ownerAlert = internalAction({
     if (!d) return { sent: 0, reason: "nothing new" };
     if (Date.now() - d.newest < ALERT_DELAY_MS - 5_000) return { sent: 0, reason: "still writing" };
     const m = ownerAlertMail(d.brand, d);
-    // Phase 0.5d step 4: the owner of this video's business (Wrangler keeps ALERT_EMAIL if it's set).
+    // Phase 0.5d step 4: the owner of this video's business. D151 (Nov 4): Wrangler Productions too, like any
+    // business (the old ALERT_EMAIL copy for the first business is gone).
     const biz = await ctx.runQuery(internal.business.contact, {});
-    const to = (biz.isDefault && process.env.ALERT_EMAIL) || biz.ownerEmail;
+    const to = biz.ownerEmail;
     // Review fix: switched off (Settings › Notifications): these notes count as told, so they don't pile up for later.
     if (await ctx.runQuery(internal.emails.isOff, { email: to, kind: "alert", ...(biz.businessId ? { businessId: biz.businessId } : {}) })) {
       await ctx.runMutation(internal.emails.markAlerted, { noteIds: d.noteIds });
@@ -381,7 +384,10 @@ export const noteEmailData = internalQuery({
     const n = await ctx.db.get(noteId);
     if (!n || n.status !== "sent" || n.emailThem === false) return null;
     const items = await ctx.db.query("inboxItems").withIndex("by_note", (q) => q.eq("noteId", noteId)).collect();
-    return { title: n.title, text: n.text, link: n.link ?? null, linkLabel: n.linkLabel ?? null, emails: items.map((i) => i.email), brand: await mailBrandOf(ctx, n.businessId) };
+    // Phase 5 (D139): a testimonial request goes out as email 35, about its project.
+    const p = n.testimonialProjectId ? await ctx.db.get(n.testimonialProjectId) : null;
+    const ask = p ? { project: p.jobNumber ? `${p.jobNumber} ${p.name}` : p.name } : null;
+    return { title: n.title, text: n.text, link: n.link ?? null, linkLabel: n.linkLabel ?? null, emails: items.map((i) => i.email), brand: await mailBrandOf(ctx, n.businessId), ask };
   },
 });
 
@@ -393,7 +399,9 @@ export const noteEmails = internalAction({
     const ok: Array<{ email: string; key: string }> = await ctx.runMutation(internal.emails.recipients, { emails: d.emails, kind: "notes" });
     let sent = 0;
     for (const r of ok) {
-      const m = noteMail(d.brand, { ...d, unsub: unsubUrl(r.key, "notes") });
+      const m = d.ask && d.link
+        ? testimonialAskMail(d.brand, { name: await ctx.runQuery(internal.shoots.nameOf, { email: r.email }), project: d.ask.project, link: `${SITE()}${d.link}`, unsub: unsubUrl(r.key, "notes") })
+        : noteMail(d.brand, { ...d, unsub: unsubUrl(r.key, "notes") });
       if (await deliver(ctx, `note:${noteId}:${r.email}`, "notes", r.email, m, unsubUrl(r.key, "notes"), d.brand.replyTo)) { sent++; await ctx.runMutation(internal.emails.markInboxEmailed, { key: `note:${noteId}`, email: r.email }); }
     }
     return { sent };

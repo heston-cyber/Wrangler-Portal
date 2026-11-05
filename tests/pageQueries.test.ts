@@ -131,10 +131,74 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "vendorPortal.notifications": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only)
   "vendorPayments.totals1099": { pages: ["owner"], args: () => "skip" }, // Vendors › Payments › 1099
   "vendorPayments.get": { pages: ["owner"], args: () => "skip" }, // a vendor invoice
+  "calendar.settings": { pages: ["owner"], args: () => ({}) }, // Settings › Calendar (Phase 4)
+  "briefs.forProject": { pages: ["owner"], args: () => "skip" }, // project Overview › Requests and brief › Kickoff brief (Phase 4)
+  "briefs.settings": { pages: ["owner"], args: () => ({}) }, // Settings › Kickoff brief, its editor and preview
+  "briefs.forEstimate": { pages: ["owner"], args: () => "skip" }, // New estimate › from the brief
+  "briefs.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Coming up
+  "briefs.page": { pages: ["clientHome"], args: () => ({ briefId: "nope" }) }, // /briefs/<id>, the client's kickoff brief
+  // Phase 5 (Nov 3): raw footage storage and testimonials
+  "production.overview": { pages: ["owner"], args: () => ({}) }, // Production › Overview (Phase 5b)
+  "calendarSync.range": { pages: ["owner"], args: () => ({ from: "2026-11-01", to: "2026-12-12" }) }, // Production › Calendar (Phase 5b step 5)
+  "calendarSync.linkOptions": { pages: ["owner"], args: () => ({}) }, // New event › Link to a shoot or project
+  "overviews.clients": { pages: ["owner"], args: () => ({}) }, // Clients › Overview (Phase 5b step 2)
+  "overviews.review": { pages: ["owner"], args: () => ({}) }, // Review › Overview
+  "overviews.docs": { pages: ["owner"], args: () => ({}) }, // Docs › Overview
+  "overviews.proposals": { pages: ["owner"], args: () => ({}) }, // Proposals › Overview
+  "overviews.vendors": { pages: ["owner"], args: () => ({}) }, // Vendors › Overview
+  "siteWatch.summary": { pages: ["owner"], args: () => ({}) }, // Dashboard row and the Settings menu: null for anyone who isn't an admin
+  "siteWatch.report": { pages: ["owner"], args: () => "skip" }, "siteWatch.run": { pages: ["owner"], args: () => "skip" }, "siteWatch.finding": { pages: ["owner"], args: () => "skip" }, // Settings › Site watch (admins only; the page asks only after summary says so)
+  "home.dashboard": { pages: ["owner"], args: () => ({ tzOffsetMin: 300 }) }, // Dashboard: Today, Coming up, Live edits, Money
+  "production.shoots": { pages: ["owner"], args: () => ({}) }, // Production › Shoots
+  "messages.unread": { pages: ["owner", "clientHome"], args: () => ({}) }, // the side menu's Messages count (Phase 5d)
+  "messages.threads": { pages: ["owner"], args: () => ({}) }, // Messages
+  "messages.thread": { pages: ["owner"], args: () => "skip" }, // a conversation
+  "messages.startOptions": { pages: ["owner"], args: () => "skip" }, // New message
+  "messages.mine": { pages: ["clientHome"], args: () => ({}) }, // the client's Messages
+  "messages.clientThreadPage": { pages: ["clientHome"], args: () => "skip" }, // a client's conversation
+  "messages.leadPage": { pages: ["share", "signin"], args: () => ({ token: "x".repeat(24) }) }, // /m/<token>, no account
+  "calls.page": { pages: ["share", "signin"], args: () => ({ slug: "nope" }) }, // /book/<business>, no account (Phase 5d)
+  "calls.manage": { pages: ["share", "signin"], args: () => ({ token: "x".repeat(24) }) }, // /call/<token>, the lead's own call
+  "calls.settings": { pages: ["owner"], args: () => ({}) }, // Settings › Booking calls; the lead page's Copy booking link
+  "calls.forDeal": { pages: ["owner"], args: () => "skip" }, // the lead page's Upcoming call card
+  "help.list": { pages: ["owner", "clientHome"], args: () => ({}) }, // Help (Phase 5d): owner Settings › Help, the client's /help
+  "help.guide": { pages: ["owner", "clientHome"], args: () => ({ slug: "signing-in" }) }, // a guide
+  "gear.list": { pages: ["owner"], args: () => ({}) }, // Production › Gear (Phase 5d)
+  "gear.get": { pages: ["owner"], args: () => "skip" }, // a gear item page
+  "gear.exportCsv": { pages: ["owner"], args: () => "skip" }, // Export for insurer (fired on the button)
+  "gear.forShoot": { pages: ["owner"], args: () => "skip" }, // a shoot's Gear on this shoot card
+  "production.projectsForShoot": { pages: ["owner"], args: () => ({}) }, // New shoot
+  // Phase 5b step 3: call sheets. The owner's pages; the client's reader and project card (null / [] for anyone it wasn't
+  // sent to); the vendor's reader and Home list (the vendor side; tests/callSheets.test.ts fires them as vendors).
+  "callSheets.list": { pages: ["owner"], args: () => ({}) }, // Production › Call sheets
+  "callSheets.newOptions": { pages: ["owner"], args: () => ({}) }, // New call sheet
+  "callSheets.get": { pages: ["owner"], args: () => "skip" }, // the questions, the editor, Detail
+  "callSheets.forClient": { pages: ["clientHome"], args: () => ({ callSheetId: "nope" }) }, // /call-sheets/<id>
+  "callSheets.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Coming up
+  "vendorPortal.callSheet": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only)
+  "vendorPortal.callSheets": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only)
+  // Phase 5b step 4: call-sheet guests. The link's page works signed out (anyone with a made-up token gets "missing");
+  // the signed-in guest pages fire only for a guest login (tests/callSheetGuests.test.ts fires them as guests).
+  "guests.intro": { pages: ["share", "signin"], args: () => ({ token: "x".repeat(24) }) }, // /guest/<token>, signed out
+  "guests.home": { pages: ["owner"], args: () => "skip" }, // /guest (guest logins only)
+  "guests.sheet": { pages: ["owner"], args: () => "skip" }, // /guest/<token> signed in (guest logins only)
+  "footage.settings": { pages: ["owner"], args: () => ({}) }, // Settings › Payments › Footage storage
+  "footage.forProject": { pages: ["owner"], args: () => "skip" }, // project › Delivery › Raw footage storage
+  "footage.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Raw footage
+  "testimonials.projectsFor": { pages: ["owner"], args: () => "skip" }, // Post a note › Ask for a testimonial
+  "testimonials.list": { pages: ["owner"], args: () => ({}) }, // Clients › Testimonials
+  "testimonials.ask": { pages: ["clientHome"], args: () => ({ noteId: "nope" }) }, // /words/<note>, the client's testimonial form
+  "fileRequests.forProject": { pages: ["owner"], args: () => "skip" }, // project Overview › Requests and brief (Phase 4)
+  "fileRequests.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Coming up
+  "fileRequests.page": { pages: ["clientHome"], args: () => ({ requestId: "nope" }) }, // /requests/<id>, the client's file request page
+  "shoots.forProject": { pages: ["owner"], args: () => "skip" }, // project Overview › Shoots (Phase 4)
+  "shoots.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Coming up
+  "shoots.page": { pages: ["clientHome"], args: () => ({ shootId: "nope" }) }, // /shoots/<id>, the client's shoot page
   "vendorPayouts.status": { pages: ["owner"], args: () => "skip" }, // Settings › Payments › Vendor payouts; a vendor invoice (Nov 2)
   "vendorPayouts.forInvoice": { pages: ["owner"], args: () => "skip" }, // a vendor invoice: Pay in portal (Nov 2)
   "vendorPayouts.mine": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only): Settings › Direct deposit
   "proposals.page": { pages: ["share"], args: () => ({ token: "x".repeat(24) }) }, // /p/<token>, no account (D73)
+  "briefings.page": { pages: ["share"], args: () => ({ token: "x".repeat(24) }) }, // /b/<token>, no account (D147)
   "brandKit.get": { pages: ["owner"], args: () => "skip" }, // Settings › Brand kit, a company's Brand kit tab (Phase 3b)
   "subscriptions.get": { pages: ["owner"], args: () => "skip" }, // a subscription
   "subscriptions.page": { pages: ["share"], args: () => ({ token: "not-a-real-token-xx" }) }, // /sub/<token>, the client's page (with or without an account)

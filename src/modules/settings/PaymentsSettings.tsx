@@ -105,6 +105,45 @@ function Reminders({ r, show }: { r: { on: boolean; beforeDays: number; afterDay
   );
 }
 
+/** Phase 5 (743:3134, D98): Footage storage. The price per year, how long raw footage is kept after delivery, and
+ *  whether clients are offered "Keep it" on their delivery page. Billed as a yearly invoice the owner sends (D33). */
+function FootageStorage({ show }: { show: (m: string) => void }) {
+  const s = useQuery(api.footage.settings, {});
+  const save = useMutation(api.footage.saveSettings);
+  const [price, setPrice] = useState<string | null>(null);
+  if (!s) return null;
+  const dollars = (c: number) => (c / 100).toFixed(2);
+  const put = (patch: Partial<{ on: boolean; priceCents: number; keepDays: number }>, msg = "Saved.") =>
+    void save({ on: s.on, priceCents: s.priceCents, keepDays: s.keepDays, ...patch }).then(() => show(msg), (e) => show(err(e)));
+  const savePrice = () => {
+    if (price === null) return;
+    const n = Math.round(Number(price.replace(/[$,]/g, "").trim()) * 100);
+    setPrice(null);
+    if (!Number.isFinite(n) || n === s.priceCents) return;
+    put({ priceCents: n });
+  };
+  const shown = `$${Number(dollars(s.priceCents)).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+  return (
+    <div className="panel pay-card">
+      <span className="wp-eyebrow">Footage storage</span>
+      <div className="pay-grid ft-grid">
+        <label className="wp-field"><span className="wp-field-label">Price per year</span>
+          <input className="input" inputMode="decimal" value={price ?? `$${dollars(s.priceCents)}`} onFocus={() => setPrice(dollars(s.priceCents))}
+            onChange={(e) => setPrice(e.target.value)} onBlur={savePrice} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} aria-label="Price per year" />
+        </label>
+        <label className="wp-field"><span className="wp-field-label">Keep raw footage after delivery</span>
+          <select className="input" value={s.keepDays} onChange={(e) => put({ keepDays: Number(e.target.value) })}>{s.keepDayChoices.map((n) => <option key={n} value={n}>{days(n)}</option>)}</select>
+        </label>
+      </div>
+      <div className="pay-switch ft-switch">
+        <span><b>Offer storage at delivery</b><small>Clients see “Keep it for {shown}/year?” on their delivery page.</small></span>
+        <Toggle label="Offer storage at delivery" checked={s.on} onChange={(on) => put({ on }, on ? "Clients are offered storage at delivery." : "Storage isn't offered at delivery.")} />
+      </div>
+      <p className="secondary pay-note">Billed as a yearly invoice you check and send. Kept until the date unless they keep it, or you copy it to their own drive. The portal never deletes files: on the keep date you get a reminder.</p>
+    </div>
+  );
+}
+
 const day = (t: number) => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 export function PaymentsSettings({ show }: { show: (m: string) => void }) {
@@ -238,6 +277,7 @@ export function PaymentsSettings({ show }: { show: (m: string) => void }) {
       )}
       {st.status === "connected" && <Reminders r={s.reminders} show={show} />}
       {st.status === "connected" && <SubFail show={show} />}
+      <FootageStorage show={show} />
       <VendorPayouts />
       {asking && (
         <Modal onClose={() => setAsking(false)} label="Disconnect Stripe" width={560}>

@@ -89,7 +89,7 @@ export default function Pipeline() {
   const nDue = (board?.deals ?? []).filter((d) => d.followUp && d.followUp <= today2).length;
   return (
     <>
-      <TopBar><a {...linkProps("/clients")}>Clients</a><Sep /><span className="here">Pipeline</span></TopBar>
+      <TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/clients")}>Clients</a><Sep /><span className="here">Pipeline</span></TopBar>
       <div className="wp-page crm-pipe">
         <PageHeader eyebrow="Clients" title="Pipeline." sub="Every lead and job, from first contact to paid." actions={<Button variant="primary" onClick={() => setAdding(true)}>Add lead</Button>} />
         {board === undefined ? <div className="crm-cols"><div className="crm-col skel" /><div className="crm-col skel" /><div className="crm-col skel" /></div>

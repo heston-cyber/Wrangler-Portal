@@ -24,7 +24,18 @@ function InboxPreview({ who, title, detail }: { who: string; title: string; deta
     </Card>
   );
 }
-function EmailPreview({ business, title, text, button }: { business: string; title: string; text: string; button: string }) {
+function EmailPreview({ business, title, text, button, ask }: { business: string; title: string; text: string; button: string; ask?: string | null }) {
+  if (ask) return ( // Phase 5 (D139): a testimonial request goes out as email 35
+    <Card className="pn-prev" label="Email preview" head={<SectionHead label="Preview · Email" />}>
+      <div className="pn-email">
+        <p className="subj">Subject: How did {ask} go?</p>
+        <div className="mail">
+          <p>Thanks for working with us on {ask}. Could you tell us how it went? About a minute, two questions. Nothing is posted without your OK.</p>
+          <span className="btn primary sm" aria-hidden>Share a few words</span>
+        </div>
+      </div>
+    </Card>
+  );
   return (
     <Card className="pn-prev" label="Email preview" head={<SectionHead label="Preview · Email" />}>
       <div className="pn-email">
@@ -94,6 +105,27 @@ function AttachPicker({ kind, clientId, onPick, onClose }: { kind: "cut" | "doc"
   );
 }
 
+/** Phase 5 (D139): "Ask for a testimonial" about one of the client's projects. */
+function AskPicker({ clientId, onPick, onClose }: { clientId: Id<"clients">; onPick: (p: { projectId: Id<"projects">; label: string }) => void; onClose: () => void }) {
+  const projects = useQuery(api.testimonials.projectsFor, { clientId });
+  return (
+    <Modal onClose={onClose} label="Ask for a testimonial" width={560}>
+      <div className="pn-pick">
+        <DialogHeader eyebrow="Testimonial" title="Which project is it about?" body="They get two quick questions about it, and a tick if you may use their words and name. Nothing is posted anywhere." onClose={onClose} />
+        <div className="wp-card pn-list">
+          <div className="wp-rows">
+            {projects === undefined ? <SkeletonRows n={3} /> : projects.length ? projects.map((p, i) => (
+              <div key={p._id} className="wp-rowwrap">{i > 0 && <Divider />}
+                <ListRow className="ilead" lead={{ icon: "folder" }} title={p.label} meta={[p.delivered ? "Delivered" : "Not delivered yet", p.asked ? "asked before" : null].filter(Boolean).join(" · ")}
+                  onClick={() => onPick({ projectId: p._id, label: p.label })} />
+              </div>)) : <ListRow className="ilead quiet" lead={{ icon: "folder" }} title="This client has no projects yet." />}
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export default function PostNote({ noteId: noteParam, clientId: clientParam }: { noteId: Id<"inboxNotes"> | null; clientId: Id<"clients"> | null }) {
   const draft = useQuery(api.inbox.noteDetail, noteParam ? { noteId: noteParam } : "skip");
   const clients = useQuery(api.clients.directory);
@@ -105,10 +137,11 @@ export default function PostNote({ noteId: noteParam, clientId: clientParam }: {
   const [clientId, setClientIdRaw] = useState<Id<"clients"> | null>(clientParam);
   const [title, setTitle] = useState(""), [text, setText] = useState("");
   const [link, setLink] = useState<Link>(null);
+  const [ask, setAsk] = useState<{ projectId: Id<"projects">; label: string } | null>(null); // Phase 5: a testimonial request
   const [emailThem, setEmailThem] = useState(true);
   const [picked, setPicked] = useState<Set<string> | null>(null); // null = everyone with access
   const [loaded, setLoaded] = useState(!noteParam);
-  const [dialog, setDialog] = useState<null | "to" | "cut" | "doc" | "preview" | "confirm">(null);
+  const [dialog, setDialog] = useState<null | "to" | "cut" | "doc" | "ask" | "preview" | "confirm">(null);
   const [busy, setBusy] = useState<null | "save" | "send">(null);
   const [err, setErr] = useState<string | null>(null);
   const people = useQuery(api.inbox.noteRecipients, clientId ? { clientId } : "skip");
@@ -120,9 +153,16 @@ export default function PostNote({ noteId: noteParam, clientId: clientParam }: {
     setClientIdRaw(draft.clientId); setTitle(draft.title); setText(draft.text); setEmailThem(draft.emailThem);
     setLink(draft.link ? { link: draft.link, label: draft.linkLabel ?? "Open in the portal", box: draft.linkLabel?.replace(/^(Watch|Open) /, "") ?? draft.link, icon: draft.link.startsWith("/s/") ? "video" : "document" } : null);
     setPicked(draft.to ? new Set(draft.to) : null);
+    setAsk(draft.testimonial ? { projectId: draft.testimonial.projectId, label: draft.testimonial.project } : null);
+    if (draft.testimonial) setLink(null);
     setLoaded(true);
   }, [draft, loaded]);
-  const setClientId = (id: Id<"clients">) => { if (id !== clientId) { setClientIdRaw(id); setPicked(null); setLink(null); } };
+  const setClientId = (id: Id<"clients">) => { if (id !== clientId) { setClientIdRaw(id); setPicked(null); setLink(null); setAsk(null); } };
+  const pickAsk = (p: { projectId: Id<"projects">; label: string }) => {
+    setAsk(p); setLink(null); setDialog(null);
+    if (!title.trim()) setTitle(`A few words about ${p.label}?`);
+    if (!text.trim()) setText(`Thanks for working with us on ${p.label}. Could you tell us how it went? Two quick questions, about a minute. Nothing is posted without your OK.`);
+  };
 
   const withAccess = useMemo(() => (people ?? []).filter((p) => p.access), [people]);
   const chosen = picked ? withAccess.filter((p) => picked.has(p.email)) : withAccess;
@@ -135,7 +175,7 @@ export default function PostNote({ noteId: noteParam, clientId: clientParam }: {
   const toArg = () => (picked && withAccess.some((p) => !picked.has(p.email)) ? [...picked].filter((e) => withAccess.some((p) => p.email === e)) : undefined);
   const persist = async () => {
     if (!clientId) throw new Error("Pick who it goes to.");
-    const id = await save({ noteId: noteId ?? undefined, clientId, title, text, link: link?.link, linkLabel: link?.label, to: toArg(), emailThem });
+    const id = await save({ noteId: noteId ?? undefined, clientId, title, text, link: ask ? undefined : link?.link, linkLabel: ask ? undefined : link?.label, to: toArg(), emailThem, testimonialProjectId: ask?.projectId ?? null });
     if (!noteId) { setNoteId(id); history.replaceState(null, "", `/sent/new?note=${id}${clientParam ? `&client=${clientParam}` : ""}`); }
     return id;
   };
@@ -163,8 +203,8 @@ export default function PostNote({ noteId: noteParam, clientId: clientParam }: {
   const toText = client ? `${client.name}${names.length ? ` · ${(picked ? chosen : withAccess).map((p) => p.name ?? p.email).join(", ")}` : " · no one with portal access yet"}` : "Pick a client";
   const toShort = client ? `${client.name}${names.length ? ` · ${names.join(", ")}` : ""}` : "Pick a client";
   const previewWho = names[0] ?? "Their";
-  const button = link?.label ?? "Open in the portal";
-  const previews = <><InboxPreview who={previewWho} title={title} detail={firstLine(text) || `A note from ${business}`} /><EmailPreview business={business} title={title} text={text} button={button} /></>;
+  const button = ask ? "Share a few words" : link?.label ?? "Open in the portal";
+  const previews = <><InboxPreview who={previewWho} title={title} detail={firstLine(text) || `A note from ${business}`} /><EmailPreview business={business} title={title} text={text} button={button} ask={ask?.label ?? null} /></>;
 
   return (
     <>
@@ -191,12 +231,15 @@ export default function PostNote({ noteId: noteParam, clientId: clientParam }: {
               <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Shoot moved to Thursday, Nov 6" maxLength={120} />
               <TextArea label="Message" value={text} onChange={(e) => setText(e.target.value)} rows={4} maxLength={2000} placeholder="What do they need to know?" />
               <div className="wp-field"><span className="wp-field-label pc-only">Link (optional)</span>
-                {link ? (
+                {ask ? (
+                  <div className="pn-link"><Icon name="note" size={18} /><span className="v">Testimonial form · {ask.label}</span><button type="button" className="btn ghost sm" onClick={() => setAsk(null)}>Remove</button></div>
+                ) : link ? (
                   <div className="pn-link"><Icon name={link.icon} size={18} /><span className="v">{link.box}</span><button type="button" className="btn ghost sm" onClick={() => setLink(null)}>Remove</button></div>
                 ) : (
                   <div className="pn-attach">
                     <Button size="sm" disabled={!clientId} onClick={() => setDialog("cut")}>Attach a cut</Button>
                     <Button size="sm" disabled={!clientId} onClick={() => setDialog("doc")}>Attach a document</Button>
+                    <Button size="sm" disabled={!clientId} onClick={() => setDialog("ask")}>Ask for a testimonial</Button>
                   </div>
                 )}
               </div>
@@ -223,6 +266,7 @@ export default function PostNote({ noteId: noteParam, clientId: clientParam }: {
         </div>
       </div>
       {dialog === "to" && <PickPeople clients={clients ?? []} clientId={clientId} setClientId={setClientId} people={people} picked={picked ?? new Set(withAccess.map((p) => p.email))} setPicked={setPicked} onClose={() => setDialog(null)} />}
+      {dialog === "ask" && clientId && <AskPicker clientId={clientId} onPick={pickAsk} onClose={() => setDialog(null)} />}
       {(dialog === "cut" || dialog === "doc") && clientId && <AttachPicker kind={dialog} clientId={clientId} onPick={(l) => { setLink(l); setDialog(null); }} onClose={() => setDialog(null)} />}
       {dialog === "preview" && (
         <Modal onClose={() => setDialog(null)} label="Preview" width={460}>

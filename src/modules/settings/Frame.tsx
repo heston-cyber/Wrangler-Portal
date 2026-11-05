@@ -1,17 +1,24 @@
 // Settings' frame (P1 / Owner / Settings, page "S5 · Settings"): the breadcrumb, the section menu on the left and the
 // section on the right. On phones the menu is its own page (/settings) and each section has a back link to it.
+import { useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
 import { useSignOutAsk } from "../../shell/SignOut";
 import { Sep, TopBar } from "../../shell/Shell";
 import { Icon, type IconName } from "../../ui/Icon";
 import { linkProps } from "../../lib/router";
 
-export type SectionKey = "business" | "payments" | "rates" | "brand" | "account" | "notifications" | "register" | "dropbox" | "connectors" | "sheet" | "clients" | "shares";
+export type SectionKey = "business" | "payments" | "rates" | "brand" | "calendar" | "sitewatch" | "brief" | "tools" | "account" | "notifications" | "register" | "dropbox" | "connectors" | "sheet" | "clients" | "shares" | "help" | "calls";
 
 export const SECTIONS: Array<{ key: SectionKey; label: string; icon: IconName }> = [
   { key: "business", label: "Business", icon: "users" },
   { key: "payments", label: "Payments", icon: "invoice" },
   { key: "rates", label: "Pricing", icon: "activity" }, // Phase 3 (263:1382), renamed Pricing in 3b (D76)
   { key: "brand", label: "Brand kit", icon: "folder" }, // Phase 3b (708:1235)
+  { key: "calendar", label: "Calendar", icon: "calendar" }, // Phase 4 (741:1953)
+  { key: "calls", label: "Booking calls", icon: "calendar" }, // Phase 5d step 1 (801:8966)
+  { key: "sitewatch", label: "Site watch", icon: "activity" }, // Phase 5c screens (Nov 4): the portal's admins only
+  { key: "brief", label: "Kickoff brief", icon: "note" }, // Phase 4 (Nov 2, option B)
+  { key: "tools", label: "Tools", icon: "menu" }, // Nov 2 (Heston): your menu's order, tools on it, Dashboard widgets
   { key: "account", label: "Account", icon: "user" },
   { key: "notifications", label: "Notifications", icon: "bell" }, // Nov 2 (Heston): every email, with a switch
   { key: "register", label: "Register", icon: "register" },
@@ -20,11 +27,12 @@ export const SECTIONS: Array<{ key: SectionKey; label: string; icon: IconName }>
   { key: "sheet", label: "Google Sheet copy", icon: "document" },
   { key: "clients", label: "Clients", icon: "users" },
   { key: "shares", label: "Shares", icon: "send" },
+  { key: "help", label: "Help", icon: "info" }, // Phase 5d step 4 (Q59): the last item, the guides
 ];
 
 // Old addresses still land on the right section: /register, /sign/connector, /settings#claude and the like, and
 // Dropbox's return to /settings?dropbox=….
-const HASH: Record<string, SectionKey> = { claude: "connectors", sign: "connectors", dropbox: "dropbox", sheet: "sheet", shares: "shares", clients: "clients", account: "account", notifications: "notifications", business: "business", register: "register", payments: "payments", rates: "rates", pricing: "rates", brand: "brand" };
+const HASH: Record<string, SectionKey> = { claude: "connectors", sign: "connectors", dropbox: "dropbox", sheet: "sheet", shares: "shares", clients: "clients", account: "account", notifications: "notifications", business: "business", register: "register", payments: "payments", calendar: "calendar", sitewatch: "sitewatch", brief: "brief", kickoff: "brief", tools: "tools", rates: "rates", pricing: "rates", brand: "brand" };
 export function sectionOf(path: string, search: string, hash: string): SectionKey | null {
   if (path.startsWith("/register")) return "register";
   if (path.startsWith("/sign/connector")) return "connectors";
@@ -39,9 +47,10 @@ export function sectionOf(path: string, search: string, hash: string): SectionKe
 
 export function SectionMenu({ active, list }: { active: SectionKey | null; list?: boolean }) {
   const [signOut, signOutDialog] = useSignOutAsk();
+  const admin = useQuery(api.siteWatch.summary); // null for anyone who isn't one of the portal's admins: Site watch stays out of their menu
   return (
     <nav className={`wp-setmenu glass${list ? " list" : ""}`} aria-label="Settings">
-      {SECTIONS.map((s) => (
+      {SECTIONS.filter((s) => s.key !== "sitewatch" || admin).map((s) => (
         <a key={s.key} className="item" aria-current={active === s.key ? "page" : undefined} {...linkProps(`/settings/${s.key}`)}>
           <Icon name={s.icon} size={16} /><span>{s.label}</span>{list && <Icon name="chevron-right" size={16} className="go" />}
         </a>

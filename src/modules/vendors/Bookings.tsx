@@ -146,9 +146,9 @@ export default function BookingsPage() {
   if (pill === "done" || pill === "declined" || pill === "cancelled") shown.reverse(); // the most recent first
   return (
     <>
-      <TopBar><a {...linkProps("/vendors")}>Vendors</a><Sep /><span className="here">Bookings</span></TopBar>
+      <TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><span className="here">Bookings</span></TopBar>
       <div className="wp-page">
-        <PageHeader eyebrow="Vendors" title="Bookings." sub="Who you’ve booked, for which project and when." actions={<Button variant="primary" onClick={() => setBooking(true)}>Book a vendor</Button>} />
+        <PageHeader eyebrow="Production · Pre-pro" title="Bookings." sub="Who you’ve booked, for which project and when." actions={<Button variant="primary" onClick={() => setBooking(true)}>Book a vendor</Button>} />
         {rows === undefined ? <Card label="Loading"><SkeletonRows n={4} /></Card> : rows.length === 0 ? (
           <EmptyState icon="calendar" title="No bookings yet." body="Book a vendor on a project: they get the offer by email and accept or decline it in their portal." actions={<Button variant="primary" onClick={() => setBooking(true)}>Book a vendor</Button>} />
         ) : (
@@ -175,7 +175,7 @@ export function BookingPage({ bookingId }: { bookingId: string }) {
   const [toast, show] = useToast();
   const [confirm, confirmNode] = useConfirm();
   const [briefing, setBriefing] = useState(false);
-  const top = <TopBar><a {...linkProps("/vendors")}>Vendors</a><Sep /><a {...linkProps("/vendors/bookings")}>Bookings</a>{x && <><Sep /><span className="here">{x.vendor} · {x.role}</span></>}</TopBar>;
+  const top = <TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/vendors/bookings")}>Bookings</a>{x && <><Sep /><span className="here">{x.vendor} · {x.role}</span></>}</TopBar>;
   if (x === undefined) return <>{top}<div className="wp-page"><Card label="Loading"><SkeletonRows n={5} /></Card></div></>;
   if (x === null) return <>{top}<div className="wp-page"><EmptyState icon="calendar" title="This booking isn't here." actions={<ButtonLink to="/vendors/bookings">All bookings</ButtonLink>} /></div></>;
   const first = x.vendor.split(" ")[0];

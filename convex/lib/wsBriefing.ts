@@ -29,8 +29,9 @@ export const starterSummary = (s: Starter) => STARTERS[s].sections.map(([h]) => 
 
 /** A new briefing's page: the title, who it's for (filled from the booking), then each section with a line saying what
  *  goes there. {vendor} and {dates} are the briefing's own fill-in fields, set from the booking it's sent to. */
-export function briefingStarterPage(s: Starter): Page {
-  const content: PNode[] = [line(`${STARTERS[s].name} · {project}`, { size: "title" }), line("For {vendor} · {dates}", { size: "subtitle" })];
+export function briefingStarterPage(s: Starter, withProject = true): Page {
+  // D147: a briefing with no project has no {project} in its title (the project is optional).
+  const content: PNode[] = [line(withProject ? `${STARTERS[s].name} · {project}` : STARTERS[s].name, { size: "title" }), line("For {vendor} · {dates}", { size: "subtitle" })];
   for (const [h, say] of STARTERS[s].sections) { content.push(line(h, { size: "heading" })); content.push(line(say)); }
   return { type: "doc", content };
 }

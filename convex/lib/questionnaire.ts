@@ -80,9 +80,14 @@ const clip = (s: unknown, n: number) => (typeof s === "string" ? s.trim().slice(
 const TYPES = new Set<QType>(Object.keys(TYPE_LABEL) as QType[]);
 
 /** A questionnaire as saved: checked and trimmed. Client and Pricing stay (and their locked questions). */
-export function cleanQuestionnaire(x: unknown): Questionnaire {
+/** Phase 4 (Nov 2, option B): the kickoff brief uses the same shape, without the proposal's built-in questions. */
+export const KICKOFF_TYPES = new Set<QType>(["short", "long", "select", "multi", "link", "date", "daterange", "money", "number", "colors"]);
+export const KICKOFF_ADDABLE = ADDABLE.filter((t) => KICKOFF_TYPES.has(t.type));
+
+export function cleanQuestionnaire(x: unknown, kind: "proposal" | "kickoff" = "proposal"): Questionnaire {
+  const kickoff = kind === "kickoff";
   const steps = (x as Questionnaire)?.steps;
-  if (!Array.isArray(steps) || !steps.length || steps.length > 12) throw new Error("A questionnaire has 1 to 12 steps.");
+  if (!Array.isArray(steps) || !steps.length || steps.length > 12) throw new Error(kickoff ? "A brief has 1 to 12 steps." : "A questionnaire has 1 to 12 steps.");
   const seen = new Set<string>();
   const qIds = new Set<string>(["__lines"]); // ids are answer keys: unique across the whole questionnaire
   const out: Step[] = steps.map((s, i) => {
@@ -93,10 +98,10 @@ export function cleanQuestionnaire(x: unknown): Questionnaire {
     seen.add(id);
     return {
       id, title: clip(s.title, 40) || `Step ${i + 1}`, heading: clip(s.heading, 120) || clip(s.title, 40) || `Step ${i + 1}`, sub: clip(s.sub, 300),
-      ...(s.fixed === "client" || s.fixed === "pricing" ? { fixed: s.fixed } : {}),
+      ...(!kickoff && (s.fixed === "client" || s.fixed === "pricing") ? { fixed: s.fixed } : {}),
       questions: qs.map((qq, j) => {
-        const bind = clip(qq?.bind, 40);
-        const type: QType = LOCKED_TYPE[bind] ?? (TYPES.has(qq?.type) ? qq.type : "short");
+        const bind = kickoff && LOCKED_BINDS.has(clip(qq?.bind, 40)) ? "" : clip(qq?.bind, 40);
+        const type: QType = kickoff ? (KICKOFF_TYPES.has(qq?.type) ? qq.type : "short") : LOCKED_TYPE[bind] ?? (TYPES.has(qq?.type) ? qq.type : "short");
         let qid = (clip(qq?.id, 40) || `q${j}`).replace(/^_+/, "q");
         while (qIds.has(qid)) qid = `${qid}_`;
         qIds.add(qid);
@@ -104,11 +109,12 @@ export function cleanQuestionnaire(x: unknown): Questionnaire {
         return {
           id: qid, label: clip(qq.label, 120) || "Question", type, ...(clip(qq.help, 300) ? { help: clip(qq.help, 300) } : {}), ...(qq.required ? { required: true } : {}),
           ...(options && (type === "select" || type === "multi" || type === "addons") ? { options } : {}), ...(qq.other ? { other: true } : {}), ...(qq.multiple ? { multiple: true } : {}),
-          ...(clip(qq.bind, 40) ? { bind: clip(qq.bind, 40) } : {}), ...(qq.half ? { half: true } : {}),
+          ...(bind ? { bind } : {}), ...(qq.half ? { half: true } : {}),
         } as Question;
       }),
     };
   });
+  if (kickoff) return { steps: out };
   for (const f of ["client", "pricing"] as const) if (!out.some((s) => s.fixed === f)) throw new Error(`The ${f === "client" ? "Client" : "Pricing"} step can't be removed: a proposal needs it.`);
   const binds = out.flatMap((s) => s.questions.map((qq) => qq.bind)).filter(Boolean) as string[];
   for (const b of LOCKED_BINDS) if (!binds.includes(b)) throw new Error("The client and pricing questions can't be removed.");
@@ -117,7 +123,8 @@ export function cleanQuestionnaire(x: unknown): Questionnaire {
 
 // ---------- answers ----------
 
-export type ClientAnswer = { mode: "existing" | "new"; key?: string; clientId?: string; dealId?: string; company: string; website?: string; name: string; email: string; phone?: string; saveAs?: "lead" | "company" };
+export type ClientAnswer = { mode: "existing" | "new" | "none"; // D149: none = "No client yet"
+  key?: string; clientId?: string; dealId?: string; company: string; website?: string; name: string; email: string; phone?: string; saveAs?: "lead" | "company" };
 export type FileAnswer = { fileId: string; name: string; size: number; type: string };
 export type PLine = { id: string; description: string; qty: number; unitCents: number; suggestedCents?: number; note?: string; auto?: string };
 export type Answers = Record<string, unknown> & { __lines?: PLine[] };

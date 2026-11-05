@@ -86,7 +86,7 @@ describe("proposals", () => {
     await expect(w.heston.mutation(api.builder.saveBuild, { buildId, title: "X", blocks: b.blocks, fields: b.fields, signers: [], style: b.style })).rejects.toThrow(/can't change/);
     const token = await tokenOf(w, id);
     const page = await w.t.query(api.proposals.page, { token });
-    expect(page).toMatchObject({ number: "WRNGLR-P-0002", status: "sent", totalCents: 1_000_000, depositPct: 50, contact: { name: "Maya Brooks", company: "Harbor Coffee" }, pdfUrl: expect.any(String) });
+    expect(page).toMatchObject({ number: "WRNGLR-P-0002", status: "sent", totalCents: 1_000_000, depositPct: 50, for: { name: "Maya Brooks", company: "Harbor Coffee", anyone: false }, pdfUrl: expect.any(String) });
     expect(JSON.stringify(page)).not.toMatch(/history|maya@harbor|asked/);
     expect(await w.t.query(api.proposals.page, { token: "x".repeat(24) })).toBeNull();
     await w.t.mutation(api.proposals.markViewed, { token });

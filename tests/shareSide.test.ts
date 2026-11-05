@@ -214,7 +214,7 @@ describe("signed media", () => {
     const signed = await me.query(api.library.video, { videoId: ids.brand });
     const s1 = signed!.versions.find((v) => v.number === 1)!, s2 = signed!.versions.find((v) => v.number === 2)!;
     expect(s1.media.hls).toMatch(/^https:\/\/vz-3ba0610b-f90\.b-cdn\.net\/bcdn_token=HS256-[\w-]+&token_path=%2Fguid-1%2F&expires=\d+\/guid-1\/playlist\.m3u8$/);
-    expect(s1.media.mp4[360]).toMatch(/\/guid-1\/play_360p\.mp4\?token=HS256-[\w-]+&token_path=%2Fguid-1%2F&expires=\d+$/);
+    expect(s1.media.mp4[360]).toMatch(/\/guid-1\/play_360p\.mp4\?token=HS256-[\w-]+&expires=\d+$/); // review fix H1: one file, never the folder
     expect(s1.media.thumb).toMatch(/\/guid-1\/thumbnail\.jpg\?token=/);
     expect(s2.media.file).toMatch(/\/review\/x\/abc\/b2\.mp4\?token=HS256-[\w-]+&token_path=%2Freview%2Fx%2Fabc%2F&expires=\d+$/);
     expect(s2.media.scrub?.hls).toMatch(/^https:\/\/vz-scrub\.b-cdn\.net\/bcdn_token=/);

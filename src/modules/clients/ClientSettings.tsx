@@ -7,6 +7,7 @@ import { Button } from "../../ui/wp";
 import { NotificationList } from "../settings/Notifications";
 import { useToast } from "../../ui/kit";
 import { TopBar } from "../../shell/Shell";
+import { linkProps } from "../../lib/router";
 import { useSignOutAsk } from "../../shell/SignOut";
 
 export default function ClientSettings({ me }: { me: { name: string | null; email: string } }) {
@@ -39,6 +40,7 @@ export default function ClientSettings({ me }: { me: { name: string | null; emai
             <span className="l"><b>Password</b><span>{resetSent ? "A code is on its way. Sign out, then use Forgot your password to finish." : "Change it with a code sent to your email."}</span></span>
             <span className="v"><Button size="sm" disabled={resetSent} onClick={async () => { try { await signIn("password", { flow: "reset", email: me.email }); setResetSent(true); } catch { show("Couldn't send the code. Try again in a minute."); } }}>Email me a code</Button></span>
           </div>
+          <div className="r"><span className="l"><b>Help</b><span>Short guides: signing, paying, uploading and more.</span></span><span className="v"><a className="btn sm" {...linkProps("/help")}>Open Help</a></span></div>
           <div className="r"><span className="l"><b>Sign out</b></span><span className="v"><Button size="sm" onClick={signOut}>Sign out</Button></span></div>{signOutDialog}
         </section>
         {/* Nov 2: every email, each with its own switch (it replaces the one "Email me when something new arrives" switch) */}

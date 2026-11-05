@@ -8,11 +8,17 @@ export const BUSINESS_TABLES = [
   "dropFiles", "transcripts", "waveforms", "clients", "stillFiles",
   "wsDocuments", "wsBuilds", "wsTemplates", "wsClauses", "wsStyles", "wsProfile", "wsFonts", "wsConnectorKeys",
   "wsDropbox", "wsSignings", "wsVersions", "wsRequests", "wsOwnerSignatures",
-  "clientPeople", "inboxItems", "inboxNotes", "clientApprovals", "deliveryFiles", "invoices", "plans", "subscriptions", "deals", "estimates", "followUps", "ledgerEntries", "quotes", "proposals", "proposalFiles", "vendors", "vendorBookings", "briefings", "vendorInvoices",
+  "clientPeople", "inboxItems", "inboxNotes", "clientApprovals", "deliveryFiles", "invoices", "plans", "subscriptions", "deals", "estimates", "followUps", "ledgerEntries", "quotes", "proposals", "proposalFiles", "vendors", "vendorBookings", "briefings", "vendorInvoices", "shoots", "fileRequests", "fileUploads", "calendars", "briefs", "footageStorage", "testimonials", "callSheets",
+  "calendarEvents", // Phase 5b step 5
+  "briefingRecipients", // D147 (Nov 4)
+  "offerRecipients", // D149 (Nov 4)
+  "gear", "gearMaintenance", "gearBookings", // Phase 5d step 3 (Nov 4)
+  "callSettings", "calls", // Phase 5d step 1 (Nov 4)
+  "msgThreads", "messages", "msgReads", "msgUploads", // Phase 5d step 2 (Nov 4)
 ] as readonly string[];
 
 export const GLOBAL_TABLES = [
-  "users", "businesses", "memberships", "rateLimits", "oauthStates", "emailLog", "stripeEvents", "userPrefs", "playerLogs", "phase0Runs", "r1Results",
+  "users", "businesses", "memberships", "guestPasses", "rateLimits", "oauthStates", "emailLog", "stripeEvents", "userPrefs", "playerLogs", "phase0Runs", "r1Results", "siteWatchFindings", "siteWatchRuns", "siteWatchSettings",
 ] as readonly string[];
 
 // Belong to a business through their parent and are never patched: Wrangler Sign's audit trail is append-only

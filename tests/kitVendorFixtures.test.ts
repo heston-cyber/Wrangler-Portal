@@ -57,7 +57,62 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures (Phase 3c)", () => {
     await jordan.mutation(api.vendorPortal.setNotification, { businessId: w.A, key: "briefings", on: false });
     await w.maya.mutation(api.notifications.setClient, { key: "invoice_reminders", on: false });
 
+    // Phone pass (Nov 4): the Nov 6 shoot has a call sheet, sent to Jordan (the vendor side's reader page and home list).
+    const { shootId } = await w.heston.mutation(api.shoots.schedule, { projectId: w.p, date: "2026-11-06", call: "07:30", wrap: "16:00", location: "Harbor Coffee, Plaza District", parking: "Behind the shop", prepare: [], withOwner: true, bookingIds: [k1], calendar: false }) as { shootId: Id<"shoots"> };
+    await w.heston.mutation(api.callSheets.ensureStarters, {});
+    const sheet = await w.heston.mutation(api.callSheets.create, { shootId, how: "questions" }) as Id<"callSheets">;
+    await w.heston.mutation(api.callSheets.saveAnswers, { callSheetId: sheet, step: 4, answers: { templateId: null, crewCall: "07:30", talentCall: "09:00", wrap: "16:00", locationName: "Harbor Coffee", address: "412 Main St, Oklahoma City, OK 73102", parking: "Behind the shop. Load-in is through the side door.", weather: true,
+      schedule: [{ id: "r1", time: "07:30", what: "Crew call and load-in", who: "Crew" }, { id: "r2", time: "09:00", what: "Talent call", who: "Talent" }, { id: "r3", time: "12:30", what: "Lunch", who: "Everyone" }, { id: "r4", time: "15:30", what: "Wrap", who: "Crew" }], notes: "Run and gun. Bring the gimbal." } });
+    await w.heston.mutation(api.callSheets.make, { callSheetId: sheet });
+    await w.heston.mutation(api.callSheets.send, { callSheetId: sheet, crew: true, client: false, guests: false, message: "See you Friday." });
+
+    // D147 (Nov 4): briefings sent freely. Read by its one booked vendor; emailed to two (one opened); a draft with no
+    // project; and one only shared by a copied link (4 opens). Each one's page, and the no-login page by a link.
+    const pdfId = () => w.t.run((ctx) => ctx.storage.store(new Blob(["%PDF-1.4 kit"], { type: "application/pdf" })));
+    const fill = async (id: Id<"briefings">) => {
+      const g = await w.heston.query(api.briefings.get, { briefingId: id });
+      const bd = await w.heston.query(api.builder.getBuild, { buildId: g.buildId });
+      const custom = bd.fields.custom.map((c: { key: string; label: string; value: string }) => (c.key === "dates" && !c.value ? { ...c, value: "Nov 6 – 7, 2026" } : c));
+      await w.heston.mutation(api.builder.saveBuild, { buildId: g.buildId, title: bd.title, blocks: bd.blocks, fields: { ...bd.fields, custom }, signers: [], style: bd.style });
+    };
+    const b1 = await w.heston.mutation(api.briefings.create, { bookingId: k1 }) as Id<"briefings">;
+    await w.heston.action(api.briefings.share, { briefingId: b1, storageId: await pdfId(), to: [{ vendorId: a, email: JORDAN }] });
+    await jordan.mutation(api.vendorPortal.markRead, { briefingId: b1 });
+    const b2 = await w.heston.mutation(api.briefings.create, { projectId: w.p, starter: "edit" }) as Id<"briefings">;
+    await fill(b2);
+    await w.heston.action(api.briefings.share, { briefingId: b2, storageId: await pdfId(), to: [{ vendorId: r, email: "riley@chen.example" }, { email: "sam@ortega.example", name: "Sam Ortega" }], copyLink: true });
+    const b2who = await w.t.run((ctx) => ctx.db.query("briefingRecipients").collect());
+    const samTok = b2who.find((x) => x.email === "sam@ortega.example")!.token;
+    await w.t.mutation(api.briefings.opened, { token: samTok });
+    const b3 = await w.heston.mutation(api.briefings.create, {}) as Id<"briefings">;
+    await w.heston.mutation(api.briefings.setDetails, { briefingId: b3, projectId: null, sendTo: [{ vendorId: r, email: "" }, { email: "ana@studiofour.com" }] });
+    const b4 = await w.heston.mutation(api.briefings.create, { projectId: w.p }) as Id<"briefings">;
+    await fill(b4);
+    const l4 = await w.heston.action(api.briefings.share, { briefingId: b4, storageId: await pdfId(), to: [], copyLink: true });
+    const linkTok = String(l4.link).split("/b/")[1];
+    for (let i = 0; i < 4; i++) await w.t.mutation(api.briefings.opened, { token: linkTok });
+    const briefs = [b1, b2, b3, b4];
+    const builds: string[] = [];
+    for (const id of briefs) builds.push((await w.heston.query(api.briefings.get, { briefingId: id })).buildId);
+
+    // D149 (Nov 4): a quote to anyone: two emailed people and a copied link; Lee accepts for Park Studio LLC.
+    const qId = await w.heston.mutation(api.quotes.save, { title: "Menu board refresh", lines: [{ id: "a", description: "Shooting · 1 day (8 h)", qty: 1, unitCents: 160_000 }, { id: "b", description: "Editing · simple (12 h)", qty: 1, unitCents: 240_000 }], deposit: { kind: "percent", value: 50 } }) as Id<"quotes">;
+    const qs = await w.heston.action(api.quotes.send, { quoteId: qId, to: "priya@rao.example, lee@parkstudio.example", copyLink: true });
+    const qRows = await w.t.run((ctx) => ctx.db.query("offerRecipients").collect());
+    const priyaTok = qRows.find((x) => x.email === "priya@rao.example")!.token, leeTok = qRows.find((x) => x.email === "lee@parkstudio.example")!.token;
+    const qLink = String(qs.link).split("/q/")[1];
+    await w.t.mutation(api.quotes.markViewed, { token: priyaTok });
+    const q2 = await w.heston.mutation(api.quotes.save, { title: "Spring promo", lines: [{ id: "a", description: "Shooting · 2 days", qty: 2, unitCents: 160_000 }], deposit: { kind: "percent", value: 25 } }) as Id<"quotes">;
+    const q2s = await w.heston.action(api.quotes.send, { quoteId: q2, to: "", copyLink: true }).catch(() => w.heston.action(api.quotes.send, { quoteId: q2, copyLink: true }));
+    const q2Link = String(q2s.link).split("/q/")[1];
+    const openQuote = { id: q2, link: q2Link };
+    await w.t.fetch("/q-respond", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: leeTok, action: "accept", name: "Lee Park", company: "Park Studio LLC" }) });
+
     const OWNER: [string, Record<string, unknown>][] = [
+      ["quotes.get#" + qId, { quoteId: qId }], ["quotes.get#" + q2, { quoteId: q2 }], ["quotes.page#" + priyaTok, { token: priyaTok }], ["quotes.page#" + leeTok, { token: leeTok }], ["quotes.page#" + openQuote.link, { token: openQuote.link }], ["quotes.list", {}],
+      ...briefs.map((id): [string, Record<string, unknown>] => ["briefings.get#" + id, { briefingId: id }]),
+      ...builds.map((id): [string, Record<string, unknown>] => ["builder.getBuild#" + id, { buildId: id }]),
+      ["briefings.page#" + samTok, { token: samTok }], ["briefings.page#" + linkTok, { token: linkTok }], ["bookings.form", {}],
       ["vendors.list", {}], ["vendors.get#" + a, { vendorId: a }], ["vendors.get#" + r, { vendorId: r }], ["vendors.invoices#" + a, { vendorId: a }], ["vendors.invoices#" + r, { vendorId: r }],
       ["bookings.list", {}], ["bookings.forVendor#" + a, { vendorId: a }], ["bookings.forVendor#" + r, { vendorId: r }], ["bookings.get#" + k1, { bookingId: k1 }], ["bookings.forProject#" + w.p, { projectId: w.p }],
       ["briefings.forVendor#" + a, { vendorId: a }], ["briefings.forVendor#" + r, { vendorId: r }], ["briefings.list", {}], ["briefings.templates", {}],
@@ -69,7 +124,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures (Phase 3c)", () => {
       ["users.me", {}], ["vendorPortal.businesses", {}], ["vendorPortal.counts", { businessId: w.A }], ["vendorPortal.home", { businessId: w.A }], ["vendorPortal.bookings", { businessId: w.A }],
       ["vendorPortal.booking#" + k1, { bookingId: k1 }], ["vendorPortal.booking#" + k2, { bookingId: k2 }], ["vendorPortal.briefings", { businessId: w.A }], ["vendorPortal.reviews", { businessId: w.A }],
       ["vendorPortal.invoices", { businessId: w.A }], ["vendorPortal.invoiceForm", { businessId: w.A }], ["vendorPortal.invoice#" + inv1, { invoiceId: inv1 }], ["vendorPortal.invoice#" + inv2, { invoiceId: inv2 }], ["vendorPortal.invoice#" + inv3, { invoiceId: inv3 }],
-      ["vendorPortal.settings", { businessId: w.A }], ["vendorPortal.notifications", { businessId: w.A }], ["business.brand", {}], ["vendorPayouts.mine", { businessId: w.A }], ["vendorPortal.invoice#" + inv4, { invoiceId: inv4 }],
+      ["help.list", { businessId: w.A }], ["help.guide#adding-a-w9", { slug: "adding-a-w9", businessId: w.A }], ["vendorPortal.settings", { businessId: w.A }], ["vendorPortal.notifications", { businessId: w.A }], ["business.brand", {}], ["vendorPayouts.mine", { businessId: w.A }], ["vendorPortal.invoice#" + inv4, { invoiceId: inv4 }], ["vendorPortal.callSheet#" + sheet, { callSheetId: sheet }],
     ];
     const run = async (as: typeof w.heston, list: [string, Record<string, unknown>][]) => {
       const out: Record<string, unknown> = {};
@@ -85,7 +140,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures (Phase 3c)", () => {
     Object.assign(fx.owner, await run(w.heston, OWNER));
     fx.vendor = await run(jordan, VENDOR);
     Object.assign(fx.client, await run(w.maya, [["notifications.client", {}]]));
-    fx.ids = { ...fx.ids, vendor: { jordan: a, riley: r, bookings: [k1, k2, k3], invoices: { toApprove: inv1, approved: inv2, paid: inv3, paying: inv4 } } };
+    fx.ids = { ...fx.ids, vendor: { jordan: a, riley: r, bookings: [k1, k2, k3], invoices: { toApprove: inv1, approved: inv2, paid: inv3, paying: inv4 }, callSheet: sheet }, briefings: { ids: briefs, emailed: samTok, link: linkTok }, offers: { quote: qId, priya: priyaTok, lee: leeTok, link: qLink, open: openQuote.link } };
     delete process.env.STRIPE_PAYOUTS_KEY;
     writeFileSync(file, JSON.stringify(fx, null, 1));
   });

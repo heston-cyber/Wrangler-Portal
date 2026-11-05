@@ -8,6 +8,7 @@ import { dateRange } from "./bookings";
 export type Mail = { from: string; subject: string; html: string; text: string };
 const first = (name: string | null | undefined) => (name ?? "").trim().split(/\s+/)[0] || "";
 const hi = (name: string | null | undefined): Block => ({ t: "p", text: first(name) ? `Hi ${first(name)},` : "Hi," });
+const hello = (name: string | null | undefined): Block => ({ t: "p", text: first(name) ? `Hi ${first(name)},` : "Hello," }); // D149 (Q98)
 /** "Heston at Wrangler Productions" (or just the business when no owner name is set). */
 const byline = (b: MailBrand, full = false) => (b.ownerName ? `${full ? b.ownerName : first(b.ownerName)} at ${b.name}` : b.name);
 const SIGN_HOST = "sign.wranglerportal.com";
@@ -45,7 +46,7 @@ export function shareInviteMail(b: MailBrand, d: { kind: string; label: string; 
 }
 /** 03b Portal invite (drawn Oct 29): "Invite to the portal" / "Resend invite" from the client page. */
 export function portalInviteMail(b: MailBrand, d: { name: string | null; email: string; hasAccount: boolean }): Mail {
-  const link = `${SITE()}/?invited=${encodeURIComponent(d.email).replace(/%40/g, "@")}`;
+  const link = `${SITE()}/?invited=${encodeURIComponent(d.email).replace(/%40/g, "@")}&side=client`; // a client-and-vendor login lands on the client side
   const who = byline(b);
   return mk(b, "review", `${who} invited you to WranglerPortal`, [
     hi(d.name),
@@ -312,7 +313,7 @@ export function ownerSubscriptionFailedMail(b: MailBrand, d: { client: string; p
 /** 18 · the quote, to the person it's for (no account needed, D81). */
 export function quoteMail(b: MailBrand, d: { name: string; number: string; title: string; totalCents: number; validUntil: string; terms: string | null; link: string }): Mail {
   return mk(b, "updates", `Quote ${d.number} from ${b.name}: ${usd(d.totalCents)}`, [
-    hi(d.name),
+    hello(d.name), // Q98: "Hi {name},", or "Hello," with no name
     { t: "p", text: `Here’s quote ${d.number} for ${d.title}.` },
     { t: "sums", rows: [{ label: "Total", value: usd(d.totalCents), big: true }, { label: "Valid until", value: longDate(d.validUntil) }, { label: "Quote", value: `${d.number} · ${d.title}` }] },
     ...(d.terms ? [{ t: "p", text: d.terms, tone: "muted" } as Block] : []),
@@ -325,7 +326,7 @@ export function quoteMail(b: MailBrand, d: { name: string; number: string; title
 export function proposalMail(b: MailBrand, d: { name: string; number: string; title: string; totalCents: number; sentAt: number; message: string | null; link: string }): Mail {
   const sent = new Date(d.sentAt).toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", year: "numeric" });
   return mk(b, "updates", `Proposal from ${b.name}: ${d.title}`, [
-    hi(d.name),
+    hello(d.name), // Q98: "Hi {name},", or "Hello," with no name
     { t: "p", text: `Here’s our proposal for ${d.title}.` },
     { t: "sums", rows: [{ label: "Investment", value: usd(d.totalCents), big: true }, { label: "Sent", value: sent }, { label: "Proposal", value: `${d.number} · ${d.title}` }] },
     ...(d.message ? [{ t: "p", text: d.message } as Block] : []),
@@ -398,9 +399,26 @@ export function briefingMail(b: MailBrand, d: { name: string; kind: string; proj
   ], signoff(b), `${d.title} · ${dateRange(d.start, d.end)}`);
 }
 
+// ---------- 58: a briefing sent to anyone (D147, S5 · Phase 3c 863:17928): a no-login link, one per person ----------
+// The rows come from the briefing itself (Q91 g): its dates field and its project when they're set, and its title.
+export function briefingLinkMail(b: MailBrand, d: { name: string | null; kind: string; project: string | null; title: string; dates: string | null; headings: string[]; note: string | null; link: string }): Mail {
+  const sender = first(b.ownerName) || b.name;
+  const parts = d.headings.slice(0, 4).map((h, i) => (i === 0 ? h : h.toLowerCase()));
+  const rows = [...(d.dates ? [{ label: "Dates", value: d.dates, big: true }] : []), ...(d.project ? [{ label: "Project", value: d.project }] : []), { label: "Brief", value: d.title }];
+  return mk(b, "updates", d.project ? `Briefing: ${d.project}` : `Briefing from ${b.name}`, [
+    { t: "p", text: first(d.name) ? `Hi ${first(d.name)},` : "Hello," },
+    { t: "p", text: `${sender} sent you a briefing: the ${d.kind.toLowerCase()}${d.project ? ` for ${d.project}` : ""}.` },
+    ...(d.note ? [{ t: "p", text: d.note } as Block] : []),
+    { t: "sums", rows },
+    ...(parts.length ? [{ t: "p", text: `${andList(parts)} ${parts.length === 1 ? "is" : "are"} in the brief.`, tone: "muted" } as Block] : []),
+    { t: "p", text: "Read it on the page. No login needed. You can press “I’ve read it” there, and download it as a PDF." },
+    { t: "button", label: "Read the briefing", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), d.dates ? `${d.title} · ${d.dates}` : d.title);
+}
+
 // ---------- the vendor portal invite (Phase 3c step 4; the portal invite's layout, 03b) ----------
 export function vendorInviteMail(b: MailBrand, d: { name: string; email: string; hasAccount: boolean }): Mail {
-  const link = `${SITE()}/?invited=${encodeURIComponent(d.email).replace(/%40/g, "@")}`;
+  const link = `${SITE()}/?invited=${encodeURIComponent(d.email).replace(/%40/g, "@")}&side=vendor`; // lands on the vendor side
   const who = byline(b);
   return mk(b, "updates", `${who} invited you to WranglerPortal`, [
     hi(d.name),
@@ -547,4 +565,315 @@ export function vendorPayoutReturnedMail(b: MailBrand, d: { name: string; number
     { t: "p", text: "Check your bank details in your portal's Settings › Direct deposit. Your invoice is back to Approved and will be paid again." },
     { t: "button", label: "Check your direct deposit", href: d.link }, { t: "link", href: d.link },
   ], vendorFoot(b), `${d.number} · ${usd(d.cents)}`);
+}
+
+// ---------- Phase 4 (frames 742:2564, 742:2590): 29 · Shoot scheduled, 30 · Shoot moved; and the owner's note when a
+// client confirms (no frame: the owner-alert layout of 26). ----------
+export const clock = (hhmm: string) => { const [h, m] = hhmm.split(":").map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
+export const shootDay = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
+export function shootMail(b: MailBrand, d: { name: string | null; project: string; date: string; call: string; location: string; moved: null | { date: string; call: string; location: string }; prepare?: boolean; link: string }): Mail {
+  if (!d.moved) return mk(b, "updates", `Your shoot for ${d.project} is set: ${shootDay(d.date)}`, [
+    hi(d.name),
+    { t: "p", text: `Your shoot for ${d.project} is set.` },
+    { t: "sums", rows: [{ label: "Date", value: shootDay(d.date), big: true }, { label: "Call", value: clock(d.call) }, { label: "Where", value: d.location }] },
+    ...(d.prepare !== false ? [{ t: "p", text: "What to prepare is on the shoot page.", tone: "muted" } as Block] : []),
+    { t: "p", text: "Please confirm it in your portal." },
+    { t: "button", label: "Confirm the shoot", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `${shootDay(d.date)} · ${clock(d.call)} call`);
+  const m = d.moved;
+  const sameDay = m.date === d.date, sameCall = m.call === d.call, samePlace = m.location === d.location;
+  return mk(b, "updates", `Your shoot for ${d.project} has moved: ${shootDay(d.date)}`, [
+    hi(d.name),
+    { t: "p", text: `Your shoot for ${d.project} has moved.` },
+    { t: "sums", rows: [
+      { label: sameDay ? "Date" : "New date", value: shootDay(d.date), big: true },
+      ...(sameDay ? [] : [{ label: "Was", value: shootDay(m.date) }]),
+      ...(sameCall ? [] : [{ label: "Call", value: `${clock(d.call)} (was ${clock(m.call)})` }]),
+      { label: "Where", value: samePlace ? `${d.location} (same)` : `${d.location} (was ${m.location})` },
+    ] },
+    ...(sameCall ? [{ t: "p", text: `Same call time: ${clock(d.call)}.`, tone: "muted" } as Block] : []),
+    { t: "p", text: sameDay ? "Please confirm it again in your portal." : "Please confirm the new date in your portal." },
+    { t: "button", label: sameDay ? "Confirm the shoot" : "Confirm the new date", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `Now ${shootDay(d.date)} · ${clock(d.call)} call`);
+}
+export function ownerShootConfirmedMail(b: MailBrand, d: { who: string; project: string; date: string; call: string; link: string }): Mail {
+  return mk(b, "updates", `${d.who} confirmed the shoot: ${d.project}`, [
+    { t: "eyebrow", text: `${d.who} confirmed the shoot` },
+    { t: "title", text: `${shootDay(d.date)} · ${clock(d.call)} call · ${d.project}` },
+    { t: "button", label: "Open the project", href: d.link },
+  ], ownerFoot("a client confirms a shoot"), `${shootDay(d.date)} · ${d.project}`);
+}
+
+// ---------- Phase 4 (742:2616, 742:2642): 31 · Files requested, 32 · Files due tomorrow; the owner's note when files
+// arrive (no frame: the owner-alert layout of 26). ----------
+/** "Upload your logo and brand guide" → "Logo and brand guide" (the email's For row). */
+export const requestFor = (title: string) => { const t = title.replace(/^(please\s+)?(upload|send|share)\s+(us\s+)?(your|the)\s+/i, "").trim() || title; return t[0].toUpperCase() + t.slice(1); };
+export function fileRequestMail(b: MailBrand, d: { kind: "asked" | "tomorrow"; name: string | null; project: string; title: string; details: string | null; due: string; uploaded: number; link: string }): Mail {
+  const owner = first(b.ownerName) || b.name;
+  const due = shootDay(d.due).replace(/^(\w+),/, "$1,");
+  if (d.kind === "asked") return mk(b, "updates", `${owner} asked for files: ${requestFor(d.title)}`, [
+    hi(d.name),
+    { t: "p", text: `${owner} asked for a few files for ${d.project}.` },
+    { t: "sums", rows: [{ label: "Due", value: due, big: true }, { label: "For", value: requestFor(d.title) }, { label: "Project", value: d.project }] },
+    ...(d.details ? [{ t: "p", text: d.details, tone: "muted" } as Block] : []),
+    { t: "p", text: "Upload them in your portal, up to 2 GB a file." },
+    { t: "button", label: "Upload files", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `Due ${due} · ${requestFor(d.title)}`);
+  return mk(b, "updates", `Reminder: files due tomorrow for ${d.project}`, [
+    hi(d.name),
+    { t: "p", text: `A reminder: the files for ${d.project} are due tomorrow.` },
+    { t: "sums", rows: [{ label: "Due", value: due, big: true }, { label: "For", value: requestFor(d.title) }, { label: "Uploaded so far", value: d.uploaded ? `${d.uploaded} ${d.uploaded === 1 ? "file" : "files"}` : "Nothing yet" }] },
+    { t: "p", text: "If you’ve sent them another way, reply and let us know.", tone: "muted" },
+    { t: "p", text: "Upload them in your portal." },
+    { t: "button", label: "Upload files", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `Due tomorrow · ${requestFor(d.title)}`);
+}
+export function ownerFilesMail(b: MailBrand, d: { who: string; count: number; title: string; project: string; folder: string; link: string }): Mail {
+  return mk(b, "updates", `${d.who} uploaded ${d.count} ${d.count === 1 ? "file" : "files"}: ${requestFor(d.title)}`, [
+    { t: "eyebrow", text: `${d.who} uploaded ${d.count === 1 ? "a file" : `${d.count} files`}` },
+    { t: "title", text: `${requestFor(d.title)} · ${d.project}` },
+    { t: "p", text: `They're in your Dropbox: Apps › Wrangler Review${d.folder.replace(/\//g, " › ")}.` },
+    { t: "button", label: "Open the project", href: d.link },
+  ], ownerFoot("a client uploads files you asked for"), `${d.count} ${d.count === 1 ? "file" : "files"} · ${d.project}`);
+}
+
+// ---------- Phase 4 (Nov 2): the kickoff brief ----------
+
+/** Email 33 (742:2668): "Before we start, tell us about {project}". Also the owner's reminder. */
+export function briefMail(b: MailBrand, d: { kind: "sent" | "reminder"; name: string | null; project: string; covers: string; started: boolean; link: string }): Mail {
+  const owner = first(b.ownerName) || b.name;
+  const reminder = d.kind === "reminder";
+  return mk(b, "updates", reminder ? `Reminder: the kickoff brief for ${d.project}` : `Before we start, tell us about ${d.project}`, [
+    hi(d.name),
+    { t: "p", text: reminder ? `A reminder from ${owner}: the kickoff brief for ${d.project} is still open.` : `Before we start, tell us about ${d.project}.` },
+    { t: "sums", rows: [{ label: "Takes", value: "About 10 minutes", big: true }, { label: "Covers", value: d.covers }, { label: "Project", value: d.project }] },
+    { t: "p", text: d.started ? "Your answers so far are saved. Pick up where you left off." : "You can save and come back any time.", tone: "muted" },
+    { t: "p", text: "Answer it in your portal." },
+    { t: "button", label: d.started ? "Finish the brief" : "Start the brief", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `About 10 minutes · ${d.covers}`);
+}
+/** To the owner when the brief comes back (or is changed afterwards). */
+export function ownerBriefMail(b: MailBrand, d: { who: string; project: string; changed: boolean; answers: Array<{ question: string; answer: string }>; link: string }): Mail {
+  const shown = d.answers.slice(0, 6);
+  return mk(b, "updates", `${d.who} ${d.changed ? "changed" : "answered"} the kickoff brief: ${d.project}`, [
+    { t: "eyebrow", text: `${d.who} ${d.changed ? "changed their answers" : "answered the kickoff brief"}` },
+    { t: "title", text: d.project },
+    ...(shown.length ? [{ t: "sums", rows: shown.map((a) => ({ label: a.question, value: a.answer.length > 90 ? `${a.answer.slice(0, 88)}…` : a.answer })) } as Block] : []),
+    ...(d.answers.length > shown.length ? [{ t: "p", text: `And ${d.answers.length - shown.length} more on the project page.`, tone: "muted" } as Block] : []),
+    { t: "button", label: "Open the project", href: d.link },
+  ], ownerFoot("a client sends back the kickoff brief"), `${d.answers.length} ${d.answers.length === 1 ? "answer" : "answers"} · ${d.project}`);
+}
+
+// ---------- Phase 5 (Nov 3): raw footage storage (emails 34, 36) and the testimonial request (35) ----------
+
+const keepDay = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" });
+const keepShort = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
+const perYear = (cents: number) => `${usd(cents).replace(/\.00$/, "")} / year`;
+
+/** Email 34 (744:1854): "Keep your raw footage?", with the final files. */
+export function footageOfferMail(b: MailBrand, d: { name: string | null; project: string; priceCents: number; keepUntil: string; link: string }): Mail {
+  return mk(b, "updates", `Keep your raw footage? ${d.project}`, [
+    hi(d.name),
+    { t: "p", text: `Your final files for ${d.project} are ready, and we still have every raw clip.` },
+    { t: "sums", rows: [{ label: "Keep it for", value: perYear(d.priceCents), big: true }, { label: "Kept until", value: keepDay(d.keepUntil) }, { label: "Project", value: d.project }] },
+    { t: "p", text: `If you keep it, you can ask for new cuts any time. If not, we let it go on ${keepShort(d.keepUntil)}.` },
+    { t: "p", text: "Choose on your delivery page." },
+    { t: "button", label: "Keep my footage", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `Kept until ${keepShort(d.keepUntil)} · ${perYear(d.priceCents)}`);
+}
+
+/** Email 35 (744:1880): "A few words?", sent when the owner asks for a testimonial from the Inbox composer (D139). */
+export function testimonialAskMail(b: MailBrand, d: { name: string | null; project: string; link: string; unsub?: string }): Mail {
+  return mk(b, "updates", `How did ${d.project} go?`, [
+    hi(d.name),
+    { t: "p", text: `Thanks for working with us on ${d.project}. Could you tell us how it went?` },
+    { t: "sums", rows: [{ label: "Takes", value: "About a minute", big: true }, { label: "Questions", value: "Two" }, { label: "Project", value: d.project }] },
+    { t: "p", text: "Nothing is posted without your OK." },
+    { t: "p", text: "Answer in your portal." },
+    { t: "button", label: "Share a few words", href: d.link }, { t: "link", href: d.link },
+  ], [...signoff(b), ...(d.unsub ? [{ t: "small", text: "Stop emails about notes:", link: { label: "unsubscribe", href: d.unsub } } as Block] : [])], "About a minute · two questions");
+}
+
+/** Email 36 (744:1906), to the owner on the keep day: the raw footage wasn't kept (or a paid year ended unrenewed). */
+export function ownerFootageEndedMail(b: MailBrand, d: { client: string; project: string; day: string; lapsed: boolean; link: string }): Mail {
+  return mk(b, "updates", `Raw footage not kept: ${d.project}`, [
+    { t: "eyebrow", text: `Raw footage not kept · ${d.project}` },
+    { t: "title", text: d.lapsed ? `${d.client}'s storage year ended without renewal. Today is ${keepShort(d.day)}.` : `${d.client} didn't keep their raw footage. Today is ${keepShort(d.day)}.` },
+    { t: "p", text: "Delete it or move it to cold storage when you're ready. The portal never deletes files itself." },
+    { t: "button", label: "Open the project", href: d.link },
+  ], [{ t: "small", text: "Sent to you on the keep date · WranglerPortal ·", link: { label: "Email settings", href: `${SITE()}/settings/notifications` } }], `${d.client} · ${d.project}`);
+}
+
+/** To the owner (no frame: the owner-alert layout): a client pressed Keep it, or next year's invoice is drafted (D140). */
+export function ownerFootageMail(b: MailBrand, d: { what: "kept" | "renewal"; who: string; project: string; priceCents: number; until: string | null; link: string }): Mail {
+  const kept = d.what === "kept";
+  return mk(b, "updates", kept ? `${d.who} is keeping their raw footage: ${d.project}` : `Next year's storage invoice is ready: ${d.project}`, [
+    { t: "eyebrow", text: kept ? `${d.who} is keeping their raw footage` : "Raw footage storage renews soon" },
+    { t: "title", text: `${d.project} · ${perYear(d.priceCents)}` },
+    { t: "p", text: kept ? `A ${usd(d.priceCents)} invoice draft is in Payments for you to check and send. It covers a year from the day it's paid, and that date becomes the yearly renewal date.` : `A ${usd(d.priceCents)} invoice draft for the next year is in Payments. The paid year runs until ${keepDay(d.until!)}. Send it, or stop storing on the project's Delivery tab.` },
+    { t: "button", label: "Open the project", href: d.link },
+  ], ownerFoot(kept ? "a client keeps their raw footage" : "a storage year is about to renew"), `${d.project} · ${perYear(d.priceCents)}`);
+}
+
+/** To the owner when a client sends a testimonial (no frame: the owner-alert layout). */
+export function ownerTestimonialMail(b: MailBrand, d: { who: string; company: string | null; project: string; working: string; film: string; permission: boolean; link: string }): Mail {
+  const q = (s: string) => (s.length > 220 ? `“${s.slice(0, 218).trimEnd()}…”` : `“${s}”`);
+  return mk(b, "updates", `${d.who} sent a few words: ${d.project}`, [
+    { t: "eyebrow", text: `${d.who}${d.company ? ` · ${d.company}` : ""} sent a few words` },
+    { t: "title", text: d.project },
+    ...(d.working ? [{ t: "p", text: q(d.working) } as Block] : []),
+    ...(d.film ? [{ t: "p", text: q(d.film) } as Block] : []),
+    { t: "p", text: d.permission ? "They said you can use their words and name." : "Private: they didn't give permission to use it publicly.", tone: "muted" },
+    { t: "button", label: "Open Testimonials", href: d.link },
+  ], ownerFoot("a client sends a testimonial"), `${d.who} · ${d.project}`);
+}
+
+/** To the owner (no frame: the owner-alert layout of 36): Keep it was pressed but the invoice isn't paid (review M3), or a
+ *  storage invoice was paid after the footage ended, was stopped or was deleted (review H1). */
+export function ownerFootageAlertMail(b: MailBrand, d: { what: "unpaid" | "paidLate"; client: string; project: string; number: string | null; link: string }): Mail {
+  const unpaid = d.what === "unpaid";
+  return mk(b, "updates", unpaid ? `Raw footage storage not paid: ${d.project}` : `A storage invoice was paid late: ${d.project}`, [
+    { t: "eyebrow", text: `${unpaid ? "Storage not paid" : "Paid late"} · ${d.project}` },
+    { t: "title", text: unpaid ? `${d.client} pressed Keep it, but the storage invoice${d.number ? ` ${d.number}` : ""} isn't paid and the keep date has passed.` : `${d.client} paid a storage invoice after their raw footage stopped being kept.` },
+    { t: "p", text: unpaid ? "The footage is still marked as kept. Remind them, or void the invoice: then it's treated as not kept and you get the usual reminder." : "Nothing changed by itself. On the project's Delivery tab, keep it for a year from the day they paid, or refund the payment in Stripe." },
+    { t: "button", label: "Open the project", href: d.link },
+  ], [{ t: "small", text: "Sent to you about raw footage · WranglerPortal ·", link: { label: "Email settings", href: `${SITE()}/settings/notifications` } }], `${d.client} · ${d.project}`);
+}
+
+// ---------- Phase 5b step 3 (Nov 3): call sheets (emails 40 and 42; 41, the guest's, is step 4) ----------
+
+/** Email 40 · Call sheet · crew and client (768:6432). A reminder (Remind on the Detail page) is the same email, marked. */
+export function callSheetMail(b: MailBrand, d: { name: string | null; title: string; date: string; dayLong: string; call: string; where: string; from: string; message?: string | null; reminder?: boolean; link: string }): Mail {
+  return mk(b, "updates", `${d.reminder ? "Reminder: c" : "C"}all sheet for ${d.dayLong}: ${d.title}`, [
+    hi(d.name),
+    { t: "p", text: `${d.reminder ? "A reminder: here’s" : "Here’s"} the call sheet for ${d.dayLong}: ${d.title}.` },
+    { t: "sums", rows: [...(d.call ? [{ label: "Call", value: d.call, big: true }] : []), ...(d.where ? [{ label: "Where", value: d.where }] : []), { label: "From", value: d.from }] },
+    ...(d.message ? [{ t: "p", text: d.message } as Block] : []),
+    { t: "p", text: "Read it in WranglerPortal on your phone or computer. Changes show up as soon as they’re sent.", tone: "muted" },
+    { t: "p", text: "You’ll get another email if the sheet is updated." },
+    { t: "button", label: "Open the call sheet", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `${d.call ? `${d.call} call · ` : ""}${d.where || d.title}`);
+}
+
+/** Email 42 · Call sheet · updated (768:6484). */
+export function callSheetUpdateMail(b: MailBrand, d: { name: string | null; title: string; dayLong: string; changed: string; call: string; was: string | null; from: string; message?: string | null; link: string }): Mail {
+  const same = !d.was || d.was === d.call;
+  return mk(b, "updates", `Call sheet updated for ${d.dayLong}: ${d.title}`, [
+    hi(d.name),
+    { t: "p", text: `The call sheet for ${d.dayLong} was updated.` },
+    { t: "sums", rows: [{ label: "What changed", value: d.changed, big: true }, ...(d.call ? [{ label: "Your call", value: same ? `${d.call} (same)` : `${d.call} (was ${d.was})` }] : []), { label: "From", value: d.from }] },
+    ...(d.message ? [{ t: "p", text: d.message } as Block] : []),
+    { t: "p", text: "Open it to see the new sheet.", tone: "muted" },
+    ...(same ? [{ t: "p", text: "Nothing else changed for you." } as Block] : []),
+    { t: "button", label: "Open the call sheet", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), d.changed);
+}
+
+/** Email 41 · Call sheet · guest (768:6458): a guest's link to the sheet, signed into with a code (D127). Sent on Send
+ *  and Remind; a guest it already went to gets email 42 for an update, with the same link. */
+export function guestCallSheetMail(b: MailBrand, d: { name: string | null; title: string; dayLong: string; call: string; where: string; from: string; message?: string | null; reminder?: boolean; link: string }): Mail {
+  return mk(b, "updates", `${d.reminder ? "Reminder: c" : "C"}all sheet for ${d.dayLong}: ${d.title}`, [
+    hi(d.name),
+    { t: "p", text: `${d.reminder ? "A reminder: " : ""}${b.name} added you to the call sheet for ${d.dayLong}.` },
+    { t: "sums", rows: [...(d.call ? [{ label: "Your call", value: d.call, big: true }] : []), ...(d.where ? [{ label: "Where", value: d.where }] : []), { label: "From", value: d.from }] },
+    ...(d.message ? [{ t: "p", text: d.message } as Block] : []),
+    { t: "p", text: "Open the link to read the whole sheet. You sign in with a 6-digit code we email you. No account needed." },
+    { t: "p", text: "Your access ends the day after the shoot, or sooner if the project is closed, the shoot is cancelled or your access is ended." },
+    { t: "button", label: "Open the call sheet", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), `${d.call ? `${d.call} call · ` : ""}${d.where || d.title}`);
+}
+
+// ---------- Phase 5d step 1: booking calls (emails 43, 52–56; S5 · Phase 5d "Call notice emails") ----------
+/** "Thu, Nov 5 · 10:00 – 10:30 AM (Central Time)" in a time zone. */
+export function callWhen(start: number, end: number, tz: string): string {
+  let zone = tz;
+  try { new Intl.DateTimeFormat("en-US", { timeZone: zone }); } catch { zone = "America/Chicago"; }
+  const day = new Date(start).toLocaleDateString("en-US", { timeZone: zone, weekday: "short", month: "short", day: "numeric" });
+  const t = (ms: number, ap: boolean) => new Date(ms).toLocaleTimeString("en-US", { timeZone: zone, hour: "numeric", minute: "2-digit" }).replace(ap ? /$^/ : / ?[AP]M$/, "");
+  const sameHalf = t(start, true).slice(-2) === t(end, true).slice(-2);
+  const name = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "longGeneric" }).formatToParts(new Date(start)).find((p) => p.type === "timeZoneName")?.value ?? zone;
+  return `${day} · ${sameHalf ? t(start, false) : t(start, true)} – ${t(end, true)} (${name})`;
+}
+const minutes = (start: number, end: number) => `${Math.round((end - start) / 60_000)} minutes`;
+const withWho = (b: MailBrand) => (b.ownerName ? `${b.ownerName}, ${b.name}` : b.name);
+
+/** 43 · to the lead: booked (and the same layout again after a reschedule is 56). */
+export function callBookedMail(b: MailBrand, d: { name: string; start: number; end: number; tz: string; meet: string | null; invite?: boolean; link: string }): Mail {
+  const len = Math.round((d.end - d.start) / 60_000);
+  return mk(b, "updates", `Your call with ${b.name} is booked`, [
+    hello(d.name),
+    { t: "p", text: `Your ${len}-minute call with ${b.name} is booked.` },
+    { t: "sums", rows: [{ label: "When", value: callWhen(d.start, d.end, d.tz), big: true }, { label: "Length", value: minutes(d.start, d.end) }, { label: "With", value: withWho(b) }, ...(d.meet ? [{ label: "Video", value: "Google Meet" }] : [])] },
+    ...(d.meet ? [{ t: "p", text: `Join on Google Meet: ${d.meet}` } as Block] : d.invite ? [{ t: "p", text: "The details are in the calendar invite.", tone: "muted" } as Block] : [{ t: "p", text: `${b.name} will send you the details for joining.`, tone: "muted" } as Block]),
+    { t: "p", text: "Need another time? You can move or cancel it from this link." },
+    { t: "button", label: "Reschedule or cancel", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), callWhen(d.start, d.end, d.tz));
+}
+/** 56 · to the lead: moved. */
+export function callMovedMail(b: MailBrand, d: { name: string; start: number; end: number; wasStart: number; wasEnd: number; tz: string; meet: string | null; link: string }): Mail {
+  return mk(b, "updates", `Your call with ${b.name} is moved`, [
+    hello(d.name),
+    { t: "p", text: `Your call with ${b.name} is now at a new time.` },
+    { t: "sums", rows: [{ label: "When", value: callWhen(d.start, d.end, d.tz), big: true }, { label: "Was", value: callWhen(d.wasStart, d.wasEnd, d.tz) }, { label: "With", value: withWho(b) }, ...(d.meet ? [{ label: "Video", value: "Google Meet" }] : [])] },
+    ...(d.meet ? [{ t: "p", text: `Join on Google Meet: ${d.meet}` } as Block] : []),
+    { t: "button", label: "Reschedule or cancel", href: d.link }, { t: "link", href: d.link },
+  ], signoff(b), callWhen(d.start, d.end, d.tz));
+}
+/** 55 · to the lead: cancelled. */
+export function callCancelledMail(b: MailBrand, d: { name: string; start: number; end: number; tz: string; bookLink: string }): Mail {
+  return mk(b, "updates", `Your call with ${b.name} is cancelled`, [
+    hello(d.name),
+    { t: "p", text: `Your call with ${b.name} on ${callWhen(d.start, d.end, d.tz)} is cancelled. It's off the calendar.` },
+    { t: "p", text: "Want to talk after all? Pick another time." },
+    { t: "button", label: "Book another time", href: d.bookLink },
+  ], signoff(b), "Cancelled");
+}
+/** 52, 53, 54 · to the owner: a lead booked, cancelled or moved a call. */
+export function ownerCallMail(b: MailBrand, d: { kind: "booked" | "cancelled" | "moved"; who: string; email: string; start: number; end: number; wasStart?: number; wasEnd?: number; note: string | null; onCalendar?: boolean; link: string }): Mail {
+  const tz = "America/Chicago";
+  const head = d.kind === "booked" ? `${d.who} booked a call` : d.kind === "cancelled" ? `${d.who} cancelled their call` : `${d.who} moved their call`;
+  return mk(b, "updates", `${head}: ${callWhen(d.start, d.end, tz).split(" (")[0]}`, [
+    { t: "eyebrow", text: head },
+    { t: "title", text: callWhen(d.start, d.end, tz) },
+    ...(d.kind === "moved" && d.wasStart && d.wasEnd ? [{ t: "p", text: `Was ${callWhen(d.wasStart, d.wasEnd, tz)}.`, tone: "muted" } as Block] : []),
+    { t: "p", text: d.kind === "cancelled" ? "It's off your calendar." : d.onCalendar === false ? "It didn't reach your Google Calendar. Check Settings › Calendar, and send them the details yourself." : "It's on your calendar with a Google Meet link." },
+    ...(d.note ? [{ t: "box", text: `Their note: ${d.note}` } as Block] : []),
+    { t: "p", text: `${d.who} · ${d.email}`, tone: "muted" },
+    { t: "button", label: "Open the lead", href: d.link },
+  ], ownerFoot("a lead books, moves or cancels a call"), `${d.who} · ${callWhen(d.start, d.end, tz)}`);
+}
+
+// ---------- Phase 5d step 2: Messages (emails 44 to the client or lead, 45 to the owner) ----------
+const snippet = (t: string) => (t.length > 400 ? `${t.slice(0, 400).trim()}…` : t);
+/** 44 · a message from the business. */
+export function messageMail(b: MailBrand, d: { name: string | null; sender: string; about: string; text: string; files: number; more: number; link: string; lead: boolean }): Mail {
+  const about = d.about ? ` about ${d.about}` : ""; // a lead's email names no project (review M2)
+  return mk(b, "updates", `${first(d.sender) || d.sender} sent you a message${about}`, [
+    hello(d.name),
+    { t: "p", text: `${d.sender} sent you a message${about}.` },
+    { t: "quote", rows: [{ who: d.sender, text: snippet(d.text) || (d.files ? `${d.files} ${d.files === 1 ? "file" : "files"}` : "") }] },
+    ...(d.more > 0 ? [{ t: "p", text: `And ${d.more} more ${d.more === 1 ? "message" : "messages"}.`, tone: "muted" } as Block] : []),
+    { t: "button", label: "Read and reply", href: d.link },
+    ...(d.lead ? [{ t: "p", text: "No login needed: the link opens your conversation.", tone: "muted" } as Block] : []),
+  ], d.lead ? signoff(b) : [...signoff(b), { t: "small", text: "You can switch these emails off in your portal's Settings › Notifications." }], snippet(d.text).slice(0, 90));
+}
+/** 45 · to the owner: a client or lead wrote. */
+export function ownerMessageMail(b: MailBrand, d: { who: string; about: string; text: string; files: number; more: number; link: string }): Mail {
+  return mk(b, "updates", `${d.who} sent a message about ${d.about}`, [
+    { t: "eyebrow", text: `${d.who} sent a message` },
+    { t: "title", text: d.about },
+    { t: "quote", rows: [{ who: d.who, text: snippet(d.text) || (d.files ? `${d.files} ${d.files === 1 ? "file" : "files"}` : "") }] },
+    ...(d.more > 0 ? [{ t: "p", text: `And ${d.more} more ${d.more === 1 ? "message" : "messages"}.`, tone: "muted" } as Block] : []),
+    { t: "button", label: "Read and reply", href: d.link },
+  ], ownerFoot("a client or lead sends you a message"), snippet(d.text).slice(0, 90));
+}
+
+/** Booking calls (Heston, Nov 4, 21:57): the 6-digit code that confirms a lead's email before their time is booked. */
+export function callCodeMail(b: MailBrand, d: { code: string; minutes: number; when: string }): Mail {
+  return mk(b, "updates", `${d.code} is your code to book with ${b.name}`, [
+    { t: "p", text: `To book your call with ${b.name} (${d.when}), enter this code on the booking page:` },
+    { t: "code", code: d.code },
+    { t: "p", text: `It works for ${d.minutes} minutes. Your time is held until then.` },
+    { t: "small", text: "If you didn't try to book a call, ignore this email. Nothing is booked without the code." },
+  ], [{ t: "small", text: `${b.name} · sent through WranglerPortal` }], `It works for ${d.minutes} minutes.`);
 }

@@ -60,14 +60,14 @@ describe("the vendor side", () => {
     await w.heston.mutation(api.vendors.invite, { vendorId: id });
     await settle(w);
     expect(mails.map((m) => [m.to, m.subject])).toEqual([["riley@chen.example", "Heston at Wrangler Productions invited you to WranglerPortal"]]);
-    expect(mails[0].text).toContain("https://app.wranglerportal.com/?invited=riley@chen.example");
+    expect(mails[0].text).toContain("https://app.wranglerportal.com/?invited=riley@chen.example&side=vendor");
     await signUp("riley@chen.example");
     const user = await w.t.run((ctx) => ctx.db.query("users").withIndex("email", (q) => q.eq("email", "riley@chen.example")).unique());
     expect(user).toMatchObject({ role: "vendor", name: "Riley Chen" });
     const ms = await w.t.run((ctx) => ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", "riley@chen.example")).collect());
     expect(ms.map((m) => [m.role, m.businessId])).toEqual([["vendor", w.A]]);
-    // D102: once someone is a vendor anywhere, their email can't be invited as a client (here or by another business).
-    await expect(w.boss.mutation(api.clients.invite, { email: "riley@chen.example" })).rejects.toThrow(/one of your vendors/);
+    // Nov 2 (replacing D102): a vendor can also be invited as a client; it's the same login, with a switch.
+    await w.boss.mutation(api.clients.invite, { email: "riley@chen.example" });
   });
 
   test("T3c.4 one login, two businesses kept apart (D94); accept, decline with a reason, I've read it", async () => {
@@ -96,7 +96,8 @@ describe("the vendor side", () => {
     // A briefing sent to Jordan: on Home to read, then "I've read it"; the owner sees Read.
     const brief = await w.heston.mutation(api.briefings.create, { bookingId: kA }) as Id<"briefings">;
     expect(await jordan.query(api.vendorPortal.briefing, { briefingId: brief })).toBeNull(); // a draft isn't theirs to see
-    await w.heston.action(api.briefings.send, { briefingId: brief, storageId: await pdf(w) });
+    const jordanId = (await w.heston.query(api.bookings.get, { bookingId: kA })).vendorId;
+    await w.heston.action(api.briefings.share, { briefingId: brief, storageId: await pdf(w), to: [{ vendorId: jordanId, email: "ignored@example.com" }] }); // D147: Share
     expect((await jordan.query(api.vendorPortal.home, { businessId: A })).toRead.map((x: { _id: string }) => x._id)).toEqual([brief]);
     expect(await jordan.query(api.vendorPortal.briefing, { briefingId: brief })).toMatchObject({ title: "Shoot brief · 26127 Launch", kind: "Shoot brief", readAt: null, pdfUrl: expect.any(String) });
     await jordan.mutation(api.vendorPortal.markRead, { briefingId: brief });

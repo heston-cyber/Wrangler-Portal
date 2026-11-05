@@ -1,0 +1,154 @@
+/* Nov 4 (Q88, Q89, Q93/Q94): screen states. Kept in its own file so it doesn't collide with other work on portal.css. */
+
+/* ---------- the guest's list: Today, Upcoming, Ended (858:94294, phone 859:9381) and "Sheets from" (859:9250) ---------- */
+.gst-brand { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.gst-switch.vp-switch { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 12px; text-align: left; min-width: 216px; padding: 8px 12px; border-radius: 12px; background: rgba(16, 11, 13, .55); box-shadow: inset 0 0 0 1px var(--border-hairline); color: var(--text-primary); cursor: pointer; border: 0; }
+.gst-switch .wp-label { grid-column: 1; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-secondary); }
+.gst-switch b { grid-column: 1; font-weight: 500; font-size: var(--fs-text-small); }
+.gst-switch > .wp-icon { grid-column: 2; grid-row: 1 / 3; color: var(--accent); }
+.gst-swphone { padding: 0 16px 8px; }
+.gst-swphone .gst-switch { width: 100%; }
+.gst-lede { margin: 0 0 8px; font-size: var(--fs-text-small); }
+.gst-group.glass { display: grid; gap: 4px; padding: 18px 20px 10px; border-radius: 20px; box-shadow: none; background-color: rgba(16, 11, 13, .72); }
+.gst-group .wp-eyebrow .n { margin-left: 4px; color: var(--text-secondary); }
+.gst-item { display: flex; align-items: center; gap: 14px; padding: 12px 0; color: var(--text-primary); text-decoration: none; }
+.gst-item + .gst-item { border-top: 1px solid var(--border-hairline); }
+.gst-item > .wp-icon:first-child { color: var(--accent); flex: none; }
+.gst-item > .wp-icon:last-child { color: var(--accent); flex: none; margin-left: auto; }
+.gst-item .txt { flex: 1; min-width: 0; display: grid; gap: 2px; overflow-wrap: anywhere; }
+.gst-item .txt .t { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+.gst-item .txt b { font-weight: 500; }
+.gst-item .txt .secondary { font-size: var(--fs-text-small); }
+.gst-item.ended { opacity: .5; }
+.gst-item.ended:hover, .gst-item.ended:focus-visible { opacity: .75; }
+.gst-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); background: var(--surface-block); }
+.gst-chip::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.gst-chip.warn { color: var(--text-warning, #f5b400); background: rgba(245, 180, 0, .14); }
+.gst-footline { width: min(1188px, 100%); margin: 0 auto; padding: 0 4px 40px; box-sizing: border-box; }
+@media (max-width: 1240px) { .gst-footline { padding-left: 24px; padding-right: 24px; } }
+@media (max-width: 900px) { .gst-footline { padding: 0 16px 32px; } .gst-group.glass { padding: 16px 16px 8px; } }
+
+/* ---------- the reader pages inside the portal (857:8881, 857:9240; phone 857:9610, 857:9736) ---------- */
+.cs-read .gst-main.csr { width: 100%; padding: 0; grid-template-columns: minmax(0, 1fr) 320px; }
+.csr-head { grid-column: 1 / -1; display: grid; gap: 4px; }
+.csr-head .wp-h2 { margin: 0; overflow-wrap: anywhere; }
+.csr-whole { display: flex; align-items: center; gap: 12px; width: 100%; }
+.csr-whole > .wp-icon:first-child { color: var(--accent); flex: none; }
+.csr-whole .txt { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.csr-whole .txt b { font-weight: 500; }
+.csr-whole .txt .secondary { font-size: var(--fs-text-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gst-whole summary { flex-direction: column; align-items: stretch; gap: 12px; }
+@media (max-width: 900px) {
+  .cs-read .gst-main.csr { grid-template-columns: minmax(0, 1fr); }
+  .csr-head .wp-h2 { font-size: 26px; line-height: 1.2; }
+}
+
+/* ---------- overviews loading (Q89): a dash for each number ---------- */
+.ov-wait b { color: var(--text-faint); }
+
+/* ---------- raw footage: the banner after a late payment's choice (870:19197, 870:19547) ---------- */
+.ft-banner { margin: 0 20px 16px; }
+.ft-banner > .btn { flex: none; }
+.gst-whole[open] summary .csr-whole > .wp-icon:first-child { transform: none; }
+
+/* ---------- Phase 5c screens (Nov 4): Settings › Site watch (783:8815 …, phone 787:11594), the finding page (785:11372)
+   and the Dashboard row (786:10853) ---------- */
+.sw-banner { display: flex; align-items: flex-start; gap: 12px; padding: 16px 20px; border-radius: 16px; background: rgba(16, 11, 13, .55); box-shadow: inset 0 0 0 1px var(--border-hairline); }
+.sw-banner > .wp-icon { flex: none; margin-top: 2px; }
+.sw-banner b { display: block; font-weight: 500; }
+.sw-banner p { margin: 2px 0 0; font-size: var(--fs-text-small); color: var(--text-secondary); overflow-wrap: anywhere; }
+.sw-banner.danger { background: rgba(255, 59, 48, .10); box-shadow: inset 0 0 0 1px rgba(255, 59, 48, .55); } .sw-banner.danger > .wp-icon { color: var(--text-danger, #ff6a5e); }
+.sw-banner.warning { background: rgba(245, 180, 0, .08); box-shadow: inset 0 0 0 1px rgba(245, 180, 0, .5); } .sw-banner.warning > .wp-icon { color: var(--text-warning, #f5b400); }
+.sw-banner.success { background: rgba(52, 199, 89, .08); box-shadow: inset 0 0 0 1px rgba(52, 199, 89, .5); } .sw-banner.success > .wp-icon { color: var(--text-success, #34c759); }
+.sw-banner.skeleton { min-height: 66px; }
+.sw-stats { margin: 0; }
+.sw-stat { cursor: default; }
+.sw-nothing { display: grid; gap: 6px; justify-items: center; text-align: center; padding: 36px 16px; color: var(--text-secondary); font-size: var(--fs-text-small); }
+.sw-nothing b { font-weight: 500; font-size: var(--fs-text-regular); color: var(--text-primary); }
+.sw-more { display: flex; justify-content: center; padding: 12px 0 4px; }
+.sw-item { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto 16px; column-gap: 14px; align-items: center; }
+.sw-item:not(:has(> .chev)) { grid-template-columns: 24px minmax(0, 1fr) auto; }
+.sw-item .ttl { overflow-wrap: anywhere; }
+.sw-item .chev { justify-self: end; }
+.sw-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.sw-find { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.sw-when { font-size: var(--fs-text-small); color: var(--text-primary); white-space: nowrap; }
+.sw-switch { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 20px 8px; border-top: 1px solid var(--border-hairline); }
+.sw-switch > span:first-child { display: grid; gap: 2px; }
+.sw-switch b { font-weight: 500; }
+.sw-switch .secondary { font-size: var(--fs-text-small); }
+.sw-back { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-text-small); color: var(--text-primary); text-decoration: none; justify-self: start; }
+.sw-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.sw-note { margin: 0; padding: 12px 20px 16px; font-size: var(--fs-text-small); color: var(--text-secondary); border-top: 1px solid var(--border-hairline); overflow-wrap: anywhere; }
+.sw-dash { margin: 0 0 4px; }
+@media (max-width: 820px) {
+  .sw-stats { grid-template-columns: 1fr 1fr; }
+  .sw-two, .sw-find { grid-template-columns: minmax(0, 1fr); }
+  /* On a phone each row's chip sits under its title (787:11594). */
+  .sw-item, .sw-item:not(:has(> .chev)) { grid-template-columns: 24px minmax(0, 1fr) 16px; align-items: start; }
+  .sw-item > .lead-icon { grid-row: 1 / span 2; margin-top: 2px; }
+  .sw-item > .sw-chip { grid-column: 2; grid-row: 2; justify-self: start; margin-top: 6px; }
+  .sw-item > .chev { grid-column: 3; grid-row: 1 / span 2; align-self: center; }
+}
+
+/* ---------- D147 briefings sent freely (S5 · Phase 3c 863:15661 panel, 863:16118 Share, 863:16685 owner page, list 870:17016) ---------- */
+.bf-to { display: grid; gap: 8px; }
+.bf-combo { position: relative; display: flex; align-items: center; }
+.bf-combo > .wp-icon { position: absolute; left: 12px; color: var(--accent); pointer-events: none; }
+.bf-combo .input { width: 100%; padding-left: 36px; }
+.bf-menu { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30; display: grid; max-height: 260px; overflow: auto; padding: 4px; border-radius: 12px; background: rgba(16, 11, 13, .97); box-shadow: inset 0 0 0 1px var(--border-hairline), 0 12px 32px rgba(0, 0, 0, .5); }
+.bf-menu button { display: grid; gap: 2px; text-align: left; padding: 8px 10px; border: 0; border-radius: 8px; background: none; color: var(--text-primary); cursor: pointer; font: inherit; }
+.bf-menu button:hover, .bf-menu button:focus-visible { background: var(--surface-block); }
+.bf-menu b { font-weight: 500; font-size: var(--fs-text-small); }
+.bf-menu .secondary { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bf-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.bf-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px 3px 10px; border-radius: 999px; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); background: var(--surface-block); max-width: 100%; overflow-wrap: anywhere; }
+.bf-chip::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex: none; }
+.bf-chip button { display: inline-flex; padding: 2px; border: 0; border-radius: 50%; background: none; color: inherit; cursor: pointer; }
+.bf-chip button:hover { color: var(--text-primary); }
+.bf-panel .field { display: grid; gap: 6px; }
+.bf-or { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--border-hairline); }
+.bf-or .wp-label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-secondary); }
+.bf-orrow { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--border-hairline); }
+.bf-orrow > span { display: grid; gap: 2px; min-width: 0; }
+.bf-orrow b { font-weight: 500; }
+.bf-orrow .secondary { font-size: var(--fs-text-small); }
+.bf-orrow .btn, .bf-orrow button { flex: none; }
+/* The list's table (870:17016): Briefing · Sent to · Opened · chip. */
+.bf-thead, .bf-trow { display: grid; grid-template-columns: 24px minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1.1fr) auto; column-gap: 16px; align-items: center; }
+.bf-thead { padding: 0 20px 4px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-secondary); }
+.bf-trow { color: var(--text-primary); text-decoration: none; }
+.bf-trow .txt { display: grid; gap: 2px; min-width: 0; }
+.bf-trow .ttl { overflow-wrap: anywhere; }
+.bf-end { display: inline-flex; align-items: center; gap: 12px; justify-self: end; }
+.bf-page .wp-pagehead { margin-bottom: 4px; }
+.bf-page .q-cols { margin-top: 16px; }
+.bf-actions, .bf-who { display: grid; gap: 10px; padding: 18px 20px 20px; }
+.bf-actions .btn, .bf-actions button { width: 100%; justify-content: center; }
+.bf-who dl { display: grid; gap: 12px; margin: 4px 0 0; }
+.bf-who dl > div { display: flex; justify-content: space-between; gap: 12px; font-size: var(--fs-text-small); }
+.bf-who dt { color: var(--text-secondary); overflow-wrap: anywhere; min-width: 0; }
+.bf-who dd { margin: 0; text-align: right; color: var(--text-primary); flex: none; }
+@media (max-width: 820px) {
+  /* On a phone the two columns drop under the title as two lines (870:17016's note). */
+  .bf-thead { display: none; }
+  .bf-trow { grid-template-columns: 24px minmax(0, 1fr) auto; row-gap: 6px; align-items: start; }
+  .bf-trow > .lead-icon { grid-row: 1 / span 3; margin-top: 2px; }
+  .bf-trow > .bf-col { grid-column: 2; }
+  .bf-trow > .bf-end { grid-column: 3; grid-row: 1 / span 3; align-self: center; flex-direction: column; align-items: flex-end; }
+  .bf-orrow { flex-direction: column; align-items: stretch; }
+}
+
+/* ---------- D149 quotes and proposals to anyone (S5 · Phase 3b "To anyone": 871:20283 Send, 872:20151 Opened and accepted) ---------- */
+.of-to { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 12px; }
+.of-to .input:disabled { opacity: .55; }
+.of-send .bf-or { margin-top: 4px; }
+.of-people { display: grid; gap: 4px; padding: 18px 20px 14px; }
+.of-person { display: flex; align-items: center; gap: 12px; padding: 10px 0; }
+.of-person + .of-person { border-top: 1px solid var(--border-hairline); }
+.of-person .txt { flex: 1; min-width: 0; display: grid; gap: 2px; overflow-wrap: anywhere; }
+.of-person .txt b { font-weight: 500; }
+.of-person .secondary { font-size: var(--fs-text-small); }
+.of-person .btn { flex: none; }
+.pr-quiet { margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; background: var(--surface-block); }
+@media (max-width: 820px) { .of-to { grid-template-columns: minmax(0, 1fr); } }

@@ -55,18 +55,68 @@ const OPEN: Record<string, string> = {
   "subscriptions.setupStart": "the same link: a SetupIntent for that subscription's customer only; a missing token is refused",
   "subscriptions.setupDone": "the same link: checks the SetupIntent is that subscription's own before using it; a missing token is refused",
   "subscriptions.mine": "a client's subscriptions, found by their own email; anyone else gets []",
+  // Phase 5d step 2: Messages. A lead's conversation answers only for that thread's own long random token (/m/<token>).
+  "messages.leadPage": "a lead's message link: that conversation only (tested in messages.test.ts)",
+  "messages.leadSend": "the same link: writes in that conversation only; rate-limited",
+  "messages.leadRead": "the same link: marks that conversation read; a missing token does nothing",
+  "messages.leadUploadUrl": "the same link: an upload address for a file to attach there; rate-limited",
+  "messages.unread": "the caller's own unread count (owner or client); 0 for anyone else",
+  // Phase 5d step 1: booking calls. The page answers by the business's slug (closed unless Google Calendar is connected
+  // and the settings are saved); the private link (/call/<token>) only for that call's own long random token. Booking,
+  // moving and cancelling are rate-limited. Tested in calls.test.ts.
+  "calls.page": "the booking page /book/<slug>: the business's name and open times only, or closed",
+  "calls.refresh": "the same page: asks for busy times to be read again; at most once a minute, rate-limited",
+  "calls.book": "the same page: books an open time; checked again with Google; rate-limited, with a hidden field for robots",
+  "calls.manage": "a call's own private link: that call only",
+  "calls.cancel": "the same link: cancels that call only; rate-limited",
+  "calls.reschedule": "the same link: moves that call to an open time only; rate-limited",
+  "calls.verify": "the same link: the 6-digit code emailed to the lead; five wrong tries and the pick is let go; rate-limited",
+  "calls.resendCode": "the same link: a new code to the email given; three an hour, shared with the lead's pick limit",
+  "calls.release": "the same link: lets go of that pick while it waits for its code; rate-limited",
+  // D147 (Nov 4): a briefing's no-login link (/b/<token>, email 58). Tested in briefingsShare.test.ts.
+  "briefings.page": "a briefing link: answers only for a shared briefing's own long random token (a person's own, or the copied link); a turned-off link answers Withdrawn with the business and title only",
+  "briefings.opened": "the same link: counts an open of that briefing only; a missing token, a draft or a turned-off link does nothing; rate-limited",
+  "briefings.markRead": "the same link: records \"I've read it\" for that briefing only (named only on a person's own link); a missing token is refused; rate-limited",
+  "siteWatch.summary": "Phase 5c: open and urgent counts for the portal's admins (ALLOWED_EMAILS); null for anyone else, tested in siteWatch.test.ts",
+  // Phase 5b step 4 (D127): a call-sheet guest's link (/guest/<token>, email 41), signed out.
+  "guests.intro": "a guest's link: answers only for that pass's own long random token, with the sheet's title, day, the guest's first name and a masked email; tested in callSheetGuests.test.ts",
+  "guests.sendCode": "the same link's \"Email me a code\": emails a code to the pass's own address only (never shown), rate-limited; a missing token is refused",
 };
 // Functions with their own gate (a key in the arguments): refused with the wrong key, whoever calls.
 const KEYED = new Set(["r1results.report"]);
+// Phase 5b step 4 (D127): the only functions a call-sheet guest's login may call, and why. Each finds the guest's own pass
+// by its token and re-checks the sheet on every call (lib/guests.ts); tested in callSheetGuests.test.ts.
+const GUEST: Record<string, string> = {
+  "guests.home": "the guest's own call sheets (passes found by their own email), one business at a time: active ones, and ended ones that went to them (title and day only); the switcher's businesses and their unopened counts from their own passes",
+  "guests.sheet": "one of the guest's own sheets by its link token: the sent copy while active, else Access ended (title and day only)",
+  "guests.opened": "records the guest opening their own sheet, only while it's active",
+};
 // Functions any signed-in account may call (owner or client), never a stranger.
-const SIGNED_IN = new Set(["users.setName", "clients.account", "shares.mine",
+const SIGNED_IN = new Set(["help.list", "help.guide", "messages.mine", "messages.clientThreadPage", "messages.clientSend", "messages.read", /* messages.uploadUrl: only a client who can open a project (the matrix client can't; messages.test.ts) */ "users.setName", "users.switchSide", "clients.account", "shares.mine",
   // Phase 1: a client's own Inbox, Documents and their businesses' look
   "inbox.mine", "inbox.unreadCount", "inbox.markRead", "inbox.markAllRead", "documents.mine", "business.brand",
   "portal.waiting", "emails.myPrefs", "emails.setMine",
   // Nov 2: a client's Settings › Notifications (their own address only)
   "notifications.client", "notifications.setClient",
+  // Phase 4: a client's shoots (only on projects they can open)
+  "shoots.forClientProject", "shoots.page", "shoots.confirm",
+  "fileRequests.forClientProject", "fileRequests.page", "fileRequests.start", "fileRequests.finishDirect",
+  "briefs.forClientProject", "briefs.page", "briefs.save", "briefs.submit",
   // Phase 2 Part A: a client's projects (only those their share invites cover) and the final files' links (only once open)
-  "projects.mine", "projects.forClient", "projects.deliveryLink"]);
+  "projects.mine", "projects.forClient", "projects.deliveryLink",
+  // Phase 5: a client's raw footage offer (only on projects they can open) and the testimonial form (only from a request they got)
+  "footage.forClientProject", "footage.keep", "footage.decline", "testimonials.ask", "testimonials.send",
+  // Phase 5b step 3: a call sheet sent to them (only one sent to them, on a project they can open; tested in callSheets.test.ts)
+  "callSheets.forClient", "callSheets.forClientProject", "callSheets.opened"]);
+// D133 (Phase 5): functions a vendor login may call: their own side of the portal (each checks the vendor's own records,
+// tested in vendorPortal.test.ts and vendorPayouts.test.ts), their own identity, and nothing of the owner's or a client's.
+const VENDOR = new Set(["help.list", "help.guide", "users.switchSide",
+  "vendorPortal.businesses", "vendorPortal.counts", "vendorPortal.home", "vendorPortal.bookings", "vendorPortal.booking", "vendorPortal.accept", "vendorPortal.decline",
+  "vendorPortal.briefings", "vendorPortal.briefing", "vendorPortal.markRead", "vendorPortal.reviews", "vendorPortal.invoices", "vendorPortal.invoiceForm", "vendorPortal.invoice",
+  "vendorPortal.saveInvoice", "vendorPortal.deleteInvoice", "vendorPortal.settings", "vendorPortal.notifications", "vendorPortal.setNotification", "vendorPortal.saveDetails",
+  "vendorPortal.w9UploadUrl", "vendorPortal.setW9", "vendorPayouts.mine", "vendorPayouts.setupLink", "vendorPayouts.refreshMine",
+  // Phase 5b step 3: call sheets sent to them (only while booked on the project; tested in callSheets.test.ts)
+  "vendorPortal.callSheet", "vendorPortal.callSheets", "vendorPortal.openCallSheet"]);
 
 import { argsFor, call, publicFunctions, setup } from "./matrix";
 const denied = (e: unknown) => /Sign in first|Not allowed/.test(String((e as Error).message ?? e));
@@ -79,15 +129,15 @@ describe("access matrix", () => {
     expect(missing).toEqual([]);
   });
 
-  for (const who of ["nobody", "stranger", "client"] as const) {
+  for (const who of ["nobody", "stranger", "client", "vendor", "guest", "guestInvited"] as const) {
     test(`${who}: every function refuses, except the ones meant to answer`, async () => {
       const { t, ids } = await setup();
       vi.stubGlobal("fetch", async () => new Response("{}", { status: 500 })); // nothing external may be reached
-      const as = who === "nobody" ? t : t.withIdentity({ subject: who === "stranger" ? ids.strangerSub : ids.clientSub });
+      const as = who === "nobody" ? t : t.withIdentity({ subject: who === "stranger" ? ids.strangerSub : who === "vendor" ? ids.vendorSub : who === "guest" ? ids.guestSub : who === "guestInvited" ? ids.guestInvitedSub : ids.clientSub });
       const table = argsFor(ids);
       const results: Record<string, string> = {};
       for (const f of publicFunctions()) {
-        const allowed = f.key in OPEN || (who === "client" && SIGNED_IN.has(f.key));
+        const allowed = f.key in OPEN || (who === "client" && SIGNED_IN.has(f.key)) || (who === "vendor" && VENDOR.has(f.key)) || ((who === "guest" || who === "guestInvited") && f.key in GUEST);
         if (KEYED.has(f.key)) { await expect(call(as, f.ref, table[f.key], "")).rejects.toThrow(/Not allowed/); results[f.key] = "denied (own key)"; continue; }
         try {
           await call(as, f.ref, table[f.key], "");
@@ -109,7 +159,7 @@ describe("access matrix", () => {
     const me = t.withIdentity({ subject: ids.ownerSub });
     expect(await me.query(api.library.overview, {})).toBeTruthy();
     expect((await me.query(api.users.me, {}))?.role).toBe("owner");
-    expect(await me.query(api.clients.listInvites, {})).toHaveLength(1);
+    expect(await me.query(api.clients.listInvites, {})).toHaveLength(2); // the client's, and the invited guest's (step 4 review)
   });
 
   test("a client sees their own identity and account, and nothing else", async () => {

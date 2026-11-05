@@ -8,3 +8,4 @@ dist-demo
 smoke-*.png
 .notes/
 public/__mail/
+*.log

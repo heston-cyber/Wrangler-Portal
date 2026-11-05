@@ -19,6 +19,7 @@ import type { DataModel, Id } from "../_generated/dataModel";
 import { defaultBusiness, ensureDefaultBusiness } from "./business";
 import { allowedEmails } from "./owners";
 import { BUSINESS_TABLES, INHERITED_TABLES } from "./tenancy";
+import { sideOf } from "./roles";
 
 export type Scope = {
   owner: Id<"businesses"> | null;        // an owner: exactly this business
@@ -37,11 +38,14 @@ export async function scopeFor(ctx: QueryCtx | MutationCtx): Promise<Scope> {
   const user = userId ? await ctx.db.get(userId) : null;
   const email = (user?.email ?? "").toLowerCase();
   if (!email) return scope;
+  // Phase 5b step 4 (D127): a call-sheet guest gets no owner or client reach, like someone signed out (lib/guests.ts).
+  if (user?.role === "guest") return scope;
   const ms = (await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", email)).collect()).filter((m) => !m.revokedAt);
   const ownerM = ms.filter((m) => m.role === "owner").sort((a, b) => a.createdAt - b.createdAt)[0];
   if (ownerM) { scope.owner = ownerM.businessId; scope.isOwner = true; return scope; }
   if (allowedEmails().includes(email)) { scope.owner = defaultBiz; scope.isOwner = true; return scope; }
-  for (const m of ms) if (m.role === "client") scope.members.add(m.businessId);
+  // Nov 2: a login on its vendor side gets no client reach (vendor calls focus on one of their vendor businesses).
+  if (sideOf(user?.role, ms) !== "vendor") for (const m of ms) if (m.role === "client") scope.members.add(m.businessId);
   return scope;
 }
 

@@ -167,7 +167,8 @@ describe("the client's projects and final files", () => {
     expect(c.delivery.open).toBe(true);
     expect(c.delivery.files.map((f: { name: string }) => f.name)).toEqual(["Harbor30s_v2.mp4", "Harbor_30s_FINAL.mov"]);
     const inbox = await w.t.run(async (ctx) => (await ctx.db.query("inboxItems").collect()).map((i) => [i.email, i.kind, i.title]));
-    expect(inbox).toEqual([["maya@harbor.example", "final_files", "Final files ready"]]);
+    // Phase 5 (D98): the first opening also offers to keep the raw footage.
+    expect(inbox).toEqual([["maya@harbor.example", "final_files", "Final files ready"], ["maya@harbor.example", "final_files", "Keep your raw footage?"]]);
 
     // The links expire after the set number of days.
     await w.t.run(async (ctx) => { await ctx.db.patch(w.p, { deliveryUnlockedAt: Date.now() - 8 * 86_400_000 }); });
@@ -181,10 +182,9 @@ describe("the client's projects and final files", () => {
     // Another business can't touch the files.
     await expect(w.boss.mutation(api.projects.removeDeliveryFile, { fileId })).resolves.toBeNull();
     expect((await w.heston.query(api.projects.page, { projectId: w.p })).delivery.files).toHaveLength(2);
-    // With project pages switched off (Settings › Business), the client sees none.
+    // Nov 2 (Heston): the module switches are gone; an old "projects off" setting no longer hides project pages.
     await w.heston.mutation(api.business.updateSettings, { modules: { review: true, docs: true, payments: false, projects: false } });
-    expect(await w.mayaC.query(api.projects.mine, {})).toEqual([]);
-    expect(await w.mayaC.query(api.projects.forClient, { projectId: w.p })).toBeNull();
+    expect(await w.mayaC.query(api.projects.forClient, { projectId: w.p })).not.toBeNull();
   });
 
   test("a share of one video doesn't open its project; stage news goes only to the people a project share covers", async () => {

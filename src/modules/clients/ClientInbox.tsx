@@ -56,6 +56,10 @@ export default function ClientInbox({ itemId }: { itemId: string | null }) {
     if (it.kind === "cut_ready" && it.link) return <ButtonLink size="sm" to={it.link}>Review</ButtonLink>;
     if (it.kind === "to_sign" && it.link) return <a className="btn sm" href={it.link} onClick={(e) => { e.stopPropagation(); read(it); }}>Sign</a>;
     if (it.kind === "stage" && it.link) return <ButtonLink size="sm" to={it.link}>Open</ButtonLink>;
+    if (it.kind === "files" && it.link) return <ButtonLink size="sm" to={it.link}>{it.linkLabel ?? "Upload"}</ButtonLink>;
+    if (it.kind === "message" && it.link) return <ButtonLink size="sm" to={it.link}>{it.linkLabel ?? "Read and reply"}</ButtonLink>; // Phase 5d step 2
+    if (it.kind === "brief" && it.link) return <ButtonLink size="sm" to={it.link}>{it.linkLabel ?? "Open"}</ButtonLink>;
+    if (it.kind === "shoot" && it.link) return <ButtonLink size="sm" to={it.link}>{it.linkLabel ?? "Open"}</ButtonLink>;
     if (it.kind === "final_files" && it.link) return <ButtonLink size="sm" variant="primary" to={it.link}>Download</ButtonLink>;
     if (it.kind === "signed" && it.documentId) return <Button size="sm" onClick={(e) => { e.stopPropagation(); read(it); void download(it.documentId!); }}>Download</Button>;
     return undefined;
@@ -81,7 +85,7 @@ export default function ClientInbox({ itemId }: { itemId: string | null }) {
         </div>
       )}
       <div className="ci-main">
-        <PageHeader title="Inbox." sub="Everything new, newest first." />
+        <PageHeader help="/help/your-files" title="Inbox." sub="Everything new, newest first." />
         <div className="ci-bar">
           <PillTabs label="Show" value={tab} onChange={setTab} items={[{ key: "unread", label: "Unread", count: data?.unread ?? 0 }, { key: "all", label: "All" }]} />
           <span className="sp" />

@@ -13,6 +13,8 @@ import { Watermark } from "../review/player/Watermark";
 import lightArcs from "../../assets/d1/light-arcs.jpg";
 import { Icon } from "../../ui/Icon";
 import { useLocation } from "../../lib/router";
+import { HelpSection } from "../help/Help";
+import { CallSettings } from "../calls/Calls";
 import { SectionMenu, sectionOf, SettingsFrame, SetHead, type SectionKey } from "./Frame";
 import { SignConnectorPanel } from "../docs/pages/SignConnector";
 import Register from "../review/Register";
@@ -21,6 +23,10 @@ import lightElbow from "../../assets/portal/light-elbow.jpg";
 import { ago } from "../../lib/format";
 import { DropboxSettings } from "./DropboxSettings";
 import { PaymentsSettings } from "./PaymentsSettings";
+import { CalendarSettings } from "./CalendarSettings";
+import { SiteWatchSettings } from "./SiteWatch";
+import { KickoffSettings } from "../projects/Brief";
+import { ToolsSettings } from "./ToolsSettings";
 import RatesSection from "./RatesSection";
 import { BrandKitEditor } from "./BrandKit";
 import { ClientsSettings } from "../clients/Clients";
@@ -84,7 +90,7 @@ export default function Settings({ me }: { me: { name: string | null; email: str
   const section = sectionOf(path, search, location.hash);
   // Old addresses (#claude, /register, /sign/connector, Dropbox's ?dropbox=…) move to the section's own address.
   useEffect(() => {
-    if (!section || path === `/settings/${section}`) return;
+    if (!section || path === `/settings/${section}` || path.startsWith(`/settings/${section}/`)) return; // a section's own pages (Site watch's finding) stay put
     history.replaceState(null, "", `/settings/${section}${search}`);
     window.dispatchEvent(new Event("wr:navigate"));
   }, [section, path, search]);
@@ -106,6 +112,11 @@ export default function Settings({ me }: { me: { name: string | null; email: str
       {key === "payments" && <PaymentsSettings show={show} />}
       {key === "rates" && <RatesSection show={show} />}
       {key === "brand" && <><SetHead eyebrow="Brand kit" title="Your brand, for decks." sub="Claude uses this when it makes a pitch deck in your brand. Each client can have their own kit on their company page." /><BrandKitEditor show={show} /></>}
+      {key === "calendar" && <CalendarSettings show={show} />}
+      {key === "calls" && <CallSettings show={show} />}
+      {key === "sitewatch" && <SiteWatchGate show={show} />}
+      {key === "brief" && <KickoffSettings />}
+      {key === "tools" && <ToolsSettings show={show} />}
       {key === "account" && <AccountSection me={me} show={show} />}
       {key === "notifications" && <OwnerNotifications show={show} />}
       {key === "dropbox" && <DropboxSettings show={show} />}
@@ -117,9 +128,18 @@ export default function Settings({ me }: { me: { name: string | null; email: str
       {key === "sheet" && <SheetCopy show={show} />}
       {key === "clients" && <ClientsSettings show={show} />}
       {key === "shares" && <SharesSettings show={show} />}
+      {key === "help" && <><SetHead eyebrow="Help" title="Guides." sub="Short guides for your clients and vendors. Edit any of them, and what you write is what they read." /><HelpSection path={path} /></>}
       {toast}
     </SettingsFrame>
   );
+}
+
+/** Site watch is the portal's admins' only: anyone else opening its address gets nothing (the backend refuses them too). */
+function SiteWatchGate({ show }: { show: (m: string) => void }) {
+  const admin = useQuery(api.siteWatch.summary);
+  if (admin === undefined) return null;
+  if (admin === null) return <SetHead eyebrow="Settings" title="Not available." sub="Site watch is for the portal's own admins." />;
+  return <SiteWatchSettings show={show} />;
 }
 
 function useNarrow() {
@@ -175,7 +195,7 @@ function AccountSection({ me, show }: { me: { name: string | null; email: string
   );
 }
 
-type Biz = { name: string; legalName: string; emailFromName: string; replyTo: string; address: string; privacyUrl: string; accent: string; background: string; modules: { review: boolean; docs: boolean; payments: boolean; projects?: boolean } };
+type Biz = { name: string; legalName: string; emailFromName: string; replyTo: string; address: string; privacyUrl: string; accent: string; background: string };
 
 function BusinessSection({ show }: { show: (m: string) => void }) {
   const cur = useQuery(api.business.settings, {});
@@ -186,15 +206,15 @@ function BusinessSection({ show }: { show: (m: string) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
-    if (cur && !f) setF({ name: cur.name, legalName: cur.legalName ?? "", emailFromName: cur.emailFromName ?? "", replyTo: cur.replyTo ?? "", address: cur.address ?? "", privacyUrl: cur.privacyUrl ?? "", accent: cur.accent ?? "", background: cur.background ?? "", modules: cur.modules });
+    if (cur && !f) setF({ name: cur.name, legalName: cur.legalName ?? "", emailFromName: cur.emailFromName ?? "", replyTo: cur.replyTo ?? "", address: cur.address ?? "", privacyUrl: cur.privacyUrl ?? "", accent: cur.accent ?? "", background: cur.background ?? "" });
   }, [cur, f]);
-  const dirty = useMemo(() => !!(cur && f) && (f.name !== cur.name || f.legalName !== (cur.legalName ?? "") || f.emailFromName !== (cur.emailFromName ?? "") || f.replyTo !== (cur.replyTo ?? "") || f.address !== (cur.address ?? "") || f.privacyUrl !== (cur.privacyUrl ?? "") || f.accent.toUpperCase() !== (cur.accent ?? "") || f.background.toUpperCase() !== (cur.background ?? "") || JSON.stringify(f.modules) !== JSON.stringify(cur.modules)), [cur, f]);
+  const dirty = useMemo(() => !!(cur && f) && (f.name !== cur.name || f.legalName !== (cur.legalName ?? "") || f.emailFromName !== (cur.emailFromName ?? "") || f.replyTo !== (cur.replyTo ?? "") || f.address !== (cur.address ?? "") || f.privacyUrl !== (cur.privacyUrl ?? "") || f.accent.toUpperCase() !== (cur.accent ?? "") || f.background.toUpperCase() !== (cur.background ?? "")), [cur, f]);
   if (!cur || !f) return <SetHead eyebrow="Business" title="Your business." sub="How your portal looks to clients and what it sends as." />;
   const set = (p: Partial<Biz>) => setF({ ...f, ...p });
   const onSave = async () => {
     setBusy("save"); setErr(null);
     try {
-      await save({ name: f.name, legalName: f.legalName || null, emailFromName: f.emailFromName || null, replyTo: f.replyTo || null, address: f.address || null, privacyUrl: f.privacyUrl || null, accent: f.accent || null, background: f.background || null, modules: f.modules });
+      await save({ name: f.name, legalName: f.legalName || null, emailFromName: f.emailFromName || null, replyTo: f.replyTo || null, address: f.address || null, privacyUrl: f.privacyUrl || null, accent: f.accent || null, background: f.background || null });
       show("Saved");
     } catch (e) { setErr((e as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]); }
     finally { setBusy(null); }
@@ -224,12 +244,6 @@ function BusinessSection({ show }: { show: (m: string) => void }) {
             <ColourField label="Background colour" value={f.background} fallback="#030104" onChange={(v) => set({ background: v })} />
           </div>
           {cur.accentCheck && !cur.accentCheck.ok && f.accent.toUpperCase() === cur.accent && <p className="wp-warnline"><Icon name="alert" size={14} plain />Text on this colour may be hard to read.</p>}
-          <span className="wp-eyebrow">Modules</span>
-          <ModRow label="Review" checked={f.modules.review} onChange={(v) => set({ modules: { ...f.modules, review: v } })} />
-          <ModRow label="Docs" checked={f.modules.docs} onChange={(v) => set({ modules: { ...f.modules, docs: v } })} />
-          <ModRow label="Inbox" checked disabled onChange={() => {}} />
-          <ModRow label="Projects" checked={f.modules.projects !== false} onChange={(v) => set({ modules: { ...f.modules, projects: v } })} />
-          <ModRow label="Invoices (Phase 2)" checked={f.modules.payments} disabled onChange={() => {}} />
           {err && <p className="wp-errline">{err}</p>}
           <div><Button variant="primary" loading={busy === "save"} disabled={!dirty || !f.name.trim() || (!!f.accent && !hex(f.accent)) || (!!f.background && !hex(f.background))} onClick={() => void onSave()}>Save</Button></div>
         </div>
@@ -285,7 +299,10 @@ function RoundsAndWatermark({ cur, show }: { cur: BizSettings; show: (m: string)
         <span className="wp-eyebrow">Watermark on review copies</span>
         <div className="prow"><span className="pl">Use it</span><span className="pr">On for every client. Switch it off on a client's page (Settings tab).</span></div>
         <div className="prow"><span className="pl">Logo</span><span className="pr">{cur.logoUrl ? "Logo · on dark (above)" : "The WP mark, until you upload a logo above"}</span></div>
-        <div className="prow"><span className="pl">Corner</span><span className="pr"><Segmented label="Corner" value={w.corner} onChange={(c) => setW({ corner: c })} items={[{ key: "tl", label: "Top left" }, { key: "tr", label: "Top right" }, { key: "bl", label: "Bottom left" }, { key: "br", label: "Bottom right" }]} /></span></div>
+        <div className="prow"><span className="pl">Show</span><span className="pr"><Segmented label="Show" value={w.mark ?? "logo"} onChange={(m) => setW({ mark: m })} items={[{ key: "logo", label: "Logo" }, { key: "text", label: "Text" }, { key: "both", label: "Logo and text" }]} /></span></div>
+        {(w.mark ?? "logo") !== "logo" && <div className="prow"><span className="pl">Text</span><span className="pr wp-wmtext"><input className="input" maxLength={40} defaultValue={w.text ?? ""} placeholder="Draft · not for broadcast" aria-label="Watermark text"
+          onBlur={(e) => { if (e.currentTarget.value.trim() !== (w.text ?? "")) setW({ text: e.currentTarget.value }); }} onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} /><span className="wp-small secondary">Up to 40 characters. Saved when you leave the box.</span></span></div>}
+        <div className="prow"><span className="pl">Position</span><span className="pr"><Segmented label="Position" value={w.corner} onChange={(c) => setW({ corner: c })} items={[{ key: "tl", label: "Top left" }, { key: "tr", label: "Top right" }, { key: "c", label: "Center" }, { key: "bl", label: "Bottom left" }, { key: "br", label: "Bottom right" }]} /></span></div>
         <div className="prow"><span className="pl">Size</span><span className="pr"><Segmented label="Size" value={w.size} onChange={(z) => setW({ size: z })} items={[{ key: "small", label: "Small" }, { key: "large", label: "Large" }]} /></span></div>
         <div className="prow"><span className="pl">Opacity</span><span className="pr wp-opacity"><input type="range" min={5} max={100} step={5} defaultValue={Math.round(w.opacity * 100)} aria-label="Opacity" onChange={(e) => { const el = e.currentTarget.nextElementSibling; if (el) el.textContent = `${e.currentTarget.value}%`; }} onPointerUp={(e) => setW({ opacity: Number(e.currentTarget.value) / 100 })} onKeyUp={(e) => setW({ opacity: Number(e.currentTarget.value) / 100 })} /><span>{Math.round(w.opacity * 100)}%</span></span></div>
         <div className="wp-wmsample"><img src={lightArcs} alt="" /><Watermark look={{ ...w, logoUrl: cur.logoUrl }} /></div>
@@ -294,9 +311,6 @@ function RoundsAndWatermark({ cur, show }: { cur: BizSettings; show: (m: string)
   );
 }
 
-function ModRow({ label, checked, disabled, onChange }: { label: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void }) {
-  return <label className="wp-modrow"><span>{label}</span><Toggle label={label} checked={checked} disabled={disabled} onChange={onChange} /></label>;
-}
 
 function LogoSlot({ label, url, light, busy, onPick, onClear }: { label: string; url: string | null; light: boolean; busy: boolean; onPick: (f: File) => void; onClear: () => void }) {
   const input = useRef<HTMLInputElement>(null);

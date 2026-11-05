@@ -55,7 +55,7 @@ export default function SignNew() {
   );
   return (
     <>
-      <TopBar><a {...linkProps("/sign")}>Docs</a><Sep /><span className="here">New document</span></TopBar>
+      <TopBar><span className="secondary">Docs</span><Sep /><a {...linkProps("/sign")}>Contracts</a><Sep /><span className="here">New document</span></TopBar>
       <input ref={input} type="file" accept="application/pdf,.pdf" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void upload(f); }} />
       <input ref={importInput} type="file" accept="application/pdf,.pdf" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void importIt(f); }} />
       <div className="wp-page docs">

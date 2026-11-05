@@ -2,6 +2,7 @@
 // 730:1153 the vendor page, 732:2909 Add vendor). A business's subcontractors with their roles, rates (shown beside the
 // business's own Pricing subcontractor costs), details, gear, W-9 status and notes. Bookings, briefings, the vendor
 // portal and payments build on this in the next steps. Owner only.
+import { allowedEmails } from "./lib/owners";
 import { internalAction, internalQuery, mutation, query } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { syncVendorMemberships } from "./lib/business";
@@ -15,7 +16,6 @@ import { requireMe } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import type { Rates } from "./lib/estimate";
 import { ratesOf } from "./crm";
-import { assertNotClient } from "./lib/roles";
 import { todayCentral } from "./lib/bookings";
 import { paidAmount, paidDay } from "./lib/bookingRows";
 
@@ -36,6 +36,11 @@ const detailsV = {
 };
 type Details = { name: string; email: string; roles: string[]; rates: Array<{ role: string; unit: "day" | "hour"; cents: number }>; basedIn?: string; phone?: string; portfolio?: string; gear?: string[]; notes?: string };
 
+/** An email that runs a business here can't also be a vendor (its owner side always wins, so it would do nothing). */
+async function notOwner(ctx: MutationCtx, email: string) {
+  const owner = allowedEmails().includes(email) || (await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", email)).collect()).some((m) => m.role === "owner" && !m.revokedAt);
+  if (owner) throw new ConvexError("That email runs a business here, so it can't be a vendor.");
+}
 function clean(a: Details) {
   const email = a.email.trim().toLowerCase();
   if (!a.name.trim()) throw new ConvexError("Add their name.");
@@ -114,9 +119,9 @@ export const add = mutation({
   handler: async (ctx, a) => {
     await ownerBiz(ctx);
     const d = clean(a);
+    await notOwner(ctx, d.email); // review (Nov 2): an owner's email can't be a vendor
     const dup = (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", d.email)).collect()).find((x) => !x.archivedAt);
     if (dup) throw new ConvexError(`${dup.name} is already a vendor with that email.`);
-    await assertNotClient(ctx, d.email); // D102
     const now = Date.now();
     const id = await ctx.db.insert("vendors", { ...d, ...(a.invite ? { invitedAt: now } : {}), createdAt: now, updatedAt: now });
     if (a.invite) await inviteNow(ctx, id);
@@ -131,8 +136,8 @@ export const update = mutation({
     const x = await ctx.db.get(vendorId);
     if (!x) throw new ConvexError("That vendor isn't here.");
     const d = clean(a);
+    await notOwner(ctx, d.email); // review (Nov 2): an owner's email can't be a vendor
     if (d.email !== x.email && (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", d.email)).collect()).some((y) => y._id !== x._id && !y.archivedAt)) throw new ConvexError("Another vendor has that email.");
-    if (d.email !== x.email) await assertNotClient(ctx, d.email); // D102
     // Review fix (step 6): a new email is a new login. The old address loses this business, and the new one needs a
     // fresh invite before it sees any of their bookings, invoices or W-9.
     if (d.email !== x.email) await endAccess(ctx, x);
@@ -148,14 +153,13 @@ export const archive = mutation({
     await ownerBiz(ctx);
     const x = await ctx.db.get(vendorId);
     if (!x) throw new ConvexError("That vendor isn't here.");
-    if (!archived && x.archivedAt) await assertNotClient(ctx, x.email); // D102: back on the list only if still not a client's
     await ctx.db.patch(vendorId, { archivedAt: archived ? Date.now() : undefined, updatedAt: Date.now() });
     // Review fix (step 6): off the list ends their portal access to this business (and a booked editor's Review link);
     // back on the list gives it back to an invited vendor.
     if (archived && !x.archivedAt) await endAccess(ctx, x);
     if (!archived && x.archivedAt && x.invitedAt) {
       const user = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", x.email)).first();
-      await syncVendorMemberships(ctx, x.email, user?.role === "vendor" ? user._id : undefined);
+      await syncVendorMemberships(ctx, x.email, user && user.role !== "owner" ? user._id : undefined);
     }
     return null;
   },
@@ -183,7 +187,8 @@ async function inviteNow(ctx: MutationCtx, vendorId: Id<"vendors">) {
   const now = Date.now();
   await ctx.db.patch(vendorId, { invitedAt: now, updatedAt: now });
   const user = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", x.email)).unique();
-  if (user?.role === "vendor") await syncVendorMemberships(ctx, x.email, user._id);
+  // An existing login (a vendor elsewhere, or a client: one login can be both) gets this business on its vendor side.
+  if (user && user.role !== "owner") await syncVendorMemberships(ctx, x.email, user._id);
   await ctx.scheduler.runAfter(0, internal.vendors.mailInvite, { vendorId, at: now });
 }
 
@@ -194,7 +199,6 @@ export const invite = mutation({
     await ownerBiz(ctx);
     const x = await ctx.db.get(vendorId);
     if (!x || x.archivedAt) throw new ConvexError("That vendor isn't on your list.");
-    await assertNotClient(ctx, x.email); // D102
     await inviteNow(ctx, vendorId);
     return null;
   },

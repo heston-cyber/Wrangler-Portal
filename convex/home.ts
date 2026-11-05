@@ -4,6 +4,7 @@
 //   doc      a sent document waiting on a client signer whose turn it is (with Remind)
 //   draft    an Inbox note Claude drafted, waiting for you to confirm it on the site
 //   request  something Claude asked to do in Sign (approve, send, cancel), waiting for you to confirm
+import { v } from "convex/values";
 import { query } from "./lib/functions";
 import { requireMe } from "./lib/access";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -12,6 +13,14 @@ import { docLabel, OWNER_KEY } from "./lib/wsLayout";
 import { REQUEST_TTL, stillFits } from "./sign";
 import { quoteNeeds } from "./quotes";
 import { proposalNeeds } from "./proposals";
+import { footageNeeds } from "./footage";
+import { testimonialNeeds } from "./testimonials";
+import { shootRows, scheduled, liveEdits } from "./production";
+import { overviewData } from "./invoices";
+import { todayCentral } from "./lib/bookings";
+import { shootMoveNeeds } from "./calendarSync";
+import { weatherNeeds } from "./callSheets";
+import { callNeeds } from "./calls";
 
 const MAX_NOTE_GROUPS = 10;
 
@@ -22,7 +31,12 @@ export type Need =
   | { kind: "request"; at: number; documentId: Id<"wsDocuments">; label: string; title: string; what: "approve" | "send" | "cancel" }
   | { kind: "quote"; at: number; quoteId: Id<"quotes">; number: string; company: string; title: string; what: "accepted" | "declined"; who: string } // Phase 3b
   | { kind: "proposal"; at: number; proposalId: Id<"proposals">; number: string; company: string; title: string; what: "accepted" | "declined"; who: string } // Phase 3b
-  | { kind: "vendorInvoice"; at: number; invoiceId: Id<"vendorInvoices">; vendorId: Id<"vendors">; vendor: string; number: string; project: string; totalCents: number }; // Phase 3c
+  | { kind: "vendorInvoice"; at: number; invoiceId: Id<"vendorInvoices">; vendorId: Id<"vendors">; vendor: string; number: string; project: string; totalCents: number } // Phase 3c
+  | { kind: "footage"; at: number; what: "kept" | "renewal" | "ended" | "unpaid" | "paidLate"; projectId: Id<"projects">; project: string; client: string | null } // Phase 5
+  | { kind: "testimonial"; at: number; testimonialId: Id<"testimonials">; who: string; project: string } // Phase 5
+  | { kind: "shootMoved"; at: number; shootId: Id<"shoots">; projectId: Id<"projects">; project: string; date: string; call: string; wasDate: string; wasCall: string; people: number; crew: number; sheetId: Id<"callSheets"> | null; kept: boolean } // Phase 5b step 5 (D143); kept: review fix H2
+  | { kind: "call"; at: number; callId: Id<"calls">; dealId: Id<"deals"> | null; who: string; what: "booked" | "moved" | "cancelled"; start: number; end: number; was: number | null; calError: string | null } // Phase 5d (Q86)
+  | { kind: "weatherChanged"; at: number; callSheetId: Id<"callSheets">; title: string; date: string; line: string; was: string }; // D148: the forecast changed after the sheet was sent
 
 /** The client a document belongs to: the client of its first signer that's one of a client's people. */
 export async function docClient(ctx: QueryCtx, emails: string[]) {
@@ -91,7 +105,35 @@ export const needs = query({
       const p = await ctx.db.get(x.projectId);
       out.push({ kind: "vendorInvoice", at: x.sentAt ?? x.updatedAt, invoiceId: x._id, vendorId: x.vendorId, vendor: vendor?.name ?? "A vendor", number: x.number, project: p?.name ?? "A project", totalCents: x.totalCents });
     }
-    const order = { proposal: 0, quote: 0, vendorInvoice: 0, notes: 1, doc: 2, draft: 3, request: 4 } as const;
+    // Phase 5: raw footage (an invoice draft to send, or past its keep day) and new testimonials.
+    out.push(...(await footageNeeds(ctx)));
+    out.push(...(await testimonialNeeds(ctx)));
+    // Phase 5b step 5 (D143): a shoot moved in Google Calendar (nobody was emailed): tell the crew and client.
+    out.push(...(await shootMoveNeeds(ctx)));
+    // D148 (Nov 4): a sent call sheet's forecast changed: readers still have the sent line until an update goes out.
+    out.push(...(await weatherNeeds(ctx)));
+    out.push(...(await callNeeds(ctx))); // Phase 5d (Q86): a lead booked, moved or cancelled a call, until Done
+    const order = { call: 0, shootMoved: 0, weatherChanged: 0, proposal: 0, quote: 0, vendorInvoice: 0, footage: 0, testimonial: 0, notes: 1, doc: 2, draft: 3, request: 4 } as const;
     return out.sort((a, b) => order[a.kind] - order[b.kind] || b.at - a.at);
+  },
+});
+
+/** The Dashboard's Today tile, Coming up, Live edits and Money this month (Nov 3, frame 767:8254). The Needs list is `needs`. */
+export const dashboard = query({
+  args: { tzOffsetMin: v.optional(v.number()) },
+  handler: async (ctx, { tzOffsetMin }) => {
+    await requireMe(ctx);
+    const today = todayCentral();
+    const upcoming = (await scheduled(ctx)).filter((s) => s.date >= today);
+    const todays = upcoming.filter((s) => s.date === today);
+    const edits = await liveEdits(ctx, today);
+    const money = await overviewData(ctx, tzOffsetMin ?? 0);
+    return {
+      today,
+      tiles: { today: todays.length, todayFirst: todays[0] ? (await shootRows(ctx, [todays[0]]))[0] ?? null : null, edits: edits.length },
+      coming: await shootRows(ctx, upcoming.slice(0, 3)), comingTotal: upcoming.length,
+      edits: edits.slice(0, 3),
+      money: { stripe: money.stripe, paid: money.paid.month, due: money.due.cents, overdue: money.overdue.cents },
+    };
   },
 });

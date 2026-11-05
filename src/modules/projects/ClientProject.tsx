@@ -15,6 +15,10 @@ import { downloadZip } from "../../lib/download";
 import { errText } from "../docs/pages/common";
 import { useSignedCopy } from "../clients/ClientInbox";
 import { StageBar, stageName, dateText, bytes, STAGES, openFileLink, canZip } from "./common";
+import { ComingUpShoots, useComingUpCount } from "./Shoots";
+import { ComingUpRequests, useRequestCount } from "./Requests";
+import { ComingUpBrief, useBriefCount } from "./Brief";
+import { ClientFootage } from "./Footage";
 
 type Data = NonNullable<ReturnType<typeof useQuery<typeof api.projects.forClient>>>;
 export type ClientProjectTab = "overview" | "videos" | "documents";
@@ -95,6 +99,8 @@ function FinalFiles({ d, show, wide }: { d: Data; show: (m: string) => void; wid
 
 export default function ClientProject({ projectId, tab }: { projectId: string; tab: ClientProjectTab }) {
   const d = useQuery(api.projects.forClient, { projectId });
+  const shootsUp = useComingUpCount(projectId), requestsUp = useRequestCount(projectId), briefUp = useBriefCount(projectId);
+  const coming = shootsUp + requestsUp + briefUp;
   const [toast, show] = useToast();
   const setTab = (k: ClientProjectTab) => navigate(`/projects/${projectId}${k === "overview" ? "" : `?tab=${k}`}`);
   if (d === undefined) return <><TopBar><a {...linkProps("/review")}>Review</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
@@ -120,6 +126,7 @@ export default function ClientProject({ projectId, tab }: { projectId: string; t
         </div>
         {tab === "overview" && (
           <div className="cpj-overview">
+            <ClientFootage projectId={projectId} show={show} />
             <Card className="cpj-where" label="Where it's at" head={<SectionHead label="Where it's at" />}>
               <div className="pj-stagebody">
                 <StageBar stage={d.stage} />
@@ -130,6 +137,7 @@ export default function ClientProject({ projectId, tab }: { projectId: string; t
             {d.delivery.open && <FinalFiles d={d} show={show} wide />}
             <div className="wp-homecols">
               <div className="col">
+                {coming > 0 && <Card className="cpj-coming" label="Coming up" head={<SectionHead label="Coming up" count={coming} />}>{briefUp > 0 && <ComingUpBrief projectId={projectId} />}{briefUp > 0 && shootsUp > 0 && <Divider />}<ComingUpShoots projectId={projectId} />{(briefUp > 0 || shootsUp > 0) && requestsUp > 0 && <Divider />}<ComingUpRequests projectId={projectId} /></Card>}
                 <Card className="cpj-videos" label="Videos" head={<SectionHead label="Videos" count={d.videos.length} />}><Videos d={d} max={6} /></Card>
               </div>
               <div className="col right">

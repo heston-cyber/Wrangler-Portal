@@ -3,6 +3,7 @@
 // 735:4610 / 735:4933). One login across the businesses a vendor works for (D94): the switcher picks one, the portal
 // takes on its look, and only its work shows. Invoices, Settings (W-9, payment method) and Review for editors come in
 // the next part of step 4.
+import { useSideSwitch } from "../../shell/SideSwitch";
 import { useContext, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -22,6 +23,8 @@ import { PdfPages } from "../proposals/ClientProposal";
 import wpLogo from "../../assets/d1/wp-logo.png";
 
 import { Ctx, type Biz } from "./ctx";
+import { HelpScreen } from "../help/Help";
+import { VendorCallSheetPage } from "../production/CallSheetRead";
 import { InvoiceEditor, VendorInvoice, VendorInvoices, VendorReview, VendorSettings, HomeInvoices } from "./VendorWork";
 const KEY = "wr.vendorBiz";
 const read = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
@@ -74,8 +77,11 @@ export default function VendorApp({ me }: { me: { name: string | null; email: st
 }
 
 function Routes({ path, me }: { path: string; me: { name: string | null; email: string } }) {
+  const { biz } = useContext(Ctx);
   const booking = /^\/vendor\/bookings\/([^/]+)\/?$/.exec(path);
   const brief = /^\/vendor\/briefings\/([^/]+)\/?$/.exec(path);
+  const sheet = /^\/vendor\/call-sheets\/([^/]+)\/?$/.exec(path); // Phase 5b step 3: a call sheet sent to them
+  if (sheet) return <VendorCallSheetPage key={sheet[1]} callSheetId={sheet[1]} />;
   if (booking) return <VendorBooking key={booking[1]} bookingId={booking[1]} />;
   if (/^\/vendor\/bookings\/?$/.test(path)) return <VendorBookings />;
   if (brief) return <VendorBriefing key={brief[1]} briefingId={brief[1]} />;
@@ -85,6 +91,8 @@ function Routes({ path, me }: { path: string; me: { name: string | null; email: 
   if (inv) return <VendorInvoice key={inv[1]} invoiceId={inv[1]} />;
   if (/^\/vendor\/invoices\/?$/.test(path)) return <VendorInvoices />;
   if (/^\/vendor\/review\/?$/.test(path)) return <VendorReview />;
+  const help = /^\/vendor\/help(?:\/([a-z0-9-]+))?\/?$/.exec(path);
+  if (help) return <HelpScreen key={help[1] ?? ""} base="/vendor/help" slug={help[1]} biz={biz} />;
   if (/^\/more\/?$/.test(path)) return <VendorMore me={me} />;
   if (path.startsWith("/settings")) return <VendorSettings />;
   return <VendorHome />;
@@ -123,6 +131,7 @@ function VendorHome() {
   const { biz, list } = useContext(Ctx);
   const others = list.length > 1;
   const h = useQuery(api.vendorPortal.home, biz ? { businessId: biz } : "skip");
+  const sheets = useQuery(api.vendorPortal.callSheets, biz ? { businessId: biz } : "skip"); // Phase 5b step 3
   const [declining, setDeclining] = useState<Id<"vendorBookings"> | null>(null);
   const [toast, show] = useToast();
   const accept = useMutation(api.vendorPortal.accept);
@@ -155,6 +164,10 @@ function VendorHome() {
                 : h.toRead.map((b, i) => <div key={b._id} className="wp-rowwrap">{i > 0 && <Divider />}
                   <ListRow className="ilead" lead={{ icon: "note" }} to={`/vendor/briefings/${b._id}`} title={b.title} meta={`Sent ${when(b.sentAt)} by ${h.owner}`} chip={<StatusChip tone="danger">New</StatusChip>} chevron /></div>)}
             </Card>
+            {sheets && sheets.length > 0 && <Card label="Call sheets" head={<SectionHead label="Call sheets" count={sheets.length} />}>
+              {sheets.map((c, i) => <div key={c._id} className="wp-rowwrap">{i > 0 && <Divider />}
+                <ListRow className="ilead" lead={{ icon: "document" }} to={`/vendor/call-sheets/${c._id}`} title={c.project} meta={`${new Date(`${c.date}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" })} · sent ${when(c.sentAt)}`} chip={c.opened ? undefined : <StatusChip tone="danger">New</StatusChip>} chevron /></div>)}
+            </Card>}
             <Card label="Upcoming" head={<SectionHead label="Upcoming" count={h.upcoming.length} />}>
               {h.upcoming.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "calendar" }} title="Nothing booked yet." />
                 : h.upcoming.map((x, i) => <div key={x._id} className="wp-rowwrap">{i > 0 && <Divider />}
@@ -219,7 +232,7 @@ function VendorBookings() {
     <>
       <TopBar><span className="here">Bookings</span></TopBar>
       <div className="wp-page">
-        <PageHeader eyebrow="Bookings" title="Bookings." sub="Work you've been offered and booked for." />
+        <PageHeader help="/vendor/help/accepting-a-booking" eyebrow="Bookings" title="Bookings." sub="Work you've been offered and booked for." />
         {r.rows.length === 0 ? <EmptyState icon="calendar" title="No bookings yet." body="When you're offered work, it shows up here and in your email." /> : <>
           <PillTabs label="Show" value={pill} onChange={setPill} items={[{ key: "offered", label: "Offered", count: count("offered") }, { key: "upcoming", label: "Upcoming", count: count("upcoming") }, { key: "done", label: "Done", count: count("done") }, { key: "declined", label: "Declined", count: count("declined") }]} />
           <Card label="Bookings">
@@ -302,7 +315,7 @@ function VendorBriefings() {
     <>
       <TopBar><span className="here">Briefings</span></TopBar>
       <div className="wp-page">
-        <PageHeader eyebrow="Briefings" title="Briefings." sub="Shoot and edit briefs for the work you're booked on." />
+        <PageHeader help="/vendor/help/vendor-briefings" eyebrow="Briefings" title="Briefings." sub="Shoot and edit briefs for the work you're booked on." />
         {r.rows.length === 0 ? <EmptyState icon="note" title="No briefings yet." body="When a brief is sent to you, it shows up here and in your email." /> : (
           <Card label="Briefings">
             {r.rows.map((b, i) => <div key={b._id} className="wp-rowwrap">{i > 0 && <Divider />}
@@ -350,6 +363,7 @@ function VendorBriefing({ briefingId }: { briefingId: string }) {
 
 function VendorMore({ me }: { me: { name: string | null; email: string } }) {
   const [signOut, dialog] = useSignOutAsk();
+  const sideSwitch = useSideSwitch();
   return (
     <div className="wp-page">
       <PageHeader title={me.name ?? me.email} sub={me.email} />
@@ -357,6 +371,7 @@ function VendorMore({ me }: { me: { name: string | null; email: string } }) {
       <Card label="More">
         <ListRow className="ilead" lead={{ icon: "settings" }} to="/settings" title="Settings" meta="Your account" chevron />
         <Divider />
+        {sideSwitch.other && <><ListRow className="ilead" lead={{ icon: "users" }} onClick={() => void sideSwitch.go()} title="Switch to the client side" meta="Same login, your projects as a client" /><Divider /></>}
         <ListRow className="ilead" lead={{ icon: "sign-out" }} onClick={signOut} title="Sign out" />
       </Card>
       {dialog}

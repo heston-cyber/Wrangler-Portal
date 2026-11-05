@@ -12,6 +12,7 @@ import { encPath, reviewStorage } from "./lib/reviewStorage";
 import { signUrl } from "./lib/media";
 import { streamFolder } from "./lib/bunnySign";
 import { SITE } from "./lib/site";
+import { isBig, listedResolutions } from "./lib/quality";
 
 const MAX_COPY_TRIES = 3;
 const SCRUB_POLL_MS = 10_000;
@@ -114,38 +115,78 @@ export const startScrub = internalAction({
   },
 });
 
+// Nov 4 (Heston): a render bigger than 1080p plays at 1080p by default once the scrub library has made its 1080p copy
+// (the library makes 360p and 1080p). Versions made before the quality choice wait for the 360p copy only, as before.
+const wants1080 = (x: { qualityMenu?: boolean; width?: number; height?: number }) => !!x.qualityMenu && isBig(x.width, x.height);
+const SCRUB_MAX_POLLS_1080 = 360; // ~1 hour: a long 4K render's 1080p copy takes a while
+
+/** Does this copy answer on the scrub library's CDN? (A two-byte range, from the site's own address.) */
+async function scrubAnswers(cdn: string, guid: string, h: number, folder: boolean): Promise<boolean> {
+  const url = `https://${cdn}/${guid}/play_${h}p.mp4`;
+  // Signed since C3 (Oct 23): the scrub zone needs a token too. (Unsigned, this was 403 and every copy "failed".)
+  const r = await fetch(await signUrl(url, folder ? { folder: streamFolder(guid) } : {}), { headers: { Range: "bytes=0-1", Referer: `${SITE()}/` } });
+  await r.arrayBuffer();
+  return r.status === 206 || r.status === 200;
+}
+
 export const pollScrub = internalAction({
   args: { versionId: v.id("versions") },
   handler: async (ctx, { versionId }): Promise<{ result: string }> => {
     const s = scrubLib();
     const row = await ctx.runQuery(internal.library.getVersionInternal, { versionId });
-    if (!s || !row?.version.scrubGuid || row.version.scrubStatus !== "pending") return { result: "nothing to do" };
-    const polls = (row.version.scrubPolls ?? 0) + 1;
+    const ver = row?.version;
+    if (!s || !ver?.scrubGuid) return { result: "nothing to do" };
+    const need1080 = wants1080(ver) && !(ver.scrubHeights ?? []).includes(1080);
+    const pending = ver.scrubStatus === "pending";
+    if (!pending && !(ver.scrubStatus === "ready" && need1080)) return { result: "nothing to do" };
+    const polls = (ver.scrubPolls ?? 0) + 1;
     try {
-      const b = await scrubCall(`/videos/${encodeURIComponent(row.version.scrubGuid)}`) as { status: number; encodeProgress?: number; availableResolutions?: string | null; storageSize?: number };
+      const b = await scrubCall(`/videos/${encodeURIComponent(ver.scrubGuid)}`) as { status: number; encodeProgress?: number; availableResolutions?: string | null; storageSize?: number };
       if (b.status === 5 || b.status === 8) {
-        await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { scrubStatus: "failed", scrubPolls: polls } });
-        return { result: "scrub copy failed" };
-      }
-      const has360 = (b.availableResolutions || "").split(",").map((x) => parseInt(x, 10)).includes(360);
-      if ((b.status === 3 || b.status === 4) && has360) {
-        // Signed since C3 (Oct 23): the scrub zone needs a token too. (Unsigned, this was 403 and every copy "failed".)
-        const mp4 = await fetch(await signUrl(`https://${s.cdn}/${row.version.scrubGuid}/play_360p.mp4`, { folder: streamFolder(row.version.scrubGuid) }), { headers: { Range: "bytes=0-1", Referer: `${SITE()}/` } });
-        await mp4.arrayBuffer();
-        if (mp4.status === 206 || mp4.status === 200) {
-          const total = (row.version.fileSize ?? 0) + (b.storageSize ?? 0);
-          await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { scrubStatus: "ready", scrubReadyAt: Date.now(), scrubPolls: polls, storageBytes: total, storageCheckedAt: Date.now() } });
-          return { result: "scrub copy ready" };
+        if (pending) {
+          await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { scrubStatus: "failed", scrubPolls: polls } });
+          return { result: "scrub copy failed" };
         }
+        await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { scrubPolls: polls } });
+        return { result: "1080p copy failed" }; // the render keeps playing at full size
       }
+      const listed = listedResolutions(b.availableResolutions);
+      const heights = new Set(ver.scrubHeights ?? []);
+      const patch: Record<string, unknown> = {};
+      if (pending && (b.status === 3 || b.status === 4) && listed.includes(360) && await scrubAnswers(s.cdn, ver.scrubGuid, 360, true)) {
+        const total = (ver.fileSize ?? 0) + (b.storageSize ?? 0);
+        Object.assign(patch, { scrubStatus: "ready", scrubReadyAt: Date.now(), storageBytes: total, storageCheckedAt: Date.now() });
+        heights.add(360);
+      }
+      // The 1080p copy: signed for its one file, the way the page gets it.
+      if (need1080 && (b.status === 3 || b.status === 4) && listed.includes(1080) && await scrubAnswers(s.cdn, ver.scrubGuid, 1080, false)) {
+        heights.add(1080);
+        if (typeof b.storageSize === "number") Object.assign(patch, { storageBytes: (ver.fileSize ?? 0) + b.storageSize, storageCheckedAt: Date.now() });
+      }
+      if (ver.qualityMenu && heights.size !== (ver.scrubHeights ?? []).length) patch.scrubHeights = [...heights].sort((a, c) => a - c);
+      const ready360 = pending ? patch.scrubStatus === "ready" : true;
+      const done1080 = !wants1080(ver) || heights.has(1080);
+      // Bunny finished without a 1080p copy: the library isn't set to make one, so stop waiting for it.
+      const no1080 = b.status === 3 && !listed.includes(1080);
+      if (ready360 && (done1080 || no1080)) {
+        await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { ...patch, scrubPolls: polls } });
+        return { result: !pending ? (done1080 ? "1080p copy ready" : "no 1080p copy") : done1080 ? "scrub copy ready" : "scrub copy ready (no 1080p copy)" };
+      }
+      if (Object.keys(patch).length) await ctx.runMutation(internal.library.patchVersion, { versionId, patch });
     } catch { /* try again */ }
-    if (polls >= SCRUB_MAX_POLLS) {
+    const latest = (await ctx.runQuery(internal.library.getVersionInternal, { versionId }))?.version;
+    const stillPending = latest?.scrubStatus === "pending";
+    if (stillPending && polls >= SCRUB_MAX_POLLS) {
       await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { scrubStatus: "failed", scrubPolls: polls } });
       return { result: "scrub copy never finished" };
     }
+    if (!stillPending && polls >= SCRUB_MAX_POLLS_1080) {
+      await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { scrubPolls: polls } });
+      return { result: "1080p copy never finished" };
+    }
     await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { scrubPolls: polls } });
     await ctx.scheduler.runAfter(SCRUB_POLL_MS, internal.reviewFiles.pollScrub, { versionId });
-    return { result: "waiting" };
+    return { result: stillPending ? "waiting" : "waiting for the 1080p copy" };
   },
 });
 

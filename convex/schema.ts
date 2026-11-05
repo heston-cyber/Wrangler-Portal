@@ -4,6 +4,12 @@ import { v } from "convex/values";
 
 // Frames are always stored as integers counted from the first frame of the version (frame 0).
 // Timecode is derived from frames + the version's start timecode, never from seconds.
+// D149: an answer to a quote or proposal. Name always; email and company when given (a copied link asks for both).
+const responseV = v.object({
+  kind: v.union(v.literal("accepted"), v.literal("declined")), name: v.string(), email: v.optional(v.string()), company: v.optional(v.string()),
+  reason: v.optional(v.string()), at: v.number(), ip: v.optional(v.string()), userAgent: v.optional(v.string()), via: v.optional(v.union(v.literal("email"), v.literal("link"))),
+});
+
 export default defineSchema({
   ...authTables,
   // Client side (C1, Oct 23): the auth users table with a role. Owners are the ALLOWED_EMAILS list (Heston);
@@ -16,8 +22,9 @@ export default defineSchema({
     phone: v.optional(v.string()),
     phoneVerificationTime: v.optional(v.number()),
     isAnonymous: v.optional(v.boolean()),
-    role: v.optional(v.union(v.literal("owner"), v.literal("client"), v.literal("vendor"))), // Phase 3c: vendors (D94, D102: one role per email)
+    role: v.optional(v.union(v.literal("owner"), v.literal("client"), v.literal("vendor"), v.literal("guest"))), // Phase 3c: vendors (D94). Nov 2: for a client-and-vendor login, the side it's on now (users.switchSide). Phase 5b step 4 (D127): "guest", a call-sheet guest's code-only login: never an owner, client or vendor (lib/access.ts)
     lastSignInAt: v.optional(v.number()),
+    tools: v.optional(v.any()),                // Nov 2: an owner's Settings › Tools (menu order, tools off the menu, Dashboard widgets; lib/tools.ts)
   }).index("email", ["email"]).index("phone", ["phone"]),
   // Emails allowed to make a client account. Made by the owner (the Share dialog in C2, or Settings › Clients).
   invites: defineTable({
@@ -45,7 +52,7 @@ export default defineSchema({
     access: v.union(v.literal("view"), v.literal("comment")),
     who: v.union(v.literal("link"), v.literal("invited")),
     allVersions: v.boolean(),    // off = only the latest version
-    downloads: v.boolean(),      // allow downloading the 1080p file (C3)
+    downloads: v.boolean(),      // allow downloading the full-resolution file (C3; D152: the render or the original)
     emailNewVersions: v.boolean(), // email the people on it when a new version lands (C4)
     expiresAt: v.optional(v.number()),
     passcodeHash: v.optional(v.string()), // link shares only; SHA-256 of token + passcode
@@ -138,6 +145,7 @@ export default defineSchema({
     keyDates: v.optional(v.array(v.object({ label: v.string(), date: v.string() }))), // date: YYYY-MM-DD
     rounds: v.optional(v.number()),              // rounds per video on this project (missing: the client's, then the business's)
     deliveryUnlockedAt: v.optional(v.number()),  // final files open to the client from here (Part B: when the final invoice is paid)
+    deliveryFirstOpenedAt: v.optional(v.number()), // Phase 5 (D142): set the first time the files open, never cleared (Lock again doesn't reset it)
     deliveryLinkDays: v.optional(v.number()),    // how long download links work after unlock (missing: 7)
     updatedAt: v.optional(v.number()),
   }).index("by_name", ["name"]).index("by_dropbox_folder", ["dropboxFolder"]).index("by_client", ["clientId"]),
@@ -229,6 +237,11 @@ export default defineSchema({
     scrubPolls: v.optional(v.number()),
     scrubReadyAt: v.optional(v.number()),
     copyMs: v.optional(v.number()), // R3: how long the Dropbox → Bunny Storage copy took
+    // Nov 4 (Heston): versions made since the 1080p / 4K quality choice. Older versions (no flag) play exactly as before.
+    qualityMenu: v.optional(v.boolean()),
+    // Nov 4: the MP4 copies the scrub library has made that answer on its CDN (360 for dragging; 1080 for a render
+    // bigger than 1080p, which plays by default). File versions with qualityMenu only.
+    scrubHeights: v.optional(v.array(v.number())),
   })
     .index("by_video", ["videoId", "number"])
     .index("by_guid", ["bunnyGuid"]),
@@ -331,6 +344,7 @@ export default defineSchema({
   oauthStates: defineTable({
     state: v.string(),
     userId: v.string(),
+    kind: v.optional(v.string()),              // Phase 4: "calendar" (Google); Dropbox's have none
     createdAt: v.number(),
   }).index("by_state", ["state"]),
 
@@ -482,7 +496,7 @@ export default defineSchema({
     style: v.any(),
     signers: v.any(),                       // client signers (name, email, title) for when it's sent
     templateId: v.optional(v.id("wsTemplates")),
-    kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"))),  // Phase 3b: a proposal (Proposals); 3c: a briefing (D97). Never a contract; kept out of Docs
+    kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"), v.literal("callsheet"))),  // Phase 3b: a proposal (Proposals); 3c: a briefing (D97); 5b: a call sheet. Never a contract; kept out of Docs
     documentId: v.optional(v.id("wsDocuments")), // set once it has gone to signing
     renderedAt: v.optional(v.number()),
     createdAt: v.number(),
@@ -492,7 +506,8 @@ export default defineSchema({
     businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     name: v.string(),
     description: v.optional(v.string()),
-    kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"))),  // a proposal or briefing template, kept apart from contract templates
+    kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"), v.literal("callsheet"), v.literal("guide"))),  // a proposal, briefing, call-sheet or Help-guide template, kept apart from contract templates
+    guideSlug: v.optional(v.string()),       // Phase 5d step 4: which of Wrangler's Help guides this business has edited
     blocks: v.any(),
     fields: v.any(),
     style: v.any(),
@@ -700,7 +715,7 @@ export default defineSchema({
     // on review copies (D24: on for every client unless switched off on the client).
     roundsDefault: v.optional(v.number()),
     roundsOff: v.optional(v.boolean()), // revision rounds switched off for the whole business
-    watermark: v.optional(v.object({ corner: v.union(v.literal("tl"), v.literal("tr"), v.literal("bl"), v.literal("br")), size: v.union(v.literal("small"), v.literal("large")), opacity: v.number() })),
+    watermark: v.optional(v.object({ corner: v.union(v.literal("tl"), v.literal("tr"), v.literal("bl"), v.literal("br"), v.literal("c")), size: v.union(v.literal("small"), v.literal("large")), opacity: v.number(), mark: v.optional(v.union(v.literal("logo"), v.literal("text"), v.literal("both"))), text: v.optional(v.string()) })), // Nov 2: center, and your own text
     // Phase 2 Part B (D45): the business's own Stripe account, connected to the portal's platform account. Money goes
     // straight to it; the portal only mirrors what Stripe holds.
     stripe: v.optional(v.object({
@@ -720,9 +735,12 @@ export default defineSchema({
     brandKit: v.optional(v.any()),           // Phase 3b (D71): Settings › Brand kit (convex/brandKit.ts)
     quoteSeq: v.optional(v.number()),        // Phase 3b: the last quote number used (D74)
     proposalSeq: v.optional(v.number()),     // Phase 3b: the last proposal number used (D85)
+    kickoff: v.optional(v.any()),            // Phase 4 (Nov 2): the business's own kickoff brief questions (lib/kickoff.ts)
     questionnaire: v.optional(v.any()),      // Phase 3b (D70): the business's own proposal questionnaire (lib/questionnaire.ts)
     // Phase 2b (D64): when Stripe's last retry of a subscription payment fails: keep it past due (default) or cancel it.
     subFailRule: v.optional(v.union(v.literal("past_due"), v.literal("cancel"))),
+    // Phase 5 (D98): Settings › Payments › Footage storage. Missing: Wrangler on, $100/year, kept 30 days; others off.
+    footage: v.optional(v.object({ on: v.boolean(), priceCents: v.number(), keepDays: v.number() })),
     // Phase 2 Part B step 4 (D51): automatic invoice reminders, off until the owner turns them on (that's their OK).
     reminders: v.optional(v.object({
       on: v.boolean(),
@@ -746,7 +764,8 @@ export default defineSchema({
     estimateId: v.optional(v.id("estimates")),
     valueCents: v.optional(v.number()),
     stage: v.union(v.literal("lead"), v.literal("quoted"), v.literal("contract_sent"), v.literal("signed"), v.literal("in_production"), v.literal("delivered"), v.literal("paid")),
-    source: v.union(v.literal("website"), v.literal("hand"), v.literal("estimate")),
+    source: v.union(v.literal("website"), v.literal("hand"), v.literal("estimate"), v.literal("accepted"), v.literal("call")), // accepted: D149's quiet lead; call: booked a call (5d)
+    quiet: v.optional(v.boolean()),               // D149: someone who isn't a client accepted; kept off the Pipeline board until "Move to Quoted?"
     lead: v.optional(v.object({ name: v.string(), email: v.string(), company: v.optional(v.string()), phone: v.optional(v.string()), message: v.optional(v.string()),
       fields: v.array(v.object({ label: v.string(), value: v.string() })), at: v.number() })),
     closedAt: v.optional(v.number()),            // "Not a lead", or taken off the board
@@ -801,7 +820,7 @@ export default defineSchema({
     clientId: v.optional(v.id("clients")),
     dealId: v.optional(v.id("deals")),
     projectId: v.optional(v.id("projects")),
-    contact: v.object({ name: v.string(), email: v.string(), company: v.optional(v.string()) }),
+    contact: v.optional(v.object({ name: v.string(), email: v.string(), company: v.optional(v.string()) })), // D149: optional ("No client yet"); whoever accepts once accepted
     title: v.string(),
     lines: v.array(v.object({ id: v.string(), description: v.string(), qty: v.number(), unitCents: v.number(), suggestedCents: v.optional(v.number()), note: v.optional(v.string()) })),
     discountCents: v.optional(v.number()),
@@ -811,10 +830,12 @@ export default defineSchema({
     terms: v.optional(v.string()),
     questions: v.optional(v.any()),               // the quick questions' answers (what's the job, days, level)
     totalCents: v.number(),
-    token: v.optional(v.string()),
+    token: v.optional(v.string()),                // the one link of a quote sent before D149
+    linkToken: v.optional(v.string()),            // D149: Copy link (anyone with it)
+    linkOpens: v.optional(v.number()),
     sentAt: v.optional(v.number()),
     viewedAt: v.optional(v.number()),
-    response: v.optional(v.object({ kind: v.union(v.literal("accepted"), v.literal("declined")), name: v.string(), reason: v.optional(v.string()), at: v.number(), ip: v.optional(v.string()), userAgent: v.optional(v.string()) })),
+    response: v.optional(responseV), // D149: who answered (name, and email and company when given)
     asked: v.optional(v.object({ move: v.optional(v.union(v.literal("yes"), v.literal("no"))), draft: v.optional(v.union(v.literal("done"), v.literal("later"))), seen: v.optional(v.boolean()) })),
     made: v.optional(v.object({ buildId: v.optional(v.id("wsBuilds")), invoiceId: v.optional(v.id("invoices")) })),
     voidedAt: v.optional(v.number()),
@@ -822,7 +843,7 @@ export default defineSchema({
     createdBy: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_token", ["token"]).index("by_client", ["clientId"]).index("by_deal", ["dealId"]).index("by_updated", ["updatedAt"]),
+  }).index("by_token", ["token"]).index("by_client", ["clientId"]).index("by_deal", ["dealId"]).index("by_updated", ["updatedAt"]).index("by_link_token", ["linkToken"]),
 
   // Phase 3b · Proposals (D69): a written pitch made in the builder (its wsBuilds row, kind "proposal"), numbered
   // {prefix}-P-0001 (D85). Sending freezes the PDF, the contact and the totals; the client reads it at /p/<token> and
@@ -850,10 +871,12 @@ export default defineSchema({
     answers: v.optional(v.any()),                // the questionnaire's answers, by question id (and __lines, the priced lines)
     qStep: v.optional(v.number()),               // the step they were on ("Save and finish later")
     deck: v.optional(v.object({ kit: v.union(v.literal("business"), v.literal("client")), note: v.optional(v.string()), askedAt: v.optional(v.number()) })), // D72
-    token: v.optional(v.string()),
+    token: v.optional(v.string()),                // the one link of a proposal sent before D149
+    linkToken: v.optional(v.string()),            // D149: Copy link (anyone with it)
+    linkOpens: v.optional(v.number()),
     sentAt: v.optional(v.number()),
     viewedAt: v.optional(v.number()),
-    response: v.optional(v.object({ kind: v.union(v.literal("accepted"), v.literal("declined")), name: v.string(), reason: v.optional(v.string()), at: v.number(), ip: v.optional(v.string()), userAgent: v.optional(v.string()) })),
+    response: v.optional(responseV), // D149: who answered (name, and email and company when given)
     asked: v.optional(v.object({ move: v.optional(v.union(v.literal("yes"), v.literal("no"))), contract: v.optional(v.union(v.literal("done"), v.literal("later"))), seen: v.optional(v.boolean()) })),
     made: v.optional(v.object({ buildId: v.optional(v.id("wsBuilds")) })),
     voidedAt: v.optional(v.number()),
@@ -861,7 +884,22 @@ export default defineSchema({
     createdBy: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_token", ["token"]).index("by_build", ["buildId"]).index("by_client", ["clientId"]).index("by_deal", ["dealId"]).index("by_updated", ["updatedAt"]),
+  }).index("by_token", ["token"]).index("by_build", ["buildId"]).index("by_client", ["clientId"]).index("by_deal", ["dealId"]).index("by_updated", ["updatedAt"]).index("by_link_token", ["linkToken"]),
+  // D149 (Nov 4): each person a quote or proposal was emailed to, with their own link: opens, and their accept or
+  // decline. One person accepting closes every other link ("Already accepted on {date}", never who).
+  offerRecipients: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    quoteId: v.optional(v.id("quotes")),
+    proposalId: v.optional(v.id("proposals")),
+    email: v.string(),                             // lower-case
+    name: v.optional(v.string()),
+    token: v.string(),
+    sentAt: v.number(),
+    openedAt: v.optional(v.number()),
+    opens: v.number(),
+    stoppedAt: v.optional(v.number()),             // "Stop this person's link"
+    response: v.optional(responseV),
+  }).index("by_quote", ["quoteId"]).index("by_proposal", ["proposalId"]).index("by_token", ["token"]),
 
   // Phase 3c · Vendors (D91–D104): the subcontractors a business hires. One row per business per vendor (D94: the same
   // person working for two businesses has two rows, each seen only by its business). W-9 per business (D100); payment
@@ -895,21 +933,42 @@ export default defineSchema({
   // Phase 3c step 3 · briefings (D97, S5 · Phase 3c 730:4522, 731:3904): a shoot or edit brief made in the builder (its
   // wsBuilds row, kind "briefing"), sent to a vendor booked on the project (email 25). The vendor reads the PDF that was
   // sent and presses "I've read it" in their portal (step 4). Never signed.
+  // D147 (Nov 3, built Nov 4): a briefing no longer needs a booked vendor. The project is optional; "Send to" holds
+  // vendors (booked or not) and typed emails; Share emails each of them their own link (briefingRecipients), and a
+  // copied link (linkToken) counts opens without names. linkOff turns every link off (and back on).
   briefings: defineTable({
     businessId: v.optional(v.id("businesses")),
     buildId: v.id("wsBuilds"),
-    projectId: v.id("projects"),
+    projectId: v.optional(v.id("projects")),
     bookingId: v.optional(v.id("vendorBookings")),      // who it's for (a booking on this project)
     starter: v.optional(v.union(v.literal("shoot"), v.literal("edit"))),
     status: v.union(v.literal("draft"), v.literal("sent")),
     pdfId: v.optional(v.id("_storage")),                // frozen at send: what the vendor reads
     sentAt: v.optional(v.number()),
     sentTo: v.optional(v.object({ vendorId: v.id("vendors"), name: v.string(), email: v.string() })),
-    readAt: v.optional(v.number()),                     // "I've read it" (the vendor side, step 4)
+    readAt: v.optional(v.number()),                     // "I've read it" (the vendor side, step 4; briefings sent before D147)
+    sendTo: v.optional(v.array(v.object({ vendorId: v.optional(v.id("vendors")), email: v.string(), name: v.optional(v.string()) }))), // the draft's Send to
+    linkToken: v.optional(v.string()),                  // Copy link: anyone with it can read; opens counted, not named
+    linkOff: v.optional(v.boolean()),                   // Q91 (a)(b): off stops every link, emailed ones too; can be turned back on
+    linkOpens: v.optional(v.number()),
+    linkReads: v.optional(v.number()),                  // "I've read it" pressed on the copied link (no name)
     history: v.array(v.object({ kind: v.string(), at: v.number(), by: v.optional(v.string()), detail: v.optional(v.string()) })),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_build", ["buildId"]).index("by_project", ["projectId"]).index("by_booking", ["bookingId"]),
+  }).index("by_build", ["buildId"]).index("by_project", ["projectId"]).index("by_booking", ["bookingId"]).index("by_link_token", ["linkToken"]),
+  // D147 (Q91 d): each person a briefing was emailed to, with their own link (/b/<token>): who opened it and who read it.
+  briefingRecipients: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    briefingId: v.id("briefings"),
+    email: v.string(),                                  // lower-case
+    name: v.optional(v.string()),
+    vendorId: v.optional(v.id("vendors")),              // picked from the vendor list (also shows in their vendor portal)
+    token: v.string(),
+    sentAt: v.number(),
+    openedAt: v.optional(v.number()),
+    opens: v.number(),
+    readAt: v.optional(v.number()),
+  }).index("by_briefing", ["briefingId"]).index("by_token", ["token"]).index("by_vendor", ["vendorId"]),
 
   // Phase 3c step 2 · bookings (S5 · Phase 3c 732:3051 Book a vendor, 730:2326 Crew card, 730:3942 Vendors › Bookings).
   // A vendor offered work on a project: role, dates, the agreed rate. Offered and accepted bookings show on the
@@ -1080,6 +1139,7 @@ export default defineSchema({
     // Step 3: the client's link to their invoice page (/i/<token>, in the invoice email) and the payments Stripe has
     // on the invoice (method shown as "Visa •••• 4242" or "Bank •••• 6789"; never full numbers).
     fromContract: v.optional(v.string()),                // "contract:<document>:v<n>": the deposit drafted when a contract was signed
+    storageId: v.optional(v.id("footageStorage")),       // Phase 5: a year of raw footage storage (D33), first year or a renewal (D140)
     payToken: v.optional(v.string()),
     // Review fixes (Oct 30): a send in progress keeps what it has made in Stripe so far, so a failed send cleans up
     // and a retry neither duplicates nor gets stuck; syncedAt spaces out reads from Stripe.
@@ -1103,6 +1163,39 @@ export default defineSchema({
   }).index("by_project", ["projectId"]).index("by_client", ["clientId"]).index("by_stripe", ["stripe.invoiceId"]).index("by_updated", ["updatedAt"]).index("by_pay_token", ["payToken"]).index("by_bill_email", ["billTo.email"]),
 
   // Phase 2 Part B: every Stripe webhook event, once (a repeat delivery changes nothing).
+  // Phase 5c (Nov 3): Site watch. Global (the portal's own health, not a business's records): one row per problem,
+  // seen by the portal's admins only (ALLOWED_EMAILS). Holds counts and error text with email addresses masked.
+  siteWatchFindings: defineTable({
+    key: v.string(),                       // e.g. "email:footage_offer", "job:footage.mailOffer", "stored:versions.failed"
+    area: v.string(),                      // email · job · stored · tests · page
+    title: v.string(),
+    detail: v.optional(v.string()),
+    count: v.number(),                     // events seen, or rows in the problem state now
+    hits: v.optional(v.number()),          // businesses affected
+    firstAt: v.number(), lastAt: v.number(),
+    status: v.union(v.literal("found"), v.literal("fix_ready"), v.literal("fixed"), v.literal("needs_you"), v.literal("cleared")),
+    urgent: v.optional(v.boolean()),
+    branch: v.optional(v.string()),        // the fix's branch (watch/...), never main
+    commit: v.optional(v.string()),        // the fix's exact commit: Heston's "go" refers to it (review H1)
+    quietAt: v.optional(v.number()),       // a fix waiting for Heston whose problem went quiet: stays open (review M3)
+    doneAt: v.optional(v.number()),        // Heston marked it done; reopens only if it gets worse or fails again (L1)
+    doneCount: v.optional(v.number()),
+    note: v.optional(v.string()),
+    alertedAt: v.optional(v.number()),     // D151: when its urgent email went to the support address (once per opening)
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]).index("by_status", ["status"]),
+  siteWatchRuns: defineTable({
+    at: v.number(),
+    by: v.union(v.literal("app"), v.literal("agent")),
+    found: v.number(), cleared: v.number(),
+    summary: v.optional(v.string()),
+    // Q47 (Heston, Nov 3): what was open at this run, so a history row opens that day's list. Cleared after 30 days.
+    open: v.optional(v.array(v.object({ key: v.string(), area: v.string(), title: v.string(), status: v.string(), urgent: v.boolean(), count: v.number() }))),
+  }).index("by_at", ["at"]),
+  // Phase 5c screens (Nov 4): the "Run the checks" switch on Settings › Site watch. One row, global. Off = the daily
+  // look doesn't run (findings stay as they are).
+  siteWatchSettings: defineTable({ paused: v.boolean(), updatedAt: v.number() }),
+
   stripeEvents: defineTable({
     eventId: v.string(), type: v.string(), account: v.optional(v.string()), livemode: v.boolean(), receivedAt: v.number(),
   }).index("by_event", ["eventId"]),
@@ -1134,16 +1227,398 @@ export default defineSchema({
     shareId: v.id("shares"),
     at: v.number(),
   }).index("by_video", ["videoId", "at"]).index("by_version_user", ["versionId", "userId"]).index("by_at", ["at"]),
+  // Phase 4 (Nov 2): Settings › Calendar. One Google Calendar connection per business (D32); tokens stay here.
+  calendars: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    email: v.string(),
+    refreshToken: v.string(),
+    accessToken: v.optional(v.string()),
+    accessExpiresAt: v.optional(v.number()),
+    calendarId: v.optional(v.string()),
+    calendarName: v.optional(v.string()),
+    inviteVendors: v.boolean(),
+    inviteClient: v.boolean(),
+    lastError: v.optional(v.string()),
+    connectedAt: v.number(),
+    // Phase 5b step 5 (Nov 3, D143): Production › Calendar. Every Google Calendar on the account, with whether it's
+    // shown (only the picked one at first) and its incremental-sync token; the picked one is always pulled (shoots and
+    // edit dates live there). disconnectedAt: Google stopped letting the portal in (Reconnect Google).
+    list: v.optional(v.array(v.object({
+      id: v.string(), name: v.string(), color: v.number(), on: v.boolean(), writable: v.boolean(), primary: v.boolean(),
+      syncToken: v.optional(v.string()), syncedAt: v.optional(v.number()),
+      // Review fix M6: a read cut short at the page cap carries on from here with the next pull (same query, same run).
+      page: v.optional(v.object({ token: v.string(), run: v.number(), timeMin: v.optional(v.string()), timeMax: v.optional(v.string()) })),
+    }))),
+    lastSyncedAt: v.optional(v.number()),
+    pullingSince: v.optional(v.number()),
+    pullRun: v.optional(v.string()),          // review fix M4: whose lock it is (only that pull releases it)
+    disconnectedAt: v.optional(v.number()),
+  }),
+
+  // Phase 5b step 5 (Nov 3, D143): Google Calendar events kept in step with the portal. kind "google": an event on a
+  // shown Google Calendar (made in Google or in the portal); kind "date": a project's edit date the portal wrote to
+  // Google as an all-day event (portal → Google only). Shoots aren't rows here: they stay on `shoots` (calendarEvent).
+  // Times are the business's wall clock (America/Chicago); end/endDate are inclusive of the last day.
+  calendarEvents: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    kind: v.union(v.literal("google"), v.literal("date")),
+    calendarId: v.string(),
+    googleId: v.string(),
+    title: v.string(),
+    location: v.optional(v.string()),
+    date: v.string(),                         // YYYY-MM-DD, first day
+    endDate: v.string(),                      // YYYY-MM-DD, last day (inclusive)
+    start: v.optional(v.string()),            // HH:MM; absent: all day
+    end: v.optional(v.string()),              // HH:MM
+    guests: v.array(v.object({ email: v.string(), name: v.optional(v.string()) })),
+    recurring: v.optional(v.boolean()),       // one occurrence of a repeating event (edited as that occurrence only)
+    readOnly: v.optional(v.boolean()),        // someone else's invite, or a calendar the account can only read
+    htmlLink: v.optional(v.string()),
+    gUpdated: v.number(),                     // Google's `updated` for the version this row matches (echo check)
+    pending: v.optional(v.union(v.literal("create"), v.literal("update"), v.literal("delete"))),
+    pendingAt: v.optional(v.number()),
+    pushError: v.optional(v.string()),
+    sendUpdates: v.optional(v.union(v.literal("all"), v.literal("none"))),
+    guestsDirty: v.optional(v.boolean()),     // the guest list changed: send it with the next write
+    prev: v.optional(v.object({ date: v.string(), endDate: v.string(), start: v.optional(v.string()), end: v.optional(v.string()), at: v.number(), notify: v.boolean() })),
+    // Review fix M2: what Google had when the portal's edit (still waiting to go) started, so a later Google change only
+    // wins over it when it changed the same things.
+    base: v.optional(v.object({ title: v.string(), location: v.optional(v.string()), date: v.string(), endDate: v.string(), start: v.optional(v.string()), end: v.optional(v.string()), guests: v.array(v.string()) })),
+    shootId: v.optional(v.id("shoots")),      // "Link to a shoot or project"
+    projectId: v.optional(v.id("projects")),  // the link, or (kind "date") the project the date belongs to
+    dateKey: v.optional(v.string()),          // kind "date": which of the project's dates
+    sig: v.optional(v.string()),              // kind "date": what was written ("" after a change in Google: write it again)
+    seen: v.optional(v.number()),             // the full sync that last saw it
+    syncedAt: v.number(),
+    createdAt: v.number(),
+  }) // review fix M7: every index starts with the business
+    .index("by_biz_google", ["businessId", "calendarId", "googleId"]).index("by_biz_date", ["businessId", "date"])
+    .index("by_biz_kind", ["businessId", "kind", "projectId"]).index("by_biz_pending", ["businessId", "pending"]),
+
+  // Phase 4 (Nov 2): shoots on a project (frames S5 · Phase 4). The client confirms one in their portal; moving its date,
+  // call time or place clears the confirmation and asks again (email 30). Times are the business's local wall clock.
+  shoots: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    projectId: v.id("projects"),
+    date: v.string(),                         // YYYY-MM-DD
+    call: v.string(),                         // HH:MM, 24-hour
+    wrap: v.optional(v.string()),             // HH:MM
+    location: v.string(),
+    parking: v.optional(v.string()),
+    prepare: v.array(v.string()),             // "what to prepare", one line each
+    crew: v.array(v.object({ name: v.string(), role: v.string(), vendorId: v.optional(v.id("vendors")), bookingId: v.optional(v.id("vendorBookings")), owner: v.optional(v.boolean()) })),
+    status: v.union(v.literal("scheduled"), v.literal("cancelled")),
+    confirmed: v.optional(v.object({ name: v.string(), email: v.string(), at: v.number() })),
+    moved: v.optional(v.object({ date: v.string(), call: v.string(), location: v.string(), at: v.number() })), // what it was before the last move
+    calendar: v.optional(v.boolean()),        // "Add to {calendar}" was ticked (the event itself arrives with Settings › Calendar)
+    calendarEvent: v.optional(v.object({ id: v.string(), calendarId: v.string(), updated: v.optional(v.number()), at: v.optional(v.number()) })), // Phase 5b step 5: Google's `updated` for the version the portal wrote or took
+    // Phase 5b step 5 (D143): moved in Google Calendar. The shoot moved with it; nobody was emailed; the owner gets a
+    // Dashboard note (until Done, or Ask to confirm again).
+    // kept (review fix H2): the other way round: a change made in Google was written over by the portal's newer one;
+    // `was` is then what Google had.
+    googleMove: v.optional(v.object({ at: v.number(), was: v.object({ date: v.string(), call: v.string(), wrap: v.optional(v.string()), location: v.string() }), doneAt: v.optional(v.number()), told: v.optional(v.boolean()), kept: v.optional(v.boolean()) })),
+    // Review fix H2: when the portal last changed what's on the calendar event (date, call, wrap, place, crew, what to
+    // prepare, the calendar tick). A client confirming doesn't change it, so it never beats a newer change made in Google.
+    calAt: v.optional(v.number()),
+    calError: v.optional(v.string()),         // the last write to Google Calendar failed (cleared by the next good one)
+    // Phase 5b step 5: a move made by dragging it on the calendar, for Undo (about 8 seconds).
+    dragUndo: v.optional(v.object({ at: v.number(), was: v.any() })),
+    history: v.array(v.object({ at: v.number(), text: v.string() })),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_project", ["projectId", "date"]).index("by_date", ["date"]),
+
+  // Phase 5d step 1 (Nov 4, D119/D144): booking calls. One settings row per business (Settings › Booking calls), with the
+  // busy times last read from the calendar it checks (read again when a lead opens the page, at most once a minute).
+  callSettings: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    lengthMin: v.number(), bufferMin: v.number(), aheadDays: v.number(), noticeHours: v.number(),
+    hours: v.array(v.object({ on: v.boolean(), start: v.string(), end: v.string() })), // Monday first; the business's wall clock
+    calendarId: v.optional(v.string()),          // the calendar checked for busy times (default: the one shoots go on)
+    paused: v.optional(v.boolean()),             // Heston (Nov 4, 21:57): the owner switched the booking page off
+    busy: v.optional(v.object({ at: v.number(), s: v.number(), e: v.number(), spans: v.array(v.object({ s: v.number(), e: v.number() })), error: v.optional(v.string()) })),
+    readingAt: v.optional(v.number()),           // a read of the calendar is on its way
+    updatedAt: v.number(),
+  }),
+  // A booked call. "holding": just picked; the calendar is read again for that time before it's booked (or "taken").
+  // The lead manages it from a private link (token) in email 43. notice: the owner's Dashboard row until Done.
+  calls: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    dealId: v.optional(v.id("deals")),
+    name: v.string(), email: v.string(), note: v.optional(v.string()),
+    start: v.number(), end: v.number(),
+    tz: v.string(),                              // the lead's time zone, for their emails
+    // "verifying" (Heston, Nov 4, 21:57): the time is held while the lead types the 6-digit code emailed to them; nothing
+    // else happens (no card, no calendar event, no other email) until it's right. "lapsed": the code never came back.
+    status: v.union(v.literal("verifying"), v.literal("holding"), v.literal("booked"), v.literal("taken"), v.literal("cancelled"), v.literal("lapsed")),
+    token: v.string(),
+    code: v.optional(v.object({ hash: v.string(), tries: v.number(), resends: v.optional(v.number()), sent: v.number(), until: v.number() })),
+    noHold: v.optional(v.boolean()),             // review M1: past five picks waiting for a code, a new one doesn't hold its time
+    heldAt: v.optional(v.number()),               // when the code was right and the time was held for Google's check
+    moving: v.optional(v.object({ start: v.number(), end: v.number(), at: v.number() })), // a new time, being checked
+    moveTaken: v.optional(v.number()),           // the last new time picked was taken meanwhile (shown once)
+    moveFailed: v.optional(v.number()),          // review M3: the move couldn't be made on the calendar; the call stayed put
+    was: v.optional(v.object({ start: v.number(), end: v.number() })), // before the last move
+    event: v.optional(v.object({ id: v.string(), calendarId: v.string() })),
+    meet: v.optional(v.string()),
+    calError: v.optional(v.string()),
+    notice: v.optional(v.object({ kind: v.union(v.literal("booked"), v.literal("moved"), v.literal("cancelled")), at: v.number(), doneAt: v.optional(v.number()) })),
+    cancelledBy: v.optional(v.union(v.literal("lead"), v.literal("owner"))),
+    history: v.array(v.object({ at: v.number(), text: v.string() })),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_token", ["token"]).index("by_start", ["start"]).index("by_deal", ["dealId", "start"]).index("by_email", ["email", "start"]),
+
+  // Phase 5d step 2 (Nov 4, D121, D144/58): Messages. One thread per project (the business and the client's people who
+  // can open the project) and one per lead (deal). A lead has no login: they read and reply from a private link (token).
+  // Booked vendors are never in a thread. A booked call is a line in its lead's thread (side "system").
+  msgThreads: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    kind: v.union(v.literal("project"), v.literal("lead")),
+    projectId: v.optional(v.id("projects")),
+    dealId: v.optional(v.id("deals")),
+    token: v.optional(v.string()),               // a lead's private link
+    leadName: v.optional(v.string()), leadEmail: v.optional(v.string()),
+    lastAt: v.number(), lastText: v.string(), lastSide: v.optional(v.string()), lastName: v.optional(v.string()),
+    inAt: v.optional(v.number()),                // review L1: the latest message from the client's people or the lead
+    outAt: v.optional(v.number()),               // and from the business (call lines are neither)
+    linkOff: v.optional(v.boolean()),            // review M3: the owner turned the lead's link off
+    createdAt: v.number(),
+  }).index("by_project", ["projectId"]).index("by_deal", ["dealId"]).index("by_token", ["token"]).index("by_last", ["lastAt"]),
+  messages: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    threadId: v.id("msgThreads"),
+    side: v.union(v.literal("owner"), v.literal("client"), v.literal("lead"), v.literal("system")),
+    name: v.string(),
+    email: v.optional(v.string()),
+    text: v.string(),
+    files: v.array(v.object({ storageId: v.id("_storage"), name: v.string(), size: v.number(), type: v.string() })),
+    call: v.optional(v.object({ callId: v.id("calls"), what: v.union(v.literal("booked"), v.literal("moved"), v.literal("cancelled")), start: v.number(), end: v.number(), meet: v.optional(v.boolean()) })),
+    createdAt: v.number(),
+  }).index("by_thread", ["threadId", "createdAt"]),
+  // Review H1: a file attached to a message is claimed here once: only a fresh upload nobody has claimed can be attached.
+  msgUploads: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    storageId: v.id("_storage"),
+    by: v.string(),                              // "user:<id>" or "lead:<thread id>"
+    at: v.number(),
+  }).index("by_storage", ["storageId"]),
+  // Who read a thread up to when: "owner" for the business, or the client's / lead's email.
+  msgReads: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    threadId: v.id("msgThreads"),
+    who: v.string(), name: v.string(), readAt: v.number(),
+  }).index("by_thread", ["threadId"]).index("by_who", ["who", "threadId"]),
+
+  // Phase 5d step 3 (Nov 4): gear (Q57). Owner-only. The full serial is stored; screens show the last 4.
+  gear: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    name: v.string(),
+    kind: v.union(v.literal("camera"), v.literal("lens"), v.literal("audio"), v.literal("lighting"), v.literal("grip"), v.literal("drone"), v.literal("computer"), v.literal("other")),
+    serial: v.optional(v.string()),
+    boughtOn: v.optional(v.string()),            // YYYY-MM-DD
+    priceCents: v.optional(v.number()),
+    insuredCents: v.optional(v.number()),
+    photoId: v.optional(v.id("_storage")),
+    notes: v.optional(v.string()),
+    status: v.union(v.literal("in_service"), v.literal("in_repair"), v.literal("retired")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_status", ["status", "name"]),
+  gearMaintenance: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    gearId: v.id("gear"),
+    date: v.string(),                            // YYYY-MM-DD
+    what: v.string(),
+    costCents: v.optional(v.number()),
+    nextDue: v.optional(v.string()),             // YYYY-MM-DD
+    createdAt: v.number(),
+  }).index("by_gear", ["gearId", "date"]),
+  // Gear on a shoot. A same-day clash is named on the shoot page and never blocks.
+  gearBookings: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    gearId: v.id("gear"),
+    shootId: v.id("shoots"),
+    createdAt: v.number(),
+  }).index("by_shoot", ["shootId"]).index("by_gear", ["gearId"]),
+
+  // Phase 5b step 3 (Nov 3): call sheets (D126, S5 · Phase 5b 765:2852 …). One per shoot. The page is a builder document
+  // (its wsBuilds row, kind "callsheet"); until the quick questionnaire is finished there's no build yet, only answers.
+  // `sent` is the copy everyone on it reads: frozen at Send, replaced by each Send an update. Each person on it has
+  // their own sent / opened times; crew are vendors booked on the project, client people are the client's portal people,
+  // guests (D127) are stored here and get their login in step 4.
+  callSheets: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    shootId: v.id("shoots"),
+    projectId: v.id("projects"),
+    buildId: v.optional(v.id("wsBuilds")),
+    templateId: v.optional(v.id("wsTemplates")),
+    how: v.union(v.literal("questions"), v.literal("template"), v.literal("blank")),
+    status: v.union(v.literal("draft"), v.literal("sent")),
+    answers: v.optional(v.any()),                       // the questionnaire (lib/callSheet.ts Answers), until it's made
+    step: v.optional(v.number()),
+    recipients: v.array(v.object({
+      id: v.string(),                                   // crew:<bookingId> · client:<email> · guest:<random>
+      kind: v.union(v.literal("crew"), v.literal("client"), v.literal("guest")),
+      name: v.string(), email: v.string(), role: v.optional(v.string()),
+      vendorId: v.optional(v.id("vendors")), bookingId: v.optional(v.id("vendorBookings")),
+      on: v.boolean(),                                  // ticked: gets it
+      sentAt: v.optional(v.number()),                   // email 40 went (or was queued) to them
+      round: v.optional(v.number()),                    // the last update (42) they were sent
+      openedAt: v.optional(v.number()), lastOpenedAt: v.optional(v.number()),
+      remindedAt: v.optional(v.number()), reminders: v.optional(v.number()),
+      endedAt: v.optional(v.number()),                  // Phase 5b step 4: a guest whose access the owner ended by hand
+      grant: v.optional(v.number()),                    // review L3: how many times a guest's access was restored (a new email 41 each time)
+      addedAt: v.number(),
+    })),
+    // review L6: heading ("Launch · Harbor Coffee") and date as they were when it was sent, for readers and Remind.
+    sent: v.optional(v.object({ title: v.string(), page: v.any(), fields: v.any(), style: v.any(), at: v.number(), round: v.number(), heading: v.optional(v.string()), date: v.optional(v.string()) })),
+    sentAt: v.optional(v.number()),
+    updates: v.optional(v.number()),                    // how many updates have gone out
+    // D148 (Nov 4): the Weather block's forecast (lib/callSheet.ts SheetWeather), for one address and shoot day, and the
+    // geocode of that address (kept so the address goes to the Census geocoder once; lat/lon left out = not found).
+    weather: v.optional(v.object({ address: v.string(), date: v.string(), state: v.union(v.literal("forecast"), v.literal("early"), v.literal("none")), line: v.string(), at: v.number(), dayBefore: v.optional(v.boolean()) })),
+    weatherTriedAt: v.optional(v.number()),   // review L11: the last lookup asked for (Refresh pressed or tried), even one that failed
+    geo: v.optional(v.object({ address: v.string(), lat: v.optional(v.number()), lon: v.optional(v.number()), at: v.number() })),
+    history: v.array(v.object({ at: v.number(), kind: v.string(), by: v.optional(v.string()), detail: v.optional(v.string()) })),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_shoot", ["shootId"]).index("by_project", ["projectId"]).index("by_build", ["buildId"]).index("by_status", ["status"]),
+
+  // Phase 4 (Nov 2): file requests. The client uploads straight into the business's Dropbox, under
+  // Apps/Wrangler Review/File requests/<Client>/<Project>/<Request> (Heston, Nov 2), which the render watcher ignores.
+  fileRequests: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    projectId: v.id("projects"),
+    title: v.string(),
+    details: v.optional(v.string()),
+    due: v.string(),                          // YYYY-MM-DD
+    folder: v.string(),                       // in the app folder, as shown: "/File requests/Harbor Coffee/26127 Launch/Logo and brand guide"
+    remind: v.boolean(),                      // email 32 the day before, if nothing's uploaded
+    remindedAt: v.optional(v.number()),
+    status: v.union(v.literal("open"), v.literal("closed"), v.literal("cancelled")),
+    files: v.array(v.object({ name: v.string(), size: v.number(), path: v.string(), at: v.number(), by: v.string() })),
+    lastUploadAt: v.optional(v.number()),
+    ownerMailedAt: v.optional(v.number()),      // the owner's last "files arrived" email covered files up to here
+    history: v.array(v.object({ at: v.number(), text: v.string() })),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_project", ["projectId"]).index("by_status_due", ["status", "due"]),
+
+  // One file on its way into a request's folder: straight to Dropbox (up to 150 MB, a one-time link) or in pieces
+  // through the portal (/upload/chunk, with this row's random token). Rows are kept as the upload log.
+  fileUploads: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    requestId: v.id("fileRequests"),
+    email: v.string(),
+    name: v.string(),
+    size: v.number(),
+    path: v.string(),                         // where it's going (Dropbox may add " (1)" to the name)
+    mode: v.union(v.literal("direct"), v.literal("chunks")),
+    token: v.optional(v.string()),            // chunks: the upload's own key for /upload/chunk
+    sessionId: v.optional(v.string()),        // chunks: Dropbox's upload session
+    offset: v.number(),
+    status: v.union(v.literal("uploading"), v.literal("done"), v.literal("failed")),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+  }).index("by_token", ["token"]).index("by_request", ["requestId"]),
+
+  // Phase 4 (Nov 2): the kickoff brief, one per project (option B). The questions are copied in when it's sent, so
+  // editing Settings › Kickoff brief later doesn't change a brief already out. Every portal person on the project
+  // answers the same one; answers save as they're typed.
+  briefs: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    projectId: v.id("projects"),
+    questions: v.any(),                       // the Questionnaire as sent (lib/questionnaire.ts)
+    answers: v.any(),                         // { [questionId]: value }
+    step: v.number(),                         // where they left off
+    status: v.union(v.literal("sent"), v.literal("submitted")),
+    sentAt: v.number(),
+    remindedAt: v.optional(v.number()),
+    startedAt: v.optional(v.number()),        // first answer saved
+    submittedAt: v.optional(v.number()),      // the first time it was sent back
+    submittedBy: v.optional(v.string()),      // email
+    updatedBy: v.optional(v.string()),
+    submits: v.number(),
+    history: v.array(v.object({ at: v.number(), text: v.string() })),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_project", ["projectId"]),
+
+  // Phase 5 (Nov 3): raw footage after delivery (D33, D98, D140). One per project, made when its final files first open.
+  // The portal never deletes files: it only keeps the offer, the invoices and the dates, and reminds the owner.
+  footageStorage: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    projectId: v.id("projects"),
+    clientId: v.optional(v.id("clients")),
+    priceCents: v.number(),                    // the yearly price when it was offered
+    offeredAt: v.number(),
+    keepUntil: v.string(),                     // YYYY-MM-DD (Central): kept until this day unless they keep it (D98)
+    status: v.union(
+      v.literal("offered"),   // no answer yet
+      v.literal("declined"),  // No thanks (Keep it still works until keepUntil)
+      v.literal("kept"),      // Keep it pressed: the first year's invoice is drafted / sent, not paid yet
+      v.literal("paid"),      // a year paid: kept until paidUntil
+      v.literal("drive"),     // the owner copied it to the client's own drive (D98)
+      v.literal("ended"),     // the keep day (or the paid year) passed: the owner was reminded to delete or offload it
+      v.literal("stopped"),   // the owner stopped storing it
+    ),
+    answeredBy: v.optional(v.object({ email: v.string(), name: v.string(), at: v.number() })),
+    invoiceId: v.optional(v.id("invoices")),   // the year being paid now (first year, or the renewal)
+    paidUntil: v.optional(v.string()),         // YYYY-MM-DD: the paid year runs to here
+    renewalFor: v.optional(v.string()),        // the paidUntil a renewal draft was made for (D140): once per year
+    endedAt: v.optional(v.number()),           // the owner was told (email 36), once
+    doneAt: v.optional(v.number()),            // the owner marked it deleted or moved (clears the Dashboard alert)
+    // Review fixes (Nov 3): a storage invoice paid after it ended or was stopped changes nothing by itself: the owner
+    // is told and decides (reinstate a year, or refund it); and Keep it pressed but never paid alerts the owner, once.
+    latePaid: v.optional(v.object({ invoiceId: v.id("invoices"), at: v.number(), was: v.string() })),
+    unpaidAt: v.optional(v.number()),
+    // Nov 4 (Q93, Q94): the owner's answer to a late payment, kept for the card's banner. "kept": a year from the day it
+    // was paid (until). "refund": marked to refund in Stripe; the box closes once Stripe reports a refund on that invoice
+    // (invoices.refundedCents, from the charge.refunded webhook). The portal never refunds anything itself.
+    lateChoice: v.optional(v.object({
+      kind: v.union(v.literal("kept"), v.literal("refund")), invoiceId: v.id("invoices"), paidAt: v.number(), at: v.number(), by: v.string(),
+      until: v.optional(v.string()), was: v.optional(v.string()), wasUntil: v.optional(v.string()),
+      // Review L6: the owner closed the "Marked to refund" box by hand (a refund Stripe never reports, e.g. paid from
+      // the customer's credit balance, so no charge to refund).
+      closedAt: v.optional(v.number()), closedBy: v.optional(v.string()),
+    })),
+    history: v.array(v.object({ at: v.number(), text: v.string() })),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_project", ["projectId"]).index("by_status", ["status"]).index("by_invoice", ["invoiceId"]),
+
+  // Phase 5 (Nov 3): a client's answers to "Ask for a testimonial" (D34, D139, D141). One per person per ask; saved as
+  // a Markdown note in Dropbox (Apps/Wrangler Review/Testimonials/) for Heston's vault. Nothing is published.
+  testimonials: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    noteId: v.id("inboxNotes"),
+    projectId: v.id("projects"),
+    clientId: v.optional(v.id("clients")),
+    email: v.string(),
+    name: v.string(),
+    company: v.optional(v.string()),
+    working: v.string(),                       // "What was it like working with us?"
+    film: v.string(),                          // "What did the film do for you?"
+    permission: v.boolean(),                   // "You can use my words and name on your website."
+    readAt: v.optional(v.number()),
+    dropboxPath: v.optional(v.string()),       // where the note was saved
+    savedAt: v.optional(v.number()),
+    saveError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_note_email", ["noteId", "email"]).index("by_created", ["createdAt"]),
+
   inboxItems: defineTable({
     businessId: v.optional(v.id("businesses")),
     clientId: v.optional(v.id("clients")),
     email: v.string(),                 // the recipient, lower-case (a person with a live invite in this business)
-    kind: v.union(v.literal("cut_ready"), v.literal("reply"), v.literal("to_sign"), v.literal("signed"), v.literal("cancelled"), v.literal("note"), v.literal("stage"), v.literal("final_files"), v.literal("invoice"), v.literal("payment"), v.literal("subscription")),
+    kind: v.union(v.literal("cut_ready"), v.literal("reply"), v.literal("to_sign"), v.literal("signed"), v.literal("cancelled"), v.literal("note"), v.literal("stage"), v.literal("final_files"), v.literal("invoice"), v.literal("payment"), v.literal("subscription"), v.literal("shoot"), v.literal("files"), v.literal("brief"), v.literal("message")),
     title: v.string(),
     text: v.string(),                  // a short line, shown under the title
     link: v.optional(v.string()),      // a path in the portal or a signing link
     linkLabel: v.optional(v.string()), // a note's link button ("Watch Harbor Coffee 30s v2")
-    source: v.object({ module: v.union(v.literal("review"), v.literal("sign"), v.literal("inbox"), v.literal("projects"), v.literal("payments")), id: v.string() }),
+    source: v.object({ module: v.union(v.literal("review"), v.literal("sign"), v.literal("inbox"), v.literal("projects"), v.literal("payments"), v.literal("schedule"), v.literal("messages")), id: v.string() }),
     key: v.string(),
     noteId: v.optional(v.id("inboxNotes")),
     createdAt: v.number(),
@@ -1165,11 +1640,39 @@ export default defineSchema({
     to: v.optional(v.array(v.string())), // picked people (emails); missing = everyone at the client with portal access
     emailThem: v.optional(v.boolean()),  // "Also email them" (on by default; the emails arrive with the one-email switch)
     linkLabel: v.optional(v.string()),
+    testimonialProjectId: v.optional(v.id("projects")), // Phase 5 (D139): "Ask for a testimonial": the note links to the form for this project
     createdAt: v.number(),
     updatedAt: v.number(),
     sentAt: v.optional(v.number()),
     recipients: v.optional(v.number()),
   }).index("by_status", ["status", "createdAt"]).index("by_client", ["clientId", "createdAt"]),
+
+  // Phase 5b step 4 (D127): a call-sheet guest's pass: one per guest per sheet. Global (like memberships), so a guest's
+  // sheets can be found by email before any business is known; it holds ids and the link token only, never sheet content.
+  // The call sheet's recipient row stays the truth (on, sent, ended); every guest function re-checks it and the sheet.
+  guestPasses: defineTable({
+    businessId: v.id("businesses"),
+    callSheetId: v.id("callSheets"),
+    personId: v.string(),                     // the recipient's id on the sheet: guest:<random>
+    email: v.string(),                        // lower-case
+    token: v.string(),                        // the link in email 41: /guest/<token>
+    createdAt: v.number(),
+    codeHash: v.optional(v.string()),         // the 6-digit sign-in code, hashed with the pass id; one at a time
+    codeExpiresAt: v.optional(v.number()),
+    codeTries: v.optional(v.number()),        // wrong tries on this code (5 and it's gone)
+    codeSentAt: v.optional(v.number()),
+    wrongDay: v.optional(v.string()),         // review L5: wrong codes today (Central), 15 locks the pass…
+    wrongCount: v.optional(v.number()),
+    lockedAt: v.optional(v.number()),         // …until the owner sends it to them again (Send an update or Remind)
+    sentAt: v.optional(v.number()),           // review L2: the sheet went to them (Q88: kept when access ends); a hint for /guest's
+    date: v.optional(v.string()),             //   business list only, never for access (lib/guests.ts sheetState decides that)
+    openedAt: v.optional(v.number()),         // Q88: the guest opened it (the switcher's "N new"); a hint like sentAt
+    // Review L12: they can't open it until it's sent to them again (access ended by hand, unticked, or restored and not
+    // sent yet) or ever (the shoot was cancelled). Set and cleared with the sheet; a hint for "N new" only.
+    offAt: v.optional(v.number()),
+    // Review L13: the heading and day as last sent to this guest, for their Ended row (never a later update's).
+    heading: v.optional(v.object({ title: v.string(), date: v.string() })),
+  }).index("by_token", ["token"]).index("by_email", ["email"]).index("by_sheet", ["callSheetId"]),
 
   memberships: defineTable({
     businessId: v.id("businesses"),

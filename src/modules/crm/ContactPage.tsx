@@ -17,7 +17,7 @@ export default function ContactPage({ personId }: { personId: string }) {
   const c = useQuery(api.crm.contact, { personId });
   const [toast, show] = useToast();
   const [adding, setAdding] = useState(false);
-  const top = <TopBar><a {...linkProps("/clients")}>Clients</a><Sep /><a {...linkProps("/clients")}>Companies</a>{c?.company && <><Sep /><a {...linkProps(`/clients/${c.company._id}`)}>{c.company.name}</a></>}{c && <><Sep /><span className="here">{c.name}</span></>}</TopBar>;
+  const top = <TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/clients")}>Clients</a><Sep /><a {...linkProps("/clients")}>Companies</a>{c?.company && <><Sep /><a {...linkProps(`/clients/${c.company._id}`)}>{c.company.name}</a></>}{c && <><Sep /><span className="here">{c.name}</span></>}</TopBar>;
   if (c === undefined) return <>{top}<div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
   if (c === null) return <>{top}<div className="wp-page"><EmptyState icon="user" title="This person isn't here." actions={<ButtonLink to="/clients">Companies</ButtonLink>} /></div></>;
   const access = c.access.state === "active" ? `portal access Active since ${dateShort(c.access.since)}` : c.access.state === "invited" ? `invited to the portal ${dateShort(c.access.at)}` : "not invited to the portal";

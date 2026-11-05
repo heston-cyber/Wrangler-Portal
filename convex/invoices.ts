@@ -17,6 +17,7 @@ import { pageOf, totals as builderTotals } from "./lib/wsBuilder";
 import { announceSent } from "./invoicePay";
 import { nextReminder } from "./invoiceReminders";
 import { crmProject } from "./crm";
+import { storageDropped, storagePaid } from "./footage";
 
 const DAY = 86_400_000;
 const MIN_CENTS = 50; // Stripe's smallest card charge in USD
@@ -82,6 +83,13 @@ export const overview = query({
   args: { tzOffsetMin: v.optional(v.number()) },
   handler: async (ctx, { tzOffsetMin = 0 }) => {
     await requireMe(ctx);
+    return overviewData(ctx, tzOffsetMin);
+  },
+});
+
+/** The numbers behind Payments › Overview (also the Dashboard's Money this month). The caller has checked who's asking. */
+export async function overviewData(ctx: QueryCtx, tzOffsetMin = 0) {
+  {
     const biz = await ctx.db.get(ownBusiness(ctx));
     const all = await ctx.db.query("invoices").withIndex("by_updated").order("desc").take(1000);
     const now = Date.now();
@@ -139,8 +147,8 @@ export const overview = query({
       paid: { month: sum.month, year: sum.year, lastMonth: sum.last },
       needs: needs.slice(0, 8), activity: activity.slice(0, 6),
     };
-  },
-});
+  }
+}
 
 /** A project's Invoices tab. */
 export const forProject = query({
@@ -276,6 +284,7 @@ export const deleteDraft = mutation({
     const i = id ? await ctx.db.get(id) : null;
     if (!i) return null;
     if (i.status !== "draft") throw new ConvexError("Only a draft can be deleted. Void a sent invoice instead.");
+    if (i.storageId) await storageDropped(ctx, i, "deleted"); // Phase 5: a storage draft deleted goes back to not kept
     await ctx.db.delete(i._id);
     return null;
   },
@@ -327,12 +336,17 @@ export const recordSent = internalMutation({
       status: s.invoice.status === "paid" ? "paid" : "open",
       stripe: { accountId: s.accountId, invoiceId: s.invoice.id, customerId: s.customerId, number: s.invoice.number ?? i.number, hostedUrl: s.invoice.hosted_invoice_url ?? undefined, pdfUrl: s.invoice.invoice_pdf ?? undefined, livemode: !!s.invoice.livemode },
       totalCents: Number(s.invoice.total ?? i.totalCents), amountPaidCents: Number(s.invoice.amount_paid ?? 0), amountRemainingCents: Number(s.invoice.amount_remaining ?? s.invoice.total ?? i.totalCents),
+      // Review L7: paid at send (a credit balance covered it): Stripe's paid time, as the webhook records it.
+      ...(s.invoice.status === "paid" && !i.paidAt ? { paidAt: stripePaidAt(s.invoice, now) } : {}),
       sentAt: now, updatedAt: now,
       history: [...i.history, { kind: "sent", at: now, by, detail: i.billTo.email }],
     });
     // Step 3: the client's link, their Inbox item and the invoice email (08).
     const sent = await ctx.db.get(invoiceId);
     if (sent && sent.status === "open") await announceSent(ctx, sent);
+    // Phase 5 (review L5): a storage invoice paid at send (a credit balance covered it): the webhook will see it already
+    // paid and skip, so the year is recorded here.
+    if (sent?.status === "paid" && sent.storageId) await storagePaid(ctx, sent);
   },
 });
 
@@ -572,6 +586,13 @@ export const voidInvoice = action({
 
 // ---------- the webhook's side ----------
 
+/** Review L7: when Stripe says the invoice was paid (status_transitions.paid_at, in seconds), not when its webhook arrived
+ *  (a retried or delayed event can come days later). `now` when Stripe gives none. */
+export function stripePaidAt(s: StripeResult, now: number): number {
+  const t = Number(s?.status_transitions?.paid_at);
+  return Number.isFinite(t) && t > 0 ? Math.min(t * 1000, now) : now;
+}
+
 async function byStripe(ctx: QueryCtx | MutationCtx, accountId: string, stripeId: string) {
   const i = await ctx.db.query("invoices").withIndex("by_stripe", (q) => q.eq("stripe.invoiceId", stripeId)).first();
   return i && i.stripe?.accountId === accountId ? i : null;
@@ -605,13 +626,16 @@ export const applyStripeInvoice = internalMutation({
       ...(status === "paid" || paid > i.amountPaidCents ? { processing: false } : {}),
       // Keep a reason the portal already read from Stripe for this same attempt (within ten minutes).
       ...(eventType === "invoice.payment_failed" ? { lastFailure: i.lastFailure && now - i.lastFailure.at < 10 * 60_000 ? i.lastFailure : { at: now, message: "A payment attempt failed" }, processing: false } : {}),
-      ...(status === "paid" && !i.paidAt ? { paidAt: now } : {}),
+      ...(status === "paid" && !i.paidAt ? { paidAt: stripePaidAt(s, now) } : {}),
       ...(status === "void" && !i.voidedAt ? { voidedAt: now } : {}),
       stripe: { ...i.stripe!, number: s.number ?? i.stripe!.number, hostedUrl: s.hosted_invoice_url ?? i.stripe!.hostedUrl, pdfUrl: s.invoice_pdf ?? i.stripe!.pdfUrl },
       history: history.slice(-60), updatedAt: now,
     });
     // Phase 3: the final invoice paid moves the pipeline card to Paid (forward only, D60).
     if (status === "paid" && i.status !== "paid" && i.kind === "final" && i.projectId) await crmProject(ctx, i.projectId, "paid", `${i.number ?? "final invoice"} paid`);
+    // Phase 5: a raw footage storage invoice paid keeps the footage a year; voided, it goes back to not kept.
+    if (i.storageId && status === "paid" && i.status !== "paid") await storagePaid(ctx, i);
+    if (i.storageId && status === "void" && i.status !== "void") await storageDropped(ctx, i, "voided");
     // A final invoice paid in full opens the project's final files (the Part A lock, now automatic).
     if (status === "paid" && i.status !== "paid" && i.kind === "final" && i.projectId) {
       const p = await ctx.db.get(i.projectId);

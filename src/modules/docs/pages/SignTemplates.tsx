@@ -26,7 +26,7 @@ export default function SignTemplates() {
   useEffect(() => { if (once.current) return; once.current = true; ensure({}).then((r) => { if (r.added) show("Added your Service Agreement as a starter template, and its clauses to the library."); }).catch(() => {}); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <>
-      <TopBar><a {...linkProps("/sign")}>Docs</a><Sep /><span className="here">Templates</span></TopBar>
+      <TopBar><span className="secondary">Docs</span><Sep /><a {...linkProps("/sign")}>Contracts</a><Sep /><span className="here">Templates</span></TopBar>
       <div className="wp-page docs">
         <div className="ws-tabs"><Tabs label="Templates or clauses" value={tab} onChange={setTab} items={[{ key: "templates", label: "Templates" }, { key: "clauses", label: "Clause library" }]} /></div>
         {tab === "templates" ? <Templates show={show} /> : <Clauses show={show} />}

@@ -2,7 +2,7 @@
 // Works signed out. Shows what the share covers (a list of videos, or the one video straight away), asks for a
 // passcode or a sign-in when the share needs one, and says plainly when a link is off, expired or not theirs.
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { useAuthActions, useAuthToken } from "@convex-dev/auth/react";
 import { SelectBar, SelectBox, useSelection } from "./VideoRows";
 import { bytesText, downloadOne, downloadZip, type Progress } from "../../lib/download";
@@ -46,15 +46,18 @@ export default function SharePage({ token, videoId, versionNumber, noteId, inShe
   const [busy, setBusy] = useState<Progress | null>(null);
   const sel = useSelection();
   const pct = (p: Progress) => (p.total ? `${Math.round((100 * p.done) / p.total)}%` : bytesText(p.done));
-  async function saveOne(f: { url: string; name: string; bytes: number | null }) {
+  // D152 fix (H1): the link is made per click, after the save box, by a check of this share (never sent with the page).
+  const downloadLink = useAction(api.library.downloadLink);
+  const linkFor = (versionId: string) => async () => (await downloadLink({ versionId: versionId as Id<"versions">, share: { token, passcode, guestKey: key, ...(guestName ? { guestName } : {}) } })).url;
+  async function saveOne(f: { versionId: string; name: string; bytes: number | null }) {
     if (busy) return;
-    try { const ok = await downloadOne(f.url, f.name, f.bytes, setBusy); if (ok) show("Downloaded"); }
+    try { const ok = await downloadOne(linkFor(f.versionId), f.name, f.bytes, setBusy); if (ok) show("Downloaded"); }
     catch (e) { show("Download didn't work: " + ((e as Error).message || "")); }
     finally { setBusy(null); }
   }
-  async function saveAll(files: Array<{ url: string; name: string; bytes: number | null }>, zipName: string) {
+  async function saveAll(files: Array<{ versionId: string; name: string; bytes: number | null }>, zipName: string) {
     if (busy || !files.length) return;
-    try { const ok = await downloadZip(files, zipName, setBusy); if (ok) show("Downloaded"); }
+    try { const ok = await downloadZip(files.map((f) => ({ url: linkFor(f.versionId), name: f.name, bytes: f.bytes })), zipName, setBusy); if (ok) show("Downloaded"); }
     catch (e) { show("Download didn't work: " + ((e as Error).message || "")); }
     finally { setBusy(null); }
   }
@@ -110,7 +113,7 @@ export default function SharePage({ token, videoId, versionNumber, noteId, inShe
   const groups = ok.projects.map((p) => ({ p, videos: ok.videos.filter((v) => v.projectId === p._id) })).filter((g) => g.videos.length);
   const latestOf = (v: typeof ok.videos[number]) => v.versions[v.versions.length - 1];
   // Everything downloadable in a project: the latest version of each video (file name as rendered).
-  const filesOf = (vs: typeof ok.videos) => vs.map((v) => latestOf(v)?.download).filter((d): d is { url: string; name: string; bytes: number | null } => !!d);
+  const filesOf = (vs: typeof ok.videos) => vs.map((v) => latestOf(v)?.download).filter((d): d is NonNullable<typeof d> => !!d);
   const sizeOf = (fs: Array<{ bytes: number | null }>) => (fs.every((f) => f.bytes) ? bytesText(fs.reduce((a, f) => a + (f.bytes ?? 0), 0)) : null);
   return (
     <div className={`sharelist wp-sharelist${inShell ? " inshell" : ""}`}>

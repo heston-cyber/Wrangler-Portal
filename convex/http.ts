@@ -10,10 +10,14 @@ import { ip as wsS0Ip } from "./wsS0";
 import { respond as quoteRespond } from "./quotes";
 import { respond as proposalRespond } from "./proposals";
 import { api as wsApi, preflight as wsPreflight } from "./signing";
+import { callback as calendarCallback } from "./calendar";
+import { chunk as uploadChunk, chunkPreflight as uploadChunkPreflight } from "./fileRequests";
 import { verifyHttp as wsVerify } from "./signDone";
 import { callback as wsDropboxCallback } from "./wsArchive";
 import { connectWebhook } from "./payments";
 import { webflow as webflowLeads } from "./leads";
+import { agentHttp as siteWatchAgent } from "./siteWatch";
+import { pdfRoute as briefingPdf } from "./briefings";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);
@@ -67,7 +71,16 @@ http.route({ path: "/q-respond", method: "OPTIONS", handler: wsPreflight });
 // Phase 3b: the same for a proposal on /p/<token> (D73, D86).
 http.route({ path: "/p-respond", method: "POST", handler: proposalRespond });
 http.route({ path: "/p-respond", method: "OPTIONS", handler: wsPreflight });
+// Phase 4: Google Calendar sign-in (Settings › Calendar).
+http.route({ path: "/calendar/callback", method: "GET", handler: calendarCallback });
+// Phase 4: big files for a file request, in pieces (fileRequests.ts).
+http.route({ path: "/upload/chunk", method: "POST", handler: uploadChunk });
+http.route({ path: "/upload/chunk", method: "OPTIONS", handler: uploadChunkPreflight });
+// D147 (Nov 4): a shared briefing's PDF by its link (/b/<token> shows it); off when the link is turned off.
+http.route({ pathPrefix: "/b-pdf/", method: "GET", handler: briefingPdf });
 http.route({ path: "/email/stop", method: "GET", handler: emailStop });
 http.route({ path: "/email/stop", method: "POST", handler: emailStop });
+// Phase 5c (Nov 3): the site-watch agent's door (key-locked; Site watch's own list only).
+http.route({ path: "/site-watch", method: "POST", handler: siteWatchAgent });
 
 export default http;

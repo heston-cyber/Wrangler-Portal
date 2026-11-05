@@ -1,4 +1,5 @@
 // Settings › Dropbox drop folder: connect, see recent drops, and how to render into it.
+import { DEFAULT_ROOT, dropboxRoot, setDropboxRoot } from "../../lib/finder";
 import { useEffect, useState } from "react";
 import { useAction, useQuery } from "convex/react";
 import { ArrowUpRight, FolderInput, RotateCw } from "lucide-react";
@@ -72,6 +73,12 @@ export function DropboxSettings({ show }: { show: (m: string) => void }) {
           </div>
         )}
         {s?.lastError && <div className="prow"><span className="pl error" style={{ fontSize: 13 }}>Last check failed: {s.lastError}</span></div>}
+        <div className="prow">
+          <span className="pl">Dropbox on this Mac <span className="secondary" style={{ display: "block", fontSize: 12.5 }}>For Reveal in Finder (it copies the path for Finder's ⌘⇧G). Kept in this browser. To get it: in Finder, right-click your Dropbox folder, hold Option, choose Copy “Dropbox” as Pathname, and paste it here.</span></span>
+          <span className="pr"><input className="input mono" style={{ minWidth: 260 }} defaultValue={dropboxRoot()} placeholder={DEFAULT_ROOT} aria-label="Dropbox folder on this Mac"
+            onBlur={(e) => { const v = e.currentTarget.value.replace(/^file:\/\//, "").trim(); if (v !== dropboxRoot()) { setDropboxRoot(v); show("Saved for this browser."); } }}
+            onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} /></span>
+        </div>
         <div className="prow">
           <span className="pl">Transcripts <span className="secondary" style={{ display: "block", fontSize: 12.5 }}>{s?.transcripts ? "Every new version is transcribed by ElevenLabs, word by word." : "Off until the ElevenLabs key is in Convex."}</span></span>
           <span className="pr"><span className="rtag">{s?.transcripts ? "On" : "Off"}</span></span>

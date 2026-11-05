@@ -10,6 +10,9 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import schema from "../convex/schema";
 import type { Id } from "../convex/_generated/dataModel";
+import { internal } from "../convex/_generated/api";
+import { nodesOf, pageOf, type Page } from "../convex/lib/wsBuilder";
+import { weatherAddress } from "../convex/lib/callSheet";
 
 const api = anyApi;
 const modules = import.meta.glob("../convex/**/*.ts");
@@ -114,7 +117,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       }
       await appendEvent(ctx as never, d1, { kind: "opened", actor: "signer:client", versionNumber: 1, email: "maya@harborcoffee.com", ip: "198.51.100.4", userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari" });
       await appendEvent(ctx as never, d3, { kind: "created", actor: "heston", versionNumber: 1, detail: "Uploaded (2 pages)", ip: "203.0.113.8", userAgent: "Mozilla/5.0 (Macintosh) Chrome" });
-      return { A, harbor, heston, maya, p1, harbor30, d1, d2, d3, hestonSub: await sess(heston), mayaSub: await sess(maya) };
+      return { A, harbor, heston, maya, p1, p2, p3, p4, harbor30, d1, d2, d3, hestonSub: await sess(heston), mayaSub: await sess(maya) };
     });
     const owner = t.withIdentity({ subject: w.hestonSub });
     const client = t.withIdentity({ subject: w.mayaSub });
@@ -172,8 +175,258 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       await ctx.db.insert("counters", { businessId: w.A, key: "invoiceSeq", value: 3 });
       return { paid, due, draft };
     });
+    // Phase 4: a shoot on the Harbor Coffee Launch (in four days), not confirmed yet.
+    const inDays = (n: number) => new Date(now + n * DAY).toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+    const { shootId } = await owner.mutation(api.shoots.schedule, { projectId: w.p1, date: inDays(4), call: "07:00", wrap: "17:00", location: "Harbor Coffee, 412 Main St.", parking: "Behind the shop",
+      prepare: ["Shop open and lights on by 7:00", "Two baristas on shift for B-roll", "Menu boards up to date", "Signed releases from anyone on camera"], withOwner: true, bookingIds: [], calendar: true }) as { shootId: string };
+    // Phase 5d step 3: gear. Nine items across the kinds (one in repair, one retired, one with maintenance due), two on the shoot.
+    const gearIds = await (async () => {
+      const mk = async (name: string, kind: string, extra: Record<string, unknown> = {}) => await owner.mutation(api.gear.add, { name, kind, ...extra }) as Id<"gear">;
+      const fx3 = await mk("Sony FX3", "camera", { serial: "4402158831", boughtOn: "2028-03-14", priceCents: 389800, insuredCents: 420000, notes: "A-camera. Cage and top handle on." });
+      const a7 = await mk("Sony A7 IV", "camera", { serial: "5100229374", boughtOn: "2028-09-02", priceCents: 249800, insuredCents: 260000 });
+      const gm = await mk("Sony 24-70mm f/2.8 GM II", "lens", { serial: "1829455", boughtOn: "2028-03-14", priceCents: 229800, insuredCents: 240000 });
+      const aput = await mk("Aputure 300d II", "lighting", { boughtOn: "2027-06-20", priceCents: 107500, insuredCents: 90000 });
+      const rode = await mk("Rode Wireless PRO", "audio", { serial: "RWP-20931", priceCents: 39900, insuredCents: 40000 });
+      const mavic = await mk("DJI Mavic 3 Pro", "drone", { serial: "1581F5FJB22", boughtOn: "2029-01-11", priceCents: 219900, insuredCents: 230000 });
+      const tripod = await mk("Sachtler Aktiv8 tripod", "grip", { priceCents: 139900, insuredCents: 120000 });
+      const mac = await mk("MacBook Pro 16\"", "computer", { serial: "C02ZK3XYMD6T", boughtOn: "2029-02-20", priceCents: 349900, insuredCents: 350000 });
+      const old = await mk("Canon C100", "camera", { boughtOn: "2022-05-02", priceCents: 349900, insuredCents: 0, notes: "Sold to a friend." });
+      await owner.mutation(api.gear.setStatus, { gearId: gm, status: "in_repair" });
+      await owner.mutation(api.gear.setStatus, { gearId: old, status: "retired" });
+      await owner.mutation(api.gear.logMaintenance, { gearId: fx3, date: inDays(-120), what: "Sensor cleaned and firmware updated", costCents: 8500, nextDue: inDays(-5) });
+      await owner.mutation(api.gear.logMaintenance, { gearId: fx3, date: inDays(-400), what: "Fan replaced", costCents: 12000 });
+      await owner.mutation(api.gear.logMaintenance, { gearId: aput, date: inDays(-30), what: "Fresnel lens cleaned", nextDue: inDays(150) });
+      await owner.mutation(api.gear.addToShoot, { shootId: shootId as Id<"shoots">, gearId: fx3 });
+      await owner.mutation(api.gear.addToShoot, { shootId: shootId as Id<"shoots">, gearId: aput });
+      await owner.mutation(api.gear.addToShoot, { shootId: shootId as Id<"shoots">, gearId: rode });
+      return { fx3, a7, gm, aput, rode, mavic, tripod, mac, old };
+    })();
+    // Phase 5d step 4: one guide the business has edited (so the owner's list shows the Edited chip).
+    await owner.mutation(api.help.edit, { slug: "paying-an-invoice" });
+    // Phase 4: two file requests, one with files in (made directly: the kit has no Dropbox).
+    const reqIds = await t.run(async (ctx) => {
+      const folder = "/File requests/Harbor Coffee/26127 Harbor Coffee Launch";
+      const a = await ctx.db.insert("fileRequests", { businessId: w.A, projectId: w.p1, title: "Upload your logo and brand guide", details: "Your logo (SVG or PNG), the brand guide, and any photos of the new menu boards.", due: inDays(1), folder: `${folder}/Logo and brand guide`, remind: true, status: "open",
+        files: [{ name: "harbor-logo.svg", size: 52_000, path: `${folder}/Logo and brand guide/harbor-logo.svg`, at: now - HOUR, by: "maya@harborcoffee.com" }, { name: "Harbor brand guide.pdf", size: 8_400_000, path: `${folder}/Logo and brand guide/Harbor brand guide.pdf`, at: now - HOUR, by: "maya@harborcoffee.com" }], lastUploadAt: now - HOUR, history: [], createdAt: now - DAY, updatedAt: now - HOUR });
+      const b = await ctx.db.insert("fileRequests", { businessId: w.A, projectId: w.p1, title: "Send your music references", due: inDays(6), folder: `${folder}/Music references`, remind: true, status: "open", files: [], history: [], createdAt: now - DAY, updatedAt: now - DAY });
+      return { a, b };
+    });
+    // Phase 4: the kickoff brief, sent back by Maya (740:2074) (made directly, like the requests).
+    const briefId = await t.run(async (ctx) => {
+      const { KICKOFF_BRIEF } = await import("../convex/lib/kickoff");
+      return await ctx.db.insert("briefs", { businessId: w.A, projectId: w.p1, questions: KICKOFF_BRIEF, step: 3, status: "submitted", sentAt: now - 3 * DAY, startedAt: now - 2 * DAY, submittedAt: now - DAY, submittedBy: "maya@harborcoffee.com", updatedBy: "maya@harborcoffee.com", submits: 1,
+        answers: { goal: "Launch the new menu and bring in the morning crowd.", audience: "Regulars and downtown office workers", where: ["Instagram", "In-store screens"], must: "Latte art, the new menu boards, the team.",
+          feel: ["Warm", "Honest", "community"], colors: ["#3B2A20", "#F2E6D8"], refs: ["https://vimeo.com/76979871"], ready: inDays(18), launch: inDays(20), filming: "Weekdays before 9 AM, when the morning rush is on.", contact: "Maya Brooks, 512 555 0142" },
+        history: [], createdAt: now - 3 * DAY, updatedAt: now - DAY });
+    });
+    // Phase 5 (Nov 3): the raw footage offer on 26127, a testimonial request to Maya, and two answers from others.
+    const askId = await t.run(async (ctx) => {
+      const { postToInbox } = await import("../convex/lib/inbox");
+      await ctx.db.insert("footageStorage", { businessId: w.A, projectId: w.p1, clientId: w.harbor, priceCents: 10_000, offeredAt: now - DAY, keepUntil: inDays(29), status: "offered", history: [{ at: now - DAY, text: "Offered at delivery" }], createdAt: now - DAY, updatedAt: now - DAY });
+      const id = await ctx.db.insert("inboxNotes", { businessId: w.A, clientId: w.harbor, title: "A few words about 26127 Harbor Coffee Launch?", text: "Two quick questions, about a minute.", status: "sent", draftedBy: "owner", testimonialProjectId: w.p1, createdAt: now - 2 * HOUR, updatedAt: now - 2 * HOUR, sentAt: now - 2 * HOUR, recipients: 1 });
+      await ctx.db.patch(id, { link: `/words/${id}`, linkLabel: "Share a few words" });
+      await postToInbox(ctx as never, { businessId: w.A, clientId: w.harbor, email: "maya@harborcoffee.com", kind: "note", title: "A few words about 26127 Harbor Coffee Launch?", text: "Two quick questions, about a minute.", link: `/words/${id}`, linkLabel: "Share a few words", source: { module: "inbox", id }, key: `note:${id}`, noteId: id });
+      await ctx.db.insert("testimonials", { businessId: w.A, noteId: id, projectId: w.p1, clientId: w.harbor, email: "ava@harborcoffee.com", name: "Ava Chen", company: "Harbor Coffee", working: "Clear, fast, and they actually listened.", film: "We use the launch film on every pitch now.", permission: true, dropboxPath: "/Apps/Wrangler Review/Testimonials/2026-10-29 Ava Chen - 26127 Harbor Coffee Launch.md", savedAt: now - HOUR, createdAt: now - HOUR, updatedAt: now - HOUR });
+      await ctx.db.insert("testimonials", { businessId: w.A, noteId: id, projectId: w.p1, clientId: w.harbor, email: "jordan@harborcoffee.com", name: "Jordan Reyes", company: "Harbor Coffee", working: "Great to work with.", film: "Customers mention the recap.", permission: false, readAt: now - HOUR, saveError: "Dropbox isn't connected. Connect it in Settings › Dropbox drop folder, then Save again.", createdAt: now - 3 * DAY, updatedAt: now - 3 * DAY });
+      return id;
+    });
+
+    // ---- Phone pass (Nov 4): a Production world. Projects in production/polish, shoots (today, this week, next week, one
+    // past), call sheets in every state (questions, draft, sent, updated today) with a Weather block in each of its four
+    // states, crew, client people and guests, and a connected Google Calendar with events. ----
+    const PICKED = "wrangler@group.calendar.google.com", PERSONAL = "heston.hill@gmail.com", HOLIDAYS = "holidays@group.v.calendar.google.com";
+    const prod = await (async () => {
+      for (const p of [w.p2, w.p3, w.p4]) await owner.mutation(api.projects.setStage, { projectId: p, stage: "production", post: false });
+      await owner.mutation(api.projects.setNextStep, { projectId: w.p3, text: "Rough cut of the Arizona highlights by Nov 10." });
+      await owner.mutation(api.projects.setNextStep, { projectId: w.p4, text: "Shoot the backrooms scenes Saturday night." });
+      await owner.mutation(api.projects.setKeyDates, { projectId: w.p3, dates: [{ label: "Shoot", date: inDays(0) }, { label: "First cut", date: inDays(12) }, { label: "Final due", date: inDays(25) }] });
+      await owner.mutation(api.projects.setKeyDates, { projectId: w.p4, dates: [{ label: "Shoot", date: inDays(2) }, { label: "First cut", date: inDays(5) }] });
+      await owner.mutation(api.projects.setKeyDates, { projectId: w.p2, dates: [{ label: "Rough cut", date: inDays(3) }, { label: "Final due", date: inDays(20) }] });
+      // Crew: two vendors, invited to the portal, booked on the shoot days.
+      const vend = async (name: string, email: string, role: string) => {
+        const id = await owner.mutation(api.vendors.add, { name, email, roles: [role], rates: [], invite: false }) as Id<"vendors">;
+        await t.run(async (ctx) => { await ctx.db.patch(id, { invitedAt: now - 5 * DAY }); });
+        return id;
+      };
+      const jordanV = await vend("Jordan Ellis", "jordan@ellisfilms.com", "Shooter"), samV = await vend("Sam Rivera", "sam@riverasound.example", "Sound");
+      const book = (vendorId: Id<"vendors">, projectId: Id<"projects">, role: string, start: string, end = start) =>
+        owner.mutation(api.bookings.create, { vendorId, projectId, role, start, end, cents: 85_000, unit: "day" }) as Promise<Id<"vendorBookings">>;
+      const bAz = await book(jordanV, w.p3, "Shooter", inDays(0));
+      const bBack = await book(jordanV, w.p4, "Shooter", inDays(2));
+      await book(jordanV, w.p1, "Shooter", inDays(4));
+      await book(samV, w.p1, "Sound", inDays(4));
+      const shoot = async (projectId: Id<"projects">, n: number, call: string, wrap: string, location: string, bookingIds: Id<"vendorBookings">[] = []) =>
+        (await owner.mutation(api.shoots.schedule, { projectId, date: inDays(n), call, wrap, location, parking: "", prepare: [], withOwner: true, bookingIds, calendar: false }) as { shootId: Id<"shoots"> }).shootId;
+      const sA = await shoot(w.p3, 0, "08:00", "17:00", "Chase Field loading dock, Phoenix", [bAz]);
+      const sB = await shoot(w.p4, 2, "18:00", "23:00", "Floor Trader HQ, Oklahoma City", [bBack]);
+      const sD = await shoot(w.p4, 5, "19:00", "23:30", "Floor Trader HQ, Oklahoma City");
+      const sE = await shoot(w.p2, 6, "09:00", "14:00", "Northline Church, Edmond");
+      const sF = await shoot(w.p2, 8, "10:00", "15:00", "Northline Church, Edmond");
+      const sG = await shoot(w.p1, 11, "07:00", "12:00", "Harbor Coffee, 412 Main St.");
+      await shoot(w.p3, 14, "08:00", "16:00", "Camelback Mountain trailhead, Phoenix");
+      const ADDR = { A: "1 Chase Field Way, Phoenix, AZ 85004", B: "100 N Broadway Ave, Oklahoma City, OK 73102", C: "412 Main St, Oklahoma City, OK 73102", D: "100 N Broadway Ave, Oklahoma City, OK 73102", E: "1 Church Rd, Edmond, OK 73034", F: "1 Church Rd, Edmond, OK 73034" };
+      const rows = (call: string) => [
+        { id: "r1", time: call, what: "Crew call and load-in", who: "Crew" }, { id: "r2", time: "09:30", what: "Talent call, hair and makeup", who: "Talent" },
+        { id: "r3", time: "11:00", what: "First setup", who: "Everyone" }, { id: "r4", time: "13:00", what: "Lunch", who: "Everyone" }, { id: "r5", time: "15:30", what: "Pickups and wrap", who: "Crew" },
+      ];
+      const mk = async (shootId: Id<"shoots">, call: string, wrap: string, place: string, address: string, weather: boolean, notes = "", step = 4, make = true) => {
+        const id = await owner.mutation(api.callSheets.create, { shootId, how: "questions" }) as Id<"callSheets">;
+        await owner.mutation(api.callSheets.saveAnswers, { callSheetId: id, step, answers: { templateId: null, crewCall: call, talentCall: "09:30", wrap, locationName: place, address, parking: "Park behind the building. Load-in is through the side door.", weather, schedule: rows(call), notes } });
+        const buildId = make ? await owner.mutation(api.callSheets.make, { callSheetId: id }) as Id<"wsBuilds"> : null;
+        return { id, buildId };
+      };
+      const edit = async (buildId: Id<"wsBuilds">, fn: (page: Page) => void) => {
+        const b = await owner.query(api.builder.getBuild, { buildId });
+        const page = JSON.parse(JSON.stringify(pageOf(b.blocks))) as Page;
+        fn(page);
+        await owner.mutation(api.builder.saveBuild, { buildId, title: b.title, blocks: page, fields: b.fields, signers: [], style: b.style });
+      };
+      const wx = async (csId: Id<"callSheets">, kind: "forecast" | "none", date: string, buildId: Id<"wsBuilds">, location: string, line = "") => {
+        const page = pageOf((await owner.query(api.builder.getBuild, { buildId })).blocks);
+        await t.mutation(internal.callSheets.weatherStore, { callSheetId: csId, address: weatherAddress(page, location).address, date, kind, ...(line ? { line } : {}) });
+      };
+      await owner.mutation(api.callSheets.ensureStarters, {});
+      const RILEY = "riley@talent.example", PAT = "pat@stylist.example";
+      // The Chase Field sheet from a week ago, sent to Riley while the shoot was still ahead (the guest's Ended list).
+      vi.setSystemTime(now - 7 * DAY);
+      const sP = await shoot(w.p3, -5, "08:00", "16:00", "Chase Field loading dock, Phoenix");
+      const P = await mk(sP, "08:00", "16:00", "Chase Field loading dock, Phoenix", ADDR.A, true);
+      const rP = await owner.mutation(api.callSheets.addGuest, { callSheetId: P.id, name: "Riley Quinn", email: RILEY, role: "Talent" }) as string;
+      await owner.mutation(api.callSheets.send, { callSheetId: P.id, crew: false, client: false, guests: true });
+      vi.setSystemTime(now);
+      // Today: the Chase Field sheet, sent to the crew and Riley, with an update this morning.
+      const A = await mk(sA, "08:00", "17:00", "Chase Field loading dock, Phoenix", ADDR.A, true, "Hydrate. It will be 90 degrees by noon.");
+      await wx(A.id, "forecast", inDays(0), A.buildId!, "Chase Field loading dock, Phoenix", "Sunny · 91°/68° · 0% rain · wind 5 mph");
+      const rA = await owner.mutation(api.callSheets.addGuest, { callSheetId: A.id, name: "Riley Quinn", email: RILEY, role: "Talent" }) as string;
+      await owner.mutation(api.callSheets.send, { callSheetId: A.id, crew: true, client: true, guests: true, message: "See you at the dock." });
+      await edit(A.buildId!, (pg) => { nodesOf(pg, "location")[0].attrs!.talentCall = "10:00"; });
+      vi.setSystemTime(now + 60_000);
+      await owner.mutation(api.callSheets.sendUpdate, { callSheetId: A.id, changed: "Talent call moved to 10:00 AM" });
+      vi.setSystemTime(now);
+      // Halloween: a built draft with the forecast in.
+      const B = await mk(sB, "18:00", "23:00", "Floor Trader HQ, Oklahoma City", ADDR.B, true);
+      await wx(B.id, "forecast", inDays(2), B.buildId!, "Floor Trader HQ, Oklahoma City", "Mostly cloudy · 58°/44° · 20% rain · wind 8 mph");
+      // Monday: the Harbor Coffee sheet, sent to Maya, both crew and two guests; Pat's access ended by hand; the forecast changed after it went out.
+      const C = await mk(shootId as Id<"shoots">, "07:00", "17:00", "Harbor Coffee, 412 Main St.", ADDR.C, true, "Shop opens at 7:00. Keep the espresso machine warm.");
+      await wx(C.id, "forecast", inDays(4), C.buildId!, "Harbor Coffee, 412 Main St.", "Partly cloudy · 64°/47° · 10% rain · wind 7 mph");
+      const rC = await owner.mutation(api.callSheets.addGuest, { callSheetId: C.id, name: "Riley Quinn", email: RILEY, role: "Talent" }) as string;
+      const pC = await owner.mutation(api.callSheets.addGuest, { callSheetId: C.id, name: "Pat Lee", email: PAT, role: "Stylist" }) as string;
+      await owner.mutation(api.callSheets.send, { callSheetId: C.id, crew: true, client: true, guests: true, message: "Looking forward to it." });
+      await owner.mutation(api.callSheets.endGuest, { callSheetId: C.id, id: pC });
+      vi.setSystemTime(now + 3 * HOUR);
+      await wx(C.id, "forecast", inDays(4), C.buildId!, "Harbor Coffee, 412 Main St.", "Light rain · 58°/46° · 60% rain · wind 12 mph");
+      vi.setSystemTime(now);
+      await t.run(async (ctx) => {
+        for (const [id, who] of [[C.id, ["maya@harborcoffee.com", "jordan@ellisfilms.com"]], [A.id, ["jordan@ellisfilms.com"]]] as const) {
+          const cs = (await ctx.db.get(id))!;
+          await ctx.db.patch(id, { recipients: cs.recipients.map((r) => (who.includes(r.email as never) ? { ...r, openedAt: now - 2 * HOUR, lastOpenedAt: now - 2 * HOUR } : r)) });
+        }
+      });
+      // A typed-over line, no forecast, and "too early".
+      const D = await mk(sD, "19:00", "23:30", "Floor Trader HQ, Oklahoma City", ADDR.D, true);
+      await edit(D.buildId!, (pg) => { nodesOf(pg, "weather")[0].attrs = { typed: true, line: "Overcast, around 55°. Bring layers and rain covers." }; });
+      const E = await mk(sE, "09:00", "14:00", "Northline Church, Edmond", ADDR.E, true);
+      await wx(E.id, "none", inDays(6), E.buildId!, "Northline Church, Edmond");
+      const F = await mk(sF, "10:00", "15:00", "Northline Church, Edmond", ADDR.F, true);
+      // Next week: still on the questions (step 3).
+      const G = await mk(sG, "07:00", "12:00", "Harbor Coffee, 412 Main St.", "412 Main St, Oklahoma City, OK 73102", false, "", 2, false);
+      // A connected Google Calendar with events around the shoots.
+      await t.run(async (ctx) => {
+        await ctx.db.insert("calendars", { businessId: w.A, email: "heston.hill@gmail.com", refreshToken: "kit", calendarId: PICKED, calendarName: "Wrangler Productions", inviteVendors: true, inviteClient: false, connectedAt: now - 20 * DAY, lastSyncedAt: now - 4 * 60_000,
+          list: [{ id: PERSONAL, name: "Personal", color: 4, on: true, writable: true, primary: true }, { id: PICKED, name: "Wrangler Productions", color: 7, on: true, writable: true, primary: false }, { id: HOLIDAYS, name: "Holidays", color: 2, on: true, writable: false, primary: false }] });
+        const ev = (cal: string, id: string, title: string, d0: number, d1: number, start?: string, end?: string, extra: Record<string, unknown> = {}) =>
+          ctx.db.insert("calendarEvents", { businessId: w.A, kind: "google", calendarId: cal, googleId: id, title, date: inDays(d0), endDate: inDays(d1), ...(start ? { start, end } : {}), guests: [], gUpdated: 1, syncedAt: now, createdAt: now, ...extra } as never);
+        await ev(PICKED, "kit0001", "Team call", 1, 1, "10:00", "10:30", { guests: [{ email: "sam@riverasound.example", name: "Sam Rivera" }, { email: "jordan@ellisfilms.com", name: "Jordan Ellis" }], recurring: true });
+        await ev(PICKED, "kit0002", "Studio rental: Stage 4", 3, 4, undefined, undefined, { location: "Stage 4, Oklahoma Film Studios" });
+        await ev(PICKED, "kit0003", "Edit session: Harbor Coffee 30s", 0, 0, "13:00", "16:30", { projectId: w.p1 });
+        await ev(PICKED, "kit0004", "Color review with Maya", 6, 6, "15:00", "16:00", { guests: [{ email: "maya@harborcoffee.com", name: "Maya Brooks" }], location: "Video call" });
+        await ev(PICKED, "kit0005", "Gear pickup", 2, 2, "09:00", "10:00", { location: "Rental House, Bricktown" });
+        await ev(PERSONAL, "kit0006", "Dentist", 4, 4, "14:00", "15:00");
+        await ev(PERSONAL, "kit0007", "Dinner with Emily-Rose", 1, 1, "18:30", "20:00", { location: "Cheever's Cafe" });
+        await ev(PERSONAL, "kit0008", "Move-in weekend", 9, 10);
+        await ev(HOLIDAYS, "kit0009", "Halloween", 2, 2, undefined, undefined, { readOnly: true });
+        await ev(HOLIDAYS, "kit0010", "Daylight saving time ends", 3, 3, undefined, undefined, { readOnly: true });
+        await ev(PICKED, "kit0011", "Edit week: Spirit Days", 7, 11, undefined, undefined, { projectId: w.p2 });
+      });
+      return { A, B, C, D, E, F, G, P, shoots: { sA, sB, sD, sE, sF, sG, sP }, riley: { A: rA, C: rC, P: rP }, RILEY, bookings: { bAz, bBack } };
+    })();
+    const sheetIds = [prod.A, prod.B, prod.C, prod.D, prod.E, prod.F, prod.G, prod.P];
+    const guest = await t.run(async (ctx) => {
+      const userId = await ctx.db.insert("users", { email: prod.RILEY, name: "Riley Quinn", role: "guest" });
+      const passes = await ctx.db.query("guestPasses").collect();
+      const tok = (id: Id<"callSheets">) => passes.find((x) => x.callSheetId === id && x.email === prod.RILEY)!.token;
+      return { sub: `${userId}|${await ctx.db.insert("authSessions", { userId, expirationTime: now + 30 * DAY })}`, tokens: { A: tok(prod.A.id), C: tok(prod.C.id), P: tok(prod.P.id) } };
+    });
+    // Calendar events for the whole stretch Production › Calendar may ask for (the kit answers any month, week or agenda from this).
+    const calRange = { from: inDays(-60), to: inDays(35) };
     const noteIds = await t.run(async (ctx) => (await ctx.db.query("inboxNotes").collect()).map((n) => n._id));
+    // Phase 5c screens (Nov 4): a Site watch report with one of each status, and four mornings of history.
+    const sw = await t.run(async (ctx) => {
+      const f = async (key: string, area: string, title: string, count: number, status: "found" | "fix_ready" | "fixed" | "needs_you", extra: Record<string, unknown> = {}) =>
+        ctx.db.insert("siteWatchFindings", { key, area, title, count, status, firstAt: now - 7 * DAY, lastAt: now - 3 * HOUR, updatedAt: now - 3 * HOUR, ...extra } as never);
+      const ids = [
+        await f("stored:wsDocuments.signDone", "stored", "Signed copies are not saving", 3, "needs_you", { urgent: true, hits: 2, note: "Touches signing: yours to decide." }),
+        await f("email:invoice", "email", "Emails not sending: invoice reminder", 14, "fix_ready", { hits: 6, branch: "watch/invoice-reminder-retry", commit: "a1b2c3d4e5f6", note: "Retries once after Resend answers 5xx." }),
+        await f("job:dropbox.poll", "job", "Dropbox connection failed", 2, "found", { hits: 1 }),
+        await f("stored:transcripts.failed", "stored", "Transcripts left failed", 5, "fixed", { doneAt: now - 2 * DAY }),
+        await f("stored:waveforms.failed", "stored", "Waveform not built", 1, "fixed", { doneAt: now - 2 * DAY }),
+        await f("page:/s/phone", "page", "Page check: Client share on a phone", 1, "fixed", { doneAt: now - 2 * DAY, detail: "1 load at 390 px" }),
+      ];
+      const open = (n: number) => [
+        { key: "stored:wsDocuments.signDone", area: "stored", title: "Signed copies are not saving", status: "needs_you", urgent: true, count: 3 },
+        { key: "email:invoice", area: "email", title: "Emails not sending: invoice reminder", status: "fix_ready", urgent: false, count: 14 },
+        { key: "job:dropbox.poll", area: "job", title: "Dropbox connection failed", status: "found", urgent: false, count: 2 },
+      ].slice(0, n);
+      const runs = [
+        await ctx.db.insert("siteWatchRuns", { at: now - 8 * HOUR, by: "app", found: 6, cleared: 0, open: open(3) }),
+        await ctx.db.insert("siteWatchRuns", { at: now - 1 * DAY - 8 * HOUR, by: "app", found: 4, cleared: 4, open: open(2) }),
+        await ctx.db.insert("siteWatchRuns", { at: now - 2 * DAY - 8 * HOUR, by: "app", found: 0, cleared: 0, open: [] }),
+        await ctx.db.insert("siteWatchRuns", { at: now - 3 * DAY - 8 * HOUR, by: "app", found: 2, cleared: 2, open: open(1) }),
+      ];
+      return { ids, runs };
+    });
+    // Phase 5d step 1: booking calls. Settings saved, busy times just read (the Team call and Gear pickup), a lead who
+    // booked a call (their card, the Upcoming call card and a Needs you row), and their private link.
+    process.env.GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "kit"; process.env.GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "kit";
+    const callKit = await t.run(async (ctx) => {
+      const biz = (await ctx.db.get(w.A))!;
+      const hours = [0, 1, 2, 3, 4, 5, 6].map((d) => ({ on: d < 5, start: "09:00", end: d === 4 ? "15:00" : "17:00" }));
+      const z = (dd: number, h: number, m = 0) => Date.UTC(2026, 9, 29 + dd, h + 5, m); // Central (CDT) wall clock
+      await ctx.db.insert("callSettings", { businessId: w.A, lengthMin: 30, bufferMin: 10, aheadDays: 30, noticeHours: 4, hours, calendarId: PICKED,
+        busy: { at: Date.now() + 10 * 365 * DAY, s: now, e: now + 31 * DAY, spans: [{ s: z(1, 10), e: z(1, 10, 30) }, { s: z(2, 9), e: z(2, 10) }] }, updatedAt: now });
+      const dealId = await ctx.db.insert("deals", { businessId: w.A, title: "Tom Silva", stage: "lead", source: "call", contactEmail: "tom@silvaroasters.example",
+        lead: { name: "Tom Silva", email: "tom@silvaroasters.example", message: "We're opening a second shop in the spring and want a launch video.", fields: [], at: now - 2 * HOUR },
+        history: [{ kind: "call", at: now - 2 * HOUR, detail: "Booked a call: Fri, Oct 30, 10:00 AM" }], createdAt: now - 2 * HOUR, updatedAt: now - 2 * HOUR });
+      const token = "kitcalltoken0000000000001";
+      await ctx.db.insert("calls", { businessId: w.A, dealId, name: "Tom Silva", email: "tom@silvaroasters.example", note: "We're opening a second shop in the spring and want a launch video.",
+        start: z(1, 10), end: z(1, 10, 30), tz: "America/New_York", status: "booked", token, event: { id: "kitcall1", calendarId: PICKED }, meet: "https://meet.google.com/abc-defg-hij",
+        notice: { kind: "booked", at: now - 2 * HOUR }, history: [], createdAt: now - 2 * HOUR, updatedAt: now - 2 * HOUR });
+      return { slug: biz.slug, dealId, token };
+    });
+    // Phase 5d step 2: Messages. Harbor Coffee's project thread (Maya, with a file and a read receipt) and Tom Silva's
+    // lead thread (his booked call is a line in it).
+    const msgKit = await t.run(async (ctx) => {
+      const m = (min: number) => now - min * 60_000;
+      const tid = await ctx.db.insert("msgThreads", { businessId: w.A, kind: "project", projectId: w.p1, lastAt: m(19), lastText: "Got them, thank you.", lastSide: "owner", lastName: "Heston Hill", createdAt: m(60) });
+      const file = await ctx.storage.store(new Blob([new Uint8Array(4_400_000)], { type: "application/zip" }));
+      const msg = (threadId: typeof tid, side: "owner" | "client" | "lead", name: string, email: string, text: string, at: number, files: Array<{ storageId: typeof file; name: string; size: number; type: string }> = []) =>
+        ctx.db.insert("messages", { businessId: w.A, threadId, side, name, email, text, files, createdAt: at });
+      await msg(tid, "client", "Maya Brooks", "maya@harborcoffee.com", "Hi Heston, can we move the Thursday shoot start to 10?", m(48));
+      await msg(tid, "owner", "Heston Hill", "heston@wranglerproductions.com", "Yes, 10 works. I will update the call sheet.", m(40));
+      await msg(tid, "client", "Maya Brooks", "maya@harborcoffee.com", "Here are the logo files.", m(26), [{ storageId: file, name: "Logo-files.zip", size: 4_400_000, type: "application/zip" }]);
+      await msg(tid, "owner", "Heston Hill", "heston@wranglerproductions.com", "Got them, thank you.", m(19));
+      await ctx.db.insert("msgReads", { businessId: w.A, threadId: tid, who: "maya@harborcoffee.com", name: "Maya Brooks", readAt: m(8) });
+      await ctx.db.insert("msgReads", { businessId: w.A, threadId: tid, who: "owner", name: "Heston Hill", readAt: m(19) });
+      const lead = await ctx.db.insert("msgThreads", { businessId: w.A, kind: "lead", dealId: callKit.dealId, token: "kitleadthreadtoken000001", leadName: "Tom Silva", leadEmail: "tom@silvaroasters.example", lastAt: m(5), lastText: "Looking forward to Friday. Should I send the brief ahead?", lastSide: "lead", lastName: "Tom Silva", createdAt: m(120) });
+      const call = (await ctx.db.query("calls").collect())[0];
+      await ctx.db.insert("messages", { businessId: w.A, threadId: lead, side: "system", name: "", text: "", files: [], call: { callId: call._id, what: "booked", start: call.start, end: call.end, meet: true }, createdAt: m(120) });
+      await msg(lead, "lead", "Tom Silva", "tom@silvaroasters.example", "Looking forward to Friday. Should I send the brief ahead?", m(5));
+      return { tid, lead, token: "kitleadthreadtoken000001" };
+    });
     const OWNER: [string, Record<string, unknown>][] = [
+      ["siteWatch.summary", {}], ["siteWatch.report", {}],
+      ...sw.ids.map((id): [string, Record<string, unknown>] => ["siteWatch.finding#" + id, { id }]),
+      ...sw.runs.map((id): [string, Record<string, unknown>] => ["siteWatch.run#" + id, { id }]),
       ["users.me", {}], ["business.brand", {}], ["business.settings", {}], ["payments.settings", {}], ["library.overview", {}], ["activity.feed", { limit: 100 }], ["activity.recent", {}], ["home.needs", {}],
       ["sign.list", {}], ["builder.listBuilds", {}], ["builder.listTemplates", {}], ["builder.listClauses", {}], ["sign.ownerSignature", {}],
       ["clients.listInvites", {}], ["clients.directory", {}], ["clients.page", { clientId: w.harbor }], ["clients.people", { clientId: w.harbor }],
@@ -184,8 +437,14 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["sign.pendingRequests", {}], ["approvals.forVideo", { videoId: w.harbor30.v }], ["sign.requestsFor", { documentId: w.d1 }],
 ["builder.getBuild#" + b1, { buildId: b1 }], ["builder.getProfile", {}], ["builder.listFonts", {}], ["builder.listStyles", {}],
       ["sign.get#" + w.d1, { documentId: w.d1 }], ["sign.get#" + w.d2, { documentId: w.d2 }], ["sign.get#" + w.d3, { documentId: w.d3 }],
-      ["projects.page#" + w.p1, { projectId: w.p1 }], ["projects.nextRound#" + w.harbor30.v, { videoId: w.harbor30.v }],
+      ["projects.page#" + w.p1, { projectId: w.p1 }], ["shoots.forProject#" + w.p1, { projectId: w.p1 }], ["fileRequests.forProject#" + w.p1, { projectId: w.p1 }], ["briefs.forProject#" + w.p1, { projectId: w.p1 }], ["briefs.settings", {}], ["calendar.settings", {}], ["projects.nextRound#" + w.harbor30.v, { videoId: w.harbor30.v }],
+      ["footage.settings", {}], ["footage.forProject#" + w.p1, { projectId: w.p1 }], ["testimonials.list", {}], ["testimonials.projectsFor#" + w.harbor, { clientId: w.harbor }],
       ["invoices.list", {}], ["invoices.overview", { tzOffsetMin: 300 }], ["invoices.options", {}], ["invoices.forProject#" + w.p1, { projectId: w.p1 }],
+      ["production.overview", {}], ["production.shoots", {}], ["messages.threads", {}], ["messages.unread", {}], ["messages.thread#" + msgKit.tid, { threadId: msgKit.tid }], ["messages.thread#" + msgKit.lead, { threadId: msgKit.lead }], ["messages.leadPage#" + msgKit.token, { token: msgKit.token }], ["messages.startOptions", {}], ["calls.settings", {}], ["calls.forDeal#" + callKit.dealId, { dealId: callKit.dealId }], ["crm.deal#" + callKit.dealId, { dealId: callKit.dealId }], ["calls.page#" + callKit.slug, { slug: callKit.slug }], ["calls.manage#" + callKit.token, { token: callKit.token }], ["help.list", {}], ["help.guide#signing-in", { slug: "signing-in" }], ["help.guide#paying-an-invoice", { slug: "paying-an-invoice" }], ["gear.list", {}], ["gear.exportCsv", {}], ["gear.forShoot#" + shootId, { shootId }], ...Object.values(gearIds).map((id): [string, Record<string, unknown>] => ["gear.get#" + id, { gearId: id }]), ["production.projectsForShoot", {}], ["callSheets.list", {}], ["callSheets.newOptions", {}], ["calendarSync.range", calRange], ["calendarSync.linkOptions", {}],
+      ["overviews.clients", {}], ["overviews.review", {}], ["overviews.docs", {}], ["overviews.proposals", {}], ["overviews.vendors", {}], ["home.dashboard", { tzOffsetMin: 300 }], ["crm.due", {}],
+      ...sheetIds.map(({ id }): [string, Record<string, unknown>] => ["callSheets.get#" + id, { callSheetId: id }]),
+      ...sheetIds.filter((x) => x.buildId).map(({ buildId }): [string, Record<string, unknown>] => ["builder.getBuild#" + buildId, { buildId }]),
+      ...[w.p2, w.p3, w.p4].map((p): [string, Record<string, unknown>] => ["shoots.forProject#" + p, { projectId: p }]),
       ["invoices.get#" + invIds.paid, { invoiceId: invIds.paid }], ["invoices.get#" + invIds.due, { invoiceId: invIds.due }], ["invoices.get#" + invIds.draft, { invoiceId: invIds.draft }],
     ];
     const shareTokens = await t.run(async (ctx) => (await ctx.db.query("shares").collect()).map((x) => (x as unknown as { token: string }).token));
@@ -197,8 +456,10 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["waveforms.forVersion#" + w.harbor30.last, { versionId: w.harbor30.last, share: { token: shareTokens[0] } }],
       ["transcripts.forVersion#" + w.harbor30.last, { versionId: w.harbor30.last, share: { token: shareTokens[0] } }],
       ["approvals.forVideo#" + w.harbor30.v, { videoId: w.harbor30.v, share: { token: shareTokens[0] } }],
-      ["projects.mine", {}], ["projects.forClient#" + w.p1, { projectId: w.p1 }],
-      ["invoicePay.mine", {}], ...["kitpaidtoken000000001", "kitduetoken0000000002", "kitproctoken000000003"].map((tok): [string, Record<string, unknown>] => ["invoicePay.page#" + tok, { token: tok }])];
+      ["messages.mine", {}], ["messages.unread", {}], ["messages.clientThreadPage#" + msgKit.tid, { threadId: msgKit.tid }], ["help.list", {}], ["help.guide#paying-an-invoice", { slug: "paying-an-invoice" }], ["projects.mine", {}], ["projects.forClient#" + w.p1, { projectId: w.p1 }], ["shoots.forClientProject#" + w.p1, { projectId: w.p1 }], ["shoots.page#" + shootId, { shootId }], ["fileRequests.forClientProject#" + w.p1, { projectId: w.p1 }], ["fileRequests.page#" + reqIds.a, { requestId: reqIds.a }], ["fileRequests.page#" + reqIds.b, { requestId: reqIds.b }],
+      ["briefs.forClientProject#" + w.p1, { projectId: w.p1 }], ["briefs.page#" + briefId, { briefId }],
+      ["footage.forClientProject#" + w.p1, { projectId: w.p1 }], ["testimonials.ask#" + askId, { noteId: askId }],
+      ["callSheets.forClient#" + prod.C.id, { callSheetId: prod.C.id }], ["callSheets.forClientProject#" + w.p1, { projectId: w.p1 }], ["invoicePay.mine", {}], ...["kitpaidtoken000000001", "kitduetoken0000000002", "kitproctoken000000003"].map((tok): [string, Record<string, unknown>] => ["invoicePay.page#" + tok, { token: tok }])];
     const run = async (as: typeof owner, list: [string, Record<string, unknown>][]) => {
       const out: Record<string, unknown> = {};
       for (const [key, args] of list) {
@@ -212,7 +473,22 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
     // The PDFs in convex-test storage can't be fetched by a browser: point them at the kit's sample PDF.
     const pdfs = (v: unknown): unknown => JSON.parse(JSON.stringify(v), (k, x) => ((k === "fileUrl" || k === "finalUrl") && typeof x === "string" ? "/kit-pdf/" : x));
     for (const k of Object.keys(owned)) if (k.startsWith("sign.get#")) owned[k] = pdfs(owned[k]);
-    const fixtures = { owner: owned, client: await run(client, CLIENT), ids: { invoices: invIds, shares: shareTokens, harbor: w.harbor, video: w.harbor30.v, docSent: w.d1, docSigned: w.d2, docDraft: w.d3, notes: noteIds } };
+    // The call-sheet guest (signed in), and the link's own page for a guest who isn't (guests.intro answers anyone).
+    const GUEST: [string, Record<string, unknown>][] = [["users.me", {}], ["business.brand", {}], ["guests.home", {}],
+      ...(["A", "C", "P"] as const).map((k): [string, Record<string, unknown>] => ["guests.sheet#" + guest.tokens[k], { token: guest.tokens[k] }])];
+    const guestOwn = await run(t.withIdentity({ subject: guest.sub }) as never, GUEST);
+    Object.assign(guestOwn, await run(t as never, (["A", "C", "P"] as const).map((k): [string, Record<string, unknown>] => ["guests.intro#" + guest.tokens[k], { token: guest.tokens[k] }])));
+    if (!guestOwn["business.brand"]) guestOwn["business.brand"] = owned["business.brand"];
+    // An owner with nothing yet: every page that can be asked without a record's id, answered by a business with no records.
+    const empty = convexTest(schema, modules);
+    const esub = await empty.run(async (ctx) => {
+      const A = await ctx.db.insert("businesses", { slug: "wrangler", name: "Wrangler Productions", legalName: "Hill Creative LLC", ownerName: "Heston Hill", createdAt: 0 });
+      const heston = await ctx.db.insert("users", { email: "heston@wranglerproductions.com", name: "Heston Hill", role: "owner" });
+      await ctx.db.insert("memberships", { businessId: A, email: "heston@wranglerproductions.com", userId: heston, role: "owner", createdAt: 0 });
+      return `${heston}|${await ctx.db.insert("authSessions", { userId: heston, expirationTime: now + 30 * DAY })}`;
+    });
+    const emptyOwn = await run(empty.withIdentity({ subject: esub }) as never, OWNER.filter(([k, a]) => !k.includes("#") && (k === "calendarSync.range" || Object.values(a).every((x) => typeof x === "number" || typeof x === "boolean"))));
+    const fixtures = { owner: owned, client: await run(client, CLIENT), guest: guestOwn, empty: emptyOwn, ids: { prod: { sheets: Object.fromEntries(Object.entries({ A: prod.A, B: prod.B, C: prod.C, D: prod.D, E: prod.E, F: prod.F, G: prod.G, P: prod.P }).map(([k, x]) => [k, { id: x.id, buildId: x.buildId }])), guest: guest.tokens, shoots: prod.shoots },  invoices: invIds, shares: shareTokens, harbor: w.harbor, video: w.harbor30.v, docSent: w.d1, docSigned: w.d2, docDraft: w.d3, notes: noteIds, gear: gearIds, calls: callKit, messages: msgKit, shoot: shootId, project: w.p1, requests: reqIds, brief: briefId } };
     writeFileSync(join(__dirname, "..", "src", "dev", "fixtures.json"), JSON.stringify(fixtures, null, 1));
     vi.useRealTimers();
   });

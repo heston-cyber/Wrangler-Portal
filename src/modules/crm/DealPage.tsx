@@ -13,6 +13,8 @@ import { linkProps, navigate } from "../../lib/router";
 import { errText } from "../docs/pages/common";
 import { dateShort, money } from "../payments/common";
 import { AddFollowUp, FollowUpRow, STAGES, type Stage } from "./common";
+import { UpcomingCall } from "../calls/Calls";
+import { MessageLeadButton } from "../messages/Messages";
 
 const when = (t: number) => new Date(t).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
@@ -24,7 +26,7 @@ export default function DealPage({ dealId }: { dealId: string }) {
   const [toast, show] = useToast();
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
-  const top = <TopBar><a {...linkProps("/clients")}>Clients</a><Sep /><a {...linkProps("/clients/pipeline")}>Pipeline</a>{d && <><Sep /><span className="here">{d.company?.name ?? d.lead?.company ?? d.title}</span></>}</TopBar>;
+  const top = <TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/clients")}>Clients</a><Sep /><a {...linkProps("/clients/pipeline")}>Pipeline</a>{d && <><Sep /><span className="here">{d.company?.name ?? d.lead?.company ?? d.title}</span></>}</TopBar>;
   if (d === undefined) return <>{top}<div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
   if (d === null) return <>{top}<div className="wp-page"><EmptyState icon="activity" title="This card isn't here." body="It may have been taken off the board." actions={<ButtonLink to="/clients/pipeline">Pipeline</ButtonLink>} /></div></>;
   const id = d._id as Id<"deals">;
@@ -72,19 +74,21 @@ export default function DealPage({ dealId }: { dealId: string }) {
             <Card label="History" head={<SectionHead label="History" />}>
               {[...d.history].reverse().slice(0, 12).map((h, i) => (
                 <div key={i} className="wp-rowwrap">{i > 0 && <Divider />}
-                  <ListRow className="ilead" lead={{ icon: "activity" }} title={h.detail ? `${STAGES.find((s) => s.key === h.kind)?.name ?? (h.kind === "moved" ? "Moved" : h.kind === "created" ? "Added" : h.kind === "closed" ? "Taken off the board" : h.kind === "website" ? "From the website" : h.kind)} · ${h.detail}` : (STAGES.find((s) => s.key === h.kind)?.name ?? (h.kind === "created" ? "Added" : h.kind === "website" ? "From the website" : h.kind))}
+                  <ListRow className="ilead" lead={{ icon: "activity" }} title={h.detail ? `${STAGES.find((s) => s.key === h.kind)?.name ?? (h.kind === "moved" ? "Moved" : h.kind === "created" ? "Added" : h.kind === "closed" ? "Taken off the board" : h.kind === "website" ? "From the website" : h.kind === "call" ? "Call" : h.kind)} · ${h.detail}` : (STAGES.find((s) => s.key === h.kind)?.name ?? (h.kind === "created" ? "Added" : h.kind === "website" ? "From the website" : h.kind))}
                     meta={`${when(h.at)}${h.by ? ` · ${h.by}` : ""}`} />
                 </div>
               ))}
             </Card>
           </div>
           <div className="col right">
+            <UpcomingCall dealId={id} />
             {!d.closedAt && (
               <Card label="Next steps" head={<SectionHead label="Next steps" />}>
                 <div className="crm-steps">
                   <ButtonLink variant="primary" to={newEstimate}>New estimate</ButtonLink>
                   <ButtonLink to={`/payments/quotes/new?${d.clientId ? `client=${d.clientId}` : `deal=${id}`}`}>Quick quote</ButtonLink>
                   <ButtonLink to={`/proposals/new?${d.clientId ? `client=${d.clientId}&deal=${id}` : `deal=${id}`}`}>New proposal</ButtonLink>
+                  {d.stage === "lead" && (d.lead?.email || d.contactEmail) && <MessageLeadButton dealId={id} />}
                   <Button onClick={() => setAdding(true)}>Add follow-up</Button>
                   <button type="button" className="btn ghost" disabled={busy} onClick={() => void notLead()}>{web && d.stage === "lead" ? "Not a lead" : "Take off the board"}</button>
                   <p className="wp-small">{web && d.stage === "lead" ? "Not a lead archives the card. Spam is filtered before a card is made." : "The card is kept, just off the board."}</p>

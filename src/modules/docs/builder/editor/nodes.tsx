@@ -4,6 +4,8 @@ import { createContext, useContext } from "react";
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import { BookmarkPlus, Plus, X } from "lucide-react";
 import { fill, money, type BuildDoc, type ItemRow, type PNode, newId, totals } from "../../../../../convex/lib/wsBuilder";
+import { locationOf, shownWeather, weatherOf, type LocationAttrs, type WeatherView } from "../../../../../convex/lib/callSheet";
+import { StatusChip, type Tone } from "../../../../ui/wp";
 
 export type BuilderCtxValue = {
   doc: BuildDoc;
@@ -11,7 +13,21 @@ export type BuilderCtxValue = {
   px: (pt: number) => number;
   onDetails: () => void;
   onSaveClause: (section: PNode) => void;
+  callSheet?: boolean; // Phase 5b step 3: a call sheet's containers have no initials or clause library
+  // D148: the call sheet's forecast (callSheets.get's `weather`: the forecast's own state, before a typed line), and its id
+  // for Refresh forecast. Absent in a template (no shoot yet). onWeather opens the block's settings (the Format tab).
+  weather?: WeatherView | null;
+  callSheetId?: string | null;
+  onWeather?: () => void;
 };
+
+/** The Weather block's four states (865:11728): its chip. */
+export const WX_CHIP: Record<WeatherView["state"], { text: string; tone: Tone }> = {
+  forecast: { text: "Forecast", tone: "success" }, typed: { text: "Typed by you", tone: "neutral" }, early: { text: "Not yet", tone: "warning" }, none: { text: "No forecast", tone: "neutral" },
+};
+/** What the block shows now: its own typed line over the forecast (null in a template, which has no shoot yet). */
+export const weatherNow = (ctx: BuilderCtxValue | null, attrs: Record<string, unknown>): WeatherView | null =>
+  ctx?.weather ? shownWeather(weatherOf({ type: "weather", attrs }), ctx.weather) : null;
 export const BuilderCtx = createContext<BuilderCtxValue | null>(null);
 
 export function SectionView({ node, updateAttributes }: NodeViewProps) {
@@ -20,10 +36,10 @@ export function SectionView({ node, updateAttributes }: NodeViewProps) {
   return (
     <NodeViewWrapper as="section" className={`wsb-sec ${a.look === "card" ? "wsb-card" : "wsb-plain"}`} data-look={a.look}>
       <NodeViewContent className="wsb-sec-body" />
-      <div className="wsb-secfoot" contentEditable={false}>
+      {!ctx?.callSheet && <div className="wsb-secfoot" contentEditable={false}>
         <label className="wsb-check"><input type="checkbox" checked={!!a.initials} onChange={(e) => updateAttributes({ initials: e.target.checked })} />Client initials here</label>
         <button type="button" className="btn ghost sm" onClick={() => ctx?.onSaveClause(node.toJSON() as PNode)}><BookmarkPlus size={13} />Save to clause library</button>
-      </div>
+      </div>}
     </NodeViewWrapper>
   );
 }
@@ -101,6 +117,53 @@ function Atom({ node, updateAttributes, ctx }: NodeViewProps & { ctx: BuilderCtx
     case "divider": return <div className={`wsb-sep ${doc.style.separator}`} title="Divider (its look is set in Style › Separator)" />;
     case "pagebreak": return <div className="wsb-break"><span>Page break</span></div>;
     case "spacer": return <div className="wsb-spacer" style={{ height: px(Number(a.size) || 18) }} title="Space (set its height in Format)" />;
+    // Phase 5b step 3: the call sheet's blocks, edited where they sit.
+    case "location": {
+      const l = locationOf(node.toJSON() as PNode);
+      const set = (p: Partial<LocationAttrs>) => updateAttributes({ ...l, ...p });
+      const inp = (k: keyof LocationAttrs, ph: string, type = "text") => <input type={type} value={String(l[k] ?? "")} placeholder={ph} aria-label={ph} onChange={(e) => set({ [k]: e.target.value } as Partial<LocationAttrs>)} />;
+      return (
+        <div className="wsb-cs-loc">
+          <div><span className="wsb-cap">Call times</span>
+            <label>Crew {inp("crewCall", "Crew call", "time")}</label><label>Talent {inp("talentCall", "Talent call", "time")}</label><label>Wrap {inp("wrap", "Wrap", "time")}</label></div>
+          <div><span className="wsb-cap">Location</span>
+            {inp("name", "Place name")}{inp("address", "Address")}{inp("parking", "Parking and load-in")}</div>
+        </div>
+      );
+    }
+    // D148: the Weather block: one line, from the forecast or typed over; its settings are in the Format tab.
+    case "weather": {
+      const w = weatherNow(ctx, a);
+      const line = w ? w.line : weatherOf({ type: "weather", attrs: a }).line;
+      return (
+        <div className="wsb-cs-wx" onClick={ctx.onWeather} title="Weather: its settings are in Format">
+          <span className="wsb-cap">Weather</span>
+          <span className={line ? "" : "secondary"}>{line || (w ? "(empty)" : "Fills in from the forecast once it's a shoot's call sheet")}</span>
+          {w && <StatusChip tone={WX_CHIP[w.state].tone}>{WX_CHIP[w.state].text}</StatusChip>}
+        </div>
+      );
+    }
+    case "schedule": case "crew": case "contacts": {
+      const cols: Array<[string, string, string]> = node.type.name === "schedule" ? [["time", "Time", "time"], ["what", "What happens", "text"], ["who", "Who", "text"], ["notes", "Notes", "text"]]
+        : node.type.name === "crew" ? [["name", "Name", "text"], ["role", "Role", "text"], ["call", "Call", "time"], ["phone", "Phone", "tel"]]
+        : [["label", "Who", "text"], ["name", "Name", "text"], ["phone", "Phone", "tel"]];
+      type Row = Record<string, string> & { id: string };
+      const rows = (a.rows as Row[]) ?? [];
+      const set = (r: Row[]) => updateAttributes({ rows: r });
+      const blank = () => ({ id: newId(), ...Object.fromEntries(cols.map(([k]) => [k, ""])) }) as Row;
+      return (
+        <table className={`wsb-items wsb-cs-table wsb-cs-${node.type.name}`}>
+          <thead><tr>{cols.map(([k, label]) => <th key={k}>{label}</th>)}<th /></tr></thead>
+          <tbody>{rows.map((r) => (
+            <tr key={r.id}>
+              {cols.map(([k, label, type]) => <td key={k}><input type={type} value={r[k] ?? ""} placeholder={label} aria-label={label} onChange={(e) => set(rows.map((x) => (x.id === r.id ? { ...x, [k]: e.target.value } : x)))} /></td>)}
+              <td><button type="button" className="icon-btn" aria-label="Remove row" onClick={() => set(rows.filter((x) => x.id !== r.id))}><X size={13} /></button></td>
+            </tr>
+          ))}</tbody>
+          <tfoot><tr><td colSpan={cols.length + 1}><button type="button" className="btn ghost sm" onClick={() => set([...rows, blank()])}><Plus size={13} />Add a row</button></td></tr></tfoot>
+        </table>
+      );
+    }
     default: return null;
   }
 }

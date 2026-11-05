@@ -40,7 +40,7 @@ export default function SignDocs() {
   return (
     <>
       <TopBar right={<ButtonLink variant="primary" size="sm" icon="document" className="ws-newbtn" to="/sign/new"><span className="long">New document</span><span className="short">New</span></ButtonLink>}>
-        <a {...linkProps("/sign")}>Docs</a><Sep /><span className="here">All docs</span>
+        <span className="secondary">Docs</span><Sep /><a {...linkProps("/sign")}>Contracts</a><Sep /><span className="here">All contracts</span>
       </TopBar>
       <div className="wp-page docs">
         <div className="ws-tabs"><Tabs label="Status" value={q.status} onChange={(k) => set({ status: k })} items={tabs} /></div>

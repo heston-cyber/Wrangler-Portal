@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 export const modules = import.meta.glob("../convex/**/*.ts");
 
-export type Ids = { requestId: Id<"wsRequests">; buildId: Id<"wsBuilds">; templateId: Id<"wsTemplates">; clauseId: Id<"wsClauses">; styleId: Id<"wsStyles">; docId: Id<"wsDocuments">; wsVersionId: Id<"wsVersions">; projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage">; clientRecId: Id<"clients">; personId: Id<"clientPeople">; inboxItemId: Id<"inboxItems">; inboxNoteId: Id<"inboxNotes">; deliveryFileId: Id<"deliveryFiles">; invoiceId: Id<"invoices">; planId: Id<"plans">; subscriptionId: Id<"subscriptions">; dealId: Id<"deals">; followUpId: Id<"followUps">; estimateId: Id<"estimates">; entryId: Id<"ledgerEntries">; quoteId: Id<"quotes">; proposalId: Id<"proposals">; vendorId: Id<"vendors">; bookingId: Id<"vendorBookings">; briefingId: Id<"briefings">; businessId: Id<"businesses">; vendorInvoiceId: Id<"vendorInvoices"> };
+export type Ids = { requestId: Id<"wsRequests">; buildId: Id<"wsBuilds">; templateId: Id<"wsTemplates">; clauseId: Id<"wsClauses">; styleId: Id<"wsStyles">; docId: Id<"wsDocuments">; wsVersionId: Id<"wsVersions">; projectId: Id<"projects">; videoId: Id<"videos">; shareId: Id<"shares">; replyId: Id<"replies">; versionId: Id<"versions">; noteId: Id<"notes">; fileId: Id<"dropFiles">; inviteId: Id<"invites">; keyId: Id<"connectorKeys">; storageId: Id<"_storage">; clientRecId: Id<"clients">; personId: Id<"clientPeople">; inboxItemId: Id<"inboxItems">; inboxNoteId: Id<"inboxNotes">; deliveryFileId: Id<"deliveryFiles">; invoiceId: Id<"invoices">; planId: Id<"plans">; subscriptionId: Id<"subscriptions">; dealId: Id<"deals">; followUpId: Id<"followUps">; estimateId: Id<"estimates">; entryId: Id<"ledgerEntries">; quoteId: Id<"quotes">; proposalId: Id<"proposals">; offerPersonId: Id<"offerRecipients">; vendorId: Id<"vendors">; bookingId: Id<"vendorBookings">; briefingId: Id<"briefings">; businessId: Id<"businesses">; vendorInvoiceId: Id<"vendorInvoices">; shootId: Id<"shoots">; fileRequestId: Id<"fileRequests">; fileUploadId: Id<"fileUploads">; briefId: Id<"briefs">; testimonialId: Id<"testimonials">; callSheetId: Id<"callSheets">; calendarEventId: Id<"calendarEvents">; gearId: Id<"gear">; callId: Id<"calls">; callToken: string; threadId: Id<"msgThreads">; guestToken: string; guestInvitedSub: string };
 
 // Minimal valid arguments for each function, so the access check (not argument validation) is what refuses.
 export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
@@ -21,7 +21,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "library.projectNames": {}, "library.overview": {}, "library.createClient": { name: "X" }, "library.markOpened": { videoId: ids.videoId },
     "library.renameProject": { projectId: ids.projectId, name: "X" }, "library.setVersionDescription": { versionId: ids.versionId, description: "x" },
     "library.createProject": { name: "X" }, "library.createVideo": { projectId: ids.projectId, title: "X" }, "library.renameVideo": { videoId: ids.videoId, title: "X" },
-    "library.video": { videoId: ids.videoId }, "library.setStartTimecode": { versionId: ids.versionId, startTimecode: "01:00:00:00" },
+    "library.video": { videoId: ids.videoId }, "library.downloadCheck": { versionId: ids.versionId }, "library.downloadLink": { versionId: ids.versionId }, "library.setStartTimecode": { versionId: ids.versionId, startTimecode: "01:00:00:00" },
     "library.reportFrameCount": { versionId: ids.versionId, frameCount: 10 }, "library.retryCopy": { versionId: ids.versionId }, "library.deleteVersion": { versionId: ids.versionId }, "library.deleteProject": { projectId: ids.projectId }, "library.setPoster": { versionId: ids.versionId, url: "https://wrangler-review-stills.b-cdn.net/stills/2026/10/a.jpg" }, "views.forVideo": { videoId: ids.videoId }, "views.beat": { versionId: ids.versionId, session: "abcdefgh12345678", watchedSec: 1, posSec: 1, lengthSec: 10 }, "library.deleteVideo": { videoId: ids.videoId }, "library.deleteVideos": { videoIds: [ids.videoId] },
     "library.deleteClient": { client: "X", typed: "X" }, "library.approveFinal": { videoId: ids.videoId, keep: 1 }, "library.clearFinal": { videoId: ids.videoId },
     "notes.forVersion": { versionId: ids.versionId }, "notes.create": { versionId: ids.versionId, kind: "general", text: "x" }, "notes.editText": { noteId: ids.noteId, text: "y" },
@@ -97,6 +97,8 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "quotes.deleteDraft": { quoteId: ids.quoteId }, "quotes.send": { quoteId: ids.quoteId }, "quotes.voidQuote": { quoteId: ids.quoteId }, "quotes.answerMove": { quoteId: ids.quoteId, yes: false },
     "quotes.later": { quoteId: ids.quoteId, what: "seen" }, "quotes.draftFrom": { quoteId: ids.quoteId, contract: true },
     "quotes.page": { token: "x".repeat(24) }, "quotes.markViewed": { token: "x".repeat(24) },
+    "quotes.stopLink": { quoteId: ids.quoteId, personId: ids.offerPersonId }, "quotes.newLink": { quoteId: ids.quoteId }, // D149
+    "proposals.stopLink": { proposalId: ids.proposalId, personId: ids.offerPersonId }, "proposals.newLink": { proposalId: ids.proposalId },
     "proposals.list": {}, "proposals.get": { proposalId: "nope" }, "proposals.create": {}, "proposals.copy": { proposalId: ids.proposalId }, "proposals.deleteDraft": { proposalId: ids.proposalId },
     "proposals.templates": {}, "proposals.newTemplate": {}, "proposals.send": { proposalId: ids.proposalId }, "proposals.withdraw": { proposalId: ids.proposalId },
     "proposals.later": { proposalId: ids.proposalId, what: "seen" }, "proposals.startContract": { proposalId: ids.proposalId },
@@ -110,8 +112,11 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "bookings.form": {}, "bookings.list": {}, "bookings.forProject": { projectId: "nope" }, "bookings.forVendor": { vendorId: "nope" }, "bookings.get": { bookingId: "nope" },
     "bookings.create": { vendorId: ids.vendorId, projectId: ids.projectId, role: "Shooter", start: "2030-01-01", end: "2030-01-02", cents: 100000, unit: "day" }, "bookings.cancel": { bookingId: ids.bookingId },
     "briefings.templates": {}, "briefings.list": {}, "briefings.forVendor": { vendorId: "nope" }, "briefings.get": { briefingId: "nope" }, "briefings.create": { bookingId: ids.bookingId },
-    "briefings.setBooking": { briefingId: ids.briefingId, bookingId: ids.bookingId }, "briefings.deleteDraft": { briefingId: ids.briefingId }, "briefings.copy": { briefingId: ids.briefingId },
-    "briefings.send": { briefingId: ids.briefingId, resend: true },
+    "briefings.deleteDraft": { briefingId: ids.briefingId }, "briefings.copy": { briefingId: ids.briefingId },
+    // D147 (Nov 4): briefings sent freely: Send to, Share (email 58 and Copy link), the link switch, and the no-login page
+    "briefings.setDetails": { briefingId: ids.briefingId, projectId: null, sendTo: [{ email: "pat@example.com" }] }, "briefings.setLinkOff": { briefingId: ids.briefingId, off: true },
+    "briefings.share": { briefingId: ids.briefingId, to: [{ email: "pat@example.com" }], copyLink: true },
+    "briefings.page": { token: "nope-nope-nope-nope" }, "briefings.opened": { token: "nope-nope-nope-nope" }, "briefings.markRead": { token: "nope-nope-nope-nope" },
     "vendors.invite": { vendorId: ids.vendorId },
     "vendorPortal.businesses": {}, "vendorPortal.counts": { businessId: ids.businessId }, "vendorPortal.home": {}, "vendorPortal.bookings": {}, "vendorPortal.booking": { bookingId: "nope" },
     "vendorPortal.accept": { bookingId: ids.bookingId }, "vendorPortal.decline": { bookingId: ids.bookingId, reason: "Too far" }, "vendorPortal.briefings": {},
@@ -122,6 +127,29 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "vendorPortal.setW9": { businessId: ids.businessId, storageId: ids.storageId, name: "w9.pdf" }, "vendors.invoices": { vendorId: "nope" },
     "vendorPayments.list": {}, "vendorPayments.totals1099": {}, "vendorPayments.get": { invoiceId: "nope" }, "vendorPayments.approve": { invoiceId: ids.vendorInvoiceId },
     "vendorPayments.decline": { invoiceId: ids.vendorInvoiceId, reason: "No" }, "vendorPayments.markPaid": { invoiceId: ids.vendorInvoiceId, paidOn: "2026-01-02", method: "ACH" },
+    "calendar.settings": {}, "calendar.authUrl": {}, "calendar.calendars": {}, "calendar.save": { calendarId: "x", calendarName: "x", inviteVendors: false, inviteClient: false }, "calendar.disconnect": {}, "calendar.finish": { code: "c", state: "s" },
+    "fileRequests.forProject": { projectId: "nope" }, "fileRequests.create": { projectId: ids.projectId, title: "X", due: "2030-01-02", remind: false }, "fileRequests.setStatus": { requestId: ids.fileRequestId, status: "closed" },
+    "users.switchSide": { side: "vendor" }, "users.setTools": { tools: {} }, "briefs.settings": {}, "briefs.saveSettings": { questionnaire: { steps: [] } }, "briefs.resetSettings": {}, "briefs.forProject": { projectId: "nope" }, "briefs.send": { projectId: ids.projectId },
+    "briefs.remind": { briefId: ids.briefId }, "briefs.forEstimate": { briefId: "nope" }, "briefs.forClientProject": { projectId: "nope" }, "briefs.page": { briefId: "nope" },
+    "briefs.save": { briefId: ids.briefId, changes: {}, step: 0 }, "briefs.submit": { briefId: ids.briefId, changes: {} },
+    "fileRequests.forClientProject": { projectId: "nope" }, "fileRequests.page": { requestId: "nope" }, "fileRequests.start": { requestId: ids.fileRequestId, name: "x.pdf", size: 10 }, "fileRequests.finishDirect": { uploadId: ids.fileUploadId },
+    "calls.page": { slug: "matrix" }, "calls.refresh": { slug: "matrix" }, "calls.book": { slug: "matrix", start: 0, name: "N", email: "n@x.example", tz: "America/Chicago" },
+    // The private link is the lead's own key (like a quote link): the matrix uses a made-up one; calls.test.ts uses real ones.
+    "calls.manage": { token: ids.callToken }, "calls.cancel": { token: "x".repeat(24) }, "calls.reschedule": { token: "x".repeat(24), start: 0 }, // manage is read-only, so it gets the real link (review L7)
+    "calls.settings": {}, "calls.saveSettings": { lengthMin: 30, bufferMin: 10, aheadDays: 30, noticeHours: 4, hours: [0, 1, 2, 3, 4, 5, 6].map((d) => ({ on: d < 5, start: "09:00", end: "17:00" })) },
+    "calls.forDeal": { dealId: "nope" }, "calls.done": { callId: ids.callId },
+    "calls.verify": { token: "x".repeat(24), code: "123456" }, "calls.resendCode": { token: "x".repeat(24) }, "calls.release": { token: "x".repeat(24) }, "calls.setPaused": { paused: false },
+    "messages.threads": {}, "messages.thread": { threadId: ids.threadId }, "messages.send": { threadId: ids.threadId, text: "x" }, "messages.unread": {},
+    "messages.mine": {}, "messages.clientThreadPage": { threadId: ids.threadId }, "messages.clientSend": { threadId: ids.threadId, text: "x" },
+    "messages.leadPage": { token: "x".repeat(24) }, "messages.leadSend": { token: "x".repeat(24), text: "x" }, "messages.leadRead": { token: "x".repeat(24) }, "messages.leadUploadUrl": { token: "x".repeat(24) },
+    "messages.uploadUrl": {}, "messages.read": { threadId: ids.threadId }, "messages.startOptions": {}, "messages.start": { projectId: ids.projectId }, "messages.setLeadLink": { threadId: ids.threadId, off: true },
+    "help.list": {}, "help.guide": { slug: "signing-in" }, "help.edit": { slug: "signing-in" }, "help.reset": { slug: "signing-in" },
+    "gear.list": {}, "gear.get": { gearId: "nope" }, "gear.add": { name: "G", kind: "lens" }, "gear.update": { gearId: ids.gearId, name: "G", kind: "lens" }, "gear.setStatus": { gearId: ids.gearId, status: "in_repair" },
+    "gear.uploadUrl": {}, "gear.setPhoto": { gearId: ids.gearId, storageId: ids.storageId }, "gear.removePhoto": { gearId: ids.gearId },
+    "gear.logMaintenance": { gearId: ids.gearId, date: "2030-02-01", what: "Serviced" }, "gear.exportCsv": {},
+    "gear.forShoot": { shootId: "nope" }, "gear.addToShoot": { shootId: ids.shootId, gearId: ids.gearId }, "gear.removeFromShoot": { shootId: ids.shootId, gearId: ids.gearId },
+    "shoots.forProject": { projectId: "nope" }, "shoots.schedule": { projectId: ids.projectId, ...{ date: "2030-01-02", call: "07:00", location: "X", prepare: [], withOwner: true, bookingIds: [], calendar: false } }, "shoots.update": { shootId: ids.shootId, ...{ date: "2030-01-02", call: "07:00", location: "X", prepare: [], withOwner: true, bookingIds: [], calendar: false } }, "shoots.cancel": { shootId: ids.shootId },
+    "shoots.forClientProject": { projectId: "nope" }, "shoots.page": { shootId: "nope" }, "shoots.confirm": { shootId: ids.shootId },
     "vendorPayouts.status": {}, "vendorPayouts.balance": {}, "vendorPayouts.forInvoice": { invoiceId: "nope" }, "vendorPayouts.pay": { invoiceId: ids.vendorInvoiceId }, "vendorPayouts.checkNow": { invoiceId: ids.vendorInvoiceId },
     "vendorPayouts.askSetup": { vendorId: ids.vendorId }, "vendorPayouts.nothingWentOut": { invoiceId: ids.vendorInvoiceId }, "vendorPayouts.mine": { businessId: ids.businessId }, "vendorPayouts.setupLink": { businessId: ids.businessId }, "vendorPayouts.refreshMine": { businessId: ids.businessId }, "proposals.setDeck": { proposalId: ids.proposalId, kit: "business" },
     "brandKit.get": {}, "brandKit.save": { colors: [], fonts: {}, links: [], tone: [] }, "brandKit.uploadUrl": {}, "brandKit.addFile": { storageId: ids.storageId, name: "x.pdf" }, "brandKit.removeFile": { fileId: ids.storageId },
@@ -136,6 +164,41 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "invoicePay.page": { token: "nope-nope-nope-nope" }, "invoicePay.mine": {}, "invoicePay.markViewed": { token: "nope-nope-nope-nope" },
     "invoicePay.start": { token: "nope-nope-nope-nope" }, "invoicePay.refresh": { token: "nope-nope-nope-nope" }, "invoicePay.ownerLink": { invoiceId: ids.invoiceId },
     "invoiceReminders.setReminders": { on: true, beforeDays: 3, afterDays: 1, everyDays: 7, stopAfter: 3 }, "invoiceReminders.sendReminder": { invoiceId: ids.invoiceId },
+    // Phase 5 (Nov 3): raw footage storage and testimonials
+    "footage.settings": {}, "footage.saveSettings": { on: true, priceCents: 10000, keepDays: 30 }, "footage.forProject": { projectId: "nope" },
+    "footage.recordDrive": { projectId: ids.projectId }, "footage.stop": { projectId: ids.projectId }, "footage.markDone": { projectId: ids.projectId },
+    "footage.reinstate": { projectId: ids.projectId }, "footage.dismissLatePaid": { projectId: ids.projectId },
+    "footage.forClientProject": { projectId: "nope" }, "footage.keep": { projectId: ids.projectId }, "footage.decline": { projectId: ids.projectId },
+    "testimonials.projectsFor": { clientId: ids.clientRecId }, "testimonials.ask": { noteId: "nope" }, "testimonials.send": { noteId: ids.inboxNoteId, working: "x", film: "", permission: false },
+    "production.overview": {}, "production.shoots": {}, "production.projectsForShoot": {},
+    "overviews.clients": {}, "overviews.review": {}, "overviews.docs": {}, "overviews.proposals": {}, "overviews.vendors": {}, "home.dashboard": {}, // Phase 5b step 2
+    "siteWatch.report": {}, "siteWatch.run": { id: "nope" }, "siteWatch.summary": {}, "siteWatch.markDone": { id: "nope" },
+    "siteWatch.finding": { id: "nope" }, "siteWatch.setPaused": { paused: true }, // Phase 5c screens (Nov 4)
+    "testimonials.list": {}, "testimonials.markRead": { testimonialId: ids.testimonialId }, "testimonials.saveAgain": { testimonialId: ids.testimonialId },
+    // Phase 5b step 3: call sheets (the owner's; the client's reader; the vendor's reader in vendorPortal)
+    "callSheets.ensureStarters": {}, "callSheets.list": {}, "callSheets.newOptions": {}, "callSheets.get": { callSheetId: ids.callSheetId },
+    "callSheets.create": { shootId: ids.shootId, how: "blank" }, "callSheets.make": { callSheetId: ids.callSheetId }, "callSheets.deleteDraft": { callSheetId: ids.callSheetId },
+    "callSheets.saveAnswers": { callSheetId: ids.callSheetId, step: 0, answers: { crewCall: "07:00", talentCall: "", wrap: "", locationName: "X", address: "", parking: "", weather: false, schedule: [], notes: "" } },
+    "callSheets.toggle": { callSheetId: ids.callSheetId, id: "client:client@example.com", on: false }, "callSheets.addGuest": { callSheetId: ids.callSheetId, name: "G", email: "g@x.example", role: "Talent" },
+    "callSheets.removeGuest": { callSheetId: ids.callSheetId, id: "guest:x" }, "callSheets.send": { callSheetId: ids.callSheetId, crew: true, client: true },
+    "callSheets.sendUpdate": { callSheetId: ids.callSheetId, changed: "Talent call moved" }, "callSheets.remind": { callSheetId: ids.callSheetId },
+    "callSheets.forClient": { callSheetId: ids.callSheetId }, "callSheets.forClientProject": { projectId: ids.projectId }, "callSheets.opened": { callSheetId: ids.callSheetId },
+    "vendorPortal.callSheet": { callSheetId: ids.callSheetId }, "vendorPortal.callSheets": { businessId: ids.businessId }, "vendorPortal.openCallSheet": { callSheetId: ids.callSheetId },
+    // Phase 5b step 5: Production › Calendar (owner only)
+    "calendarSync.range": { from: "2030-01-01", to: "2030-01-31" }, "calendarSync.linkOptions": {}, "calendarSync.setShown": { calendarId: "cal@x", on: false },
+    "calendarSync.create": { title: "T", date: "2030-01-02", endDate: "2030-01-02", start: "10:00", end: "11:00", guests: [] },
+    "calendarSync.update": { eventId: ids.calendarEventId, title: "T", date: "2030-01-02", endDate: "2030-01-02", start: "10:00", end: "11:00", guests: [], notify: false },
+    "calendarSync.move": { eventId: ids.calendarEventId, date: "2030-01-03", endDate: "2030-01-03", start: "10:00", end: "11:00", notify: false },
+    "calendarSync.undoMove": { eventId: ids.calendarEventId }, "calendarSync.remove": { eventId: ids.calendarEventId },
+    "calendarSync.moveShoot": { shootId: ids.shootId, date: "2030-01-03", call: "08:00", notify: false }, "calendarSync.undoShoot": { shootId: ids.shootId },
+    "calendarSync.moveDate": { projectId: ids.projectId, label: "Cut 1 due", from: "2030-01-05", to: "2030-01-06" },
+    "calendarSync.shootMoveDone": { shootId: ids.shootId }, "calendarSync.askConfirmAgain": { shootId: ids.shootId }, "calendarSync.syncNow": {},
+    // Phase 5b step 4: call-sheet guests (the owner's End access; the guest's link, code and pages)
+    "callSheets.endGuest": { callSheetId: ids.callSheetId, id: "guest:matrix" }, "callSheets.restoreGuest": { callSheetId: ids.callSheetId, id: "guest:matrix" },
+    // D148: Refresh forecast (owner only; looks the forecast up again for one of the owner's own sheets).
+    "callSheets.refreshWeather": { callSheetId: ids.callSheetId },
+    "guests.intro": { token: ids.guestToken }, "guests.sendCode": { token: "nope-nope-nope-nope" },
+    "guests.home": {}, "guests.sheet": { token: ids.guestToken }, "guests.opened": { token: ids.guestToken },
   };
 }
 
@@ -159,7 +222,7 @@ export async function setup() {
     const stranger = await ctx.db.insert("users", { email: "nobody@example.com", name: "Nobody" });
     const client = await ctx.db.insert("users", { email: "client@example.com", name: "Client", role: "client" });
     const sess = async (userId: Id<"users">) => `${userId}|${await ctx.db.insert("authSessions", { userId, expirationTime: Date.now() + 3_600_000 })}`;
-    const projectId = await ctx.db.insert("projects", { name: "P", createdAt: 0 });
+    const projectId = await ctx.db.insert("projects", { name: "P", createdAt: 0, keyDates: [{ label: "Cut 1 due", date: "2030-01-05" }] });
     const videoId = await ctx.db.insert("videos", { projectId, title: "V", createdAt: 0, updatedAt: 0 });
     const versionId = await ctx.db.insert("versions", { videoId, number: 1, status: "ready", bunnyGuid: "g", fileName: "a.mp4", startTimecode: "01:00:00:00", createdAt: 0 } as never);
     const noteId = await ctx.db.insert("notes", { versionId, videoId, kind: "general", text: "n", status: "open", authorName: "Heston", createdAt: 0, updatedAt: 0 } as never);
@@ -191,12 +254,62 @@ export async function setup() {
     const entryId = await ctx.db.insert("ledgerEntries", { projectId, kind: "hours", hours: 1, date: "2030-01-01", createdAt: 0 });
     const quoteId = await ctx.db.insert("quotes", { number: "X-Q-0001", seq: 1, status: "draft", contact: { name: "A", email: "a@b.co" }, title: "T", lines: [], deposit: { kind: "percent", value: 25 }, validUntil: "2030-01-01", totalCents: 0, history: [], createdAt: 0, updatedAt: 0 });
     const proposalId = await ctx.db.insert("proposals", { buildId, number: "X-P-0001", seq: 1, status: "draft", history: [], createdAt: 0, updatedAt: 0 });
+    const offerPersonId = await ctx.db.insert("offerRecipients", { quoteId, email: "p@x.example", token: "matrixmatrixmatrixmatrix", sentAt: 0, opens: 0 }); // D149
     const vendorId = await ctx.db.insert("vendors", { name: "V", email: "v@x.example", roles: [], rates: [], createdAt: 0, updatedAt: 0 });
     const bookingId = await ctx.db.insert("vendorBookings", { vendorId, projectId, role: "Shooter", start: "2030-01-01", end: "2030-01-02", rate: { cents: 100000, unit: "day" }, status: "offered", offeredAt: 0, createdAt: 0, updatedAt: 0 });
     const businessId = (await ctx.db.query("businesses").first())?._id ?? await ctx.db.insert("businesses", { slug: "matrix", name: "Matrix Co", createdAt: 0 });
     const briefingId = await ctx.db.insert("briefings", { buildId, projectId, bookingId, status: "draft", history: [], createdAt: 0, updatedAt: 0 });
     const vendorInvoiceId = await ctx.db.insert("vendorInvoices", { vendorId, bookingId, projectId, number: "INV-0001", mode: "hours", hours: [], lines: [], rate: { cents: 1, unit: "day" }, totalCents: 0, status: "draft", createdAt: 0, updatedAt: 0 });
-    return { vendorInvoiceId, businessId, briefingId, bookingId, vendorId, proposalId, quoteId, dealId, followUpId, estimateId, entryId, subscriptionId, planId, invoiceId, deliveryFileId, clientRecId, personId, inboxItemId, inboxNoteId, requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
+    const shootId = await ctx.db.insert("shoots", { projectId, date: "2030-01-02", call: "07:00", location: "X", prepare: [], crew: [], status: "scheduled", history: [], createdAt: 0, updatedAt: 0 });
+    const gearId = await ctx.db.insert("gear", { name: "Matrix camera", kind: "camera", serial: "SN-1234567", status: "in_service", insuredCents: 100000, createdAt: 0, updatedAt: 0 });
+    await ctx.db.insert("gearMaintenance", { gearId, date: "2030-01-01", what: "Cleaned", nextDue: "2030-06-01", createdAt: 0 });
+    await ctx.db.insert("gearBookings", { gearId, shootId, createdAt: 0 });
+    // Phase 5d step 1: booking calls: the settings and one booked call (its private link's token).
+    await ctx.db.insert("callSettings", { lengthMin: 30, bufferMin: 10, aheadDays: 30, noticeHours: 4, hours: [0, 1, 2, 3, 4, 5, 6].map((d) => ({ on: d < 5, start: "09:00", end: "17:00" })), updatedAt: 0 });
+    const callToken = "matrixcalltoken0123456789";
+    const callId = await ctx.db.insert("calls", { name: "Lead", email: "lead@x.example", start: Date.now() + 5 * 86_400_000, end: Date.now() + 5 * 86_400_000 + 1_800_000, tz: "America/Chicago", status: "booked", token: callToken, notice: { kind: "booked", at: 0 }, history: [], createdAt: 0, updatedAt: 0 });
+    // Phase 5d step 2: a project's message thread with a message and a read, and a lead's thread.
+    const threadId = await ctx.db.insert("msgThreads", { kind: "project", projectId, lastAt: 1, lastText: "Hi", lastSide: "client", lastName: "Client", createdAt: 0 });
+    await ctx.db.insert("messages", { threadId, side: "client", name: "Client", email: "client@example.com", text: "Hi", files: [], createdAt: 1 });
+    await ctx.db.insert("msgReads", { threadId, who: "client@example.com", name: "Client", readAt: 1 });
+    await ctx.db.insert("msgThreads", { kind: "lead", token: "matrixleadthreadtoken0123", leadName: "Lead", leadEmail: "lead@x.example", lastAt: 1, lastText: "", createdAt: 0 });
+    const fileRequestId = await ctx.db.insert("fileRequests", { projectId, title: "X", due: "2030-01-02", folder: "/File requests/X/P/X", remind: false, status: "open", files: [], history: [], createdAt: 0, updatedAt: 0 });
+    const fileUploadId = await ctx.db.insert("fileUploads", { requestId: fileRequestId, email: "client@example.com", name: "x.pdf", size: 10, path: "/File requests/X/P/X/x.pdf", mode: "direct", offset: 0, status: "uploading", expiresAt: Date.now() + 3_600_000, createdAt: 0 });
+    const briefId = await ctx.db.insert("briefs", { projectId, questions: { steps: [] }, answers: {}, step: 0, status: "sent", sentAt: 0, submits: 0, history: [], createdAt: 0, updatedAt: 0 });
+    // Phase 5: a testimonial, and a raw footage offer on the project.
+    const testimonialId = await ctx.db.insert("testimonials", { noteId: inboxNoteId, projectId, email: "client@example.com", name: "Client", working: "w", film: "f", permission: false, createdAt: 0, updatedAt: 0 });
+    await ctx.db.insert("footageStorage", { projectId, priceCents: 10000, offeredAt: 0, keepUntil: "2030-01-01", status: "offered", history: [], createdAt: 0, updatedAt: 0 });
+    // D133 (Phase 5): a vendor login with its own vendor record in this business (not booked on anything), the matrix's
+    // fourth caller. It proves a vendor is refused everything outside the vendor side; vendor-against-vendor checks are in
+    // vendorPortal.test.ts.
+    const vendorUser = await ctx.db.insert("users", { email: "vee@x.example", name: "Vee", role: "vendor" });
+    await ctx.db.insert("memberships", { businessId, email: "vee@x.example", userId: vendorUser, role: "vendor", createdAt: 0 });
+    await ctx.db.insert("vendors", { businessId, name: "Vee", email: "vee@x.example", roles: [], rates: [], createdAt: 0, updatedAt: 0 });
+    // Phase 5b step 3: a call sheet for the shoot, sent to the invited client (who isn't on the project's shares, so the
+    // client reader still answers null for them: the matrix proves nobody else gets it; callSheets.test.ts proves who does).
+    const csBuild = await ctx.db.insert("wsBuilds", { title: "CS", blocks: { type: "doc", content: [] }, fields: {}, style: {}, signers: [], kind: "callsheet", createdAt: 0, updatedAt: 0 });
+    const callSheetId = await ctx.db.insert("callSheets", { shootId, projectId, buildId: csBuild, how: "blank", status: "sent", sentAt: 0, updates: 0,
+      recipients: [{ id: "client:client@example.com", kind: "client", name: "Client", email: "client@example.com", on: true, sentAt: 0, addedAt: 0 }, { id: `crew:${bookingId}`, kind: "crew", name: "V", email: "v@x.example", vendorId, bookingId, on: true, sentAt: 0, addedAt: 0 },
+        { id: "guest:matrix", kind: "guest", name: "Gail", email: "gail@x.example", role: "Talent", on: true, sentAt: 0, addedAt: 0 },
+        { id: "guest:invited", kind: "guest", name: "Ivy", email: "ivy@x.example", role: "Talent", on: true, sentAt: 1, addedAt: 0 }],
+      sent: { title: "CS", page: { type: "doc", content: [] }, fields: {}, style: {}, at: 0, round: 0 }, history: [], createdAt: 0, updatedAt: 0 });
+    // Phase 5b step 5: a Google Calendar connection with one event, and the shoot moved in Google (its Dashboard note).
+    await ctx.db.insert("calendars", { businessId, email: "heston@gmail.example", refreshToken: "rt", calendarId: "cal@x", calendarName: "Wrangler", inviteVendors: true, inviteClient: false, connectedAt: 0,
+      list: [{ id: "cal@x", name: "Wrangler", color: 0, on: true, writable: true, primary: true }] });
+    const calendarEventId = await ctx.db.insert("calendarEvents", { businessId, kind: "google", calendarId: "cal@x", googleId: "pevabc123", title: "Team call", date: "2030-01-02", endDate: "2030-01-02", start: "10:00", end: "11:00",
+      guests: [{ email: "g@x.example" }], gUpdated: 1, syncedAt: 0, createdAt: 0, prev: { date: "2030-01-01", endDate: "2030-01-01", start: "10:00", end: "11:00", at: Date.now(), notify: false } });
+    await ctx.db.patch(shootId, { googleMove: { at: 0, was: { date: "2030-01-01", call: "07:00", location: "X" } }, dragUndo: { at: Date.now(), was: { date: "2030-01-01", call: "07:00", wrap: null, moved: null, confirmed: null, notify: false } } });
+    // Phase 5b step 4 (D127): a call-sheet guest, signed in, on that sheet: the matrix's fifth caller. It proves a guest login
+    // is refused everything but its own three guest functions; callSheetGuests.test.ts proves what those answer.
+    const guestToken = "matrixguesttoken0123456789";
+    await ctx.db.insert("guestPasses", { businessId, callSheetId, personId: "guest:matrix", email: "gail@x.example", token: guestToken, createdAt: 0 });
+    const guestUser = await ctx.db.insert("users", { email: "gail@x.example", name: "Gail", role: "guest" });
+    // Review test gap: a guest whose email also has a client invite (not yet accepted: no membership, no password). The
+    // invite gives the guest login no client powers; it stays a guest until the email signs up and is proved.
+    await ctx.db.insert("guestPasses", { businessId, callSheetId, personId: "guest:invited", email: "ivy@x.example", token: "matrixinvitedtoken01234567", createdAt: 0, sentAt: 1 });
+    const invitedGuest = await ctx.db.insert("users", { email: "ivy@x.example", name: "Ivy", role: "guest" });
+    await ctx.db.insert("invites", { email: "ivy@x.example", createdAt: 0 });
+    return { threadId, callId, callToken, gearId, offerPersonId, calendarEventId, guestToken, guestInvitedSub: await sess(invitedGuest), guestSub: await sess(guestUser), callSheetId, testimonialId, vendorSub: await sess(vendorUser), briefId, fileRequestId, fileUploadId, shootId, vendorInvoiceId, businessId, briefingId, bookingId, vendorId, proposalId, quoteId, dealId, followUpId, estimateId, entryId, subscriptionId, planId, invoiceId, deliveryFileId, clientRecId, personId, inboxItemId, inboxNoteId, requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
   });
   return { t, ids };
 }

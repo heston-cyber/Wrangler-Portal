@@ -5,6 +5,7 @@
 //           wrote through the connector (T1.7).
 //   Hooks:  onVersionReady, onReply (Review), onSignInvite, onSigned (Sign). Called where those emails are sent.
 //           They only add Inbox rows; the emails themselves are unchanged until the one-email switch (task 10).
+import { isClientLogin } from "./lib/roles";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
@@ -17,6 +18,7 @@ import { signLink } from "./lib/wsSigning";
 import { docLabel } from "./lib/wsLayout";
 import { frameTc } from "./lib/frames";
 import { signedThumbUrl, signStillUrl } from "./lib/media";
+import { askLink } from "./testimonials";
 
 const MAX_TITLE = 120, MAX_TEXT = 2000, MAX_LINK = 500;
 const projectLabel = (p: { name: string; jobNumber?: string } | null) => (p ? (p.jobNumber ? `${p.jobNumber} ${p.name}` : p.name) : "");
@@ -228,10 +230,17 @@ export const noteDetail = query({
       _id: n._id, clientId: n.clientId, client: client?.name ?? null, title: n.title, text: n.text, link: n.link ?? null,
       status: n.status, draftedBy: n.draftedBy, said: n.said ?? null, createdAt: n.createdAt, sentAt: n.sentAt ?? null,
       linkLabel: n.linkLabel ?? null, to: n.to ?? null, emailThem: n.emailThem ?? true, attachment: await attachmentOf(ctx, n.link),
+      testimonial: n.testimonialProjectId ? await testimonialOf(ctx, n.testimonialProjectId) : null, // Phase 5 (D139)
       people: people.sort((a, b) => (a.name ?? a.email).localeCompare(b.name ?? b.email)),
     };
   },
 });
+
+/** Phase 5: the project a testimonial request is about. */
+async function testimonialOf(ctx: QueryCtx, projectId: Id<"projects">) {
+  const p = await ctx.db.get(projectId);
+  return p ? { projectId: p._id, project: p.jobNumber ? `${p.jobNumber} ${p.name}` : p.name } : null;
+}
 
 /** What a note's link points at, for the "Attached cut" row: the video and version (with its picture), or a page. */
 async function attachmentOf(ctx: QueryCtx, link: string | undefined) {
@@ -262,12 +271,19 @@ export const saveNote = mutation({
   args: {
     noteId: v.optional(v.id("inboxNotes")), clientId: v.id("clients"), title: v.string(), text: v.string(), link: v.optional(v.string()),
     linkLabel: v.optional(v.string()), to: v.optional(v.array(v.string())), emailThem: v.optional(v.boolean()),
+    // Phase 5 (D139): "Ask for a testimonial" about this project (null clears it). The link to the form is made on send.
+    testimonialProjectId: v.optional(v.union(v.id("projects"), v.null())),
   },
   handler: async (ctx, a) => {
     await requireMe(ctx);
     const client = await ctx.db.get(a.clientId);
     if (!client) throw new ConvexError("That client isn't here.");
-    const n = checkNote(a);
+    if (a.testimonialProjectId) {
+      const p = await ctx.db.get(a.testimonialProjectId);
+      if (!p || p.clientId !== client._id) throw new ConvexError(`Pick one of ${client.name}'s projects.`);
+    }
+    const asking = !!a.testimonialProjectId;
+    const n = checkNote(asking ? { ...a, link: undefined, linkLabel: undefined } : a);
     let to: string[] | undefined;
     if (a.to) {
       const theirs = new Set((await noteAudience(ctx, client)).map((p) => p.email));
@@ -275,7 +291,7 @@ export const saveNote = mutation({
       if (!to.length) throw new ConvexError("Pick at least one person.");
       if (to.some((e) => !theirs.has(e))) throw new ConvexError(`Everyone you send to must be one of ${client.name}'s people.`);
     }
-    const fields = { clientId: a.clientId, title: n.title, text: n.text, link: n.link, linkLabel: n.linkLabel, to, emailThem: a.emailThem ?? true };
+    const fields = { clientId: a.clientId, title: n.title, text: n.text, link: n.link, linkLabel: n.linkLabel, to, emailThem: a.emailThem ?? true, testimonialProjectId: a.testimonialProjectId ?? undefined };
     const now = Date.now();
     if (a.noteId) {
       const cur = await ctx.db.get(a.noteId);
@@ -302,11 +318,14 @@ export const sendNote = mutation({
     const biz = await businessOf(ctx, n);
     const audience = (await noteAudience(ctx, client)).filter((p) => p.access && (!n.to || n.to.includes(p.email)));
     if (!biz || !audience.length) throw new ConvexError(n.to ? "None of the people you picked has portal access yet." : `No one at ${client.name} has portal access yet. Invite someone first.`);
+    // Phase 5 (D139): a testimonial request links to its form (the note's own page, /words/<note>).
+    if (n.testimonialProjectId && (await ctx.db.get(n.testimonialProjectId))?.clientId !== n.clientId) throw new ConvexError(`The project this asks about isn't one of ${client.name}'s any more.`);
+    const { link, linkLabel } = n.testimonialProjectId ? askLink(noteId) : { link: n.link, linkLabel: n.linkLabel };
     let posted = 0;
     for (const p of audience) {
-      if (await postToInbox(ctx, { businessId: biz, clientId: client._id, email: p.email, kind: "note", title: n.title, text: n.text, link: n.link, linkLabel: n.linkLabel, source: { module: "inbox", id: noteId }, key: `note:${noteId}`, noteId })) posted++;
+      if (await postToInbox(ctx, { businessId: biz, clientId: client._id, email: p.email, kind: "note", title: n.title, text: n.text, link, linkLabel, source: { module: "inbox", id: noteId }, key: `note:${noteId}`, noteId })) posted++;
     }
-    await ctx.db.patch(noteId, { status: "sent", sentAt: Date.now(), recipients: posted, updatedAt: Date.now() });
+    await ctx.db.patch(noteId, { status: "sent", sentAt: Date.now(), recipients: posted, updatedAt: Date.now(), ...(n.testimonialProjectId ? { link, linkLabel } : {}) });
     if (n.emailThem !== false && posted) await ctx.scheduler.runAfter(0, internal.emails.noteEmails, { noteId });
     return { sent: posted };
   },
@@ -407,7 +426,7 @@ export const onReply = internalMutation({
     if (!note || note.visibility !== "shared" || !note.authorId) return 0;
     if (r.authorId && r.authorId === note.authorId) return 0;
     const author = await ctx.db.get(note.authorId);
-    if (!author?.email || author.role !== "client") return 0;
+    if (!author?.email || (author.role !== "client" && !(author.role === "vendor" && await isClientLogin(ctx, author.email)))) return 0;
     const ver = await ctx.db.get(note.versionId);
     const vid = ver ? await ctx.db.get(ver.videoId) : null;
     if (!ver || !vid) return 0;

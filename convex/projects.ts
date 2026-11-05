@@ -14,9 +14,11 @@ import { requireMe, requireSignedIn } from "./lib/access";
 import { clampRounds, roundOf, roundsFor } from "./lib/rounds";
 import { postToInbox, businessOf, hasAccess } from "./lib/inbox";
 import { coveredProjects, coveredVideos, sameBusiness, shareState } from "./lib/shareAccess";
-import { downloadFor, signedThumbUrl, signStillUrl } from "./lib/media";
+import { downloadInfo, signedThumbUrl, signStillUrl } from "./lib/media";
+import { resolveDownload } from "./library";
 import { docLabel } from "./lib/wsLayout";
 import { crmProject } from "./crm";
+import { deliveredBefore, offerOnDelivery } from "./footage";
 
 export const STAGES = ["discovery", "strategy", "production", "polish", "delivery"] as const;
 export type Stage = (typeof STAGES)[number];
@@ -42,7 +44,7 @@ async function ownedProject(ctx: QueryCtx | MutationCtx, raw: string) {
 
 /** Who hears about this project (stage moves, final files): the invited members of live project or client shares that
  *  cover it, with a live invite in its business. The same people who can open its project page (myProjects). */
-async function portalPeople(ctx: QueryCtx | MutationCtx, p: Doc<"projects">) {
+export async function portalPeople(ctx: QueryCtx | MutationCtx, p: Doc<"projects">) {
   const biz = await businessOf(ctx, p);
   if (!biz) return [];
   const shares = (await ctx.db.query("shares").collect()).filter((s) => s.who === "invited" && s.kind !== "video" && !shareState(s) && sameBusiness(s, p));
@@ -169,6 +171,7 @@ export const setKeyDates = mutation({
     }
     dates.sort((x, y) => x.date.localeCompare(y.date));
     await ctx.db.patch(p._id, { keyDates: dates, updatedAt: Date.now() });
+    await ctx.scheduler.runAfter(0, internal.calendarSync.pushDates, {}); // Phase 5b step 5: edit dates go to Google (portal → Google only)
     return null;
   },
 });
@@ -253,7 +256,8 @@ export const setDelivery = mutation({
     const patch: Partial<Doc<"projects">> = { updatedAt: Date.now() };
     if (a.linkDays !== undefined) patch.deliveryLinkDays = Math.max(1, Math.min(90, Math.round(a.linkDays)));
     let posted = 0;
-    if (a.unlocked === false) patch.deliveryUnlockedAt = undefined;
+    // D142 (review M1): locking again keeps the fact that the files were opened, so a later Unlock offers no storage.
+    if (a.unlocked === false) { patch.deliveryUnlockedAt = undefined; if (p.deliveryUnlockedAt && !p.deliveryFirstOpenedAt) patch.deliveryFirstOpenedAt = p.deliveryUnlockedAt; }
     if (a.unlocked === true) {
       const files = await ctx.db.query("deliveryFiles").withIndex("by_project", (q) => q.eq("projectId", p._id)).first();
       if (!files) throw new ConvexError("Add the final files first.");
@@ -270,7 +274,11 @@ export async function openDelivery(ctx: MutationCtx, p: Doc<"projects">): Promis
   const files = await ctx.db.query("deliveryFiles").withIndex("by_project", (q) => q.eq("projectId", p._id)).first();
   if (!files) return null;
   const now = Date.now();
-  await ctx.db.patch(p._id, { deliveryUnlockedAt: now, updatedAt: now });
+  // Phase 5 (D142, review M1): only a project's very first opening offers raw footage storage. Earlier openings are
+  // known from the never-cleared deliveryFirstOpenedAt (from now on) or, for projects delivered before it existed, from
+  // their "Final files ready" Inbox items or a delivered pipeline card (checked before the new items are posted below).
+  const firstTime = !p.deliveryUnlockedAt && !p.deliveryFirstOpenedAt && !(await deliveredBefore(ctx, p._id));
+  await ctx.db.patch(p._id, { deliveryUnlockedAt: now, ...(p.deliveryFirstOpenedAt ? {} : { deliveryFirstOpenedAt: now }), updatedAt: now });
   await crmProject(ctx, p._id, "delivered", "final files opened"); // Phase 3
   let posted = 0;
   const biz = await businessOf(ctx, p);
@@ -280,6 +288,7 @@ export async function openDelivery(ctx: MutationCtx, p: Doc<"projects">): Promis
       link: `/projects/${p._id}`, linkLabel: "Download", source: { module: "projects", id: p._id }, key: `final:${p._id}:${now}`,
     })) posted++;
   }
+  await offerOnDelivery(ctx, p, firstTime); // Phase 5: "Keep your raw footage?" (D98)
   return posted;
 }
 
@@ -303,7 +312,7 @@ export const folderOf = internalQuery({
 /** The projects a signed-in client can see: those a live project or client share they're invited to covers. A share
  *  of one video doesn't open its project page (stage, documents, final files); it adds that video to a project page
  *  the person can already see. */
-async function myProjects(ctx: QueryCtx, email: string) {
+export async function myProjects(ctx: QueryCtx, email: string) {
   type Row = { project: Doc<"projects">; videos: Map<string, { video: Doc<"videos">; token: string }> };
   const out = new Map<string, Row>();
   const invites = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()).filter((i) => !i.revokedAt);
@@ -332,7 +341,6 @@ export const mine = query({
     const out = [];
     for (const { project: p } of (await myProjects(ctx, me.email)).values()) {
       const biz = p.businessId ? await ctx.db.get(p.businessId) : null;
-      if (biz?.modules?.projects === false) continue; // the owner switched project pages off (Settings › Business)
       out.push({ _id: p._id, label: label(p), stage: (p.stage ?? "discovery") as Stage, nextStep: p.nextStep ?? null, business: biz?.name ?? null, updatedAt: p.updatedAt ?? p.createdAt, delivery: deliveryState(p).open });
     }
     return out.sort((a, b) => b.updatedAt - a.updatedAt);
@@ -349,7 +357,6 @@ export const forClient = query({
     const row = id ? (await myProjects(ctx, me.email)).get(id) : undefined;
     if (!row) return null;
     const p = row.project;
-    if (p.businessId && (await ctx.db.get(p.businessId))?.modules?.projects === false) return null;
     const r = await roundsFor(ctx, p);
     const videos = [];
     for (const { video: vid, token } of row.videos.values()) {
@@ -381,11 +388,12 @@ export const deliveryLink = action({
       const url: string = await ctx.runAction(internal.dropbox.temporaryLink, { path: f.path!, ...(f.businessId ? { asBusiness: f.businessId } : {}) });
       return { url, name: f.name };
     }
-    const url: string | null = await ctx.runQuery(internal.projects.versionFileUrl, { versionId: f.versionId!, until: f.until });
-    if (!url) throw new ConvexError("That file isn't available.");
-    // The site's copy may be the render as uploaded (a .mov, say) rather than an MP4: name it by what it is.
-    const ext = /\.(mp4|mov|m4v|mxf)$/i.exec(new URL(url).pathname)?.[1]?.toLowerCase();
-    return { url, name: ext ? f.name.replace(/\.[^.]+$/, `.${ext}`) : f.name };
+    // D152: the render itself, or the master from Dropbox (never a Stream link: review fix H1). Review fix L1: a Bunny
+    // link ends when the delivery window does (Dropbox's own links last 4 hours, inside the window's 4-hour cap).
+    const ext: string | null = await ctx.runQuery(internal.projects.versionExt, { versionId: f.versionId! });
+    if (!ext) throw new ConvexError("That file isn't available.");
+    const r = await resolveDownload(ctx, f.versionId!, f.name.replace(/\.[^.]+$/, "") + `.${ext}`, Math.floor(f.until / 1000));
+    return { url: r.url, name: r.name };
   },
 });
 export const canDownload = internalQuery({
@@ -405,12 +413,10 @@ export const canDownload = internalQuery({
     return { kind: f.kind, path: f.dropboxPath ?? null, versionId: f.versionId ?? null, name: f.name, until, businessId: p.businessId ?? null };
   },
 });
-export const versionFileUrl = internalQuery({
-  args: { versionId: v.id("versions"), until: v.number() },
+export const versionExt = internalQuery({
+  args: { versionId: v.id("versions") },
   handler: async (ctx, { versionId }) => {
-    // The same file "Download" saves (the render itself, or the largest MP4 copy); its signature lasts a few hours,
-    // and a fresh one is made on every click while the files are open.
     const ver = await ctx.db.get(versionId);
-    return ver ? (await downloadFor(ver))?.url ?? null : null;
+    return ver ? downloadInfo(ver)?.ext ?? null : null;
   },
 });

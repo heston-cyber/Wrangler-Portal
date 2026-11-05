@@ -8,7 +8,7 @@ import type { Editor } from "@tiptap/react";
 import { TextSelection } from "@tiptap/pm/state";
 import {
   BookmarkPlus, Check, Eye, FileSignature, Palette, Heading, Heading1, LayoutTemplate, List, Minus, PanelTop, PenLine, Plus, Receipt, Redo2, Undo2,
-  ScrollText, Send, SeparatorHorizontal, Space, TriangleAlert, Type, Users, X, CircleCheck, Trash2, Ellipsis, ArrowUp, ArrowDown, Copy, CopyPlus, ListChecks, CircleSlash,
+  ScrollText, Send, SeparatorHorizontal, Space, TriangleAlert, Type, Users, X, CircleCheck, Trash2, Ellipsis, ArrowUp, ArrowDown, Copy, CopyPlus, ListChecks, CircleSlash, CloudSun,
 } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -16,7 +16,7 @@ import { Sep, TopBar } from "../../../shell/Shell";
 import { linkProps, navigate } from "../../../lib/router";
 import { Modal, Spinner, useToast } from "../../../ui/kit";
 import {
-  FIELD_HELP, INSERT_LABEL, PAGE_PT, buildProblems, clauseSection, emptyFields, fieldValues, fill, missingFields, money, newNodes, pageOf, sectionClause, signerKeys, totals,
+  FIELD_HELP, INSERT_LABEL, PAGE_PT, buildProblems, clauseSection, emptyFields, fieldValues, fill, missingFields, money, newNodes, nodesOf, pageOf, sectionClause, signerKeys, totals,
   type BuildDoc, type ExtraSigner, type Fields, type InsertKind, type PNode, type Style,
 } from "../../../../convex/lib/wsBuilder";
 import { cssFamily, loadForScreen, type FontRow } from "./fonts";
@@ -34,14 +34,20 @@ import { Icon } from "../../../ui/Icon";
 import { Button, IconButton, SkeletonRows, EmptyState, ButtonLink, StatusChip as Chip, Checkbox, DialogHeader, TextArea } from "../../../ui/wp";
 import { proposalProblems } from "../../../../convex/lib/wsProposal";
 import { briefingProblems } from "../../../../convex/lib/wsBriefing";
+import { BriefingPanel, ShareBriefing, type BriefingInfo } from "../../vendors/BriefingShare";
+import { OfferPeopleCard, SendOfferDialog } from "../../payments/SendOffer";
+import { CALL_BLOCKS, bakeWeather, blockCard, callSheetProblems, isCallAtom, shownWeather, weatherOf } from "../../../../convex/lib/callSheet";
+import { PeoplePicker, SendSheet, SendUpdate, type CallSheetInfo } from "../../production/callSheetParts";
 
 // Phase 3b: proposals open here too (S5 · Phase 3b 716:4980 / 718:4495): no signature boxes, Send instead of
 // "Continue to signing", locked once sent, and "Start the contract?" once accepted (D75, D84).
 export type ProposalInfo = NonNullable<FunctionReturnType<typeof api.proposals.get>>;
 // Phase 3c: briefings too (D97, 731:3904): no signature boxes, "Send to {vendor}" (a vendor booked on the project),
 // locked once sent, "Sent · Read" in the top row.
-export type BriefingInfo = NonNullable<FunctionReturnType<typeof api.briefings.get>>;
-type Mode = { kind: "build"; buildId: Id<"wsBuilds">; proposal?: ProposalInfo; briefing?: BriefingInfo } | { kind: "template"; templateId: Id<"wsTemplates">; proposal?: boolean; briefing?: boolean };
+export type { BriefingInfo };
+// Phase 5b step 3: call sheets too (765:2056): no signature boxes, the call sheet's own blocks and block library,
+// "Send call sheet", and "Send an update" once it's sent (it stays editable; readers see the copy that was sent).
+type Mode = { kind: "build"; buildId: Id<"wsBuilds">; proposal?: ProposalInfo; briefing?: BriefingInfo; callSheet?: CallSheetInfo } | { kind: "template"; templateId: Id<"wsTemplates">; proposal?: boolean; briefing?: boolean; callSheet?: boolean; guide?: string };
 const B_CHIP: Record<string, { tone: "neutral" | "accent" | "success"; text: string }> = { draft: { tone: "neutral", text: "Draft" }, sent: { tone: "accent", text: "Sent" }, read: { tone: "success", text: "Read" } };
 const P_OPEN = new Set(["draft", "waiting", "ready"]);
 const P_CHIP: Record<string, { tone: "neutral" | "accent" | "success" | "danger" | "warning"; text: string }> = {
@@ -67,14 +73,24 @@ const INSERT: Array<{ kind: InsertKind; icon: React.ReactNode; hint: string }> =
   { kind: "divider", icon: <Icon name="minus" size={18} />, hint: "A line between sections" },
   { kind: "pagebreak", icon: <Icon name="document" size={18} />, hint: "Start a new page" },
   { kind: "spacer", icon: <Icon name="plus" size={18} />, hint: "Some empty space" },
+  // Phase 5b step 3: only on a call sheet
+  { kind: "crew", icon: <Icon name="users" size={18} />, hint: "Everyone on the shoot" },
+  { kind: "schedule", icon: <Icon name="calendar" size={18} />, hint: "Times, and what happens" },
+  { kind: "location", icon: <Icon name="map-pin" size={18} />, hint: "Call times, address, parking and a map link" },
+  { kind: "contacts", icon: <Icon name="phone" size={18} />, hint: "Who to call on the day" },
+  { kind: "weather", icon: <CloudSun size={18} />, hint: "The forecast for the shoot's address, or your own line" },
 ];
+const CALL_HIDES = new Set<InsertKind>(["parties", "items", "payment", "signatures"]);
 
 export default function Builder({ mode }: { mode: Mode }) {
   const prop = mode.kind === "build" ? mode.proposal ?? null : null;
   const isProp = !!prop || (mode.kind === "template" && !!mode.proposal);
   const brief = mode.kind === "build" ? mode.briefing ?? null : null;
   const isBrief = !!brief || (mode.kind === "template" && !!mode.briefing);
-  const side = isProp || isBrief; // never signed: no parties or signature blocks, no clause library
+  const call = mode.kind === "build" ? mode.callSheet ?? null : null;
+  const isCall = !!call || (mode.kind === "template" && !!mode.callSheet);
+  const isGuide = mode.kind === "template" && !!mode.guide; // Phase 5d step 4: a Help guide, edited like any page
+  const side = isProp || isBrief || isCall || isGuide; // never signed: no parties or signature blocks, no clause library
   const locked = (!!prop && !P_OPEN.has(prop.status)) || (!!brief && brief.state !== "draft");
   const build = useQuery(api.builder.getBuild, mode.kind === "build" ? { buildId: mode.buildId } : "skip");
   const tpl = useQuery(api.builder.getTemplate, mode.kind === "template" ? { templateId: mode.templateId } : "skip");
@@ -96,13 +112,12 @@ export default function Builder({ mode }: { mode: Mode }) {
   const withdrawProposal = useMutation(api.proposals.withdraw);
   const copyProposal = useMutation(api.proposals.copy);
   const dismissDrafted = useMutation(api.proposals.dismissDrafted);
-  const sendBriefing = useAction(api.briefings.send);
   const copyBriefing = useMutation(api.briefings.copy);
-  const setBriefingBooking = useMutation(api.briefings.setBooking);
   const [toast, show] = useToast();
   const [sending, setSending] = useState(false);
-  const [askBrief, setAskBrief] = useState(false); // Heston, Nov 2: ask before a briefing goes out, as proposals do
+  const [askBrief, setAskBrief] = useState(false); // D147: the Share dialog (Send, Copy link, Download PDF)
   const [contracting, setContracting] = useState(false);
+  const [csDialog, setCsDialog] = useState<"send" | "update" | null>(null);
 
   const [doc, setDocRaw] = useState<BuildDoc | null>(null);
   const [meta, setMeta] = useState<Meta>({ name: "", description: "" });
@@ -328,13 +343,16 @@ export default function Builder({ mode }: { mode: Mode }) {
   // Opening a declined proposal is seeing it: it leaves Home.
   useEffect(() => { if (prop?.status === "declined" && !prop.asked.seen) void proposalLater({ proposalId: prop._id, what: "seen" }).catch(() => undefined); }, [prop?.status, prop?.asked.seen]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // A call sheet's "Send" on the list opens the editor with ?send=1: ask straight away.
+  useEffect(() => { if (call && doc && call.status === "draft" && new URLSearchParams(location.search).get("send") === "1") { history.replaceState(null, "", location.pathname); setCsDialog("send"); } }, [!!call, !!doc]); // eslint-disable-line react-hooks/exhaustive-deps
   const missingKey = doc ? missingFields(doc.page, doc.fields).sort().join(",") : "";
   const missing = useMemo(() => new Set(missingKey ? missingKey.split(",") : []), [missingKey]);
 
-  if (!doc) return <><TopBar><a {...linkProps("/sign")}>Docs</a></TopBar><div className="wp-page docs"><div className="wp-tablecard glass"><SkeletonRows n={3} /></div></div></>;
-  if (mode.kind === "build" && !prop && build?.kind === "proposal") return <><TopBar><a {...linkProps("/proposals")}>Proposals</a></TopBar><div className="wp-page docs"><EmptyState icon="quote" title="This is a proposal." body="Proposals open from Proposals, where they're sent and answered." actions={<ButtonLink to="/proposals">All proposals</ButtonLink>} /></div></>;
-  if (mode.kind === "build" && !brief && build?.kind === "briefing") return <><TopBar><a {...linkProps("/vendors/briefings")}>Briefings</a></TopBar><div className="wp-page docs"><EmptyState icon="note" title="This is a briefing." body="Briefings open from Vendors › Briefings, where they're sent to a booked vendor." actions={<ButtonLink to="/vendors/briefings">All briefings</ButtonLink>} /></div></>;
-  if (mode.kind === "build" && build === null) return <><TopBar><a {...linkProps("/sign")}>Docs</a></TopBar><div className="wp-page docs"><EmptyState icon="document" title="This document doesn't exist." actions={<ButtonLink to="/sign/docs">All docs</ButtonLink>} /></div></>;
+  if (!doc) return <><TopBar><span className="secondary">Docs</span><Sep /><a {...linkProps("/sign")}>Contracts</a></TopBar><div className="wp-page docs"><div className="wp-tablecard glass"><SkeletonRows n={3} /></div></div></>;
+  if (mode.kind === "build" && !prop && build?.kind === "proposal") return <><TopBar><span className="secondary">Docs</span><Sep /><a {...linkProps("/proposals")}>Proposals</a></TopBar><div className="wp-page docs"><EmptyState icon="quote" title="This is a proposal." body="Proposals open from Proposals, where they're sent and answered." actions={<ButtonLink to="/proposals">All proposals</ButtonLink>} /></div></>;
+  if (mode.kind === "build" && !brief && build?.kind === "briefing") return <><TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/vendors/briefings")}>Briefings</a></TopBar><div className="wp-page docs"><EmptyState icon="note" title="This is a briefing." body="Briefings open from Vendors › Briefings, where they're sent to a booked vendor." actions={<ButtonLink to="/vendors/briefings">All briefings</ButtonLink>} /></div></>;
+  if (mode.kind === "build" && !call && build?.kind === "callsheet") return <><TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/production/call-sheets")}>Call sheets</a></TopBar><div className="wp-page docs"><EmptyState icon="document" title="This is a call sheet." body="Call sheets open from Production › Call sheets, where they're sent." actions={<ButtonLink to="/production/call-sheets">All call sheets</ButtonLink>} /></div></>;
+  if (mode.kind === "build" && build === null) return <><TopBar><span className="secondary">Docs</span><Sep /><a {...linkProps("/sign")}>Contracts</a></TopBar><div className="wp-page docs"><EmptyState icon="document" title="This document doesn't exist." actions={<ButtonLink to="/sign/docs">All docs</ButtonLink>} /></div></>;
 
   const st = doc.style;
   const values = fieldValues(doc.fields, doc.page);
@@ -357,7 +375,12 @@ export default function Builder({ mode }: { mode: Mode }) {
   const dragNodes = (e: React.DragEvent, nodes: PNode[]) => startInsertDrag(e, nodes);
 
   const assets = () => ({ fonts: fontRows, files: files as Record<string, string | null> });
-  const render = async () => { const { renderPdf } = await import("./pdf"); return renderPdf(doc, assets(), prop ? prop.number : brief ? undefined : build?.document?.label); };
+  // D148: a call sheet's preview shows the Weather block's line as it would be sent (typed, or the forecast).
+  const render = async () => {
+    const { renderPdf } = await import("./pdf");
+    const wx = call?.weather ? shownWeather(weatherOf(nodesOf(doc.page, "weather")[0]), call.weather) : null;
+    return renderPdf(wx ? { ...doc, page: bakeWeather(doc.page, wx) } : doc, assets(), prop ? prop.number : brief ? undefined : build?.document?.label);
+  };
   const onPreview = async () => {
     setBusy("preview");
     try { const blob = await render(); setPreview(URL.createObjectURL(blob)); }
@@ -381,70 +404,42 @@ export default function Builder({ mode }: { mode: Mode }) {
     try {
       if (isProp) { const id = await createProposal({ templateId }); navigate(`/proposals/${id}`); }
       else if (isBrief) navigate(`/vendors/briefings?template=${templateId}`); // New briefing asks who it's for
+      else if (isCall) navigate(`/production/call-sheets/new?template=${templateId}`); // New call sheet asks which shoot
       else { const id = await createBuild({ templateId }); navigate(`/sign/b/${id}`); }
     } catch (e) { show(errText(e)); setBusy(null); }
   };
   // Proposals: Send checks the proposal first (Details lists what's missing), then asks (717:4509).
   const onAskSend = () => {
-    const p = proposalProblems(doc);
+    const p = proposalProblems(doc, { anyone: true }); // D149: who it goes to is asked in the Send dialog
     if (p.length) { setProblems(p); setTab("details"); if (phone) setSheet(true); show(p[0]); return; }
     setProblems(null); setSending(true);
   };
-  const onSend = async (message: string, move: boolean) => {
-    if (!prop) return;
-    try {
+  // D149: Send (To, one link each), Copy link or Download PDF. A draft is saved and its PDF frozen the first time.
+  const onSend = async (o: { to?: string; name?: string; message?: string; move?: boolean; copyLink?: boolean }) => {
+    if (!prop) return null;
+    let storageId: Id<"_storage"> | undefined;
+    if (prop.status !== "sent") {
       // Always save first (review fix): the server checks and freezes the saved copy, so it must match the PDF.
       const sent = doc;
       await saveBuild({ buildId: prop.buildId, title: sent.title, blocks: sent.page, fields: sent.fields, signers: sent.signers, style: sent.style });
       if (docRef.current === sent) setDirty(false);
       const blob = await render();
-      const storageId = await uploadToStorage(await uploadUrl({}), new File([blob], `${prop.number} ${doc.title}.pdf`, { type: "application/pdf" }));
-      const r = await sendProposal({ proposalId: prop._id, storageId, message: message.trim() || undefined, move });
-      setSending(false);
-      show(r.held ? "Saved as sent, but the email was held (email sending is limited on this site)." : `Sent to ${doc.fields.client.name.split(" ")[0] || doc.fields.client.email}`);
-    } catch (e) { show(errText(e)); }
+      storageId = await uploadToStorage(await uploadUrl({}), new File([blob], `${prop.number} ${doc.title}.pdf`, { type: "application/pdf" }));
+    }
+    const r = await sendProposal({ proposalId: prop._id, ...(storageId ? { storageId } : {}), ...(o.to !== undefined ? { to: o.to } : {}), ...(o.name?.trim() ? { name: o.name } : {}),
+      ...(o.message?.trim() ? { message: o.message.trim() } : {}), ...(o.move ? { move: true } : {}), ...(o.copyLink ? { copyLink: true } : {}) });
+    setSending(false);
+    show(o.copyLink ? "Link copied. Anyone with it can open and accept the proposal." : r.failed.length ? `Not sent to ${r.failed.join(", ")}.` : r.held ? "Saved as sent, but the email was held (email sending is limited on this site)." : r.sent ? `Sent to ${r.sent === 1 ? (o.to ?? "").trim() : `${r.sent} people`}.` : "They were emailed in the last 10 minutes, so not again yet.");
+    return r.link;
   };
-  // Briefings: Send to {vendor} (731:3904) checks it, saves, freezes the PDF and emails them (email 25).
-  const recipient = brief?.recipients.find((r) => r._id === brief.bookingId) ?? null;
+  // D147: Share (863:16118) checks it; the dialog saves, freezes the PDF the first time, and sends or copies the link.
   const onAskBriefing = () => {
     if (!brief) return;
-    const p = [...(recipient ? [] : ["Pick who it's for (Send to, under Insert)."]), ...briefingProblems(doc)];
-    if (p.length) { setProblems(p); setTab(recipient ? "details" : "insert"); if (phone) setSheet(true); show(p[0]); return; }
+    const p = briefingProblems(doc);
+    if (p.length) { setProblems(p); setTab("details"); if (phone) setSheet(true); show(p[0]); return; }
     setProblems(null); setAskBrief(true);
   };
-  const onSendBriefing = async () => {
-    if (!brief || !recipient) return;
-    setBusy("brief");
-    try {
-      const sent = doc;
-      await saveBuild({ buildId: brief.buildId, title: sent.title, blocks: sent.page, fields: sent.fields, signers: sent.signers, style: sent.style });
-      if (docRef.current === sent) setDirty(false);
-      const blob = await render();
-      const storageId = await uploadToStorage(await uploadUrl({}), new File([blob], `${doc.title}.pdf`, { type: "application/pdf" }));
-      const r = await sendBriefing({ briefingId: brief._id, storageId });
-      setAskBrief(false);
-      show(r.held ? "Saved as sent, but the email was held (email sending is limited on this site)." : r.off ? `Sent to ${recipient.name.split(" ")[0]}’s portal. They’ve switched off briefing emails, so no email went out.` : `Sent to ${recipient.name.split(" ")[0]}`);
-    } catch (e) { show(errText(e)); } finally { setBusy(null); }
-  };
-  const onPickRecipient = async (bookingId: string) => {
-    if (!brief) return;
-    const r = brief.recipients.find((x) => x._id === bookingId);
-    if (!r) return;
-    try {
-      await setBriefingBooking({ briefingId: brief._id, bookingId: r._id });
-      setDoc((d) => ({ ...d, fields: { ...d.fields, custom: [{ key: "vendor", label: "Vendor", value: r.vendor }, { key: "dates", label: "Dates", value: r.dates }, ...d.fields.custom.filter((c) => c.key !== "vendor" && c.key !== "dates")] } }));
-    } catch (e) { show(errText(e)); }
-  };
-  const onResend = async () => {
-    if (brief) {
-      setBusy("resend");
-      try { const r = await sendBriefing({ briefingId: brief._id, resend: true }); show(r.held ? "The email was held (email sending is limited on this site)." : r.off ? "They’ve switched off briefing emails, so no email went out. It’s in their portal." : "Sent the email again"); } catch (e) { show(errText(e)); } finally { setBusy(null); }
-      return;
-    }
-    if (!prop) return;
-    setBusy("resend");
-    try { const r = await sendProposal({ proposalId: prop._id, resend: true }); show(r.held ? "The email was held (email sending is limited on this site)." : "Sent the email again"); } catch (e) { show(errText(e)); } finally { setBusy(null); }
-  };
+  const briefPdf = async () => { await saveNow(); return render(); };
   const onCopy = async () => {
     if (brief) { setBusy("copy"); try { const id = await copyBriefing({ briefingId: brief._id }); navigate(`/vendors/briefings/${id}`); } catch (e) { show(errText(e)); setBusy(null); } return; }
     if (!prop) return;
@@ -454,6 +449,19 @@ export default function Builder({ mode }: { mode: Mode }) {
   const onStartContract = async () => {
     if (!prop) return;
     try { const id = await startContract({ proposalId: prop._id }); navigate(`/sign/b/${id}`); } catch (e) { show(errText(e)); }
+  };
+  // Call sheets: Send call sheet / Send an update check the sheet, save it (the server freezes the saved copy), then ask.
+  const saveNow = async () => {
+    if (mode.kind !== "build") return;
+    const d = docRef.current ?? doc;
+    await saveBuild({ buildId: mode.buildId, title: d.title, blocks: d.page, fields: d.fields, signers: d.signers, style: d.style });
+    if (docRef.current === d) setDirty(false);
+  };
+  const onAskCallSheet = () => {
+    if (!call) return;
+    const p = callSheetProblems(doc);
+    if (p.length) { setProblems(p); setTab("details"); if (phone) setSheet(true); show(p[0]); return; }
+    setProblems(null); setCsDialog(call.status === "sent" ? "update" : "send");
   };
   const goTo = (pos: number) => {
     if (!editor) return;
@@ -465,7 +473,7 @@ export default function Builder({ mode }: { mode: Mode }) {
   const extraKeys = keys.filter((k) => k !== "heston" && k !== "client");
 
   return (
-    <BuilderCtx.Provider value={{ doc, values, px, onDetails: () => setTab("details"), onSaveClause: (sec) => void onSaveClause(sec) }}>
+    <BuilderCtx.Provider value={{ doc, values, px, onDetails: () => setTab("details"), onSaveClause: (sec) => void onSaveClause(sec), callSheet: isCall, weather: call?.weather ?? null, callSheetId: call?._id ?? null, onWeather: () => setTab("format") }}>
       <TopBar right={<>
         <span className="wsb-undo">
           <button className="icon-btn sm" aria-label="Undo" title={`Undo (${mac ? "⌘Z" : "Ctrl+Z"})`} disabled={!hist.current.past.length} onClick={() => step("undo")}><Icon name="arrow-left" size={18} /></button>
@@ -476,24 +484,29 @@ export default function Builder({ mode }: { mode: Mode }) {
           : <span className={`ws-save hide-sm ${saveState}`}>{saveState === "saving" ? <><Spinner /> Saving</> : saveState === "error" ? <><Icon name="alert" size={14} /> Not saved</> : <><Icon name="check" size={14} plain /> Saved</>}</span>}
         {prop && <span className="hide-sm"><ProposalChip status={prop.status} /></span>}
         {brief && <span className="hide-sm"><Chip tone={B_CHIP[brief.state].tone}>{B_CHIP[brief.state].text}</Chip></span>}
-        <Button variant="ghost" size="sm" className="hide-sm" loading={busy === "preview"} onClick={() => void onPreview()} iconEnd="external">Preview PDF</Button>
-        {brief ? <>
+        {!isGuide && <Button variant="ghost" size="sm" className="hide-sm" loading={busy === "preview"} onClick={() => void onPreview()} iconEnd="external">{isCall ? "Preview" : "Preview PDF"}</Button>}
+        {call ? <>
+          <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setAsTemplate(true)}>Save as template</Button>
+          {call.status === "sent" && <ButtonLink variant="ghost" size="sm" className="hide-sm" to={`/production/call-sheets/${call._id}`} iconEnd={false}>Who opened it</ButtonLink>}
+          <Button variant="primary" size="sm" onClick={onAskCallSheet}>{call.status === "sent" ? "Send an update" : "Send call sheet"}</Button>
+        </> : brief ? <>
           {!locked && <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setAsTemplate(true)}>Save as briefing template</Button>}
-          {!locked ? <Button variant="primary" size="sm" onClick={onAskBriefing}>{recipient ? `Send to ${recipient.name.split(" ")[0]}` : "Send"}</Button>
-            : <><Button variant="ghost" size="sm" className="hide-sm" loading={busy === "copy"} onClick={() => void onCopy()}>Make a copy</Button><Button variant="secondary" size="sm" loading={busy === "resend"} onClick={() => void onResend()}>Send again</Button></>}
+          {!locked ? <Button variant="primary" size="sm" onClick={onAskBriefing}>Share</Button>
+            : <Button variant="ghost" size="sm" className="hide-sm" loading={busy === "copy"} onClick={() => void onCopy()}>Make a copy</Button>}
         </> : prop ? <>
           {!locked && <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setAsTemplate(true)}>Save as proposal template</Button>}
           {!locked ? <Button variant="primary" size="sm" disabled={prop.status === "waiting"} title={prop.status === "waiting" ? "Claude is still drafting it" : undefined} onClick={onAskSend}>Send</Button>
             : prop.status === "accepted" ? (prop.contract ? <ButtonLink variant="secondary" size="sm" to={`/sign/b/${prop.contract._id}`}>Open the contract</ButtonLink> : <Button variant="primary" size="sm" onClick={() => setContracting(true)}>Start the contract</Button>)
-            : prop.status === "sent" ? <Button variant="secondary" size="sm" loading={busy === "resend"} onClick={() => void onResend()}>Send again</Button>
+            : prop.status === "sent" ? <Button variant="secondary" size="sm" onClick={() => setSending(true)}>Send again</Button>
             : <Button variant="secondary" size="sm" loading={busy === "copy"} onClick={() => void onCopy()}>Make a copy</Button>}
         </> : mode.kind === "build" ? <>
           <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setAsTemplate(true)} iconEnd="chevron-right">Save as template</Button>
           <Button variant="primary" size="sm" loading={busy === "continue"} disabled={!!sent} onClick={() => void onContinue()} title={sent ? "It's out for signature or signed" : undefined}>{build?.document ? "Update the PDF" : "Continue to signing"}</Button>
-        </> : <Button variant="primary" size="sm" loading={busy === "use"} onClick={() => void onUseTemplate()}>{isProp ? "New proposal from this" : isBrief ? "New briefing from this" : "New document from this"}</Button>}
+        </> : isGuide ? <ButtonLink variant="primary" size="sm" to={`/settings/help/${mode.kind === "template" ? mode.guide : ""}`} iconEnd={false}>Done</ButtonLink>
+          : <Button variant="primary" size="sm" loading={busy === "use"} onClick={() => void onUseTemplate()}>{isProp ? "New proposal from this" : isBrief ? "New briefing from this" : isCall ? "New call sheet from this" : "New document from this"}</Button>}
       </>}>
-        {isProp ? <><a {...linkProps("/proposals")}>Proposals</a><Sep /></> : isBrief ? <><a {...linkProps("/vendors")}>Vendors</a><Sep /><a {...linkProps("/vendors/briefings")}>Briefings</a><Sep /></> : <><a {...linkProps("/sign")}>Docs</a><Sep /></>}
-        {mode.kind === "template" && !isBrief ? <><a {...linkProps(isProp ? "/proposals/templates" : "/sign/templates")}>Templates</a><Sep /></> : null}
+        {isGuide ? <><a {...linkProps("/settings")}>Settings</a><Sep /><a {...linkProps("/settings/help")}>Help</a><Sep /></> : isCall ? <><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/production/call-sheets")}>Call sheets</a><Sep />{mode.kind === "template" && <><a {...linkProps("/production/call-sheets?tab=templates")}>Templates</a><Sep /></>}</> : isProp ? <><span className="secondary">Docs</span><Sep /><a {...linkProps("/proposals")}>Proposals</a><Sep /></> : isBrief ? <><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/vendors/briefings")}>Briefings</a><Sep /></> : <><span className="secondary">Docs</span><Sep /><a {...linkProps("/sign")}>Contracts</a><Sep /></>}
+        {mode.kind === "template" && !isBrief && !isCall && !isGuide ? <><a {...linkProps(isProp ? "/proposals/templates" : "/sign/templates")}>Templates</a><Sep /></> : null}
         <span className="here">{mode.kind === "template" ? meta.name || doc.title : doc.title}{prop ? ` · ${prop.number}` : build?.document ? ` · ${build.document.label}` : ""}</span>
       </TopBar>
 
@@ -535,7 +548,7 @@ export default function Builder({ mode }: { mode: Mode }) {
             style={{ width: pageW, minHeight: px(PAGE_PT[st.pageSize].h), background: st.page, color: st.text, fontFamily: B, fontSize: textPx, padding: `${padPx}px`, ["--wsb-accent" as string]: st.accent, ["--wsb-muted" as string]: st.muted, ["--wsb-heading" as string]: st.heading, ["--wsb-hfont" as string]: H, ["--wsb-bfont" as string]: B, ["--wsb-text" as string]: st.text, ["--wsb-pagebg" as string]: st.page }}>
             {st.cover && files[st.cover.fileId] && <div className="wsb-cover" style={{ height: px(st.cover.height), backgroundImage: `url(${files[st.cover.fileId]})`, margin: `-${padPx}px -${padPx}px ${px(18)}px` }} />}
             {st.logo && files[st.logo.fileId] && <div style={{ textAlign: st.logo.align, marginBottom: px(st.baseSize * 1.2) }}><img src={files[st.logo.fileId]!} alt="Logo" style={{ width: px(st.logo.width) }} /></div>}
-            <PageEditor page={doc.page} onChange={onPage} onEditor={setEditor} onSelectText={onSelectText} onMenu={(m) => { if (picking || Date.now() - justPicked.current < 1500) return; setMenu(m); }} missing={missing} />
+            <PageEditor page={doc.page} callBlocks={isCall} onChange={onPage} onEditor={setEditor} onSelectText={onSelectText} onMenu={(m) => { if (picking || Date.now() - justPicked.current < 1500) return; setMenu(m); }} missing={missing} />
             {st.footer && <div className="wsb-footer" style={{ color: st.muted, fontSize: textPx * 0.75 }}><span>{doc.title}</span><span>Page 1 of …</span></div>}
           </div>
         </div>
@@ -549,16 +562,18 @@ export default function Builder({ mode }: { mode: Mode }) {
           {tab === "insert" && (
             <div className="wsb-pane">
               <span className="wsb-hint">{phone ? "Tap to add after the cursor, or press and hold to drag onto the page" : "Drag onto the page (or into a container), or click to add after the cursor"}</span>
-              {INSERT.filter((x) => !side || (x.kind !== "parties" && x.kind !== "signatures")).map((x) => <button key={x.kind} className="wsb-insert" draggable onDragStart={(e) => dragNodes(e, newNodes(x.kind))} onDragEnd={() => endInsertDrag(editor)} {...touch.item(() => newNodes(x.kind), INSERT_LABEL[x.kind])} onClick={() => { if (touch.justDropped()) return; if (editor) insertKind(editor, x.kind); if (phone) setSheet(false); }}>{x.icon}<span><b>{INSERT_LABEL[x.kind]}</b><span className="secondary">{x.hint}</span></span></button>)}
+              {INSERT.filter((x) => (isCall ? !CALL_HIDES.has(x.kind) : !isCallAtom(x.kind)) && (!side || (x.kind !== "parties" && x.kind !== "signatures"))).map((x) => <button key={x.kind} className="wsb-insert" draggable onDragStart={(e) => dragNodes(e, newNodes(x.kind))} onDragEnd={() => endInsertDrag(editor)} {...touch.item(() => newNodes(x.kind), INSERT_LABEL[x.kind])} onClick={() => { if (touch.justDropped()) return; if (editor) insertKind(editor, x.kind); if (phone) setSheet(false); }}>{x.icon}<span><b>{INSERT_LABEL[x.kind]}</b><span className="secondary">{x.hint}</span></span></button>)}
+              {prop && prop.status !== "draft" && prop.status !== "waiting" && prop.status !== "ready" && <ProposalPeople p={prop} show={show} />}
               {prop && <PitchDeck p={prop} show={show} />}
-              {brief && <BriefingSendTo b={brief} locked={locked} onPick={(id) => void onPickRecipient(id)} />}
+              {brief && !locked && <BriefingPanel b={brief} show={show} onProject={(label) => setDoc((d) => ({ ...d, fields: { ...d.fields, project: label } }))} />}
+              {isCall && <BlockLibrary onInsert={(b) => { if (touch.justDropped()) return; if (editor) insertNodes(editor, [blockCard(b)]); if (phone) setSheet(false); }} onDragStart={(e, b) => dragNodes(e, [blockCard(b)])} onDragEnd={() => endInsertDrag(editor)} touchProps={(b) => touch.item(() => [blockCard(b)], b.title)} />}
               {!side && <ClauseLibrary clauses={clauses} onInsert={(c) => { if (touch.justDropped()) return; if (editor) insertNodes(editor, [clauseSection(c)]); if (phone) setSheet(false); }} onDragStart={(e, c) => dragNodes(e, [clauseSection(c)])} onDragEnd={() => endInsertDrag(editor)} touchProps={(c) => touch.item(() => [clauseSection(c)], c.title)} />}
             </div>
           )}
           {tab === "format" && <FormatPanel editor={editor} accent={st.accent} onSaveClause={(sec) => void onSaveClause(sec)} />}
           {tab === "style" && <StylePanel style={st} onChange={(s) => setDoc((d) => ({ ...d, style: s }))} fonts={fontRows} files={files as Record<string, string | null>} show={show} />}
           {tab === "details" && (
-            <DetailsPane doc={doc} setDoc={setDoc} extraKeys={side ? [] : extraKeys} mode={mode.kind} proposal={isProp} briefing={isBrief} meta={meta} setMeta={(m) => { setMeta(m); setDirty(true); }} total={t} problems={problems ?? (mode.kind === "build" ? (locked ? [] : isProp ? proposalProblems(doc) : isBrief ? briefingProblems(doc) : buildProblems(doc)) : [])} show={show} />
+            <DetailsPane doc={doc} setDoc={setDoc} extraKeys={side ? [] : extraKeys} mode={mode.kind} proposal={isProp} briefing={isBrief} guide={isGuide} callSheet={call} meta={meta} setMeta={(m) => { setMeta(m); setDirty(true); }} total={t} problems={problems ?? (mode.kind === "build" ? (locked ? [] : isProp ? proposalProblems(doc) : isBrief ? briefingProblems(doc) : call ? callSheetProblems(doc) : buildProblems(doc)) : [])} show={show} />
           )}
         </aside>
       </div>
@@ -599,17 +614,19 @@ export default function Builder({ mode }: { mode: Mode }) {
       {preview && (
         <Modal onClose={() => { URL.revokeObjectURL(preview); setPreview(null); }} label="PDF preview" width={900}>
           <div className="wsb-preview">
-            <div className="dhead"><h2 className="headline">Preview <span className="rest">{isProp ? (locked ? "This page now; the client has the PDF that was sent." : "Exactly what the client will read.") : isBrief ? (locked ? "This page now; the vendor has the PDF that was sent." : "Exactly what the vendor will read.") : "Exactly what will be signed (the signature spots are invisible markers)."}</span></h2><button className="icon-btn" onClick={() => { URL.revokeObjectURL(preview); setPreview(null); }} aria-label="Close"><X size={18} /></button></div>
+            <div className="dhead"><h2 className="headline">Preview <span className="rest">{isProp ? (locked ? "This page now; the client has the PDF that was sent." : "Exactly what the client will read.") : isBrief ? (locked ? "This page now; the vendor has the PDF that was sent." : "Exactly what the vendor will read.") : isCall ? "A PDF of this page. Everyone on it reads it in the portal." : "Exactly what will be signed (the signature spots are invisible markers)."}</span></h2><button className="icon-btn" onClick={() => { URL.revokeObjectURL(preview); setPreview(null); }} aria-label="Close"><X size={18} /></button></div>
             <iframe title="PDF preview" src={preview} />
             <a className="btn ghost sm" href={preview} download={`${doc.title}.pdf`}>Download this preview</a>
           </div>
         </Modal>
       )}
-      {asTemplate && <SaveTemplate doc={doc} proposal={isProp} briefing={isBrief} onClose={() => setAsTemplate(false)} onSave={async (name, description) => {
-        try { await saveAsTemplate({ name, description, title: doc.title, blocks: doc.page, fields: doc.fields, signers: [], style: doc.style, ...(isProp ? { kind: "proposal" as const } : isBrief ? { kind: "briefing" as const } : {}) }); setAsTemplate(false); show(`Saved as the ${isProp ? "proposal " : isBrief ? "briefing " : ""}template "${name}"`); } catch (e) { show(errText(e)); }
+      {asTemplate && <SaveTemplate doc={doc} proposal={isProp} briefing={isBrief} callSheet={isCall} onClose={() => setAsTemplate(false)} onSave={async (name, description) => {
+        try { await saveAsTemplate({ name, description, title: doc.title, blocks: doc.page, fields: doc.fields, signers: [], style: doc.style, ...(isProp ? { kind: "proposal" as const } : isBrief ? { kind: "briefing" as const } : isCall ? { kind: "callsheet" as const } : {}) }); setAsTemplate(false); show(`Saved as the ${isProp ? "proposal " : isBrief ? "briefing " : isCall ? "call sheet " : ""}template "${name}"`); } catch (e) { show(errText(e)); }
       }} />}
-      {askBrief && brief && recipient && <SendBriefing b={brief} to={recipient} busy={busy === "brief"} onClose={() => setAskBrief(false)} onSend={() => void onSendBriefing()} />}
-      {sending && prop && <SendProposal p={prop} doc={doc} onClose={() => setSending(false)} onSend={onSend} />}
+      {csDialog === "send" && call && <SendSheet cs={call} before={saveNow} onClose={() => setCsDialog(null)} show={show} onSent={() => navigate(`/production/call-sheets/${call._id}`)} />}
+      {csDialog === "update" && call && <SendUpdate cs={call} before={saveNow} onClose={() => setCsDialog(null)} show={show} />}
+      {askBrief && brief && <ShareBriefing b={brief} initial={brief.sendTo} makePdf={briefPdf} onClose={() => setAskBrief(false)} show={show} />}
+      {sending && prop && <SendProposal p={prop} doc={doc} onClose={() => setSending(false)} onSend={onSend} onPdf={async () => { const blob = await render(); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `${prop.number} ${doc.title}.pdf`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 30_000); }} />}
       {contracting && prop && <StartContract p={prop} doc={doc} onClose={() => setContracting(false)} onStart={onStartContract} />}
       {tdrag && <>
         {tdrag.line && <div className="wsb-tdragline" style={{ top: tdrag.line.top - 2, left: tdrag.line.left, width: tdrag.line.width }} />}
@@ -635,9 +652,23 @@ function ClauseLibrary({ clauses, onInsert, onDragStart, onDragEnd, touchProps }
   );
 }
 
+// Phase 5b step 3: a call sheet's block library (765:2056): ready-made cards, searched like the clause library.
+type LibBlock = (typeof CALL_BLOCKS)[number];
+function BlockLibrary({ onInsert, onDragStart, onDragEnd, touchProps }: { onInsert: (b: LibBlock) => void; onDragStart: (e: React.DragEvent, b: LibBlock) => void; onDragEnd: () => void; touchProps: (b: LibBlock) => Record<string, unknown> }) {
+  const [q, setQ] = useState("");
+  const list = CALL_BLOCKS.filter((b) => !q || b.title.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <div className="wsb-lib">
+      <div className="wp-listhead"><span className="wp-eyebrow">Block library</span></div>
+      <label className="ws-search"><Icon name="search" size={16} /><input placeholder="Search blocks" aria-label="Search blocks" value={q} onChange={(e) => setQ(e.target.value)} /></label>
+      {list.length === 0 ? <p className="wsb-hint">No block matches.</p>
+        : list.map((b) => <button key={b.title} className="wsb-libitem" draggable onDragStart={(e) => onDragStart(e, b)} onDragEnd={onDragEnd} {...touchProps(b)} onClick={() => onInsert(b)} title="Drag onto the page, or click to add"><span>{b.title}</span></button>)}
+    </div>
+  );
+}
 
-function DetailsPane({ doc, setDoc, extraKeys, mode, proposal, briefing, meta, setMeta, total, problems, show }: {
-  doc: BuildDoc; setDoc: (f: (d: BuildDoc) => BuildDoc) => void; extraKeys: string[]; mode: "build" | "template"; proposal: boolean; briefing?: boolean; meta: Meta; setMeta: (m: Meta) => void;
+function DetailsPane({ doc, setDoc, extraKeys, mode, proposal, briefing, guide, callSheet, meta, setMeta, total, problems, show }: {
+  doc: BuildDoc; setDoc: (f: (d: BuildDoc) => BuildDoc) => void; extraKeys: string[]; mode: "build" | "template"; proposal: boolean; briefing?: boolean; guide?: boolean; callSheet?: CallSheetInfo | null; meta: Meta; setMeta: (m: Meta) => void;
   total: ReturnType<typeof totals>; problems: string[]; show: (m: string) => void;
 }) {
   const saveProfile = useMutation(api.builder.saveProfile);
@@ -646,6 +677,13 @@ function DetailsPane({ doc, setDoc, extraKeys, mode, proposal, briefing, meta, s
   const setClient = (k: keyof Fields["client"], v: string) => setF({ client: { ...f.client, [k]: v } });
   const setBiz = (k: keyof Fields["business"], v: string) => setF({ business: { ...f.business, [k]: v } });
   const input = (label: string, value: string, on: (v: string) => void, type = "text", ph = "") => <label className="field"><span className="ws-flabel">{label}</span><input className="input sm" type={type} value={value} placeholder={ph} onChange={(e) => on(e.target.value)} /></label>;
+  if (guide) return (
+    <div className="wsb-pane">
+      {input("Guide title", meta.name, (v) => setMeta({ ...meta, name: v }))}
+      {input("One-line summary", meta.description, (v) => setMeta({ ...meta, description: v }))}
+      <p className="caption secondary">This is a Help guide. Whoever reads Help sees it as you write it here. Press Done when you're finished; Reset on the guide's page brings Wrangler's version back.</p>
+    </div>
+  );
   return (
     <div className="wsb-pane">
       {problems.length > 0 && mode === "build" && <ul className="ws-problems">{problems.map((p) => <li key={p}><TriangleAlert size={13} />{p}</li>)}</ul>}
@@ -653,9 +691,14 @@ function DetailsPane({ doc, setDoc, extraKeys, mode, proposal, briefing, meta, s
         {input("Template name", meta.name, (v) => setMeta({ ...meta, name: v }))}
         {input("Description", meta.description, (v) => setMeta({ ...meta, description: v }))}
         <p className="caption secondary">Client details are filled in on each document made from this template.</p>
+      </> : callSheet ? <>
+        {input("Call sheet title", doc.title, (v) => setDoc((d) => ({ ...d, title: v })))}
+        <span className="label">Who gets it</span>
+        <PeoplePicker cs={callSheet} show={show} compact />
+        <p className="caption secondary">The crew list on the page doesn't change when you tick people here; edit its rows on the page.</p>
       </> : briefing ? <>
         {input("Briefing title", doc.title, (v) => setDoc((d) => ({ ...d, title: v })))}
-        <p className="caption secondary">Who it's for ({"{vendor}"}, {"{dates}"}) comes from the booking you send it to (Send to, under Insert).</p>
+        <p className="caption secondary">Who it's for ({"{vendor}"}) and the dates ({"{dates}"}) are filled in below; from a booking they start filled. Who gets it is Send to, under Insert.</p>
       </> : <>
         {input(proposal ? "Proposal title" : "Document title", doc.title, (v) => setDoc((d) => ({ ...d, title: v })))}
         <span className="label">Client</span>
@@ -685,7 +728,7 @@ function DetailsPane({ doc, setDoc, extraKeys, mode, proposal, briefing, meta, s
       <div className="field"><span className="ws-flabel">Fill-in fields (click to copy)</span><div className="wsb-fields">
         {[...FIELD_HELP, ...f.custom.filter((c) => c.key).map((c) => ({ key: c.key, label: c.key }))].map((x) => <button key={x.key} className="chip" onClick={() => { void navigator.clipboard.writeText(`{${x.key}}`); show(`Copied {${x.key}}`); }} title={x.label}>{`{${x.key}}`}</button>)}
       </div></div>
-      {mode === "build" && !briefing && <div className="wsb-totals"><span>{proposal ? "Investment" : "Total"} <b>{money(total.total)}</b></span>{total.depositPct > 0 && <span>{proposal ? "Deposit to book" : "Deposit"} <b>{money(total.deposit)}</b>{total.invoiceDeposit && !proposal ? " → Stripe draft" : ""}</span>}</div>}
+      {mode === "build" && !briefing && !callSheet && <div className="wsb-totals"><span>{proposal ? "Investment" : "Total"} <b>{money(total.total)}</b></span>{total.depositPct > 0 && <span>{proposal ? "Deposit to book" : "Deposit"} <b>{money(total.deposit)}</b>{total.invoiceDeposit && !proposal ? " → Stripe draft" : ""}</span>}</div>}
       <span className="label">Your business</span>
       {input("Legal name", f.business.legalName, (v) => setBiz("legalName", v))}
       {input("Doing business as", f.business.name, (v) => setBiz("name", v))}
@@ -699,14 +742,14 @@ function DetailsPane({ doc, setDoc, extraKeys, mode, proposal, briefing, meta, s
   );
 }
 
-function SaveTemplate({ doc, proposal, briefing, onClose, onSave }: { doc: BuildDoc; proposal?: boolean; briefing?: boolean; onClose: () => void; onSave: (name: string, description: string) => Promise<void> }) {
+function SaveTemplate({ doc, proposal, briefing, callSheet, onClose, onSave }: { doc: BuildDoc; proposal?: boolean; briefing?: boolean; callSheet?: boolean; onClose: () => void; onSave: (name: string, description: string) => Promise<void> }) {
   const [name, setName] = useState(doc.title);
   const [desc, setDesc] = useState("");
   const [busy, setBusy] = useState(false);
   return (
     <Modal onClose={onClose} label="Save as template" width={460}>
       <div style={{ display: "grid", gap: 12 }}>
-        <h2 className="headline">{proposal ? "Save as a proposal template" : briefing ? "Save as a briefing template" : "Save as a template"}</h2>
+        <h2 className="headline">{proposal ? "Save as a proposal template" : briefing ? "Save as a briefing template" : callSheet ? "Save as a call sheet template" : "Save as a template"}</h2>
         <p className="caption secondary">{proposal ? "The sections, wording and style are saved; the client's details and the prices aren't (they come from Settings › Pricing each time)." : briefing ? "The sections, wording and style are saved; who it's for comes from each booking." : "The page, fields and style are saved; the client's details aren't."}</p>
         <label className="field"><span className="ws-flabel">Name</span><input className="input sm" value={name} onChange={(e) => setName(e.target.value)} /></label>
         <label className="field"><span className="ws-flabel">Description (optional)</span><input className="input sm" value={desc} onChange={(e) => setDesc(e.target.value)} /></label>
@@ -766,27 +809,20 @@ function ProposalBanner({ p, busy, onContract, onLater, onWithdraw, onCopy, onDi
   return null;
 }
 
-function SendProposal({ p, doc, onClose, onSend }: { p: ProposalInfo; doc: BuildDoc; onClose: () => void; onSend: (message: string, move: boolean) => Promise<void> }) {
+function SendProposal({ p, doc, onClose, onSend, onPdf }: { p: ProposalInfo; doc: BuildDoc; onClose: () => void; onSend: (o: { to?: string; name?: string; message?: string; move?: boolean; copyLink?: boolean }) => Promise<string | null>; onPdf: () => Promise<void> }) {
   const c = doc.fields.client;
-  const first = c.name.trim().split(" ")[0] || "the client";
   const [message, setMessage] = useState("");
   const [move, setMove] = useState(false); // D84: unticked; nothing moves on its own
-  const [busy, setBusy] = useState(false);
   const company = c.company.trim() || c.name.trim();
+  const again = p.status === "sent";
+  const client = !!(p.client || p.deal) && !again;
   return (
-    <Modal onClose={onClose} label="Send the proposal" width={560}>
-      <div className="crm-dialog">
-        <DialogHeader eyebrow={`Send · ${p.number}`} title={`Send the proposal to ${first}?`} body={`${first} gets an email with a link to read it and press Accept. No account needed.`} onClose={onClose} />
-        <div className="wp-field"><span className="wp-field-label">To</span><div className="pr-to"><Icon name="mail" size={16} />{c.name.trim()} · {c.email.trim()}</div></div>
-        <TextArea label="Message (optional)" rows={3} value={message} onChange={(e) => setMessage(e.target.value)} placeholder={`e.g. Hi ${first}, here's our plan. Happy to talk it through.`} />
-        <hr className="wp-divider" />
-        <Checkbox checked={move} onChange={setMove} label={`Also move ${company} to Quoted in your pipeline`} hint="Only if you tick this. Nothing moves on its own." />
-        <div className="dfoot">
-          <button className="btn ghost" type="button" onClick={onClose}>Cancel</button>
-          <Button variant="primary" loading={busy} onClick={async () => { setBusy(true); await onSend(message, move); setBusy(false); }}>Send proposal</Button>
-        </div>
-      </div>
-    </Modal>
+    <SendOfferDialog kind="proposal" number={p.number} initialTo={again ? "" : c.email.trim()} initialName={again ? "" : c.name.trim()} toClient={client}
+      extra={<>
+        {!again && <TextArea label="Message (optional)" rows={3} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="e.g. Here's our plan. Happy to talk it through." />}
+        {client && company && <Checkbox checked={move} onChange={setMove} label={`Also move ${company} to Quoted in your pipeline`} hint="Only if you tick this. Nothing moves on its own." />}
+      </>}
+      onSend={async (to, name) => { await onSend({ to, name, message, move }); }} onCopyLink={() => onSend({ copyLink: true })} onPdf={onPdf} onClose={onClose} />
   );
 }
 
@@ -858,39 +894,15 @@ function PitchDeck({ p, show }: { p: ProposalInfo; show: (m: string) => void }) 
   );
 }
 
-// ---------- Phase 3c: a briefing's Send to (731:3904, under Insert) ----------
+// ---------- D149: who has a sent proposal (873:20972): Opened and accepted, and a quiet lead's note ----------
 
-function BriefingSendTo({ b, locked, onPick }: { b: BriefingInfo; locked: boolean; onPick: (bookingId: string) => void }) {
+function ProposalPeople({ p, show }: { p: ProposalInfo; show: (m: string) => void }) {
+  const stop = useMutation(api.proposals.stopLink);
+  const newLink = useMutation(api.proposals.newLink);
   return (
-    <div className="wsb-brief">
-      <span className="label">Briefing</span>
-      {locked ? <>
-        <p className="caption">Sent to {b.sentTo?.name ?? b.vendor}{b.sentTo ? ` (${b.sentTo.email})` : ""}{b.readAt ? `. Read ${longDay(b.readAt)}.` : ". Not read yet."}</p>
-        {b.pdfUrl && <a className="btn ghost sm" href={b.pdfUrl} target="_blank" rel="noopener noreferrer">Open the PDF they got</a>}
-      </> : <>
-        <label className="field"><span className="ws-flabel">Send to</span>
-          <select className="input sm" value={b.bookingId ?? ""} onChange={(e) => onPick(e.target.value)}>
-            {!b.bookingId && <option value="" disabled>Pick a booked vendor</option>}
-            {b.recipients.map((r) => <option key={r._id} value={r._id}>{r.name} · {r.role} ({r.state === "accepted" ? "booked" : "offered"})</option>)}
-          </select></label>
-        <p className="caption secondary">{b.recipients.length ? "Only vendors booked on this project can get it. They see it in their portal and press “I’ve read it”." : "No one is booked on this project now. Book a vendor first."}</p>
-      </>}
-    </div>
-  );
-}
-
-function SendBriefing({ b, to, busy, onClose, onSend }: { b: BriefingInfo; to: BriefingInfo["recipients"][number]; busy: boolean; onClose: () => void; onSend: () => void }) {
-  const first = to.name.split(" ")[0];
-  return (
-    <Modal onClose={onClose} label="Send the briefing" width={520}>
-      <div className="crm-dialog">
-        <DialogHeader eyebrow={`Send · ${b.kindName}`} title={`Send the briefing to ${first}?`} body={`${first} gets an email with a link to read it in their vendor portal and press “I’ve read it”. It can’t change once it’s sent; make a copy to send a new version.`} onClose={onClose} />
-        <div className="wp-field"><span className="wp-field-label">To</span><div className="pr-to"><Icon name="mail" size={16} />{to.name} · {to.role} · {to.dates}</div></div>
-        <div className="dfoot">
-          <button className="btn ghost" type="button" onClick={onClose}>Cancel</button>
-          <Button variant="primary" loading={busy} onClick={onSend}>Send briefing</Button>
-        </div>
-      </div>
-    </Modal>
+    <>
+      {p.status === "accepted" && p.deal?.quiet && p.response && <p className="caption pr-quiet">{p.response.name}{p.response.company ? `, for ${p.response.company},` : ""} is not a client, so a quiet lead record was made. Nothing else moves unless you say so. Start the contract fills in their name{p.response.company ? " and company" : ""}; you check it before anything is sent.</p>}
+      <OfferPeopleCard who={p.people} open={p.status === "sent"} show={show} onStop={(personId) => stop({ proposalId: p._id, personId: personId as Id<"offerRecipients"> })} onNewLink={() => newLink({ proposalId: p._id })} />
+    </>
   );
 }

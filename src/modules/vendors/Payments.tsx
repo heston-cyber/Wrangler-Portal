@@ -32,7 +32,7 @@ export default function PaymentsPage() {
   const setTab = (k: Tab) => navigate(k === "approve" ? "/vendors/payments" : `/vendors/payments?tab=${k}`);
   return (
     <>
-      <TopBar><a {...linkProps("/vendors")}>Vendors</a><Sep /><span className="here">Payments</span></TopBar>
+      <TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/vendors")}>Vendors</a><Sep /><span className="here">Payments</span></TopBar>
       <div className="wp-page">
         <PageHeader eyebrow="Vendors" title="Vendor payments." sub="Invoices and hours your vendors send. Approve them into the Ledger, then mark them paid. You pay outside the portal for now." />
         <Tabs label="Payments" value={tab} onChange={setTab} items={[
@@ -117,7 +117,7 @@ export function VendorInvoicePage({ invoiceId }: { invoiceId: string }) {
   const [toast, show] = useToast();
   const [busy, setBusy] = useState(false);
   const [dialog, setDialog] = useState<null | "paid" | "decline" | "pay">(null);
-  const top = <TopBar><a {...linkProps("/vendors")}>Vendors</a><Sep /><a {...linkProps("/vendors/payments")}>Payments</a>{x && <><Sep /><span className="here">{x.number}</span></>}</TopBar>;
+  const top = <TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/vendors")}>Vendors</a><Sep /><a {...linkProps("/vendors/payments")}>Payments</a>{x && <><Sep /><span className="here">{x.number}</span></>}</TopBar>;
   if (x === undefined) return <>{top}<div className="wp-page"><Card label="Loading"><SkeletonRows n={5} /></Card></div></>;
   if (x === null) return <>{top}<div className="wp-page"><EmptyState icon="invoice" title="This invoice isn't here." actions={<ButtonLink to="/vendors/payments">Vendor payments</ButtonLink>} /></div></>;
   const first = firstOf(x.vendor.name);

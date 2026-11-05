@@ -8,18 +8,16 @@ import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireMe, requireSignedIn } from "./lib/access";
 import { businessContact, businessInScope, defaultBusiness } from "./lib/business";
-import { alertEmail } from "./emails";
 import { prefRow, setSwitch, viewFor } from "./lib/notifyPrefs";
 
 async function ownerScope(ctx: QueryCtx | MutationCtx) {
   const me = await requireMe(ctx);
   const biz = businessInScope(ctx);
   if (!biz) throw new ConvexError("Not allowed.");
-  // The owner's emails go to the business contact address (and, for the first business, the alert address); a
-  // switch is set on each so it holds wherever the email goes.
+  // The owner's emails go to the business contact address; a switch is set on each so it holds wherever the email
+  // goes. D151 (Nov 4): no extra alert address for the first business.
   const c = await businessContact(ctx, biz);
-  const def = (await defaultBusiness(ctx))?._id ?? null;
-  const to = [...new Set([me.email, c.ownerEmail, ...(biz === def ? [alertEmail()] : [])].map((e) => e.trim().toLowerCase()).filter(Boolean))];
+  const to = [...new Set([me.email, c.ownerEmail].map((e) => e.trim().toLowerCase()).filter(Boolean))];
   return { me, biz, to };
 }
 

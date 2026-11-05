@@ -26,16 +26,26 @@ export const NOTICES: Notice[] = [
   { key: "proposal_answers", side: "owner", group: "Quotes and proposals", label: "A client accepts or declines a proposal", kinds: ["proposal-accepted", "proposal-declined"] },
   { key: "client_paid", side: "owner", group: "Payments", label: "A client pays an invoice", kinds: ["owner-paid"] },
   { key: "subscription_failed", side: "owner", group: "Payments", label: "A subscription payment fails", kinds: ["subscription-failed-owner"] },
+  { key: "messages_owner", side: "owner", group: "Clients", label: "A client or lead sends you a message", hint: "One email when they write, not one per message, and only if you haven't read it yet.", kinds: ["message_owner"] }, // Phase 5d (email 45)
+  { key: "booked_calls", side: "owner", group: "Clients", label: "A lead books, moves or cancels a call", hint: "It also shows under Needs you on your Dashboard.", kinds: ["call_booked_owner", "call_cancelled_owner", "call_moved_owner"] }, // Phase 5d (Q86)
   { key: "booking_answers", side: "owner", group: "Vendors", label: "A vendor accepts or declines a booking", kinds: ["booking_accepted", "booking_declined"] },
   { key: "briefing_read", side: "owner", group: "Vendors", label: "A vendor reads a briefing", kinds: ["briefing_read"] },
   { key: "vendor_invoices", side: "owner", group: "Vendors", label: "A vendor sends an invoice", kinds: ["vendor_invoice"] },
   { key: "vendor_w9", side: "owner", group: "Vendors", label: "A vendor uploads a W-9", kinds: ["vendor_w9"] },
   { key: "vendor_payouts", side: "owner", group: "Vendors", label: "A vendor payment through Stripe goes out, fails or comes back", kinds: ["vendor_payout_posted", "vendor_payout_failed"] },
+  { key: "shoot_confirmed", side: "owner", group: "Shoots and files", label: "A client confirms a shoot", kinds: ["shoot_confirmed"] },
+  { key: "files_uploaded", side: "owner", group: "Shoots and files", label: "A client uploads files you asked for", hint: "One email per sitting, 10 minutes after their last file.", kinds: ["files_uploaded"] },
+  { key: "brief_answered", side: "owner", group: "Shoots and files", label: "A client sends back the kickoff brief", hint: "And when they change it afterwards.", kinds: ["brief_answered"] },
+  // Phase 5 (Nov 3)
+  { key: "footage", side: "owner", group: "Delivery", label: "A client keeps their raw footage, or a storage year is about to renew", hint: "With the invoice draft for you to send.", kinds: ["footage_kept", "footage_renewal"] },
+  { key: "footage_ended", side: "owner", group: "Delivery", label: "The keep date comes and the raw footage wasn't kept", hint: "The portal never deletes files, so this always arrives.", kinds: ["footage_ended"], always: true }, // also: Keep it never paid, and a storage invoice paid late (review fixes)
+  { key: "testimonials", side: "owner", group: "Delivery", label: "A client sends a testimonial", kinds: ["testimonial"] },
   { key: "owner_codes", side: "owner", group: "Your account", label: "Sign-in codes and password resets", kinds: ["code", "reset"], always: true },
 
   // ---------- to a vendor ----------
   { key: "bookings", side: "vendor", group: "Bookings", label: "A new booking, or a booking is cancelled", kinds: ["booking_offer", "booking_cancelled"] },
   { key: "briefings", side: "vendor", group: "Briefings", label: "A briefing is sent to you", kinds: ["briefing"] },
+  { key: "vendor_call_sheets", side: "vendor", group: "Call sheets", label: "A call sheet is sent to you, or updated", hint: "With reminders when you haven't opened one yet.", kinds: ["vendor_callsheet", "vendor_callsheet_update"] }, // Phase 5b step 3
   { key: "invoice_updates", side: "vendor", group: "Invoices", label: "Your invoice is approved, declined or paid", kinds: ["vendor_invoice_approved", "vendor_invoice_declined", "vendor_invoice_paid", "vendor_payout_returned"] },
   { key: "vendor_payout_setup", side: "vendor", group: "Your account", label: "A business asks you to set up direct deposit", kinds: ["vendor_payout_setup"], always: true },
   { key: "vendor_invite", side: "vendor", group: "Your account", label: "Invites from a business", kinds: ["vendor_invite"], always: true },
@@ -48,6 +58,11 @@ export const NOTICES: Notice[] = [
   { key: "invoice_reminders", side: "client", group: "Payments", label: "Reminders before an invoice is due", hint: "Overdue notices, and reminders the business sends by hand, still arrive.", kinds: ["invoice-reminder-before"] },
   { key: "subscription_upcoming", side: "client", group: "Payments", label: "A subscription charge is coming up", kinds: ["subscription-upcoming"] },
   { key: "client_bills", side: "client", group: "Payments", label: "Invoices, receipts, overdue notices and failed payments", kinds: ["invoice", "invoice-reminder-overdue", "invoice-reminder-manual", "receipt", "payment-failed", "subscription", "subscription-failed", "subscription-cancelled"], always: true },
+  { key: "client_shoots", side: "client", group: "Shoots and files", label: "Shoots scheduled or moved, files asked for, and the kickoff brief", hint: "They ask you to confirm, upload or answer, so they always arrive.", kinds: ["shoot", "file_request", "brief"], always: true },
+  { key: "client_messages", side: "client", group: "Messages", label: "A message from the business", hint: "One email when they write, and only if you haven't read it yet.", kinds: ["message"] }, // Phase 5d (email 44)
+  { key: "call_sheets", side: "client", group: "Shoots and files", label: "A call sheet is sent to you, or updated", hint: "With reminders when you haven't opened one yet.", kinds: ["callsheet", "callsheet_update"] }, // Phase 5b step 3
+  { key: "files_due", side: "client", group: "Shoots and files", label: "A reminder the day before files are due", hint: "Only when nothing has been uploaded yet.", kinds: ["files_due"] },
+  { key: "footage_offer", side: "client", group: "Delivery", label: "An offer to keep your raw footage after delivery", kinds: ["footage_offer"] },
   { key: "client_docs", side: "client", group: "Documents", label: "Quotes, proposals, documents to sign and signed copies", kinds: ["quote", "proposal", "ws-sign", "ws-reminder", "ws-cancelled", "ws-copy", "ws-code"], always: true },
   { key: "client_access", side: "client", group: "Your account", label: "Invites, shared links and sign-in codes", kinds: ["invite", "share-invite", "code", "reset"], always: true },
 ];

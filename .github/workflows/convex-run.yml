@@ -21,6 +21,8 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
+    # Nov 4 (Heston): the live Convex key lives only in GitHub environments, used only from main (D150).
+    environment: production
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

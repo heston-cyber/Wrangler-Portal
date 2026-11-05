@@ -43,6 +43,10 @@ env:
 jobs:
   backup:
     runs-on: ubuntu-latest
+    # Nov 4 (Heston): the live Convex key lives only in GitHub environments, used only from main (D150).
+    # Live backups use "production-checks" (no approval, main only), so the weekly copy doesn't wait for a click.
+    # Dev backups use no environment (their key is the dev one).
+    environment: ${{ (github.event_name == 'schedule' || inputs.target == 'prod') && 'production-checks' || '' }}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4

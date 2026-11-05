@@ -3,10 +3,11 @@
 // Frame-exact: every note is stored as integer frames from frame 0 of its version.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BrandImg } from "../../ui/BrandImg";
-import { useConvex, useMutation, useQuery } from "convex/react";
+import { useAction, useConvex, useMutation, useQuery } from "convex/react";
 import {
   AlertTriangle, ArrowUp, Brush, Check, ChevronDown, ChevronUp, Circle, CircleCheckBig, Copy, Download, ListOrdered, Ellipsis, EyeOff, Eye, Keyboard, Maximize, Minimize, MoveUpRight, PanelRight, Pause, Pencil, Play,
   Crosshair, Film, Mic, Plus, Settings, Share2, SlidersHorizontal, Square, Timer, Undo2, Upload, Volume2, VolumeX, X,
+  FolderOpen,
 } from "lucide-react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../convex/_generated/api";
@@ -29,7 +30,8 @@ import { canRecord, useVoiceRecorder } from "./voice/useVoiceRecorder";
 import { mapWords, playedRange, pointersFrom, transcriptText, type Pointer, type VoiceWord } from "../../../convex/lib/voice";
 import { secondsText } from "./notes/NotesPanel";
 import { Sep, TopBar } from "../../shell/Shell";
-import { Menu, MenuItem, MenuLabel, MenuSep, Modal, Spinner, useIsNarrow, useToast } from "../../ui/kit";
+import { Menu, MenuItem, MenuLabel, MenuSep, Modal, Spinner, useContextMenu, useIsNarrow, useToast } from "../../ui/kit";
+import { revealInFinder } from "../../lib/finder";
 import { Button, ButtonLink, DialogHeader, EmptyState } from "../../ui/wp";
 import { FileName, copyText } from "./Register";
 import { shortTitleFrom } from "../../../convex/lib/register";
@@ -45,6 +47,7 @@ import { ViewsChip, ViewsDialog } from "./Views";
 import { RoundChip } from "./VideoRows";
 import { Watermark } from "./player/Watermark";
 import { useRoundGate } from "../projects/RoundGate";
+import { QUALITY_PREF_KEY, defaultQuality, noticeKey, noticeText, qualityOptions, switchTo, type QualityId } from "./player/quality";
 
 export default function VideoPage({ videoId, versionNumber, noteId }: { videoId: Id<"videos">; versionNumber: number | null; noteId: string | null }) {
   const viewer = useViewer();
@@ -156,6 +159,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const reportFrameCount = useMutation(api.library.reportFrameCount);
   const retryCopy = useMutation(api.library.retryCopy);
   const [toast, showToast] = useToast();
+  const [openCtx, ctxMenu] = useContextMenu(); // Nov 2: right-click "Reveal in Finder" on the breadcrumb
   const [uploadVersion, roundGate] = useRoundGate();
 
   const fps: Fps = useMemo(() => ({ num: version?.fpsNum ?? 24000, den: version?.fpsDen ?? 1001 }), [version?.fpsNum, version?.fpsDen]);
@@ -173,7 +177,13 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   // A version whose 1080p file failed before opens on the stream (remembered per browser; see the fallback below).
   // (Renamed Oct 22: flags saved by a false error on the iPhone are ignored.)
   const streamOnlyKey = version ? `wr.streamOnly2.${version.bunnyGuid || version._id}` : "";
-  const [quality, setQuality] = useState<"file" | "stream">(() => (mp4H && !(version?.streamOnly && !isFile) && !readFlag(streamOnlyKey) ? "file" : "stream"));
+  // Nov 4 (Heston): versions made since then list only 1080p and, when there is one, 4K; 1080p plays by default and a
+  // viewer's own 4K choice (one key per browser) wins. Older versions keep the menu and picture below (see player/quality.ts).
+  const qOptions = useMemo(() => qualityOptions(version?.media.quality), [version?.media.quality]);
+  const [qPick, setQPick] = useState<QualityId | null>(() => defaultQuality(qOptions, readPref(QUALITY_PREF_KEY, "")));
+  const qPicked = qOptions.find((o) => o.id === qPick) ?? null;
+  const chose = useRef(false); // the viewer picked in this visit: the default never takes over again
+  const [quality, setQuality] = useState<"file" | "stream">(() => ((qPicked || mp4H) && !(version?.streamOnly && !isFile) && !readFlag(streamOnlyKey) ? "file" : "stream"));
   const ready = version?.status === "ready";
   // C8: the owner's browser makes a version's preview picture the first time it opens it (once per version).
   const posterTried = useRef<string | null>(null);
@@ -185,7 +195,9 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   }, [owner, version?._id, ready, version?.needsPoster]);
   // One quiet retry of the full file before falling back (see the error handler below).
   const [retryN, setRetryN] = useState(0);
+  const fallbackSrc = !version ? null : isFile ? scrubHls : version.media.hls; // the 360p copy, or the stream
   const src = !version || !ready ? null
+    : qPicked ? (quality === "stream" && fallbackSrc ? fallbackSrc : isFile && retryN ? `${qPicked.url}#retry${retryN}` : qPicked.url)
     : isFile ? (quality === "stream" && scrubHls ? scrubHls : fileUrl && retryN ? `${fileUrl}#retry${retryN}` : fileUrl)
     : quality === "file" && mp4H ? version.media.mp4[mp4H] : version.media.hls;
   // Scrub copy: the best MP4 copy up to 720p that fits (80 MB on computers, 30 MB on phones), downloaded once the video is ready.
@@ -250,13 +262,48 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       return;
     }
     writeFlag(streamOnlyKey);
-    // A review render's fallback is only 360p, so other devices keep trying the full file.
-    if (!isFile) void markFileFailed({ versionId: version._id, code: player.errorCode ?? undefined, ...shareArgs }).catch(() => {});
+    // A review render's fallback is only 360p, so other devices keep trying the full file. (Nov 4: so do they when it
+    // was a 4K copy that failed here; the 1080p copy may still play there.)
+    if (!isFile && qPicked?.id !== "4k") void markFileFailed({ versionId: version._id, code: player.errorCode ?? undefined, ...shareArgs }).catch(() => {});
     void logPlayback({ versionId: version._id, kind: "fallback", t: d?.t, src: "stream", ua: navigator.userAgent, ...shareArgs }).catch(() => {});
     setQuality("stream");
-    showToast(isFile ? "The full-size render hit a playback error here, so this version switched to its 360p copy. Same frames." : "The 1080p file hit a playback error here, so this version switched to the stream. Same frames.");
+    const what = !qPicked ? null : isFile ? (qPicked.id === "4k" ? `${qPicked.label} render` : "1080p copy") : `${qPicked.label} file`;
+    showToast(isFile
+      ? `The ${what ?? "full-size render"} hit a playback error here, so this version switched to its 360p copy. Same frames.`
+      : `The ${what ?? "1080p file"} hit a playback error here, so this version switched to the stream. Same frames.`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player.errorCode]);
+  // Nov 4: picking 1080p or 4K in the cog keeps the frame (and keeps playing), the way the fallback above does.
+  const chooseQuality = (id: QualityId) => {
+    chose.current = true;
+    writePref(QUALITY_PREF_KEY, id);
+    if (id === qPick && quality === "file") return;
+    resumeAt.current = { f: player.clock.get(), play: player.playing };
+    setRetryN(0);
+    setQPick(id);
+    setQuality("file");
+  };
+  // When a copy becomes ready (a 4K render's 1080p copy), the default takes over only while the video is paused at its
+  // very start, never mid-play; a viewer's own choice stays.
+  const qKey = qOptions.map((o) => o.id).join();
+  useEffect(() => {
+    const next = switchTo({ options: qOptions, current: qPick, pref: readPref(QUALITY_PREF_KEY, ""), chose: chose.current, playing: player.playing, frame: player.clock.get() });
+    if (next) setQPick(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qKey, player.playing]);
+  // Clients and guests: playing 1080p while a 4K is there gets a small note for a few seconds when playback starts,
+  // once per version per browser.
+  const qNotice = owner ? null : noticeText(qOptions);
+  const [noticeOn, setNoticeOn] = useState(false);
+  const noticeDone = useRef(false);
+  useEffect(() => {
+    if (!player.playing || !qNotice || !version || quality !== "file" || qPick !== "1080" || noticeDone.current) return;
+    noticeDone.current = true;
+    if (readFlag(noticeKey(version._id))) return;
+    writeFlag(noticeKey(version._id));
+    setNoticeOn(true);
+  }, [player.playing, qNotice, version, quality, qPick]);
+  useEffect(() => { if (!noticeOn) return; const t = setTimeout(() => setNoticeOn(false), 5000); return () => clearTimeout(t); }, [noticeOn]);
   useEffect(() => {
     if (!player.ready || resumeAt.current === null) return;
     const { f, play } = resumeAt.current;
@@ -588,21 +635,26 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   }
 
   const newVersion = () => fileRef.current?.click();
-  // Download (C3): the render itself, or the best MP4 copy, when the share allows it (the owner always may).
-  const downloadUrl = version?.media.file ?? (version && mp4H ? version.media.mp4[mp4H] : null) ?? null;
-  const canDownload = !!downloadUrl && (owner || viewer.downloads);
+  // Download (C3; full resolution since D152): the render itself, or the master from Dropbox, when the share allows it
+  // (the owner always may). Review fix H1: the link is made per click by a server check, never sent with the page.
+  const downloadLink = useAction(api.library.downloadLink);
+  const canDownload = !!version?.download && (owner || viewer.downloads);
   // A plain link to another domain only plays the file, so it's fetched and saved here (lib/download), with progress.
   const [dl, setDl] = useState<{ pct: number } | null>(null);
   async function downloadFile() {
-    if (!downloadUrl || !version || dl) return;
-    const name = `${(data.title || "video").replace(/[^\w\- ]+/g, "").trim() || "video"}_v${version.number}.mp4`;
+    if (!version?.download || dl) return;
+    const v = version;
+    let got: { url: string; fallback: boolean } | null = null;
+    const link = async () => { got = await downloadLink({ versionId: v._id as Id<"versions">, ...shareArgs }); return got.url; };
     setDl({ pct: 0 });
     try {
-      const ok = await downloadOne(downloadUrl, name, version.fileSize ?? null, (p) => setDl({ pct: p.total ? Math.round((100 * p.done) / p.total) : 0 }));
-      if (ok) showToast("Downloaded");
-    } catch {
-      window.open(downloadUrl, "_blank", "noopener");
-      showToast("Opened the file in a new tab; save it from there.");
+      const ok = await downloadOne(link, v.download!.name, v.download!.bytes ?? null, (p) => setDl({ pct: p.total ? Math.round((100 * p.done) / p.total) : 0 }));
+      const g = got as { url: string; fallback: boolean } | null;
+      if (ok) showToast(g?.fallback ? "Downloaded the MP4 copy: the master isn't in Dropbox any more." : "Downloaded");
+    } catch (e) {
+      const g = got as { url: string; fallback: boolean } | null;
+      if (g?.url) { window.open(g.url, "_blank", "noopener"); showToast("Opened the file in a new tab; save it from there."); }
+      else showToast(String((e as Error)?.message ?? "Download didn't work.").replace(/^.*ConvexError: /, ""));
     } finally {
       setDl(null);
     }
@@ -627,8 +679,9 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       {SPEEDS.map((s) => <MenuItem key={s} keepOpen checked={rate === s} onSelect={() => setRate(s)}>{s}×</MenuItem>)}
       <MenuSep />
       <MenuLabel>Picture</MenuLabel>
-      {mp4H > 0 && <MenuItem checked={quality === "file" || (isFile && !scrubHls)} onSelect={() => setQuality("file")}>{isFile ? `The render, ${mp4H}p (exact frames)` : `${mp4H}p file (exact frames)`}</MenuItem>}
-      {hasStream && <MenuItem checked={quality === "stream" && !(isFile && !scrubHls)} onSelect={() => setQuality("stream")}>{isFile ? "Small copy, 360p (slow connections)" : player.streamTop ? `Stream, ${player.streamTop}p (highest; frames approximate)` : version?.height && version.height > mp4H ? `Stream, up to ${version.height}p (adapts to connection)` : "Stream (adapts to connection)"}</MenuItem>}
+      {qOptions.length > 0 && qOptions.map((o) => <MenuItem key={o.id} checked={quality === "file" && qPick === o.id} onSelect={() => chooseQuality(o.id)}>{o.label}</MenuItem>)}
+      {qOptions.length === 0 && mp4H > 0 && <MenuItem checked={quality === "file" || (isFile && !scrubHls)} onSelect={() => setQuality("file")}>{isFile ? `The render, ${mp4H}p (exact frames)` : `${mp4H}p file (exact frames)`}</MenuItem>}
+      {qOptions.length === 0 && hasStream && <MenuItem checked={quality === "stream" && !(isFile && !scrubHls)} onSelect={() => setQuality("stream")}>{isFile ? "Small copy, 360p (slow connections)" : player.streamTop ? `Stream, ${player.streamTop}p (highest; frames approximate)` : version?.height && version.height > mp4H ? `Stream, up to ${version.height}p (adapts to connection)` : "Stream (adapts to connection)"}</MenuItem>}
       <MenuSep />
       {!noNotes && <MenuItem checked={showDrawings} onSelect={() => setShowDrawings(!showDrawings)}>Show note drawings</MenuItem>}
       <MenuItem icon={<Keyboard size={16} />} kbd="?" onSelect={() => setDialog("keys")}>Keyboard shortcuts</MenuItem>
@@ -685,6 +738,10 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
     </div>
   );
 
+  // Nov 2 (Heston): "Reveal in Finder": this version's render in Dropbox (else its project's folder), the project's
+  // folder, or the Wrangler Review folder for Projects. It copies the path for Finder's ⌘⇧G (lib/finder.ts).
+  const versionPath = (version as { dropboxPath?: string | null } | null)?.dropboxPath ?? data.projectFolder ?? null;
+  const revealMenu = (e: React.MouseEvent, inApp: string | null, what: string) => openCtx(e, <MenuItem icon={<FolderOpen size={16} />} onSelect={() => void revealInFinder(inApp, showToast, what)}>Reveal in Finder</MenuItem>, "Reveal in Finder");
   return (
     <div className={`review${fs ? " fs" : ""}${typing && narrow ? " typing" : ""}`} ref={rootRef}>
       <TopBar right={
@@ -702,12 +759,12 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       }>
         <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps(viewer.home)} aria-label="Home" style={{ display: "flex" }}><BrandImg name="wordmark" className="logo" alt="Wrangler Productions" /></a>
         <Sep /></span>
-        {owner && <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps("/projects")}>Projects</a><Sep /></span>}
+        {owner && <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps("/projects")} onContextMenu={(e) => revealMenu(e, "/", "the Wrangler Review folder")}>Projects</a><Sep /></span>}
         {data.project && (owner
-          ? <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps(`/projects/${data.project._id}`)}>{projectLabel(data.project)}</a><Sep /></span>
+          ? <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps(`/projects/${data.project._id}`)} onContextMenu={(e) => revealMenu(e, data.projectFolder, "this project's folder")}>{projectLabel(data.project)}</a><Sep /></span>
           : <span className="hide-sm" style={{ display: "contents" }}><a {...linkProps(viewer.home)}>{projectLabel(data.project)}</a><Sep /></span>)}
         {data.number && <span className="chip num mono hide-sm" title="Register number">{String(data.number).padStart(5, "0")}</span>}
-        <span className="here">{data.title}</span>
+        <span className="here" onContextMenu={owner ? (e) => revealMenu(e, versionPath, "this video") : undefined}>{data.title}</span>
         <FinalBadge final={data.final} />
         {owner && verApprovals.length > 0 && <span className="wp-status success hide-sm" title={verApprovals.map((a) => `${a.name} · ${new Date(a.at).toLocaleString()}`).join("\n")}>Approved by {verApprovals.map((a) => a.name).join(", ")} · v{version!.number}</span>}
         {myApproval && <span className="wp-status success hide-sm" title={new Date(myApproval.at).toLocaleString()}>Approved by you · {new Date(myApproval.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>}
@@ -729,12 +786,14 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           {(libSettings.approveFinal || data.final) && data.versions.length > 0 && <MenuItem icon={<CircleCheckBig size={16} />} onSelect={() => setDialog("final")}>{data.final ? "Final version…" : "Approve final…"}</MenuItem>}
           {data.nextFileName && <MenuItem icon={<Copy size={16} />} onSelect={() => void copyText(`${data.nextFileName}.mp4`, showToast, "File name copied")}>Copy next render name</MenuItem>}
           <MenuItem icon={<Timer size={16} />} onSelect={() => setDialog("starttc")} disabled={!version}>Start timecode…</MenuItem>
+          <MenuItem icon={<FolderOpen size={16} />} onSelect={() => void revealInFinder(versionPath, showToast, "this video")}>Reveal in Finder</MenuItem>
           <MenuSep />
           <MenuItem icon={<Download size={16} />} onSelect={downloadEdl} disabled={!notes?.length}>Download Resolve markers</MenuItem>
           <MenuItem icon={<Keyboard size={16} />} onSelect={() => setDialog("keys")} kbd="?">Keyboard shortcuts</MenuItem>
         </Menu>
         )}
       </TopBar>
+      {ctxMenu}
       <input ref={fileRef} type="file" hidden accept="video/*,.mov,.mp4,.m4v,.mxf,.mkv"
         onChange={(e) => { const f = e.target.files?.[0]; if (f && isVideoFile(f)) { void uploadVersion(data._id, f, () => { setPanel("versions"); showToast("Uploading a new version…"); }); } e.target.value = ""; }} />
 
@@ -758,6 +817,12 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                 );
               }}</AtFrame>
               {data.watermark && version && ready && <Watermark look={data.watermark} />}
+              {noticeOn && qNotice && (
+                <div className="vquality" role="status">
+                  <span>{qNotice.split("⚙").map((part, i) => <span key={i}>{i > 0 && <><Settings size={13} aria-hidden className="cog" /><span className="sr-only">settings</span></>}{part}</span>)}</span>
+                  <button type="button" className="icon-btn bare sm" onClick={() => setNoticeOn(false)} aria-label="Dismiss"><X size={14} /></button>
+                </div>
+              )}
               {lastNotice && (
                 <div className="vlast" role="status">
                   <AlertTriangle size={18} />

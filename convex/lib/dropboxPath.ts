@@ -62,6 +62,8 @@ export function placeFor(pathDisplay: string): DropPlace {
   if (!VIDEO_EXTS.includes(ext)) return { ok: false, reason: `Not a video file (.${ext}).`, ignore: true };
   // A top-level folder starting with "_" (e.g. _tests) is scratch space the site leaves alone (Oct 22).
   if (parts.length > 1 && parts[0].trim().startsWith("_")) return { ok: false, reason: "Scratch folder (starts with _).", ignore: true };
+  // Phase 4 (Nov 2): clients' uploads for file requests live under File requests/; they're never renders.
+  if (parts.length > 1 && parts[0].trim().toLowerCase() === "file requests") return { ok: false, reason: "A client's upload (File requests).", ignore: true };
   // R3: a register name (00001_Title_v4.mp4) decides the video by its number, in any folder.
   const reg = registerName(fileName);
   if (reg) {

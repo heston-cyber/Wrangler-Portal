@@ -38,7 +38,7 @@ export default function ClientReview({ me }: { me: { name: string | null; email:
             </>
           ) : (
             <>
-              <PageHeader eyebrow="Shared with you" title={first ? `Hi ${first}.` : "Hello."} sub={`Open a video to watch it${comment ? " (and leave notes on exact frames)" : ""}.`} />
+              <PageHeader help="/help/leaving-notes" eyebrow="Shared with you" title={first ? `Hi ${first}.` : "Hello."} sub={`Open a video to watch it${comment ? " (and leave notes on exact frames)" : ""}.`} />
               {[...groups.entries()].map(([client, shares]) => {
                 const seen = new Set<string>();
                 const rows: Array<{ s: Share; v: Video }> = [];

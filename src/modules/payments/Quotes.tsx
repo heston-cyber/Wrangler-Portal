@@ -7,6 +7,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { estimate, formulaPrice, primaryKind, type Rates } from "../../../convex/lib/estimate";
+import { OfferPeopleCard, SendOfferDialog } from "./SendOffer";
 import { Button, ButtonLink, Card, Checkbox, DialogHeader, Divider, EmptyState, ListRow, PageHeader, PillTabs, SectionHead, Segmented, SkeletonRows, StatusChip, TextArea, TextField } from "../../ui/wp";
 import { Icon } from "../../ui/Icon";
 import { Menu, MenuItem, Modal, useConfirm, useToast } from "../../ui/kit";
@@ -92,7 +93,7 @@ export function QuoteEditor({ quoteId, clientId, dealId }: { quoteId?: string | 
   const send = useAction(api.quotes.send);
   const [toast, show] = useToast();
   const [loaded, setLoaded] = useState(!quoteId);
-  const [mode, setMode] = useState<"existing" | "new">("existing");
+  const [mode, setMode] = useState<"existing" | "new" | "none">("existing"); // D149: none = "No client yet"
   const [whoKey, setWhoKey] = useState<string>("");
   const [person, setPerson] = useState({ name: "", email: "", company: "" });
   const [title, setTitle] = useState("");
@@ -114,8 +115,8 @@ export function QuoteEditor({ quoteId, clientId, dealId }: { quoteId?: string | 
   useEffect(() => {
     if (!quoteId || loaded || !existing || !options) return;
     const q = existing;
-    const match = options.who.find((w) => (q.clientId && w.clientId === q.clientId && w.email === q.contact.email) || (q.dealId && w.dealId === q.dealId));
-    if (match) { setMode("existing"); setWhoKey(match.key); } else { setMode("new"); setPerson({ name: q.contact.name, email: q.contact.email, company: q.contact.company ?? "" }); }
+    const match = options.who.find((w) => (q.clientId && w.clientId === q.clientId && w.email === q.contact?.email) || (q.dealId && w.dealId === q.dealId));
+    if (match) { setMode("existing"); setWhoKey(match.key); } else if (q.contact) { setMode("new"); setPerson({ name: q.contact.name, email: q.contact.email, company: q.contact.company ?? "" }); } else setMode("none");
     setTitle(q.title); setLines(q.lines.map((l) => ({ ...l }))); setDiscountOn(!!q.discountCents); setDiscountCents(q.discountCents ?? 0);
     setTaxOn(!!q.taxPercent); setTaxPercent(String(q.taxPercent ?? 0)); setDeposit(q.deposit); setDepositText(q2(q.deposit.kind === "percent" ? q.deposit.value : q.deposit.value / 100));
     setValidUntil(q.validUntil); setTerms(q.terms ?? "");
@@ -130,7 +131,7 @@ export function QuoteEditor({ quoteId, clientId, dealId }: { quoteId?: string | 
   useEffect(() => { if (r && !answers.level && r.links[0]) setAnswers((a) => ({ ...a, level: r.links[0].defaultLevel })); }, [r, answers.level]);
 
   const who = mode === "existing" ? options?.who.find((w) => w.key === whoKey) ?? null : null;
-  const contact = mode === "existing" ? (who ? { name: who.name, email: who.email, company: who.company ?? "" } : { name: "", email: "", company: "" }) : person;
+  const contact = mode === "existing" ? (who ? { name: who.name, email: who.email, company: who.company ?? "" } : { name: "", email: "", company: "" }) : mode === "none" ? { name: "", email: "", company: "" } : person;
   const k0 = r ? primaryKind(r) : null;
   const link0 = r?.links[0];
   const level = link0?.levels.find((x) => x.id === answers.level) ?? link0?.levels.find((x) => x.id === link0.defaultLevel);
@@ -174,20 +175,20 @@ export function QuoteEditor({ quoteId, clientId, dealId }: { quoteId?: string | 
   const formula = r?.formula?.on && est && answers.jobs.length ? formulaPrice(r, est) : null;
   const tax = taxOn ? Math.max(0, Number(taxPercent) || 0) : 0;
   const t = totalsOf(lines, discountOn ? discountCents : 0, tax, deposit);
-  const contactOk = !!contact.name.trim() && /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(contact.email.trim());
+  const contactOk = mode === "none" || (!!contact.name.trim() && /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(contact.email.trim()));
   const doc: QuoteDoc = {
     business: existing?.business ?? { name: "", legalName: null }, number: existing?.number ?? options?.next ?? "", issued: longMs(Date.now()), validUntil: longIso(validUntil),
-    contact: { name: contact.name, email: contact.email, ...(contact.company ? { company: contact.company } : {}) }, project: title || null,
+    contact: mode === "none" ? { name: "Added at send" } : { name: contact.name, email: contact.email, ...(contact.company ? { company: contact.company } : {}) }, project: title || null,
     lines, totals: t, taxPercent: tax, deposit, terms: terms || null,
   };
   const biz = useQuery(api.business.settings, {});
   if (!existing && biz) doc.business = { name: biz.name, legalName: biz.legalName, logoUrl: biz.logoUrl, logoLightUrl: biz.logoLightUrl, email: biz.replyTo ?? biz.ownerEmail, address: biz.address, privacyUrl: biz.privacyUrl };
 
   const doSave = async () => {
-    const w = mode === "existing" && who ? { ...(who.clientId ? { clientId: who.clientId as Id<"clients"> } : {}), ...(who.dealId ? { dealId: who.dealId as Id<"deals"> } : {}), name: who.name, email: who.email, ...(who.company ? { company: who.company } : {}) }
+    const w = mode === "none" ? undefined : mode === "existing" && who ? { ...(who.clientId ? { clientId: who.clientId as Id<"clients"> } : {}), ...(who.dealId ? { dealId: who.dealId as Id<"deals"> } : {}), name: who.name, email: who.email, ...(who.company ? { company: who.company } : {}) }
       : { name: person.name, email: person.email, ...(person.company.trim() ? { company: person.company } : {}) };
     const id = await save({
-      ...(savedId ? { quoteId: savedId } : {}), who: w, title, deposit, validUntil, terms, questions: answers,
+      ...(savedId ? { quoteId: savedId } : {}), ...(w ? { who: w } : {}), title, deposit, validUntil, terms, questions: answers,
       lines: lines.map((l) => ({ id: l.id, description: l.description, qty: l.qty, unitCents: l.unitCents, ...(l.suggestedCents !== undefined ? { suggestedCents: l.suggestedCents } : {}), ...(l.note ? { note: l.note } : {}) })),
       ...(discountOn && discountCents ? { discountCents } : {}), ...(tax ? { taxPercent: tax } : {}),
     });
@@ -202,9 +203,17 @@ export function QuoteEditor({ quoteId, clientId, dealId }: { quoteId?: string | 
     setBusy("save");
     try { await doSave(); setConfirm(true); } catch (e) { show(errText(e)); } finally { setBusy(null); }
   };
-  const onSend = async () => {
-    setBusy("send");
-    try { const id = savedId!; const r2 = await send({ quoteId: id }); setConfirm(false); navigate(`/payments/quotes/${id}`); if (r2.held) show("Sent. (The preview only emails allowed addresses.)"); } catch (e) { show(errText(e)); setBusy(null); }
+  const onSend = async (to: string, name: string) => {
+    const id = savedId!;
+    const r2 = await send({ quoteId: id, to, ...(name.trim() ? { name } : {}) });
+    setConfirm(false); navigate(`/payments/quotes/${id}`);
+    show(r2.failed.length ? `Sent, but not to ${r2.failed.join(", ")}.` : r2.held ? "Sent. (The preview only emails allowed addresses.)" : `Sent to ${r2.sent === 1 ? to.trim() : `${r2.sent} people`}.`);
+  };
+  const onCopyLink = async () => {
+    const id = savedId!;
+    const r2 = await send({ quoteId: id, copyLink: true });
+    setConfirm(false); navigate(`/payments/quotes/${id}`); show("Link copied. Anyone with it can open and accept the quote.");
+    return r2.link;
   };
 
   const setLine = (i: number, p: Partial<QLine>) => setLines(lines.map((l, j) => (j === i ? { ...l, ...p } : l)));
@@ -232,8 +241,9 @@ export function QuoteEditor({ quoteId, clientId, dealId }: { quoteId?: string | 
           <div className="col">
             <Card label="Who it's for" head={<SectionHead label="Who it's for" />}>
               <div className="crm-pad">
-                <Segmented label="Who it's for" value={mode} onChange={setMode} items={[{ key: "existing", label: "Existing client or lead" }, { key: "new", label: "New person" }]} />
-                {mode === "existing" ? (
+                <Segmented label="Who it's for" value={mode} onChange={setMode} items={[{ key: "existing", label: "Existing client or lead" }, { key: "new", label: "New person" }, { key: "none", label: "No client yet" }]} />
+                {mode === "none" ? <p className="wp-small secondary">Add who it goes to when you send it, or add a client later. They don’t have to be a client, and nothing is saved as a client. Sending needs a recipient.</p>
+                : mode === "existing" ? (
                   <label className="wp-field"><span className="wp-field-label">Client</span>
                     <select className="input" value={whoKey} onChange={(e) => setWhoKey(e.target.value)}>
                       <option value="">Pick a person</option>
@@ -330,21 +340,10 @@ export function QuoteEditor({ quoteId, clientId, dealId }: { quoteId?: string | 
         </div>
       </div>
       {confirm && savedId && (
-        <Modal onClose={() => setConfirm(false)} label="Send quote" width={520}>
-          <div className="crm-dialog">
-            <DialogHeader eyebrow={doc.number} title={`Send this quote to ${contact.name.split(" ")[0]}?`} body={`It goes to ${contact.email} from ${doc.business.name || "your business"}, with a link to accept or decline. No account needed.`} onClose={() => setConfirm(false)} />
-            <dl className="crm-dl crm-box">
-              <dt className="big">Total</dt><dd className="big">{money(t.total)}</dd>
-              <dt>Deposit to book</dt><dd>{money(t.deposit)}</dd>
-              <dt>Valid until</dt><dd>{longIso(validUntil)}</dd>
-            </dl>
-            <p className="wp-small">Nothing moves on your pipeline until you say so.</p>
-            <div className="dfoot">
-              <button className="btn ghost" type="button" onClick={() => setConfirm(false)}>Not yet</button>
-              <Button variant="primary" loading={busy === "send"} onClick={() => void onSend()}>Send quote</Button>
-            </div>
-          </div>
-        </Modal>
+        <SendOfferDialog kind="quote" number={doc.number} initialTo={mode === "none" ? "" : contact.email} initialName={mode === "none" ? "" : contact.name} toClient={mode !== "none"}
+          summary={<><dl className="crm-dl crm-box"><dt className="big">Total</dt><dd className="big">{money(t.total)}</dd><dt>Deposit to book</dt><dd>{money(t.deposit)}</dd><dt>Valid until</dt><dd>{longIso(validUntil)}</dd></dl>
+            <p className="wp-small">Nothing moves on your pipeline until you say so.</p></>}
+          onSend={onSend} onCopyLink={onCopyLink} onPdf={() => downloadPdf(quotePdf(doc))} onClose={() => setConfirm(false)} />
       )}
       {toast}
     </>
@@ -405,14 +404,21 @@ export function QuoteDetail({ quoteId }: { quoteId: string }) {
   const [ask, confirmNode] = useConfirm();
   const [drafting, setDrafting] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [sending, setSending] = useState(false);
+  const stopLink = useMutation(api.quotes.stopLink);
+  const newLink = useMutation(api.quotes.newLink);
   const top = (here?: string) => <TopBar><span className="secondary">Payments</span><Sep /><a {...linkProps("/payments/quotes")}>Quotes</a>{here && <><Sep /><span className="here">{here}</span></>}</TopBar>;
   if (q === undefined) return <>{top()}<div className="wp-page"><Card label="Loading"><SkeletonRows n={5} /></Card></div></>;
   if (q === null) return <>{top()}<div className="wp-page"><EmptyState icon="invoice" title="This quote isn't here." actions={<ButtonLink to="/payments/quotes">Quotes</ButtonLink>} /></div></>;
   if (q.status === "draft") return <QuoteEditor key={q._id} quoteId={q._id} />;
   const s = q.display as Status;
-  const company = q.contact.company || q.contact.name;
-  const doc: QuoteDoc = { business: q.business, number: q.number, issued: longMs(q.sentAt ?? q.createdAt), validUntil: longIso(q.validUntil), contact: q.contact, project: q.title, lines: q.lines, totals: q.totals, taxPercent: q.taxPercent, deposit: q.deposit, terms: q.terms ?? null, acceptUrl: q.link };
-  const copy = async () => { try { await navigator.clipboard.writeText(q.link ?? ""); show("Link copied."); } catch { show("Couldn't copy. The link is on the quote."); } };
+  const company = q.contact?.company || q.contact?.name || "No client yet";
+  const doc: QuoteDoc = { business: q.business, number: q.number, issued: longMs(q.sentAt ?? q.createdAt), validUntil: longIso(q.validUntil), contact: q.contact ?? { name: "Anyone it was sent to" }, project: q.title, lines: q.lines, totals: q.totals, taxPercent: q.taxPercent, deposit: q.deposit, terms: q.terms ?? null, acceptUrl: q.linkUrl ?? null }; // D149 review M4: a PDF never carries one person's own link
+  const copy = async () => {
+    try { const r2 = await send({ quoteId: q._id, copyLink: true }); await navigator.clipboard.writeText(r2.link ?? ""); show("Link copied. Anyone with it can open and accept the quote; opens are counted, not named."); }
+    catch (e) { show(errText(e)); }
+  };
+  const sentTo = q.who.people.length > 1 ? `${q.who.people[0].name || q.who.people[0].email} and ${q.who.people.length - 1} more` : q.who.people[0] ? q.who.people[0].name || q.who.people[0].email : "anyone with the link";
   const run = async (f: () => Promise<unknown>, msg: string) => { setBusy(true); try { await f(); show(msg); } catch (e) { show(errText(e)); } finally { setBusy(false); } };
   const viewed = q.viewedAt ? ` · viewed ${dateShort(q.viewedAt)}` : "";
   return (
@@ -427,13 +433,19 @@ export function QuoteDetail({ quoteId }: { quoteId: string }) {
           </div>
           <div className="acts"><QuoteChip status={s} /></div>
         </header>
-        {s === "sent" && !q.asked?.move && (
+        {s === "sent" && !q.asked?.move && (q.clientId || q.dealId) && ( // D149: sent to anyone with no client, there's nothing to move
           <div className="q-banner">
             <Icon name="info" size={18} />
-            <span><b>Sent to {q.contact.name} · {dateShort(q.sentAt ?? q.createdAt)}{viewed}</b><small>Move {company} to Quoted in your pipeline? Nothing moves unless you say so.</small></span>
+            <span><b>Sent to {sentTo} · {dateShort(q.sentAt ?? q.createdAt)}{viewed}</b><small>Move {company} to Quoted in your pipeline? Nothing moves unless you say so.</small></span>
             <span className="sp" />
             <button type="button" className="btn ghost sm" disabled={busy} onClick={() => void run(() => answerMove({ quoteId: q._id, yes: false }), "Left as it is.")}>No</button>
             <Button size="sm" variant="primary" disabled={busy} onClick={() => void run(() => answerMove({ quoteId: q._id, yes: true }), `${company} is in Quoted.`)}>Yes, move it</Button>
+          </div>
+        )}
+        {s === "accepted" && q.deal?.quiet && (
+          <div className="q-banner">
+            <Icon name="info" size={18} />
+            <span><b>{q.response?.name}{q.response?.company ? `, for ${q.response.company},` : ""} is not a client, so a quiet lead record was made.</b><small>Nothing else moves unless you say so. Move them to Quoted to put them on the pipeline.</small></span>
           </div>
         )}
         {s === "accepted" && !q.asked?.draft && (
@@ -461,18 +473,19 @@ export function QuoteDetail({ quoteId }: { quoteId: string }) {
           </div>
         )}
         <div className="q-cols">
-          <div className="col"><QuotePaper q={doc} /></div>
+          <div className="col"><QuotePaper q={doc} showAccept={!!doc.acceptUrl} /></div>
           <div className="col right">
             <Card label="Actions" head={<SectionHead label="Actions" />}>
               <div className="crm-steps">
                 {s === "accepted" && <Button variant="primary" onClick={() => setDrafting(true)}>Draft from this quote</Button>}
-                {s === "sent" && <Button disabled={busy} onClick={() => void run(() => send({ quoteId: q._id, resend: true }), `Sent again to ${q.contact.email}.`)}>Resend</Button>}
-                {q.link && s !== "void" && <Button onClick={() => void copy()}>Copy link</Button>}
+                {s === "sent" && <Button disabled={busy} onClick={() => setSending(true)}>Send again</Button>}
+                {s === "sent" && <Button onClick={() => void copy()}>Copy link</Button>}
                 <Button onClick={() => void downloadPdf(quotePdf(doc))}>Download PDF</Button>
                 {s === "sent" && <button type="button" className="btn ghost" onClick={async () => { if (await ask({ title: `Void ${q.number}?`, body: "Its link stops working and it can't be accepted. You can make a new quote.", yes: "Void quote" })) void run(() => voidQuote({ quoteId: q._id }), "Voided."); }}>Void quote</button>}
                 {(s === "expired" || s === "declined" || s === "void") && <ButtonLink to={`/payments/quotes/new${q.clientId ? `?client=${q.clientId}` : ""}`}>New quote</ButtonLink>}
               </div>
             </Card>
+            <OfferPeopleCard who={q.who} open={s === "sent"} show={show} onStop={(personId) => stopLink({ quoteId: q._id, personId: personId as Id<"offerRecipients"> })} onNewLink={() => newLink({ quoteId: q._id })} />
             <Card label="History" head={<SectionHead label="History" />}>
               <dl className="crm-dl q-hist">
                 {[...q.history].reverse().filter((h) => HIST[h.kind]).map((h, i) => <span key={i} className="crm-pair"><dt>{HIST[h.kind](h, q)}{h.kind === "accepted" ? " (typed name)" : ""}</dt><dd>{longMs(h.at).replace(/, \d{4}$/, "")}, {new Date(h.at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</dd></span>)}
@@ -493,6 +506,9 @@ export function QuoteDetail({ quoteId }: { quoteId: string }) {
         </div>
       </div>
       {drafting && <DraftFrom q={q} onClose={() => setDrafting(false)} show={show} />}
+      {sending && <SendOfferDialog kind="quote" number={q.number} onClose={() => setSending(false)} onPdf={() => downloadPdf(quotePdf(doc))}
+        onSend={async (to, name) => { const r2 = await send({ quoteId: q._id, to, ...(name.trim() ? { name } : {}) }); setSending(false); show(r2.failed.length ? `Not sent to ${r2.failed.join(", ")}.` : r2.sent ? `Sent to ${r2.sent} ${r2.sent === 1 ? "person" : "people"}.` : "They were emailed in the last 10 minutes, so not again yet."); }}
+        onCopyLink={async () => { const r2 = await send({ quoteId: q._id, copyLink: true }); setSending(false); show("Link copied."); return r2.link; }} />}
       {confirmNode}
       {toast}
     </>

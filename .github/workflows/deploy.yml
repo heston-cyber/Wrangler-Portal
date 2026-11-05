@@ -30,6 +30,9 @@ jobs:
   build:
     needs: [tests, backup]
     runs-on: ubuntu-latest
+    # Nov 4 (Heston): the live Convex key lives only in GitHub environments, used only from main (D150).
+    # "production" needs Heston's Approve on GitHub before anything goes live.
+    environment: production
     env:
       CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
       # Public value (not a secret): Bunny's video CDN host name.

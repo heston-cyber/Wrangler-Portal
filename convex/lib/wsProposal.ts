@@ -44,12 +44,13 @@ export function withoutPrices(page: Page): Page {
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** What must be right before a proposal is sent (the builder's Details list, and the server's own check). */
-export function proposalProblems(d: BuildDoc): string[] {
+export function proposalProblems(d: BuildDoc, o: { anyone?: boolean } = {}): string[] {
   const out: string[] = [];
   if (!d.title.trim()) out.push("Give the proposal a title (Details).");
   if (!textOf(d.page as PNode).trim()) out.push("Add some content.");
-  if (!d.fields.client.name.trim()) out.push("Enter the client's name (Details).");
-  if (!EMAIL.test(d.fields.client.email.trim())) out.push("Enter the client's email (Details): the proposal link goes there.");
+  // D149: sent to anyone (To in the Send dialog), the client's name and email aren't needed.
+  if (!o.anyone && !d.fields.client.name.trim()) out.push("Enter the client's name (Details).");
+  if (!o.anyone && !EMAIL.test(d.fields.client.email.trim())) out.push("Enter the client's email (Details): the proposal link goes there.");
   if (nodesOf(d.page, "signatures").length) out.push("Proposals aren't signed: remove the signature block (the contract follows once it's accepted).");
   if (/\bPICK ONE:/.test(textOf(d.page as PNode))) out.push('Resolve the "PICK ONE" note.');
   const miss = missingFields(d.page, d.fields);

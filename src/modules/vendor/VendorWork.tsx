@@ -60,7 +60,7 @@ export function VendorInvoices() {
     <>
       <TopBar><span className="here">Invoices</span></TopBar>
       <div className="wp-page">
-        <PageHeader eyebrow={owner?.business} title="Invoices." sub={`${ownerFirst} marks each one paid when it's paid.`} actions={<ButtonLink variant="primary" to="/vendor/invoices/new">Send an invoice</ButtonLink>} />
+        <PageHeader help="/vendor/help/sending-an-invoice" eyebrow={owner?.business} title="Invoices." sub={`${ownerFirst} marks each one paid when it's paid.`} actions={<ButtonLink variant="primary" to="/vendor/invoices/new">Send an invoice</ButtonLink>} />
         {rows.length === 0 ? <EmptyState icon="invoice" title="No invoices yet." body="Send an invoice for a booking you've accepted: hours at the agreed rate, or line items." actions={<ButtonLink variant="primary" to="/vendor/invoices/new">Send an invoice</ButtonLink>} /> : <>
           <PillTabs label="Show" value={pill} onChange={setPill} items={[{ key: "all", label: "All", count: count("all") }, ...(count("draft") ? [{ key: "draft" as Pill, label: "Draft", count: count("draft") }] : []), ...(count("declined") ? [{ key: "declined" as Pill, label: "Declined", count: count("declined") }] : []), { key: "sent", label: "Sent", count: count("sent") }, { key: "approved", label: "Approved", count: count("approved") }, { key: "paid", label: "Paid", count: count("paid") }]} />
           <Card label="Invoices">{shown.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "invoice" }} title="None here." /> : shown.map(rowOf)}</Card>
@@ -262,7 +262,7 @@ export function VendorSettings() {
     <>
       <TopBar><span className="here">Settings</span></TopBar>
       <div className="wp-page">
-        <PageHeader eyebrow="Your account" title="Your details." sub={`What ${s.business} has for you. Your login (${s.email}) works for every business you work for.`} actions={<Button variant="primary" loading={busy} onClick={() => void onSave()}>Save</Button>} />
+        <PageHeader help="/vendor/help/adding-a-w9" eyebrow="Your account" title="Your details." sub={`What ${s.business} has for you. Your login (${s.email}) works for every business you work for.`} actions={<Button variant="primary" loading={busy} onClick={() => void onSave()}>Save</Button>} />
         {err && <p className="error" role="alert">{err}</p>}
         <div className="wp-homecols">
           <div className="col">
@@ -286,6 +286,9 @@ export function VendorSettings() {
             </Card>
           </div>
           <div className="col right">
+            <Card label="Help" head={<SectionHead label="Help" />}>
+              <ListRow className="ilead" lead={{ icon: "info" }} to="/vendor/help" chevron title="Help" meta="Short guides: bookings, briefings, invoices and your W-9." />
+            </Card>
             <Card label="W-9" head={<SectionHead label="W-9" />}>
               <div className="vd-pad vi-for">
                 {s.w9 ? <div className="vd-row"><span>{s.w9.name} · uploaded {dateShort(s.w9.uploadedAt)}</span><StatusChip tone="success">On file</StatusChip></div> : <div className="vd-row"><span>No W-9 yet</span><StatusChip tone="warning">Missing</StatusChip></div>}

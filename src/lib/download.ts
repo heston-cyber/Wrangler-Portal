@@ -14,7 +14,7 @@ async function openSink(name: string, mime: string): Promise<Sink> {
   const w = window as unknown as { showSaveFilePicker?: (o: { suggestedName: string; types: Array<{ description: string; accept: Record<string, string[]> }> }) => Promise<{ createWritable: () => Promise<{ write: (c: Uint8Array) => Promise<void>; close: () => Promise<void>; abort: () => Promise<void> }> }> };
   if (w.showSaveFilePicker) {
     const ext = name.includes(".") ? "." + name.split(".").pop()! : "";
-    const handle = await w.showSaveFilePicker({ suggestedName: name, types: [{ description: mime, accept: { [mime]: [ext] } }] });
+    const handle = await w.showSaveFilePicker({ suggestedName: name, types: ext ? [{ description: mime, accept: { [mime]: [ext] } }] : [] });
     const ws = await handle.createWritable();
     return { write: (c) => ws.write(c), close: () => ws.close(), abort: () => ws.abort() };
   }
@@ -46,12 +46,17 @@ async function pump(url: string, onChunk: (c: Uint8Array) => Promise<void>, onBy
   return got;
 }
 
+// D152: full-resolution files keep their own type (.mov, .mxf…), so the save box offers the right one.
+const MIME: Record<string, string> = { mp4: "video/mp4", m4v: "video/x-m4v", mov: "video/quicktime", mxf: "application/mxf", mkv: "video/x-matroska", avi: "video/x-msvideo", webm: "video/webm" };
+const mimeOf = (name: string) => MIME[(/\.([A-Za-z0-9]+)$/.exec(name)?.[1] ?? "").toLowerCase()] ?? "application/octet-stream";
+
 /** Saves one file. `onProgress` gets bytes so far and the total when known. Returns false when the user cancelled the save box. */
-export async function downloadOne(url: string, name: string, total: number | null, onProgress: (p: Progress) => void): Promise<boolean> {
+export async function downloadOne(url: string | (() => Promise<string>), name: string, total: number | null, onProgress: (p: Progress) => void): Promise<boolean> {
   let sink: Sink;
-  try { sink = await openSink(safeName(name), "video/mp4"); } catch (e) { if ((e as Error).name === "AbortError") return false; throw e; }
+  try { sink = await openSink(safeName(name), mimeOf(name)); } catch (e) { if ((e as Error).name === "AbortError") return false; throw e; }
   try {
-    await pump(url, (c) => sink.write(c), (n) => onProgress({ done: n, total: total ?? 0, file: name, files: 1, ofFiles: 1 }));
+    // The link is made after the save box (D152 fix: per click, so the click still counts and no link goes stale).
+    await pump(typeof url === "string" ? url : await url(), (c) => sink.write(c), (n) => onProgress({ done: n, total: total ?? 0, file: name, files: 1, ofFiles: 1 }));
     await sink.close();
     return true;
   } catch (e) { await sink.abort().catch(() => {}); throw e; }

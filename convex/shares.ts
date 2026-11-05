@@ -13,7 +13,7 @@ import { bump } from "./lib/rate";
 import { ensureInvite } from "./clients";
 import { randomToken } from "./lib/hash";
 import { SITE, sendEmail } from "./lib/email";
-import { downloadFor, signedThumbUrl } from "./lib/media";
+import { downloadInfo, downloadName, signedThumbUrl } from "./lib/media";
 import { mailBrandOf, type MailBrand } from "./lib/mail";
 import { shareInviteMail } from "./lib/mails";
 import { clientKey, coveredProjects, coveredVideos, gateShare, sameBusiness, shareCovers, labelOf, MIN_PASSCODE, passProof, passcodeHash, shareState, showsAllVersions, type Share } from "./lib/shareAccess";
@@ -267,8 +267,9 @@ export const open = query({
         versions: await Promise.all(shown.map(async (x) => ({
           _id: x._id, number: x.number, frameCount: x.frameCount ?? null, fpsNum: x.fpsNum ?? 24000, fpsDen: x.fpsDen ?? 1001, startTimecode: x.startTimecode,
           width: x.width ?? null, height: x.height ?? null, createdAt: x.createdAt, description: x.description ?? null, thumbUrl: await signedThumbUrl(x),
-          // C3: the file to download (the render, or the best MP4 copy), when the share allows downloads.
-          download: s.downloads ? await downloadFor(x) : null,
+          // C3: what Download gives, when the share allows downloads. D152 fix (H1, L2): no link here (made per click
+          // by library.downloadLink) and the video's title, not the upload's file name.
+          download: s.downloads ? (() => { const d = downloadInfo(x); return d ? { versionId: x._id, name: downloadName(x, d.ext, { owner: false, title: vid.title }), bytes: d.bytes } : null; })() : null,
         }))),
       });
     }

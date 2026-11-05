@@ -8,6 +8,7 @@
 // query that re-runs mid-review hands the page the same URL and the player doesn't reload.
 import type { Doc } from "../_generated/dataModel";
 import { renderFolder, signBunnyUrl, streamFolder } from "./bunnySign";
+import { copySize, isBig, type Size } from "./quality";
 
 export const streamCdn = () => process.env.BUNNY_STREAM_CDN || "vz-3ba0610b-f90.b-cdn.net";
 export const scrubCdn = () => process.env.BUNNY_SCRUB_CDN || "";
@@ -51,8 +52,7 @@ export function thumbUrl(v: Doc<"versions">): string | null {
 export async function signedThumbUrl(v: Doc<"versions">): Promise<string | null> {
   const u = thumbUrl(v);
   if (!u) return null;
-  const folder = isFile(v) ? streamFolder(v.scrubGuid!) : streamFolder(v.bunnyGuid);
-  return await signUrl(u, { folder });
+  return await signUrl(u); // review fix H1: this one file, never its folder
 }
 
 // The small copy for dragging and its stream (file versions only, once the scrub library has made it).
@@ -71,12 +71,50 @@ export type VersionMedia = {
   /** The 360p scrub copy (file versions, when made). */
   scrub: { mp4: string; hls: string } | null;
   thumb: string | null;
+  /** Nov 4 (Heston): the 1080p / 4K choice. Null for versions made before it (they play exactly as before). */
+  quality: Quality | null;
 };
+
+/** What the player may offer. Every link is signed for its one file (review fix H1), never a folder. */
+export type Quality = {
+  /** The 1080p picture: the render itself when it's 1080p or smaller; otherwise the 1080p copy (the scrub library's for
+   *  a render, Bunny Stream's for a converted file). Null until that copy is ready. */
+  q1080: string | null;
+  /** The high-resolution picture: the render itself when it's bigger than 1080p, or Bunny Stream's copy taller than
+   *  1080p. Null when there isn't one (yet). */
+  q4k: string | null;
+  /** The high-resolution picture's real size (for its label), when q4k is set. */
+  hi: Size | null;
+  /** The source is bigger than 1080p: a high-resolution choice exists or is on its way. */
+  big: boolean;
+};
+
+/** The 1080p and 4K links for a version made since Nov 4 (null for older ones). */
+export async function qualityOf(v: Doc<"versions">, expiresAt = stepExpiry()): Promise<Quality | null> {
+  if (!v.qualityMenu) return null;
+  if (isFile(v)) {
+    const big = isBig(v.width, v.height);
+    const render = v.fileUrl ? await signUrl(v.fileUrl, { expiresAt }) : null;
+    if (!big) return { q1080: render, q4k: null, hi: null, big };
+    const copy = (v.scrubHeights ?? []).includes(1080) && v.scrubGuid && scrubCdn() ? await signUrl(`https://${scrubCdn()}/${v.scrubGuid}/play_1080p.mp4`, { expiresAt }) : null;
+    return { q1080: copy, q4k: render, hi: render ? { width: v.width!, height: v.height! } : null, big };
+  }
+  if (!v.bunnyGuid) return { q1080: null, q4k: null, hi: null, big: isBig(v.width, v.height) };
+  const base = `https://${streamCdn()}/${v.bunnyGuid}`;
+  const hs = v.mp4Heights ?? [];
+  const top = Math.max(0, ...hs.filter((h) => h > 1080));
+  return {
+    q1080: hs.includes(1080) ? await signUrl(`${base}/play_1080p.mp4`, { expiresAt }) : null,
+    q4k: top ? await signUrl(`${base}/play_${top}p.mp4`, { expiresAt }) : null,
+    hi: top ? copySize(top, v) : null,
+    big: isBig(v.width, v.height) || top > 0,
+  };
+}
 
 /** Every link the player may need for a version, signed where the zone has a key. */
 export async function versionMedia(v: Doc<"versions">): Promise<VersionMedia> {
   const expiresAt = stepExpiry();
-  const out: VersionMedia = { hls: null, mp4: {}, file: null, scrub: null, thumb: null };
+  const out: VersionMedia = { hls: null, mp4: {}, file: null, scrub: null, thumb: null, quality: await qualityOf(v, expiresAt) };
   if (isFile(v)) {
     if (v.fileUrl && v.storagePath) out.file = await signUrl(v.fileUrl, { folder: renderFolder(v.storagePath), expiresAt });
     else if (v.fileUrl) out.file = await signUrl(v.fileUrl, { expiresAt });
@@ -92,20 +130,44 @@ export async function versionMedia(v: Doc<"versions">): Promise<VersionMedia> {
   const folder = streamFolder(v.bunnyGuid);
   const base = `https://${streamCdn()}/${v.bunnyGuid}`;
   out.hls = await signUrl(`${base}/playlist.m3u8`, { folder, directory: true, expiresAt });
-  for (const h of v.mp4Heights ?? []) out.mp4[h] = await signUrl(`${base}/play_${h}p.mp4`, { folder, expiresAt });
-  out.thumb = await signUrl(`${base}/thumbnail.jpg`, { folder, expiresAt });
+  // Review fix H1: each copy and the picture are signed alone; only the stream playlist needs the folder token.
+  for (const h of v.mp4Heights ?? []) out.mp4[h] = await signUrl(`${base}/play_${h}p.mp4`, { expiresAt });
+  out.thumb = await signUrl(`${base}/thumbnail.jpg`, { expiresAt });
   return out;
 }
 
-/** What "Download" saves for a version: the render itself (file versions) or the largest MP4 copy up to 1080p. */
-export async function downloadFor(x: Doc<"versions">): Promise<{ url: string; name: string; bytes: number | null } | null> {
+// ---------- downloads (D152, Heston Nov 4: "clients should be able to download the full res") ----------
+// Review fix H1 (Nov 4): never through a link a viewer already holds. A Stream video's player token covers its whole
+// folder, so the full-resolution file never comes from there: a converted version's master comes from Dropbox (where
+// the drop folder found it), fetched with a 4-hour link made per click after the caller's right to download is checked
+// (library.downloadLink). Preset renders are the render itself (their own folder). Videos with no Dropbox master
+// (uploaded in the browser) download the largest MP4 copy.
+
+export type DownloadFrom = "file" | "dropbox" | "copy";
+const extOf = (s: string | null | undefined) => /\.([A-Za-z0-9]{2,5})$/.exec(s ?? "")?.[1]?.toLowerCase() ?? null;
+const bestCopy = (x: Pick<Doc<"versions">, "mp4Heights">) => Math.max(0, ...(x.mp4Heights ?? []).filter((n) => n <= 2160));
+
+/** What Download gives for a version (no link: links are made per click). Null when nothing can be downloaded yet. */
+export function downloadInfo(x: Doc<"versions">): { from: DownloadFrom; ext: string; bytes: number | null } | null {
   if (x.status !== "ready") return null;
-  const m = await versionMedia(x);
-  const h = Math.max(0, ...(x.mp4Heights ?? []).filter((n) => n <= 2160));
-  const url = m.file ?? (h ? m.mp4[h] : null);
-  if (!url) return null;
-  const name = x.fileName && /\.mp4$/i.test(x.fileName) ? x.fileName : `${(x.fileName || "video").replace(/\.[^.]+$/, "")}_v${x.number}.mp4`;
-  return { url, name, bytes: x.fileSize ?? null };
+  if (isFile(x) && x.fileUrl) return { from: "file", ext: extOf(x.fileName) ?? extOf(x.storagePath) ?? "mp4", bytes: x.fileSize ?? null };
+  if (x.dropboxPath) return { from: "dropbox", ext: extOf(x.dropboxPath) ?? extOf(x.fileName) ?? "mov", bytes: x.fileSize ?? null };
+  if (x.bunnyGuid && bestCopy(x)) return { from: "copy", ext: "mp4", bytes: null };
+  return null;
+}
+
+/** The saved file's name: the owner gets the name as uploaded; anyone else the video's title (Oct 23 review: clients
+ *  never see upload names; review fix L2). */
+export function downloadName(x: Pick<Doc<"versions">, "fileName" | "number">, ext: string, opts: { owner: boolean; title: string }) {
+  const base = opts.owner && x.fileName ? x.fileName.replace(/\.[A-Za-z0-9]{2,5}$/, "") : `${(opts.title || "video").replace(/[^\w\- ]+/g, "").trim() || "video"}_v${x.number}`;
+  return `${base}.${ext}`;
+}
+
+/** A Bunny link to one file only (never a folder), for a "file" or "copy" download. `expiresAt` in unix seconds. */
+export async function downloadFileUrl(x: Doc<"versions">, from: "file" | "copy", expiresAt = stepExpiry()): Promise<string | null> {
+  if (from === "file") return x.fileUrl ? await signUrl(x.fileUrl, { expiresAt }) : null;
+  const h = bestCopy(x);
+  return h && x.bunnyGuid ? await signUrl(`https://${streamCdn()}/${x.bunnyGuid}/play_${h}p.mp4`, { expiresAt }) : null;
 }
 
 /** A version's picture for an email: signed for 60 days, since an email is opened long after it's sent. */
@@ -114,5 +176,5 @@ export async function emailThumbUrl(v: Doc<"versions">): Promise<string | null> 
   if (v.posterUrl) return await signUrl(v.posterUrl, { expiresAt });
   const u = thumbUrl(v);
   if (!u) return null;
-  return await signUrl(u, { folder: isFile(v) ? streamFolder(v.scrubGuid!) : streamFolder(v.bunnyGuid), expiresAt });
+  return await signUrl(u, { expiresAt }); // review fix H1: this one file, never its folder
 }

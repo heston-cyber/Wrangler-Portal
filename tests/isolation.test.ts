@@ -75,6 +75,37 @@ describe("two businesses", () => {
     expect(changed).toEqual([]);
   });
 
+  test("a call-sheet guest of B (signed in) gets nothing of A from any function, and changes nothing of A", async () => {
+    const { t, ids, a, b } = await twoBusinesses();
+    vi.stubGlobal("fetch", async () => new Response("{}", { status: 500 }));
+    const gSub = await t.run(async (ctx) => {
+      const p = await ctx.db.insert("projects", { businessId: b, name: "B project", createdAt: 0 });
+      const s = await ctx.db.insert("shoots", { businessId: b, projectId: p, date: "2030-01-03", call: "08:00", location: "B", prepare: [], crew: [], status: "scheduled", history: [], createdAt: 0, updatedAt: 0 });
+      const cs = await ctx.db.insert("callSheets", { businessId: b, shootId: s, projectId: p, how: "blank", status: "sent", sentAt: 0, updates: 0,
+        recipients: [{ id: "guest:b", kind: "guest", name: "Bea", email: "bea@x.example", on: true, sentAt: 1, addedAt: 0 }],
+        sent: { title: "B", page: { type: "doc", content: [] }, fields: {}, style: {}, at: 0, round: 0 }, history: [], createdAt: 0, updatedAt: 0 });
+      await ctx.db.insert("guestPasses", { businessId: b, callSheetId: cs, personId: "guest:b", email: "bea@x.example", token: "beatokenbeatokenbeatoken", createdAt: 0, sentAt: 1, date: "2030-01-03" });
+      const u = await ctx.db.insert("users", { email: "bea@x.example", name: "Bea", role: "guest" });
+      return `${u}|${await ctx.db.insert("authSessions", { userId: u, expirationTime: Date.now() + 3_600_000 })}`;
+    });
+    const guest = t.withIdentity({ subject: gSub });
+    expect((await guest.query(api.guests.home, {})).sheets).toHaveLength(1); // B's own sheet, so the caller is a working guest
+    const before = await snapshot(t, a, true);
+    const table = argsFor(ids);
+    const aIds = Object.entries(ids).filter(([k]) => !/Sub$/.test(k) && k !== "storageId").map(([, v]) => String(v));
+    const leaks: string[] = [];
+    for (const f of publicFunctions()) {
+      let out: unknown;
+      try { out = await call(guest, f.ref, table[f.key], ""); } catch { continue; }
+      const json = JSON.stringify(out ?? null);
+      const hit = aIds.find((id) => json.includes(id));
+      if (hit) leaks.push(`${f.key} returned A's ${hit}`);
+    }
+    expect(leaks).toEqual([]);
+    const after = await snapshot(t, a, true);
+    expect(Object.keys(before).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))).toEqual([]);
+  });
+
   test("each owner sees only their own projects; B's records are stamped with B", async () => {
     const { t, ids, b, bSub } = await twoBusinesses();
     const heston = t.withIdentity({ subject: ids.ownerSub });

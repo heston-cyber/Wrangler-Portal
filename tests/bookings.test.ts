@@ -1,7 +1,7 @@
 // Phase 3c step 2 · bookings (owner side). T3c.2: Book a vendor suggests the rate from Pricing (or the vendor's own
 // rate), sending emails the vendor once (email 24) and adds the booking to the Crew card, Vendors › Bookings, the vendor
-// page and the Ledger as an expected cost that isn't counted; cancelling takes it off. Isolation, bad input, and D102
-// (one role per email).
+// page and the Ledger as an expected cost that isn't counted; cancelling takes it off. Isolation and bad input. (D102,
+// one role per email, was replaced Nov 2 by one login with both roles: tests/roles.test.ts.)
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { anyApi } from "convex/server";
 import type { Id } from "../convex/_generated/dataModel";
@@ -129,19 +129,4 @@ describe("bookings", () => {
     await expect(w.maya.query(api.bookings.form, {})).rejects.toThrow();
   });
 
-  test("D102 one role per email: a client's email can't be a vendor, and a vendor's can't be invited as a client", async () => {
-    const w = await world();
-    await expect(w.heston.mutation(api.vendors.add, { ...jordan, email: "maya@harbor.example", invite: false })).rejects.toThrow(/belongs to a client.*not both/);
-    const vendorId = await w.heston.mutation(api.vendors.add, { ...jordan, invite: false }) as Id<"vendors">;
-    await expect(w.heston.mutation(api.vendors.update, { vendorId, ...jordan, email: "jo@harbor.example" })).rejects.toThrow(/belongs to a client/);
-    await expect(w.heston.mutation(api.clients.invite, { email: "jordan@ellisfilms.com" })).rejects.toThrow(/one of your vendors.*not both/);
-    await expect(w.heston.mutation(api.clients.addPerson, { clientId: w.harbor, email: "Jordan@EllisFilms.com", role: "contact" })).rejects.toThrow(/one of your vendors/);
-    // Taken off the vendor list, the email is free to become a client's.
-    await w.heston.mutation(api.vendors.archive, { vendorId, archived: true });
-    await w.heston.mutation(api.clients.addPerson, { clientId: w.harbor, email: "jordan@ellisfilms.com", role: "contact" });
-    // Their old vendor record can't come back now, and couldn't be booked if it were.
-    await expect(w.heston.mutation(api.vendors.archive, { vendorId, archived: false })).rejects.toThrow(/belongs to a client/);
-    await w.t.run(async (ctx) => { await ctx.db.patch(vendorId, { archivedAt: undefined }); });
-    await expect(shoot(w, vendorId)).rejects.toThrow(/belongs to a client/);
-  });
 });
