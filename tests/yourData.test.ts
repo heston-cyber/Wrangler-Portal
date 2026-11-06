@@ -26,7 +26,7 @@ const stub = () => {
     return new Response(JSON.stringify({ id: "em" }), { status: 200 });
   }));
 };
-const settle = (w: W) => w.t.finishAllScheduledFunctions(vi.runAllTimers);
+const settle = (w: W) => w.t.finishAllScheduledFunctions(vi.runAllTimers, 2000); // the day-60 run is a chain of short steps
 const B = (w: W) => w.t.run(async (ctx) => (await ctx.db.query("businesses").collect()).find((b) => b.slug === "other")!._id);
 
 async function seedInvoice(w: W, biz: Id<"businesses">, clientId: Id<"clients">, title: string, payToken: string) {
@@ -61,11 +61,13 @@ describe("Phase 5e · Your data", () => {
     const ours = await seedInvoice(w, w.A, w.harbor, "Ours", "SECRETPAYTOKENAAAA");
     // Review fix: tokens also travel inside other fields (an Inbox item's link, Stripe's own pay page).
     await w.t.run(async (ctx) => {
-      await ctx.db.patch(ours, { stripe: { accountId: "acct_1", invoiceId: "in_1", customerId: "cus_1", hostedUrl: "https://invoice.stripe.com/i/acct_1/live_STRIPEHOSTEDSECRET99", pdfUrl: "https://pay.stripe.com/invoice/acct_1/STRIPEPDFSECRET77/pdf", livemode: false } } as never);
+      await ctx.db.patch(ours, { stripe: { accountId: "acct_1Pq9WranglerAcct", invoiceId: "in_1", customerId: "cus_1", hostedUrl: "https://invoice.stripe.com/i/acct_1Pq9WranglerAcct/live_STRIPEHOSTEDSECRET99", pdfUrl: "https://pay.stripe.com/invoice/acct_1/STRIPEPDFSECRET77/pdf", livemode: false } } as never);
       await ctx.db.insert("inboxItems", { businessId: w.A, email: "maya@harbor.example", kind: "invoice", title: "Invoice", text: "Pay it", link: "/i/SECRETPAYTOKENAAAA", source: { module: "payments", id: ours }, key: "inv:1", createdAt: 0 });
       await ctx.db.insert("emailPrefs", { businessId: w.A, email: "maya@harbor.example", key: "UNSUBSCRIBEKEYSECRET42", updatedAt: 0 });
       // A file id of another business, pasted into this business's text: never treated as this business's file.
       const theirFile = await ctx.storage.store(new Blob(["theirs"]));
+      const kitFile = await ctx.storage.store(new Blob(["kit"]));
+      await ctx.db.patch(w.harbor, { brandKit: { colors: [], fonts: {}, files: [{ fileId: kitFile, name: "guide.pdf", size: 3, type: "application/pdf", addedAt: 0 }] } } as never);
       await ctx.db.insert("vendors", { businessId: w.A, name: "Pasted", email: "p@x.example", roles: [], rates: [], portfolio: String(theirFile), createdAt: 0, updatedAt: 0 } as never);
     });
     await seedInvoice(w, b, otherClient, "Theirs", "SECRETPAYTOKENBBBB");
@@ -84,7 +86,9 @@ describe("Phase 5e · Your data", () => {
     expect(everything).not.toContain("SECRETPAYTOKEN");
     expect(everything).not.toMatch(/STRIPEHOSTEDSECRET|STRIPEPDFSECRET|UNSUBSCRIBEKEYSECRET/);
     expect(files["records/inboxItems.json"]).toContain("/i/[removed]");
+    expect(files["records/invoices.json"]).toContain("acct_1Pq9WranglerAcct"); // Stripe's own ids aren't secrets
     expect(files["files.csv"].trim().split("\r\n").filter((l) => l.startsWith("vendors,"))).toHaveLength(1); // the W-9, not the pasted id
+    expect(files["files.csv"]).toMatch(/clients,[a-z0-9]+,brandKit\.files\[0\]\.fileId,http/); // a file in a brand kit
     expect(files["records/connectorKeys.json"]).toBeUndefined();
     for (const [name, text] of Object.entries(files)) if (name.endsWith(".json")) for (const k of keysIn(JSON.parse(text))) expect(SECRET_FIELDS.has(k), `${name}: ${k}`).toBe(false);
     expect(files["files.csv"]).toMatch(/vendors,[a-z0-9]+,w9\.fileId,http/);

@@ -1744,6 +1744,7 @@ export default defineSchema({
     // Review fix (Nov 6): the run goes in short steps and saves where it got to, so a stopped run starts again there.
     step: v.optional(v.union(v.literal("export"), v.literal("lockout"), v.literal("signout"), v.literal("tables"), v.literal("finish"), v.literal("done"))),
     tableIndex: v.optional(v.number()),
+    pass: v.optional(v.number()),                  // the tables are gone through twice: the second catches rows added while it ran
     cursor: v.optional(v.union(v.string(), v.null())),
     users: v.optional(v.array(v.id("users"))),   // the logins that were in the business (signed out, and deleted if they belong nowhere else)
     emails: v.optional(v.array(v.string())),

@@ -62,8 +62,12 @@ function storagePaths(val: Validator | undefined, path: string[], out: string[][
   else if (val.kind === "union") for (const m of val.members ?? []) storagePaths(m, path, out);
 }
 const TABLE_DEFS = (schema as unknown as { tables: Record<string, { validator: Validator }> }).tables;
+// Files kept inside free-form fields (v.any()), which the schema can't type: the brand kits and Sign's styles.
+const KIT = [["brandKit", "logoFileId"], ["brandKit", "files", "[]", "fileId"]];
+const STYLE = [["style", "logo", "fileId"], ["style", "cover", "fileId"], ["style", "backdropImage", "fileId"]];
+const EXTRA_PATHS: Record<string, string[][]> = { businesses: KIT, clients: KIT, wsStyles: STYLE, wsBuilds: STYLE, wsTemplates: STYLE };
 export const STORAGE_PATHS: Record<string, string[][]> = Object.fromEntries(Object.entries(TABLE_DEFS).map(([t, d]) => {
-  const out: string[][] = []; storagePaths(d.validator, [], out);
+  const out: string[][] = [...(EXTRA_PATHS[t] ?? [])]; storagePaths(d.validator, [], out);
   return [t, [...new Map(out.map((p) => [p.join("."), p])).values()]];
 }));
 /** The storage ids a record keeps, each with the field it's in. */
@@ -85,8 +89,11 @@ export function filesOf(table: string, doc: unknown): Array<{ field: string; id:
 // ---------- secrets: left out, and their values removed wherever else they turn up (a link that carries a token) ----------
 
 const RUN = /[A-Za-z0-9_-]{12,}/g;
+/** Stripe's object ids (an account, a customer, an invoice) sit in its pay-page links but aren't secret, and appear on
+ *  their own in the records: never removed (review re-check, Nov 6). */
+const STRIPE_ID = /^(acct|cus|in|sub|pi|ch|price|prod|cs)_[A-Za-z0-9]+$/;
 function collectSecret(x: unknown, into: Set<string>) {
-  if (typeof x === "string") { if (x.length >= 12) into.add(x); for (const m of x.match(RUN) ?? []) into.add(m); }
+  if (typeof x === "string") { if (x.length >= 12) into.add(x); for (const m of x.match(RUN) ?? []) if (!STRIPE_ID.test(m)) into.add(m); }
   else if (Array.isArray(x)) x.forEach((y) => collectSecret(y, into));
   else if (x && typeof x === "object") Object.values(x).forEach((y) => collectSecret(y, into));
 }
@@ -136,7 +143,7 @@ export const state = query({
     // The portal's admins (on the platform's own business) see the safety-net exports of deleted businesses.
     const safety = isDefault && isAdmin(me.email)
       ? (await ctx.db.query("businessDeletions").withIndex("by_purge", (q) => q.gt("purgeAt", now)).collect()).filter((d) => d.finalExportId)
-        .map((d) => ({ _id: d._id, name: d.name, status: d.status, doneAt: d.doneAt ?? null, bytes: d.finalBytes ?? null, purgeAt: d.purgeAt! }))
+        .map((d) => ({ _id: d._id, name: d.name, status: d.status, doneAt: d.doneAt ?? null, bytes: d.finalBytes ?? null, purgeAt: d.purgeAt ?? now + KEEP_FINAL_DAYS * DAY }))
       : [];
     return {
       business: { name: b.name, isDefault },
@@ -286,15 +293,16 @@ export const facts = internalQuery({
 type Ctx = { runQuery: (ref: any, args: any) => Promise<any> };
 
 /** The zip: README, a JSON file of records per kind, CSVs of the main lists, and files.csv with links. */
-async function makeZip(ctx: Ctx, name: string) {
+async function makeZip(ctx: Ctx, name: string, progress?: () => Promise<unknown>) {
   const files: Record<string, Uint8Array> = {};
   const links: Array<{ table: string; record: string; field: string; storageId: string }> = [];
   const secrets = new Set<string>();
   const json: Record<string, unknown[]> = {};
   const counts: Record<string, number> = {};
   const all: Record<string, Array<Record<string, unknown>>> = {};
-  for (const table of BUSINESS_TABLES) {
+  for (const [ti, table] of BUSINESS_TABLES.entries()) {
     if (OMIT_TABLES.has(table)) continue;
+    if (progress && ti % 5 === 0) await progress();
     const rows: unknown[] = [];
     let cursor: string | null = null;
     for (;;) {
@@ -498,14 +506,14 @@ export const deleteStep = internalMutation({
 
     if (step === "tables") {
       const i = d.tableIndex ?? 0, table = ORDER[i];
-      if (!table) return next({ step: "finish", tableIndex: 0, cursor: null });
+      if (!table) return next((d.pass ?? 1) < 2 ? { pass: 2, tableIndex: 0, cursor: null } : { step: "finish", tableIndex: 0, cursor: null }); // a second pass: rows added while it ran
       const r = await ctx.db.query(table as "projects").paginate({ cursor: d.cursor ?? null, numItems: BATCH });
       const guids = new Set<string>(), stills = new Set<string>();
       let n = 0;
       for (const row of r.page) {
         if (row.businessId !== biz) continue; // the row rules already keep other businesses out; never a legacy row
         // Option B (Heston, Nov 6): the files the portal keeps stay 30 days with the safety-net export, then go with it.
-        for (const f of filesOf(table, row)) await ctx.db.insert("deletionFiles", { deletionId, fileId: f.id, purgeAt: d.purgeAt! });
+        for (const f of filesOf(table, row)) await ctx.db.insert("deletionFiles", { deletionId, fileId: f.id, purgeAt: d.purgeAt ?? now + KEEP_FINAL_DAYS * DAY });
         if (table === "versions") {
           const ver = row as unknown as Doc<"versions">;
           if (ver.bunnyGuid) guids.add(ver.bunnyGuid);
@@ -538,11 +546,20 @@ export const deleteStep = internalMutation({
       if (from + 50 < list.length) return next({ tableIndex: from + 50 });
       const b = await ctx.db.get(d.businessId);
       if (b) {
-        for (const f of filesOf("businesses", b)) await ctx.db.insert("deletionFiles", { deletionId, fileId: f.id, purgeAt: d.purgeAt! }); // its logos
+        for (const f of filesOf("businesses", b)) await ctx.db.insert("deletionFiles", { deletionId, fileId: f.id, purgeAt: d.purgeAt ?? now + KEEP_FINAL_DAYS * DAY }); // its logos
         await ctx.db.delete(d.businessId);
       }
       await ctx.db.patch(deletionId, { status: "done", step: "done", doneAt: now, heartbeat: now, users: [], emails: [] });
     }
+  },
+});
+
+/** The run is still moving (so the daily purge doesn't start a second one). */
+export const touch = internalMutation({
+  args: { deletionId: v.id("businessDeletions") },
+  handler: async (ctx, { deletionId }) => {
+    const d = await ctx.db.get(deletionId);
+    if (d?.status === "running" && businessInScope(ctx) === d.businessId) await ctx.db.patch(deletionId, { heartbeat: Date.now() });
   },
 });
 
@@ -559,7 +576,7 @@ export const runDeletion = internalAction({
     if (!s) return;
     try {
       if (s.needExport) {
-        const { zip } = await makeZip(ctx, s.name);
+        const { zip } = await makeZip(ctx, s.name, () => ctx.runMutation(internal.yourData.touch, { deletionId }));
         const fileId = await ctx.storage.store(new Blob([zip as BlobPart], { type: "application/zip" }));
         await ctx.runMutation(internal.yourData.keepFinal, { deletionId, fileId, bytes: zip.byteLength });
       }
@@ -592,13 +609,21 @@ export const purge = internalMutation({
       n++;
     }
     for (const d of await ctx.db.query("businessDeletions").withIndex("by_purge", (q) => q.gt("purgeAt", 0).lt("purgeAt", now)).take(50)) {
+      if (d.status === "running" || d.status === "failed") continue; // its safety net stays until the run is finished
       if (d.finalExportId) { try { await ctx.storage.delete(d.finalExportId); } catch { /* gone */ } }
       await ctx.db.patch(d._id, { finalExportId: undefined, purgeAt: undefined });
       n++;
     }
     for (const status of ["running", "failed"] as const) {
       for (const d of await ctx.db.query("businessDeletions").withIndex("by_status", (q) => q.eq("status", status)).take(20)) {
-        if ((d.attempts ?? 1) >= TRIES || now - (d.heartbeat ?? 0) < STALE) continue;
+        if (now - (d.heartbeat ?? 0) < STALE) continue;
+        if ((d.attempts ?? 1) >= TRIES) { // stop trying, and tell the portal's admins (once)
+          if (d.status === "running" || !d.error?.startsWith("Stopped")) {
+            await ctx.db.patch(d._id, { status: "failed", error: `Stopped after ${TRIES} tries at step ${d.step ?? "?"}.` });
+            await ctx.scheduler.runAfter(0, internal.bell.post, { kind: "sitewatch", title: `Deleting ${d.name} stopped part way. It needs a look.`, key: `deletion-stuck:${d._id}`, link: "/settings/data" });
+          }
+          continue;
+        }
         await ctx.scheduler.runAfter(0, internal.yourData.runDeletion, { deletionId: d._id, resume: true, asBusiness: d.businessId });
       }
     }
