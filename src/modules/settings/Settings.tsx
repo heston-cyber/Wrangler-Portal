@@ -24,6 +24,7 @@ import { ago } from "../../lib/format";
 import { DropboxSettings } from "./DropboxSettings";
 import { PaymentsSettings } from "./PaymentsSettings";
 import { CalendarSettings } from "./CalendarSettings";
+import { YourDataSection } from "./YourData";
 import { SiteWatchSettings } from "./SiteWatch";
 import { KickoffSettings } from "../projects/Brief";
 import { ToolsSettings } from "./ToolsSettings";
@@ -136,6 +137,7 @@ export default function Settings({ me }: { me: { name: string | null; email: str
       {key === "sheet" && <SheetCopy show={show} />}
       {key === "clients" && <ClientsSettings show={show} />}
       {key === "shares" && <SharesSettings show={show} />}
+      {key === "data" && <YourDataSection me={me} show={show} />}
       {key === "help" && <><SetHead title="Guides." sub="Short guides for your clients and vendors. Edit any of them, and what you write is what they read." /><HelpSection path={path} /></>}
       {toast}
     </SettingsFrame>

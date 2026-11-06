@@ -8,38 +8,41 @@ import { Icon, type IconName } from "../../ui/Icon";
 import { linkProps } from "../../lib/router";
 import { usePerms } from "../../lib/teamAccess";
 
-export type SectionKey = "business" | "team" | "security" | "activity" | "payments" | "rates" | "brand" | "calendar" | "sitewatch" | "brief" | "tools" | "account" | "notifications" | "register" | "dropbox" | "connectors" | "sheet" | "clients" | "shares" | "help" | "calls";
+export type SectionKey = "business" | "team" | "security" | "activity" | "payments" | "rates" | "brand" | "calendar" | "sitewatch" | "brief" | "tools" | "account" | "notifications" | "register" | "dropbox" | "connectors" | "sheet" | "clients" | "shares" | "help" | "calls" | "data";
 
+// D146 (Heston): Business, Team, Security, Notifications, Payments, Calendar, Tools, then the rest; Your data and Help last.
 export const SECTIONS: Array<{ key: SectionKey; label: string; icon: IconName }> = [
   { key: "business", label: "Business", icon: "users" },
   { key: "team", label: "Team", icon: "users" }, // Phase 5e (D146: after Business), the owner's only
   { key: "security", label: "Security", icon: "lock" }, // Phase 5e step 2 (D146: after Team): password, email, devices
   { key: "activity", label: "Activity", icon: "activity" }, // Phase 5e step 3: who changed what (owner only, kept 1 year)
+  { key: "notifications", label: "Notifications", icon: "bell" }, // Nov 2 (Heston): every email, with a switch
   { key: "payments", label: "Payments", icon: "invoice" },
+  { key: "calendar", label: "Calendar", icon: "calendar" }, // Phase 4 (741:1953)
+  { key: "tools", label: "Tools", icon: "menu" }, // Nov 2 (Heston): your menu's order, tools on it, Dashboard widgets
   { key: "rates", label: "Pricing", icon: "activity" }, // Phase 3 (263:1382), renamed Pricing in 3b (D76)
   { key: "brand", label: "Brand kit", icon: "folder" }, // Phase 3b (708:1235)
-  { key: "calendar", label: "Calendar", icon: "calendar" }, // Phase 4 (741:1953)
   { key: "calls", label: "Booking calls", icon: "calendar" }, // Phase 5d step 1 (801:8966)
   { key: "sitewatch", label: "Site watch", icon: "activity" }, // Phase 5c screens (Nov 4): the portal's admins only
   { key: "brief", label: "Kickoff brief", icon: "note" }, // Phase 4 (Nov 2, option B)
-  { key: "tools", label: "Tools", icon: "menu" }, // Nov 2 (Heston): your menu's order, tools on it, Dashboard widgets
   { key: "account", label: "Account", icon: "user" },
-  { key: "notifications", label: "Notifications", icon: "bell" }, // Nov 2 (Heston): every email, with a switch
   { key: "register", label: "Register", icon: "register" },
   { key: "dropbox", label: "Dropbox drop folder", icon: "folder" },
   { key: "connectors", label: "Claude connectors", icon: "globe" },
   { key: "sheet", label: "Google Sheet copy", icon: "document" },
   { key: "clients", label: "Clients", icon: "users" },
   { key: "shares", label: "Shares", icon: "send" },
+  { key: "data", label: "Your data", icon: "folder" }, // Phase 5e step 6: export everything, delete the business (owner only)
   { key: "help", label: "Help", icon: "info" }, // Phase 5d step 4 (Q59): the last item, the guides
 ];
 
 // Old addresses still land on the right section: /register, /sign/connector, /settings#claude and the like, and
 // Dropbox's return to /settings?dropbox=….
-const HASH: Record<string, SectionKey> = { claude: "connectors", sign: "connectors", dropbox: "dropbox", sheet: "sheet", shares: "shares", clients: "clients", account: "account", notifications: "notifications", business: "business", register: "register", payments: "payments", calendar: "calendar", sitewatch: "sitewatch", brief: "brief", kickoff: "brief", tools: "tools", rates: "rates", pricing: "rates", brand: "brand" };
+const HASH: Record<string, SectionKey> = { claude: "connectors", sign: "connectors", dropbox: "dropbox", sheet: "sheet", shares: "shares", clients: "clients", account: "account", notifications: "notifications", business: "business", register: "register", payments: "payments", calendar: "calendar", sitewatch: "sitewatch", brief: "brief", kickoff: "brief", tools: "tools", rates: "rates", pricing: "rates", brand: "brand", data: "data" };
 export function sectionOf(path: string, search: string, hash: string): SectionKey | null {
   if (path.startsWith("/register")) return "register";
   if (path.startsWith("/sign/connector")) return "connectors";
+  if (path.startsWith("/settings/your-data")) return "data"; // the address in emails 48 and 49
   const m = /^\/settings\/([a-z]+)/.exec(path);
   if (m && SECTIONS.some((s) => s.key === m[1])) return m[1] as SectionKey;
   if (m?.[1] === "pricing") return "rates"; // Settings › Pricing keeps /settings/rates (D76)

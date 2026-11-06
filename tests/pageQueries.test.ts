@@ -157,6 +157,7 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   // Phase 5e step 2: Settings › Security, and a client's and vendor's account page (their own account)
   "security.state": { pages: ["owner", "clientHome"], args: () => ({}) },
   "auditLog.list": { pages: ["owner"], args: () => ({}) }, // Phase 5e step 3: Settings › Activity
+  "yourData.state": { pages: ["owner"], args: () => ({}) }, // Phase 5e step 6: Settings › Your data
   // Phase 5e step 4: the bell (every back-office page), its panel and See all, Settings › Notifications
   "bell.unread": { pages: ["owner"], args: () => ({}) },
   // Phase 5e step 5: Payments › Reports and the Dashboard's Reports widgets

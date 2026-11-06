@@ -1708,6 +1708,41 @@ export default defineSchema({
 
   // Phase 5e step 4 (Nov 5): the notification centre. One row per person (the owner, and team members whose switches cover
   // the kind), kept 90 days (D146). Made from the owner emails (lib/bell.ts EMAIL_TO_BELL).
+  // Phase 5e step 6 (Nov 6): Settings › Your data. An export of a business's records (D116): made in the background,
+  // downloadable by the owner for 7 days, then its file is removed (the row stays, for "Last export").
+  dataExports: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    status: v.union(v.literal("making"), v.literal("ready"), v.literal("failed"), v.literal("cancelled"), v.literal("expired")),
+    requestedAt: v.number(),
+    requestedBy: v.id("users"),
+    fileId: v.optional(v.id("_storage")),
+    bytes: v.optional(v.number()),
+    readyAt: v.optional(v.number()),
+    expiresAt: v.optional(v.number()),
+    error: v.optional(v.string()),
+  }).index("by_requested", ["requestedAt"]).index("by_expires", ["expiresAt"]),
+  // Delete the business (D116, D146): a 60-day wait, then everyone is signed out, links stop and the records are
+  // deleted (Dropbox untouched). Global: it outlives the business. The final export is the platform owner's safety net
+  // (rule 7), kept 30 days and shown only to the portal's admins.
+  businessDeletions: defineTable({
+    businessId: v.id("businesses"),
+    name: v.string(),
+    ownerEmail: v.string(),
+    requestedBy: v.string(),
+    requestedAt: v.number(),
+    deleteAt: v.number(),
+    status: v.union(v.literal("scheduled"), v.literal("cancelled"), v.literal("running"), v.literal("done"), v.literal("failed")),
+    jobs: v.optional(v.array(v.id("_scheduled_functions"))),   // the day-60 run and the 7-day reminder (cancelled with it)
+    cancelledAt: v.optional(v.number()),
+    startedAt: v.optional(v.number()),
+    doneAt: v.optional(v.number()),
+    error: v.optional(v.string()),
+    finalExportId: v.optional(v.id("_storage")),
+    finalBytes: v.optional(v.number()),
+    purgeAt: v.optional(v.number()),
+    deleted: v.optional(v.record(v.string(), v.number())),   // how many rows went, per table
+  }).index("by_business", ["businessId"]).index("by_purge", ["purgeAt"]),
+
   bellItems: defineTable({
     businessId: v.optional(v.id("businesses")),
     userId: v.id("users"),

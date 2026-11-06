@@ -922,6 +922,28 @@ export function passwordChangedMail(b: MailBrand, d: { name: string | null; when
     { t: "button", label: "Reset your password", href: d.resetLink }, { t: "link", href: d.resetLink },
   ], [{ t: "small", text: "— Wrangler Portal" }]);
 }
+/** Email 48 (Phase 5e step 6): the owner's export is ready. A link to Settings › Your data, where they sign in to download. */
+export function exportReadyMail(b: MailBrand, d: { name: string | null; business: string; made: string; size: string; until: string; link: string }): Mail {
+  return mk(b, "review", `Your ${d.business} export is ready`, [
+    hi(d.name),
+    { t: "p", text: `The export of your ${d.business} records is ready.` },
+    { t: "sums", rows: [{ label: "Made", value: d.made }, { label: "Size", value: d.size }, { label: "Link works until", value: d.until }] },
+    { t: "p", text: "It holds your records and links to your files. The files themselves stay in Dropbox." },
+    { t: "p", text: "Sign in to download it.", tone: "muted" },
+    { t: "button", label: "Download the export", href: d.link }, { t: "link", href: d.link },
+  ], [{ t: "small", text: "— Wrangler Portal" }]);
+}
+/** Email 49 (Phase 5e step 6): deletion scheduled; and, in the same layout, the reminder a week before (approved Nov 6). */
+export function deletionMail(b: MailBrand, d: { name: string | null; business: string; askedBy: string; on: string; link: string; reminder?: boolean }): Mail {
+  return mk(b, "review", d.reminder ? `${d.business} will be deleted on ${d.on}` : `${d.business} is scheduled for deletion`, [
+    hi(d.name),
+    { t: "p", text: d.reminder ? `${d.business} will be deleted from the portal in a week.` : `You asked to delete ${d.business} from the portal.` },
+    { t: "sums", rows: [{ label: "Business", value: d.business }, { label: "Asked by", value: d.askedBy }, { label: "Deleted on", value: d.on }] },
+    { t: "p", text: "Your records and the files kept in the portal (such as W-9s) are deleted. Files in your Dropbox stay where they are." },
+    { t: "p", text: "Changed your mind? Cancel the deletion before then." },
+    { t: "button", label: "Cancel the deletion", href: d.link }, { t: "link", href: d.link },
+  ], [{ t: "small", text: "— Wrangler Portal" }]);
+}
 /** The 6-digit code that confirms a new email address (Change email, step 2). */
 export function newEmailCodeMail(b: MailBrand, d: { code: string; minutes: number }): Mail {
   return mk(b, "review", `${d.code} is your code to confirm your new email`, [

@@ -16931,6 +16931,30 @@
    ],
    "outstandingCents": 1245000,
    "outstandingCount": 4
+  },
+  "yourData.state": {
+   "business": {
+    "name": "Wrangler Productions",
+    "isDefault": true
+   },
+   "latest": {
+    "_id": "kitexport1",
+    "status": "ready",
+    "requestedAt": 1793543873216,
+    "readyAt": 1793543873216,
+    "bytes": 42000000,
+    "expiresAt": 1794148673216
+   },
+   "lastReady": {
+    "_id": "kitexport1",
+    "status": "ready",
+    "requestedAt": 1793543873216,
+    "readyAt": 1793543873216,
+    "bytes": 42000000,
+    "expiresAt": 1794148673216
+   },
+   "deletion": null,
+   "safety": []
   }
  },
  "client": {

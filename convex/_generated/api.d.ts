@@ -47,6 +47,7 @@ import type * as payments from "../payments.js";
 import type * as projects from "../projects.js";
 import type * as push from "../push.js";
 import type * as reports from "../reports.js";
+import type * as yourData from "../yourData.js";
 import type * as auth from "../auth.js";
 import type * as bunny from "../bunny.js";
 import type * as calendar from "../calendar.js";
@@ -192,6 +193,7 @@ declare const fullApi: ApiFromModules<{
   projects: typeof projects;
   push: typeof push;
   reports: typeof reports;
+  yourData: typeof yourData;
   auth: typeof auth;
   bunny: typeof bunny;
   calendar: typeof calendar;

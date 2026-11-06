@@ -27,5 +27,6 @@ crons.daily("call sheet weather", { hourUTC: 23, minuteUTC: 13 }, internal.callS
 // Review L5 (Nov 4): booking picks never confirmed with their code are deleted a week after they were let go.
 crons.daily("activity older than a year", { hourUTC: 9, minuteUTC: 47 }, internal.auditLog.purge, {}); // Phase 5e step 3
 crons.daily("bell older than 90 days", { hourUTC: 9, minuteUTC: 53 }, internal.bell.purge, {}); // Phase 5e step 4 (D146)
+crons.daily("expired exports and kept final exports", { hourUTC: 9, minuteUTC: 57 }, internal.yourData.purge, {}); // Phase 5e step 6
 crons.daily("lapsed call picks", { hourUTC: 9, minuteUTC: 41 }, internal.calls.purgeLapsed, {});
 export default crons;
