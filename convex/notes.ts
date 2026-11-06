@@ -1,8 +1,11 @@
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
+import { claimUpload, deleteFile } from "./lib/fileOwners";
+import { businessInScope } from "./lib/business";
 import { internal } from "./_generated/api";
 import { audit } from "./lib/audit";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import { requireFor, requireMe } from "./lib/access";
 import { accessToVersion, authorOf, limitKey, noteVisible, ownsNote, shareArg, type Access } from "./lib/viewer";
 import { bump } from "./lib/rate";
@@ -187,7 +190,7 @@ export const remove = mutation({
     if (!ownsNote(access, note)) throw new ConvexError(note.status === "done" ? "That note is marked done; it can't be deleted now." : "You can only delete your own notes.");
     const replies = await ctx.db.query("replies").withIndex("by_note", (q) => q.eq("noteId", noteId)).collect();
     for (const r of replies) await ctx.db.delete(r._id);
-    if (note.voice) await ctx.storage.delete(note.voice.storageId).catch(() => null);
+    if (note.voice) await deleteFile(ctx as unknown as MutationCtx, note.voice.storageId, note.businessId ?? null); // only a file this business owns
     await ctx.db.delete(noteId);
     // Phase 5e: a note deleted from the back office (the owner or the team) goes in the Activity log.
     if (access.kind === "owner") { const vid = await ctx.db.get(note.videoId); await audit(ctx, { kind: "deleted", text: `deleted a note${note.text ? `: "${note.text.slice(0, 60)}"` : ""}`, where: vid?.title ?? "Review", link: vid ? `/v/${vid._id}` : undefined }); }
@@ -248,6 +251,7 @@ const voiceRow = (ctx: { db: any }, storageId: Id<"_storage">): Promise<Doc<"voi
 export const registerVoice = internalMutation({
   args: { storageId: v.id("_storage"), versionId: v.optional(v.id("versions")) },
   handler: async (ctx, { storageId, versionId }) => {
+    await claimUpload(ctx as unknown as MutationCtx, storageId, businessInScope(ctx), "voice"); // review fix (Nov 6): only this business's own fresh recording
     if (!(await voiceRow(ctx, storageId))) await ctx.db.insert("voiceUploads", { storageId, versionId, createdAt: Date.now() });
     return null;
   },
@@ -261,6 +265,6 @@ export const discardVoice = mutation({
     const row = await voiceRow(ctx, storageId);
     if (!row) return; // only a voice recording, never another stored file
     const used = (await ctx.db.query("notes").collect()).some((n) => n.voice?.storageId === storageId);
-    if (!used) { await ctx.storage.delete(storageId).catch(() => null); await ctx.db.delete(row._id); }
+    if (!used) { await deleteFile(ctx as unknown as MutationCtx, storageId, row.businessId ?? null); await ctx.db.delete(row._id); }
   },
 });

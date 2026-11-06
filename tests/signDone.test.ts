@@ -139,7 +139,10 @@ describe("T-S3.1 the signed PDF", () => {
     expect(d.doc.status).toBe("completed");
     const f = d.doc.final!;
     expect(f.fileName).toBe("WS-00001 Service Agreement (signed).pdf");
-    const bytes = new Uint8Array(await x.t.run(async (ctx) => (await ctx.storage.get(f.fileId))!.arrayBuffer()));
+    // The page no longer gets the file's id (review fix, Nov 6): read it from the record.
+    const fileId = (await x.t.run(async (ctx) => (await ctx.db.get(x.documentId))!.final!.fileId));
+    expect((f as { fileId?: unknown }).fileId).toBeUndefined();
+    const bytes = new Uint8Array(await x.t.run(async (ctx) => (await ctx.storage.get(fileId))!.arrayBuffer()));
     expect(await sha(bytes)).toBe(f.sha256);
     // The trail names the hash; so does every email.
     expect(d.events.find((e) => e.kind === "signed_copy_made")!.detail).toContain(f.sha256);
@@ -182,7 +185,7 @@ describe("T-S3.2 copies", () => {
     const d = await x.get();
     const copies = x.w.mails.filter((m) => m.subject === "Signed: Service Agreement (WS-00001)");
     expect(copies.map((m) => m.to).sort()).toEqual(["heston@wranglerproductions.com", "jordan@example.com"]);
-    const bytes = new Uint8Array(await x.t.run(async (ctx) => (await ctx.storage.get(d.doc.final!.fileId))!.arrayBuffer()));
+    const bytes = new Uint8Array(await x.t.run(async (ctx) => (await ctx.storage.get((await ctx.db.get(x.documentId))!.final!.fileId))!.arrayBuffer()));
     for (const m of copies) {
       expect(m.attachments![0].filename).toBe("WS-00001 Service Agreement (signed).pdf");
       expect(await sha(unb64(m.attachments![0].content))).toBe(await sha(bytes));
