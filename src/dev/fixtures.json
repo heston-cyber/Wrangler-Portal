@@ -4190,6 +4190,18 @@
      "number": 1,
      "ownerSignedAt": null
     }
+   ],
+   "copies": [
+    {
+     "_id": "kitcopy1",
+     "email": "ana@harbor.example",
+     "name": "Ana Ruiz",
+     "sentAt": 1793900000000,
+     "emailedAt": 1793900005000,
+     "emailError": null,
+     "openedAt": 1793950000000,
+     "opens": 2
+    }
    ]
   },
   "sign.get#000000000000000010058wsDocuments": {
@@ -4385,7 +4397,8 @@
      "number": 1,
      "ownerSignedAt": null
     }
-   ]
+   ],
+   "copies": []
   },
   "sign.get#000000000000000010060wsDocuments": {
    "chain": {
@@ -4527,7 +4540,8 @@
      "number": 1,
      "ownerSignedAt": null
     }
-   ]
+   ],
+   "copies": []
   },
   "projects.page#000000000000000000010020projects": {
    "_id": "000000000000000000010020projects",

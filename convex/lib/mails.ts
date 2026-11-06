@@ -91,7 +91,7 @@ export function ownerAlertMail(b: MailBrand, d: { title: string; project: string
 }
 
 // ---------- 07 · 07b · 08 · 09: signing ----------
-export function pleaseSignMail(b: MailBrand, d: { name: string; title: string; label: string; link: string; until: string | null; reminder: boolean }): Mail {
+export function pleaseSignMail(b: MailBrand, d: { name: string; title: string; label: string; link: string; until: string | null; reminder: boolean; copied?: string[] }): Mail {
   return mk(b, "contracts", `${d.reminder ? "Reminder: " : ""}Please sign: ${d.title} (${d.label})`, [
     hi(d.name),
     { t: "p", text: `${d.reminder ? "A reminder: " : ""}${byline(b, true)} sent you "${d.title}" (${d.label}) to review and sign.` },
@@ -99,8 +99,29 @@ export function pleaseSignMail(b: MailBrand, d: { name: string; title: string; l
     { t: "button", label: "Review and sign", href: d.link }, { t: "link", href: d.link },
     { t: "p", text: "You'll confirm this email address with a 6-digit code, read the document, add your initials where asked, and sign. It takes a few minutes on a phone or a computer.", tone: "muted" },
     ...(d.until ? [{ t: "p", text: `The link works until ${d.until}.`, tone: "muted" } as Block] : []),
+    ...(d.copied?.length ? [{ t: "p", text: `Copied: ${d.copied.join(", ")}.`, tone: "muted" } as Block] : []), // D160: nobody is copied without the signers knowing
     { t: "p", text: "Questions, or would you rather sign on paper? Reply to this email.", tone: "muted" },
   ], [{ t: "small", text: `${b.footerName} · ${SIGN_HOST}` }]);
+}
+/** D160 (Nov 6, built without frames): someone copied on a contract, when it's sent. A view-only link; nothing to sign. */
+export function copiedMail(b: MailBrand, d: { name: string | null; title: string; label: string; signers: string[]; link: string }): Mail {
+  return mk(b, "contracts", `Copy: ${d.title} (${d.label}) was sent for signature`, [
+    hi(d.name),
+    { t: "p", text: `${byline(b, true)} sent "${d.title}" (${d.label}) for signature, and copied you.` },
+    { t: "p", text: "Sent to:" }, { t: "list", items: d.signers },
+    { t: "p", text: "You're copied, so there's nothing for you to sign. You can read it here:", tone: "muted" },
+    { t: "button", label: "View the document", href: d.link }, { t: "link", href: d.link },
+    { t: "p", text: "When everyone has signed, you'll get the signed copy too. Questions? Reply to this email.", tone: "muted" },
+  ], [{ t: "small", text: `${b.footerName} · ${SIGN_HOST}` }]);
+}
+/** D160: someone copied on a contract that was then cancelled. */
+export function copiedCancelledMail(b: MailBrand, d: { name: string | null; title: string; label: string; reason: string | null }): Mail {
+  return mk(b, "contracts", `Cancelled: ${d.title} (${d.label})`, [
+    hi(d.name),
+    { t: "p", text: `${byline(b, true)} cancelled "${d.title}" (${d.label}), which you were copied on. Its links no longer work.` },
+    ...(d.reason ? [{ t: "box", text: `Reason: ${d.reason}` } as Block] : []),
+    { t: "p", text: "Questions? Reply to this email.", tone: "muted" },
+  ], [{ t: "small", text: b.name }]);
 }
 export function cancelledMail(b: MailBrand, d: { name: string; title: string; label: string; reason: string | null }): Mail {
   return mk(b, "contracts", `Cancelled: ${d.title} (${d.label})`, [
