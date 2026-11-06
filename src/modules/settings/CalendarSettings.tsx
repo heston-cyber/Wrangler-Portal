@@ -48,7 +48,7 @@ export function CalendarSettings({ show }: { show: (m: string) => void }) {
     return () => { live = false; };
   }, [conn?.email, conn?.calendarId, conn?.inviteVendors, conn?.inviteClient, conn?.disconnected, list]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const head = <SetHead eyebrow="Calendar" title="Shoots on your calendar." sub="Each business picks its own calendar. Shoots you schedule go on it, and move when you move them." />;
+  const head = <SetHead title="Shoots on your calendar." sub="Each business picks its own calendar. Shoots you schedule go on it, and move when you move them." />;
   if (s === undefined) return <>{head}<div className="panel"><SkeletonRows n={3} /></div></>;
   if (s === null) return null;
   const connect = async () => { setBusy("connect"); setErr(null); try { window.location.assign(await authUrl({})); } catch (e) { setErr(errText(e)); setBusy(null); } };

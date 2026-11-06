@@ -312,7 +312,7 @@ export function CallSettings({ show }: { show: (m: string) => void }) {
   const [cal, setCal] = useState<string>("");
   const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
   useEffect(() => { if (s && !p) { setP(s.prefs); setCal(s.calendar?.checkId ?? ""); } }, [s, p]);
-  const head = <SetHead eyebrow="Settings" title="Booking calls." sub="Choose when leads can book a call with you." />;
+  const head = <SetHead title="Booking calls." sub="Choose when leads can book a call with you." />;
   if (s === undefined || (s && !p)) return <>{head}<div className="panel"><SkeletonRows n={5} /></div></>;
   if (s === null || !p) return null;
   const off = !s.calendar;

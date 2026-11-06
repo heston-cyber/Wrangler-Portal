@@ -40,7 +40,7 @@ export function TeamHome({ name }: { name: string | null }) {
     <>
       <TopBar><span className="here">Dashboard</span></TopBar>
       <div className="wp-page wp-home pov">
-        <PageHeader eyebrow="Dashboard" title={`${greeting()}${first(name) ? `, ${first(name)}` : ""}.`} sub={sub} />
+        <PageHeader title={`${greeting()}${first(name) ? `, ${first(name)}` : ""}.`} sub={sub} />
         <div className="pov-stats ov-tiles">
           {shootsOn && <Tile label="Shoots this week" n={shoots ? week.length : "–"} sub={week[0] ? `Next: ${dayText(week[0].date)}` : "None this week"} to="/production/shoots" link="See shoots" />}
           {reviewOn && <Tile label="Notes waiting" n={ov ? noteCount : "–"} sub={notes.length ? `Across ${notes.length === 1 ? "1 video" : `${notes.length} videos`}` : "All caught up"} to="/review" link="Open Review" />}
@@ -89,7 +89,7 @@ export function TeamAccount({ me }: { me: { name: string | null; email: string }
     <>
       <TopBar><span className="here">Account</span></TopBar>
       <div className="wp-page">
-        <PageHeader eyebrow="Settings" title="Account." sub={`You work here as ${role ? ROLE[role] ?? role : "a team member"}.`} />
+        <PageHeader title="Account." sub={`You work here as ${role ? ROLE[role] ?? role : "a team member"}.`} />
         <Card label="Your details" head={<SectionHead label="Your details" />}>
           <div className="team-form">
             <label className="wp-field"><span className="wp-field-label">Your name</span><input className="input" value={name} maxLength={60} onChange={(e) => setNameText(e.target.value)} /></label>

@@ -319,7 +319,7 @@ export default function OwnerHome() {
     <>
     <TopBar><span className="here">Dashboard</span></TopBar>
     <div className="wp-page wp-home pov">
-      <PageHeader eyebrow="Dashboard" title="Dashboard." sub="What needs you today." actions={<><ButtonLink variant="secondary" to="/settings/tools" iconEnd={false}>Customize</ButtonLink><ButtonLink variant="primary" to="/production/call-sheets/new" iconEnd={false}>New call sheet</ButtonLink></>} />
+      <PageHeader title="Dashboard." sub="What needs you today." actions={<><ButtonLink variant="secondary" to="/settings/tools" iconEnd={false}>Customize</ButtonLink><ButtonLink variant="primary" to="/production/call-sheets/new" iconEnd={false}>New call sheet</ButtonLink></>} />
       {watch && watch.open > 0 && <SiteWatchRow w={watch} />}
       <div className="pov-stats ov-tiles">
         <Tile label="Today" n={dash ? dash.tiles.today : "–"} sub={dash?.tiles.todayFirst ? `${dash.tiles.today === 1 ? "shoot" : "shoots"} · ${dash.tiles.todayFirst.client ?? dash.tiles.todayFirst.project}` : "no shoots"}

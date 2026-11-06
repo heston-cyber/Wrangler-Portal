@@ -34,7 +34,7 @@ export default function VendorsPage() {
     <>
       <TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/vendors")}>Vendors</a><Sep /><span className="here">All vendors</span></TopBar>
       <div className="wp-page">
-        <PageHeader eyebrow="Vendors" title="All vendors." sub="Shooters, editors and anyone else you hire. They get their own portal to accept bookings and send invoices." actions={<Button variant="primary" onClick={() => setAdding(true)}>Add vendor</Button>} />
+        <PageHeader title="All vendors." sub="Shooters, editors and anyone else you hire. They get their own portal to accept bookings and send invoices." actions={<Button variant="primary" onClick={() => setAdding(true)}>Add vendor</Button>} />
         {rows === undefined ? <Card label="Loading"><SkeletonRows n={4} /></Card> : rows.length === 0 ? (
           <EmptyState icon="user" title="No vendors yet." body="Add the shooters, editors and crew you hire. Book them on projects, send briefings, and track their invoices and 1099 totals here." actions={<Button variant="primary" onClick={() => setAdding(true)}>Add vendor</Button>} />
         ) : (

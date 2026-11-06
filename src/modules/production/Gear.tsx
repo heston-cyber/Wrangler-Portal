@@ -50,7 +50,7 @@ export default function GearPage() {
     <>
       <TopBar><span className="secondary">Production</span><Sep /><a {...linkProps("/production/prin-pro")}>Prin-pro</a><Sep /><span className="here">Gear</span></TopBar>
       <div className="wp-page prod">
-        <PageHeader eyebrow="Production" title="Gear." sub="What you own, what it's insured for, and what's booked on a shoot."
+        <PageHeader title="Gear." sub="What you own, what it's insured for, and what's booked on a shoot."
           actions={<><Button onClick={() => setExporting(true)} disabled={!d || d.tiles.items === 0}>Export for insurer</Button><Button variant="primary" onClick={() => setAdding(true)}>Add gear</Button></>} />
         {d === undefined ? <Card label="Loading"><SkeletonRows n={4} /></Card> : d === null ? null : <>
           <div className="pov-stats prod-tiles">

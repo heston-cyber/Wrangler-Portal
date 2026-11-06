@@ -41,7 +41,7 @@ export function ActivityLog() {
   }
   return (
     <>
-      <SetHead eyebrow="Settings" title="Activity." sub="Who changed what, and when. Kept for 1 year. Only the owner sees this." />
+      <SetHead title="Activity." sub="Who changed what, and when. Kept for 1 year. Only the owner sees this." />
       <span className="wp-label">Kind</span>
       <div className="qz-chips act-pills" role="group" aria-label="Kind">
         <button type="button" className={`qz-chip${!kind ? " on" : ""}`} aria-pressed={!kind} onClick={() => { setKind(null); setLimit(50); }}>All {d?.counts.all ?? ""}</button>

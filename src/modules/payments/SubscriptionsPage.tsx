@@ -68,7 +68,7 @@ export default function SubscriptionsPage() {
     <>
       <TopBar><span className="secondary">Payments</span><Sep /><span className="here">Subscriptions</span></TopBar>
       <div className="wp-page inv-list">
-        <PageHeader eyebrow="Payments" title="Subscriptions." sub="Every client on a plan, and what comes in each month."
+        <PageHeader title="Subscriptions." sub="Every client on a plan, and what comes in each month."
           actions={<ButtonLink variant="primary" to="/payments/subscriptions/new">Start a subscription</ButtonLink>} />
         {notConnected && <div className="wp-notice"><Icon name="info" size={20} /><span className="txt"><b>Stripe isn't connected.</b> Subscriptions run in your Stripe account (Settings › Payments).</span><ButtonLink size="sm" to="/settings/payments">Settings › Payments</ButtonLink></div>}
         {data === undefined ? <Card label="Subscriptions"><SkeletonRows n={4} /></Card>

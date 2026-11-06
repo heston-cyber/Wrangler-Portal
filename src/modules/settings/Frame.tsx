@@ -88,10 +88,11 @@ export function SettingsFrame({ section, right, children }: { section: SectionKe
 }
 
 /** A section's heading: eyebrow, title and one line under it. */
-export function SetHead({ eyebrow, title, sub }: { eyebrow: string; title: string; sub?: React.ReactNode }) {
+// Heston (Nov 5, 20:02): a page says where it is once, so the eyebrow is only for words the breadcrumb and title don't say.
+export function SetHead({ eyebrow, title, sub }: { eyebrow?: string; title: string; sub?: React.ReactNode }) {
   return (
     <header className="wp-sethead">
-      <span className="wp-eyebrow">{eyebrow}</span>
+      {eyebrow && <span className="wp-eyebrow">{eyebrow}</span>}
       <h1 className="wp-h3">{title}</h1>
       {sub && <p className="wp-body">{sub}</p>}
     </header>

@@ -116,10 +116,10 @@ export default function Settings({ me }: { me: { name: string | null; email: str
       {key === "business" && <BusinessSection show={show} />}
       {key === "team" && <TeamSection path={path} show={show} />}
       {key === "activity" && <ActivityLog />}
-      {key === "security" && <SecuritySection show={show} head={<SetHead eyebrow="Settings" title="Security." sub="Your email is your username. Sign in with your email and a password." />} />}
+      {key === "security" && <SecuritySection show={show} head={<SetHead title="Security." sub="Your email is your username. Sign in with your email and a password." />} />}
       {key === "payments" && <PaymentsSettings show={show} />}
       {key === "rates" && <RatesSection show={show} />}
-      {key === "brand" && <><SetHead eyebrow="Brand kit" title="Your brand, for decks." sub="Claude uses this when it makes a pitch deck in your brand. Each client can have their own kit on their company page." /><BrandKitEditor show={show} /></>}
+      {key === "brand" && <><SetHead title="Your brand, for decks." sub="Claude uses this when it makes a pitch deck in your brand. Each client can have their own kit on their company page." /><BrandKitEditor show={show} /></>}
       {key === "calendar" && <CalendarSettings show={show} />}
       {key === "calls" && <CallSettings show={show} />}
       {key === "sitewatch" && <SiteWatchGate show={show} />}
@@ -129,14 +129,14 @@ export default function Settings({ me }: { me: { name: string | null; email: str
       {key === "notifications" && <OwnerNotifications show={show} />}
       {key === "dropbox" && <DropboxSettings show={show} />}
       {key === "connectors" && <>
-        <SetHead eyebrow="Claude connectors" title="Claude reads your notes and sets up your contracts." sub="Two connectors, each with its own keys." />
+        <SetHead title="Claude reads your notes and sets up your contracts." sub="Two connectors, each with its own keys." />
         <Connector show={show} />
         <SignConnectorPanel show={show} />
       </>}
       {key === "sheet" && <SheetCopy show={show} />}
       {key === "clients" && <ClientsSettings show={show} />}
       {key === "shares" && <SharesSettings show={show} />}
-      {key === "help" && <><SetHead eyebrow="Help" title="Guides." sub="Short guides for your clients and vendors. Edit any of them, and what you write is what they read." /><HelpSection path={path} /></>}
+      {key === "help" && <><SetHead title="Guides." sub="Short guides for your clients and vendors. Edit any of them, and what you write is what they read." /><HelpSection path={path} /></>}
       {toast}
     </SettingsFrame>
   );
@@ -146,7 +146,7 @@ export default function Settings({ me }: { me: { name: string | null; email: str
 function SiteWatchGate({ show }: { show: (m: string) => void }) {
   const admin = useQuery(api.siteWatch.summary);
   if (admin === undefined) return null;
-  if (admin === null) return <SetHead eyebrow="Settings" title="Not available." sub="Site watch is for the portal's own admins." />;
+  if (admin === null) return <SetHead title="Not available." sub="Site watch is for the portal's own admins." />;
   return <SiteWatchSettings show={show} />;
 }
 
@@ -185,7 +185,7 @@ function AccountSection({ me, show }: { me: { name: string | null; email: string
   const changed = name.trim() !== (me.name ?? "") && name.trim().length > 0;
   return (
     <>
-      <SetHead eyebrow="Account" title="Your profile." sub="The name here goes on every note and reply you leave." />
+      <SetHead title="Your profile." sub="The name here goes on every note and reply you leave." />
       <div className="panel">
         <div className="prow">
           <span className="pl">Name</span>
@@ -222,7 +222,7 @@ function BusinessSection({ show }: { show: (m: string) => void }) {
     if (cur && !f) setF({ name: cur.name, legalName: cur.legalName ?? "", emailFromName: cur.emailFromName ?? "", replyTo: cur.replyTo ?? "", address: cur.address ?? "", privacyUrl: cur.privacyUrl ?? "", accent: cur.accent ?? "", background: cur.background ?? "" });
   }, [cur, f]);
   const dirty = useMemo(() => !!(cur && f) && (f.name !== cur.name || f.legalName !== (cur.legalName ?? "") || f.emailFromName !== (cur.emailFromName ?? "") || f.replyTo !== (cur.replyTo ?? "") || f.address !== (cur.address ?? "") || f.privacyUrl !== (cur.privacyUrl ?? "") || f.accent.toUpperCase() !== (cur.accent ?? "") || f.background.toUpperCase() !== (cur.background ?? "")), [cur, f]);
-  if (!cur || !f) return <SetHead eyebrow="Business" title="Your business." sub="How your portal looks to clients and what it sends as." />;
+  if (!cur || !f) return <SetHead title="Your business." sub="How your portal looks to clients and what it sends as." />;
   const set = (p: Partial<Biz>) => setF({ ...f, ...p });
   const onSave = async () => {
     setBusy("save"); setErr(null);
@@ -238,7 +238,7 @@ function BusinessSection({ show }: { show: (m: string) => void }) {
   const hex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v);
   return (
     <>
-      <SetHead eyebrow="Business" title="Your business." sub="How your portal looks to clients and what it sends as." />
+      <SetHead title="Your business." sub="How your portal looks to clients and what it sends as." />
       <div className="wp-bizgrid">
         <div className="wp-biz glass">
           {field("Business name", "name")}
@@ -474,7 +474,7 @@ function SheetCopy({ show }: { show: (m: string) => void }) {
   };
   return (
     <>
-      <SetHead eyebrow="Google Sheet copy" title="The register in a Google Sheet." sub="A copy that refreshes itself every 10 minutes. Changes happen here, not in the sheet." />
+      <SetHead title="The register in a Google Sheet." sub="A copy that refreshes itself every 10 minutes. Changes happen here, not in the sheet." />
       <div className="panel">
         <div className="prow">
           <span className="pl">

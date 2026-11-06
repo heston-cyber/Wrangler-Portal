@@ -105,7 +105,7 @@ export function BellSettings({ show, emails }: { show: (m: string) => void; emai
 
   return (
     <>
-      <SetHead eyebrow="Settings" title="Notifications." sub={emails ? "Choose what reaches your bell and your phone. The email switches are below." : "Choose what reaches your bell and your phone."} />
+      <SetHead title="Notifications." sub={emails ? "Choose what reaches your bell and your phone. The email switches are below." : "Choose what reaches your bell and your phone."} />
       <Card label="Phone alerts" head={<SectionHead label="Phone alerts" />}>
         {phone}
         {others.map((x) => <ListRow key={x.endpoint} lead={{ icon: "phone" }} title={x.label} meta={`Alerts on · ${added(x.createdAt)}`} action={<Button size="sm" variant="ghost" onClick={() => void unsubscribe({ endpoint: x.endpoint }).then(() => show("Alerts are off for that device."), (e) => show(errText(e)))}>Remove</Button>} />)}

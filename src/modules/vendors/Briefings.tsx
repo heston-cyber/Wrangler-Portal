@@ -59,7 +59,7 @@ export default function BriefingsPage() {
     <>
       <TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><span className="here">Briefings</span></TopBar>
       <div className="wp-page">
-        <PageHeader eyebrow="Production · Pre-pro" title="Briefings." sub="Shoot and edit briefs, made in the builder. Email one to a booked vendor or to anyone else, or copy a link; see who has opened it." actions={<Button variant="primary" onClick={() => setNew({})}>New briefing</Button>} />
+        <PageHeader title="Briefings." sub="Shoot and edit briefs, made in the builder. Email one to a booked vendor or to anyone else, or copy a link; see who has opened it." actions={<Button variant="primary" onClick={() => setNew({})}>New briefing</Button>} />
         {rows === undefined ? <Card label="Loading"><SkeletonRows n={4} /></Card> : (
           <>
             {rows.length > 0 && <PillTabs label="Show" value={pill} onChange={setPill} items={[{ key: "all", label: "All", count: count("all") }, { key: "draft", label: "Draft", count: count("draft") }, { key: "sent", label: "Sent", count: count("sent") }, { key: "read", label: "Read", count: count("read") }]} />}

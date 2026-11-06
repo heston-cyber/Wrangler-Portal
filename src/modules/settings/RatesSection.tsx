@@ -47,7 +47,7 @@ export default function RatesSection({ show }: { show: (m: string) => void }) {
   useEffect(() => { if (data && !r) setR(structuredClone(data.rates as Rates)); }, [data, r]);
   const problems = useMemo(() => (r ? ratesProblems(r) : []), [r]);
   const dirty = !!r && !!data && JSON.stringify(r) !== JSON.stringify(data.rates);
-  if (!data || !r) return <><SetHead eyebrow="Pricing" title="How you price a job." /><Card label="Loading"><SkeletonRows n={5} /></Card></>;
+  if (!data || !r) return <><SetHead title="How you price a job." /><Card label="Loading"><SkeletonRows n={5} /></Card></>;
   const up = (p: Partial<Rates>) => setR({ ...r, ...p });
   const kind = (id: string) => r.kinds.find((k) => k.id === id);
   const setKind = (i: number, p: Partial<Kind>) => up({ kinds: r.kinds.map((k, j) => (j === i ? { ...k, ...p } : k)) });
@@ -74,7 +74,7 @@ export default function RatesSection({ show }: { show: (m: string) => void }) {
   };
   return (
     <>
-      <SetHead eyebrow="Pricing" title="How you price a job." sub="Estimates, quotes and proposals suggest prices from these. You can type a different number on any of them. Clients never see costs, profit or the split." />
+      <SetHead title="How you price a job." sub="Estimates, quotes and proposals suggest prices from these. You can type a different number on any of them. Clients never see costs, profit or the split." />
 
       <Fold label="Default rates" summary={`Hourly ${money(defaults.hourlyCents)} · Daily ${money(defaults.dailyCents)}`.replace(/\.00/g, "")}>
         <div className="rt-pad">

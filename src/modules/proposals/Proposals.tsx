@@ -51,7 +51,7 @@ export default function ProposalsPage() {
     <>
       <TopBar><span className="secondary">Docs</span><Sep /><a {...linkProps("/proposals")}>Proposals</a><Sep /><span className="here">All proposals</span></TopBar>
       <div className="wp-page">
-        <PageHeader eyebrow="Proposals" title="All proposals." sub="Written pitches, made in the builder. Clients read and accept them from a link." actions={<><ButtonLink to="/proposals/questionnaire">Questionnaire</ButtonLink><ButtonLink variant="primary" to="/proposals/new">New proposal</ButtonLink></>} />
+        <PageHeader title="All proposals." sub="Written pitches, made in the builder. Clients read and accept them from a link." actions={<><ButtonLink to="/proposals/questionnaire">Questionnaire</ButtonLink><ButtonLink variant="primary" to="/proposals/new">New proposal</ButtonLink></>} />
         {rows === undefined ? <Card label="Loading"><SkeletonRows n={4} /></Card> : rows.length === 0 ? (
           <EmptyState icon="quote" title="No proposals yet." body="A proposal is a written pitch: scope, deliverables, timeline and the investment. Start one from a template or the standard sections; the client reads it and presses Accept, no account needed."
             actions={<ButtonLink variant="primary" to="/proposals/new">New proposal</ButtonLink>} />
@@ -162,7 +162,7 @@ export function ProposalTemplates() {
     <>
       <TopBar><span className="secondary">Docs</span><Sep /><a {...linkProps("/proposals")}>Proposals</a><Sep /><span className="here">Templates</span></TopBar>
       <div className="wp-page">
-        <PageHeader eyebrow="Proposals" title="Proposal templates." sub="Sections and wording you reuse. Kept apart from contract templates in Docs."
+        <PageHeader title="Proposal templates." sub="Sections and wording you reuse. Kept apart from contract templates in Docs."
           actions={<Button variant="primary" loading={busy === "new"} onClick={async () => { setBusy("new"); try { navigate(`/proposals/templates/${await newTemplate({})}`); } catch (e) { show(errText(e)); setBusy(null); } }}>New template</Button>} />
         {templates === undefined ? <Card label="Loading"><SkeletonRows n={3} /></Card> : templates.length === 0 ? (
           <EmptyState icon="folder" title="No proposal templates yet." body="Save any proposal as a template from the builder, or start one here with the standard sections." />

@@ -364,7 +364,7 @@ export function VendorReview() {
     <>
       <TopBar><span className="here">Review</span></TopBar>
       <div className="wp-page">
-        <PageHeader eyebrow="Review" title="Review." sub="The projects you're booked to edit. Watch every cut and leave notes; uploads and sharing stay with the business." />
+        <PageHeader title="Review." sub="The projects you're booked to edit. Watch every cut and leave notes; uploads and sharing stay with the business." />
         {r.rows.length === 0 ? <EmptyState icon="review" title="Nothing to review." body="When you're booked as an editor, the project's cuts show up here." /> : (
           <Card label="Projects">
             {r.rows.map((x, i) => <div key={x.bookingId} className="wp-rowwrap">{i > 0 && <Divider />}

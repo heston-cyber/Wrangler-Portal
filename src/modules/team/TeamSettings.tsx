@@ -59,7 +59,7 @@ function TeamList({ show }: { show: (m: string) => void }) {
   };
   return (
     <>
-      <SetHead eyebrow="Settings" title="Team." sub="Invite people to work in the portal. They see only what their role allows." />
+      <SetHead title="Team." sub="Invite people to work in the portal. They see only what their role allows." />
       {page === undefined ? <Card label="Members"><SkeletonRows n={3} label="Loading the team" /></Card> : <>
         <Card label="Members" head={<SectionHead label="Members" count={page.members.length + 1} action={<Button size="sm" variant="ghost" onClick={() => setInviting(true)}>Invite a team member</Button>} />}>
           <ListRow lead={{ icon: "user" }} title={me?.name ?? "You"} meta={me?.email} chip={<StatusChip tone="accent">Owner</StatusChip>} />
@@ -150,7 +150,7 @@ function MemberPage({ membershipId, show }: { membershipId: Id<"memberships">; s
   };
   return (
     <>
-      <SetHead eyebrow="Settings" title={`${m.name}.`} sub={`${ROLE_NAMES[role]} · ${m.email}`} />
+      <SetHead title={`${m.name}.`} sub={`${ROLE_NAMES[role]} · ${m.email}`} />
       <Card label="Role" head={<SectionHead label="Role" />}>
         <div className="team-form">
           <label className="wp-field"><span className="wp-field-label">Name</span><input className="input" value={m.name} readOnly /></label>
@@ -204,7 +204,7 @@ function RolesPage({ show }: { show: (m: string) => void }) {
   };
   return (
     <>
-      <SetHead eyebrow="Settings" title="Team." sub="Choose what each role can use. Changes apply to everyone in that role." />
+      <SetHead title="Team." sub="Choose what each role can use. Changes apply to everyone in that role." />
       <p className="wp-small"><a {...linkProps("/settings/team")}>← Back to the team</a></p>
       {page === undefined ? <Card label="Roles"><SkeletonRows n={6} label="Loading" /></Card> : (
         <Card className="team-matrix" label="Roles and what they can use" head={<SectionHead label="Roles and what they can use" action={<Button size="sm" variant="ghost" onClick={() => void doReset()}>Reset all to suggested</Button>} />}>

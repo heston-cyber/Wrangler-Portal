@@ -47,7 +47,7 @@ export function ToolsSettings({ show }: { show: (m: string) => void }) {
   const [t, setT] = useState<Tools | null>(null);
   const saving = useRef(0);
   useEffect(() => { if (me?.tools && !t) setT(toolsOf(me.tools)); }, [me, t]);
-  const head = <SetHead eyebrow="Tools" title="Your menu and Dashboard." sub="Drag tools into the order you want, take them off the menu or put them back, and pick what your Dashboard shows. Only your menu changes." />;
+  const head = <SetHead title="Your menu and Dashboard." sub="Drag tools into the order you want, take them off the menu or put them back, and pick what your Dashboard shows. Only your menu changes." />;
   if (!t) return <>{head}<div className="panel"><SkeletonRows n={6} /></div></>;
   const put = (next: Tools) => {
     setT(next);

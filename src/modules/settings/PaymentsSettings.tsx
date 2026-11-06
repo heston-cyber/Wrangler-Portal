@@ -177,7 +177,7 @@ export function PaymentsSettings({ show }: { show: (m: string) => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [back, s?.stripe]);
 
-  if (s === undefined) return <><SetHead eyebrow="Payments" title="Payments." /><div className="panel"><SkeletonRows n={3} /></div></>;
+  if (s === undefined) return <><SetHead title="Payments." /><div className="panel"><SkeletonRows n={3} /></div></>;
   if (s === null) return null;
   const st = s.stripe;
   const test = s.platform.mode === "test";
@@ -186,7 +186,7 @@ export function PaymentsSettings({ show }: { show: (m: string) => void }) {
   if (!s.platform.ready) {
     return (
       <>
-        <SetHead eyebrow="Payments" title="Take payments in the portal." sub="Connect your Stripe account so clients can pay invoices right on the invoice page." />
+        <SetHead title="Take payments in the portal." sub="Connect your Stripe account so clients can pay invoices right on the invoice page." />
         <div className="wp-notice"><Icon name="info" size={20} /><span className="txt"><b>Payments aren't switched on for the portal yet.</b> The portal's own Stripe account is still being set up.</span></div>
       </>
     );
@@ -195,7 +195,7 @@ export function PaymentsSettings({ show }: { show: (m: string) => void }) {
   if (!st) {
     return (
       <>
-        <SetHead eyebrow="Payments" title="Take payments in the portal." sub="Connect your Stripe account so clients can pay invoices right on the invoice page." />
+        <SetHead title="Take payments in the portal." sub="Connect your Stripe account so clients can pay invoices right on the invoice page." />
         <div className="panel pay-card">
           <span className="wp-eyebrow">What you get {testTag}</span>
           <ul className="pay-gets">
@@ -245,7 +245,7 @@ export function PaymentsSettings({ show }: { show: (m: string) => void }) {
 
   return (
     <>
-      <SetHead eyebrow="Payments" title="Payments." sub="Your Stripe connection and how clients pay you." />
+      <SetHead title="Payments." sub="Your Stripe connection and how clients pay you." />
       {(st.status === "needs_info" || st.status === "pending") && (
         <div className="wp-notice warn pay-banner">
           <Icon name="alert" size={20} />
