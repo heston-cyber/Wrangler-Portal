@@ -16470,7 +16470,141 @@
     "Dana Whitfield"
    ],
    "more": true
-  }
+  },
+  "bell.unread": 3,
+  "bell.feed": {
+   "rows": [
+    {
+     "_id": "b1",
+     "kind": "quotes",
+     "title": "Maya Brooks accepted proposal WRNGLR-P-0007",
+     "link": "/proposals",
+     "at": 1793929147911,
+     "unread": true
+    },
+    {
+     "_id": "b2",
+     "kind": "contracts",
+     "title": "Floor Trader signed the Service Agreement",
+     "link": "/sign",
+     "at": 1793925667911,
+     "unread": true
+    },
+    {
+     "_id": "b3",
+     "kind": "payments",
+     "title": "Harbor Coffee paid $2,500.00 on Invoice 0041",
+     "link": "/payments/invoices",
+     "at": 1793918467911,
+     "unread": true
+    },
+    {
+     "_id": "b4",
+     "kind": "vendors",
+     "title": "Jordan Ellis sent an invoice",
+     "link": "/production",
+     "at": 1793835667911,
+     "unread": false
+    },
+    {
+     "_id": "b5",
+     "kind": "notes",
+     "title": "3 notes on Spring spot v2",
+     "link": "/review",
+     "at": 1793832067911,
+     "unread": false
+    },
+    {
+     "_id": "b6",
+     "kind": "messages",
+     "title": "New message from Maya Brooks",
+     "link": "/clients",
+     "at": 1793828467911,
+     "unread": false
+    },
+    {
+     "_id": "b7",
+     "kind": "uploads",
+     "title": "Logo-files.zip uploaded",
+     "link": "/clients",
+     "at": 1793824867911,
+     "unread": false
+    },
+    {
+     "_id": "b8",
+     "kind": "sitewatch",
+     "title": "Site watch: urgent \u00b7 A fix is ready",
+     "link": null,
+     "at": 1793821267911,
+     "unread": false
+    }
+   ],
+   "counts": {
+    "all": 48,
+    "quotes": 6,
+    "contracts": 9,
+    "payments": 8,
+    "vendors": 5,
+    "notes": 7,
+    "messages": 9,
+    "uploads": 3,
+    "sitewatch": 1
+   },
+   "unread": 3,
+   "more": true
+  },
+  "bell.prefs": {
+   "kinds": [
+    {
+     "kind": "quotes",
+     "bell": true,
+     "phone": true
+    },
+    {
+     "kind": "contracts",
+     "bell": true,
+     "phone": true
+    },
+    {
+     "kind": "payments",
+     "bell": true,
+     "phone": true
+    },
+    {
+     "kind": "vendors",
+     "bell": true,
+     "phone": false
+    },
+    {
+     "kind": "notes",
+     "bell": true,
+     "phone": false
+    },
+    {
+     "kind": "messages",
+     "bell": true,
+     "phone": true
+    },
+    {
+     "kind": "uploads",
+     "bell": true,
+     "phone": false
+    },
+    {
+     "kind": "sitewatch",
+     "bell": true,
+     "phone": false
+    }
+   ],
+   "devices": [
+    {
+     "endpoint": "https://push.example/kit",
+     "label": "iPhone \u00b7 Safari",
+     "createdAt": 1793670067911
+    }
+   ]
+  },
+  "bell.pushKey": null
  },
  "client": {
   "users.me": {

@@ -2,6 +2,7 @@
 // clicking a layer item opens its main page, the chevron opens its layer. Phone: the layers become chips under the
 // top bar and a glass tab bar is fixed at the bottom. The back office and the client side share it; the client side
 // wears its business's look (lib/brand.ts). Work surfaces (the review page) hide the sidebar and open it as a drawer.
+import { BellButton } from "../modules/bell/BellButton";
 import { createContext, Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "convex/react";
 import { useSignOutAsk } from "./SignOut";
@@ -236,17 +237,18 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
   const showSidebar = !overlay || drawer;
   const lightSrc = side === "owner" ? lightBack : lightClient;
   const onSearch = canSearch ? () => setSearch(true) : undefined;
+  const bell = side === "owner" && !navIn; // Phase 5e step 4: the owner's and the team's bell
   return (
     <Ctx.Provider value={ctx}>
       <div className={`wp-shell${overlay ? " overlay" : ""}${side !== "owner" ? " client-side" : ""}`}>
         {light && !overlay && <div className={`wp-light ${side === "owner" ? "back" : "client"}`} aria-hidden><i style={{ backgroundImage: `url(${lightSrc})` }} /></div>}
         {showSidebar && (
           <Sidebar me={me} side={side} items={nav.main} logo={logo} bizName={bizName} subtitle={subtitle} recent={recent} top={top}
-            drawer={overlay && !!drawer} onClose={() => setDrawer(false)} onSearch={onSearch}
+            drawer={overlay && !!drawer} onClose={() => setDrawer(false)} onSearch={onSearch} bell={bell}
             onHover={overlay && drawer === "peek" ? peek : undefined} />
         )}
         {overlay && drawer && <div className="wp-scrim" onClick={() => setDrawer(false)} />}
-        <PhoneTop me={me} side={side} items={[...nav.main, ...nav.tabs]} logo={logo} bizName={bizName} onSearch={onSearch} />
+        <PhoneTop me={me} side={side} items={[...nav.main, ...nav.tabs]} logo={logo} bizName={bizName} onSearch={onSearch} bell={bell} />
         <div className="main">{children}</div>
         <TabBar items={nav.tabs} />
       </div>
@@ -272,8 +274,8 @@ function Logo({ src, name }: { src: string; name: string }) {
   return <span className="wp-logo"><span className="rec" aria-hidden /><img src={src} alt={name} /></span>;
 }
 
-function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onClose, onSearch, onHover, top }: {
-  me: Me; side: Side; items: Item[]; logo: string; bizName: string; subtitle?: string | null; recent: Recent[]; drawer: boolean; onClose: () => void; onSearch?: () => void; top?: React.ReactNode;
+function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onClose, onSearch, onHover, top, bell }: {
+  me: Me; side: Side; items: Item[]; logo: string; bizName: string; subtitle?: string | null; recent: Recent[]; drawer: boolean; onClose: () => void; onSearch?: () => void; top?: React.ReactNode; bell?: boolean;
   onHover?: (on: boolean) => void;
 }) {
   const { path } = useLocation();
@@ -289,6 +291,7 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
       <div className={`wp-brand${side === "client" ? " client" : ""}`}>
         <a {...linkProps("/")} aria-label={`${bizName} home`}><Logo src={logo} name={bizName} /></a>
         <span style={{ display: "flex", gap: 4 }}>
+          {bell && <BellButton />}
           {onSearch && <IconButton icon="search" label="Search (⌘K)" onClick={onSearch} />}
           {drawer && <IconButton icon="close" label="Close menu" onClick={onClose} />}
         </span>
@@ -381,7 +384,7 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
 }
 
 // Phones: logo, search and the account; under it the current section's layer as chips.
-function PhoneTop({ me, side, items, logo, bizName, onSearch }: { me: Me; side: Side; items: Item[]; logo: string; bizName: string; onSearch?: () => void }) {
+function PhoneTop({ me, side, items, logo, bizName, onSearch, bell }: { me: Me; side: Side; items: Item[]; logo: string; bizName: string; onSearch?: () => void; bell?: boolean }) {
   const { path } = useLocation();
   const section = items.find((it) => (it.tab ?? it.match)(path));
   const grouped = !!section?.layer?.some((s) => s.group);
@@ -399,6 +402,7 @@ function PhoneTop({ me, side, items, logo, bizName, onSearch }: { me: Me; side: 
       <div className="bar">
         <a {...linkProps("/")} aria-label={`${bizName} home`}><Logo src={logo} name={bizName} /></a>
         <span className="sp" />
+        {bell && <BellButton phone />}
         {onSearch && <IconButton icon="search" label="Search" iconSize={22} onClick={onSearch} />}
         <a {...linkProps("/more")} aria-label="Account and more"><Avatar name={me.name || me.email} /></a>
       </div>

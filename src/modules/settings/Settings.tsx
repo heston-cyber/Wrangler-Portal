@@ -34,6 +34,8 @@ import { SharesSettings } from "../review/Share";
 import { NotificationList } from "./Notifications";
 import { errText } from "../docs/pages/common";
 import { TeamSection } from "../team/TeamSettings";
+import { BellSettings } from "../bell/Bell";
+import { usePerms } from "../../lib/teamAccess";
 import { SecuritySection } from "../security/Security";
 import { ActivityLog } from "../security/ActivityLog";
 
@@ -159,13 +161,18 @@ function useNarrow() {
   return n;
 }
 
-// Nov 2 · Settings › Notifications: the emails the portal sends you, each with a switch.
+// Nov 2 · Settings › Notifications: the emails the portal sends you, each with a switch. Phase 5e step 4: the bell and
+// phone switches come first (823:21703); a team member gets only those (the emails are the owner's).
 function OwnerNotifications({ show }: { show: (m: string) => void }) {
+  const { team } = usePerms();
+  return <BellSettings show={show} emails={team ? undefined : <OwnerEmails show={show} />} />;
+}
+function OwnerEmails({ show }: { show: (m: string) => void }) {
   const r = useQuery(api.notifications.owner, {});
   const set = useMutation(api.notifications.setOwner);
   return (
     <>
-      <SetHead eyebrow="Notifications" title="The emails you get." sub={<>Each one is on until you switch it off. They go to {r ? r.to.join(" and ") : "your email"}. What your clients and vendors get is theirs to choose, in their own Settings.</>} />
+      <SetHead eyebrow="Emails" title="The emails you get." sub={<>Each one is on until you switch it off. They go to {r ? r.to.join(" and ") : "your email"}. What your clients and vendors get is theirs to choose, in their own Settings.</>} />
       <NotificationList items={r?.items} onToggle={async (key, on) => { try { await set({ key, on }); show(on ? "On." : "Off. You won't get these emails."); } catch (e) { show(errText(e)); throw e; } }} />
     </>
   );

@@ -17,6 +17,7 @@ import { businessOf, postToInbox } from "./lib/inbox";
 import { mailBrandOf } from "./lib/mail";
 import { ownerPaidMail, paymentFailedMail, receiptMail, reminderMail } from "./lib/mails";
 import { SITE, sendEmail } from "./lib/email";
+import { EMAIL_TO_BELL, bellLink } from "./lib/bell";
 import { payLink } from "./invoicePay";
 import { keyMode, platformKey } from "./lib/stripeApi";
 
@@ -154,6 +155,9 @@ export const mailData = internalQuery({
 export async function deliverOnce(ctx: { runMutation: (ref: any, args: any) => Promise<any> }, key: string, kind: string, to: string, m: { from: string; subject: string; text: string; html: string }, replyTo: string, businessId?: Id<"businesses"> | null) {
   // Nov 2: an email the person switched off (Settings › Notifications) isn't sent, and isn't logged as sent.
   const biz = businessId ?? (ctx as { asBusiness?: Id<"businesses"> }).asBusiness ?? null; // the business this run acts for
+  // Phase 5e step 4 (D146): every email to the owner also lands in the bell, even when its email is switched off.
+  const bellKind = EMAIL_TO_BELL[kind];
+  if (bellKind) await ctx.runMutation(internal.bell.post, { kind: bellKind, title: m.subject, key, ...(biz ? { businessId: biz } : {}), ...((): { link?: string } => { const l = bellLink(m.text, SITE()); return l ? { link: l } : {}; })() });
   const c = await ctx.runMutation(internal.invoicePay.claimEmail, { key, to, kind, ...(biz ? { businessId: biz } : {}) });
   if (c === "off") return "off";
   if (!c) return "already";

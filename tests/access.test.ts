@@ -141,6 +141,8 @@ const PAYMENTS = "Payments: invoices, reminders, quotes, plans, subscriptions an
 const VENDORPAY = "Vendor payments: vendor invoices and payouts (not an Editor)";
 const SETTINGS = "Settings: booking-call settings (when Settings is on for the role)";
 const BUDGETS = "Clients and leads with See what a project is worth: the pipeline, estimates and the job ledger (a Producer by default, Heston Nov 5)";
+const BELL = "the notification bell and Settings › Notifications: their own feed, switches and phones; items reach them only for kinds their switches cover (an Editor only for assigned projects), tested in bell.test.ts";
+const BELL_FNS = ["bell.feed", "bell.unread", "bell.markRead", "bell.markAllRead", "bell.prefs", "bell.setPref", "bell.phoneAllOff", "bell.subscribe", "bell.unsubscribe", "bell.pushKey", "push.ensureKey"];
 const ACCOUNT = "Settings › Account and Security: their own name, password, email and devices";
 const BRAND = "their business's look (name, logo, colours), like every signed-in account";
 const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>> = {
@@ -522,6 +524,8 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "vendorPayouts.askSetup": VENDORPAY,
   },
 };
+// Phase 5e step 4: every team role has its own bell.
+for (const r of ["producer", "editor", "bookkeeper"] as const) for (const f of BELL_FNS) TEAM[r][f] = BELL;
 
 import { argsFor, call, publicFunctions, setup } from "./matrix";
 const denied = (e: unknown) => /Sign in first|Not allowed/.test(String((e as Error).message ?? e));

@@ -1706,6 +1706,38 @@ export default defineSchema({
     userId: v.optional(v.id("users")),
   }).index("by_email", ["email"]).index("by_token", ["tokenHash"]).index("by_business", ["businessId"]),
 
+  // Phase 5e step 4 (Nov 5): the notification centre. One row per person (the owner, and team members whose switches cover
+  // the kind), kept 90 days (D146). Made from the owner emails (lib/bell.ts EMAIL_TO_BELL).
+  bellItems: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    userId: v.id("users"),
+    kind: v.string(),          // lib/bell.ts BellKind
+    title: v.string(),
+    link: v.optional(v.string()),
+    key: v.string(),           // one item per event per person
+    at: v.number(),
+    readAt: v.optional(v.number()),
+  }).index("by_user_at", ["userId", "at"]).index("by_user_key", ["userId", "key"]).index("by_at", ["at"]),
+  // A person's bell and phone switches (Settings › Notifications): kinds off in the bell, and kinds on for the phone
+  // (unset: lib/bell.ts PHONE_DEFAULT).
+  alertPrefs: defineTable({
+    userId: v.id("users"),
+    bellOff: v.array(v.string()),
+    phoneOn: v.optional(v.array(v.string())),
+  }).index("by_user", ["userId"]),
+  // A phone (or browser) that turned alerts on: its Web Push address and keys (D146: every device a person turns on).
+  pushSubs: defineTable({
+    userId: v.id("users"),
+    endpoint: v.string(),
+    p256dh: v.string(),
+    auth: v.string(),
+    label: v.string(),
+    createdAt: v.number(),
+    fails: v.optional(v.number()),
+  }).index("by_user", ["userId"]).index("by_endpoint", ["endpoint"]),
+  // The portal's own Web Push key pair (VAPID), made on the server the first time it's needed; never in chat or the repo.
+  pushKeys: defineTable({ publicKey: v.string(), privateKey: v.string(), createdAt: v.number() }),
+
   // Phase 5e step 3 (Nov 5): Settings › Activity, the owner's log of who changed what (D146: new-device sign-ins, anything
   // sent, signatures, marked paid, voids and deletions, settings, team changes, exports). Kept 1 year (crons.ts).
   auditLog: defineTable({

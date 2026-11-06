@@ -1,4 +1,6 @@
 import { useDeviceCheckIn } from "./modules/security/Security";
+import { NotificationsPage } from "./modules/bell/Bell";
+import { registerWorker } from "./lib/push";
 import { NotAllowedBoundary } from "./ErrorBoundary";
 import { canOpen, type Perms } from "./lib/teamAccess";
 import { useConvexAuth, useQuery } from "convex/react";
@@ -30,7 +32,7 @@ import ActivityPage from "./modules/review/ActivityPage";
 import Settings from "./modules/settings/Settings";
 import VideoPage from "./modules/review/VideoPage";
 import SharePage from "./modules/review/SharePage";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { MorePage, Shell } from "./shell/Shell";
 import { UploadProvider } from "./shell/UploadDialog";
 import type { Id } from "../convex/_generated/dataModel";
@@ -234,6 +236,7 @@ export default function App() {
 function SignedIn() {
   const me = useQuery(api.users.me);
   useDeviceCheckIn(!!me && me.role !== "guest" && me.role !== null); // Phase 5e step 2: Settings › Security's devices, email 47
+  useEffect(() => { if (me) registerWorker(); }, [!!me]); // Phase 5e step 4: phone alerts open the portal when tapped
   const { signOut } = useAuthActions();
   const { path, search } = useLocation();
   const signer = (isSignHost() ? /^\/(?:x\/)?([A-Za-z0-9_-]{16,64})\/?$/ : /^\/x\/([A-Za-z0-9_-]{16,64})\/?$/).exec(path);
@@ -348,6 +351,7 @@ function SignedIn() {
   else if (/^\/settings\/brief\/questions\/?$/.test(path)) page = <Suspense fallback={<Loading />}><QuestionnaireEditor kind="kickoff" /></Suspense>;
   else if (/^\/settings\/brief\/preview\/?$/.test(path)) page = <ClientBriefPage key="preview" preview />;
   else if (path.startsWith("/settings")) page = <Settings me={me} />;
+  else if (/^\/notifications\/?$/.test(path)) page = <NotificationsPage />; // Phase 5e step 4: the bell's See all
   else if (/^\/more\/?$/.test(path)) page = <MorePage me={me} side="owner" />;
   else if (/^\/review\/?$/.test(path)) page = <Home />; // Review's main page
   else page = <OwnerHome />; // "/": the back-office Home

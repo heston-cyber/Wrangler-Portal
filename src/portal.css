@@ -3132,3 +3132,42 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 /* Phase 5e step 3: Settings › Activity */
 .act-pills { gap: 8px; margin: 6px 0 14px; }
 .act-dl dd { text-align: left; }
+/* Phase 5e step 4: the notification centre (822:18106 panel, 823:19778 See all, 823:21703 Settings › Notifications) */
+.bell-wrap { position: relative; display: inline-flex; }
+.bell-badge {
+  position: absolute; top: -3px; right: -5px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; display: grid; place-items: center; pointer-events: none;
+  background: var(--accent); color: var(--on-accent); box-shadow: 0 0 5px var(--glow-soft), 0 0 2px var(--glow-medium);
+  font: 500 10px/1 var(--font-body);
+}
+.bell-panel {
+  position: fixed; left: 262px; top: 16px; z-index: 60; width: 460px; max-width: calc(100vw - 32px); max-height: calc(100vh - 32px);
+  display: flex; flex-direction: column; gap: 14px; padding: 24px 20px 20px; border-radius: 20px; box-shadow: var(--shadow-float);
+}
+.bell-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 2px; }
+.bell-head .headline { margin: 0; }
+.bell-link { border: 0; background: none; padding: 0; color: var(--text-secondary); font: 400 var(--fs-text-small)/1.2 var(--font-body); cursor: pointer; }
+.bell-link:hover:not(:disabled) { color: var(--text-primary); }
+.bell-link:disabled { opacity: .45; cursor: default; }
+.bell-pills { gap: 6px; }
+.bell-list { overflow-y: auto; margin: 0 -8px; min-height: 0; }
+.bell-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 36px 12px 44px; text-align: center; }
+.bell-empty .ring { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent-ring); background: var(--accent-tint); }
+.bell-empty b { margin-top: 8px; }
+.bell-all { align-self: flex-start; }
+.qz-chip .n { color: var(--text-muted); }
+.qz-chip.on .n { color: var(--text-secondary); }
+.bell-table { display: flex; flex-direction: column; }
+.bell-trow { display: grid; grid-template-columns: 1fr 96px 112px; align-items: center; gap: 8px; padding: 12px 0; }
+.bell-trow > span:nth-child(n+2) { justify-self: center; }
+.bell-trow.head { padding: 4px 0 8px; font: 500 var(--fs-label-small)/1 var(--font-title); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--accent); }
+.bell-steps { list-style: none; margin: 4px 0 8px; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.bell-steps li { display: flex; align-items: center; gap: 12px; }
+.bell-steps .n { flex: 0 0 auto; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent-ring); font: 500 var(--fs-text-small)/1 var(--font-body); }
+@media (max-width: 820px) {
+  .bell-trow { grid-template-columns: 1fr 64px 72px; }
+  .bell-trow.head { font-size: 9px; }
+  .wp-ptop .bell-badge { top: -2px; right: -3px; }
+}
+.bell-table { padding: 0 20px 8px; }
+.wp-brand .bell-wrap { margin-right: 18px; }
+@media (max-width: 820px) { .bell-table { padding: 0 16px 6px; } .wp-ptop .bell-wrap { margin-right: 6px; } }

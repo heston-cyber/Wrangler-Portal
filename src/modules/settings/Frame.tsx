@@ -57,7 +57,7 @@ export function SectionMenu({ active, list }: { active: SectionKey | null; list?
   const admin = useQuery(api.siteWatch.summary); // null for anyone who isn't one of the portal's admins: Site watch stays out of their menu
   // Phase 5e: a team member sees Account, and with Settings on, the sections their switch opens.
   const { team, perms } = usePerms();
-  const shown = SECTIONS.filter((s) => (s.key !== "sitewatch" || admin) && (!team || s.key === "account" || s.key === "security" || (perms.settings && TEAM_SECTIONS.includes(s.key))));
+  const shown = SECTIONS.filter((s) => (s.key !== "sitewatch" || admin) && (!team || s.key === "account" || s.key === "security" || s.key === "notifications" || (perms.settings && TEAM_SECTIONS.includes(s.key))));
   return (
     <nav className={`wp-setmenu glass${list ? " list" : ""}`} aria-label="Settings">
       {shown.map((s) => (

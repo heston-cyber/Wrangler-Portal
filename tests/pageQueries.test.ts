@@ -157,6 +157,10 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   // Phase 5e step 2: Settings › Security, and a client's and vendor's account page (their own account)
   "security.state": { pages: ["owner", "clientHome"], args: () => ({}) },
   "auditLog.list": { pages: ["owner"], args: () => ({}) }, // Phase 5e step 3: Settings › Activity
+  // Phase 5e step 4: the bell (every back-office page), its panel and See all, Settings › Notifications
+  "bell.unread": { pages: ["owner"], args: () => ({}) },
+  "bell.feed": { pages: ["owner"], args: () => ({ limit: 30 }) },
+  "bell.prefs": { pages: ["owner"], args: () => ({}) },
   "team.member": { pages: ["owner"], args: () => "skip" },
   "team.projectPeople": { pages: ["owner"], args: () => "skip" },
   "team.joinPage": { pages: ["share", "signin"], args: () => ({ token: "x".repeat(32) }) }, // /team/join/<token>
