@@ -1,8 +1,8 @@
 // The glass (Heston, Nov 5, 19:57 and 22:03): every card is one glass, Figma's "Glass/effect" style, rendered the way
 // Apple's Liquid Glass works (Nov 6): the scene behind it bends inward through a narrow curved rim (refraction 100 %,
 // depth 70 caps the rim's width), splits into red and blue at the rim (dispersion 85 %), is
-// lightly frosted (12) and lit from the top left (−45°, 50 %), with a fine grain (Figma's 8 %, softened to 5 % because a
-// screen shows it at every device pixel). Browsers can't bend what's behind a box with CSS (Safari, and so every iPhone
+// lightly frosted (12) and lit from the top left (−45°, 50 %). No grain on the glass (Heston, Nov 6: the grain lives in
+// the background scene only; Figma's 8 % noise layer is left out). Browsers can't bend what's behind a box with CSS (Safari, and so every iPhone
 // browser, has no backdrop SVG filters), but the scene is one known picture, so WebGL draws it.
 //
 // Nov 6 (Heston: "the animation isn't smooth"): each card now carries its own small canvas, inside the card, so the
@@ -13,7 +13,7 @@
 // keeps the frosted blur, as in Figma ("Glass/frost"). Without WebGL, with Reduce transparency on, or on another
 // business's background, nothing changes: the CSS glass stays.
 
-export const GLASS = { frost: 12, refraction: 1, depth: 70, dispersion: 0.85, lightAngle: -45, lightIntensity: 0.5, grain: 0.05 } as const;
+export const GLASS = { frost: 12, refraction: 1, depth: 70, dispersion: 0.85, lightAngle: -45, lightIntensity: 0.5 } as const;
 
 /** Glass the canvas draws: cards and tiles in the page. */
 const PICK = ".glass, .pov-stat";
@@ -38,13 +38,11 @@ uniform float u_frost;   // frost radius, device px
 uniform float u_texScale;// texture px per device px
 uniform float u_light;
 uniform vec2 u_ldir;
-uniform float u_grain;
 uniform float u_dpr;
 out vec4 o;
 
 float sd(vec2 p, vec2 b, float r) { vec2 q = abs(p) - b + r; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r; }
 vec3 scene(vec2 px, float lod) { return textureLod(u_tex, (px - u_img.xy) / u_img.zw, lod).rgb; }
-float hash(vec2 p) { p = fract(p * vec2(443.897, 441.423)); p += dot(p, p.yx + 19.19); return fract((p.x + p.y) * p.x); }
 
 void main() {
   vec2 px = vec2(gl_FragCoord.x, u_top - gl_FragCoord.y);   // card-local, from its top left
@@ -94,7 +92,6 @@ void main() {
   vec3 ink = vec3(0.012, 0.004, 0.016), paper = vec3(0.957, 0.945, 0.914);
   col = mix(col, ink, 0.34);
   col = mix(col, paper, 0.02 + 0.02 * max(0.0, 1.0 - px.y / (0.714 * u_size.y)));
-  col = mix(col, paper, step(0.5, hash(floor(px / max(1.0, u_dpr / 2.0)))) * u_grain);
   o = vec4(col * alpha, alpha);
 }`;
 
@@ -119,13 +116,12 @@ export function startGlass(host: HTMLElement): () => void {
   gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
   gl.useProgram(prog);
   const U = (name: string) => gl.getUniformLocation(prog, name);
-  const u = { top: U("u_top"), img: U("u_img"), size: U("u_size"), r: U("u_r"), depth: U("u_depth"), refr: U("u_refr"), disp: U("u_disp"), frost: U("u_frost"), texScale: U("u_texScale"), light: U("u_light"), ldir: U("u_ldir"), grain: U("u_grain"), dpr: U("u_dpr"), tex: U("u_tex") };
+  const u = { top: U("u_top"), img: U("u_img"), size: U("u_size"), r: U("u_r"), depth: U("u_depth"), refr: U("u_refr"), disp: U("u_disp"), frost: U("u_frost"), texScale: U("u_texScale"), light: U("u_light"), ldir: U("u_ldir"), dpr: U("u_dpr"), tex: U("u_tex") };
   const ang = (GLASS.lightAngle * Math.PI) / 180; // −45°: from the top left (screen y points down)
   gl.uniform2f(u.ldir, Math.cos(ang), Math.sin(ang));
   gl.uniform1f(u.refr, GLASS.refraction);
   gl.uniform1f(u.disp, GLASS.dispersion);
   gl.uniform1f(u.light, GLASS.lightIntensity);
-  gl.uniform1f(u.grain, GLASS.grain);
   gl.uniform1i(u.tex, 0);
 
   let tex: WebGLTexture | null = null;
