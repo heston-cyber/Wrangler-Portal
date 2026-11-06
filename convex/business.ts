@@ -1,6 +1,7 @@
 // Wrangler Portal, Phase 0.5d step 1 (Oct 28). Internal only: run by hand through the "Convex run" workflow.
 // Its output is counts only (the repo and its CI logs are public).
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
+import { claimUpload, deleteFile } from "./lib/fileOwners";
 import { audit } from "./lib/audit";
 import { v, ConvexError } from "convex/values";
 import { requireMe, requireSignedIn, requireAll, viewerOf } from "./lib/access";
@@ -184,10 +185,11 @@ export const setLogo = mutation({
       if (!meta || !/^image\/(png|jpeg|svg\+xml|webp)$/.test(meta.contentType ?? "") || meta.size > 1_000_000) {
         throw new ConvexError("Use a PNG, JPG, SVG or WebP image under 1 MB.");
       }
+      await claimUpload(ctx, storageId, id, "logo"); // 5e review (Nov 6): this business's own upload only
     }
     const field = which === "light" ? "logoLightFileId" : "logoFileId";
     const old = b[field];
-    if (old && old !== storageId) await ctx.storage.delete(old);
+    if (old && old !== storageId) await deleteFile(ctx, old, id);
     await ctx.db.patch(id, { [field]: storageId ?? undefined, updatedAt: Date.now() });
     return null;
   },

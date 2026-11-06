@@ -36,6 +36,11 @@ export async function claimUpload(ctx: W, id: Id<"_storage">, businessId: Id<"bu
   return { fresh: true };
 }
 
+/** Has any business claimed this file? (Checked across businesses: the table is global.) */
+export async function isClaimed(ctx: R, id: Id<"_storage">) {
+  return !!(await rowOf(ctx, id));
+}
+
 /** Does this business own the file? (Files the portal stored before Nov 6 were recorded by the backfill.) */
 export async function ownsFile(ctx: R, id: Id<"_storage">, businessId: Id<"businesses"> | null) {
   if (!businessId) return false;
