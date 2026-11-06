@@ -154,6 +154,8 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "messages.threads": { pages: ["owner"], args: () => ({}) }, // Messages
   // Phase 5e step 1: Settings › Team (owner only), the project page's Assigned people, and the Join page (no account).
   "team.page": { pages: ["owner"], args: () => ({}) },
+  // Phase 5e step 2: Settings › Security, and a client's and vendor's account page (their own account)
+  "security.state": { pages: ["owner", "clientHome"], args: () => ({}) },
   "team.member": { pages: ["owner"], args: () => "skip" },
   "team.projectPeople": { pages: ["owner"], args: () => "skip" },
   "team.joinPage": { pages: ["share", "signin"], args: () => ({ token: "x".repeat(32) }) }, // /team/join/<token>

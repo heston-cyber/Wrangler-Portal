@@ -1,3 +1,4 @@
+import { useDeviceCheckIn } from "./modules/security/Security";
 import { NotAllowedBoundary } from "./ErrorBoundary";
 import { canOpen, type Perms } from "./lib/teamAccess";
 import { useConvexAuth, useQuery } from "convex/react";
@@ -232,6 +233,7 @@ export default function App() {
 
 function SignedIn() {
   const me = useQuery(api.users.me);
+  useDeviceCheckIn(!!me && me.role !== "guest" && me.role !== null); // Phase 5e step 2: Settings › Security's devices, email 47
   const { signOut } = useAuthActions();
   const { path, search } = useLocation();
   const signer = (isSignHost() ? /^\/(?:x\/)?([A-Za-z0-9_-]{16,64})\/?$/ : /^\/x\/([A-Za-z0-9_-]{16,64})\/?$/).exec(path);

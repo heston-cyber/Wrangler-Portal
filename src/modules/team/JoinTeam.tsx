@@ -9,19 +9,7 @@ import { Button, ButtonLink } from "../../ui/wp";
 import { Icon } from "../../ui/Icon";
 import { CodeBoxes } from "../../shell/SignIn";
 import { navigate } from "../../lib/router";
-import { BrandImg } from "../../ui/BrandImg";
-import smear from "../../assets/portal/light-smear.jpg";
-
-function Curtain({ legal, children }: { legal: string; children: React.ReactNode }) {
-  return (
-    <div className="wsx gst">
-      <div className="wp-light signing" aria-hidden><i style={{ backgroundImage: `url(${smear})` }} /></div>
-      <header className="wsx-top"><BrandImg name="wordmark" alt="WranglerPortal" /><span className="wsx-secure"><Icon name="lock" size={14} />Secure sign-in</span></header>
-      <main className="wsx-main">{children}</main>
-      <footer className="wsx-foot">{legal ? `${legal} · ` : ""}Questions? Reply to the email that brought you here.</footer>
-    </div>
-  );
-}
+import { Curtain } from "../../shell/Curtain";
 
 export default function JoinTeam({ token }: { token: string }) {
   const p = useQuery(api.team.joinPage, { token });

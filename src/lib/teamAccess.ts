@@ -24,7 +24,7 @@ const starts = (p: string, ...xs: string[]) => xs.some((x) => p === x || p.start
  * "owner" (the owner only, whatever the switches say).
  */
 export function pathNeeds(path: string): Perm[] | "any" | "owner" {
-  if (path === "/" || path === "" || starts(path, "/more", "/settings/account")) return "any";
+  if (path === "/" || path === "" || starts(path, "/more", "/settings/account", "/settings/security")) return "any";
   if (starts(path, "/v", "/review", "/register")) return ["review"];
   if (starts(path, "/projects")) return ["projects", "review"];
   if (starts(path, "/activity")) return "owner";

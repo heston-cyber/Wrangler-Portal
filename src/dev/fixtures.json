@@ -16352,6 +16352,25 @@
    "legalName": "Wrangler Productions, a DBA of Hill Creative LLC",
    "role": "Editor",
    "invitedBy": "Heston Hill"
+  },
+  "security.state": {
+   "email": "heston@wranglerproductions.com",
+   "passwordChangedAt": 1793208800000,
+   "devices": [
+    {
+     "sessionId": "kitsession0001authSessions",
+     "label": "Mac \u00b7 Chrome",
+     "lastSeen": 1793900000000,
+     "current": true
+    },
+    {
+     "sessionId": "kitsession0002authSessions",
+     "label": "iPhone \u00b7 Safari",
+     "lastSeen": 1793640800000,
+     "current": false
+    }
+   ],
+   "pending": null
   }
  },
  "client": {
@@ -18358,6 +18377,19 @@
    },
    "sub": "With Wrangler Productions",
    "title": "Harbor Coffee Launch"
+  },
+  "security.state": {
+   "email": "maya@harborcoffee.com",
+   "passwordChangedAt": 1793208800000,
+   "devices": [
+    {
+     "sessionId": "kitsession0001authSessions",
+     "label": "Mac \u00b7 Chrome",
+     "lastSeen": 1793900000000,
+     "current": true
+    }
+   ],
+   "pending": null
   }
  },
  "guest": {
@@ -21057,6 +21089,19 @@
    "slug": "adding-a-w9",
    "summary": "The tax form the business needs before it can pay you.",
    "title": "Adding your W-9"
+  },
+  "security.state": {
+   "email": "riley@example.com",
+   "passwordChangedAt": 1793208800000,
+   "devices": [
+    {
+     "sessionId": "kitsession0001authSessions",
+     "label": "Mac \u00b7 Chrome",
+     "lastSeen": 1793900000000,
+     "current": true
+    }
+   ],
+   "pending": null
   }
  }
 }

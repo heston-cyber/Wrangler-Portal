@@ -10,6 +10,7 @@ import { Button, ButtonLink, Card, EmptyState, ListRow, PageHeader, SectionHead,
 import { Tile } from "../overviews/Tile";
 import { usePerms } from "../../lib/teamAccess";
 import { errText } from "../docs/pages/common";
+import { DevicesCard, SignInRows } from "../security/Security";
 
 const ROLE: Record<string, string> = { producer: "Producer", editor: "Editor", bookkeeper: "Bookkeeper" };
 const greeting = () => { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"; };
@@ -96,6 +97,8 @@ export function TeamAccount({ me }: { me: { name: string | null; email: string }
             <div className="team-acts"><Button variant="primary" loading={busy} disabled={!name.trim() || name.trim() === (me.name ?? "")} onClick={() => void save()}>Save</Button>{msg && <span className="wp-small secondary">{msg}</span>}</div>
           </div>
         </Card>
+        <Card label="Sign-in" head={<SectionHead label="Sign-in" />}><SignInRows show={(m) => setMsg(m)} /></Card>
+        <DevicesCard show={(m) => setMsg(m)} />
         <div className="team-acts"><Button variant="secondary" onClick={signOut}>Sign out</Button></div>
         {signOutDialog}
       </div>

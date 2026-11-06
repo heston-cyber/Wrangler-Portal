@@ -8,11 +8,12 @@ import { Icon, type IconName } from "../../ui/Icon";
 import { linkProps } from "../../lib/router";
 import { usePerms } from "../../lib/teamAccess";
 
-export type SectionKey = "business" | "team" | "payments" | "rates" | "brand" | "calendar" | "sitewatch" | "brief" | "tools" | "account" | "notifications" | "register" | "dropbox" | "connectors" | "sheet" | "clients" | "shares" | "help" | "calls";
+export type SectionKey = "business" | "team" | "security" | "payments" | "rates" | "brand" | "calendar" | "sitewatch" | "brief" | "tools" | "account" | "notifications" | "register" | "dropbox" | "connectors" | "sheet" | "clients" | "shares" | "help" | "calls";
 
 export const SECTIONS: Array<{ key: SectionKey; label: string; icon: IconName }> = [
   { key: "business", label: "Business", icon: "users" },
   { key: "team", label: "Team", icon: "users" }, // Phase 5e (D146: after Business), the owner's only
+  { key: "security", label: "Security", icon: "lock" }, // Phase 5e step 2 (D146: after Team): password, email, devices
   { key: "payments", label: "Payments", icon: "invoice" },
   { key: "rates", label: "Pricing", icon: "activity" }, // Phase 3 (263:1382), renamed Pricing in 3b (D76)
   { key: "brand", label: "Brand kit", icon: "folder" }, // Phase 3b (708:1235)
@@ -55,7 +56,7 @@ export function SectionMenu({ active, list }: { active: SectionKey | null; list?
   const admin = useQuery(api.siteWatch.summary); // null for anyone who isn't one of the portal's admins: Site watch stays out of their menu
   // Phase 5e: a team member sees Account, and with Settings on, the sections their switch opens.
   const { team, perms } = usePerms();
-  const shown = SECTIONS.filter((s) => (s.key !== "sitewatch" || admin) && (!team || s.key === "account" || (perms.settings && TEAM_SECTIONS.includes(s.key))));
+  const shown = SECTIONS.filter((s) => (s.key !== "sitewatch" || admin) && (!team || s.key === "account" || s.key === "security" || (perms.settings && TEAM_SECTIONS.includes(s.key))));
   return (
     <nav className={`wp-setmenu glass${list ? " list" : ""}`} aria-label="Settings">
       {shown.map((s) => (

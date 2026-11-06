@@ -2,6 +2,7 @@
 // (734:4386: their details, the W-9 for this business D100, how they're paid D101) and Review for booked editors
 // (734:4809, D93, D103). Approving and marking invoices paid is the owner's (step 5, convex/vendorPayments.ts); an
 // invoice the owner declines comes back here to fix and send again.
+import { SignInRows } from "../security/Security";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -286,6 +287,8 @@ export function VendorSettings() {
             </Card>
           </div>
           <div className="col right">
+            {/* Phase 5e step 2: the same Password and Email rows as everyone's (842:11010, vendors assumed the same) */}
+            <Card label="Sign-in" head={<SectionHead label="Sign-in" />}><SignInRows show={show} /></Card>
             <Card label="Help" head={<SectionHead label="Help" />}>
               <ListRow className="ilead" lead={{ icon: "info" }} to="/vendor/help" chevron title="Help" meta="Short guides: bookings, briefings, invoices and your W-9." />
             </Card>
