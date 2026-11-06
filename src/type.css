@@ -67,6 +67,12 @@
   background-position: center;
   background-size: cover;
   background-repeat: no-repeat;
+  /* Heston (Nov 5, 19:55): locked while scrolling. A phone browser's address bar shrinks as you scroll, which changed the
+     window's height and so rescaled and moved the scene. It is now sized to the tallest window (the bar fully tucked
+     away), so it never moves; with the bar showing, the bottom sliver sits under the browser's own bar. */
+  bottom: auto;
+  height: 100vh;
+  height: 100lvh;
 }
 :root:not([data-brand]) .wp-light.back > i,
 :root:not([data-brand]) .wp-light.client:not(.curtain) > i { display: none; }
