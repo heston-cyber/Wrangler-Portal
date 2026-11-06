@@ -114,10 +114,10 @@ export function YourDataSection({ me, show }: { me: { email: string }; show: (m:
         <Card label="Deleted businesses" head={<SectionHead label="Deleted businesses" count={st.safety.length} />}>
           {st.safety.map((s) => (
             <ListRow key={s._id} lead={{ icon: "folder" }} title={s.name}
-              meta={`Deleted ${s.doneAt ? dayYear(s.doneAt) : ""} · ${size(s.bytes)} · kept until ${dayYear(s.purgeAt)}`}
+              meta={`${s.status === "done" && s.doneAt ? `Deleted ${dayYear(s.doneAt)}` : s.status === "failed" ? "Deletion stopped part way" : "Being deleted"} · ${size(s.bytes)} · kept until ${dayYear(s.purgeAt)}`}
               action={<Button size="sm" loading={dl.busy === s._id} onClick={() => void dl.safety(s._id)}>Download</Button>} />
           ))}
-          <p className="wp-small secondary yd-pad">The last export of each deleted business, for the portal's admins. It's deleted after 30 days.</p>
+          <p className="wp-small secondary yd-pad">The last export of each deleted business and the files it kept, for the portal's admins. Both are deleted after 30 days.</p>
         </Card>
       )}
 

@@ -58,7 +58,16 @@ describe("Phase 5e · Your data", () => {
       await ctx.db.insert("clients", { businessId: b, name: "Someone Else's Client", createdAt: 0 });
     });
     const otherClient = await w.t.run(async (ctx) => (await ctx.db.query("clients").collect()).find((c) => c.businessId === b)!._id);
-    await seedInvoice(w, w.A, w.harbor, "Ours", "SECRETPAYTOKENAAAA");
+    const ours = await seedInvoice(w, w.A, w.harbor, "Ours", "SECRETPAYTOKENAAAA");
+    // Review fix: tokens also travel inside other fields (an Inbox item's link, Stripe's own pay page).
+    await w.t.run(async (ctx) => {
+      await ctx.db.patch(ours, { stripe: { accountId: "acct_1", invoiceId: "in_1", customerId: "cus_1", hostedUrl: "https://invoice.stripe.com/i/acct_1/live_STRIPEHOSTEDSECRET99", pdfUrl: "https://pay.stripe.com/invoice/acct_1/STRIPEPDFSECRET77/pdf", livemode: false } } as never);
+      await ctx.db.insert("inboxItems", { businessId: w.A, email: "maya@harbor.example", kind: "invoice", title: "Invoice", text: "Pay it", link: "/i/SECRETPAYTOKENAAAA", source: { module: "payments", id: ours }, key: "inv:1", createdAt: 0 });
+      await ctx.db.insert("emailPrefs", { businessId: w.A, email: "maya@harbor.example", key: "UNSUBSCRIBEKEYSECRET42", updatedAt: 0 });
+      // A file id of another business, pasted into this business's text: never treated as this business's file.
+      const theirFile = await ctx.storage.store(new Blob(["theirs"]));
+      await ctx.db.insert("vendors", { businessId: w.A, name: "Pasted", email: "p@x.example", roles: [], rates: [], portfolio: String(theirFile), createdAt: 0, updatedAt: 0 } as never);
+    });
     await seedInvoice(w, b, otherClient, "Theirs", "SECRETPAYTOKENBBBB");
     const exportId = await w.heston.mutation(api.yourData.requestExport, {});
     await expect(w.heston.mutation(api.yourData.requestExport, {})).rejects.toThrow(/already being made/);
@@ -73,6 +82,9 @@ describe("Phase 5e · Your data", () => {
     expect(everything).not.toContain("Someone Else's Client");
     expect(everything).not.toContain("Theirs");
     expect(everything).not.toContain("SECRETPAYTOKEN");
+    expect(everything).not.toMatch(/STRIPEHOSTEDSECRET|STRIPEPDFSECRET|UNSUBSCRIBEKEYSECRET/);
+    expect(files["records/inboxItems.json"]).toContain("/i/[removed]");
+    expect(files["files.csv"].trim().split("\r\n").filter((l) => l.startsWith("vendors,"))).toHaveLength(1); // the W-9, not the pasted id
     expect(files["records/connectorKeys.json"]).toBeUndefined();
     for (const [name, text] of Object.entries(files)) if (name.endsWith(".json")) for (const k of keysIn(JSON.parse(text))) expect(SECRET_FIELDS.has(k), `${name}: ${k}`).toBe(false);
     expect(files["files.csv"]).toMatch(/vendors,[a-z0-9]+,w9\.fileId,http/);
@@ -145,10 +157,15 @@ describe("Phase 5e · Your data", () => {
       await ctx.db.insert("authSessions", { userId: only, expirationTime: Date.now() + 3_600_000 });
       const maya = (await ctx.db.query("users").withIndex("email", (q) => q.eq("email", "maya@harbor.example")).first())!._id;
       await ctx.db.insert("memberships", { businessId: b, email: "maya@harbor.example", userId: maya, role: "client", createdAt: 0 });
-      return { client, logo, only, maya };
+      await ctx.db.insert("authSessions", { userId: maya, expirationTime: Date.now() + 3_600_000 }); // signed in at Wrangler
+      // Review fix: Wrangler's file id pasted into this business's text is not this business's file.
+      const ours = await ctx.storage.store(new Blob(["wrangler's"]));
+      await ctx.db.insert("vendors", { businessId: b, name: "Paster", email: "p@x.example", roles: [], rates: [], portfolio: String(ours), createdAt: 0, updatedAt: 0 } as never);
+      return { client, logo, only, maya, ours };
     });
     await seedInvoice(w, b, seeded.client, "Theirs", "SECRETPAYTOKENCCCC");
     const before = await w.t.run(async (ctx) => ({ projects: (await ctx.db.query("projects").collect()).filter((p) => p.businessId === w.A).length, clients: (await ctx.db.query("clients").collect()).filter((p) => p.businessId === w.A).length }));
+    const mayaSessions = await w.t.run(async (ctx) => (await ctx.db.query("authSessions").collect()).filter((s) => s.userId === seeded.maya).length);
     const { deleteAt } = await w.boss.mutation(api.yourData.scheduleDeletion, { typedName: "Other Films" });
     await settle(w);
     const deletionId = await w.t.run(async (ctx) => (await ctx.db.query("businessDeletions").collect())[0]._id);
@@ -158,12 +175,13 @@ describe("Phase 5e · Your data", () => {
     await w.t.action(internal.yourData.runDeletion, { deletionId, asBusiness: b });
     await settle(w);
     const d = (await w.t.run(async (ctx) => ctx.db.get(deletionId)))!;
-    expect(d).toMatchObject({ status: "done", deleted: expect.objectContaining({ clients: 1, projects: 1, invoices: 1, vendors: 1 }) });
+    expect(d).toMatchObject({ status: "done", step: "done", deleted: expect.objectContaining({ clients: 1, projects: 1, invoices: 1, vendors: 2 }) });
     expect(mails.map((m) => m.subject)).toEqual(["Other Films is scheduled for deletion", `Other Films will be deleted on ${new Date(deleteAt).toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", year: "numeric" })}`]);
     const after = await w.t.run(async (ctx) => ({
       business: await ctx.db.get(b),
       theirRows: (await ctx.db.query("clients").collect()).filter((c) => c.businessId === b).length + (await ctx.db.query("invoices").collect()).filter((c) => c.businessId === b).length,
-      file: await ctx.storage.get(seeded.logo),
+      file: !!(await ctx.storage.get(seeded.logo)), oursFile: !!(await ctx.storage.get(seeded.ours)),
+      mayaSessions: (await ctx.db.query("authSessions").collect()).filter((s) => s.userId === seeded.maya).length,
       only: await ctx.db.get(seeded.only), onlySessions: (await ctx.db.query("authSessions").collect()).filter((s) => s.userId === seeded.only).length,
       maya: await ctx.db.get(seeded.maya), mayaMembers: (await ctx.db.query("memberships").collect()).filter((m) => m.userId === seeded.maya).map((m) => m.businessId),
       boss: (await ctx.db.query("users").withIndex("email", (q) => q.eq("email", "boss@other.example")).first()),
@@ -171,7 +189,9 @@ describe("Phase 5e · Your data", () => {
     }));
     expect(after.business).toBeNull();
     expect(after.theirRows).toBe(0);
-    expect(after.file).toBeNull();
+    expect(after.file).toBe(true); // option B: kept 30 days with the safety-net export
+    expect(after.oursFile).toBe(true);
+    expect(after.mayaSessions).toBe(mayaSessions); // still Wrangler's client, so still signed in there
     expect(after.only).toBeNull();
     expect(after.onlySessions).toBe(0);
     expect(after.maya).not.toBeNull();
@@ -185,6 +205,42 @@ describe("Phase 5e · Your data", () => {
     const st = await w.heston.query(api.yourData.state, {});
     expect(st.safety).toEqual([expect.objectContaining({ name: "Other Films" })]);
     expect(await w.heston.mutation(api.yourData.finalExportLink, { deletionId: d._id })).toMatch(/^http/);
+    expect(files["files.csv"]).toMatch(/vendors,[a-z0-9]+,w9\.fileId,http/);
+    // Day 30 after: the export and the files kept with it go; Wrangler's file stays.
+    vi.setSystemTime(deleteAt + 31 * 86_400_000);
+    await w.t.mutation(internal.yourData.purge, {});
+    const later = await w.t.run(async (ctx) => ({ file: !!(await ctx.storage.get(seeded.logo)), zip: !!(await ctx.storage.get(d.finalExportId!)), ours: !!(await ctx.storage.get(seeded.ours)), kept: (await ctx.db.query("deletionFiles").collect()).length }));
+    expect(later).toEqual({ file: false, zip: false, ours: true, kept: 0 });
+    expect((await w.heston.query(api.yourData.state, {})).safety).toEqual([]);
+  });
+
+  test("D6 a run that stops part way starts again where it stopped; a started run can't be cancelled", async () => {
+    const w = await world();
+    stub();
+    const b = await B(w);
+    await w.t.run(async (ctx) => { for (let i = 0; i < 250; i++) await ctx.db.insert("clients", { businessId: b, name: `C${i}`, createdAt: 0 }); });
+    const { deleteAt } = await w.boss.mutation(api.yourData.scheduleDeletion, { typedName: "Other Films" });
+    await settle(w);
+    const deletionId = await w.t.run(async (ctx) => (await ctx.db.query("businessDeletions").collect())[0]._id);
+    vi.setSystemTime(deleteAt + 1000);
+    // The export and the first steps happen, then the run stops (as if a step had failed).
+    await w.t.mutation(internal.yourData.startDeletion, { deletionId, asBusiness: b });
+    await expect(w.boss.mutation(api.yourData.cancelDeletion, {})).rejects.toThrow(/already started/);
+    const zip = await w.t.run((ctx) => ctx.storage.store(new Blob(["zip"])));
+    await w.t.mutation(internal.yourData.keepFinal, { deletionId, fileId: zip, bytes: 3, asBusiness: b });
+    for (let i = 0; i < 6; i++) await w.t.mutation(internal.yourData.deleteStep, { deletionId, asBusiness: b });
+    await w.t.run(async (ctx) => { for (const j of await ctx.db.system.query("_scheduled_functions").collect()) if (j.state.kind === "pending") await ctx.scheduler.cancel(j._id); });
+    const mid = (await w.t.run(async (ctx) => ctx.db.get(deletionId)))!;
+    expect(mid.status).toBe("running");
+    expect(await w.t.run(async (ctx) => ctx.db.get(b))).not.toBeNull();
+    // Half an hour without a step: the daily purge starts it again from its saved step; nothing is made twice.
+    vi.setSystemTime(Date.now() + 31 * 60_000);
+    await w.t.mutation(internal.yourData.purge, {});
+    await settle(w);
+    const d = (await w.t.run(async (ctx) => ctx.db.get(deletionId)))!;
+    expect(d).toMatchObject({ status: "done", finalExportId: zip, attempts: 2 });
+    expect(d.deleted?.clients).toBe(250);
+    expect(await w.t.run(async (ctx) => ctx.db.get(b))).toBeNull();
   });
 
   test("D5 Wrangler can't be deleted; only the owner can use Your data", async () => {

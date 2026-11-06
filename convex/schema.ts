@@ -1674,7 +1674,7 @@ export default defineSchema({
     offAt: v.optional(v.number()),
     // Review L13: the heading and day as last sent to this guest, for their Ended row (never a later update's).
     heading: v.optional(v.object({ title: v.string(), date: v.string() })),
-  }).index("by_token", ["token"]).index("by_email", ["email"]).index("by_sheet", ["callSheetId"]),
+  }).index("by_token", ["token"]).index("by_email", ["email"]).index("by_sheet", ["callSheetId"]).index("by_business", ["businessId"]),
 
   memberships: defineTable({
     businessId: v.id("businesses"),
@@ -1741,7 +1741,22 @@ export default defineSchema({
     finalBytes: v.optional(v.number()),
     purgeAt: v.optional(v.number()),
     deleted: v.optional(v.record(v.string(), v.number())),   // how many rows went, per table
-  }).index("by_business", ["businessId"]).index("by_purge", ["purgeAt"]),
+    // Review fix (Nov 6): the run goes in short steps and saves where it got to, so a stopped run starts again there.
+    step: v.optional(v.union(v.literal("export"), v.literal("lockout"), v.literal("signout"), v.literal("tables"), v.literal("finish"), v.literal("done"))),
+    tableIndex: v.optional(v.number()),
+    cursor: v.optional(v.union(v.string(), v.null())),
+    users: v.optional(v.array(v.id("users"))),   // the logins that were in the business (signed out, and deleted if they belong nowhere else)
+    emails: v.optional(v.array(v.string())),
+    heartbeat: v.optional(v.number()),
+    attempts: v.optional(v.number()),
+  }).index("by_business", ["businessId"]).index("by_purge", ["purgeAt"]).index("by_status", ["status"]),
+
+  // Option B (Heston, Nov 6): the files a deleted business's portal kept stay 30 days with its safety-net export.
+  deletionFiles: defineTable({
+    deletionId: v.id("businessDeletions"),
+    fileId: v.id("_storage"),
+    purgeAt: v.number(),
+  }).index("by_purge", ["purgeAt"]).index("by_deletion", ["deletionId"]),
 
   bellItems: defineTable({
     businessId: v.optional(v.id("businesses")),

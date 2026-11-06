@@ -25,7 +25,7 @@ export const GLOBAL_TABLES = [
   "users", "businesses", "memberships", "guestPasses", "rateLimits", "oauthStates", "emailLog", "stripeEvents", "userPrefs", "playerLogs", "phase0Runs", "r1Results", "siteWatchFindings", "siteWatchRuns", "siteWatchSettings",
   "sessionDevices", "emailChanges", // Phase 5e step 2: a login's own, not a business's
   "alertPrefs", "pushSubs", "pushKeys", // Phase 5e step 4
-  "businessDeletions", // Phase 5e step 6: outlives the business it deletes
+  "businessDeletions", "deletionFiles", // Phase 5e step 6: outlive the business they delete
 ] as readonly string[];
 
 // Belong to a business through their parent and are never patched: Wrangler Sign's audit trail is append-only

@@ -29,6 +29,7 @@ import { mailBrandOf } from "./lib/mail";
 import { SITE } from "./lib/email";
 import { deletionMail, exportReadyMail } from "./lib/mails";
 import { deliverOnce } from "./invoiceReminders";
+import schema from "./schema";
 
 export const EXPORT_DAYS = 7;
 export const WAIT_DAYS = 60;
@@ -36,32 +37,75 @@ export const REMIND_DAYS = 7;
 export const KEEP_FINAL_DAYS = 30;
 const DAY = 86_400_000;
 const PAGE = 300;
+const BATCH = 100; // rows per step of the day-60 run (each step is its own short transaction)
 
 /** Kept out of the export: keys and tokens, and records that are only the portal's own machinery. */
 export const OMIT_TABLES = new Set(["connectorKeys", "sheetKeys", "wsConnectorKeys", "dropbox", "wsDropbox", "counters", "waveforms", "dataExports"]);
-/** Fields never written into the export, wherever they appear: the secret part of links, sign-in codes and tokens. */
-export const SECRET_FIELDS = new Set(["token", "linkToken", "payToken", "passcodeHash", "codeHash", "sessionHash", "tokenHash", "refreshToken", "accessToken", "accessExpiresAt", "syncToken", "codeSends", "codeAttempts", "codeExpiresAt", "failures", "failTotal"]);
+/** Fields never written into the export, wherever they appear: the secret part of links, sign-in codes and tokens, and
+ *  Stripe's own pay-page and PDF links (anyone holding one can open the invoice). */
+export const SECRET_FIELDS = new Set(["token", "linkToken", "payToken", "passcodeHash", "codeHash", "sessionHash", "tokenHash", "refreshToken", "accessToken", "accessExpiresAt", "syncToken", "codeSends", "codeAttempts", "codeExpiresAt", "failures", "failTotal", "hostedUrl", "pdfUrl"]);
+/** Secret fields whose names mean something else in other tables (review fix, Nov 6). */
+export const SECRET_PATHS: Record<string, string[]> = { calls: ["code"], emailPrefs: ["key"], fileUploads: ["sessionId"], wsDocuments: ["invoice.url"] };
 /** Deleted last: what other records point at (the business's own records go first, then these). */
 const LAST = ["wsDocuments", "projects", "clients", "vendors"];
+const ORDER = [...BUSINESS_TABLES.filter((t) => !LAST.includes(t)), ...LAST];
 
-// A string that could be a storage id (each one is checked with normalizeId before it counts). The second form is
-// the test backend's.
-const looksLikeId = (s: string) => /^[0-9a-z]{25,40}$/.test(s) || /^\d+_storage$/.test(s);
+// ---------- the files a record keeps: read from the schema (fields typed as storage ids), never guessed from text ----------
 
-/** A record as it goes into the export: secret fields out, and the storage ids it mentions collected. */
-function clean(x: unknown, found: (s: string, path: string) => void, path = ""): unknown {
-  if (Array.isArray(x)) return x.map((y, i) => clean(y, found, `${path}[${i}]`));
+type Validator = { kind: string; tableName?: string; fields?: Record<string, Validator>; element?: Validator; members?: Validator[]; value?: Validator };
+function storagePaths(val: Validator | undefined, path: string[], out: string[][]) {
+  if (!val) return;
+  if (val.kind === "id" && val.tableName === "_storage") out.push(path);
+  else if (val.kind === "object") for (const [k, f] of Object.entries(val.fields ?? {})) storagePaths(f, [...path, k], out);
+  else if (val.kind === "array") storagePaths(val.element, [...path, "[]"], out);
+  else if (val.kind === "record") storagePaths(val.value, [...path, "{}"], out);
+  else if (val.kind === "union") for (const m of val.members ?? []) storagePaths(m, path, out);
+}
+const TABLE_DEFS = (schema as unknown as { tables: Record<string, { validator: Validator }> }).tables;
+export const STORAGE_PATHS: Record<string, string[][]> = Object.fromEntries(Object.entries(TABLE_DEFS).map(([t, d]) => {
+  const out: string[][] = []; storagePaths(d.validator, [], out);
+  return [t, [...new Map(out.map((p) => [p.join("."), p])).values()]];
+}));
+/** The storage ids a record keeps, each with the field it's in. */
+export function filesOf(table: string, doc: unknown): Array<{ field: string; id: Id<"_storage"> }> {
+  const out: Array<{ field: string; id: Id<"_storage"> }> = [];
+  const walk = (x: unknown, rest: string[], at: string) => {
+    if (x === undefined || x === null) return;
+    if (!rest.length) { if (typeof x === "string") out.push({ field: at, id: x as Id<"_storage"> }); return; }
+    const [h, ...t] = rest;
+    if (h === "[]") { if (Array.isArray(x)) x.forEach((y, i) => walk(y, t, `${at}[${i}]`)); return; }
+    if (typeof x !== "object") return;
+    if (h === "{}") { for (const [k, y] of Object.entries(x as Record<string, unknown>)) walk(y, t, `${at}.${k}`); return; }
+    walk((x as Record<string, unknown>)[h], t, at ? `${at}.${h}` : h);
+  };
+  for (const p of STORAGE_PATHS[table] ?? []) walk(doc, p, "");
+  return out;
+}
+
+// ---------- secrets: left out, and their values removed wherever else they turn up (a link that carries a token) ----------
+
+const RUN = /[A-Za-z0-9_-]{12,}/g;
+function collectSecret(x: unknown, into: Set<string>) {
+  if (typeof x === "string") { if (x.length >= 12) into.add(x); for (const m of x.match(RUN) ?? []) into.add(m); }
+  else if (Array.isArray(x)) x.forEach((y) => collectSecret(y, into));
+  else if (x && typeof x === "object") Object.values(x).forEach((y) => collectSecret(y, into));
+}
+/** A record as it goes into the export: secret fields out (their values kept aside to be removed everywhere). */
+function clean(table: string, x: unknown, secrets: Set<string>, path = ""): unknown {
+  if (Array.isArray(x)) return x.map((y) => clean(table, y, secrets, path));
   if (x && typeof x === "object") {
     const out: Record<string, unknown> = {};
     for (const [k, val] of Object.entries(x as Record<string, unknown>)) {
-      if (SECRET_FIELDS.has(k)) continue;
-      out[k] = clean(val, found, path ? `${path}.${k}` : k);
+      const full = path ? `${path}.${k}` : k;
+      if (SECRET_FIELDS.has(k) || SECRET_PATHS[table]?.includes(full)) { collectSecret(val, secrets); continue; }
+      out[k] = clean(table, val, secrets, full);
     }
     return out;
   }
-  if (typeof x === "string" && looksLikeId(x)) found(x, path);
   return x;
 }
+/** Every run of link characters that is (or holds) a secret becomes [removed]. Tokens are base64url or hex. */
+export const redact = (text: string, secrets: Set<string>) => (secrets.size ? text.replace(RUN, (m) => (secrets.has(m) ? "[removed]" : m)) : text);
 
 const fmtDay = (ms: number) => new Date(ms).toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", year: "numeric" });
 const fmtWhen = (ms: number) => new Date(ms).toLocaleString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -92,7 +136,7 @@ export const state = query({
     // The portal's admins (on the platform's own business) see the safety-net exports of deleted businesses.
     const safety = isDefault && isAdmin(me.email)
       ? (await ctx.db.query("businessDeletions").withIndex("by_purge", (q) => q.gt("purgeAt", now)).collect()).filter((d) => d.finalExportId)
-        .map((d) => ({ _id: d._id, name: d.name, doneAt: d.doneAt ?? null, bytes: d.finalBytes ?? null, purgeAt: d.purgeAt! }))
+        .map((d) => ({ _id: d._id, name: d.name, status: d.status, doneAt: d.doneAt ?? null, bytes: d.finalBytes ?? null, purgeAt: d.purgeAt! }))
       : [];
     return {
       business: { name: b.name, isDefault },
@@ -160,7 +204,9 @@ export const cancelDeletion = mutation({
   args: {},
   handler: async (ctx) => {
     const { b } = await ownBiz(ctx);
-    const d = (await ctx.db.query("businessDeletions").withIndex("by_business", (q) => q.eq("businessId", b._id)).collect()).find((x) => x.status === "scheduled");
+    const all = await ctx.db.query("businessDeletions").withIndex("by_business", (q) => q.eq("businessId", b._id)).collect();
+    if (all.some((x) => x.status === "running")) throw new ConvexError("The deletion has already started, so it can't be cancelled.");
+    const d = all.find((x) => x.status === "scheduled");
     if (!d) return null;
     for (const j of d.jobs ?? []) { try { await ctx.scheduler.cancel(j); } catch { /* already ran */ } }
     await ctx.db.patch(d._id, { status: "cancelled", cancelledAt: Date.now() });
@@ -191,15 +237,15 @@ export const exportPage = internalQuery({
     if (!biz || !BUSINESS_TABLES.includes(table)) throw new Error("No business.");
     const def = (await defaultBusiness(ctx))?._id;
     const r = await ctx.db.query(table as "projects").paginate({ cursor, numItems: PAGE });
-    const files: Array<{ table: string; record: string; field: string; storageId: string }> = [];
+    const files: Array<{ table: string; record: string; field: string; storageId: Id<"_storage"> }> = [];
     const docs: unknown[] = [];
+    const secrets = new Set<string>();
     for (const d of r.page) {
       if ((d.businessId ?? def) !== biz) continue; // belt and braces: the row rules already keep other businesses out
-      const cands: Array<{ s: string; path: string }> = [];
-      docs.push(clean(d, (s, path) => cands.push({ s, path })));
-      for (const c of cands) if (ctx.db.system.normalizeId("_storage", c.s)) files.push({ table, record: d._id, field: c.path, storageId: c.s });
+      docs.push(clean(table, d, secrets));
+      for (const f of filesOf(table, d)) files.push({ table, record: d._id, field: f.field, storageId: f.id });
     }
-    return { docs, files, cursor: r.continueCursor, done: r.isDone };
+    return { docs, files, secrets: [...secrets], cursor: r.continueCursor, done: r.isDone };
   },
 });
 
@@ -208,19 +254,20 @@ export const signEvents = internalQuery({
   args: { documentIds: v.array(v.id("wsDocuments")) },
   handler: async (ctx, { documentIds }) => {
     const out: unknown[] = [];
+    const secrets = new Set<string>();
     for (const id of documentIds) {
       if (!(await ctx.db.get(id))) continue;
-      for (const e of await ctx.db.query("wsEvents").withIndex("by_document", (q) => q.eq("documentId", id)).collect()) out.push(clean(e, () => {}));
+      for (const e of await ctx.db.query("wsEvents").withIndex("by_document", (q) => q.eq("documentId", id)).collect()) out.push(clean("wsEvents", e, secrets));
     }
-    return out;
+    return { events: out, secrets: [...secrets] };
   },
 });
 
 export const storageUrls = internalQuery({
-  args: { ids: v.array(v.string()) },
+  args: { ids: v.array(v.id("_storage")) },
   handler: async (ctx, { ids }) => {
     const out: Record<string, string | null> = {};
-    for (const s of ids) { const id = ctx.db.system.normalizeId("_storage", s); out[s] = id ? await ctx.storage.getUrl(id) : null; }
+    for (const id of ids) out[id] = await ctx.storage.getUrl(id);
     return out;
   },
 });
@@ -242,6 +289,8 @@ type Ctx = { runQuery: (ref: any, args: any) => Promise<any> };
 async function makeZip(ctx: Ctx, name: string) {
   const files: Record<string, Uint8Array> = {};
   const links: Array<{ table: string; record: string; field: string; storageId: string }> = [];
+  const secrets = new Set<string>();
+  const json: Record<string, unknown[]> = {};
   const counts: Record<string, number> = {};
   const all: Record<string, Array<Record<string, unknown>>> = {};
   for (const table of BUSINESS_TABLES) {
@@ -249,22 +298,29 @@ async function makeZip(ctx: Ctx, name: string) {
     const rows: unknown[] = [];
     let cursor: string | null = null;
     for (;;) {
-      const r: { docs: unknown[]; files: typeof links; cursor: string; done: boolean } = await ctx.runQuery(internal.yourData.exportPage, { table, cursor });
+      const r: { docs: unknown[]; files: typeof links; secrets: string[]; cursor: string; done: boolean } = await ctx.runQuery(internal.yourData.exportPage, { table, cursor });
       rows.push(...r.docs); links.push(...r.files);
+      for (const x of r.secrets) secrets.add(x);
       if (r.done) break;
       cursor = r.cursor;
     }
     if (!rows.length) continue;
     counts[table] = rows.length;
     all[table] = rows as Array<Record<string, unknown>>;
-    files[`records/${table}.json`] = strToU8(JSON.stringify(rows, null, 1));
+    json[table] = rows;
   }
   const docIds = (all.wsDocuments ?? []).map((d) => d._id as Id<"wsDocuments">);
   if (docIds.length) {
     const ev: unknown[] = [];
-    for (let i = 0; i < docIds.length; i += 50) ev.push(...(await ctx.runQuery(internal.yourData.signEvents, { documentIds: docIds.slice(i, i + 50) })));
-    if (ev.length) { counts.wsEvents = ev.length; files["records/wsEvents.json"] = strToU8(JSON.stringify(ev, null, 1)); }
+    for (let i = 0; i < docIds.length; i += 50) {
+      const r: { events: unknown[]; secrets: string[] } = await ctx.runQuery(internal.yourData.signEvents, { documentIds: docIds.slice(i, i + 50) });
+      ev.push(...r.events); for (const x of r.secrets) secrets.add(x);
+    }
+    if (ev.length) { counts.wsEvents = ev.length; json.wsEvents = ev; }
   }
+  // Every file is written only now, once the secrets of every table are known, with each secret's value removed.
+  const put = (name: string, text: string) => { files[name] = strToU8(redact(text, secrets)); };
+  for (const [table, rows] of Object.entries(json)) put(`records/${table}.json`, JSON.stringify(rows, null, 1));
   const urls: Record<string, string | null> = {};
   const ids = [...new Set(links.map((l) => l.storageId))];
   for (let i = 0; i < ids.length; i += 100) Object.assign(urls, await ctx.runQuery(internal.yourData.storageUrls, { ids: ids.slice(i, i + 100) }));
@@ -273,18 +329,18 @@ async function makeZip(ctx: Ctx, name: string) {
   const fileRows: unknown[][] = [["Kind", "Record", "Field", "Link"]];
   for (const l of links) if (urls[l.storageId]) fileRows.push([l.table, l.record, l.field, urls[l.storageId]]);
   for (const v of all.versions ?? []) if (v.dropboxPath) fileRows.push(["versions", v._id, "dropboxPath (in your Dropbox)", v.dropboxPath]);
-  files["files.csv"] = strToU8(csv(fileRows));
+  put("files.csv", csv(fileRows));
   const money = (c: unknown) => (typeof c === "number" ? (c / 100).toFixed(2) : "");
   const nameOf = (table: string, id: unknown) => (all[table] ?? []).find((r) => r._id === id)?.name ?? "";
-  files["clients.csv"] = strToU8(csv([["Client", "Email", "Created"], ...(all.clients ?? []).map((c) => [c.name, c.email ?? "", c.createdAt ? new Date(c.createdAt as number).toISOString().slice(0, 10) : ""])]));
-  files["projects.csv"] = strToU8(csv([["Job number", "Project", "Client", "Stage"], ...(all.projects ?? []).map((p) => [p.jobNumber ?? "", p.name, nameOf("clients", p.clientId), p.stage ?? ""])]));
-  files["invoices.csv"] = strToU8(csv([["Number", "Title", "Client", "Status", "Due", "Total (USD)", "Paid (USD)", "Refunded (USD)"], ...(all.invoices ?? []).map((i) => [i.number ?? "", i.title, nameOf("clients", i.clientId), i.status, i.dueDate, money(i.totalCents), money(i.amountPaidCents), money(i.refundedCents ?? 0)])]));
-  files["vendors.csv"] = strToU8(csv([["Vendor", "Email", "Roles", "W-9 on file"], ...(all.vendors ?? []).map((x) => [x.name, x.email, Array.isArray(x.roles) ? x.roles.join("; ") : "", x.w9 ? "Yes" : "No"])]));
+  put("clients.csv", csv([["Client", "Email", "Created"], ...(all.clients ?? []).map((c) => [c.name, c.email ?? "", c.createdAt ? new Date(c.createdAt as number).toISOString().slice(0, 10) : ""])]))
+  put("projects.csv", csv([["Job number", "Project", "Client", "Stage"], ...(all.projects ?? []).map((p) => [p.jobNumber ?? "", p.name, nameOf("clients", p.clientId), p.stage ?? ""])]))
+  put("invoices.csv", csv([["Number", "Title", "Client", "Status", "Due", "Total (USD)", "Paid (USD)", "Refunded (USD)"], ...(all.invoices ?? []).map((i) => [i.number ?? "", i.title, nameOf("clients", i.clientId), i.status, i.dueDate, money(i.totalCents), money(i.amountPaidCents), money(i.refundedCents ?? 0)])]))
+  put("vendors.csv", csv([["Vendor", "Email", "Roles", "W-9 on file"], ...(all.vendors ?? []).map((x) => [x.name, x.email, Array.isArray(x.roles) ? x.roles.join("; ") : "", x.w9 ? "Yes" : "No"])]))
   const made = new Date().toISOString();
-  files["README.txt"] = strToU8([
+  put("README.txt", [
     `${name}: everything in Wrangler Portal`, `Made ${made}`, "",
     "records/  every record, one JSON file per kind (ids link records to each other)",
-    "files.csv  links to the files the portal keeps (signed PDFs, uploads, W-9s, logos), and Dropbox paths of originals",
+    "files.csv  links to the files the portal keeps (signed PDFs, uploads, W-9s), and Dropbox paths of originals",
     "clients.csv, projects.csv, invoices.csv, vendors.csv  the main lists, for a spreadsheet", "",
     "Not included: connector keys, Stripe, Dropbox and Google tokens, passwords and sign-in data, and the secret part of",
     "every link (shares, invoices, signing, quotes, proposals, briefings, calls). Your files themselves stay in Dropbox.", "",
@@ -358,22 +414,34 @@ export const sendDeletionMail = internalAction({
   },
 });
 
+// The day-60 run, in short steps that each save where they got to (review fix, Nov 6): the safety-net export, then
+// everyone out, then each table a batch at a time, then the logins and the business itself. A step that fails leaves the
+// row "running" with an old heartbeat; the daily purge starts it again from where it stopped (5 tries at most).
+
 export const startDeletion = internalMutation({
-  args: { deletionId: v.id("businessDeletions") },
-  handler: async (ctx, { deletionId }) => {
+  args: { deletionId: v.id("businessDeletions"), resume: v.optional(v.boolean()) },
+  handler: async (ctx, { deletionId, resume }) => {
     const d = await ctx.db.get(deletionId);
     const biz = businessInScope(ctx);
-    if (!d || d.status !== "scheduled" || Date.now() < d.deleteAt || biz !== d.businessId) return null;
+    if (!d || biz !== d.businessId) return null;
     if ((await defaultBusiness(ctx))?._id === d.businessId) { await ctx.db.patch(deletionId, { status: "failed", error: "The portal's own business can't be deleted." }); return null; }
-    await ctx.db.patch(deletionId, { status: "running", startedAt: Date.now() });
-    return d.name;
+    const now = Date.now();
+    if (d.status === "scheduled") {
+      if (now < d.deleteAt) return null;
+      await ctx.db.patch(deletionId, { status: "running", startedAt: now, step: "export", heartbeat: now, attempts: 1 });
+    } else if (resume && (d.status === "running" || d.status === "failed")) {
+      await ctx.db.patch(deletionId, { status: "running", heartbeat: now, attempts: (d.attempts ?? 1) + 1, error: undefined });
+    } else return null;
+    return { name: d.name, needExport: !d.finalExportId };
   },
 });
 
 export const keepFinal = internalMutation({
   args: { deletionId: v.id("businessDeletions"), fileId: v.id("_storage"), bytes: v.number() },
   handler: async (ctx, { deletionId, fileId, bytes }) => {
-    await ctx.db.patch(deletionId, { finalExportId: fileId, finalBytes: bytes, purgeAt: Date.now() + KEEP_FINAL_DAYS * DAY });
+    const d = await ctx.db.get(deletionId);
+    if (!d || d.status !== "running" || d.finalExportId) { await ctx.storage.delete(fileId); return; } // a second try keeps the first one
+    await ctx.db.patch(deletionId, { finalExportId: fileId, finalBytes: bytes, purgeAt: Date.now() + KEEP_FINAL_DAYS * DAY, step: "lockout", tableIndex: 0, cursor: null, heartbeat: Date.now() });
   },
 });
 
@@ -385,74 +453,96 @@ async function endSessions(ctx: MutationCtx, userId: Id<"users">) {
   }
 }
 
-/** Step one of day 60: nobody can get in any more. Every membership goes and everyone in it is signed out. */
-export const lockOut = internalMutation({
+/** Does this login still belong anywhere (another business, a guest pass, or the portal's admins)? */
+async function stillBelongs(ctx: MutationCtx, userId: Id<"users">) {
+  const user = await ctx.db.get(userId);
+  if (!user) return true; // gone already: nothing to do
+  const email = (user.email ?? "").toLowerCase();
+  if (email && allowedEmails().includes(email)) return true;
+  if (await ctx.db.query("memberships").withIndex("by_user", (q) => q.eq("userId", userId)).first()) return true;
+  if (email && await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", email)).first()) return true;
+  if (email && await ctx.db.query("guestPasses").withIndex("by_email", (q) => q.eq("email", email)).first()) return true;
+  return false;
+}
+
+/** One step of the run; it schedules the next one (as the same business) until the business is gone. */
+export const deleteStep = internalMutation({
   args: { deletionId: v.id("businessDeletions") },
   handler: async (ctx, { deletionId }) => {
     const d = await ctx.db.get(deletionId);
-    if (!d || d.status !== "running" || businessInScope(ctx) !== d.businessId) throw new Error("Not running.");
-    const ms = await ctx.db.query("memberships").withIndex("by_business_email", (q) => q.eq("businessId", d.businessId)).collect();
-    const users = new Set<Id<"users">>();
-    for (const m of ms) { if (m.userId) users.add(m.userId); await ctx.db.delete(m._id); }
-    for (const g of await ctx.db.query("guestPasses").collect()) if (g.businessId === d.businessId) await ctx.db.delete(g._id);
-    for (const u of users) await endSessions(ctx as unknown as MutationCtx, u);
-    return [...users];
-  },
-});
-
-/** One batch of one table: this business's rows go, with the files the portal keeps for them. */
-export const deleteBatch = internalMutation({
-  args: { deletionId: v.id("businessDeletions"), table: v.string() },
-  handler: async (ctx, { deletionId, table }) => {
-    const d = await ctx.db.get(deletionId);
     const biz = businessInScope(ctx);
-    if (!d || d.status !== "running" || biz !== d.businessId || !BUSINESS_TABLES.includes(table)) throw new Error("Not running.");
-    const rows = await ctx.db.query(table as "projects").take(PAGE);
-    const guids = new Set<string>(), stills = new Set<string>();
-    let n = 0;
-    for (const r of rows) {
-      if (r.businessId !== biz) continue; // the row rules already keep other businesses out; never a legacy row
-      const found: string[] = [];
-      clean(r, (s) => found.push(s));
-      for (const s of found) { const id = ctx.db.system.normalizeId("_storage", s); if (id) { try { await ctx.storage.delete(id); } catch { /* gone */ } } }
-      if (table === "versions") {
-        const ver = r as unknown as Doc<"versions">;
-        if (ver.bunnyGuid) guids.add(ver.bunnyGuid);
-        if (ver.storagePath) guids.add(`storage:${ver.storagePath}`);
-        if (ver.scrubGuid) guids.add(`scrub:${ver.scrubGuid}`);
-      }
-      if (table === "notes") { const nt = r as unknown as Doc<"notes">; for (const u of [nt.still, nt.stillIn, nt.stillOut, ...(nt.voice?.pointers ?? []).map((p) => p.still)]) if (u) stills.add(u); }
-      if (table === "wsDocuments") for (const e of await ctx.db.query("wsEvents").withIndex("by_document", (q) => q.eq("documentId", r._id as unknown as Id<"wsDocuments">)).collect()) await ctx.db.delete(e._id);
-      await ctx.db.delete(r._id);
-      n++;
-    }
-    // Bunny: the business's playback copies and stills (the originals are in Dropbox).
-    const list = [...guids];
-    for (let i = 0; i < Math.max(list.length, stills.size ? 1 : 0); i++) await ctx.scheduler.runAfter(i * 500, internal.stills.cleanup, { bunnyGuid: list[i] ?? null, stillUrls: i === 0 ? [...stills] : [] });
-    const more = rows.length === PAGE;
-    const deleted = { ...(d.deleted ?? {}) };
-    if (n) { deleted[table] = (deleted[table] ?? 0) + n; await ctx.db.patch(deletionId, { deleted }); }
-    return { n, more };
-  },
-});
+    if (!d || d.status !== "running" || !biz || biz !== d.businessId || !d.finalExportId) return;
+    const now = Date.now();
+    const next = async (patch: Partial<Doc<"businessDeletions">>) => {
+      await ctx.db.patch(deletionId, { ...patch, heartbeat: now });
+      await ctx.scheduler.runAfter(0, internal.yourData.deleteStep, { deletionId });
+    };
+    const step = d.step ?? "lockout";
 
-/** Last: the business itself, and the logins that belonged only to it (never the portal's admins). */
-export const finishDeletion = internalMutation({
-  args: { deletionId: v.id("businessDeletions"), users: v.array(v.id("users")) },
-  handler: async (ctx, { deletionId, users }) => {
-    const d = await ctx.db.get(deletionId);
-    if (!d || d.status !== "running") throw new Error("Not running.");
-    const admins = new Set(allowedEmails());
-    for (const u of users) {
-      const user = await ctx.db.get(u);
-      if (!user || (user.email && admins.has(user.email.toLowerCase()))) continue;
-      if (await ctx.db.query("memberships").withIndex("by_user", (q) => q.eq("userId", u)).first()) continue; // still in another business
-      for (const a of await ctx.db.query("authAccounts").withIndex("userIdAndProvider", (q) => q.eq("userId", u)).collect()) await ctx.db.delete(a._id);
-      for (const t of ["userPrefs", "sessionDevices", "emailChanges", "alertPrefs", "pushSubs"] as const) for (const r of await ctx.db.query(t).collect()) if ((r as { userId?: Id<"users"> }).userId === u) await ctx.db.delete(r._id);
-      await ctx.db.delete(u);
+    if (step === "lockout") { // nobody can get in any more: every membership and guest pass of this business goes
+      const users = new Set(d.users ?? []), emails = new Set(d.emails ?? []);
+      const ms = await ctx.db.query("memberships").withIndex("by_business_email", (q) => q.eq("businessId", d.businessId)).take(BATCH);
+      for (const m of ms) { if (m.userId) users.add(m.userId); emails.add(m.email.toLowerCase()); await ctx.db.delete(m._id); }
+      const gs = ms.length < BATCH ? await ctx.db.query("guestPasses").withIndex("by_business", (q) => q.eq("businessId", d.businessId)).take(BATCH) : [];
+      for (const g of gs) { emails.add(g.email.toLowerCase()); await ctx.db.delete(g._id); }
+      const done = ms.length < BATCH && gs.length < BATCH;
+      if (done) for (const e of emails) { const u = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", e)).first(); if (u) users.add(u._id); }
+      return next({ users: [...users], emails: done ? [] : [...emails], ...(done ? { step: "signout" as const, tableIndex: 0 } : {}) });
     }
-    await ctx.db.delete(d.businessId);
-    await ctx.db.patch(deletionId, { status: "done", doneAt: Date.now() });
+
+    if (step === "signout") { // signed out only where they have nothing else: a client of two businesses stays in the other
+      const list = d.users ?? [], from = d.tableIndex ?? 0;
+      for (const u of list.slice(from, from + 50)) if (!(await stillBelongs(ctx as unknown as MutationCtx, u))) await endSessions(ctx as unknown as MutationCtx, u);
+      return next(from + 50 >= list.length ? { step: "tables", tableIndex: 0, cursor: null } : { tableIndex: from + 50 });
+    }
+
+    if (step === "tables") {
+      const i = d.tableIndex ?? 0, table = ORDER[i];
+      if (!table) return next({ step: "finish", tableIndex: 0, cursor: null });
+      const r = await ctx.db.query(table as "projects").paginate({ cursor: d.cursor ?? null, numItems: BATCH });
+      const guids = new Set<string>(), stills = new Set<string>();
+      let n = 0;
+      for (const row of r.page) {
+        if (row.businessId !== biz) continue; // the row rules already keep other businesses out; never a legacy row
+        // Option B (Heston, Nov 6): the files the portal keeps stay 30 days with the safety-net export, then go with it.
+        for (const f of filesOf(table, row)) await ctx.db.insert("deletionFiles", { deletionId, fileId: f.id, purgeAt: d.purgeAt! });
+        if (table === "versions") {
+          const ver = row as unknown as Doc<"versions">;
+          if (ver.bunnyGuid) guids.add(ver.bunnyGuid);
+          if (ver.storagePath) guids.add(`storage:${ver.storagePath}`);
+          if (ver.scrubGuid) guids.add(`scrub:${ver.scrubGuid}`);
+        }
+        if (table === "notes") { const nt = row as unknown as Doc<"notes">; for (const u of [nt.still, nt.stillIn, nt.stillOut, ...(nt.voice?.pointers ?? []).map((p) => p.still)]) if (u) stills.add(u); }
+        if (table === "wsDocuments") for (const e of await ctx.db.query("wsEvents").withIndex("by_document", (q) => q.eq("documentId", row._id as unknown as Id<"wsDocuments">)).collect()) await ctx.db.delete(e._id);
+        await ctx.db.delete(row._id);
+        n++;
+      }
+      // Bunny: the business's playback copies and stills (the originals are in Dropbox).
+      const list = [...guids];
+      for (let k = 0; k < Math.max(list.length, stills.size ? 1 : 0); k++) await ctx.scheduler.runAfter(k * 500, internal.stills.cleanup, { bunnyGuid: list[k] ?? null, stillUrls: k === 0 ? [...stills] : [] });
+      const deleted = { ...(d.deleted ?? {}) };
+      if (n) deleted[table] = (deleted[table] ?? 0) + n;
+      return next(r.isDone ? { deleted, tableIndex: i + 1, cursor: null } : { deleted, cursor: r.continueCursor });
+    }
+
+    if (step === "finish") { // the logins that belonged only to this business (never an admin's), then the business itself
+      const list = d.users ?? [], from = d.tableIndex ?? 0;
+      for (const u of list.slice(from, from + 50)) {
+        if (await stillBelongs(ctx as unknown as MutationCtx, u)) continue;
+        await endSessions(ctx as unknown as MutationCtx, u);
+        for (const a of await ctx.db.query("authAccounts").withIndex("userIdAndProvider", (q) => q.eq("userId", u)).collect()) await ctx.db.delete(a._id);
+        for (const t of ["sessionDevices", "emailChanges", "alertPrefs", "pushSubs"] as const) for (const row of await ctx.db.query(t).withIndex("by_user", (q) => q.eq("userId", u)).collect()) await ctx.db.delete(row._id);
+        for (const row of await ctx.db.query("userPrefs").withIndex("by_user_key", (q) => q.eq("userId", u)).collect()) await ctx.db.delete(row._id);
+        await ctx.db.delete(u);
+      }
+      if (from + 50 < list.length) return next({ tableIndex: from + 50 });
+      const b = await ctx.db.get(d.businessId);
+      if (b) {
+        for (const f of filesOf("businesses", b)) await ctx.db.insert("deletionFiles", { deletionId, fileId: f.id, purgeAt: d.purgeAt! }); // its logos
+        await ctx.db.delete(d.businessId);
+      }
+      await ctx.db.patch(deletionId, { status: "done", step: "done", doneAt: now, heartbeat: now, users: [], emails: [] });
+    }
   },
 });
 
@@ -461,43 +551,56 @@ export const deletionFailed = internalMutation({
   handler: async (ctx, { deletionId, error }) => { await ctx.db.patch(deletionId, { status: "failed", error }); },
 });
 
-/** Day 60 (runs as the business): the safety-net export, then lock out, then delete, table by table. */
+/** Day 60 (runs as the business), and every later try: the safety-net export if it isn't made yet, then the steps. */
 export const runDeletion = internalAction({
-  args: { deletionId: v.id("businessDeletions") },
-  handler: async (ctx, { deletionId }) => {
-    const name: string | null = await ctx.runMutation(internal.yourData.startDeletion, { deletionId });
-    if (!name) return;
+  args: { deletionId: v.id("businessDeletions"), resume: v.optional(v.boolean()) },
+  handler: async (ctx, { deletionId, resume }) => {
+    const s: { name: string; needExport: boolean } | null = await ctx.runMutation(internal.yourData.startDeletion, { deletionId, resume });
+    if (!s) return;
     try {
-      const { zip } = await makeZip(ctx, name);
-      const fileId = await ctx.storage.store(new Blob([zip as BlobPart], { type: "application/zip" }));
-      await ctx.runMutation(internal.yourData.keepFinal, { deletionId, fileId, bytes: zip.byteLength });
-      const users: Id<"users">[] = await ctx.runMutation(internal.yourData.lockOut, { deletionId });
-      const order = [...BUSINESS_TABLES.filter((t) => !LAST.includes(t)), ...LAST];
-      for (const table of order) {
-        for (let guard = 0; guard < 10_000; guard++) {
-          const r: { n: number; more: boolean } = await ctx.runMutation(internal.yourData.deleteBatch, { deletionId, table });
-          if (!r.more) break;
-        }
+      if (s.needExport) {
+        const { zip } = await makeZip(ctx, s.name);
+        const fileId = await ctx.storage.store(new Blob([zip as BlobPart], { type: "application/zip" }));
+        await ctx.runMutation(internal.yourData.keepFinal, { deletionId, fileId, bytes: zip.byteLength });
       }
-      await ctx.runMutation(internal.yourData.finishDeletion, { deletionId, users });
+      await ctx.runMutation(internal.yourData.deleteStep, { deletionId });
     } catch (e) {
       await ctx.runMutation(internal.yourData.deletionFailed, { deletionId, error: String((e as Error)?.message ?? e).slice(0, 300) });
     }
   },
 });
 
-/** Daily: exports past their 7 days lose their file; safety-net exports past their 30 days go. */
+const STALE = 30 * 60_000; // a run that hasn't moved for 30 minutes has stopped
+const TRIES = 5;
+
+/** Daily: exports past their 7 days lose their file; safety-net exports and the files kept with them go after 30 days;
+ *  a deletion that stopped part way is started again from where it got to. */
 export const purge = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
     let n = 0;
-    for (const e of await ctx.db.query("dataExports").withIndex("by_expires", (q) => q.lt("expiresAt", now)).take(200)) {
+    // Past rows lose their date, so the next run never meets them again (review fix: it used to stall on old rows).
+    for (const e of await ctx.db.query("dataExports").withIndex("by_expires", (q) => q.gt("expiresAt", 0).lt("expiresAt", now)).take(200)) {
       if (e.fileId) { try { await ctx.storage.delete(e.fileId); } catch { /* gone */ } }
-      if (e.status === "ready" || e.fileId) { await ctx.db.patch(e._id, { status: "expired", fileId: undefined }); n++; }
+      await ctx.db.patch(e._id, { status: e.status === "ready" ? "expired" : e.status, fileId: undefined, expiresAt: undefined });
+      n++;
     }
-    for (const d of await ctx.db.query("businessDeletions").withIndex("by_purge", (q) => q.lt("purgeAt", now)).take(50)) {
-      if (d.finalExportId) { try { await ctx.storage.delete(d.finalExportId); } catch { /* gone */ } await ctx.db.patch(d._id, { finalExportId: undefined }); n++; }
+    for (const f of await ctx.db.query("deletionFiles").withIndex("by_purge", (q) => q.lt("purgeAt", now)).take(500)) {
+      try { await ctx.storage.delete(f.fileId); } catch { /* gone */ }
+      await ctx.db.delete(f._id);
+      n++;
+    }
+    for (const d of await ctx.db.query("businessDeletions").withIndex("by_purge", (q) => q.gt("purgeAt", 0).lt("purgeAt", now)).take(50)) {
+      if (d.finalExportId) { try { await ctx.storage.delete(d.finalExportId); } catch { /* gone */ } }
+      await ctx.db.patch(d._id, { finalExportId: undefined, purgeAt: undefined });
+      n++;
+    }
+    for (const status of ["running", "failed"] as const) {
+      for (const d of await ctx.db.query("businessDeletions").withIndex("by_status", (q) => q.eq("status", status)).take(20)) {
+        if ((d.attempts ?? 1) >= TRIES || now - (d.heartbeat ?? 0) < STALE) continue;
+        await ctx.scheduler.runAfter(0, internal.yourData.runDeletion, { deletionId: d._id, resume: true, asBusiness: d.businessId });
+      }
     }
     return n;
   },
