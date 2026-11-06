@@ -650,12 +650,30 @@ export default defineSchema({
   }).index("by_document", ["documentId", "seq"]),
   // Security review (Oct 27): what Claude asked to do through the connector (approve, send, cancel). Nothing happens
   // until Heston confirms it on the document page, signed in; a request lasts a day.
+  // D160 (Heston, Nov 6): people copied on a contract. They get an email when it's sent with a view-only link
+  // (/c/<token> on the sign host: no boxes, nothing to sign), the signed copy at the end, and the cancellation if it's
+  // cancelled. Never reminders. Their link is not a signing link: the signing functions only take wsSignings tokens.
+  wsCopies: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    documentId: v.id("wsDocuments"),
+    versionNumber: v.number(),
+    email: v.string(),                        // lower-case
+    name: v.optional(v.string()),
+    token: v.string(),
+    sentAt: v.number(),
+    emailedAt: v.optional(v.number()),
+    emailError: v.optional(v.string()),
+    openedAt: v.optional(v.number()),
+    opens: v.number(),
+  }).index("by_document", ["documentId", "versionNumber"]).index("by_token", ["token"]),
+
   wsRequests: defineTable({
     businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     documentId: v.id("wsDocuments"),
     what: v.union(v.literal("approve"), v.literal("send"), v.literal("cancel")),
     versionNumber: v.number(),
     expiresInDays: v.optional(v.number()),
+    cc: v.optional(v.array(v.object({ email: v.string(), name: v.optional(v.string()) }))), // D160: who to copy when it's sent
     reason: v.optional(v.string()),
     said: v.string(),                      // what Claude said Heston told it in chat
     status: v.union(v.literal("pending"), v.literal("done"), v.literal("declined"), v.literal("expired"), v.literal("replaced"), v.literal("failed"), v.literal("overtaken")),  // overtaken: Heston did it himself with the page's own buttons
@@ -954,6 +972,9 @@ export default defineSchema({
     linkOff: v.optional(v.boolean()),                   // Q91 (a)(b): off stops every link, emailed ones too; can be turned back on
     linkOpens: v.optional(v.number()),
     linkReads: v.optional(v.number()),                  // "I've read it" pressed on the copied link (no name)
+    // D161 (Heston, Nov 6): a sent briefing can be edited; "Update the link" puts the new PDF behind every link.
+    editedAt: v.optional(v.number()),                   // when the live copy was last updated (shown as "Updated …")
+    shown: v.optional(v.object({ title: v.string(), dates: v.optional(v.string()), buildAt: v.optional(v.number()) })), // the live copy's title, dates, and the edit it was made from
     history: v.array(v.object({ kind: v.string(), at: v.number(), by: v.optional(v.string()), detail: v.optional(v.string()) })),
     createdAt: v.number(),
     updatedAt: v.number(),

@@ -128,6 +128,7 @@ const TeamHome = lazy(() => import("./modules/team/TeamPages").then((m) => ({ de
 const NoAccess = lazy(() => import("./modules/team/TeamPages").then((m) => ({ default: m.NoAccess })));
 const TeamAccount = lazy(() => import("./modules/team/TeamPages").then((m) => ({ default: m.TeamAccount })));
 const SignerApp = lazy(() => import("./modules/docs/signer/SignerApp"));
+const CopyPage = lazy(() => import("./modules/docs/signer/CopyPage")); // D160: copied on a contract
 const VerifyPage = lazy(() => import("./modules/docs/signer/VerifyPage"));
 // Dev only: the component page (never part of the live build).
 const KIT_ON = import.meta.env.DEV || import.meta.env.VITE_KIT === "1";
@@ -181,6 +182,8 @@ export default function App() {
     return <Suspense fallback={<Loading />}><KitApp side={kit}>{sh ? <ShareForMember video={!!sh[2]} page={(inShell) => <SharePage inShell={inShell} token={sh[1]} videoId={(sh[2] as Id<"videos"> | undefined) ?? null} versionNumber={null} noteId={null} />} /> : <SignedIn />}</KitApp></Suspense>;
   }
   const signer = (isSignHost() ? /^\/(?:x\/)?([A-Za-z0-9_-]{16,64})\/?$/ : /^\/x\/([A-Za-z0-9_-]{16,64})\/?$/).exec(path);
+  const copied = (isSignHost() ? /^\/(?:x\/)?c\/([A-Za-z0-9_-]{16,64})\/?$/ : /^\/x\/c\/([A-Za-z0-9_-]{16,64})\/?$/).exec(path); // D160
+  if (copied) return <Suspense fallback={<Loading />}><CopyPage key={copied[1]} token={copied[1]} /></Suspense>;
   if ((isSignHost() && /^\/verify\/?$/.test(path)) || /^\/x\/verify\/?$/.test(path)) return <Suspense fallback={<Loading />}><VerifyPage /></Suspense>;
   if (signer) return <Suspense fallback={<Loading />}><SignerApp key={signer[1]} token={signer[1]} /></Suspense>;
   if (isSignHost()) return <SignHostHome />;
@@ -241,6 +244,8 @@ function SignedIn() {
   const { signOut } = useAuthActions();
   const { path, search } = useLocation();
   const signer = (isSignHost() ? /^\/(?:x\/)?([A-Za-z0-9_-]{16,64})\/?$/ : /^\/x\/([A-Za-z0-9_-]{16,64})\/?$/).exec(path);
+  const copied = (isSignHost() ? /^\/(?:x\/)?c\/([A-Za-z0-9_-]{16,64})\/?$/ : /^\/x\/c\/([A-Za-z0-9_-]{16,64})\/?$/).exec(path); // D160
+  if (copied) return <Suspense fallback={<Loading />}><CopyPage key={copied[1]} token={copied[1]} /></Suspense>;
   if ((isSignHost() && /^\/verify\/?$/.test(path)) || /^\/x\/verify\/?$/.test(path)) return <Suspense fallback={<Loading />}><VerifyPage /></Suspense>;
   if (signer) return <Suspense fallback={<Loading />}><SignerApp key={signer[1]} token={signer[1]} /></Suspense>;
   if (isSignHost()) return <SignHostHome />;

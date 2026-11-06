@@ -91,7 +91,7 @@ export function ownerAlertMail(b: MailBrand, d: { title: string; project: string
 }
 
 // ---------- 07 · 07b · 08 · 09: signing ----------
-export function pleaseSignMail(b: MailBrand, d: { name: string; title: string; label: string; link: string; until: string | null; reminder: boolean }): Mail {
+export function pleaseSignMail(b: MailBrand, d: { name: string; title: string; label: string; link: string; until: string | null; reminder: boolean; copied?: string[] }): Mail {
   return mk(b, "contracts", `${d.reminder ? "Reminder: " : ""}Please sign: ${d.title} (${d.label})`, [
     hi(d.name),
     { t: "p", text: `${d.reminder ? "A reminder: " : ""}${byline(b, true)} sent you "${d.title}" (${d.label}) to review and sign.` },
@@ -99,8 +99,29 @@ export function pleaseSignMail(b: MailBrand, d: { name: string; title: string; l
     { t: "button", label: "Review and sign", href: d.link }, { t: "link", href: d.link },
     { t: "p", text: "You'll confirm this email address with a 6-digit code, read the document, add your initials where asked, and sign. It takes a few minutes on a phone or a computer.", tone: "muted" },
     ...(d.until ? [{ t: "p", text: `The link works until ${d.until}.`, tone: "muted" } as Block] : []),
+    ...(d.copied?.length ? [{ t: "p", text: `Copied: ${d.copied.join(", ")}.`, tone: "muted" } as Block] : []), // D160: nobody is copied without the signers knowing
     { t: "p", text: "Questions, or would you rather sign on paper? Reply to this email.", tone: "muted" },
   ], [{ t: "small", text: `${b.footerName} · ${SIGN_HOST}` }]);
+}
+/** D160 (Nov 6, built without frames): someone copied on a contract, when it's sent. A view-only link; nothing to sign. */
+export function copiedMail(b: MailBrand, d: { name: string | null; title: string; label: string; signers: string[]; link: string }): Mail {
+  return mk(b, "contracts", `Copy: ${d.title} (${d.label}) was sent for signature`, [
+    hi(d.name),
+    { t: "p", text: `${byline(b, true)} sent "${d.title}" (${d.label}) for signature, and copied you.` },
+    { t: "p", text: "Sent to:" }, { t: "list", items: d.signers },
+    { t: "p", text: "You're copied, so there's nothing for you to sign. You can read it here:", tone: "muted" },
+    { t: "button", label: "View the document", href: d.link }, { t: "link", href: d.link },
+    { t: "p", text: "When everyone has signed, you'll get the signed copy too. Questions? Reply to this email.", tone: "muted" },
+  ], [{ t: "small", text: `${b.footerName} · ${SIGN_HOST}` }]);
+}
+/** D160: someone copied on a contract that was then cancelled. */
+export function copiedCancelledMail(b: MailBrand, d: { name: string | null; title: string; label: string; reason: string | null }): Mail {
+  return mk(b, "contracts", `Cancelled: ${d.title} (${d.label})`, [
+    hi(d.name),
+    { t: "p", text: `${byline(b, true)} cancelled "${d.title}" (${d.label}), which you were copied on. Its links no longer work.` },
+    ...(d.reason ? [{ t: "box", text: `Reason: ${d.reason}` } as Block] : []),
+    { t: "p", text: "Questions? Reply to this email.", tone: "muted" },
+  ], [{ t: "small", text: b.name }]);
 }
 export function cancelledMail(b: MailBrand, d: { name: string; title: string; label: string; reason: string | null }): Mail {
   return mk(b, "contracts", `Cancelled: ${d.title} (${d.label})`, [
@@ -401,6 +422,16 @@ export function briefingMail(b: MailBrand, d: { name: string; kind: string; proj
 
 // ---------- 58: a briefing sent to anyone (D147, S5 · Phase 3c 863:17928): a no-login link, one per person ----------
 // The rows come from the briefing itself (Q91 g): its dates field and its project when they're set, and its title.
+/** D161 (Nov 6, built without frames): a sent briefing was updated; their same link shows the new version. */
+export function briefingUpdatedMail(b: MailBrand, d: { name: string | null; kind: string; title: string; dates: string | null; link: string }): Mail {
+  return mk(b, "updates", `Updated: ${d.title}`, [
+    hello(d.name),
+    { t: "p", text: `${byline(b, true)} updated the ${d.kind.toLowerCase()} "${d.title}"${d.dates ? ` (${d.dates})` : ""}.` },
+    { t: "p", text: "Your link shows the new version:", tone: "muted" },
+    { t: "button", label: "Read the briefing", href: d.link }, { t: "link", href: d.link },
+    { t: "p", text: "Questions? Reply to this email.", tone: "muted" },
+  ], [{ t: "small", text: b.footerName }]);
+}
 export function briefingLinkMail(b: MailBrand, d: { name: string | null; kind: string; project: string | null; title: string; dates: string | null; headings: string[]; note: string | null; link: string }): Mail {
   const sender = first(b.ownerName) || b.name;
   const parts = d.headings.slice(0, 4).map((h, i) => (i === 0 ? h : h.toLowerCase()));
