@@ -8,6 +8,8 @@ import { action, type ActionCtx } from "./_generated/server";
 import { audit } from "./lib/audit";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { internal } from "./_generated/api";
+import { claimIn, discardIn, removeIn } from "./fileOwners";
+import { deleteFile } from "./lib/fileOwners";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
@@ -105,7 +107,7 @@ async function getCore(ctx: QueryCtx, documentId: Id<"wsDocuments">, versionNumb
     const events = await eventsOf(ctx, documentId);
     const sig = await currentSignature(ctx);
     return {
-      doc: { ...doc, label: docLabel(doc.number) },
+      doc: { ...doc, final: doc.final ? { ...doc.final, fileId: undefined } : undefined, label: docLabel(doc.number) }, // no raw file ids (review fix, Nov 6)
       // S3: the signed copy (a link that works for an hour or so; the page asks again when it re-renders).
       finalUrl: doc.final ? await ctx.storage.getUrl(doc.final.fileId) : null,
       version: { ...shown, fileUrl: await ctx.storage.getUrl(shown.fileId), isCurrent: shown.number === doc.currentVersion, editable: shown.number === doc.currentVersion && !shown.approvedAt && doc.status === "draft" },
@@ -142,10 +144,12 @@ export const uploadUrl = mutation({
   handler: async (ctx) => { await requireAll(ctx, "docs"); return ctx.storage.generateUploadUrl(); },
 });
 
-async function readPdf(ctx: { storage: { get: (id: Id<"_storage">) => Promise<Blob | null>; delete: (id: Id<"_storage">) => Promise<void> } }, storageId: Id<"_storage">) {
+// Review fix (Nov 6): a refused PDF is thrown away only when it's the caller's own fresh upload (`drop`), never a file
+// already in use, such as a signed copy.
+async function readPdf(ctx: { storage: { get: (id: Id<"_storage">) => Promise<Blob | null> } }, storageId: Id<"_storage">, drop: () => Promise<unknown>) {
   const blob = await ctx.storage.get(storageId);
   if (!blob) throw new ConvexError("The upload didn't arrive. Try again.");
-  const fail = async (msg: string) => { await ctx.storage.delete(storageId); throw new ConvexError(msg); };
+  const fail = async (msg: string) => { await drop(); throw new ConvexError(msg); };
   if (blob.size > MAX_PDF_BYTES) return fail("That PDF is over 25 MB. Export a smaller one.");
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const head = new TextDecoder().decode(bytes.subarray(0, 1024));
@@ -163,7 +167,8 @@ export const create = action({
   args: { storageId: v.id("_storage"), fileName: v.string(), title: v.optional(v.string()) },
   handler: async (ctx, { storageId, fileName, title }): Promise<{ documentId: Id<"wsDocuments">; label: string }> => {
     await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs"] });
-    const pdf = await readPdf(ctx, storageId);
+    const claim = await claimIn(ctx, storageId, "contract-pdf");
+    const pdf = await readPdf(ctx, storageId, () => discardIn(ctx, storageId, claim));
     return ctx.runMutation(internal.sign.insertDocument, {
       storageId, fileName: fileName.slice(0, 200), title: (title?.trim() || titleFromFile(fileName)).slice(0, 120),
       sha: pdf.sha, bytes: pdf.bytes.length, pages: pdf.pages,
@@ -175,7 +180,7 @@ export const create = action({
 export const createAs = internalAction({
   args: { storageId: v.id("_storage"), fileName: v.string(), title: v.optional(v.string()), actor: v.string() },
   handler: async (ctx, { storageId, fileName, title, actor }): Promise<{ documentId: Id<"wsDocuments">; label: string }> => {
-    const pdf = await readPdf(ctx, storageId);
+    const pdf = await readPdf(ctx, storageId, () => removeIn(ctx, storageId)); // the server's own file (recorded or claimed)
     return ctx.runMutation(internal.sign.insertDocument, {
       storageId, fileName: fileName.slice(0, 200), title: (title?.trim() || titleFromFile(fileName)).slice(0, 120),
       sha: pdf.sha, bytes: pdf.bytes.length, pages: pdf.pages, actor,
@@ -284,8 +289,10 @@ export const replaceFile = action({
   args: { documentId: v.id("wsDocuments"), storageId: v.id("_storage"), fileName: v.string() },
   handler: async (ctx, { documentId, storageId, fileName }): Promise<{ versionNumber: number }> => {
     await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs"], ids: [documentId] });
-    const pdf = await readPdf(ctx, storageId);
-    return ctx.runMutation(internal.sign.insertReplacement, { documentId, storageId, fileName: fileName.slice(0, 200), sha: pdf.sha, bytes: pdf.bytes.length, pages: pdf.pages });
+    const claim = await claimIn(ctx, storageId, "contract-pdf");
+    if (!claim.fresh) throw new ConvexError("Upload the new PDF again."); // a new version is always a new upload
+    const pdf = await readPdf(ctx, storageId, () => discardIn(ctx, storageId, claim));
+    return ctx.runMutation(internal.sign.insertReplacement, { documentId, storageId, fileName: fileName.slice(0, 200), sha: pdf.sha, bytes: pdf.bytes.length, pages: pdf.pages, fresh: true });
   },
 });
 
@@ -293,7 +300,7 @@ export const replaceFile = action({
 export const inspectUpload = internalAction({
   args: { storageId: v.id("_storage") },
   handler: async (ctx, { storageId }): Promise<{ sha: string; bytes: number; pages: Array<{ width: number; height: number; rotate: number }> }> => {
-    const pdf = await readPdf(ctx, storageId);
+    const pdf = await readPdf(ctx, storageId, () => removeIn(ctx, storageId)); // the builder's own render
     return { sha: pdf.sha, bytes: pdf.bytes.length, pages: pdf.pages };
   },
 });
@@ -313,18 +320,20 @@ export const replaceDraftFile = internalMutation({
     await ctx.db.patch(doc._id, { title: a.title.slice(0, 120), updatedAt: now });
     // An earlier version (sent, then cancelled) may share this file: it stays as long as anything refers to it.
     const shared = (await ctx.db.query("wsVersions").withIndex("by_document", (q) => q.eq("documentId", doc._id)).collect()).some((x) => x._id !== ver._id && x.fileId === old) || doc.final?.fileId === old;
-    if (old !== a.storageId && !shared) await ctx.storage.delete(old);
+    if (old !== a.storageId && !shared) await deleteFile(ctx as unknown as MutationCtx, old, businessInScope(ctx));
     await appendEvent(ctx, doc._id, { kind: "rebuilt", actor: OWNER_KEY, versionNumber: ver.number, detail: `Rebuilt from the builder: "${a.fileName}" (${a.pages.length} page${a.pages.length === 1 ? "" : "s"}), SHA-256 ${a.sha}` });
     return { versionId: ver._id };
   },
 });
 
 export const insertReplacement = internalMutation({
-  args: { documentId: v.id("wsDocuments"), storageId: v.id("_storage"), fileName: v.string(), sha: v.string(), bytes: v.number(), pages: v.array(v.object({ width: v.number(), height: v.number(), rotate: v.number() })) },
+  args: { documentId: v.id("wsDocuments"), storageId: v.id("_storage"), fileName: v.string(), sha: v.string(), bytes: v.number(), pages: v.array(v.object({ width: v.number(), height: v.number(), rotate: v.number() })), fresh: v.optional(v.boolean()) },
   handler: async (ctx, a) => {
     const doc = await ctx.db.get(a.documentId);
-    if (!doc) { await ctx.storage.delete(a.storageId); throw new ConvexError("That document doesn't exist."); }
-    if (doc.status !== "draft" && doc.status !== "approved" && doc.status !== "voided") { await ctx.storage.delete(a.storageId); throw new ConvexError(doc.status === "sent" ? "Cancel (void) it first, then replace the PDF." : "A signed document can't be changed."); }
+    // Review fix (Nov 6): a refused file is thrown away only when it's a fresh upload, never one already in use.
+    const drop = () => (a.fresh ? deleteFile(ctx as unknown as MutationCtx, a.storageId, businessInScope(ctx)) : Promise.resolve(false));
+    if (!doc) { await drop(); throw new ConvexError("That document doesn't exist."); }
+    if (doc.status !== "draft" && doc.status !== "approved" && doc.status !== "voided") { await drop(); throw new ConvexError(doc.status === "sent" ? "Cancel (void) it first, then replace the PDF." : "A signed document can't be changed."); }
     const cur = await currentVersion(ctx, doc);
     const now = Date.now();
     const number = cur.number + 1;
@@ -369,7 +378,7 @@ export const remove = mutation({
     const versions = await ctx.db.query("wsVersions").withIndex("by_document", (q) => q.eq("documentId", documentId)).collect();
     const files = new Set<Id<"_storage">>(versions.map((x) => x.fileId));
     for (const x of versions) await ctx.db.delete(x._id);
-    for (const f of files) await ctx.storage.delete(f);
+    for (const f of files) await deleteFile(ctx as unknown as MutationCtx, f, businessInScope(ctx));
     for (const e of await eventsOf(ctx, documentId)) await ctx.db.delete(e._id);
     // Made in the builder: its builder draft goes too (it would otherwise hang on to a document that's gone).
     if (doc.buildId) { const b = await ctx.db.get(doc.buildId); if (b && b.documentId === documentId) await ctx.db.delete(b._id); }
@@ -386,11 +395,13 @@ export const adoptSignature = action({
   args: { name: v.string(), title: v.string(), method: v.union(v.literal("typed"), v.literal("drawn")), signatureStorageId: v.id("_storage"), initialsStorageId: v.id("_storage") },
   handler: async (ctx, a): Promise<null> => {
     await ctx.runQuery(internal.users.assertAllowed, {});
+    const claims = { [a.signatureStorageId]: await claimIn(ctx, a.signatureStorageId, "owner-signature"), [a.initialsStorageId]: await claimIn(ctx, a.initialsStorageId, "owner-signature") };
+    if (!claims[a.signatureStorageId].fresh || !claims[a.initialsStorageId].fresh) throw new ConvexError("Draw or type your signature again.");
     const read = async (id: Id<"_storage">) => {
       const blob = await ctx.storage.get(id);
-      if (!blob || blob.size > MAX_PNG_BYTES) { if (blob) await ctx.storage.delete(id); throw new ConvexError("The signature image didn't arrive or is too big."); }
+      if (!blob || blob.size > MAX_PNG_BYTES) { if (blob) await discardIn(ctx, id, claims[id]); throw new ConvexError("The signature image didn't arrive or is too big."); }
       const b = new Uint8Array(await blob.arrayBuffer());
-      if (!isPng(b)) { await ctx.storage.delete(id); throw new ConvexError("The signature must be a PNG image."); }
+      if (!isPng(b)) { await discardIn(ctx, id, claims[id]); throw new ConvexError("The signature must be a PNG image."); }
       return sha256Bytes(b);
     };
     const name = a.name.trim(), title = a.title.trim();

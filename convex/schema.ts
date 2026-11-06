@@ -1752,6 +1752,15 @@ export default defineSchema({
     attempts: v.optional(v.number()),
   }).index("by_business", ["businessId"]).index("by_purge", ["purgeAt"]).index("by_status", ["status"]),
 
+  // Review fix (Nov 6): which business each stored file belongs to (lib/fileOwners.ts).
+  fileOwners: defineTable({
+    storageId: v.id("_storage"),
+    businessId: v.id("businesses"),
+    userId: v.optional(v.id("users")),
+    purpose: v.string(),
+    at: v.number(),
+  }).index("by_storage", ["storageId"]).index("by_business", ["businessId"]),
+
   // Option B (Heston, Nov 6): the files a deleted business's portal kept stay 30 days with its safety-net export.
   deletionFiles: defineTable({
     deletionId: v.id("businessDeletions"),

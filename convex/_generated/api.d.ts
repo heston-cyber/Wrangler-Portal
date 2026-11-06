@@ -47,6 +47,7 @@ import type * as payments from "../payments.js";
 import type * as projects from "../projects.js";
 import type * as push from "../push.js";
 import type * as reports from "../reports.js";
+import type * as fileOwners from "../fileOwners.js";
 import type * as yourData from "../yourData.js";
 import type * as auth from "../auth.js";
 import type * as bunny from "../bunny.js";
@@ -146,6 +147,7 @@ import type * as messages from "../messages.js";
 import type * as migrations from "../migrations.js";
 import type * as lib_functions from "../lib/functions.js";
 import type * as lib_tenancy from "../lib/tenancy.js";
+import type * as lib_fileOwners from "../lib/fileOwners.js";
 
 import type {
   ApiFromModules,
@@ -193,6 +195,7 @@ declare const fullApi: ApiFromModules<{
   projects: typeof projects;
   push: typeof push;
   reports: typeof reports;
+  fileOwners: typeof fileOwners;
   yourData: typeof yourData;
   auth: typeof auth;
   bunny: typeof bunny;
@@ -266,6 +269,7 @@ declare const fullApi: ApiFromModules<{
   migrations: typeof migrations;
   "lib/functions": typeof lib_functions;
   "lib/tenancy": typeof lib_tenancy;
+  "lib/fileOwners": typeof lib_fileOwners;
   users: typeof users;
   views: typeof views;
   waveform: typeof waveform;
