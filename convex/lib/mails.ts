@@ -422,6 +422,16 @@ export function briefingMail(b: MailBrand, d: { name: string; kind: string; proj
 
 // ---------- 58: a briefing sent to anyone (D147, S5 · Phase 3c 863:17928): a no-login link, one per person ----------
 // The rows come from the briefing itself (Q91 g): its dates field and its project when they're set, and its title.
+/** D161 (Nov 6, built without frames): a sent briefing was updated; their same link shows the new version. */
+export function briefingUpdatedMail(b: MailBrand, d: { name: string | null; kind: string; title: string; dates: string | null; link: string }): Mail {
+  return mk(b, "updates", `Updated: ${d.title}`, [
+    hello(d.name),
+    { t: "p", text: `${byline(b, true)} updated the ${d.kind.toLowerCase()} "${d.title}"${d.dates ? ` (${d.dates})` : ""}.` },
+    { t: "p", text: "Your link shows the new version:", tone: "muted" },
+    { t: "button", label: "Read the briefing", href: d.link }, { t: "link", href: d.link },
+    { t: "p", text: "Questions? Reply to this email.", tone: "muted" },
+  ], [{ t: "small", text: b.footerName }]);
+}
 export function briefingLinkMail(b: MailBrand, d: { name: string | null; kind: string; project: string | null; title: string; dates: string | null; headings: string[]; note: string | null; link: string }): Mail {
   const sender = first(b.ownerName) || b.name;
   const parts = d.headings.slice(0, 4).map((h, i) => (i === 0 ? h : h.toLowerCase()));

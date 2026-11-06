@@ -49,7 +49,7 @@ describe("briefings: the pure parts", () => {
 });
 
 describe("briefings", () => {
-  test("T3c.3 create from a booking, out of Docs, send once (email 25), locked after, a copy can change", async () => {
+  test("T3c.3 create from a booking, out of Docs, send once (email 25), editable after (D161), a copy can change", async () => {
     const w = await world();
     const mails: Sent[] = [];
     stub(mails);
@@ -82,7 +82,9 @@ describe("briefings", () => {
     expect(await w.heston.query(api.briefings.list, {})).toEqual([expect.objectContaining({ _id: id, vendor: "Jordan Ellis", project: "26127 Launch" })]);
 
     // Locked: no edit, no delete; Share again to the same person emails them the same link again.
-    await expect(w.heston.mutation(api.builder.saveBuild, { buildId: b.buildId, title: "X", blocks: build.blocks, fields: build.fields, signers: [], style: build.style })).rejects.toThrow(/has been sent/);
+    // D161 (Nov 6): a sent briefing saves edits; the link keeps the shared copy until "Update the link" (briefingEdit.test.ts).
+    await w.heston.mutation(api.builder.saveBuild, { buildId: b.buildId, title: "X", blocks: build.blocks, fields: build.fields, signers: [], style: build.style });
+    expect((await w.heston.query(api.briefings.get, { briefingId: id }))!.changed).toBe(true);
     await expect(w.heston.mutation(api.briefings.deleteDraft, { briefingId: id })).rejects.toThrow(/stays/);
     await expect(w.heston.mutation(api.briefings.setDetails, { briefingId: id, projectId: null, sendTo: [] })).rejects.toThrow(/Share again/);
     vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(Date.now() + 11 * 60_000); // review L2: not again within 10 minutes

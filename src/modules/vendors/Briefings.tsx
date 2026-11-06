@@ -103,7 +103,8 @@ export function BriefingBuilder({ briefingId }: { briefingId: string }) {
   const [toast, show] = useToast();
   if (b === undefined) return <><TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/vendors/briefings")}>Briefings</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
   if (b === null) return <><TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/vendors/briefings")}>Briefings</a></TopBar><div className="wp-page"><EmptyState icon="note" title="This briefing isn't here." body="It may have been a draft that was deleted." actions={<ButtonLink to="/vendors/briefings">All briefings</ButtonLink>} /></div></>;
-  if (b.state !== "draft") return <BriefingPage b={b} show={show} toast={toast} />; // shared: its own page (863:16685)
+  // shared: its own page (863:16685); ?edit=1 opens it in the builder (D161: a sent briefing can still change)
+  if (b.state !== "draft" && !new URLSearchParams(location.search).has("edit")) return <BriefingPage b={b} show={show} toast={toast} />;
   return <Builder key={b.buildId} mode={{ kind: "build", buildId: b.buildId, briefing: b }} />;
 }
 export function BriefingTemplateBuilder({ templateId }: { templateId: string }) {

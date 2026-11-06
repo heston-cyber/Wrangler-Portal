@@ -6,7 +6,7 @@ import { useAction, useMutation } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { Button, Card, DialogHeader, TextArea } from "../../ui/wp";
+import { Button, Card, Checkbox, DialogHeader, TextArea } from "../../ui/wp";
 import { Icon } from "../../ui/Icon";
 import { Modal } from "../../ui/kit";
 import { Sep, TopBar } from "../../shell/Shell";
@@ -192,8 +192,8 @@ export function BriefingPage({ b, show, toast }: { b: BriefingInfo; show: (m: st
       <div className="wp-page bf-page">
         <header className="wp-pagehead">
           <div className="txt"><span className="wp-eyebrow">Briefing{b.project ? ` · ${b.project.label}` : ""}</span><h1 className="wp-h2">{b.kindName}.</h1>
-            <p className="wp-body">{[b.title, b.dates, b.sentAt ? `shared ${day(b.sentAt)}` : null].filter(Boolean).join(" · ")}</p></div>
-          <div className="actions"><Button variant="primary" disabled={b.link.off} title={b.link.off ? "Turn the link back on first" : undefined} onClick={() => setSharing(true)}>Share</Button></div>
+            <p className="wp-body">{[b.title, b.dates, b.sentAt ? `shared ${day(b.sentAt)}` : null, b.editedAt ? `updated ${day(b.editedAt)}` : null].filter(Boolean).join(" · ")}</p></div>
+          <div className="actions"><ButtonLinkEdit briefingId={b._id} changed={b.changed} /><Button variant="primary" disabled={b.link.off} title={b.link.off ? "Turn the link back on first" : undefined} onClick={() => setSharing(true)}>Share</Button></div>
         </header>
         {b.link.off ? <Banner tone="neutral" icon="info" title="The link is turned off." text="No one can open the briefing, including the people it was emailed to. Turn it back on any time; the same links work again." />
           : <Banner tone="neutral" icon="info" title={summary || "Shared"} text="Saving never sends anything. A copied link works for whoever has it; opens are counted, not named." />}
@@ -223,4 +223,43 @@ export function BriefingPage({ b, show, toast }: { b: BriefingInfo; show: (m: st
       {toast}
     </>
   );
+}
+
+/** D161 (Heston, Nov 6; built without frames, in Share's layout): put the edited briefing behind every link. Asks each
+ *  time whether to email the people it was sent to (off by default); "I've read it" stays as it was. */
+export function UpdateBriefing({ b, makePdf, onClose, show }: { b: BriefingInfo; makePdf: () => Promise<Blob>; onClose: () => void; show: (m: string) => void }) {
+  const update = useAction(api.briefings.update);
+  const uploadUrl = useMutation(api.builder.uploadUrl);
+  const [notify, setNotify] = useState(false);
+  const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
+  const n = b.emailable;
+  const go = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const blob = await makePdf();
+      const storageId = await uploadToStorage(await uploadUrl({}), new File([blob], `${b.title}.pdf`, { type: "application/pdf" }));
+      const r = await update({ briefingId: b._id, storageId, notify: notify && n > 0 });
+      show(r.emailed ? `Updated. ${plural(r.emailed, "person was", "people were")} emailed.` : r.held ? "Updated. The emails were held (email sending is limited on this site)." : "Updated. Every link shows the new version.");
+      onClose();
+    } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
+  };
+  return (
+    <Modal onClose={onClose} label="Update the link" width={520}>
+      <div className="crm-dialog bf-share">
+        <DialogHeader eyebrow={`Update · ${b.kindName}`} title="Update the link?" body={`Everyone's link${b.link.copied ? ", the copied link" : ""} and the vendor portal show this version from now on. The PDF they had before is replaced.${b.link.off ? " The link is turned off, so nobody can open it until you turn it back on." : ""}`} onClose={onClose} />
+        {n > 0 && !b.link.off && <Checkbox checked={notify} onChange={setNotify} label={`Email the ${plural(n, "person", "people")} it was sent to that it changed`} hint="Off: nobody is emailed; they see the new version next time they open it." />}
+        <p className="wp-small secondary">Anyone who marked it read stays marked read.</p>
+        {err && <p className="error" role="alert">{err}</p>}
+        <div className="dfoot">
+          <button className="btn ghost" type="button" onClick={onClose}>Cancel</button>
+          <Button variant="primary" loading={busy} onClick={() => void go()}>Update the link</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** D161: a sent briefing opens in the builder to edit; "Update the link" there puts the change live. */
+function ButtonLinkEdit({ briefingId, changed }: { briefingId: string; changed: boolean }) {
+  return <a className="btn" {...linkProps(`/vendors/briefings/${briefingId}?edit=1`)}>{changed ? "Edit · not on the link yet" : "Edit"}</a>;
 }
