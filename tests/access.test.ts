@@ -170,6 +170,7 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "briefings.copy": PRODUCTION,
     "briefings.setLinkOff": PRODUCTION,
     "briefings.share": PRODUCTION,
+    "briefings.update": PRODUCTION, // D161: update a sent briefing's link
     "briefs.settings": PROJECTS,
     "briefs.saveSettings": PROJECTS,
     "briefs.resetSettings": PROJECTS,

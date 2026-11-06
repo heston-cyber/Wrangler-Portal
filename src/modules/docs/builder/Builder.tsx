@@ -34,7 +34,7 @@ import { Icon } from "../../../ui/Icon";
 import { Button, IconButton, SkeletonRows, EmptyState, ButtonLink, StatusChip as Chip, Checkbox, DialogHeader, TextArea } from "../../../ui/wp";
 import { proposalProblems } from "../../../../convex/lib/wsProposal";
 import { briefingProblems } from "../../../../convex/lib/wsBriefing";
-import { BriefingPanel, ShareBriefing, type BriefingInfo } from "../../vendors/BriefingShare";
+import { BriefingPanel, ShareBriefing, UpdateBriefing, type BriefingInfo } from "../../vendors/BriefingShare";
 import { OfferPeopleCard, SendOfferDialog } from "../../payments/SendOffer";
 import { CALL_BLOCKS, bakeWeather, blockCard, callSheetProblems, isCallAtom, shownWeather, weatherOf } from "../../../../convex/lib/callSheet";
 import { PeoplePicker, SendSheet, SendUpdate, type CallSheetInfo } from "../../production/callSheetParts";
@@ -91,7 +91,8 @@ export default function Builder({ mode }: { mode: Mode }) {
   const isCall = !!call || (mode.kind === "template" && !!mode.callSheet);
   const isGuide = mode.kind === "template" && !!mode.guide; // Phase 5d step 4: a Help guide, edited like any page
   const side = isProp || isBrief || isCall || isGuide; // never signed: no parties or signature blocks, no clause library
-  const locked = (!!prop && !P_OPEN.has(prop.status)) || (!!brief && brief.state !== "draft");
+  const locked = !!prop && !P_OPEN.has(prop.status); // D161 (Nov 6): a sent briefing stays editable ("Update the link")
+  const briefSent = !!brief && brief.state !== "draft";
   const build = useQuery(api.builder.getBuild, mode.kind === "build" ? { buildId: mode.buildId } : "skip");
   const tpl = useQuery(api.builder.getTemplate, mode.kind === "template" ? { templateId: mode.templateId } : "skip");
   const profile = useQuery(api.builder.getProfile);
@@ -116,6 +117,7 @@ export default function Builder({ mode }: { mode: Mode }) {
   const [toast, show] = useToast();
   const [sending, setSending] = useState(false);
   const [askBrief, setAskBrief] = useState(false); // D147: the Share dialog (Send, Copy link, Download PDF)
+  const [updatingBrief, setUpdatingBrief] = useState(false); // D161: Update the link
   const [contracting, setContracting] = useState(false);
   const [csDialog, setCsDialog] = useState<"send" | "update" | null>(null);
 
@@ -479,7 +481,7 @@ export default function Builder({ mode }: { mode: Mode }) {
           <button className="icon-btn sm" aria-label="Undo" title={`Undo (${mac ? "⌘Z" : "Ctrl+Z"})`} disabled={!hist.current.past.length} onClick={() => step("undo")}><Icon name="arrow-left" size={18} /></button>
           <button className="icon-btn sm" aria-label="Redo" title={`Redo (${mac ? "⇧⌘Z" : "Ctrl+Shift+Z"})`} disabled={!hist.current.future.length} onClick={() => step("redo")}><Icon name="arrow-right" size={18} /></button>
         </span>
-        {brief && locked ? <span className="ws-save hide-sm saved"><Icon name="lock" size={14} /> Sent {longDay(brief.sentAt ?? Date.now()).replace(/, \d{4}$/, "")}{brief.readAt ? ` · Read ${longDay(brief.readAt).replace(/, \d{4}$/, "")}` : ""}</span>
+        {briefSent && brief.changed && saveState !== "saving" ? <span className="ws-save hide-sm saved"><Icon name="alert" size={14} /> Saved · not on the link yet</span>
           : locked ? <span className="ws-save hide-sm saved"><Icon name="lock" size={14} /> Locked · {P_CHIP[prop!.status]?.text.toLowerCase()}</span>
           : <span className={`ws-save hide-sm ${saveState}`}>{saveState === "saving" ? <><Spinner /> Saving</> : saveState === "error" ? <><Icon name="alert" size={14} /> Not saved</> : <><Icon name="check" size={14} plain /> Saved</>}</span>}
         {prop && <span className="hide-sm"><ProposalChip status={prop.status} /></span>}
@@ -490,9 +492,12 @@ export default function Builder({ mode }: { mode: Mode }) {
           {call.status === "sent" && <ButtonLink variant="ghost" size="sm" className="hide-sm" to={`/production/call-sheets/${call._id}`} iconEnd={false}>Who opened it</ButtonLink>}
           <Button variant="primary" size="sm" onClick={onAskCallSheet}>{call.status === "sent" ? "Send an update" : "Send call sheet"}</Button>
         </> : brief ? <>
-          {!locked && <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setAsTemplate(true)}>Save as briefing template</Button>}
-          {!locked ? <Button variant="primary" size="sm" onClick={onAskBriefing}>Share</Button>
-            : <Button variant="ghost" size="sm" className="hide-sm" loading={busy === "copy"} onClick={() => void onCopy()}>Make a copy</Button>}
+          {!briefSent && <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setAsTemplate(true)}>Save as briefing template</Button>}
+          {!briefSent ? <Button variant="primary" size="sm" onClick={onAskBriefing}>Share</Button>
+            : <>
+              <Button variant="ghost" size="sm" className="hide-sm" loading={busy === "copy"} onClick={() => void onCopy()}>Make a copy</Button>
+              <Button variant={brief.changed ? "primary" : "secondary"} size="sm" onClick={() => { const p = briefingProblems(doc); if (p.length) { setProblems(p); setTab("details"); show(p[0]); return; } setUpdatingBrief(true); }}>Update the link</Button>
+            </>}
         </> : prop ? <>
           {!locked && <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setAsTemplate(true)}>Save as proposal template</Button>}
           {!locked ? <Button variant="primary" size="sm" disabled={prop.status === "waiting"} title={prop.status === "waiting" ? "Claude is still drafting it" : undefined} onClick={onAskSend}>Send</Button>
@@ -565,7 +570,7 @@ export default function Builder({ mode }: { mode: Mode }) {
               {INSERT.filter((x) => (isCall ? !CALL_HIDES.has(x.kind) : !isCallAtom(x.kind)) && (!side || (x.kind !== "parties" && x.kind !== "signatures"))).map((x) => <button key={x.kind} className="wsb-insert" draggable onDragStart={(e) => dragNodes(e, newNodes(x.kind))} onDragEnd={() => endInsertDrag(editor)} {...touch.item(() => newNodes(x.kind), INSERT_LABEL[x.kind])} onClick={() => { if (touch.justDropped()) return; if (editor) insertKind(editor, x.kind); if (phone) setSheet(false); }}>{x.icon}<span><b>{INSERT_LABEL[x.kind]}</b><span className="secondary">{x.hint}</span></span></button>)}
               {prop && prop.status !== "draft" && prop.status !== "waiting" && prop.status !== "ready" && <ProposalPeople p={prop} show={show} />}
               {prop && <PitchDeck p={prop} show={show} />}
-              {brief && !locked && <BriefingPanel b={brief} show={show} onProject={(label) => setDoc((d) => ({ ...d, fields: { ...d.fields, project: label } }))} />}
+              {brief && !briefSent && <BriefingPanel b={brief} show={show} onProject={(label) => setDoc((d) => ({ ...d, fields: { ...d.fields, project: label } }))} />}
               {isCall && <BlockLibrary onInsert={(b) => { if (touch.justDropped()) return; if (editor) insertNodes(editor, [blockCard(b)]); if (phone) setSheet(false); }} onDragStart={(e, b) => dragNodes(e, [blockCard(b)])} onDragEnd={() => endInsertDrag(editor)} touchProps={(b) => touch.item(() => [blockCard(b)], b.title)} />}
               {!side && <ClauseLibrary clauses={clauses} onInsert={(c) => { if (touch.justDropped()) return; if (editor) insertNodes(editor, [clauseSection(c)]); if (phone) setSheet(false); }} onDragStart={(e, c) => dragNodes(e, [clauseSection(c)])} onDragEnd={() => endInsertDrag(editor)} touchProps={(c) => touch.item(() => [clauseSection(c)], c.title)} />}
             </div>
@@ -614,7 +619,7 @@ export default function Builder({ mode }: { mode: Mode }) {
       {preview && (
         <Modal onClose={() => { URL.revokeObjectURL(preview); setPreview(null); }} label="PDF preview" width={900}>
           <div className="wsb-preview">
-            <div className="dhead"><h2 className="headline">Preview <span className="rest">{isProp ? (locked ? "This page now; the client has the PDF that was sent." : "Exactly what the client will read.") : isBrief ? (locked ? "This page now; the vendor has the PDF that was sent." : "Exactly what the vendor will read.") : isCall ? "A PDF of this page. Everyone on it reads it in the portal." : "Exactly what will be signed (the signature spots are invisible markers)."}</span></h2><button className="icon-btn" onClick={() => { URL.revokeObjectURL(preview); setPreview(null); }} aria-label="Close"><X size={18} /></button></div>
+            <div className="dhead"><h2 className="headline">Preview <span className="rest">{isProp ? (locked ? "This page now; the client has the PDF that was sent." : "Exactly what the client will read.") : isBrief ? (briefSent && brief?.changed ? "This page now. Update the link so everyone reads it." : "Exactly what the vendor will read.") : isCall ? "A PDF of this page. Everyone on it reads it in the portal." : "Exactly what will be signed (the signature spots are invisible markers)."}</span></h2><button className="icon-btn" onClick={() => { URL.revokeObjectURL(preview); setPreview(null); }} aria-label="Close"><X size={18} /></button></div>
             <iframe title="PDF preview" src={preview} />
             <a className="btn ghost sm" href={preview} download={`${doc.title}.pdf`}>Download this preview</a>
           </div>
@@ -625,6 +630,7 @@ export default function Builder({ mode }: { mode: Mode }) {
       }} />}
       {csDialog === "send" && call && <SendSheet cs={call} before={saveNow} onClose={() => setCsDialog(null)} show={show} onSent={() => navigate(`/production/call-sheets/${call._id}`)} />}
       {csDialog === "update" && call && <SendUpdate cs={call} before={saveNow} onClose={() => setCsDialog(null)} show={show} />}
+      {updatingBrief && brief && <UpdateBriefing b={brief} makePdf={briefPdf} onClose={() => setUpdatingBrief(false)} show={show} />}
       {askBrief && brief && <ShareBriefing b={brief} initial={brief.sendTo} makePdf={briefPdf} onClose={() => setAskBrief(false)} show={show} />}
       {sending && prop && <SendProposal p={prop} doc={doc} onClose={() => setSending(false)} onSend={onSend} onPdf={async () => { const blob = await render(); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `${prop.number} ${doc.title}.pdf`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 30_000); }} />}
       {contracting && prop && <StartContract p={prop} doc={doc} onClose={() => setContracting(false)} onStart={onStartContract} />}

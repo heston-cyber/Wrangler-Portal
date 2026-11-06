@@ -972,6 +972,9 @@ export default defineSchema({
     linkOff: v.optional(v.boolean()),                   // Q91 (a)(b): off stops every link, emailed ones too; can be turned back on
     linkOpens: v.optional(v.number()),
     linkReads: v.optional(v.number()),                  // "I've read it" pressed on the copied link (no name)
+    // D161 (Heston, Nov 6): a sent briefing can be edited; "Update the link" puts the new PDF behind every link.
+    editedAt: v.optional(v.number()),                   // when the live copy was last updated (shown as "Updated …")
+    shown: v.optional(v.object({ title: v.string(), dates: v.optional(v.string()), buildAt: v.optional(v.number()) })), // the live copy's title, dates, and the edit it was made from
     history: v.array(v.object({ kind: v.string(), at: v.number(), by: v.optional(v.string()), detail: v.optional(v.string()) })),
     createdAt: v.number(),
     updatedAt: v.number(),

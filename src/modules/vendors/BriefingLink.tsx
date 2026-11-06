@@ -43,7 +43,8 @@ export default function BriefingLink({ token }: { token: string }) {
         <a className="btn sm" href={briefingPdfUrl(token, true)} download>Download PDF</a></div>
       <header className="wp-pagehead inv-head">
         <div className="txt"><span className="wp-eyebrow">Briefing{p.project ? ` · ${p.project}` : ""}</span><h1 className="wp-h2">{p.kind}.</h1>
-          <p className="wp-body">{[p.title, p.dates, p.business.owner ? `from ${p.business.owner}` : null].filter(Boolean).join(" · ")}</p></div>
+          <p className="wp-body">{[p.title, p.dates, p.business.owner ? `from ${p.business.owner}` : null].filter(Boolean).join(" · ")}</p>
+          {p.updatedAt && <p className="wp-small secondary">Updated {longMs(p.updatedAt)}, {new Date(p.updatedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</p>}</div>
       </header>
       <div className="q-cols">
         <div className="col"><PdfPages url={briefingPdfUrl(token)} title={p.title} /></div>
