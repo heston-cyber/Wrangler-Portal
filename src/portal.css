@@ -3287,3 +3287,15 @@ html[data-glass="gl"] [data-gl] { background: transparent !important; backdrop-f
   .yd-notice .t { flex-basis: calc(100% - 34px); }
   .yd-notice .btn { margin-left: 34px; }
 }
+
+/* D160 (Nov 6, built without frames): CC on a contract: the Send dialog's rows and the Copied list on the document */
+.ws-cc { display: grid; gap: 8px; }
+.ws-ccrow { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.ws-cc .btn { justify-self: start; }
+.ws-copies { display: grid; gap: 8px; padding-top: 12px; margin-top: 4px; border-top: 1px solid var(--border-hairline); }
+@media (max-width: 520px) { .ws-ccrow { grid-template-columns: minmax(0, 1fr) auto; } .ws-ccrow input:nth-child(2) { grid-column: 1; } .ws-ccrow button { grid-row: 1; grid-column: 2; } }
+.ws-copysigners { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.ws-copysigners li { display: flex; gap: 10px; align-items: flex-start; }
+.ws-copysigners li > .wp-icon { flex: 0 0 auto; margin-top: 2px; color: var(--accent); }
+.ws-copysigners span { display: grid; gap: 2px; font-size: var(--fs-text-small); color: var(--text-primary); }
+.ws-copysigners small { color: var(--text-muted); font-size: var(--fs-text-small); }

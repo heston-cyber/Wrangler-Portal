@@ -29,7 +29,7 @@ export function ClaudeRequests({ documentId, label }: { documentId: Id<"wsDocume
         <div key={r._id} className="ws-banner ws-claudereq" role="alert">
           <Bot size={16} />
           <span className="ws-claudereq-text">
-            <b>Claude asks to {VERB[r.what]} {label}</b> (version {r.versionNumber}{r.what === "send" && r.expiresInDays ? `, links for ${r.expiresInDays} days` : ""}{r.what === "cancel" && r.reason ? `, reason: "${r.reason}"` : ""}).
+            <b>Claude asks to {VERB[r.what]} {label}</b> (version {r.versionNumber}{r.what === "send" && r.expiresInDays ? `, links for ${r.expiresInDays} days` : ""}{r.what === "send" && r.cc.length ? `, copying ${r.cc.map((c) => c.name ? `${c.name} (${c.email})` : c.email).join(", ")}` : ""}{r.what === "cancel" && r.reason ? `, reason: "${r.reason}"` : ""}).
             <span className="secondary"> It says you told it: "{r.said}" · {central(r.createdAt)}. Nothing happens unless you confirm.</span>
           </span>
           <span className="ws-claudereq-btns">

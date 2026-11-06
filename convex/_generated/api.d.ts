@@ -113,6 +113,7 @@ import type * as waveforms from "../waveforms.js";
 import type * as sign from "../sign.js";
 import type * as signing from "../signing.js";
 import type * as lib_wsSigning from "../lib/wsSigning.js";
+import type * as signCopies from "../signCopies.js";
 import type * as signDone from "../signDone.js";
 import type * as wsMcp from "../wsMcp.js";
 import type * as builder from "../builder.js";
@@ -273,6 +274,7 @@ declare const fullApi: ApiFromModules<{
   sign: typeof sign;
   signing: typeof signing;
   "lib/wsSigning": typeof lib_wsSigning;
+  signCopies: typeof signCopies;
   signDone: typeof signDone;
   wsMcp: typeof wsMcp;
   builder: typeof builder;

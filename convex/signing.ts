@@ -436,7 +436,8 @@ export const emailData = internalQuery({
     if (!s) return null;
     const doc = (await ctx.db.get(s.documentId))!;
     const all = await ctx.db.query("wsSignings").withIndex("by_document", (q) => q.eq("documentId", s.documentId).eq("versionNumber", s.versionNumber)).collect();
-    return { s, doc, label: docLabel(doc.number), all: all.map((x) => ({ name: x.name, status: x.status })) };
+    const copied = (await ctx.db.query("wsCopies").withIndex("by_document", (q) => q.eq("documentId", s.documentId).eq("versionNumber", s.versionNumber)).collect()).map((c) => c.name ? `${c.name} (${c.email})` : c.email);
+    return { s, doc, label: docLabel(doc.number), all: all.map((x) => ({ name: x.name, status: x.status })), copied };
   },
 });
 
@@ -451,7 +452,7 @@ export const emailInvite = internalAction({
     const b = await ctx.runQuery(internal.business.mailBrand, { businessId: doc.businessId ?? null });
     const m = kind === "voided"
       ? cancelledMail(b, { name: s.name, title: doc.title, label, reason: doc.voidReason ?? null })
-      : pleaseSignMail(b, { name: s.name, title: doc.title, label, link: signLink(s.token), until, reminder: kind === "reminder" });
+      : pleaseSignMail(b, { name: s.name, title: doc.title, label, link: signLink(s.token), until, reminder: kind === "reminder", copied: d.copied }); // D160
     try {
       await sendEmail({ from: m.from, to: s.email, replyTo: b.replyTo, subject: m.subject, text: m.text, html: m.html, tag: `ws-${kind}` });
       await ctx.runMutation(internal.signing.markEmailed, { signingId, kind, ok: true });

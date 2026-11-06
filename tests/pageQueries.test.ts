@@ -215,6 +215,7 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "vendorPayouts.mine": { pages: ["owner"], args: () => "skip" }, // the vendor side (vendors only): Settings › Direct deposit
   "proposals.page": { pages: ["share"], args: () => ({ token: "x".repeat(24) }) }, // /p/<token>, no account (D73)
   "briefings.page": { pages: ["share"], args: () => ({ token: "x".repeat(24) }) }, // /b/<token>, no account (D147)
+  "signCopies.page": { pages: ["share"], args: () => ({ token: "x".repeat(24) }) }, // /c/<token> on the sign host, no account (D160)
   "brandKit.get": { pages: ["owner"], args: () => "skip" }, // Settings › Brand kit, a company's Brand kit tab (Phase 3b)
   "subscriptions.get": { pages: ["owner"], args: () => "skip" }, // a subscription
   "subscriptions.page": { pages: ["share"], args: () => ({ token: "not-a-real-token-xx" }) }, // /sub/<token>, the client's page (with or without an account)

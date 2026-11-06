@@ -116,7 +116,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     // D147 (Nov 4): briefings sent freely: Send to, Share (email 58 and Copy link), the link switch, and the no-login page
     "briefings.setDetails": { briefingId: ids.briefingId, projectId: null, sendTo: [{ email: "pat@example.com" }] }, "briefings.setLinkOff": { briefingId: ids.briefingId, off: true },
     "briefings.share": { briefingId: ids.briefingId, to: [{ email: "pat@example.com" }], copyLink: true },
-    "briefings.page": { token: "nope-nope-nope-nope" }, "briefings.opened": { token: "nope-nope-nope-nope" }, "briefings.markRead": { token: "nope-nope-nope-nope" },
+    "briefings.page": { token: "nope-nope-nope-nope" }, "briefings.opened": { token: "nope-nope-nope-nope" }, "briefings.markRead": { token: "nope-nope-nope-nope" }, "signCopies.page": { token: "nope-nope-nope-nope" }, "signCopies.opened": { token: "nope-nope-nope-nope" },
     "vendors.invite": { vendorId: ids.vendorId },
     "vendorPortal.businesses": {}, "vendorPortal.counts": { businessId: ids.businessId }, "vendorPortal.home": {}, "vendorPortal.bookings": {}, "vendorPortal.booking": { bookingId: "nope" },
     "vendorPortal.accept": { bookingId: ids.bookingId }, "vendorPortal.decline": { bookingId: ids.bookingId, reason: "Too far" }, "vendorPortal.briefings": {},

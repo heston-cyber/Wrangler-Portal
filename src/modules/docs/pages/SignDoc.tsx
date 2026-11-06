@@ -568,6 +568,7 @@ type SendData = Data;
 function SendDialog({ data, onClose, onSent }: { data: SendData; onClose: () => void; onSent: (n: number) => void }) {
   const send = useMutation(api.sign.send);
   const [days, setDays] = useState(30);
+  const [cc, setCc] = useState<Array<{ email: string; name: string }>>([]); // D160
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const v = data.version;
@@ -576,11 +577,14 @@ function SendDialog({ data, onClose, onSent }: { data: SendData; onClose: () => 
   const until = new Date(Date.now() + days * 86_400_000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   const go = async () => {
     setBusy(true); setErr(null);
-    try { const r = await send({ versionId: v._id, expiresInDays: days }); onSent(r.sent); }
+    try {
+      const list = cc.filter((c) => c.email.trim()).map((c) => ({ email: c.email.trim(), ...(c.name.trim() ? { name: c.name.trim() } : {}) }));
+      const r = await send({ versionId: v._id, expiresInDays: days, ...(list.length ? { cc: list } : {}) }); onSent(r.sent);
+    }
     catch (e) { setErr(errText(e)); setBusy(false); }
   };
   return (
-    <Modal onClose={onClose} label="Send for signature" width={480}>
+    <Modal onClose={onClose} label="Send for signature" width={560}>
       <div style={{ display: "grid", gap: 12 }}>
         <h2 className="headline">Send {data.doc.label} for signature?</h2>
         <ol className="ws-sendlist">
@@ -590,6 +594,18 @@ function SendDialog({ data, onClose, onSent }: { data: SendData; onClose: () => 
           ))}
         </ol>
         {ownerSigns && <p className="caption"><Icon name="sign" size={14} /> Your adopted signature goes on your boxes now, dated today.</p>}
+        {/* D160 (Nov 6, built without frames): people to copy. They read it from a link; they don't sign. */}
+        <div className="field ws-cc"><span className="ws-flabel">CC (optional)</span>
+          {cc.map((c, i) => (
+            <span key={i} className="ws-ccrow">
+              <input className="input sm" type="email" placeholder="Email" aria-label={`CC ${i + 1} email`} value={c.email} autoFocus={i === cc.length - 1 && !c.email} onChange={(e) => setCc(cc.map((x, j) => (j === i ? { ...x, email: e.target.value } : x)))} />
+              <input className="input sm" placeholder="Name (optional)" aria-label={`CC ${i + 1} name`} value={c.name} onChange={(e) => setCc(cc.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
+              <button type="button" className="icon-btn sm" aria-label={`Remove CC ${i + 1}`} onClick={() => setCc(cc.filter((_, j) => j !== i))}><Icon name="close" size={12} /></button>
+            </span>
+          ))}
+          {cc.length < 10 && <Button variant="ghost" size="sm" icon="plus" onClick={() => setCc([...cc, { email: "", name: "" }])}>Add someone to copy</Button>}
+          {cc.length > 0 && <span className="caption secondary">They get an email with a view-only link now, and the signed copy at the end. They don't sign. Signers see who's copied.</span>}
+        </div>
         <label className="field"><span className="ws-flabel">Links work for</span>
           <span style={{ display: "flex", gap: 8, alignItems: "center" }}><input className="input sm" type="number" min={1} max={90} value={days} onChange={(e) => setDays(Math.max(1, Math.min(90, Number(e.target.value) || 1)))} style={{ width: 80 }} /><span className="caption secondary">days, until {until}</span></span>
         </label>
@@ -652,6 +668,15 @@ function SigningCard({ data, show }: { data: Data; show: (m: string) => void }) 
           </div>
         );
       })}
+      {data.copies.length > 0 && (
+        <div className="ws-copies">
+          <span className="ws-flabel">Copied</span>
+          {data.copies.map((c) => (
+            <div key={c._id} className="ws-signerhead"><span><b>{c.name ?? c.email}</b>{c.name && <span className="ws-sub"> · {c.email}</span>}</span>
+              <span title={c.openedAt ? central(c.openedAt) : c.emailedAt ? central(c.emailedAt) : undefined}><Chip tone={c.emailError ? "danger" : c.openedAt ? "accent" : "neutral"}>{c.emailError ? "Email failed" : c.openedAt ? `Opened ${day(c.openedAt)}` : c.emailedAt ? "Emailed" : "Sending"}</Chip></span></div>
+          ))}
+        </div>
+      )}
       {live && (
         <div className="ws-btnrow end">
           <Button variant="ghost" size="sm" onClick={() => setExtending(true)}>{expired ? "Extend the links" : "Change expiry"}</Button>

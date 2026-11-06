@@ -76,6 +76,8 @@ const OPEN: Record<string, string> = {
   // D147 (Nov 4): a briefing's no-login link (/b/<token>, email 58). Tested in briefingsShare.test.ts.
   "briefings.page": "a briefing link: answers only for a shared briefing's own long random token (a person's own, or the copied link); a turned-off link answers Withdrawn with the business and title only",
   "briefings.opened": "the same link: counts an open of that briefing only; a missing token, a draft or a turned-off link does nothing; rate-limited",
+  "signCopies.page": "D160: a copied person's view-only link: answers only for a copy row's own long random token; a cancelled, replaced or expired document answers without its file (tested in signCc.test.ts)",
+  "signCopies.opened": "the same link: counts an open of that copy only; rate-limited",
   "briefings.markRead": "the same link: records \"I've read it\" for that briefing only (named only on a person's own link); a missing token is refused; rate-limited",
   "siteWatch.summary": "Phase 5c: open and urgent counts for the portal's admins (ALLOWED_EMAILS); null for anyone else, tested in siteWatch.test.ts",
   // Phase 5b step 4 (D127): a call-sheet guest's link (/guest/<token>, email 41), signed out.
