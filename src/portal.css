@@ -3190,3 +3190,16 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
   .wp-shell:not(.overlay):has(.wp-ptop .wp-chips) .topbar:has(+ .wp-page :is(.wp-pagehead, .wp-sethead)) .crumbs > a { display: none; }
   .wp-shell:not(.overlay):has(.wp-ptop .wp-chips) .topbar:has(+ .wp-page :is(.wp-pagehead, .wp-sethead)):not(:has(.right > *)) { display: none; }
 }
+/* ---------- the glass (Heston, Nov 5, 22:03): one glass for every card, Figma's Glass/effect ----------
+   The tiles take the cards' glass. Where the WebGL layer (src/lib/glass.ts) draws a card (data-gl), the card drops its CSS
+   blur: the refracted, frosted scene is under it. Floating glass keeps the blur. */
+.pov-stat { position: relative; isolation: isolate; border: 0; background: var(--glass-fill); backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass); }
+.pov-stat::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: .75px; pointer-events: none; z-index: 2;
+  background: var(--glass-edge);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+.wp-light > canvas.wp-glass { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+html[data-glass="gl"] [data-gl] { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+@media (prefers-reduced-transparency: reduce) { .pov-stat { backdrop-filter: none; -webkit-backdrop-filter: none; background-color: rgb(14, 12, 15); } }

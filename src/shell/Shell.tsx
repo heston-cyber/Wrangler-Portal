@@ -3,6 +3,7 @@
 // top bar and a glass tab bar is fixed at the bottom. The back office and the client side share it; the client side
 // wears its business's look (lib/brand.ts). Work surfaces (the review page) hide the sidebar and open it as a drawer.
 import { BellButton } from "../modules/bell/BellButton";
+import { Light } from "./Light";
 import { createContext, Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "convex/react";
 import { useSignOutAsk } from "./SignOut";
@@ -241,7 +242,7 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
   return (
     <Ctx.Provider value={ctx}>
       <div className={`wp-shell${overlay ? " overlay" : ""}${side !== "owner" ? " client-side" : ""}`}>
-        {light && !overlay && <div className={`wp-light ${side === "owner" ? "back" : "client"}`} aria-hidden><i style={{ backgroundImage: `url(${lightSrc})` }} /></div>}
+        {light && !overlay && <Light className={`wp-light ${side === "owner" ? "back" : "client"}`} src={lightSrc} />}
         {showSidebar && (
           <Sidebar me={me} side={side} items={nav.main} logo={logo} bizName={bizName} subtitle={subtitle} recent={recent} top={top}
             drawer={overlay && !!drawer} onClose={() => setDrawer(false)} onSearch={onSearch} bell={bell}
