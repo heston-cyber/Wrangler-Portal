@@ -100,6 +100,13 @@ type Shape = { el: HTMLElement; cv: HTMLCanvasElement | null; ctx: CanvasRenderi
 export function startGlass(host: HTMLElement): () => void {
   if (typeof window === "undefined") return () => {};
   if (matchMedia("(prefers-reduced-transparency: reduce)").matches) return () => {};
+  // A check for Heston's phone (Nov 6, the black lines): ?glass=css shows the plain CSS glass for this tab, ?glass=gl
+  // brings the WebGL glass back.
+  try {
+    const q = new URLSearchParams(location.search).get("glass");
+    if (q === "css" || q === "gl") sessionStorage.setItem("wp.glass", q);
+    if (sessionStorage.getItem("wp.glass") === "css") return () => {};
+  } catch { /* no storage: the glass as usual */ }
   // only the cactus scene (another business keeps its own light and the CSS glass)
   if (!/cactus/.test(getComputedStyle(host).backgroundImage)) return () => {};
   const glc = document.createElement("canvas");
