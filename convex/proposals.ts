@@ -6,6 +6,7 @@
 // and device, the same way quotes and signing record it. Nothing moves or converts on its own (D84): the Send dialog's
 // "Also move to Quoted" box is unticked by default, and an accepted proposal asks "Start the contract?" (D75).
 import { action, httpAction } from "./_generated/server";
+import { audit } from "./lib/audit";
 import { internalAction, internalMutation, internalQuery, mutation, query, focusBusiness } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
@@ -237,6 +238,7 @@ export const markSent = internalMutation({
     let p = await ctx.db.get(a.proposalId);
     const build = p ? await ctx.db.get(p.buildId) : null;
     if (!p || !build) throw new ConvexError("That proposal isn't here.");
+    await audit(ctx, { kind: "sent", text: `${a.resend ? "sent again" : "sent"} proposal ${p.number ?? ""}`.trim(), where: "Docs › Proposals", link: `/proposals/${p._id}` });
     const now = Date.now();
     if (a.resend && p.token && a.to === undefined && !a.copyLink) {
       if (p.status !== "sent") throw new ConvexError("Only an open proposal can be sent again.");

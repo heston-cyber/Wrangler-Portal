@@ -1,6 +1,7 @@
 // Client accounts (client side C1, Oct 23). Owner only: invite an email, see and revoke invites. An invited email
 // can then make an account on the sign-in page; everyone else is refused by auth.ts. Shares (C2) call invite too.
 import { type MutationCtx } from "./_generated/server";
+import { audit } from "./lib/audit";
 import { mutation, query } from "./lib/functions";
 import { clampRounds } from "./lib/rounds";
 import { v, ConvexError } from "convex/values";
@@ -42,6 +43,7 @@ export const invite = mutation({
   handler: async (ctx, a) => {
     await requireAll(ctx, "clients");
     const r = await ensureInvite(ctx, a.email, a.name);
+    if (!r.already) await audit(ctx, { kind: "sent", text: `invited ${a.email.trim().toLowerCase()} to the portal`, where: "Clients" });
     return { inviteId: r.inviteId, already: r.already };
   },
 });
@@ -181,6 +183,7 @@ export const invitePerson = mutation({
     const p = await ctx.db.get(personId);
     if (!p || p.removedAt) throw new ConvexError("That person isn't here.");
     const r = await ensureInvite(ctx, p.email, p.name);
+    await audit(ctx, { kind: "sent", text: `sent a portal invite to ${p.name ?? p.email}`, where: "Clients", link: `/clients/${p.clientId}` });
     // Phase 1 step 5: the invite email (one per press; a second press within a minute doesn't send another).
     await ctx.scheduler.runAfter(0, internal.emails.portalInvite, { email: r.email, sendKey: String(Math.floor(Date.now() / 60_000)) });
     return { already: r.already, emailed: true };

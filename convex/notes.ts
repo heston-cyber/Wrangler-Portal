@@ -1,5 +1,6 @@
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { internal } from "./_generated/api";
+import { audit } from "./lib/audit";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireFor, requireMe } from "./lib/access";
@@ -188,6 +189,8 @@ export const remove = mutation({
     for (const r of replies) await ctx.db.delete(r._id);
     if (note.voice) await ctx.storage.delete(note.voice.storageId).catch(() => null);
     await ctx.db.delete(noteId);
+    // Phase 5e: a note deleted from the back office (the owner or the team) goes in the Activity log.
+    if (access.kind === "owner") { const vid = await ctx.db.get(note.videoId); await audit(ctx, { kind: "deleted", text: `deleted a note${note.text ? `: "${note.text.slice(0, 60)}"` : ""}`, where: vid?.title ?? "Review", link: vid ? `/v/${vid._id}` : undefined }); }
   },
 });
 

@@ -1,6 +1,7 @@
 // Wrangler Portal, Phase 0.5d step 1 (Oct 28). Internal only: run by hand through the "Convex run" workflow.
 // Its output is counts only (the repo and its CI logs are public).
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
+import { audit } from "./lib/audit";
 import { v, ConvexError } from "convex/values";
 import { requireMe, requireSignedIn, requireAll, viewerOf } from "./lib/access";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -120,6 +121,8 @@ export const updateSettings = mutation({
     await requireAll(ctx, "settings");
     const id = ownBusiness(ctx);
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
+    { const changed = Object.keys(a).filter((k) => (a as Record<string, unknown>)[k] !== undefined);
+      await audit(ctx, { kind: "settings", text: `changed the business settings (${changed.join(", ").slice(0, 120) || "nothing"})`, where: "Settings › Business", link: "/settings/business" }); }
     const text = (k: string, val: string | null | undefined, max: number, required = false) => {
       if (val === undefined) return;
       const s = (val ?? "").trim().replace(/\s+/g, " ");
@@ -172,6 +175,7 @@ export const setLogo = mutation({
   args: { storageId: v.union(v.id("_storage"), v.null()), which: v.optional(v.union(v.literal("dark"), v.literal("light"))) },
   handler: async (ctx, { storageId, which }) => {
     await requireAll(ctx, "settings");
+    await audit(ctx, { kind: "settings", text: `changed the ${which === "light" ? "light " : ""}logo`, where: "Settings › Business", link: "/settings" });
     const id = ownBusiness(ctx);
     const b = await ctx.db.get(id);
     if (!b) throw new ConvexError("Not allowed.");

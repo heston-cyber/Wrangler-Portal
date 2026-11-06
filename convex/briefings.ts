@@ -13,6 +13,7 @@
 // only shared by copied link stays SENT. Vendors picked from the list also see it in their vendor portal (as before).
 // Owner only, except the three link functions at the bottom (a token is the key) and the PDF route.
 import { action, httpAction } from "./_generated/server";
+import { audit } from "./lib/audit";
 import { internalMutation, internalQuery, mutation, query, focusBusiness } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
@@ -308,6 +309,7 @@ export const shareStart = internalMutation({
     const to = await cleanTo(ctx, a.to);
     if (!to.length && !a.copyLink) return { error: "Add who it goes to (Send to)." };
     if (x.linkOff) return { error: "The link is turned off. Turn it back on first, so the new links work." };
+    await audit(ctx, { kind: "sent", text: `shared the briefing ${build.title ?? ""}${to.length ? ` with ${to.length} ${to.length === 1 ? "person" : "people"}` : " by link"}`.replace("  ", " "), where: "Vendors › Briefings", link: `/vendors/briefings/${x._id}` });
     const now = Date.now();
     // As proposals (review fix): a file that isn't a fresh PDF upload is never touched; one this caller just uploaded
     // for this briefing is theirs, so a refusal deletes it (returned, not thrown, so the delete isn't rolled back).

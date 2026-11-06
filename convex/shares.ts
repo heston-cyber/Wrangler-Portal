@@ -2,6 +2,7 @@
 // someone outside see it. Owner functions make and manage shares; `open` and `touch` are what a share link
 // calls (anyone, gated by lib/shareAccess). Share links look like review.wranglerportal.com/s/<token>.
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./lib/functions";
+import { audit } from "./lib/audit";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -90,6 +91,7 @@ export const create = mutation({
     });
     const added: string[] = [];
     if (a.who === "invited") for (const e of a.emails ?? []) if (e.trim()) added.push(await addPerson(ctx, shareId, e));
+    { const sh = (await ctx.db.get(shareId))!; await audit(ctx, { kind: "sent", text: `shared ${(await labelOf(ctx, sh)).label}${added.length ? ` with ${added.join(", ")}` : " by link"}`, where: "Review › Shares" }); }
     return { shareId, token, url: `${SITE()}/s/${token}`, added };
   },
 });
@@ -157,6 +159,7 @@ export const addMember = mutation({
     const s = await ctx.db.get(a.shareId);
     if (!s) throw new ConvexError("That share is gone.");
     if (s.who !== "invited") throw new ConvexError("This share is open to anyone with the link; there's no list to add to.");
+    await audit(ctx, { kind: "sent", text: `shared ${(await labelOf(ctx, s)).label} with ${a.email.trim().toLowerCase()}`, where: "Review › Shares" });
     return { email: await addPerson(ctx, a.shareId, a.email, a.name) };
   },
 });

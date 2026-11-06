@@ -1706,6 +1706,21 @@ export default defineSchema({
     userId: v.optional(v.id("users")),
   }).index("by_email", ["email"]).index("by_token", ["tokenHash"]).index("by_business", ["businessId"]),
 
+  // Phase 5e step 3 (Nov 5): Settings › Activity, the owner's log of who changed what (D146: new-device sign-ins, anything
+  // sent, signatures, marked paid, voids and deletions, settings, team changes, exports). Kept 1 year (crons.ts).
+  auditLog: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    at: v.number(),
+    kind: v.union(v.literal("sent"), v.literal("signed"), v.literal("paid"), v.literal("deleted"), v.literal("settings"), v.literal("signin"), v.literal("team"), v.literal("export")),
+    who: v.string(),            // "Heston Hill", "Maya Brooks", "Stripe"
+    role: v.string(),           // "Owner", "Producer", "Client", "System"
+    userId: v.optional(v.id("users")),
+    text: v.string(),           // after the name: "sent proposal WRNGLR-P-0007"
+    where: v.optional(v.string()), // "Harbor Coffee › Proposals"
+    link: v.optional(v.string()),  // the page that opens it
+    device: v.optional(v.string()), // "Mac · Chrome"
+  }).index("by_business_at", ["businessId", "at"]).index("by_at", ["at"]),
+
   // Phase 5e step 2 (Nov 5): Settings › Security. A signed-in browser (one per session): its label ("Mac · Chrome"), and a
   // random key the browser keeps, so a sign-in from a browser not seen before sends email 47 (owner and team).
   sessionDevices: defineTable({

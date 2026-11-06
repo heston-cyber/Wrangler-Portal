@@ -12,6 +12,7 @@
 //   - Readers: a client person (client side, /call-sheets/<id>) or a booked vendor (vendor side, vendorPortal.ts), each
 //     only for a sheet that was sent to them, on a project or booking they still have.
 import { focusBusiness, internalAction, internalMutation, internalQuery, mutation, query } from "./lib/functions";
+import { audit } from "./lib/audit";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -504,6 +505,7 @@ export const send = mutation({
     const left = (k: string) => (k === "crew" && !a.crew) || (k === "client" && !a.client) || (k === "guest" && !a.guests);
     const go = reachable(people).filter((x) => !left(x.kind));
     if (!go.length) throw new ConvexError("Tick at least one person who can open it.");
+    await audit(ctx, { kind: "sent", text: `sent the call sheet for ${sh.p.name} to ${go.length} ${go.length === 1 ? "person" : "people"}`, where: "Production › Call sheets", link: `/production/call-sheets/${cs._id}` });
     const now = Date.now();
     const ids = new Set(go.map((x) => x.id));
     const recipients: Person[] = people.filter((x) => x.addedAt || ids.has(x.id) || x.on).map(({ access: _a, note: _n, ...r }) => ({

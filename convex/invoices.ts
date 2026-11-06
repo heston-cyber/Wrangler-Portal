@@ -3,6 +3,7 @@
 // (its connected account), gives it the business's next number (D52) and finalizes it. Stripe holds the money from
 // then on; the Connect webhook keeps this copy in step. The client's page, Pay and the email: invoicePay.ts.
 import { action } from "./_generated/server";
+import { audit } from "./lib/audit";
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
@@ -332,6 +333,7 @@ export const recordSent = internalMutation({
     if (!i) return;
     const s = stripe as { accountId: string; customerId: string; invoice: StripeResult };
     const now = Date.now();
+    await audit(ctx, { kind: "sent", text: `sent invoice ${s.invoice.number ?? i.number ?? i.title}`, where: "Payments › Invoices", link: `/payments/invoices/${invoiceId}`, businessId: i.businessId });
     await ctx.db.patch(invoiceId, {
       status: s.invoice.status === "paid" ? "paid" : "open",
       stripe: { accountId: s.accountId, invoiceId: s.invoice.id, customerId: s.customerId, number: s.invoice.number ?? i.number, hostedUrl: s.invoice.hosted_invoice_url ?? undefined, pdfUrl: s.invoice.invoice_pdf ?? undefined, livemode: !!s.invoice.livemode },
@@ -577,6 +579,7 @@ export const voidInvoice = action({
     try {
       const inv = await stripeCall("POST", `invoices/${t.stripeId}/void`, { account: t.accountId });
       await ctx.runMutation(internal.invoices.applyStripeInvoice, { accountId: t.accountId, invoice: inv });
+      await ctx.runMutation(internal.auditLog.log, { kind: "deleted", text: `voided invoice ${inv.number ?? ""}`.trim(), where: "Payments › Invoices", link: `/payments/invoices/${invoiceId}` });
     } catch (e) {
       throw new ConvexError(e instanceof StripeError ? e.message : "Couldn't reach Stripe. Try again.");
     }
@@ -616,6 +619,7 @@ export const applyStripeInvoice = internalMutation({
     const stale = status !== incoming || paid !== Number(s.amount_paid ?? paid);
     const history = [...i.history];
     if (status === "paid" && i.status !== "paid") history.push({ kind: "paid", at: now, detail: "Paid in full" });
+    if (status === "paid" && i.status !== "paid") await audit(ctx, { kind: "paid", text: `paid invoice ${s.number ?? i.number ?? i.title}`, where: "Payments › Invoices", link: `/payments/invoices/${i._id}`, by: { name: i.billTo?.name || "A client", role: "Client" }, businessId: i.businessId });
     else if (status === "open" && paid > i.amountPaidCents) history.push({ kind: "part_paid", at: now, detail: `$${((paid - i.amountPaidCents) / 100).toFixed(2)} paid` });
     if (status === "void" && i.status !== "void") history.push({ kind: "voided", at: now });
     if (status === "uncollectible" && i.status !== "uncollectible") history.push({ kind: "uncollectible", at: now });

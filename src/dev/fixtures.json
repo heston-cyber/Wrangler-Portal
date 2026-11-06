@@ -16371,6 +16371,105 @@
     }
    ],
    "pending": null
+  },
+  "auditLog.list": {
+   "rows": [
+    {
+     "_id": "kitaudit0000auditLog",
+     "at": 1793899280000,
+     "kind": "sent",
+     "who": "Heston Hill",
+     "role": "Owner",
+     "text": "sent proposal WRNGLR-P-0007",
+     "where": "Harbor Coffee \u203a Proposals",
+     "link": "/settings",
+     "device": "Mac \u00b7 Chrome"
+    },
+    {
+     "_id": "kitaudit0001auditLog",
+     "at": 1793895320000,
+     "kind": "signed",
+     "who": "Maya Brooks",
+     "role": "Signer",
+     "text": "signed the Service Agreement",
+     "where": "Docs \u203a Contracts",
+     "link": "/settings",
+     "device": null
+    },
+    {
+     "_id": "kitaudit0002auditLog",
+     "at": 1793890640000,
+     "kind": "paid",
+     "who": "Floor Trader",
+     "role": "Client",
+     "text": "paid invoice 0041",
+     "where": "Payments \u203a Invoices",
+     "link": "/settings",
+     "device": null
+    },
+    {
+     "_id": "kitaudit0003auditLog",
+     "at": 1793882000000,
+     "kind": "signin",
+     "who": "Riley Chen",
+     "role": "Producer",
+     "text": "signed in from a new device (Windows PC \u00b7 Edge)",
+     "where": "Settings \u203a Security",
+     "link": "/settings",
+     "device": "Windows PC \u00b7 Edge"
+    },
+    {
+     "_id": "kitaudit0004auditLog",
+     "at": 1793806400000,
+     "kind": "paid",
+     "who": "Dana Whitfield",
+     "role": "Bookkeeper",
+     "text": "approved a vendor invoice from Jordan Ellis",
+     "where": "Vendors \u203a Payments",
+     "link": "/settings",
+     "device": "Mac \u00b7 Safari"
+    },
+    {
+     "_id": "kitaudit0005auditLog",
+     "at": 1793802800000,
+     "kind": "settings",
+     "who": "Heston Hill",
+     "role": "Owner",
+     "text": "changed Pricing",
+     "where": "Settings \u203a Pricing",
+     "link": "/settings",
+     "device": "Mac \u00b7 Chrome"
+    },
+    {
+     "_id": "kitaudit0006auditLog",
+     "at": 1793788400000,
+     "kind": "deleted",
+     "who": "Sam Ortiz",
+     "role": "Editor",
+     "text": "deleted a note: \"Trim the open\"",
+     "where": "Spring spot",
+     "link": "/settings",
+     "device": "iPhone \u00b7 Safari"
+    }
+   ],
+   "counts": {
+    "all": 54,
+    "sent": 12,
+    "signed": 9,
+    "paid": 8,
+    "deleted": 2,
+    "settings": 5,
+    "team": 4,
+    "export": 2,
+    "signin": 12
+   },
+   "people": [
+    "Heston Hill",
+    "Riley Chen",
+    "Sam Ortiz",
+    "Dana Whitfield"
+   ],
+   "more": true
   }
  },
  "client": {

@@ -8,12 +8,13 @@ import { Icon, type IconName } from "../../ui/Icon";
 import { linkProps } from "../../lib/router";
 import { usePerms } from "../../lib/teamAccess";
 
-export type SectionKey = "business" | "team" | "security" | "payments" | "rates" | "brand" | "calendar" | "sitewatch" | "brief" | "tools" | "account" | "notifications" | "register" | "dropbox" | "connectors" | "sheet" | "clients" | "shares" | "help" | "calls";
+export type SectionKey = "business" | "team" | "security" | "activity" | "payments" | "rates" | "brand" | "calendar" | "sitewatch" | "brief" | "tools" | "account" | "notifications" | "register" | "dropbox" | "connectors" | "sheet" | "clients" | "shares" | "help" | "calls";
 
 export const SECTIONS: Array<{ key: SectionKey; label: string; icon: IconName }> = [
   { key: "business", label: "Business", icon: "users" },
   { key: "team", label: "Team", icon: "users" }, // Phase 5e (D146: after Business), the owner's only
   { key: "security", label: "Security", icon: "lock" }, // Phase 5e step 2 (D146: after Team): password, email, devices
+  { key: "activity", label: "Activity", icon: "activity" }, // Phase 5e step 3: who changed what (owner only, kept 1 year)
   { key: "payments", label: "Payments", icon: "invoice" },
   { key: "rates", label: "Pricing", icon: "activity" }, // Phase 3 (263:1382), renamed Pricing in 3b (D76)
   { key: "brand", label: "Brand kit", icon: "folder" }, // Phase 3b (708:1235)

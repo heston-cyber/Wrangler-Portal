@@ -7,6 +7,7 @@
 // Memberships are global rows (not filtered by business like business records), so every function that takes one checks
 // it belongs to the caller's business by hand (mine()).
 import { internalAction, internalQuery, mutation, query } from "./lib/functions";
+import { audit } from "./lib/audit";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -21,7 +22,7 @@ import { teamInviteMail } from "./lib/mails";
 import { deliverOnce } from "./invoiceReminders";
 import { allowedEmails } from "./lib/owners";
 import { bumpDay } from "./lib/rate";
-import { LOCKED_OFF, PERMS, ROLE_NAMES, SUGGESTED, TEAM_ROLES, cleanPerms, rolePerms, type Perm, type TeamRole } from "./lib/perms";
+import { LOCKED_OFF, PERMS, PERM_NAMES, ROLE_NAMES, SUGGESTED, TEAM_ROLES, cleanPerms, rolePerms, type Perm, type TeamRole } from "./lib/perms";
 
 const DAY = 86_400_000;
 export const INVITE_DAYS = 14; // D146
@@ -129,6 +130,7 @@ export const invite = mutation({
     const n = name?.trim().slice(0, 60) || undefined;
     const inviteId = await ctx.db.insert("teamInvites", { businessId: biz, email: e, ...(n ? { name: n } : {}), teamRole: role, tokenHash: await tokenHash(token), invitedBy: me.name, createdAt: now, sentAt: now, expiresAt: now + INVITE_DAYS * DAY });
     await ctx.scheduler.runAfter(0, internal.team.inviteMail, { inviteId, token, at: now });
+    await audit(ctx, { kind: "team", text: `invited ${e} as ${ROLE_NAMES[role]}`, where: "Settings › Team", link: "/settings/team" });
     return { ok: true as const, inviteId };
   },
 });
@@ -145,6 +147,7 @@ export const resendInvite = mutation({
     const token = randomToken(24);
     await ctx.db.patch(inviteId, { tokenHash: await tokenHash(token), sentAt: now, expiresAt: now + INVITE_DAYS * DAY });
     await ctx.scheduler.runAfter(0, internal.team.inviteMail, { inviteId, token, at: now });
+    await audit(ctx, { kind: "team", text: `sent the team invite to ${i.email} again`, where: "Settings › Team", link: "/settings/team" });
     return { ok: true as const };
   },
 });
@@ -157,6 +160,7 @@ export const cancelInvite = mutation({
     const i = await ctx.db.get(inviteId);
     if (!i || i.acceptedAt) throw new ConvexError("That invite isn't open any more.");
     if (!i.revokedAt) await ctx.db.patch(inviteId, { revokedAt: Date.now() });
+    await audit(ctx, { kind: "team", text: `cancelled the team invite to ${i.email}`, where: "Settings › Team", link: "/settings/team" });
     return { ok: true as const };
   },
 });
@@ -168,6 +172,7 @@ export const remove = mutation({
     await requireOwner(ctx);
     const m = await mine(ctx, membershipId);
     await ctx.db.patch(m._id, { revokedAt: Date.now() });
+    await audit(ctx, { kind: "team", text: `removed ${(await personOf(ctx, m)).name} from the team`, where: "Settings › Team", link: "/settings/team" });
     if (m.userId) {
       for (const r of await ctx.db.query("projectTeam").withIndex("by_user", (q) => q.eq("userId", m.userId!)).collect()) await ctx.db.delete(r._id);
       await endSessions(ctx, m.userId);
@@ -184,6 +189,7 @@ export const setRole = mutation({
     const m = await mine(ctx, membershipId);
     const b = await ctx.db.get(m.businessId);
     await ctx.db.patch(m._id, { teamRole: role, perms: rolePerms(b?.teamRoles, role) });
+    await audit(ctx, { kind: "team", text: `made ${(await personOf(ctx, m)).name} ${ROLE_NAMES[role] === "Editor" ? "an" : "a"} ${ROLE_NAMES[role]}`, where: "Settings › Team", link: "/settings/team" });
     // An Editor only sees assigned projects; a role that sees every project keeps its assignments (they show on the project).
     return { ok: true as const };
   },
@@ -197,6 +203,7 @@ export const setPerm = mutation({
     const m = await mine(ctx, membershipId);
     if (on && LOCKED_OFF[m.teamRole].includes(perm)) throw new ConvexError(lockedText(m.teamRole));
     await ctx.db.patch(m._id, { perms: { ...cleanPerms(m.teamRole, m.perms), [perm]: on } });
+    await audit(ctx, { kind: "team", text: `turned ${PERM_NAMES[perm]} ${on ? "on" : "off"} for ${(await personOf(ctx, m)).name}`, where: "Settings › Team", link: "/settings/team" });
     return { ok: true as const };
   },
 });
@@ -209,6 +216,7 @@ export const resetToRole = mutation({
     const m = await mine(ctx, membershipId);
     const b = await ctx.db.get(m.businessId);
     await ctx.db.patch(m._id, { perms: rolePerms(b?.teamRoles, m.teamRole) });
+    await audit(ctx, { kind: "team", text: `reset ${(await personOf(ctx, m)).name} to the ${ROLE_NAMES[m.teamRole]} switches`, where: "Settings › Team", link: "/settings/team" });
     return { ok: true as const };
   },
 });
@@ -230,6 +238,7 @@ export const setRolePerm = mutation({
     const roles = Object.fromEntries(TEAM_ROLES.map((r) => [r, rolePerms(b?.teamRoles, r)])) as Record<TeamRole, Record<Perm, boolean>>;
     roles[role] = cleanPerms(role, { ...roles[role], [perm]: on });
     await saveRoles(ctx, biz, roles, role);
+    await audit(ctx, { kind: "team", text: `turned ${PERM_NAMES[perm]} ${on ? "on" : "off"} for every ${ROLE_NAMES[role]}`, where: "Settings › Team", link: "/settings/team" });
     return { ok: true as const };
   },
 });
@@ -239,6 +248,7 @@ export const resetRoles = mutation({
   args: {},
   handler: async (ctx) => {
     await requireOwner(ctx);
+    await audit(ctx, { kind: "team", text: "reset every role to the suggested switches", where: "Settings › Team", link: "/settings/team" });
     await saveRoles(ctx, myBusiness(ctx), { producer: { ...SUGGESTED.producer }, editor: { ...SUGGESTED.editor }, bookkeeper: { ...SUGGESTED.bookkeeper } });
     return { ok: true as const };
   },
@@ -285,6 +295,7 @@ export const assign = mutation({
     for (const r of rows) if (!want.has(r.userId)) await ctx.db.delete(r._id);
     const have = new Set(rows.map((r) => r.userId as string));
     for (const id of want) if (!have.has(id)) await ctx.db.insert("projectTeam", { projectId, userId: id as Id<"users">, createdAt: Date.now() });
+    await audit(ctx, { kind: "team", text: `changed who is assigned to ${p.name}`, where: "Settings › Team", link: "/settings/team" });
     return { ok: true as const };
   },
 });

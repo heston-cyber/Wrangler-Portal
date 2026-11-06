@@ -12,6 +12,7 @@
 //     Notifications) and a Needs you row on the Dashboard until Done. A lead who books twice keeps one card.
 //   - Signed in as another business's owner, the page shows nothing of this one (the database guard), like other links.
 import { focusBusiness, internalAction, internalMutation, internalQuery, mutation, query, type Scope } from "./lib/functions";
+import { audit } from "./lib/audit";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -666,6 +667,7 @@ export const saveSettings = mutation({
   args: { lengthMin: v.number(), bufferMin: v.number(), aheadDays: v.number(), noticeHours: v.number(), hours: v.array(v.object({ on: v.boolean(), start: v.string(), end: v.string() })), calendarId: v.optional(v.string()) },
   handler: async (ctx, a) => {
     await requireAll(ctx, "settings");
+    await audit(ctx, { kind: "settings", text: "changed the booking-call settings", where: "Settings › Booking calls", link: "/settings" });
     let p: CallPrefs;
     try { p = checkPrefs(a); } catch (e) { throw new ConvexError((e as Error).message); }
     const conn = await connection(ctx);
@@ -686,6 +688,7 @@ export const setPaused = mutation({
   args: { paused: v.boolean() },
   handler: async (ctx, { paused }) => {
     await requireAll(ctx, "settings");
+    await audit(ctx, { kind: "settings", text: `turned the booking page ${paused ? "off" : "on"}`, where: "Settings › Booking calls", link: "/settings" });
     const row = await settingsRow(ctx);
     if (!row) throw new ConvexError("Save your booking settings first.");
     await ctx.db.patch(row._id, { paused, updatedAt: Date.now() });

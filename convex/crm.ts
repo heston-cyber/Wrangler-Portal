@@ -4,6 +4,7 @@
 // lead's company and contact are made at its first estimate), D67 (Claude drafts wait for Confirm), D68 (existing clients
 // get no cards; the board starts with new leads and estimates).
 import { action } from "./_generated/server";
+import { audit } from "./lib/audit";
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { expectedForProject } from "./lib/bookingRows";
@@ -64,6 +65,7 @@ export const saveRates = mutation({
   args: { rates: v.any() },
   handler: async (ctx, { rates: r }) => {
     const { b } = await ownerBiz(ctx);
+    await audit(ctx, { kind: "settings", text: "changed Pricing", where: "Settings › Pricing", link: "/settings" });
     const problems = ratesProblems(r as Rates);
     if (problems.length) throw new ConvexError(problems[0]);
     if (JSON.stringify(r).length > 20_000) throw new ConvexError("That's too many rates.");

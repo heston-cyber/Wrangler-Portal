@@ -156,6 +156,7 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "team.page": { pages: ["owner"], args: () => ({}) },
   // Phase 5e step 2: Settings › Security, and a client's and vendor's account page (their own account)
   "security.state": { pages: ["owner", "clientHome"], args: () => ({}) },
+  "auditLog.list": { pages: ["owner"], args: () => ({}) }, // Phase 5e step 3: Settings › Activity
   "team.member": { pages: ["owner"], args: () => "skip" },
   "team.projectPeople": { pages: ["owner"], args: () => "skip" },
   "team.joinPage": { pages: ["share", "signin"], args: () => ({ token: "x".repeat(32) }) }, // /team/join/<token>

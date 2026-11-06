@@ -35,6 +35,7 @@ import { NotificationList } from "./Notifications";
 import { errText } from "../docs/pages/common";
 import { TeamSection } from "../team/TeamSettings";
 import { SecuritySection } from "../security/Security";
+import { ActivityLog } from "../security/ActivityLog";
 
 // The connector lives on the Convex site host: <deployment>.convex.site/mcp
 const CONVEX = (import.meta.env.VITE_CONVEX_URL as string | undefined) || "https://handsome-hummingbird-11.convex.cloud";
@@ -112,6 +113,7 @@ export default function Settings({ me }: { me: { name: string | null; email: str
     <SettingsFrame section={key}>
       {key === "business" && <BusinessSection show={show} />}
       {key === "team" && <TeamSection path={path} show={show} />}
+      {key === "activity" && <ActivityLog />}
       {key === "security" && <SecuritySection show={show} head={<SetHead eyebrow="Settings" title="Security." sub="Your email is your username. Sign in with your email and a password." />} />}
       {key === "payments" && <PaymentsSettings show={show} />}
       {key === "rates" && <RatesSection show={show} />}

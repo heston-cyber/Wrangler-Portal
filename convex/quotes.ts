@@ -5,6 +5,7 @@
 // same way signing records a signer). Nothing converts or moves on its own (D84): the owner is asked to move the card
 // to Quoted, and, once accepted, whether to draft a contract, an invoice (deposit or full total, D87), both or neither.
 import { action, httpAction } from "./_generated/server";
+import { audit } from "./lib/audit";
 import { internalAction, internalMutation, internalQuery, mutation, query, focusBusiness } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
@@ -201,6 +202,7 @@ export const markSent = internalMutation({
     const { me } = await ownerBiz(ctx);
     const q0 = await ctx.db.get(a.quoteId);
     if (!q0) throw new ConvexError("That quote isn't here.");
+    await audit(ctx, { kind: "sent", text: `${a.resend ? "sent again" : "sent"} quote ${q0.number ?? q0.title ?? ""}`.trim(), where: "Payments › Quotes", link: `/payments/quotes/${q0._id}` });
     const now = Date.now();
     // Before D149: Send again goes to the contact on the quote's own link.
     if (a.resend && q0.token && a.to === undefined && !a.copyLink) {
@@ -293,6 +295,7 @@ export const voidQuote = mutation({
     const q = await ctx.db.get(quoteId);
     if (!q) throw new ConvexError("That quote isn't here.");
     if (q.status !== "sent") throw new ConvexError(q.status === "draft" ? "Delete a draft instead." : "Only an open quote can be voided.");
+    await audit(ctx, { kind: "deleted", text: `voided quote ${q.number}`, where: "Payments › Quotes", link: `/payments/quotes/${q._id}` });
     const now = Date.now();
     await ctx.db.patch(quoteId, { status: "void", voidedAt: now, updatedAt: now, history: [...q.history, { kind: "voided", at: now, by: by(me) }].slice(-60) });
     return null;

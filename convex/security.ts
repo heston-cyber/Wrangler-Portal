@@ -21,6 +21,7 @@ import { emailChangedMail, newDeviceMail, newEmailCodeMail, passwordChangedMail 
 import { deliverOnce } from "./invoiceReminders";
 import { allowedEmails } from "./lib/owners";
 import { SIGN_IN_TRIES } from "./auth";
+import { audit } from "./lib/audit";
 
 type Ctx = QueryCtx | MutationCtx;
 const CODE_MIN = 10;
@@ -65,13 +66,13 @@ export const state = query({
 
 // ---------- password ----------
 
-export const who = internalQuery({ args: {}, handler: async (ctx) => { const m = await whoAmI(ctx); return { userId: m.userId, email: m.email, name: m.name }; } });
+export const who = internalQuery({ args: {}, handler: async (ctx) => { const m = await whoAmI(ctx); return { userId: m.userId, email: m.email, name: m.name, kind: m.kind }; } });
 
 /** Change password: the current one (wrong ones count toward the 5 tries), then a new one of 10+ characters. Other devices are signed out; email 51. */
 export const changePassword = action({
   args: { current: v.string(), next: v.string() },
   handler: async (ctx, { current, next }): Promise<{ ok: true } | { error: "short" | "wrong" | "locked" | "same" }> => {
-    const me: { userId: Id<"users">; email: string; name: string | null } = await ctx.runQuery(internal.security.who, {});
+    const me: { userId: Id<"users">; email: string; name: string | null; kind: string } = await ctx.runQuery(internal.security.who, {});
     if (next.length < 10) return { error: "short" };
     if (next === current) return { error: "same" };
     try { await retrieveAccount(ctx, { provider: "password", account: { id: me.email, secret: current } }); }
@@ -81,6 +82,7 @@ export const changePassword = action({
     await invalidateSessions(ctx, { userId: me.userId, except: sessionId ? [sessionId] : [] });
     const at = Date.now();
     await ctx.runMutation(internal.security.passwordChanged, { userId: me.userId, at });
+    if (me.kind === "owner" || me.kind === "team") await ctx.runMutation(internal.auditLog.log, { kind: "signin", text: "changed their password", where: "Settings › Security" });
     const brand = await ctx.runQuery(internal.security.brand, {});
     await deliverOnce(ctx, `password-changed:${me.userId}:${at}`, "password_changed", me.email, passwordChangedMail(brand, { name: me.name, when: when(at), resetLink: `${SITE()}/?reset=${encodeURIComponent(me.email)}` }), brand.replyTo, null);
     return { ok: true };
@@ -164,6 +166,7 @@ export const confirmEmailChange = mutation({
     for (const m of await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", old)).collect()) await ctx.db.patch(m._id, { email: next });
     // The person's rows in each business (trusted code: every business, not only the caller's), and email 50 to the old address.
     await ctx.scheduler.runAfter(0, internal.security.moveContacts, { old, next });
+    if (me.kind === "owner" || me.kind === "team") await audit(ctx, { kind: "signin", text: `changed their sign-in email to ${next}`, where: "Settings › Security" });
     await ctx.scheduler.runAfter(0, internal.security.changedMail, { userId: me.userId, old, next, at: now });
     return { ok: true, email: next };
   },
@@ -231,6 +234,7 @@ export const seenDevice = mutation({
     if (here) { if (now - here.lastSeen > 60_000) await ctx.db.patch(here._id, { lastSeen: now }); return null; }
     const known = mine.some((r) => r.deviceKey === deviceKey);
     await ctx.db.insert("sessionDevices", { userId: me.userId, sessionId, deviceKey, label: lbl, firstSeen: now, lastSeen: now });
+    if (!known && mine.length > 0 && (me.kind === "owner" || me.kind === "team")) await audit(ctx, { kind: "signin", text: `signed in from a new device (${lbl})`, where: "Settings › Security" });
     if (!known && mine.length > 0 && (me.kind === "owner" || me.kind === "team")) await ctx.scheduler.runAfter(0, internal.security.deviceMail, { userId: me.userId, to: me.email, name: me.name, device: lbl, at: now });
     return null;
   },

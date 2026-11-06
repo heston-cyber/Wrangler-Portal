@@ -14,6 +14,7 @@
 // Nothing here trusts the page: every rule (consent first, every initial, the signing order, expiry, a voided or
 // replaced document) is checked again on the server, and every step is an event in the hash-chained trail.
 import { httpAction, type MutationCtx } from "./_generated/server";
+import { audit } from "./lib/audit";
 import { forBusiness, internalAction, internalMutation, internalQuery } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
@@ -388,6 +389,7 @@ export const sign = internalMutation({
     if (missing.length) return { error: `${missing.length} initial box${missing.length === 1 ? " is" : "es are"} still empty.` };
     if (!mine.some((b) => b.kind === "sign")) return { error: "This document has no signature box for you. Contact Wrangler Productions." };
     const now = Date.now();
+    await audit(ctx, { kind: "signed", text: `signed ${doc.title}`, where: "Docs › Contracts", link: `/sign/d/${doc._id}`, by: { name: s.adopted.name, role: "Signer" }, businessId: doc.businessId });
     await ctx.db.patch(s._id, { status: "signed", signedAt: now, signedDate: centralDate(now), signIp: ip, signUserAgent: userAgent, sessionHash: undefined, sessionExpiresAt: undefined });
     await ev(ctx, s, "signed", { ip, userAgent }, `Signed version ${ver.number} as "${s.adopted.name}" (${s.adopted.method} signature, ${(s.initialed ?? []).length} initial${(s.initialed ?? []).length === 1 ? "" : "s"}) after agreeing: "${SIGN_STATEMENT}" Lock hash ${ver.lockHash}. File SHA-256 ${ver.fileSha256}.`);
 

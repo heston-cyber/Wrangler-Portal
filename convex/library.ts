@@ -1,5 +1,6 @@
 // Projects, videos and versions: what the home page and the video page read.
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
+import { audit } from "./lib/audit";
 import { action } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
@@ -480,6 +481,7 @@ export const deleteVersion = mutation({
     const ver = await ctx.db.get(versionId);
     if (!ver) throw new ConvexError("That version no longer exists.");
     const stills = new Set<string>(), guids = new Set<string>();
+    { const vid = await ctx.db.get(ver.videoId); await audit(ctx, { kind: "deleted", text: `deleted v${ver.number} of ${vid?.title ?? "a video"}`, where: "Review" }); }
     await removeVersion(ctx, ver, `Its version (v${ver.number}) was deleted on the site.`, stills, guids);
     await ctx.db.patch(ver.videoId, { updatedAt: Date.now() });
     await scheduleCleanup(ctx, stills, guids);
@@ -493,6 +495,7 @@ export const deleteVideo = mutation({
   handler: async (ctx, { videoId }) => {
     await requireMe(ctx);
     if (!(await ctx.db.get(videoId))) throw new ConvexError("That video no longer exists.");
+    await audit(ctx, { kind: "deleted", text: `deleted the video ${(await ctx.db.get(videoId))!.title}`, where: "Review" });
     const versions = await removeVideoAndFiles(ctx, videoId);
     return { versions };
   },
@@ -505,6 +508,7 @@ export const deleteVideos = mutation({
     await requireMe(ctx);
     let deleted = 0;
     for (const id of videoIds.slice(0, 200)) if (await ctx.db.get(id)) { await removeVideoAndFiles(ctx, id); deleted++; }
+    if (deleted) await audit(ctx, { kind: "deleted", text: `deleted ${deleted} ${deleted === 1 ? "video" : "videos"}`, where: "Review" });
     return { deleted };
   },
 });
@@ -515,6 +519,7 @@ export const deleteProject = mutation({
   handler: async (ctx, { projectId }) => {
     await requireMe(ctx);
     if (!(await ctx.db.get(projectId))) throw new ConvexError("That project no longer exists.");
+    await audit(ctx, { kind: "deleted", text: `deleted the project ${(await ctx.db.get(projectId))!.name}`, where: "Projects" });
     const stills = new Set<string>(), guids = new Set<string>();
     const videos = await removeProject(ctx, projectId, stills, guids);
     await scheduleCleanup(ctx, stills, guids);
@@ -533,6 +538,7 @@ export const deleteClient = mutation({
     const projects = (await ctx.db.query("projects").collect()).filter((p) => (p.client ?? "").trim().toLowerCase() === c.toLowerCase());
     const made = (await ctx.db.query("clients").collect()).filter((x) => x.name.toLowerCase() === c.toLowerCase());
     if (!projects.length && !made.length) throw new ConvexError("There's no client by that name.");
+    await audit(ctx, { kind: "deleted", text: `deleted the client ${c} and its projects`, where: "Clients" });
     for (const x of made) await ctx.db.delete(x._id);
     const stills = new Set<string>(), guids = new Set<string>();
     let videos = 0;

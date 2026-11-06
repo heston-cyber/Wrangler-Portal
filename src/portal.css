@@ -3129,3 +3129,6 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
   .team-matrix { overflow-x: auto; }
   .team-matrix .team-mrow { min-width: 560px; }
 }
+/* Phase 5e step 3: Settings › Activity */
+.act-pills { gap: 8px; margin: 6px 0 14px; }
+.act-dl dd { text-align: left; }

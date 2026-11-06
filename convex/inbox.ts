@@ -6,6 +6,7 @@
 //   Hooks:  onVersionReady, onReply (Review), onSignInvite, onSigned (Sign). Called where those emails are sent.
 //           They only add Inbox rows; the emails themselves are unchanged until the one-email switch (task 10).
 import { isClientLogin } from "./lib/roles";
+import { audit } from "./lib/audit";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
@@ -317,6 +318,7 @@ export const sendNote = mutation({
     if (!client) throw new ConvexError("That client isn't here.");
     const biz = await businessOf(ctx, n);
     const audience = (await noteAudience(ctx, client)).filter((p) => p.access && (!n.to || n.to.includes(p.email)));
+    await audit(ctx, { kind: "sent", text: `sent the note "${n.title}"`, where: `${client.name} › Inbox`, link: `/sent/${noteId}` });
     if (!biz || !audience.length) throw new ConvexError(n.to ? "None of the people you picked has portal access yet." : `No one at ${client.name} has portal access yet. Invite someone first.`);
     // Phase 5 (D139): a testimonial request links to its form (the note's own page, /words/<note>).
     if (n.testimonialProjectId && (await ctx.db.get(n.testimonialProjectId))?.clientId !== n.clientId) throw new ConvexError(`The project this asks about isn't one of ${client.name}'s any more.`);

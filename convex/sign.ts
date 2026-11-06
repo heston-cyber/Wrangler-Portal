@@ -5,6 +5,7 @@
 // covered by one lock hash. Any change after that is a new version; earlier versions are kept as they were.
 // Sending, signing and completion are Phases S2–S3.
 import { action, type ActionCtx } from "./_generated/server";
+import { audit } from "./lib/audit";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { ConvexError, v } from "convex/values";
@@ -364,6 +365,7 @@ export const remove = mutation({
     const everSent = doc.sentAt || (await ctx.db.query("wsSignings").withIndex("by_document", (q) => q.eq("documentId", documentId)).first())
       || (await eventsOf(ctx, documentId)).some((e) => e.kind === "sent");
     if (everSent) throw new ConvexError("This document was sent for signing once, so it's kept for the record and can't be deleted.");
+    await audit(ctx, { kind: "deleted", text: `deleted the draft ${doc.title}`, where: "Docs › Contracts" });
     const versions = await ctx.db.query("wsVersions").withIndex("by_document", (q) => q.eq("documentId", documentId)).collect();
     const files = new Set<Id<"_storage">>(versions.map((x) => x.fileId));
     for (const x of versions) await ctx.db.delete(x._id);
@@ -463,6 +465,7 @@ async function sendCore(ctx: MutationCtx, versionId: Id<"wsVersions">, expiresIn
     await applyOwner(ctx, versionId); // refuses if anything changed since approval
     const clients = ver.signers.filter((x) => x.key !== OWNER_KEY).sort((a, b) => a.order - b.order);
     if (!clients.length) throw new ConvexError("There's no client signer.");
+    await audit(ctx, { kind: "sent", text: `sent ${doc.title} for signing`, where: `Docs › Contracts`, link: `/sign/d/${doc._id}`, businessId: doc.businessId });
     const first = Math.min(...clients.map((c) => c.order));
     const now = Date.now();
     for (const c of clients) {
@@ -506,6 +509,7 @@ async function voidCore(ctx: MutationCtx, documentId: Id<"wsDocuments">, reason:
     const now = Date.now();
     const why = reason?.trim().slice(0, 300) || undefined;
     await ctx.db.patch(doc._id, { status: "voided", voidedAt: now, voidReason: why, updatedAt: now });
+    await audit(ctx, { kind: "deleted", text: `cancelled ${doc.title}${why ? ` (${why})` : ""}`, where: "Docs › Contracts", link: `/sign/d/${doc._id}`, businessId: doc.businessId });
     await closeRequests(ctx, doc._id, ["approve", "send", "cancel"]);
     for (const x of signings) {
       if (x.status === "signed") continue;

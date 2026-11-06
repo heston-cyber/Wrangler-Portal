@@ -16,6 +16,7 @@ export const BUSINESS_TABLES = [
   "callSettings", "calls", // Phase 5d step 1 (Nov 4)
   "msgThreads", "messages", "msgReads", "msgUploads", // Phase 5d step 2 (Nov 4)
   "teamInvites", "projectTeam", // Phase 5e step 1 (Nov 5)
+  "auditLog", // Phase 5e step 3
 ] as readonly string[];
 
 export const GLOBAL_TABLES = [
