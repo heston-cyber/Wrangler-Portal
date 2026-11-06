@@ -41,11 +41,7 @@ const isGuide = (x: { kind?: string } | null | undefined) => x?.kind === "guide"
 const isSide = (x: { kind?: string } | null | undefined) => isProposal(x) || isBriefing(x) || isCallSheet(x) || isGuide(x);
 async function assertEditable(ctx: QueryCtx, b: { _id: Id<"wsBuilds">; kind?: string }) {
   if (isCallSheet(b)) return;
-  if (isBriefing(b)) {
-    const br = await ctx.db.query("briefings").withIndex("by_build", (q) => q.eq("buildId", b._id)).first();
-    if (br && br.status !== "draft") throw new ConvexError("This briefing has been sent, so it can't change. Make a copy to change it.");
-    return;
-  }
+  if (isBriefing(b)) return; // D161 (Heston, Nov 6): a sent briefing stays editable; "Update the link" puts the new copy live
   if (!isProposal(b)) return;
   const p = await ctx.db.query("proposals").withIndex("by_build", (q) => q.eq("buildId", b._id)).first();
   if (p && p.status !== "draft" && p.status !== "ready" && p.status !== "waiting") throw new ConvexError(`Proposal ${p.number} has been sent, so it can't change. Make a copy to change it.`);

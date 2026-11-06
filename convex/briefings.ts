@@ -26,7 +26,7 @@ import { STARTERS, briefingFields, briefingHeadings, briefingProblems, briefingS
 import { dateRange } from "./lib/bookings";
 import { label } from "./lib/bookingRows";
 import { mailBrandOf } from "./lib/mail";
-import { briefingLinkMail } from "./lib/mails";
+import { briefingLinkMail, briefingUpdatedMail } from "./lib/mails";
 import { deliverOnce } from "./invoiceReminders";
 import { SITE } from "./lib/site";
 import { randomToken } from "./lib/hash";
@@ -199,6 +199,9 @@ export const get = query({
       vendors, projects, who: await peopleOf(ctx, x),
       link: { copied: !!x.linkToken, url: x.linkToken ? linkOf(x.linkToken) : null, off: !!x.linkOff, opens: x.linkOpens ?? 0, reads: x.linkReads ?? 0 },
       pdfUrl: x.pdfId ? await ctx.storage.getUrl(x.pdfId) : null, history: x.history,
+      // D161: the live copy and whether the briefing changed after it
+      editedAt: x.editedAt ?? null, changed: x.status === "sent" && !!build && (x.shown?.buildAt !== undefined ? build.updatedAt !== x.shown.buildAt : build.updatedAt > (x.sentAt ?? 0) + 1000),
+      emailable: (await peopleOf(ctx, x)).length,
     };
   },
 });
@@ -325,7 +328,7 @@ export const shareStart = internalMutation({
       mayDrop = true;
       const problems = briefingProblems(docOf(build));
       if (problems.length) return refuse(problems[0]);
-      patch = { ...patch, status: "sent", pdfId: a.storageId, sentAt: now };
+      patch = { ...patch, status: "sent", pdfId: a.storageId, sentAt: now, shown: shownOf(build) };
       await ctx.db.patch(build._id, { renderedAt: now });
     }
     const sends: Array<{ recipientId: Id<"briefingRecipients">; email: string; name: string | null; token: string }> = [];
@@ -359,7 +362,7 @@ export const shareMail = internalQuery({
     const build = x ? await ctx.db.get(x.buildId) : null;
     if (!x || !build) return null;
     const p = x.projectId ? await ctx.db.get(x.projectId) : null;
-    return { kind: kindName(x), title: build.title, project: p ? label(p) : null, dates: fieldOf(build, "dates"), headings: briefingHeadings(pageOf(build.blocks)), brand: await mailBrandOf(ctx, x.businessId ?? null), businessId: x.businessId ?? null };
+    return { kind: kindName(x), title: x.shown?.title ?? build.title, project: p ? label(p) : null, dates: x.shown ? x.shown.dates ?? null : fieldOf(build, "dates"), headings: briefingHeadings(pageOf(build.blocks)), brand: await mailBrandOf(ctx, x.businessId ?? null), businessId: x.businessId ?? null };
   },
 });
 
@@ -396,6 +399,60 @@ export const share = action({
   },
 });
 
+// ---------- D161 (Heston, Nov 6): update a sent briefing ----------
+// Edits to a sent briefing save as you type (as a draft's do). "Update the link" makes the new PDF (in the browser, as
+// at first share) and puts it behind every link at once: emailed people's, the copied link and the vendor portal. The
+// old PDF goes. Heston's picks: asked each time whether to email everyone it was sent to (default off); "I've read
+// it" stays as it was; the page says "Updated {date}".
+
+const shownOf = (build: Doc<"wsBuilds">) => { const d = fieldOf(build, "dates"); return { title: build.title, ...(d ? { dates: d } : {}), buildAt: build.updatedAt }; };
+
+export const updateStart = internalMutation({
+  args: { briefingId: v.id("briefings"), storageId: v.id("_storage"), notify: v.boolean() },
+  handler: async (ctx, a): Promise<{ error?: string; at?: number; sends?: Array<{ recipientId: Id<"briefingRecipients">; email: string; name: string | null; token: string }> }> => {
+    const { me } = await ownerBiz(ctx);
+    const x = await ctx.db.get(a.briefingId);
+    const build = x ? await ctx.db.get(x.buildId) : null;
+    if (!x || !build) throw new ConvexError("That briefing isn't here.");
+    if (x.status !== "sent") return { error: "It hasn't been shared yet. Share it instead." };
+    const file = await ctx.db.system.get(a.storageId);
+    if (!file || !fresh(file) || (file.contentType && file.contentType !== "application/pdf") || file.size > MAX_PDF_BYTES) return { error: "The PDF didn't upload. Try again." };
+    if (await ctx.db.query("briefings").filter((q) => q.eq(q.field("pdfId"), a.storageId)).first()) return { error: "The PDF didn't upload. Try again." };
+    const problems = briefingProblems(docOf(build));
+    if (problems.length) { await ctx.storage.delete(a.storageId).catch(() => null); return { error: problems[0] }; }
+    const now = Date.now();
+    const old = x.pdfId;
+    const people = a.notify && !x.linkOff ? await recipientsOf(ctx, x._id) : [];
+    await ctx.db.patch(x._id, { pdfId: a.storageId, editedAt: now, updatedAt: now, shown: shownOf(build),
+      history: [...x.history, { kind: "edited", at: now, by: by(me), ...(people.length ? { detail: `emailed ${people.length} ${people.length === 1 ? "person" : "people"}` } : {}) }].slice(-60) });
+    await ctx.db.patch(build._id, { renderedAt: now });
+    if (old && old !== a.storageId) await ctx.storage.delete(old).catch(() => null);
+    for (const _ of people) await bump(ctx, "briefingSend", String(x.businessId ?? "default"));
+    return { at: now, sends: people.map((r) => ({ recipientId: r._id, email: r.email, name: r.name ?? null, token: r.token })) };
+  },
+});
+
+/** "Update the link": the new PDF goes live behind every link; optionally each emailed person hears it changed. */
+export const update = action({
+  args: { briefingId: v.id("briefings"), storageId: v.id("_storage"), notify: v.boolean() },
+  handler: async (ctx, a): Promise<{ emailed: number; held: number; failed: string[] }> => {
+    const s = await ctx.runMutation(internal.briefings.updateStart, a);
+    if (s.error !== undefined || !s.at) throw new ConvexError(s.error ?? "That didn't update. Try again.");
+    const out = { emailed: 0, held: 0, failed: [] as string[] };
+    if (!s.sends?.length) return out;
+    const d = await ctx.runQuery(internal.briefings.shareMail, { briefingId: a.briefingId });
+    if (!d) return out;
+    for (const r of s.sends) {
+      try {
+        const res = await deliverOnce(ctx, `briefing-update:${r.recipientId}:${s.at}`, "briefing", r.email, briefingUpdatedMail(d.brand, { name: r.name, kind: d.kind, title: d.title, dates: d.dates, link: linkOf(r.token) }), d.brand.replyTo, d.businessId);
+        if (res === "held") out.held++; else if (res !== "off") out.emailed++;
+      } catch { out.failed.push(r.email); }
+    }
+    if (out.failed.length) await ctx.runMutation(internal.briefings.note, { briefingId: a.briefingId, kind: "email_failed", detail: out.failed.join(", ") });
+    return out;
+  },
+});
+
 // ---------- the no-login page (/b/<token>, 863:17436): a token is the key ----------
 
 type Found = { x: Doc<"briefings">; r: Doc<"briefingRecipients"> | null };
@@ -425,10 +482,11 @@ export const page = query({
       name: b.name, owner: b.ownerName?.trim() || null, email: b.replyTo ?? null, accent: b.accent ?? null, background: b.background ?? null,
       logoUrl: b.logoFileId ? await ctx.storage.getUrl(b.logoFileId) : null,
     } : { name: "", owner: null, email: null, accent: null, background: null, logoUrl: null };
-    if (f.x.linkOff) return { withdrawn: true as const, business, title: build?.title ?? "Briefing" };
+    const title = f.x.shown?.title ?? build?.title ?? "Briefing"; // D161: the live copy's, not unsaved edits
+    if (f.x.linkOff) return { withdrawn: true as const, business, title };
     return {
-      withdrawn: false as const, business, title: build?.title ?? "Briefing", kind: kindName(f.x), project: p ? label(p) : null,
-      dates: fieldOf(build, "dates"), sentAt: f.x.sentAt ?? null, named: !!f.r, name: f.r?.name ?? null, readAt: f.r?.readAt ?? null,
+      withdrawn: false as const, business, title, kind: kindName(f.x), project: p ? label(p) : null,
+      dates: f.x.shown ? f.x.shown.dates ?? null : fieldOf(build, "dates"), sentAt: f.x.sentAt ?? null, updatedAt: f.x.editedAt ?? null, named: !!f.r, name: f.r?.name ?? null, readAt: f.r?.readAt ?? null,
     };
   },
 });
