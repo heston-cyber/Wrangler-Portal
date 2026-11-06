@@ -493,7 +493,7 @@ type EstResult = { priceCents: number; expenseCents: number; netCents: number; l
  *  the estimate's rates when the current ones no longer have it), the same rates the Log dialog checks against.
  *  Money logged as a cost counts as it is. The actual price is what was billed, less refunds, once the final invoice
  *  has gone out; until then the estimate's price, so a paid deposit doesn't read as a loss (build reading). */
-async function ledgerCalc(ctx: QueryCtx, p: Doc<"projects">, current: Rates) {
+export async function ledgerCalc(ctx: QueryCtx, p: Doc<"projects">, current: Rates) {
   const deal = await ctx.db.query("deals").withIndex("by_project", (q) => q.eq("projectId", p._id)).first();
   const est = (await ctx.db.query("estimates").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect()).sort((a, c) => c.updatedAt - a.updatedAt)[0]
     ?? (deal?.estimateId ? await ctx.db.get(deal.estimateId) : null);

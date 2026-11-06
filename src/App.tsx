@@ -42,6 +42,7 @@ const InvoicesPage = lazy(() => import("./modules/payments/InvoicesPage"));
 const InvoiceEditor = lazy(() => import("./modules/payments/InvoiceEditor"));
 const InvoiceDetail = lazy(() => import("./modules/payments/InvoiceDetail"));
 const PaymentsOverview = lazy(() => import("./modules/payments/PaymentsOverview"));
+const ReportsPage = lazy(() => import("./modules/payments/ReportsPage")); // Phase 5e step 5
 const PlansPage = lazy(() => import("./modules/payments/PlansPage"));
 // Phase 3: the CRM (Clients › Pipeline · Companies · Follow-ups), estimates and contacts.
 const Pipeline = lazy(() => import("./modules/crm/Pipeline"));
@@ -284,6 +285,7 @@ function SignedIn() {
   else if (/^\/payments\/invoices\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><InvoiceDetail key={id} invoiceId={id} /></Suspense>; }
   else if (/^\/payments\/invoices\/?$/.test(path)) page = <Suspense fallback={<Loading />}><InvoicesPage key={search} /></Suspense>;
   else if (/^\/payments\/?$/.test(path)) page = <Suspense fallback={<Loading />}><PaymentsOverview /></Suspense>;
+  else if (/^\/payments\/reports\/?$/.test(path)) page = <Suspense fallback={<Loading />}><ReportsPage /></Suspense>;
   else if (/^\/payments\/subscriptions\/?$/.test(path)) page = <Suspense fallback={<Loading />}><SubscriptionsPage /></Suspense>;
   else if (/^\/payments\/subscriptions\/new\/?$/.test(path)) page = <Suspense fallback={<Loading />}><StartSubscription key={search} clientId={params.get("client")} /></Suspense>;
   else if (/^\/payments\/subscriptions\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><SubscriptionDetail key={id} subscriptionId={id} /></Suspense>; }

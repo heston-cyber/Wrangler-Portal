@@ -11,6 +11,7 @@ import { Tile } from "../overviews/Tile";
 import { usePerms } from "../../lib/teamAccess";
 import { errText } from "../docs/pages/common";
 import { DevicesCard, SignInRows } from "../security/Security";
+import { OutstandingCard, RevenueYearCard } from "../payments/ReportsWidgets";
 
 const ROLE: Record<string, string> = { producer: "Producer", editor: "Editor", bookkeeper: "Bookkeeper" };
 const greeting = () => { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"; };
@@ -55,7 +56,8 @@ export function TeamHome({ name }: { name: string | null }) {
               {notes.slice(0, 6).map((v) => <ListRow key={v._id} lead={{ icon: "review" }} title={`Notes on ${v.title}${v.latest ? ` v${v.latest.number}` : ""}`} meta={`${v.openNotes} open ${v.openNotes === 1 ? "note" : "notes"}`} to={`/v/${v._id}`} chevron />)}
               {overdue.slice(0, 6).map((i) => <ListRow key={i._id} lead={{ icon: "invoice" }} title={`${i.title}${i.client ? ` · ${i.client.name}` : ""}`} meta={`Overdue · ${money(i.amountRemainingCents ?? 0)}`} to={`/payments/invoices/${i._id}`} chevron />)}
             </Card>
-          ) : <EmptyState title="Nothing waiting on you." body={role === "editor" ? "When you're assigned to a project, its cuts and notes show here." : "Shoots, notes and money that need you show here."} />}
+          ) : !perms.reports ? <EmptyState title="Nothing waiting on you." body={role === "editor" ? "When you're assigned to a project, its cuts and notes show here." : "Shoots, notes and money that need you show here."} /> : null}
+        {perms.reports && role !== "editor" && <div className="wp-homecols rp-teamwidgets"><RevenueYearCard /><OutstandingCard /></div>}
       </div>
     </>
   );

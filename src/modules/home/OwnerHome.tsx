@@ -17,6 +17,7 @@ import { Tile } from "../overviews/Tile";
 import { clock, shootDay } from "../projects/Shoots";
 import { FollowUpRow } from "../crm/common";
 import { DEFAULT_TOOLS, type Tools, type WidgetKey } from "../../../convex/lib/tools";
+import { OutstandingCard, RevenueYearCard } from "../payments/ReportsWidgets";
 
 // Phase 2b: monthly recurring and any past-due subscription (loaded with the Payments code).
 const Recurring = lazy(() => import("../payments/PaymentsOverview").then((m) => ({ default: m.Recurring })));
@@ -308,10 +309,13 @@ export default function OwnerHome() {
       </Card>
     ),
     recurring: <Suspense key="recurring" fallback={null}><Recurring withPastDue /></Suspense>,
+    // Phase 5e step 5 (829:24616): the Reports widgets
+    revenue_year: <RevenueYearCard key="revenue_year" />,
+    outstanding: <OutstandingCard key="outstanding" />,
   };
   // Each widget keeps its column from the approved Home (lists on the left, activity and money on the right); your
   // order decides the order inside each. With only one column's widgets on, they take the page.
-  const RIGHT = new Set<WidgetKey>(["live_edits", "money", "activity", "recurring"]);
+  const RIGHT = new Set<WidgetKey>(["live_edits", "money", "activity", "recurring", "outstanding"]);
   const cols: [React.ReactNode[], React.ReactNode[]] = [[], []];
   for (const id of on) if (card[id]) cols[RIGHT.has(id) ? 1 : 0].push(card[id]);
   if (!cols[0].length) { cols[0] = cols[1]; cols[1] = []; }

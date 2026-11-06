@@ -36,6 +36,7 @@ export function pathNeeds(path: string): Perm[] | "any" | "owner" {
   if (starts(path, "/clients", "/messages", "/sent")) return ["clients"];
   if (starts(path, "/sign/signature", "/sign/connector")) return "owner";
   if (starts(path, "/sign", "/proposals")) return ["docs"];
+  if (starts(path, "/payments/reports")) return ["reports"]; // Phase 5e step 5
   if (starts(path, "/payments")) return ["payments"];
   if (starts(path, "/settings/business", "/settings/brand", "/settings/calls")) return ["settings"];
   if (starts(path, "/settings")) return "owner";

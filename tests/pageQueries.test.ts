@@ -159,6 +159,9 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "auditLog.list": { pages: ["owner"], args: () => ({}) }, // Phase 5e step 3: Settings › Activity
   // Phase 5e step 4: the bell (every back-office page), its panel and See all, Settings › Notifications
   "bell.unread": { pages: ["owner"], args: () => ({}) },
+  // Phase 5e step 5: Payments › Reports and the Dashboard's Reports widgets
+  "reports.page": { pages: ["owner"], args: () => ({ from: "2026-01-01", to: "2026-11-06", tz: "America/Chicago" }) },
+  "reports.widgets": { pages: ["owner"], args: () => ({ tz: "America/Chicago" }) },
   "bell.feed": { pages: ["owner"], args: () => ({ limit: 30 }) },
   "bell.prefs": { pages: ["owner"], args: () => ({}) },
   "team.member": { pages: ["owner"], args: () => "skip" },

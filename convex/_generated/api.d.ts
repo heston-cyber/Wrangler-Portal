@@ -46,6 +46,7 @@ import type * as overviews from "../overviews.js";
 import type * as payments from "../payments.js";
 import type * as projects from "../projects.js";
 import type * as push from "../push.js";
+import type * as reports from "../reports.js";
 import type * as auth from "../auth.js";
 import type * as bunny from "../bunny.js";
 import type * as calendar from "../calendar.js";
@@ -190,6 +191,7 @@ declare const fullApi: ApiFromModules<{
   payments: typeof payments;
   projects: typeof projects;
   push: typeof push;
+  reports: typeof reports;
   auth: typeof auth;
   bunny: typeof bunny;
   calendar: typeof calendar;

@@ -44,7 +44,8 @@ const OWNER_DOCS: Sub[] = [
 ];
 const OWNER_PAYMENTS: Sub[] = [{ to: "/payments", label: "Overview", match: (p) => p === "/payments" }, { to: "/payments/invoices", label: "Invoices", match: (p) => starts(p, "/payments/invoices") },
   { to: "/payments/quotes", label: "Quotes", match: (p) => starts(p, "/payments/quotes") }, // Phase 3b
-  { to: "/payments/subscriptions", label: "Subscriptions", match: (p) => starts(p, "/payments/subscriptions") }, { to: "/payments/plans", label: "Plans", match: (p) => starts(p, "/payments/plans") }];
+  { to: "/payments/subscriptions", label: "Subscriptions", match: (p) => starts(p, "/payments/subscriptions") }, { to: "/payments/plans", label: "Plans", match: (p) => starts(p, "/payments/plans") },
+  { to: "/payments/reports", label: "Reports", match: (p) => starts(p, "/payments/reports") }]; // Phase 5e step 5
 const inPayments = (p: string) => starts(p, "/payments");
 // Phase 3b (D69): Proposals is its own item with a layer.
 const OWNER_PROPOSALS: Sub[] = [

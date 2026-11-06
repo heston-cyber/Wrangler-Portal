@@ -16604,7 +16604,334 @@
     }
    ]
   },
-  "bell.pushKey": null
+  "bell.pushKey": null,
+  "reports.page": {
+   "from": "2026-01-01",
+   "to": "2026-11-06",
+   "today": "2026-11-06",
+   "tiles": {
+    "revenueCents": 6875000,
+    "profitCents": 5635000,
+    "outstandingCents": 1245000,
+    "outstandingCount": 4,
+    "leadToJob": 38,
+    "jobs": 8,
+    "leads": 21
+   },
+   "months": [
+    {
+     "month": "2026-01",
+     "paidCents": 420000,
+     "invoicedCents": 470000
+    },
+    {
+     "month": "2026-02",
+     "paidCents": 515000,
+     "invoicedCents": 565000
+    },
+    {
+     "month": "2026-03",
+     "paidCents": 380000,
+     "invoicedCents": 430000
+    },
+    {
+     "month": "2026-04",
+     "paidCents": 690000,
+     "invoicedCents": 740000
+    },
+    {
+     "month": "2026-05",
+     "paidCents": 610000,
+     "invoicedCents": 660000
+    },
+    {
+     "month": "2026-06",
+     "paidCents": 740000,
+     "invoicedCents": 790000
+    },
+    {
+     "month": "2026-07",
+     "paidCents": 580000,
+     "invoicedCents": 630000
+    },
+    {
+     "month": "2026-08",
+     "paidCents": 820000,
+     "invoicedCents": 870000
+    },
+    {
+     "month": "2026-09",
+     "paidCents": 760000,
+     "invoicedCents": 810000
+    },
+    {
+     "month": "2026-10",
+     "paidCents": 910000,
+     "invoicedCents": 960000
+    },
+    {
+     "month": "2026-11",
+     "paidCents": 450000,
+     "invoicedCents": 500000
+    }
+   ],
+   "summary": {
+    "revenueCents": 6875000,
+    "vendorCents": 1240000,
+    "profitCents": 5635000,
+    "jobsFinished": 14,
+    "averageJobCents": 487500
+   },
+   "byProject": [
+    {
+     "_id": "p1",
+     "project": "26127 Harbor Coffee Launch",
+     "client": "Harbor Coffee",
+     "priceCents": 1250000,
+     "billed": true,
+     "costCents": 380000,
+     "profitCents": 870000,
+     "estimateProfitCents": 800000
+    },
+    {
+     "_id": "p2",
+     "project": "26131 Backrooms",
+     "client": "Floor Trader",
+     "priceCents": 980000,
+     "billed": true,
+     "costCents": 310000,
+     "profitCents": 670000,
+     "estimateProfitCents": 700000
+    },
+    {
+     "_id": "p3",
+     "project": "26122 Spirit Days",
+     "client": "ICG",
+     "priceCents": 640000,
+     "billed": true,
+     "costCents": 160000,
+     "profitCents": 480000,
+     "estimateProfitCents": 450000
+    },
+    {
+     "_id": "p4",
+     "project": "26133 Spring Catalog",
+     "client": "Northline Outfitters",
+     "priceCents": 520000,
+     "billed": false,
+     "costCents": 120000,
+     "profitCents": 400000,
+     "estimateProfitCents": 400000
+    },
+    {
+     "_id": "p5",
+     "project": "26119 LC Arizona",
+     "client": "LC Arizona",
+     "priceCents": 300000,
+     "billed": true,
+     "costCents": 90000,
+     "profitCents": 210000,
+     "estimateProfitCents": 240000
+    },
+    {
+     "_id": "p6",
+     "project": "26129 Teaser",
+     "client": "Northline Outfitters",
+     "priceCents": 150000,
+     "billed": true,
+     "costCents": 175000,
+     "profitCents": -25000,
+     "estimateProfitCents": 30000
+    }
+   ],
+   "outstanding": {
+    "buckets": [
+     {
+      "key": "not_due",
+      "label": "Not due yet",
+      "cents": 650000,
+      "count": 2
+     },
+     {
+      "key": "late_30",
+      "label": "1 to 30 days late",
+      "cents": 320000,
+      "count": 1
+     },
+     {
+      "key": "late_60",
+      "label": "31 to 60 days late",
+      "cents": 275000,
+      "count": 1
+     },
+     {
+      "key": "late_more",
+      "label": "Over 60 days late",
+      "cents": 0,
+      "count": 0
+     }
+    ],
+    "invoices": [
+     {
+      "_id": "i1",
+      "title": "Final invoice",
+      "number": "WRNGLR-0040",
+      "client": "Floor Trader",
+      "due": "2026-09-20",
+      "daysLate": 47,
+      "cents": 275000,
+      "bucket": "31 to 60 days late"
+     }
+    ]
+   },
+   "vendors": [
+    {
+     "vendor": "Jordan Ellis",
+     "cents": 720000,
+     "invoices": 9
+    },
+    {
+     "vendor": "Priya Nair",
+     "cents": 380000,
+     "invoices": 4
+    },
+    {
+     "vendor": "Alex Romero",
+     "cents": 140000,
+     "invoices": 2
+    }
+   ],
+   "funnel": {
+    "stages": [
+     {
+      "stage": "lead",
+      "label": "Lead",
+      "count": 21
+     },
+     {
+      "stage": "quoted",
+      "label": "Quoted",
+      "count": 15
+     },
+     {
+      "stage": "contract_sent",
+      "label": "Contract sent",
+      "count": 11
+     },
+     {
+      "stage": "signed",
+      "label": "Signed",
+      "count": 8
+     },
+     {
+      "stage": "in_production",
+      "label": "In production",
+      "count": 7
+     },
+     {
+      "stage": "delivered",
+      "label": "Delivered",
+      "count": 6
+     },
+     {
+      "stage": "paid",
+      "label": "Paid",
+      "count": 5
+     }
+    ],
+    "leads": 21,
+    "leadToPaid": 24
+   },
+   "detail": {
+    "payments": [],
+    "vendorPaid": [],
+    "finished": []
+   },
+   "empty": false
+  },
+  "reports.widgets": {
+   "from": "2026-01-01",
+   "to": "2026-11-06",
+   "revenueCents": 6875000,
+   "months": [
+    {
+     "month": "2026-01",
+     "cents": 420000
+    },
+    {
+     "month": "2026-02",
+     "cents": 515000
+    },
+    {
+     "month": "2026-03",
+     "cents": 380000
+    },
+    {
+     "month": "2026-04",
+     "cents": 690000
+    },
+    {
+     "month": "2026-05",
+     "cents": 610000
+    },
+    {
+     "month": "2026-06",
+     "cents": 740000
+    },
+    {
+     "month": "2026-07",
+     "cents": 580000
+    },
+    {
+     "month": "2026-08",
+     "cents": 820000
+    },
+    {
+     "month": "2026-09",
+     "cents": 760000
+    },
+    {
+     "month": "2026-10",
+     "cents": 910000
+    },
+    {
+     "month": "2026-11",
+     "cents": 450000
+    },
+    {
+     "month": "2026-12",
+     "cents": 0
+    }
+   ],
+   "outstanding": [
+    {
+     "key": "not_due",
+     "label": "Not due yet",
+     "cents": 650000,
+     "count": 2
+    },
+    {
+     "key": "late_30",
+     "label": "1 to 30 days late",
+     "cents": 320000,
+     "count": 1
+    },
+    {
+     "key": "late_60",
+     "label": "31 to 60 days late",
+     "cents": 275000,
+     "count": 1
+    },
+    {
+     "key": "late_more",
+     "label": "Over 60 days late",
+     "cents": 0,
+     "count": 0
+    }
+   ],
+   "outstandingCents": 1245000,
+   "outstandingCount": 4
+  }
  },
  "client": {
   "users.me": {

@@ -205,6 +205,8 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "team.setPerm": { membershipId: ids.teamMemberId, perm: "docs", on: false }, "team.resetToRole": { membershipId: ids.teamMemberId }, "team.setRolePerm": { role: "editor", perm: "docs", on: false },
     "auditLog.list": {}, // Phase 5e step 3: Settings › Activity (owner only)
     // Phase 5e step 4: the bell (each caller's own; markRead refuses another person's item)
+    // Phase 5e step 5: Payments › Reports
+    "reports.page": { from: "2026-01-01", to: "2026-03-31", tz: "America/Chicago" }, "reports.widgets": { tz: "America/Chicago" }, "reports.logExport": { from: "2026-01-01", to: "2026-03-31", reports: ["revenue"] },
     "bell.feed": {}, "bell.unread": {}, "bell.markRead": { itemId: ids.bellItemId }, "bell.markAllRead": {}, "bell.prefs": {}, "bell.setPref": { kind: "notes", bell: false },
     "bell.phoneAllOff": {}, "bell.subscribe": { endpoint: "https://push.example/matrixmatrix", p256dh: "p", auth: "a", label: "Test" }, "bell.unsubscribe": { endpoint: "https://push.example/matrixmatrix" },
     "bell.pushKey": {}, "push.ensureKey": {},
