@@ -20,6 +20,7 @@ import { DEFAULT_EXPIRY_DAYS, cleanLine, signLink } from "./lib/wsSigning";
 import { pngProblem } from "./lib/pngCheck";
 import { businessContact, businessInScope } from "./lib/business";
 import { crmDocument } from "./crm";
+import { ccArg, cleanCc, copiesFor, copiesOnVoid, copyOnSend, type Cc } from "./signCopies";
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
 const MAX_PNG_BYTES = 600 * 1024;
@@ -105,6 +106,7 @@ async function getCore(ctx: QueryCtx, documentId: Id<"wsDocuments">, versionNumb
     const sig = await currentSignature(ctx);
     return {
       doc: { ...doc, label: docLabel(doc.number) },
+      copies: await copiesFor(ctx, documentId, shown.number), // D160
       // S3: the signed copy (a link that works for an hour or so; the page asks again when it re-renders).
       finalUrl: doc.final ? await ctx.storage.getUrl(doc.final.fileId) : null,
       version: { ...shown, fileUrl: await ctx.storage.getUrl(shown.fileId), isCurrent: shown.number === doc.currentVersion, editable: shown.number === doc.currentVersion && !shown.approvedAt && doc.status === "draft" },
@@ -447,12 +449,12 @@ async function applyOwner(ctx: MutationCtx, versionId: Id<"wsVersions">) {
 // Send the current approved version: Heston's signature goes on, every client signer gets a link (all at once, or
 // the first in line when they sign one after another), and the links work until the expiry date.
 export const send = mutation({
-  args: { versionId: v.id("wsVersions"), expiresInDays: v.optional(v.number()) },
-  handler: async (ctx, a) => { await requireMe(ctx); return sendCore(ctx, a.versionId, a.expiresInDays, OWNER_KEY); },
+  args: { versionId: v.id("wsVersions"), expiresInDays: v.optional(v.number()), cc: ccArg },
+  handler: async (ctx, a) => { await requireMe(ctx); return sendCore(ctx, a.versionId, a.expiresInDays, OWNER_KEY, a.cc); },
 });
 
 
-async function sendCore(ctx: MutationCtx, versionId: Id<"wsVersions">, expiresInDays: number | undefined, actor: string) {
+async function sendCore(ctx: MutationCtx, versionId: Id<"wsVersions">, expiresInDays: number | undefined, actor: string, ccIn?: Cc) {
   {
     const ver = await ctx.db.get(versionId);
     if (!ver) throw new ConvexError("That version doesn't exist.");
@@ -463,6 +465,7 @@ async function sendCore(ctx: MutationCtx, versionId: Id<"wsVersions">, expiresIn
     await applyOwner(ctx, versionId); // refuses if anything changed since approval
     const clients = ver.signers.filter((x) => x.key !== OWNER_KEY).sort((a, b) => a.order - b.order);
     if (!clients.length) throw new ConvexError("There's no client signer.");
+    const cc = cleanCc(ccIn, [...clients.map((c) => c.email), await ownerEmailOf(ctx)]); // D160
     const first = Math.min(...clients.map((c) => c.order));
     const now = Date.now();
     for (const c of clients) {
@@ -480,8 +483,9 @@ async function sendCore(ctx: MutationCtx, versionId: Id<"wsVersions">, expiresIn
     await ctx.db.patch(doc._id, { status: "sent", sentAt: now, sentVersion: ver.number, expiresAt, updatedAt: now });
     await crmDocument(ctx, doc._id, "contract_sent", "contract sent"); // Phase 3: the pipeline card moves on
     await appendEvent(ctx, doc._id, { kind: "send_settings", actor, versionNumber: ver.number, detail: `${actor === OWNER_KEY ? "" : "Sent by Claude, on Heston's OK in chat. "}Sent version ${ver.number} to ${clients.length} signer${clients.length === 1 ? "" : "s"} (${ver.signingOrder === "any" ? "any order" : "one after another"}); links work until ${new Date(expiresAt).toISOString()}.` });
+    await copyOnSend(ctx, doc, ver.number, cc, actor); // D160: after the signers' links, so their email names who's copied
     await closeRequests(ctx, doc._id, ["approve", "send"]);
-    return { sent: clients.length, expiresAt };
+    return { sent: clients.length, copied: cc.length, expiresAt };
   }
 }
 
@@ -512,6 +516,7 @@ async function voidCore(ctx: MutationCtx, documentId: Id<"wsDocuments">, reason:
       await ctx.db.patch(x._id, { status: "closed", sessionHash: undefined, sessionExpiresAt: undefined, codeHash: undefined, codeExpiresAt: undefined });
       if (x.sentAt) await ctx.scheduler.runAfter(0, internal.signing.emailInvite, { signingId: x._id, kind: "voided" });
     }
+    await copiesOnVoid(ctx, doc); // D160
     await appendEvent(ctx, doc._id, { kind: "voided", actor, versionNumber: doc.sentVersion, detail: `Cancelled${actor === OWNER_KEY ? "" : " by Claude, on Heston's OK in chat"}. Every signing link stopped working.${why ? ` Reason: ${why}` : ""}` });
     return null;
   }
@@ -638,7 +643,7 @@ export const REQUEST_TTL = 24 * 3600_000;
 const WHAT_LABEL = { approve: "approve", send: "send", cancel: "cancel" } as const;
 
 export const requestAs = internalMutation({
-  args: { documentId: v.id("wsDocuments"), what: v.union(v.literal("approve"), v.literal("send"), v.literal("cancel")), said: v.string(), expiresInDays: v.optional(v.number()), reason: v.optional(v.string()) },
+  args: { documentId: v.id("wsDocuments"), what: v.union(v.literal("approve"), v.literal("send"), v.literal("cancel")), said: v.string(), expiresInDays: v.optional(v.number()), reason: v.optional(v.string()), cc: ccArg },
   handler: async (ctx, a) => {
     const doc = await ctx.db.get(a.documentId);
     if (!doc) throw new ConvexError("That document doesn't exist.");
@@ -650,13 +655,15 @@ export const requestAs = internalMutation({
       if (problems.length) throw new ConvexError(problems.join(" "));
     }
     if (a.expiresInDays !== undefined && (a.expiresInDays < 1 || a.expiresInDays > 90)) throw new ConvexError("Links can last 1 to 90 days.");
+    const cur = await currentVersion(ctx, doc);
+    const cc = a.what === "send" ? cleanCc(a.cc, [...cur.signers.map((x) => x.email), await ownerEmailOf(ctx)]) : [];
     const now = Date.now();
     for (const r of await ctx.db.query("wsRequests").withIndex("by_document", (q) => q.eq("documentId", doc._id).eq("status", "pending")).collect()) {
       if (r.what === a.what) await ctx.db.patch(r._id, { status: "replaced", decidedAt: now });
     }
     const said = cleanLine(a.said, 200);
-    const requestId = await ctx.db.insert("wsRequests", { documentId: doc._id, what: a.what, versionNumber: doc.currentVersion, expiresInDays: a.expiresInDays, reason: a.reason?.trim().slice(0, 300) || undefined, said, status: "pending", createdAt: now });
-    await appendEvent(ctx, doc._id, { kind: "claude_requested", actor: "claude", versionNumber: doc.currentVersion, detail: `Claude asked to ${WHAT_LABEL[a.what]} version ${doc.currentVersion} through the connector, saying Heston told it: "${said}". Waiting for Heston to confirm on the site.` });
+    const requestId = await ctx.db.insert("wsRequests", { documentId: doc._id, what: a.what, versionNumber: doc.currentVersion, expiresInDays: a.expiresInDays, ...(cc.length ? { cc } : {}), reason: a.reason?.trim().slice(0, 300) || undefined, said, status: "pending", createdAt: now });
+    await appendEvent(ctx, doc._id, { kind: "claude_requested", actor: "claude", versionNumber: doc.currentVersion, detail: `Claude asked to ${WHAT_LABEL[a.what]} version ${doc.currentVersion}${cc.length ? `, copying ${cc.map((c) => c.email).join(", ")}` : ""} through the connector, saying Heston told it: "${said}". Waiting for Heston to confirm on the site.` });
     return { requestId, expiresAt: now + REQUEST_TTL };
   },
 });
@@ -684,7 +691,7 @@ export const requestsFor = query({
   args: { documentId: v.id("wsDocuments") },
   handler: async (ctx, { documentId }) => {
     await requireMe(ctx);
-    return (await pendingOf(ctx, documentId)).map((r) => ({ _id: r._id, what: r.what, versionNumber: r.versionNumber, expiresInDays: r.expiresInDays ?? null, reason: r.reason ?? null, said: r.said, createdAt: r.createdAt }));
+    return (await pendingOf(ctx, documentId)).map((r) => ({ _id: r._id, what: r.what, versionNumber: r.versionNumber, expiresInDays: r.expiresInDays ?? null, cc: r.cc ?? [], reason: r.reason ?? null, said: r.said, createdAt: r.createdAt }));
   },
 });
 
@@ -731,7 +738,7 @@ export const decideRequest = mutation({
     await appendEvent(ctx, doc._id, { kind: "claude_request_confirmed", actor: OWNER_KEY, versionNumber: doc.currentVersion, detail: `Heston confirmed on the site, signed in: ${WHAT_LABEL[r.what]} (asked by Claude).` });
     const ver = await currentVersion(ctx, doc);
     if (r.what === "approve") await approveCore(ctx, ver._id, OWNER_KEY);
-    else if (r.what === "send") await sendCore(ctx, ver._id, r.expiresInDays, OWNER_KEY);
+    else if (r.what === "send") await sendCore(ctx, ver._id, r.expiresInDays, OWNER_KEY, r.cc);
     else await voidCore(ctx, doc._id, r.reason, OWNER_KEY);
     await ctx.db.patch(r._id, { status: "done", decidedAt: now });
     return { done: true };

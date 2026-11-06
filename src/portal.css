@@ -3082,3 +3082,15 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 .wp-sub.wp-stagetop { color: var(--accent); font-weight: 600; } /* Heston (Nov 4, 21:30): Overview in red too */
 .msg-closed { margin: 0; padding: 14px 22px 18px; border-top: 1px solid var(--border-hairline); }
 .msg-acts { display: flex; gap: 8px; align-items: center; }
+
+/* D160 (Nov 6, built without frames): CC on a contract: the Send dialog's rows and the Copied list on the document */
+.ws-cc { display: grid; gap: 8px; }
+.ws-ccrow { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.ws-cc .btn { justify-self: start; }
+.ws-copies { display: grid; gap: 8px; padding-top: 12px; margin-top: 4px; border-top: 1px solid var(--border-hairline); }
+@media (max-width: 520px) { .ws-ccrow { grid-template-columns: minmax(0, 1fr) auto; } .ws-ccrow input:nth-child(2) { grid-column: 1; } .ws-ccrow button { grid-row: 1; grid-column: 2; } }
+.ws-copysigners { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.ws-copysigners li { display: flex; gap: 10px; align-items: flex-start; }
+.ws-copysigners li > .wp-icon { flex: 0 0 auto; margin-top: 2px; color: var(--accent); }
+.ws-copysigners span { display: grid; gap: 2px; font-size: var(--fs-text-small); color: var(--text-primary); }
+.ws-copysigners small { color: var(--text-muted); font-size: var(--fs-text-small); }

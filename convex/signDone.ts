@@ -267,7 +267,9 @@ async function sendCopies(ctx: ActionCtx, d: Data) {
     ...(owner && d.ver.ownerSignedAt ? [`${owner.name}, ${owner.title}, ${brand.name}, ${centralDate(d.ver.ownerSignedAt)}`] : []),
   ];
   const already = new Set(doc.copies?.sent ?? []);
-  const people = [...signings.map((s) => ({ email: s.email, name: s.name, owner: false })), { email: ownerEmail, name: "Heston", owner: true }].filter((p, i, a) => a.findIndex((x) => x.email === p.email) === i);
+  // D160: everyone copied gets the signed copy too (as a signer does: the PDF attached, no invoice line).
+  const copied: Array<{ email: string; name: string | null }> = doc.sentVersion ? await ctx.runQuery(internal.signCopies.forFinish, { documentId: doc._id, versionNumber: doc.sentVersion }) : [];
+  const people = [...signings.map((s) => ({ email: s.email, name: s.name, owner: false, cc: false })), { email: ownerEmail, name: "Heston", owner: true, cc: false }, ...copied.map((c) => ({ email: c.email, name: c.name ?? "", owner: false, cc: true }))].filter((p, i, a) => a.findIndex((x) => x.email === p.email) === i);
   // Phase 1: the Inbox first, so each item can note that its copy was emailed.
   try { await ctx.runMutation(internal.inbox.onSigned, { documentId: doc._id }); } catch (e) { console.error("inbox", String((e as Error).message).slice(0, 120)); }
   const sent: string[] = [], failed: string[] = [];
@@ -282,7 +284,7 @@ async function sendCopies(ctx: ActionCtx, d: Data) {
     try {
       await sendEmail({ from: m.from, to: p.email, replyTo: p.owner ? null : brand.replyTo, subject: m.subject, text: m.text, html: m.html, tag: p.owner ? "ws-copy-owner" : "ws-copy", attachments: attachment });
       sent.push(p.email);
-      if (!p.owner) await ctx.runMutation(internal.emails.markInboxEmailed, { key: `sign:${doc._id}:signed`, email: p.email });
+      if (!p.owner && !p.cc) await ctx.runMutation(internal.emails.markInboxEmailed, { key: `sign:${doc._id}:signed`, email: p.email });
     } catch (e) { failed.push(`${p.email}: ${errText(e).slice(0, 100)}`); }
   }
   await ctx.runMutation(internal.signDone.recordCopies, { documentId: doc._id, sent, failed, sha256: final.sha256 });
