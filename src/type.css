@@ -75,6 +75,7 @@
   :root:not([data-brand]) .wp-light.client:not(.curtain) {
     background-image: url("/bg/cactus-phone.jpg");
     background-image: image-set(url("/bg/cactus-phone.webp") type("image/webp"), url("/bg/cactus-phone.jpg") type("image/jpeg"));
-    background-position: center top;
+    /* Heston (Nov 5, 19:20): the horizon sits where Figma has it (about 80% down); a screen shorter than the 844 frame loses sky at the top, not ground */
+    background-position: center bottom;
   }
 }
