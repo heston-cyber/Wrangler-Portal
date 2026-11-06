@@ -25,6 +25,7 @@ export default defineSchema({
     role: v.optional(v.union(v.literal("owner"), v.literal("client"), v.literal("vendor"), v.literal("guest"), v.literal("team"))), // Phase 5e (Nov 5): "team", a team member (lib/perms.ts) // Phase 3c: vendors (D94). Nov 2: for a client-and-vendor login, the side it's on now (users.switchSide). Phase 5b step 4 (D127): "guest", a call-sheet guest's code-only login: never an owner, client or vendor (lib/access.ts)
     lastSignInAt: v.optional(v.number()),
     tools: v.optional(v.any()),                // Nov 2: an owner's Settings › Tools (menu order, tools off the menu, Dashboard widgets; lib/tools.ts)
+    passwordChangedAt: v.optional(v.number()),  // Phase 5e step 2: Settings › Security's "Last changed"
   }).index("email", ["email"]).index("phone", ["phone"]),
   // Emails allowed to make a client account. Made by the owner (the Share dialog in C2, or Settings › Clients).
   invites: defineTable({
@@ -1704,6 +1705,26 @@ export default defineSchema({
     acceptedAt: v.optional(v.number()),
     userId: v.optional(v.id("users")),
   }).index("by_email", ["email"]).index("by_token", ["tokenHash"]).index("by_business", ["businessId"]),
+
+  // Phase 5e step 2 (Nov 5): Settings › Security. A signed-in browser (one per session): its label ("Mac · Chrome"), and a
+  // random key the browser keeps, so a sign-in from a browser not seen before sends email 47 (owner and team).
+  sessionDevices: defineTable({
+    userId: v.id("users"),
+    sessionId: v.id("authSessions"),
+    deviceKey: v.string(),
+    label: v.string(),
+    firstSeen: v.number(),
+    lastSeen: v.number(),
+  }).index("by_user", ["userId"]).index("by_session", ["sessionId"]),
+  // A change of sign-in email waiting for its 6-digit code (sent to the new address; 10 minutes; 5 tries).
+  emailChanges: defineTable({
+    userId: v.id("users"),
+    newEmail: v.string(),
+    codeHash: v.string(),
+    tries: v.number(),
+    sentAt: v.number(),
+    until: v.number(),
+  }).index("by_user", ["userId"]),
 
   // Phase 5e (Nov 5): who is assigned to a project (Project page › Assigned people). Team members only (D146).
   projectTeam: defineTable({

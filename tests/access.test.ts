@@ -81,6 +81,7 @@ const OPEN: Record<string, string> = {
   // Phase 5b step 4 (D127): a call-sheet guest's link (/guest/<token>, email 41), signed out.
   "guests.intro": "a guest's link: answers only for that pass's own long random token, with the sheet's title, day, the guest's first name and a masked email; tested in callSheetGuests.test.ts",
   "guests.sendCode": "the same link's \"Email me a code\": emails a code to the pass's own address only (never shown), rate-limited; a missing token is refused",
+  "security.signInLocked": "the sign-in page's Too many tries (D146): only whether an email's password sign-in is resting after 5 wrong tries, and for how many minutes; tested in security.test.ts",
   // Phase 5e step 1: the Join page (/team/join/<token>, email 46).
   "team.joinPage": "a team invite's link: answers only for that invite's own long random token (its hash is stored), with the business, role, inviter and the invited email; tested in team.test.ts",
 };
@@ -109,7 +110,9 @@ const SIGNED_IN = new Set(["help.list", "help.guide", "messages.mine", "messages
   // Phase 5: a client's raw footage offer (only on projects they can open) and the testimonial form (only from a request they got)
   "footage.forClientProject", "footage.keep", "footage.decline", "testimonials.ask", "testimonials.send",
   // Phase 5b step 3: a call sheet sent to them (only one sent to them, on a project they can open; tested in callSheets.test.ts)
-  "callSheets.forClient", "callSheets.forClientProject", "callSheets.opened"]);
+  "callSheets.forClient", "callSheets.forClientProject", "callSheets.opened",
+  // Phase 5e step 2: their own password, email and devices (security.test.ts)
+  "security.state", "security.changePassword", "security.startEmailChange", "security.confirmEmailChange", "security.cancelEmailChange", "security.seenDevice", "security.signOutDevice"]);
 // D133 (Phase 5): functions a vendor login may call: their own side of the portal (each checks the vendor's own records,
 // tested in vendorPortal.test.ts and vendorPayouts.test.ts), their own identity, and nothing of the owner's or a client's.
 const VENDOR = new Set(["help.list", "help.guide", "users.switchSide",
@@ -118,7 +121,9 @@ const VENDOR = new Set(["help.list", "help.guide", "users.switchSide",
   "vendorPortal.saveInvoice", "vendorPortal.deleteInvoice", "vendorPortal.settings", "vendorPortal.notifications", "vendorPortal.setNotification", "vendorPortal.saveDetails",
   "vendorPortal.w9UploadUrl", "vendorPortal.setW9", "vendorPayouts.mine", "vendorPayouts.setupLink", "vendorPayouts.refreshMine",
   // Phase 5b step 3: call sheets sent to them (only while booked on the project; tested in callSheets.test.ts)
-  "vendorPortal.callSheet", "vendorPortal.callSheets", "vendorPortal.openCallSheet"]);
+  "vendorPortal.callSheet", "vendorPortal.callSheets", "vendorPortal.openCallSheet",
+  // Phase 5e step 2: their own password, email and devices (security.test.ts)
+  "security.state", "security.changePassword", "security.startEmailChange", "security.confirmEmailChange", "security.cancelEmailChange", "security.seenDevice", "security.signOutDevice"]);
 
 // Phase 5e step 1: what each team role may call with its suggested switches (lib/perms.ts SUGGESTED). A function names
 // the switch that opens it (requireMe(ctx, "review"), requireAll for the whole business, requireFor for particular
@@ -136,7 +141,7 @@ const PAYMENTS = "Payments: invoices, reminders, quotes, plans, subscriptions an
 const VENDORPAY = "Vendor payments: vendor invoices and payouts (not an Editor)";
 const SETTINGS = "Settings: booking-call settings (when Settings is on for the role)";
 const BUDGETS = "Clients and leads with See what a project is worth: the pipeline, estimates and the job ledger (a Producer by default, Heston Nov 5)";
-const ACCOUNT = "Settings › Account: their own name";
+const ACCOUNT = "Settings › Account and Security: their own name, password, email and devices";
 const BRAND = "their business's look (name, logo, colours), like every signed-in account";
 const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>> = {
   producer: {
@@ -370,6 +375,13 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "register.newVideo": REVIEW,
     "register.setShortTitle": REVIEW,
     "register.addToRegister": REVIEW,
+    "security.state": ACCOUNT,
+    "security.changePassword": ACCOUNT,
+    "security.startEmailChange": ACCOUNT,
+    "security.confirmEmailChange": ACCOUNT,
+    "security.cancelEmailChange": ACCOUNT,
+    "security.seenDevice": ACCOUNT,
+    "security.signOutDevice": ACCOUNT,
     "shares.create": SHARES,
     "shares.update": SHARES,
     "shares.setOff": SHARES,
@@ -426,6 +438,13 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "library.overview": REVIEW,
     "notes.voiceUploadUrl": REVIEW,
     "notes.discardVoice": REVIEW,
+    "security.state": ACCOUNT,
+    "security.changePassword": ACCOUNT,
+    "security.startEmailChange": ACCOUNT,
+    "security.confirmEmailChange": ACCOUNT,
+    "security.cancelEmailChange": ACCOUNT,
+    "security.seenDevice": ACCOUNT,
+    "security.signOutDevice": ACCOUNT,
     "users.setName": ACCOUNT,
   },
   bookkeeper: {
@@ -469,6 +488,13 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "quotes.answerMove": PAYMENTS,
     "quotes.later": PAYMENTS,
     "quotes.draftFrom": PAYMENTS,
+    "security.state": ACCOUNT,
+    "security.changePassword": ACCOUNT,
+    "security.startEmailChange": ACCOUNT,
+    "security.confirmEmailChange": ACCOUNT,
+    "security.cancelEmailChange": ACCOUNT,
+    "security.seenDevice": ACCOUNT,
+    "security.signOutDevice": ACCOUNT,
     "subscriptions.start": PAYMENTS,
     "subscriptions.list": PAYMENTS,
     "subscriptions.get": PAYMENTS,

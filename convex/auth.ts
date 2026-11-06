@@ -76,8 +76,12 @@ async function endSessions(ctx: MutationCtx, userId: Id<"users">) {
   }
 }
 
+// D146 (Phase 5e step 2): wrong passwords and wrong codes are limited per account: 5 tries, then one more every 12 minutes
+// (the library's own limit refills at 5 an hour); a right one clears it. The page shows "Too many tries" (security.signInLocked).
+export const SIGN_IN_TRIES = 5;
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [WranglerPassword, GuestCode],
+  signIn: { maxFailedAttempsPerHour: SIGN_IN_TRIES },
   callbacks: {
     // Who may have an account: owners (the allow list) and invited clients. Decided here, on the server, for every
     // sign-up; the page can't get around it.

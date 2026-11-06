@@ -887,3 +887,46 @@ export function teamInviteMail(b: MailBrand, d: { invitedBy: string; role: strin
     { t: "button", label: "Join the team", href: d.link }, { t: "link", href: d.link },
   ], clientFooter(b), `The link works until ${d.until}.`);
 }
+
+// ---------- 47, 50, 51 and the new-address code: security (Phase 5e step 2, frames 819:14153, 842:10984) ----------
+const SECURITY_LINK = () => `${SITE()}/settings/security`;
+/** 47 · a sign-in from a device not seen before (owner and team). The frame's "Near" line is left out: the portal doesn't see where a sign-in comes from. */
+export function newDeviceMail(b: MailBrand, d: { name: string | null; when: string; device: string }): Mail {
+  return mk(b, "review", "New sign-in to your portal", [
+    hi(d.name),
+    { t: "p", text: "Your portal was just opened from a device we have not seen before." },
+    { t: "sums", rows: [{ label: "When", value: d.when }, { label: "Device", value: d.device }] },
+    { t: "p", text: "If this was you, there is nothing to do.", tone: "muted" },
+    { t: "p", text: "If it was not, sign that device out in Settings › Security and change your password." },
+    { t: "button", label: "Review sign-ins", href: SECURITY_LINK() }, { t: "link", href: SECURITY_LINK() },
+  ], [{ t: "small", text: "— Wrangler Portal" }]);
+}
+/** 50 · to the OLD address after an email change. The frame said "reset your password", which the old address can no longer do; replying reaches support instead. */
+export function emailChangedMail(b: MailBrand, d: { name: string | null; when: string; old: string; next: string }): Mail {
+  return mk(b, "review", "The email you sign in with was changed", [
+    hi(d.name),
+    { t: "p", text: "The email address you sign in with was just changed." },
+    { t: "sums", rows: [{ label: "When", value: d.when }, { label: "Old email", value: d.old }, { label: "New email", value: d.next }] },
+    { t: "p", text: "If you did this, there is nothing to do. From now on, sign in with the new address.", tone: "muted" },
+    { t: "p", text: "If you did not, reply to this email right away and we'll lock the account." },
+  ], [{ t: "small", text: "— Wrangler Portal" }]);
+}
+/** 51 · your password was changed. */
+export function passwordChangedMail(b: MailBrand, d: { name: string | null; when: string; resetLink: string }): Mail {
+  return mk(b, "review", "Your portal password was changed", [
+    hi(d.name),
+    { t: "p", text: "The password for your portal account was just changed. Any other devices were signed out." },
+    { t: "sums", rows: [{ label: "When", value: d.when }] },
+    { t: "p", text: "If you did this, there is nothing to do.", tone: "muted" },
+    { t: "p", text: "If you did not, reset your password right away." },
+    { t: "button", label: "Reset your password", href: d.resetLink }, { t: "link", href: d.resetLink },
+  ], [{ t: "small", text: "— Wrangler Portal" }]);
+}
+/** The 6-digit code that confirms a new email address (Change email, step 2). */
+export function newEmailCodeMail(b: MailBrand, d: { code: string; minutes: number }): Mail {
+  return mk(b, "review", `${d.code} is your code to confirm your new email`, [
+    { t: "p", text: "Enter this code to make this your new sign-in email:" }, { t: "code", code: d.code },
+    { t: "p", text: `It works for ${d.minutes} minutes.` },
+    { t: "small", text: "If you didn't ask for this, ignore this email. Nothing changes without the code." },
+  ], [{ t: "small", text: `WranglerPortal · ${SITE_HOST()}` }], `It works for ${d.minutes} minutes.`);
+}

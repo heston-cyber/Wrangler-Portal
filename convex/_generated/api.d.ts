@@ -36,6 +36,7 @@ import type * as vendorPortal from "../vendorPortal.js";
 import type * as leads from "../leads.js";
 import type * as plans from "../plans.js";
 import type * as subscriptionClock from "../subscriptionClock.js";
+import type * as security from "../security.js";
 import type * as subscriptions from "../subscriptions.js";
 import type * as team from "../team.js";
 import type * as invoices from "../invoices.js";
@@ -174,6 +175,7 @@ declare const fullApi: ApiFromModules<{
   leads: typeof leads;
   plans: typeof plans;
   subscriptionClock: typeof subscriptionClock;
+  security: typeof security;
   subscriptions: typeof subscriptions;
   team: typeof team;
   invoices: typeof invoices;

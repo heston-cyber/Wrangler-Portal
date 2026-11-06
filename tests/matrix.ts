@@ -203,7 +203,11 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "team.page": {}, "team.member": { membershipId: ids.teamMemberId }, "team.invite": { email: "new@x.example", role: "editor" }, "team.resendInvite": { inviteId: ids.teamInviteId },
     "team.cancelInvite": { inviteId: ids.teamInviteId }, "team.remove": { membershipId: ids.teamMemberId }, "team.setRole": { membershipId: ids.teamMemberId, role: "editor" },
     "team.setPerm": { membershipId: ids.teamMemberId, perm: "docs", on: false }, "team.resetToRole": { membershipId: ids.teamMemberId }, "team.setRolePerm": { role: "editor", perm: "docs", on: false },
-    "team.resetRoles": {}, "team.projectPeople": { projectId: ids.projectId }, "team.assign": { projectId: ids.projectId, userIds: [] }, "team.joinPage": { token: "nope" },
+    // Phase 5e step 2: Security (one's own account)
+    "security.state": {}, "security.changePassword": { current: "x", next: "yyyyyyyyyyyy" }, "security.signInLocked": { email: "x@example.com" },
+    "security.startEmailChange": { newEmail: "brand.new@example.com" }, "security.confirmEmailChange": { code: "000000" }, "security.cancelEmailChange": {},
+    "security.seenDevice": { deviceKey: "matrixdevicekey0000000", label: "Test" }, "security.signOutDevice": { sessionId: ids.ownerSub.split("|")[1] },
+        "team.resetRoles": {}, "team.projectPeople": { projectId: ids.projectId }, "team.assign": { projectId: ids.projectId, userIds: [] }, "team.joinPage": { token: "nope" },
   };
 }
 

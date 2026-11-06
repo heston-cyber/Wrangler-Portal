@@ -20,6 +20,7 @@ export const BUSINESS_TABLES = [
 
 export const GLOBAL_TABLES = [
   "users", "businesses", "memberships", "guestPasses", "rateLimits", "oauthStates", "emailLog", "stripeEvents", "userPrefs", "playerLogs", "phase0Runs", "r1Results", "siteWatchFindings", "siteWatchRuns", "siteWatchSettings",
+  "sessionDevices", "emailChanges", // Phase 5e step 2: a login's own, not a business's
 ] as readonly string[];
 
 // Belong to a business through their parent and are never patched: Wrangler Sign's audit trail is append-only
