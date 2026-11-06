@@ -1,5 +1,6 @@
-// The glass (Heston, Nov 5, 19:57 and 22:03): every card is one glass, Figma's "Glass/effect" style: the scene behind it
-// bends at the curved edges (refraction 100 %, depth 70), splits into red and blue at the rim (dispersion 85 %), is
+// The glass (Heston, Nov 5, 19:57 and 22:03): every card is one glass, Figma's "Glass/effect" style, rendered the way
+// Apple's Liquid Glass works (Nov 6): the scene behind it bends inward through a narrow curved rim (refraction 100 %,
+// depth 70 caps the rim's width), splits into red and blue at the rim (dispersion 85 %), is
 // lightly frosted (12) and lit from the top left (−45°, 50 %), with a fine grain (Figma's 8 %, softened to 5 % because a
 // screen shows it at every device pixel). Browsers can't bend what's behind a box with CSS (Safari, and so every iPhone
 // browser, has no backdrop SVG filters), but the scene is one known picture, so WebGL draws it.
@@ -53,24 +54,42 @@ void main() {
   float d = sd(p, h, r);
   float alpha = clamp(0.5 - d, 0.0, 1.0);
   if (alpha <= 0.0) discard;
+  // Nov 6 (Heston: "sharp artifacts", "refracting too early"; study Apple's glass): real refraction, like Apple's
+  // Liquid Glass. The edge is a narrow convex squircle bevel (height (1-(1-x)^4)^(1/4)), flat and clear in the middle.
+  // A straight-down ray is bent by Snell's law (index 1.5) where the surface tilts, so near the rim it lands *inward*:
+  // the rim shows what is behind the card, squeezed and magnified, never what is beside it. The bevel's normals come
+  // from a rounded box whose corners are at least as round as the bevel is wide, so they never fold into a seam, and
+  // the bend eases off softly at the very rim instead of running away.
+  float b = min(u_depth, 0.32 * min(u_size.x, u_size.y));     // bevel width
+  float R2 = min(max(r, b), min(h.x, h.y));
+  float d2 = sd(p, h, R2);
   vec2 e = vec2(1.0, 0.0);
-  vec2 n = normalize(vec2(sd(p + e.xy, h, r) - sd(p - e.xy, h, r), sd(p + e.yx, h, r) - sd(p - e.yx, h, r)) + 1e-6);
-  float depth = min(u_depth, min(h.x, h.y));
-  float t = clamp(1.0 + d / depth, 0.0, 1.0);           // 0 inside the flat middle, 1 at the rim
-  float bend = 1.0 - sqrt(1.0 - t * t);                   // a rounded bevel: steepest at the rim
-  vec2 off = n * bend * depth * 0.55 * u_refr;            // the scene from just outside wraps round the edge
+  vec2 n = normalize(vec2(sd(p + e.xy, h, R2) - sd(p - e.xy, h, R2), sd(p + e.yx, h, R2) - sd(p - e.yx, h, R2)) + 1e-6);
+  float x = clamp(-d2 / b, 0.0, 1.0);                         // 0 at the rim, 1 where the flat middle starts
+  float xm = max(x, 0.004), om = 1.0 - xm;
+  float sq = 1.0 - om * om * om * om;
+  float height = b * pow(sq, 0.25);
+  float slope = om * om * om * pow(sq, -0.75);                // d(height)/d(distance in)
+  vec3 N = normalize(vec3(n * slope, 1.0));                   // the surface leans outward at the rim
+  vec3 ray = refract(vec3(0.0, 0.0, -1.0), N, 1.0 / 1.5);
+  vec2 bendv = ray.xy / max(-ray.z, 0.25) * (height + 0.25 * b) * u_refr;
+  float cap = 0.6 * b, m = length(bendv);
+  bendv /= 1.0 + m / cap;                                      // soft limit: no hard plateau
   float lod = log2(max(1.0, u_frost * u_texScale)) - 0.6;
   vec3 col = vec3(0.0);
-  float k = u_disp * 0.14 * bend;
+  float k = u_disp * 0.08;                                     // red bends a little less, blue a little more
   for (int i = 0; i < 6; i++) {
     float a = float(i) * 1.0472 + 0.4;
-    vec2 q = px + off + vec2(cos(a), sin(a)) * u_frost * 0.45;
-    col += vec3(scene(q + off * k, lod).r, scene(q, lod).g, scene(q - off * k, lod).b);
+    vec2 q = px + vec2(cos(a), sin(a)) * u_frost * 0.45;
+    col += vec3(scene(q + bendv * (1.0 - k), lod).r, scene(q + bendv, lod).g, scene(q + bendv * (1.0 + k), lod).b);
   }
   col /= 6.0;
+  // light from the top left: a fine specular line on the rim where it faces the light, a fainter one opposite, and a
+  // soft sheen across the bevel
   float facing = dot(n, -u_ldir);
-  float rim = smoothstep(2.2 * u_dpr / 2.0, 0.0, -d);
-  col += u_light * (0.55 * rim * pow(max(facing, 0.0), 1.5) + 0.2 * rim * pow(max(-facing, 0.0), 2.0) + 0.06 * bend * max(facing, 0.0));
+  float edge = exp(-max(-d, 0.0) / (1.1 * u_dpr));
+  float rimEdge = 1.0 - x;
+  col += u_light * (0.6 * edge * pow(max(facing, 0.0), 2.0) + 0.22 * edge * pow(max(-facing, 0.0), 2.0) + 0.07 * rimEdge * rimEdge * max(facing, 0.0));
   // Figma's fill layers on the glass (the CSS --glass-fill): ink 34 %, paper 2 %, and a paper sheen fading down
   vec3 ink = vec3(0.012, 0.004, 0.016), paper = vec3(0.957, 0.945, 0.914);
   col = mix(col, ink, 0.34);
