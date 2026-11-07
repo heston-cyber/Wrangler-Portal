@@ -13,7 +13,7 @@ import { deleteFile } from "./lib/fileOwners";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe, requireAll } from "./lib/access";
+import { requireMe, requireAll, seesValue } from "./lib/access";
 import { appendEvent, eventsOf, verifyChain } from "./lib/wsAudit";
 import { approvalProblems, docLabel, lockText, OWNER_KEY, shapeProblems, type LayoutBox, type LayoutSigner } from "./lib/wsLayout";
 import { inspect, sha256Bytes, stamp, type Stamp } from "./lib/wsPdf";
@@ -72,7 +72,7 @@ function withOwner(signers: LayoutSigner[], sig: Doc<"wsOwnerSignatures"> | null
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    await requireAll(ctx, "docs");
+    const value = seesValue(await requireAll(ctx, "docs")); // 5e review M5
     const docs = await ctx.db.query("wsDocuments").withIndex("by_updated").order("desc").take(500);
     return Promise.all(docs.map(async (d) => {
       const ver = await currentVersion(ctx, d);
@@ -81,7 +81,7 @@ export const list = query({
         _id: d._id, label: docLabel(d.number), number: d.number, title: d.title, status: d.status, version: d.currentVersion, updatedAt: d.updatedAt, createdAt: d.createdAt,
         signers: clients.map((s) => s.name || s.email || s.key), emails: clients.map((s) => s.email).filter(Boolean),
         pages: ver.pages.length, approved: !!ver.approvedAt, sentAt: d.sentAt ?? null, completedAt: d.completedAt ?? null,
-        amount: ver.payment ? ver.payment.amountCents / 100 : null, fromBuilder: !!d.buildId, buildId: d.buildId ?? null,
+        amount: value && ver.payment ? ver.payment.amountCents / 100 : null, fromBuilder: !!d.buildId, buildId: d.buildId ?? null,
         hidden: !!d.hiddenAt,
       };
     }));
@@ -90,7 +90,13 @@ export const list = query({
 
 export const get = query({
   args: { documentId: v.id("wsDocuments"), versionNumber: v.optional(v.number()) },
-  handler: async (ctx, a) => { await requireAll(ctx, "docs"); return getCore(ctx, a.documentId, a.versionNumber); },
+  handler: async (ctx, a) => {
+    const me = await requireAll(ctx, "docs");
+    const d = await getCore(ctx, a.documentId, a.versionNumber);
+    if (!d || seesValue(me)) return d ? { ...d, paymentHidden: false } : d;
+    // 5e review M5: without "See what a project is worth", no payment amount or Stripe draft amount.
+    return { ...d, paymentHidden: true, doc: { ...d.doc, invoice: d.doc.invoice ? { ...d.doc.invoice, amountCents: undefined } : undefined }, version: { ...d.version, payment: undefined } };
+  },
 });
 
 // S4: the same, for the Claude connector.
@@ -214,7 +220,12 @@ export const saveLayout = mutation({
     versionId: v.id("wsVersions"), title: v.string(), signers: v.array(signerV), boxes: v.array(boxV),
     signingOrder: v.union(v.literal("any"), v.literal("sequence")), payment: paymentV, hasTextLayer: v.optional(v.boolean()),
   },
-  handler: async (ctx, a) => { await requireAll(ctx, "docs"); return saveLayoutCore(ctx, a); },
+  handler: async (ctx, a) => {
+    const me = await requireAll(ctx, "docs");
+    // 5e review M5: without "See what a project is worth" the payment isn't shown, so it's kept as it is.
+    if (!seesValue(me)) { const ver = await ctx.db.get(a.versionId); return saveLayoutCore(ctx, { ...a, payment: ver?.payment ?? null }); }
+    return saveLayoutCore(ctx, a);
+  },
 });
 
 // S4: the same, for the Claude connector.

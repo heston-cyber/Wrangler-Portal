@@ -844,7 +844,7 @@ function StartContract({ p, doc, onClose, onStart }: { p: ProposalInfo; doc: Bui
         <dl className="crm-dl pr-dl">
           <dt>Client</dt><dd>{[p.who.company, p.who.name].filter(Boolean).join(" · ")}</dd>
           <dt>Project</dt><dd>{doc.fields.project || doc.title}</dd>
-          <dt>Line items</dt><dd>{p.money.lines} line{p.money.lines === 1 ? "" : "s"} · {usd(p.money.totalCents)}</dd>
+          <dt>Line items</dt><dd>{p.money.lines} line{p.money.lines === 1 ? "" : "s"}{p.money.totalCents == null ? "" : ` · ${usd(p.money.totalCents)}`}</dd>
           <dt>Deposit</dt><dd>{p.money.depositPct ? `${p.money.depositPct}% · sets the Stripe draft` : "None"}</dd>
         </dl>
         <div className="dfoot">

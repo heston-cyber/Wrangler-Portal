@@ -271,7 +271,7 @@ function Editor({ data }: { data: Data }) {
                 <button type="button" aria-pressed={layout.signingOrder === "sequence"} className={layout.signingOrder === "sequence" ? "on" : ""} disabled={!editable} onClick={() => setLayout((l) => ({ ...l, signingOrder: "sequence" }))}>One after another</button>
               </div>
             </div>
-            <InvoiceField payment={layout.payment} title={layout.title} editable={editable} onChange={(p) => setLayout((l) => ({ ...l, payment: p }))} />
+            {!data.paymentHidden && <InvoiceField payment={layout.payment} title={layout.title} editable={editable} onChange={(p) => setLayout((l) => ({ ...l, payment: p }))} />}
           </section>
 
           {/* Signers */}
@@ -754,7 +754,7 @@ function FinishedCard({ data, show }: { data: Data; show: (m: string) => void })
         <ul className="ws-steps">
           <li>
             <Icon name="invoice" size={16} />
-            {doc.invoice?.status === "created" ? <><span>Draft invoice {money(doc.invoice.amountCents ?? 0)}{doc.invoice.livemode ? "" : " (test mode)"}<br /><a className="ws-sub" href={doc.invoice.url} target="_blank" rel="noreferrer">Review and send in Stripe <Icon name="arrow-up-right" size={11} plain /></a></span><Done /></>
+            {doc.invoice?.status === "created" ? <><span>Draft invoice{doc.invoice.amountCents == null ? "" : ` ${money(doc.invoice.amountCents)}`}{doc.invoice.livemode ? "" : " (test mode)"}<br /><a className="ws-sub" href={doc.invoice.url} target="_blank" rel="noreferrer">Review and send in Stripe <Icon name="arrow-up-right" size={11} plain /></a></span><Done /></>
               : doc.invoice?.status === "none" ? <span className="secondary">No invoice set for this document.</span>
               : doc.invoice?.status === "failed" ? <><span className="ws-err">Stripe draft failed: {doc.invoice.error}</span><Retry step="invoice" /></>
               : <span className="secondary"><Spinner /> Stripe draft…</span>}

@@ -315,7 +315,7 @@ function PitchesCard({ clientId }: { clientId: Id<"clients"> }) {
       {list.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "document" }} title="None yet." />
         : rows(list, (x) => <ListRow className="ilead" lead={{ icon: x.kind === "proposal" ? "document" : "invoice" }} to={x.kind === "proposal" ? `/proposals/${x._id}` : `/payments/quotes/${x._id}`} title={x.title}
           meta={[`${x.kind === "proposal" ? "Proposal" : "Quote"} ${x.number}`, x.response ? `${x.response.kind} ${day(x.response.at)}` : x.sentAt ? `sent ${day(x.sentAt)}` : null, x.validUntil && x.status === "sent" ? `valid until ${day(Date.parse(`${x.validUntil}T12:00:00`))}` : null].filter(Boolean).join(" · ")}
-          trailing={money(x.totalCents)} chip={<StatusChip tone={tone(x.status)}>{word[x.status] ?? x.status}</StatusChip>} chevron />, (x) => x._id)}
+          trailing={x.totalCents == null ? undefined : money(x.totalCents)} chip={<StatusChip tone={tone(x.status)}>{word[x.status] ?? x.status}</StatusChip>} chevron />, (x) => x._id)}
     </Card>
   );
 }

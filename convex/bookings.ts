@@ -6,7 +6,7 @@ import { internalAction, internalQuery, mutation, query } from "./lib/functions"
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe, requireAll } from "./lib/access";
+import { requireMe, requireAll, seesValue } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import { ratesOf } from "./crm";
 import { daysIn, isDate, todayCentral } from "./lib/bookings";
@@ -28,20 +28,25 @@ async function ownerBiz(ctx: QueryCtx | MutationCtx) {
 
 // ---------- reads ----------
 
+/** 5e review M5 (Heston, Nov 6): without "See what a project is worth", a booking shows no rate or expected cost. */
+export type ShownBooking = Omit<BookingRow, "rate" | "expectedCents"> & { rate: BookingRow["rate"] | null; expectedCents: number | null };
+const shown = (row: BookingRow, value: boolean): ShownBooking => (value ? row : { ...row, rate: null, expectedCents: null });
+
 /** What the Book a vendor dialog needs: your vendors, your projects, and Pricing's subcontractor costs. */
 export const form = query({
   args: { projectId: v.optional(v.string()) },
   handler: async (ctx, { projectId }) => {
-    const { b } = await ownerBiz(ctx);
+    const { b, me } = await ownerBiz(ctx);
+    const value = seesValue(me);
     const r = await ratesOf(ctx, b);
     const vendors = (await ctx.db.query("vendors").collect()).filter((x) => !x.archivedAt).sort((a, c) => a.name.localeCompare(c.name))
-      .map((x) => ({ _id: x._id, name: x.name, roles: x.roles, rates: x.rates }));
+      .map((x) => ({ _id: x._id, name: x.name, roles: x.roles, rates: value ? x.rates : [] }));
     const projects = (await ctx.db.query("projects").collect()).sort((a, c) => (c.updatedAt ?? c.createdAt) - (a.updatedAt ?? a.createdAt))
       .map((p) => ({ _id: p._id, label: label(p) }));
     const pid = projectId ? ctx.db.normalizeId("projects", projectId) : null;
     return {
       vendors, projects, project: pid ? projects.find((p) => p._id === pid) ?? null : null,
-      rates: { costs: r.costs, kinds: r.kinds, fullDayHours: r.fullDayHours },
+      rates: { costs: value ? r.costs : [], kinds: r.kinds, fullDayHours: r.fullDayHours },
     };
   },
 });
@@ -49,11 +54,11 @@ export const form = query({
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    await ownerBiz(ctx);
+    const value = seesValue((await ownerBiz(ctx)).me);
     const today = todayCentral();
     const out: BookingRow[] = [];
     for (const x of await ctx.db.query("vendorBookings").collect()) out.push(await rowOf(ctx, x, today));
-    return out.sort(order);
+    return out.sort(order).map((x) => shown(x, value));
   },
 });
 
@@ -61,40 +66,40 @@ export const list = query({
 export const forProject = query({
   args: { projectId: v.string() },
   handler: async (ctx, { projectId }) => {
-    await ownerBiz(ctx);
+    const value = seesValue((await ownerBiz(ctx)).me);
     const id = ctx.db.normalizeId("projects", projectId);
     if (!id || !(await ctx.db.get(id))) return null;
     const today = todayCentral();
     const out: BookingRow[] = [];
     for (const x of await ctx.db.query("vendorBookings").withIndex("by_project", (q) => q.eq("projectId", id)).collect()) if (x.status !== "cancelled") out.push(await rowOf(ctx, x, today));
-    return out.sort(order);
+    return out.sort(order).map((x) => shown(x, value));
   },
 });
 
 export const forVendor = query({
   args: { vendorId: v.string() },
   handler: async (ctx, { vendorId }) => {
-    await ownerBiz(ctx);
+    const value = seesValue((await ownerBiz(ctx)).me);
     const id = ctx.db.normalizeId("vendors", vendorId);
     if (!id || !(await ctx.db.get(id))) return null;
     const today = todayCentral();
     const out: BookingRow[] = [];
     for (const x of await ctx.db.query("vendorBookings").withIndex("by_vendor", (q) => q.eq("vendorId", id)).collect()) out.push(await rowOf(ctx, x, today));
-    return out.sort((a, c) => c.start.localeCompare(a.start) || c.offeredAt - a.offeredAt); // newest work first
+    return out.sort((a, c) => c.start.localeCompare(a.start) || c.offeredAt - a.offeredAt).map((x) => shown(x, value)); // newest work first
   },
 });
 
 export const get = query({
   args: { bookingId: v.string() },
   handler: async (ctx, { bookingId }) => {
-    await ownerBiz(ctx);
+    const value = seesValue((await ownerBiz(ctx)).me);
     const id = ctx.db.normalizeId("vendorBookings", bookingId);
     const x = id ? await ctx.db.get(id) : null;
     if (!x) return null;
     const vendor = await ctx.db.get(x.vendorId);
     // Phase 3c step 3: the newest briefing for this booking, to open from here.
     const brief = (await ctx.db.query("briefings").withIndex("by_booking", (q) => q.eq("bookingId", x._id)).collect()).sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
-    return { ...(await rowOf(ctx, x, todayCentral())), vendorEmail: vendor?.email ?? null, suggestedCents: x.suggestedCents ?? null, createdBy: x.createdBy ?? null,
+    return { ...shown(await rowOf(ctx, x, todayCentral()), value), vendorEmail: vendor?.email ?? null, suggestedCents: value ? x.suggestedCents ?? null : null, createdBy: x.createdBy ?? null,
       briefing: brief ? { _id: brief._id, sentAt: brief.sentAt ?? null, readAt: brief.readAt ?? null } : null };
   },
 });

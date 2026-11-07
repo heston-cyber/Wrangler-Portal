@@ -25,7 +25,7 @@ const offeredText = (t: number) => (new Date(t).toDateString() === new Date().to
 const BRIEF = { none: "no brief yet", draft: "brief drafted", sent: "brief sent", read: "brief read" } as const;
 function rowMeta(x: Row, withProject: boolean) {
   const tail = x.state === "declined" ? (x.declineReason ? `“${x.declineReason}”` : "no reason given") : x.state === "offered" ? (x.brief === "none" ? offeredText(x.offeredAt) : BRIEF[x.brief]) : x.state === "cancelled" ? `cancelled ${dateShort(x.cancelledAt ?? x.offeredAt)}` : BRIEF[x.brief];
-  return [withProject ? x.project : null, shortRange(x.start, x.end), rateText(x.rate), tail].filter(Boolean).join(" · ");
+  return [withProject ? x.project : null, shortRange(x.start, x.end), x.rate ? rateText(x.rate) : null, tail].filter(Boolean).join(" · ");
 }
 
 // ---------- Book a vendor (732:3051) ----------
@@ -199,9 +199,9 @@ export function BookingPage({ bookingId }: { bookingId: string }) {
                 <dt>Project</dt><dd><a {...linkProps(`/projects/${x.projectId}`)}>{x.project}</a></dd>
                 <dt>Role</dt><dd>{x.role}</dd>
                 <dt>Dates</dt><dd>{dateRange(x.start, x.end)}{x.days > 1 ? ` · ${x.days} days` : ""}</dd>
-                <dt>Agreed rate</dt><dd>{rateText(x.rate)}{x.suggestedCents && x.suggestedCents !== x.rate.cents ? <span className="secondary"> · suggested {rateText({ cents: x.suggestedCents, unit: x.rate.unit })}</span> : null}</dd>
+                {x.rate && <><dt>Agreed rate</dt><dd>{rateText(x.rate)}{x.suggestedCents && x.suggestedCents !== x.rate.cents ? <span className="secondary"> · suggested {rateText({ cents: x.suggestedCents, unit: x.rate.unit })}</span> : null}</dd></>}
                 {x.hours !== null && <><dt>Hours expected</dt><dd>{x.hours}</dd></>}
-                <dt>Expected cost</dt><dd>{money(x.expectedCents)}{open ? " · in the Ledger" : ""}</dd>
+                {x.expectedCents != null && <><dt>Expected cost</dt><dd>{money(x.expectedCents)}{open ? " · in the Ledger" : ""}</dd></>}
                 {x.location && <><dt>Location</dt><dd>{x.location}</dd></>}
                 {x.note && <><dt>Note</dt><dd>{x.note}</dd></>}
               </dl>
