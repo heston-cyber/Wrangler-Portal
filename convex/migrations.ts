@@ -126,3 +126,51 @@ export const clientsSelfTest = internalQuery({
     return { clients: clients.length, madeFromProjects: clients.filter((c) => c.fromProjects).length, linked, unlinked, mismatched, ok: unlinked === 0 && mismatched === 0 };
   },
 });
+
+// ---------- 5e review (Nov 6): who owns each stored file ----------
+// Records a fileOwners row for every file a business's records point at (the fields the schema types as storage ids,
+// plus the brand kits and Sign styles), so files from before Nov 6 can be deleted by their business and counted in
+// Your data. Run by hand after a `convex export`, on the dev copy first. Safe to run again: a file already recorded is
+// left alone. A file two businesses' records point at keeps the first owner found and is counted as a conflict
+// (counts only; nothing is deleted).
+import { filesOf } from "./yourData";
+
+export const ownersBatch = internalMutation({
+  args: { table: v.string(), cursor: v.union(v.string(), v.null()) },
+  handler: async (ctx, { table, cursor }) => {
+    if (table !== "businesses" && !BUSINESS_TABLES.includes(table)) throw new Error(`Not a business table: ${table}`);
+    const page = await ctx.db.query(table as never).paginate({ numItems: BATCH, cursor });
+    let recorded = 0, conflicts = 0, missing = 0;
+    for (const row of page.page as Array<{ _id: string; businessId?: string }>) {
+      const biz = (table === "businesses" ? row._id : row.businessId) as never;
+      if (!biz) continue;
+      for (const f of filesOf(table, row)) {
+        const id = ctx.db.system.normalizeId("_storage", f.id);
+        if (!id || !(await ctx.db.system.get(id))) { missing++; continue; }
+        const have = await ctx.db.query("fileOwners").withIndex("by_storage", (q) => q.eq("storageId", id)).first();
+        if (have) { if (have.businessId !== biz) conflicts++; continue; }
+        await ctx.db.insert("fileOwners", { storageId: id, businessId: biz, purpose: `backfill:${table}`, at: Date.now() });
+        recorded++;
+      }
+    }
+    return { seen: page.page.length, recorded, conflicts, missing, cursor: page.continueCursor, done: page.isDone };
+  },
+});
+
+export const ownersAll = internalAction({
+  args: {},
+  handler: async (ctx): Promise<Record<string, { seen: number; recorded: number; conflicts: number; missing: number }>> => {
+    const out: Record<string, { seen: number; recorded: number; conflicts: number; missing: number }> = {};
+    for (const table of ["businesses", ...BUSINESS_TABLES]) {
+      const t = { seen: 0, recorded: 0, conflicts: 0, missing: 0 };
+      let cursor: string | null = null;
+      for (;;) {
+        const r: { seen: number; recorded: number; conflicts: number; missing: number; cursor: string; done: boolean } = await ctx.runMutation(internal.migrations.ownersBatch, { table, cursor });
+        t.seen += r.seen; t.recorded += r.recorded; t.conflicts += r.conflicts; t.missing += r.missing; cursor = r.cursor;
+        if (r.done) break;
+      }
+      if (t.recorded || t.conflicts || t.missing) out[table] = t;
+    }
+    return out;
+  },
+});
