@@ -8,6 +8,7 @@
 import { action, httpAction } from "./_generated/server";
 import { audit } from "./lib/audit";
 import { internalAction, internalMutation, internalQuery, mutation, query, focusBusiness } from "./lib/functions";
+import { claimUpload, deleteFile } from "./lib/fileOwners";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -263,6 +264,7 @@ export const markSent = internalMutation({
     const file = await ctx.db.system.get(a.storageId);
     if (!file || !fresh(file) || (file.contentType && file.contentType !== "application/pdf") || file.size > MAX_PDF_BYTES) return { error: "The PDF didn't upload. Try again." };
     if (await ctx.db.query("proposals").filter((q) => q.eq(q.field("pdfId"), a.storageId)).first()) return { error: "The PDF didn't upload. Try again." };
+    if (!(await claimUpload(ctx, a.storageId, p.businessId ?? null, "proposal")).fresh) return { error: "The PDF didn't upload. Try again." }; // 5e review (Nov 6): across businesses
     const refuse = async (error: string) => ({ error });
     if (p.filling) return refuse("Finish the questionnaire first.");
     if (p.status === "waiting") return refuse("Claude is still drafting this one.");
@@ -589,7 +591,9 @@ export const addAnswerFile = mutation({
     const meta = await ctx.db.system.get(a.storageId);
     if (!meta || !fresh(meta)) return { error: "The file didn't upload. Try again." };
     if (await ctx.db.query("proposalFiles").withIndex("by_storage", (q) => q.eq("storageId", a.storageId)).first()) return { error: "That file is already in use." };
-    const refuse = async (error: string) => { await ctx.storage.delete(a.storageId).catch(() => null); return { error }; };
+    // 5e review (Nov 6): proposalFiles only sees this business's rows, so the claim is what stops another business's fresh upload.
+    if (!(await claimUpload(ctx, a.storageId, p.businessId ?? null, "proposalFile")).fresh) return { error: "That file is already in use." };
+    const refuse = async (error: string) => { await deleteFile(ctx, a.storageId, p.businessId ?? null); return { error }; };
     if (!OPEN.has(p.status)) return refuse("This proposal can't take files now.");
     if (meta.size > MAX_FILE_BYTES) return refuse("That file is over 25 MB. Link to it instead (videos especially).");
     const had = await ctx.db.query("proposalFiles").withIndex("by_proposal", (q) => q.eq("proposalId", p._id)).collect();

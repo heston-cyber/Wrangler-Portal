@@ -14,7 +14,7 @@ import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { requireMe, requireAll } from "./lib/access";
 import { claimIn, discardIn, recordIn } from "./fileOwners";
-import { deleteFile, ownsFile } from "./lib/fileOwners";
+import { deleteFile, ownsFile, recordFile } from "./lib/fileOwners";
 import { businessInScope } from "./lib/business";
 import {
   DEFAULT_BUSINESS, DEFAULT_STYLE, MAX_BUILD_JSON, PRESET_STYLES, buildProblems, emptyFields, newId, totals,
@@ -505,6 +505,7 @@ export const insertFont = internalMutation({
     const same = (await ctx.db.query("wsFonts").withIndex("by_family", (q) => q.eq("family", a.family)).collect()).find((f) => f.weight === a.weight && f.italic === a.italic);
     if (same) { await deleteFile(ctx as unknown as MutationCtx, same.fileId, businessInScope(ctx)); await ctx.db.delete(same._id); }
     await ctx.db.insert("wsFonts", { ...a, createdAt: Date.now() });
+    await recordFile(ctx as unknown as MutationCtx, a.fileId, businessInScope(ctx), "font"); // 5e review (Nov 6): a Google font the server fetched (an upload is claimed already)
     return null;
   },
 });

@@ -34,6 +34,7 @@ import {
 import { pngProblem } from "./lib/pngCheck";
 import { allowedEmails } from "./auth";
 import { bump } from "./lib/rate";
+import { recordFile } from "./lib/fileOwners";
 import { businessContact, businessInScope, defaultBusiness } from "./lib/business";
 import { crmDocument } from "./crm";
 
@@ -342,6 +343,8 @@ export const adoptRecord = internalMutation({
     if (await tooBusy(ctx, r.s._id)) return { error: BUSY };
     const old = r.s.adopted;
     await ctx.db.patch(r.s._id, { adopted: { name: a.name, title: a.title, method: a.method, signatureFileId: a.signatureFileId, initialsFileId: a.initialsFileId, signatureSha256: a.signatureSha256, initialsSha256: a.initialsSha256, at: Date.now() } });
+    // 5e review (Nov 6): the images the server just stored belong to the document's business (bookkeeping only; the signing steps are unchanged).
+    for (const id of [a.signatureFileId, a.initialsFileId]) await recordFile(ctx, id, r.s.businessId ?? null, "signerSignature");
     if (old) { await ctx.storage.delete(old.signatureFileId); await ctx.storage.delete(old.initialsFileId); }
     await ev(ctx, r.s, old ? "signature_changed" : "signature_adopted", a, `Adopted a ${a.method} signature and initials as "${a.name}"${a.title ? `, ${a.title}` : ""} (signature image SHA-256 ${a.signatureSha256}, initials ${a.initialsSha256}).`);
     return { ok: true };
