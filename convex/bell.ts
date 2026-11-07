@@ -56,8 +56,10 @@ export const post = internalMutation({
   args: { businessId: v.optional(v.id("businesses")), kind: kindArg, title: v.string(), link: v.optional(v.string()), key: v.string(), projectId: v.optional(v.id("projects")) },
   handler: async (ctx, a) => {
     const now = Date.now();
-    const businessId = a.businessId ?? (await defaultBusiness(ctx))?._id;
-    if (!businessId) return 0;
+    // 5e review H3 (Nov 6): an alert lands only in the business it's about. Without one it's dropped (and noted in the
+    // log), never put in Wrangler's bell; only Site watch, which is about the portal itself, goes to the default business.
+    const businessId = a.businessId ?? (a.kind === "sitewatch" ? (await defaultBusiness(ctx))?._id : undefined);
+    if (!businessId) { console.warn(`bell: no business for ${a.kind} (${a.key.slice(0, 40)}); not posted`); return 0; }
     const head = `${(await ctx.db.get(businessId))?.name ?? "Wrangler Portal"} · ${BELL_NAMES[a.kind].label}`; // 824:21489
     let made = 0;
     for (const userId of await recipients(ctx, businessId, a.kind, a.projectId)) {

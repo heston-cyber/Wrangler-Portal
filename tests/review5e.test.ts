@@ -94,3 +94,42 @@ test("the vendor form's Save sends only its own fields (it used to send the whol
   await w.heston.mutation(api.vendors.update, { vendorId, ...body });
   expect((await w.t.run((ctx) => ctx.db.get(vendorId)))?.notes).toBe("Edited");
 });
+
+test("H3 an alert lands only in its own business's bell; one with no business is dropped (Site watch aside)", async () => {
+  const w = await world();
+  const internal = anyApi;
+  const { B, bossId } = await w.t.run(async (ctx) => {
+    const B = await ctx.db.insert("businesses", { slug: "other", name: "Other Films", createdAt: 1 });
+    const bossId = await ctx.db.insert("users", { email: "boss@other.example", name: "Boss", role: "owner" });
+    await ctx.db.insert("memberships", { businessId: B, email: "boss@other.example", userId: bossId, role: "owner", createdAt: 1 });
+    return { B, bossId };
+  });
+  const items = () => w.t.run(async (ctx) => (await ctx.db.query("bellItems").collect()).map((x) => ({ biz: x.businessId, user: x.userId, kind: x.kind })));
+  expect(await w.t.mutation(internal.bell.post, { kind: "payments", title: "A payment failed", key: "k1" })).toBe(0);
+  expect(await items()).toEqual([]);
+  await w.t.mutation(internal.bell.post, { businessId: B, kind: "payments", title: "Other's payment failed", key: "k2" });
+  expect(await items()).toEqual([{ biz: B, user: bossId, kind: "payments" }]);
+  await w.t.mutation(internal.bell.post, { kind: "sitewatch", title: "The portal needs a look", key: "k3" });
+  expect((await items()).filter((x) => x.kind === "sitewatch").map((x) => x.biz)).toEqual([w.A]);
+});
+
+test("bell gap: an Editor hears about client notes on a project they're assigned to, and only those", async () => {
+  const w = await world();
+  const internal = anyApi;
+  const { p1, p2, eds } = await w.t.run(async (ctx) => {
+    const p1 = await ctx.db.insert("projects", { businessId: w.A, name: "Theirs", createdAt: 0 });
+    const p2 = await ctx.db.insert("projects", { businessId: w.A, name: "Not theirs", createdAt: 0 });
+    const eds: Id<"users">[] = [];
+    for (const email of ["ed@x.example", "ed2@x.example"]) {
+      const u = await ctx.db.insert("users", { email, name: "Ed", role: "team", emailVerificationTime: 0 });
+      await ctx.db.insert("memberships", { businessId: w.A, email, userId: u, role: "team", teamRole: "editor", perms: switches(["projects", "review"]), createdAt: 1 });
+      eds.push(u);
+    }
+    await ctx.db.insert("projectTeam", { businessId: w.A, projectId: p1, userId: eds[0], createdAt: 0 });
+    return { p1, p2, eds };
+  });
+  await w.t.mutation(internal.bell.post, { businessId: w.A, kind: "notes", title: "Notes on theirs", key: "n1", projectId: p1 });
+  await w.t.mutation(internal.bell.post, { businessId: w.A, kind: "notes", title: "Notes on another", key: "n2", projectId: p2 });
+  const got = await w.t.run(async (ctx) => (await ctx.db.query("bellItems").collect()).filter((x) => eds.includes(x.userId)).map((x) => [x.userId === eds[0] ? "assigned" : "other", x.title]));
+  expect(got).toEqual([["assigned", "Notes on theirs"]]);
+});
