@@ -13,7 +13,8 @@ beforeAll(() => {
 });
 const TZ = "America/Chicago";
 const RANGE = { from: "2026-01-01", to: "2026-03-31", tz: TZ };
-const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+// Nov 6 fix: the business's own day (Central), as the report counts it; the UTC date was a day ahead every evening after 6 pm.
+const day = (n: number) => new Date(Date.now() + n * 86_400_000).toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
 type W = Awaited<ReturnType<typeof world>>;
 
 async function invoice(w: W, x: { title: string; status: "open" | "paid" | "void" | "draft"; total: number; paid?: number; due?: string; sentAt?: number; kind?: "final" | "subscription" | "other";
