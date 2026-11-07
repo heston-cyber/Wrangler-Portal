@@ -16,6 +16,7 @@ import { BookDialog, VendorBookings } from "./Bookings";
 import { NewBriefing } from "./NewBriefing";
 import { VendorBriefings } from "./VendorBriefings";
 import { VendorInvoiceChip } from "./Payments";
+import { usePerms } from "../../lib/teamAccess";
 
 export const VENDOR_ROLES = ["Shooter", "Editor", "Drone pilot", "Sound", "Colourist", "Production assistant"];
 type Rate = { role: string; unit: "day" | "hour"; cents: number };
@@ -44,7 +45,7 @@ export default function VendorsPage() {
               {shown.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "user" }} title="None here." /> : shown.map((r, i) => (
                 <div key={r._id} className="wp-rowwrap">{i > 0 && <Divider />}
                   <ListRow lead={{ avatar: r.name }} to={`/vendors/${r._id}`} title={r.name} meta={[r.roles.join(", ") || "No role yet", r.basedIn, r.portal].filter(Boolean).join(" · ")}
-                    trailing={`${money(r.paidThisYearCents)} this year`} chip={r.w9 ? <StatusChip tone="success">W-9 on file</StatusChip> : <StatusChip tone="warning">W-9 missing</StatusChip>} chevron />
+                    trailing={r.paidThisYearCents == null ? undefined : `${money(r.paidThisYearCents)} this year`} chip={r.w9 ? <StatusChip tone="success">W-9 on file</StatusChip> : <StatusChip tone="warning">W-9 missing</StatusChip>} chevron />
                 </div>
               ))}
             </Card>
@@ -66,6 +67,8 @@ export function VendorDialog({ onClose, vendor, invite: inviteFirst = true }: { 
   const [other, setOther] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const { perms, team } = usePerms();
+  const showRate = !team || perms.value; // 5e review M5: rates are a job amount
   const first = d.name.trim().split(" ")[0] || "them";
   const toggle = (r: string) => setD({ ...d, roles: d.roles.includes(r) ? d.roles.filter((x) => x !== r) : [...d.roles, r] });
   const rate0 = d.rates[0] ?? { role: d.roles[0] ?? "", unit: "hour" as const, cents: 0 };
@@ -73,7 +76,9 @@ export function VendorDialog({ onClose, vendor, invite: inviteFirst = true }: { 
   const save = async () => {
     setBusy(true); setErr(null);
     try {
-      const body = { ...d, rates: d.rates.filter((r) => r.cents > 0).map((r) => ({ ...r, role: r.role || d.roles[0] || "Rate" })) };
+      // Nov 6 fix: only the form's own fields go (the vendor record's other fields made Save fail with a validator error).
+      const body = { name: d.name, email: d.email, roles: d.roles, basedIn: d.basedIn, phone: d.phone, portfolio: d.portfolio, gear: d.gear, notes: d.notes,
+        rates: d.rates.filter((r) => r.cents > 0).map((r) => ({ role: r.role || d.roles[0] || "Rate", unit: r.unit, cents: r.cents })) };
       if (vendor) { await update({ vendorId: vendor._id, ...body }); onClose(); }
       else { const id = await add({ ...body, invite }); navigate(`/vendors/${id}`); }
     } catch (e) { setErr(errText(e)); setBusy(false); }
@@ -90,9 +95,9 @@ export function VendorDialog({ onClose, vendor, invite: inviteFirst = true }: { 
               {[...VENDOR_ROLES, ...d.roles.filter((r) => !VENDOR_ROLES.includes(r))].map((r) => <button key={r} type="button" className={`qz-chip${d.roles.includes(r) ? " on" : ""}`} aria-pressed={d.roles.includes(r)} onClick={() => toggle(r)}>{r}</button>)}
               <span className="qz-addword"><input className="input sm" placeholder="+ Other" aria-label="Another role" value={other} onChange={(e) => setOther(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && other.trim()) { e.preventDefault(); if (!d.roles.includes(other.trim())) toggle(other.trim()); setOther(""); } }} /></span>
             </div></div>
-          <div className="wp-field qz-q"><span className="wp-field-label">Their rate (optional)</span>
+          {showRate && <div className="wp-field qz-q"><span className="wp-field-label">Their rate (optional)</span>
             <span className="vd-rate"><MoneyInput label="Their rate" value={rate0.cents} onChange={(c) => setRate0({ cents: c })} />
-              <select className="input" aria-label="Per" value={rate0.unit} onChange={(e) => setRate0({ unit: e.target.value as "day" | "hour" })}><option value="hour">/ hour</option><option value="day">/ day</option></select></span></div>
+              <select className="input" aria-label="Per" value={rate0.unit} onChange={(e) => setRate0({ unit: e.target.value as "day" | "hour" })}><option value="hour">/ hour</option><option value="day">/ day</option></select></span></div>}
           <label className="wp-field qz-q"><span className="wp-field-label">Based in (optional)</span><input className="input" value={d.basedIn ?? ""} onChange={(e) => setD({ ...d, basedIn: e.target.value })} /></label>
           {vendor && <>
             <label className="wp-field qz-q"><span className="wp-field-label">Phone</span><input className="input" type="tel" value={d.phone ?? ""} onChange={(e) => setD({ ...d, phone: e.target.value })} /></label>
@@ -142,11 +147,11 @@ export function VendorPage({ vendorId }: { vendorId: string }) {
             <Button variant="primary" onClick={() => setBooking(true)}>Book</Button>
           </div>
         </header>
-        <div className="vd-tiles">
+        {t && <div className="vd-tiles">
           <section className="vd-tile glass"><span className="wp-eyebrow">Paid this year</span><b>{money(t.paidThisYearCents)}</b><span className="wp-small secondary">for your 1099 total</span></section>
           <section className="vd-tile glass"><span className="wp-eyebrow">Approved, not paid</span><b>{money(t.approvedCents)}</b><span className="wp-small secondary">{t.approvedCount} invoice{t.approvedCount === 1 ? "" : "s"}</span></section>
           <section className="vd-tile glass"><span className="wp-eyebrow">Waiting for approval</span><b>{money(t.waitingCents)}</b><span className="wp-small secondary">{t.waitingCount} invoice{t.waitingCount === 1 ? "" : "s"}</span></section>
-        </div>
+        </div>}
         <div className="wp-homecols">
           <div className="col">
             <VendorBookings vendorId={x._id} first={first} />
@@ -154,7 +159,7 @@ export function VendorPage({ vendorId }: { vendorId: string }) {
             <VendorInvoices vendorId={x._id} first={first} />
           </div>
           <div className="col right">
-            <Card label="Rates" head={<SectionHead label="Rates" action={<button type="button" className="btn ghost sm" onClick={() => setEditing(true)}>Edit</button>} />}>
+            {!x.ratesHidden && <Card label="Rates" head={<SectionHead label="Rates" action={<button type="button" className="btn ghost sm" onClick={() => setEditing(true)}>Edit</button>} />}>
               <div className="vd-pad">
                 {x.rates.length === 0 && x.costs.length === 0 && <p className="wp-small secondary">No rates yet.</p>}
                 {x.roles.map((role) => {
@@ -164,7 +169,7 @@ export function VendorPage({ vendorId }: { vendorId: string }) {
                 })}
                 {x.rates.filter((r) => !x.roles.includes(r.role)).map((r) => <div key={r.role} className="vd-row"><span className="secondary">{r.role}</span><b>{perUnit(r)}</b></div>)}
               </div>
-            </Card>
+            </Card>}
             <Card label="Details" head={<SectionHead label="Details" action={<button type="button" className="btn ghost sm" onClick={() => setEditing(true)}>Edit</button>} />}>
               <dl className="crm-dl vd-pad">{details.map(([k, v]) => <Fragment key={k}><dt>{k}</dt><dd>{v}</dd></Fragment>)}</dl>
             </Card>
@@ -190,6 +195,7 @@ export function VendorPage({ vendorId }: { vendorId: string }) {
 function VendorInvoices({ vendorId, first }: { vendorId: Id<"vendors">; first: string }) {
   const rows = useQuery(api.vendors.invoices, { vendorId });
   const day = (t: number) => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  if (rows === null) return null; // 5e review H2: only with the Vendor payments switch
   return (
     <Card label="Invoices and payments" head={<SectionHead label="Invoices and payments" count={rows?.length ?? 0} action={rows?.length ? <ButtonLink size="sm" variant="ghost" to="/vendors/payments">Payments</ButtonLink> : undefined} />}>
       {rows === undefined ? <SkeletonRows n={2} /> : !rows || rows.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "invoice" }} title={`Nothing from ${first} yet.`} />

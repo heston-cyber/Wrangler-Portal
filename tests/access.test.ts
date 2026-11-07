@@ -430,7 +430,7 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "users.setName": ACCOUNT,
     "vendors.invoices": PRODUCTION,
     "vendors.list": PRODUCTION,
-    "vendors.get": PRODUCTION,
+    "vendors.get": PRODUCTION, // 5e review H2: the W-9 file, how they're paid and the totals need Vendor payments too (tests/review5e.test.ts)
     "vendors.add": PRODUCTION,
     "vendors.update": PRODUCTION,
     "vendors.archive": PRODUCTION,

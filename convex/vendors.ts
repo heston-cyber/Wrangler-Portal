@@ -12,7 +12,7 @@ import { deliverOnce } from "./invoiceReminders";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe, requireAll } from "./lib/access";
+import { requireMe, requireAll, seesValue, type Me } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import type { Rates } from "./lib/estimate";
 import { ratesOf } from "./crm";
@@ -21,6 +21,10 @@ import { paidAmount, paidDay } from "./lib/bookingRows";
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i;
 const clip = (s: string | undefined, n: number) => (s ?? "").trim().slice(0, n);
+
+/** 5e review H2 (Heston, Nov 6, "Go and approved", answer a): W-9s, payout details, how a vendor is paid and what
+ *  they've been paid are for the owner and the Vendor payments switch. */
+const seesVendorPay = (me: Me) => !me.team || me.team.perms.vendorPayments;
 
 async function ownerBiz(ctx: QueryCtx | MutationCtx) {
   await requireAll(ctx, "production");
@@ -78,6 +82,7 @@ export const invoices = query({
   args: { vendorId: v.string() },
   handler: async (ctx, { vendorId }) => {
     await ownerBiz(ctx);
+    if (!seesVendorPay(await requireAll(ctx, "production"))) return null; // H2: what a vendor billed and was paid
     const id = ctx.db.normalizeId("vendors", vendorId);
     if (!id) return null;
     const rows = (await ctx.db.query("vendorInvoices").withIndex("by_vendor", (q) => q.eq("vendorId", id)).collect()).filter((x) => x.status !== "draft").sort((a, b) => (b.sentAt ?? 0) - (a.sentAt ?? 0));
@@ -91,9 +96,10 @@ export const list = query({
   args: {},
   handler: async (ctx) => {
     await ownerBiz(ctx);
+    const pay = seesVendorPay(await requireAll(ctx, "production"));
     const rows = (await ctx.db.query("vendors").collect()).filter((x) => !x.archivedAt).sort((a, b) => a.name.localeCompare(b.name));
     const out = [];
-    for (const x of rows) out.push({ _id: x._id, name: x.name, roles: x.roles, basedIn: x.basedIn ?? null, portal: status(x), w9: !!x.w9, paidThisYearCents: (await totalsOf(ctx, x._id)).paidThisYearCents });
+    for (const x of rows) out.push({ _id: x._id, name: x.name, roles: x.roles, basedIn: x.basedIn ?? null, portal: status(x), w9: !!x.w9, paidThisYearCents: pay ? (await totalsOf(ctx, x._id)).paidThisYearCents : null });
     return out;
   },
 });
@@ -102,14 +108,22 @@ export const get = query({
   args: { vendorId: v.string() },
   handler: async (ctx, { vendorId }) => {
     const b = await ownerBiz(ctx);
+    const me = await requireAll(ctx, "production");
+    const pay = seesVendorPay(me), value = seesValue(me);
     const id = ctx.db.normalizeId("vendors", vendorId);
     const x = id ? await ctx.db.get(id) : null;
     if (!x) return null;
     const rates = await ratesOf(ctx, b);
+    // The Stripe recipient and payout method never leave the server; the rest follows the switches (H2, M5).
+    const { payout: _payout, w9, payMethod, rates: theirRates, ...rest } = x;
+    void _payout;
     return {
-      ...x, portal: status(x), w9: x.w9 ? { name: x.w9.name, uploadedAt: x.w9.uploadedAt, url: await ctx.storage.getUrl(x.w9.fileId) } : null,
-      costs: x.roles.map((role) => ({ role, cost: pricingCost(rates, role) })),
-      totals: await totalsOf(ctx, x._id),
+      ...rest, portal: status(x),
+      w9: w9 ? { name: w9.name, uploadedAt: w9.uploadedAt, url: pay ? await ctx.storage.getUrl(w9.fileId) : null } : null,
+      payMethod: pay ? payMethod : undefined,
+      rates: value ? theirRates : [], ratesHidden: !value,
+      costs: value ? x.roles.map((role) => ({ role, cost: pricingCost(rates, role) })) : [],
+      totals: pay ? await totalsOf(ctx, x._id) : null,
     };
   },
 });
@@ -123,6 +137,7 @@ export const add = mutation({
     const dup = (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", d.email)).collect()).find((x) => !x.archivedAt);
     if (dup) throw new ConvexError(`${dup.name} is already a vendor with that email.`);
     const now = Date.now();
+    if (!seesValue(await requireAll(ctx, "production"))) d.rates = []; // M5: rates are a job amount
     const id = await ctx.db.insert("vendors", { ...d, ...(a.invite ? { invitedAt: now } : {}), createdAt: now, updatedAt: now });
     if (a.invite) await inviteNow(ctx, id);
     return id;
@@ -136,6 +151,7 @@ export const update = mutation({
     const x = await ctx.db.get(vendorId);
     if (!x) throw new ConvexError("That vendor isn't here.");
     const d = clean(a);
+    if (!seesValue(await requireAll(ctx, "production"))) d.rates = x.rates; // M5: they don't see the rates, so they keep them as they are
     await notOwner(ctx, d.email); // review (Nov 2): an owner's email can't be a vendor
     if (d.email !== x.email && (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", d.email)).collect()).some((y) => y._id !== x._id && !y.archivedAt)) throw new ConvexError("Another vendor has that email.");
     // Review fix (step 6): a new email is a new login. The old address loses this business, and the new one needs a
