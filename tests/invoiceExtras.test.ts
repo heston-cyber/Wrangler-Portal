@@ -130,6 +130,14 @@ describe("refunds and disputes", () => {
     expect(inv.refundedCents).toBe(50000);
     expect(inv.disputed).toMatchObject({ status: "needs_response", cents: 400000, reason: "fraudulent" });
     expect(inv.history.slice(-2).map((h: { kind: string; detail: string }) => `${h.kind}: ${h.detail}`)).toEqual(["refunded: $500.00 refunded in Stripe", "disputed: $4,000.00 disputed (fraudulent). Respond in Stripe."]);
+    // 5e review M4 (Nov 6): a later sync from Stripe (whose payments list has no refunds) keeps the refund, and a
+    // second refund on the same payment raises the total; it never drops back.
+    await refreshNow(w, token);
+    await w.t.finishAllScheduledFunctions(vi.runAllTimers);
+    expect((await w.heston.query(api.invoices.get, { invoiceId: id })).refundedCents).toBe(50000);
+    expect(await w.t.run(async (ctx) => (await ctx.db.get(id))?.payments?.[0]?.refundedCents)).toBe(50000);
+    expect(await post("evt_r2", "charge.refunded", "acct_A", { id: "ch_1", payment_intent: "pi_1", amount_refunded: 80000 })).toBe(200);
+    expect((await w.heston.query(api.invoices.get, { invoiceId: id })).refundedCents).toBe(80000);
   });
 });
 

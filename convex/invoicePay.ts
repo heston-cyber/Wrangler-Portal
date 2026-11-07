@@ -283,7 +283,10 @@ export const applyPayments = internalMutation({
   handler: async (ctx, a) => {
     const i = await ctx.db.query("invoices").withIndex("by_stripe", (q) => q.eq("stripe.invoiceId", a.stripeId)).first();
     if (!i || i.stripe?.accountId !== a.accountId) return null;
-    const payments = a.payments as NonNullable<Doc<"invoices">["payments"]>;
+    // 5e review M4 (Nov 6): Stripe's payments list doesn't carry refunds; what charge.refunded recorded on each payment
+    // is kept by its id (it used to be wiped by the next sync, and the next refund then shrank the refunded total).
+    const refunds = new Map((i.payments ?? []).filter((p) => p.refundedCents).map((p) => [p.id, p.refundedCents!]));
+    const payments = (a.payments as NonNullable<Doc<"invoices">["payments"]>).map((p) => (refunds.has(p.id) ? { ...p, refundedCents: refunds.get(p.id) } : p));
     const failure = a.failure as Failure | null;
     const now = Date.now();
     const history = [...i.history];
