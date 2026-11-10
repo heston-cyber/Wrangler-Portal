@@ -220,7 +220,9 @@ async function build(ctx: QueryCtx, a: { from: string; to: string; tz: string },
     outstanding: { buckets, invoices: owed.slice(0, 200) },
     vendors: [...vendorRows.values()].sort((x, y) => y.cents - x.cents),
     funnel: { stages: funnel, leads, leadToPaid: leads ? Math.round((funnel[STAGES.length - 1].count / leads) * 100) : null },
-    detail: { payments: payments.sort((x, y) => x.day.localeCompare(y.day)), vendorPaid: vendorPaid.sort((x, y) => x.day.localeCompare(y.day)), finished },
+    detail: { payments: payments.sort((x, y) => x.day.localeCompare(y.day)), vendorPaid: vendorPaid.sort((x, y) => x.day.localeCompare(y.day)),
+      // 5e review M5: a finished job's own amount is a job amount; without the switch only the totals above remain.
+      finished: withValue ? finished : finished.map((f) => ({ ...f, cents: null })) },
     empty: revenue === 0 && vendorCents === 0 && owed.length === 0 && leads === 0 && !months.some((m) => m.invoicedCents),
   };
 }

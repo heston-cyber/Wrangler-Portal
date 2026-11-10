@@ -133,3 +133,58 @@ test("bell gap: an Editor hears about client notes on a project they're assigned
   const got = await w.t.run(async (ctx) => (await ctx.db.query("bellItems").collect()).filter((x) => eds.includes(x.userId)).map((x) => [x.userId === eds[0] ? "assigned" : "other", x.title]));
   expect(got).toEqual([["assigned", "Notes on theirs"]]);
 });
+
+// ---------- M5: "See what a project is worth" hides every job amount (Heston, Nov 6, answer b) ----------
+import { setup as matrixWorld } from "./matrix";
+
+test("M5 a Producer with the worth switch off: no proposal or quote totals, no contract payment, no booking rates; saving the contract keeps its payment", async () => {
+  const { t, ids } = await matrixWorld();
+  const anyIds = ids as Record<string, any>;
+  await t.run(async (ctx) => {
+    await ctx.db.patch(ids.wsVersionId, { payment: { amountCents: 500000, description: "Deposit" } });
+    const m = await ctx.db.get(ids.teamMemberId);
+    await ctx.db.patch(ids.teamMemberId, { perms: { ...(m as any).perms, value: false } });
+  });
+  const owner = t.withIdentity({ subject: anyIds.ownerSub });
+  const producer = t.withIdentity({ subject: ids.producerSub });
+  // The owner sees them (the same world, so a hidden value is the switch, not missing data).
+  expect((await owner.query(api.sign.list, {})).find((d: any) => d._id === ids.docId).amount).toBe(5000);
+  expect((await owner.query(api.sign.get, { documentId: ids.docId })).version.payment).toMatchObject({ amountCents: 500000 });
+  expect(typeof (await owner.query(api.bookings.get, { bookingId: ids.bookingId })).expectedCents).toBe("number");
+  // The Producer doesn't.
+  for (const p of await producer.query(api.proposals.list, {})) expect(p.totalCents).toBeNull();
+  const company = await producer.query(api.proposals.forCompany, { clientId: ids.clientRecId });
+  expect(company.filter((x: any) => x.kind === "quote")).toEqual([]); // quotes are Payments'
+  for (const x of company) expect(x.totalCents).toBeNull();
+  expect((await producer.query(api.sign.list, {})).find((d: any) => d._id === ids.docId).amount).toBeNull();
+  const doc = await producer.query(api.sign.get, { documentId: ids.docId });
+  expect(doc.paymentHidden).toBe(true);
+  expect(doc.version.payment).toBeUndefined();
+  expect(JSON.stringify(doc)).not.toContain("500000");
+  const booking = await producer.query(api.bookings.get, { bookingId: ids.bookingId });
+  expect(booking).toMatchObject({ rate: null, expectedCents: null, suggestedCents: null });
+  for (const b of await producer.query(api.bookings.list, {})) expect(b.rate).toBeNull();
+  const form = await producer.query(api.bookings.form, {});
+  expect(form.rates.costs).toEqual([]);
+  for (const v of form.vendors) expect(v.rates).toEqual([]);
+  // Saving the contract's layout without seeing the payment leaves the payment as it was.
+  await producer.mutation(api.sign.saveLayout, { versionId: ids.wsVersionId, title: "T", signers: [], boxes: [], signingOrder: "any", payment: null });
+  expect((await t.run((ctx) => ctx.db.get(ids.wsVersionId)))?.payment).toMatchObject({ amountCents: 500000 });
+});
+
+test("M5 Reports without the worth switch: totals stay, each finished job's own amount goes", async () => {
+  const { t, ids } = await matrixWorld();
+  const bookkeeper = t.withIdentity({ subject: ids.bookkeeperSub });
+  await t.run(async (ctx) => {
+    const m = (await ctx.db.query("memberships").collect()).find((x) => x.teamRole === "bookkeeper")!;
+    await ctx.db.patch(m._id, { perms: { ...(m as any).perms, value: false } });
+    const d = await ctx.db.get(ids.dealId);
+    await ctx.db.patch(ids.dealId, { stage: "delivered", valueCents: 250000, history: [...(d?.history ?? []), { kind: "delivered", at: Date.now() }] } as never);
+  });
+  const today = new Date().toISOString().slice(0, 10);
+  const r = await bookkeeper.query(api.reports.page, { from: `${Number(today.slice(0, 4)) - 1}-01-01`, to: today, tz: "UTC" });
+  expect(r.byProject).toBeNull();
+  expect(r.detail.finished.length).toBeGreaterThan(0);
+  for (const f of r.detail.finished) expect(f.cents).toBeNull();
+  expect(typeof r.summary.revenueCents).toBe("number");
+});
