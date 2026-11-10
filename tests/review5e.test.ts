@@ -188,3 +188,30 @@ test("M5 Reports without the worth switch: totals stay, each finished job's own 
   for (const f of r.detail.finished) expect(f.cents).toBeNull();
   expect(typeof r.summary.revenueCents).toBe("number");
 });
+
+test("answer c: with the Settings switch a team member changes the business's look only; Dropbox and the details are the owner's", async () => {
+  const { t, ids } = await matrixWorld();
+  await t.run(async (ctx) => {
+    const m = await ctx.db.get(ids.teamMemberId);
+    await ctx.db.patch(ids.teamMemberId, { perms: { ...(m as any).perms, settings: true } });
+  });
+  const producer = t.withIdentity({ subject: ids.producerSub });
+  await producer.mutation(api.business.updateSettings, { accent: "#22AA44", watermark: { corner: "br", size: "small", opacity: 0.5 } });
+  await expect(producer.mutation(api.business.updateSettings, { name: "Renamed" })).rejects.toThrow(/Only the owner/);
+  await expect(producer.mutation(api.business.updateSettings, { accent: "#22AA44", replyTo: "x@y.example" })).rejects.toThrow(/Only the owner/);
+  await expect(producer.mutation(api.business.updateSettings, { roundsDefault: 5 })).rejects.toThrow(/Only the owner/);
+  for (const q of [api.dropbox.status, api.dropbox.flagged]) await expect(producer.query(q, {})).rejects.toThrow();
+  await expect(producer.mutation(api.dropbox.retryFlagged, { fileId: ids.fileId })).rejects.toThrow();
+  const owner = t.withIdentity({ subject: (ids as any).ownerSub });
+  await owner.mutation(api.business.updateSettings, { name: "Renamed" });
+  expect(Array.isArray(await owner.query(api.dropbox.flagged, {}))).toBe(true);
+});
+
+test("answer d: a Bookkeeper approving, declining or paying a vendor invoice is in Settings › Activity", async () => {
+  const { t, ids } = await matrixWorld();
+  await t.run((ctx) => ctx.db.patch(ids.vendorInvoiceId, { status: "sent", totalCents: 12000 } as never));
+  const bookkeeper = t.withIdentity({ subject: ids.bookkeeperSub });
+  await bookkeeper.mutation(api.vendorPayments.decline, { invoiceId: ids.vendorInvoiceId, reason: "Hours don't match" });
+  const rows = await t.run(async (ctx) => (await ctx.db.query("auditLog").collect()).map((r: any) => `${r.role}: ${r.text}`));
+  expect(rows).toContain("Bookkeeper: declined a vendor invoice (INV-0001)");
+});

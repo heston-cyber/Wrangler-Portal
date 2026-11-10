@@ -162,6 +162,7 @@ export const decline = mutation({
     if (!why) throw new ConvexError("Say why, so they can fix it.");
     const now = Date.now();
     await ctx.db.patch(invoiceId, { status: "declined", declinedAt: now, declineReason: why, history: [...(x.history ?? []), { at: now, text: `Declined by you: ${why}` }], updatedAt: now });
+    await audit(ctx, { kind: "paid", text: `declined a vendor invoice (${x.number})`, where: "Vendors › Payments", link: `/vendors/payments/${invoiceId}` }); // 5e review (answer d)
     await ctx.scheduler.runAfter(0, internal.vendorPayments.mailDeclined, { invoiceId, at: now }); // Nov 2: email for everything
     return null;
   },

@@ -119,7 +119,14 @@ export const updateSettings = mutation({
     watermark: v.optional(v.object({ corner: v.union(v.literal("tl"), v.literal("tr"), v.literal("bl"), v.literal("br"), v.literal("c")), size: v.union(v.literal("small"), v.literal("large")), opacity: v.number(), mark: v.optional(v.union(v.literal("logo"), v.literal("text"), v.literal("both"))), text: v.optional(v.string()) })),
   },
   handler: async (ctx, a) => {
-    await requireAll(ctx, "settings");
+    const me = await requireAll(ctx, "settings");
+    // 5e review (Heston, Nov 6, answer c): the Settings switch covers the business's look (colours, logo, watermark);
+    // its details (names, emails, address, privacy link, modules, revision rounds) are the owner's.
+    if (me.team) {
+      const LOOK = new Set(["accent", "background", "watermark"]);
+      const other = Object.keys(a).filter((k) => (a as Record<string, unknown>)[k] !== undefined && !LOOK.has(k));
+      if (other.length) throw new ConvexError("Only the owner can change the business's details. You can change its colours, logo and watermark.");
+    }
     const id = ownBusiness(ctx);
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
     { const changed = Object.keys(a).filter((k) => (a as Record<string, unknown>)[k] !== undefined);

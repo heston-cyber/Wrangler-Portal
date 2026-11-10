@@ -220,6 +220,7 @@ function BusinessSection({ show }: { show: (m: string) => void }) {
   const [f, setF] = useState<Biz | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const { team } = usePerms(); // 5e review (answer c): a team member with Settings changes the look; the details are the owner's
   useEffect(() => {
     if (cur && !f) setF({ name: cur.name, legalName: cur.legalName ?? "", emailFromName: cur.emailFromName ?? "", replyTo: cur.replyTo ?? "", address: cur.address ?? "", privacyUrl: cur.privacyUrl ?? "", accent: cur.accent ?? "", background: cur.background ?? "" });
   }, [cur, f]);
@@ -229,13 +230,14 @@ function BusinessSection({ show }: { show: (m: string) => void }) {
   const onSave = async () => {
     setBusy("save"); setErr(null);
     try {
-      await save({ name: f.name, legalName: f.legalName || null, emailFromName: f.emailFromName || null, replyTo: f.replyTo || null, address: f.address || null, privacyUrl: f.privacyUrl || null, accent: f.accent || null, background: f.background || null });
+      await save(team ? { accent: f.accent || null, background: f.background || null }
+        : { name: f.name, legalName: f.legalName || null, emailFromName: f.emailFromName || null, replyTo: f.replyTo || null, address: f.address || null, privacyUrl: f.privacyUrl || null, accent: f.accent || null, background: f.background || null });
       show("Saved");
     } catch (e) { setErr((e as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]); }
     finally { setBusy(null); }
   };
   const field = (label: string, k: "name" | "legalName" | "emailFromName" | "replyTo" | "address" | "privacyUrl", type = "text", ph = "") => (
-    <label className="wp-field"><span className="wp-field-label">{label}</span><input className="input" type={type} value={f[k]} placeholder={ph} onChange={(e) => set({ [k]: e.target.value } as Partial<Biz>)} /></label>
+    <label className="wp-field"><span className="wp-field-label">{label}</span><input className="input" type={type} value={f[k]} placeholder={ph} readOnly={team} disabled={team} onChange={(e) => set({ [k]: e.target.value } as Partial<Biz>)} /></label>
   );
   const hex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v);
   return (
@@ -249,7 +251,7 @@ function BusinessSection({ show }: { show: (m: string) => void }) {
           {field("Reply-to", "replyTo", "email", cur.ownerEmail ?? "")}
           {field("Business address", "address", "text", "Street, city, state ZIP")}
           {field("Privacy policy link", "privacyUrl", "url", "https://")}
-          <p className="wp-field-hint" style={{ margin: "-6px 0 0" }}>Shown on invoices, receipts and email footers. Stripe requires both on receipts.</p>
+          <p className="wp-field-hint" style={{ margin: "-6px 0 0" }}>{team ? "Only the owner changes these. You can change the logo, colours and watermark." : "Shown on invoices, receipts and email footers. Stripe requires both on receipts."}</p>
           <div className="wp-biz2">
             <LogoSlot label="Logo · on dark" url={cur.logoUrl} light={false} busy={busy === "dark"} onPick={async (file) => { setBusy("dark"); try { await uploadLogo(file, "dark"); } finally { setBusy(null); } }} onClear={() => void setLogo({ storageId: null })} />
             <LogoSlot label="Logo · on light" url={cur.logoLightUrl} light busy={busy === "light"} onPick={async (file) => { setBusy("light"); try { await uploadLogo(file, "light"); } finally { setBusy(null); } }} onClear={() => void setLogo({ storageId: null, which: "light" })} />
@@ -294,10 +296,11 @@ function RoundsAndWatermark({ cur, show }: { cur: BizSettings; show: (m: string)
   const save = useMutation(api.business.updateSettings);
   const [rounds, setRounds] = useState<string | null>(null);
   const w = cur.watermark;
+  const { team } = usePerms();
   const setW = (p: Partial<typeof w>) => void save({ watermark: { ...w, ...p } }).catch((e) => show(String((e as Error).message)));
   return (
     <div className="wp-bizextra">
-      <div className="panel">
+      {!team && <div className="panel">
         <span className="wp-eyebrow">Revision rounds</span>
         <div className="prow"><span className="pl">Use them</span><span className="pr"><Toggle label="Revision rounds" checked={!cur.roundsOff} onChange={(on) => void save({ roundsOff: !on }).then(() => show(on ? "Revision rounds are on." : "Revision rounds are off."), (e) => show(String((e as Error).message)))} /><span className="wmtxt">{cur.roundsOff ? "Off · no round chips, last-round notices or change-order prompts" : "On · each version counts as a round"}</span></span></div>
         {!cur.roundsOff && <>
@@ -309,7 +312,7 @@ function RoundsAndWatermark({ cur, show }: { cur: BizSettings; show: (m: string)
         <div className="prow"><span className="pl">How it counts</span><span className="pr">Each version you upload is a round: v1 is round 1, v2 is round 2.</span></div>
         <div className="prow"><span className="pl">Per client</span><span className="pr">Change it, or switch it off, on a client or on one project.</span></div>
         </>}
-      </div>
+      </div>}
       <div className="panel">
         <span className="wp-eyebrow">Watermark on review copies</span>
         <div className="prow"><span className="pl">Use it</span><span className="pr">On for every client. Switch it off on a client's page (Settings tab).</span></div>
