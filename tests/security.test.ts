@@ -1,6 +1,7 @@
 // Phase 5e step 2 (Nov 5): Settings › Security. Change password (email 51, other devices signed out), five wrong tries
 // rest the sign-in (D146), change email with a code to the new address (D158: the login and the person's contact rows
 // move; email 50 to the old address), and devices (email 47 for an owner or team member on a new browser).
+import { Scrypt } from "lucia";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { anyApi } from "convex/server";
 import type { Id } from "../convex/_generated/dataModel";
@@ -71,19 +72,38 @@ describe("Phase 5e · Security", () => {
     await expect(w.t.action(api.security.changePassword, { current: PW, next: "brandnewpassword2" })).rejects.toThrow(/Sign in first/);
   }, 30_000);
 
-  test("S2 five wrong passwords rest the sign-in; the page can say so; an unknown email says nothing", async () => {
+  test("S2 five wrong passwords rest the sign-in; the page says so the same way whether or not the email has a login", async () => {
     const w = await world();
     const mails: Sent[] = [];
     stub(mails);
     await account(w, mails);
-    expect(await w.t.query(api.security.signInLocked, { email: CASEY })).toEqual({ locked: false });
-    for (let i = 0; i < 5; i++) await expect(signInWith(w, CASEY, "wrong password " + i)).rejects.toThrow();
-    const lock = await w.t.query(api.security.signInLocked, { email: CASEY });
-    expect(lock).toMatchObject({ locked: true });
-    expect(lock.minutes).toBeGreaterThanOrEqual(10);
-    // Even the right password waits now.
+    // The page asks after each failed try (and that's what counts toward the notice).
+    const fail = async (email: string, i: number) => { await expect(signInWith(w, email, "wrong password " + i)).rejects.toThrow(); return w.t.mutation(api.security.signInLocked, { email }); };
+    const seen: Record<string, unknown[]> = { [CASEY]: [], "nobody@else.example": [] };
+    for (const email of Object.keys(seen)) for (let i = 0; i < 5; i++) seen[email].push(await fail(email, i));
+    // 5e review (Nov 6): identical answers, so the notice can't tell anyone which emails have a login.
+    expect(seen["nobody@else.example"]).toEqual(seen[CASEY]);
+    expect(seen[CASEY].slice(0, 4)).toEqual([{ locked: false }, { locked: false }, { locked: false }, { locked: false }]);
+    expect(seen[CASEY][4]).toMatchObject({ locked: true });
+    expect((seen[CASEY][4] as { minutes: number }).minutes).toBeGreaterThanOrEqual(10);
+    // And the real limit holds: even the right password waits now.
     await expect(signInWith(w, CASEY, PW)).rejects.toThrow();
-    expect(await w.t.query(api.security.signInLocked, { email: "nobody@else.example" })).toEqual({ locked: false });
+  }, 30_000);
+
+  test("S6 while the sign-in rests, the reset code still lets them set a new password and sign in", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    await account(w, mails);
+    for (let i = 0; i < 5; i++) await expect(signInWith(w, CASEY, "wrong password " + i)).rejects.toThrow();
+    await w.t.action(api.auth.signIn, { provider: "password", params: { flow: "reset", email: CASEY } });
+    const code = codeIn(mails.filter((m) => m.to === CASEY).pop()!);
+    // Asking for a code, or a wrong code, ends nothing: the old password still rests.
+    await expect(w.t.action(api.auth.signIn, { provider: "password", params: { flow: "reset-verification", email: CASEY, code: code === "000000" ? "111111" : "000000", newPassword: "afreshpassword9" } })).rejects.toThrow();
+    await expect(signInWith(w, CASEY, PW)).rejects.toThrow(/TooManyFailedAttempts/);
+    const r = await w.t.action(api.auth.signIn, { provider: "password", params: { flow: "reset-verification", email: CASEY, code, newPassword: "afreshpassword9" } }) as { tokens?: unknown };
+    expect(r.tokens).toBeTruthy();
+    expect((await signInWith(w, CASEY, "afreshpassword9")).tokens).toBeTruthy();
   }, 30_000);
 
   test("S3 change email: a code to the new address; the login and the person's rows move; email 50 to the old address", async () => {
@@ -91,10 +111,16 @@ describe("Phase 5e · Security", () => {
     const mails: Sent[] = [];
     stub(mails);
     // Maya is Harbor Coffee's client person; give her a password account the way she'd have one.
-    await w.t.run(async (ctx) => { const u = (await ctx.db.query("users").withIndex("email", (q) => q.eq("email", "maya@harbor.example")).unique())!; await ctx.db.insert("authAccounts", { userId: u._id, provider: "password", providerAccountId: "maya@harbor.example", secret: "x" } as never); });
-    await expect(w.maya.mutation(api.security.startEmailChange, { newEmail: "jo@harbor.example" })).rejects.toThrow(/already has a portal login/);
-    await expect(w.maya.mutation(api.security.startEmailChange, { newEmail: "heston@wranglerproductions.com" })).rejects.toThrow(/already has a portal login/);
-    await w.maya.mutation(api.security.startEmailChange, { newEmail: "Maya.New@Harbor.example" });
+    const secret = await new Scrypt().hash(PW);
+    await w.t.run(async (ctx) => { const u = (await ctx.db.query("users").withIndex("email", (q) => q.eq("email", "maya@harbor.example")).unique())!; await ctx.db.insert("authAccounts", { userId: u._id, provider: "password", providerAccountId: "maya@harbor.example", secret } as never); });
+    // 5e review M6 (Nov 6): her current password first.
+    expect(await w.maya.action(api.security.startEmailChange, { newEmail: "maya.new@harbor.example", current: "not it" })).toEqual({ error: "wrong" });
+    expect(mails.filter((m) => m.to === "maya.new@harbor.example")).toEqual([]);
+    await expect(w.maya.action(api.security.startEmailChange, { newEmail: "jo@harbor.example", current: PW })).rejects.toThrow(/already has a portal login/);
+    await expect(w.maya.action(api.security.startEmailChange, { newEmail: "heston@wranglerproductions.com", current: PW })).rejects.toThrow(/already has a portal login/);
+    // Another device of hers, signed in now; it's signed out when the email changes.
+    const other = await session(w, "maya@harbor.example");
+    await w.maya.action(api.security.startEmailChange, { newEmail: "Maya.New@Harbor.example", current: PW });
     await settle(w);
     const codeMail = mails.find((m) => m.to === "maya.new@harbor.example")!;
     expect(codeMail.subject).toMatch(/is your code to confirm your new email/);
@@ -110,6 +136,7 @@ describe("Phase 5e · Security", () => {
       person: (await ctx.db.query("clientPeople").collect()).filter((p) => p.email === "maya.new@harbor.example").length,
     }));
     expect(after).toEqual({ user: "Maya Brooks", acct: true, ms: 1, oldMs: 0, person: 1 });
+    expect(await w.t.run((ctx) => ctx.db.get(other.sessionId))).toBeNull();
     expect(mails.find((m) => m.to === "maya@harbor.example" && m.subject === "The email you sign in with was changed")?.text).toContain("maya.new@harbor.example");
     // She's still Harbor Coffee's client, under the new address.
     expect(await w.maya.query(api.users.me, {})).toMatchObject({ email: "maya.new@harbor.example", role: "client" });
@@ -118,11 +145,13 @@ describe("Phase 5e · Security", () => {
   test("S4 five wrong codes cancel the change; an expired code does nothing", async () => {
     const w = await world();
     stub([]);
-    await w.maya.mutation(api.security.startEmailChange, { newEmail: "maya2@harbor.example" });
+    const secret = await new Scrypt().hash(PW);
+    await w.t.run(async (ctx) => { const u = (await ctx.db.query("users").withIndex("email", (q) => q.eq("email", "maya@harbor.example")).unique())!; await ctx.db.insert("authAccounts", { userId: u._id, provider: "password", providerAccountId: "maya@harbor.example", secret } as never); });
+    await w.maya.action(api.security.startEmailChange, { newEmail: "maya2@harbor.example", current: PW });
     for (let i = 0; i < 4; i++) expect(await w.maya.mutation(api.security.confirmEmailChange, { code: "000000" })).toEqual({ error: "wrong" });
     expect(await w.maya.mutation(api.security.confirmEmailChange, { code: "000000" })).toEqual({ error: "tooMany" });
     expect((await w.maya.query(api.security.state, {})).pending).toBeNull();
-    await w.maya.mutation(api.security.startEmailChange, { newEmail: "maya2@harbor.example" });
+    await w.maya.action(api.security.startEmailChange, { newEmail: "maya2@harbor.example", current: PW });
     await w.t.run(async (ctx) => { for (const r of await ctx.db.query("emailChanges").collect()) await ctx.db.patch(r._id, { until: Date.now() - 1 }); });
     expect(await w.maya.mutation(api.security.confirmEmailChange, { code: "123456" })).toEqual({ error: "expired" });
     expect((await w.maya.query(api.users.me, {})).email).toBe("maya@harbor.example");

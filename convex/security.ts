@@ -99,18 +99,24 @@ export const brand = internalQuery({ args: {}, handler: async (ctx) => mailBrand
 
 // ---------- the sign-in page: Too many tries ----------
 
-/** Too many tries (D146): whether this email's password sign-in is resting, and for how long. Only says anything after 5 wrong tries. */
-export const signInLocked = query({
+/**
+ * Too many tries (D146): whether to show "Too many tries" after a failed sign-in. The page calls it once per failed try.
+ * 5e review (Nov 6): it no longer reads the account's own counter, which only exists for an email with a login and so
+ * told anyone which emails have one. It keeps its own count per email, for any email, with the library's arithmetic
+ * (5 tries, one back every 12 minutes), so an email without a login answers exactly as one with a login would.
+ */
+export const signInLocked = mutation({
   args: { email: v.string() },
   handler: async (ctx, { email }) => {
     const e = email.trim().toLowerCase();
-    if (!EMAIL.test(e)) return { locked: false as const };
-    const acct = await ctx.db.query("authAccounts").withIndex("providerAndAccountId", (q) => q.eq("provider", "password").eq("providerAccountId", e)).unique();
-    if (!acct) return { locked: false as const };
-    const lim = await ctx.db.query("authRateLimits").withIndex("identifier", (q) => q.eq("identifier", acct._id)).unique();
-    if (!lim) return { locked: false as const };
-    const perMs = SIGN_IN_TRIES / 3_600_000;
-    const left = Math.min(SIGN_IN_TRIES, lim.attemptsLeft + (Date.now() - lim.lastAttemptTime) * perMs);
+    if (!EMAIL.test(e) || e.length > 200) return { locked: false as const };
+    const key = `signInTries:${await sha256Hex(e)}`;
+    const now = Date.now(), perMs = SIGN_IN_TRIES / 3_600_000;
+    const row = await ctx.db.query("rateLimits").withIndex("by_key", (q) => q.eq("key", key)).unique();
+    // count = tries left (before this one), hour = when the last one was counted (ms).
+    const before = row ? Math.min(SIGN_IN_TRIES, row.count + (now - row.hour) * perMs) : SIGN_IN_TRIES;
+    const left = Math.max(0, before - 1);
+    if (row) await ctx.db.patch(row._id, { count: left, hour: now }); else await ctx.db.insert("rateLimits", { key, count: left, hour: now });
     if (left >= 1) return { locked: false as const };
     return { locked: true as const, minutes: Math.max(1, Math.ceil((1 - left) / perMs / 60_000)) };
   },
@@ -118,8 +124,18 @@ export const signInLocked = query({
 
 // ---------- email ----------
 
-/** Change email, step 1: a 6-digit code to the new address (10 minutes). */
-export const startEmailChange = mutation({
+/** Change email, step 1: the current password first (5e review M6, Nov 6: a signed-in device left open can't move the
+ *  login on its own; wrong ones count toward the same 5 tries as signing in), then a 6-digit code to the new address. */
+export const startEmailChange = action({
+  args: { newEmail: v.string(), current: v.string() },
+  handler: async (ctx, { newEmail, current }): Promise<{ ok: true; until: number } | { error: "wrong" | "locked" }> => {
+    const me: { email: string } = await ctx.runQuery(internal.security.who, {});
+    try { await retrieveAccount(ctx, { provider: "password", account: { id: me.email, secret: current } }); }
+    catch (e) { return { error: /TooManyFailedAttempts/.test(String((e as Error).message)) ? "locked" : "wrong" }; }
+    return ctx.runMutation(internal.security.startEmailChangeCore, { newEmail });
+  },
+});
+export const startEmailChangeCore = internalMutation({
   args: { newEmail: v.string() },
   handler: async (ctx, { newEmail }) => {
     const me = await whoAmI(ctx);
@@ -164,6 +180,14 @@ export const confirmEmailChange = mutation({
     await ctx.db.patch(me.userId, { email: next });
     for (const a of await ctx.db.query("authAccounts").withIndex("userIdAndProvider", (q) => q.eq("userId", me.userId).eq("provider", "password")).collect()) await ctx.db.patch(a._id, { providerAccountId: next });
     for (const m of await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", old)).collect()) await ctx.db.patch(m._id, { email: next });
+    // 5e review M6: every other device is signed out (it signs in again with the new email).
+    const here = await getAuthSessionId(ctx);
+    for (const sess of await ctx.db.query("authSessions").withIndex("userId", (q) => q.eq("userId", me.userId)).collect()) {
+      if (sess._id === here) continue;
+      for (const t of await ctx.db.query("authRefreshTokens").withIndex("sessionId", (q) => q.eq("sessionId", sess._id)).collect()) await ctx.db.delete(t._id);
+      await ctx.db.delete(sess._id);
+      for (const d of await ctx.db.query("sessionDevices").withIndex("by_session", (q) => q.eq("sessionId", sess._id)).collect()) await ctx.db.delete(d._id);
+    }
     // The person's rows in each business (trusted code: every business, not only the caller's), and email 50 to the old address.
     await ctx.scheduler.runAfter(0, internal.security.moveContacts, { old, next });
     if (me.kind === "owner" || me.kind === "team") await audit(ctx, { kind: "signin", text: `changed their sign-in email to ${next}`, where: "Settings › Security" });

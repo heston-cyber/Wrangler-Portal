@@ -216,7 +216,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "bell.pushKey": {}, "push.ensureKey": {},
     // Phase 5e step 2: Security (one's own account)
     "security.state": {}, "security.changePassword": { current: "x", next: "yyyyyyyyyyyy" }, "security.signInLocked": { email: "x@example.com" },
-    "security.startEmailChange": { newEmail: "brand.new@example.com" }, "security.confirmEmailChange": { code: "000000" }, "security.cancelEmailChange": {},
+    "security.startEmailChange": { newEmail: "brand.new@example.com", current: "x" }, "security.confirmEmailChange": { code: "000000" }, "security.cancelEmailChange": {},
     "security.seenDevice": { deviceKey: "matrixdevicekey0000000", label: "Test" }, "security.signOutDevice": { sessionId: ids.ownerSub.split("|")[1] },
         "team.resetRoles": {}, "team.projectPeople": { projectId: ids.projectId }, "team.assign": { projectId: ids.projectId, userIds: [] }, "team.joinPage": { token: "nope" },
   };

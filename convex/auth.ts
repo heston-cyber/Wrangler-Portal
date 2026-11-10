@@ -91,6 +91,14 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       const verified = args.type === "verification" || args.profile.emailVerified === true;
       if (args.existingUserId) {
         let uid: Id<"users"> = args.existingUserId as Id<"users">;
+        // 5e review (Nov 6): a right emailed code (a reset, or proving the email) ends "Too many tries" for the account, so
+        // the new password signs in at once (the library only resets the password; its try counter kept the sign-in resting
+        // up to an hour). "verification" is called only once the code has been checked; asking for a code is "email" and
+        // changes nothing (tested: S6).
+        if (args.type === "verification") {
+          for (const a of await ctx.db.query("authAccounts").withIndex("userIdAndProvider", (q) => q.eq("userId", uid).eq("provider", "password")).collect())
+            for (const r of await ctx.db.query("authRateLimits").withIndex("identifier", (q) => q.eq("identifier", a._id)).collect()) await ctx.db.delete(r._id);
+        }
         // Phase 5b step 4: a guest login that set a password (they were invited since). Until the email is proved it
         // stays a guest login, untouched; once proved, the account its invite says replaces it.
         // Review L4: as a NEW users row. The guest row and its sessions are deleted, and the password account is moved to

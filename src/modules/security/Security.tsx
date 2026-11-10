@@ -66,15 +66,19 @@ function PasswordDialog({ onClose, show }: { onClose: () => void; show: (m: stri
 }
 
 function EmailDialog({ pending, onClose, show }: { pending: string | null; onClose: () => void; show: (m: string) => void }) {
-  const start = useMutation(api.security.startEmailChange);
+  const start = useAction(api.security.startEmailChange);
   const confirm = useMutation(api.security.confirmEmailChange);
   const cancel = useMutation(api.security.cancelEmailChange);
   const [step, setStep] = useState<"address" | "code">(pending ? "code" : "address");
-  const [email, setEmail] = useState(pending ?? ""), [code, setCode] = useState("");
+  const [email, setEmail] = useState(pending ?? ""), [code, setCode] = useState(""), [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
   const send = async () => {
     setBusy(true); setErr(null);
-    try { await start({ newEmail: email }); setCode(""); setStep("code"); } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
+    try {
+      const r = await start({ newEmail: email, current: pw });
+      if ("error" in r) { setErr(r.error === "locked" ? "Too many wrong passwords. Wait a few minutes, or reset your password from the sign-in page." : "That isn't your current password."); setPw(""); return; }
+      setCode(""); setPw(""); setStep("code");
+    } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
   };
   const check = async () => {
     setBusy(true); setErr(null);
@@ -92,12 +96,14 @@ function EmailDialog({ pending, onClose, show }: { pending: string | null; onClo
     <Modal onClose={close} label="Change your email" width={560}>
       <form className="crm-dialog team-dialog" onSubmit={(e) => { e.preventDefault(); void (step === "address" ? send() : check()); }}>
         {step === "address" ? <>
-          <DialogHeader eyebrow="Security" title="Change your email" body="Your email is your username. We send a 6-digit code to the new address to confirm it." onClose={close} />
+          <DialogHeader eyebrow="Security" title="Change your email" body="Your email is your username. We send a 6-digit code to the new address to confirm it, and sign out your other devices once it changes." onClose={close} />
           <label className="wp-field"><span className="wp-field-label">New email address</span><input className="input" type="email" autoFocus placeholder="name@example.com" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+          {/* 5e review M6 (Nov 6): the current password first, as Change password asks */}
+          <label className="wp-field"><span className="wp-field-label">Current password</span><input className="input" type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} /></label>
           {err && <p className="error" role="alert">{err}</p>}
           <div className="dfoot">
             <button className="btn ghost" type="button" onClick={close}>Cancel</button>
-            <Button variant="primary" type="submit" loading={busy} disabled={!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())}>Send me a code</Button>
+            <Button variant="primary" type="submit" loading={busy} disabled={!pw || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())}>Send me a code</Button>
           </div>
         </> : <>
           <DialogHeader eyebrow="Security" title="Enter the code" body={`We sent a 6-digit code to ${email.trim().toLowerCase()}. It works for 10 minutes. Your email changes once you enter it.`} onClose={close} />
