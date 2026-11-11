@@ -45,7 +45,7 @@
   --surface-overlay: rgba(var(--ink), .6);
   --fill-chip: rgba(var(--paper), .07);
   --fill-chip-hover: rgba(var(--paper), .11);
-  --fill-glass: rgba(var(--ink), .34);
+  --fill-glass: rgba(var(--ink), .16); /* D169 (Nov 11): clearer than Figma's 34 % */
   --fill-glass-strong: rgba(18, 16, 19, .9);
 
   /* borders */
@@ -90,15 +90,17 @@
   --glow-dot: 0 0 4px var(--glow-medium), 0 0 10px var(--glow-soft);
   /* Phase 5f (Foundations, "Phase 5f · Glass layer and content card", approved Nov 11) */
   --shadow-float: 0 18px 50px rgba(var(--ink), .55);                      /* Shadow/float */
-  --blur-glass: blur(12px);                                                /* Glass/effect's frost */
-  --blur-glass-clear: blur(3px);                                           /* Glass/effect-clear's frost */
-  /* Glass fill: ink 34 % + paper 2 % + a paper sheen 10 % → 0 (top to bottom) at 20 % */
+  /* D169 (Heston, Nov 11: "too dark and frosted"): clearer than Glass/effect's values, the way Apple's glass is: a light
+     frost, a colour boost and a dimming of what's behind, so text stays readable over the bright sun */
+  --blur-glass: blur(4px) saturate(160%) brightness(.68);
+  --blur-glass-clear: blur(2px) saturate(160%) brightness(.68);
+  /* Glass fill: ink 16 % (D169; Figma 34 %) + paper 2 % + a paper sheen 10 % → 0 (top to bottom) at 20 % */
   --glass-fill: linear-gradient(180deg, rgba(var(--paper), .02), rgba(var(--paper), 0)), linear-gradient(rgba(var(--paper), .02), rgba(var(--paper), .02)), linear-gradient(var(--fill-glass), var(--fill-glass));
   --glass-edge: linear-gradient(180deg, rgba(var(--paper), .75), rgba(var(--paper), .18));     /* 1 px, inside */
   /* the content card: not glass (Card/fill, Card/edge, Card/shadow); another business's background tints it */
   --card-fill: color-mix(in srgb, var(--surface-base) 78%, transparent);
   --card-edge: rgba(var(--paper), .14);
-  --card-shadow: 0 10px 30px rgba(var(--ink), .45);
+  --card-shadow: 0 10px 30px rgba(var(--ink), .25); /* D168: a lighter Card/shadow under clear glass */
   /* the accessible looks (Glass/solid-fill, Glass/solid-edge, Glass/contrast-edge); lib/brand.ts sets another business's fill */
   --glass-solid: #0b0b0d;
   --glass-solid-edge: rgba(var(--paper), .28);
@@ -135,21 +137,29 @@ body { font-family: var(--font-body); font-size: var(--fs-text-regular); line-he
 .wp-body { font-size: var(--fs-text-regular); line-height: var(--lh-regular); color: var(--text-muted); margin: 0; }
 .wp-small { font-size: var(--fs-text-small); line-height: var(--lh-small); color: var(--text-secondary); margin: 0; }
 
-/* ---------- the content card (Phase 5f): cards, stat tiles, lists, section cards are content, not glass ----------
-   The class keeps its old name (.glass) on the cards that use it; since Nov 11 it draws Card/fill, Card/edge and
-   Card/shadow: no blur, no refraction. The scene shows faintly through the 22 % the fill leaves. */
+/* ---------- the cards are glass (D168, Heston, Nov 11: "The rectangles should be glass") ----------
+   Cards and stat tiles are the bending glass, like the floating layer: CSS draws the frosted middle, the fill and a 1 px
+   edge; src/lib/glass.ts draws the bending rim. (The Nov 11 frames' solid card, Card/fill 78 %, is set aside.) */
 .glass {
+  --lg-frost: 4;
   position: relative; isolation: isolate;
-  background: var(--card-fill);
-  box-shadow: inset 0 0 0 1px var(--card-edge), var(--card-shadow);
+  background: var(--glass-fill);
+  backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass);
+  box-shadow: var(--card-shadow);
 }
-/* the old pages' blocks are content too; a block inside a card keeps its edge but casts no shadow */
+.glass::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none; z-index: 2;
+  background: var(--glass-edge);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+/* the old pages' blocks take the same frosted glass (no bending rim) */
 .panel, .note, .vcard, .rect, .regwrap, .nextrender, .ws-card, .ws-hubcard, .wst-card, .wst-clause, .ws-sigform, .ws-sigcard,
 .wsx-card, .ws-note, .ehead, .drop {
-  background-color: var(--card-fill);
-  background-image: none;
-  backdrop-filter: none; -webkit-backdrop-filter: none;
-  box-shadow: inset 0 0 0 1px var(--card-edge);
+  background-color: transparent;
+  background-image: var(--glass-fill);
+  backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass);
+  box-shadow: inset 0 0 0 1px rgba(var(--paper), .2), inset 0 1px 0 rgba(var(--paper), .4);
 }
 
 /* ---------- icons ---------- */
@@ -3196,8 +3206,14 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
   .wp-shell:not(.overlay):has(.wp-ptop .wp-chips) .topbar:has(+ .wp-page :is(.wp-pagehead, .wp-sethead)) .crumbs > a { display: none; }
   .wp-shell:not(.overlay):has(.wp-ptop .wp-chips) .topbar:has(+ .wp-page :is(.wp-pagehead, .wp-sethead)):not(:has(.right > *)) { display: none; }
 }
-/* Phase 5f: the stat tiles are content cards (portal.css, end: "Phase 5f") */
-.pov-stat { position: relative; isolation: isolate; border: 0; background: var(--card-fill); box-shadow: inset 0 0 0 1px var(--card-edge), var(--card-shadow); }
+/* D168: the stat tiles are glass, like the cards */
+.pov-stat { --lg-frost: 4; position: relative; isolation: isolate; border: 0; background: var(--glass-fill); backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass); box-shadow: var(--card-shadow); }
+.pov-stat::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none; z-index: 2;
+  background: var(--glass-edge);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
 /* ---------- Phase 5e step 5: Payments › Reports (828:23224, phone 829:23397) and the Dashboard widgets (829:24616) ---------- */
 .rp-presets { margin: 4px 0 4px; }
 .rp-presets .short { display: none; }
@@ -3303,13 +3319,17 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 :root[data-theme="light"] { --card-shadow: 0 10px 30px rgba(40, 30, 20, .12); --glass-solid: rgb(250, 248, 243); --glass-solid-edge: rgba(var(--ink), .28); --glass-contrast-edge: rgba(var(--ink), .6); }
 
 /* cards that had switched their old edge off take the card's edge and shadow (they're content cards now) */
-:root .glass:is(.wst-card, .wst-clause, .ws-sigcard, .ws-sigform, .ws-card, .wsx-card, .gst-card, .gst-row, .gst-group) { box-shadow: inset 0 0 0 1px var(--card-edge), var(--card-shadow); }
+:root .glass:is(.wst-card, .wst-clause, .ws-sigcard, .ws-sigform, .ws-card, .wsx-card, .gst-card, .gst-row, .gst-group) { box-shadow: var(--card-shadow); }
 :root .wst-card.glass:hover { box-shadow: inset 0 0 0 1px var(--border-strong), var(--card-shadow); }
+/* never glass on glass: a card inside a glass card or a floating surface is a plain block (no frost, no rim) */
+:is(.glass, .pov-stat, .wp-side, .wp-tabbar, .menu, .dialog, .bell-panel, .toast, .cal-pop, .selbar) :is(.glass, .pov-stat) {
+  --lg-frost: none; background: rgba(var(--paper), .04); backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none;
+}
 .dialog .rect, .dialog .keyline { border-radius: 12px; } /* concentric: dialog 24, inset 12 → 12 */
 
 /* ---------- 1 · the floating layer: Glass/effect (frost 12) or Glass/effect-clear (frost 3), fill and a 1 px edge ---------- */
 .wp-side, .wp-tabbar, .wp-layerchip, .menu, .dialog, .bell-panel, .toast, .cal-pop, .selbar {
-  --lg-frost: 12;
+  --lg-frost: 4;
   isolation: isolate; border: 0;
   background: var(--glass-fill);
   backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass);
@@ -3321,7 +3341,7 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
   mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
 }
 /* Glass/effect-clear: the phone tab bar, layer chips, toasts, small controls */
-.wp-tabbar, .wp-layerchip, .toast, .selbar { --lg-frost: 3; backdrop-filter: var(--blur-glass-clear); -webkit-backdrop-filter: var(--blur-glass-clear); }
+.wp-tabbar, .wp-layerchip, .toast, .selbar { --lg-frost: 2; backdrop-filter: var(--blur-glass-clear); -webkit-backdrop-filter: var(--blur-glass-clear); }
 /* Glass/float (+ Shadow/float): dialogs, sheets, menus, popovers, the bell panel; Glass/float-clear: toasts */
 .wp-side:not(.drawer), .wp-tabbar, .wp-layerchip, .selbar { box-shadow: none; }
 .menu, .dialog, .bell-panel, .toast, .cal-pop, .wp-side.drawer { box-shadow: var(--shadow-float); }
@@ -3338,7 +3358,9 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
   background: var(--glass-solid); backdrop-filter: none; -webkit-backdrop-filter: none;
 }
 /* the bending rim (src/lib/glass.ts): a canvas behind the surface's content, above its frosted fill */
-canvas.wp-glass { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; display: block; pointer-events: none; border-radius: inherit; }
+canvas.wp-glass { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; display: block; pointer-events: none; border-radius: inherit; transition: opacity 160ms var(--ease-out); }
+canvas.wp-glass.stale { opacity: 0; transition-duration: 90ms; } /* a card's rim while it scrolls (5f.3) */
+.glass, .pov-stat { --lg-lazy: 1; }
 
 /* ---------- 2 · desktop: the glass top bar, and content fading under it (scroll edge effect) ----------
    48 high, inset 16 from the main area and 12 from the top, a capsule (radius 24), padding 24. It carries the breadcrumb
@@ -3348,7 +3370,7 @@ canvas.wp-glass { position: absolute; inset: 0; width: 100%; height: 100%; z-ind
 @media (min-width: 821px) {
   .wp-shell:not(.overlay) .main { position: relative; }
   .wp-shell:not(.overlay) .main > .topbar {
-    --lg-frost: 12; --lg-veil: .75;
+    --lg-frost: 4; --lg-veil: 0; /* D169: the fade under it doesn't dim the bend */
     position: absolute; z-index: 6; top: 12px; left: 16px; right: 16px; height: 48px; min-height: 48px; padding: 0 24px; gap: 12px;
     display: flex; align-items: center; border: 0; border-radius: 24px; isolation: isolate; box-shadow: none;
     background: var(--glass-fill); backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass);
@@ -3376,8 +3398,8 @@ canvas.wp-glass { position: absolute; inset: 0; width: 100%; height: 100%; z-ind
 
 /* ---------- 3 · phones: the tab bar and its fade, chips, sheets ---------- */
 @media (max-width: 820px) {
-  .wp-tabbar { --lg-veil: .8; }
-  .wp-layerchip { --lg-veil: .8; }
+  .wp-tabbar, .wp-layerchip { --lg-veil: 0; } /* D169 */
+  .wp-layerchip { --lg-lazy: 1; } /* carried by the page: the rim is redrawn where it stops (src/lib/glass.ts) */
   /* content fades above the tab bar: 112 tall from 30 px above it, ink 0 → 60 % at 60 % → 92 % */
   .wp-shell:not(.overlay):not(:has(.wsb-phonebar))::after {
     content: ""; position: fixed; z-index: 59; left: 0; right: 0; bottom: 0; height: calc(112px + env(safe-area-inset-bottom, 0px) * .5); pointer-events: none;
@@ -3427,8 +3449,8 @@ canvas.wp-glass { position: absolute; inset: 0; width: 100%; height: 100%; z-ind
 }
 /* Reduce motion: the glass keeps its still look; nothing fades in */
 @media (prefers-reduced-motion: reduce) {
-  .wp-shell .main::before, .wp-shell .main > .topbar .crumbs { transition: none !important; }
+  .wp-shell .main::before, .wp-shell .main > .topbar .crumbs, canvas.wp-glass { transition: none !important; }
 }
 /* the phone's More list is content */
-.wp-morelist { border: 0; background: var(--card-fill); backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: inset 0 0 0 1px var(--card-edge), var(--card-shadow); }
+.wp-morelist { border: 0; background: var(--glass-fill); backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass); box-shadow: inset 0 0 0 1px rgba(var(--paper), .2), var(--card-shadow); } /* D168: a glass card */
 @media (max-width: 820px) { .topbar.deskonly { display: none !important; } } /* the glass bar a page added for the desktop only */

@@ -16,11 +16,18 @@
 // Without WebGL, with Reduce transparency or Increase contrast on, or on another business's background, the CSS glass
 // stands alone (D164: plain frost only where the bending glass can't be drawn).
 
-export const GLASS = { frost: 12, frostClear: 3, refraction: 1, depth: 70, dispersion: 0.85, lightAngle: -45, lightIntensity: 0.5 } as const;
+// D169 (Heston, Nov 11: "too dark and frosted", "edges don't bend enough"): clearer and bending more than Figma's
+// Glass/effect (frost 12, refraction 1, ink 34 %); the CSS frost matches (portal.css --blur-glass: 4 px, saturate 160 %,
+// brightness 68 %; ink 16 %).
+export const GLASS = { frost: 4, frostClear: 2, refraction: 1.5, depth: 70, bevel: 0.4, dispersion: 0.85, lightAngle: -45, lightIntensity: 0.5, saturate: 1.6, brightness: 0.68 } as const;
 
 /** The floating layer: every surface drawn as glass (portal.css gives the same list its CSS glass). */
 export const FLOAT = ".wp-side, .wp-shell:not(.overlay) .main > .topbar, .wp-tabbar, .wp-layerchip, .menu, .dialog, .bell-panel, .toast, .cal-pop, .selbar";
+/** D168 (Heston, Nov 11: "The rectangles should be glass"): the cards and stat tiles are the same bending glass. */
+export const CARDS = ".glass, .pov-stat";
+const ALL = `${FLOAT}, ${CARDS}`;
 const NEAR = 120; // surfaces this far off screen give their canvas back
+const RES = 1.5;  // pixels per CSS pixel the rim is drawn at
 
 const VERT = `#version 300 es
 in vec2 a; void main() { gl_Position = vec4(a, 0.0, 1.0); }`;
@@ -42,6 +49,8 @@ uniform vec2 u_ldir;
 uniform float u_dpr;
 uniform float u_ink;     // the ink in the surface's fill (0.34; sheets 0.78 / 0.92)
 uniform float u_veil;    // how much the page dims the scene behind the surface
+uniform float u_sat;     // the frost's colour boost and dimming, as the CSS backdrop-filter
+uniform float u_bright;
 out vec4 o;
 
 float sd(vec2 p, vec2 b, float r) { vec2 q = abs(p) - b + r; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r; }
@@ -59,7 +68,7 @@ void main() {
   // middle. A straight-down ray is bent by Snell's law (index 1.5) where the surface tilts, so near the rim it lands
   // *inward*: the rim shows what is behind the surface, squeezed and magnified, never what is beside it. The bevel's
   // normals come from a rounded box whose corners are at least as round as the bevel is wide, so they never fold.
-  float b = min(u_depth, 0.32 * min(u_size.x, u_size.y));     // bevel width
+  float b = min(u_depth, ${GLASS.bevel.toFixed(2)} * min(u_size.x, u_size.y)); // bevel width
   float R2 = min(max(r, b), min(h.x, h.y));
   float d2 = sd(p, h, R2);
   float x = clamp(-d2 / b, 0.0, 1.0);                         // 0 at the rim, 1 where the flat middle starts
@@ -77,17 +86,19 @@ void main() {
   vec3 N = normalize(vec3(n * slope, 1.0));
   vec3 ray = refract(vec3(0.0, 0.0, -1.0), N, 1.0 / 1.5);
   vec2 bendv = ray.xy / max(-ray.z, 0.25) * (height + 0.25 * b) * u_refr;
-  float cap = 0.6 * b, m = length(bendv);
+  float cap = 0.9 * b, m = length(bendv);
   bendv /= 1.0 + m / cap;
   float lod = log2(max(1.0, u_frost * u_texScale)) - 0.6;
   vec3 col = vec3(0.0);
   float k = u_disp * 0.08;                                     // red bends a little less, blue a little more
-  for (int i = 0; i < 6; i++) {
-    float a = float(i) * 1.0472 + 0.4;
+  for (int i = 0; i < 3; i++) {                               // three taps: the light frost (D169) needs no more
+    float a = float(i) * 2.0944 + 0.4;
     vec2 q = px + vec2(cos(a), sin(a)) * u_frost * 0.45;
     col += vec3(scene(q + bendv * (1.0 - k), lod).r, scene(q + bendv, lod).g, scene(q + bendv * (1.0 + k), lod).b);
   }
-  col /= 6.0;
+  col /= 3.0;
+  float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+  col = max(mix(vec3(lum), col, u_sat), 0.0) * u_bright;      // as the CSS frost: saturate(160 %) brightness(68 %)
   vec3 ink = vec3(0.012, 0.004, 0.016), paper = vec3(0.957, 0.945, 0.914);
   col = mix(col, ink, u_veil);                                 // what the page lays over the scene there
   col = mix(col, ink, u_ink);                                  // the surface's own fill (as the CSS middle)
@@ -103,27 +114,29 @@ void main() {
   o = vec4(min(c, vec3(a)), a);
 }`;
 
-type Shape = { el: HTMLElement; cv: HTMLCanvasElement | null; ctx: CanvasRenderingContext2D | null; radius: number; frost: number; ink: number; veil: number; last: string; size: string };
+type Shape = { el: HTMLElement; cv: HTMLCanvasElement | null; ctx: CanvasRenderingContext2D | null; radius: number; frost: number; ink: number; veil: number; lazy: boolean; last: string; size: string };
 
 /** A surface's glass settings, from its CSS; null when the CSS doesn't make it glass here (a phone's page title row). */
-export function glassOf(el: Element): { frost: number; ink: number; veil: number } | null {
+export function glassOf(el: Element): { frost: number; ink: number; veil: number; lazy: boolean } | null {
   const cs = getComputedStyle(el);
   const frost = parseFloat(cs.getPropertyValue("--lg-frost"));
   if (!Number.isFinite(frost)) return null;
   const num = (name: string, d: number) => { const v = parseFloat(cs.getPropertyValue(name)); return Number.isFinite(v) ? v : d; };
-  return { frost, ink: num("--lg-ink", 0.34), veil: num("--lg-veil", 0) };
+  return { frost, ink: num("--lg-ink", 0.16), veil: num("--lg-veil", 0), lazy: num("--lg-lazy", 0) > 0 };
 }
 
 export function startGlass(host: HTMLElement): () => void {
   if (typeof window === "undefined") return () => {};
   // the accessible looks are solid, with no glass effect (Foundations, 5 · Accessible looks)
   if (matchMedia("(prefers-reduced-transparency: reduce), (prefers-contrast: more)").matches) return () => {};
-  // A check for Heston's phone (Nov 6, the black lines): ?glass=css shows the plain CSS glass for this tab, ?glass=gl
-  // brings the WebGL rim back.
+  // Checks for Heston's phone: ?glass=css shows the plain CSS glass for this tab, ?glass=gl brings the WebGL rim back,
+  // ?glass=live redraws the cards' rims on every frame while they scroll (Nov 11, to feel its cost on a real iPhone).
+  let live = false;
   try {
     const q = new URLSearchParams(location.search).get("glass");
-    if (q === "css" || q === "gl") sessionStorage.setItem("wp.glass", q);
+    if (q === "css" || q === "gl" || q === "live") sessionStorage.setItem("wp.glass", q);
     if (sessionStorage.getItem("wp.glass") === "css") return () => {};
+    live = sessionStorage.getItem("wp.glass") === "live";
   } catch { /* no storage: the glass as usual */ }
   // only the cactus scene (another business keeps its own light and the CSS glass)
   if (!/cactus/.test(getComputedStyle(host).backgroundImage)) return () => {};
@@ -141,12 +154,14 @@ export function startGlass(host: HTMLElement): () => void {
   gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
   gl.useProgram(prog);
   const U = (name: string) => gl.getUniformLocation(prog, name);
-  const u = { top: U("u_top"), img: U("u_img"), size: U("u_size"), r: U("u_r"), depth: U("u_depth"), refr: U("u_refr"), disp: U("u_disp"), frost: U("u_frost"), texScale: U("u_texScale"), light: U("u_light"), ldir: U("u_ldir"), dpr: U("u_dpr"), tex: U("u_tex"), ink: U("u_ink"), veil: U("u_veil") };
+  const u = { top: U("u_top"), img: U("u_img"), size: U("u_size"), r: U("u_r"), depth: U("u_depth"), refr: U("u_refr"), disp: U("u_disp"), frost: U("u_frost"), texScale: U("u_texScale"), light: U("u_light"), ldir: U("u_ldir"), dpr: U("u_dpr"), tex: U("u_tex"), ink: U("u_ink"), veil: U("u_veil"), sat: U("u_sat"), bright: U("u_bright") };
   const ang = (GLASS.lightAngle * Math.PI) / 180; // −45°: from the top left (screen y points down)
   gl.uniform2f(u.ldir, Math.cos(ang), Math.sin(ang));
   gl.uniform1f(u.refr, GLASS.refraction);
   gl.uniform1f(u.disp, GLASS.dispersion);
   gl.uniform1f(u.light, GLASS.lightIntensity);
+  gl.uniform1f(u.sat, GLASS.saturate);
+  gl.uniform1f(u.bright, GLASS.brightness);
   gl.uniform1i(u.tex, 0);
 
   let tex: WebGLTexture | null = null;
@@ -185,15 +200,15 @@ export function startGlass(host: HTMLElement): () => void {
   const collect = () => {
     if (!img) return;
     const next: Shape[] = [];
-    for (const el of document.querySelectorAll<HTMLElement>(FLOAT)) {
+    for (const el of document.querySelectorAll<HTMLElement>(ALL)) {
       const look = el.getClientRects().length > 0 ? glassOf(el) : null;
       // never glass on glass: a surface inside another floating surface is drawn plain (portal.css makes it solid)
-      const ok = !!look && !el.parentElement?.closest(FLOAT);
+      const ok = !!look && !el.parentElement?.closest(ALL);
       const had = shapes.find((x) => x.el === el);
       if (ok) {
         const radius = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
-        const sh = had ?? { el, cv: null, ctx: null, radius, frost: 0, ink: 0, veil: 0, last: "", size: "" };
-        if (sh.radius !== radius || sh.frost !== look!.frost || sh.ink !== look!.ink || sh.veil !== look!.veil) Object.assign(sh, { radius, ...look!, last: "" });
+        const sh = had ?? { el, cv: null, ctx: null, radius, frost: 0, ink: 0, veil: 0, lazy: false, last: "", size: "" };
+        if (sh.radius !== radius || sh.frost !== look!.frost || sh.ink !== look!.ink || sh.veil !== look!.veil || sh.lazy !== look!.lazy) Object.assign(sh, { radius, ...look!, last: "" });
         el.dataset.gl = "1";
         next.push(sh);
       } else if (el.dataset.gl) delete el.dataset.gl;
@@ -209,7 +224,9 @@ export function startGlass(host: HTMLElement): () => void {
     raf = 0;
     if (!img || !tex || dead) return;
     if (img.phone !== phone()) load(phone());
-    const dpr = Math.min(devicePixelRatio || 1, 3);
+    // D168 (5f.3): the rim is a soft, bent picture, so it's drawn at up to 1.5 pixels per CSS pixel and stretched to
+    // the surface (a phone's 3× would cost four times as much for nothing you can see); the crisp edge is the CSS line.
+    const dpr = Math.min(devicePixelRatio || 1, RES);
     const box = host.getBoundingClientRect();
     const W = box.width * dpr, H = box.height * dpr;
     // the scene as the CSS draws it: cover; centred (phone: anchored to the bottom)
@@ -224,14 +241,17 @@ export function startGlass(host: HTMLElement): () => void {
     for (const s of shapes) {
       const r = s.el.getBoundingClientRect();
       const near = r.bottom > -NEAR && r.top < innerHeight + NEAR && r.right > -NEAR && r.left < innerWidth + NEAR && r.width >= 2 && r.height >= 2;
-      if (!near) { if (s.cv) release(s); continue; }
+      const sliding = s.lazy && !live && performance.now() < movingUntil;
+      if (!near) { if (s.cv && !sliding) release(s); continue; }
       const w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
       const key = `${r.left.toFixed(1)}|${r.top.toFixed(1)}|${w}|${h}`, size = `${w}|${h}`;
       if (s.cv && key === s.last) continue; // hasn't moved: its glass is still right
-      // Nov 11 (5f.3): a surface carried along by the page's scroll (the phone's chips), or sliding in, only slides over
-      // the scene, which its veil and frost all but hide; it's redrawn where it stops, not on every frame it slides
-      // (redrawing ten chips a frame dropped a phone-sized software GPU to 26 fps; this keeps it at 60).
-      if (s.cv && size === s.size && performance.now() < movingUntil) { pending = true; continue; }
+      // Nov 11 (5f.3): surfaces that slide with the page (--lg-lazy: the cards, tiles and phone chips) are redrawn where
+      // they stop, not on every frame: redrawing every card a frame dropped a phone-sized software GPU from 60 fps to 4
+      // (desktop too). Bars, the tab bar, menus and sheets don't slide, so they're always true.
+      // While it slides its rim steps aside (a quick fade, portal.css canvas.wp-glass.stale), so a stale bend never shows,
+      // and fades back once redrawn.
+      if (sliding && (!s.cv || size === s.size)) { if (s.cv && !s.cv.classList.contains("stale")) s.cv.classList.add("stale"); pending = true; continue; }
       s.last = key; s.size = size;
       if (!s.cv) {
         s.cv = document.createElement("canvas");
@@ -258,6 +278,7 @@ export function startGlass(host: HTMLElement): () => void {
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       s.ctx?.clearRect(0, 0, w, h);
       s.ctx?.drawImage(glc, 0, 0, w, h, 0, 0, w, h);
+      s.cv.classList.remove("stale");
     }
     // keep looking every frame while anything may be moving (a sheet sliding in, momentum scrolling the chips)
     if (pending || performance.now() < movingUntil) raf = requestAnimationFrame(draw);

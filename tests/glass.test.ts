@@ -1,12 +1,12 @@
 // Phase 5f (glass), tests 5f.1, 5f.2 and 5f.5, read from the stylesheets and the shader themselves (the screenshots for
 // 5f.3 and 5f.4 are taken in a browser; their results are in the Master Plan).
-//   5f.1 no glass on content, no glass on glass
+//   5f.1 no glass on glass (D168, Nov 11: the cards are glass after all)
 //   5f.2 the accessibility settings give solid glass and no motion
 //   5f.5 no black lines: the shader never normalises a zero vector (Apple's GPUs turn that into NaN, drawn black)
 import { describe, expect, test } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { FLOAT, GLASS } from "../src/lib/glass";
+import { CARDS, FLOAT, GLASS } from "../src/lib/glass";
 
 const read = (f: string) => readFileSync(join(__dirname, "..", f), "utf8");
 const [styles, d1, portal, states, type, glassSrc] = ["src/styles.css", "src/d1.css", "src/portal.css", "src/states.css", "src/type.css", "src/lib/glass.ts"].map(read);
@@ -43,62 +43,46 @@ const ALL = [styles, d1, portal, states, type].flatMap(rules);
 const decl = (body: string, prop: string) => [...body.matchAll(new RegExp(`(?:^|;|\\s)${prop}\\s*:\\s*([^;]+)`, "g"))].map((m) => m[1].trim());
 const accessible = (m: string) => /prefers-reduced-transparency|prefers-contrast/.test(m);
 
-// the content layer: cards, stat tiles, lists, section cards (Foundations › 1 · Two layers)
+// the cards, tiles, lists and section cards: all solid under the accessible looks
 const CONTENT = [".glass", ".pov-stat", ".wp-morelist", ".panel", ".note", ".vcard", ".rect", ".regwrap", ".nextrender", ".ws-card", ".ws-hubcard", ".wst-card", ".wst-clause", ".ws-sigform", ".ws-sigcard", ".wsx-card", ".ws-note", ".drop", ".wp-setmenu"];
 const FLOATING = FLOAT.split(",").map((s) => s.trim());
 const SURFACES = [".wp-side", ".wp-tabbar", ".wp-layerchip", ".menu", ".dialog", ".bell-panel", ".toast", ".cal-pop", ".selbar"];
 
-describe("5f.1 no glass on content, no glass on glass", () => {
-  test("the floating layer is exactly the surfaces the frames make glass", () => {
+describe("5f.1 (revised by D168, Nov 11) the glass surfaces, and no glass on glass", () => {
+  test("the floating layer is the surfaces the frames make glass; the cards and tiles are glass too (D168)", () => {
     expect(FLOATING).toEqual([...SURFACES.slice(0, 1), ".wp-shell:not(.overlay) .main > .topbar", ...SURFACES.slice(1)]);
+    expect(CARDS).toBe(".glass, .pov-stat");
   });
 
-  test("every floating surface gets its frost, fill and 1 px edge from the CSS (the WebGL rim reads --lg-frost)", () => {
-    for (const s of FLOATING) {
+  test("every glass surface gets its frost, fill and 1 px edge from the CSS (the WebGL rim reads --lg-frost)", () => {
+    for (const s of [...FLOATING, ".glass", ".pov-stat"]) {
       const own = ALL.filter((r) => r.sel.includes(s) && !accessible(r.media));
       expect(own.some((r) => decl(r.body, "--lg-frost").length), `${s} has --lg-frost`).toBe(true);
       expect(own.some((r) => decl(r.body, "backdrop-filter").some((v) => /blur/.test(v))), `${s} is frosted`).toBe(true);
       expect(ALL.some((r) => r.sel.includes(`${s}::before`) && /var\(--glass-edge\)/.test(r.body)), `${s} has the glass edge`).toBe(true);
     }
-    // Glass/effect is 12, Glass/effect-clear is 3: the tab bar, chips, toasts and small controls
-    const clear = ALL.find((r) => r.sel.includes(".wp-tabbar") && decl(r.body, "--lg-frost")[0] === "3");
+    // D169: clearer than Figma (frost 4, clear 2, ink 16 %, bending 1.5×); the clear glass is the tab bar, chips, toasts, small controls
+    const clear = ALL.find((r) => r.sel.includes(".wp-tabbar") && decl(r.body, "--lg-frost")[0] === "2");
     expect(clear?.sel).toEqual([".wp-tabbar", ".wp-layerchip", ".toast", ".selbar"]);
-    expect(GLASS.frost).toBe(12);
-    expect(GLASS.frostClear).toBe(3);
+    expect(GLASS).toMatchObject({ frost: 4, frostClear: 2, refraction: 1.5 });
+    const root = rules(portal).find((r) => r.sel.includes(":root") && /--blur-glass:/.test(r.body))!;
+    expect(decl(root.body, "--blur-glass")[0]).toBe(`blur(4px) saturate(160%) brightness(${String(GLASS.brightness).replace(/^0/, "")})`);
   });
 
-  test("content is never glass: no blur, no glass fill on a card, a tile, a list or a section card", () => {
-    const bad: string[] = [];
-    for (const r of ALL) {
-      if (accessible(r.media)) continue;
-      for (const sel of r.sel) {
-        // a rule aimed at a content surface itself (its last compound), not at something inside it
-        const last = sel.split(/[\s>+~]+/).pop() ?? "";
-        if (!CONTENT.some((c) => new RegExp(`${c.replace(".", "\\.")}(?![\\w-])`).test(last))) continue;
-        if (FLOATING.some((f) => last.includes(f))) continue;
-        const blur = decl(r.body, "backdrop-filter").concat(decl(r.body, "-webkit-backdrop-filter")).filter((v) => v !== "none" && v !== "none !important");
-        const glassFill = /var\(--glass-fill\)/.test(r.body);
-        if (blur.length || glassFill) bad.push(`${sel} { ${blur.join(" ")}${glassFill ? " glass-fill" : ""} }`);
-      }
-    }
-    expect(bad).toEqual([]);
-  });
-
-  test("the content card is Card/fill 78 %, Card/edge paper 14 % and Card/shadow 0 / 10 / 30 ink 45 %", () => {
-    const root = ALL.find((r) => r.sel.includes(":root") && /--card-fill/.test(r.body))!;
-    expect(decl(root.body, "--card-fill")[0]).toBe("color-mix(in srgb, var(--surface-base) 78%, transparent)");
-    expect(decl(root.body, "--card-edge")[0]).toBe("rgba(var(--paper), .14)");
-    expect(decl(root.body, "--card-shadow")[0]).toBe("0 10px 30px rgba(var(--ink), .45)");
-    const card = ALL.filter((r) => r.sel.includes(".glass") && r.sel.length === 1 && !r.media).pop()!;
-    expect(card.body).toMatch(/background: var\(--card-fill\)/);
-    expect(card.body).not.toMatch(/backdrop-filter/);
-  });
-
-  test("never glass on glass: a floating surface inside another is drawn solid, and the WebGL skips it", () => {
+  test("never glass on glass: a glass surface inside another is drawn plain, and the WebGL skips it", () => {
     const nested = ALL.find((r) => r.sel.some((s) => /^:is\(\.wp-side.*\) :is\(/.test(s)));
     expect(nested?.body).toMatch(/background: var\(--glass-solid\)/);
     expect(nested?.body).toMatch(/backdrop-filter: none/);
-    expect(glassSrc).toMatch(/!el\.parentElement\?\.closest\(FLOAT\)/);
+    const cardIn = ALL.find((r) => r.sel.some((s) => /^:is\(\.glass, \.pov-stat.*\) :is\(\.glass, \.pov-stat\)$/.test(s)));
+    expect(cardIn?.body).toMatch(/--lg-frost: none/);
+    expect(cardIn?.body).toMatch(/backdrop-filter: none/);
+    expect(glassSrc).toMatch(/!el\.parentElement\?\.closest\(ALL\)/);
+  });
+
+  test("5f.3: cards and chips (they slide with the page) are redrawn where they stop; their rim steps aside while sliding", () => {
+    expect(ALL.some((r) => r.sel.join(",") === ".glass,.pov-stat" && /--lg-lazy: 1/.test(r.body))).toBe(true);
+    expect(glassSrc).toMatch(/const sliding = s\.lazy && !live && performance\.now\(\) < movingUntil;/);
+    expect(ALL.some((r) => r.sel.includes("canvas.wp-glass.stale") && /opacity: 0/.test(r.body))).toBe(true);
   });
 });
 
