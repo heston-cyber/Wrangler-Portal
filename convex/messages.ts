@@ -26,6 +26,7 @@ import { mailBrandOf } from "./lib/mail";
 import { messageMail, ownerMessageMail } from "./lib/mails";
 import { deliverOnce } from "./invoiceReminders";
 import { TZ } from "./lib/gcal";
+import { claimUpload, isClaimed } from "./lib/fileOwners";
 
 type Ctx = QueryCtx | MutationCtx;
 const TOKEN = /^[A-Za-z0-9_-]{16,64}$/;
@@ -231,7 +232,7 @@ export const leadPage = query({
  *  before; attaching claims it for this caller. 25 MB at most each, 10 at most. A refused file is left alone: it may
  *  not be the caller's, so it's never deleted here. */
 const FRESH_UPLOAD = 30 * 60_000;
-async function checkFiles(ctx: MutationCtx, files: Array<{ storageId: Id<"_storage">; name: string }>, by: string) {
+async function checkFiles(ctx: MutationCtx, files: Array<{ storageId: Id<"_storage">; name: string }>, by: string, businessId: Id<"businesses"> | null) {
   const no = (msg: string) => ({ error: msg, files: [] as Doc<"messages">["files"] });
   if (files.length > MAX_FILES) return no(`Up to ${MAX_FILES} files a message.`);
   if (new Set(files.map((f) => f.storageId)).size !== files.length) return no("The same file is attached twice.");
@@ -241,10 +242,11 @@ async function checkFiles(ctx: MutationCtx, files: Array<{ storageId: Id<"_stora
     const meta = await ctx.db.system.get(f.storageId);
     if (!meta || meta._creationTime < now - FRESH_UPLOAD) return no("A file didn't upload. Attach it again.");
     if (await ctx.db.query("msgUploads").withIndex("by_storage", (q) => q.eq("storageId", f.storageId)).first()) return no("A file didn't upload. Attach it again.");
+    if (await isClaimed(ctx, f.storageId)) return no("A file didn't upload. Attach it again."); // 5e review (Nov 6): across businesses
     if (meta.size > MAX_FILE_BYTES) return no(`${f.name.slice(0, 80)} is over 25 MB. Share a link to big files instead.`);
     out.push({ storageId: f.storageId, name: (f.name.trim() || "File").slice(0, 140), size: meta.size, type: (meta.contentType ?? "").slice(0, 100) });
   }
-  for (const f of out) await ctx.db.insert("msgUploads", { storageId: f.storageId, by, at: now });
+  for (const f of out) { await claimUpload(ctx, f.storageId, businessId, "message"); await ctx.db.insert("msgUploads", { storageId: f.storageId, by, at: now }); }
   return { error: null, files: out };
 }
 
@@ -281,7 +283,7 @@ export const send = mutation({
     if (!t) throw new ConvexError("This conversation isn't here any more.");
     const text = tidy(a.text);
     if (!text && !(a.files ?? []).length) throw new ConvexError("Write a message.");
-    const f = await checkFiles(ctx, a.files ?? [], `user:${me.userId}`);
+    const f = await checkFiles(ctx, a.files ?? [], `user:${me.userId}`, t.businessId ?? null);
     if (f.error) return { error: f.error };
     await bump(ctx, "msgSend", String(me.userId));
     const biz = t.businessId ? await ctx.db.get(t.businessId) : null;
@@ -307,7 +309,7 @@ export const clientSend = mutation({
     if (!t) throw new ConvexError("This conversation isn't here any more.");
     const text = tidy(a.text);
     if (!text && !(a.files ?? []).length) throw new ConvexError("Write a message.");
-    const f = await checkFiles(ctx, a.files ?? [], `user:${me.userId}`);
+    const f = await checkFiles(ctx, a.files ?? [], `user:${me.userId}`, t.businessId ?? null);
     if (f.error) return { error: f.error, threadId: t._id };
     await bump(ctx, "msgSend", String(me.userId));
     await post(ctx, t, { side: "client", name: me.name, email, text, files: f.files });
@@ -325,7 +327,7 @@ export const leadSend = mutation({
     await bump(ctx, "msgLead", a.token);
     const text = tidy(a.text);
     if (!text && !(a.files ?? []).length) throw new ConvexError("Write a message.");
-    const f = await checkFiles(ctx, a.files ?? [], `lead:${t._id}`);
+    const f = await checkFiles(ctx, a.files ?? [], `lead:${t._id}`, t.businessId ?? null);
     if (f.error) return { error: f.error };
     await post(ctx, t, { side: "lead", name: t.leadName ?? "Lead", email: t.leadEmail, text, files: f.files });
     return { error: null };

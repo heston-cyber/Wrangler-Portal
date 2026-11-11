@@ -69,6 +69,13 @@ describe("Phase 5e · Your data", () => {
       const kitFile = await ctx.storage.store(new Blob(["kit"]));
       await ctx.db.patch(w.harbor, { brandKit: { colors: [], fonts: {}, files: [{ fileId: kitFile, name: "guide.pdf", size: 3, type: "application/pdf", addedAt: 0 }] } } as never);
       await ctx.db.insert("vendors", { businessId: w.A, name: "Pasted", email: "p@x.example", roles: [], rates: [], portfolio: String(theirFile), createdAt: 0, updatedAt: 0 } as never);
+      // Who owns each file, as the backfill records them; and (second 5e review) a field of ours pointing at another
+      // business's file links nothing.
+      await ctx.db.insert("fileOwners", { storageId: w9, businessId: w.A, purpose: "w9", at: 0 });
+      await ctx.db.insert("fileOwners", { storageId: kitFile, businessId: w.A, purpose: "brandKit", at: 0 });
+      const planted = await ctx.storage.store(new Blob(["their logo"]));
+      await ctx.db.insert("fileOwners", { storageId: planted, businessId: b, purpose: "logo", at: 0 });
+      await ctx.db.patch(w.harbor, { brandKit: { colors: [], fonts: {}, files: [{ fileId: kitFile, name: "guide.pdf", size: 3, type: "application/pdf", addedAt: 0 }, { fileId: planted, name: "theirs.png", size: 3, type: "image/png", addedAt: 0 }] } } as never);
     });
     await seedInvoice(w, b, otherClient, "Theirs", "SECRETPAYTOKENBBBB");
     const exportId = await w.heston.mutation(api.yourData.requestExport, {});
@@ -89,6 +96,7 @@ describe("Phase 5e · Your data", () => {
     expect(files["records/invoices.json"]).toContain("acct_1Pq9WranglerAcct"); // Stripe's own ids aren't secrets
     expect(files["files.csv"].trim().split("\r\n").filter((l) => l.startsWith("vendors,"))).toHaveLength(1); // the W-9, not the pasted id
     expect(files["files.csv"]).toMatch(/clients,[a-z0-9]+,brandKit\.files\[0\]\.fileId,http/); // a file in a brand kit
+    expect(files["files.csv"]).not.toMatch(/brandKit\.files\[1\]/); // the planted pointer at B's file
     expect(files["records/connectorKeys.json"]).toBeUndefined();
     for (const [name, text] of Object.entries(files)) if (name.endsWith(".json")) for (const k of keysIn(JSON.parse(text))) expect(SECRET_FIELDS.has(k), `${name}: ${k}`).toBe(false);
     expect(files["files.csv"]).toMatch(/vendors,[a-z0-9]+,w9\.fileId,http/);
@@ -165,7 +173,13 @@ describe("Phase 5e · Your data", () => {
       // Review fix: Wrangler's file id pasted into this business's text is not this business's file.
       const ours = await ctx.storage.store(new Blob(["wrangler's"]));
       await ctx.db.insert("vendors", { businessId: b, name: "Paster", email: "p@x.example", roles: [], rates: [], portfolio: String(ours), createdAt: 0, updatedAt: 0 } as never);
-      return { client, logo, only, maya, ours };
+      // Nov 6 (file ownership): who owns each file, as the backfill records them. A planted pointer at Wrangler's file
+      // doesn't make it theirs; an upload of theirs that nothing points at any more goes too.
+      const planted = await ctx.storage.store(new Blob(["wrangler's other"]));
+      await ctx.db.insert("vendors", { businessId: b, name: "Planter", email: "pl@x.example", roles: [], rates: [], w9: { fileId: planted, name: "w9.pdf", uploadedAt: 0 }, createdAt: 0, updatedAt: 0 } as never);
+      const stray = await ctx.storage.store(new Blob(["stray"]));
+      for (const [id, biz] of [[logo, b], [stray, b], [ours, w.A], [planted, w.A]] as const) await ctx.db.insert("fileOwners", { storageId: id, businessId: biz, purpose: "test", at: 0 });
+      return { client, logo, only, maya, ours, planted, stray };
     });
     await seedInvoice(w, b, seeded.client, "Theirs", "SECRETPAYTOKENCCCC");
     const before = await w.t.run(async (ctx) => ({ projects: (await ctx.db.query("projects").collect()).filter((p) => p.businessId === w.A).length, clients: (await ctx.db.query("clients").collect()).filter((p) => p.businessId === w.A).length }));
@@ -179,7 +193,7 @@ describe("Phase 5e · Your data", () => {
     await w.t.action(internal.yourData.runDeletion, { deletionId, asBusiness: b });
     await settle(w);
     const d = (await w.t.run(async (ctx) => ctx.db.get(deletionId)))!;
-    expect(d).toMatchObject({ status: "done", step: "done", deleted: expect.objectContaining({ clients: 1, projects: 1, invoices: 1, vendors: 2 }) });
+    expect(d).toMatchObject({ status: "done", step: "done", deleted: expect.objectContaining({ clients: 1, projects: 1, invoices: 1, vendors: 3 }) });
     expect(mails.map((m) => m.subject)).toEqual(["Other Films is scheduled for deletion", `Other Films will be deleted on ${new Date(deleteAt).toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", year: "numeric" })}`]);
     const after = await w.t.run(async (ctx) => ({
       business: await ctx.db.get(b),
@@ -213,8 +227,8 @@ describe("Phase 5e · Your data", () => {
     // Day 30 after: the export and the files kept with it go; Wrangler's file stays.
     vi.setSystemTime(deleteAt + 31 * 86_400_000);
     await w.t.mutation(internal.yourData.purge, {});
-    const later = await w.t.run(async (ctx) => ({ file: !!(await ctx.storage.get(seeded.logo)), zip: !!(await ctx.storage.get(d.finalExportId!)), ours: !!(await ctx.storage.get(seeded.ours)), kept: (await ctx.db.query("deletionFiles").collect()).length }));
-    expect(later).toEqual({ file: false, zip: false, ours: true, kept: 0 });
+    const later = await w.t.run(async (ctx) => ({ file: !!(await ctx.storage.get(seeded.logo)), zip: !!(await ctx.storage.get(d.finalExportId!)), ours: !!(await ctx.storage.get(seeded.ours)), planted: !!(await ctx.storage.get(seeded.planted)), stray: !!(await ctx.storage.get(seeded.stray)), kept: (await ctx.db.query("deletionFiles").collect()).length, owners: (await ctx.db.query("fileOwners").collect()).map((o) => o.businessId) }));
+    expect(later).toEqual({ file: false, zip: false, ours: true, planted: true, stray: false, kept: 0, owners: [w.A, w.A] });
     expect((await w.heston.query(api.yourData.state, {})).safety).toEqual([]);
   });
 

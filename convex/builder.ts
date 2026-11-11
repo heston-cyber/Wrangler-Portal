@@ -13,6 +13,9 @@ import { internal } from "./_generated/api";
 import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { requireMe, requireAll } from "./lib/access";
+import { claimIn, discardIn, recordIn } from "./fileOwners";
+import { assertStyleFiles, deleteFile, ownedOrNull, ownsFile, recordFile } from "./lib/fileOwners";
+import { businessInScope } from "./lib/business";
 import {
   DEFAULT_BUSINESS, DEFAULT_STYLE, MAX_BUILD_JSON, PRESET_STYLES, buildProblems, emptyFields, newId, totals,
   line, pageOf, textOf, type Business, type BuildDoc, type ExtraSigner, type Fields, type ItemRow, type Page, type PNode, type Style,
@@ -135,6 +138,7 @@ export const saveBuild = mutation({
     await requireAll(ctx, "docs");
     const b = await ctx.db.get(a.buildId);
     if (!b) throw new ConvexError("That document doesn't exist.");
+    await assertStyleFiles(ctx, a.style, b.style, businessInScope(ctx)); // second 5e review: only this business's own images
     await assertEditable(ctx, b);
     tooBig(a.blocks, a.fields, a.signers, a.style);
     if (!isPage(a.blocks) || !Array.isArray(a.signers)) throw new ConvexError("That document isn't in the right shape.");
@@ -173,7 +177,7 @@ export const linkBuild = internalMutation({
   handler: async (ctx, { buildId, documentId }) => {
     const b = (await ctx.db.get(buildId))!;
     const st = b.style as Style;
-    const img = st.backdropImage?.fileId ? (st.backdropImage.fileId as Id<"_storage">) : null;
+    const img = await ownedOrNull(ctx, st.backdropImage?.fileId, b.businessId); // second 5e review: only its own image
     await ctx.db.patch(buildId, { documentId, renderedAt: Date.now() });
     // The signing page's background comes from the document's style (its backdrop colour or image).
     await ctx.db.patch(documentId, { buildId, look: { backdrop: /^#[0-9a-f]{3,8}$/i.test(st.backdrop) ? st.backdrop : "#e9e7e2", ...(img ? { backdropImageId: img } : {}) } });
@@ -186,20 +190,25 @@ export const toSigning = action({
   args: { buildId: v.id("wsBuilds"), storageId: v.id("_storage") },
   handler: async (ctx, { buildId, storageId }): Promise<{ documentId: Id<"wsDocuments">; label: string; rebuilt: boolean }> => {
     await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs"], ids: [buildId] });
-    try { return await toSigningCore(ctx, buildId, storageId); }
+    const claim = await claimIn(ctx, storageId, "contract-pdf");
+    if (!claim.fresh) throw new ConvexError("Upload the PDF again."); // second 5e review: a new upload only, never a file already in use
+    try { return await toSigningCore(ctx, buildId, storageId, OWNER_KEY, claim); }
     catch (e) { throw new ConvexError(errText(e)); }
   },
 });
 
-export async function toSigningCore(ctx: ActionCtx, buildId: Id<"wsBuilds">, storageId: Id<"_storage">, actor = OWNER_KEY) {
+export async function toSigningCore(ctx: ActionCtx, buildId: Id<"wsBuilds">, storageId: Id<"_storage">, actor = OWNER_KEY, claim?: { fresh: boolean }) {
+  // A file the server rendered itself is recorded as the business's; a caller's upload was claimed by the caller.
+  if (!claim) { await recordIn(ctx, storageId, "contract-pdf"); claim = { fresh: true }; }
+  const drop = () => discardIn(ctx, storageId, claim!);
   const r = await ctx.runQuery(internal.builder.buildForSigning, { buildId });
-  if (!r) { await ctx.storage.delete(storageId); throw new Error("That document doesn't exist."); }
-  if (isProposal(r.build)) { await ctx.storage.delete(storageId); throw new Error("Proposals aren't signed. Send it from Proposals; once it's accepted, Start the contract makes the agreement."); }
-  if (isBriefing(r.build)) { await ctx.storage.delete(storageId); throw new Error("Briefings aren't signed. Send it from Vendors › Briefings; the vendor presses “I’ve read it”."); }
-  if (isCallSheet(r.build)) { await ctx.storage.delete(storageId); throw new Error("Call sheets aren't signed. Send it from Production › Call sheets."); }
+  if (!r) { await drop(); throw new Error("That document doesn't exist."); }
+  if (isProposal(r.build)) { await drop(); throw new Error("Proposals aren't signed. Send it from Proposals; once it's accepted, Start the contract makes the agreement."); }
+  if (isBriefing(r.build)) { await drop(); throw new Error("Briefings aren't signed. Send it from Vendors › Briefings; the vendor presses “I’ve read it”."); }
+  if (isCallSheet(r.build)) { await drop(); throw new Error("Call sheets aren't signed. Send it from Production › Call sheets."); }
   const d: BuildDoc = { title: r.build.title, page: pageOf(r.build.blocks), fields: r.build.fields as Fields, signers: (r.build.signers as ExtraSigner[]) ?? [], style: r.build.style as Style };
   const problems = buildProblems(d);
-  if (problems.length) { await ctx.storage.delete(storageId); throw new Error(problems[0]); }
+  if (problems.length) { await drop(); throw new Error(problems[0]); }
   const fileName = `${safeFileName(d.title)}.pdf`;
   let documentId: Id<"wsDocuments">, label: string, rebuilt = false;
   if (!r.doc) {
@@ -208,8 +217,8 @@ export async function toSigningCore(ctx: ActionCtx, buildId: Id<"wsBuilds">, sto
     await ctx.runMutation(internal.builder.linkBuild, { buildId, documentId });
   } else {
     const doc = r.doc;
-    if (doc.status === "sent") { await ctx.storage.delete(storageId); throw new Error(`${docLabel(doc.number)} is out for signature. Cancel it first, then rebuild.`); }
-    if (doc.status === "completed") { await ctx.storage.delete(storageId); throw new Error(`${docLabel(doc.number)} is signed and can't change. Duplicate it as a new document instead.`); }
+    if (doc.status === "sent") { await drop(); throw new Error(`${docLabel(doc.number)} is out for signature. Cancel it first, then rebuild.`); }
+    if (doc.status === "completed") { await drop(); throw new Error(`${docLabel(doc.number)} is signed and can't change. Duplicate it as a new document instead.`); }
     const info = await ctx.runAction(internal.sign.inspectUpload, { storageId });
     if (doc.status === "draft") await ctx.runMutation(internal.sign.replaceDraftFile, { documentId: doc._id, storageId, fileName, title: d.title, ...info });
     else await ctx.runMutation(internal.sign.insertReplacement, { documentId: doc._id, storageId, fileName, ...info });
@@ -271,6 +280,7 @@ export const saveAsTemplate = mutation({
     // A call sheet template keeps the layout, not the people (765:3564).
     const blocks = a.kind === "proposal" && isPage(a.blocks) && !Array.isArray(a.blocks) ? withoutPrices(a.blocks as Page)
       : a.kind === "callsheet" && isPage(a.blocks) && !Array.isArray(a.blocks) ? withoutPeople(a.blocks as Page) : a.blocks;
+    await assertStyleFiles(ctx, a.style, null, businessInScope(ctx)); // second 5e review
     return ctx.db.insert("wsTemplates", { name, description: clean(a.description ?? "", 300) || undefined, ...(a.kind ? { kind: a.kind } : {}), blocks, fields, style: a.style, createdAt: now, updatedAt: now });
   },
 });
@@ -282,6 +292,7 @@ export const updateTemplate = mutation({
     const t0 = await ctx.db.get(a.templateId);
     if (!t0) throw new ConvexError("That template doesn't exist.");
     tooBig(a.blocks, a.fields, a.style);
+    await assertStyleFiles(ctx, a.style, t0.style, businessInScope(ctx)); // second 5e review
     // A proposal template never keeps prices (review fix): they come from Settings › Pricing each time.
     // Review L8: a call-sheet template keeps the layout, never the people (as when it's first saved).
     const blocks = isProposal(t0) && isPage(a.blocks) && !Array.isArray(a.blocks) ? withoutPrices(a.blocks as Page)
@@ -389,6 +400,9 @@ export const saveStyle = mutation({
     const name = clean(a.name, 60);
     if (!name) throw new ConvexError("Name the style.");
     const style = { ...(a.style as Style), name };
+    const prev = a.styleId ? await ctx.db.get(a.styleId) : null;
+    if (a.styleId && !prev) throw new ConvexError("That style doesn't exist.");
+    await assertStyleFiles(ctx, style, prev?.style, businessInScope(ctx)); // second 5e review
     const now = Date.now();
     if (a.styleId) { await ctx.db.patch(a.styleId, { name, style, updatedAt: now }); return a.styleId; }
     return ctx.db.insert("wsStyles", { name, style, isDefault: false, createdAt: now, updatedAt: now });
@@ -422,8 +436,15 @@ export const fileUrls = query({
   args: { ids: v.array(v.id("_storage")) },
   handler: async (ctx, { ids }) => {
     await requireAll(ctx, "docs");
+    // Review fix (Nov 6): only images this business's own styles, drafts and templates use (and only its own files).
+    const used = new Set<string>();
+    const pick = (st: unknown) => { const x = st as Record<string, { fileId?: string } | undefined> | null; for (const k of ["logo", "cover", "backdropImage"]) { const f = x?.[k]?.fileId; if (f) used.add(f); } };
+    for (const r of await ctx.db.query("wsStyles").collect()) pick(r.style);
+    for (const r of await ctx.db.query("wsTemplates").collect()) pick(r.style);
+    for (const r of await ctx.db.query("wsBuilds").collect()) pick(r.style);
+    const biz = businessInScope(ctx);
     const out: Record<string, string | null> = {};
-    for (const id of ids.slice(0, 20)) out[id] = await ctx.storage.getUrl(id);
+    for (const id of ids.slice(0, 20)) out[id] = used.has(id) && (await ownsFile(ctx, id, biz)) ? await ctx.storage.getUrl(id) : null;
     return out;
   },
 });
@@ -432,8 +453,9 @@ export const checkImage = action({
   args: { storageId: v.id("_storage") },
   handler: async (ctx, { storageId }): Promise<{ ok: true }> => {
     await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs"] });
+    const claim = await claimIn(ctx, storageId, "style-image");
     const b = await ctx.storage.get(storageId);
-    const bad = async (m: string) => { await ctx.storage.delete(storageId); throw new ConvexError(m); };
+    const bad = async (m: string) => { await discardIn(ctx, storageId, claim); throw new ConvexError(m); }; // only this call's own fresh upload
     if (!b) return bad("The upload didn't arrive.");
     if (b.size > 5 * 1024 * 1024) return bad("That image is over 5 MB.");
     const h = new Uint8Array(await b.slice(0, 4).arrayBuffer());
@@ -468,8 +490,9 @@ export const addFont = action({
   args: { storageId: v.id("_storage"), family: v.string(), weight: v.number(), italic: v.boolean(), fileName: v.string(), source: v.union(v.literal("upload"), v.literal("local")) },
   handler: async (ctx, a): Promise<{ ok: true }> => {
     await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs"] });
+    const claim = await claimIn(ctx, a.storageId, "font");
     const b = await ctx.storage.get(a.storageId);
-    const bad = async (m: string) => { await ctx.storage.delete(a.storageId); throw new ConvexError(m); };
+    const bad = async (m: string) => { await discardIn(ctx, a.storageId, claim); throw new ConvexError(m); };
     if (!b) return bad("The font didn't arrive.");
     if (b.size > 15 * 1024 * 1024) return bad("That font file is over 15 MB.");
     const k = fontKind(new Uint8Array(await b.slice(0, 4).arrayBuffer()));
@@ -487,8 +510,9 @@ export const insertFont = internalMutation({
   args: { family: v.string(), weight: v.number(), italic: v.boolean(), fileId: v.id("_storage"), fileName: v.string(), source: v.union(v.literal("upload"), v.literal("local"), v.literal("google")) },
   handler: async (ctx, a) => {
     const same = (await ctx.db.query("wsFonts").withIndex("by_family", (q) => q.eq("family", a.family)).collect()).find((f) => f.weight === a.weight && f.italic === a.italic);
-    if (same) { await ctx.storage.delete(same.fileId); await ctx.db.delete(same._id); }
+    if (same) { await deleteFile(ctx as unknown as MutationCtx, same.fileId, businessInScope(ctx)); await ctx.db.delete(same._id); }
     await ctx.db.insert("wsFonts", { ...a, createdAt: Date.now() });
+    await recordFile(ctx as unknown as MutationCtx, a.fileId, businessInScope(ctx), "font"); // 5e review (Nov 6): a Google font the server fetched (an upload is claimed already)
     return null;
   },
 });
@@ -497,7 +521,7 @@ export const deleteFont = mutation({
   args: { family: v.string() },
   handler: async (ctx, { family }) => {
     await requireAll(ctx, "docs");
-    for (const f of await ctx.db.query("wsFonts").withIndex("by_family", (q) => q.eq("family", family)).collect()) { await ctx.storage.delete(f.fileId); await ctx.db.delete(f._id); }
+    for (const f of await ctx.db.query("wsFonts").withIndex("by_family", (q) => q.eq("family", family)).collect()) { await deleteFile(ctx as unknown as MutationCtx, f.fileId, businessInScope(ctx)); await ctx.db.delete(f._id); }
     return null;
   },
 });
@@ -664,7 +688,10 @@ export const renderInputs = internalQuery({
     const st = b.style as Style;
     const fonts = await Promise.all((await ctx.db.query("wsFonts").collect()).map(async (f) => ({ _id: f._id as string, family: f.family, weight: f.weight, italic: f.italic, source: f.source, fileName: f.fileName, url: await ctx.storage.getUrl(f.fileId) })));
     const files: Record<string, string | null> = {};
-    for (const id of [st.logo?.fileId, st.cover?.fileId].filter(Boolean) as string[]) { try { files[id] = await ctx.storage.getUrl(id as Id<"_storage">); } catch { files[id] = null; } }
+    for (const id of [st.logo?.fileId, st.cover?.fileId].filter(Boolean) as string[]) {
+      const own = await ownedOrNull(ctx, id, b.businessId); // second 5e review: another business's file never renders
+      try { files[id] = own ? await ctx.storage.getUrl(own) : null; } catch { files[id] = null; }
+    }
     const doc = b.documentId ? await ctx.db.get(b.documentId) : null;
     const d: BuildDoc = { title: b.title, page: pageOf(b.blocks), fields: b.fields as Fields, signers: (b.signers as ExtraSigner[]) ?? [], style: st };
     return { d, fonts, files, label: doc ? docLabel(doc.number) : undefined };
@@ -672,7 +699,7 @@ export const renderInputs = internalQuery({
 });
 
 /** PDF → editable draft (the New document page's "Import a PDF to edit", and the connector's import_pdf). */
-export async function importPdfCore(ctx: ActionCtx, storageId: Id<"_storage">, title?: string, keep = false): Promise<{ buildId: Id<"wsBuilds">; notes: string[]; stats: ImportResult["stats"] }> {
+export async function importPdfCore(ctx: ActionCtx, storageId: Id<"_storage">, title?: string, keep = false, claim: { fresh: boolean } = { fresh: true }): Promise<{ buildId: Id<"wsBuilds">; notes: string[]; stats: ImportResult["stats"] }> {
   try {
     const lines = await ctx.runAction(internal.wsNode.extractLines, { storageId });
     const r = pdfLinesToPage(lines);
@@ -682,14 +709,16 @@ export async function importPdfCore(ctx: ActionCtx, storageId: Id<"_storage">, t
     const buildId = await ctx.runMutation(internal.builder.createBuildFor, { title: name, page: r.page });
     return { buildId, notes: r.notes, stats: r.stats };
   } finally {
-    if (!keep) await ctx.storage.delete(storageId).catch(() => {}); // an upload only; a document's own file stays
+    if (!keep) await discardIn(ctx, storageId, claim).catch(() => {}); // an upload only (the caller's own); a document's own file stays
   }
 }
 export const importPdf = action({
   args: { storageId: v.id("_storage"), title: v.optional(v.string()) },
   handler: async (ctx, { storageId, title }): Promise<{ buildId: Id<"wsBuilds">; notes: string[] }> => {
     await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs"] });
-    try { const r = await importPdfCore(ctx, storageId, title); return { buildId: r.buildId, notes: r.notes }; }
+    const claim = await claimIn(ctx, storageId, "import-pdf");
+    if (!claim.fresh) throw new ConvexError("Upload the PDF again."); // second 5e review: a new upload only, never a file already in use
+    try { const r = await importPdfCore(ctx, storageId, title, false, claim); return { buildId: r.buildId, notes: r.notes }; }
     catch (e) { throw new ConvexError(errText(e)); }
   },
 });

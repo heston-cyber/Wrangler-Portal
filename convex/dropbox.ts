@@ -8,7 +8,7 @@ import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireMe, requireAll } from "./lib/access";
+import { requireMe, requireOwner } from "./lib/access";
 import { bunnyCall, bunnyEnv } from "./bunny";
 import { checkReviewExport, httpRangeReader, mp4HasIndex } from "./lib/mp4";
 import { directLink, folderPlace, pickProject, placeFor, projectFolderOf, splitJob } from "./lib/dropboxPath";
@@ -50,7 +50,7 @@ const errText = (e: unknown) => ((e as Error)?.message || String(e)).replace(/^.
 export const status = query({
   args: {},
   handler: async (ctx) => {
-    await requireAll(ctx, "settings");
+    await requireOwner(ctx); // 5e review (answer c): Dropbox is the owner's
     const conn = await ctx.db.query("dropbox").first();
     const files = (await ctx.db.query("dropFiles").order("desc").take(40))
       .filter((f) => f.status !== "existing")
@@ -81,7 +81,7 @@ export const status = query({
 export const flagged = query({
   args: {},
   handler: async (ctx) => {
-    await requireAll(ctx, "settings");
+    await requireOwner(ctx); // 5e review (answer c): Dropbox is the owner's
     const since = Date.now() - 14 * 86400_000;
     const rows = (await ctx.db.query("dropFiles").withIndex("by_status", (q) => q.eq("status", "flagged")).collect())
       .filter((f) => f.lastChangeAt > since)
@@ -104,7 +104,7 @@ export const flagged = query({
 export const retryFlagged = mutation({
   args: { fileId: v.id("dropFiles") },
   handler: async (ctx, { fileId }) => {
-    await requireAll(ctx, "settings");
+    await requireOwner(ctx); // 5e review (answer c): Dropbox is the owner's
     const f = await ctx.db.get(fileId);
     if (!f || f.status !== "flagged") return false;
     await ctx.db.patch(fileId, { status: "waiting", reason: undefined, lastChangeAt: Date.now() - 10 * 60_000, checks: 0 });
@@ -519,7 +519,7 @@ export const sync = internalAction({
 export const syncNow = action({
   args: {},
   handler: async (ctx) => {
-    const me: { businessId: Id<"businesses"> | null } = await ctx.runQuery(internal.users.assertAllowed, { perm: ["settings"] });
+    const me: { businessId: Id<"businesses"> | null } = await ctx.runQuery(internal.users.assertAllowed, {}); // the owner only (5e review, answer c)
     await ctx.scheduler.runAfter(0, internal.dropbox.sync, me.businessId ? { asBusiness: me.businessId } : {});
   },
 });
@@ -653,7 +653,7 @@ export const folderNote = internalQuery({
 export const registerFlagged = mutation({
   args: { fileId: v.id("dropFiles"), title: v.optional(v.string()), shortTitle: v.optional(v.string()), videoId: v.optional(v.id("videos")) },
   handler: async (ctx, a) => {
-    await requireAll(ctx, "settings");
+    await requireOwner(ctx); // 5e review (answer c): Dropbox is the owner's
     const f = await ctx.db.get(a.fileId);
     if (!f || f.status !== "flagged") throw new ConvexError("That file isn't waiting to be registered.");
     const ext = f.pathDisplay.split(".").pop();

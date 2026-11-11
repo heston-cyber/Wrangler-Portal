@@ -83,7 +83,7 @@ const OPEN: Record<string, string> = {
   // Phase 5b step 4 (D127): a call-sheet guest's link (/guest/<token>, email 41), signed out.
   "guests.intro": "a guest's link: answers only for that pass's own long random token, with the sheet's title, day, the guest's first name and a masked email; tested in callSheetGuests.test.ts",
   "guests.sendCode": "the same link's \"Email me a code\": emails a code to the pass's own address only (never shown), rate-limited; a missing token is refused",
-  "security.signInLocked": "the sign-in page's Too many tries (D146): only whether an email's password sign-in is resting after 5 wrong tries, and for how many minutes; tested in security.test.ts",
+  "security.signInLocked": "the sign-in page's Too many tries (D146): counts the page's failed tries per email (any email, login or not, so it can't tell which have one; 5e review) and says whether to show the notice; tested in security.test.ts S2",
   // Phase 5e step 1: the Join page (/team/join/<token>, email 46).
   "team.joinPage": "a team invite's link: answers only for that invite's own long random token (its hash is stored), with the business, role, inviter and the invited email; tested in team.test.ts",
 };
@@ -430,7 +430,8 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "users.setName": ACCOUNT,
     "vendors.invoices": PRODUCTION,
     "vendors.list": PRODUCTION,
-    "vendors.get": PRODUCTION,
+    // "vendors.w9Link" (second 5e review): Production and Vendor payments both, so no default team role; the owner and a member given both.
+    "vendors.get": PRODUCTION, // 5e review H2: the W-9 file, how they're paid and the totals need Vendor payments too (tests/review5e.test.ts)
     "vendors.add": PRODUCTION,
     "vendors.update": PRODUCTION,
     "vendors.archive": PRODUCTION,

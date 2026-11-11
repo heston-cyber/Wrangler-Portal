@@ -3,6 +3,7 @@
 //   - A shoot's "Gear on this shoot" card. Two shoots on one day that need the same item are named, never blocked.
 //   - The serial is stored whole but every screen shows only the last 4; the insurer export carries the whole one.
 import { mutation, query } from "./lib/functions";
+import { claimUpload, deleteFile } from "./lib/fileOwners";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
@@ -151,11 +152,13 @@ export const setPhoto = mutation({
     const meta = await ctx.db.system.get(storageId);
     if (!meta) return "The photo didn't upload. Try again.";
     const g = await ctx.db.get(gearId);
-    const refuse = async (msg: string) => { await ctx.storage.delete(storageId); return msg; };
-    if (!g) return refuse("That gear isn't here any more.");
+    if (!g) return "That gear isn't here any more.";
+    // 5e review (Nov 6): only this business's own fresh upload, and only that may be deleted on a refusal.
+    if (!(await claimUpload(ctx, storageId, g.businessId ?? null, "gear")).fresh) return "The photo didn't upload. Try again.";
+    const refuse = async (msg: string) => { await deleteFile(ctx, storageId, g.businessId ?? null); return msg; };
     if (!/^image\/(png|jpeg|webp|gif)$/.test(meta.contentType ?? "")) return refuse("A photo needs to be a PNG, JPG, WebP or GIF.");
     if (meta.size > MAX_PHOTO) return refuse("That photo is over 10 MB.");
-    if (g.photoId) await ctx.storage.delete(g.photoId).catch(() => null);
+    if (g.photoId) await deleteFile(ctx, g.photoId, g.businessId ?? null);
     await ctx.db.patch(g._id, { photoId: storageId, updatedAt: Date.now() });
     return null;
   },
@@ -166,7 +169,7 @@ export const removePhoto = mutation({
   handler: async (ctx, { gearId }) => {
     await requireAll(ctx, "production");
     const g = await owned(ctx, gearId);
-    if (g.photoId) await ctx.storage.delete(g.photoId).catch(() => null);
+    if (g.photoId) await deleteFile(ctx, g.photoId, g.businessId ?? null);
     await ctx.db.patch(g._id, { photoId: undefined, updatedAt: Date.now() });
   },
 });

@@ -136,7 +136,7 @@ export default function ReportsPage() {
                       </div>
                     </Card>
                   )}
-                  <Card className="rp-o-vendors" label="Vendor costs" head={<SectionHead label="Vendor costs" />}>
+                  {r.vendors && <Card className="rp-o-vendors" label="Vendor costs" head={<SectionHead label="Vendor costs" />}>
                     <div className="rp-body">
                       <View table={views.vendors} set={(t) => setViews((v) => ({ ...v, vendors: t }))} />
                       {!r.vendors.length ? <p className="wp-small secondary">No vendor invoices were paid in this range.</p>
@@ -144,7 +144,7 @@ export default function ReportsPage() {
                           ? <Table head={["Vendor", "Invoices", "Paid"]} num={[1, 2]} rows={r.vendors.map((x) => [x.vendor, x.invoices, usd(x.cents, true)])} />
                           : <Bars value={(n) => usd(n)} rows={r.vendors.map((x) => ({ key: x.vendor, label: x.vendor, n: x.cents }))} />}
                     </div>
-                  </Card>
+                  </Card>}
                 </div>
                 <div className="rp-side">
                   <Card className="rp-o-sum" label={yearSoFar ? "The year so far" : "This range"} head={<SectionHead label={yearSoFar ? "The year so far" : "This range"} />}>
@@ -202,7 +202,8 @@ const FILES: Array<{ key: FileKey; label: string; sub: string }> = [
 ];
 
 function ExportDialog({ data, canProfit, business, onClose, done }: { data: PageData; canProfit: boolean; business: string; onClose: () => void; done: (m: string) => void }) {
-  const files = useMemo(() => FILES.filter((f) => f.key !== "profit" || canProfit), [canProfit]);
+  // Each vendor's amounts need Vendor payments (Heston, Nov 10): without it the page has no vendor rows to export.
+  const files = useMemo(() => FILES.filter((f) => (f.key !== "profit" || canProfit) && (f.key !== "vendors" || data.vendors !== null)), [canProfit, data.vendors]);
   const [pick, setPick] = useState<Set<FileKey>>(() => new Set(files.filter((f) => f.key !== "funnel").map((f) => f.key)));
   const [making, setMaking] = useState(false);
   const [err, setErr] = useState<string | null>(null);

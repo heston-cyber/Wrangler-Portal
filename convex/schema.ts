@@ -128,6 +128,9 @@ export default defineSchema({
 
   // Per-hour counters for what commenters may do (security review, Oct 23).
   rateLimits: defineTable({ key: v.string(), count: v.number(), hour: v.number() }).index("by_key", ["key"]).index("by_hour", ["hour"]),
+  // Second 5e review (Nov 10): a short-lived ticket to open one private file (a W-9) through /f/<token>. Made only for
+  // someone allowed to see it at that moment; works for 10 minutes. Storage links never expire, so W-9s don't use them.
+  fileTickets: defineTable({ token: v.string(), fileId: v.id("_storage"), businessId: v.id("businesses"), name: v.string(), expiresAt: v.number() }).index("by_token", ["token"]).index("by_expiry", ["expiresAt"]),
 
   projects: defineTable({
     businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
@@ -1772,6 +1775,15 @@ export default defineSchema({
     heartbeat: v.optional(v.number()),
     attempts: v.optional(v.number()),
   }).index("by_business", ["businessId"]).index("by_purge", ["purgeAt"]).index("by_status", ["status"]),
+
+  // Review fix (Nov 6): which business each stored file belongs to (lib/fileOwners.ts).
+  fileOwners: defineTable({
+    storageId: v.id("_storage"),
+    businessId: v.id("businesses"),
+    userId: v.optional(v.id("users")),
+    purpose: v.string(),
+    at: v.number(),
+  }).index("by_storage", ["storageId"]).index("by_business", ["businessId"]),
 
   // Option B (Heston, Nov 6): the files a deleted business's portal kept stay 30 days with its safety-net export.
   deletionFiles: defineTable({

@@ -256,7 +256,7 @@ export function VendorSettings() {
   const onFile = async (f: File | undefined) => {
     if (!f) return;
     setUp(true);
-    try { const id = await uploadToStorage(await uploadUrl({ businessId: s.businessId }), f); await setW9({ businessId: s.businessId, storageId: id as Id<"_storage">, name: f.name }); show("W-9 uploaded."); }
+    try { const id = await uploadToStorage(await uploadUrl({ businessId: s.businessId }), f); const r = await setW9({ businessId: s.businessId, storageId: id as Id<"_storage">, name: f.name }); show(r && "error" in r ? r.error ?? "The W-9 didn't upload." : "W-9 uploaded."); }
     catch (e) { show(errText(e)); } finally { setUp(false); if (file.current) file.current.value = ""; }
   };
   return (

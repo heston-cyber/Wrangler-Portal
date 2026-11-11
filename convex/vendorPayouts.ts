@@ -21,6 +21,7 @@ import { ownerPayoutMail, vendorInvoicePaidMail, vendorPayoutReturnedMail, vendo
 import { deliverOnce } from "./invoiceReminders";
 import { SITE } from "./lib/site";
 import { asVendor } from "./vendorPortal";
+import { audit } from "./lib/audit";
 
 type Ctx = QueryCtx | MutationCtx;
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e)).replace(/^Stripe: /, "");
@@ -196,6 +197,8 @@ export const claim = internalMutation({
     const now = Date.now();
     const key = `wp-vinv-${invoiceId}-${attempt}`;
     await ctx.db.patch(invoiceId, { payout: { status: "starting", attempt, mode: payoutsMode() ?? "test", startedAt: now, by: me.name ?? me.email }, updatedAt: now });
+    // 5e review (Heston, Nov 6, answer d): whoever presses Pay (a Bookkeeper may), it's in Settings › Activity.
+    await audit(ctx, { kind: "paid", text: `started a direct deposit of ${usd(x.totalCents)} to ${vendor.name} (${x.number})`, where: "Vendors › Payments", link: `/vendors/payments/${invoiceId}` });
     return { vendorId: vendor._id, recipientId: vendor.payout.recipientId, cents: x.totalCents, number: x.number, attempt, key, first: vendor.name.split(" ")[0] };
   },
 });
@@ -371,6 +374,7 @@ export const nothingWentOut = mutation({
     if (!x || !p || p.status !== "unknown" || Date.now() - p.startedAt < REPLAY_FOR) throw new ConvexError("Only for a payment Stripe hasn't answered about for a day.");
     const now = Date.now();
     await ctx.db.patch(invoiceId, { payout: { ...p, status: "refused", reason: "You checked Stripe: nothing went out.", checkedAt: now }, history: [...(x.history ?? []), { at: now, text: "You checked Stripe: that payment didn't go out." }], updatedAt: now });
+    await audit(ctx, { kind: "paid", text: `marked a direct deposit to a vendor as not sent (${x.number})`, where: "Vendors › Payments", link: `/vendors/payments/${invoiceId}` });
     return null;
   },
 });

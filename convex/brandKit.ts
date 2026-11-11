@@ -4,6 +4,7 @@
 // colours, heading and body fonts, reference files, links and tone words. Uploads: 25 MB a file, 20 files (D90).
 // Owner only; clients never see a kit.
 import { mutation, query } from "./lib/functions";
+import { claimUpload, deleteFile } from "./lib/fileOwners";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
@@ -113,11 +114,14 @@ export async function attachFile(ctx: MutationCtx, row: Doc<"businesses"> | Doc<
   const meta = await ctx.db.system.get(storageId);
   if (!meta) return "The file didn't upload. Try again.";
   const kit = kitOf(row);
-  const refuse = async (msg: string) => { await ctx.storage.delete(storageId); return msg; };
+  // 5e review (Nov 6): the upload must be this business's own fresh one (claimed now), and only then may a refusal delete it.
+  const biz = ("businessId" in row ? row.businessId : row._id) as Id<"businesses"> | undefined;
+  if (!(await claimUpload(ctx, storageId, biz ?? null, "brandKit")).fresh) return "The file didn't upload. Try again.";
+  const refuse = async (msg: string) => { await deleteFile(ctx, storageId, biz ?? null); return msg; };
   if (meta.size > MAX_FILE_BYTES) return refuse(`That file is ${Math.ceil(meta.size / 1024 / 1024)} MB. The limit is 25 MB; link to big files (like videos) instead.`);
   if (opts.logo) {
     if (!/^image\/(png|svg\+xml|jpeg|webp)$/.test(meta.contentType ?? "")) return refuse("A logo needs to be an SVG, PNG, JPG or WebP.");
-    if (kit.logoFileId) await ctx.storage.delete(kit.logoFileId).catch(() => null);
+    if (kit.logoFileId) await deleteFile(ctx, kit.logoFileId, biz ?? null);
     await ctx.db.patch(row._id, { brandKit: { ...kit, logoFileId: storageId } });
     return null;
   }
@@ -146,7 +150,7 @@ export const removeFile = mutation({
       if (!kit.files.some((f) => f.fileId === a.fileId)) throw new ConvexError("That file isn't in this kit.");
       await ctx.db.patch(row._id, { brandKit: { ...kit, files: kit.files.filter((f) => f.fileId !== a.fileId) } });
     }
-    await ctx.storage.delete(a.fileId).catch(() => null);
+    await deleteFile(ctx, a.fileId, (("businessId" in row ? row.businessId : row._id) as Id<"businesses"> | undefined) ?? null);
     return null;
   },
 });

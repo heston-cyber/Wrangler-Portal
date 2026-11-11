@@ -62,7 +62,7 @@ export default function ProposalsPage() {
               {shown.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "document" }} title="None here." /> : shown.map((r, i) => (
                 <div key={r._id} className="wp-rowwrap">{i > 0 && <Divider />}
                   <ListRow className="ilead" lead={{ icon: "document" }} to={`/proposals/${r._id}`} title={r.title} meta={meta(r)}
-                    trailing={money(r.totalCents)} chip={<ProposalChip status={r.status} />} chevron />
+                    trailing={r.totalCents == null ? undefined : money(r.totalCents)} chip={<ProposalChip status={r.status} />} chevron />
                 </div>
               ))}
             </Card>

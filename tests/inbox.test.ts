@@ -208,6 +208,7 @@ describe("a client's people, the client page, settings", () => {
       const d = await ctx.storage.store(new Blob([new Uint8Array([1])], { type: "image/png" }));
       const l = await ctx.storage.store(new Blob([new Uint8Array([2])], { type: "image/png" }));
       await ctx.db.patch(w.A, { logoFileId: d, logoLightFileId: l });
+      for (const id of [d, l]) await ctx.db.insert("fileOwners", { storageId: id, businessId: w.A, purpose: "logo", at: Date.now() }); // as the Nov 6 backfill records them
       return [d, l];
     });
     let s = await w.heston.query(api.business.settings, {});

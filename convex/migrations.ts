@@ -5,6 +5,7 @@
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "./lib/functions";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { BUSINESS_TABLES } from "./lib/tenancy";
 import { defaultBusiness } from "./lib/business";
 import { eventsOf, verifyChain } from "./lib/wsAudit";
@@ -124,5 +125,84 @@ export const clientsSelfTest = internalQuery({
     for await (const p of ctx.db.query("projects")) check(p);
     for await (const s of ctx.db.query("shares")) if (s.kind === "client") check(s);
     return { clients: clients.length, madeFromProjects: clients.filter((c) => c.fromProjects).length, linked, unlinked, mismatched, ok: unlinked === 0 && mismatched === 0 };
+  },
+});
+
+// ---------- 5e review (Nov 6): who owns each stored file ----------
+// Records a fileOwners row for every file a business's records point at (the fields the schema types as storage ids,
+// plus the brand kits and Sign styles), so files from before Nov 6 can be deleted by their business and counted in
+// Your data. Run by hand after a `convex export`, on the dev copy first. Safe to run again: a file already recorded is
+// left alone.
+// Second 5e review (Nov 10): first every reference is collected across all businesses; only a file exactly one business
+// points at is recorded. A file two businesses point at (before Nov 6 one could point a logo or a style at another's
+// file) is recorded for nobody and listed, for Heston to decide.
+import { filesOf } from "./yourData";
+
+const SMALL = new Set(["wsBuilds", "wsTemplates", "wsStyles", "proposals", "briefings"]); // big rows: fewer per call
+
+export const ownersScan = internalQuery({
+  args: { table: v.string(), cursor: v.union(v.string(), v.null()) },
+  handler: async (ctx, { table, cursor }) => {
+    if (table !== "businesses" && !BUSINESS_TABLES.includes(table)) throw new Error(`Not a business table: ${table}`);
+    const page = await ctx.db.query(table as never).paginate({ numItems: SMALL.has(table) ? 25 : BATCH, cursor });
+    const refs: Array<{ id: string; biz: string }> = [];
+    let missing = 0;
+    for (const row of page.page as Array<{ _id: string; businessId?: string }>) {
+      const biz = table === "businesses" ? row._id : row.businessId;
+      if (!biz) continue;
+      for (const f of filesOf(table, row)) {
+        const id = ctx.db.system.normalizeId("_storage", f.id);
+        if (!id || !(await ctx.db.system.get(id))) { missing++; continue; }
+        refs.push({ id, biz });
+      }
+    }
+    return { refs, missing, cursor: page.continueCursor, done: page.isDone };
+  },
+});
+
+export const ownersRecord = internalMutation({
+  args: { files: v.array(v.object({ id: v.id("_storage"), biz: v.id("businesses"), table: v.string() })) },
+  handler: async (ctx, { files }) => {
+    let recorded = 0, already = 0;
+    for (const f of files) {
+      const have = await ctx.db.query("fileOwners").withIndex("by_storage", (q) => q.eq("storageId", f.id)).first();
+      if (have) { already++; continue; }
+      await ctx.db.insert("fileOwners", { storageId: f.id, businessId: f.biz, purpose: `backfill:${f.table}`, at: Date.now() });
+      recorded++;
+    }
+    return { recorded, already };
+  },
+});
+
+// The result is counts only (GitHub's run logs are public); each conflict is written to the Convex dashboard's logs.
+type OwnersReport = { recorded: number; already: number; missing: number; conflicts: number };
+export const ownersAll = internalAction({
+  args: {},
+  handler: async (ctx): Promise<OwnersReport> => {
+    const seen = new Map<string, { biz: Set<string>; tables: Set<string> }>();
+    let missing = 0;
+    for (const table of ["businesses", ...BUSINESS_TABLES]) {
+      let cursor: string | null = null;
+      for (;;) {
+        const r: { refs: Array<{ id: string; biz: string }>; missing: number; cursor: string; done: boolean } = await ctx.runQuery(internal.migrations.ownersScan, { table, cursor });
+        missing += r.missing;
+        for (const x of r.refs) { const e = seen.get(x.id) ?? { biz: new Set<string>(), tables: new Set<string>() }; e.biz.add(x.biz); e.tables.add(table); seen.set(x.id, e); }
+        cursor = r.cursor;
+        if (r.done) break;
+      }
+    }
+    const single: Array<{ id: Id<"_storage">; biz: Id<"businesses">; table: string }> = [];
+    const conflicts: Array<{ fileId: string; businesses: string[]; tables: string[] }> = [];
+    for (const [id, e] of seen) {
+      if (e.biz.size === 1) single.push({ id: id as Id<"_storage">, biz: [...e.biz][0] as Id<"businesses">, table: [...e.tables][0] });
+      else conflicts.push({ fileId: id, businesses: [...e.biz], tables: [...e.tables] });
+    }
+    let recorded = 0, already = 0;
+    for (let k = 0; k < single.length; k += 100) {
+      const r: { recorded: number; already: number } = await ctx.runMutation(internal.migrations.ownersRecord, { files: single.slice(k, k + 100) });
+      recorded += r.recorded; already += r.already;
+    }
+    for (const c of conflicts) console.log(`ownersAll conflict: file ${c.fileId} · businesses ${c.businesses.join(", ")} · tables ${c.tables.join(", ")}`);
+    return { recorded, already, missing, conflicts: conflicts.length };
   },
 });

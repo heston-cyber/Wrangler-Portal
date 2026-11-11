@@ -81,7 +81,7 @@ export default function SignIn({ invitedEmail, note: lead }: { invitedEmail?: st
     } catch (err) {
       // D146: after 5 wrong tries the sign-in rests; say so rather than "doesn't match".
       if (flow === "signIn" || flow === "code") {
-        const l = await convex.query(api.security.signInLocked, { email: mail }).catch(() => null);
+        const l = await convex.mutation(api.security.signInLocked, { email: mail }).catch(() => null); // counts this failed try (5e review)
         if (l?.locked) { setLocked(l.minutes); return; }
       }
       setError(explain((err as Error).message || "", flow));

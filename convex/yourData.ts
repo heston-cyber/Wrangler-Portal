@@ -16,6 +16,7 @@
 //   6. The download is the portal's own link, given only to the signed-in owner; its file is removed after 7 days.
 import { strToU8, zipSync } from "fflate";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./lib/functions";
+import { ownsFile } from "./lib/fileOwners";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -45,7 +46,11 @@ export const OMIT_TABLES = new Set(["connectorKeys", "sheetKeys", "wsConnectorKe
  *  Stripe's own pay-page and PDF links (anyone holding one can open the invoice). */
 export const SECRET_FIELDS = new Set(["token", "linkToken", "payToken", "passcodeHash", "codeHash", "sessionHash", "tokenHash", "refreshToken", "accessToken", "accessExpiresAt", "syncToken", "codeSends", "codeAttempts", "codeExpiresAt", "failures", "failTotal", "hostedUrl", "pdfUrl"]);
 /** Secret fields whose names mean something else in other tables (review fix, Nov 6). */
-export const SECRET_PATHS: Record<string, string[]> = { calls: ["code"], emailPrefs: ["key"], fileUploads: ["sessionId"], wsDocuments: ["invoice.url"] };
+export const SECRET_PATHS: Record<string, string[]> = { calls: ["code"], emailPrefs: ["key"], fileUploads: ["sessionId"], wsDocuments: ["invoice.url"],
+  // Second 5e review (W-9 check, Nov 10): a vendor's Stripe recipient and bank method, and a payout's request and
+  // receipt link, stay out of the export (the vendor page shows only that direct deposit is set up).
+  vendors: ["payout.recipientId", "payout.payoutMethodId"],
+  vendorInvoices: ["payout.receiptUrl", "payout.request.recipient", "payout.request.payoutMethod", "payout.request.financialAccount", "payout.request.key"] };
 /** Deleted last: what other records point at (the business's own records go first, then these). */
 const LAST = ["wsDocuments", "projects", "clients", "vendors"];
 const ORDER = [...BUSINESS_TABLES.filter((t) => !LAST.includes(t)), ...LAST];
@@ -273,8 +278,10 @@ export const signEvents = internalQuery({
 export const storageUrls = internalQuery({
   args: { ids: v.array(v.id("_storage")) },
   handler: async (ctx, { ids }) => {
+    // Second 5e review (Nov 10): only files this business owns; a record pointing at someone else's file links nothing.
+    const biz = businessInScope(ctx);
     const out: Record<string, string | null> = {};
-    for (const id of ids) out[id] = await ctx.storage.getUrl(id);
+    for (const id of ids) out[id] = (await ownsFile(ctx, id, biz)) ? await ctx.storage.getUrl(id) : null;
     return out;
   },
 });
@@ -513,7 +520,8 @@ export const deleteStep = internalMutation({
       for (const row of r.page) {
         if (row.businessId !== biz) continue; // the row rules already keep other businesses out; never a legacy row
         // Option B (Heston, Nov 6): the files the portal keeps stay 30 days with the safety-net export, then go with it.
-        for (const f of filesOf(table, row)) await ctx.db.insert("deletionFiles", { deletionId, fileId: f.id, purgeAt: d.purgeAt ?? now + KEEP_FINAL_DAYS * DAY });
+        // 5e review (Nov 6): only files this business owns; a row pointing at another business's file never deletes it.
+        for (const f of filesOf(table, row)) if (await ownsFile(ctx, f.id, biz)) await ctx.db.insert("deletionFiles", { deletionId, fileId: f.id, purgeAt: d.purgeAt ?? now + KEEP_FINAL_DAYS * DAY });
         if (table === "versions") {
           const ver = row as unknown as Doc<"versions">;
           if (ver.bunnyGuid) guids.add(ver.bunnyGuid);
@@ -544,9 +552,15 @@ export const deleteStep = internalMutation({
         await ctx.db.delete(u);
       }
       if (from + 50 < list.length) return next({ tableIndex: from + 50 });
+      // 5e review (Nov 6): every other file the business owns (an upload no record points at any more) goes the same way.
+      const owned = await ctx.db.query("fileOwners").withIndex("by_business", (q) => q.eq("businessId", d.businessId)).take(BATCH);
+      if (owned.length) {
+        for (const o of owned) { await ctx.db.insert("deletionFiles", { deletionId, fileId: o.storageId, purgeAt: d.purgeAt ?? now + KEEP_FINAL_DAYS * DAY }); await ctx.db.delete(o._id); }
+        return next({ tableIndex: list.length });
+      }
       const b = await ctx.db.get(d.businessId);
       if (b) {
-        for (const f of filesOf("businesses", b)) await ctx.db.insert("deletionFiles", { deletionId, fileId: f.id, purgeAt: d.purgeAt ?? now + KEEP_FINAL_DAYS * DAY }); // its logos
+        for (const f of filesOf("businesses", b)) if (await ownsFile(ctx, f.id, d.businessId)) await ctx.db.insert("deletionFiles", { deletionId, fileId: f.id, purgeAt: d.purgeAt ?? now + KEEP_FINAL_DAYS * DAY }); // its logos
         await ctx.db.delete(d.businessId);
       }
       await ctx.db.patch(deletionId, { status: "done", step: "done", doneAt: now, heartbeat: now, users: [], emails: [] });
@@ -605,6 +619,7 @@ export const purge = internalMutation({
     }
     for (const f of await ctx.db.query("deletionFiles").withIndex("by_purge", (q) => q.lt("purgeAt", now)).take(500)) {
       try { await ctx.storage.delete(f.fileId); } catch { /* gone */ }
+      for (const o of await ctx.db.query("fileOwners").withIndex("by_storage", (q) => q.eq("storageId", f.fileId)).collect()) await ctx.db.delete(o._id);
       await ctx.db.delete(f._id);
       n++;
     }

@@ -868,9 +868,9 @@ export const onFailed = internalAction({
     await ctx.runMutation(internal.subscriptions.markFailed, { subscriptionId: s._id, at: failureAt, message, invoice: d.invoice.stripeId, final: next === null, nextTry: next ?? undefined });
     const link = subLink(s.payToken);
     await deliverOnce(ctx, `subfailed:${invoiceId}:${failureKey}`, "subscription-failed", s.billTo.email,
-      subscriptionFailedMail(d.brand, { name: s.billTo.name, plan: s.planName, amountCents: d.invoice.amountCents, reason: message, nextTry: next ? dateWords(next) : null, link }), d.brand.replyTo);
+      subscriptionFailedMail(d.brand, { name: s.billTo.name, plan: s.planName, amountCents: d.invoice.amountCents, reason: message, nextTry: next ? dateWords(next) : null, link }), d.brand.replyTo, s.businessId ?? null);
     if (d.owner) await deliverOnce(ctx, `subfailed-owner:${invoiceId}:${failureKey}`, "subscription-failed-owner", d.owner,
-      ownerSubscriptionFailedMail(d.brand, { client: d.client, plan: s.planName, amountCents: d.invoice.amountCents, reason: message, nextTry: next ? dateWords(next) : null, link: `${SITE()}/payments/subscriptions/${s._id}` }), d.brand.replyTo);
+      ownerSubscriptionFailedMail(d.brand, { client: d.client, plan: s.planName, amountCents: d.invoice.amountCents, reason: message, nextTry: next ? dateWords(next) : null, link: `${SITE()}/payments/subscriptions/${s._id}` }), d.brand.replyTo, s.businessId ?? null); // 5e review H3: its own business's bell
     // D64: after Stripe's last try, the owner's choice for this client (or the business's): keep it past due, or cancel.
     if (next === null && d.rule === "cancel" && s.stripe?.subscriptionId) {
       try { await stripeCall("DELETE", `subscriptions/${s.stripe.subscriptionId}`, { account: s.stripe.accountId }); } catch { return "sent"; }

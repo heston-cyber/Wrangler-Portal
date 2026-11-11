@@ -1,6 +1,7 @@
 // Wrangler Portal, Phase 0.5d step 1 (Oct 28). Internal only: run by hand through the "Convex run" workflow.
 // Its output is counts only (the repo and its CI logs are public).
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
+import { claimUpload, deleteFile } from "./lib/fileOwners";
 import { audit } from "./lib/audit";
 import { v, ConvexError } from "convex/values";
 import { requireMe, requireSignedIn, requireAll, viewerOf } from "./lib/access";
@@ -118,7 +119,14 @@ export const updateSettings = mutation({
     watermark: v.optional(v.object({ corner: v.union(v.literal("tl"), v.literal("tr"), v.literal("bl"), v.literal("br"), v.literal("c")), size: v.union(v.literal("small"), v.literal("large")), opacity: v.number(), mark: v.optional(v.union(v.literal("logo"), v.literal("text"), v.literal("both"))), text: v.optional(v.string()) })),
   },
   handler: async (ctx, a) => {
-    await requireAll(ctx, "settings");
+    const me = await requireAll(ctx, "settings");
+    // 5e review (Heston, Nov 6, answer c): the Settings switch covers the business's look (colours, logo, watermark);
+    // its details (names, emails, address, privacy link, modules, revision rounds) are the owner's.
+    if (me.team) {
+      const LOOK = new Set(["accent", "background", "watermark"]);
+      const other = Object.keys(a).filter((k) => (a as Record<string, unknown>)[k] !== undefined && !LOOK.has(k));
+      if (other.length) throw new ConvexError("Only the owner can change the business's details. You can change its colours, logo and watermark.");
+    }
     const id = ownBusiness(ctx);
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
     { const changed = Object.keys(a).filter((k) => (a as Record<string, unknown>)[k] !== undefined);
@@ -184,10 +192,12 @@ export const setLogo = mutation({
       if (!meta || !/^image\/(png|jpeg|svg\+xml|webp)$/.test(meta.contentType ?? "") || meta.size > 1_000_000) {
         throw new ConvexError("Use a PNG, JPG, SVG or WebP image under 1 MB.");
       }
+      // 5e review (Nov 6): this business's own upload only; second review (Nov 10): a new upload, not a file already in use
+      if (!(await claimUpload(ctx, storageId, id, "logo")).fresh) throw new ConvexError("Upload the logo again.");
     }
     const field = which === "light" ? "logoLightFileId" : "logoFileId";
     const old = b[field];
-    if (old && old !== storageId) await ctx.storage.delete(old);
+    if (old && old !== storageId) await deleteFile(ctx, old, id);
     await ctx.db.patch(id, { [field]: storageId ?? undefined, updatedAt: Date.now() });
     return null;
   },

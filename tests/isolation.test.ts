@@ -34,10 +34,18 @@ async function twoBusinesses() {
     const bOwner = await ctx.db.insert("users", { email: "boss@otherfilms.example", name: "Boss", role: "owner" });
     await ctx.db.insert("memberships", { businessId: b, email: "boss@otherfilms.example", userId: bOwner, role: "owner", createdAt: 1 });
     const bSub = `${bOwner}|${await ctx.db.insert("authSessions", { userId: bOwner, expirationTime: Date.now() + 3_600_000 })}`;
+    // 5e review (Nov 6): A's uploaded file is recorded as A's (as attaching it does), so B can neither use nor delete it.
+    if (!(await ctx.db.query("fileOwners").withIndex("by_storage", (q) => q.eq("storageId", ids.storageId)).first())) await ctx.db.insert("fileOwners", { storageId: ids.storageId, businessId: a, purpose: "test", at: Date.now() });
     return { a, b, bSub };
   });
   return { t, ids, ...extra };
 }
+
+/** Is the file still there, and whose is it? */
+const aFile = (t: Awaited<ReturnType<typeof setup>>["t"], id: Id<"_storage">) => t.run(async (ctx) => ({
+  alive: !!(await ctx.storage.get(id)),
+  owner: (await ctx.db.query("fileOwners").withIndex("by_storage", (q) => q.eq("storageId", id)).first())?.businessId ?? null,
+}));
 
 async function snapshot(t: Awaited<ReturnType<typeof setup>>["t"], biz: Id<"businesses">, isDefault: boolean) {
   return t.run(async (ctx) => {
@@ -57,8 +65,8 @@ describe("two businesses", () => {
     const before = await snapshot(t, a, true);
     const b = t.withIdentity({ subject: bSub });
     const table = argsFor(ids);
-    // File ids (Convex storage) aren't business records: they're long random capabilities, handed only to whoever
-    // uploaded the file. Giving files a business is on the product-phase list; here only records are checked.
+    // File ids (Convex storage) aren't business records, so they aren't in the leak list; since the 5e review (Nov 6)
+    // each file has an owner (fileOwners), and A's file is checked below: still there, still A's.
     const aIds = Object.entries(ids).filter(([k]) => !/Sub$/.test(k) && k !== "storageId").map(([, v]) => String(v));
     const leaks: string[] = [];
     for (const f of publicFunctions()) {
@@ -73,6 +81,7 @@ describe("two businesses", () => {
     const after = await snapshot(t, a, true);
     const changed = Object.keys(before).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]));
     expect(changed).toEqual([]);
+    expect(await aFile(t, ids.storageId)).toEqual({ alive: true, owner: a }); // 5e review: A's stored file is untouched
   });
 
   test("Phase 5e: a team member of B with every switch on gets nothing of A, and neither B's owner nor B's team changes A's team", async () => {
@@ -106,6 +115,7 @@ describe("two businesses", () => {
     const after = await snapshot(t, a, true);
     expect(Object.keys(before).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))).toEqual([]);
     expect(await aTeam()).toEqual(teamBefore);
+    expect(await aFile(t, ids.storageId)).toEqual({ alive: true, owner: a });
   });
 
   test("a call-sheet guest of B (signed in) gets nothing of A from any function, and changes nothing of A", async () => {
