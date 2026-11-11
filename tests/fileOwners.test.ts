@@ -116,7 +116,7 @@ test("F7 the backfill records who owns each existing file, and counts a file two
   expect(await owner(w, w9B)).toBe(w.B);
   // Second 5e review: a file two businesses point at is recorded for nobody and listed for Heston.
   expect(await owner(w, shared)).toBeNull();
-  expect(r).toMatchObject({ recorded: 2, conflicts: [{ fileId: shared, businesses: expect.arrayContaining([w.A, w.B]), tables: ["gear"] }] });
+  expect(r).toMatchObject({ recorded: 2, conflicts: 1 }); // listed in the Convex logs, counts only in the result
   // Safe to run again.
   expect(await w.t.action(internal.migrations.ownersAll, {})).toMatchObject({ recorded: 0, already: 2 });
 });

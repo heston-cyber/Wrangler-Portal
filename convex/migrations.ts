@@ -174,7 +174,8 @@ export const ownersRecord = internalMutation({
   },
 });
 
-type OwnersReport = { recorded: number; already: number; missing: number; conflicts: Array<{ fileId: string; businesses: string[]; tables: string[] }> };
+// The result is counts only (GitHub's run logs are public); each conflict is written to the Convex dashboard's logs.
+type OwnersReport = { recorded: number; already: number; missing: number; conflicts: number };
 export const ownersAll = internalAction({
   args: {},
   handler: async (ctx): Promise<OwnersReport> => {
@@ -191,7 +192,7 @@ export const ownersAll = internalAction({
       }
     }
     const single: Array<{ id: Id<"_storage">; biz: Id<"businesses">; table: string }> = [];
-    const conflicts: OwnersReport["conflicts"] = [];
+    const conflicts: Array<{ fileId: string; businesses: string[]; tables: string[] }> = [];
     for (const [id, e] of seen) {
       if (e.biz.size === 1) single.push({ id: id as Id<"_storage">, biz: [...e.biz][0] as Id<"businesses">, table: [...e.tables][0] });
       else conflicts.push({ fileId: id, businesses: [...e.biz], tables: [...e.tables] });
@@ -201,6 +202,7 @@ export const ownersAll = internalAction({
       const r: { recorded: number; already: number } = await ctx.runMutation(internal.migrations.ownersRecord, { files: single.slice(k, k + 100) });
       recorded += r.recorded; already += r.already;
     }
-    return { recorded, already, missing, conflicts };
+    for (const c of conflicts) console.log(`ownersAll conflict: file ${c.fileId} · businesses ${c.businesses.join(", ")} · tables ${c.tables.join(", ")}`);
+    return { recorded, already, missing, conflicts: conflicts.length };
   },
 });
