@@ -58,7 +58,8 @@ test("H2 a Producer without Vendor payments sees that a W-9 is on file, never th
   const vendorId = await vendorWithW9(w);
   const producer = await w.member("pro@x.example", "producer", ["production", "value"]);
   const x = await producer.query(api.vendors.get, { vendorId });
-  expect(x.w9).toMatchObject({ name: "w9.pdf", url: null });
+  expect(x.w9).toMatchObject({ name: "w9.pdf", canOpen: false });
+  await expect(producer.mutation(api.vendors.w9Link, { vendorId })).rejects.toThrow(/Not allowed/);
   expect(x.payMethod).toBeUndefined();
   expect(x.totals).toBeNull();
   expect(JSON.stringify(x)).not.toMatch(/rcp_SECRET|pm_SECRET|6789|jordan@bank/);
@@ -66,12 +67,36 @@ test("H2 a Producer without Vendor payments sees that a W-9 is on file, never th
   expect(await producer.query(api.vendors.invoices, { vendorId })).toBeNull();
   // The owner, and someone with the switch, see them (the Stripe ids never leave the server for anyone).
   const owner = await w.heston.query(api.vendors.get, { vendorId });
-  expect(owner.w9.url).toMatch(/^http/);
+  expect(owner.w9).toMatchObject({ canOpen: true });
+  expect(JSON.stringify(owner)).not.toMatch(/https?:\/\//); // no lasting link to the W-9 (second 5e review)
   expect(owner.payMethod).toMatchObject({ method: "Zelle" });
   expect(owner.totals).toMatchObject({ paidThisYearCents: 0 });
   expect(JSON.stringify(owner)).not.toMatch(/rcp_SECRET|pm_SECRET/);
   const payer = await w.member("pay@x.example", "producer", ["production", "vendorPayments", "value"]);
-  expect((await payer.query(api.vendors.get, { vendorId })).w9.url).toMatch(/^http/);
+  expect((await payer.query(api.vendors.get, { vendorId })).w9.canOpen).toBe(true);
+  // Opening it: a 10-minute link through /f/, which serves the file with no caching, then stops working.
+  const link = await payer.mutation(api.vendors.w9Link, { vendorId });
+  const token = link.split("/f/")[1];
+  const res = await w.t.fetch(`/f/${token}`, { method: "GET" });
+  expect(res.status).toBe(200);
+  expect(res.headers.get("cache-control")).toContain("no-store");
+  expect(await res.text()).toBe("%PDF w9");
+  const real = Date.now;
+  Date.now = () => real() + 11 * 60_000;
+  try { expect((await w.t.fetch(`/f/${token}`, { method: "GET" })).status).toBe(404); } finally { Date.now = real; }
+  expect((await w.t.fetch("/f/not-a-real-token-at-all-000000", { method: "GET" })).status).toBe(404);
+});
+
+test("second review: only the owner or Vendor payments can change a vendor's email (their portal login), and it's in Activity", async () => {
+  const w = await world();
+  const vendorId = await vendorWithW9(w);
+  const producer = await w.member("pro@x.example", "producer", ["production", "value"]);
+  const body = { vendorId, name: "Jordan Ellis", email: "mine@attacker.example", roles: ["Shooter"], rates: [] };
+  await expect(producer.mutation(api.vendors.update, body)).rejects.toThrow(/Only the owner or someone with Vendor payments/);
+  expect((await w.t.run((ctx) => ctx.db.get(vendorId)))?.email).toBe("jordan@x.example");
+  await w.heston.mutation(api.vendors.update, { ...body, email: "jordan.new@x.example" });
+  const rows = await w.t.run(async (ctx) => (await ctx.db.query("auditLog").collect()).map((r: any) => r.text));
+  expect(rows).toContain("changed Jordan Ellis's vendor email from jordan@x.example to jordan.new@x.example");
 });
 
 test("M5 without 'See what a project is worth', a vendor's rates are hidden and saving the vendor keeps them", async () => {

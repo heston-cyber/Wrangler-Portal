@@ -13,6 +13,8 @@ import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireMe, requireAll, seesValue, type Me } from "./lib/access";
+import { audit } from "./lib/audit";
+import { ticketFor } from "./fileTickets";
 import { businessInScope } from "./lib/business";
 import type { Rates } from "./lib/estimate";
 import { ratesOf } from "./crm";
@@ -119,7 +121,7 @@ export const get = query({
     void _payout;
     return {
       ...rest, portal: status(x),
-      w9: w9 ? { name: w9.name, uploadedAt: w9.uploadedAt, url: pay ? await ctx.storage.getUrl(w9.fileId) : null } : null,
+      w9: w9 ? { name: w9.name, uploadedAt: w9.uploadedAt, canOpen: pay } : null, // opened through w9Link (second 5e review)
       payMethod: pay ? payMethod : undefined,
       rates: value ? theirRates : [], ratesHidden: !value,
       costs: value ? x.roles.map((role) => ({ role, cost: pricingCost(rates, role) })) : [],
@@ -151,7 +153,14 @@ export const update = mutation({
     const x = await ctx.db.get(vendorId);
     if (!x) throw new ConvexError("That vendor isn't here.");
     const d = clean(a);
-    if (!seesValue(await requireAll(ctx, "production"))) d.rates = x.rates; // M5: they don't see the rates, so they keep them as they are
+    const me = await requireAll(ctx, "production");
+    if (!seesValue(me)) d.rates = x.rates; // M5: they don't see the rates, so they keep them as they are
+    // Second 5e review (W-9 check, Nov 10): the vendor's email is their portal login, and the portal shows their W-9 and
+    // bank form, so only the owner or someone with Vendor payments may change it, and the change is in Activity.
+    if (d.email !== x.email) {
+      if (!seesVendorPay(me)) throw new ConvexError("Only the owner or someone with Vendor payments can change a vendor's email.");
+      await audit(ctx, { kind: "settings", text: `changed ${x.name}'s vendor email from ${x.email} to ${d.email}`, where: "Vendors", link: `/vendors/${x._id}` });
+    }
     await notOwner(ctx, d.email); // review (Nov 2): an owner's email can't be a vendor
     if (d.email !== x.email && (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", d.email)).collect()).some((y) => y._id !== x._id && !y.archivedAt)) throw new ConvexError("Another vendor has that email.");
     // Review fix (step 6): a new email is a new login. The old address loses this business, and the new one needs a
@@ -159,6 +168,18 @@ export const update = mutation({
     if (d.email !== x.email) await endAccess(ctx, x);
     await ctx.db.patch(vendorId, { ...d, ...(d.email !== x.email ? { invitedAt: undefined, joinedAt: undefined } : {}), updatedAt: Date.now() });
     return null;
+  },
+});
+
+/** Second 5e review: open a vendor's W-9 (owner or Vendor payments): a 10-minute link, checked now. */
+export const w9Link = mutation({
+  args: { vendorId: v.id("vendors") },
+  handler: async (ctx, { vendorId }) => {
+    await requireAll(ctx, "vendorPayments"); // and Production, in ownerBiz: the owner, or a member with both switches
+    const b = await ownerBiz(ctx);
+    const x = await ctx.db.get(vendorId);
+    if (!x?.w9) throw new ConvexError("There's no W-9 on file.");
+    return ticketFor(ctx, x.w9.fileId, b._id, x.w9.name || "W-9.pdf");
   },
 });
 

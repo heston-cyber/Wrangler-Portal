@@ -67,3 +67,29 @@ export async function deleteFile(ctx: W, id: Id<"_storage"> | null | undefined, 
 export async function discardFresh(ctx: W, id: Id<"_storage">, claim: { fresh: boolean }, businessId: Id<"businesses"> | null) {
   if (claim.fresh) await deleteFile(ctx, id, businessId);
 }
+
+/** The image files a document style points at (its logo, cover and backdrop image). */
+export function styleFileIds(style: unknown): string[] {
+  const x = style as Record<string, { fileId?: unknown } | null | undefined> | null | undefined;
+  const out: string[] = [];
+  for (const k of ["logo", "cover", "backdropImage"]) { const f = x?.[k]?.fileId; if (typeof f === "string" && f) out.push(f); }
+  return out;
+}
+
+/** Second 5e review (Nov 10): a style a caller saves may point only at this business's own images. An image the saved
+ *  style already had is let through unchanged (so a save between the deploy and the owner backfill doesn't fail). */
+export async function assertStyleFiles(ctx: R, style: unknown, before: unknown, businessId: Id<"businesses"> | null) {
+  const had = new Set(styleFileIds(before));
+  for (const f of styleFileIds(style)) {
+    if (had.has(f)) continue;
+    const id = ctx.db.system.normalizeId("_storage", f);
+    if (!id || !(await ownsFile(ctx, id, businessId))) throw new ConvexError(NOT_YOURS);
+  }
+}
+
+/** A file id from a stored record, as a storage id, only when this business owns it (for reads that hand out a link). */
+export async function ownedOrNull(ctx: R, f: string | null | undefined, businessId: Id<"businesses"> | null | undefined): Promise<Id<"_storage"> | null> {
+  if (!f || !businessId) return null;
+  const id = ctx.db.system.normalizeId("_storage", f);
+  return id && (await ownsFile(ctx, id, businessId)) ? id : null;
+}

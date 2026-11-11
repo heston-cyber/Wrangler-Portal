@@ -531,7 +531,7 @@ export const settings = query({
     const { biz, vendor, email } = await asVendor(ctx, businessId);
     return {
       businessId: biz, ...(await ownerOf(ctx, biz)), email, name: vendor.name, businessName: vendor.businessName ?? "", phone: vendor.phone ?? "", address: vendor.address ?? "", portfolio: vendor.portfolio ?? "",
-      roles: vendor.roles, w9: vendor.w9 ? { name: vendor.w9.name, uploadedAt: vendor.w9.uploadedAt, url: await ctx.storage.getUrl(vendor.w9.fileId) } : null,
+      roles: vendor.roles, w9: vendor.w9 ? { name: vendor.w9.name, uploadedAt: vendor.w9.uploadedAt } : null, // no lasting link (second 5e review)
       payMethod: vendor.payMethod ?? null,
     };
   },
@@ -586,16 +586,21 @@ export const setW9 = mutation({
     const file = await ctx.db.system.get(a.storageId);
     const fresh = file && Date.now() - file._creationTime < 30 * 60_000;
     if (!file || !fresh) throw new ConvexError("The W-9 didn't upload. Try again.");
-    const pdf = file.contentType ? file.contentType === "application/pdf" : /\.pdf$/i.test(a.name.trim());
-    if (!pdf || file.size > 10 * 1024 * 1024) throw new ConvexError("Upload the W-9 as a PDF, up to 10 MB.");
     // 5e review (Nov 6): the file must be a fresh upload nobody has claimed; it becomes this business's file (the vendor
     // uploaded it for them). Any other stored file (a contract, another business's upload) is refused.
     if (!(await claimUpload(ctx, a.storageId, a.businessId, "w9")).fresh) throw new ConvexError("The W-9 didn't upload. Try again.");
+    const pdf = file.contentType ? file.contentType === "application/pdf" : /\.pdf$/i.test(a.name.trim());
+    if (!pdf || file.size > 10 * 1024 * 1024) {
+      // Second 5e review: a refused upload (a photo of a W-9, say) is deleted rather than left in storage. Returned, not
+      // thrown, so the delete isn't rolled back.
+      await deleteFile(ctx, a.storageId, a.businessId);
+      return { error: "Upload the W-9 as a PDF, up to 10 MB." };
+    }
     const old = vendor.w9?.fileId;
     await ctx.db.patch(vendor._id, { w9: { fileId: a.storageId, name: clip(a.name, 120) || "W-9.pdf", uploadedAt: Date.now() }, updatedAt: Date.now() });
     await ctx.scheduler.runAfter(0, internal.vendorPortal.mailOwner, { what: old ? "w9-replaced" : "w9", id: a.storageId }); // Nov 2
     if (old && old !== a.storageId) await deleteFile(ctx, old, a.businessId);
-    return null;
+    return { ok: true as const };
   },
 });
 

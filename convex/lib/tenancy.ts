@@ -22,7 +22,7 @@ export const BUSINESS_TABLES = [
 ] as readonly string[];
 
 export const GLOBAL_TABLES = [
-  "users", "businesses", "memberships", "guestPasses", "rateLimits", "oauthStates", "emailLog", "stripeEvents", "userPrefs", "playerLogs", "phase0Runs", "r1Results", "siteWatchFindings", "siteWatchRuns", "siteWatchSettings",
+  "users", "businesses", "memberships", "guestPasses", "rateLimits", "fileTickets", "oauthStates", "emailLog", "stripeEvents", "userPrefs", "playerLogs", "phase0Runs", "r1Results", "siteWatchFindings", "siteWatchRuns", "siteWatchSettings",
   "sessionDevices", "emailChanges", // Phase 5e step 2: a login's own, not a business's
   "alertPrefs", "pushSubs", "pushKeys", // Phase 5e step 4
   "businessDeletions", "deletionFiles", "fileOwners", // Phase 5e step 6: outlive the business they delete

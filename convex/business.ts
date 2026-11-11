@@ -192,7 +192,8 @@ export const setLogo = mutation({
       if (!meta || !/^image\/(png|jpeg|svg\+xml|webp)$/.test(meta.contentType ?? "") || meta.size > 1_000_000) {
         throw new ConvexError("Use a PNG, JPG, SVG or WebP image under 1 MB.");
       }
-      await claimUpload(ctx, storageId, id, "logo"); // 5e review (Nov 6): this business's own upload only
+      // 5e review (Nov 6): this business's own upload only; second review (Nov 10): a new upload, not a file already in use
+      if (!(await claimUpload(ctx, storageId, id, "logo")).fresh) throw new ConvexError("Upload the logo again.");
     }
     const field = which === "light" ? "logoLightFileId" : "logoFileId";
     const old = b[field];

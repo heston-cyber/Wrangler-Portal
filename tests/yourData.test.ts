@@ -69,6 +69,13 @@ describe("Phase 5e · Your data", () => {
       const kitFile = await ctx.storage.store(new Blob(["kit"]));
       await ctx.db.patch(w.harbor, { brandKit: { colors: [], fonts: {}, files: [{ fileId: kitFile, name: "guide.pdf", size: 3, type: "application/pdf", addedAt: 0 }] } } as never);
       await ctx.db.insert("vendors", { businessId: w.A, name: "Pasted", email: "p@x.example", roles: [], rates: [], portfolio: String(theirFile), createdAt: 0, updatedAt: 0 } as never);
+      // Who owns each file, as the backfill records them; and (second 5e review) a field of ours pointing at another
+      // business's file links nothing.
+      await ctx.db.insert("fileOwners", { storageId: w9, businessId: w.A, purpose: "w9", at: 0 });
+      await ctx.db.insert("fileOwners", { storageId: kitFile, businessId: w.A, purpose: "brandKit", at: 0 });
+      const planted = await ctx.storage.store(new Blob(["their logo"]));
+      await ctx.db.insert("fileOwners", { storageId: planted, businessId: b, purpose: "logo", at: 0 });
+      await ctx.db.patch(w.harbor, { brandKit: { colors: [], fonts: {}, files: [{ fileId: kitFile, name: "guide.pdf", size: 3, type: "application/pdf", addedAt: 0 }, { fileId: planted, name: "theirs.png", size: 3, type: "image/png", addedAt: 0 }] } } as never);
     });
     await seedInvoice(w, b, otherClient, "Theirs", "SECRETPAYTOKENBBBB");
     const exportId = await w.heston.mutation(api.yourData.requestExport, {});
@@ -89,6 +96,7 @@ describe("Phase 5e · Your data", () => {
     expect(files["records/invoices.json"]).toContain("acct_1Pq9WranglerAcct"); // Stripe's own ids aren't secrets
     expect(files["files.csv"].trim().split("\r\n").filter((l) => l.startsWith("vendors,"))).toHaveLength(1); // the W-9, not the pasted id
     expect(files["files.csv"]).toMatch(/clients,[a-z0-9]+,brandKit\.files\[0\]\.fileId,http/); // a file in a brand kit
+    expect(files["files.csv"]).not.toMatch(/brandKit\.files\[1\]/); // the planted pointer at B's file
     expect(files["records/connectorKeys.json"]).toBeUndefined();
     for (const [name, text] of Object.entries(files)) if (name.endsWith(".json")) for (const k of keysIn(JSON.parse(text))) expect(SECRET_FIELDS.has(k), `${name}: ${k}`).toBe(false);
     expect(files["files.csv"]).toMatch(/vendors,[a-z0-9]+,w9\.fileId,http/);

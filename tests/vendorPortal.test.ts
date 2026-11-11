@@ -206,9 +206,11 @@ describe("the vendor side, part 2", () => {
     expect(await w.heston.query(api.vendors.get, { vendorId: a })).toMatchObject({ businessName: "Ellis Films", address: "1 Main St, OKC", payMethod: { method: "ACH", note: "Send a remittance email" } });
     const up = await w.t.run((ctx) => ctx.storage.store(new Blob(["%PDF-1.4 w9"], { type: "application/pdf" })));
     await jordan.mutation(api.vendorPortal.setW9, { businessId: A, storageId: up, name: "W-9 2026.pdf" });
-    expect((await w.heston.query(api.vendors.get, { vendorId: a })).w9).toMatchObject({ name: "W-9 2026.pdf", url: expect.any(String) });
+    expect((await w.heston.query(api.vendors.get, { vendorId: a })).w9).toMatchObject({ name: "W-9 2026.pdf", canOpen: true });
     expect((await jordan.query(api.vendorPortal.settings, { businessId: B })).w9).toBeNull(); // one per business
     const png = await w.t.run((ctx) => ctx.storage.store(new Blob(["x"], { type: "image/png" })));
-    await expect(jordan.mutation(api.vendorPortal.setW9, { businessId: B, storageId: png, name: "w9.png" })).rejects.toThrow(/PDF/);
+    // Second 5e review: refused, and the refused file is deleted rather than left in storage.
+    expect(await jordan.mutation(api.vendorPortal.setW9, { businessId: B, storageId: png, name: "w9.png" })).toEqual({ error: "Upload the W-9 as a PDF, up to 10 MB." });
+    expect(await w.t.run(async (ctx) => !!(await ctx.storage.get(png)))).toBe(false);
   });
 });

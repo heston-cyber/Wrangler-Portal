@@ -69,6 +69,7 @@ export function VendorDialog({ onClose, vendor, invite: inviteFirst = true }: { 
   const [err, setErr] = useState<string | null>(null);
   const { perms, team } = usePerms();
   const showRate = !team || perms.value; // 5e review M5: rates are a job amount
+  const canEmail = !team || perms.vendorPayments; // second 5e review: the email is their portal login
   const first = d.name.trim().split(" ")[0] || "them";
   const toggle = (r: string) => setD({ ...d, roles: d.roles.includes(r) ? d.roles.filter((x) => x !== r) : [...d.roles, r] });
   const rate0 = d.rates[0] ?? { role: d.roles[0] ?? "", unit: "hour" as const, cents: 0 };
@@ -89,7 +90,7 @@ export function VendorDialog({ onClose, vendor, invite: inviteFirst = true }: { 
         <DialogHeader eyebrow="Vendors" title={vendor ? `Edit ${vendor.name}.` : "Add a vendor."} body={vendor ? undefined : "Save their details. Invite them to their own portal now or later."} onClose={onClose} />
         <div className="qz-grid">
           <label className="wp-field qz-q"><span className="wp-field-label">Name</span><input className="input" value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} /></label>
-          <label className="wp-field qz-q"><span className="wp-field-label">Email</span><span className="qz-icon-in"><Icon name="mail" size={16} /><input className="input" type="email" value={d.email} onChange={(e) => setD({ ...d, email: e.target.value })} /></span></label>
+          <label className="wp-field qz-q"><span className="wp-field-label">Email</span><span className="qz-icon-in"><Icon name="mail" size={16} /><input className="input" type="email" value={d.email} readOnly={!!vendor && !canEmail} disabled={!!vendor && !canEmail} title={vendor && !canEmail ? "Only the owner or someone with Vendor payments can change a vendor's email." : undefined} onChange={(e) => setD({ ...d, email: e.target.value })} /></span></label>
           <div className="wp-field qz-q wide"><span className="wp-field-label">Roles</span>
             <div className="qz-chips">
               {[...VENDOR_ROLES, ...d.roles.filter((r) => !VENDOR_ROLES.includes(r))].map((r) => <button key={r} type="button" className={`qz-chip${d.roles.includes(r) ? " on" : ""}`} aria-pressed={d.roles.includes(r)} onClick={() => toggle(r)}>{r}</button>)}
@@ -123,6 +124,7 @@ export function VendorPage({ vendorId }: { vendorId: string }) {
   const x = useQuery(api.vendors.get, { vendorId });
   const archive = useMutation(api.vendors.archive);
   const invite = useMutation(api.vendors.invite);
+  const w9Link = useMutation(api.vendors.w9Link);
   const [editing, setEditing] = useState(false);
   const [booking, setBooking] = useState(false);
   const [briefing, setBriefing] = useState(false);
@@ -131,6 +133,8 @@ export function VendorPage({ vendorId }: { vendorId: string }) {
   if (x === undefined) return <><TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/vendors")}>Vendors</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={5} /></Card></div></>;
   if (x === null) return <><TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/vendors")}>Vendors</a></TopBar><div className="wp-page"><EmptyState icon="user" title="This vendor isn't here." actions={<ButtonLink to="/vendors">All vendors</ButtonLink>} /></div></>;
   const first = x.name.split(" ")[0];
+  // Second 5e review: a 10-minute link, made when pressed (the file downloads; this page stays).
+  const openW9 = async () => { try { window.location.assign(await w9Link({ vendorId: x._id })); } catch (e) { show(errText(e)); } };
   const t = x.totals;
   const details: Array<[string, React.ReactNode]> = ([["Email", x.email], ["Business", x.businessName], ["Phone", x.phone], ["Based in", x.basedIn], ["Mailing address", x.address], ["Paid by", x.payMethod ? `${x.payMethod.method}${x.payMethod.note ? ` · ${x.payMethod.note}` : ""}` : null], ["Portfolio", x.portfolio ? <a href={/^https?:\/\//.test(x.portfolio) ? x.portfolio : `https://${x.portfolio}`} target="_blank" rel="noopener noreferrer">{x.portfolio.replace(/^https?:\/\//, "")}</a> : null]] as Array<[string, React.ReactNode]>).filter(([, v]) => v);
   return (
@@ -176,7 +180,7 @@ export function VendorPage({ vendorId }: { vendorId: string }) {
             {!!x.gear?.length && <Card label="Gear" head={<SectionHead label="Gear" />}><div className="vd-pad vd-gear">{x.gear.map((g) => <span key={g} className="wp-tag">{g}</span>)}</div></Card>}
             <Card label="Tax" head={<SectionHead label="Tax" />}>
               <div className="vd-pad"><div className="vd-row"><span>W-9</span>{x.w9 ? <StatusChip tone="success">On file</StatusChip> : <StatusChip tone="warning">Missing</StatusChip>}</div>
-                <p className="wp-small secondary">{x.w9 ? <>Uploaded by {first} {new Date(x.w9.uploadedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. {x.w9.url && <a href={x.w9.url} target="_blank" rel="noopener noreferrer">Download it</a>}; it isn't shown to anyone else.</> : `${first} uploads it in their vendor portal. Ask your accountant when you need it before paying them.`}</p></div>
+                <p className="wp-small secondary">{x.w9 ? <>Uploaded by {first} {new Date(x.w9.uploadedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. {x.w9.canOpen && <button type="button" className="linkbtn" onClick={() => void openW9()}>Download it</button>}; it isn't shown to anyone else.</> : `${first} uploads it in their vendor portal. Ask your accountant when you need it before paying them.`}</p></div>
             </Card>
             {x.notes && <Card label="Notes" head={<SectionHead label="Notes" />}><p className="wp-body vd-pad vd-notes">{x.notes}</p></Card>}
             <button type="button" className="btn ghost sm vd-archive" onClick={async () => { if (!(await confirm({ title: `Take ${x.name} off your vendors?`, body: "Their bookings, invoices and 1099 totals stay. You can add them back later.", yes: "Take off" }))) return; try { await archive({ vendorId: x._id, archived: true }); navigate("/vendors"); } catch (e) { show(errText(e)); } }}>Take off the vendor list</button>

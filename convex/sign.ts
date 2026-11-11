@@ -8,7 +8,7 @@ import { action, type ActionCtx } from "./_generated/server";
 import { audit } from "./lib/audit";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { internal } from "./_generated/api";
-import { claimIn, discardIn, removeIn } from "./fileOwners";
+import { claimIn, discardIn, removeRecentIn } from "./fileOwners";
 import { deleteFile } from "./lib/fileOwners";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -176,6 +176,7 @@ export const create = action({
   handler: async (ctx, { storageId, fileName, title }): Promise<{ documentId: Id<"wsDocuments">; label: string }> => {
     await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs"] });
     const claim = await claimIn(ctx, storageId, "contract-pdf");
+    if (!claim.fresh) throw new ConvexError("Upload the PDF again."); // second 5e review: a new upload only, never a file already in use
     const pdf = await readPdf(ctx, storageId, () => discardIn(ctx, storageId, claim));
     return ctx.runMutation(internal.sign.insertDocument, {
       storageId, fileName: fileName.slice(0, 200), title: (title?.trim() || titleFromFile(fileName)).slice(0, 120),
@@ -188,7 +189,7 @@ export const create = action({
 export const createAs = internalAction({
   args: { storageId: v.id("_storage"), fileName: v.string(), title: v.optional(v.string()), actor: v.string() },
   handler: async (ctx, { storageId, fileName, title, actor }): Promise<{ documentId: Id<"wsDocuments">; label: string }> => {
-    const pdf = await readPdf(ctx, storageId, () => removeIn(ctx, storageId)); // the server's own file (recorded or claimed)
+    const pdf = await readPdf(ctx, storageId, () => removeRecentIn(ctx, storageId)); // only a file this call stored or claimed (second 5e review)
     return ctx.runMutation(internal.sign.insertDocument, {
       storageId, fileName: fileName.slice(0, 200), title: (title?.trim() || titleFromFile(fileName)).slice(0, 120),
       sha: pdf.sha, bytes: pdf.bytes.length, pages: pdf.pages, actor,
@@ -313,7 +314,7 @@ export const replaceFile = action({
 export const inspectUpload = internalAction({
   args: { storageId: v.id("_storage") },
   handler: async (ctx, { storageId }): Promise<{ sha: string; bytes: number; pages: Array<{ width: number; height: number; rotate: number }> }> => {
-    const pdf = await readPdf(ctx, storageId, () => removeIn(ctx, storageId)); // the builder's own render
+    const pdf = await readPdf(ctx, storageId, () => removeRecentIn(ctx, storageId)); // the builder's own render, just made
     return { sha: pdf.sha, bytes: pdf.bytes.length, pages: pdf.pages };
   },
 });

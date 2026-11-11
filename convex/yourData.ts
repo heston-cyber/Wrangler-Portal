@@ -274,8 +274,10 @@ export const signEvents = internalQuery({
 export const storageUrls = internalQuery({
   args: { ids: v.array(v.id("_storage")) },
   handler: async (ctx, { ids }) => {
+    // Second 5e review (Nov 10): only files this business owns; a record pointing at someone else's file links nothing.
+    const biz = businessInScope(ctx);
     const out: Record<string, string | null> = {};
-    for (const id of ids) out[id] = await ctx.storage.getUrl(id);
+    for (const id of ids) out[id] = (await ownsFile(ctx, id, biz)) ? await ctx.storage.getUrl(id) : null;
     return out;
   },
 });

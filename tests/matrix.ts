@@ -125,7 +125,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "vendorPortal.reviews": {}, "vendorPortal.invoices": {}, "vendorPortal.invoiceForm": {}, "vendorPortal.invoice": { invoiceId: "nope" },
     "vendorPortal.saveInvoice": { bookingId: ids.bookingId, mode: "hours", hours: [], lines: [], send: false }, "vendorPortal.deleteInvoice": { invoiceId: ids.vendorInvoiceId },
     "vendorPortal.settings": {}, "vendorPortal.saveDetails": { businessId: ids.businessId, name: "V" }, "vendorPortal.w9UploadUrl": { businessId: ids.businessId },
-    "vendorPortal.setW9": { businessId: ids.businessId, storageId: ids.storageId, name: "w9.pdf" }, "vendors.invoices": { vendorId: "nope" },
+    "vendorPortal.setW9": { businessId: ids.businessId, storageId: ids.storageId, name: "w9.pdf" }, "vendors.invoices": { vendorId: "nope" }, "vendors.w9Link": { vendorId: ids.vendorId },
     "vendorPayments.list": {}, "vendorPayments.totals1099": {}, "vendorPayments.get": { invoiceId: "nope" }, "vendorPayments.approve": { invoiceId: ids.vendorInvoiceId },
     "vendorPayments.decline": { invoiceId: ids.vendorInvoiceId, reason: "No" }, "vendorPayments.markPaid": { invoiceId: ids.vendorInvoiceId, paidOn: "2026-01-02", method: "ACH" },
     "calendar.settings": {}, "calendar.authUrl": {}, "calendar.calendars": {}, "calendar.save": { calendarId: "x", calendarName: "x", inviteVendors: false, inviteClient: false }, "calendar.disconnect": {}, "calendar.finish": { code: "c", state: "s" },

@@ -48,6 +48,7 @@ import type * as projects from "../projects.js";
 import type * as push from "../push.js";
 import type * as reports from "../reports.js";
 import type * as fileOwners from "../fileOwners.js";
+import type * as fileTickets from "../fileTickets.js";
 import type * as yourData from "../yourData.js";
 import type * as auth from "../auth.js";
 import type * as bunny from "../bunny.js";
@@ -197,6 +198,7 @@ declare const fullApi: ApiFromModules<{
   push: typeof push;
   reports: typeof reports;
   fileOwners: typeof fileOwners;
+  fileTickets: typeof fileTickets;
   yourData: typeof yourData;
   auth: typeof auth;
   bunny: typeof bunny;

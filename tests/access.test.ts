@@ -430,6 +430,7 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "users.setName": ACCOUNT,
     "vendors.invoices": PRODUCTION,
     "vendors.list": PRODUCTION,
+    // "vendors.w9Link" (second 5e review): Production and Vendor payments both, so no default team role; the owner and a member given both.
     "vendors.get": PRODUCTION, // 5e review H2: the W-9 file, how they're paid and the totals need Vendor payments too (tests/review5e.test.ts)
     "vendors.add": PRODUCTION,
     "vendors.update": PRODUCTION,

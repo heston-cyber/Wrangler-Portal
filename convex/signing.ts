@@ -34,7 +34,7 @@ import {
 import { pngProblem } from "./lib/pngCheck";
 import { allowedEmails } from "./auth";
 import { bump } from "./lib/rate";
-import { recordFile } from "./lib/fileOwners";
+import { ownedOrNull, recordFile } from "./lib/fileOwners";
 import { businessContact, businessInScope, defaultBusiness } from "./lib/business";
 import { crmDocument } from "./crm";
 
@@ -295,11 +295,13 @@ export const docFor = internalMutation({
 
 // B2: the signing page's background: the document's own (from its builder style), or the default style's backdrop.
 async function lookOf(ctx: MutationCtx, doc: Doc<"wsDocuments">): Promise<{ backdrop: string; image: string | null }> {
-  if (doc.look) return { backdrop: doc.look.backdrop, image: doc.look.backdropImageId ? await ctx.storage.getUrl(doc.look.backdropImageId) : null };
+  // Second 5e review: only an image the document's business owns (a look only; the signing steps are unchanged).
+  if (doc.look) { const own = await ownedOrNull(ctx, doc.look.backdropImageId, doc.businessId); return { backdrop: doc.look.backdrop, image: own ? await ctx.storage.getUrl(own) : null }; }
   const def = (await ctx.db.query("wsStyles").collect()).find((x) => x.isDefault)?.style as { backdrop?: string; backdropImage?: { fileId: string } | null } | undefined;
   const preset = (await ctx.db.query("counters").withIndex("by_key", (q) => q.eq("key", "wsDefaultPreset")).first())?.value ?? 0;
   const st = def ?? PRESET_STYLES[preset] ?? PRESET_STYLES[0];
-  const img = st.backdropImage?.fileId ? await ctx.storage.getUrl(st.backdropImage.fileId as Id<"_storage">) : null;
+  const ownImg = await ownedOrNull(ctx, st.backdropImage?.fileId, doc.businessId);
+  const img = ownImg ? await ctx.storage.getUrl(ownImg) : null;
   return { backdrop: st.backdrop && /^#[0-9a-f]{3,8}$/i.test(st.backdrop) ? st.backdrop : "#e9e7e2", image: img };
 }
 

@@ -14,7 +14,7 @@ import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { requireMe, requireAll } from "./lib/access";
 import { claimIn, discardIn, recordIn } from "./fileOwners";
-import { deleteFile, ownsFile, recordFile } from "./lib/fileOwners";
+import { assertStyleFiles, deleteFile, ownedOrNull, ownsFile, recordFile } from "./lib/fileOwners";
 import { businessInScope } from "./lib/business";
 import {
   DEFAULT_BUSINESS, DEFAULT_STYLE, MAX_BUILD_JSON, PRESET_STYLES, buildProblems, emptyFields, newId, totals,
@@ -138,6 +138,7 @@ export const saveBuild = mutation({
     await requireAll(ctx, "docs");
     const b = await ctx.db.get(a.buildId);
     if (!b) throw new ConvexError("That document doesn't exist.");
+    await assertStyleFiles(ctx, a.style, b.style, businessInScope(ctx)); // second 5e review: only this business's own images
     await assertEditable(ctx, b);
     tooBig(a.blocks, a.fields, a.signers, a.style);
     if (!isPage(a.blocks) || !Array.isArray(a.signers)) throw new ConvexError("That document isn't in the right shape.");
@@ -176,7 +177,7 @@ export const linkBuild = internalMutation({
   handler: async (ctx, { buildId, documentId }) => {
     const b = (await ctx.db.get(buildId))!;
     const st = b.style as Style;
-    const img = st.backdropImage?.fileId ? (st.backdropImage.fileId as Id<"_storage">) : null;
+    const img = await ownedOrNull(ctx, st.backdropImage?.fileId, b.businessId); // second 5e review: only its own image
     await ctx.db.patch(buildId, { documentId, renderedAt: Date.now() });
     // The signing page's background comes from the document's style (its backdrop colour or image).
     await ctx.db.patch(documentId, { buildId, look: { backdrop: /^#[0-9a-f]{3,8}$/i.test(st.backdrop) ? st.backdrop : "#e9e7e2", ...(img ? { backdropImageId: img } : {}) } });
@@ -190,6 +191,7 @@ export const toSigning = action({
   handler: async (ctx, { buildId, storageId }): Promise<{ documentId: Id<"wsDocuments">; label: string; rebuilt: boolean }> => {
     await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs"], ids: [buildId] });
     const claim = await claimIn(ctx, storageId, "contract-pdf");
+    if (!claim.fresh) throw new ConvexError("Upload the PDF again."); // second 5e review: a new upload only, never a file already in use
     try { return await toSigningCore(ctx, buildId, storageId, OWNER_KEY, claim); }
     catch (e) { throw new ConvexError(errText(e)); }
   },
@@ -278,6 +280,7 @@ export const saveAsTemplate = mutation({
     // A call sheet template keeps the layout, not the people (765:3564).
     const blocks = a.kind === "proposal" && isPage(a.blocks) && !Array.isArray(a.blocks) ? withoutPrices(a.blocks as Page)
       : a.kind === "callsheet" && isPage(a.blocks) && !Array.isArray(a.blocks) ? withoutPeople(a.blocks as Page) : a.blocks;
+    await assertStyleFiles(ctx, a.style, null, businessInScope(ctx)); // second 5e review
     return ctx.db.insert("wsTemplates", { name, description: clean(a.description ?? "", 300) || undefined, ...(a.kind ? { kind: a.kind } : {}), blocks, fields, style: a.style, createdAt: now, updatedAt: now });
   },
 });
@@ -289,6 +292,7 @@ export const updateTemplate = mutation({
     const t0 = await ctx.db.get(a.templateId);
     if (!t0) throw new ConvexError("That template doesn't exist.");
     tooBig(a.blocks, a.fields, a.style);
+    await assertStyleFiles(ctx, a.style, t0.style, businessInScope(ctx)); // second 5e review
     // A proposal template never keeps prices (review fix): they come from Settings › Pricing each time.
     // Review L8: a call-sheet template keeps the layout, never the people (as when it's first saved).
     const blocks = isProposal(t0) && isPage(a.blocks) && !Array.isArray(a.blocks) ? withoutPrices(a.blocks as Page)
@@ -396,6 +400,9 @@ export const saveStyle = mutation({
     const name = clean(a.name, 60);
     if (!name) throw new ConvexError("Name the style.");
     const style = { ...(a.style as Style), name };
+    const prev = a.styleId ? await ctx.db.get(a.styleId) : null;
+    if (a.styleId && !prev) throw new ConvexError("That style doesn't exist.");
+    await assertStyleFiles(ctx, style, prev?.style, businessInScope(ctx)); // second 5e review
     const now = Date.now();
     if (a.styleId) { await ctx.db.patch(a.styleId, { name, style, updatedAt: now }); return a.styleId; }
     return ctx.db.insert("wsStyles", { name, style, isDefault: false, createdAt: now, updatedAt: now });
@@ -681,7 +688,10 @@ export const renderInputs = internalQuery({
     const st = b.style as Style;
     const fonts = await Promise.all((await ctx.db.query("wsFonts").collect()).map(async (f) => ({ _id: f._id as string, family: f.family, weight: f.weight, italic: f.italic, source: f.source, fileName: f.fileName, url: await ctx.storage.getUrl(f.fileId) })));
     const files: Record<string, string | null> = {};
-    for (const id of [st.logo?.fileId, st.cover?.fileId].filter(Boolean) as string[]) { try { files[id] = await ctx.storage.getUrl(id as Id<"_storage">); } catch { files[id] = null; } }
+    for (const id of [st.logo?.fileId, st.cover?.fileId].filter(Boolean) as string[]) {
+      const own = await ownedOrNull(ctx, id, b.businessId); // second 5e review: another business's file never renders
+      try { files[id] = own ? await ctx.storage.getUrl(own) : null; } catch { files[id] = null; }
+    }
     const doc = b.documentId ? await ctx.db.get(b.documentId) : null;
     const d: BuildDoc = { title: b.title, page: pageOf(b.blocks), fields: b.fields as Fields, signers: (b.signers as ExtraSigner[]) ?? [], style: st };
     return { d, fonts, files, label: doc ? docLabel(doc.number) : undefined };
@@ -707,6 +717,7 @@ export const importPdf = action({
   handler: async (ctx, { storageId, title }): Promise<{ buildId: Id<"wsBuilds">; notes: string[] }> => {
     await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs"] });
     const claim = await claimIn(ctx, storageId, "import-pdf");
+    if (!claim.fresh) throw new ConvexError("Upload the PDF again."); // second 5e review: a new upload only, never a file already in use
     try { const r = await importPdfCore(ctx, storageId, title, false, claim); return { buildId: r.buildId, notes: r.notes }; }
     catch (e) { throw new ConvexError(errText(e)); }
   },
