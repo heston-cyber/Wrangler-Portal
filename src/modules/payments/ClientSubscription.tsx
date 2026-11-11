@@ -153,7 +153,7 @@ export function ClientSubscriptions() {
     <>
       <TopBar><span className="secondary">Payments</span><Sep /><span className="here">Subscriptions</span></TopBar>
       <div className="wp-page inv-list">
-        <PageHeader eyebrow="Payments" title="Subscriptions." sub={rows?.[0] ? `Plans you pay for on a schedule. To change or cancel a plan, contact ${rows[0].business}${rows[0].businessEmail ? ` at ${rows[0].businessEmail}` : ""}.` : "Plans you pay for on a schedule."} />
+        <PageHeader title="Subscriptions." sub={rows?.[0] ? `Plans you pay for on a schedule. To change or cancel a plan, contact ${rows[0].business}${rows[0].businessEmail ? ` at ${rows[0].businessEmail}` : ""}.` : "Plans you pay for on a schedule."} />
         {rows === undefined ? <Card label="Subscriptions"><SkeletonRows n={3} /></Card>
           : rows.length === 0 ? <EmptyState icon="activity" title="No subscriptions." body="When a business starts a plan for you, it shows here." />
           : <Card label="Subscriptions" head={<SectionHead label="Subscriptions" count={rows.length} />}>

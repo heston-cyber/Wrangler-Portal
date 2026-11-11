@@ -124,7 +124,7 @@ export default function CalendarPage() {
     <>
       <TopBar><span className="secondary">Production</span><Sep /><a {...linkProps("/production/prin-pro")}>Prin-pro</a><Sep /><span className="here">Calendar</span></TopBar>
       <div className="wp-page cal">
-        <PageHeader eyebrow="Production" title="Calendar." sub={narrow ? (view === "agenda" ? "Next 7 days" : view === "week" ? weekTitle(startOfWeek(anchor)) : monthTitle(anchor)) : "Your shoots and edit dates, and your Google Calendars, in one place."} actions={newEvent} />
+        <PageHeader title="Calendar." sub={narrow ? (view === "agenda" ? "Next 7 days" : view === "week" ? weekTitle(startOfWeek(anchor)) : monthTitle(anchor)) : "Your shoots and edit dates, and your Google Calendars, in one place."} actions={newEvent} />
         {d && d.conn.state === "disconnected" && <Disconnected />}
         {narrow ? <>
           <div className="cal-phone-bar">{views}</div>
@@ -769,7 +769,7 @@ function EventForm({ data, edit, init, onClose, page }: { data: Data | undefined
     <>
       <div className="wp-page cal cal-newpage">
         <button type="button" className="cal-back" onClick={onClose}><Icon name="arrow-left" size={20} />Calendar</button>
-        <PageHeader eyebrow="Calendar" title={edit ? "Edit event" : "New event"} sub="Saved to Google Calendar." />
+        <PageHeader title={edit ? "Edit event" : "New event"} sub="Saved to Google Calendar." />
         <Card label="Event" className="cal-formcard"><div className="cal-form">{fields}</div></Card>
         <div className="cal-pagefoot"><button className="btn ghost" type="button" onClick={onClose}>Cancel</button><Button variant="primary" loading={busy} onClick={() => save()}>Save event</Button></div>
       </div>

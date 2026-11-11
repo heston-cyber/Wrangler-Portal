@@ -11,7 +11,7 @@ import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe, requireSignedIn } from "./lib/access";
+import { requireMe, requireSignedIn, requireAll } from "./lib/access";
 import { businessOf, postToInbox } from "./lib/inbox";
 import { myProjects, portalPeople } from "./projects";
 import { label } from "./lib/bookingRows";
@@ -114,7 +114,7 @@ export async function tell(ctx: MutationCtx, p: Doc<"projects">, s: { _id: Id<"s
 export const forProject = query({
   args: { projectId: v.string() },
   handler: async (ctx, { projectId }) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "shoots");
     const id = ctx.db.normalizeId("projects", projectId);
     const p = id ? await ctx.db.get(id) : null;
     if (!p) return null;
@@ -134,7 +134,7 @@ export const forProject = query({
 export const schedule = mutation({
   args: { projectId: v.string(), ...fields },
   handler: async (ctx, a) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "shoots");
     const p = await ownedProject(ctx, a.projectId);
     const f = await clean(ctx, p, a, await ownerName(ctx, p, me));
     if (f.date < todayCentral()) throw new ConvexError("That date has passed.");
@@ -150,7 +150,7 @@ export const schedule = mutation({
 export const update = mutation({
   args: { shootId: v.id("shoots"), ...fields },
   handler: async (ctx, a) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "shoots");
     const { s, p } = await ownedShoot(ctx, a.shootId);
     if (s.status !== "scheduled") throw new ConvexError("That shoot was cancelled.");
     const f = await clean(ctx, p, a, await ownerName(ctx, p, me));
@@ -172,7 +172,7 @@ export const update = mutation({
 export const cancel = mutation({
   args: { shootId: v.id("shoots") },
   handler: async (ctx, { shootId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "shoots");
     const { s, p } = await ownedShoot(ctx, shootId);
     if (s.status === "cancelled") return null;
     const now = Date.now();

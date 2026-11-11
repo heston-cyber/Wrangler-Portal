@@ -27,6 +27,7 @@ export type Scope = {
   pin: Id<"businesses"> | null;           // anyone else: the first business they reach
   only: Id<"businesses"> | null;          // step 6: set once a share or link is resolved; then only its business
   isOwner: boolean;
+  isTeam?: boolean;                       // Phase 5e: a team member: exactly `owner`'s business, like the owner (not an owner)
   defaultBiz: Id<"businesses"> | null;
 };
 
@@ -44,6 +45,10 @@ export async function scopeFor(ctx: QueryCtx | MutationCtx): Promise<Scope> {
   const ownerM = ms.filter((m) => m.role === "owner").sort((a, b) => a.createdAt - b.createdAt)[0];
   if (ownerM) { scope.owner = ownerM.businessId; scope.isOwner = true; return scope; }
   if (allowedEmails().includes(email)) { scope.owner = defaultBiz; scope.isOwner = true; return scope; }
+  // Phase 5e: a team member sees only the business they work in (what they may do there is each function's own check).
+  const teamM = ms.filter((m) => m.role === "team").sort((a, b) => a.createdAt - b.createdAt)[0];
+  if (teamM && user?.role === "team") { scope.owner = teamM.businessId; scope.isTeam = true; return scope; }
+  if (user?.role === "team") return scope;
   // Nov 2: a login on its vendor side gets no client reach (vendor calls focus on one of their vendor businesses).
   if (sideOf(user?.role, ms) !== "vendor") for (const m of ms) if (m.role === "client") scope.members.add(m.businessId);
   return scope;
@@ -51,7 +56,7 @@ export async function scopeFor(ctx: QueryCtx | MutationCtx): Promise<Scope> {
 
 export function allowed(scope: Scope, businessId: Id<"businesses"> | undefined | null): boolean {
   const b = businessId ?? scope.defaultBiz;
-  if (scope.isOwner) return b === scope.owner;
+  if (scope.isOwner || scope.isTeam) return b === scope.owner;
   if (scope.only) return b === scope.only;
   if (b && scope.members.has(b)) return true;
   if (scope.pin === null) { scope.pin = b; return true; }
@@ -62,7 +67,7 @@ export function allowed(scope: Scope, businessId: Id<"businesses"> | undefined |
 // Step 6: a non-owner's new record belongs to the share or link they're acting through. With none resolved yet,
 // a client of exactly one business stamps that one; anything else is ambiguous and refused (never the default).
 export function stampFor(scope: Scope): Id<"businesses"> | null {
-  if (scope.isOwner) return scope.owner;
+  if (scope.isOwner || scope.isTeam) return scope.owner;
   if (scope.only) return scope.only;
   if (scope.pin) return scope.pin;
   if (scope.members.size === 1) return [...scope.members][0] as Id<"businesses">;
@@ -74,7 +79,7 @@ export function stampFor(scope: Scope): Id<"businesses"> | null {
 function jobBusiness(scope: Scope): Id<"businesses"> | null {
   const b = stampFor(scope);
   if (b) return b;
-  if (scope.isOwner || (!scope.members.size && !scope.pin)) return scope.defaultBiz;
+  if (scope.isOwner || scope.isTeam || (!scope.members.size && !scope.pin)) return scope.defaultBiz;
   throw new Error("Which business this belongs to isn't clear.");
 }
 
@@ -85,7 +90,7 @@ function jobBusiness(scope: Scope): Id<"businesses"> | null {
  */
 export function focusBusiness(ctx: object, businessId: Id<"businesses"> | undefined | null) {
   const scope = (ctx as { scope?: Scope | null }).scope;
-  if (!scope || scope.isOwner) return;
+  if (!scope || scope.isOwner || scope.isTeam) return;
   const b = businessId ?? scope.defaultBiz;
   if (!b) return;
   if (scope.only && scope.only !== b) throw new Error("Already acting for another business.");

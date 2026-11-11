@@ -7,6 +7,7 @@
 // vendor record there is still on the list. Owners and clients are refused here, and vendors are refused everywhere
 // else (requireMe, requireSignedIn).
 import { focusBusiness, internalAction, internalQuery, mutation, query } from "./lib/functions";
+import { claimUpload, deleteFile } from "./lib/fileOwners";
 import { internal } from "./_generated/api";
 import { randomToken } from "./lib/hash";
 import { businessContact } from "./lib/business";
@@ -332,9 +333,11 @@ export const ownerMailData = internalQuery({
         mail: { k: "read" as const, vendor: r.name || r.email, title: build?.title ?? "The brief", project: p ? label(p) : "no project", link: `${SITE()}/vendors/briefings/${x._id}` } };
     }
     if (what === "w9" || what === "w9-replaced") {
-      const vendor = (await ctx.db.query("vendors").collect()).find((x) => x.w9 && String(x.w9.fileId) === id);
-      if (!vendor) return null;
-      return { ...(await brandOf(vendor.businessId ?? null)), key: `vendor-w9:${id}`, kind: "vendor_w9",
+      const [vid, at] = id.split(":");
+      const vId = ctx.db.normalizeId("vendors", vid ?? "");
+      const vendor = vId ? await ctx.db.get(vId) : null;
+      if (!vendor?.w9) return null;
+      return { ...(await brandOf(vendor.businessId ?? null)), key: `vendor-w9:${vendor._id}:${at ?? vendor.w9.uploadedAt}`, kind: "vendor_w9",
         mail: { k: "w9" as const, vendor: vendor.name, replaced: what === "w9-replaced", link: `${SITE()}/vendors/${vendor._id}` } };
     }
     return null;
@@ -530,7 +533,7 @@ export const settings = query({
     const { biz, vendor, email } = await asVendor(ctx, businessId);
     return {
       businessId: biz, ...(await ownerOf(ctx, biz)), email, name: vendor.name, businessName: vendor.businessName ?? "", phone: vendor.phone ?? "", address: vendor.address ?? "", portfolio: vendor.portfolio ?? "",
-      roles: vendor.roles, w9: vendor.w9 ? { name: vendor.w9.name, uploadedAt: vendor.w9.uploadedAt, url: await ctx.storage.getUrl(vendor.w9.fileId) } : null,
+      roles: vendor.roles, w9: vendor.w9 ? { name: vendor.w9.name, uploadedAt: vendor.w9.uploadedAt } : null, // no lasting link (second 5e review)
       payMethod: vendor.payMethod ?? null,
     };
   },
@@ -585,13 +588,22 @@ export const setW9 = mutation({
     const file = await ctx.db.system.get(a.storageId);
     const fresh = file && Date.now() - file._creationTime < 30 * 60_000;
     if (!file || !fresh) throw new ConvexError("The W-9 didn't upload. Try again.");
+    // 5e review (Nov 6): the file must be a fresh upload nobody has claimed; it becomes this business's file (the vendor
+    // uploaded it for them). Any other stored file (a contract, another business's upload) is refused.
+    if (!(await claimUpload(ctx, a.storageId, a.businessId, "w9")).fresh) throw new ConvexError("The W-9 didn't upload. Try again.");
     const pdf = file.contentType ? file.contentType === "application/pdf" : /\.pdf$/i.test(a.name.trim());
-    if (!pdf || file.size > 10 * 1024 * 1024) throw new ConvexError("Upload the W-9 as a PDF, up to 10 MB.");
+    if (!pdf || file.size > 10 * 1024 * 1024) {
+      // Second 5e review: a refused upload (a photo of a W-9, say) is deleted rather than left in storage. Returned, not
+      // thrown, so the delete isn't rolled back.
+      await deleteFile(ctx, a.storageId, a.businessId);
+      return { error: "Upload the W-9 as a PDF, up to 10 MB." };
+    }
     const old = vendor.w9?.fileId;
     await ctx.db.patch(vendor._id, { w9: { fileId: a.storageId, name: clip(a.name, 120) || "W-9.pdf", uploadedAt: Date.now() }, updatedAt: Date.now() });
-    await ctx.scheduler.runAfter(0, internal.vendorPortal.mailOwner, { what: old ? "w9-replaced" : "w9", id: a.storageId }); // Nov 2
-    if (old && old !== a.storageId) await ctx.storage.delete(old).catch(() => null);
-    return null;
+    // Second 5e review: the email is keyed by the vendor and the time, never the W-9's file id.
+    await ctx.scheduler.runAfter(0, internal.vendorPortal.mailOwner, { what: old ? "w9-replaced" : "w9", id: `${vendor._id}:${Date.now()}` }); // Nov 2
+    if (old && old !== a.storageId) await deleteFile(ctx, old, a.businessId);
+    return { ok: true as const };
   },
 });
 

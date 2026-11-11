@@ -4,7 +4,7 @@
 // The business guard limits every table below to the owner's own business.
 import { query } from "./lib/functions";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import { todayCentral, bookingState } from "./lib/bookings";
 import { label } from "./lib/bookingRows";
@@ -21,7 +21,7 @@ const month = (t: number) => todayCentral(t).slice(0, 7);
 export const clients = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const today = todayCentral();
     const weekEnd = addDays(today, 6);
     const projects = await ctx.db.query("projects").collect();
@@ -83,7 +83,7 @@ export const clients = query({
 export const review = query({
   args: {},
   handler: async (ctx) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "review");
     const now = Date.now();
     const thisMonth = month(now);
     const projects = await ctx.db.query("projects").collect();
@@ -147,7 +147,7 @@ export const review = query({
 export const docs = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const now = Date.now();
     const thisMonth = month(now);
     const all = (await ctx.db.query("wsDocuments").collect()).filter((d) => !d.hiddenAt && d.status !== "voided");
@@ -181,7 +181,7 @@ export const docs = query({
 export const proposals = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const now = Date.now();
     const year = todayCentral(now).slice(0, 4);
     const all = await ctx.db.query("proposals").withIndex("by_updated").order("desc").take(500);
@@ -218,7 +218,7 @@ export const proposals = query({
 export const vendors = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "production");
     const today = todayCentral();
     const weekEnd = addDays(today, 6);
     const thisMonth = today.slice(0, 7);

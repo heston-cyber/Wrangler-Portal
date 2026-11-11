@@ -1,8 +1,12 @@
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
+import { claimUpload, deleteFile } from "./lib/fileOwners";
+import { businessInScope } from "./lib/business";
 import { internal } from "./_generated/api";
+import { audit } from "./lib/audit";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireMe } from "./lib/access";
+import type { MutationCtx } from "./_generated/server";
+import { requireFor, requireMe } from "./lib/access";
 import { accessToVersion, authorOf, limitKey, noteVisible, ownsNote, shareArg, type Access } from "./lib/viewer";
 import { bump } from "./lib/rate";
 import { stillOk } from "./lib/stillOk";
@@ -153,7 +157,7 @@ export const editText = mutation({
 export const setStatus = mutation({
   args: { noteId: v.id("notes"), status: v.union(v.literal("open"), v.literal("done")) },
   handler: async (ctx, { noteId, status }) => {
-    await requireMe(ctx);
+    await requireFor(ctx, "review", noteId);
     await ctx.db.patch(noteId, { status, doneAt: status === "done" ? Date.now() : undefined, updatedAt: Date.now() });
   },
 });
@@ -162,7 +166,7 @@ export const setStatus = mutation({
 export const setVisibility = mutation({
   args: { noteId: v.id("notes"), visibility: v.union(v.literal("private"), v.literal("shared")) },
   handler: async (ctx, { noteId, visibility }) => {
-    await requireMe(ctx);
+    await requireFor(ctx, "review", noteId);
     if (!(await ctx.db.get(noteId))) throw new ConvexError("That note no longer exists.");
     await ctx.db.patch(noteId, { visibility });
   },
@@ -172,7 +176,7 @@ export const setVisibility = mutation({
 export const setReplyHidden = mutation({
   args: { replyId: v.id("replies"), hidden: v.boolean() },
   handler: async (ctx, { replyId, hidden }) => {
-    await requireMe(ctx);
+    await requireFor(ctx, "review", replyId);
     if (!(await ctx.db.get(replyId))) throw new ConvexError("That reply no longer exists.");
     await ctx.db.patch(replyId, { hidden });
     if (!hidden) await ctx.scheduler.runAfter(0, internal.emails.replyToNote, { replyId }); // shown to the client: tell them (once)
@@ -186,8 +190,10 @@ export const remove = mutation({
     if (!ownsNote(access, note)) throw new ConvexError(note.status === "done" ? "That note is marked done; it can't be deleted now." : "You can only delete your own notes.");
     const replies = await ctx.db.query("replies").withIndex("by_note", (q) => q.eq("noteId", noteId)).collect();
     for (const r of replies) await ctx.db.delete(r._id);
-    if (note.voice) await ctx.storage.delete(note.voice.storageId).catch(() => null);
+    if (note.voice) await deleteFile(ctx as unknown as MutationCtx, note.voice.storageId, note.businessId ?? null); // only a file this business owns
     await ctx.db.delete(noteId);
+    // Phase 5e: a note deleted from the back office (the owner or the team) goes in the Activity log.
+    if (access.kind === "owner") { const vid = await ctx.db.get(note.videoId); await audit(ctx, { kind: "deleted", text: `deleted a note${note.text ? `: "${note.text.slice(0, 60)}"` : ""}`, where: vid?.title ?? "Review", link: vid ? `/v/${vid._id}` : undefined }); }
   },
 });
 
@@ -231,7 +237,7 @@ export const voiceUploadUrl = mutation({
   args: { versionId: v.optional(v.id("versions")), share: shareArg },
   handler: async (ctx, { versionId, share }) => {
     if (versionId) { const { access } = await accessToVersion(ctx, versionId, share, "comment"); if (access.kind !== "owner") await bump(ctx, "voice", limitKey(access)); }
-    else await requireMe(ctx);
+    else await requireMe(ctx, "review");
     return await ctx.storage.generateUploadUrl();
   },
 });
@@ -245,6 +251,7 @@ const voiceRow = (ctx: { db: any }, storageId: Id<"_storage">): Promise<Doc<"voi
 export const registerVoice = internalMutation({
   args: { storageId: v.id("_storage"), versionId: v.optional(v.id("versions")) },
   handler: async (ctx, { storageId, versionId }) => {
+    await claimUpload(ctx as unknown as MutationCtx, storageId, businessInScope(ctx), "voice"); // review fix (Nov 6): only this business's own fresh recording
     if (!(await voiceRow(ctx, storageId))) await ctx.db.insert("voiceUploads", { storageId, versionId, createdAt: Date.now() });
     return null;
   },
@@ -254,10 +261,10 @@ export const registerVoice = internalMutation({
 export const discardVoice = mutation({
   args: { storageId: v.id("_storage"), versionId: v.optional(v.id("versions")), share: shareArg },
   handler: async (ctx, { storageId, versionId, share }) => {
-    if (versionId) await accessToVersion(ctx, versionId, share, "comment"); else await requireMe(ctx);
+    if (versionId) await accessToVersion(ctx, versionId, share, "comment"); else await requireMe(ctx, "review");
     const row = await voiceRow(ctx, storageId);
     if (!row) return; // only a voice recording, never another stored file
     const used = (await ctx.db.query("notes").collect()).some((n) => n.voice?.storageId === storageId);
-    if (!used) { await ctx.storage.delete(storageId).catch(() => null); await ctx.db.delete(row._id); }
+    if (!used) { await deleteFile(ctx as unknown as MutationCtx, storageId, row.businessId ?? null); await ctx.db.delete(row._id); }
   },
 });

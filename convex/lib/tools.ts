@@ -7,7 +7,7 @@ export const TOOL_LABEL: Record<ToolKey, string> = { dashboard: "Dashboard", peo
 export const REQUIRED_TOOLS: ToolKey[] = ["dashboard"]; // always on the menu
 const FOLDED: Record<string, ToolKey> = { review: "production", clients: "people", vendors: "people", proposals: "docs" };
 
-export const WIDGETS = ["coming_up", "needs", "followups", "clients", "live_edits", "money", "activity", "recurring"] as const; // Phase 5b: Coming up, Live edits, Money this month
+export const WIDGETS = ["coming_up", "needs", "followups", "clients", "live_edits", "money", "activity", "recurring", "revenue_year", "outstanding"] as const; // Phase 5b: Coming up, Live edits, Money this month; Phase 5e step 5: the Reports widgets
 export type WidgetKey = (typeof WIDGETS)[number];
 export const WIDGET_LABEL: Record<WidgetKey, { label: string; sub: string }> = {
   coming_up: { label: "Coming up", sub: "The next shoots, from Production" },
@@ -18,6 +18,8 @@ export const WIDGET_LABEL: Record<WidgetKey, { label: string; sub: string }> = {
   clients: { label: "Your clients", sub: "The first five, the ones waiting on you first" },
   activity: { label: "Recent activity", sub: "Views, notes and signatures" },
   recurring: { label: "Recurring revenue", sub: "Subscriptions and past-due payments (once Stripe is on)" },
+  revenue_year: { label: "Revenue this year", sub: "Paid by month, from Reports" },
+  outstanding: { label: "Outstanding", sub: "Invoices not due yet and late, from Reports" },
 };
 
 export type Tools = { order: ToolKey[]; hidden: ToolKey[]; widgets: Array<{ id: WidgetKey; on: boolean }> };

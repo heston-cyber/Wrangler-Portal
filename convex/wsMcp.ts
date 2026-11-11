@@ -20,6 +20,7 @@ import { KEY_PREFIX } from "./wsConnector";
 import { PAGE_MARKDOWN_GUIDE, pageFromMarkdown, pageToMarkdown } from "./lib/wsPageMd";
 import { buildProblems, nodesOf, totals, type BuildDoc, type ExtraSigner, type Fields, type ItemRow, type Page, type PNode, newId } from "./lib/wsBuilder";
 import { importPdfCore, toSigningCore } from "./builder";
+import { recordIn } from "./fileOwners";
 
 const SERVER_INFO = { name: "wrangler-sign", title: "Wrangler Sign", version: "1.0.0" };
 const ACTOR = "claude";
@@ -386,6 +387,7 @@ async function draftTool(ctx: ActionCtx, name: string, args: Json): Promise<Tool
       const bytes = await pdfBytes(args);
       if (bytes.length > MAX_PDF) return fail("That PDF is over 25 MB.");
       storageId = await ctx.storage.store(new Blob([new Uint8Array(bytes)], { type: "application/pdf" }));
+      await recordIn(ctx, storageId, "import-pdf");
     }
     const r = await importPdfCore(ctx, storageId, str(args.title), keep);
     return ok({ ...(await draftOut(ctx, r.buildId)) as object, import_notes: r.notes, stats: r.stats, next: "Compare the markdown with the original PDF and correct the line styles, lists and sections with update_draft. Fill in the client with update_draft before draft_to_signing." } as Json);
@@ -460,6 +462,7 @@ async function callTool(ctx: ActionCtx, name: string, args: Json): Promise<ToolR
       const bytes = await pdfBytes(args);
       if (bytes.length > MAX_PDF) return fail("That PDF is over 25 MB.");
       const storageId = await ctx.storage.store(new Blob([new Uint8Array(bytes)], { type: "application/pdf" }));
+      await recordIn(ctx, storageId, "contract-pdf");
       const fileName = (str(args.file_name) ?? `${title}.pdf`).replace(/(\.pdf)?$/i, ".pdf");
       const { documentId } = await ctx.runAction(internal.sign.createAs, { storageId, fileName, title, actor: ACTOR });
       let d = (await getDoc(ctx, documentId))!;

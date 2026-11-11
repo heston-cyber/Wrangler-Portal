@@ -15,10 +15,17 @@ export const BUSINESS_TABLES = [
   "gear", "gearMaintenance", "gearBookings", // Phase 5d step 3 (Nov 4)
   "callSettings", "calls", // Phase 5d step 1 (Nov 4)
   "msgThreads", "messages", "msgReads", "msgUploads", // Phase 5d step 2 (Nov 4)
+  "teamInvites", "projectTeam", // Phase 5e step 1 (Nov 5)
+  "auditLog", // Phase 5e step 3
+  "bellItems", // Phase 5e step 4
+  "dataExports", // Phase 5e step 6
 ] as readonly string[];
 
 export const GLOBAL_TABLES = [
-  "users", "businesses", "memberships", "guestPasses", "rateLimits", "oauthStates", "emailLog", "stripeEvents", "userPrefs", "playerLogs", "phase0Runs", "r1Results", "siteWatchFindings", "siteWatchRuns", "siteWatchSettings",
+  "users", "businesses", "memberships", "guestPasses", "rateLimits", "fileTickets", "oauthStates", "emailLog", "stripeEvents", "userPrefs", "playerLogs", "phase0Runs", "r1Results", "siteWatchFindings", "siteWatchRuns", "siteWatchSettings",
+  "sessionDevices", "emailChanges", // Phase 5e step 2: a login's own, not a business's
+  "alertPrefs", "pushSubs", "pushKeys", // Phase 5e step 4
+  "businessDeletions", "deletionFiles", "fileOwners", // Phase 5e step 6: outlive the business they delete
 ] as readonly string[];
 
 // Belong to a business through their parent and are never patched: Wrangler Sign's audit trail is append-only

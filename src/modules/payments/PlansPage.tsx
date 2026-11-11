@@ -41,7 +41,7 @@ export default function PlansPage() {
     <>
       <TopBar><span className="secondary">Payments</span><Sep /><span className="here">Plans</span></TopBar>
       <div className="wp-page inv-list">
-        <PageHeader eyebrow="Payments" title="Plans." sub="The price list you reuse when you start a subscription."
+        <PageHeader title="Plans." sub="The price list you reuse when you start a subscription."
           actions={<ButtonLink variant="primary" to="/payments/plans/new">New plan</ButtonLink>} />
         {notConnected && <div className="wp-notice"><Icon name="info" size={20} /><span className="txt"><b>Stripe isn't connected.</b> Plans live in your Stripe account, so they need Stripe (Settings › Payments).</span><ButtonLink size="sm" to="/settings/payments">Settings › Payments</ButtonLink></div>}
         {plans === undefined ? <Card label="Plans"><SkeletonRows n={3} /></Card>

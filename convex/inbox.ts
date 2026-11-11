@@ -6,10 +6,11 @@
 //   Hooks:  onVersionReady, onReply (Review), onSignInvite, onSigned (Sign). Called where those emails are sent.
 //           They only add Inbox rows; the emails themselves are unchanged until the one-email switch (task 10).
 import { isClientLogin } from "./lib/roles";
+import { audit } from "./lib/audit";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
-import { requireMe, requireSignedIn } from "./lib/access";
+import { requireMe, requireSignedIn, requireAll } from "./lib/access";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { businessOf, hasAccess, itemView, myItems, postToInbox } from "./lib/inbox";
@@ -83,7 +84,7 @@ export const forClient = query({
   args: { clientId: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, a) => {
     const limit = a.limit;
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const clientId = ctx.db.normalizeId("clients", a.clientId);
     if (!clientId || !(await ctx.db.get(clientId))) return [];
     const rows = await ctx.db.query("inboxItems").withIndex("by_client", (q) => q.eq("clientId", clientId)).order("desc").take(1000);
@@ -112,7 +113,7 @@ async function noteAudience(ctx: QueryCtx | MutationCtx, client: Doc<"clients">)
 export const noteRecipients = query({
   args: { clientId: v.string() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const clientId = ctx.db.normalizeId("clients", a.clientId);
     const client = clientId ? await ctx.db.get(clientId) : null;
     if (!client) throw new ConvexError("That client isn't here.");
@@ -124,7 +125,7 @@ export const noteRecipients = query({
 export const notes = query({
   args: { clientId: v.optional(v.id("clients")) },
   handler: async (ctx, { clientId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const rows = clientId
       ? await ctx.db.query("inboxNotes").withIndex("by_client", (q) => q.eq("clientId", clientId)).order("desc").collect()
       : await ctx.db.query("inboxNotes").order("desc").take(500);
@@ -148,7 +149,7 @@ export const notes = query({
 export const sent = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, { limit }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const max = Math.min(Math.max(limit ?? 100, 1), 300);
     type Row = {
       key: string; type: "draft" | "note" | "auto"; kind: string; title: string; subject: string | null; to: string; at: number;
@@ -214,7 +215,7 @@ export const sent = query({
 export const noteDetail = query({
   args: { noteId: v.string() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const noteId = ctx.db.normalizeId("inboxNotes", a.noteId);
     const n = noteId ? await ctx.db.get(noteId) : null;
     if (!n || !noteId || n.status === "discarded") return null;
@@ -275,7 +276,7 @@ export const saveNote = mutation({
     testimonialProjectId: v.optional(v.union(v.id("projects"), v.null())),
   },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const client = await ctx.db.get(a.clientId);
     if (!client) throw new ConvexError("That client isn't here.");
     if (a.testimonialProjectId) {
@@ -309,7 +310,7 @@ export const saveNote = mutation({
 export const sendNote = mutation({
   args: { noteId: v.id("inboxNotes") },
   handler: async (ctx, { noteId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const n = await ctx.db.get(noteId);
     if (!n) throw new ConvexError("That note isn't here.");
     if (n.status !== "draft") throw new ConvexError(n.status === "sent" ? "This note was already sent." : "This note was discarded.");
@@ -317,6 +318,7 @@ export const sendNote = mutation({
     if (!client) throw new ConvexError("That client isn't here.");
     const biz = await businessOf(ctx, n);
     const audience = (await noteAudience(ctx, client)).filter((p) => p.access && (!n.to || n.to.includes(p.email)));
+    await audit(ctx, { kind: "sent", text: `sent the note "${n.title}"`, where: `${client.name} › Inbox`, link: `/sent/${noteId}` });
     if (!biz || !audience.length) throw new ConvexError(n.to ? "None of the people you picked has portal access yet." : `No one at ${client.name} has portal access yet. Invite someone first.`);
     // Phase 5 (D139): a testimonial request links to its form (the note's own page, /words/<note>).
     if (n.testimonialProjectId && (await ctx.db.get(n.testimonialProjectId))?.clientId !== n.clientId) throw new ConvexError(`The project this asks about isn't one of ${client.name}'s any more.`);
@@ -334,7 +336,7 @@ export const sendNote = mutation({
 export const discardNote = mutation({
   args: { noteId: v.id("inboxNotes") },
   handler: async (ctx, { noteId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const n = await ctx.db.get(noteId);
     if (!n) throw new ConvexError("That note isn't here.");
     if (n.status !== "draft") throw new ConvexError("Only a draft can be discarded.");

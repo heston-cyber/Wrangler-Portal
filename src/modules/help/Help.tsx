@@ -57,7 +57,7 @@ export function HelpIndex({ base, biz, owner, bare }: Who & { bare?: boolean }) 
   const open = async (slug: string) => { try { const id = await edit({ slug }); navigate(`/settings/help/edit/${id}?guide=${slug}`); } catch (e) { show(errText(e)); } };
   return (
     <>
-      {!bare && <PageHeader eyebrow="Help" title="How can we help?" sub="Short guides for the things people ask about most." />}
+      {!bare && <PageHeader title="How can we help?" sub="Short guides for the things people ask about most." />}
       <div className="help-bar">
         <label className="ws-search help-search">
           <Icon name="search" size={16} />

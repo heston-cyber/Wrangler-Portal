@@ -14,7 +14,7 @@ import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe, requireSignedIn, viewerOf } from "./lib/access";
+import { requireMe, requireSignedIn, viewerOf, requireAll } from "./lib/access";
 import { bump } from "./lib/rate";
 import { randomToken } from "./lib/hash";
 import { SITE } from "./lib/site";
@@ -26,6 +26,7 @@ import { mailBrandOf } from "./lib/mail";
 import { messageMail, ownerMessageMail } from "./lib/mails";
 import { deliverOnce } from "./invoiceReminders";
 import { TZ } from "./lib/gcal";
+import { claimUpload, isClaimed } from "./lib/fileOwners";
 
 type Ctx = QueryCtx | MutationCtx;
 const TOKEN = /^[A-Za-z0-9_-]{16,64}$/;
@@ -42,7 +43,7 @@ const fileArg = v.array(v.object({ storageId: v.id("_storage"), name: v.string()
 // ---------- who may see a thread ----------
 
 async function ownerThread(ctx: Ctx, threadId: string) {
-  const me = await requireMe(ctx);
+  const me = await requireAll(ctx, "clients"); // Phase 5e: the owner, or a team member with Clients and leads on
   const id = ctx.db.normalizeId("msgThreads", threadId);
   const t = id ? await ctx.db.get(id) : null;
   return { me, t };
@@ -120,7 +121,7 @@ async function threadHead(ctx: Ctx, t: Doc<"msgThreads">) {
 export const threads = query({
   args: { q: v.optional(v.string()) },
   handler: async (ctx, { q }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     // Review M4: bounded: the newest 150 conversations, and the newest 200 messages of each when searching.
     const words = (q ?? "").toLowerCase().split(/\s+/).filter((w) => w.length >= 2).slice(0, 6);
     const out = [];
@@ -231,7 +232,7 @@ export const leadPage = query({
  *  before; attaching claims it for this caller. 25 MB at most each, 10 at most. A refused file is left alone: it may
  *  not be the caller's, so it's never deleted here. */
 const FRESH_UPLOAD = 30 * 60_000;
-async function checkFiles(ctx: MutationCtx, files: Array<{ storageId: Id<"_storage">; name: string }>, by: string) {
+async function checkFiles(ctx: MutationCtx, files: Array<{ storageId: Id<"_storage">; name: string }>, by: string, businessId: Id<"businesses"> | null) {
   const no = (msg: string) => ({ error: msg, files: [] as Doc<"messages">["files"] });
   if (files.length > MAX_FILES) return no(`Up to ${MAX_FILES} files a message.`);
   if (new Set(files.map((f) => f.storageId)).size !== files.length) return no("The same file is attached twice.");
@@ -241,10 +242,11 @@ async function checkFiles(ctx: MutationCtx, files: Array<{ storageId: Id<"_stora
     const meta = await ctx.db.system.get(f.storageId);
     if (!meta || meta._creationTime < now - FRESH_UPLOAD) return no("A file didn't upload. Attach it again.");
     if (await ctx.db.query("msgUploads").withIndex("by_storage", (q) => q.eq("storageId", f.storageId)).first()) return no("A file didn't upload. Attach it again.");
+    if (await isClaimed(ctx, f.storageId)) return no("A file didn't upload. Attach it again."); // 5e review (Nov 6): across businesses
     if (meta.size > MAX_FILE_BYTES) return no(`${f.name.slice(0, 80)} is over 25 MB. Share a link to big files instead.`);
     out.push({ storageId: f.storageId, name: (f.name.trim() || "File").slice(0, 140), size: meta.size, type: (meta.contentType ?? "").slice(0, 100) });
   }
-  for (const f of out) await ctx.db.insert("msgUploads", { storageId: f.storageId, by, at: now });
+  for (const f of out) { await claimUpload(ctx, f.storageId, businessId, "message"); await ctx.db.insert("msgUploads", { storageId: f.storageId, by, at: now }); }
   return { error: null, files: out };
 }
 
@@ -281,7 +283,7 @@ export const send = mutation({
     if (!t) throw new ConvexError("This conversation isn't here any more.");
     const text = tidy(a.text);
     if (!text && !(a.files ?? []).length) throw new ConvexError("Write a message.");
-    const f = await checkFiles(ctx, a.files ?? [], `user:${me.userId}`);
+    const f = await checkFiles(ctx, a.files ?? [], `user:${me.userId}`, t.businessId ?? null);
     if (f.error) return { error: f.error };
     await bump(ctx, "msgSend", String(me.userId));
     const biz = t.businessId ? await ctx.db.get(t.businessId) : null;
@@ -307,7 +309,7 @@ export const clientSend = mutation({
     if (!t) throw new ConvexError("This conversation isn't here any more.");
     const text = tidy(a.text);
     if (!text && !(a.files ?? []).length) throw new ConvexError("Write a message.");
-    const f = await checkFiles(ctx, a.files ?? [], `user:${me.userId}`);
+    const f = await checkFiles(ctx, a.files ?? [], `user:${me.userId}`, t.businessId ?? null);
     if (f.error) return { error: f.error, threadId: t._id };
     await bump(ctx, "msgSend", String(me.userId));
     await post(ctx, t, { side: "client", name: me.name, email, text, files: f.files });
@@ -325,7 +327,7 @@ export const leadSend = mutation({
     await bump(ctx, "msgLead", a.token);
     const text = tidy(a.text);
     if (!text && !(a.files ?? []).length) throw new ConvexError("Write a message.");
-    const f = await checkFiles(ctx, a.files ?? [], `lead:${t._id}`);
+    const f = await checkFiles(ctx, a.files ?? [], `lead:${t._id}`, t.businessId ?? null);
     if (f.error) return { error: f.error };
     await post(ctx, t, { side: "lead", name: t.leadName ?? "Lead", email: t.leadEmail, text, files: f.files });
     return { error: null };
@@ -394,7 +396,7 @@ export async function threadForDeal(ctx: MutationCtx, d: Doc<"deals">) {
 export const startOptions = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const projects = [];
     for (const p of await ctx.db.query("projects").order("desc").take(200)) {
       const people = await portalPeople(ctx, p);
@@ -408,7 +410,7 @@ export const startOptions = query({
 export const start = mutation({
   args: { projectId: v.optional(v.id("projects")), dealId: v.optional(v.id("deals")) },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     if (a.projectId) {
       const p = await ctx.db.get(a.projectId);
       if (!p) throw new ConvexError("That project isn't here any more.");

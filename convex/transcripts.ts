@@ -2,7 +2,8 @@
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
-import { requireMe } from "./lib/access";
+import { recordFile } from "./lib/fileOwners";
+import { requireFor, requireMe } from "./lib/access";
 import { accessToVersion, shareArg } from "./lib/viewer";
 import { findVideo, pickVersion, versionInfo } from "./connector";
 
@@ -33,6 +34,7 @@ export const finish = internalMutation({
   args: { versionId: v.id("versions"), storageId: v.id("_storage"), language: v.optional(v.string()), wordCount: v.number(), segmentCount: v.number(), model: v.string() },
   handler: async (ctx, a) => {
     const row = await ctx.db.query("transcripts").withIndex("by_version", (q) => q.eq("versionId", a.versionId)).first();
+    await recordFile(ctx as never, a.storageId, (await ctx.db.get(a.versionId))?.businessId ?? null, "transcript"); // 5e review (Nov 6)
     const patch = { status: "done" as const, storageId: a.storageId, language: a.language, wordCount: a.wordCount, segmentCount: a.segmentCount, model: a.model, error: undefined, updatedAt: Date.now() };
     if (row) {
       if (row.storageId && row.storageId !== a.storageId) await ctx.storage.delete(row.storageId);
@@ -79,7 +81,7 @@ export const summary = internalQuery({
 export const retry = mutation({
   args: { versionId: v.id("versions") },
   handler: async (ctx, { versionId }) => {
-    await requireMe(ctx);
+    await requireFor(ctx, "review", versionId);
     const row = await ctx.db.query("transcripts").withIndex("by_version", (q) => q.eq("versionId", versionId)).first();
     if (row) await ctx.db.patch(row._id, { status: "pending", error: undefined, updatedAt: Date.now() });
     else await ctx.db.insert("transcripts", { versionId, status: "pending", attempts: 0, updatedAt: Date.now() });

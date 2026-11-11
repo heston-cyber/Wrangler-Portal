@@ -7,7 +7,7 @@ import { internalMutation, internalQuery, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import { stripeCall, StripeError } from "./lib/stripeApi";
 
@@ -54,7 +54,7 @@ function check(a: { name: string; amountCents: number; interval: Interval; inter
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     const plans = await ctx.db.query("plans").collect();
     const subs = await ctx.db.query("subscriptions").collect();
     return plans.sort((a, b) => b.createdAt - a.createdAt).map((p) => {
@@ -75,7 +75,7 @@ export const list = query({
 export const get = query({
   args: { planId: v.string() },
   handler: async (ctx, { planId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     const id = ctx.db.normalizeId("plans", planId);
     const p = id ? await ctx.db.get(id) : null;
     if (!p) return null;
@@ -90,7 +90,7 @@ export const get = query({
 export const saveTarget = internalQuery({
   args: { planId: v.optional(v.id("plans")) },
   handler: async (ctx, { planId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     const bizId = businessInScope(ctx);
     const b = bizId ? await ctx.db.get(bizId) : null;
     if (!b) throw new ConvexError("Not allowed.");

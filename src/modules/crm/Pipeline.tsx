@@ -91,7 +91,7 @@ export default function Pipeline() {
     <>
       <TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/clients")}>Clients</a><Sep /><span className="here">Pipeline</span></TopBar>
       <div className="wp-page crm-pipe">
-        <PageHeader eyebrow="Clients" title="Pipeline." sub="Every lead and job, from first contact to paid." actions={<Button variant="primary" onClick={() => setAdding(true)}>Add lead</Button>} />
+        <PageHeader title="Pipeline." sub="Every lead and job, from first contact to paid." actions={<Button variant="primary" onClick={() => setAdding(true)}>Add lead</Button>} />
         {board === undefined ? <div className="crm-cols"><div className="crm-col skel" /><div className="crm-col skel" /><div className="crm-col skel" /></div>
           : board.deals.length === 0 ? (
             <EmptyState icon="activity" title="No leads yet." body="Leads from your website land here, and so do cards you add. Saving an estimate moves a card to Quoted; contracts, project stages and payments move it on from there."

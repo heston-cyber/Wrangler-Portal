@@ -34,7 +34,7 @@ export default function PaymentsPage() {
     <>
       <TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/vendors")}>Vendors</a><Sep /><span className="here">Payments</span></TopBar>
       <div className="wp-page">
-        <PageHeader eyebrow="Vendors" title="Vendor payments." sub="Invoices and hours your vendors send. Approve them into the Ledger, then mark them paid. You pay outside the portal for now." />
+        <PageHeader title="Vendor payments." sub="Invoices and hours your vendors send. Approve them into the Ledger, then mark them paid. You pay outside the portal for now." />
         <Tabs label="Payments" value={tab} onChange={setTab} items={[
           { key: "approve", label: "To approve", count: r?.toApprove.length ?? "" }, { key: "approved", label: "Approved", count: r?.approved.length ?? "" },
           { key: "paid", label: "Paid", count: r?.paid.length ?? "" }, { key: "1099", label: "1099" },

@@ -260,7 +260,8 @@ describe("failed charges and D64", () => {
     const w = await world();
     const { id } = await running(w);
     const inv = await failedInvoice(w, id);
-    fakeStripe({ sub: { portal: id }, subInvoice: { next_payment_attempt: 1_793_000_000 } });
+    // Stripe reports the subscription past due after a failed renewal (a sync job still running from the import reads it).
+    fakeStripe({ sub: { portal: id, status: "past_due" }, subInvoice: { next_payment_attempt: 1_793_000_000 } });
     expect(await w.t.action(anyApi.subscriptions.onFailed, { invoiceId: inv, failureKey: "pi_9:ch_9", failureAt: Date.now(), message: "Your card was declined." })).toBe("sent");
     const keys = await w.t.run(async (ctx) => (await ctx.db.query("emailLog").collect()).map((r) => `${r.key.split(":")[0]} ${r.to}`));
     expect(keys).toEqual(expect.arrayContaining(["subfailed maya@harbor.example", "subfailed-owner heston@wranglerproductions.com"]));

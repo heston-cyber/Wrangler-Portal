@@ -246,6 +246,9 @@ describe("T-S2.4 several signers", () => {
     expect(x.mails.filter((m) => m.subject.startsWith("Please sign")).map((m) => m.to)).toEqual(["jordan@example.com", "casey@example.com"]);
     expect((await x.call("open", { token: client2 })).body.state).toBe("ready");
     expect((await x.me.query(api.sign.get, { documentId: x.documentId }))!.doc.status).toBe("sent");
+    // 5e review (Nov 6): the owner's "Jordan signed" notice is in the bell too, linked to the document.
+    const bell = await x.t.run(async (ctx) => (await ctx.db.query("bellItems").collect()).filter((b) => b.kind === "contracts").map((b) => b.link));
+    expect(bell).toEqual([`/sign/d/${x.documentId}`]);
   });
 
   test("reminders go only to someone whose turn it is and who hasn't signed", async () => {

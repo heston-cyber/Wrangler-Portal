@@ -110,11 +110,12 @@ export default function ClientInvoice({ token, inShell }: { token: string; inShe
   );
 }
 
-export function Frame({ inShell, bar, brand, children }: { inShell: boolean; bar: React.ReactNode; brand?: { name: string; logoUrl: string | null } | null; children: React.ReactNode }) {
+/** `curtain`: the page keeps its own dark-curtain background instead of the cactus scene (the lead's booking pages, Nov 5). */
+export function Frame({ inShell, bar, brand, curtain, children }: { inShell: boolean; bar: React.ReactNode; brand?: { name: string; logoUrl: string | null } | null; curtain?: boolean; children: React.ReactNode }) {
   if (inShell) return <>{bar}<div className="wp-page inv-detail">{children}</div></>;
   return (
     <div className="inv-public">
-      <div className="wp-light client" aria-hidden><i style={{ backgroundImage: `url(${lightClient})` }} /></div>
+      <div className={`wp-light client${curtain ? " curtain" : ""}`} aria-hidden><i style={{ backgroundImage: `url(${lightClient})` }} /></div>
       <header className="inv-public-top">
         {brand?.logoUrl ? <img src={brand.logoUrl} alt={brand.name} /> : <span className="name">{brand?.name ?? ""}</span>}
       </header>

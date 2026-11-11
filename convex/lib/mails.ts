@@ -530,7 +530,7 @@ export function ownerBriefingReadMail(b: MailBrand, d: { vendor: string; title: 
 export function ownerW9Mail(b: MailBrand, d: { vendor: string; replaced: boolean; link: string }): Mail {
   return mk(b, "updates", `${d.vendor} ${d.replaced ? "replaced their" : "uploaded a"} W-9`, [
     { t: "eyebrow", text: `${d.vendor} ${d.replaced ? "replaced their" : "uploaded a"} W-9` },
-    { t: "p", text: "It's on their vendor page under Tax, for your 1099s. Only you can open it." },
+    { t: "p", text: "It's on their vendor page under Tax, for your 1099s. Only you, and anyone you give Vendor payments, can open it." },
     { t: "button", label: "Open their page", href: d.link },
   ], ownerFoot("a vendor uploads a W-9"));
 }
@@ -907,4 +907,79 @@ export function callCodeMail(b: MailBrand, d: { code: string; minutes: number; w
     { t: "p", text: `It works for ${d.minutes} minutes. Your time is held until then.` },
     { t: "small", text: "If you didn't try to book a call, ignore this email. Nothing is booked without the code." },
   ], [{ t: "small", text: `${b.name} · sent through WranglerPortal` }], `It works for ${d.minutes} minutes.`);
+}
+
+// ---------- 46: team invite (Phase 5e, frame 816:12391) ----------
+export function teamInviteMail(b: MailBrand, d: { invitedBy: string; role: string; until: string; link: string }): Mail {
+  return mk(b, "review", `${d.invitedBy} invited you to join ${b.name} on the portal`, [
+    { t: "p", text: `${d.invitedBy} invited you to join ${b.name} on the portal. The link works until ${d.until}.` },
+    { t: "sums", rows: [{ label: "Business", value: b.name }, { label: "Your role", value: d.role }, { label: "Invited by", value: d.invitedBy }] },
+    { t: "p", text: "The first time, you'll create your account: a password, then a six-digit code we send once to confirm your email. After that, you sign in with your email and password." },
+    { t: "button", label: "Join the team", href: d.link }, { t: "link", href: d.link },
+  ], clientFooter(b), `The link works until ${d.until}.`);
+}
+
+// ---------- 47, 50, 51 and the new-address code: security (Phase 5e step 2, frames 819:14153, 842:10984) ----------
+const SECURITY_LINK = () => `${SITE()}/settings/security`;
+/** 47 · a sign-in from a device not seen before (owner and team). The frame's "Near" line is left out: the portal doesn't see where a sign-in comes from. */
+export function newDeviceMail(b: MailBrand, d: { name: string | null; when: string; device: string }): Mail {
+  return mk(b, "review", "New sign-in to your portal", [
+    hi(d.name),
+    { t: "p", text: "Your portal was just opened from a device we have not seen before." },
+    { t: "sums", rows: [{ label: "When", value: d.when }, { label: "Device", value: d.device }] },
+    { t: "p", text: "If this was you, there is nothing to do.", tone: "muted" },
+    { t: "p", text: "If it was not, sign that device out in Settings › Security and change your password." },
+    { t: "button", label: "Review sign-ins", href: SECURITY_LINK() }, { t: "link", href: SECURITY_LINK() },
+  ], [{ t: "small", text: "— Wrangler Portal" }]);
+}
+/** 50 · to the OLD address after an email change. The frame said "reset your password", which the old address can no longer do; replying reaches support instead. */
+export function emailChangedMail(b: MailBrand, d: { name: string | null; when: string; old: string; next: string }): Mail {
+  return mk(b, "review", "The email you sign in with was changed", [
+    hi(d.name),
+    { t: "p", text: "The email address you sign in with was just changed." },
+    { t: "sums", rows: [{ label: "When", value: d.when }, { label: "Old email", value: d.old }, { label: "New email", value: d.next }] },
+    { t: "p", text: "If you did this, there is nothing to do. From now on, sign in with the new address.", tone: "muted" },
+    { t: "p", text: "If you did not, reply to this email right away and we'll lock the account." },
+  ], [{ t: "small", text: "— Wrangler Portal" }]);
+}
+/** 51 · your password was changed. */
+export function passwordChangedMail(b: MailBrand, d: { name: string | null; when: string; resetLink: string }): Mail {
+  return mk(b, "review", "Your portal password was changed", [
+    hi(d.name),
+    { t: "p", text: "The password for your portal account was just changed. Any other devices were signed out." },
+    { t: "sums", rows: [{ label: "When", value: d.when }] },
+    { t: "p", text: "If you did this, there is nothing to do.", tone: "muted" },
+    { t: "p", text: "If you did not, reset your password right away." },
+    { t: "button", label: "Reset your password", href: d.resetLink }, { t: "link", href: d.resetLink },
+  ], [{ t: "small", text: "— Wrangler Portal" }]);
+}
+/** Email 48 (Phase 5e step 6): the owner's export is ready. A link to Settings › Your data, where they sign in to download. */
+export function exportReadyMail(b: MailBrand, d: { name: string | null; business: string; made: string; size: string; until: string; link: string }): Mail {
+  return mk(b, "review", `Your ${d.business} export is ready`, [
+    hi(d.name),
+    { t: "p", text: `The export of your ${d.business} records is ready.` },
+    { t: "sums", rows: [{ label: "Made", value: d.made }, { label: "Size", value: d.size }, { label: "Link works until", value: d.until }] },
+    { t: "p", text: "It holds your records and links to your files. The files themselves stay in Dropbox." },
+    { t: "p", text: "Sign in to download it.", tone: "muted" },
+    { t: "button", label: "Download the export", href: d.link }, { t: "link", href: d.link },
+  ], [{ t: "small", text: "— Wrangler Portal" }]);
+}
+/** Email 49 (Phase 5e step 6): deletion scheduled; and, in the same layout, the reminder a week before (approved Nov 6). */
+export function deletionMail(b: MailBrand, d: { name: string | null; business: string; askedBy: string; on: string; link: string; reminder?: boolean }): Mail {
+  return mk(b, "review", d.reminder ? `${d.business} will be deleted on ${d.on}` : `${d.business} is scheduled for deletion`, [
+    hi(d.name),
+    { t: "p", text: d.reminder ? `${d.business} will be deleted from the portal in a week.` : `You asked to delete ${d.business} from the portal.` },
+    { t: "sums", rows: [{ label: "Business", value: d.business }, { label: "Asked by", value: d.askedBy }, { label: "Deleted on", value: d.on }] },
+    { t: "p", text: "Your records and the files kept in the portal (such as W-9s) are deleted. Files in your Dropbox stay where they are." },
+    { t: "p", text: "Changed your mind? Cancel the deletion before then." },
+    { t: "button", label: "Cancel the deletion", href: d.link }, { t: "link", href: d.link },
+  ], [{ t: "small", text: "— Wrangler Portal" }]);
+}
+/** The 6-digit code that confirms a new email address (Change email, step 2). */
+export function newEmailCodeMail(b: MailBrand, d: { code: string; minutes: number }): Mail {
+  return mk(b, "review", `${d.code} is your code to confirm your new email`, [
+    { t: "p", text: "Enter this code to make this your new sign-in email:" }, { t: "code", code: d.code },
+    { t: "p", text: `It works for ${d.minutes} minutes.` },
+    { t: "small", text: "If you didn't ask for this, ignore this email. Nothing changes without the code." },
+  ], [{ t: "small", text: `WranglerPortal · ${SITE_HOST()}` }], `It works for ${d.minutes} minutes.`);
 }

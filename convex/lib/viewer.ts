@@ -5,7 +5,7 @@ import { v, ConvexError } from "convex/values";
 import type { QueryCtx, MutationCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { viewerOf } from "./access";
+import { projectsFor, viewerOf } from "./access";
 import { coversVideo, gateShare, showsAllVersions, type Share } from "./shareAccess";
 
 export const shareArg = v.optional(v.object({
@@ -26,6 +26,13 @@ const cleanName = (s: string | undefined) => (s ?? "").trim().replace(/\s+/g, " 
 export async function accessToVideo(ctx: QueryCtx | MutationCtx, videoId: Id<"videos">, share: ShareRef | undefined, need: "view" | "comment" = "view"): Promise<Access> {
   const viewer = await viewerOf(ctx);
   if (viewer.kind === "owner") return { kind: "owner", userId: viewer.userId, name: viewer.name, email: viewer.email, can: "owner", share: null };
+  // Phase 5e: a team member with Review on works on a video as the owner does (an Editor only on their assigned projects).
+  // Without the switch, or on another project, they're like anyone else: only a share can let them see it.
+  if (viewer.kind === "team" && viewer.team.perms.review) {
+    const vid = await ctx.db.get(videoId);
+    const only = await projectsFor(ctx, { userId: viewer.userId, name: viewer.name, email: viewer.email, team: viewer.team });
+    if (vid && (!only || only.has(vid.projectId))) return { kind: "owner", userId: viewer.userId, name: viewer.name, email: viewer.email, can: "owner", share: null };
+  }
   const signedIn = !!(await getAuthUserId(ctx));
   if (!share) throw new ConvexError(signedIn ? "Not allowed." : "Sign in first.");
   const g = await gateShare(ctx, share.token, share.passcode);

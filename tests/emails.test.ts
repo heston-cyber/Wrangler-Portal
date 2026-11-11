@@ -178,6 +178,9 @@ describe("Heston's alert", () => {
     expect(mails[0].text).toContain("v1 · 01:00:00:20 → 01:00:01:20 · Pat (guest) · drawing");
     expect(mails[0].text).toContain(`${SITE_URL}/v/${ids.brand}?version=1&note=${a}`);
     expect(mails[0].text).not.toContain("my own note");
+    // 5e review (Nov 6): the bell hears it too, naming the video's page.
+    const bell = await t.run(async (ctx) => (await ctx.db.query("bellItems").collect()).filter((x) => x.kind === "notes"));
+    expect(bell.map((x) => ({ title: x.title, link: x.link }))).toEqual([{ title: "2 new notes on Brand Film from Maya Chen and 1 more", link: `/v/${ids.brand}` }]);
     // Nothing left to send; a later note starts a new sitting.
     expect((await t.action(internal.emails.ownerAlert, { videoId: ids.brand })).reason).toBe("nothing new");
     const c = await maya.mutation(api.notes.create, { versionId: ids.v1, kind: "general", text: "one more", share: { token: share.token } });

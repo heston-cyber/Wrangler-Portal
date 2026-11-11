@@ -4,6 +4,7 @@
 import { useRef, useState } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvex } from "convex/react";
+import { Curtain } from "./Curtain";
 import { api } from "../../convex/_generated/api";
 import { Icon } from "../ui/Icon";
 import { Button } from "../ui/wp";
@@ -38,6 +39,7 @@ export default function SignIn({ invitedEmail, note: lead }: { invitedEmail?: st
   const [code, setCode] = useState("");
   const pw = useRef(""); // kept only to resend a code; never stored
 
+  const [locked, setLocked] = useState<number | null>(null); // Phase 5e step 2: Too many tries (minutes to wait)
   const explain = (msg: string, f: Flow) => {
     if (/invited/i.test(msg)) return "This email hasn't been invited to Wrangler Review. Ask the person who shared with you to invite it.";
     if (/valid email/i.test(msg)) return "Enter a valid email.";
@@ -77,6 +79,11 @@ export default function SignIn({ invitedEmail, note: lead }: { invitedEmail?: st
         await signIn("password", { flow: "reset-verification", email: mail, code: String(fd.get("code") ?? "").replace(/\D/g, ""), newPassword: String(fd.get("newPassword") ?? "") });
       }
     } catch (err) {
+      // D146: after 5 wrong tries the sign-in rests; say so rather than "doesn't match".
+      if (flow === "signIn" || flow === "code") {
+        const l = await convex.mutation(api.security.signInLocked, { email: mail }).catch(() => null); // counts this failed try (5e review)
+        if (l?.locked) { setLocked(l.minutes); return; }
+      }
       setError(explain((err as Error).message || "", flow));
     } finally {
       setBusy(false);
@@ -92,6 +99,16 @@ export default function SignIn({ invitedEmail, note: lead }: { invitedEmail?: st
     } catch (err) { setError(explain((err as Error).message || "", "code")); }
     finally { setBusy(false); }
   }
+  if (locked !== null) return (
+    <Curtain legal="Wrangler Productions, a DBA of Hill Creative LLC">
+      <div className="wsx-card glass team-join">
+        <span className="wp-eyebrow">Sign in</span>
+        <h1 className="headline">Too many tries</h1>
+        <p className="caption">That was 5 wrong tries. Wait {locked > 15 ? `${locked} minutes` : "15 minutes"} and try again, or reset your password now.</p>
+        <div className="team-acts"><Button onClick={() => { setLocked(null); go("reset"); }}>Reset your password</Button><button type="button" className="linkbtn wp-small secondary" onClick={() => { setLocked(null); go("signIn"); }}>Back to sign in</button></div>
+      </div>
+    </Curtain>
+  );
   const askEmail = flow === "signIn" || flow === "signUp" || flow === "reset";
   const invited = flow === "signUp" && !!invitedEmail;
   return (
@@ -159,7 +176,7 @@ export default function SignIn({ invitedEmail, note: lead }: { invitedEmail?: st
 }
 
 /** Six boxes over one real field, so paste, autofill and screen readers work as with any code input. */
-function CodeBoxes({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function CodeBoxes({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [focus, setFocus] = useState(true);
   return (
     <div className="wp-code">

@@ -268,7 +268,7 @@ export function ClientBriefPage({ briefId, preview }: { briefId?: string; previe
 
 export function KickoffSettings() {
   const s = useQuery(api.briefs.settings, {});
-  const head = <SetHead eyebrow="Kickoff brief" title="Questions before a project starts." sub="Send it from a project's Requests and brief card. The client answers in their portal, and you can start an estimate from the answers." />;
+  const head = <SetHead title="Questions before a project starts." sub="Send it from a project's Requests and brief card. The client answers in their portal, and you can start an estimate from the answers." />;
   if (s === undefined) return <>{head}<div className="panel"><SkeletonRows n={3} /></div></>;
   const qn = s.questionnaire as Questionnaire;
   return (

@@ -18,6 +18,7 @@ import { connectWebhook } from "./payments";
 import { webflow as webflowLeads } from "./leads";
 import { agentHttp as siteWatchAgent } from "./siteWatch";
 import { pdfRoute as briefingPdf } from "./briefings";
+import { route as fileTicket } from "./fileTickets";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);
@@ -78,6 +79,7 @@ http.route({ path: "/upload/chunk", method: "POST", handler: uploadChunk });
 http.route({ path: "/upload/chunk", method: "OPTIONS", handler: uploadChunkPreflight });
 // D147 (Nov 4): a shared briefing's PDF by its link (/b/<token> shows it); off when the link is turned off.
 http.route({ pathPrefix: "/b-pdf/", method: "GET", handler: briefingPdf });
+http.route({ pathPrefix: "/f/", method: "GET", handler: fileTicket }); // second 5e review: W-9s, through a 10-minute ticket
 http.route({ path: "/email/stop", method: "GET", handler: emailStop });
 http.route({ path: "/email/stop", method: "POST", handler: emailStop });
 // Phase 5c (Nov 3): the site-watch agent's door (key-locked; Site watch's own list only).

@@ -750,8 +750,8 @@
   "activity.recent": [
    {
     "at": 1793289600000,
-    "detail": "Service Agreement — Harbor Coffee Launch · Harbor Coffee",
-    "label": "WS-00012 Service Agreement — Harbor Coffee Launch",
+    "detail": "Service Agreement \u2014 Harbor Coffee Launch \u00b7 Harbor Coffee",
+    "label": "WS-00012 Service Agreement \u2014 Harbor Coffee Launch",
     "ref": {
      "id": "000000000000000010056wsDocuments",
      "kind": "document"
@@ -818,9 +818,9 @@
     "callSheetId": "0000000000000000010200callSheets",
     "date": "2026-11-02",
     "kind": "weatherChanged",
-    "line": "Light rain · 58°/46° · 60% rain · wind 12 mph",
-    "title": "Harbor Coffee Launch · Harbor Coffee",
-    "was": "Partly cloudy · 64°/47° · 10% rain · wind 7 mph"
+    "line": "Light rain \u00b7 58\u00b0/46\u00b0 \u00b7 60% rain \u00b7 wind 12 mph",
+    "title": "Harbor Coffee Launch \u00b7 Harbor Coffee",
+    "was": "Partly cloudy \u00b7 64\u00b0/47\u00b0 \u00b7 10% rain \u00b7 wind 7 mph"
    },
    {
     "at": 1793286000000,
@@ -868,7 +868,7 @@
     "lastEmailAt": null,
     "sentAt": 1793203200000,
     "signerKey": "client",
-    "title": "Service Agreement — Harbor Coffee Launch",
+    "title": "Service Agreement \u2014 Harbor Coffee Launch",
     "waitingOn": [
      "Maya Brooks"
     ]
@@ -902,7 +902,7 @@
      "Floor Trader"
     ],
     "status": "draft",
-    "title": "Service Agreement — Backrooms",
+    "title": "Service Agreement \u2014 Backrooms",
     "updatedAt": 1793246400000,
     "version": 1
    },
@@ -926,7 +926,7 @@
      "Maya Brooks"
     ],
     "status": "sent",
-    "title": "Service Agreement — Harbor Coffee Launch",
+    "title": "Service Agreement \u2014 Harbor Coffee Launch",
     "updatedAt": 1793203200000,
     "version": 1
    },
@@ -950,7 +950,7 @@
      "Dan Price"
     ],
     "status": "completed",
-    "title": "Change Order — Spirit Days",
+    "title": "Change Order \u2014 Spirit Days",
     "updatedAt": 1792900800000,
     "version": 1
    }
@@ -1219,7 +1219,7 @@
       {
        "content": [
         {
-         "text": "If the COMPANY’s equipment is damaged due to CLIENT negligence or unsafe working conditions provided by the CLIENT, the CLIENT agrees to reimburse the COMPANY for the cost of repair or replacement.",
+         "text": "If the COMPANY\u2019s equipment is damaged due to CLIENT negligence or unsafe working conditions provided by the CLIENT, the CLIENT agrees to reimburse the COMPANY for the cost of repair or replacement.",
          "type": "text"
         }
        ],
@@ -1297,7 +1297,7 @@
       {
        "content": [
         {
-         "text": "The COMPANY’s total liability for any claim arising out of or relating to this Agreement shall not exceed the total amount paid by the CLIENT under this Agreement. Under no circumstances shall the COMPANY be liable for any indirect, incidental, or consequential damages.",
+         "text": "The COMPANY\u2019s total liability for any claim arising out of or relating to this Agreement shall not exceed the total amount paid by the CLIENT under this Agreement. Under no circumstances shall the COMPANY be liable for any indirect, incidental, or consequential damages.",
          "type": "text"
         }
        ],
@@ -1608,7 +1608,7 @@
      "number": 12,
      "sentAt": 1793203200000,
      "status": "sent",
-     "title": "Service Agreement — Harbor Coffee Launch",
+     "title": "Service Agreement \u2014 Harbor Coffee Launch",
      "voidedAt": null,
      "waitingOn": [
       "Maya Brooks"
@@ -1954,7 +1954,7 @@
     "readBy": 0,
     "sentTo": 2,
     "subject": "Harbor Coffee, 412 Main St. Please confirm.",
-    "title": "Shoot scheduled: Mon, Nov 9 · 7:00 AM",
+    "title": "Shoot scheduled: Mon, Nov 9 \u00b7 7:00 AM",
     "to": "Harbor Coffee (2)",
     "type": "auto"
    },
@@ -1968,7 +1968,7 @@
     "readBy": 0,
     "sentTo": 2,
     "subject": "Harbor Coffee, 412 Main St. Please confirm.",
-    "title": "Shoot scheduled: Mon, Nov 2 · 7:00 AM",
+    "title": "Shoot scheduled: Mon, Nov 2 \u00b7 7:00 AM",
     "to": "Harbor Coffee (2)",
     "type": "auto"
    },
@@ -2009,7 +2009,7 @@
     "open": "/sign/d/d1",
     "readBy": 0,
     "sentTo": 1,
-    "subject": "Service Agreement — Harbor Coffee Launch",
+    "subject": "Service Agreement \u2014 Harbor Coffee Launch",
     "title": "Document to sign",
     "to": "Maya Brooks",
     "type": "auto"
@@ -2068,7 +2068,7 @@
     "readAt": null,
     "readBy": 0,
     "sentTo": 2,
-    "text": "Harbor Coffee Launch · Harbor Coffee · your call 7:00 AM",
+    "text": "Harbor Coffee Launch \u00b7 Harbor Coffee \u00b7 your call 7:00 AM",
     "title": "Call sheet: Mon Nov 2"
    },
    {
@@ -2096,7 +2096,7 @@
     "readBy": 0,
     "sentTo": 2,
     "text": "Harbor Coffee, 412 Main St. Please confirm.",
-    "title": "Shoot scheduled: Mon, Nov 9 · 7:00 AM"
+    "title": "Shoot scheduled: Mon, Nov 9 \u00b7 7:00 AM"
    },
    {
     "_id": "0000000000000000010136inboxItems",
@@ -2145,7 +2145,7 @@
     "readBy": 0,
     "sentTo": 2,
     "text": "Harbor Coffee, 412 Main St. Please confirm.",
-    "title": "Shoot scheduled: Mon, Nov 2 · 7:00 AM"
+    "title": "Shoot scheduled: Mon, Nov 2 \u00b7 7:00 AM"
    },
    {
     "_id": "0000000000000000010112inboxItems",
@@ -2193,7 +2193,7 @@
     "readAt": null,
     "readBy": 0,
     "sentTo": 1,
-    "text": "Harbor Coffee 30s · v4",
+    "text": "Harbor Coffee 30s \u00b7 v4",
     "title": "Reply on your note at 01:00:05:00"
    },
    {
@@ -2215,7 +2215,7 @@
     "readAt": null,
     "readBy": 0,
     "sentTo": 1,
-    "text": "Service Agreement — Harbor Coffee Launch · WS-00012",
+    "text": "Service Agreement \u2014 Harbor Coffee Launch \u00b7 WS-00012",
     "title": "Document to sign"
    },
    {
@@ -2237,7 +2237,7 @@
     "readAt": null,
     "readBy": 0,
     "sentTo": 1,
-    "text": "Harbor Coffee 30s · v4",
+    "text": "Harbor Coffee 30s \u00b7 v4",
     "title": "New cut ready"
    },
    {
@@ -3344,7 +3344,7 @@
         },
         "content": [
          {
-          "text": "The COMPANY’s total liability for any claim arising out of or relating to this Agreement shall not exceed the total amount paid by the CLIENT under this Agreement. Under no circumstances shall the COMPANY be liable for any indirect, incidental, or consequential damages.",
+          "text": "The COMPANY\u2019s total liability for any claim arising out of or relating to this Agreement shall not exceed the total amount paid by the CLIENT under this Agreement. Under no circumstances shall the COMPANY be liable for any indirect, incidental, or consequential damages.",
           "type": "text"
          }
         ],
@@ -3492,7 +3492,7 @@
         },
         "content": [
          {
-          "text": "If the COMPANY’s equipment is damaged due to CLIENT negligence or unsafe working conditions provided by the CLIENT, the CLIENT agrees to reimburse the COMPANY for the cost of repair or replacement.",
+          "text": "If the COMPANY\u2019s equipment is damaged due to CLIENT negligence or unsafe working conditions provided by the CLIENT, the CLIENT agrees to reimburse the COMPANY for the cost of repair or replacement.",
           "type": "text"
          }
         ],
@@ -3988,7 +3988,7 @@
     "sentAt": 1793203200000,
     "sentVersion": 1,
     "status": "sent",
-    "title": "Service Agreement — Harbor Coffee Launch",
+    "title": "Service Agreement \u2014 Harbor Coffee Launch",
     "updatedAt": 1793203200000
    },
    "events": [
@@ -4056,7 +4056,7 @@
     "title": null
    },
    "problems": [
-    "Adopt your signature first (Contracts › Your signature)."
+    "Adopt your signature first (Contracts \u203a Your signature)."
    ],
    "signings": [
     {
@@ -4221,7 +4221,7 @@
     "sentAt": 1792900800000,
     "sentVersion": 1,
     "status": "completed",
-    "title": "Change Order — Spirit Days",
+    "title": "Change Order \u2014 Spirit Days",
     "updatedAt": 1792900800000
    },
    "events": [
@@ -4278,7 +4278,7 @@
     "title": null
    },
    "problems": [
-    "Adopt your signature first (Contracts › Your signature)."
+    "Adopt your signature first (Contracts \u203a Your signature)."
    ],
    "signings": [
     {
@@ -4414,7 +4414,7 @@
     "label": "WS-00013",
     "number": 13,
     "status": "draft",
-    "title": "Service Agreement — Backrooms",
+    "title": "Service Agreement \u2014 Backrooms",
     "updatedAt": 1793246400000
    },
    "events": [
@@ -4438,7 +4438,7 @@
     "title": null
    },
    "problems": [
-    "Adopt your signature first (Contracts › Your signature)."
+    "Adopt your signature first (Contracts \u203a Your signature)."
    ],
    "signings": [],
    "version": {
@@ -4579,7 +4579,7 @@
      "label": "WS-00012",
      "sentAt": 1793203200000,
      "status": "sent",
-     "title": "Service Agreement — Harbor Coffee Launch"
+     "title": "Service Agreement \u2014 Harbor Coffee Launch"
     }
    ],
    "dropbox": false,
@@ -4670,7 +4670,7 @@
      "openNotes": 3,
      "round": {
       "included": 2,
-      "label": "Round 4 · change order",
+      "label": "Round 4 \u00b7 change order",
       "round": 4,
       "state": "over"
      },
@@ -4830,7 +4830,7 @@
         "question": "How should it feel?"
        },
        {
-        "answer": "#3B2A20 · #F2E6D8",
+        "answer": "#3B2A20 \u00b7 #F2E6D8",
         "question": "Brand colours"
        },
        {
@@ -5218,7 +5218,7 @@
     "project": "26127 Harbor Coffee Launch",
     "projectId": "000000000000000000010020projects",
     "read": true,
-    "saveError": "Dropbox isn't connected. Connect it in Settings › Dropbox drop folder, then Save again.",
+    "saveError": "Dropbox isn't connected. Connect it in Settings \u203a Dropbox drop folder, then Save again.",
     "saved": null,
     "working": "Great to work with."
    }
@@ -5352,7 +5352,7 @@
     "sendError": null,
     "sentAt": 1792598400000,
     "status": "paid",
-    "title": "Deposit · WS-00012",
+    "title": "Deposit \u00b7 WS-00012",
     "totalCents": 300000,
     "updatedAt": 1792684800000,
     "viewedAt": null
@@ -5364,28 +5364,28 @@
      "at": 1793203200000,
      "invoiceId": "000000000000000000010117invoices",
      "kind": "sent",
-     "meta": "Harbor Coffee · WRNGLR-0002",
+     "meta": "Harbor Coffee \u00b7 WRNGLR-0002",
      "title": "Invoice sent"
     },
     {
      "at": 1792684800000,
      "invoiceId": "000000000000000000010116invoices",
      "kind": "paid",
-     "meta": "Harbor Coffee · WRNGLR-0001 · Visa •••• 4242",
-     "title": "Payment received · $3,000.00"
+     "meta": "Harbor Coffee \u00b7 WRNGLR-0001 \u00b7 Visa \u2022\u2022\u2022\u2022 4242",
+     "title": "Payment received \u00b7 $3,000.00"
     },
     {
      "at": 1792641600000,
      "invoiceId": "000000000000000000010116invoices",
      "kind": "viewed",
-     "meta": "Harbor Coffee · WRNGLR-0001",
+     "meta": "Harbor Coffee \u00b7 WRNGLR-0001",
      "title": "Invoice viewed"
     },
     {
      "at": 1792598400000,
      "invoiceId": "000000000000000000010116invoices",
      "kind": "sent",
-     "meta": "Harbor Coffee · WRNGLR-0001",
+     "meta": "Harbor Coffee \u00b7 WRNGLR-0001",
      "title": "Invoice sent"
     }
    ],
@@ -5531,7 +5531,7 @@
     "sendError": null,
     "sentAt": 1792598400000,
     "status": "paid",
-    "title": "Deposit · WS-00012",
+    "title": "Deposit \u00b7 WS-00012",
     "totalCents": 300000,
     "updatedAt": 1792684800000,
     "viewedAt": null
@@ -5846,7 +5846,7 @@
      "date": "2026-11-01",
      "kind": "date",
      "projectId": "000000000000000000010021projects",
-     "text": "Spirit Days · Rough cut"
+     "text": "Spirit Days \u00b7 Rough cut"
     },
     {
      "date": "2026-11-02",
@@ -5864,7 +5864,7 @@
      "date": "2026-11-03",
      "kind": "date",
      "projectId": "000000000000000000010023projects",
-     "text": "Backrooms · First cut"
+     "text": "Backrooms \u00b7 First cut"
     },
     {
      "date": "2026-11-04",
@@ -6101,7 +6101,7 @@
      "people": 2,
      "sentAt": 1793289600000,
      "state": "sent",
-     "title": "Arizona · 4M LC"
+     "title": "Arizona \u00b7 4M LC"
     },
     {
      "_id": "0000000000000000010195callSheets",
@@ -6115,7 +6115,7 @@
      "people": 1,
      "sentAt": null,
      "state": "draft",
-     "title": "Backrooms · Floor Trader"
+     "title": "Backrooms \u00b7 Floor Trader"
     },
     {
      "_id": "0000000000000000010197callSheets",
@@ -6129,7 +6129,7 @@
      "people": 6,
      "sentAt": 1793289600000,
      "state": "sent",
-     "title": "Harbor Coffee Launch · Harbor Coffee"
+     "title": "Harbor Coffee Launch \u00b7 Harbor Coffee"
     },
     {
      "_id": "0000000000000000010204callSheets",
@@ -6143,7 +6143,7 @@
      "people": 0,
      "sentAt": null,
      "state": "draft",
-     "title": "Backrooms · Floor Trader"
+     "title": "Backrooms \u00b7 Floor Trader"
     },
     {
      "_id": "0000000000000000010206callSheets",
@@ -6157,7 +6157,7 @@
      "people": 0,
      "sentAt": null,
      "state": "draft",
-     "title": "Spirit Days · Northline"
+     "title": "Spirit Days \u00b7 Northline"
     },
     {
      "_id": "0000000000000000010208callSheets",
@@ -6171,7 +6171,7 @@
      "people": 0,
      "sentAt": null,
      "state": "draft",
-     "title": "Spirit Days · Northline"
+     "title": "Spirit Days \u00b7 Northline"
     },
     {
      "_id": "0000000000000000010210callSheets",
@@ -6185,7 +6185,7 @@
      "people": 2,
      "sentAt": null,
      "state": "questions",
-     "title": "Harbor Coffee Launch · Harbor Coffee"
+     "title": "Harbor Coffee Launch \u00b7 Harbor Coffee"
     },
     {
      "_id": "0000000000000000010186callSheets",
@@ -6199,7 +6199,7 @@
      "people": 1,
      "sentAt": 1792684800000,
      "state": "sent",
-     "title": "Arizona · 4M LC"
+     "title": "Arizona \u00b7 4M LC"
     }
    ],
    "templates": [
@@ -6235,7 +6235,7 @@
     {
      "_id": "00000000000000000000010166shoots",
      "date": "2026-11-12",
-     "label": "Arizona · 4M LC · Thu Nov 12"
+     "label": "Arizona \u00b7 4M LC \u00b7 Thu Nov 12"
     }
    ],
    "templates": [
@@ -6846,39 +6846,39 @@
    "shoots": [
     {
      "_id": "00000000000000000000010185shoots",
-     "label": "Shoot Oct 24 · Arizona"
+     "label": "Shoot Oct 24 \u00b7 Arizona"
     },
     {
      "_id": "00000000000000000000010157shoots",
-     "label": "Shoot Oct 29 · Arizona"
+     "label": "Shoot Oct 29 \u00b7 Arizona"
     },
     {
      "_id": "00000000000000000000010158shoots",
-     "label": "Shoot Oct 31 · Backrooms"
+     "label": "Shoot Oct 31 \u00b7 Backrooms"
     },
     {
      "_id": "00000000000000000000010126shoots",
-     "label": "Shoot Nov 2 · Harbor Coffee Launch"
+     "label": "Shoot Nov 2 \u00b7 Harbor Coffee Launch"
     },
     {
      "_id": "00000000000000000000010159shoots",
-     "label": "Shoot Nov 3 · Backrooms"
+     "label": "Shoot Nov 3 \u00b7 Backrooms"
     },
     {
      "_id": "00000000000000000000010160shoots",
-     "label": "Shoot Nov 4 · Spirit Days"
+     "label": "Shoot Nov 4 \u00b7 Spirit Days"
     },
     {
      "_id": "00000000000000000000010161shoots",
-     "label": "Shoot Nov 6 · Spirit Days"
+     "label": "Shoot Nov 6 \u00b7 Spirit Days"
     },
     {
      "_id": "00000000000000000000010162shoots",
-     "label": "Shoot Nov 9 · Harbor Coffee Launch"
+     "label": "Shoot Nov 9 \u00b7 Harbor Coffee Launch"
     },
     {
      "_id": "00000000000000000000010166shoots",
-     "label": "Shoot Nov 12 · Arizona"
+     "label": "Shoot Nov 12 \u00b7 Arizona"
     }
    ]
   },
@@ -6896,7 +6896,7 @@
      "id": "00000000000000010137testimonials",
      "kind": "testimonial",
      "meta": "26127 Harbor Coffee Launch",
-     "title": "Testimonial · Harbor Coffee"
+     "title": "Testimonial \u00b7 Harbor Coffee"
     }
    ],
    "needsTotal": 1,
@@ -7029,7 +7029,7 @@
     {
      "_id": "000000000000000010058wsDocuments",
      "at": 1793095200000,
-     "title": "Change Order — Spirit Days"
+     "title": "Change Order \u2014 Spirit Days"
     }
    ],
    "templates": {
@@ -7056,7 +7056,7 @@
      },
      "sentAt": 1793203200000,
      "signed": 0,
-     "title": "Service Agreement — Harbor Coffee Launch"
+     "title": "Service Agreement \u2014 Harbor Coffee Launch"
     }
    ]
   },
@@ -7086,7 +7086,7 @@
      "at": 1793289600000,
      "id": "000000000000010149vendorBookings",
      "kind": "waiting",
-     "meta": "Booking for Thu, Oct 29 · Arizona · not accepted yet",
+     "meta": "Booking for Thu, Oct 29 \u00b7 Arizona \u00b7 not accepted yet",
      "role": "Shooter",
      "vendor": "Jordan Ellis"
     },
@@ -7094,7 +7094,7 @@
      "at": 1793289600000,
      "id": "000000000000010151vendorBookings",
      "kind": "waiting",
-     "meta": "Booking for Sat, Oct 31 · Backrooms · not accepted yet",
+     "meta": "Booking for Sat, Oct 31 \u00b7 Backrooms \u00b7 not accepted yet",
      "role": "Shooter",
      "vendor": "Jordan Ellis"
     },
@@ -7102,7 +7102,7 @@
      "at": 1793289600000,
      "id": "000000000000010153vendorBookings",
      "kind": "waiting",
-     "meta": "Booking for Mon, Nov 2 · Harbor Coffee Launch · not accepted yet",
+     "meta": "Booking for Mon, Nov 2 \u00b7 Harbor Coffee Launch \u00b7 not accepted yet",
      "role": "Shooter",
      "vendor": "Jordan Ellis"
     }
@@ -7465,7 +7465,7 @@
      "used": 0
     }
    ],
-   "title": "Arizona · 4M LC",
+   "title": "Arizona \u00b7 4M LC",
    "today": "2026-10-29",
    "updates": 1,
    "weather": {
@@ -7473,8 +7473,8 @@
     "date": "2026-10-29",
     "due": true,
     "fillsOn": "2026-10-22",
-    "forecast": "Sunny · 91°/68° · 0% rain · wind 5 mph",
-    "line": "Sunny · 91°/68° · 0% rain · wind 5 mph",
+    "forecast": "Sunny \u00b7 91\u00b0/68\u00b0 \u00b7 0% rain \u00b7 wind 5 mph",
+    "line": "Sunny \u00b7 91\u00b0/68\u00b0 \u00b7 0% rain \u00b7 wind 5 mph",
     "place": "Chase Field loading dock, Phoenix",
     "state": "forecast"
    }
@@ -7604,7 +7604,7 @@
      "used": 0
     }
    ],
-   "title": "Backrooms · Floor Trader",
+   "title": "Backrooms \u00b7 Floor Trader",
    "today": "2026-10-29",
    "updates": 0,
    "weather": {
@@ -7612,8 +7612,8 @@
     "date": "2026-10-31",
     "due": true,
     "fillsOn": "2026-10-24",
-    "forecast": "Mostly cloudy · 58°/44° · 20% rain · wind 8 mph",
-    "line": "Mostly cloudy · 58°/44° · 20% rain · wind 8 mph",
+    "forecast": "Mostly cloudy \u00b7 58\u00b0/44\u00b0 \u00b7 20% rain \u00b7 wind 8 mph",
+    "line": "Mostly cloudy \u00b7 58\u00b0/44\u00b0 \u00b7 20% rain \u00b7 wind 8 mph",
     "place": "Floor Trader HQ, Oklahoma City",
     "state": "forecast"
    }
@@ -7666,7 +7666,7 @@
    "buildId": "000000000000000000010198wsBuilds",
    "changed": true,
    "changes": [
-    "Weather: Light rain · 58°/46° · 60% rain · wind 12 mph"
+    "Weather: Light rain \u00b7 58\u00b0/46\u00b0 \u00b7 60% rain \u00b7 wind 12 mph"
    ],
    "client": "Harbor Coffee",
    "crewCall": "07:00",
@@ -7862,7 +7862,7 @@
      "used": 0
     }
    ],
-   "title": "Harbor Coffee Launch · Harbor Coffee",
+   "title": "Harbor Coffee Launch \u00b7 Harbor Coffee",
    "today": "2026-10-29",
    "updates": 0,
    "weather": {
@@ -7870,8 +7870,8 @@
     "date": "2026-11-02",
     "due": true,
     "fillsOn": "2026-10-26",
-    "forecast": "Light rain · 58°/46° · 60% rain · wind 12 mph",
-    "line": "Light rain · 58°/46° · 60% rain · wind 12 mph",
+    "forecast": "Light rain \u00b7 58\u00b0/46\u00b0 \u00b7 60% rain \u00b7 wind 12 mph",
+    "line": "Light rain \u00b7 58\u00b0/46\u00b0 \u00b7 60% rain \u00b7 wind 12 mph",
     "place": "Harbor Coffee, 412 Main St.",
     "state": "forecast"
    }
@@ -7985,7 +7985,7 @@
      "used": 0
     }
    ],
-   "title": "Backrooms · Floor Trader",
+   "title": "Backrooms \u00b7 Floor Trader",
    "today": "2026-10-29",
    "updates": 0,
    "weather": {
@@ -8124,7 +8124,7 @@
      "used": 0
     }
    ],
-   "title": "Spirit Days · Northline",
+   "title": "Spirit Days \u00b7 Northline",
    "today": "2026-10-29",
    "updates": 0,
    "weather": {
@@ -8263,7 +8263,7 @@
      "used": 0
     }
    ],
-   "title": "Spirit Days · Northline",
+   "title": "Spirit Days \u00b7 Northline",
    "today": "2026-10-29",
    "updates": 0,
    "weather": {
@@ -8427,7 +8427,7 @@
      "used": 0
     }
    ],
-   "title": "Harbor Coffee Launch · Harbor Coffee",
+   "title": "Harbor Coffee Launch \u00b7 Harbor Coffee",
    "today": "2026-10-29",
    "updates": 0,
    "weather": null
@@ -8587,7 +8587,7 @@
      "used": 0
     }
    ],
-   "title": "Arizona · 4M LC",
+   "title": "Arizona \u00b7 4M LC",
    "today": "2026-10-29",
    "updates": 0,
    "weather": {
@@ -8637,7 +8637,7 @@
       },
       "content": [
        {
-        "text": "{shoot.client} · {shoot.project} · {shoot.date}",
+        "text": "{shoot.client} \u00b7 {shoot.project} \u00b7 {shoot.date}",
         "type": "text"
        }
       ],
@@ -8818,7 +8818,7 @@
      {
       "key": "shoot.title",
       "label": "Shoot",
-      "value": "Arizona · 4M LC"
+      "value": "Arizona \u00b7 4M LC"
      },
      {
       "key": "shoot.date",
@@ -8868,7 +8868,7 @@
     "separator": "line",
     "text": "#1d1d1f"
    },
-   "title": "Arizona · 4M LC · Oct 29",
+   "title": "Arizona \u00b7 4M LC \u00b7 Oct 29",
    "updatedAt": 1793289600000
   },
   "builder.getBuild#000000000000000000010196wsBuilds": {
@@ -8907,7 +8907,7 @@
       },
       "content": [
        {
-        "text": "{shoot.client} · {shoot.project} · {shoot.date}",
+        "text": "{shoot.client} \u00b7 {shoot.project} \u00b7 {shoot.date}",
         "type": "text"
        }
       ],
@@ -9064,7 +9064,7 @@
      {
       "key": "shoot.title",
       "label": "Shoot",
-      "value": "Backrooms · Floor Trader"
+      "value": "Backrooms \u00b7 Floor Trader"
      },
      {
       "key": "shoot.date",
@@ -9113,7 +9113,7 @@
     "separator": "line",
     "text": "#1d1d1f"
    },
-   "title": "Backrooms · Floor Trader · Oct 31",
+   "title": "Backrooms \u00b7 Floor Trader \u00b7 Oct 31",
    "updatedAt": 1793289600000
   },
   "builder.getBuild#000000000000000000010198wsBuilds": {
@@ -9152,7 +9152,7 @@
       },
       "content": [
        {
-        "text": "{shoot.client} · {shoot.project} · {shoot.date}",
+        "text": "{shoot.client} \u00b7 {shoot.project} \u00b7 {shoot.date}",
         "type": "text"
        }
       ],
@@ -9265,14 +9265,14 @@
          "id": "kw0yyl60",
          "name": "Maya Brooks",
          "phone": "",
-         "role": "Harbor Coffee · Main contact"
+         "role": "Harbor Coffee \u00b7 Main contact"
         },
         {
          "call": "07:00",
          "id": "k5yp55b6",
          "name": "Jordan Lee",
          "phone": "",
-         "role": "Harbor Coffee · Contact"
+         "role": "Harbor Coffee \u00b7 Contact"
         }
        ]
       },
@@ -9360,7 +9360,7 @@
      {
       "key": "shoot.title",
       "label": "Shoot",
-      "value": "Harbor Coffee Launch · Harbor Coffee"
+      "value": "Harbor Coffee Launch \u00b7 Harbor Coffee"
      },
      {
       "key": "shoot.date",
@@ -9410,7 +9410,7 @@
     "separator": "line",
     "text": "#1d1d1f"
    },
-   "title": "Harbor Coffee Launch · Harbor Coffee · Nov 2",
+   "title": "Harbor Coffee Launch \u00b7 Harbor Coffee \u00b7 Nov 2",
    "updatedAt": 1793289600000
   },
   "builder.getBuild#000000000000000000010205wsBuilds": {
@@ -9449,7 +9449,7 @@
       },
       "content": [
        {
-        "text": "{shoot.client} · {shoot.project} · {shoot.date}",
+        "text": "{shoot.client} \u00b7 {shoot.project} \u00b7 {shoot.date}",
         "type": "text"
        }
       ],
@@ -9469,7 +9469,7 @@
      },
      {
       "attrs": {
-       "line": "Overcast, around 55°. Bring layers and rain covers.",
+       "line": "Overcast, around 55\u00b0. Bring layers and rain covers.",
        "typed": true
       },
       "type": "weather"
@@ -9598,7 +9598,7 @@
      {
       "key": "shoot.title",
       "label": "Shoot",
-      "value": "Backrooms · Floor Trader"
+      "value": "Backrooms \u00b7 Floor Trader"
      },
      {
       "key": "shoot.date",
@@ -9647,7 +9647,7 @@
     "separator": "line",
     "text": "#1d1d1f"
    },
-   "title": "Backrooms · Floor Trader · Nov 3",
+   "title": "Backrooms \u00b7 Floor Trader \u00b7 Nov 3",
    "updatedAt": 1793289600000
   },
   "builder.getBuild#000000000000000000010207wsBuilds": {
@@ -9686,7 +9686,7 @@
       },
       "content": [
        {
-        "text": "{shoot.client} · {shoot.project} · {shoot.date}",
+        "text": "{shoot.client} \u00b7 {shoot.project} \u00b7 {shoot.date}",
         "type": "text"
        }
       ],
@@ -9835,7 +9835,7 @@
      {
       "key": "shoot.title",
       "label": "Shoot",
-      "value": "Spirit Days · Northline"
+      "value": "Spirit Days \u00b7 Northline"
      },
      {
       "key": "shoot.date",
@@ -9884,7 +9884,7 @@
     "separator": "line",
     "text": "#1d1d1f"
    },
-   "title": "Spirit Days · Northline · Nov 4",
+   "title": "Spirit Days \u00b7 Northline \u00b7 Nov 4",
    "updatedAt": 1793289600000
   },
   "builder.getBuild#000000000000000000010209wsBuilds": {
@@ -9923,7 +9923,7 @@
       },
       "content": [
        {
-        "text": "{shoot.client} · {shoot.project} · {shoot.date}",
+        "text": "{shoot.client} \u00b7 {shoot.project} \u00b7 {shoot.date}",
         "type": "text"
        }
       ],
@@ -10072,7 +10072,7 @@
      {
       "key": "shoot.title",
       "label": "Shoot",
-      "value": "Spirit Days · Northline"
+      "value": "Spirit Days \u00b7 Northline"
      },
      {
       "key": "shoot.date",
@@ -10121,7 +10121,7 @@
     "separator": "line",
     "text": "#1d1d1f"
    },
-   "title": "Spirit Days · Northline · Nov 6",
+   "title": "Spirit Days \u00b7 Northline \u00b7 Nov 6",
    "updatedAt": 1793289600000
   },
   "builder.getBuild#000000000000000000010187wsBuilds": {
@@ -10160,7 +10160,7 @@
       },
       "content": [
        {
-        "text": "{shoot.client} · {shoot.project} · {shoot.date}",
+        "text": "{shoot.client} \u00b7 {shoot.project} \u00b7 {shoot.date}",
         "type": "text"
        }
       ],
@@ -10309,7 +10309,7 @@
      {
       "key": "shoot.title",
       "label": "Shoot",
-      "value": "Arizona · 4M LC"
+      "value": "Arizona \u00b7 4M LC"
      },
      {
       "key": "shoot.date",
@@ -10359,7 +10359,7 @@
     "separator": "line",
     "text": "#1d1d1f"
    },
-   "title": "Arizona · 4M LC · Oct 24",
+   "title": "Arizona \u00b7 4M LC \u00b7 Oct 24",
    "updatedAt": 1792684800000
   },
   "shoots.forProject#000000000000000000010021projects": {
@@ -10628,7 +10628,7 @@
    "lastFailure": null,
    "lines": [
     {
-     "description": "Deposit (25%) · 26127 Harbor Coffee Launch",
+     "description": "Deposit (25%) \u00b7 26127 Harbor Coffee Launch",
      "id": "l0",
      "qty": 1,
      "unitCents": 300000
@@ -10643,7 +10643,7 @@
      "at": 1792684800000,
      "cents": 300000,
      "id": "pi_k1",
-     "method": "Visa •••• 4242",
+     "method": "Visa \u2022\u2022\u2022\u2022 4242",
      "status": "paid"
     }
    ],
@@ -10669,7 +10669,7 @@
     "pdfUrl": "/kit-pdf/"
    },
    "taxPercent": 0,
-   "title": "Deposit · WS-00012",
+   "title": "Deposit \u00b7 WS-00012",
    "totalCents": 300000,
    "totals": {
     "discount": 0,
@@ -10725,7 +10725,7 @@
    "lastFailure": null,
    "lines": [
     {
-     "description": "Change order WS-00014 · extra revision round",
+     "description": "Change order WS-00014 \u00b7 extra revision round",
      "id": "l0",
      "qty": 1,
      "unitCents": 45000
@@ -10808,7 +10808,7 @@
    "lastFailure": null,
    "lines": [
     {
-     "description": "Final payment · 26127 Harbor Coffee Launch",
+     "description": "Final payment \u00b7 26127 Harbor Coffee Launch",
      "id": "l0",
      "qty": 1,
      "unitCents": 900000
@@ -10909,7 +10909,7 @@
    "name": "Jordan Ellis",
    "payMethod": {
     "method": "ACH",
-    "note": "Bank of Example · account ending 0000"
+    "note": "Bank of Example \u00b7 account ending 0000"
    },
    "payout": {
     "bankName": "STRIPE TEST BANK",
@@ -11387,7 +11387,7 @@
     "readAt": 1793820926639,
     "sentAt": 1793820926629,
     "state": "read",
-    "title": "Shoot brief · 26127 Launch",
+    "title": "Shoot brief \u00b7 26127 Launch",
     "updatedAt": 1793820926639,
     "vendor": "Jordan Ellis",
     "vendorId": null
@@ -11425,7 +11425,7 @@
     "readAt": null,
     "sentAt": 1793820926650,
     "state": "sent",
-    "title": "Edit brief · 26127 Launch",
+    "title": "Edit brief \u00b7 26127 Launch",
     "updatedAt": 1793820926650,
     "vendor": "Riley Chen",
     "vendorId": null
@@ -11448,7 +11448,7 @@
     "readAt": null,
     "sentAt": 1793820926672,
     "state": "sent",
-    "title": "Shoot brief · 26127 Launch",
+    "title": "Shoot brief \u00b7 26127 Launch",
     "updatedAt": 1793820926672,
     "vendor": null,
     "vendorId": null
@@ -11505,7 +11505,7 @@
     "readAt": null,
     "sentAt": 1793820926650,
     "state": "sent",
-    "title": "Edit brief · 26127 Launch",
+    "title": "Edit brief \u00b7 26127 Launch",
     "updatedAt": 1793820926650,
     "vendor": "Riley Chen",
     "vendorId": null
@@ -11534,7 +11534,7 @@
     "readAt": 1793820926639,
     "sentAt": 1793820926629,
     "state": "read",
-    "title": "Shoot brief · 26127 Launch",
+    "title": "Shoot brief \u00b7 26127 Launch",
     "updatedAt": 1793820926639,
     "vendor": "Jordan Ellis",
     "vendorId": null
@@ -11546,12 +11546,12 @@
     {
      "key": "shoot",
      "name": "Shoot brief",
-     "summary": "Call sheet · schedule · shot list · gear · contacts · deliverables · notes"
+     "summary": "Call sheet \u00b7 schedule \u00b7 shot list \u00b7 gear \u00b7 contacts \u00b7 deliverables \u00b7 notes"
     },
     {
      "key": "edit",
      "name": "Edit brief",
-     "summary": "Story · cuts and lengths · music · references · files · deadlines"
+     "summary": "Story \u00b7 cuts and lengths \u00b7 music \u00b7 references \u00b7 files \u00b7 deadlines"
     }
    ]
   },
@@ -11688,13 +11688,13 @@
    "lines": [
     {
      "cents": 85000,
-     "label": "Shooting day · Nov 6",
+     "label": "Shooting day \u00b7 Nov 6",
      "qty": 1,
      "rateCents": 85000
     },
     {
      "cents": 85000,
-     "label": "Shooting day · Nov 7",
+     "label": "Shooting day \u00b7 Nov 7",
      "qty": 1,
      "rateCents": 85000
     }
@@ -11724,7 +11724,7 @@
     "name": "Jordan Ellis",
     "payMethod": {
      "method": "ACH",
-     "note": "Bank of Example · account ending 0000"
+     "note": "Bank of Example \u00b7 account ending 0000"
     }
    }
   },
@@ -11748,7 +11748,7 @@
    "history": [
     {
      "at": 1793812817022,
-     "text": "Approved by you · added to the Ledger"
+     "text": "Approved by you \u00b7 added to the Ledger"
     },
     {
      "at": 1793812816987,
@@ -11759,13 +11759,13 @@
    "lines": [
     {
      "cents": 65000,
-     "label": "Assembly · Nov 10–11",
+     "label": "Assembly \u00b7 Nov 10\u201311",
      "qty": 10,
      "rateCents": 6500
     },
     {
      "cents": 52000,
-     "label": "Fine cut · Nov 12–13",
+     "label": "Fine cut \u00b7 Nov 12\u201313",
      "qty": 8,
      "rateCents": 6500
     }
@@ -11795,7 +11795,7 @@
     "name": "Jordan Ellis",
     "payMethod": {
      "method": "ACH",
-     "note": "Bank of Example · account ending 0000"
+     "note": "Bank of Example \u00b7 account ending 0000"
     }
    }
   },
@@ -11819,11 +11819,11 @@
    "history": [
     {
      "at": 1793812817026,
-     "text": "Marked paid · Zelle · Nov 4"
+     "text": "Marked paid \u00b7 Zelle \u00b7 Nov 4"
     },
     {
      "at": 1793812817024,
-     "text": "Approved by you · added to the Ledger"
+     "text": "Approved by you \u00b7 added to the Ledger"
     },
     {
      "at": 1793812816989,
@@ -11870,7 +11870,7 @@
     "name": "Jordan Ellis",
     "payMethod": {
      "method": "ACH",
-     "note": "Bank of Example · account ending 0000"
+     "note": "Bank of Example \u00b7 account ending 0000"
     }
    }
   },
@@ -12061,7 +12061,7 @@
    "history": [
     {
      "at": 1793812817029,
-     "text": "Approved by you · added to the Ledger"
+     "text": "Approved by you \u00b7 added to the Ledger"
     },
     {
      "at": 1793812817028,
@@ -12102,7 +12102,7 @@
     "name": "Jordan Ellis",
     "payMethod": {
      "method": "ACH",
-     "note": "Bank of Example · account ending 0000"
+     "note": "Bank of Example \u00b7 account ending 0000"
     }
    }
   },
@@ -12525,7 +12525,7 @@
   "briefings.get#00000000000000000010083briefings": {
    "_id": "00000000000000000010083briefings",
    "buildId": "000000000000000000010082wsBuilds",
-   "dates": "Nov 6 – 7, 2026",
+   "dates": "Nov 6 \u2013 7, 2026",
    "history": [
     {
      "at": 1793820926626,
@@ -12579,7 +12579,7 @@
    "sentAt": 1793820926629,
    "starter": "shoot",
    "state": "read",
-   "title": "Shoot brief · 26127 Launch",
+   "title": "Shoot brief \u00b7 26127 Launch",
    "updatedAt": 1793820926639,
    "vendor": "Jordan Ellis",
    "vendorId": null,
@@ -12615,7 +12615,7 @@
   "briefings.get#00000000000000000010088briefings": {
    "_id": "00000000000000000010088briefings",
    "buildId": "000000000000000000010087wsBuilds",
-   "dates": "Nov 6 – 7, 2026",
+   "dates": "Nov 6 \u2013 7, 2026",
    "history": [
     {
      "at": 1793820926641,
@@ -12681,7 +12681,7 @@
    "sentAt": 1793820926650,
    "starter": "edit",
    "state": "sent",
-   "title": "Edit brief · 26127 Launch",
+   "title": "Edit brief \u00b7 26127 Launch",
    "updatedAt": 1793820926650,
    "vendor": "Riley Chen",
    "vendorId": null,
@@ -12797,7 +12797,7 @@
   "briefings.get#00000000000000000010098briefings": {
    "_id": "00000000000000000010098briefings",
    "buildId": "000000000000000000010097wsBuilds",
-   "dates": "Nov 6 – 7, 2026",
+   "dates": "Nov 6 \u2013 7, 2026",
    "history": [
     {
      "at": 1793820926665,
@@ -12837,7 +12837,7 @@
    "sentAt": 1793820926672,
    "starter": "shoot",
    "state": "sent",
-   "title": "Shoot brief · 26127 Launch",
+   "title": "Shoot brief \u00b7 26127 Launch",
    "updatedAt": 1793820926672,
    "vendor": null,
    "vendorId": null,
@@ -12866,14 +12866,14 @@
     "name": "Wrangler Productions",
     "owner": null
    },
-   "dates": "Nov 6 – 7, 2026",
+   "dates": "Nov 6 \u2013 7, 2026",
    "kind": "Edit brief",
    "name": "Sam Ortega",
    "named": true,
    "project": "26127 Launch",
    "readAt": null,
    "sentAt": 1793820803783,
-   "title": "Edit brief · 26127 Launch",
+   "title": "Edit brief \u00b7 26127 Launch",
    "withdrawn": false
   },
   "briefings.page#o-0G0v6fSTOXbD-kfxb2ZD5w": {
@@ -12885,14 +12885,14 @@
     "name": "Wrangler Productions",
     "owner": null
    },
-   "dates": "Nov 6 – 7, 2026",
+   "dates": "Nov 6 \u2013 7, 2026",
    "kind": "Shoot brief",
    "name": null,
    "named": false,
    "project": "26127 Launch",
    "readAt": null,
    "sentAt": 1793820803812,
-   "title": "Shoot brief · 26127 Launch",
+   "title": "Shoot brief \u00b7 26127 Launch",
    "withdrawn": false
   },
   "bookings.form": {
@@ -12989,7 +12989,7 @@
       },
       "content": [
        {
-        "text": "Shoot brief · {project}",
+        "text": "Shoot brief \u00b7 {project}",
         "type": "text"
        }
       ],
@@ -13001,7 +13001,7 @@
       },
       "content": [
        {
-        "text": "For {vendor} · {dates}",
+        "text": "For {vendor} \u00b7 {dates}",
         "type": "text"
        }
       ],
@@ -13207,7 +13207,7 @@
      {
       "key": "dates",
       "label": "Dates",
-      "value": "Nov 6 – 7, 2026"
+      "value": "Nov 6 \u2013 7, 2026"
      }
     ],
     "date": "2026-11-04",
@@ -13242,7 +13242,7 @@
     "separator": "line",
     "text": "#1d1d1f"
    },
-   "title": "Shoot brief · 26127 Launch",
+   "title": "Shoot brief \u00b7 26127 Launch",
    "updatedAt": 1793820926625
   },
   "builder.getBuild#000000000000000000010087wsBuilds": {
@@ -13256,7 +13256,7 @@
       },
       "content": [
        {
-        "text": "Edit brief · {project}",
+        "text": "Edit brief \u00b7 {project}",
         "type": "text"
        }
       ],
@@ -13268,7 +13268,7 @@
       },
       "content": [
        {
-        "text": "For {vendor} · {dates}",
+        "text": "For {vendor} \u00b7 {dates}",
         "type": "text"
        }
       ],
@@ -13450,7 +13450,7 @@
      {
       "key": "dates",
       "label": "Dates",
-      "value": "Nov 6 – 7, 2026"
+      "value": "Nov 6 \u2013 7, 2026"
      }
     ],
     "date": "2026-11-04",
@@ -13485,7 +13485,7 @@
     "separator": "line",
     "text": "#1d1d1f"
    },
-   "title": "Edit brief · 26127 Launch",
+   "title": "Edit brief \u00b7 26127 Launch",
    "updatedAt": 1793820926647
   },
   "builder.getBuild#000000000000000000010095wsBuilds": {
@@ -13499,7 +13499,7 @@
       },
       "content": [
        {
-        "text": "Shoot brief · {project}",
+        "text": "Shoot brief \u00b7 {project}",
         "type": "text"
        }
       ],
@@ -13511,7 +13511,7 @@
       },
       "content": [
        {
-        "text": "For {vendor} · {dates}",
+        "text": "For {vendor} \u00b7 {dates}",
         "type": "text"
        }
       ],
@@ -13765,7 +13765,7 @@
       },
       "content": [
        {
-        "text": "Shoot brief · {project}",
+        "text": "Shoot brief \u00b7 {project}",
         "type": "text"
        }
       ],
@@ -13777,7 +13777,7 @@
       },
       "content": [
        {
-        "text": "For {vendor} · {dates}",
+        "text": "For {vendor} \u00b7 {dates}",
         "type": "text"
        }
       ],
@@ -13983,7 +13983,7 @@
      {
       "key": "dates",
       "label": "Dates",
-      "value": "Nov 6 – 7, 2026"
+      "value": "Nov 6 \u2013 7, 2026"
      }
     ],
     "date": "2026-11-04",
@@ -14018,7 +14018,7 @@
     "separator": "line",
     "text": "#1d1d1f"
    },
-   "title": "Shoot brief · 26127 Launch",
+   "title": "Shoot brief \u00b7 26127 Launch",
    "updatedAt": 1793820926669
   },
   "briefings.page#Dbvy2LL-JKVPvU4t3_eASCqP": {
@@ -14030,14 +14030,14 @@
     "name": "Wrangler Productions",
     "owner": null
    },
-   "dates": "Nov 6 – 7, 2026",
+   "dates": "Nov 6 \u2013 7, 2026",
    "kind": "Edit brief",
    "name": "Sam Ortega",
    "named": true,
    "project": "26127 Launch",
    "readAt": null,
    "sentAt": 1793820926650,
-   "title": "Edit brief · 26127 Launch",
+   "title": "Edit brief \u00b7 26127 Launch",
    "withdrawn": false
   },
   "briefings.page#_YThBcz4OO3xRAbVPgXHTB8P": {
@@ -14049,14 +14049,14 @@
     "name": "Wrangler Productions",
     "owner": null
    },
-   "dates": "Nov 6 – 7, 2026",
+   "dates": "Nov 6 \u2013 7, 2026",
    "kind": "Shoot brief",
    "name": null,
    "named": false,
    "project": "26127 Launch",
    "readAt": null,
    "sentAt": 1793820926672,
-   "title": "Shoot brief · 26127 Launch",
+   "title": "Shoot brief \u00b7 26127 Launch",
    "withdrawn": false
   },
   "quotes.get#00000000000000000000010102quotes": {
@@ -14120,13 +14120,13 @@
    ],
    "lines": [
     {
-     "description": "Shooting · 1 day (8 h)",
+     "description": "Shooting \u00b7 1 day (8 h)",
      "id": "a",
      "qty": 1,
      "unitCents": 160000
     },
     {
-     "description": "Editing · simple (12 h)",
+     "description": "Editing \u00b7 simple (12 h)",
      "id": "b",
      "qty": 1,
      "unitCents": 240000
@@ -14224,13 +14224,13 @@
    "issued": 1793823175202,
    "lines": [
     {
-     "description": "Shooting · 1 day (8 h)",
+     "description": "Shooting \u00b7 1 day (8 h)",
      "id": "a",
      "qty": 1,
      "unitCents": 160000
     },
     {
-     "description": "Editing · simple (12 h)",
+     "description": "Editing \u00b7 simple (12 h)",
      "id": "b",
      "qty": 1,
      "unitCents": 240000
@@ -14281,13 +14281,13 @@
    "issued": 1793823175202,
    "lines": [
     {
-     "description": "Shooting · 1 day (8 h)",
+     "description": "Shooting \u00b7 1 day (8 h)",
      "id": "a",
      "qty": 1,
      "unitCents": 160000
     },
     {
-     "description": "Editing · simple (12 h)",
+     "description": "Editing \u00b7 simple (12 h)",
      "id": "b",
      "qty": 1,
      "unitCents": 240000
@@ -14334,7 +14334,7 @@
    "issued": 1793823175213,
    "lines": [
     {
-     "description": "Shooting · 2 days",
+     "description": "Shooting \u00b7 2 days",
      "id": "a",
      "qty": 2,
      "unitCents": 160000
@@ -14433,7 +14433,7 @@
    ],
    "lines": [
     {
-     "description": "Shooting · 2 days",
+     "description": "Shooting \u00b7 2 days",
      "id": "a",
      "qty": 2,
      "unitCents": 160000
@@ -14498,13 +14498,13 @@
    "issued": 1793823256167,
    "lines": [
     {
-     "description": "Shooting · 1 day (8 h)",
+     "description": "Shooting \u00b7 1 day (8 h)",
      "id": "a",
      "qty": 1,
      "unitCents": 160000
     },
     {
-     "description": "Editing · simple (12 h)",
+     "description": "Editing \u00b7 simple (12 h)",
      "id": "b",
      "qty": 1,
      "unitCents": 240000
@@ -14555,13 +14555,13 @@
    "issued": 1793823256167,
    "lines": [
     {
-     "description": "Shooting · 1 day (8 h)",
+     "description": "Shooting \u00b7 1 day (8 h)",
      "id": "a",
      "qty": 1,
      "unitCents": 160000
     },
     {
-     "description": "Editing · simple (12 h)",
+     "description": "Editing \u00b7 simple (12 h)",
      "id": "b",
      "qty": 1,
      "unitCents": 240000
@@ -14608,7 +14608,7 @@
    "issued": 1793823256177,
    "lines": [
     {
-     "description": "Shooting · 2 days",
+     "description": "Shooting \u00b7 2 days",
      "id": "a",
      "qty": 2,
      "unitCents": 160000
@@ -15914,7 +15914,7 @@
     "lastAt": 1793289300000,
     "lastSide": "lead",
     "lastText": "Looking forward to Friday. Should I send the brief ahead?",
-    "sub": "Lead · Tom Silva",
+    "sub": "Lead \u00b7 Tom Silva",
     "title": "Tom Silva",
     "unread": true
    },
@@ -15924,7 +15924,7 @@
     "lastAt": 1793288460000,
     "lastSide": "owner",
     "lastText": "Got them, thank you.",
-    "sub": "Harbor Coffee · Harbor Coffee Launch",
+    "sub": "Harbor Coffee \u00b7 Harbor Coffee Launch",
     "title": "Harbor Coffee",
     "unread": false
    }
@@ -15997,7 +15997,7 @@
      }
     ]
    },
-   "sub": "Harbor Coffee · Harbor Coffee Launch",
+   "sub": "Harbor Coffee \u00b7 Harbor Coffee Launch",
    "title": "Harbor Coffee",
    "linkOff": false
   },
@@ -16038,7 +16038,7 @@
    "people": 1,
    "projectId": null,
    "readBy": null,
-   "sub": "Lead · Tom Silva",
+   "sub": "Lead \u00b7 Tom Silva",
    "title": "Tom Silva",
    "linkOff": false
   },
@@ -16125,6 +16125,850 @@
     "triesLeft": 5,
     "sentAt": 1793300000000
    }
+  },
+  "team.page": {
+   "members": [
+    {
+     "membershipId": "kitmember0000000001memberships",
+     "email": "riley@example.com",
+     "name": "Riley Chen",
+     "role": "producer",
+     "lastSignedIn": 1793896400000,
+     "assigned": 2,
+     "joinedAt": 1792172000000
+    },
+    {
+     "membershipId": "kitmember0000000002memberships",
+     "email": "sam@example.com",
+     "name": "Sam Ortiz",
+     "role": "editor",
+     "lastSignedIn": 1793554400000,
+     "assigned": 1,
+     "joinedAt": 1792604000000
+    },
+    {
+     "membershipId": "kitmember0000000003memberships",
+     "email": "dana@example.com",
+     "name": "Dana Whitfield",
+     "role": "bookkeeper",
+     "lastSignedIn": 1793381600000,
+     "assigned": 0,
+     "joinedAt": 1793036000000
+    }
+   ],
+   "invites": [
+    {
+     "inviteId": "kitinvite0000000001teamInvites",
+     "email": "jules@example.com",
+     "name": null,
+     "role": "producer",
+     "sentAt": 1793554400000,
+     "expiresAt": 1794764000000,
+     "expired": false
+    },
+    {
+     "inviteId": "kitinvite0000000002teamInvites",
+     "email": "kim@example.com",
+     "name": null,
+     "role": "editor",
+     "sentAt": 1792172000000,
+     "expiresAt": 1793381600000,
+     "expired": true
+    }
+   ],
+   "roles": {
+    "producer": {
+     "projects": true,
+     "shoots": true,
+     "production": true,
+     "clients": true,
+     "review": true,
+     "docs": true,
+     "payments": false,
+     "reports": false,
+     "vendorPayments": false,
+     "settings": false,
+     "value": true
+    },
+    "editor": {
+     "projects": true,
+     "shoots": false,
+     "production": false,
+     "clients": false,
+     "review": true,
+     "docs": false,
+     "payments": false,
+     "reports": false,
+     "vendorPayments": false,
+     "settings": false,
+     "value": false
+    },
+    "bookkeeper": {
+     "projects": false,
+     "shoots": false,
+     "production": false,
+     "clients": false,
+     "review": false,
+     "docs": false,
+     "payments": true,
+     "reports": true,
+     "vendorPayments": true,
+     "settings": false,
+     "value": true
+    }
+   },
+   "locked": {
+    "producer": [],
+    "editor": [
+     "shoots",
+     "production",
+     "clients",
+     "docs",
+     "payments",
+     "reports",
+     "vendorPayments",
+     "settings",
+     "value"
+    ],
+    "bookkeeper": []
+   }
+  },
+  "team.member#kitmember0000000001memberships": {
+   "membershipId": "kitmember0000000001memberships",
+   "email": "riley@example.com",
+   "name": "Riley Chen",
+   "role": "producer",
+   "perms": {
+    "projects": true,
+    "shoots": true,
+    "production": true,
+    "clients": true,
+    "review": true,
+    "docs": true,
+    "payments": false,
+    "reports": false,
+    "vendorPayments": false,
+    "settings": false,
+    "value": true
+   },
+   "rolePerms": {
+    "projects": true,
+    "shoots": true,
+    "production": true,
+    "clients": true,
+    "review": true,
+    "docs": true,
+    "payments": false,
+    "reports": false,
+    "vendorPayments": false,
+    "settings": false,
+    "value": true
+   },
+   "matchesRole": true,
+   "locked": [],
+   "lastSignedIn": 1793896400000,
+   "joinedAt": 1792172000000,
+   "invitedBy": "Heston Hill",
+   "projects": []
+  },
+  "team.member#kitmember0000000002memberships": {
+   "membershipId": "kitmember0000000002memberships",
+   "email": "sam@example.com",
+   "name": "Sam Ortiz",
+   "role": "editor",
+   "perms": {
+    "projects": true,
+    "shoots": false,
+    "production": false,
+    "clients": false,
+    "review": true,
+    "docs": false,
+    "payments": false,
+    "reports": false,
+    "vendorPayments": false,
+    "settings": false,
+    "value": false
+   },
+   "rolePerms": {
+    "projects": true,
+    "shoots": false,
+    "production": false,
+    "clients": false,
+    "review": true,
+    "docs": false,
+    "payments": false,
+    "reports": false,
+    "vendorPayments": false,
+    "settings": false,
+    "value": false
+   },
+   "matchesRole": true,
+   "locked": [
+    "shoots",
+    "production",
+    "clients",
+    "docs",
+    "payments",
+    "reports",
+    "vendorPayments",
+    "settings",
+    "value"
+   ],
+   "lastSignedIn": 1793554400000,
+   "joinedAt": 1792604000000,
+   "invitedBy": "Heston Hill",
+   "projects": []
+  },
+  "team.projectPeople#000000000000000000010020projects": {
+   "people": [
+    {
+     "userId": "kituser0001users",
+     "name": "Riley Chen",
+     "role": "producer"
+    },
+    {
+     "userId": "kituser0002users",
+     "name": "Sam Ortiz",
+     "role": "editor"
+    }
+   ],
+   "candidates": [
+    {
+     "userId": "kituser0001users",
+     "name": "Riley Chen",
+     "role": "producer"
+    },
+    {
+     "userId": "kituser0002users",
+     "name": "Sam Ortiz",
+     "role": "editor"
+    },
+    {
+     "userId": "kituser0003users",
+     "name": "Dana Whitfield",
+     "role": "bookkeeper"
+    }
+   ],
+   "canAssign": true
+  },
+  "team.joinPage#kitjointoken0000000000000001": {
+   "state": "open",
+   "business": "Wrangler Productions",
+   "legalName": "Wrangler Productions, a DBA of Hill Creative LLC",
+   "role": "Producer",
+   "invitedBy": "Heston Hill",
+   "email": "riley@example.com",
+   "name": "Riley Chen"
+  },
+  "team.joinPage#kitjointoken0000000000000002": {
+   "state": "expired",
+   "business": "Wrangler Productions",
+   "legalName": "Wrangler Productions, a DBA of Hill Creative LLC",
+   "role": "Editor",
+   "invitedBy": "Heston Hill"
+  },
+  "security.state": {
+   "email": "heston@wranglerproductions.com",
+   "passwordChangedAt": 1793208800000,
+   "devices": [
+    {
+     "sessionId": "kitsession0001authSessions",
+     "label": "Mac \u00b7 Chrome",
+     "lastSeen": 1793900000000,
+     "current": true
+    },
+    {
+     "sessionId": "kitsession0002authSessions",
+     "label": "iPhone \u00b7 Safari",
+     "lastSeen": 1793640800000,
+     "current": false
+    }
+   ],
+   "pending": null
+  },
+  "auditLog.list": {
+   "rows": [
+    {
+     "_id": "kitaudit0000auditLog",
+     "at": 1793899280000,
+     "kind": "sent",
+     "who": "Heston Hill",
+     "role": "Owner",
+     "text": "sent proposal WRNGLR-P-0007",
+     "where": "Harbor Coffee \u203a Proposals",
+     "link": "/settings",
+     "device": "Mac \u00b7 Chrome"
+    },
+    {
+     "_id": "kitaudit0001auditLog",
+     "at": 1793895320000,
+     "kind": "signed",
+     "who": "Maya Brooks",
+     "role": "Signer",
+     "text": "signed the Service Agreement",
+     "where": "Docs \u203a Contracts",
+     "link": "/settings",
+     "device": null
+    },
+    {
+     "_id": "kitaudit0002auditLog",
+     "at": 1793890640000,
+     "kind": "paid",
+     "who": "Floor Trader",
+     "role": "Client",
+     "text": "paid invoice 0041",
+     "where": "Payments \u203a Invoices",
+     "link": "/settings",
+     "device": null
+    },
+    {
+     "_id": "kitaudit0003auditLog",
+     "at": 1793882000000,
+     "kind": "signin",
+     "who": "Riley Chen",
+     "role": "Producer",
+     "text": "signed in from a new device (Windows PC \u00b7 Edge)",
+     "where": "Settings \u203a Security",
+     "link": "/settings",
+     "device": "Windows PC \u00b7 Edge"
+    },
+    {
+     "_id": "kitaudit0004auditLog",
+     "at": 1793806400000,
+     "kind": "paid",
+     "who": "Dana Whitfield",
+     "role": "Bookkeeper",
+     "text": "approved a vendor invoice from Jordan Ellis",
+     "where": "Vendors \u203a Payments",
+     "link": "/settings",
+     "device": "Mac \u00b7 Safari"
+    },
+    {
+     "_id": "kitaudit0005auditLog",
+     "at": 1793802800000,
+     "kind": "settings",
+     "who": "Heston Hill",
+     "role": "Owner",
+     "text": "changed Pricing",
+     "where": "Settings \u203a Pricing",
+     "link": "/settings",
+     "device": "Mac \u00b7 Chrome"
+    },
+    {
+     "_id": "kitaudit0006auditLog",
+     "at": 1793788400000,
+     "kind": "deleted",
+     "who": "Sam Ortiz",
+     "role": "Editor",
+     "text": "deleted a note: \"Trim the open\"",
+     "where": "Spring spot",
+     "link": "/settings",
+     "device": "iPhone \u00b7 Safari"
+    }
+   ],
+   "counts": {
+    "all": 54,
+    "sent": 12,
+    "signed": 9,
+    "paid": 8,
+    "deleted": 2,
+    "settings": 5,
+    "team": 4,
+    "export": 2,
+    "signin": 12
+   },
+   "people": [
+    "Heston Hill",
+    "Riley Chen",
+    "Sam Ortiz",
+    "Dana Whitfield"
+   ],
+   "more": true
+  },
+  "bell.unread": 3,
+  "bell.feed": {
+   "rows": [
+    {
+     "_id": "b1",
+     "kind": "quotes",
+     "title": "Maya Brooks accepted proposal WRNGLR-P-0007",
+     "link": "/proposals",
+     "at": 1793929147911,
+     "unread": true
+    },
+    {
+     "_id": "b2",
+     "kind": "contracts",
+     "title": "Floor Trader signed the Service Agreement",
+     "link": "/sign",
+     "at": 1793925667911,
+     "unread": true
+    },
+    {
+     "_id": "b3",
+     "kind": "payments",
+     "title": "Harbor Coffee paid $2,500.00 on Invoice 0041",
+     "link": "/payments/invoices",
+     "at": 1793918467911,
+     "unread": true
+    },
+    {
+     "_id": "b4",
+     "kind": "vendors",
+     "title": "Jordan Ellis sent an invoice",
+     "link": "/production",
+     "at": 1793835667911,
+     "unread": false
+    },
+    {
+     "_id": "b5",
+     "kind": "notes",
+     "title": "3 notes on Spring spot v2",
+     "link": "/review",
+     "at": 1793832067911,
+     "unread": false
+    },
+    {
+     "_id": "b6",
+     "kind": "messages",
+     "title": "New message from Maya Brooks",
+     "link": "/clients",
+     "at": 1793828467911,
+     "unread": false
+    },
+    {
+     "_id": "b7",
+     "kind": "uploads",
+     "title": "Logo-files.zip uploaded",
+     "link": "/clients",
+     "at": 1793824867911,
+     "unread": false
+    },
+    {
+     "_id": "b8",
+     "kind": "sitewatch",
+     "title": "Site watch: urgent \u00b7 A fix is ready",
+     "link": null,
+     "at": 1793821267911,
+     "unread": false
+    }
+   ],
+   "counts": {
+    "all": 48,
+    "quotes": 6,
+    "contracts": 9,
+    "payments": 8,
+    "vendors": 5,
+    "notes": 7,
+    "messages": 9,
+    "uploads": 3,
+    "sitewatch": 1
+   },
+   "unread": 3,
+   "more": true
+  },
+  "bell.prefs": {
+   "kinds": [
+    {
+     "kind": "quotes",
+     "bell": true,
+     "phone": true
+    },
+    {
+     "kind": "contracts",
+     "bell": true,
+     "phone": true
+    },
+    {
+     "kind": "payments",
+     "bell": true,
+     "phone": true
+    },
+    {
+     "kind": "vendors",
+     "bell": true,
+     "phone": false
+    },
+    {
+     "kind": "notes",
+     "bell": true,
+     "phone": false
+    },
+    {
+     "kind": "messages",
+     "bell": true,
+     "phone": true
+    },
+    {
+     "kind": "uploads",
+     "bell": true,
+     "phone": false
+    },
+    {
+     "kind": "sitewatch",
+     "bell": true,
+     "phone": false
+    }
+   ],
+   "devices": [
+    {
+     "endpoint": "https://push.example/kit",
+     "label": "iPhone \u00b7 Safari",
+     "createdAt": 1793670067911
+    }
+   ]
+  },
+  "bell.pushKey": null,
+  "reports.page": {
+   "from": "2026-01-01",
+   "to": "2026-11-06",
+   "today": "2026-11-06",
+   "tiles": {
+    "revenueCents": 6875000,
+    "profitCents": 5635000,
+    "outstandingCents": 1245000,
+    "outstandingCount": 4,
+    "leadToJob": 38,
+    "jobs": 8,
+    "leads": 21
+   },
+   "months": [
+    {
+     "month": "2026-01",
+     "paidCents": 420000,
+     "invoicedCents": 470000
+    },
+    {
+     "month": "2026-02",
+     "paidCents": 515000,
+     "invoicedCents": 565000
+    },
+    {
+     "month": "2026-03",
+     "paidCents": 380000,
+     "invoicedCents": 430000
+    },
+    {
+     "month": "2026-04",
+     "paidCents": 690000,
+     "invoicedCents": 740000
+    },
+    {
+     "month": "2026-05",
+     "paidCents": 610000,
+     "invoicedCents": 660000
+    },
+    {
+     "month": "2026-06",
+     "paidCents": 740000,
+     "invoicedCents": 790000
+    },
+    {
+     "month": "2026-07",
+     "paidCents": 580000,
+     "invoicedCents": 630000
+    },
+    {
+     "month": "2026-08",
+     "paidCents": 820000,
+     "invoicedCents": 870000
+    },
+    {
+     "month": "2026-09",
+     "paidCents": 760000,
+     "invoicedCents": 810000
+    },
+    {
+     "month": "2026-10",
+     "paidCents": 910000,
+     "invoicedCents": 960000
+    },
+    {
+     "month": "2026-11",
+     "paidCents": 450000,
+     "invoicedCents": 500000
+    }
+   ],
+   "summary": {
+    "revenueCents": 6875000,
+    "vendorCents": 1240000,
+    "profitCents": 5635000,
+    "jobsFinished": 14,
+    "averageJobCents": 487500
+   },
+   "byProject": [
+    {
+     "_id": "p1",
+     "project": "26127 Harbor Coffee Launch",
+     "client": "Harbor Coffee",
+     "priceCents": 1250000,
+     "billed": true,
+     "costCents": 380000,
+     "profitCents": 870000,
+     "estimateProfitCents": 800000
+    },
+    {
+     "_id": "p2",
+     "project": "26131 Backrooms",
+     "client": "Floor Trader",
+     "priceCents": 980000,
+     "billed": true,
+     "costCents": 310000,
+     "profitCents": 670000,
+     "estimateProfitCents": 700000
+    },
+    {
+     "_id": "p3",
+     "project": "26122 Spirit Days",
+     "client": "ICG",
+     "priceCents": 640000,
+     "billed": true,
+     "costCents": 160000,
+     "profitCents": 480000,
+     "estimateProfitCents": 450000
+    },
+    {
+     "_id": "p4",
+     "project": "26133 Spring Catalog",
+     "client": "Northline Outfitters",
+     "priceCents": 520000,
+     "billed": false,
+     "costCents": 120000,
+     "profitCents": 400000,
+     "estimateProfitCents": 400000
+    },
+    {
+     "_id": "p5",
+     "project": "26119 LC Arizona",
+     "client": "LC Arizona",
+     "priceCents": 300000,
+     "billed": true,
+     "costCents": 90000,
+     "profitCents": 210000,
+     "estimateProfitCents": 240000
+    },
+    {
+     "_id": "p6",
+     "project": "26129 Teaser",
+     "client": "Northline Outfitters",
+     "priceCents": 150000,
+     "billed": true,
+     "costCents": 175000,
+     "profitCents": -25000,
+     "estimateProfitCents": 30000
+    }
+   ],
+   "outstanding": {
+    "buckets": [
+     {
+      "key": "not_due",
+      "label": "Not due yet",
+      "cents": 650000,
+      "count": 2
+     },
+     {
+      "key": "late_30",
+      "label": "1 to 30 days late",
+      "cents": 320000,
+      "count": 1
+     },
+     {
+      "key": "late_60",
+      "label": "31 to 60 days late",
+      "cents": 275000,
+      "count": 1
+     },
+     {
+      "key": "late_more",
+      "label": "Over 60 days late",
+      "cents": 0,
+      "count": 0
+     }
+    ],
+    "invoices": [
+     {
+      "_id": "i1",
+      "title": "Final invoice",
+      "number": "WRNGLR-0040",
+      "client": "Floor Trader",
+      "due": "2026-09-20",
+      "daysLate": 47,
+      "cents": 275000,
+      "bucket": "31 to 60 days late"
+     }
+    ]
+   },
+   "vendors": [
+    {
+     "vendor": "Jordan Ellis",
+     "cents": 720000,
+     "invoices": 9
+    },
+    {
+     "vendor": "Priya Nair",
+     "cents": 380000,
+     "invoices": 4
+    },
+    {
+     "vendor": "Alex Romero",
+     "cents": 140000,
+     "invoices": 2
+    }
+   ],
+   "funnel": {
+    "stages": [
+     {
+      "stage": "lead",
+      "label": "Lead",
+      "count": 21
+     },
+     {
+      "stage": "quoted",
+      "label": "Quoted",
+      "count": 15
+     },
+     {
+      "stage": "contract_sent",
+      "label": "Contract sent",
+      "count": 11
+     },
+     {
+      "stage": "signed",
+      "label": "Signed",
+      "count": 8
+     },
+     {
+      "stage": "in_production",
+      "label": "In production",
+      "count": 7
+     },
+     {
+      "stage": "delivered",
+      "label": "Delivered",
+      "count": 6
+     },
+     {
+      "stage": "paid",
+      "label": "Paid",
+      "count": 5
+     }
+    ],
+    "leads": 21,
+    "leadToPaid": 24
+   },
+   "detail": {
+    "payments": [],
+    "vendorPaid": [],
+    "finished": []
+   },
+   "empty": false
+  },
+  "reports.widgets": {
+   "from": "2026-01-01",
+   "to": "2026-11-06",
+   "revenueCents": 6875000,
+   "months": [
+    {
+     "month": "2026-01",
+     "cents": 420000
+    },
+    {
+     "month": "2026-02",
+     "cents": 515000
+    },
+    {
+     "month": "2026-03",
+     "cents": 380000
+    },
+    {
+     "month": "2026-04",
+     "cents": 690000
+    },
+    {
+     "month": "2026-05",
+     "cents": 610000
+    },
+    {
+     "month": "2026-06",
+     "cents": 740000
+    },
+    {
+     "month": "2026-07",
+     "cents": 580000
+    },
+    {
+     "month": "2026-08",
+     "cents": 820000
+    },
+    {
+     "month": "2026-09",
+     "cents": 760000
+    },
+    {
+     "month": "2026-10",
+     "cents": 910000
+    },
+    {
+     "month": "2026-11",
+     "cents": 450000
+    },
+    {
+     "month": "2026-12",
+     "cents": 0
+    }
+   ],
+   "outstanding": [
+    {
+     "key": "not_due",
+     "label": "Not due yet",
+     "cents": 650000,
+     "count": 2
+    },
+    {
+     "key": "late_30",
+     "label": "1 to 30 days late",
+     "cents": 320000,
+     "count": 1
+    },
+    {
+     "key": "late_60",
+     "label": "31 to 60 days late",
+     "cents": 275000,
+     "count": 1
+    },
+    {
+     "key": "late_more",
+     "label": "Over 60 days late",
+     "cents": 0,
+     "count": 0
+    }
+   ],
+   "outstandingCents": 1245000,
+   "outstandingCount": 4
+  },
+  "yourData.state": {
+   "business": {
+    "name": "Wrangler Productions",
+    "isDefault": true
+   },
+   "latest": {
+    "_id": "kitexport1",
+    "status": "ready",
+    "requestedAt": 1793543873216,
+    "readyAt": 1793543873216,
+    "bytes": 42000000,
+    "expiresAt": 1794148673216
+   },
+   "lastReady": {
+    "_id": "kitexport1",
+    "status": "ready",
+    "requestedAt": 1793543873216,
+    "readyAt": 1793543873216,
+    "bytes": 42000000,
+    "expiresAt": 1794148673216
+   },
+   "deletion": null,
+   "safety": []
   }
  },
  "client": {
@@ -16205,7 +17049,7 @@
      "linkLabel": "Open the call sheet",
      "read": false,
      "readAt": null,
-     "text": "Harbor Coffee Launch · Harbor Coffee · your call 7:00 AM",
+     "text": "Harbor Coffee Launch \u00b7 Harbor Coffee \u00b7 your call 7:00 AM",
      "title": "Call sheet: Mon Nov 2"
     },
     {
@@ -16220,7 +17064,7 @@
      "read": false,
      "readAt": null,
      "text": "Harbor Coffee, 412 Main St. Please confirm.",
-     "title": "Shoot scheduled: Mon, Nov 9 · 7:00 AM"
+     "title": "Shoot scheduled: Mon, Nov 9 \u00b7 7:00 AM"
     },
     {
      "_id": "0000000000000000010136inboxItems",
@@ -16248,7 +17092,7 @@
      "read": false,
      "readAt": null,
      "text": "Harbor Coffee, 412 Main St. Please confirm.",
-     "title": "Shoot scheduled: Mon, Nov 2 · 7:00 AM"
+     "title": "Shoot scheduled: Mon, Nov 2 \u00b7 7:00 AM"
     },
     {
      "_id": "0000000000000000010111inboxItems",
@@ -16275,7 +17119,7 @@
      "linkLabel": null,
      "read": false,
      "readAt": null,
-     "text": "Harbor Coffee 30s · v4",
+     "text": "Harbor Coffee 30s \u00b7 v4",
      "title": "Reply on your note at 01:00:05:00"
     },
     {
@@ -16289,7 +17133,7 @@
      "linkLabel": null,
      "read": false,
      "readAt": null,
-     "text": "Service Agreement — Harbor Coffee Launch · WS-00012",
+     "text": "Service Agreement \u2014 Harbor Coffee Launch \u00b7 WS-00012",
      "title": "Document to sign"
     },
     {
@@ -16303,7 +17147,7 @@
      "linkLabel": null,
      "read": false,
      "readAt": null,
-     "text": "Harbor Coffee 30s · v4",
+     "text": "Harbor Coffee 30s \u00b7 v4",
      "title": "New cut ready"
     },
     {
@@ -16339,7 +17183,7 @@
      "signers": [
       "Heston Hill"
      ],
-     "title": "Service Agreement — Harbor Coffee Launch",
+     "title": "Service Agreement \u2014 Harbor Coffee Launch",
      "waiting": false
     }
    ]
@@ -16372,7 +17216,7 @@
      "pages": 2,
      "sentAt": 1793203200000,
      "signUrl": "https://sign.wranglerportal.com/kittokenkittokenkit1",
-     "title": "Service Agreement — Harbor Coffee Launch"
+     "title": "Service Agreement \u2014 Harbor Coffee Launch"
     }
    ]
   },
@@ -16911,7 +17755,7 @@
      "label": "WS-00012",
      "sentAt": 1793203200000,
      "status": "sent",
-     "title": "Service Agreement — Harbor Coffee Launch"
+     "title": "Service Agreement \u2014 Harbor Coffee Launch"
     }
    ],
    "keyDates": [
@@ -16959,7 +17803,7 @@
      "final": false,
      "round": {
       "included": 2,
-      "label": "Round 4 · change order",
+      "label": "Round 4 \u00b7 change order",
       "round": 4,
       "state": "over"
      },
@@ -17282,7 +18126,7 @@
    "business": "Wrangler Productions",
    "change": null,
    "date": "2026-11-02",
-   "docTitle": "Harbor Coffee Launch · Harbor Coffee · Nov 2",
+   "docTitle": "Harbor Coffee Launch \u00b7 Harbor Coffee \u00b7 Nov 2",
    "me": {
     "call": "07:00",
     "kind": "client",
@@ -17324,7 +18168,7 @@
       },
       "content": [
        {
-        "text": "{shoot.client} · {shoot.project} · {shoot.date}",
+        "text": "{shoot.client} \u00b7 {shoot.project} \u00b7 {shoot.date}",
         "type": "text"
        }
       ],
@@ -17344,7 +18188,7 @@
      },
      {
       "attrs": {
-       "line": "Partly cloudy · 64°/47° · 10% rain · wind 7 mph",
+       "line": "Partly cloudy \u00b7 64\u00b0/47\u00b0 \u00b7 10% rain \u00b7 wind 7 mph",
        "typed": false
       },
       "type": "weather"
@@ -17437,14 +18281,14 @@
          "id": "kw0yyl60",
          "name": "Maya Brooks",
          "phone": "",
-         "role": "Harbor Coffee · Main contact"
+         "role": "Harbor Coffee \u00b7 Main contact"
         },
         {
          "call": "07:00",
          "id": "k5yp55b6",
          "name": "Jordan Lee",
          "phone": "",
-         "role": "Harbor Coffee · Contact"
+         "role": "Harbor Coffee \u00b7 Contact"
         }
        ]
       },
@@ -17514,7 +18358,7 @@
    },
    "replyTo": "heston@wranglerproductions.com",
    "sentAt": 1793289600000,
-   "title": "Harbor Coffee Launch · Harbor Coffee",
+   "title": "Harbor Coffee Launch \u00b7 Harbor Coffee",
    "updated": false,
    "updatedToday": false,
    "values": {
@@ -17571,7 +18415,7 @@
     "processingSince": null,
     "project": "26127 Harbor Coffee Launch",
     "status": "paid",
-    "title": "Deposit · WS-00012",
+    "title": "Deposit \u00b7 WS-00012",
     "token": "kitpaidtoken000000001",
     "totalCents": 300000,
     "voidedAt": null
@@ -17603,7 +18447,7 @@
    "lastFailure": null,
    "lines": [
     {
-     "description": "Deposit (25%) · 26127 Harbor Coffee Launch",
+     "description": "Deposit (25%) \u00b7 26127 Harbor Coffee Launch",
      "id": "l0",
      "qty": 1,
      "unitCents": 300000
@@ -17617,7 +18461,7 @@
      "at": 1792684800000,
      "cents": 300000,
      "id": "pi_k1",
-     "method": "Visa •••• 4242",
+     "method": "Visa \u2022\u2022\u2022\u2022 4242",
      "status": "paid"
     }
    ],
@@ -17628,7 +18472,7 @@
    "subtotalCents": 300000,
    "taxPercent": 0,
    "testMode": true,
-   "title": "Deposit · WS-00012",
+   "title": "Deposit \u00b7 WS-00012",
    "token": "kitpaidtoken000000001",
    "totalCents": 300000,
    "voidedAt": null
@@ -17659,7 +18503,7 @@
    "lastFailure": null,
    "lines": [
     {
-     "description": "Change order WS-00014 · extra revision round",
+     "description": "Change order WS-00014 \u00b7 extra revision round",
      "id": "l0",
      "qty": 1,
      "unitCents": 45000
@@ -17707,7 +18551,7 @@
    "lastFailure": null,
    "lines": [
     {
-     "description": "Extra shoot day · Nov 14",
+     "description": "Extra shoot day \u00b7 Nov 14",
      "id": "l0",
      "qty": 1,
      "unitCents": 120000
@@ -17721,7 +18565,7 @@
      "at": 1793116800000,
      "cents": 120000,
      "id": "pi_k3",
-     "method": "Bank •••• 6789",
+     "method": "Bank \u2022\u2022\u2022\u2022 6789",
      "status": "processing"
     }
    ],
@@ -18131,6 +18975,19 @@
    },
    "sub": "With Wrangler Productions",
    "title": "Harbor Coffee Launch"
+  },
+  "security.state": {
+   "email": "maya@harborcoffee.com",
+   "passwordChangedAt": 1793208800000,
+   "devices": [
+    {
+     "sessionId": "kitsession0001authSessions",
+     "label": "Mac \u00b7 Chrome",
+     "lastSeen": 1793900000000,
+     "current": true
+    }
+   ],
+   "pending": null
   }
  },
  "guest": {
@@ -18176,7 +19033,7 @@
      "isNew": true,
      "place": "Chase Field loading dock, Phoenix",
      "state": "today",
-     "title": "Arizona · 4M LC",
+     "title": "Arizona \u00b7 4M LC",
      "token": "MxjT7AL4bavUJ8e08q1lpSRv",
      "updatedToday": true
     },
@@ -18187,7 +19044,7 @@
      "isNew": true,
      "place": "Harbor Coffee, 412 Main St.",
      "state": "upcoming",
-     "title": "Harbor Coffee Launch · Harbor Coffee",
+     "title": "Harbor Coffee Launch \u00b7 Harbor Coffee",
      "token": "LmSIHj15CjR2O_ZtslSkyQRh",
      "updatedToday": false
     },
@@ -18198,7 +19055,7 @@
      "isNew": false,
      "place": "",
      "state": "ended",
-     "title": "Arizona · 4M LC",
+     "title": "Arizona \u00b7 4M LC",
      "token": "46A9eDv3mjdrt-cSPGFyrsZ3",
      "updatedToday": false
     }
@@ -18214,7 +19071,7 @@
    },
    "date": "2026-10-29",
    "day": "Thu Oct 29",
-   "docTitle": "Arizona · 4M LC · Oct 29",
+   "docTitle": "Arizona \u00b7 4M LC \u00b7 Oct 29",
    "ended": false,
    "me": {
     "call": "10:00",
@@ -18257,7 +19114,7 @@
       },
       "content": [
        {
-        "text": "{shoot.client} · {shoot.project} · {shoot.date}",
+        "text": "{shoot.client} \u00b7 {shoot.project} \u00b7 {shoot.date}",
         "type": "text"
        }
       ],
@@ -18277,7 +19134,7 @@
      },
      {
       "attrs": {
-       "line": "Sunny · 91°/68° · 0% rain · wind 5 mph",
+       "line": "Sunny \u00b7 91\u00b0/68\u00b0 \u00b7 0% rain \u00b7 wind 5 mph",
        "typed": false
       },
       "type": "weather"
@@ -18416,7 +19273,7 @@
    },
    "replyTo": "heston@wranglerproductions.com",
    "sentAt": 1793289660000,
-   "title": "Arizona · 4M LC",
+   "title": "Arizona \u00b7 4M LC",
    "updated": true,
    "updatedToday": true,
    "values": {
@@ -18433,7 +19290,7 @@
    "change": null,
    "date": "2026-11-02",
    "day": "Mon Nov 2",
-   "docTitle": "Harbor Coffee Launch · Harbor Coffee · Nov 2",
+   "docTitle": "Harbor Coffee Launch \u00b7 Harbor Coffee \u00b7 Nov 2",
    "ended": false,
    "me": {
     "call": "09:30",
@@ -18476,7 +19333,7 @@
       },
       "content": [
        {
-        "text": "{shoot.client} · {shoot.project} · {shoot.date}",
+        "text": "{shoot.client} \u00b7 {shoot.project} \u00b7 {shoot.date}",
         "type": "text"
        }
       ],
@@ -18496,7 +19353,7 @@
      },
      {
       "attrs": {
-       "line": "Partly cloudy · 64°/47° · 10% rain · wind 7 mph",
+       "line": "Partly cloudy \u00b7 64\u00b0/47\u00b0 \u00b7 10% rain \u00b7 wind 7 mph",
        "typed": false
       },
       "type": "weather"
@@ -18589,14 +19446,14 @@
          "id": "kw0yyl60",
          "name": "Maya Brooks",
          "phone": "",
-         "role": "Harbor Coffee · Main contact"
+         "role": "Harbor Coffee \u00b7 Main contact"
         },
         {
          "call": "07:00",
          "id": "k5yp55b6",
          "name": "Jordan Lee",
          "phone": "",
-         "role": "Harbor Coffee · Contact"
+         "role": "Harbor Coffee \u00b7 Contact"
         }
        ]
       },
@@ -18662,7 +19519,7 @@
    },
    "replyTo": "heston@wranglerproductions.com",
    "sentAt": 1793289600000,
-   "title": "Harbor Coffee Launch · Harbor Coffee",
+   "title": "Harbor Coffee Launch \u00b7 Harbor Coffee",
    "updated": false,
    "updatedToday": false,
    "values": {
@@ -18679,7 +19536,7 @@
    },
    "date": "2026-10-24",
    "ended": true,
-   "title": "Arizona · 4M LC"
+   "title": "Arizona \u00b7 4M LC"
   },
   "guests.intro#MxjT7AL4bavUJ8e08q1lpSRv": {
    "business": {
@@ -18689,10 +19546,10 @@
    },
    "date": "2026-10-29",
    "dayLong": "Thursday, Oct 29",
-   "email": "r•••@talent.example",
+   "email": "r\u2022\u2022\u2022@talent.example",
    "name": "Riley Quinn",
    "state": "active",
-   "title": "Arizona · 4M LC"
+   "title": "Arizona \u00b7 4M LC"
   },
   "guests.intro#LmSIHj15CjR2O_ZtslSkyQRh": {
    "business": {
@@ -18702,10 +19559,10 @@
    },
    "date": "2026-11-02",
    "dayLong": "Monday, Nov 2",
-   "email": "r•••@talent.example",
+   "email": "r\u2022\u2022\u2022@talent.example",
    "name": "Riley Quinn",
    "state": "active",
-   "title": "Harbor Coffee Launch · Harbor Coffee"
+   "title": "Harbor Coffee Launch \u00b7 Harbor Coffee"
   },
   "guests.intro#46A9eDv3mjdrt-cSPGFyrsZ3": {
    "business": {
@@ -18715,7 +19572,7 @@
    },
    "date": "2026-10-24",
    "state": "ended",
-   "title": "Arizona · 4M LC"
+   "title": "Arizona \u00b7 4M LC"
   }
  },
  "empty": {
@@ -19953,7 +20810,7 @@
      "role": "Shooter",
      "sentAt": 1793820803766,
      "start": "2026-11-06",
-     "title": "Shoot brief · 26127 Launch"
+     "title": "Shoot brief \u00b7 26127 Launch"
     }
    ]
   },
@@ -20057,11 +20914,11 @@
      "declinedAt": null,
      "hours": [
       {
-       "label": "Assembly · Nov 10–11",
+       "label": "Assembly \u00b7 Nov 10\u201311",
        "qty": 10
       },
       {
-       "label": "Fine cut · Nov 12–13",
+       "label": "Fine cut \u00b7 Nov 12\u201313",
        "qty": 8
       }
      ],
@@ -20095,11 +20952,11 @@
      "declinedAt": null,
      "hours": [
       {
-       "label": "Shooting day · Nov 6",
+       "label": "Shooting day \u00b7 Nov 6",
        "qty": 1
       },
       {
-       "label": "Shooting day · Nov 7",
+       "label": "Shooting day \u00b7 Nov 7",
        "qty": 1
       }
      ],
@@ -20133,7 +20990,7 @@
      "end": "2026-11-07",
      "expectedCents": 170000,
      "hours": null,
-     "label": "26127 Launch · Shooter",
+     "label": "26127 Launch \u00b7 Shooter",
      "rate": {
       "cents": 85000,
       "unit": "day"
@@ -20145,7 +21002,7 @@
      "end": "2026-11-14",
      "expectedCents": 117000,
      "hours": 18,
-     "label": "26127 Launch · Editor",
+     "label": "26127 Launch \u00b7 Editor",
      "rate": {
       "cents": 6500,
       "unit": "hour"
@@ -20170,11 +21027,11 @@
    "declinedAt": null,
    "hours": [
     {
-     "label": "Shooting day · Nov 6",
+     "label": "Shooting day \u00b7 Nov 6",
      "qty": 1
     },
     {
-     "label": "Shooting day · Nov 7",
+     "label": "Shooting day \u00b7 Nov 7",
      "qty": 1
     }
    ],
@@ -20211,11 +21068,11 @@
    "declinedAt": null,
    "hours": [
     {
-     "label": "Assembly · Nov 10–11",
+     "label": "Assembly \u00b7 Nov 10\u201311",
      "qty": 10
     },
     {
-     "label": "Fine cut · Nov 12–13",
+     "label": "Fine cut \u00b7 Nov 12\u201313",
      "qty": 8
     }
    ],
@@ -20292,7 +21149,7 @@
    "owner": "Wrangler Productions",
    "payMethod": {
     "method": "ACH",
-    "note": "Bank of Example · account ending 0000"
+    "note": "Bank of Example \u00b7 account ending 0000"
    },
    "phone": "405-555-0142",
    "portfolio": "ellisfilms.com",
@@ -20416,7 +21273,7 @@
    "businessId": "0000000000000000010000businesses",
    "change": null,
    "date": "2026-11-06",
-   "docTitle": "Launch · Harbor Coffee · Nov 6",
+   "docTitle": "Launch \u00b7 Harbor Coffee \u00b7 Nov 6",
    "me": {
     "call": "07:30",
     "kind": "crew",
@@ -20458,7 +21315,7 @@
       },
       "content": [
        {
-        "text": "{shoot.client} · {shoot.project} · {shoot.date}",
+        "text": "{shoot.client} \u00b7 {shoot.project} \u00b7 {shoot.date}",
         "type": "text"
        }
       ],
@@ -20614,7 +21471,7 @@
    },
    "replyTo": "heston@wranglerproductions.com",
    "sentAt": 1793812817073,
-   "title": "Launch · Harbor Coffee",
+   "title": "Launch \u00b7 Harbor Coffee",
    "updated": false,
    "updatedToday": false,
    "values": {
@@ -20830,6 +21687,19 @@
    "slug": "adding-a-w9",
    "summary": "The tax form the business needs before it can pay you.",
    "title": "Adding your W-9"
+  },
+  "security.state": {
+   "email": "riley@example.com",
+   "passwordChangedAt": 1793208800000,
+   "devices": [
+    {
+     "sessionId": "kitsession0001authSessions",
+     "label": "Mac \u00b7 Chrome",
+     "lastSeen": 1793900000000,
+     "current": true
+    }
+   ],
+   "pending": null
   }
  }
 }

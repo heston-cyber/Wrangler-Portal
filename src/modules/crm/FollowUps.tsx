@@ -31,7 +31,7 @@ export default function FollowUps() {
     <>
       <TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/clients")}>Clients</a><Sep /><span className="here">Follow-ups</span></TopBar>
       <div className="wp-page crm-fu">
-        <PageHeader eyebrow="Clients" title="Follow-ups." sub="Who to get back to, and when. Claude checks these each morning." actions={<Button variant="primary" onClick={() => setAdding(true)}>Add follow-up</Button>} />
+        <PageHeader title="Follow-ups." sub="Who to get back to, and when. Claude checks these each morning." actions={<Button variant="primary" onClick={() => setAdding(true)}>Add follow-up</Button>} />
         {data === undefined ? <Card label="Loading"><SkeletonRows n={4} /></Card> : (
           <>
             <PillTabs label="Show" value={pill} onChange={setPill} items={[

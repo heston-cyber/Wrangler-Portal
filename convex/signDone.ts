@@ -12,9 +12,10 @@
 import { action, httpAction, type ActionCtx } from "./_generated/server";
 import { internalAction, internalMutation, internalQuery, mutation } from "./lib/functions";
 import { internal } from "./_generated/api";
+import { recordFile } from "./lib/fileOwners";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll } from "./lib/access";
 import { appendEvent, eventsOf, verifyChain } from "./lib/wsAudit";
 import { OWNER_KEY, docLabel, type LayoutBox } from "./lib/wsLayout";
 import { sha256Bytes, stamp } from "./lib/wsPdf";
@@ -141,7 +142,7 @@ export const stepFailed = internalMutation({
 export const retry = mutation({
   args: { documentId: v.id("wsDocuments"), step: v.union(v.literal("pdf"), v.literal("invoice"), v.literal("copies"), v.literal("archive")) },
   handler: async (ctx, { documentId, step }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "docs");
     const doc = await ctx.db.get(documentId);
     if (!doc || doc.status !== "completed") throw new ConvexError("Only a document everyone has signed.");
     if (step !== "pdf" && !doc.final) throw new ConvexError("Make the signed copy first.");
@@ -171,6 +172,7 @@ export const recordPdf = internalMutation({
     const doc = (await ctx.db.get(a.documentId))!;
     if (doc.final) return false;
     await ctx.db.patch(a.documentId, { final: { fileId: a.fileId, sha256: a.sha256, bytes: a.bytes, fileName: a.fileName, at: Date.now() }, finishError: undefined, updatedAt: Date.now() });
+    await recordFile(ctx as never, a.fileId, doc.businessId ?? null, "signed-pdf"); // 5e review (Nov 6): bookkeeping only
     await appendEvent(ctx, a.documentId, { kind: "signed_copy_made", actor: "system", versionNumber: doc.sentVersion, detail: `The signed copy "${a.fileName}" was made (${Math.round(a.bytes / 1024)} KB), with every signature, initial, name and date stamped and the audit certificate appended. SHA-256 ${a.sha256}` });
     return true;
   },
@@ -317,7 +319,7 @@ export async function auditJson(ctx: ActionCtx, documentId: Id<"wsDocuments">): 
 export const downloadAudit = action({
   args: { documentId: v.id("wsDocuments") },
   handler: async (ctx, { documentId }): Promise<{ json: string; name: string }> => {
-    await ctx.runQuery(internal.users.assertAllowed, { ids: [documentId] });
+    await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs"], ids: [documentId] });
     try { const r = await auditJson(ctx, documentId); return { json: r.json, name: r.name }; }
     catch (e) { throw new ConvexError(errText(e)); }
   },

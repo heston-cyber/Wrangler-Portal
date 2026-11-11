@@ -4,6 +4,7 @@
 // Needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Convex (Heston's own Google Cloud sign-in setup) and the
 // redirect address below added to it. Until then the section says so and shoots save without a calendar event.
 import { action, httpAction } from "./_generated/server";
+import { audit } from "./lib/audit";
 import { forBusiness, internalAction, internalMutation, internalQuery, mutation, query, type Scope } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
@@ -206,6 +207,7 @@ export const save = mutation({
   args: { calendarId: v.string(), calendarName: v.string(), inviteVendors: v.boolean(), inviteClient: v.boolean() },
   handler: async (ctx, a) => {
     await requireMe(ctx);
+    await audit(ctx, { kind: "settings", text: "changed the Google Calendar settings", where: "Settings › Calendar", link: "/settings" });
     const c = await ctx.db.query("calendars").first();
     if (!c) throw new ConvexError("Connect Google Calendar first.");
     const calendarId = a.calendarId.slice(0, 300);

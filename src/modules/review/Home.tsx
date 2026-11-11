@@ -13,6 +13,7 @@ import { VideoRow, openedMeta } from "./VideoRows";
 import { useLibrarySettings } from "../../lib/details";
 import { Icon } from "../../ui/Icon";
 import { Button, IconButton } from "../../ui/wp";
+import { usePerms } from "../../lib/teamAccess";
 
 export default function Home() {
   const overview = useQuery(api.library.overview);
@@ -91,7 +92,9 @@ export default function Home() {
 }
 
 function RecentActivity() {
-  const feed = useQuery(api.activity.feed, { limit: 8 });
+  const { team } = usePerms(); // Phase 5e: the activity feed is the owner's
+  const feed = useQuery(api.activity.feed, team ? "skip" : { limit: 8 });
+  if (team) return null;
   if (feed === undefined) return <p className="wp-small rv-pad">Loading…</p>;
   if (feed.length === 0) return <p className="wp-small rv-pad">Nothing yet.</p>;
   return (
