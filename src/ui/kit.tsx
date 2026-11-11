@@ -165,15 +165,41 @@ export function MenuSub({ icon, label, children }: { icon?: React.ReactNode; lab
 export const MenuLabel = ({ children }: { children: React.ReactNode }) => <div className="mlabel">{children}</div>;
 
 // ---------- Modal ----------
+// Phase 5f: on a phone a dialog is a glass sheet at the bottom (portal.css); its content scrolls inside .dbody (so the
+// glass's rim stays put), and a sheet that would fill the screen fills it (data-full: radius 0, ink 92 %, D167).
 export function Modal({ onClose, children, label, width }: { onClose: () => void; children: React.ReactNode; label: string; width?: number }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [onClose]);
+  const dialog = useRef<HTMLDivElement>(null);
+  const body = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const d = dialog.current, b = body.current;
+    if (!d || !b) return;
+    const fit = () => {
+      if (window.innerWidth > 820) { delete d.dataset.full; return; }
+      const need = b.scrollHeight, room = window.innerHeight - 16;
+      // a little slack either way, so a sheet right at the edge doesn't flip back and forth
+      if (need > room) d.dataset.full = "1"; else if (need < room - 48) delete d.dataset.full;
+    };
+    fit();
+    // the body's own box stops growing at the sheet's height, so watch what's in it (and what's added later)
+    const ro = new ResizeObserver(fit);
+    const watch = () => { ro.disconnect(); ro.observe(b); for (const c of Array.from(b.children)) ro.observe(c); fit(); };
+    watch();
+    const mo = new MutationObserver(watch);
+    mo.observe(b, { childList: true });
+    window.addEventListener("resize", fit);
+    return () => { ro.disconnect(); mo.disconnect(); window.removeEventListener("resize", fit); };
+  }, []);
   return createPortal(
     <div className="backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="dialog" role="dialog" aria-modal="true" aria-label={label} style={width ? { width: `min(${width}px, 100%)` } : undefined}>{children}</div>
+      <div ref={dialog} className="dialog" role="dialog" aria-modal="true" aria-label={label} style={width ? { width: `min(${width}px, 100%)` } : undefined}>
+        <span className="dgrab" aria-hidden />
+        <div ref={body} className="dbody">{children}</div>
+      </div>
     </div>,
     document.body,
   );

@@ -7,7 +7,7 @@ import { shade, textOn } from "../../convex/lib/color";
 
 export type Brand = { name: string; accent: string | null; background: string | null; logoUrl: string | null };
 
-const VARS = ["--accent", "--accent-hover", "--accent-tint", "--accent-ring", "--text-accent", "--on-accent", "--surface-base"] as const;
+const VARS = ["--accent", "--accent-hover", "--accent-tint", "--accent-ring", "--text-accent", "--on-accent", "--surface-base", "--glass-solid"] as const;
 
 function alpha(hex: string, a: number) {
   const h = hex.replace("#", "");
@@ -27,7 +27,12 @@ export function brandVars(b: Brand | null): Record<string, string> {
     out["--text-accent"] = b.accent;
     out["--on-accent"] = textOn(b.accent).text;
   }
-  if (b.background) out["--surface-base"] = b.background;
+  if (b.background) {
+    out["--surface-base"] = b.background;
+    // Phase 5f: the solid look (Reduce transparency) is the background lifted a little, as Wrangler's #0b0b0d is its ink
+    // lifted (Glass/solid-fill; Juniper & Ash's juniper-charcoal is matched this way until its value is confirmed)
+    if ((b.accent ?? "").trim().toLowerCase() !== "#ff0000") out["--glass-solid"] = `color-mix(in srgb, ${b.background}, rgb(244, 241, 233) 3%)`;
+  }
   return out;
 }
 

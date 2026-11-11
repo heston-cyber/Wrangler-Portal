@@ -1,4 +1,5 @@
 // Clients (P1 / Owner / Clients): every client with its people, projects and what's waiting on them.
+import { TopBar } from "../../shell/Shell";
 import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -33,25 +34,29 @@ export default function ClientsPage() {
   const needle = q.trim().toLowerCase();
   const rows = (clients ?? []).filter((c) => !needle || c.name.toLowerCase().includes(needle));
   return (
-    <div className="wp-page notop wp-clients">
-      <PageHeader title="Clients." actions={<Button variant="primary" icon="plus" onClick={() => setAdding(true)}>New client</Button>} />
-      <label className="ws-search wp-clientsearch">
-        <Icon name="search" size={16} />
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search clients" aria-label="Search clients" />
-      </label>
-      {clients === undefined ? <Card label="Clients"><SkeletonRows n={4} /></Card>
-        : clients.length === 0 ? (
-          <EmptyState icon="users" title="No clients yet." body="Add one, or share a cut to start."
-            actions={<><Button variant="primary" icon="plus" onClick={() => setAdding(true)}>New client</Button><ButtonLink to="/review">Share a cut</ButtonLink></>} />
-        ) : rows.length === 0 ? (
-          <EmptyState icon="search" title="No clients match." body={`Nothing called “${q.trim()}”.`} />
-        ) : (
-          <Card label="Clients">
-            {rows.map((c, i) => <div key={c._id} className="wp-rowwrap">{i > 0 && <Divider />}<Row c={c} /></div>)}
-          </Card>
-        )}
-      {adding && <NewClient onClose={() => setAdding(false)} onDone={() => { setAdding(false); show("Client added."); }} />}
-      {toast}
-    </div>
+    <>
+      {/* Phase 5f: the glass top bar (desktop); one crumb, so it fades in as the title scrolls under it */}
+      <TopBar className="deskonly"><span className="here">Clients</span></TopBar>
+      <div className="wp-page notop wp-clients">
+        <PageHeader title="Clients." actions={<Button variant="primary" icon="plus" onClick={() => setAdding(true)}>New client</Button>} />
+        <label className="ws-search wp-clientsearch">
+          <Icon name="search" size={16} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search clients" aria-label="Search clients" />
+        </label>
+        {clients === undefined ? <Card label="Clients"><SkeletonRows n={4} /></Card>
+          : clients.length === 0 ? (
+            <EmptyState icon="users" title="No clients yet." body="Add one, or share a cut to start."
+              actions={<><Button variant="primary" icon="plus" onClick={() => setAdding(true)}>New client</Button><ButtonLink to="/review">Share a cut</ButtonLink></>} />
+          ) : rows.length === 0 ? (
+            <EmptyState icon="search" title="No clients match." body={`Nothing called “${q.trim()}”.`} />
+          ) : (
+            <Card label="Clients">
+              {rows.map((c, i) => <div key={c._id} className="wp-rowwrap">{i > 0 && <Divider />}<Row c={c} /></div>)}
+            </Card>
+          )}
+        {adding && <NewClient onClose={() => setAdding(false)} onDone={() => { setAdding(false); show("Client added."); }} />}
+        {toast}
+      </div>
+    </>
   );
 }

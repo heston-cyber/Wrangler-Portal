@@ -1,5 +1,6 @@
 // The client's Inbox (P1 / Client / Inbox): everything new, newest first. Unread · All (opens on All), Mark all read.
 // A note opens in place (on a phone, on its own); everything else goes where it points. Replies go by email.
+import { TopBar } from "../../shell/Shell";
 import { useEffect, useState } from "react";
 import { useConvex, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -70,44 +71,48 @@ export default function ClientInbox({ itemId }: { itemId: string | null }) {
   const openId = open && !open.read ? open._id : null;
   useEffect(() => { if (openId) void markRead({ itemId: openId }); }, [openId, markRead]);
   return (
-    <div className={`wp-page notop ci${open?.kind === "note" ? " opened" : ""}`}>
-      {open?.kind === "note" && (
-        <div className="ci-phonenote">
-          <a className="wp-setback" {...linkProps("/inbox")}><Icon name="arrow-left" size={20} />Inbox</a>
-          <section className="wp-card glass ci-notecard">
-            <span className="wp-eyebrow"><Icon name="mail" size={16} />A note from {open.from ?? business}</span>
-            <h1 className="wp-h4">{open.title}</h1>
-            <p className="when">{Day(open.createdAt)}, {timeOfDay(open.createdAt)}</p>
-            {open.text && open.text.split(/\n+/).map((p, i) => <p key={i} className="txt">{p}</p>)}
-            {open.link && (/^https:\/\//.test(open.link) ? <a className="btn" href={open.link}>{open.linkLabel ?? "Open"}</a> : <ButtonLink to={open.link}>{open.linkLabel ?? "Open in the portal"}</ButtonLink>)}
-          </section>
+    <>
+      {/* Phase 5f: the glass top bar (desktop); one crumb, so it fades in as the title scrolls under it */}
+      <TopBar className="deskonly"><span className="here">Inbox</span></TopBar>
+      <div className={`wp-page notop ci${open?.kind === "note" ? " opened" : ""}`}>
+        {open?.kind === "note" && (
+          <div className="ci-phonenote">
+            <a className="wp-setback" {...linkProps("/inbox")}><Icon name="arrow-left" size={20} />Inbox</a>
+            <section className="wp-card glass ci-notecard">
+              <span className="wp-eyebrow"><Icon name="mail" size={16} />A note from {open.from ?? business}</span>
+              <h1 className="wp-h4">{open.title}</h1>
+              <p className="when">{Day(open.createdAt)}, {timeOfDay(open.createdAt)}</p>
+              {open.text && open.text.split(/\n+/).map((p, i) => <p key={i} className="txt">{p}</p>)}
+              {open.link && (/^https:\/\//.test(open.link) ? <a className="btn" href={open.link}>{open.linkLabel ?? "Open"}</a> : <ButtonLink to={open.link}>{open.linkLabel ?? "Open in the portal"}</ButtonLink>)}
+            </section>
+            {foot}
+          </div>
+        )}
+        <div className="ci-main">
+          <PageHeader help="/help/your-files" title="Inbox." sub="Everything new, newest first." />
+          <div className="ci-bar">
+            <PillTabs label="Show" value={tab} onChange={setTab} items={[{ key: "unread", label: "Unread", count: data?.unread ?? 0 }, { key: "all", label: "All" }]} />
+            <span className="sp" />
+            {(data?.unread ?? 0) > 0 && <Button size="sm" variant="ghost" onClick={async () => { const n = await markAll({}); show(`Marked ${n} as read.`); }} icon="check">Mark all read</Button>}
+          </div>
+          {data === undefined ? <Card label="Inbox"><SkeletonRows n={5} /></Card>
+            : list.length === 0 ? <EmptyState icon="inbox" title={tab === "unread" && items.length ? "Nothing unread." : "Nothing new yet."} body={tab === "unread" && items.length ? "You've read everything here." : "Cuts, documents and notes will show up here."} />
+            : (
+              <Card label="Inbox">
+                {list.map((it, i) => (
+                  <div key={it._id} className={`wp-rowwrap${open?._id === it._id ? " open" : ""}`}>{i > 0 && <Divider />}
+                    <div className="ci-row" role="button" tabIndex={0} onClick={() => go(it)} onKeyDown={(e) => { if (e.key === "Enter") go(it); }} aria-expanded={it.kind === "note" ? open?._id === it._id : undefined}>
+                      <InboxItem icon={INBOX_ICON[it.kind as InboxKind]} title={it.title} detail={it.text || undefined} action={action(it)} time={Day(it.createdAt)} unread={!it.read} selected={open?._id === it._id} />
+                    </div>
+                    {open?._id === it._id && it.kind === "note" && <NoteBody it={it} business={business} />}
+                  </div>
+                ))}
+              </Card>
+            )}
           {foot}
         </div>
-      )}
-      <div className="ci-main">
-        <PageHeader help="/help/your-files" title="Inbox." sub="Everything new, newest first." />
-        <div className="ci-bar">
-          <PillTabs label="Show" value={tab} onChange={setTab} items={[{ key: "unread", label: "Unread", count: data?.unread ?? 0 }, { key: "all", label: "All" }]} />
-          <span className="sp" />
-          {(data?.unread ?? 0) > 0 && <Button size="sm" variant="ghost" onClick={async () => { const n = await markAll({}); show(`Marked ${n} as read.`); }} icon="check">Mark all read</Button>}
-        </div>
-        {data === undefined ? <Card label="Inbox"><SkeletonRows n={5} /></Card>
-          : list.length === 0 ? <EmptyState icon="inbox" title={tab === "unread" && items.length ? "Nothing unread." : "Nothing new yet."} body={tab === "unread" && items.length ? "You've read everything here." : "Cuts, documents and notes will show up here."} />
-          : (
-            <Card label="Inbox">
-              {list.map((it, i) => (
-                <div key={it._id} className={`wp-rowwrap${open?._id === it._id ? " open" : ""}`}>{i > 0 && <Divider />}
-                  <div className="ci-row" role="button" tabIndex={0} onClick={() => go(it)} onKeyDown={(e) => { if (e.key === "Enter") go(it); }} aria-expanded={it.kind === "note" ? open?._id === it._id : undefined}>
-                    <InboxItem icon={INBOX_ICON[it.kind as InboxKind]} title={it.title} detail={it.text || undefined} action={action(it)} time={Day(it.createdAt)} unread={!it.read} selected={open?._id === it._id} />
-                  </div>
-                  {open?._id === it._id && it.kind === "note" && <NoteBody it={it} business={business} />}
-                </div>
-              ))}
-            </Card>
-          )}
-        {foot}
+        {toast}
       </div>
-      {toast}
-    </div>
+    </>
   );
 }

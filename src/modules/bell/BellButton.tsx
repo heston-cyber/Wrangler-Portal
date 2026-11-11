@@ -48,7 +48,7 @@ function BellPanel({ anchor, onClose }: { anchor: React.RefObject<HTMLSpanElemen
   const side = anchor.current?.closest(".wp-side")?.getBoundingClientRect();
   const rows = (d?.rows ?? []) as Row[];
   return (
-    <div ref={ref} className="bell-panel glass" role="dialog" aria-label="Notifications" style={side ? { left: side.right - 6, top: side.top + 4 } : undefined}>
+    <div ref={ref} className="bell-panel" role="dialog" aria-label="Notifications" style={side ? { left: side.right - 6, top: side.top + 4 } : undefined}>
       <div className="bell-head">
         <h2 className="headline">Notifications</h2>
         {!!d?.unread && <button type="button" className="bell-link" onClick={() => void markAll({})}>Mark all read</button>}

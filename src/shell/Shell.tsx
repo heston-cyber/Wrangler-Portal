@@ -289,7 +289,7 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
   const isOpen = (it: Item) => open[it.to] ?? !!it.layerHas?.(path);
   const settingsOn = starts(path, "/settings");
   return (
-    <nav className={`wp-side glass${drawer ? " drawer" : ""}`} aria-label="Main" onMouseEnter={onHover && (() => onHover(true))} onMouseLeave={onHover && (() => onHover(false))}>
+    <nav className={`wp-side${drawer ? " drawer" : ""}`} aria-label="Main" onMouseEnter={onHover && (() => onHover(true))} onMouseLeave={onHover && (() => onHover(false))}>
       <div className={`wp-brand${side === "client" ? " client" : ""}`}>
         <a {...linkProps("/")} aria-label={`${bizName} home`}><Logo src={logo} name={bizName} /></a>
         <span style={{ display: "flex", gap: 4 }}>
@@ -425,7 +425,7 @@ function PhoneTop({ me, side, items, logo, bizName, onSearch, bell }: { me: Me; 
 function TabBar({ items }: { items: Item[] }) {
   const { path } = useLocation();
   return (
-    <nav className="wp-tabbar glass" aria-label="Sections">
+    <nav className="wp-tabbar" aria-label="Sections">
       {items.map((it) => (
         <a key={it.to} className="wp-tab" aria-current={(it.tab ?? it.match)(path) ? "page" : undefined} {...linkProps(it.to)}>
           <Icon name={it.icon} size={24} />
@@ -491,10 +491,32 @@ export function MorePage({ me, side }: { me: Me; side: Side }) {
 
 // The bar at the top of the main area: breadcrumb on the left, actions on the right. On a work surface it also
 // holds the button that opens the sidebar.
-export function TopBar({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
+//
+// Phase 5f (Design Log "Handoff ready: Phase 5f (glass)"): on a desktop it is a glass bar floating over the page. Once the
+// page scrolls, its content fades under the bar (the main area's data-scrolled); a page whose breadcrumb is one crumb
+// shows an empty bar until its own title has scrolled up under it, then its name fades in (.titled).
+export function TopBar({ children, right, className }: { children: React.ReactNode; right?: React.ReactNode; className?: string }) {
   const { openSidebar, peekSidebar, overlay } = useShell();
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const bar = ref.current, main = bar?.parentElement, page = bar?.nextElementSibling as HTMLElement | null;
+    if (!bar || !main || !page || overlay) return;
+    let raf = 0;
+    const check = () => {
+      raf = 0;
+      const scrolled = page.scrollTop > 0;
+      if (scrolled) main.dataset.scrolled = "1"; else delete main.dataset.scrolled;
+      const head = page.querySelector<HTMLElement>(".wp-pagehead, .wp-sethead");
+      const under = !!head && head.getBoundingClientRect().bottom <= bar.getBoundingClientRect().bottom;
+      bar.classList.toggle("titled", under);
+    };
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(check); };
+    check();
+    page.addEventListener("scroll", onScroll, { passive: true });
+    return () => { cancelAnimationFrame(raf); page.removeEventListener("scroll", onScroll); delete main.dataset.scrolled; };
+  }, [overlay]);
   return (
-    <header className="topbar">
+    <header className={`topbar${className ? " " + className : ""}`} ref={ref}>
       {overlay && <IconButton icon="menu" label="Open menu" onClick={openSidebar} onMouseEnter={() => peekSidebar(true)} onMouseLeave={() => peekSidebar(false)} />}
       <div className="crumbs">{children}</div>
       {right && <div className="right">{right}</div>}
