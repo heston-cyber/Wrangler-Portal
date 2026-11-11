@@ -120,3 +120,21 @@ test("F7 the backfill records who owns each existing file, and counts a file two
   // Safe to run again.
   expect(await w.t.action(internal.migrations.ownersAll, {})).toMatchObject({ recorded: 0, already: 2 });
 });
+
+test("F8 second review: inside its own business a file already in use isn't a new upload, and a W-9 is only ever a W-9", async () => {
+  const w = await world();
+  const w9 = await upload(w, "%PDF w9");
+  await w.t.mutation(internal.fileOwners.claim, { storageId: w9, purpose: "w9", asBusiness: w.A });
+  // The same business can't reuse its W-9 as a style image, a message file, a brand-kit file…
+  await expect(w.t.mutation(internal.fileOwners.claim, { storageId: w9, purpose: "style-image", asBusiness: w.A })).rejects.toThrow(/isn't one of yours/);
+  // …and a PDF the business already has can't be handed to Sign or the builder as a new document.
+  const pdf = await upload(w, "%PDF contract");
+  await w.t.mutation(internal.fileOwners.claim, { storageId: pdf, purpose: "contract-pdf", asBusiness: w.A });
+  await expect(w.heston.action(api.sign.create, { storageId: pdf, fileName: "x.pdf" })).rejects.toThrow(/Upload the PDF again/);
+  await expect(w.heston.action(api.builder.importPdf, { storageId: pdf })).rejects.toThrow(/Upload the PDF again/);
+  expect(await alive(w, pdf)).toBe(true);
+  // A style may point only at the business's own images.
+  const theirs = await upload(w, "their logo");
+  await w.t.mutation(internal.fileOwners.claim, { storageId: theirs, purpose: "style-image", asBusiness: w.B });
+  await expect(w.heston.mutation(api.builder.saveStyle, { name: "Planted", style: { logo: { fileId: theirs, width: 120, align: "left" } } })).rejects.toThrow(/isn't one of yours/);
+});

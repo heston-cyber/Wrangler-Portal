@@ -333,9 +333,11 @@ export const ownerMailData = internalQuery({
         mail: { k: "read" as const, vendor: r.name || r.email, title: build?.title ?? "The brief", project: p ? label(p) : "no project", link: `${SITE()}/vendors/briefings/${x._id}` } };
     }
     if (what === "w9" || what === "w9-replaced") {
-      const vendor = (await ctx.db.query("vendors").collect()).find((x) => x.w9 && String(x.w9.fileId) === id);
-      if (!vendor) return null;
-      return { ...(await brandOf(vendor.businessId ?? null)), key: `vendor-w9:${id}`, kind: "vendor_w9",
+      const [vid, at] = id.split(":");
+      const vId = ctx.db.normalizeId("vendors", vid ?? "");
+      const vendor = vId ? await ctx.db.get(vId) : null;
+      if (!vendor?.w9) return null;
+      return { ...(await brandOf(vendor.businessId ?? null)), key: `vendor-w9:${vendor._id}:${at ?? vendor.w9.uploadedAt}`, kind: "vendor_w9",
         mail: { k: "w9" as const, vendor: vendor.name, replaced: what === "w9-replaced", link: `${SITE()}/vendors/${vendor._id}` } };
     }
     return null;
@@ -598,7 +600,8 @@ export const setW9 = mutation({
     }
     const old = vendor.w9?.fileId;
     await ctx.db.patch(vendor._id, { w9: { fileId: a.storageId, name: clip(a.name, 120) || "W-9.pdf", uploadedAt: Date.now() }, updatedAt: Date.now() });
-    await ctx.scheduler.runAfter(0, internal.vendorPortal.mailOwner, { what: old ? "w9-replaced" : "w9", id: a.storageId }); // Nov 2
+    // Second 5e review: the email is keyed by the vendor and the time, never the W-9's file id.
+    await ctx.scheduler.runAfter(0, internal.vendorPortal.mailOwner, { what: old ? "w9-replaced" : "w9", id: `${vendor._id}:${Date.now()}` }); // Nov 2
     if (old && old !== a.storageId) await deleteFile(ctx, old, a.businessId);
     return { ok: true as const };
   },

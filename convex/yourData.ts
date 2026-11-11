@@ -46,7 +46,11 @@ export const OMIT_TABLES = new Set(["connectorKeys", "sheetKeys", "wsConnectorKe
  *  Stripe's own pay-page and PDF links (anyone holding one can open the invoice). */
 export const SECRET_FIELDS = new Set(["token", "linkToken", "payToken", "passcodeHash", "codeHash", "sessionHash", "tokenHash", "refreshToken", "accessToken", "accessExpiresAt", "syncToken", "codeSends", "codeAttempts", "codeExpiresAt", "failures", "failTotal", "hostedUrl", "pdfUrl"]);
 /** Secret fields whose names mean something else in other tables (review fix, Nov 6). */
-export const SECRET_PATHS: Record<string, string[]> = { calls: ["code"], emailPrefs: ["key"], fileUploads: ["sessionId"], wsDocuments: ["invoice.url"] };
+export const SECRET_PATHS: Record<string, string[]> = { calls: ["code"], emailPrefs: ["key"], fileUploads: ["sessionId"], wsDocuments: ["invoice.url"],
+  // Second 5e review (W-9 check, Nov 10): a vendor's Stripe recipient and bank method, and a payout's request and
+  // receipt link, stay out of the export (the vendor page shows only that direct deposit is set up).
+  vendors: ["payout.recipientId", "payout.payoutMethodId"],
+  vendorInvoices: ["payout.receiptUrl", "payout.request.recipient", "payout.request.payoutMethod", "payout.request.financialAccount", "payout.request.key"] };
 /** Deleted last: what other records point at (the business's own records go first, then these). */
 const LAST = ["wsDocuments", "projects", "clients", "vendors"];
 const ORDER = [...BUSINESS_TABLES.filter((t) => !LAST.includes(t)), ...LAST];

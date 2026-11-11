@@ -519,7 +519,7 @@ export const sync = internalAction({
 export const syncNow = action({
   args: {},
   handler: async (ctx) => {
-    const me: { businessId: Id<"businesses"> | null } = await ctx.runQuery(internal.users.assertAllowed, { perm: ["settings"] });
+    const me: { businessId: Id<"businesses"> | null } = await ctx.runQuery(internal.users.assertAllowed, {}); // the owner only (5e review, answer c)
     await ctx.scheduler.runAfter(0, internal.dropbox.sync, me.businessId ? { asBusiness: me.businessId } : {});
   },
 });

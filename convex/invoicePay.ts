@@ -215,7 +215,12 @@ export function paymentsFrom(list: StripeResult[]): { payments: NonNullable<Doc<
     if (!pi || typeof pi !== "object") continue;
     const at = Number(ip.status_transitions?.paid_at ?? pi.created ?? ip.created ?? 0) * 1000;
     const method = methodLabel(pi.payment_method ?? pi.last_payment_error?.payment_method);
-    if (ip.status === "paid" || pi.status === "succeeded") payments.push({ id: String(pi.id), at, method, cents: Number(ip.amount_paid ?? pi.amount_received ?? pi.amount ?? 0), status: "paid" });
+    if (ip.status === "paid" || pi.status === "succeeded") {
+      // Second 5e review: the charge says what's been refunded so far (a refund whose event came before the first sync).
+      const ch = typeof pi.latest_charge === "object" && pi.latest_charge ? pi.latest_charge : null;
+      const refunded = Number(ch?.amount_refunded ?? 0);
+      payments.push({ id: String(pi.id), at, method, cents: Number(ip.amount_paid ?? pi.amount_received ?? pi.amount ?? 0), status: "paid", ...(refunded > 0 ? { refundedCents: refunded } : {}) });
+    }
     else if (pi.status === "processing") payments.push({ id: String(pi.id), at, method, cents: Number(pi.amount ?? ip.amount_requested ?? 0), status: "processing" });
     else if (pi.last_payment_error) {
       // Each failed attempt is its own charge: the payment and charge ids name it (a bank payment fails days after it
@@ -259,7 +264,8 @@ export const applyChargeEvent = internalMutation({
     const money = (c: number) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     if (type === "charge.refunded") {
       const refunded = Number(o.amount_refunded ?? 0);
-      const payments = (i.payments ?? []).map((p) => (p.id === pi ? { ...p, refundedCents: refunded } : p));
+      // Second 5e review: events can arrive out of order; the refunded amount only goes up.
+      const payments = (i.payments ?? []).map((p) => (p.id === pi ? { ...p, refundedCents: Math.max(p.refundedCents ?? 0, refunded) } : p));
       const total = payments.reduce((s, p) => s + (p.refundedCents ?? 0), 0);
       if (total === (i.refundedCents ?? 0)) return null;
       await ctx.db.patch(i._id, { payments, refundedCents: total, history: [...i.history, { kind: "refunded", at: now, detail: `${money(total - (i.refundedCents ?? 0))} refunded in Stripe` }].slice(-60), updatedAt: now });
@@ -285,8 +291,13 @@ export const applyPayments = internalMutation({
     if (!i || i.stripe?.accountId !== a.accountId) return null;
     // 5e review M4 (Nov 6): Stripe's payments list doesn't carry refunds; what charge.refunded recorded on each payment
     // is kept by its id (it used to be wiped by the next sync, and the next refund then shrank the refunded total).
+    // Second 5e review: the larger of what's recorded and what Stripe's charge says, so a refund never goes back down.
     const refunds = new Map((i.payments ?? []).filter((p) => p.refundedCents).map((p) => [p.id, p.refundedCents!]));
-    const payments = (a.payments as NonNullable<Doc<"invoices">["payments"]>).map((p) => (refunds.has(p.id) ? { ...p, refundedCents: refunds.get(p.id) } : p));
+    const payments = (a.payments as NonNullable<Doc<"invoices">["payments"]>).map((p) => {
+      const r = Math.max(refunds.get(p.id) ?? 0, p.refundedCents ?? 0);
+      return r > 0 ? { ...p, refundedCents: r } : p;
+    });
+    const refundTotal = payments.reduce((t, p) => t + (p.refundedCents ?? 0), 0);
     const failure = a.failure as Failure | null;
     const now = Date.now();
     const history = [...i.history];
@@ -297,9 +308,11 @@ export const applyPayments = internalMutation({
     if (recorded) history.push({ kind: "failed", at: recorded.at, detail: recorded.message });
     const startedProcessing = a.processing && !i.processing && i.status === "open";
     if (startedProcessing) history.push({ kind: "processing", at: now, detail: payments.find((p) => p.status === "processing")?.method });
+    const moreRefunded = refundTotal > (i.refundedCents ?? 0);
+    if (moreRefunded) history.push({ kind: "refunded", at: now, detail: `$${((refundTotal - (i.refundedCents ?? 0)) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} refunded in Stripe` });
     await ctx.db.patch(i._id, {
       payments, processing: i.status === "paid" ? false : a.processing,
-      ...(recorded ? { lastFailure: recorded } : {}),
+      ...(recorded ? { lastFailure: recorded } : {}), ...(moreRefunded ? { refundedCents: refundTotal } : {}),
       history: history.slice(-60), syncedAt: now, updatedAt: now,
     });
     // Step 4: a receipt and "Payment received" for each new payment; the failed-payment email for a new failure.

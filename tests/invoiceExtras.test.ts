@@ -138,6 +138,9 @@ describe("refunds and disputes", () => {
     expect(await w.t.run(async (ctx) => (await ctx.db.get(id))?.payments?.[0]?.refundedCents)).toBe(50000);
     expect(await post("evt_r2", "charge.refunded", "acct_A", { id: "ch_1", payment_intent: "pi_1", amount_refunded: 80000 })).toBe(200);
     expect((await w.heston.query(api.invoices.get, { invoiceId: id })).refundedCents).toBe(80000);
+    // Second 5e review: an older event arriving late never lowers it.
+    expect(await post("evt_r_old", "charge.refunded", "acct_A", { id: "ch_1", payment_intent: "pi_1", amount_refunded: 50000 })).toBe(200);
+    expect((await w.heston.query(api.invoices.get, { invoiceId: id })).refundedCents).toBe(80000);
   });
 });
 

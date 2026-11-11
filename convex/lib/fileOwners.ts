@@ -27,6 +27,8 @@ export async function claimUpload(ctx: W, id: Id<"_storage">, businessId: Id<"bu
   const row = await rowOf(ctx, id);
   if (row) {
     if (row.businessId !== businessId) throw new ConvexError(NOT_YOURS);
+    // Second 5e review (W-9 check): a tax form is only ever used as a tax form, even inside its own business.
+    if ((row.purpose === "w9") !== (purpose === "w9")) throw new ConvexError(NOT_YOURS);
     return { fresh: false };
   }
   const meta = await ctx.db.system.get(id);

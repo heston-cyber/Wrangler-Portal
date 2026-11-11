@@ -530,7 +530,7 @@ export function ownerBriefingReadMail(b: MailBrand, d: { vendor: string; title: 
 export function ownerW9Mail(b: MailBrand, d: { vendor: string; replaced: boolean; link: string }): Mail {
   return mk(b, "updates", `${d.vendor} ${d.replaced ? "replaced their" : "uploaded a"} W-9`, [
     { t: "eyebrow", text: `${d.vendor} ${d.replaced ? "replaced their" : "uploaded a"} W-9` },
-    { t: "p", text: "It's on their vendor page under Tax, for your 1099s. Only you can open it." },
+    { t: "p", text: "It's on their vendor page under Tax, for your 1099s. Only you, and anyone you give Vendor payments, can open it." },
     { t: "button", label: "Open their page", href: d.link },
   ], ownerFoot("a vendor uploads a W-9"));
 }
