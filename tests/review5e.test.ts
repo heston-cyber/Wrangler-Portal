@@ -240,3 +240,19 @@ test("answer d: a Bookkeeper approving, declining or paying a vendor invoice is 
   const rows = await t.run(async (ctx) => (await ctx.db.query("auditLog").collect()).map((r: any) => `${r.role}: ${r.text}`));
   expect(rows).toContain("Bookkeeper: declined a vendor invoice (INV-0001)");
 });
+
+test("Heston, Nov 10: Reports shows what each vendor was paid only with Vendor payments; the vendor total stays", async () => {
+  const { t, ids } = await matrixWorld();
+  const bookkeeper = t.withIdentity({ subject: ids.bookkeeperSub });
+  const today = new Date().toISOString().slice(0, 10);
+  const range = { from: `${Number(today.slice(0, 4)) - 1}-01-01`, to: today, tz: "UTC" };
+  expect(Array.isArray((await bookkeeper.query(api.reports.page, range)).vendors)).toBe(true);
+  await t.run(async (ctx) => {
+    const m = (await ctx.db.query("memberships").collect()).find((x) => x.teamRole === "bookkeeper")!;
+    await ctx.db.patch(m._id, { perms: { ...(m as any).perms, vendorPayments: false } });
+  });
+  const r = await bookkeeper.query(api.reports.page, range);
+  expect(r.vendors).toBeNull();
+  expect(r.detail.vendorPaid).toBeNull();
+  expect(typeof r.summary.vendorCents).toBe("number");
+});

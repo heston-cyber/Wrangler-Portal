@@ -79,7 +79,7 @@ function reached(d: Doc<"deals">) {
   return { furthest, firstAt };
 }
 
-async function build(ctx: QueryCtx, a: { from: string; to: string; tz: string }, withValue: boolean) {
+async function build(ctx: QueryCtx, a: { from: string; to: string; tz: string }, withValue: boolean, withVendorPay = true) {
   if (!DAY.test(a.from) || !DAY.test(a.to) || a.from > a.to) throw new ConvexError("Pick a start and an end date.");
   if (daysBetween(a.from, a.to) > 366 * 6) throw new ConvexError("Pick a range of six years or less.");
   const tz = a.tz.slice(0, 64);
@@ -218,9 +218,10 @@ async function build(ctx: QueryCtx, a: { from: string; to: string; tz: string },
       averageJobCents: finished.length ? Math.round(finished.reduce((t, f) => t + f.cents, 0) / finished.length) : null },
     byProject,
     outstanding: { buckets, invoices: owed.slice(0, 200) },
-    vendors: [...vendorRows.values()].sort((x, y) => y.cents - x.cents),
+    // Heston, Nov 10 (18:45, "1. Yes"): what each vendor was paid needs Vendor payments; the vendor total above stays.
+    vendors: withVendorPay ? [...vendorRows.values()].sort((x, y) => y.cents - x.cents) : null,
     funnel: { stages: funnel, leads, leadToPaid: leads ? Math.round((funnel[STAGES.length - 1].count / leads) * 100) : null },
-    detail: { payments: payments.sort((x, y) => x.day.localeCompare(y.day)), vendorPaid: vendorPaid.sort((x, y) => x.day.localeCompare(y.day)),
+    detail: { payments: payments.sort((x, y) => x.day.localeCompare(y.day)), vendorPaid: withVendorPay ? vendorPaid.sort((x, y) => x.day.localeCompare(y.day)) : null,
       // 5e review M5: a finished job's own amount is a job amount; without the switch only the totals above remain.
       finished: withValue ? finished : finished.map((f) => ({ ...f, cents: null })) },
     empty: revenue === 0 && vendorCents === 0 && owed.length === 0 && leads === 0 && !months.some((m) => m.invoicedCents),
@@ -234,7 +235,7 @@ export const page = query({
   args: rangeArgs,
   handler: async (ctx, a) => {
     const me = await requireAll(ctx, "reports");
-    return build(ctx, a, seesValue(me));
+    return build(ctx, a, seesValue(me), !me.team || me.team.perms.vendorPayments);
   },
 });
 

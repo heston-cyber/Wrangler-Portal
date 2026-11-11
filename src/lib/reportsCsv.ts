@@ -21,9 +21,9 @@ type Page = {
   months: Array<{ month: string; paidCents: number; invoicedCents: number }>;
   byProject: Array<{ project: string; client: string | null; priceCents: number; billed: boolean; costCents: number; profitCents: number; estimateProfitCents: number | null }> | null;
   outstanding: { invoices: Array<{ title: string; number: string | null; client: string | null; due: string; daysLate: number; cents: number; bucket: string }> };
-  vendors: Array<{ vendor: string; cents: number; invoices: number }>;
+  vendors: Array<{ vendor: string; cents: number; invoices: number }> | null;
   funnel: { stages: Array<{ label: string; count: number }>; leads: number };
-  detail: { vendorPaid: Array<{ day: string; vendor: string; number: string; project: string | null; cents: number }> };
+  detail: { vendorPaid: Array<{ day: string; vendor: string; number: string; project: string | null; cents: number }> | null };
 };
 
 export const REPORT_FILES = {
@@ -32,8 +32,8 @@ export const REPORT_FILES = {
     ...(p.byProject ?? []).map((x) => [x.project, x.client, dollars(x.priceCents), x.billed ? "Yes" : "No, the estimate", dollars(x.costCents), dollars(x.profitCents), x.estimateProfitCents === null ? null : dollars(x.estimateProfitCents)])],
   outstanding: (p: Page): Cell[][] => [[`Outstanding as of ${p.today}`], ["Invoice", "Number", "Client", "Due", "Days late", "How late", "Owed (USD)"],
     ...p.outstanding.invoices.map((x) => [x.title, x.number, x.client, x.due, x.daysLate, x.bucket, dollars(x.cents)])],
-  vendors: (p: Page): Cell[][] => [["Vendor", "Invoices paid", "Paid (USD)"], ...p.vendors.map((x) => [x.vendor, x.invoices, dollars(x.cents)]),
-    [], ["Paid on", "Vendor", "Their invoice", "Project", "Paid (USD)"], ...p.detail.vendorPaid.map((x) => [x.day, x.vendor, x.number, x.project, dollars(x.cents)])],
+  vendors: (p: Page): Cell[][] => [["Vendor", "Invoices paid", "Paid (USD)"], ...(p.vendors ?? []).map((x) => [x.vendor, x.invoices, dollars(x.cents)]),
+    [], ["Paid on", "Vendor", "Their invoice", "Project", "Paid (USD)"], ...(p.detail.vendorPaid ?? []).map((x) => [x.day, x.vendor, x.number, x.project, dollars(x.cents)])],
   funnel: (p: Page): Cell[][] => [["Stage", "Leads that reached it", "Share of leads"], ...p.funnel.stages.map((s) => [s.label, s.count, p.funnel.leads ? `${Math.round((s.count / p.funnel.leads) * 100)}%` : null])],
 } as const;
 export type FileKey = keyof typeof REPORT_FILES;
