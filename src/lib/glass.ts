@@ -27,7 +27,8 @@ export const FLOAT = ".wp-side, .wp-shell:not(.overlay) .main > .topbar, .wp-tab
 export const CARDS = ".glass, .pov-stat";
 const ALL = `${FLOAT}, ${CARDS}`;
 const NEAR = 120; // surfaces this far off screen give their canvas back
-const RES = 1.5;  // pixels per CSS pixel the rim is drawn at
+const RES = 1.5;  // pixels per CSS pixel a still surface's rim is drawn at
+const RES_SLIDING = 1; // …and a card's or chip's, redrawn on every frame it scrolls (Nov 11, 5f.3)
 
 const VERT = `#version 300 es
 in vec2 a; void main() { gl_Position = vec4(a, 0.0, 1.0); }`;
@@ -130,13 +131,13 @@ export function startGlass(host: HTMLElement): () => void {
   // the accessible looks are solid, with no glass effect (Foundations, 5 · Accessible looks)
   if (matchMedia("(prefers-reduced-transparency: reduce), (prefers-contrast: more)").matches) return () => {};
   // Checks for Heston's phone: ?glass=css shows the plain CSS glass for this tab, ?glass=gl brings the WebGL rim back,
-  // ?glass=live redraws the cards' rims on every frame while they scroll (Nov 11, to feel its cost on a real iPhone).
-  let live = false;
+  // ?glass=lazy keeps the cards' rims still while they scroll and redraws them where they stop (with a quick fade).
+  let lazyMode = false;
   try {
     const q = new URLSearchParams(location.search).get("glass");
-    if (q === "css" || q === "gl" || q === "live") sessionStorage.setItem("wp.glass", q);
+    if (q === "css" || q === "gl" || q === "lazy") sessionStorage.setItem("wp.glass", q);
     if (sessionStorage.getItem("wp.glass") === "css") return () => {};
-    live = sessionStorage.getItem("wp.glass") === "live";
+    lazyMode = sessionStorage.getItem("wp.glass") === "lazy";
   } catch { /* no storage: the glass as usual */ }
   // only the cactus scene (another business keeps its own light and the CSS glass)
   if (!/cactus/.test(getComputedStyle(host).backgroundImage)) return () => {};
@@ -226,31 +227,37 @@ export function startGlass(host: HTMLElement): () => void {
     if (img.phone !== phone()) load(phone());
     // D168 (5f.3): the rim is a soft, bent picture, so it's drawn at up to 1.5 pixels per CSS pixel and stretched to
     // the surface (a phone's 3× would cost four times as much for nothing you can see); the crisp edge is the CSS line.
-    const dpr = Math.min(devicePixelRatio || 1, RES);
+    // Nov 11 (Heston: "when I press to scroll the effect goes away"): cards and chips that scroll with the page are drawn
+    // at 1 pixel per CSS pixel (their rim is soft), so redrawing them on every frame they move stays cheap.
     const box = host.getBoundingClientRect();
-    const W = box.width * dpr, H = box.height * dpr;
-    // the scene as the CSS draws it: cover; centred (phone: anchored to the bottom)
-    const sc = Math.max(W / img.w, H / img.h), dw = img.w * sc, dh = img.h * sc;
-    const dx = (W - dw) / 2, dy = img.phone ? H - dh : (H - dh) / 2;
-    const sceneKey = `${W}|${H}|${box.left}|${box.top}`;
+    const sceneKey = `${box.width}|${box.height}|${box.left}|${box.top}|${devicePixelRatio}`;
     if (sceneKey !== scene) { scene = sceneKey; for (const s of shapes) s.last = ""; }
-    gl.uniform1f(u.texScale, img.w / dw);
-    gl.uniform1f(u.depth, GLASS.depth * dpr);
-    gl.uniform1f(u.dpr, dpr);
+    let at = -1;
+    const useRes = (res: number) => {
+      if (res === at) return;
+      at = res;
+      const W = box.width * res, H = box.height * res;
+      // the scene as the CSS draws it: cover; centred (phone: anchored to the bottom)
+      const sc = Math.max(W / img!.w, H / img!.h), dw = img!.w * sc, dh = img!.h * sc;
+      view = { dx: (W - dw) / 2, dy: img!.phone ? H - dh : (H - dh) / 2, dw, dh };
+      gl.uniform1f(u.texScale, img!.w / dw);
+      gl.uniform1f(u.depth, GLASS.depth * res);
+      gl.uniform1f(u.dpr, res);
+    };
+    let view = { dx: 0, dy: 0, dw: 1, dh: 1 };
     let pending = false;
     for (const s of shapes) {
+      const dpr = Math.min(devicePixelRatio || 1, s.lazy ? RES_SLIDING : RES);
       const r = s.el.getBoundingClientRect();
       const near = r.bottom > -NEAR && r.top < innerHeight + NEAR && r.right > -NEAR && r.left < innerWidth + NEAR && r.width >= 2 && r.height >= 2;
-      const sliding = s.lazy && !live && performance.now() < movingUntil;
+      const sliding = s.lazy && lazyMode && performance.now() < movingUntil;
       if (!near) { if (s.cv && !sliding) release(s); continue; }
       const w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
       const key = `${r.left.toFixed(1)}|${r.top.toFixed(1)}|${w}|${h}`, size = `${w}|${h}`;
       if (s.cv && key === s.last) continue; // hasn't moved: its glass is still right
-      // Nov 11 (5f.3): surfaces that slide with the page (--lg-lazy: the cards, tiles and phone chips) are redrawn where
-      // they stop, not on every frame: redrawing every card a frame dropped a phone-sized software GPU from 60 fps to 4
-      // (desktop too). Bars, the tab bar, menus and sheets don't slide, so they're always true.
-      // While it slides its rim steps aside (a quick fade, portal.css canvas.wp-glass.stale), so a stale bend never shows,
-      // and fades back once redrawn.
+      // ?glass=lazy only (the Nov 11 first try; Heston: "when I press to scroll the effect goes away"): surfaces that
+      // slide with the page (--lg-lazy) are redrawn where they stop; while they slide their rim steps aside (a quick fade,
+      // portal.css canvas.wp-glass.stale). By default they're redrawn on every frame, so the bend stays as they scroll.
       if (sliding && (!s.cv || size === s.size)) { if (s.cv && !s.cv.classList.contains("stale")) s.cv.classList.add("stale"); pending = true; continue; }
       s.last = key; s.size = size;
       if (!s.cv) {
@@ -274,10 +281,10 @@ export function startGlass(host: HTMLElement): () => void {
       gl.uniform1f(u.frost, s.frost * dpr);
       gl.uniform1f(u.ink, s.ink);
       gl.uniform1f(u.veil, s.veil);
-      gl.uniform4f(u.img, dx - (r.left - box.left) * dpr, dy - (r.top - box.top) * dpr, dw, dh);
+      useRes(dpr);
+      gl.uniform4f(u.img, view.dx - (r.left - box.left) * dpr, view.dy - (r.top - box.top) * dpr, view.dw, view.dh);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
-      s.ctx?.clearRect(0, 0, w, h);
-      s.ctx?.drawImage(glc, 0, 0, w, h, 0, 0, w, h);
+      if (s.ctx) { s.ctx.globalCompositeOperation = "copy"; s.ctx.drawImage(glc, 0, 0, w, h, 0, 0, w, h); } // replaces, no clear pass
       s.cv.classList.remove("stale");
     }
     // keep looking every frame while anything may be moving (a sheet sliding in, momentum scrolling the chips)
