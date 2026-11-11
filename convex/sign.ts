@@ -8,7 +8,7 @@ import { action, type ActionCtx } from "./_generated/server";
 import { audit } from "./lib/audit";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { internal } from "./_generated/api";
-import { claimIn, discardIn, removeRecentIn } from "./fileOwners";
+import { claimIn, discardIn, recordIn, removeRecentIn } from "./fileOwners";
 import { deleteFile } from "./lib/fileOwners";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -635,6 +635,7 @@ async function buildPreview(ctx: ActionCtx, versionId: Id<"wsVersions">): Promis
     const out = await stamp(bytes, stamps, cert);
     // Kept for 15 minutes, then deleted: long enough to open, never a second copy lying around.
     const id = await ctx.storage.store(new Blob([new Uint8Array(out)], { type: "application/pdf" }));
+    await recordIn(ctx, id, "preview"); // second 5e review: the business's own, so no one else can claim it while it lives
     await ctx.scheduler.runAfter(15 * 60_000, internal.sign.deletePreview, { storageId: id });
     const url = await ctx.storage.getUrl(id);
     if (!url) throw new ConvexError("The preview couldn't be saved.");
@@ -659,7 +660,11 @@ export const previewData = internalQuery({
 
 export const deletePreview = internalMutation({
   args: { storageId: v.id("_storage") },
-  handler: async (ctx, { storageId }) => { await ctx.storage.delete(storageId); return null; },
+  handler: async (ctx, { storageId }) => {
+    await ctx.storage.delete(storageId);
+    for (const r of await ctx.db.query("fileOwners").withIndex("by_storage", (q) => q.eq("storageId", storageId)).collect()) await ctx.db.delete(r._id);
+    return null;
+  },
 });
 
 // ---------- Claude's requests (security review, Oct 27) ----------
