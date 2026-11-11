@@ -62,12 +62,18 @@ void main() {
   float R2 = min(max(r, b), min(h.x, h.y));
   float d2 = sd(p, h, R2);
   vec2 e = vec2(1.0, 0.0);
-  vec2 n = normalize(vec2(sd(p + e.xy, h, R2) - sd(p - e.xy, h, R2), sd(p + e.yx, h, R2) - sd(p - e.yx, h, R2)) + 1e-6);
+  // Nov 11 (Heston's iPhone: a black line across the middle of every card): along a rounded box's centre line the
+  // distance field's slope is zero, so the old normalize(g + 1e-6) had nothing to normalise; Apple's GPUs turned that
+  // into NaN (black) where desktop GPUs didn't. The direction is now taken only where the slope is real, and the flat
+  // middle (where nothing bends) never uses it.
+  vec2 g = vec2(sd(p + e.xy, h, R2) - sd(p - e.xy, h, R2), sd(p + e.yx, h, R2) - sd(p - e.yx, h, R2));
+  float gl2 = dot(g, g);
+  vec2 n = gl2 > 1e-4 ? g * inversesqrt(gl2) : vec2(0.0);
   float x = clamp(-d2 / b, 0.0, 1.0);                         // 0 at the rim, 1 where the flat middle starts
   float xm = max(x, 0.004), om = 1.0 - xm;
   float sq = 1.0 - om * om * om * om;
   float height = b * pow(sq, 0.25);
-  float slope = om * om * om * pow(sq, -0.75);                // d(height)/d(distance in)
+  float slope = x >= 0.999 ? 0.0 : om * om * om * pow(max(sq, 1e-4), -0.75); // d(height)/d(distance in); none in the flat middle
   vec3 N = normalize(vec3(n * slope, 1.0));                   // the surface leans outward at the rim
   vec3 ray = refract(vec3(0.0, 0.0, -1.0), N, 1.0 / 1.5);
   vec2 bendv = ray.xy / max(-ray.z, 0.25) * (height + 0.25 * b) * u_refr;
