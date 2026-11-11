@@ -120,7 +120,7 @@ export function SiteWatchSettings({ show }: { show: (m: string) => void }) {
 function ReportPage({ show }: { show: (m: string) => void }) {
   const rep = useQuery(api.siteWatch.report);
   const setPaused = useMutation(api.siteWatch.setPaused);
-  const head = <SetHead eyebrow="Settings" title="Site watch." sub="A daily check of the portal. What it finds, the fixes it has ready, and what needs you." />;
+  const head = <SetHead title="Site watch." sub="A daily check of the portal. What it finds, the fixes it has ready, and what needs you." />;
   if (rep === undefined) return (
     <>{head}
       <div className="sw-banner skeleton" aria-hidden><SkeletonRows n={1} /></div>

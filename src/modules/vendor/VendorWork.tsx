@@ -2,6 +2,7 @@
 // (734:4386: their details, the W-9 for this business D100, how they're paid D101) and Review for booked editors
 // (734:4809, D93, D103). Approving and marking invoices paid is the owner's (step 5, convex/vendorPayments.ts); an
 // invoice the owner declines comes back here to fix and send again.
+import { SignInRows } from "../security/Security";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -255,7 +256,7 @@ export function VendorSettings() {
   const onFile = async (f: File | undefined) => {
     if (!f) return;
     setUp(true);
-    try { const id = await uploadToStorage(await uploadUrl({ businessId: s.businessId }), f); await setW9({ businessId: s.businessId, storageId: id as Id<"_storage">, name: f.name }); show("W-9 uploaded."); }
+    try { const id = await uploadToStorage(await uploadUrl({ businessId: s.businessId }), f); const r = await setW9({ businessId: s.businessId, storageId: id as Id<"_storage">, name: f.name }); show(r && "error" in r ? r.error ?? "The W-9 didn't upload." : "W-9 uploaded."); }
     catch (e) { show(errText(e)); } finally { setUp(false); if (file.current) file.current.value = ""; }
   };
   return (
@@ -286,6 +287,8 @@ export function VendorSettings() {
             </Card>
           </div>
           <div className="col right">
+            {/* Phase 5e step 2: the same Password and Email rows as everyone's (842:11010, vendors assumed the same) */}
+            <Card label="Sign-in" head={<SectionHead label="Sign-in" />}><SignInRows show={show} /></Card>
             <Card label="Help" head={<SectionHead label="Help" />}>
               <ListRow className="ilead" lead={{ icon: "info" }} to="/vendor/help" chevron title="Help" meta="Short guides: bookings, briefings, invoices and your W-9." />
             </Card>
@@ -361,7 +364,7 @@ export function VendorReview() {
     <>
       <TopBar><span className="here">Review</span></TopBar>
       <div className="wp-page">
-        <PageHeader eyebrow="Review" title="Review." sub="The projects you're booked to edit. Watch every cut and leave notes; uploads and sharing stay with the business." />
+        <PageHeader title="Review." sub="The projects you're booked to edit. Watch every cut and leave notes; uploads and sharing stay with the business." />
         {r.rows.length === 0 ? <EmptyState icon="review" title="Nothing to review." body="When you're booked as an editor, the project's cuts show up here." /> : (
           <Card label="Projects">
             {r.rows.map((x, i) => <div key={x.bookingId} className="wp-rowwrap">{i > 0 && <Divider />}

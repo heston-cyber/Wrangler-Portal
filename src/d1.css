@@ -120,15 +120,13 @@ body { font-family: var(--font-body); font-size: 14.5px; letter-spacing: -.003em
 .panel, .note, .vcard, .rect, .regwrap, .nextrender, .ws-card, .ws-hubcard, .wst-card, .wst-clause, .ws-sigform, .ws-sigcard,
 .wsx-card, .ws-note, .ws-recent .regwrap, .ehead, .drop, .selbar {
   background-color: var(--surface-block);
-  background-image: var(--grain);
-  background-blend-mode: soft-light;
   backdrop-filter: blur(14px) saturate(130%); -webkit-backdrop-filter: blur(14px) saturate(130%);
   box-shadow: inset 0 0 0 1px var(--border-glass);
 }
 .note, .vcard, .rect, .vcard.rect { border-radius: var(--radius-card); }
 .panel, .regwrap, .ws-card, .ws-hubcard, .wst-card, .wst-clause, .ws-sigform, .ws-sigcard, .wsx-card { border-radius: var(--radius-card); }
 .ws-hubcard:hover, .wst-card:hover { background-color: var(--surface-block-hover); box-shadow: inset 0 0 0 1px var(--border-strong); }
-.menu, .dialog, .toast { background-image: var(--grain); background-blend-mode: soft-light; }
+/* Heston (Nov 6): no grain on the glass; the grain lives in the background scene only */
 .menu { border-radius: 16px; }
 .dialog { border-radius: var(--radius-lg); backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass); }
 .backdrop { background: rgba(var(--ink), .62); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }

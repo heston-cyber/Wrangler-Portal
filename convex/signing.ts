@@ -14,6 +14,7 @@
 // Nothing here trusts the page: every rule (consent first, every initial, the signing order, expiry, a voided or
 // replaced document) is checked again on the server, and every step is an event in the hash-chained trail.
 import { httpAction, type MutationCtx } from "./_generated/server";
+import { audit } from "./lib/audit";
 import { forBusiness, internalAction, internalMutation, internalQuery } from "./lib/functions";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
@@ -33,6 +34,7 @@ import {
 import { pngProblem } from "./lib/pngCheck";
 import { allowedEmails } from "./auth";
 import { bump } from "./lib/rate";
+import { ownedOrNull, recordFile } from "./lib/fileOwners";
 import { businessContact, businessInScope, defaultBusiness } from "./lib/business";
 import { crmDocument } from "./crm";
 
@@ -293,11 +295,13 @@ export const docFor = internalMutation({
 
 // B2: the signing page's background: the document's own (from its builder style), or the default style's backdrop.
 async function lookOf(ctx: MutationCtx, doc: Doc<"wsDocuments">): Promise<{ backdrop: string; image: string | null }> {
-  if (doc.look) return { backdrop: doc.look.backdrop, image: doc.look.backdropImageId ? await ctx.storage.getUrl(doc.look.backdropImageId) : null };
+  // Second 5e review: only an image the document's business owns (a look only; the signing steps are unchanged).
+  if (doc.look) { const own = await ownedOrNull(ctx, doc.look.backdropImageId, doc.businessId); return { backdrop: doc.look.backdrop, image: own ? await ctx.storage.getUrl(own) : null }; }
   const def = (await ctx.db.query("wsStyles").collect()).find((x) => x.isDefault)?.style as { backdrop?: string; backdropImage?: { fileId: string } | null } | undefined;
   const preset = (await ctx.db.query("counters").withIndex("by_key", (q) => q.eq("key", "wsDefaultPreset")).first())?.value ?? 0;
   const st = def ?? PRESET_STYLES[preset] ?? PRESET_STYLES[0];
-  const img = st.backdropImage?.fileId ? await ctx.storage.getUrl(st.backdropImage.fileId as Id<"_storage">) : null;
+  const ownImg = await ownedOrNull(ctx, st.backdropImage?.fileId, doc.businessId);
+  const img = ownImg ? await ctx.storage.getUrl(ownImg) : null;
   return { backdrop: st.backdrop && /^#[0-9a-f]{3,8}$/i.test(st.backdrop) ? st.backdrop : "#e9e7e2", image: img };
 }
 
@@ -341,6 +345,8 @@ export const adoptRecord = internalMutation({
     if (await tooBusy(ctx, r.s._id)) return { error: BUSY };
     const old = r.s.adopted;
     await ctx.db.patch(r.s._id, { adopted: { name: a.name, title: a.title, method: a.method, signatureFileId: a.signatureFileId, initialsFileId: a.initialsFileId, signatureSha256: a.signatureSha256, initialsSha256: a.initialsSha256, at: Date.now() } });
+    // 5e review (Nov 6): the images the server just stored belong to the document's business (bookkeeping only; the signing steps are unchanged).
+    for (const id of [a.signatureFileId, a.initialsFileId]) await recordFile(ctx, id, r.s.businessId ?? null, "signerSignature");
     if (old) { await ctx.storage.delete(old.signatureFileId); await ctx.storage.delete(old.initialsFileId); }
     await ev(ctx, r.s, old ? "signature_changed" : "signature_adopted", a, `Adopted a ${a.method} signature and initials as "${a.name}"${a.title ? `, ${a.title}` : ""} (signature image SHA-256 ${a.signatureSha256}, initials ${a.initialsSha256}).`);
     return { ok: true };
@@ -388,6 +394,7 @@ export const sign = internalMutation({
     if (missing.length) return { error: `${missing.length} initial box${missing.length === 1 ? " is" : "es are"} still empty.` };
     if (!mine.some((b) => b.kind === "sign")) return { error: "This document has no signature box for you. Contact Wrangler Productions." };
     const now = Date.now();
+    await audit(ctx, { kind: "signed", text: `signed ${doc.title}`, where: "Docs › Contracts", link: `/sign/d/${doc._id}`, by: { name: s.adopted.name, role: "Signer" }, businessId: doc.businessId });
     await ctx.db.patch(s._id, { status: "signed", signedAt: now, signedDate: centralDate(now), signIp: ip, signUserAgent: userAgent, sessionHash: undefined, sessionExpiresAt: undefined });
     await ev(ctx, s, "signed", { ip, userAgent }, `Signed version ${ver.number} as "${s.adopted.name}" (${s.adopted.method} signature, ${(s.initialed ?? []).length} initial${(s.initialed ?? []).length === 1 ? "" : "s"}) after agreeing: "${SIGN_STATEMENT}" Lock hash ${ver.lockHash}. File SHA-256 ${ver.fileSha256}.`);
 
@@ -487,6 +494,8 @@ export const notifyOwner = internalAction({
     const m = kind === "locked" ? ownerLockedMail(b, { signer: d.s.name, title: d.doc.title, label: d.label, link })
       : kind === "all_signed" ? ownerAllSignedMail(b, { title: d.doc.title, label: d.label, link })
       : ownerSignedMail(b, { signer: d.s.name, title: d.doc.title, label: d.label, left, link });
+    // 5e review (Nov 6): the bell hears it too, even with the email off (D146). A notice only; signing is unchanged.
+    try { if (d.doc.businessId) await ctx.runMutation(internal.bell.post, { businessId: d.doc.businessId, kind: "contracts", title: m.subject, key: `ws-owner-${kind}:${signingId}`, link: `/sign/d/${d.doc._id}` }); } catch { /* the bell never stops the email (second 5e review) */ }
     if (await ctx.runQuery(internal.emails.isOff, { email: to, kind: `ws-owner-${kind}`, ...(d.doc.businessId ? { businessId: d.doc.businessId } : {}) })) return null; // Settings › Notifications
     try { await sendEmail({ from: m.from, to, replyTo: null, subject: m.subject, text: m.text, html: m.html, tag: `ws-owner-${kind}` }); } catch (e) { console.error("notifyOwner", String((e as Error).message).slice(0, 120)); }
     return null;

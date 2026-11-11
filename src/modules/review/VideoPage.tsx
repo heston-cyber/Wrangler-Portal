@@ -47,6 +47,7 @@ import { ViewsChip, ViewsDialog } from "./Views";
 import { RoundChip } from "./VideoRows";
 import { Watermark } from "./player/Watermark";
 import { useRoundGate } from "../projects/RoundGate";
+import { usePerms } from "../../lib/teamAccess";
 import { QUALITY_PREF_KEY, defaultQuality, noticeKey, noticeText, qualityOptions, switchTo, type QualityId } from "./player/quality";
 
 export default function VideoPage({ videoId, versionNumber, noteId }: { videoId: Id<"videos">; versionNumber: number | null; noteId: string | null }) {
@@ -370,7 +371,8 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const [focusId, setFocusId] = useState<string | null>(noteId);
   const [focusTick, setFocusTick] = useState(0);
   const [dialog, setDialog] = useState<null | "rename" | "starttc" | "keys" | "register" | "final" | "share" | "views">(null);
-  const covering = useQuery(api.shares.coveringVideo, owner ? { videoId: data._id } : "skip");
+  const { role } = usePerms(); // Phase 5e: an Editor has no share links (the server refuses them)
+  const covering = useQuery(api.shares.coveringVideo, owner && role !== "editor" ? { videoId: data._id } : "skip");
   const libSettings = useLibrarySettings();
   const rootRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);

@@ -58,7 +58,7 @@ export default function QuotesPage() {
     <>
       <TopBar><span className="secondary">Payments</span><Sep /><span className="here">Quotes</span></TopBar>
       <div className="wp-page">
-        <PageHeader eyebrow="Payments" title="Quotes." sub="Quick prices for small jobs. Clients accept them online, no account needed." actions={<ButtonLink variant="primary" to="/payments/quotes/new">New quote</ButtonLink>} />
+        <PageHeader title="Quotes." sub="Quick prices for small jobs. Clients accept them online, no account needed." actions={<ButtonLink variant="primary" to="/payments/quotes/new">New quote</ButtonLink>} />
         {rows === undefined ? <Card label="Loading"><SkeletonRows n={4} /></Card> : rows.length === 0 ? (
           <EmptyState icon="invoice" title="No quotes yet." body="A quote is a quick price for a small job. It looks like your invoices, and the client accepts it online without an account." actions={<ButtonLink variant="primary" to="/payments/quotes/new">New quote</ButtonLink>} />
         ) : (

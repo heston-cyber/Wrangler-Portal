@@ -25,7 +25,7 @@ const MAX_POLLS = 720; // 2 hours
 export const startUpload = action({
   args: { videoId: v.id("videos"), fileName: v.string(), fileSize: v.optional(v.number()) },
   handler: async (ctx, a): Promise<{ versionId: Id<"versions">; number: number; libraryId: string; videoId: string; expire: number; signature: string; endpoint: string }> => {
-    const who: { name: string } = await ctx.runQuery(internal.users.assertAllowed, { ids: [a.videoId] });
+    const who: { name: string } = await ctx.runQuery(internal.users.assertAllowed, { ids: [a.videoId], perm: ["review"] });
     const { lib, key } = bunnyEnv();
     const title = a.fileName.slice(0, 200);
     const created = (await bunnyCall(`/library/${lib}/videos`, { method: "POST", body: JSON.stringify({ title }) })) as { guid?: string };
@@ -43,7 +43,7 @@ export const startUpload = action({
 export const uploadFinished = action({
   args: { versionId: v.id("versions") },
   handler: async (ctx, { versionId }) => {
-    const { businessId } = await ctx.runQuery(internal.users.assertAllowed, { ids: [versionId] });
+    const { businessId } = await ctx.runQuery(internal.users.assertAllowed, { ids: [versionId], perm: ["review"] });
     await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { status: "processing", pollCount: 0 } });
     // Step 6: the whole pipeline after the upload (poll, new-version emails, transcript, waveform) acts for this business.
     await forBusiness(ctx, businessId).scheduler.runAfter(2000, internal.uploads.poll, { versionId });
@@ -53,7 +53,7 @@ export const uploadFinished = action({
 export const uploadFailed = action({
   args: { versionId: v.id("versions"), error: v.string() },
   handler: async (ctx, { versionId, error }) => {
-    await ctx.runQuery(internal.users.assertAllowed, { ids: [versionId] });
+    await ctx.runQuery(internal.users.assertAllowed, { ids: [versionId], perm: ["review"] });
     await ctx.runMutation(internal.library.patchVersion, { versionId, patch: { status: "failed", error: error.slice(0, 300) } });
   },
 });

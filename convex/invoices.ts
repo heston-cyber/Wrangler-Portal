@@ -3,12 +3,13 @@
 // (its connected account), gives it the business's next number (D52) and finalizes it. Stripe holds the money from
 // then on; the Connect webhook keeps this copy in step. The client's page, Pay and the email: invoicePay.ts.
 import { action } from "./_generated/server";
+import { audit } from "./lib/audit";
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import { invoicePrefix } from "./lib/invoiceNumber";
 import { stripeCall, StripeError, type StripeResult } from "./lib/stripeApi";
@@ -71,7 +72,7 @@ async function rowOf(ctx: QueryCtx, i: Doc<"invoices">) {
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     const rows = await ctx.db.query("invoices").withIndex("by_updated").order("desc").take(500);
     return Promise.all(rows.map((i) => rowOf(ctx, i)));
   },
@@ -82,7 +83,7 @@ export const list = query({
 export const overview = query({
   args: { tzOffsetMin: v.optional(v.number()) },
   handler: async (ctx, { tzOffsetMin = 0 }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     return overviewData(ctx, tzOffsetMin);
   },
 });
@@ -154,7 +155,7 @@ export async function overviewData(ctx: QueryCtx, tzOffsetMin = 0) {
 export const forProject = query({
   args: { projectId: v.string() },
   handler: async (ctx, { projectId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     const id = ctx.db.normalizeId("projects", projectId);
     if (!id) return [];
     const rows = await ctx.db.query("invoices").withIndex("by_project", (q) => q.eq("projectId", id)).collect();
@@ -166,7 +167,7 @@ export const forProject = query({
 export const get = query({
   args: { invoiceId: v.string() },
   handler: async (ctx, { invoiceId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     const id = ctx.db.normalizeId("invoices", invoiceId);
     const i = id ? await ctx.db.get(id) : null;
     if (!i) return null;
@@ -196,7 +197,7 @@ export const get = query({
 export const options = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     const biz = await ctx.db.get(ownBusiness(ctx));
     const clients = await ctx.db.query("clients").collect();
     const projects = await ctx.db.query("projects").collect();
@@ -252,7 +253,7 @@ function cleanDraft(a: { title: string; billTo: { name: string; email: string; c
 export const saveDraft = mutation({
   args: { invoiceId: v.optional(v.string()), ...draftArgs },
   handler: async (ctx, a) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "payments");
     const clientId = a.clientId ? ctx.db.normalizeId("clients", a.clientId) : null;
     const projectId = a.projectId ? ctx.db.normalizeId("projects", a.projectId) : null;
     if (a.clientId && !(clientId && (await ctx.db.get(clientId)))) throw new ConvexError("That client isn't here.");
@@ -279,7 +280,7 @@ export const saveDraft = mutation({
 export const deleteDraft = mutation({
   args: { invoiceId: v.string() },
   handler: async (ctx, { invoiceId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     const id = ctx.db.normalizeId("invoices", invoiceId);
     const i = id ? await ctx.db.get(id) : null;
     if (!i) return null;
@@ -296,7 +297,7 @@ export const deleteDraft = mutation({
 export const claimForSend = internalMutation({
   args: { invoiceId: v.id("invoices") },
   handler: async (ctx, { invoiceId }) => {
-    const me = await requireMe(ctx);
+    const me = await requireAll(ctx, "payments");
     const i = await ctx.db.get(invoiceId);
     if (!i) throw new ConvexError("That invoice isn't here.");
     // A send that stopped partway (more than 5 minutes in "sending") can be tried again; send() then checks what's in Stripe.
@@ -332,6 +333,7 @@ export const recordSent = internalMutation({
     if (!i) return;
     const s = stripe as { accountId: string; customerId: string; invoice: StripeResult };
     const now = Date.now();
+    await audit(ctx, { kind: "sent", text: `sent invoice ${s.invoice.number ?? i.number ?? i.title}`, where: "Payments › Invoices", link: `/payments/invoices/${invoiceId}`, businessId: i.businessId });
     await ctx.db.patch(invoiceId, {
       status: s.invoice.status === "paid" ? "paid" : "open",
       stripe: { accountId: s.accountId, invoiceId: s.invoice.id, customerId: s.customerId, number: s.invoice.number ?? i.number, hostedUrl: s.invoice.hosted_invoice_url ?? undefined, pdfUrl: s.invoice.invoice_pdf ?? undefined, livemode: !!s.invoice.livemode },
@@ -446,7 +448,7 @@ export const send = action({
 /** Owner only, before anything is claimed (so a refused caller never touches the counter). */
 export const sendGuard = internalQuery({
   args: { invoiceId: v.id("invoices") },
-  handler: async (ctx) => { await requireMe(ctx); return null; },
+  handler: async (ctx) => { await requireAll(ctx, "payments"); return null; },
 });
 
 /** The moment an invoice falls due: the end of its due date, US Central time (Stripe needs a time in the future). */
@@ -522,7 +524,7 @@ async function finalCandidates(ctx: QueryCtx | MutationCtx, projectId: Id<"proje
 export const finalOptions = query({
   args: { projectId: v.string() },
   handler: async (ctx, { projectId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     const id = ctx.db.normalizeId("projects", projectId);
     return id ? (await finalCandidates(ctx, id)).rows : [];
   },
@@ -533,7 +535,7 @@ export const finalOptions = query({
 export const draftFinal = mutation({
   args: { projectId: v.id("projects"), documentId: v.id("wsDocuments") },
   handler: async (ctx, { projectId, documentId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     const { project, rows } = await finalCandidates(ctx, projectId);
     const r = rows.find((x) => x.documentId === documentId);
     if (!project || !r) throw new ConvexError("That contract has no balance left to invoice on this project.");
@@ -559,7 +561,7 @@ export const draftFinal = mutation({
 export const voidTarget = internalQuery({
   args: { invoiceId: v.id("invoices") },
   handler: async (ctx, { invoiceId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     const i = await ctx.db.get(invoiceId);
     if (!i) throw new ConvexError("That invoice isn't here.");
     if (i.status !== "open") throw new ConvexError(i.status === "draft" ? "A draft isn't sent; delete it instead." : "Only an unpaid invoice can be voided.");
@@ -577,6 +579,7 @@ export const voidInvoice = action({
     try {
       const inv = await stripeCall("POST", `invoices/${t.stripeId}/void`, { account: t.accountId });
       await ctx.runMutation(internal.invoices.applyStripeInvoice, { accountId: t.accountId, invoice: inv });
+      await ctx.runMutation(internal.auditLog.log, { kind: "deleted", text: `voided invoice ${inv.number ?? ""}`.trim(), where: "Payments › Invoices", link: `/payments/invoices/${invoiceId}` });
     } catch (e) {
       throw new ConvexError(e instanceof StripeError ? e.message : "Couldn't reach Stripe. Try again.");
     }
@@ -616,6 +619,7 @@ export const applyStripeInvoice = internalMutation({
     const stale = status !== incoming || paid !== Number(s.amount_paid ?? paid);
     const history = [...i.history];
     if (status === "paid" && i.status !== "paid") history.push({ kind: "paid", at: now, detail: "Paid in full" });
+    if (status === "paid" && i.status !== "paid") await audit(ctx, { kind: "paid", text: `paid invoice ${s.number ?? i.number ?? i.title}`, where: "Payments › Invoices", link: `/payments/invoices/${i._id}`, by: { name: i.billTo?.name || "A client", role: "Client" }, businessId: i.businessId });
     else if (status === "open" && paid > i.amountPaidCents) history.push({ kind: "part_paid", at: now, detail: `$${((paid - i.amountPaidCents) / 100).toFixed(2)} paid` });
     if (status === "void" && i.status !== "void") history.push({ kind: "voided", at: now });
     if (status === "uncollectible" && i.status !== "uncollectible") history.push({ kind: "uncollectible", at: now });

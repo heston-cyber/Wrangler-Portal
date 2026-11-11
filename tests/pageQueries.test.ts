@@ -152,6 +152,22 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "production.shoots": { pages: ["owner"], args: () => ({}) }, // Production › Shoots
   "messages.unread": { pages: ["owner", "clientHome"], args: () => ({}) }, // the side menu's Messages count (Phase 5d)
   "messages.threads": { pages: ["owner"], args: () => ({}) }, // Messages
+  // Phase 5e step 1: Settings › Team (owner only), the project page's Assigned people, and the Join page (no account).
+  "team.page": { pages: ["owner"], args: () => ({}) },
+  // Phase 5e step 2: Settings › Security, and a client's and vendor's account page (their own account)
+  "security.state": { pages: ["owner", "clientHome"], args: () => ({}) },
+  "auditLog.list": { pages: ["owner"], args: () => ({}) }, // Phase 5e step 3: Settings › Activity
+  "yourData.state": { pages: ["owner"], args: () => ({}) }, // Phase 5e step 6: Settings › Your data
+  // Phase 5e step 4: the bell (every back-office page), its panel and See all, Settings › Notifications
+  "bell.unread": { pages: ["owner"], args: () => ({}) },
+  // Phase 5e step 5: Payments › Reports and the Dashboard's Reports widgets
+  "reports.page": { pages: ["owner"], args: () => ({ from: "2026-01-01", to: "2026-11-06", tz: "America/Chicago" }) },
+  "reports.widgets": { pages: ["owner"], args: () => ({ tz: "America/Chicago" }) },
+  "bell.feed": { pages: ["owner"], args: () => ({ limit: 30 }) },
+  "bell.prefs": { pages: ["owner"], args: () => ({}) },
+  "team.member": { pages: ["owner"], args: () => "skip" },
+  "team.projectPeople": { pages: ["owner"], args: () => "skip" },
+  "team.joinPage": { pages: ["share", "signin"], args: () => ({ token: "x".repeat(32) }) }, // /team/join/<token>
   "messages.thread": { pages: ["owner"], args: () => "skip" }, // a conversation
   "messages.startOptions": { pages: ["owner"], args: () => "skip" }, // New message
   "messages.mine": { pages: ["clientHome"], args: () => ({}) }, // the client's Messages

@@ -1,11 +1,12 @@
 // Client accounts (client side C1, Oct 23). Owner only: invite an email, see and revoke invites. An invited email
 // can then make an account on the sign-in page; everyone else is refused by auth.ts. Shares (C2) call invite too.
 import { type MutationCtx } from "./_generated/server";
+import { audit } from "./lib/audit";
 import { mutation, query } from "./lib/functions";
 import { clampRounds } from "./lib/rounds";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
-import { requireMe, requireSignedIn } from "./lib/access";
+import { requireMe, requireSignedIn, requireAll } from "./lib/access";
 import { allowedEmails } from "./auth";
 import { prefsByEmail } from "./emails";
 import { businessInScope, ensureMembership } from "./lib/business";
@@ -40,8 +41,9 @@ export async function ensureInvite(ctx: MutationCtx, rawEmail: string, rawName?:
 export const invite = mutation({
   args: { email: v.string(), name: v.optional(v.string()) },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const r = await ensureInvite(ctx, a.email, a.name);
+    if (!r.already) await audit(ctx, { kind: "sent", text: `invited ${a.email.trim().toLowerCase()} to the portal`, where: "Clients" });
     return { inviteId: r.inviteId, already: r.already };
   },
 });
@@ -49,7 +51,7 @@ export const invite = mutation({
 export const revokeInvite = mutation({
   args: { inviteId: v.id("invites") },
   handler: async (ctx, { inviteId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const inv = await ctx.db.get(inviteId);
     if (!inv || inv.revokedAt) return;
     await ctx.db.patch(inviteId, { revokedAt: Date.now() });
@@ -64,7 +66,7 @@ export const revokeInvite = mutation({
 export const listInvites = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const rows = await ctx.db.query("invites").collect();
     const prefs = await prefsByEmail(ctx, rows.map((i) => i.email));
     const out = [];
@@ -122,7 +124,7 @@ const roleArg = v.union(v.literal("signer"), v.literal("contact"));
 export const people = query({
   args: { clientId: v.id("clients") },
   handler: async (ctx, { clientId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     if (!(await ctx.db.get(clientId))) return [];
     const rows = (await ctx.db.query("clientPeople").withIndex("by_client", (q) => q.eq("clientId", clientId)).collect()).filter((p) => !p.removedAt);
     const out = [];
@@ -134,7 +136,7 @@ export const people = query({
 export const addPerson = mutation({
   args: { clientId: v.id("clients"), email: v.string(), name: v.optional(v.string()), role: roleArg },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     if (!(await ctx.db.get(a.clientId))) throw new ConvexError("That client isn't here.");
     const email = cleanEmail(a.email);
     if (!valid(email)) throw new ConvexError("Enter a valid email.");
@@ -150,7 +152,7 @@ export const addPerson = mutation({
 export const updatePerson = mutation({
   args: { personId: v.id("clientPeople"), name: v.optional(v.string()), role: v.optional(roleArg) },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const p = await ctx.db.get(a.personId);
     if (!p || p.removedAt) throw new ConvexError("That person isn't here.");
     const patch: Record<string, unknown> = {};
@@ -165,7 +167,7 @@ export const updatePerson = mutation({
 export const removePerson = mutation({
   args: { personId: v.id("clientPeople") },
   handler: async (ctx, { personId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const p = await ctx.db.get(personId);
     if (!p || p.removedAt) return null;
     await ctx.db.patch(personId, { removedAt: Date.now() });
@@ -177,10 +179,11 @@ export const removePerson = mutation({
 export const invitePerson = mutation({
   args: { personId: v.id("clientPeople") },
   handler: async (ctx, { personId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const p = await ctx.db.get(personId);
     if (!p || p.removedAt) throw new ConvexError("That person isn't here.");
     const r = await ensureInvite(ctx, p.email, p.name);
+    await audit(ctx, { kind: "sent", text: `sent a portal invite to ${p.name ?? p.email}`, where: "Clients", link: `/clients/${p.clientId}` });
     // Phase 1 step 5: the invite email (one per press; a second press within a minute doesn't send another).
     await ctx.scheduler.runAfter(0, internal.emails.portalInvite, { email: r.email, sendKey: String(Math.floor(Date.now() / 60_000)) });
     return { already: r.already, emailed: true };
@@ -192,7 +195,7 @@ export const invitePerson = mutation({
 export const page = query({
   args: { clientId: v.string() }, // a string, so a mistyped address shows "isn't here" rather than an error
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const clientId = ctx.db.normalizeId("clients", a.clientId);
     const client = clientId ? await ctx.db.get(clientId) : null;
     if (!client || !clientId) return null;
@@ -281,7 +284,7 @@ export const page = query({
 export const setSettings = mutation({
   args: { clientId: v.string(), rounds: v.optional(v.union(v.number(), v.null())), watermarkOff: v.optional(v.boolean()) },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const id = ctx.db.normalizeId("clients", a.clientId);
     const c = id ? await ctx.db.get(id) : null;
     if (!c) throw new ConvexError("This client doesn't exist any more.");
@@ -328,7 +331,7 @@ async function waitingOn(ctx: { db: import("./_generated/server").QueryCtx["db"]
 export const directory = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const clients = await ctx.db.query("clients").collect();
     const people = (await ctx.db.query("clientPeople").collect()).filter((p) => !p.removedAt);
     const projects = await ctx.db.query("projects").collect();

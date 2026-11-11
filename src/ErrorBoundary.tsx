@@ -21,3 +21,16 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
     );
   }
 }
+
+/**
+ * Phase 5e: around a team member's page. A call their role can't make ("Not allowed") shows the no-access page instead
+ * of the error page; anything else is passed on.
+ */
+export class NotAllowedBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { denied: boolean }> {
+  state = { denied: false };
+  static getDerivedStateFromError(error: Error) {
+    if (/Not allowed/.test(String(error?.message ?? error))) return { denied: true };
+    throw error;
+  }
+  render() { return this.state.denied ? this.props.fallback : this.props.children; }
+}

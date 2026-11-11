@@ -38,7 +38,7 @@ export default function SignHome() {
         <span className="secondary">Docs</span><Sep /><span className="here">Contracts</span>
       </TopBar>
       <div className="wp-page docs home">
-        <PageHeader eyebrow="Wrangler Sign" title="Contracts." sub="Write it, send it, get it signed." />
+        <PageHeader title="Contracts." sub="Write it, send it, get it signed." />
         <SignNotices />
         <div className="wp-hub">
           {card("/sign/new", "plus", "New document", "Build one from blocks or a template, or upload a finished PDF.", null)}

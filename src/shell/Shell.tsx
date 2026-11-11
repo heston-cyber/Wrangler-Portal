@@ -2,6 +2,8 @@
 // clicking a layer item opens its main page, the chevron opens its layer. Phone: the layers become chips under the
 // top bar and a glass tab bar is fixed at the bottom. The back office and the client side share it; the client side
 // wears its business's look (lib/brand.ts). Work surfaces (the review page) hide the sidebar and open it as a drawer.
+import { BellButton } from "../modules/bell/BellButton";
+import { Light } from "./Light";
 import { createContext, Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "convex/react";
 import { useSignOutAsk } from "./SignOut";
@@ -10,6 +12,7 @@ import { DEFAULT_TOOLS, toolsOf, type ToolKey, type Tools } from "../../convex/l
 import { api } from "../../convex/_generated/api";
 import { linkProps, navigate, useLocation } from "../lib/router";
 import { useUploads } from "../lib/uploads";
+import { canOpen, usePerms } from "../lib/teamAccess";
 import { useBrand, type Brand } from "../lib/brand";
 import { Menu, MenuItem, MenuSep, Modal, Thumb } from "../ui/kit";
 import { Icon, type IconName } from "../ui/Icon";
@@ -41,7 +44,8 @@ const OWNER_DOCS: Sub[] = [
 ];
 const OWNER_PAYMENTS: Sub[] = [{ to: "/payments", label: "Overview", match: (p) => p === "/payments" }, { to: "/payments/invoices", label: "Invoices", match: (p) => starts(p, "/payments/invoices") },
   { to: "/payments/quotes", label: "Quotes", match: (p) => starts(p, "/payments/quotes") }, // Phase 3b
-  { to: "/payments/subscriptions", label: "Subscriptions", match: (p) => starts(p, "/payments/subscriptions") }, { to: "/payments/plans", label: "Plans", match: (p) => starts(p, "/payments/plans") }];
+  { to: "/payments/subscriptions", label: "Subscriptions", match: (p) => starts(p, "/payments/subscriptions") }, { to: "/payments/plans", label: "Plans", match: (p) => starts(p, "/payments/plans") },
+  { to: "/payments/reports", label: "Reports", match: (p) => starts(p, "/payments/reports") }]; // Phase 5e step 5
 const inPayments = (p: string) => starts(p, "/payments");
 // Phase 3b (D69): Proposals is its own item with a layer.
 const OWNER_PROPOSALS: Sub[] = [
@@ -121,6 +125,33 @@ function ownerItems(payments = false, saved: Tools = DEFAULT_TOOLS, msgs = 0): {
   return { main, tabs: [...tabbed, more] };
 }
 
+/**
+ * Phase 5e (Design Log › Role views): a team member's menu is the owner's, keeping only what their switches open (nothing
+ * greyed). A tool whose own page they can't use opens their first page inside it. An Editor (D157) gets Dashboard and
+ * Review.
+ */
+function teamItems(can: (p: string) => boolean, role: string | null, payments = false, saved: Tools = DEFAULT_TOOLS, msgs = 0): { main: Item[]; tabs: Item[] } {
+  const home: Item = { to: "/", label: "Dashboard", icon: "home", match: (p) => p === "/" };
+  if (role === "editor") {
+    const review: Item = { to: "/review", label: "Review", icon: "review", match: (p) => starts(p, "/review", "/v") };
+    return { main: [home, review], tabs: [home, review] };
+  }
+  const own = ownerItems(payments, saved, msgs);
+  const main: Item[] = [];
+  for (const it of own.main) {
+    if (it.to === "/") { main.push(it); continue; }
+    const layer = it.layer?.filter((x) => can(x.to));
+    if (it.layer && !layer?.length) continue;
+    if (!it.layer && !can(it.to)) continue;
+    main.push({ ...it, to: can(it.to) ? it.to : layer![0].to, ...(layer ? { layer } : {}) });
+  }
+  const tabbed = main.slice(0, 4);
+  const rest = main.slice(4);
+  const inRest = (p: string) => rest.some((it) => (it.tab ?? it.match)(p));
+  const more: Item = { to: "/more", label: "More", icon: "menu", match: (p) => starts(p, "/more", "/settings") || inRest(p) };
+  return { main, tabs: [...tabbed, more] };
+}
+
 type SharedProject = { to: string; label: string };
 const CLIENT_PAYMENTS: Sub[] = [{ to: "/payments/invoices", label: "Invoices", match: (p) => starts(p, "/payments/invoices", "/i") },
   { to: "/payments/subscriptions", label: "Subscriptions", match: (p) => starts(p, "/payments/subscriptions", "/sub") }];
@@ -149,8 +180,9 @@ export function Shell({ me, side = "owner", overlay, light = true, subtitle, chi
   const mine = useQuery(api.shares.mine, side === "client" ? {} : "skip");
   const unread = useQuery(api.inbox.unreadCount, side === "client" ? {} : "skip") ?? 0;
   const msgs = useQuery(api.messages.unread, side !== "vendor" ? {} : "skip") ?? 0; // Phase 5d step 2
-  const overview = useQuery(api.library.overview, side === "owner" ? {} : "skip");
-  const pay = useQuery(api.payments.settings, side === "owner" ? {} : "skip");
+  const { perms, team, role } = usePerms(); // Phase 5e: a team member's switches
+  const overview = useQuery(api.library.overview, side === "owner" && (!team || perms.review) ? {} : "skip");
+  const pay = useQuery(api.payments.settings, side === "owner" && (!team || perms.payments) ? {} : "skip");
   const billed = useQuery(api.invoicePay.mine, side === "client" ? {} : "skip");
   const subs = useQuery(api.subscriptions.mine, side === "client" ? {} : "skip");
   const tools = useQuery(api.users.me)?.tools as Tools | undefined; // the owner's Settings › Tools
@@ -167,15 +199,17 @@ export function Shell({ me, side = "owner", overlay, light = true, subtitle, chi
     : [];
   return (
     <ShellFrame me={me} side={side} overlay={overlay} light={light} subtitle={subtitle} logo={brand?.logoUrl ?? wpLogo} bizName={brand?.name ?? "Wrangler Productions"}
-      shared={shared} unread={unread} msgs={msgs} recent={recent} search={side === "owner"} tools={tools} payments={side === "owner" ? !!pay?.stripe : !!billed?.length || !!subs?.length}>
+      shared={shared} unread={unread} msgs={msgs} recent={recent} search={side === "owner" && !team} tools={tools} payments={side === "owner" ? !!pay?.stripe : !!billed?.length || !!subs?.length}
+      team={team ? { can: (p: string) => canOpen(p, perms, true, role), role } : undefined}>
       {children}
     </ShellFrame>
   );
 }
 
 /** The frame itself, fed by Shell (or by the dev-only component page with sample data). */
-export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, shared, unread, msgs = 0, recent, search: canSearch, payments, nav: navIn, top, tools, children }: {
+export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, shared, unread, msgs = 0, recent, search: canSearch, payments, nav: navIn, top, tools, team, children }: {
   me: Me; side: Side; overlay: boolean; light: boolean; subtitle?: string | null; logo: string; bizName: string; tools?: Tools;
+  team?: { can: (p: string) => boolean; role: string | null }; // Phase 5e: a team member's menu
   shared: SharedProject[]; unread: number; msgs?: number; recent: Recent[]; search: boolean; payments?: boolean; children: React.ReactNode;
   nav?: { main: Item[]; tabs: Item[] }; top?: React.ReactNode; // Phase 3c: the vendor side's own items and its "Working for" switcher
 }) {
@@ -200,22 +234,23 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [canSearch]);
-  const nav = navIn ?? (side === "owner" ? ownerItems(payments, tools, msgs) : clientItems(shared, unread, payments, msgs));
+  const nav = navIn ?? (side === "owner" ? (team ? teamItems(team.can, team.role, payments, tools, msgs) : ownerItems(payments, tools, msgs)) : clientItems(shared, unread, payments, msgs));
   const ctx = useMemo(() => ({ openSidebar: () => setDrawerState("open"), peekSidebar: peek, openSearch: () => setSearch(true), overlay, side }), [overlay, side]);
   const showSidebar = !overlay || drawer;
   const lightSrc = side === "owner" ? lightBack : lightClient;
   const onSearch = canSearch ? () => setSearch(true) : undefined;
+  const bell = side === "owner" && !navIn; // Phase 5e step 4: the owner's and the team's bell
   return (
     <Ctx.Provider value={ctx}>
       <div className={`wp-shell${overlay ? " overlay" : ""}${side !== "owner" ? " client-side" : ""}`}>
-        {light && !overlay && <div className={`wp-light ${side === "owner" ? "back" : "client"}`} aria-hidden><i style={{ backgroundImage: `url(${lightSrc})` }} /></div>}
+        {light && !overlay && <Light className={`wp-light ${side === "owner" ? "back" : "client"}`} src={lightSrc} />}
         {showSidebar && (
           <Sidebar me={me} side={side} items={nav.main} logo={logo} bizName={bizName} subtitle={subtitle} recent={recent} top={top}
-            drawer={overlay && !!drawer} onClose={() => setDrawer(false)} onSearch={onSearch}
+            drawer={overlay && !!drawer} onClose={() => setDrawer(false)} onSearch={onSearch} bell={bell}
             onHover={overlay && drawer === "peek" ? peek : undefined} />
         )}
         {overlay && drawer && <div className="wp-scrim" onClick={() => setDrawer(false)} />}
-        <PhoneTop me={me} side={side} items={[...nav.main, ...nav.tabs]} logo={logo} bizName={bizName} onSearch={onSearch} />
+        <PhoneTop me={me} side={side} items={[...nav.main, ...nav.tabs]} logo={logo} bizName={bizName} onSearch={onSearch} bell={bell} />
         <div className="main">{children}</div>
         <TabBar items={nav.tabs} />
       </div>
@@ -241,8 +276,8 @@ function Logo({ src, name }: { src: string; name: string }) {
   return <span className="wp-logo"><span className="rec" aria-hidden /><img src={src} alt={name} /></span>;
 }
 
-function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onClose, onSearch, onHover, top }: {
-  me: Me; side: Side; items: Item[]; logo: string; bizName: string; subtitle?: string | null; recent: Recent[]; drawer: boolean; onClose: () => void; onSearch?: () => void; top?: React.ReactNode;
+function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onClose, onSearch, onHover, top, bell }: {
+  me: Me; side: Side; items: Item[]; logo: string; bizName: string; subtitle?: string | null; recent: Recent[]; drawer: boolean; onClose: () => void; onSearch?: () => void; top?: React.ReactNode; bell?: boolean;
   onHover?: (on: boolean) => void;
 }) {
   const { path } = useLocation();
@@ -258,6 +293,7 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
       <div className={`wp-brand${side === "client" ? " client" : ""}`}>
         <a {...linkProps("/")} aria-label={`${bizName} home`}><Logo src={logo} name={bizName} /></a>
         <span style={{ display: "flex", gap: 4 }}>
+          {bell && <BellButton />}
           {onSearch && <IconButton icon="search" label="Search (⌘K)" onClick={onSearch} />}
           {drawer && <IconButton icon="close" label="Close menu" onClick={onClose} />}
         </span>
@@ -350,7 +386,7 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
 }
 
 // Phones: logo, search and the account; under it the current section's layer as chips.
-function PhoneTop({ me, side, items, logo, bizName, onSearch }: { me: Me; side: Side; items: Item[]; logo: string; bizName: string; onSearch?: () => void }) {
+function PhoneTop({ me, side, items, logo, bizName, onSearch, bell }: { me: Me; side: Side; items: Item[]; logo: string; bizName: string; onSearch?: () => void; bell?: boolean }) {
   const { path } = useLocation();
   const section = items.find((it) => (it.tab ?? it.match)(path));
   const grouped = !!section?.layer?.some((s) => s.group);
@@ -368,6 +404,7 @@ function PhoneTop({ me, side, items, logo, bizName, onSearch }: { me: Me; side: 
       <div className="bar">
         <a {...linkProps("/")} aria-label={`${bizName} home`}><Logo src={logo} name={bizName} /></a>
         <span className="sp" />
+        {bell && <BellButton phone />}
         {onSearch && <IconButton icon="search" label="Search" iconSize={22} onClick={onSearch} />}
         <a {...linkProps("/more")} aria-label="Account and more"><Avatar name={me.name || me.email} /></a>
       </div>

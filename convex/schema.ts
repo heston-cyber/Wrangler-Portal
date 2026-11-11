@@ -22,9 +22,10 @@ export default defineSchema({
     phone: v.optional(v.string()),
     phoneVerificationTime: v.optional(v.number()),
     isAnonymous: v.optional(v.boolean()),
-    role: v.optional(v.union(v.literal("owner"), v.literal("client"), v.literal("vendor"), v.literal("guest"))), // Phase 3c: vendors (D94). Nov 2: for a client-and-vendor login, the side it's on now (users.switchSide). Phase 5b step 4 (D127): "guest", a call-sheet guest's code-only login: never an owner, client or vendor (lib/access.ts)
+    role: v.optional(v.union(v.literal("owner"), v.literal("client"), v.literal("vendor"), v.literal("guest"), v.literal("team"))), // Phase 5e (Nov 5): "team", a team member (lib/perms.ts) // Phase 3c: vendors (D94). Nov 2: for a client-and-vendor login, the side it's on now (users.switchSide). Phase 5b step 4 (D127): "guest", a call-sheet guest's code-only login: never an owner, client or vendor (lib/access.ts)
     lastSignInAt: v.optional(v.number()),
     tools: v.optional(v.any()),                // Nov 2: an owner's Settings › Tools (menu order, tools off the menu, Dashboard widgets; lib/tools.ts)
+    passwordChangedAt: v.optional(v.number()),  // Phase 5e step 2: Settings › Security's "Last changed"
   }).index("email", ["email"]).index("phone", ["phone"]),
   // Emails allowed to make a client account. Made by the owner (the Share dialog in C2, or Settings › Clients).
   invites: defineTable({
@@ -127,6 +128,9 @@ export default defineSchema({
 
   // Per-hour counters for what commenters may do (security review, Oct 23).
   rateLimits: defineTable({ key: v.string(), count: v.number(), hour: v.number() }).index("by_key", ["key"]).index("by_hour", ["hour"]),
+  // Second 5e review (Nov 10): a short-lived ticket to open one private file (a W-9) through /f/<token>. Made only for
+  // someone allowed to see it at that moment; works for 10 minutes. Storage links never expire, so W-9s don't use them.
+  fileTickets: defineTable({ token: v.string(), fileId: v.id("_storage"), businessId: v.id("businesses"), name: v.string(), expiresAt: v.number() }).index("by_token", ["token"]).index("by_expiry", ["expiresAt"]),
 
   projects: defineTable({
     businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
@@ -728,6 +732,7 @@ export default defineSchema({
     background: v.optional(v.string()),    // #rrggbb
     // Which modules the business uses. Menu items only show when on (and only once something is in them).
     modules: v.optional(v.object({ review: v.boolean(), docs: v.boolean(), payments: v.boolean(), projects: v.optional(v.boolean()) })),
+    teamRoles: v.optional(v.any()), // Phase 5e: each role's switches (Settings › Team › Roles; lib/perms.ts rolePerms)
     updatedAt: v.optional(v.number()),
     // Phase 2 Part A (Oct 29): revision rounds (each version is a round, D23; default 2, D23b) and the watermark look
     // on review copies (D24: on for every client unless switched off on the client).
@@ -1693,14 +1698,170 @@ export default defineSchema({
     offAt: v.optional(v.number()),
     // Review L13: the heading and day as last sent to this guest, for their Ended row (never a later update's).
     heading: v.optional(v.object({ title: v.string(), date: v.string() })),
-  }).index("by_token", ["token"]).index("by_email", ["email"]).index("by_sheet", ["callSheetId"]),
+  }).index("by_token", ["token"]).index("by_email", ["email"]).index("by_sheet", ["callSheetId"]).index("by_business", ["businessId"]),
 
   memberships: defineTable({
     businessId: v.id("businesses"),
     email: v.string(),              // lower-case
     userId: v.optional(v.id("users")),
-    role: v.union(v.literal("owner"), v.literal("client"), v.literal("vendor")), // vendor: Phase 3c, one per business they work for (D94)
+    role: v.union(v.literal("owner"), v.literal("client"), v.literal("vendor"), v.literal("team")), // vendor: Phase 3c, one per business they work for (D94); team: Phase 5e
     createdAt: v.number(),
     revokedAt: v.optional(v.number()),
+    // Phase 5e (Nov 5): a team member's role and switches (lib/perms.ts). Made only by team.ts when their invite is accepted.
+    teamRole: v.optional(v.union(v.literal("producer"), v.literal("editor"), v.literal("bookkeeper"))),
+    perms: v.optional(v.any()),
+    invitedBy: v.optional(v.string()),
   }).index("by_email", ["email"]).index("by_business_email", ["businessId", "email"]).index("by_user", ["userId"]),
+
+  // Phase 5e (Nov 5): an invite to join a business's team (Settings › Team, email 46). The link carries a long random
+  // token; only its hash is kept. Lasts 14 days (D146). Accepting makes a team membership (team.ts, auth.ts).
+  teamInvites: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    email: v.string(),              // lower-case
+    name: v.optional(v.string()),
+    teamRole: v.union(v.literal("producer"), v.literal("editor"), v.literal("bookkeeper")),
+    tokenHash: v.string(),
+    invitedBy: v.string(),          // the owner's name, for the email and the Join page
+    createdAt: v.number(),
+    sentAt: v.number(),
+    expiresAt: v.number(),
+    revokedAt: v.optional(v.number()),
+    acceptedAt: v.optional(v.number()),
+    userId: v.optional(v.id("users")),
+  }).index("by_email", ["email"]).index("by_token", ["tokenHash"]).index("by_business", ["businessId"]),
+
+  // Phase 5e step 4 (Nov 5): the notification centre. One row per person (the owner, and team members whose switches cover
+  // the kind), kept 90 days (D146). Made from the owner emails (lib/bell.ts EMAIL_TO_BELL).
+  // Phase 5e step 6 (Nov 6): Settings › Your data. An export of a business's records (D116): made in the background,
+  // downloadable by the owner for 7 days, then its file is removed (the row stays, for "Last export").
+  dataExports: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    status: v.union(v.literal("making"), v.literal("ready"), v.literal("failed"), v.literal("cancelled"), v.literal("expired")),
+    requestedAt: v.number(),
+    requestedBy: v.id("users"),
+    fileId: v.optional(v.id("_storage")),
+    bytes: v.optional(v.number()),
+    readyAt: v.optional(v.number()),
+    expiresAt: v.optional(v.number()),
+    error: v.optional(v.string()),
+  }).index("by_requested", ["requestedAt"]).index("by_expires", ["expiresAt"]),
+  // Delete the business (D116, D146): a 60-day wait, then everyone is signed out, links stop and the records are
+  // deleted (Dropbox untouched). Global: it outlives the business. The final export is the platform owner's safety net
+  // (rule 7), kept 30 days and shown only to the portal's admins.
+  businessDeletions: defineTable({
+    businessId: v.id("businesses"),
+    name: v.string(),
+    ownerEmail: v.string(),
+    requestedBy: v.string(),
+    requestedAt: v.number(),
+    deleteAt: v.number(),
+    status: v.union(v.literal("scheduled"), v.literal("cancelled"), v.literal("running"), v.literal("done"), v.literal("failed")),
+    jobs: v.optional(v.array(v.id("_scheduled_functions"))),   // the day-60 run and the 7-day reminder (cancelled with it)
+    cancelledAt: v.optional(v.number()),
+    startedAt: v.optional(v.number()),
+    doneAt: v.optional(v.number()),
+    error: v.optional(v.string()),
+    finalExportId: v.optional(v.id("_storage")),
+    finalBytes: v.optional(v.number()),
+    purgeAt: v.optional(v.number()),
+    deleted: v.optional(v.record(v.string(), v.number())),   // how many rows went, per table
+    // Review fix (Nov 6): the run goes in short steps and saves where it got to, so a stopped run starts again there.
+    step: v.optional(v.union(v.literal("export"), v.literal("lockout"), v.literal("signout"), v.literal("tables"), v.literal("finish"), v.literal("done"))),
+    tableIndex: v.optional(v.number()),
+    pass: v.optional(v.number()),                  // the tables are gone through twice: the second catches rows added while it ran
+    cursor: v.optional(v.union(v.string(), v.null())),
+    users: v.optional(v.array(v.id("users"))),   // the logins that were in the business (signed out, and deleted if they belong nowhere else)
+    emails: v.optional(v.array(v.string())),
+    heartbeat: v.optional(v.number()),
+    attempts: v.optional(v.number()),
+  }).index("by_business", ["businessId"]).index("by_purge", ["purgeAt"]).index("by_status", ["status"]),
+
+  // Review fix (Nov 6): which business each stored file belongs to (lib/fileOwners.ts).
+  fileOwners: defineTable({
+    storageId: v.id("_storage"),
+    businessId: v.id("businesses"),
+    userId: v.optional(v.id("users")),
+    purpose: v.string(),
+    at: v.number(),
+  }).index("by_storage", ["storageId"]).index("by_business", ["businessId"]),
+
+  // Option B (Heston, Nov 6): the files a deleted business's portal kept stay 30 days with its safety-net export.
+  deletionFiles: defineTable({
+    deletionId: v.id("businessDeletions"),
+    fileId: v.id("_storage"),
+    purgeAt: v.number(),
+  }).index("by_purge", ["purgeAt"]).index("by_deletion", ["deletionId"]),
+
+  bellItems: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    userId: v.id("users"),
+    kind: v.string(),          // lib/bell.ts BellKind
+    title: v.string(),
+    link: v.optional(v.string()),
+    key: v.string(),           // one item per event per person
+    at: v.number(),
+    readAt: v.optional(v.number()),
+  }).index("by_user_at", ["userId", "at"]).index("by_user_key", ["userId", "key"]).index("by_at", ["at"]),
+  // A person's bell and phone switches (Settings › Notifications): kinds off in the bell, and kinds on for the phone
+  // (unset: lib/bell.ts PHONE_DEFAULT).
+  alertPrefs: defineTable({
+    userId: v.id("users"),
+    bellOff: v.array(v.string()),
+    phoneOn: v.optional(v.array(v.string())),
+  }).index("by_user", ["userId"]),
+  // A phone (or browser) that turned alerts on: its Web Push address and keys (D146: every device a person turns on).
+  pushSubs: defineTable({
+    userId: v.id("users"),
+    endpoint: v.string(),
+    p256dh: v.string(),
+    auth: v.string(),
+    label: v.string(),
+    createdAt: v.number(),
+    fails: v.optional(v.number()),
+  }).index("by_user", ["userId"]).index("by_endpoint", ["endpoint"]),
+  // The portal's own Web Push key pair (VAPID), made on the server the first time it's needed; never in chat or the repo.
+  pushKeys: defineTable({ publicKey: v.string(), privateKey: v.string(), createdAt: v.number() }),
+
+  // Phase 5e step 3 (Nov 5): Settings › Activity, the owner's log of who changed what (D146: new-device sign-ins, anything
+  // sent, signatures, marked paid, voids and deletions, settings, team changes, exports). Kept 1 year (crons.ts).
+  auditLog: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    at: v.number(),
+    kind: v.union(v.literal("sent"), v.literal("signed"), v.literal("paid"), v.literal("deleted"), v.literal("settings"), v.literal("signin"), v.literal("team"), v.literal("export")),
+    who: v.string(),            // "Heston Hill", "Maya Brooks", "Stripe"
+    role: v.string(),           // "Owner", "Producer", "Client", "System"
+    userId: v.optional(v.id("users")),
+    text: v.string(),           // after the name: "sent proposal WRNGLR-P-0007"
+    where: v.optional(v.string()), // "Harbor Coffee › Proposals"
+    link: v.optional(v.string()),  // the page that opens it
+    device: v.optional(v.string()), // "Mac · Chrome"
+  }).index("by_business_at", ["businessId", "at"]).index("by_at", ["at"]),
+
+  // Phase 5e step 2 (Nov 5): Settings › Security. A signed-in browser (one per session): its label ("Mac · Chrome"), and a
+  // random key the browser keeps, so a sign-in from a browser not seen before sends email 47 (owner and team).
+  sessionDevices: defineTable({
+    userId: v.id("users"),
+    sessionId: v.id("authSessions"),
+    deviceKey: v.string(),
+    label: v.string(),
+    firstSeen: v.number(),
+    lastSeen: v.number(),
+  }).index("by_user", ["userId"]).index("by_session", ["sessionId"]),
+  // A change of sign-in email waiting for its 6-digit code (sent to the new address; 10 minutes; 5 tries).
+  emailChanges: defineTable({
+    userId: v.id("users"),
+    newEmail: v.string(),
+    codeHash: v.string(),
+    tries: v.number(),
+    sentAt: v.number(),
+    until: v.number(),
+  }).index("by_user", ["userId"]),
+
+  // Phase 5e (Nov 5): who is assigned to a project (Project page › Assigned people). Team members only (D146).
+  projectTeam: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    projectId: v.id("projects"),
+    userId: v.id("users"),
+    createdAt: v.number(),
+  }).index("by_project", ["projectId"]).index("by_user", ["userId"]),
 });

@@ -105,7 +105,7 @@ export default function ProductionOverview() {
     <>
       <TopBar><span className="secondary">Production</span><Sep /><span className="here">Overview</span></TopBar>
       <div className="wp-page pov prod">
-        <PageHeader eyebrow="Production" title="Production." sub="Live shoots and edits, at a glance." actions={<ButtonLink variant="primary" to="/production/call-sheets/new" iconEnd={false}>New call sheet</ButtonLink>} />
+        <PageHeader title="Production." sub="Live shoots and edits, at a glance." actions={<ButtonLink variant="primary" to="/production/call-sheets/new" iconEnd={false}>New call sheet</ButtonLink>} />
         {o === undefined ? <>
           <div className="pov-stats prod-tiles">{[0, 1, 2, 3].map((i) => <div key={i} className="pov-stat prod-tile"><SkeletonRows n={1} /></div>)}</div>
           <Card label="Loading"><SkeletonRows n={4} /></Card>
@@ -173,7 +173,7 @@ export function ProductionShoots() {
     <>
       <TopBar><span className="secondary">Production</span><Sep /><a {...linkProps("/production/prin-pro")}>Prin-pro</a><Sep /><span className="here">Shoots</span></TopBar>
       <div className="wp-page prod">
-        <PageHeader eyebrow="Production" title="Shoots." sub="Every shoot, with its call sheet." actions={<Button variant="primary" onClick={() => setAdding(true)}>New shoot</Button>} />
+        <PageHeader title="Shoots." sub="Every shoot, with its call sheet." actions={<Button variant="primary" onClick={() => setAdding(true)}>New shoot</Button>} />
         {d === undefined ? <Card label="Loading"><SkeletonRows n={4} /></Card> : d === null ? null : <>
           <PillTabs label="Which shoots" value={show} onChange={setShow} items={[
             { key: "upcoming", label: "Upcoming", count: d.upcoming.length },
@@ -197,7 +197,7 @@ export function ProductionDelivery() {
     <>
       <TopBar><a {...linkProps("/production")}>Production</a><Sep /><span className="here">Delivery</span></TopBar>
       <div className="wp-page prod">
-        <PageHeader eyebrow="Production · Delivery" title="Delivery." sub="Coming soon." />
+        <PageHeader title="Delivery." sub="Coming soon." />
         <EmptyState icon="folder" title="Coming soon." body="This will be the catalog of the media you store for each client: finished videos, raw footage and stills, ready to find and send." />
       </div>
     </>
@@ -220,7 +220,7 @@ export function ProductionStage({ stage }: { stage: StageKey }) {
     <>
       <TopBar><a {...linkProps("/production")}>Production</a><Sep /><span className="here">{STAGE_NAME[stage]}</span></TopBar>
       <div className="wp-page prod">
-        <PageHeader eyebrow="Production" title={`${STAGE_NAME[stage]}.`} sub={STAGE_SUB[stage]} />
+        <PageHeader title={`${STAGE_NAME[stage]}.`} sub={STAGE_SUB[stage]} />
         {stage === "pre-pro" ? <PrePro /> : stage === "prin-pro" ? <PrinPro /> : <PostPro />}
       </div>
     </>

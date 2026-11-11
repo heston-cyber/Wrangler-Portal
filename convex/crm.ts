@@ -4,13 +4,14 @@
 // lead's company and contact are made at its first estimate), D67 (Claude drafts wait for Confirm), D68 (existing clients
 // get no cards; the board starts with new leads and estimates).
 import { action } from "./_generated/server";
+import { audit } from "./lib/audit";
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { expectedForProject } from "./lib/bookingRows";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { ActionCtx, MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll, seesValue } from "./lib/access";
 import { businessInScope, defaultBusiness } from "./lib/business";
 import { EMPTY_RATES, WRANGLER_RATES, estimate, primaryKind, ratesProblems, type EstimateInput, type Rates } from "./lib/estimate";
 import { applyArgs } from "./wsMcp";
@@ -30,7 +31,10 @@ const todayIso = () => {
 };
 
 async function ownerBiz(ctx: QueryCtx | MutationCtx) {
-  const me = await requireMe(ctx);
+  // Phase 5e: the pipeline, estimates and the job ledger are what a job is worth, so a team member needs both
+  // Clients and leads and "See what a project is worth" (a Producer has both by default, Heston Nov 5).
+  const me = await requireAll(ctx, "clients");
+  if (!seesValue(me)) throw new ConvexError("Not allowed.");
   const id = businessInScope(ctx);
   const b = id ? await ctx.db.get(id) : null;
   if (!b) throw new ConvexError("Not allowed.");
@@ -61,6 +65,7 @@ export const saveRates = mutation({
   args: { rates: v.any() },
   handler: async (ctx, { rates: r }) => {
     const { b } = await ownerBiz(ctx);
+    await audit(ctx, { kind: "settings", text: "changed Pricing", where: "Settings › Pricing", link: "/settings" });
     const problems = ratesProblems(r as Rates);
     if (problems.length) throw new ConvexError(problems[0]);
     if (JSON.stringify(r).length > 20_000) throw new ConvexError("That's too many rates.");
@@ -488,7 +493,7 @@ type EstResult = { priceCents: number; expenseCents: number; netCents: number; l
  *  the estimate's rates when the current ones no longer have it), the same rates the Log dialog checks against.
  *  Money logged as a cost counts as it is. The actual price is what was billed, less refunds, once the final invoice
  *  has gone out; until then the estimate's price, so a paid deposit doesn't read as a loss (build reading). */
-async function ledgerCalc(ctx: QueryCtx, p: Doc<"projects">, current: Rates) {
+export async function ledgerCalc(ctx: QueryCtx, p: Doc<"projects">, current: Rates) {
   const deal = await ctx.db.query("deals").withIndex("by_project", (q) => q.eq("projectId", p._id)).first();
   const est = (await ctx.db.query("estimates").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect()).sort((a, c) => c.updatedAt - a.updatedAt)[0]
     ?? (deal?.estimateId ? await ctx.db.get(deal.estimateId) : null);

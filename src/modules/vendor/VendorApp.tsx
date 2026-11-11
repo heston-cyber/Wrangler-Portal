@@ -232,7 +232,7 @@ function VendorBookings() {
     <>
       <TopBar><span className="here">Bookings</span></TopBar>
       <div className="wp-page">
-        <PageHeader help="/vendor/help/accepting-a-booking" eyebrow="Bookings" title="Bookings." sub="Work you've been offered and booked for." />
+        <PageHeader help="/vendor/help/accepting-a-booking" title="Bookings." sub="Work you've been offered and booked for." />
         {r.rows.length === 0 ? <EmptyState icon="calendar" title="No bookings yet." body="When you're offered work, it shows up here and in your email." /> : <>
           <PillTabs label="Show" value={pill} onChange={setPill} items={[{ key: "offered", label: "Offered", count: count("offered") }, { key: "upcoming", label: "Upcoming", count: count("upcoming") }, { key: "done", label: "Done", count: count("done") }, { key: "declined", label: "Declined", count: count("declined") }]} />
           <Card label="Bookings">
@@ -315,7 +315,7 @@ function VendorBriefings() {
     <>
       <TopBar><span className="here">Briefings</span></TopBar>
       <div className="wp-page">
-        <PageHeader help="/vendor/help/vendor-briefings" eyebrow="Briefings" title="Briefings." sub="Shoot and edit briefs for the work you're booked on." />
+        <PageHeader help="/vendor/help/vendor-briefings" title="Briefings." sub="Shoot and edit briefs for the work you're booked on." />
         {r.rows.length === 0 ? <EmptyState icon="note" title="No briefings yet." body="When a brief is sent to you, it shows up here and in your email." /> : (
           <Card label="Briefings">
             {r.rows.map((b, i) => <div key={b._id} className="wp-rowwrap">{i > 0 && <Divider />}

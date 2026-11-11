@@ -240,7 +240,7 @@ export const alertData = internalQuery({
         link: `${SITE()}/v/${videoId}?version=${ver.number}&note=${n._id}`,
       });
     }
-    return { title: vid.title, project: projectLabel(project), newest, videoId, noteIds: notes.map((n) => n._id), rows, brand: await mailBrandOf(ctx, vid.businessId) };
+    return { title: vid.title, project: projectLabel(project), newest, videoId, noteIds: notes.map((n) => n._id), rows, brand: await mailBrandOf(ctx, vid.businessId), businessId: vid.businessId ?? null, projectId: vid.projectId };
   },
 });
 
@@ -262,6 +262,10 @@ export const ownerAlert = internalAction({
     // business (the old ALERT_EMAIL copy for the first business is gone).
     const biz = await ctx.runQuery(internal.business.contact, {});
     const to = biz.ownerEmail;
+    // 5e review (Nov 6): client notes reach the bell too, even with the email off (D146), naming the project so an
+    // Editor assigned to it hears (D157).
+    const bizId = d.businessId ?? biz.businessId ?? null;
+    if (bizId) await ctx.runMutation(internal.bell.post, { businessId: bizId, kind: "notes", title: m.subject, key: `alert:${videoId}:${d.noteIds[d.noteIds.length - 1]}`, link: `/v/${videoId}`, projectId: d.projectId });
     // Review fix: switched off (Settings › Notifications): these notes count as told, so they don't pile up for later.
     if (await ctx.runQuery(internal.emails.isOff, { email: to, kind: "alert", ...(biz.businessId ? { businessId: biz.businessId } : {}) })) {
       await ctx.runMutation(internal.emails.markAlerted, { noteIds: d.noteIds });

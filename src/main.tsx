@@ -13,6 +13,7 @@ import "./styles.css";
 import "./d1.css";
 import "./portal.css";
 import "./states.css";
+import "./type.css";
 import { applyTheme } from "./lib/theme";
 
 applyTheme();

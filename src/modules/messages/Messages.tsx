@@ -231,7 +231,7 @@ export function OwnerMessages() {
     <>
       <TopBar><a {...linkProps("/")} className="secondary">Dashboard</a><Sep /><span className="here">Messages</span></TopBar>
       <div className={`wp-page msg-page${sel ? " has-thread" : ""}`}>
-        <PageHeader eyebrow="Messages" title="Messages" sub="Conversations with your clients and leads." actions={<Button variant="primary" onClick={() => setStarting(true)}>New message</Button>} />
+        <PageHeader title="Messages" sub="Conversations with your clients and leads." actions={<Button variant="primary" onClick={() => setStarting(true)}>New message</Button>} />
         <div className="msg-cols">
           {list}
           {sel ? (t === null ? <section className="msg-thread glass"><EmptyState icon="mail" title="This conversation isn't here." actions={<ButtonLink to="/messages">All conversations</ButtonLink>} /></section>
@@ -319,7 +319,7 @@ export function ClientMessages() {
     <>
       <TopBar><a {...linkProps("/")} className="secondary">Home</a><Sep /><span className="here">Messages</span></TopBar>
       <div className={`wp-page msg-page${sel || startProject ? " has-thread" : ""}`}>
-        <PageHeader eyebrow="Messages" title="Messages" sub={`Conversations with ${biz} about your projects.`} />
+        <PageHeader title="Messages" sub={`Conversations with ${biz} about your projects.`} />
         <div className="msg-cols">
           {list}
           {sel ? <Thread key={sel} mode={{ kind: "client", threadId: sel }} head={<ThreadHead back="/messages" title={t?.title ?? "…"} sub={t?.sub} action={t?.projectId ? <ButtonLink size="sm" to={`/projects/${t.projectId}`} iconEnd={false}>Open project</ButtonLink> : undefined} />} />

@@ -166,8 +166,9 @@ export const urgentMail = internalAction({
     if (!d) return "gone";
     const to = SUPPORT();
     const key = `site-watch-urgent:${findingId}:${at}`;
-    if (!(await ctx.runMutation(internal.emails.claim, { key, kind: "site_watch_urgent", to }))) return "already";
     const m = urgentMailText(d);
+    await ctx.runMutation(internal.bell.post, { kind: "sitewatch", title: m.subject, key }); // Phase 5e step 4: the owner's bell too
+    if (!(await ctx.runMutation(internal.emails.claim, { key, kind: "site_watch_urgent", to }))) return "already";
     try {
       const id = await sendEmail({ from: PORTAL_FROM(), to, subject: m.subject, text: m.text, tag: "site_watch_urgent", replyTo: null });
       await ctx.runMutation(internal.emails.sent, { key, resendId: id || "sent" });

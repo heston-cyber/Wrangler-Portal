@@ -1,6 +1,7 @@
 import { internalQuery, mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
-import { requireMe, requireSignedIn, viewerOf } from "./lib/access";
+import { projectOf, projectsFor, requireMe, requireSignedIn, viewerOf } from "./lib/access";
+import { PERMS } from "./lib/perms";
 import { toolsOf } from "./lib/tools";
 import { BUSINESS_TABLES } from "./lib/tenancy";
 import { defaultBusiness } from "./lib/business";
@@ -22,10 +23,12 @@ export const me = query({
     const v = await viewerOf(ctx);
     const owner = v.kind === "owner";
     // Phase 5b step 4: a call-sheet guest's login (D127): the page shows it the guest pages and nothing else.
-    const role: "owner" | "client" | "vendor" | "guest" | null = owner ? "owner" : v.kind === "client" ? "client" : v.kind === "vendor" ? "vendor" : user.role === "guest" ? "guest" : null;
+    const role: "owner" | "client" | "vendor" | "guest" | "team" | null = owner ? "owner" : v.kind === "client" ? "client" : v.kind === "vendor" ? "vendor" : v.kind === "team" ? "team" : user.role === "guest" ? "guest" : null;
     // Nov 2: a login that is a client and a vendor shows a switch between the two sides.
-    const sides = owner || role === "guest" ? [] : await sidesOf(ctx, email);
-    return { id: userId, email, name: (user.name as string | undefined) || fallback, allowed: owner, role, sides, ...(owner ? { tools: toolsOf(user.tools) } : {}) };
+    const sides = owner || role === "guest" || role === "team" ? [] : await sidesOf(ctx, email);
+    // Phase 5e: a team member's role and switches decide their menu (the server checks every call again).
+    const team = v.kind === "team" ? { role: v.team.role, perms: v.team.perms } : null;
+    return { id: userId, email, name: (user.name as string | undefined) || fallback, allowed: owner, role, sides, team, ...(owner ? { tools: toolsOf(user.tools) } : {}) };
   },
 });
 
@@ -39,7 +42,7 @@ export const switchSide = mutation({
     const email = (user?.email ?? "").toLowerCase();
     if (!user || !email) throw new ConvexError("Sign in first.");
     const kind = (await viewerOf(ctx)).kind;
-    if (kind === "owner" || kind === "nobody") throw new ConvexError("Not allowed.");
+    if (kind === "owner" || kind === "nobody" || kind === "team" || user.role === "team") throw new ConvexError("Not allowed."); // Phase 5e: a team login has no other side
     if (!(await sidesOf(ctx, email)).includes(side)) throw new ConvexError(side === "vendor" ? "No business has you as a vendor." : "No business has you as a client.");
     if (user.role !== side) await ctx.db.patch(userId, { role: side });
     return side;
@@ -48,12 +51,18 @@ export const switchSide = mutation({
 
 // Used by actions: throws unless the caller is signed in as an owner. Phase 0.5d step 3: an action passes the ids it
 // was given, and each must be a record of the owner's own business (anything else is "Not allowed.").
+// Phase 5e: `perm` lets a team member with that switch through (an Editor only when every record named is on a project
+// they're assigned to). Without it, the owner only.
 export const assertAllowed = internalQuery({
-  args: { ids: v.optional(v.array(v.string())) },
-  handler: async (ctx, { ids }) => {
+  args: { ids: v.optional(v.array(v.string())), perm: v.optional(v.array(v.union(...PERMS.map((p) => v.literal(p))))) },
+  handler: async (ctx, { ids, perm }) => {
     const v = await viewerOf(ctx);
     if (v.kind === "nobody") throw new Error((await getAuthUserId(ctx)) ? "Not allowed." : "Sign in first.");
-    if (v.kind !== "owner") throw new Error("Not allowed.");
+    if (v.kind === "team" && perm?.some((p) => v.team.perms[p])) {
+      const only = await projectsFor(ctx, { userId: v.userId, name: v.name, email: v.email, team: v.team });
+      if (only) for (const id of ids ?? []) { const p = await projectOf(ctx, id); if (!p || !only.has(p)) throw new Error("Not allowed."); }
+      if (only && !ids?.length) throw new Error("Not allowed.");
+    } else if (v.kind !== "owner") throw new Error("Not allowed.");
     const biz = v.businessId ?? (await defaultBusiness(ctx))?._id ?? null;
     for (const id of ids ?? []) {
       const table = BUSINESS_TABLES.find((t) => ctx.db.normalizeId(t as never, id));
@@ -81,7 +90,9 @@ export const setTools = mutation({
 export const setName = mutation({
   args: { name: v.string() },
   handler: async (ctx, { name }) => {
-    const me = await requireSignedIn(ctx);
+    // Phase 5e: a team member names themselves too (Settings › Account).
+    const who = await viewerOf(ctx);
+    const me = who.kind === "team" ? { userId: who.userId, kind: "team" as const } : await requireSignedIn(ctx);
     const n = name.trim().replace(/\s+/g, " ").slice(0, 60);
     if (!n) throw new ConvexError("Enter a name.");
     if (me.kind !== "owner" && ownerNames().has(n.toLowerCase())) throw new ConvexError("That name is taken.");

@@ -1,7 +1,7 @@
 // The client's Settings (P1 / Client / Settings): their name, email, password, Sign out, and (Nov 2) Notifications.
 import { useState } from "react";
+import { SignInRows } from "../security/Security";
 import { useMutation, useQuery } from "convex/react";
-import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../../convex/_generated/api";
 import { Button } from "../../ui/wp";
 import { NotificationList } from "../settings/Notifications";
@@ -11,7 +11,6 @@ import { linkProps } from "../../lib/router";
 import { useSignOutAsk } from "../../shell/SignOut";
 
 export default function ClientSettings({ me }: { me: { name: string | null; email: string } }) {
-  const { signIn } = useAuthActions();
   const [signOut, signOutDialog] = useSignOutAsk();
   const setName = useMutation(api.users.setName);
   const ntf = useQuery(api.notifications.client, {});
@@ -19,7 +18,6 @@ export default function ClientSettings({ me }: { me: { name: string | null; emai
   const brands = useQuery(api.business.brand);
   const business = brands?.[0]?.name ?? "Wrangler Productions";
   const [name, setN] = useState(me.name ?? "");
-  const [resetSent, setResetSent] = useState(false);
   const [toast, show] = useToast();
   const changed = name.trim() !== (me.name ?? "") && name.trim().length > 0;
   return (
@@ -35,11 +33,8 @@ export default function ClientSettings({ me }: { me: { name: string | null; emai
               <Button size="sm" disabled={!changed} onClick={async () => { await setName({ name }); show("Name saved."); }}>Save</Button>
             </span>
           </div>
-          <div className="r"><span className="l"><b>Email</b></span><span className="v secondary">{me.email}</span></div>
-          <div className="r">
-            <span className="l"><b>Password</b><span>{resetSent ? "A code is on its way. Sign out, then use Forgot your password to finish." : "Change it with a code sent to your email."}</span></span>
-            <span className="v"><Button size="sm" disabled={resetSent} onClick={async () => { try { await signIn("password", { flow: "reset", email: me.email }); setResetSent(true); } catch { show("Couldn't send the code. Try again in a minute."); } }}>Email me a code</Button></span>
-          </div>
+          {/* Phase 5e step 2 (842:11010): Password and Email, with the same dialogs as Settings › Security */}
+          <SignInRows rows show={show} />
           <div className="r"><span className="l"><b>Help</b><span>Short guides: signing, paying, uploading and more.</span></span><span className="v"><a className="btn sm" {...linkProps("/help")}>Open Help</a></span></div>
           <div className="r"><span className="l"><b>Sign out</b></span><span className="v"><Button size="sm" onClick={signOut}>Sign out</Button></span></div>{signOutDialog}
         </section>

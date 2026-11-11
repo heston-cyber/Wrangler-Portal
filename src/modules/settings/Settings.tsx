@@ -24,6 +24,7 @@ import { ago } from "../../lib/format";
 import { DropboxSettings } from "./DropboxSettings";
 import { PaymentsSettings } from "./PaymentsSettings";
 import { CalendarSettings } from "./CalendarSettings";
+import { YourDataSection } from "./YourData";
 import { SiteWatchSettings } from "./SiteWatch";
 import { KickoffSettings } from "../projects/Brief";
 import { ToolsSettings } from "./ToolsSettings";
@@ -33,6 +34,11 @@ import { ClientsSettings } from "../clients/Clients";
 import { SharesSettings } from "../review/Share";
 import { NotificationList } from "./Notifications";
 import { errText } from "../docs/pages/common";
+import { TeamSection } from "../team/TeamSettings";
+import { BellSettings } from "../bell/Bell";
+import { usePerms } from "../../lib/teamAccess";
+import { SecuritySection } from "../security/Security";
+import { ActivityLog } from "../security/ActivityLog";
 
 // The connector lives on the Convex site host: <deployment>.convex.site/mcp
 const CONVEX = (import.meta.env.VITE_CONVEX_URL as string | undefined) || "https://handsome-hummingbird-11.convex.cloud";
@@ -109,9 +115,12 @@ export default function Settings({ me }: { me: { name: string | null; email: str
   return (
     <SettingsFrame section={key}>
       {key === "business" && <BusinessSection show={show} />}
+      {key === "team" && <TeamSection path={path} show={show} />}
+      {key === "activity" && <ActivityLog />}
+      {key === "security" && <SecuritySection show={show} head={<SetHead title="Security." sub="Your email is your username. Sign in with your email and a password." />} />}
       {key === "payments" && <PaymentsSettings show={show} />}
       {key === "rates" && <RatesSection show={show} />}
-      {key === "brand" && <><SetHead eyebrow="Brand kit" title="Your brand, for decks." sub="Claude uses this when it makes a pitch deck in your brand. Each client can have their own kit on their company page." /><BrandKitEditor show={show} /></>}
+      {key === "brand" && <><SetHead title="Your brand, for decks." sub="Claude uses this when it makes a pitch deck in your brand. Each client can have their own kit on their company page." /><BrandKitEditor show={show} /></>}
       {key === "calendar" && <CalendarSettings show={show} />}
       {key === "calls" && <CallSettings show={show} />}
       {key === "sitewatch" && <SiteWatchGate show={show} />}
@@ -121,14 +130,15 @@ export default function Settings({ me }: { me: { name: string | null; email: str
       {key === "notifications" && <OwnerNotifications show={show} />}
       {key === "dropbox" && <DropboxSettings show={show} />}
       {key === "connectors" && <>
-        <SetHead eyebrow="Claude connectors" title="Claude reads your notes and sets up your contracts." sub="Two connectors, each with its own keys." />
+        <SetHead title="Claude reads your notes and sets up your contracts." sub="Two connectors, each with its own keys." />
         <Connector show={show} />
         <SignConnectorPanel show={show} />
       </>}
       {key === "sheet" && <SheetCopy show={show} />}
       {key === "clients" && <ClientsSettings show={show} />}
       {key === "shares" && <SharesSettings show={show} />}
-      {key === "help" && <><SetHead eyebrow="Help" title="Guides." sub="Short guides for your clients and vendors. Edit any of them, and what you write is what they read." /><HelpSection path={path} /></>}
+      {key === "data" && <YourDataSection me={me} show={show} />}
+      {key === "help" && <><SetHead title="Guides." sub="Short guides for your clients and vendors. Edit any of them, and what you write is what they read." /><HelpSection path={path} /></>}
       {toast}
     </SettingsFrame>
   );
@@ -138,7 +148,7 @@ export default function Settings({ me }: { me: { name: string | null; email: str
 function SiteWatchGate({ show }: { show: (m: string) => void }) {
   const admin = useQuery(api.siteWatch.summary);
   if (admin === undefined) return null;
-  if (admin === null) return <SetHead eyebrow="Settings" title="Not available." sub="Site watch is for the portal's own admins." />;
+  if (admin === null) return <SetHead title="Not available." sub="Site watch is for the portal's own admins." />;
   return <SiteWatchSettings show={show} />;
 }
 
@@ -153,13 +163,18 @@ function useNarrow() {
   return n;
 }
 
-// Nov 2 · Settings › Notifications: the emails the portal sends you, each with a switch.
+// Nov 2 · Settings › Notifications: the emails the portal sends you, each with a switch. Phase 5e step 4: the bell and
+// phone switches come first (823:21703); a team member gets only those (the emails are the owner's).
 function OwnerNotifications({ show }: { show: (m: string) => void }) {
+  const { team } = usePerms();
+  return <BellSettings show={show} emails={team ? undefined : <OwnerEmails show={show} />} />;
+}
+function OwnerEmails({ show }: { show: (m: string) => void }) {
   const r = useQuery(api.notifications.owner, {});
   const set = useMutation(api.notifications.setOwner);
   return (
     <>
-      <SetHead eyebrow="Notifications" title="The emails you get." sub={<>Each one is on until you switch it off. They go to {r ? r.to.join(" and ") : "your email"}. What your clients and vendors get is theirs to choose, in their own Settings.</>} />
+      <SetHead eyebrow="Emails" title="The emails you get." sub={<>Each one is on until you switch it off. They go to {r ? r.to.join(" and ") : "your email"}. What your clients and vendors get is theirs to choose, in their own Settings.</>} />
       <NotificationList items={r?.items} onToggle={async (key, on) => { try { await set({ key, on }); show(on ? "On." : "Off. You won't get these emails."); } catch (e) { show(errText(e)); throw e; } }} />
     </>
   );
@@ -172,7 +187,7 @@ function AccountSection({ me, show }: { me: { name: string | null; email: string
   const changed = name.trim() !== (me.name ?? "") && name.trim().length > 0;
   return (
     <>
-      <SetHead eyebrow="Account" title="Your profile." sub="The name here goes on every note and reply you leave." />
+      <SetHead title="Your profile." sub="The name here goes on every note and reply you leave." />
       <div className="panel">
         <div className="prow">
           <span className="pl">Name</span>
@@ -205,27 +220,29 @@ function BusinessSection({ show }: { show: (m: string) => void }) {
   const [f, setF] = useState<Biz | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const { team } = usePerms(); // 5e review (answer c): a team member with Settings changes the look; the details are the owner's
   useEffect(() => {
     if (cur && !f) setF({ name: cur.name, legalName: cur.legalName ?? "", emailFromName: cur.emailFromName ?? "", replyTo: cur.replyTo ?? "", address: cur.address ?? "", privacyUrl: cur.privacyUrl ?? "", accent: cur.accent ?? "", background: cur.background ?? "" });
   }, [cur, f]);
   const dirty = useMemo(() => !!(cur && f) && (f.name !== cur.name || f.legalName !== (cur.legalName ?? "") || f.emailFromName !== (cur.emailFromName ?? "") || f.replyTo !== (cur.replyTo ?? "") || f.address !== (cur.address ?? "") || f.privacyUrl !== (cur.privacyUrl ?? "") || f.accent.toUpperCase() !== (cur.accent ?? "") || f.background.toUpperCase() !== (cur.background ?? "")), [cur, f]);
-  if (!cur || !f) return <SetHead eyebrow="Business" title="Your business." sub="How your portal looks to clients and what it sends as." />;
+  if (!cur || !f) return <SetHead title="Your business." sub="How your portal looks to clients and what it sends as." />;
   const set = (p: Partial<Biz>) => setF({ ...f, ...p });
   const onSave = async () => {
     setBusy("save"); setErr(null);
     try {
-      await save({ name: f.name, legalName: f.legalName || null, emailFromName: f.emailFromName || null, replyTo: f.replyTo || null, address: f.address || null, privacyUrl: f.privacyUrl || null, accent: f.accent || null, background: f.background || null });
+      await save(team ? { accent: f.accent || null, background: f.background || null }
+        : { name: f.name, legalName: f.legalName || null, emailFromName: f.emailFromName || null, replyTo: f.replyTo || null, address: f.address || null, privacyUrl: f.privacyUrl || null, accent: f.accent || null, background: f.background || null });
       show("Saved");
     } catch (e) { setErr((e as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]); }
     finally { setBusy(null); }
   };
   const field = (label: string, k: "name" | "legalName" | "emailFromName" | "replyTo" | "address" | "privacyUrl", type = "text", ph = "") => (
-    <label className="wp-field"><span className="wp-field-label">{label}</span><input className="input" type={type} value={f[k]} placeholder={ph} onChange={(e) => set({ [k]: e.target.value } as Partial<Biz>)} /></label>
+    <label className="wp-field"><span className="wp-field-label">{label}</span><input className="input" type={type} value={f[k]} placeholder={ph} readOnly={team} disabled={team} onChange={(e) => set({ [k]: e.target.value } as Partial<Biz>)} /></label>
   );
   const hex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v);
   return (
     <>
-      <SetHead eyebrow="Business" title="Your business." sub="How your portal looks to clients and what it sends as." />
+      <SetHead title="Your business." sub="How your portal looks to clients and what it sends as." />
       <div className="wp-bizgrid">
         <div className="wp-biz glass">
           {field("Business name", "name")}
@@ -234,7 +251,7 @@ function BusinessSection({ show }: { show: (m: string) => void }) {
           {field("Reply-to", "replyTo", "email", cur.ownerEmail ?? "")}
           {field("Business address", "address", "text", "Street, city, state ZIP")}
           {field("Privacy policy link", "privacyUrl", "url", "https://")}
-          <p className="wp-field-hint" style={{ margin: "-6px 0 0" }}>Shown on invoices, receipts and email footers. Stripe requires both on receipts.</p>
+          <p className="wp-field-hint" style={{ margin: "-6px 0 0" }}>{team ? "Only the owner changes these. You can change the logo, colours and watermark." : "Shown on invoices, receipts and email footers. Stripe requires both on receipts."}</p>
           <div className="wp-biz2">
             <LogoSlot label="Logo · on dark" url={cur.logoUrl} light={false} busy={busy === "dark"} onPick={async (file) => { setBusy("dark"); try { await uploadLogo(file, "dark"); } finally { setBusy(null); } }} onClear={() => void setLogo({ storageId: null })} />
             <LogoSlot label="Logo · on light" url={cur.logoLightUrl} light busy={busy === "light"} onPick={async (file) => { setBusy("light"); try { await uploadLogo(file, "light"); } finally { setBusy(null); } }} onClear={() => void setLogo({ storageId: null, which: "light" })} />
@@ -279,10 +296,11 @@ function RoundsAndWatermark({ cur, show }: { cur: BizSettings; show: (m: string)
   const save = useMutation(api.business.updateSettings);
   const [rounds, setRounds] = useState<string | null>(null);
   const w = cur.watermark;
+  const { team } = usePerms();
   const setW = (p: Partial<typeof w>) => void save({ watermark: { ...w, ...p } }).catch((e) => show(String((e as Error).message)));
   return (
     <div className="wp-bizextra">
-      <div className="panel">
+      {!team && <div className="panel">
         <span className="wp-eyebrow">Revision rounds</span>
         <div className="prow"><span className="pl">Use them</span><span className="pr"><Toggle label="Revision rounds" checked={!cur.roundsOff} onChange={(on) => void save({ roundsOff: !on }).then(() => show(on ? "Revision rounds are on." : "Revision rounds are off."), (e) => show(String((e as Error).message)))} /><span className="wmtxt">{cur.roundsOff ? "Off · no round chips, last-round notices or change-order prompts" : "On · each version counts as a round"}</span></span></div>
         {!cur.roundsOff && <>
@@ -294,7 +312,7 @@ function RoundsAndWatermark({ cur, show }: { cur: BizSettings; show: (m: string)
         <div className="prow"><span className="pl">How it counts</span><span className="pr">Each version you upload is a round: v1 is round 1, v2 is round 2.</span></div>
         <div className="prow"><span className="pl">Per client</span><span className="pr">Change it, or switch it off, on a client or on one project.</span></div>
         </>}
-      </div>
+      </div>}
       <div className="panel">
         <span className="wp-eyebrow">Watermark on review copies</span>
         <div className="prow"><span className="pl">Use it</span><span className="pr">On for every client. Switch it off on a client's page (Settings tab).</span></div>
@@ -461,7 +479,7 @@ function SheetCopy({ show }: { show: (m: string) => void }) {
   };
   return (
     <>
-      <SetHead eyebrow="Google Sheet copy" title="The register in a Google Sheet." sub="A copy that refreshes itself every 10 minutes. Changes happen here, not in the sheet." />
+      <SetHead title="The register in a Google Sheet." sub="A copy that refreshes itself every 10 minutes. Changes happen here, not in the sheet." />
       <div className="panel">
         <div className="prow">
           <span className="pl">

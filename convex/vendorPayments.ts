@@ -4,11 +4,12 @@
 // cost) and emails the vendor (27). Mark paid records the day, amount and method the owner paid them outside the
 // portal, and emails the vendor (28). Nothing here moves money (D92). Owner only.
 import { internalAction, internalQuery, mutation, query } from "./lib/functions";
+import { audit } from "./lib/audit";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import { PAY_METHODS, expectedCents, isDate, looksLikeAccount, todayCentral } from "./lib/bookings";
 import { label, paidAmount, paidDay } from "./lib/bookingRows";
@@ -21,7 +22,7 @@ type Ctx = QueryCtx | MutationCtx;
 const clip = (s: string | undefined, n: number) => (s ?? "").trim().slice(0, n);
 
 async function ownerBiz(ctx: Ctx) {
-  const me = await requireMe(ctx);
+  const me = await requireAll(ctx, "vendorPayments");
   const id = businessInScope(ctx);
   const b = id ? await ctx.db.get(id) : null;
   if (!b) throw new ConvexError("Not allowed.");
@@ -135,6 +136,7 @@ export const approve = mutation({
     const vendor = await ctx.db.get(x.vendorId);
     const k = await ctx.db.get(x.bookingId);
     if (!(await ctx.db.get(x.projectId))) throw new ConvexError("Its project isn't here any more.");
+    await audit(ctx, { kind: "paid", text: `approved a vendor invoice from ${vendor?.name ?? "a vendor"}`, where: "Vendors › Payments", link: `/vendors/payments/${x._id}` });
     const now = Date.now();
     const who = me.name ?? me.email;
     const entryId = await ctx.db.insert("ledgerEntries", {
@@ -160,6 +162,7 @@ export const decline = mutation({
     if (!why) throw new ConvexError("Say why, so they can fix it.");
     const now = Date.now();
     await ctx.db.patch(invoiceId, { status: "declined", declinedAt: now, declineReason: why, history: [...(x.history ?? []), { at: now, text: `Declined by you: ${why}` }], updatedAt: now });
+    await audit(ctx, { kind: "paid", text: `declined a vendor invoice (${x.number})`, where: "Vendors › Payments", link: `/vendors/payments/${invoiceId}` }); // 5e review (answer d)
     await ctx.scheduler.runAfter(0, internal.vendorPayments.mailDeclined, { invoiceId, at: now }); // Nov 2: email for everything
     return null;
   },
@@ -179,6 +182,7 @@ export const markPaid = mutation({
     if (!isDate(a.paidOn)) throw new ConvexError("Pick the day you paid.");
     if (a.paidOn > todayCentral()) throw new ConvexError("The paid date can't be in the future.");
     if (!PAY_METHODS.includes(a.method)) throw new ConvexError("Pick how you paid.");
+    await audit(ctx, { kind: "paid", text: `marked a vendor invoice paid (${a.method})`, where: "Vendors › Payments", link: `/vendors/payments/${x._id}` });
     const ref = clip(a.reference, 80);
     if (looksLikeAccount(ref)) throw new ConvexError("Leave account numbers out. A short confirmation number, or its last 4 digits, is enough.");
     const now = Date.now();

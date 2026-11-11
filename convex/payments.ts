@@ -3,11 +3,12 @@
 // keeps its full Stripe Dashboard). The portal keeps a mirror of the account's state, refreshed from Stripe on return
 // from onboarding, on "Check again" and by the Connect webhook (account.updated).
 import { action, httpAction } from "./_generated/server";
+import { audit } from "./lib/audit";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import { SITE, siteHost } from "./lib/site";
 import { invoicePrefix } from "./lib/invoiceNumber";
@@ -25,7 +26,7 @@ function ownBusiness(ctx: unknown): Id<"businesses"> {
 export const settings = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "payments");
     const b = await ctx.db.get(ownBusiness(ctx));
     if (!b) return null;
     const s = b.stripe;
@@ -203,6 +204,7 @@ export const disconnect = mutation({
   args: {},
   handler: async (ctx) => {
     await requireMe(ctx);
+    await audit(ctx, { kind: "settings", text: "disconnected Stripe", where: "Settings › Payments", link: "/settings" });
     const b = await ctx.db.get(ownBusiness(ctx));
     if (!b?.stripe) return null;
     await ctx.db.patch(b._id, { stripe: { ...b.stripe, status: "disconnected", disconnectedAt: Date.now() }, updatedAt: Date.now() });

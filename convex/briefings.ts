@@ -13,12 +13,14 @@
 // only shared by copied link stays SENT. Vendors picked from the list also see it in their vendor portal (as before).
 // Owner only, except the three link functions at the bottom (a token is the key) and the PDF route.
 import { action, httpAction } from "./_generated/server";
+import { audit } from "./lib/audit";
+import { claimUpload, deleteFile } from "./lib/fileOwners";
 import { internalMutation, internalQuery, mutation, query, focusBusiness } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import { insertBuild } from "./builder";
 import { pageOf, type BuildDoc, type ExtraSigner, type Fields, type Page, type Style } from "./lib/wsBuilder";
@@ -45,7 +47,7 @@ type To = { vendorId?: Id<"vendors">; email: string; name?: string };
 const linkOf = (token: string) => `${SITE()}/b/${token}`;
 
 async function ownerBiz(ctx: QueryCtx | MutationCtx) {
-  const me = await requireMe(ctx);
+  const me = await requireAll(ctx, "production");
   const id = businessInScope(ctx);
   const b = id ? await ctx.db.get(id) : null;
   if (!b) throw new ConvexError("Not allowed.");
@@ -311,13 +313,14 @@ export const shareStart = internalMutation({
     const to = await cleanTo(ctx, a.to);
     if (!to.length && !a.copyLink) return { error: "Add who it goes to (Send to)." };
     if (x.linkOff) return { error: "The link is turned off. Turn it back on first, so the new links work." };
+    await audit(ctx, { kind: "sent", text: `shared the briefing ${build.title ?? ""}${to.length ? ` with ${to.length} ${to.length === 1 ? "person" : "people"}` : " by link"}`.replace("  ", " "), where: "Vendors › Briefings", link: `/vendors/briefings/${x._id}` });
     const now = Date.now();
     // As proposals (review fix): a file that isn't a fresh PDF upload is never touched; one this caller just uploaded
     // for this briefing is theirs, so a refusal deletes it (returned, not thrown, so the delete isn't rolled back).
     // Review M2: a refusal deletes only after the file is shown to be a fresh PDF upload (below); a shared briefing
     // never touches the file it's given (its PDF is already frozen, and the browser sends none).
     let mayDrop = false;
-    const refuse = async (error: string) => { if (a.storageId && mayDrop) await ctx.storage.delete(a.storageId).catch(() => null); return { error }; };
+    const refuse = async (error: string) => { if (a.storageId && mayDrop) await deleteFile(ctx, a.storageId, x.businessId ?? null); return { error }; };
     let patch: Partial<Doc<"briefings">> = { updatedAt: now };
     const hist = [...x.history];
     if (x.status === "draft") {
@@ -325,6 +328,8 @@ export const shareStart = internalMutation({
       const file = await ctx.db.system.get(a.storageId);
       if (!file || !fresh(file) || (file.contentType && file.contentType !== "application/pdf") || file.size > MAX_PDF_BYTES) return { error: "The PDF didn't upload. Try again." };
       if (await ctx.db.query("briefings").filter((q) => q.eq(q.field("pdfId"), a.storageId)).first()) return { error: "The PDF didn't upload. Try again." };
+      // 5e review (Nov 6): the upload becomes this business's file; another business's fresh upload is refused.
+      if (!(await claimUpload(ctx, a.storageId, x.businessId ?? null, "briefing")).fresh) return { error: "The PDF didn't upload. Try again." };
       mayDrop = true;
       const problems = briefingProblems(docOf(build));
       if (problems.length) return refuse(problems[0]);
@@ -418,15 +423,17 @@ export const updateStart = internalMutation({
     const file = await ctx.db.system.get(a.storageId);
     if (!file || !fresh(file) || (file.contentType && file.contentType !== "application/pdf") || file.size > MAX_PDF_BYTES) return { error: "The PDF didn't upload. Try again." };
     if (await ctx.db.query("briefings").filter((q) => q.eq(q.field("pdfId"), a.storageId)).first()) return { error: "The PDF didn't upload. Try again." };
+    if (!(await claimUpload(ctx, a.storageId, x.businessId ?? null, "briefing")).fresh) return { error: "The PDF didn't upload. Try again." }; // 5e review (Nov 6)
     const problems = briefingProblems(docOf(build));
-    if (problems.length) { await ctx.storage.delete(a.storageId).catch(() => null); return { error: problems[0] }; }
+    if (problems.length) { await deleteFile(ctx, a.storageId, x.businessId ?? null); return { error: problems[0] }; }
     const now = Date.now();
     const old = x.pdfId;
     const people = a.notify && !x.linkOff ? await recipientsOf(ctx, x._id) : [];
     await ctx.db.patch(x._id, { pdfId: a.storageId, editedAt: now, updatedAt: now, shown: shownOf(build),
       history: [...x.history, { kind: "edited", at: now, by: by(me), ...(people.length ? { detail: `emailed ${people.length} ${people.length === 1 ? "person" : "people"}` } : {}) }].slice(-60) });
     await ctx.db.patch(build._id, { renderedAt: now });
-    if (old && old !== a.storageId) await ctx.storage.delete(old).catch(() => null);
+    if (old && old !== a.storageId) await deleteFile(ctx, old, x.businessId ?? null);
+    await audit(ctx, { kind: "settings", text: `updated the briefing ${build.title}${people.length ? `, emailing ${people.length}` : ""}`, where: "Vendors › Briefings", link: `/vendors/briefings/${x._id}` });
     for (const _ of people) await bump(ctx, "briefingSend", String(x.businessId ?? "default"));
     return { at: now, sends: people.map((r) => ({ recipientId: r._id, email: r.email, name: r.name ?? null, token: r.token })) };
   },

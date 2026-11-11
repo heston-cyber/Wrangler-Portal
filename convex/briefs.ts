@@ -11,7 +11,7 @@ import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe, requireSignedIn } from "./lib/access";
+import { requireMe, requireSignedIn, requireAll } from "./lib/access";
 import { businessContact, businessInScope } from "./lib/business";
 import { businessOf, postToInbox } from "./lib/inbox";
 import { myProjects, portalPeople } from "./projects";
@@ -28,7 +28,7 @@ const REMIND_GAP = 20 * 3_600_000;       // one reminder a day at most
 const QUIET_CHANGES = 10 * 60_000;       // changes sent back: one owner email, 10 minutes after the last
 
 async function ownerBiz(ctx: Ctx) {
-  const me = await requireMe(ctx);
+  const me = await requireAll(ctx, "projects");
   const id = businessInScope(ctx);
   const b = id ? await ctx.db.get(id) : null;
   if (!b) throw new ConvexError("Not allowed.");
@@ -121,7 +121,7 @@ async function ownedProject(ctx: Ctx, projectId: string) {
 export const forProject = query({
   args: { projectId: v.string() },
   handler: async (ctx, { projectId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "projects");
     const id = ctx.db.normalizeId("projects", projectId);
     const p = id ? await ctx.db.get(id) : null;
     if (!p) return null;
@@ -168,7 +168,7 @@ export const send = mutation({
 export const remind = mutation({
   args: { briefId: v.id("briefs") },
   handler: async (ctx, { briefId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "projects");
     const r = await ctx.db.get(briefId);
     if (!r) throw new ConvexError("That brief isn't here any more.");
     if (r.status !== "sent") throw new ConvexError("They've already sent it back.");
@@ -187,7 +187,7 @@ export const remind = mutation({
 export const forEstimate = query({
   args: { briefId: v.string() },
   handler: async (ctx, { briefId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "projects");
     const id = ctx.db.normalizeId("briefs", briefId);
     const r = id ? await ctx.db.get(id) : null;
     if (!r) return null;

@@ -53,7 +53,7 @@ export default function CallSheetsPage() {
     <>
       {tab === "templates" ? <Crumbs>{CS}<Sep /><span className="here">Templates</span></Crumbs> : <Crumbs />}
       <div className="wp-page prod">
-        <PageHeader eyebrow="Production" title="Call sheets." sub="Written, sent and opened." actions={<ButtonLink variant="primary" to="/production/call-sheets/new" iconEnd={false}>New call sheet</ButtonLink>} />
+        <PageHeader title="Call sheets." sub="Written, sent and opened." actions={<ButtonLink variant="primary" to="/production/call-sheets/new" iconEnd={false}>New call sheet</ButtonLink>} />
         {d === undefined ? <Card label="Loading"><SkeletonRows n={4} /></Card>
           : d === null ? null
           : d.rows.length === 0 && tab !== "templates" ? <EmptyState icon="document" title="No call sheets yet"
@@ -116,7 +116,7 @@ export function NewCallSheet({ shootId, templateId }: { shootId: string | null; 
     <>
       <Crumbs>{CS}<Sep /><span className="here">New call sheet</span></Crumbs>
       <div className="wp-page prod">
-        <PageHeader eyebrow="Production" title="New call sheet." sub="Pick the shoot first, then how you want to write it." />
+        <PageHeader title="New call sheet." sub="Pick the shoot first, then how you want to write it." />
         {o === undefined ? <Card label="Loading"><SkeletonRows n={2} /></Card> : o === null ? null : <>
           <section className="qz-card glass">
             <span className="wp-eyebrow">Shoot</span>
@@ -317,7 +317,7 @@ export function CallSheetDetail({ callSheetId }: { callSheetId: string }) {
       <Crumbs>{CS}<Sep /><span className="here">{cs.client ? `${cs.client} · ${short}` : short}</span></Crumbs>
       <div className="wp-page prod cs-detail">
         <a {...linkProps("/production/call-sheets")} className="cs-back"><Icon name="arrow-left" size={18} />Call sheets</a>
-        <PageHeader eyebrow="Call sheet" title={cs.title} sub={[sheetDay(cs.shoot.date), `Crew call ${clockOf(cs.crewCall)}`, cs.place].filter(Boolean).join(" · ")}
+        <PageHeader title={cs.title} sub={[sheetDay(cs.shoot.date), `Crew call ${clockOf(cs.crewCall)}`, cs.place].filter(Boolean).join(" · ")}
           actions={<><ButtonLink to={`/production/call-sheets/${cs._id}/edit`} iconEnd={false} className="hide-sm">Open in editor</ButtonLink>
             {cs.status === "sent" ? <Button variant="primary" onClick={() => setDialog("update")}>Send an update</Button> : <ButtonLink variant="primary" to={`/production/call-sheets/${cs._id}/edit?send=1`} iconEnd={false}>Send call sheet</ButtonLink>}</>} />
         {cs.changed && <section className="wp-notice warn cs-warn"><Icon name="alert" size={20} /><span className="txt"><b>{cs.changes.length && cs.changes.every((c) => /^Weather: /.test(c)) ? "The forecast changed after you sent it" : "You changed the sheet after sending it"}</b><br />{cs.changes.length ? `${cs.changes.join(". ")}. ` : ""}Send an update so everyone sees it.</span><Button size="sm" className="hide-sm" onClick={() => setDialog("update")}>Send an update</Button></section>}

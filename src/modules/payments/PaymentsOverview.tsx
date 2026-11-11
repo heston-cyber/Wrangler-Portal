@@ -55,7 +55,7 @@ export default function PaymentsOverview() {
     <>
       <TopBar><span className="secondary">Payments</span><Sep /><span className="here">Overview</span></TopBar>
       <div className="wp-page pov">
-        <PageHeader eyebrow="Payments" title="Payments." sub="Money in, at a glance."
+        <PageHeader title="Payments." sub="Money in, at a glance."
           actions={o && !off ? <ButtonLink variant="primary" icon="plus" to="/payments/invoices/new">New invoice</ButtonLink> : undefined} />
         {off && (
           <div className="wp-notice warn">

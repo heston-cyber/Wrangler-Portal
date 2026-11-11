@@ -12,7 +12,7 @@ import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe, requireSignedIn } from "./lib/access";
+import { requireMe, requireSignedIn, requireAll } from "./lib/access";
 import { businessContact } from "./lib/business";
 import { businessOf, clientOfEmail, hasAccess } from "./lib/inbox";
 import { ownerEmailFor } from "./footage";
@@ -36,7 +36,7 @@ const tidy = (s: string) => s.replace(/\r\n?/g, "\n").replace(/[ \t]+/g, " ").re
 export const projectsFor = query({
   args: { clientId: v.string() },
   handler: async (ctx, { clientId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const id = ctx.db.normalizeId("clients", clientId);
     if (!id || !(await ctx.db.get(id))) return [];
     const rows = (await ctx.db.query("projects").collect()).filter((p) => p.clientId === id);
@@ -115,7 +115,7 @@ export const send = mutation({
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const rows = await ctx.db.query("testimonials").withIndex("by_created").order("desc").take(500);
     const out = [];
     for (const t of rows) {
@@ -133,7 +133,7 @@ export const list = query({
 export const markRead = mutation({
   args: { testimonialId: v.id("testimonials") },
   handler: async (ctx, { testimonialId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const t = await ctx.db.get(testimonialId);
     if (!t) throw new ConvexError("That testimonial isn't here.");
     if (!t.readAt) await ctx.db.patch(t._id, { readAt: Date.now(), updatedAt: Date.now() });
@@ -145,7 +145,7 @@ export const markRead = mutation({
 export const saveAgain = mutation({
   args: { testimonialId: v.id("testimonials") },
   handler: async (ctx, { testimonialId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, "clients");
     const t = await ctx.db.get(testimonialId);
     if (!t) throw new ConvexError("That testimonial isn't here.");
     if (t.savedAt) return { already: true };

@@ -30,7 +30,7 @@ import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll } from "./lib/access";
 import { Disconnected, google, hasKeys, queueCalendar, scoped, scopedAction, type Google } from "./calendar";
 import { ID_OK, addDays, dateEventId, fromGoogle, isDay, isTime, newEventId, spanError, toGoogle, updatedMs, type Span } from "./lib/gcal";
 import { todayCentral } from "./lib/bookings";
@@ -94,7 +94,7 @@ const dateSig = (calendarId: string, title: string, date: string) => `${calendar
 export const range = query({
   args: { from: v.string(), to: v.string() },
   handler: async (ctx, { from, to }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, ["shoots", "production"]);
     const biz = bizOf(ctx);
     if (!isDay(from) || !isDay(to) || to < from) throw new ConvexError("Pick the days to show.");
     if (to > addDays(from, 100)) to = addDays(from, 100);
@@ -160,7 +160,7 @@ export const range = query({
 export const linkOptions = query({
   args: {},
   handler: async (ctx) => {
-    await requireMe(ctx);
+    await requireAll(ctx, ["shoots", "production"]);
     const today = todayCentral();
     const shoots = [];
     for (const s of await ctx.db.query("shoots").withIndex("by_date", (q) => q.gte("date", addDays(today, -7))).take(100)) {
@@ -178,7 +178,7 @@ export const linkOptions = query({
 export const setShown = mutation({
   args: { calendarId: v.string(), on: v.boolean() },
   handler: async (ctx, { calendarId, on }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, ["shoots", "production"]);
     const c = await conn(ctx);
     if (!c) throw new ConvexError("Connect Google Calendar first.");
     const list = calendarsOf(c);
@@ -253,7 +253,7 @@ const baseFor = (r: Row) => (r.pending ? r.base : shapeOf(r));
 export const create = mutation({
   args: { ...eventArgs, calendarId: v.optional(v.string()) },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, ["shoots", "production"]);
     const c = await writable(ctx);
     const calendarId = a.calendarId || c.calendarId;
     if (!calendarId) throw new ConvexError("Pick the calendar for new events in Settings › Calendar first.");
@@ -277,7 +277,7 @@ export const create = mutation({
 export const update = mutation({
   args: { eventId: v.string(), ...eventArgs, notify: v.boolean() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, ["shoots", "production"]);
     await writable(ctx);
     const r = await ownRow(ctx, a.eventId);
     const e = await cleanEvent(ctx, a);
@@ -297,7 +297,7 @@ export const update = mutation({
 export const move = mutation({
   args: { eventId: v.string(), ...spanArgs, notify: v.boolean() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, ["shoots", "production"]);
     await writable(ctx);
     const r = await ownRow(ctx, a.eventId);
     const s = cleanSpan(a);
@@ -315,7 +315,7 @@ export const move = mutation({
 export const undoMove = mutation({
   args: { eventId: v.string() },
   handler: async (ctx, { eventId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, ["shoots", "production"]);
     await writable(ctx);
     const r = await ownRow(ctx, eventId);
     if (!r.prev || Date.now() - r.prev.at > UNDO_MS) throw new ConvexError("It's too late to undo that move. Move it back instead.");
@@ -329,7 +329,7 @@ export const undoMove = mutation({
 export const remove = mutation({
   args: { eventId: v.string() },
   handler: async (ctx, { eventId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, ["shoots", "production"]);
     await writable(ctx);
     const r = await ownRow(ctx, eventId);
     // Guests get Google's cancellation (the confirm says so).
@@ -346,7 +346,7 @@ export const remove = mutation({
 export const moveShoot = mutation({
   args: { shootId: v.string(), date: v.string(), call: v.string(), wrap: v.optional(v.string()), notify: v.boolean() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, ["shoots", "production"]);
     const id = ctx.db.normalizeId("shoots", a.shootId);
     const s = id ? await ctx.db.get(id) : null;
     if (!s || s.status !== "scheduled") throw new ConvexError("That shoot isn't here any more.");
@@ -386,7 +386,7 @@ async function dropDragNotes(ctx: MutationCtx, s: Doc<"shoots">, at: number) {
 export const undoShoot = mutation({
   args: { shootId: v.string() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, ["shoots", "production"]);
     const id = ctx.db.normalizeId("shoots", a.shootId);
     const s = id ? await ctx.db.get(id) : null;
     if (!s || s.status !== "scheduled") throw new ConvexError("That shoot isn't here any more.");
@@ -409,7 +409,7 @@ export const undoShoot = mutation({
 export const moveDate = mutation({
   args: { projectId: v.string(), label: v.string(), from: v.string(), to: v.string() },
   handler: async (ctx, a) => {
-    await requireMe(ctx);
+    await requireAll(ctx, ["shoots", "production"]);
     const id = ctx.db.normalizeId("projects", a.projectId);
     const p = id ? await ctx.db.get(id) : null;
     if (!p) throw new ConvexError("This project doesn't exist any more.");
@@ -437,7 +437,7 @@ async function movedShoot(ctx: MutationCtx, shootId: string) {
 export const shootMoveDone = mutation({
   args: { shootId: v.string() },
   handler: async (ctx, { shootId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, ["shoots", "production"]);
     const { s, g } = await movedShoot(ctx, shootId);
     if (!g.doneAt) await ctx.db.patch(s._id, { googleMove: { ...g, doneAt: Date.now() } });
     return null;
@@ -448,7 +448,7 @@ export const shootMoveDone = mutation({
 export const askConfirmAgain = mutation({
   args: { shootId: v.string() },
   handler: async (ctx, { shootId }) => {
-    await requireMe(ctx);
+    await requireAll(ctx, ["shoots", "production"]);
     const { s, g } = await movedShoot(ctx, shootId);
     if (g.doneAt) return { told: 0 };
     if (g.kept) { await ctx.db.patch(s._id, { googleMove: { ...g, doneAt: Date.now() } }); return { told: 0 }; } // nothing moved
@@ -480,7 +480,7 @@ export async function shootMoveNeeds(ctx: QueryCtx) {
 export const syncNow = action({
   args: {},
   handler: async (ctx): Promise<{ state: string }> => {
-    const me: { businessId: Biz | null } = await ctx.runQuery(internal.users.assertAllowed, {});
+    const me: { businessId: Biz | null } = await ctx.runQuery(internal.users.assertAllowed, { perm: ["shoots", "production"] });
     if (!hasKeys()) throw new ConvexError("Google Calendar isn't set up for the portal yet (the Google sign-in keys go in Convex).");
     if (!me.businessId) throw new ConvexError("Which business this is for isn't clear.");
     return { state: await forBusiness(ctx, me.businessId).runAction(internal.calendarSync.pull, {}) };

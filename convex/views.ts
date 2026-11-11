@@ -6,7 +6,7 @@
 import { mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireMe } from "./lib/access";
+import { requireFor, requireMe } from "./lib/access";
 import { accessToVersion, authorOf, limitKey, shareArg } from "./lib/viewer";
 import { bump } from "./lib/rate";
 
@@ -47,7 +47,7 @@ function rowOf(r: Doc<"views">, versionNumber: number): ViewRow {
 export const forVideo = query({
   args: { videoId: v.id("videos") },
   handler: async (ctx, { videoId }) => {
-    await requireMe(ctx);
+    await requireFor(ctx, "review", videoId);
     const rows = (await ctx.db.query("views").withIndex("by_video", (q) => q.eq("videoId", videoId)).order("desc").take(500)).filter((r) => r.kind !== "owner");
     const versions = new Map((await ctx.db.query("versions").withIndex("by_video", (q) => q.eq("videoId", videoId)).collect()).map((x) => [x._id as string, x.number]));
     const people = new Set(rows.map((r) => r.whoKey));

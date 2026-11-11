@@ -54,7 +54,7 @@ export default function ClientInvoices() {
     <>
       <TopBar><span className="secondary">Payments</span><Sep /><span className="here">Invoices</span></TopBar>
       <div className="wp-page inv-list">
-        <PageHeader help="/help/paying-an-invoice" eyebrow="Payments" title="Invoices." sub="Everything you've been billed for, and what's left to pay." />
+        <PageHeader help="/help/paying-an-invoice" title="Invoices." sub="Everything you've been billed for, and what's left to pay." />
         {rows === undefined ? <Card label="Invoices"><SkeletonRows n={3} /></Card>
           : rows.length === 0 ? <EmptyState icon="invoice" title="No invoices." />
           : <>

@@ -1,3 +1,4 @@
+import { requireAll } from "./lib/access";
 // Phase 2 Part B, step 4: reminders and the after-payment emails.
 //   - Reminders (D51): "Send reminder" on an invoice always works. Automatic reminders are a business setting, off
 //     until the owner turns them on (turning them on is their OK for those emails, rule 3): one before the due date,
@@ -16,6 +17,7 @@ import { businessOf, postToInbox } from "./lib/inbox";
 import { mailBrandOf } from "./lib/mail";
 import { ownerPaidMail, paymentFailedMail, receiptMail, reminderMail } from "./lib/mails";
 import { SITE, sendEmail } from "./lib/email";
+import { EMAIL_TO_BELL, bellLink } from "./lib/bell";
 import { payLink } from "./invoicePay";
 import { keyMode, platformKey } from "./lib/stripeApi";
 
@@ -56,7 +58,6 @@ function ownBusiness(ctx: unknown): Id<"businesses"> {
   if (!id) throw new ConvexError("Not allowed.");
   return id;
 }
-const isOwner = (ctx: unknown) => !!(ctx as { scope?: { isOwner: boolean } }).scope?.isOwner;
 
 // ---------- the setting ----------
 
@@ -65,7 +66,7 @@ const clampInt = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi
 export const setReminders = mutation({
   args: { on: v.boolean(), beforeDays: v.number(), afterDays: v.number(), everyDays: v.number(), stopAfter: v.number() },
   handler: async (ctx, a) => {
-    if (!isOwner(ctx)) throw new ConvexError("Not allowed.");
+    await requireAll(ctx, "payments"); // Phase 5e: the owner, or Payments on
     const id = ownBusiness(ctx);
     await ctx.db.patch(id, { reminders: { on: a.on, beforeDays: clampInt(a.beforeDays, 0, 30), afterDays: clampInt(a.afterDays, 0, 30), everyDays: clampInt(a.everyDays, 1, 60), stopAfter: clampInt(a.stopAfter, 1, 12) }, updatedAt: Date.now() });
     return null;
@@ -85,7 +86,7 @@ async function logReminder(ctx: MutationCtx, i: Doc<"invoices">, kind: "before" 
 export const sendReminder = mutation({
   args: { invoiceId: v.id("invoices") },
   handler: async (ctx, { invoiceId }) => {
-    if (!isOwner(ctx)) throw new ConvexError("Not allowed.");
+    await requireAll(ctx, "payments"); // Phase 5e: the owner, or Payments on
     const i = await ctx.db.get(invoiceId);
     if (!i || i.status === "draft" || i.status === "sending") throw new ConvexError("Send the invoice first.");
     if (i.status !== "open" || i.amountRemainingCents <= 0) throw new ConvexError("There's nothing left to pay on this invoice.");
@@ -154,6 +155,9 @@ export const mailData = internalQuery({
 export async function deliverOnce(ctx: { runMutation: (ref: any, args: any) => Promise<any> }, key: string, kind: string, to: string, m: { from: string; subject: string; text: string; html: string }, replyTo: string, businessId?: Id<"businesses"> | null) {
   // Nov 2: an email the person switched off (Settings › Notifications) isn't sent, and isn't logged as sent.
   const biz = businessId ?? (ctx as { asBusiness?: Id<"businesses"> }).asBusiness ?? null; // the business this run acts for
+  // Phase 5e step 4 (D146): every email to the owner also lands in the bell, even when its email is switched off.
+  const bellKind = EMAIL_TO_BELL[kind];
+  if (bellKind) await ctx.runMutation(internal.bell.post, { kind: bellKind, title: m.subject, key, ...(biz ? { businessId: biz } : {}), ...((): { link?: string } => { const l = bellLink(m.text, SITE()); return l ? { link: l } : {}; })() });
   const c = await ctx.runMutation(internal.invoicePay.claimEmail, { key, to, kind, ...(biz ? { businessId: biz } : {}) });
   if (c === "off") return "off";
   if (!c) return "already";

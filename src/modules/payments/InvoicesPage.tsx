@@ -76,7 +76,7 @@ export default function InvoicesPage() {
     <>
       <TopBar><span className="secondary">Payments</span><Sep /><span className="here">Invoices</span></TopBar>
       <div className="wp-page inv-list">
-        <PageHeader eyebrow="Payments" title="Invoices." sub="Every invoice the portal has sent. Drafts wait for your OK."
+        <PageHeader title="Invoices." sub="Every invoice the portal has sent. Drafts wait for your OK."
           actions={<ButtonLink variant="primary" icon="plus" to="/payments/invoices/new">New invoice</ButtonLink>} />
         {notConnected && <div className="wp-notice"><Icon name="info" size={20} /><span className="txt"><b>Stripe isn't connected.</b> You can write drafts; sending needs Stripe (Settings › Payments).</span><ButtonLink size="sm" to="/settings/payments">Settings › Payments</ButtonLink></div>}
         {rows === undefined ? <Card label="Invoices"><SkeletonRows n={4} /></Card>

@@ -1,3 +1,8 @@
+import { useDeviceCheckIn } from "./modules/security/Security";
+import { NotificationsPage } from "./modules/bell/Bell";
+import { registerWorker } from "./lib/push";
+import { NotAllowedBoundary } from "./ErrorBoundary";
+import { canOpen, type Perms } from "./lib/teamAccess";
 import { useConvexAuth, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../convex/_generated/api";
@@ -27,7 +32,7 @@ import ActivityPage from "./modules/review/ActivityPage";
 import Settings from "./modules/settings/Settings";
 import VideoPage from "./modules/review/VideoPage";
 import SharePage from "./modules/review/SharePage";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { MorePage, Shell } from "./shell/Shell";
 import { UploadProvider } from "./shell/UploadDialog";
 import type { Id } from "../convex/_generated/dataModel";
@@ -37,6 +42,7 @@ const InvoicesPage = lazy(() => import("./modules/payments/InvoicesPage"));
 const InvoiceEditor = lazy(() => import("./modules/payments/InvoiceEditor"));
 const InvoiceDetail = lazy(() => import("./modules/payments/InvoiceDetail"));
 const PaymentsOverview = lazy(() => import("./modules/payments/PaymentsOverview"));
+const ReportsPage = lazy(() => import("./modules/payments/ReportsPage")); // Phase 5e step 5
 const PlansPage = lazy(() => import("./modules/payments/PlansPage"));
 // Phase 3: the CRM (Clients › Pipeline · Companies · Follow-ups), estimates and contacts.
 const Pipeline = lazy(() => import("./modules/crm/Pipeline"));
@@ -117,6 +123,10 @@ const HelpScreen = lazy(() => import("./modules/help/Help").then((m) => ({ defau
 const SignDoc = lazy(() => import("./modules/docs/pages/SignDoc"));
 const SignSignature = lazy(() => import("./modules/docs/pages/SignSignature"));
 // S2: the client's signing page. sign.wranglerportal.com/<token>, or /x/<token> on any host (a fallback).
+const JoinTeam = lazy(() => import("./modules/team/JoinTeam")); // Phase 5e: /team/join/<token>
+const TeamHome = lazy(() => import("./modules/team/TeamPages").then((m) => ({ default: m.TeamHome }))); // Phase 5e
+const NoAccess = lazy(() => import("./modules/team/TeamPages").then((m) => ({ default: m.NoAccess })));
+const TeamAccount = lazy(() => import("./modules/team/TeamPages").then((m) => ({ default: m.TeamAccount })));
 const SignerApp = lazy(() => import("./modules/docs/signer/SignerApp"));
 const CopyPage = lazy(() => import("./modules/docs/signer/CopyPage")); // D160: copied on a contract
 const VerifyPage = lazy(() => import("./modules/docs/signer/VerifyPage"));
@@ -153,6 +163,8 @@ export default function App() {
     const guestKit = /^\/guest(?:\/([A-Za-z0-9_-]{16,64}))?\/?$/.exec(path);
     if (guestKit && (kit === "guest" || kit === "guestout")) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><GuestApp key={guestKit[1] ?? "home"} token={guestKit[1] ?? null} /></Suspense></KitApp></Suspense>;
     const sh = /^\/s\/([^/]+)(?:\/v\/([^/]+))?\/?$/.exec(path);
+    const jk = /^\/team\/join\/([A-Za-z0-9_-]{20,64})\/?$/.exec(path); // Phase 5e: the Join page
+    if (jk) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><JoinTeam token={jk[1]} /></Suspense></KitApp></Suspense>;
     const qk = /^\/q\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path); // D149: the no-account quote page
     if (qk) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><ClientQuote token={qk[1]} /></Suspense></KitApp></Suspense>;
     const brief = /^\/b\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path); // D147: the no-login briefing page
@@ -214,6 +226,9 @@ export default function App() {
     const page = (inShell: boolean) => <Suspense fallback={<Loading />}><ClientInvoice key={invoice[1]} token={invoice[1]} inShell={inShell} /></Suspense>;
     return isAuthenticated ? <ShareForMember video={false} page={page} /> : page(false);
   }
+  // Phase 5e: a team invite's link (email 46), no account yet.
+  const joinLink = /^\/team\/join\/([A-Za-z0-9_-]{20,64})\/?$/.exec(path);
+  if (joinLink) return <Suspense fallback={<Loading />}><JoinTeam key={joinLink[1]} token={joinLink[1]} /></Suspense>;
   // Phase 5b step 4: a call-sheet guest's link (email 41), signed in or out; the page decides.
   const guestLink = /^\/guest(?:\/([A-Za-z0-9_-]{16,64}))?\/?$/.exec(path);
   if (guestLink) return <Suspense fallback={<Loading />}><GuestApp key={guestLink[1] ?? "home"} token={guestLink[1] ?? null} /></Suspense>;
@@ -224,6 +239,8 @@ export default function App() {
 
 function SignedIn() {
   const me = useQuery(api.users.me);
+  useDeviceCheckIn(!!me && me.role !== "guest" && me.role !== null); // Phase 5e step 2: Settings › Security's devices, email 47
+  useEffect(() => { if (me) registerWorker(); }, [!!me]); // Phase 5e step 4: phone alerts open the portal when tapped
   const { signOut } = useAuthActions();
   const { path, search } = useLocation();
   const signer = (isSignHost() ? /^\/(?:x\/)?([A-Za-z0-9_-]{16,64})\/?$/ : /^\/x\/([A-Za-z0-9_-]{16,64})\/?$/).exec(path);
@@ -247,7 +264,9 @@ function SignedIn() {
       <><SideFromLink /><ClientShell me={me} /></>
     );
   }
-  if (!me || !me.allowed) {
+  // Phase 5e: a team member works in the back office, with what their role allows.
+  const team = !!me && me.role === "team" && !!me.team;
+  if (!me || (!me.allowed && !team)) {
     return (
       <SystemPage icon="lock" eyebrow="Wrangler Review" title="Not allowed." body="This account isn't on Wrangler Review's list.">
         <Button style={{ alignSelf: "flex-start" }} onClick={() => void signOut()}>Sign out</Button>
@@ -271,6 +290,7 @@ function SignedIn() {
   else if (/^\/payments\/invoices\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><InvoiceDetail key={id} invoiceId={id} /></Suspense>; }
   else if (/^\/payments\/invoices\/?$/.test(path)) page = <Suspense fallback={<Loading />}><InvoicesPage key={search} /></Suspense>;
   else if (/^\/payments\/?$/.test(path)) page = <Suspense fallback={<Loading />}><PaymentsOverview /></Suspense>;
+  else if (/^\/payments\/reports\/?$/.test(path)) page = <Suspense fallback={<Loading />}><ReportsPage /></Suspense>;
   else if (/^\/payments\/subscriptions\/?$/.test(path)) page = <Suspense fallback={<Loading />}><SubscriptionsPage /></Suspense>;
   else if (/^\/payments\/subscriptions\/new\/?$/.test(path)) page = <Suspense fallback={<Loading />}><StartSubscription key={search} clientId={params.get("client")} /></Suspense>;
   else if (/^\/payments\/subscriptions\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><SubscriptionDetail key={id} subscriptionId={id} /></Suspense>; }
@@ -338,9 +358,19 @@ function SignedIn() {
   else if (/^\/settings\/brief\/questions\/?$/.test(path)) page = <Suspense fallback={<Loading />}><QuestionnaireEditor kind="kickoff" /></Suspense>;
   else if (/^\/settings\/brief\/preview\/?$/.test(path)) page = <ClientBriefPage key="preview" preview />;
   else if (path.startsWith("/settings")) page = <Settings me={me} />;
+  else if (/^\/notifications\/?$/.test(path)) page = <NotificationsPage />; // Phase 5e step 4: the bell's See all
   else if (/^\/more\/?$/.test(path)) page = <MorePage me={me} side="owner" />;
   else if (/^\/review\/?$/.test(path)) page = <Home />; // Review's main page
   else page = <OwnerHome />; // "/": the back-office Home
+  // Phase 5e: a team member's Dashboard and Account are their own; a page their role can't use is the no-access page,
+  // and a page that still asks for something the role can't have falls back to it too.
+  if (team) {
+    const perms = me.team!.perms as Perms;
+    if (path === "/" || path === "") page = <Suspense fallback={<Loading />}><TeamHome name={me.name} /></Suspense>;
+    else if ((/^\/settings\/?$/.test(path) && !perms.settings) || /^\/settings\/account\/?$/.test(path)) page = <Suspense fallback={<Loading />}><TeamAccount me={me} /></Suspense>;
+    else if (!canOpen(path, perms, true, me.team!.role)) page = <Suspense fallback={<Loading />}><NoAccess /></Suspense>;
+    page = <NotAllowedBoundary key={path} fallback={<Suspense fallback={<Loading />}><NoAccess /></Suspense>}>{page}</NotAllowedBoundary>;
+  }
   // Work surfaces get no background light, so nothing competes with the video or the document.
   const workSurface = Boolean(video) || /^\/sign\/(b|d)\//.test(path) || /^\/sign\/templates\/[^/]+/.test(path) || /^\/production\/call-sheets\/([^/]+\/edit|templates\/[^/]+)/.test(path) || /^\/settings\/help\/edit\//.test(path);
   return (

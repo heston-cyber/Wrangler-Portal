@@ -6,12 +6,14 @@
 // and device, the same way quotes and signing record it. Nothing moves or converts on its own (D84): the Send dialog's
 // "Also move to Quoted" box is unticked by default, and an accepted proposal asks "Start the contract?" (D75).
 import { action, httpAction } from "./_generated/server";
+import { audit } from "./lib/audit";
 import { internalAction, internalMutation, internalQuery, mutation, query, focusBusiness } from "./lib/functions";
+import { claimUpload, deleteFile } from "./lib/fileOwners";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe } from "./lib/access";
+import { requireMe, requireAll, seesValue } from "./lib/access";
 import { businessContact, businessInScope } from "./lib/business";
 import { invoicePrefix } from "./lib/invoiceNumber";
 import { randomToken } from "./lib/hash";
@@ -39,7 +41,7 @@ const OPEN = new Set(["draft", "waiting", "ready"]);
 const fresh = (f: { _creationTime: number }) => Date.now() - f._creationTime < 30 * 60_000;
 
 async function ownerBiz(ctx: QueryCtx | MutationCtx) {
-  const me = await requireMe(ctx);
+  const me = await requireAll(ctx, "docs");
   const id = businessInScope(ctx);
   const b = id ? await ctx.db.get(id) : null;
   if (!b) throw new ConvexError("Not allowed.");
@@ -67,14 +69,15 @@ const whoOf = (p: Doc<"proposals">, build: Doc<"wsBuilds"> | null) => {
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    await ownerBiz(ctx);
+    const { me } = await ownerBiz(ctx);
+    const value = seesValue(me); // 5e review M5: totals only with "See what a project is worth"
     const out = [];
     for (const p of await ctx.db.query("proposals").withIndex("by_updated").order("desc").take(500)) {
       const build = await ctx.db.get(p.buildId);
       const who = whoOf(p, build);
       out.push({
         _id: p._id, number: p.number, title: build?.title ?? "Proposal", status: p.status, company: who.company, contact: who.name, lead: !p.clientId && !!p.dealId,
-        filling: !!p.filling, totalCents: p.filling ? linesTotal((p.answers as Answers | undefined)?.__lines, undefined).total : money(p, build).totalCents, sentAt: p.sentAt ?? null, viewedAt: p.viewedAt ?? null, response: p.response ? { kind: p.response.kind, name: p.response.name, at: p.response.at } : null,
+        filling: !!p.filling, totalCents: !value ? null : p.filling ? linesTotal((p.answers as Answers | undefined)?.__lines, undefined).total : money(p, build).totalCents, sentAt: p.sentAt ?? null, viewedAt: p.viewedAt ?? null, response: p.response ? { kind: p.response.kind, name: p.response.name, at: p.response.at } : null,
         createdAt: p.createdAt, updatedAt: Math.max(p.updatedAt, build?.updatedAt ?? 0),
       });
     }
@@ -86,7 +89,7 @@ export const list = query({
 export const get = query({
   args: { proposalId: v.string() },
   handler: async (ctx, { proposalId }) => {
-    await ownerBiz(ctx);
+    const { me } = await ownerBiz(ctx);
     const id = ctx.db.normalizeId("proposals", proposalId);
     const p = id ? await ctx.db.get(id) : null;
     if (!p) return null;
@@ -95,7 +98,7 @@ export const get = query({
     const deal = p.dealId ? await ctx.db.get(p.dealId) : null;
     const client = p.clientId ? await ctx.db.get(p.clientId) : null;
     return {
-      _id: p._id, buildId: p.buildId, number: p.number, status: p.status, drafted: p.drafted ?? null, who: whoOf(p, build), money: money(p, build),
+      _id: p._id, buildId: p.buildId, number: p.number, status: p.status, drafted: p.drafted ?? null, who: whoOf(p, build), money: seesValue(me) ? money(p, build) : { ...money(p, build), totalCents: null, depositCents: null }, // M5
       link: await (async () => { const rows = await rowsOf(ctx, "proposal", p._id); const own = rows.find((r) => r.email === p.contact?.email) ?? rows[0]; return own ? proposalLink(own.token) : p.token && p.status !== "draft" ? proposalLink(p.token) : null; })(),
       people: await peopleOf(ctx, "proposal", p), linkUrl: p.linkToken ? proposalLink(p.linkToken) : null, // D149: Opened and accepted
       sentAt: p.sentAt ?? null, viewedAt: p.viewedAt ?? null, message: p.message ?? null,
@@ -237,6 +240,7 @@ export const markSent = internalMutation({
     let p = await ctx.db.get(a.proposalId);
     const build = p ? await ctx.db.get(p.buildId) : null;
     if (!p || !build) throw new ConvexError("That proposal isn't here.");
+    await audit(ctx, { kind: "sent", text: `${a.resend ? "sent again" : "sent"} proposal ${p.number ?? ""}`.trim(), where: "Docs › Proposals", link: `/proposals/${p._id}` });
     const now = Date.now();
     if (a.resend && p.token && a.to === undefined && !a.copyLink) {
       if (p.status !== "sent") throw new ConvexError("Only an open proposal can be sent again.");
@@ -261,6 +265,7 @@ export const markSent = internalMutation({
     const file = await ctx.db.system.get(a.storageId);
     if (!file || !fresh(file) || (file.contentType && file.contentType !== "application/pdf") || file.size > MAX_PDF_BYTES) return { error: "The PDF didn't upload. Try again." };
     if (await ctx.db.query("proposals").filter((q) => q.eq(q.field("pdfId"), a.storageId)).first()) return { error: "The PDF didn't upload. Try again." };
+    if (!(await claimUpload(ctx, a.storageId, p.businessId ?? null, "proposal")).fresh) return { error: "The PDF didn't upload. Try again." }; // 5e review (Nov 6): across businesses
     const refuse = async (error: string) => ({ error });
     if (p.filling) return refuse("Finish the questionnaire first.");
     if (p.status === "waiting") return refuse("Claude is still drafting this one.");
@@ -587,7 +592,9 @@ export const addAnswerFile = mutation({
     const meta = await ctx.db.system.get(a.storageId);
     if (!meta || !fresh(meta)) return { error: "The file didn't upload. Try again." };
     if (await ctx.db.query("proposalFiles").withIndex("by_storage", (q) => q.eq("storageId", a.storageId)).first()) return { error: "That file is already in use." };
-    const refuse = async (error: string) => { await ctx.storage.delete(a.storageId).catch(() => null); return { error }; };
+    // 5e review (Nov 6): proposalFiles only sees this business's rows, so the claim is what stops another business's fresh upload.
+    if (!(await claimUpload(ctx, a.storageId, p.businessId ?? null, "proposalFile")).fresh) return { error: "That file is already in use." };
+    const refuse = async (error: string) => { await deleteFile(ctx, a.storageId, p.businessId ?? null); return { error }; };
     if (!OPEN.has(p.status)) return refuse("This proposal can't take files now.");
     if (meta.size > MAX_FILE_BYTES) return refuse("That file is over 25 MB. Link to it instead (videos especially).");
     const had = await ctx.db.query("proposalFiles").withIndex("by_proposal", (q) => q.eq("proposalId", p._id)).collect();
@@ -843,15 +850,16 @@ export const connectorWrite = internalMutation({
 export const forCompany = query({
   args: { clientId: v.id("clients") },
   handler: async (ctx, { clientId }) => {
-    await ownerBiz(ctx);
+    const { me } = await ownerBiz(ctx);
     if (!(await ctx.db.get(clientId))) return [];
-    const out: Array<{ kind: "proposal" | "quote"; _id: string; title: string; number: string; status: string; totalCents: number; at: number; sentAt: number | null; response: { kind: string; name: string; at: number } | null; validUntil: string | null }> = [];
+    const value = seesValue(me), quotes = !me.team || me.team.perms.payments; // M5; quotes are Payments' (5e review)
+    const out: Array<{ kind: "proposal" | "quote"; _id: string; title: string; number: string; status: string; totalCents: number | null; at: number; sentAt: number | null; response: { kind: string; name: string; at: number } | null; validUntil: string | null }> = [];
     for (const p of await ctx.db.query("proposals").withIndex("by_client", (q) => q.eq("clientId", clientId)).collect()) {
       const b = await ctx.db.get(p.buildId);
-      out.push({ kind: "proposal", _id: p._id, title: b?.title ?? "Proposal", number: p.number, status: p.status, totalCents: money(p, b).totalCents, at: p.updatedAt, sentAt: p.sentAt ?? null, response: p.response ? { kind: p.response.kind, name: p.response.name, at: p.response.at } : null, validUntil: null });
+      out.push({ kind: "proposal", _id: p._id, title: b?.title ?? "Proposal", number: p.number, status: p.status, totalCents: value ? money(p, b).totalCents : null, at: p.updatedAt, sentAt: p.sentAt ?? null, response: p.response ? { kind: p.response.kind, name: p.response.name, at: p.response.at } : null, validUntil: null });
     }
-    for (const q of await ctx.db.query("quotes").withIndex("by_client", (x) => x.eq("clientId", clientId)).collect()) {
-      out.push({ kind: "quote", _id: q._id, title: q.title, number: q.number, status: q.status, totalCents: q.totalCents, at: q.updatedAt, sentAt: q.sentAt ?? null, response: q.response ? { kind: q.response.kind, name: q.response.name, at: q.response.at } : null, validUntil: q.validUntil });
+    if (quotes) for (const q of await ctx.db.query("quotes").withIndex("by_client", (x) => x.eq("clientId", clientId)).collect()) {
+      out.push({ kind: "quote", _id: q._id, title: q.title, number: q.number, status: q.status, totalCents: value ? q.totalCents : null, at: q.updatedAt, sentAt: q.sentAt ?? null, response: q.response ? { kind: q.response.kind, name: q.response.name, at: q.response.at } : null, validUntil: q.validUntil });
     }
     return out.sort((a, b) => b.at - a.at).slice(0, 20);
   },

@@ -37,6 +37,10 @@ export function useBrand(b: Brand | null) {
     const root = document.documentElement;
     const vars = brandVars(b);
     for (const [k, val] of Object.entries(vars)) root.style.setProperty(k, val);
-    return () => { for (const k of VARS) root.style.removeProperty(k); };
+    // another business's colours keep the old page light; the red cactus scene is Wrangler's own (Heston, Nov 5). Wrangler's
+    // settings save its own red (and a black background), so only an accent other than that red counts as another brand.
+    if (b?.accent && b.accent.trim().toLowerCase() !== "#ff0000") root.setAttribute("data-brand", "custom");
+    else root.removeAttribute("data-brand");
+    return () => { for (const k of VARS) root.style.removeProperty(k); root.removeAttribute("data-brand"); };
   }, [b?.accent, b?.background]);
 }
