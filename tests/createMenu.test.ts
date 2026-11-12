@@ -60,4 +60,18 @@ describe("D174 Create menu", () => {
     expect(css).toContain("@keyframes wp-sheet-up");
     expect(css).toMatch(/prefers-reduced-motion: reduce\) \{ \.backdrop, \.backdrop > \.dialog \{ animation: none/);
   });
+
+  it("174.8 the sheet slides back down when dismissed, and never animates opacity (that delays the blur behind it)", () => {
+    const kit = readFileSync("src/ui/kit.tsx", "utf8");
+    const hold = readFileSync("src/ui/hold.tsx", "utf8");
+    expect(hold).toMatch(/<Modal [^>]*slideOut>/);
+    expect(kit).toContain("data-closing");
+    expect(kit).toMatch(/Escape[^\n]*dismiss\(\)/);
+    expect(kit).toMatch(/e\.target === e\.currentTarget\) dismiss\(\)/);
+    expect(css).toContain("@keyframes wp-sheet-down");
+    for (const k of ["wp-sheet-up", "wp-sheet-down", "wp-sheet-scrim", "wp-sheet-scrim-out"]) {
+      const body = css.slice(css.indexOf(`@keyframes ${k}`), css.indexOf("\n", css.indexOf(`@keyframes ${k}`)));
+      expect(body, k).not.toMatch(/opacity/);
+    }
+  });
 });

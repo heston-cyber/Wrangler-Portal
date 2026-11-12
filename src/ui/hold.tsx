@@ -120,7 +120,7 @@ export function HoldA({ to, spec, className, children }: { to: string; spec: Ite
 export function MenuSurface({ at, onClose, label, title, children }: { at: { x: number; y: number }; onClose: () => void; label: string; title: string; children: React.ReactNode }) {
   const narrow = useIsNarrow();
   return narrow ? (
-    <Modal onClose={onClose} label={label} width={420}>
+    <Modal onClose={onClose} label={label} width={420} slideOut>
       <div className="hold-sheet">
         <div className="hold-title"><span className="rbold">{title}</span></div>
         <div className="menu-list" role="menu" aria-label={label}>{children}</div>
