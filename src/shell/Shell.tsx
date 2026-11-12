@@ -5,7 +5,7 @@
 import { ItemMenuHost } from "../ui/hold";
 import { BellButton } from "../modules/bell/BellButton";
 import { Light } from "./Light";
-import { createContext, Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { Children, createContext, Fragment, isValidElement, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "convex/react";
 import { useSignOutAsk } from "./SignOut";
 import { sideWord, useSideSwitch } from "./SideSwitch";
@@ -25,8 +25,8 @@ import lightClient from "../assets/portal/light-elbow.jpg";
 
 export type Side = "owner" | "client" | "vendor"; // Phase 3c: the vendor side
 type Me = { name: string | null; email: string };
-type ShellCtx = { openSidebar: () => void; peekSidebar: (on: boolean) => void; openSearch: () => void; overlay: boolean; side: Side };
-const Ctx = createContext<ShellCtx>({ openSidebar: () => {}, peekSidebar: () => {}, openSearch: () => {}, overlay: false, side: "owner" });
+type ShellCtx = { openSidebar: () => void; peekSidebar: (on: boolean) => void; openSearch: () => void; overlay: boolean; side: Side; trail: TrailCrumb[] };
+const Ctx = createContext<ShellCtx>({ openSidebar: () => {}, peekSidebar: () => {}, openSearch: () => {}, overlay: false, side: "owner", trail: [] });
 export const useShell = () => useContext(Ctx);
 
 // ---------- what goes where ----------
@@ -106,7 +106,7 @@ const inPeople = (p: string) => inClients(p) || inVendors(p);
 
 // Nov 2 (Heston): Settings › Tools sets this owner's menu: the order, which tools are on it, and Home is now Dashboard.
 // Phones: the first four tools on the menu, then More (the rest, then Settings).
-function ownerItems(payments = false, saved: Tools = DEFAULT_TOOLS, msgs = 0): { main: Item[]; tabs: Item[] } {
+export function ownerItems(payments = false, saved: Tools = DEFAULT_TOOLS, msgs = 0): { main: Item[]; tabs: Item[] } {
   const tools = toolsOf(saved); // D150: a menu saved with Review shows Production in its place, even before the server re-saves it
   const home: Item = { to: "/", label: "Dashboard", icon: "home", match: (p) => p === "/" };
   const people: Item = { to: "/clients/overview", label: "People", icon: "users", match: () => false, tab: inPeople, layer: OWNER_PEOPLE, layerHas: inPeople };
@@ -226,7 +226,22 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
   }, []);
   const [search, setSearch] = useState(false);
   const { path } = useLocation();
-  useEffect(() => setDrawer(false), [path]);
+  // D172 (Heston, Nov 11): on a phone the same sidebar slides in from a menu button, instead of rows of chips.
+  const [phoneMenu, setPhoneMenu] = useState(false);
+  useEffect(() => { setDrawer(false); setPhoneMenu(false); }, [path]);
+  useEffect(() => {
+    if (!phoneMenu && !drawer) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { setPhoneMenu(false); setDrawer(false); } };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [phoneMenu, drawer]);
+  useEffect(() => {
+    if (!phoneMenu) return;
+    const mq = matchMedia("(max-width: 820px)");
+    const onChange = () => { if (!mq.matches) setPhoneMenu(false); };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [phoneMenu]);
   useEffect(() => {
     if (!canSearch) return;
     const onKey = (e: KeyboardEvent) => {
@@ -236,7 +251,13 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
     return () => window.removeEventListener("keydown", onKey);
   }, [canSearch]);
   const nav = navIn ?? (side === "owner" ? (team ? teamItems(team.can, team.role, payments, tools, msgs) : ownerItems(payments, tools, msgs)) : clientItems(shared, unread, payments, msgs));
-  const ctx = useMemo(() => ({ openSidebar: () => setDrawerState("open"), peekSidebar: peek, openSearch: () => setSearch(true), overlay, side }), [overlay, side]);
+  // D172: where this page sits in the menu; the top bar's crumbs open the pages beside them (desktop), the phone shows it as a path.
+  const trail = useMemo(() => {
+    const all = [...nav.main, ...nav.tabs];
+    const section = all.find((it) => (it.tab ?? it.match)(path));
+    return section?.layer ? trailOf(section, nav.main, path, side) : [];
+  }, [nav, path, side]);
+  const ctx = useMemo(() => ({ openSidebar: () => setDrawerState("open"), peekSidebar: peek, openSearch: () => setSearch(true), overlay, side, trail }), [overlay, side, trail]);
   const showSidebar = !overlay || drawer;
   const lightSrc = side === "owner" ? lightBack : lightClient;
   const onSearch = canSearch ? () => setSearch(true) : undefined;
@@ -247,11 +268,11 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
         {light && !overlay && <Light className={`wp-light ${side === "owner" ? "back" : "client"}`} src={lightSrc} />}
         {showSidebar && (
           <Sidebar me={me} side={side} items={nav.main} logo={logo} bizName={bizName} subtitle={subtitle} recent={recent} top={top}
-            drawer={overlay && !!drawer} onClose={() => setDrawer(false)} onSearch={onSearch} bell={bell}
+            drawer={(overlay && !!drawer) || phoneMenu} onClose={() => { setDrawer(false); setPhoneMenu(false); }} onSearch={onSearch} bell={bell}
             onHover={overlay && drawer === "peek" ? peek : undefined} />
         )}
-        {overlay && drawer && <div className="wp-scrim" onClick={() => setDrawer(false)} />}
-        <PhoneTop me={me} side={side} items={[...nav.main, ...nav.tabs]} logo={logo} bizName={bizName} onSearch={onSearch} bell={bell} />
+        {((overlay && drawer) || phoneMenu) && <div className="wp-scrim" onClick={() => { setDrawer(false); setPhoneMenu(false); }} />}
+        <PhoneTop me={me} side={side} items={[...nav.main, ...nav.tabs]} sections={nav.main} logo={logo} bizName={bizName} onSearch={onSearch} bell={bell} onMenu={() => setPhoneMenu(true)} />
         <div className="main">{children}</div>
         <TabBar items={nav.tabs} />
       </div>
@@ -290,8 +311,11 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const isOpen = (it: Item) => open[it.to] ?? !!it.layerHas?.(path);
   const settingsOn = starts(path, "/settings");
+  const touchX = useRef<number | null>(null); // a swipe left closes the drawer
   return (
-    <nav className={`wp-side${drawer ? " drawer" : ""}`} aria-label="Main" onMouseEnter={onHover && (() => onHover(true))} onMouseLeave={onHover && (() => onHover(false))}>
+    <nav className={`wp-side${drawer ? " drawer" : ""}`} aria-label="Main" onMouseEnter={onHover && (() => onHover(true))} onMouseLeave={onHover && (() => onHover(false))}
+      onTouchStart={drawer ? (e) => { touchX.current = e.touches[0].clientX; } : undefined}
+      onTouchEnd={drawer ? (e) => { const x0 = touchX.current; touchX.current = null; if (x0 != null && e.changedTouches[0].clientX - x0 < -60) onClose(); } : undefined}>
       <div className={`wp-brand${side === "client" ? " client" : ""}`}>
         <a {...linkProps("/")} aria-label={`${bizName} home`}><Logo src={logo} name={bizName} /></a>
         <span style={{ display: "flex", gap: 4 }}>
@@ -387,39 +411,70 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
   );
 }
 
-// Phones: logo, search and the account; under it the current section's layer as chips.
-function PhoneTop({ me, side, items, logo, bizName, onSearch, bell }: { me: Me; side: Side; items: Item[]; logo: string; bizName: string; onSearch?: () => void; bell?: boolean }) {
+// D172: where you are, as a path of crumbs: Production › Pre-pro › Briefings. Each crumb opens the pages beside it.
+type Opt = { to: string; label: string; current: boolean };
+export type TrailCrumb = { label: string; to: string; options: Opt[] };
+export function trailOf(section: Item, sections: Item[], path: string, side: Side): TrailCrumb[] {
+  const opt = (to: string, label: string, current: boolean): Opt => ({ to, label, current });
+  const out: TrailCrumb[] = [{ label: section.label, to: section.to, options: sections.map((x) => opt(x.to, x.label, x.to === section.to)) }];
+  const layer = section.layer;
+  if (!layer) return out;
+  if (layer.some((x) => x.group)) {
+    const groups = groupsOf(layer);
+    const g = groups.find((x) => inStage(layer, x, path));
+    if (g) {
+      out.push({ label: g, to: STAGE_TO[g], options: groups.map((x) => opt(STAGE_TO[x], x, x === g)) });
+      const kids = stageItems(layer, g);
+      const page = kids.find((x) => x.match(path));
+      if (page) out.push({ label: page.label, to: page.to, options: kids.map((x) => opt(x.to, x.label, x === page)) });
+    } else {
+      const top = layer.filter((x) => !x.group);
+      const page = top.find((x) => x.match(path));
+      if (page) out.push({ label: page.label, to: page.to, options: [...top.map((x) => opt(x.to, x.label, x === page)), ...groups.map((x) => opt(STAGE_TO[x], x, false))] });
+    }
+    return out;
+  }
+  const pages = layer.filter((x) => !(side === "client" && x.to === "/review"));
+  const page = pages.find((x) => x.match(path));
+  if (page && page.to !== section.to) out.push({ label: page.label, to: page.to, options: pages.map((x) => opt(x.to, x.label, x === page)) });
+  return out;
+}
+
+export function NavTrail({ crumbs, label }: { crumbs: TrailCrumb[]; label: string }) {
+  return (
+    <nav className="wp-trail" aria-label={label}>
+      {crumbs.map((c, i) => (
+        <Fragment key={`${i}:${c.to}`}>
+          {i > 0 && <span className="tsep" aria-hidden>›</span>}
+          <Menu label={`${c.label}: pages`} trigger={(p) => (
+            <button {...p} type="button" className="tcrumb" aria-current={i === crumbs.length - 1 ? "location" : undefined}>
+              <span>{c.label}</span><Icon name="chevron-down" size={14} />
+            </button>
+          )}>
+            {c.options.map((o) => <MenuItem key={o.to} checked={o.current} onSelect={() => navigate(o.to)}>{o.label}</MenuItem>)}
+          </Menu>
+        </Fragment>
+      ))}
+    </nav>
+  );
+}
+
+// Phones: the menu button, logo, search and the account; under it where you are (the crumbs).
+function PhoneTop({ me, side, items, sections, logo, bizName, onSearch, bell, onMenu }: { me: Me; side: Side; items: Item[]; sections: Item[]; logo: string; bizName: string; onSearch?: () => void; bell?: boolean; onMenu: () => void }) {
   const { path } = useLocation();
   const section = items.find((it) => (it.tab ?? it.match)(path));
-  const grouped = !!section?.layer?.some((s) => s.group);
-  // D150: a grouped layer (Production) shows its stages as chips, and the current stage's pages in a second row.
-  const stages = grouped ? groupsOf(section!.layer!) : [];
-  const stageOf = (g: string) => stageItems(section!.layer!, g);
-  const current = stages.find((g) => inStage(section!.layer!, g, path)) ?? null;
-  const chips = !section?.layer ? null : grouped
-    ? [...section.layer.filter((s) => !s.group), ...stages.map((g) => ({ to: STAGE_TO[g], label: g, match: (p: string) => inStage(section!.layer!, g, p) }))]
-    : [{ to: section.to, label: section.label, match: section.match }, ...section.layer.filter((s) => !(side === "client" && s.to === "/review"))];
-  const second = current && stageOf(current).length > 1 ? stageOf(current) : null;
-  // the client's "All shared" is the Review chip itself
+  const crumbs = section?.layer ? trailOf(section, sections, path, side) : null;
   return (
     <div className="wp-ptop">
       <div className="bar">
+        <IconButton icon="menu" label="Open menu" iconSize={22} onClick={onMenu} />
         <a {...linkProps("/")} aria-label={`${bizName} home`}><Logo src={logo} name={bizName} /></a>
         <span className="sp" />
         {bell && <BellButton phone />}
         {onSearch && <IconButton icon="search" label="Search" iconSize={22} onClick={onSearch} />}
         <a {...linkProps("/more")} aria-label="Account and more"><Avatar name={me.name || me.email} /></a>
       </div>
-      {chips && (
-        <nav className="wp-chips" aria-label={`${section!.label} pages`}>
-          {chips.map((c) => <a key={c.to} className="wp-layerchip" aria-current={c.match(path) || (c.to === section!.to && side === "client" && path === "/review") ? "page" : undefined} {...linkProps(c.to)}>{c.label}</a>)}
-        </nav>
-      )}
-      {second && (
-        <nav className="wp-chips wp-chips2" aria-label={`${current} pages`}>
-          {second.map((c) => <a key={c.to} className="wp-layerchip" aria-current={c.match(path) ? "page" : undefined} {...linkProps(c.to)}>{c.label}</a>)}
-        </nav>
-      )}
+      {crumbs && <NavTrail crumbs={crumbs} label={`${section!.label}: where you are`} />}
     </div>
   );
 }
@@ -498,8 +553,16 @@ export function MorePage({ me, side }: { me: Me; side: Side }) {
 // page scrolls, its content fades under the bar (the main area's data-scrolled); a page whose breadcrumb is one crumb
 // shows an empty bar until its own title has scrolled up under it, then its name fades in (.titled).
 export function TopBar({ children, right, className }: { children: React.ReactNode; right?: React.ReactNode; className?: string }) {
-  const { openSidebar, peekSidebar, overlay } = useShell();
+  const { openSidebar, peekSidebar, overlay, trail } = useShell();
   const ref = useRef<HTMLElement>(null);
+  // D172: a crumb that is one of the menu's own places gets a small arrow that opens the pages beside it.
+  const crumbs: React.ReactNode = overlay || !trail.length ? children : Children.toArray(children).flatMap((el): React.ReactNode[] => {
+    if (!isValidElement(el)) return [el];
+    const pr = el.props as { href?: string; className?: string; children?: unknown };
+    const hit = el.type === "a" ? trail.find((c) => c.to === pr.href)
+      : el.type === "span" && /\bhere\b/.test(pr.className ?? "") && typeof pr.children === "string" ? trail.find((c) => c.label === pr.children) : undefined;
+    return hit ? [el, <CrumbMenu key={`cm:${hit.to}`} crumb={hit} />] : [el];
+  });
   useEffect(() => {
     const bar = ref.current, main = bar?.parentElement, page = bar?.nextElementSibling as HTMLElement | null;
     if (!bar || !main || !page || overlay) return;
@@ -520,9 +583,18 @@ export function TopBar({ children, right, className }: { children: React.ReactNo
   return (
     <header className={`topbar${className ? " " + className : ""}`} ref={ref}>
       {overlay && <IconButton icon="menu" label="Open menu" onClick={openSidebar} onMouseEnter={() => peekSidebar(true)} onMouseLeave={() => peekSidebar(false)} />}
-      <div className="crumbs">{children}</div>
+      <div className="crumbs">{crumbs}</div>
       {right && <div className="right">{right}</div>}
     </header>
+  );
+}
+function CrumbMenu({ crumb }: { crumb: TrailCrumb }) {
+  return (
+    <Menu label={`${crumb.label}: pages`} trigger={(p) => (
+      <button {...p} type="button" className="crumb-menu" aria-label={`Pages beside ${crumb.label}`}><Icon name="chevron-down" size={14} /></button>
+    )}>
+      {crumb.options.map((o) => <MenuItem key={o.to} checked={o.current} onSelect={() => navigate(o.to)}>{o.label}</MenuItem>)}
+    </Menu>
   );
 }
 export const Sep = () => <span className="sep" aria-hidden>›</span>;

@@ -3203,8 +3203,8 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
   }
   .wp-shell:not(.overlay) .topbar:has(+ .wp-page :is(.wp-pagehead, .wp-sethead)):not(:has(.crumbs > a)):not(:has(.right > *)) { display: none; }
   /* the section's chips under the logo already say where you are, so no back link under them */
-  .wp-shell:not(.overlay):has(.wp-ptop .wp-chips) .topbar:has(+ .wp-page :is(.wp-pagehead, .wp-sethead)) .crumbs > a { display: none; }
-  .wp-shell:not(.overlay):has(.wp-ptop .wp-chips) .topbar:has(+ .wp-page :is(.wp-pagehead, .wp-sethead)):not(:has(.right > *)) { display: none; }
+  .wp-shell:not(.overlay):has(.wp-ptop .wp-trail) .topbar:has(+ .wp-page :is(.wp-pagehead, .wp-sethead)) .crumbs > a { display: none; }
+  .wp-shell:not(.overlay):has(.wp-ptop .wp-trail) .topbar:has(+ .wp-page :is(.wp-pagehead, .wp-sethead)):not(:has(.right > *)) { display: none; }
 }
 /* D168: the stat tiles are glass, like the cards */
 .pov-stat { --lg-frost: 4; position: relative; isolation: isolate; border: 0; background: var(--glass-fill); backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass); box-shadow: var(--card-shadow); }
@@ -3479,3 +3479,16 @@ canvas.wp-glass.stale { opacity: 0; transition-duration: 90ms; } /* ?glass=lazy 
   .selbar.hold-bar { left: 8px; right: 8px; bottom: calc(94px + env(safe-area-inset-bottom, 0px) * .5); border-radius: 22px; padding: 10px 12px; gap: 8px; }
   .selbar.hold-bar .right { flex-wrap: wrap; justify-content: flex-end; }
 }
+
+/* D172 (Heston, Nov 11): phones get the desktop's side menu from a button, and a path of crumbs instead of rows of chips */
+.wp-trail { display: flex; align-items: center; flex-wrap: wrap; gap: 0 4px; margin-top: -10px; }
+.wp-trail .tsep { color: var(--text-faint); font-size: var(--fs-text-small); }
+.wp-trail .tcrumb {
+  display: inline-flex; align-items: center; gap: 3px; min-height: 40px; padding: 0 6px; margin: 0 -2px; border: 0; background: none; border-radius: 10px; cursor: pointer;
+  font: 400 var(--fs-text-small)/var(--lh-small) var(--font-body); color: var(--text-secondary);
+}
+.wp-trail .tcrumb[aria-current] { color: var(--text-primary); }
+.wp-trail .tcrumb .wp-icon { opacity: .6; }
+.crumbs .crumb-menu { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 24px; margin-left: -4px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--text-faint); cursor: pointer; }
+.crumbs .crumb-menu:hover, .crumbs .crumb-menu[aria-expanded="true"] { color: var(--text-primary); background: var(--surface-block-hover); }
+@media (max-width: 820px) { .wp-shell:not(.overlay) .crumbs .crumb-menu { display: none; } }
