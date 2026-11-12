@@ -8,6 +8,7 @@ import { pathNeeds } from "../src/lib/teamAccess";
 const menu = readFileSync("src/modules/home/CreateMenu.tsx", "utf8");
 const home = readFileSync("src/modules/home/OwnerHome.tsx", "utf8");
 const production = readFileSync("src/modules/production/Production.tsx", "utf8");
+const css = readFileSync("src/portal.css", "utf8");
 const dashboard = home.slice(home.indexOf("<PageHeader"), home.indexOf("<PageHeader") + 1200);
 
 describe("D174 Create menu", () => {
@@ -52,5 +53,11 @@ describe("D174 Create menu", () => {
     expect(shoot).toContain("api.library.createProject");
     expect(shoot).toMatch(/mayStart/);
     expect(shoot).not.toContain("No open projects yet");
+  });
+
+  it("174.7 the options sheet is lighter glass and rises quickly; reduced motion turns it off", () => {
+    expect(css).toMatch(/\.dialog:not\(\[data-full\]\):has\(\.hold-sheet\) \{[^}]*--lg-ink: \.45[^}]*animation: wp-sheet-up 200ms/);
+    expect(css).toContain("@keyframes wp-sheet-up");
+    expect(css).toMatch(/prefers-reduced-motion: reduce\) \{ \.backdrop, \.backdrop > \.dialog \{ animation: none/);
   });
 });

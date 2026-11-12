@@ -3425,7 +3425,18 @@ canvas.wp-glass.stale { opacity: 0; transition-duration: 90ms; } /* ?glass=lazy 
   }
   .backdrop > .dialog[data-full] > .dbody { padding: calc(32px + env(safe-area-inset-top, 0px)) 20px calc(24px + env(safe-area-inset-bottom, 0px)); }
   .backdrop > .dialog[data-full] > .dgrab { display: none; }
+  /* D174 (Heston, Nov 12: "Make it a glass panel that animates up quickly"): the options sheet (Create, a hold on a row) is
+     lighter glass, ink 45 % so the scene shows through, with a lighter scrim, and rises from the bottom in 200 ms. */
+  .backdrop:has(> .dialog:not([data-full]) .hold-sheet) { background: rgba(var(--ink), .32); animation: wp-sheet-scrim 160ms var(--ease-out); }
+  .backdrop > .dialog:not([data-full]):has(.hold-sheet) {
+    --lg-ink: .45; --lg-veil: .25;
+    background: linear-gradient(180deg, rgba(var(--paper), .06), rgba(var(--paper), 0)), linear-gradient(color-mix(in srgb, var(--surface-base) 45%, transparent), color-mix(in srgb, var(--surface-base) 45%, transparent));
+    animation: wp-sheet-up 200ms var(--ease-out);
+  }
 }
+@keyframes wp-sheet-up { from { transform: translateY(40%); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes wp-sheet-scrim { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .backdrop, .backdrop > .dialog { animation: none !important; } }
 .dialog > .dbody { display: contents; }
 .dialog > .dgrab { display: none; }
 
