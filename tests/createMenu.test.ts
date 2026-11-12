@@ -74,4 +74,8 @@ describe("D174 Create menu", () => {
       expect(body, k).not.toMatch(/opacity/);
     }
   });
+
+  it("174.9 the word Create at the top of the menu is in the serif of the page titles", () => {
+    expect(css).toMatch(/\.hold-title \.rbold \{[^}]*var\(--font-serif\)/);
+  });
 });
