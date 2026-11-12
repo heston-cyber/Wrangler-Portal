@@ -79,12 +79,17 @@ describe("5f.1 (revised by D168, Nov 11) the glass surfaces, and no glass on gla
     expect(glassSrc).toMatch(/!el\.parentElement\?\.closest\(ALL\)/);
   });
 
-  test("5f.3: cards and chips (they slide with the page) keep their bend while scrolling, drawn at 1 px per CSS px", () => {
+  test("5f.3: cards and chips (they slide with the page) keep their bend while scrolling, at full quality", () => {
     expect(ALL.some((r) => r.sel.join(",") === ".glass,.pov-stat" && /--lg-lazy: 1/.test(r.body))).toBe(true);
     // Heston (Nov 11): "when I press to scroll the effect goes away": the redraw-where-it-stops mode is only ?glass=lazy
     expect(glassSrc).toMatch(/const sliding = s\.lazy && lazyMode && performance\.now\(\) < movingUntil;/);
     expect(glassSrc).toMatch(/lazyMode = sessionStorage\.getItem\("wp\.glass"\) === "lazy";/);
-    expect(glassSrc).toMatch(/const RES_SLIDING = 1;/);
+    // Heston (Nov 11): "Still want to maintain quality": full resolution moving or still; a moving rim steps down only
+    // while frames run long, never below 1 px per CSS px, and is redrawn at full resolution where it stops
+    expect(glassSrc).toMatch(/let slideRes = RES,/);
+    expect(glassSrc).toMatch(/if \(avg > 20 && slideRes > RES_FLOOR\) slideRes = Math\.max\(RES_FLOOR, slideRes - 0\.25\);/);
+    expect(glassSrc).toMatch(/const RES_FLOOR = 1;/);
+    expect(glassSrc).toMatch(/if \(dpr < Math\.min\(devicePixelRatio \|\| 1, RES\)\) pending = true;/);
   });
 });
 

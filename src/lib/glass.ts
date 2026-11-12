@@ -28,7 +28,8 @@ export const CARDS = ".glass, .pov-stat";
 const ALL = `${FLOAT}, ${CARDS}`;
 const NEAR = 120; // surfaces this far off screen give their canvas back
 const RES = 1.5;  // pixels per CSS pixel a still surface's rim is drawn at
-const RES_SLIDING = 1; // …and a card's or chip's, redrawn on every frame it scrolls (Nov 11, 5f.3)
+const RES_FLOOR = 1;  // the least a moving card's rim drops to, and only if the device falls behind (Heston, Nov 11:
+                      // "Still want to maintain quality")
 
 const VERT = `#version 300 es
 in vec2 a; void main() { gl_Position = vec4(a, 0.0, 1.0); }`;
@@ -286,16 +287,31 @@ export function startGlass(host: HTMLElement): () => void {
   };
 
   // ---------- drawing ----------
-  const draw = () => {
+  // Frame pacing while things move: if frames run long (over 20 ms on average across 20 frames), moving cards' rims step
+  // down a quarter of a pixel per CSS pixel (not below RES_FLOOR); when frames are quick again they step back up.
+  let slideRes = RES, lastFrame = 0, paced: number[] = [];
+  const slowTest = !!(window as unknown as { __glassSlow?: boolean }).__glassSlow; // the build's check: every frame counts as slow
+  const pace = (now: number) => {
+    if (lastFrame && performance.now() < movingUntil) paced.push(slowTest ? 40 : now - lastFrame); // lastFrame is 0 after a pause
+    lastFrame = now;
+    if (paced.length >= (slowTest ? 4 : 20)) {
+      const avg = paced.reduce((a, b) => a + b, 0) / paced.length;
+      if (avg > 20 && slideRes > RES_FLOOR) slideRes = Math.max(RES_FLOOR, slideRes - 0.25);
+      else if (avg < 17.5 && slideRes < RES) slideRes = Math.min(RES, slideRes + 0.25);
+      paced = [];
+    }
+  };
+  const draw = (now: number) => {
+    pace(now);
     const t0 = performance.now();
     drawn = 0;
     paint();
-    meter?.(performance.now() - t0, drawn);
+    meter?.(performance.now() - t0, drawn, slideRes);
   };
   let drawn = 0;
   // ?glassmeter=1 (Nov 11, for Heston's iPhone): a small box with the frame rate while scrolling and the glass's share
   // of each frame, so a real phone can report its own numbers. ?glassmeter=0 hides it.
-  let meter: ((ms: number, n: number) => void) | null = null;
+  let meter: ((ms: number, n: number, res: number) => void) | null = null;
   try {
     const m = new URLSearchParams(location.search).get("glassmeter");
     if (m === "1" || m === "0") sessionStorage.setItem("wp.glassmeter", m);
@@ -304,7 +320,7 @@ export function startGlass(host: HTMLElement): () => void {
       box.setAttribute("aria-hidden", "true");
       box.style.cssText = "position:fixed;z-index:9999;left:8px;top:calc(env(safe-area-inset-top,0px) + 8px);padding:6px 8px;border-radius:8px;background:rgba(0,0,0,.75);color:#fff;font:600 11px/1.3 ui-monospace,monospace;pointer-events:none;white-space:pre";
       document.body.appendChild(box);
-      let frames: number[] = [], glassMs = 0, glassN = 0, surfaces = 0, last = performance.now(), shownAt = 0;
+      let frames: number[] = [], glassMs = 0, glassN = 0, surfaces = 0, res = RES, last = performance.now(), shownAt = 0;
       const tick = (now: number) => {
         if (dead) { box.remove(); return; }
         frames.push(now - last); last = now;
@@ -312,13 +328,13 @@ export function startGlass(host: HTMLElement): () => void {
           const busy = frames.filter((f) => f < 200);
           const avg = busy.reduce((a, b) => a + b, 0) / Math.max(1, busy.length);
           const slow = busy.filter((f) => f > 20).length;
-          box.textContent = `${Math.round(1000 / Math.max(avg, 1))} fps · ${avg.toFixed(1)} ms/frame\nslow frames ${slow}/${busy.length}\nglass ${glassN ? (glassMs / glassN).toFixed(2) : "0"} ms (CPU) · ${surfaces} redrawn`;
+          box.textContent = `${Math.round(1000 / Math.max(avg, 1))} fps · ${avg.toFixed(1)} ms/frame\nslow frames ${slow}/${busy.length}\nglass ${glassN ? (glassMs / glassN).toFixed(2) : "0"} ms · ${surfaces} redrawn\nquality ${Math.round((res / RES) * 100)} %`;
           frames = []; glassMs = 0; glassN = 0; surfaces = 0; shownAt = now;
         }
         requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
-      meter = (ms, n) => { if (n) { glassMs += ms; glassN++; surfaces = Math.max(surfaces, n); } };
+      meter = (ms, n, r) => { res = r; if (n) { glassMs += ms; glassN++; surfaces = Math.max(surfaces, n); } };
     }
   } catch { /* no storage: no meter */ }
   const paint = () => {
@@ -346,8 +362,12 @@ export function startGlass(host: HTMLElement): () => void {
     };
     let view = { dx: 0, dy: 0, dw: 1, dh: 1 };
     let pending = false;
+    const moving = performance.now() < movingUntil;
     for (const s of shapes) {
-      const dpr = Math.min(devicePixelRatio || 1, s.lazy ? RES_SLIDING : RES);
+      // quality first: full resolution, still or moving; a moving card's rim steps down only while the device can't keep
+      // up, and is redrawn at full resolution where it stops
+      const dpr = Math.min(devicePixelRatio || 1, s.lazy && moving ? slideRes : RES);
+      if (dpr < Math.min(devicePixelRatio || 1, RES)) pending = true;
       const r = s.el.getBoundingClientRect();
       const near = r.bottom > -NEAR && r.top < innerHeight + NEAR && r.right > -NEAR && r.left < innerWidth + NEAR && r.width >= 2 && r.height >= 2;
       const sliding = s.lazy && lazyMode && performance.now() < movingUntil;
@@ -399,6 +419,7 @@ export function startGlass(host: HTMLElement): () => void {
     }
     // keep looking every frame while anything may be moving (a sheet sliding in, momentum scrolling the chips)
     if (pending || performance.now() < movingUntil) raf = requestAnimationFrame(draw);
+    else lastFrame = 0; // the loop rests: the next frame starts a new run of frame timings
   };
   const kick = (ms = 0) => { movingUntil = Math.max(movingUntil, performance.now() + ms); if (!raf) raf = requestAnimationFrame(draw); };
   const onScroll = () => kick(250);
