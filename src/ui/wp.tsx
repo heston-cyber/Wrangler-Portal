@@ -201,12 +201,14 @@ export function ListRow({ lead = null, title, titleChip, meta, trailing, chip, a
   /** D170: its options, on a hold (phone) or a right-click (computer); select-several inside a <SelectList> */
   menu?: ItemSpec | null;
 }) {
-  const hold = useHold(menu);
-  const sel = useSelectable(menu);
+  // D170: every row that opens somewhere has the basic menu (Open, Share, Copy link); a page adds its own options with `menu`.
+  const spec = menu === undefined ? (to ? { id: to, title: typeof title === "string" ? title : label ?? to, href: to } : null) : menu && !menu.href && to ? { ...menu, href: to } : menu;
+  const hold = useHold(spec);
+  const sel = useSelectable(spec);
   const extra = sel.selecting ? { ...sel.tapProps, "aria-checked": sel.picked, role: "checkbox" } : hold;
   const body = (
     <>
-      {sel.selecting ? <SelectTick on={sel.picked} label={`Select ${typeof title === "string" ? title : menu?.title ?? ""}`} onToggle={sel.toggle} /> : <LeadView lead={lead} />}
+      {sel.selecting ? <SelectTick on={sel.picked} label={`Select ${typeof title === "string" ? title : spec?.title ?? ""}`} onToggle={sel.toggle} /> : <LeadView lead={lead} />}
       <span className="txt">
         <span className="ttl"><span>{title}</span>{titleChip}</span>
         {meta && <span className="meta">{meta}</span>}

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { Trash2 } from "lucide-react";
 import { Button, ButtonLink, Card, Divider, EmptyState, IconButton, ListRow, PageHeader, PillTabs, SectionHead, SkeletonRows } from "../../ui/wp";
 import { Icon } from "../../ui/Icon";
 import { Menu, MenuItem, useConfirm, useToast } from "../../ui/kit";
@@ -29,6 +30,7 @@ const updatedWord = (t: number) => {
 type Pill = "all" | Status;
 export default function ProposalsPage() {
   const rows = useQuery(api.proposals.list, {});
+  const dropProposal = useMutation(api.proposals.deleteDraft);
   const [pill, setPill] = useState<Pill>("all");
   const n = (s: Status) => (rows ?? []).filter((r) => r.status === s).length;
   const shown = (rows ?? []).filter((r) => pill === "all" || r.status === pill);
@@ -62,6 +64,8 @@ export default function ProposalsPage() {
               {shown.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "document" }} title="None here." /> : shown.map((r, i) => (
                 <div key={r._id} className="wp-rowwrap">{i > 0 && <Divider />}
                   <ListRow className="ilead" lead={{ icon: "document" }} to={`/proposals/${r._id}`} title={r.title} meta={meta(r)}
+                    menu={r.status === "draft" ? { id: r._id, title: r.title, actions: [{ key: "delete", label: "Delete draft", icon: <Trash2 size={16} />, danger: true,
+                      confirm: { title: `Delete "${r.title}"?`, body: "The draft is deleted. Nothing was sent. This can't be undone.", yes: "Delete" }, run: () => dropProposal({ proposalId: r._id as Id<"proposals"> }), done: "Draft deleted." }] } : undefined}
                     trailing={r.totalCents == null ? undefined : money(r.totalCents)} chip={<ProposalChip status={r.status} />} chevron />
                 </div>
               ))}

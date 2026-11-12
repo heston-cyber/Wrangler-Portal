@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { Trash2 } from "lucide-react";
 import { estimate, formulaPrice, primaryKind, type Rates } from "../../../convex/lib/estimate";
 import { OfferPeopleCard, SendOfferDialog } from "./SendOffer";
 import { Button, ButtonLink, Card, Checkbox, DialogHeader, Divider, EmptyState, ListRow, PageHeader, PillTabs, SectionHead, Segmented, SkeletonRows, StatusChip, TextArea, TextField } from "../../ui/wp";
@@ -41,6 +42,7 @@ function totalsOf(lines: Array<{ qty: number; unitCents: number }>, discountCent
 
 type Pill = "all" | Status;
 export default function QuotesPage() {
+  const dropQuote = useMutation(api.quotes.deleteDraft);
   const rows = useQuery(api.quotes.list, {});
   const [pill, setPill] = useState<Pill>("all");
   const n = (s: Status) => (rows ?? []).filter((r) => r.status === s).length;
@@ -69,6 +71,8 @@ export default function QuotesPage() {
               {shown.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "invoice" }} title="None here." /> : shown.map((r, i) => (
                 <div key={r._id} className="wp-rowwrap">{i > 0 && <Divider />}
                   <ListRow className="ilead" lead={{ icon: "invoice" }} to={`/payments/quotes/${r._id}`} title={`${r.number} · ${r.company}`} meta={meta(r)}
+                    menu={r.status === "draft" ? { id: r._id, title: `${r.number} · ${r.company}`, actions: [{ key: "delete", label: "Delete draft", icon: <Trash2 size={16} />, danger: true,
+                      confirm: { title: `Delete ${r.number}?`, body: "The draft quote is deleted. Nothing was sent. This can't be undone.", yes: "Delete" }, run: () => dropQuote({ quoteId: r._id as Id<"quotes"> }), done: "Draft deleted." }] } : undefined}
                     trailing={money(r.totalCents)} chip={<QuoteChip status={r.status as Status} />} chevron />
                 </div>
               ))}

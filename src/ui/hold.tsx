@@ -14,6 +14,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { createPortal } from "react-dom";
 import { Check, CheckSquare, Copy, ExternalLink, Share2, X } from "lucide-react";
 import { navigate } from "../lib/router";
+import { linkProps } from "../lib/router";
 import { ContextMenu, MenuItem, MenuSep, Modal, useIsNarrow } from "./kit";
 
 export type ItemAction = {
@@ -107,6 +108,12 @@ export function useHoldAt(onOpen: ((x: number, y: number) => void) | null | unde
       }
     },
   };
+}
+
+/** A link row a page lays out itself (not a ListRow): holds like one. */
+export function HoldA({ to, spec, className, children }: { to: string; spec: ItemSpec | null; className?: string; children: React.ReactNode }) {
+  const hold = useHold(spec ? { ...spec, href: spec.href ?? to } : null);
+  return <a {...linkProps(to)} {...hold} className={className}>{children}</a>;
 }
 
 /** A menu a page keeps itself: a popup at the pointer on a computer, the same bottom sheet as the hold menu on a phone. */

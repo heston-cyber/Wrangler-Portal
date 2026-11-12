@@ -3,12 +3,14 @@
 // D147 (Nov 4): the list is 870:17016 (Sent to and Opened columns; tabs All, Draft, Sent, Read; Q95: Read once
 // everyone emailed has read it). A shared briefing opens its own page (BriefingShare.tsx), a draft the builder.
 import { useState } from "react";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Button, ButtonLink, Card, Divider, EmptyState, ListRow, PageHeader, PillTabs, SectionHead, SkeletonRows } from "../../ui/wp";
 import { useToast } from "../../ui/kit";
+import { Copy, Trash2 } from "lucide-react";
 import { Icon } from "../../ui/Icon";
+import { HoldA } from "../../ui/hold";
 import { dateShort } from "../payments/common";
 import { BriefingPage } from "./BriefingShare";
 import { Sep, TopBar } from "../../shell/Shell";
@@ -50,6 +52,8 @@ type Pill = "all" | "draft" | "sent" | "read";
 export default function BriefingsPage() {
   const rows = useQuery(api.briefings.list, {});
   const tpls = useQuery(api.briefings.templates, {});
+  const dropDraft = useMutation(api.briefings.deleteDraft);
+  const copyBriefing = useMutation(api.briefings.copy);
   const [pill, setPill] = useState<Pill>("all");
   const asked = new URLSearchParams(window.location.search).get("template");
   const [newOpen, setNew] = useState<null | { templateId?: string; starter?: "shoot" | "edit" }>(asked ? { templateId: asked } : null);
@@ -70,13 +74,17 @@ export default function BriefingsPage() {
                   <div className="bf-thead" aria-hidden><span /><span>Briefing</span><span>Sent to</span><span>Opened</span><span /></div>
                   {shown.map((x, i) => { const [t1, t2] = sentTo(x), [o1, o2] = opened(x); return (
                     <div key={x._id} className="wp-rowwrap">{i > 0 && <Divider />}
-                      <a className="wp-row ilead bf-trow" {...linkProps(`/vendors/briefings/${x._id}`)}>
+                      <HoldA className="wp-row ilead bf-trow" to={`/vendors/briefings/${x._id}`} spec={{
+                        id: x._id, title: x.title,
+                        actions: x.state === "draft"
+                          ? [{ key: "delete", label: "Delete draft", icon: <Trash2 size={16} />, danger: true, confirm: { title: `Delete "${x.title}"?`, body: "The draft is deleted. Nothing was sent. This can't be undone.", yes: "Delete" }, run: () => dropDraft({ briefingId: x._id as Id<"briefings"> }), done: "Draft deleted." }]
+                          : [{ key: "copy", label: "Make a copy as a new draft", icon: <Copy size={16} />, run: async () => { const id = await copyBriefing({ briefingId: x._id as Id<"briefings"> }); navigate(`/vendors/briefings/${id}`); } }] }}>
                         <Icon name="note" size={20} className="lead-icon" />
                         <span className="txt"><span className="ttl">{x.title}</span><span className="meta">{sentLine(x)}</span></span>
                         <span className="txt bf-col"><span className="ttl">{t1}</span>{t2 && <span className="meta">{t2}</span>}</span>
                         <span className="txt bf-col"><span className="ttl">{o1}</span>{o2 && <span className="meta">{o2}</span>}</span>
                         <span className="bf-end"><BriefChip state={x.state} /><Icon name="chevron-right" size={16} className="chev" /></span>
-                      </a></div>); })}
+                      </HoldA></div>); })}
                 </>}
             </Card>
           </>
