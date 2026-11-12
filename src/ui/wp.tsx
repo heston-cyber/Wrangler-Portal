@@ -1,5 +1,6 @@
 // The portal's components (Figma "02 · Components"), built on the classes in portal.css. Pages use these instead
 // of raw markup so every screen matches the approved design. Copy on the components comes from the page.
+import { SelectTick, useHold, useSelectable, type ItemSpec } from "./hold";
 import { forwardRef, useId, useState } from "react";
 import { linkProps } from "../lib/router";
 import { Icon, type IconName } from "./Icon";
@@ -194,27 +195,32 @@ function LeadView({ lead }: { lead: Lead }) {
 }
 
 /** List row. Give it `to` (a link), `onClick` (a button), or neither (static). */
-export function ListRow({ lead = null, title, titleChip, meta, trailing, chip, action, chevron, to, onClick, selected, className, label }: {
+export function ListRow({ lead = null, title, titleChip, meta, trailing, chip, action, chevron, to, onClick, selected, className, label, menu }: {
   lead?: Lead; title: React.ReactNode; titleChip?: React.ReactNode; meta?: React.ReactNode; trailing?: React.ReactNode; chip?: React.ReactNode;
   action?: React.ReactNode; chevron?: boolean; to?: string; onClick?: () => void; selected?: boolean; className?: string; label?: string;
+  /** D170: its options, on a hold (phone) or a right-click (computer); select-several inside a <SelectList> */
+  menu?: ItemSpec | null;
 }) {
+  const hold = useHold(menu);
+  const sel = useSelectable(menu);
+  const extra = sel.selecting ? { ...sel.tapProps, "aria-checked": sel.picked, role: "checkbox" } : hold;
   const body = (
     <>
-      <LeadView lead={lead} />
+      {sel.selecting ? <SelectTick on={sel.picked} label={`Select ${typeof title === "string" ? title : menu?.title ?? ""}`} onToggle={sel.toggle} /> : <LeadView lead={lead} />}
       <span className="txt">
         <span className="ttl"><span>{title}</span>{titleChip}</span>
         {meta && <span className="meta">{meta}</span>}
       </span>
       {trailing && <span className="trail">{trailing}</span>}
       {chip}
-      {action}
-      {chevron && <Icon name="chevron-right" size={16} className="chev" />}
+      {!sel.selecting && action}
+      {chevron && !sel.selecting && <Icon name="chevron-right" size={16} className="chev" />}
     </>
   );
-  const cls = cx("wp-row", className);
-  if (to) return <a {...linkProps(to)} className={cls} aria-current={selected ? "page" : undefined} aria-label={label}>{body}</a>;
-  if (onClick) return <button type="button" className={cls} onClick={onClick} aria-selected={selected || undefined} aria-label={label}>{body}</button>;
-  return <div className={cls} aria-selected={selected || undefined}>{body}</div>;
+  const cls = cx("wp-row", className, sel.picked && "picked");
+  if (to) return <a {...linkProps(to)} {...extra} className={cls} aria-current={selected ? "page" : undefined} aria-label={label}>{body}</a>;
+  if (onClick) return <button type="button" {...extra} className={cls} onClick={onClick} aria-selected={selected || undefined} aria-label={label}>{body}</button>;
+  return <div {...extra} className={cls} aria-selected={selected || undefined}>{body}</div>;
 }
 
 /** Inbox item: an icon, title and detail, an optional status and button, the time, and the unread dot. */

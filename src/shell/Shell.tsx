@@ -2,6 +2,7 @@
 // clicking a layer item opens its main page, the chevron opens its layer. Phone: the layers become chips under the
 // top bar and a glass tab bar is fixed at the bottom. The back office and the client side share it; the client side
 // wears its business's look (lib/brand.ts). Work surfaces (the review page) hide the sidebar and open it as a drawer.
+import { ItemMenuHost } from "../ui/hold";
 import { BellButton } from "../modules/bell/BellButton";
 import { Light } from "./Light";
 import { createContext, Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -255,6 +256,7 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
         <TabBar items={nav.tabs} />
       </div>
       {search && <SearchPalette onClose={() => setSearch(false)} />}
+      <ItemMenuHost />
     </Ctx.Provider>
   );
 }

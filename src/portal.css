@@ -3454,3 +3454,28 @@ canvas.wp-glass.stale { opacity: 0; transition-duration: 90ms; } /* ?glass=lazy 
 /* the phone's More list is content */
 .wp-morelist { border: 0; background: var(--glass-fill); backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass); box-shadow: inset 0 0 0 1px rgba(var(--paper), .2), var(--card-shadow); } /* D168: a glass card */
 @media (max-width: 820px) { .topbar.deskonly { display: none !important; } } /* the glass bar a page added for the desktop only */
+
+/* ======================================================================================================================
+   D170 (Nov 11): hold for options. src/ui/hold.tsx: a hold on a phone or a right-click opens an item's options; a list
+   can select several, with a glass bar at the bottom.
+   ====================================================================================================================== */
+[data-hold] { -webkit-touch-callout: none; } /* not the browser's link menu */
+@media (hover: none) { [data-hold] { -webkit-user-select: none; user-select: none; } }
+[data-hold].holding { transform: scale(.985); background-color: var(--surface-block-hover); transition: transform 380ms var(--ease-out), background-color 380ms var(--ease-out); }
+@media (prefers-reduced-motion: reduce) { [data-hold].holding { transform: none; } }
+.wp-row.picked { background: var(--accent-tint); }
+.wp-row > .selbox { margin: 0 4px 0 0; }
+/* the phone's sheet: the item's name, then the options as full-width rows */
+.hold-sheet { display: grid; gap: 10px; }
+.hold-title { padding: 0 4px 6px; border-bottom: 1px solid var(--border-hairline); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hold-sheet .menu-list { display: grid; gap: 2px; }
+.hold-sheet .mitem { display: flex; align-items: center; width: 100%; min-height: 48px; padding: 10px 12px; border-radius: 12px; font-size: var(--fs-text-regular); background: none; text-align: left; }
+.hold-sheet .mitem > svg, .hold-sheet .mitem .lucide { width: 20px; height: 20px; flex: none; }
+.hold-sheet .sep { height: 1px; margin: 6px 4px; background: var(--border-hairline); }
+/* select several: the bar floats over the page's bottom edge */
+.selbar.hold-bar { position: fixed; z-index: 70; bottom: 16px; left: calc(268px + 32px); right: 32px; margin: 0; flex-wrap: wrap; }
+.btn.danger { color: var(--text-danger); }
+@media (max-width: 820px) {
+  .selbar.hold-bar { left: 8px; right: 8px; bottom: calc(94px + env(safe-area-inset-bottom, 0px) * .5); border-radius: 22px; padding: 10px 12px; gap: 8px; }
+  .selbar.hold-bar .right { flex-wrap: wrap; justify-content: flex-end; }
+}
