@@ -18,7 +18,7 @@ export function QuotePaper({ q, showAccept = true }: { q: QuoteDoc; showAccept?:
   const b = q.business;
   const legal = b.legalName && b.legalName !== b.name ? `a DBA of ${b.legalName.replace(/^.*?,?\s*a DBA of\s*/i, "")}` : null;
   return (
-    <article className="inv-paper">
+    <article className="inv-paper glass">
       <header className="inv-top">
         <div className="who"><span className="logo">{b.logoUrl ? <img src={b.logoUrl} alt="" /> : <BrandImg name="wordmark" alt="" />}</span><span><b>{b.name}</b>{legal && <small>{legal}</small>}</span></div>
         <div className="num"><span>Quote</span><b>{q.number}</b></div>

@@ -371,7 +371,7 @@ export function VendorReview() {
               <ListRow className="ilead" lead={{ icon: "review" }} to={`/s/${x.token}`} title={x.project} meta={[`Booked as ${x.role.toLowerCase()} · ${dateRange(x.start, x.end)}`, x.expiresAt ? `access until ${dateShort(x.expiresAt)}` : null].filter(Boolean).join(" · ")} chevron /></div>)}
           </Card>
         )}
-        <div className="wp-notice"><Icon name="lock" size={18} /><span className="txt">Access ends 30 days after the booking's last day. The business can extend it.</span></div>
+        <div className="wp-notice glass"><Icon name="lock" size={18} /><span className="txt">Access ends 30 days after the booking's last day. The business can extend it.</span></div>
       </div>
     </>
   );

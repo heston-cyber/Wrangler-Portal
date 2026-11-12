@@ -526,7 +526,7 @@ export default function Builder({ mode }: { mode: Mode }) {
         <div className="wsb-stage" ref={stageRef}>
           {prop && <ProposalBanner p={prop} busy={busy} onDismiss={() => void dismissDrafted({ proposalId: prop._id }).catch((e) => show(errText(e)))} onContract={() => setContracting(true)} onLater={() => void proposalLater({ proposalId: prop._id, what: "contract" }).catch((e) => show(errText(e)))}
             onWithdraw={async () => { try { await withdrawProposal({ proposalId: prop._id }); show("Withdrawn. The link now says so."); } catch (e) { show(errText(e)); } }} onCopy={() => void onCopy()} />}
-          {sent && <div className="wp-notice ws-banner"><Icon name="lock" size={20} /><span className="txt">{build!.document!.label} is {build!.document!.status === "sent" ? "out for signature" : "signed"}. Changes here won't reach it; cancel it first to send a new version.</span></div>}
+          {sent && <div className="wp-notice ws-banner glass"><Icon name="lock" size={20} /><span className="txt">{build!.document!.label} is {build!.document!.status === "sent" ? "out for signature" : "signed"}. Changes here won't reach it; cancel it first to send a new version.</span></div>}
           <div className={`wsb-page${picking ? " wsb-picking" : ""}`}
             // Select mode: a tap ticks the block under it; nothing else on the page reacts (no typing, no fields).
             onMouseDownCapture={(e) => { if (picking) { e.preventDefault(); e.stopPropagation(); } }}
@@ -771,14 +771,14 @@ function SaveTemplate({ doc, proposal, briefing, callSheet, onClose, onSave }: {
 function ProposalBanner({ p, busy, onContract, onLater, onWithdraw, onCopy, onDismiss }: { p: ProposalInfo; busy: string | null; onContract: () => void; onLater: () => void; onWithdraw: () => void; onCopy: () => void; onDismiss: () => void }) {
   const r = p.response;
   if (P_OPEN.has(p.status) && p.drafted === "claude") return (
-    <div className="wp-notice warn pr-banner">
+    <div className="wp-notice warn pr-banner glass">
       <Icon name="note" size={20} />
       <span className="txt"><b>Drafted by Claude: review before sending</b><span>Claude wrote this from the questionnaire answers. Check every section and every price before you send it.</span></span>
       <button type="button" className="btn ghost sm" onClick={onDismiss}>Dismiss</button>
     </div>
   );
   if (p.status === "accepted" && r) return (
-    <div className="wp-notice pr-banner ok">
+    <div className="wp-notice pr-banner ok glass">
       <Icon name="check-circle" size={20} />
       <span className="txt"><b>Accepted by {r.name} · {longWhen(r.at)}</b>
         <span>{p.contract ? "The contract draft is in Docs. Nothing has been sent." : "Start the contract? It makes a Service Agreement draft in Docs from this proposal. Nothing is sent."}</span></span>
@@ -789,14 +789,14 @@ function ProposalBanner({ p, busy, onContract, onLater, onWithdraw, onCopy, onDi
     </div>
   );
   if (p.status === "declined" && r) return (
-    <div className="wp-notice pr-banner">
+    <div className="wp-notice pr-banner glass">
       <Icon name="info" size={20} />
       <span className="txt"><b>Declined by {r.name} · {longWhen(r.at)}</b><span>{r.reason ? `"${r.reason}"` : "No reason given."}</span></span>
       <Button size="sm" variant="secondary" loading={busy === "copy"} onClick={onCopy}>Make a copy to change</Button>
     </div>
   );
   if (p.status === "sent") return (
-    <div className="wp-notice pr-banner">
+    <div className="wp-notice pr-banner glass">
       <Icon name="send" size={20} />
       <span className="txt"><b>Sent to {p.who.name} · {p.sentAt ? longDay(p.sentAt) : ""}{p.viewedAt ? ` · viewed ${longDay(p.viewedAt)}` : ""}</b>
         <span>Locked: {p.who.name.split(" ")[0] || "the client"} is reading the PDF that was sent. To change it, withdraw it or make a copy.</span></span>
@@ -806,7 +806,7 @@ function ProposalBanner({ p, busy, onContract, onLater, onWithdraw, onCopy, onDi
     </div>
   );
   if (p.status === "void") return (
-    <div className="wp-notice pr-banner">
+    <div className="wp-notice pr-banner glass">
       <Icon name="info" size={20} />
       <span className="txt"><b>Withdrawn{p.voidedAt ? ` · ${longDay(p.voidedAt)}` : ""}</b><span>The link says it was withdrawn. Make a copy to change it and send it again.</span></span>
       <Button size="sm" variant="secondary" loading={busy === "copy"} onClick={onCopy}>Make a copy</Button>

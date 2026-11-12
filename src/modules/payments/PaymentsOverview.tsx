@@ -58,7 +58,7 @@ export default function PaymentsOverview() {
         <PageHeader title="Payments." sub="Money in, at a glance."
           actions={o && !off ? <ButtonLink variant="primary" icon="plus" to="/payments/invoices/new">New invoice</ButtonLink> : undefined} />
         {off && (
-          <div className="wp-notice warn">
+          <div className="wp-notice warn glass">
             <Icon name="alert" size={20} />
             <span className="txt"><b>Stripe is disconnected.</b><br />Clients can't pay in the portal until you connect again. Your history is still here.</span>
             <ButtonLink variant="primary" to="/settings/payments" iconEnd={false}>Go to Settings › Payments</ButtonLink>

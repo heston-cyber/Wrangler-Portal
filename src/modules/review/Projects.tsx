@@ -420,7 +420,7 @@ function DeleteClient({ client, projects, vids, onClose, onDone }: { client: str
 }
 
 // "New client": just a name. It shows on the Projects page (grouped by client) with a + to add its first project.
-export function NewClient({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+export function NewClient({ onClose, onDone }: { onClose: () => void; onDone: (name: string) => void }) {
   const create = useMutation(api.library.createClient);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -431,7 +431,7 @@ export function NewClient({ onClose, onDone }: { onClose: () => void; onDone: ()
         e.preventDefault();
         if (!name.trim()) { setError("Give the client a name."); return; }
         setBusy(true); setError(null);
-        try { await create({ name }); onDone(); } catch (err) { setError((err as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]); setBusy(false); }
+        try { const made = await create({ name }); onDone(made); } catch (err) { setError((err as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]); setBusy(false); }
       }}>
         <div className="dhead">
           <div style={{ display: "grid", gap: 6 }}>

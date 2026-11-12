@@ -343,7 +343,7 @@ function MonthGrid({ anchor, today, items, drag, onOpen, onAdd, onDrop }: { anch
     onDrop(item, { date: over, endDate: addDays(item.endDate, shift), ...(item.start ? { start: item.start, end: item.end ?? undefined } : {}) });
   };
   return (
-    <div className={`cal-month${drag ? " dragging-on" : ""}`} onPointerMove={moveP} onPointerUp={up} onPointerCancel={() => setDr(null)}>
+    <div className={`glass cal-month${drag ? " dragging-on" : ""}`} onPointerMove={moveP} onPointerUp={up} onPointerCancel={() => setDr(null)}>
       <div className="cal-wk">{["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map((w) => <span key={w}>{w}</span>)}</div>
       <div className="cal-mgrid" ref={grid}>
         {days.map((day) => {
@@ -417,7 +417,7 @@ function WeekGrid({ start, today, items, drag, onOpen, onAdd, onDrop, tall }: { 
   const ghostOf = (x: Item) => dr?.moved && dr.item.key === x.key;
   const preview = dr?.moved && dr.item.canDrag ? { ...dr.item, date: dr.span.date, endDate: dr.span.endDate, start: dr.span.start ?? null, end: dr.span.end ?? null, key: "preview" } : null;
   return (
-    <div className={`cal-week${tall ? " tall" : ""}`} onPointerMove={moveP} onPointerUp={up} onPointerCancel={() => setDr(null)}>
+    <div className={`glass cal-week${tall ? " tall" : ""}`} onPointerMove={moveP} onPointerUp={up} onPointerCancel={() => setDr(null)}>
       <div className="cal-whead">
         <span />
         {days.map((day) => <span key={day} className={day === today ? "today" : ""}><small>{weekday(day)}</small> <b className={day === today ? "cal-dn today" : ""}>{dayNum(day)}</b></span>)}

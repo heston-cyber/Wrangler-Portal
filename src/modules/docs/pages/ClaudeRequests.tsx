@@ -50,7 +50,7 @@ export function ClaudeRequestNotices() {
   return (
     <>
       {reqs.map((r) => (
-        <div key={r._id} className="wp-notice" role="status">
+        <div key={r._id} className="wp-notice glass" role="status">
           <Icon name="alert" size={20} /><span className="txt"><b>Claude asks to {VERB[r.what]} {r.label}</b> · {r.title}. Waiting for you to confirm.</span>
           <ButtonLink size="sm" to={`/sign/d/${r.documentId}`}>Review</ButtonLink>
         </div>

@@ -323,7 +323,7 @@ function Delivery({ page, show, onAddFiles }: { page: Page; show: (m: string) =>
   };
   return (
     <div className="pj-delivery">
-      <section className={`wp-notice pj-lock${d.open ? " open" : ""}`}>
+      <section className={`glass wp-notice pj-lock${d.open ? " open" : ""}`}>
         <Icon name={d.open ? "download" : "lock"} size={20} />
         <div className="txt">
           <b>{d.open ? `Open for ${client} until ${until}` : d.unlockedAt ? `The links for ${client} expired on ${until}` : `Locked for ${client}`}</b>

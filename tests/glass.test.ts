@@ -153,3 +153,21 @@ describe("Nov 11 pass: the rim matches the frosted middle, and only the rim is d
     expect(scrim?.body).toMatch(/rgba\(var\(--ink\), \.92\) 0%, rgba\(var\(--ink\), \.6\) 60%, rgba\(var\(--ink\), 0\) 100%/);
   });
 });
+
+// Nov 11 (Heston: "the glass effect needs to go site wide"): the flat panels became glass cards.
+describe("glass site wide", () => {
+  test("5f.6 no page draws the invoice paper, notices, pay panels, pipeline columns, calendars, help guide or More list as a flat panel", async () => {
+    const { readdirSync } = await import("node:fs");
+    const files = (readdirSync("src", { recursive: true }) as string[]).filter((f) => f.endsWith(".tsx")).map((f) => join("src", f));
+    const re = /className=(?:"([^"]*)"|\{`([^`]*)`\})/g;
+    const flat: string[] = [];
+    for (const f of files) {
+      const src = readFileSync(f, "utf8");
+      for (const m of src.matchAll(re)) {
+        const v = m[1] ?? m[2];
+        if (/\b(inv-paper|inv-pay|crm-col|cal-month|cal-week|help-guide|wp-morelist|wp-notice)\b/.test(v) && !/\bglass\b/.test(v)) flat.push(`${f}: ${v}`);
+      }
+    }
+    expect(flat).toEqual([]);
+  });
+});

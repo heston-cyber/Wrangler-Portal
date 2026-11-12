@@ -451,7 +451,7 @@ export function ProposalWaiting({ p }: { p: ProposalInfo }) {
           <div className="qz-phrase"><span>“{phrase}”</span><button type="button" className="btn sm" onClick={() => void navigator.clipboard?.writeText(phrase).then(() => show("Copied"), () => show("Couldn't copy"))}>Copy</button></div>
           <p className="wp-small secondary qz-wait"><Spinner /> This page updates when the draft lands. You can leave it.</p>
           {askedAt && Date.now() - askedAt > 10 * 60_000 && (
-            <div className="wp-notice warn"><Icon name="clock" size={20} /><span className="txt"><b>Still waiting for Claude (since {timeWord(askedAt)})</b><span className="wp-small"> Check the connector is on in your Claude app, then say the line again. Or fill it in yourself.</span></span></div>
+            <div className="wp-notice warn glass"><Icon name="clock" size={20} /><span className="txt"><b>Still waiting for Claude (since {timeWord(askedAt)})</b><span className="wp-small"> Check the connector is on in your Claude app, then say the line again. Or fill it in yourself.</span></span></div>
           )}
           <p className="wp-small secondary">Claude needs the Wrangler Sign connector (Settings › Claude connectors).</p>
         </section>

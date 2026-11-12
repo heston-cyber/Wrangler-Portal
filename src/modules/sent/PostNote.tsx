@@ -215,7 +215,7 @@ export default function PostNote({ noteId: noteParam, clientId: clientParam }: {
         <div className="pn-cols">
           <div className="col">
             {fromClaude && (
-              <div className="wp-notice bad pn-claude" role="status">
+              <div className="wp-notice bad pn-claude glass" role="status">
                 <Icon name="alert" size={20} />
                 <span className="txt"><b>Drafted by Claude: confirm to send</b><span className="secondary"> Check the wording and who it goes to. Nothing goes out until you press Send note.</span></span>
               </div>

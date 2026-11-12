@@ -49,3 +49,18 @@ describe("5g phone menu", () => {
     expect(shell).toContain("Pages beside ${crumb.label}");
   });
 });
+
+describe("5g phone keyboard", () => {
+  it("5g.5 the tab bar steps aside while a text box has the keyboard, and the background is sized to the full screen", () => {
+    expect(shell).toContain('root.classList.toggle("kb"');
+    expect(css).toMatch(/html\.kb \.wp-tabbar/);
+    expect(css).toMatch(/\.wp-light \{ bottom: auto; height: 100lvh; \}/);
+  });
+  it("5g.6 the invoice and subscription client pickers can make a new client", () => {
+    for (const f of ["src/modules/payments/InvoiceEditor.tsx", "src/modules/payments/SubscriptionsPage.tsx"]) {
+      const src = readFileSync(f, "utf8");
+      expect(src, f).toContain("+ New client…");
+      expect(src, f).toContain("<NewClient");
+    }
+  });
+});

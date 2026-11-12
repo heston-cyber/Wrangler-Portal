@@ -11,6 +11,7 @@ import { Modal, useToast } from "../../ui/kit";
 import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps, navigate } from "../../lib/router";
 import { errText } from "../docs/pages/common";
+import { NewClient } from "../review/Projects";
 import { InvoicePaper, MoneyInput, dateLong, isoIn, money, newId, totals, type Line } from "./common";
 
 type Kind = "deposit" | "final" | "other";
@@ -53,6 +54,13 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
   }, [opts, existing, invoiceId, initClient, initProject, d]);
 
   const client = useMemo(() => opts?.clients.find((c) => c._id === d?.clientId) ?? null, [opts, d?.clientId]);
+  // "New client…" in the picker: make it, then pick it as soon as it shows up in the list
+  const [makingClient, setMakingClient] = useState(false);
+  const [madeClient, setMadeClient] = useState<string | null>(null);
+  useEffect(() => {
+    const c = madeClient ? opts?.clients.find((x) => x.name === madeClient) : null;
+    if (c && d) { pickClient(c._id); setMadeClient(null); }
+  });
   if (!opts || !d) return <><TopBar><a {...linkProps("/payments/invoices")}>Invoices</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
   if (invoiceId && existing === null) return <><TopBar><a {...linkProps("/payments/invoices")}>Invoices</a></TopBar><div className="wp-page"><p>This invoice isn't here.</p></div></>;
 
@@ -101,17 +109,18 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
       </TopBar>
       <div className="wp-page inv-edit">
         <header className="wp-pagehead"><div className="txt"><span className="wp-eyebrow">{invoiceId ? `Draft ${number}` : "New invoice"}</span><h1 className="wp-h2">{invoiceId ? (d.title || "Invoice") : "New invoice."}</h1><p className="wp-body">Nothing sends until you press Send and confirm.</p></div></header>
-        {existing?.sendError && <div className="wp-notice"><Icon name="alert" size={20} /><span className="txt"><b>The last send didn't go through.</b> {existing.sendError}</span></div>}
-        {!opts.stripeReady && <div className="wp-notice"><Icon name="info" size={20} /><span className="txt"><b>Stripe isn't connected.</b> You can save drafts; sending needs Stripe.</span></div>}
+        {existing?.sendError && <div className="wp-notice glass"><Icon name="alert" size={20} /><span className="txt"><b>The last send didn't go through.</b> {existing.sendError}</span></div>}
+        {!opts.stripeReady && <div className="wp-notice glass"><Icon name="info" size={20} /><span className="txt"><b>Stripe isn't connected.</b> You can save drafts; sending needs Stripe.</span></div>}
         <div className="inv-cols">
           <div className="col">
             <Card label="Who it's for" head={<SectionHead label="Who it's for" />}>
               <div className="inv-form">
                 <div className="row2">
                   <label className="wp-field"><span className="wp-field-label">Client</span>
-                    <select className="input" value={d.clientId} onChange={(e) => pickClient(e.target.value)}>
+                    <select className="input" value={d.clientId} onChange={(e) => e.target.value === "__new" ? setMakingClient(true) : pickClient(e.target.value)}>
                       <option value="">Choose a client…</option>
                       {opts.clients.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+                      <option value="__new">+ New client…</option>
                     </select></label>
                   <label className="wp-field"><span className="wp-field-label">Project</span>
                     <select className="input" value={d.projectId} onChange={(e) => set({ projectId: e.target.value })} disabled={!client}>
@@ -202,6 +211,7 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
         </Modal>
       )}
       {toast}
+      {makingClient && <NewClient onClose={() => setMakingClient(false)} onDone={(name) => { setMakingClient(false); setMadeClient(name); }} />}
     </>
   );
 }

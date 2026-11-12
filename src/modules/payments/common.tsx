@@ -37,7 +37,7 @@ export function InvoicePaper({ business, number, issued, due, billTo, project, l
   const t = totals({ lines, discountCents, taxPercent });
   const legal = business.legalName ? `a DBA of ${business.legalName.replace(/^.*?,?\s*a DBA of\s*/i, "")}` : null;
   return (
-    <article className="inv-paper">
+    <article className="inv-paper glass">
       <header className="inv-top">
         <div className="who"><span className="logo">{business.logoUrl ? <img src={business.logoUrl} alt="" /> : <BrandImg name="wordmark" alt="" />}</span><span><b>{business.name}</b>{legal && <small>{legal}</small>}</span></div>
         <div className="num"><span>Invoice</span><b>{number}</b></div>

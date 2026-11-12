@@ -226,6 +226,16 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
   }, []);
   const [search, setSearch] = useState(false);
   const { path } = useLocation();
+  // Phones: while a text box has the keyboard, the tab bar steps aside (it would ride up above the keyboard) and the background holds still.
+  useEffect(() => {
+    const root = document.documentElement;
+    const typing = (el: Element | null) => !!el && (el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement || (el instanceof HTMLInputElement && !/^(checkbox|radio|button|submit|range|file|color|image|reset)$/.test(el.type)) || (el as HTMLElement).isContentEditable);
+    const sync = () => root.classList.toggle("kb", matchMedia("(max-width: 820px)").matches && typing(document.activeElement));
+    const onOut = () => window.setTimeout(sync, 60);
+    document.addEventListener("focusin", sync);
+    document.addEventListener("focusout", onOut);
+    return () => { document.removeEventListener("focusin", sync); document.removeEventListener("focusout", onOut); root.classList.remove("kb"); };
+  }, []);
   // D172 (Heston, Nov 11): on a phone the same sidebar slides in from a menu button, instead of rows of chips.
   const [phoneMenu, setPhoneMenu] = useState(false);
   useEffect(() => { setDrawer(false); setPhoneMenu(false); }, [path]);
@@ -529,7 +539,7 @@ export function MorePage({ me, side }: { me: Me; side: Side }) {
       {signOutDialog}
       <TopBar><span className="here">More</span></TopBar>
       <div className="wp-page">
-        <div className="wp-morelist">
+        <div className="wp-morelist glass">
           {rows.map((r, i) => (
             <div key={r.title} style={{ display: "contents" }}>
               {i > 0 && <hr className="wp-divider" style={{ background: "var(--border-faint)" }} />}

@@ -97,7 +97,7 @@ export function HelpGuide({ base, slug, biz, owner, bare }: Who & { slug: string
   return (
     <>
       {back}
-      <article className="help-guide">
+      <article className="help-guide glass">
         <header className="help-head">
           <h1 className="wp-h2">{g.title}</h1>
           {g.summary && <p className="wp-body secondary">{g.summary}</p>}
