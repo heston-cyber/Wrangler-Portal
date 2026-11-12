@@ -5,7 +5,7 @@ import { useQuery } from "convex/react";
 import { useToast } from "../../../ui/kit";
 import { Icon, type IconName } from "../../../ui/Icon";
 import { ButtonLink, PageHeader } from "../../../ui/wp";
-import { DocMenu, menuOpeners, type MenuAt, type MenuDoc } from "./DocMenu";
+import { DocMenu, DocRow, type MenuAt, type MenuDoc } from "./DocMenu";
 import { api } from "../../../../convex/_generated/api";
 import { Sep, TopBar } from "../../../shell/Shell";
 import { linkProps, navigate } from "../../../lib/router";
@@ -54,14 +54,14 @@ export default function SignHome() {
                 <thead><tr><th scope="col" className="hide-sm">No.</th><th scope="col">Document</th><th scope="col" className="hide-sm">Signers</th><th scope="col">Status</th><th scope="col" className="hide-sm">Updated</th><th aria-label="Actions" /></tr></thead>
                 <tbody>
                   {recent.map((d) => (
-                    <tr key={d._id} onClick={() => navigate(`/sign/d/${d._id}`)} tabIndex={0} className={menu?.doc._id === d._id ? "ws-menurow" : undefined} {...menuOpeners(md(d), setMenu)}>
+                    <DocRow key={d._id} doc={md(d)} open={setMenu} onClick={() => navigate(`/sign/d/${d._id}`)} className={menu?.doc._id === d._id ? "ws-menurow" : undefined}>
                       <td className="num hide-sm">{d.label}</td>
                       <td className="ttl"><a {...linkProps(`/sign/d/${d._id}`)} onClick={(e) => e.stopPropagation()}>{d.title}</a></td>
                       <td className="hide-sm">{d.signers.filter(Boolean).join(", ") || "—"}</td>
                       <td><StatusChip status={d.status} /></td>
                       <td className="hide-sm" title={central(d.updatedAt)}>{shortWhen(d.updatedAt)}</td>
                       <td className="ws-more"><button className="icon-btn bare sm" aria-label={`Actions for ${d.label === "—" ? d.title : d.label}`} aria-haspopup="menu" onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setMenu({ doc: md(d), x: r.right - 200, y: r.bottom + 4 }); }}><Icon name="more" size={18} /></button></td>
-                    </tr>
+                    </DocRow>
                   ))}
                 </tbody>
               </table>

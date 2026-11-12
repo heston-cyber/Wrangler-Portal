@@ -59,11 +59,16 @@ const SLOP = 8; // px a finger may drift before it counts as scrolling
 /** Props to spread on an item (a row, a card): hold on a touch screen, right-click or the menu key on a computer. */
 export function useHold(spec: ItemSpec | null | undefined): React.HTMLAttributes<HTMLElement> & { "data-hold"?: string } {
   const list = useContext(ListContext);
+  return useHoldAt(spec ? (x, y) => openItemMenu(spec, { x, y }, list) : null);
+}
+
+/** The same gestures for a menu a page opens itself (the Contracts rows): `onOpen` gets the point to open it at. */
+export function useHoldAt(onOpen: ((x: number, y: number) => void) | null | undefined): React.HTMLAttributes<HTMLElement> & { "data-hold"?: string } {
   const t = useRef<{ timer: number; x: number; y: number; held: boolean; el: HTMLElement | null }>({ timer: 0, x: 0, y: 0, held: false, el: null });
   useEffect(() => () => window.clearTimeout(t.current.timer), []);
-  if (!spec) return {};
+  if (!onOpen) return {};
   const cancel = () => { window.clearTimeout(t.current.timer); t.current.timer = 0; t.current.el?.classList.remove("holding"); };
-  const open = (x: number, y: number) => openItemMenu(spec, { x, y }, list);
+  const open = onOpen;
   return {
     "data-hold": "",
     onPointerDown: (e) => {
@@ -102,6 +107,19 @@ export function useHold(spec: ItemSpec | null | undefined): React.HTMLAttributes
       }
     },
   };
+}
+
+/** A menu a page keeps itself: a popup at the pointer on a computer, the same bottom sheet as the hold menu on a phone. */
+export function MenuSurface({ at, onClose, label, title, children }: { at: { x: number; y: number }; onClose: () => void; label: string; title: string; children: React.ReactNode }) {
+  const narrow = useIsNarrow();
+  return narrow ? (
+    <Modal onClose={onClose} label={label} width={420}>
+      <div className="hold-sheet">
+        <div className="hold-title"><span className="rbold">{title}</span></div>
+        <div className="menu-list" role="menu" aria-label={label}>{children}</div>
+      </div>
+    </Modal>
+  ) : <ContextMenu at={at} onClose={onClose} label={label}>{children}</ContextMenu>;
 }
 
 // ---------- select several ----------
