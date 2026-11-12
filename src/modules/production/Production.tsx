@@ -2,8 +2,9 @@
 // 769:6647, 771:8608, 771:8851) and Production › Shoots (763:2708). Step 3 added call sheets: the fourth tile, the Call
 // sheets card, each shoot's sheet chip and button, "Needs a call sheet". Step 5: the Google Calendar card's Last synced
 // and Sync now, and Production › Calendar (Calendar.tsx).
-import { useState } from "react";
-import { useAction, useQuery } from "convex/react";
+import { useEffect, useState } from "react";
+import { usePerms } from "../../lib/teamAccess";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Button, ButtonLink, Card, DialogHeader, Divider, EmptyState, ListRow, PageHeader, PillTabs, SectionHead, SkeletonRows, StatusChip } from "../../ui/wp";
@@ -74,23 +75,51 @@ export function NewShoot({ onClose }: { onClose: () => void }) {
   const projects = useQuery(api.production.projectsForShoot, {});
   const [pid, setPid] = useState<string>("");
   const [picked, setPicked] = useState<{ _id: Id<"projects">; label: string; client: string | null } | null>(null);
+  // D174: a shoot can be made on its own. "+ New project…" makes the project here (the same call Review's New project
+  // uses, no video needed), then goes straight on to the shoot.
+  const overview = useQuery(api.library.overview, pid === "__new" ? {} : "skip");
+  const createProject = useMutation(api.library.createProject);
+  const { perms, team } = usePerms();
+  const mayStart = !team || !!perms.projects; // making a project needs the Projects switch, same as Review's
+  const [name, setName] = useState(""), [client, setClient] = useState("");
+  const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
+  const [made, setMade] = useState<string | null>(null);
   const data = useQuery(api.shoots.forProject, picked ? { projectId: picked._id } : "skip");
   const [toast, show] = useToast();
+  useEffect(() => {
+    const p = made ? projects?.find((x) => x._id === made) : null;
+    if (p) setPicked(p);
+  }, [made, projects]);
+  const clients = [...new Set([...(overview?.clients ?? []), ...(overview?.projects ?? []).map((p) => p.client?.trim() ?? "").filter(Boolean)])].sort((a, b) => a.localeCompare(b));
+  const next = async () => {
+    if (pid !== "__new") { const p = projects?.find((x) => x._id === pid); if (p) setPicked(p); return; }
+    setBusy(true); setErr(null);
+    try { setMade(await createProject({ name, client: client.trim() || undefined })); }
+    catch (e) { setErr(errText(e)); setBusy(false); }
+  };
   if (picked && data) return <>{<ShootDialog projectId={picked._id} label={picked.label} data={data} shoot={null} client={picked.client} people={data.people} onClose={onClose} show={show} />}{toast}</>;
   return (
     <Modal onClose={onClose} label="New shoot" width={480}>
       <div className="crm-dialog">
         <DialogHeader eyebrow="Production" title="New shoot." body="Which project is it for?" onClose={onClose} />
         {projects === undefined ? <SkeletonRows n={2} />
-          : projects.length === 0 ? <p className="secondary">No open projects yet. Start one from a client first.</p>
           : <label className="wp-field"><span className="wp-field-label">Project</span>
             <select className="input" value={pid} onChange={(e) => setPid(e.target.value)}>
               <option value="">Choose a project</option>
               {projects.map((p) => <option key={p._id} value={p._id}>{p.client ? `${p.label} · ${p.client}` : p.label}</option>)}
+              {mayStart && <option value="__new">+ New project…</option>}
             </select></label>}
+        {pid === "__new" && <>
+          <label className="wp-field"><span className="wp-field-label">Project name</span>
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Spring campaign" autoFocus /></label>
+          <label className="wp-field"><span className="wp-field-label">Client (optional)</span>
+            <input className="input" value={client} onChange={(e) => setClient(e.target.value)} placeholder="Floor Trader" list="shoot-clients" />
+            <datalist id="shoot-clients">{clients.map((c) => <option key={c} value={c} />)}</datalist></label>
+        </>}
+        {err && <p className="wp-field-error" role="alert">{err}</p>}
         <div className="dfoot">
           <button className="btn ghost" type="button" onClick={onClose}>Cancel</button>
-          <Button variant="primary" disabled={!pid} onClick={() => { const p = projects?.find((x) => x._id === pid); if (p) setPicked(p); }}>Next</Button>
+          <Button variant="primary" loading={busy || !!made} disabled={!pid || (pid === "__new" && !name.trim())} onClick={next}>Next</Button>
         </div>
       </div>
     </Modal>
