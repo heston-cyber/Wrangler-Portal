@@ -21,6 +21,7 @@ import { ShowDetails } from "./ShowDetails";
 import { ApproveFinal } from "./ApproveFinal";
 import { ShareDialog, type ShareTarget } from "./Share";
 import { Icon } from "../../ui/Icon";
+import { useHold, type ItemSpec } from "../../ui/hold";
 
 type GroupBy = "client" | "project" | "activity" | "opened" | "status";
 type SortBy = SortKey;
@@ -34,6 +35,11 @@ function usePref<T extends string>(key: string, fallback: T): [T, (v: T) => void
 }
 
 // embedded (Phase 2): inside the project page's Cuts tab, which has its own top bar.
+/** D170: a project or client heading you can hold (or right-click) for its menu. */
+function HoldDiv({ spec, className, children }: { spec: ItemSpec | null; className: string; children: React.ReactNode }) {
+  return <div className={className} {...useHold(spec)}>{children}</div>;
+}
+
 export default function Projects({ projectId, embedded }: { projectId?: Id<"projects">; embedded?: boolean }) {
   const overview = useQuery(api.library.overview);
   const { openUpload } = useUpload();
@@ -140,7 +146,13 @@ export default function Projects({ projectId, embedded }: { projectId?: Id<"proj
               <button className="btn sm" onClick={() => openUpload({ newProject: true, client: g.emptyClient })}><FolderPlus size={14} />New project</button>
             </div>
           ) : g.clientHead ? (
-            <div className="chead" key={g.key}>
+            <HoldDiv key={g.key} className="chead" spec={{
+              id: g.key, title: String(g.title), select: g.title !== NO_CLIENT ? () => sel.start() : undefined,
+              actions: g.title === NO_CLIENT ? [] : [
+                { key: "share", label: "Share client…", icon: <Share2 size={18} />, run: () => setSharing({ target: { kind: "client", client: String(g.title) }, label: String(g.title) }) },
+                { key: "new", label: "New project", icon: <FolderPlus size={18} />, run: () => openUpload({ newProject: true, client: String(g.title) }) },
+                { key: "delete", label: "Delete client", icon: <Trash2 size={18} />, danger: true, run: () => setDeletingClient(String(g.title)) },
+              ] }}>
               <button className="collapse" onClick={() => toggle(g.key)} aria-label={collapsed.has(g.key) ? "Expand" : "Collapse"}><Icon name={collapsed.has(g.key) ? "chevron-right" : "chevron-down"} size={14} /></button>
               <Icon name="users" size={18} />
               <span className="ctitle">{g.title}</span>
@@ -156,10 +168,17 @@ export default function Projects({ projectId, embedded }: { projectId?: Id<"proj
                   </Menu>
                 </span>
               )}
-            </div>
+            </HoldDiv>
           ) : (
             <section className={`group${group === "client" ? " nested" : ""}`} key={g.key}>
-              <div className="ghead">
+              <HoldDiv className="ghead" spec={!g.project ? null : {
+                id: g.key, title: String(g.title), href: `/projects/${g.project._id}`, select: () => sel.start(),
+                actions: [
+                  { key: "share-project", label: "Share project…", icon: <Share2 size={18} />, run: () => setSharing({ target: { kind: "project", projectId: g.project!._id }, label: projectLabel(g.project) }) },
+                  { key: "rename", label: "Rename or set client", icon: <Pencil size={18} />, run: () => setRenaming(g.project!) },
+                  { key: "upload", label: "Upload a video", icon: <Upload size={18} />, run: () => openUpload({ projectId: g.project!._id }) },
+                  { key: "delete", label: "Delete project", icon: <Trash2 size={18} />, danger: true, run: () => setDeletingProject(g.project!) },
+                ] }}>
                 <button className="collapse" onClick={() => toggle(g.key)} aria-label={collapsed.has(g.key) ? "Expand" : "Collapse"}><Icon name={collapsed.has(g.key) ? "chevron-right" : "chevron-down"} size={14} /></button>
                 {g.project && <Icon name="folder" size={18} />}
                 {g.project ? <a className="gtitle" {...linkProps(`/projects/${g.project._id}`)} title="Open the project page">{g.title}<Icon name="arrow-right" size={14} className="go" /></a> : <span className="gtitle">{g.title}</span>}
@@ -178,7 +197,7 @@ export default function Projects({ projectId, embedded }: { projectId?: Id<"proj
                     </Menu>
                   </span>
                 )}
-              </div>
+              </HoldDiv>
               {!collapsed.has(g.key) && (
                 g.items.length === 0 ? <p className="caption" style={{ padding: "8px 28px" }}>No videos yet.</p>
                   : view === "grid" ? <div className="grid">{g.items.map((x) => <VideoCard key={x._id} {...rowProps(x)} />)}</div>
