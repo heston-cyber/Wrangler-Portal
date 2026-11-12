@@ -37,7 +37,7 @@ export default function CopyPage({ token }: { token: string }) {
       <div className="q-cols">
         <div className="col">{p.fileUrl ? <PdfPages url={p.fileUrl} title={p.title} /> : <EmptyState icon="document" title="The document isn't available." />}</div>
         <div className="col right">
-          <section className="inv-pay" aria-label="Who signs">
+          <section className="inv-pay glass" aria-label="Who signs">
             <span className="wp-eyebrow">{p.state === "signed" ? "Signed" : `Signed ${signedCount} of ${p.signers.length}`}</span>
             <Banner tone="neutral" icon="info" title="You're copied." text="There's nothing for you to sign. You'll get the signed copy by email when everyone has signed." />
             <ul className="ws-copysigners">

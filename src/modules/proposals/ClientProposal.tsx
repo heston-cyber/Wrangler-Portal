@@ -70,7 +70,7 @@ export default function ClientProposal({ token }: { token: string }) {
       <div className="q-cols">
         <div className="col">{p.pdfUrl ? <PdfPages url={p.pdfUrl} title={p.title} /> : <p className="wp-small">The PDF isn't available.</p>}</div>
         <div className="col right">
-          <section className="inv-pay" aria-label={s === "sent" ? "Accept this proposal" : "Status"}>
+          <section className="inv-pay glass" aria-label={s === "sent" ? "Accept this proposal" : "Status"}>
             <span className="wp-eyebrow">{s === "sent" ? "Accept this proposal" : "Status"}</span>
             <dl className="crm-dl q-sum">
               <dt className="big">Investment</dt><dd className="big">{money(p.totalCents)}</dd>

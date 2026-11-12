@@ -92,7 +92,7 @@ export default function Pipeline() {
       <TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/clients")}>Clients</a><Sep /><span className="here">Pipeline</span></TopBar>
       <div className="wp-page crm-pipe">
         <PageHeader title="Pipeline." sub="Every lead and job, from first contact to paid." actions={<Button variant="primary" onClick={() => setAdding(true)}>Add lead</Button>} />
-        {board === undefined ? <div className="crm-cols"><div className="crm-col skel" /><div className="crm-col skel" /><div className="crm-col skel" /></div>
+        {board === undefined ? <div className="crm-cols"><div className="crm-col skel glass" /><div className="crm-col skel glass" /><div className="crm-col skel glass" /></div>
           : board.deals.length === 0 ? (
             <EmptyState icon="activity" title="No leads yet." body="Leads from your website land here, and so do cards you add. Saving an estimate moves a card to Quoted; contracts, project stages and payments move it on from there."
               actions={<Button variant="primary" onClick={() => setAdding(true)}>Add lead</Button>} />
@@ -110,7 +110,7 @@ export default function Pipeline() {
                 {STAGES.map((s) => {
                   const list = deals.filter((d) => d.stage === s.key);
                   return (
-                    <section key={s.key} className={`crm-col${over === s.key ? " over" : ""}${phoneStage === s.key ? " ph-on" : ""}`} aria-label={s.name}
+                    <section key={s.key} className={`glass crm-col${over === s.key ? " over" : ""}${phoneStage === s.key ? " ph-on" : ""}`} aria-label={s.name}
                       onDragOver={(e) => { if (drag) { e.preventDefault(); setOver(s.key); } }} onDragLeave={() => setOver((o) => (o === s.key ? null : o))}
                       onDrop={(e) => { e.preventDefault(); void drop(s.key); }}>
                       <h2 className="crm-colhead">{s.name} <span>{list.length}</span></h2>

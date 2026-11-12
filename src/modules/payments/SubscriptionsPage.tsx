@@ -1,7 +1,7 @@
 // Phase 2b (Oct 30): Payments › Subscriptions (frame 250:3092), Start a subscription (252:2598, confirm 253:3474) and
 // the subscription page (252:3187 active, 252:3825 past due, 252:4475 paused). Nothing reaches Stripe or the client
 // before the owner's confirm; nothing is charged until the client adds a payment method.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAction, useQuery } from "convex/react";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { api } from "../../../convex/_generated/api";
@@ -13,6 +13,7 @@ import { linkProps, navigate } from "../../lib/router";
 import { errText } from "../docs/pages/common";
 import { dateShort, isoIn, money } from "./common";
 import { SubscriptionActions } from "./SubscriptionActions";
+import { NewClient } from "../review/Projects";
 
 export type SubStatus = "waiting" | "scheduled" | "trialing" | "active" | "past_due" | "paused" | "ending" | "canceled";
 export const SUB_CHIP: Record<SubStatus, { tone: Tone; text: string }> = {
@@ -70,7 +71,7 @@ export default function SubscriptionsPage() {
       <div className="wp-page inv-list">
         <PageHeader title="Subscriptions." sub="Every client on a plan, and what comes in each month."
           actions={<ButtonLink variant="primary" to="/payments/subscriptions/new">Start a subscription</ButtonLink>} />
-        {notConnected && <div className="wp-notice"><Icon name="info" size={20} /><span className="txt"><b>Stripe isn't connected.</b> Subscriptions run in your Stripe account (Settings › Payments).</span><ButtonLink size="sm" to="/settings/payments">Settings › Payments</ButtonLink></div>}
+        {notConnected && <div className="wp-notice glass"><Icon name="info" size={20} /><span className="txt"><b>Stripe isn't connected.</b> Subscriptions run in your Stripe account (Settings › Payments).</span><ButtonLink size="sm" to="/settings/payments">Settings › Payments</ButtonLink></div>}
         {data === undefined ? <Card label="Subscriptions"><SkeletonRows n={4} /></Card>
           : rows.length === 0 ? <EmptyState icon="activity" title="No subscriptions yet." body="Make a plan, then start a subscription for a client. Nothing is charged until they add a payment method."
             actions={<><ButtonLink variant="primary" to="/payments/subscriptions/new">Start a subscription</ButtonLink><ButtonLink to="/payments/plans">Plans</ButtonLink></>} />
@@ -117,6 +118,12 @@ export function StartSubscription({ clientId: initClient }: { clientId?: string 
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const client = opts?.clients.find((c) => c._id === clientId);
+  const [makingClient, setMakingClient] = useState(false);
+  const [madeClient, setMadeClient] = useState<string | null>(null);
+  useEffect(() => {
+    const c = madeClient ? opts?.clients.find((x) => x.name === madeClient) : null;
+    if (c) { setClientId(c._id); setPerson(""); setProjectId(""); setMadeClient(null); }
+  });
   const people = client?.people ?? [];
   const who = people.find((p) => p.email === person) ?? people.find((p) => p.role === "signer") ?? people[0];
   const plan = (plans ?? []).find((p) => p._id === planId);
@@ -145,17 +152,18 @@ export function StartSubscription({ clientId: initClient }: { clientId?: string 
       </TopBar>
       <div className="wp-page inv-edit">
         <header className="wp-pagehead"><div className="txt"><span className="wp-eyebrow">Start a subscription</span><h1 className="wp-h2">Start a subscription.</h1><p className="wp-body">Nothing is charged or sent until you confirm.</p></div></header>
-        {!opts.stripeReady && <div className="wp-notice"><Icon name="info" size={20} /><span className="txt"><b>Stripe isn't connected.</b> Subscriptions need Stripe (Settings › Payments).</span></div>}
-        {active.length === 0 && <div className="wp-notice"><Icon name="info" size={20} /><span className="txt"><b>No plans yet.</b> Make one first.</span><ButtonLink size="sm" to="/payments/plans/new">New plan</ButtonLink></div>}
+        {!opts.stripeReady && <div className="wp-notice glass"><Icon name="info" size={20} /><span className="txt"><b>Stripe isn't connected.</b> Subscriptions need Stripe (Settings › Payments).</span></div>}
+        {active.length === 0 && <div className="wp-notice glass"><Icon name="info" size={20} /><span className="txt"><b>No plans yet.</b> Make one first.</span><ButtonLink size="sm" to="/payments/plans/new">New plan</ButtonLink></div>}
         <div className="inv-cols">
           <div className="col">
             <Card label="Who and what" head={<SectionHead label="Who and what" />}>
               <div className="inv-form">
                 <div className="row2">
                   <label className="wp-field"><span className="wp-field-label">Client</span>
-                    <select className="input" value={clientId} onChange={(e) => { setClientId(e.target.value); setPerson(""); setProjectId(""); }}>
+                    <select className="input" value={clientId} onChange={(e) => { if (e.target.value === "__new") { setMakingClient(true); return; } setClientId(e.target.value); setPerson(""); setProjectId(""); }}>
                       <option value="">Choose a client…</option>
                       {opts.clients.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+                      <option value="__new">+ New client…</option>
                     </select></label>
                   <label className="wp-field"><span className="wp-field-label">Plan</span>
                     <select className="input" value={planId} onChange={(e) => setPlanId(e.target.value)}>
@@ -232,6 +240,7 @@ export function StartSubscription({ clientId: initClient }: { clientId?: string 
         </Modal>
       )}
       {toast}
+      {makingClient && <NewClient onClose={() => setMakingClient(false)} onDone={(name) => { setMakingClient(false); setMadeClient(name); }} />}
     </>
   );
 }
@@ -257,8 +266,8 @@ export function SubscriptionDetail({ subscriptionId }: { subscriptionId: string 
             <p className="wp-body">{[s.person, s.project?.label, `started ${dateShort(s.startDate)}`].filter(Boolean).join(" · ")}</p></div>
           <SubChip status={st} />
         </header>
-        {st === "past_due" && <div className="wp-notice sub-danger"><Icon name="alert" size={20} /><span className="txt"><b>The last payment didn't go through.</b> {s.lastFailure?.message ?? ""} {s.nextCharge ? `Stripe tries again ${dateShort(s.nextCharge)}.` : ""} {s.person.split(/\s+/)[0]} was emailed a link to update their payment method.</span></div>}
-        {st === "waiting" && <div className="wp-notice"><Icon name="clock" size={20} /><span className="txt"><b>Waiting on {s.person.split(/\s+/)[0]} to add a payment method.</b> Nothing is charged until they do.</span><Button size="sm" onClick={() => void copy()}>Copy their link</Button></div>}
+        {st === "past_due" && <div className="wp-notice sub-danger glass"><Icon name="alert" size={20} /><span className="txt"><b>The last payment didn't go through.</b> {s.lastFailure?.message ?? ""} {s.nextCharge ? `Stripe tries again ${dateShort(s.nextCharge)}.` : ""} {s.person.split(/\s+/)[0]} was emailed a link to update their payment method.</span></div>}
+        {st === "waiting" && <div className="wp-notice glass"><Icon name="clock" size={20} /><span className="txt"><b>Waiting on {s.person.split(/\s+/)[0]} to add a payment method.</b> Nothing is charged until they do.</span><Button size="sm" onClick={() => void copy()}>Copy their link</Button></div>}
         <div className="inv-cols">
           <div className="col">
             <Card label="Plan" head={<SectionHead label="Plan" />}>

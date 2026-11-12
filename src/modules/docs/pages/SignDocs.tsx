@@ -5,7 +5,7 @@ import { useQuery } from "convex/react";
 import { useToast } from "../../../ui/kit";
 import { Icon } from "../../../ui/Icon";
 import { Button, ButtonLink, EmptyState, IconButton, SkeletonRows, Tabs } from "../../../ui/wp";
-import { DocMenu, menuOpeners, type MenuAt, type MenuDoc } from "./DocMenu";
+import { DocMenu, DocRow, type MenuAt, type MenuDoc } from "./DocMenu";
 import { api } from "../../../../convex/_generated/api";
 import { Sep, TopBar } from "../../../shell/Shell";
 import { linkProps, navigate, useLocation } from "../../../lib/router";
@@ -76,14 +76,14 @@ export default function SignDocs() {
                 <thead><tr><Th k="number" cls="hide-sm">No.</Th><Th k="title">Document</Th><Th k="client" cls="hide-sm">Client</Th><th scope="col">Status</th><Th k="updated" cls="hide-sm">Updated</Th><th aria-label="Actions" /></tr></thead>
                 <tbody>
                   {rows.map((d) => (
-                    <tr key={d._id} onClick={() => navigate(d.href)} tabIndex={0} className={menu?.doc._id === d._id ? "ws-menurow" : undefined} {...menuOpeners(md(d), setMenu)}>
+                    <DocRow key={d._id} doc={md(d)} open={setMenu} onClick={() => navigate(d.href)} className={menu?.doc._id === d._id ? "ws-menurow" : undefined}>
                       <td className="num hide-sm">{d.label}</td>
                       <td className="ttl"><a {...linkProps(d.href)} onClick={(e) => e.stopPropagation()}>{d.title}</a><span className="sub hide-sm"> {d.inBuilder ? "· in the builder" : `· v${d.version}`}{d.amount ? ` · $${d.amount.toLocaleString("en-US")}` : ""}</span></td>
                       <td className="hide-sm">{d.signers.filter(Boolean).join(", ") || "—"}</td>
                       <td><StatusChip status={d.status} /></td>
                       <td className="hide-sm" title={central(d.updatedAt)}>{shortWhen(d.updatedAt)}</td>
                       <td className="ws-more"><button className="icon-btn bare sm" aria-label={`Actions for ${d.label === "—" ? d.title : d.label}`} aria-haspopup="menu" onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setMenu({ doc: md(d), x: r.right - 200, y: r.bottom + 4 }); }}><Icon name="more" size={18} /></button></td>
-                    </tr>
+                    </DocRow>
                   ))}
                 </tbody>
               </table>

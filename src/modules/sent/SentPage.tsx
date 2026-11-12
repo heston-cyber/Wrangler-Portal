@@ -30,29 +30,33 @@ export default function SentPage() {
   const list = (rows ?? []).filter((r) => filter === "all" || (filter === "notes" ? r.type !== "auto" : r.type === "auto"));
   const post = <ButtonLink variant="primary" icon="plus" to="/sent/new">Post a note</ButtonLink>;
   return (
-    <div className="wp-page notop wp-sent">
-      <PageHeader title="Sent." sub={<span className="pc-only">Notes and automatic updates, newest first.</span>} actions={post} />
-      {rows === undefined ? <Card label="Sent"><SkeletonRows n={5} /></Card>
-        : rows.length === 0 ? <EmptyState icon="send" title="Nothing sent yet." body="Notes and automatic updates you send show up here." actions={post} />
-        : (
-          <>
-            <PillTabs label="Show" value={filter} onChange={setFilter} items={[{ key: "all", label: "All" }, { key: "notes", label: "Notes" }, { key: "auto", label: "Automatic" }]} />
-            {list.length === 0 ? <EmptyState icon="send" title={filter === "notes" ? "No notes yet." : "No automatic updates yet."} />
-              : (
-                <Card label="Sent">
-                  {list.map((r, i) => (
-                    <div key={r.key} className="wp-rowwrap">{i > 0 && <Divider />}
-                      <ListRow to={r.open} className="ilead" lead={{ icon: INBOX_ICON[r.kind as InboxKind] ?? "mail" }} title={title(r)}
-                        titleChip={r.type === "draft" ? <StatusChip tone="accent">Draft</StatusChip> : undefined}
-                        meta={<><span className="pc-only">{TYPE[r.type]} · to {r.to} · {r.type === "draft" ? `saved ${dayWord(r.at)}` : dayWord(r.at)}</span><span className="ph-only">{TYPE[r.type]} · {r.to} · {shortStatus(r)}</span></>}
-                        trailing={<span className="pc-only">{status(r)}</span>} chevron />
-                    </div>
-                  ))}
-                </Card>
-              )}
-          </>
-        )}
-    </div>
+    <>
+      {/* Phase 5f: the glass top bar (desktop); one crumb, so it fades in as the title scrolls under it */}
+      <TopBar className="deskonly"><span className="here">Sent</span></TopBar>
+      <div className="wp-page notop wp-sent">
+        <PageHeader title="Sent." sub={<span className="pc-only">Notes and automatic updates, newest first.</span>} actions={post} />
+        {rows === undefined ? <Card label="Sent"><SkeletonRows n={5} /></Card>
+          : rows.length === 0 ? <EmptyState icon="send" title="Nothing sent yet." body="Notes and automatic updates you send show up here." actions={post} />
+          : (
+            <>
+              <PillTabs label="Show" value={filter} onChange={setFilter} items={[{ key: "all", label: "All" }, { key: "notes", label: "Notes" }, { key: "auto", label: "Automatic" }]} />
+              {list.length === 0 ? <EmptyState icon="send" title={filter === "notes" ? "No notes yet." : "No automatic updates yet."} />
+                : (
+                  <Card label="Sent">
+                    {list.map((r, i) => (
+                      <div key={r.key} className="wp-rowwrap">{i > 0 && <Divider />}
+                        <ListRow to={r.open} className="ilead" lead={{ icon: INBOX_ICON[r.kind as InboxKind] ?? "mail" }} title={title(r)}
+                          titleChip={r.type === "draft" ? <StatusChip tone="accent">Draft</StatusChip> : undefined}
+                          meta={<><span className="pc-only">{TYPE[r.type]} · to {r.to} · {r.type === "draft" ? `saved ${dayWord(r.at)}` : dayWord(r.at)}</span><span className="ph-only">{TYPE[r.type]} · {r.to} · {shortStatus(r)}</span></>}
+                          trailing={<span className="pc-only">{status(r)}</span>} chevron />
+                      </div>
+                    ))}
+                  </Card>
+                )}
+            </>
+          )}
+      </div>
+    </>
   );
 }
 

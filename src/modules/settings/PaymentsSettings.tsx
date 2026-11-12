@@ -187,7 +187,7 @@ export function PaymentsSettings({ show }: { show: (m: string) => void }) {
     return (
       <>
         <SetHead title="Take payments in the portal." sub="Connect your Stripe account so clients can pay invoices right on the invoice page." />
-        <div className="wp-notice"><Icon name="info" size={20} /><span className="txt"><b>Payments aren't switched on for the portal yet.</b> The portal's own Stripe account is still being set up.</span></div>
+        <div className="wp-notice glass"><Icon name="info" size={20} /><span className="txt"><b>Payments aren't switched on for the portal yet.</b> The portal's own Stripe account is still being set up.</span></div>
       </>
     );
   }
@@ -247,7 +247,7 @@ export function PaymentsSettings({ show }: { show: (m: string) => void }) {
     <>
       <SetHead title="Payments." sub="Your Stripe connection and how clients pay you." />
       {(st.status === "needs_info" || st.status === "pending") && (
-        <div className="wp-notice warn pay-banner">
+        <div className="wp-notice warn pay-banner glass">
           <Icon name="alert" size={20} />
           <span className="txt">{st.due.length === 0 && st.verifying
             ? <><b>Stripe is checking your details.</b><br />Clients can't pay until it's done. It usually takes a few minutes; Check again in a bit.</>
@@ -257,7 +257,7 @@ export function PaymentsSettings({ show }: { show: (m: string) => void }) {
         </div>
       )}
       {st.status === "disconnected" && (
-        <div className="wp-notice pay-banner">
+        <div className="wp-notice pay-banner glass">
           <Icon name="info" size={20} />
           <span className="txt"><b>Stripe is disconnected.</b><br />Clients can't pay in the portal right now. Your invoices and payment history are kept.</span>
           <Button variant="primary" onClick={() => void go()} loading={busy === "connect"}>Connect Stripe again</Button>

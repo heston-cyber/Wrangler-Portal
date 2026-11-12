@@ -37,7 +37,7 @@ export default function ClientQuote({ token }: { token: string }) {
       <div className="q-cols">
         <div className="col"><QuotePaper q={doc} showAccept={false} /></div>
         <div className="col right">
-          <section className="inv-pay" aria-label="Accept this quote">
+          <section className="inv-pay glass" aria-label="Accept this quote">
             <span className="wp-eyebrow">{s === "sent" ? "Accept this quote" : "This quote"}</span>
             <dl className="crm-dl q-sum">
               <dt className="big">Total</dt><dd className="big">{money(q.totals.total)}</dd>

@@ -7,6 +7,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Button, ButtonLink, Card, Divider, EmptyState, ListRow, PageHeader, PillTabs, SectionHead, SkeletonRows, StatusChip, TextField, Toggle } from "../../ui/wp";
+import { Trash2 } from "lucide-react";
 import { Icon } from "../../ui/Icon";
 import { Modal, useToast } from "../../ui/kit";
 import { Sep, TopBar } from "../../shell/Shell";
@@ -44,6 +45,7 @@ type Tab = "all" | "notSent" | "sent" | "templates";
 export default function CallSheetsPage() {
   useStarters();
   const d = useQuery(api.callSheets.list, {});
+  const dropSheet = useMutation(api.callSheets.deleteDraft);
   const first = new URLSearchParams(location.search).get("tab");
   const [tab, setTab] = useState<Tab>(first === "templates" || first === "sent" || first === "notSent" ? first : "all");
   const rows = (d?.rows ?? []).filter((r) => tab === "all" || (tab === "sent" ? r.state === "sent" : r.state !== "sent"));
@@ -81,6 +83,8 @@ export default function CallSheetsPage() {
               {rows.map((r, i) => (
                 <Line key={r._id} first={i === 0}>
                   <ListRow className="ilead ovact" lead={{ icon: "document" }} to={sheetHref(r)} title={r.title} meta={meta(r)} chip={sheetChip(r)} chevron={r.state === "sent"}
+                    menu={r.state === "sent" ? undefined : { id: r._id, title: r.title, actions: [{ key: "delete", label: "Delete draft", icon: <Trash2 size={16} />, danger: true,
+                      confirm: { title: `Delete "${r.title}"?`, body: "The draft is deleted. Nothing was sent. This can't be undone.", yes: "Delete" }, run: () => dropSheet({ callSheetId: r._id as Id<"callSheets"> }), done: "Draft deleted." }] }}
                     action={r.state === "sent" ? undefined : r.state === "draft" ? <Button size="sm" onClick={go(`/production/call-sheets/${r._id}/edit?send=1`)}>Send</Button> : <Button size="sm" onClick={go(sheetHref(r))}>Finish it</Button>} />
                 </Line>
               ))}
@@ -320,8 +324,8 @@ export function CallSheetDetail({ callSheetId }: { callSheetId: string }) {
         <PageHeader title={cs.title} sub={[sheetDay(cs.shoot.date), `Crew call ${clockOf(cs.crewCall)}`, cs.place].filter(Boolean).join(" · ")}
           actions={<><ButtonLink to={`/production/call-sheets/${cs._id}/edit`} iconEnd={false} className="hide-sm">Open in editor</ButtonLink>
             {cs.status === "sent" ? <Button variant="primary" onClick={() => setDialog("update")}>Send an update</Button> : <ButtonLink variant="primary" to={`/production/call-sheets/${cs._id}/edit?send=1`} iconEnd={false}>Send call sheet</ButtonLink>}</>} />
-        {cs.changed && <section className="wp-notice warn cs-warn"><Icon name="alert" size={20} /><span className="txt"><b>{cs.changes.length && cs.changes.every((c) => /^Weather: /.test(c)) ? "The forecast changed after you sent it" : "You changed the sheet after sending it"}</b><br />{cs.changes.length ? `${cs.changes.join(". ")}. ` : ""}Send an update so everyone sees it.</span><Button size="sm" className="hide-sm" onClick={() => setDialog("update")}>Send an update</Button></section>}
-        {cs.status === "draft" && <section className="wp-notice"><Icon name="info" size={20} /><span className="txt"><b>Not sent yet</b><br />Finish it in the editor, then send it from there.</span></section>}
+        {cs.changed && <section className="wp-notice warn cs-warn glass"><Icon name="alert" size={20} /><span className="txt"><b>{cs.changes.length && cs.changes.every((c) => /^Weather: /.test(c)) ? "The forecast changed after you sent it" : "You changed the sheet after sending it"}</b><br />{cs.changes.length ? `${cs.changes.join(". ")}. ` : ""}Send an update so everyone sees it.</span><Button size="sm" className="hide-sm" onClick={() => setDialog("update")}>Send an update</Button></section>}
+        {cs.status === "draft" && <section className="wp-notice glass"><Icon name="info" size={20} /><span className="txt"><b>Not sent yet</b><br />Finish it in the editor, then send it from there.</span></section>}
         <div className="pov-cols">
           <div className="col">
             <Card label="Who has opened it" head={<SectionHead label={cs.status === "sent" ? "Who has opened it" : "Who gets it"} count={list.length || undefined} action={cs.status === "sent" && notOpened > 1 ? <Button size="sm" variant="ghost" onClick={() => setDialog("remind")}>Remind everyone</Button> : undefined} />}>

@@ -43,7 +43,7 @@ export default function PlansPage() {
       <div className="wp-page inv-list">
         <PageHeader title="Plans." sub="The price list you reuse when you start a subscription."
           actions={<ButtonLink variant="primary" to="/payments/plans/new">New plan</ButtonLink>} />
-        {notConnected && <div className="wp-notice"><Icon name="info" size={20} /><span className="txt"><b>Stripe isn't connected.</b> Plans live in your Stripe account, so they need Stripe (Settings › Payments).</span><ButtonLink size="sm" to="/settings/payments">Settings › Payments</ButtonLink></div>}
+        {notConnected && <div className="wp-notice glass"><Icon name="info" size={20} /><span className="txt"><b>Stripe isn't connected.</b> Plans live in your Stripe account, so they need Stripe (Settings › Payments).</span><ButtonLink size="sm" to="/settings/payments">Settings › Payments</ButtonLink></div>}
         {plans === undefined ? <Card label="Plans"><SkeletonRows n={3} /></Card>
           : plans.length === 0 ? <EmptyState icon="activity" title="No plans yet." body="A plan is a price you reuse, like a monthly retainer. Make one, then start a subscription for a client."
             actions={<ButtonLink variant="primary" to="/payments/plans/new">New plan</ButtonLink>} />

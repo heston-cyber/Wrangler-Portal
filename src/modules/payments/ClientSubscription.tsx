@@ -66,20 +66,20 @@ export default function ClientSubscription({ token, inShell }: { token: string; 
         </div>
         <div className="col right">
           {st === "waiting" ? (
-            <section className="inv-pay" aria-label="Add a payment method">
+            <section className="inv-pay glass" aria-label="Add a payment method">
               <span className="wp-eyebrow">Add a payment method</span>
               <p className="secondary" style={{ margin: 0 }}>Hi {first}. Add a card or bank account to start {s.plan}. {s.nextCharge ? `Nothing is charged until ${dayLong(s.nextCharge)}.` : `The first ${money(s.amountCents)} is charged when you save it.`}</p>
               {s.canSetup ? <SetupForm token={token} label={s.nextCharge ? "Save payment method" : `Save and pay ${money(s.amountCents)}`} onDone={done} /> : <p className="secondary" style={{ margin: 0 }}>This can't be set up here right now. Reply to the email from {s.business.name}.</p>}
               <p className="inv-secure"><Icon name="lock" size={14} />Saved securely by Stripe. {s.business.name} never sees your card number.</p>
             </section>
           ) : (
-            <section className="inv-pay" aria-label="Payment method">
+            <section className="inv-pay glass" aria-label="Payment method">
               <span className="wp-eyebrow">Payment method</span>
               <div className="sub-method"><Icon name="lock" size={18} /><span>{s.method ?? "None saved"}</span></div>
               {s.canSetup && st !== "canceled" && <Button onClick={() => setUpdating(true)}>Update payment method</Button>}
             </section>
           )}
-          <section className="inv-pay" aria-label="Changes">
+          <section className="inv-pay glass" aria-label="Changes">
             <span className="wp-eyebrow">Changes</span>
             <p className="secondary" style={{ margin: 0 }}>To change or cancel this plan, contact {s.business.name}.</p>
             {s.business.email && <a className="sub-mail" href={`mailto:${s.business.email}`}>Email {s.business.email}</a>}
@@ -113,7 +113,7 @@ function SetupForm({ token, label, onDone }: { token: string; label: string; onD
   }, [start, token]);
   const stripe = useMemo(() => (setup ? stripeFor(setup.publishableKey, setup.accountId) : null), [setup]);
   if (err) return <Banner tone="neutral" icon="info" title={err} />;
-  if (!setup || !stripe) return <div className="inv-pay-loading" aria-label="Loading the form"><SkeletonRows n={3} /></div>;
+  if (!setup || !stripe) return <div className="inv-pay-loading glass" aria-label="Loading the form"><SkeletonRows n={3} /></div>;
   return (
     <Elements stripe={stripe} options={{ clientSecret: setup.clientSecret, appearance: appearance(), loader: "auto" }}>
       <ConfirmSetup token={token} label={label} onDone={onDone} />
@@ -138,10 +138,10 @@ function ConfirmSetup({ token, label, onDone }: { token: string; label: string; 
     setBusy(false);
   };
   return (
-    <form className="inv-pay-form" onSubmit={(e) => { e.preventDefault(); void save(); }}>
+    <form className="inv-pay-form glass" onSubmit={(e) => { e.preventDefault(); void save(); }}>
       {error && <Banner tone="danger" icon="alert" title={error} />}
       <PaymentElement options={{ layout: "tabs" }} onReady={() => setReady(true)} />
-      <Button variant="primary" type="submit" loading={busy} disabled={!ready || !stripe} className="inv-pay-btn">{label}</Button>
+      <Button variant="primary" type="submit" loading={busy} disabled={!ready || !stripe} className="inv-pay-btn glass">{label}</Button>
     </form>
   );
 }

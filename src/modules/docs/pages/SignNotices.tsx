@@ -26,11 +26,11 @@ export function SignNotices() {
     <>
       <ClaudeRequestNotices />
       {sig && !sig.adopted && (
-        <div className="wp-notice" role="status"><Icon name="sign" size={20} /><span className="txt"><b>Adopt your signature first.</b> It goes on every document you send.</span><ButtonLink size="sm" to="/sign/signature">Set it up</ButtonLink></div>
+        <div className="wp-notice glass" role="status"><Icon name="sign" size={20} /><span className="txt"><b>Adopt your signature first.</b> It goes on every document you send.</span><ButtonLink size="sm" to="/sign/signature">Set it up</ButtonLink></div>
       )}
-      {note && <div className="wp-notice" role="status"><Icon name="folder" size={20} /><span className="txt">{note}</span></div>}
+      {note && <div className="wp-notice glass" role="status"><Icon name="folder" size={20} /><span className="txt">{note}</span></div>}
       {archive && !archive.connected && (
-        <div className="wp-notice" role="status">
+        <div className="wp-notice glass" role="status">
           <Icon name="folder" size={20} />
           {archive.configured
             ? <><span className="txt"><b>Connect the archive.</b> Signed copies and their audit records are also kept in Dropbox › Apps/Wrangler Sign.</span><Button size="sm" loading={connecting} onClick={() => void onConnect()}>Connect Dropbox</Button></>

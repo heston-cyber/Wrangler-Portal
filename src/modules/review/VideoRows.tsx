@@ -8,6 +8,7 @@ import { Check, Share2, Trash2, Upload, X } from "lucide-react";
 import { Icon } from "../../ui/Icon";
 import { linkProps, navigate } from "../../lib/router";
 import { Menu, MenuItem, MenuSep, Modal, Spinner, Thumb, useToast } from "../../ui/kit";
+import { useHold, type ItemAction, type ItemSpec } from "../../ui/hold";
 import { ago, transcriptChip } from "../../lib/format";
 import { isVideoFile } from "../../lib/uploads";
 import { useRoundGate } from "../projects/RoundGate";
@@ -60,8 +61,10 @@ export function VideoRow({ x, meta, projectName, project, fields = DEFAULT_FIELD
   const selecting = !!select?.on;
   const picked = selecting && select!.has(x._id);
   const link = selecting ? { href: `/v/${x._id}`, onClick: (e: React.MouseEvent) => { e.preventDefault(); select!.toggle(x._id); } } : linkProps(`/v/${x._id}`);
+  const opts = useVideoOptions(x);
+  const hold = useHold(selecting ? null : videoSpec(x, opts.actions, select));
   return (
-    <div className={`vline${picked ? " picked" : ""}`}>
+    <div className={`vline${picked ? " picked" : ""}`} {...hold}>
       {selecting && <SelectBox on={picked} onClick={() => select!.toggle(x._id)} label={`Select ${x.title}`} />}
       <a className="vrow" {...link} aria-selected={selecting ? picked : undefined}>
         <Thumb src={x.latest?.thumbUrl ?? null} />
@@ -84,14 +87,15 @@ export function VideoRow({ x, meta, projectName, project, fields = DEFAULT_FIELD
         {x.latest && project?.roundsIncluded ? <RoundChip n={x.latest.number} of={project.roundsIncluded} /> : null}
       </a>
       {canApprove && !selecting && <button className={`btn sm approve${x.final ? " done" : ""}`} onClick={() => onApprove!(x)} title="Keep one version and delete the others">{x.final ? `Final v${x.final.version}` : "Approve final"}</button>}
-      {!selecting && <VideoMenu x={x} />}
+      {!selecting && <VideoMenu x={x} opts={opts} />}
+      {opts.node}
     </div>
   );
 }
 
-// The ⋯ menu at the end of a video row or card (Oct 23): share, upload a new version from this computer, delete.
-export function VideoMenu({ x }: { x: VideoItem }) {
-  const convex = useConvex();
+// A video's options (Oct 23; Nov 11, D170: also on a hold or a right-click): share it with the client, upload a new
+// version from this computer, delete it. The ⋯ menu at the end of a row or card and the hold menu use the same ones.
+export function useVideoOptions(x: VideoItem) {
   const del = useMutation(api.library.deleteVideo);
   const fileRef = useRef<HTMLInputElement>(null);
   const [dialog, setDialog] = useState<null | "share" | "delete">(null);
@@ -99,15 +103,14 @@ export function VideoMenu({ x }: { x: VideoItem }) {
   const [error, setError] = useState<string | null>(null);
   const [toast, show] = useToast();
   const [uploadVersion, roundGate] = useRoundGate();
-  return (
+  const actions: ItemAction[] = [
+    { key: "share-video", label: "Share with the client…", icon: <Share2 size={16} />, run: () => setDialog("share") },
+    { key: "upload", label: "Upload a new version", icon: <Upload size={16} />, run: () => fileRef.current?.click() },
+    { key: "delete", label: "Delete video", icon: <Trash2 size={16} />, danger: true, run: () => setDialog("delete") },
+  ];
+  const node = (
     <>
       {roundGate}
-      <Menu align="end" label="Video options" trigger={(p) => <button {...p} className="icon-btn bare vmenu" aria-label={`${x.title} options`}><Icon name="more" size={18} /></button>}>
-        <MenuItem icon={<Share2 size={16} />} onSelect={() => setDialog("share")}>Share video…</MenuItem>
-        <MenuItem icon={<Upload size={16} />} onSelect={() => fileRef.current?.click()}>Upload a new version</MenuItem>
-        <MenuSep />
-        <MenuItem icon={<Trash2 size={16} />} danger onSelect={() => setDialog("delete")}>Delete video</MenuItem>
-      </Menu>
       <input ref={fileRef} type="file" hidden accept="video/*,.mov,.mp4,.m4v,.mxf,.mkv"
         onChange={(e) => { const f = e.target.files?.[0]; if (f && isVideoFile(f)) { void uploadVersion(x._id, f, () => navigate(`/v/${x._id}`)); } e.target.value = ""; }} />
       {dialog === "share" && <ShareDialog target={{ kind: "video", videoId: x._id }} label={x.title} onClose={() => setDialog(null)} show={show} />}
@@ -133,6 +136,26 @@ export function VideoMenu({ x }: { x: VideoItem }) {
       {toast}
     </>
   );
+  return { actions, node };
+}
+
+/** A video's hold menu (D170): open, share, copy link, select, then its own options. */
+export function videoSpec(x: VideoItem, actions: ItemAction[], select?: Selection): ItemSpec {
+  return { id: x._id, title: x.title, href: `/v/${x._id}`, actions, select: select ? () => select.start([x._id]) : undefined };
+}
+
+// The ⋯ menu at the end of a video row or card.
+export function VideoMenu({ x, opts }: { x: VideoItem; opts: ReturnType<typeof useVideoOptions> }) {
+  return (
+    <Menu align="end" label="Video options" trigger={(p) => <button {...p} className="icon-btn bare vmenu" aria-label={`${x.title} options`}><Icon name="more" size={18} /></button>}>
+      {opts.actions.map((a, i) => (
+        <span key={a.key} style={{ display: "contents" }}>
+          {a.danger && i > 0 && <MenuSep />}
+          <MenuItem icon={a.icon} danger={a.danger} onSelect={() => void a.run()}>{a.label}</MenuItem>
+        </span>
+      ))}
+    </Menu>
+  );
 }
 
 export function VideoCard({ x, meta, projectName, project, fields = DEFAULT_FIELDS, onApprove, select }: RowProps) {
@@ -142,8 +165,10 @@ export function VideoCard({ x, meta, projectName, project, fields = DEFAULT_FIEL
   const selecting = !!select?.on;
   const picked = selecting && select!.has(x._id);
   const link = selecting ? { href: `/v/${x._id}`, onClick: (e: React.MouseEvent) => { e.preventDefault(); select!.toggle(x._id); } } : linkProps(`/v/${x._id}`);
+  const opts = useVideoOptions(x);
+  const hold = useHold(selecting ? null : videoSpec(x, opts.actions, select));
   return (
-    <div className={`cardwrap${picked ? " picked" : ""}`}>
+    <div className={`cardwrap${picked ? " picked" : ""}`} {...hold}>
       {selecting && <span className="cardsel"><SelectBox on={picked} onClick={() => select!.toggle(x._id)} label={`Select ${x.title}`} /></span>}
       <a className="card rect" {...link} aria-selected={selecting ? picked : undefined}>
         <div className="media">
@@ -165,7 +190,8 @@ export function VideoCard({ x, meta, projectName, project, fields = DEFAULT_FIEL
         </div>
       </a>
       {onApprove && x.latest && !selecting && <button className={`btn sm approve${x.final ? " done" : ""}`} onClick={() => onApprove(x)}>{x.final ? `Final v${x.final.version}` : "Approve final"}</button>}
-      {!selecting && <span className="cardmenu"><VideoMenu x={x} /></span>}
+      {!selecting && <span className="cardmenu"><VideoMenu x={x} opts={opts} /></span>}
+      {opts.node}
     </div>
   );
 }

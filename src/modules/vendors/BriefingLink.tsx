@@ -49,7 +49,7 @@ export default function BriefingLink({ token }: { token: string }) {
       <div className="q-cols">
         <div className="col"><PdfPages url={briefingPdfUrl(token)} title={p.title} /></div>
         <div className="col right">
-          <section className="inv-pay" aria-label={read ? "Marked read" : "Read it?"}>
+          <section className="inv-pay glass" aria-label={read ? "Marked read" : "Read it?"}>
             <span className="wp-eyebrow">{read ? "Marked read" : "Read it?"}</span>
             {read ? <Banner tone="success" icon="check-circle" title={p.readAt ? `You marked it read · ${longMs(p.readAt)}` : "Thanks. You marked it read."} text={`${sender} can see you've read it.`} />
               : <>

@@ -51,7 +51,7 @@ export default function PaymentsPage() {
             </Card>
           );
         })()}
-        {tab !== "1099" && <div className="wp-notice vpay-note"><Icon name="info" size={20} /><span className="txt"><b>Paying vendors in the portal comes later</b><br />{D92}</span></div>}
+        {tab !== "1099" && <div className="wp-notice vpay-note glass"><Icon name="info" size={20} /><span className="txt"><b>Paying vendors in the portal comes later</b><br />{D92}</span></div>}
       </div>
     </>
   );
@@ -99,7 +99,7 @@ function Totals1099() {
         </Card>
       )}
       {r.missing.length > 0 && (
-        <div className="wp-notice warn vpay-note"><Icon name="alert" size={20} />
+        <div className="wp-notice warn vpay-note glass"><Icon name="alert" size={20} />
           <span className="txt"><b>{r.missing.length === 1 ? "1 vendor has no W-9" : `${r.missing.length} vendors have no W-9`}</b><br />Ask {r.missing.map((m) => m.name).join(", ")} to upload one in their portal.</span>
           {remind && <a className="btn sm" href={remind}>Send a reminder</a>}
         </div>
@@ -154,13 +154,13 @@ export function VendorInvoicePage({ invoiceId }: { invoiceId: string }) {
       {top}
       <div className="wp-page">
         <PageHeader eyebrow={`Vendor invoice · ${x.vendor.name}`} title={`${x.number}.`} sub={`${x.project.label} · ${money(x.totalCents)}`} actions={<VendorInvoiceChip status={x.status} />} />
-        {x.status === "approved" && !paying(po) && <div className="wp-notice vpay-note"><Icon name="info" size={20} /><span className="txt"><b>Approved and in the Ledger</b><br />{po?.on ? `Pay ${first} in the portal, or pay your usual way and press Mark paid.` : `Pay ${first} your usual way, then press Mark paid.`}</span></div>}
-        {x.status === "approved" && po?.payout?.status === "processing" && <div className="wp-notice vpay-note"><Icon name="clock" size={20} /><span className="txt"><b>Paying {first} through Stripe</b><br />{money(x.totalCents)} by direct deposit{po.vendor.last4 ? ` to ••••${po.vendor.last4}` : ""}{po.payout.expectedArrival ? `, expected ${dateShort(po.payout.expectedArrival)}` : ""}. It's marked paid when Stripe sends it; the portal checks every 15 minutes.</span></div>}
-        {x.status === "approved" && (po?.payout?.status === "starting" || po?.payout?.status === "unknown") && <div className={`wp-notice vpay-note${po.payout.stale ? " warn" : ""}`}><Icon name={po.payout.stale ? "alert" : "clock"} size={20} /><span className="txt"><b>Waiting for Stripe to confirm</b><br />{po.payout.stale
+        {x.status === "approved" && !paying(po) && <div className="wp-notice vpay-note glass"><Icon name="info" size={20} /><span className="txt"><b>Approved and in the Ledger</b><br />{po?.on ? `Pay ${first} in the portal, or pay your usual way and press Mark paid.` : `Pay ${first} your usual way, then press Mark paid.`}</span></div>}
+        {x.status === "approved" && po?.payout?.status === "processing" && <div className="wp-notice vpay-note glass"><Icon name="clock" size={20} /><span className="txt"><b>Paying {first} through Stripe</b><br />{money(x.totalCents)} by direct deposit{po.vendor.last4 ? ` to ••••${po.vendor.last4}` : ""}{po.payout.expectedArrival ? `, expected ${dateShort(po.payout.expectedArrival)}` : ""}. It's marked paid when Stripe sends it; the portal checks every 15 minutes.</span></div>}
+        {x.status === "approved" && (po?.payout?.status === "starting" || po?.payout?.status === "unknown") && <div className={`glass wp-notice vpay-note${po.payout.stale ? " warn" : ""}`}><Icon name={po.payout.stale ? "alert" : "clock"} size={20} /><span className="txt"><b>Waiting for Stripe to confirm</b><br />{po.payout.stale
           ? "Stripe hasn't confirmed this payment for a day. Look for it in your Stripe dashboard (Balances, Outbound payments) before doing anything else. If it isn't there, press Nothing went out."
           : "The payment was sent, but Stripe's answer didn't arrive. The portal asks Stripe again (with the same request, so it can't be paid twice). Don't pay another way until this clears."}</span></div>}
-        {x.status === "approved" && po?.payout && failedOut(po.payout.status) && <div className="wp-notice warn vpay-note"><Icon name="alert" size={20} /><span className="txt"><b>{po.payout.status === "refused" ? "Stripe didn't take the payment" : po.payout.status === "returned" ? "The Stripe payment came back" : "The Stripe payment didn't go through"}</b><br />{po.payout.reason ? `${po.payout.status === "refused" ? "" : "Stripe says: "}${po.payout.reason}${/[.!?]$/.test(po.payout.reason) ? "" : "."} ` : ""}{po.payout.status === "refused" ? "Nothing left your Stripe balance." : "The money is back in your Stripe balance."} Pay it again, or pay another way and press Mark paid.</span></div>}
-        {x.status === "declined" && <div className="wp-notice warn vpay-note"><Icon name="alert" size={20} /><span className="txt"><b>You declined it</b><br />“{x.declineReason}” {first} got an email with your reason and can fix it and send it again from their portal.</span>{ask && <a className="btn sm" href={ask}>Email {first}</a>}</div>}
+        {x.status === "approved" && po?.payout && failedOut(po.payout.status) && <div className="wp-notice warn vpay-note glass"><Icon name="alert" size={20} /><span className="txt"><b>{po.payout.status === "refused" ? "Stripe didn't take the payment" : po.payout.status === "returned" ? "The Stripe payment came back" : "The Stripe payment didn't go through"}</b><br />{po.payout.reason ? `${po.payout.status === "refused" ? "" : "Stripe says: "}${po.payout.reason}${/[.!?]$/.test(po.payout.reason) ? "" : "."} ` : ""}{po.payout.status === "refused" ? "Nothing left your Stripe balance." : "The money is back in your Stripe balance."} Pay it again, or pay another way and press Mark paid.</span></div>}
+        {x.status === "declined" && <div className="wp-notice warn vpay-note glass"><Icon name="alert" size={20} /><span className="txt"><b>You declined it</b><br />“{x.declineReason}” {first} got an email with your reason and can fix it and send it again from their portal.</span>{ask && <a className="btn sm" href={ask}>Email {first}</a>}</div>}
         <div className="wp-homecols">
           <div className="col">
             <Card label="Vendor invoice" className="vpay-inv">

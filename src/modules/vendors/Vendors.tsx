@@ -5,6 +5,7 @@ import { Fragment, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { Archive } from "lucide-react";
 import { Avatar, Button, ButtonLink, Card, Checkbox, DialogHeader, Divider, EmptyState, ListRow, PageHeader, PillTabs, SectionHead, SkeletonRows, StatusChip, type Tone } from "../../ui/wp";
 import { Icon } from "../../ui/Icon";
 import { Modal, useConfirm, useToast } from "../../ui/kit";
@@ -26,6 +27,7 @@ const perUnit = (r: { cents: number; unit: "day" | "hour" }) => `${money(r.cents
 // ---------- All vendors ----------
 
 export default function VendorsPage() {
+  const archiveVendor = useMutation(api.vendors.archive);
   const rows = useQuery(api.vendors.list, {});
   const [pill, setPill] = useState("all");
   const [adding, setAdding] = useState(false);
@@ -45,6 +47,8 @@ export default function VendorsPage() {
               {shown.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "user" }} title="None here." /> : shown.map((r, i) => (
                 <div key={r._id} className="wp-rowwrap">{i > 0 && <Divider />}
                   <ListRow lead={{ avatar: r.name }} to={`/vendors/${r._id}`} title={r.name} meta={[r.roles.join(", ") || "No role yet", r.basedIn, r.portal].filter(Boolean).join(" · ")}
+                    menu={{ id: r._id, title: r.name, actions: [{ key: "archive", label: "Take off the vendor list", icon: <Archive size={16} />, danger: true,
+                      confirm: { title: `Take ${r.name} off your vendors?`, body: "Their bookings, invoices and 1099 totals stay. You can add them back later.", yes: "Take off" }, run: () => archiveVendor({ vendorId: r._id as Id<"vendors">, archived: true }), done: `${r.name} is off the list.` }] }}
                     trailing={r.paidThisYearCents == null ? undefined : `${money(r.paidThisYearCents)} this year`} chip={r.w9 ? <StatusChip tone="success">W-9 on file</StatusChip> : <StatusChip tone="warning">W-9 missing</StatusChip>} chevron />
                 </div>
               ))}

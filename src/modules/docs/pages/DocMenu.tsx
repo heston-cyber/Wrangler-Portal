@@ -7,7 +7,8 @@ import { Ban, Copy, Download, ExternalLink, Eye, EyeOff, PencilLine, Send, Trash
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { navigate } from "../../../lib/router";
-import { ContextMenu, MenuItem, MenuSep, Modal, Spinner } from "../../../ui/kit";
+import { MenuItem, MenuSep, Modal, Spinner } from "../../../ui/kit";
+import { MenuSurface, useHoldAt } from "../../../ui/hold";
 import { errText, type DocStatus } from "./common";
 
 export type MenuDoc = { _id: string; label: string; title: string; status: DocStatus; inBuilder: boolean; buildId?: string | null; hidden?: boolean };
@@ -21,6 +22,12 @@ export function menuOpeners(doc: MenuDoc, open: (m: MenuAt) => void) {
       if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); open({ doc, x: r.left + 40, y: r.bottom }); }
     },
   };
+}
+
+/** A row of a Contracts list: hold (phone), right-click or the menu key opens the document's menu. */
+export function DocRow({ doc, open, className, onClick, children }: { doc: MenuDoc; open: (m: MenuAt) => void; className?: string; onClick: () => void; children: React.ReactNode }) {
+  const hold = useHoldAt((x, y) => open({ doc, x, y }));
+  return <tr onClick={onClick} tabIndex={0} className={className} {...hold}>{children}</tr>;
 }
 
 export function DocMenu({ at, onClose, show }: { at: MenuAt; onClose: () => void; show: (m: string) => void }) {
@@ -49,7 +56,7 @@ export function DocMenu({ at, onClose, show }: { at: MenuAt; onClose: () => void
     : <ConfirmCancel d={d} onClose={onClose} show={show} />;
 
   return (
-    <ContextMenu at={at} onClose={onClose} label={`${d.label === "—" ? d.title : d.label} actions`}>
+    <MenuSurface at={at} onClose={onClose} title={d.label === "—" ? d.title : `${d.label} · ${d.title}`} label={`${d.label === "—" ? d.title : d.label} actions`}>
       <MenuItem icon={<ExternalLink size={15} />} onSelect={() => navigate(d.inBuilder ? `/sign/b/${d._id}` : `/sign/d/${d._id}`)}>Open</MenuItem>
       {builderHref && !d.inBuilder && <MenuItem icon={<PencilLine size={15} />} onSelect={() => navigate(builderHref)}>Edit in the builder</MenuItem>}
       {d.inBuilder && <MenuItem icon={<PencilLine size={15} />} onSelect={() => navigate(builderHref!)}>Edit</MenuItem>}
@@ -64,7 +71,7 @@ export function DocMenu({ at, onClose, show }: { at: MenuAt; onClose: () => void
       {!d.inBuilder && (d.hidden
         ? <MenuItem icon={<Eye size={15} />} onSelect={() => void hide(false)}>Put back in the list</MenuItem>
         : <MenuItem icon={<EyeOff size={15} />} onSelect={() => void hide(true)}>Remove from list</MenuItem>)}
-    </ContextMenu>
+    </MenuSurface>
   );
 }
 

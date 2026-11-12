@@ -129,11 +129,11 @@ function PayCard({ inv, token }: { inv: Inv; token: string }) {
   const processing = inv.payments.find((p) => p.status === "processing");
   const lastPaid = [...inv.payments].reverse().find((p) => p.status === "paid");
   if (s === "paid") return (
-    <section className="inv-pay" aria-label="Receipt">
+    <section className="inv-pay glass" aria-label="Receipt">
       <span className="wp-eyebrow">Receipt</span>
       <div className="amt"><span className="lbl">Paid in full</span><b>{money(inv.totalCents)}</b><small>{[inv.paidAt ? `Paid ${dateLong(new Date(inv.paidAt).toISOString().slice(0, 10))}` : null, lastPaid?.method].filter(Boolean).join(" · ")}</small></div>
       <Banner tone="success" icon="check-circle" title="Thank you. Your payment went through." text={`A receipt was emailed to ${inv.billTo.email}.`} />
-      <div className="inv-pay-pdfs">
+      <div className="inv-pay-pdfs glass">
         <PdfButton inv={inv} kind="receipt" className="btn">Download receipt</PdfButton>
         <PdfButton inv={inv} kind="invoice" className="btn ghost">Download PDF</PdfButton>
       </div>
@@ -141,13 +141,13 @@ function PayCard({ inv, token }: { inv: Inv; token: string }) {
     </section>
   );
   if (s === "void" || s === "uncollectible") return (
-    <section className="inv-pay" aria-label="This invoice">
+    <section className="inv-pay glass" aria-label="This invoice">
       <span className="wp-eyebrow">This invoice</span>
       <Banner tone="neutral" icon="info" title={s === "void" ? `This invoice was cancelled${inv.voidedAt ? ` on ${dateShort(inv.voidedAt)}` : ""}.` : "This invoice is closed."} text="There's nothing to pay. If you have a question, reply to the email it came with." />
     </section>
   );
   if (s === "processing" || processing) return (
-    <section className="inv-pay" aria-label="Pay this invoice">
+    <section className="inv-pay glass" aria-label="Pay this invoice">
       <span className="wp-eyebrow">Pay this invoice</span>
       <div className="amt"><span className="lbl">Payment processing</span><b>{money(processing?.cents ?? inv.amountRemainingCents)}</b><small>{processing ? `From ${processing.method} · started ${dateShort(processing.at)}` : "Started"}</small></div>
       <Banner tone="neutral" icon="clock" title="Your bank payment is on its way." text="Bank payments take a few business days to clear. Nothing else to do." />
@@ -155,7 +155,7 @@ function PayCard({ inv, token }: { inv: Inv; token: string }) {
   );
   const partly = inv.amountPaidCents > 0;
   return (
-    <section className="inv-pay" aria-label="Pay this invoice">
+    <section className="inv-pay glass" aria-label="Pay this invoice">
       <span className="wp-eyebrow">Pay this invoice</span>
       <div className="amt">
         <span className="lbl">{partly ? "Amount remaining" : "Amount due"}</span><b>{money(inv.amountRemainingCents)}</b>
@@ -185,7 +185,7 @@ function PayForm({ inv, token }: { inv: Inv; token: string }) {
   }, [start, token, inv.amountRemainingCents]);
   const stripe = useMemo(() => (setup ? stripeFor(setup.publishableKey, setup.accountId) : null), [setup]);
   if (err) return <Banner tone="neutral" icon="info" title={err} />;
-  if (!setup || !stripe) return <div className="inv-pay-loading" aria-label="Loading the payment form"><SkeletonRows n={3} /></div>;
+  if (!setup || !stripe) return <div className="inv-pay-loading glass" aria-label="Loading the payment form"><SkeletonRows n={3} /></div>;
   return (
     <Elements stripe={stripe} options={{ clientSecret: setup.clientSecret, appearance: appearance(), loader: "auto" }}>
       <ConfirmForm inv={inv} token={token} />
@@ -213,10 +213,10 @@ function ConfirmForm({ inv, token }: { inv: Inv; token: string }) {
     setBusy(false);
   };
   return (
-    <form className="inv-pay-form" onSubmit={(e) => { e.preventDefault(); void pay(); }}>
+    <form className="inv-pay-form glass" onSubmit={(e) => { e.preventDefault(); void pay(); }}>
       {declined && <Banner tone="danger" icon="alert" title={declined.endsWith(".") ? declined : `${declined}.`} text="Nothing was charged. Try again, or use a different card or your bank account." />}
       <PaymentElement options={{ layout: "tabs" }} onReady={() => setReady(true)} />
-      <Button variant="primary" type="submit" loading={busy} disabled={!ready || !stripe} className="inv-pay-btn">{declined ? "Try again" : `Pay ${money(inv.amountRemainingCents)}`}</Button>
+      <Button variant="primary" type="submit" loading={busy} disabled={!ready || !stripe} className="inv-pay-btn glass">{declined ? "Try again" : `Pay ${money(inv.amountRemainingCents)}`}</Button>
     </form>
   );
 }
