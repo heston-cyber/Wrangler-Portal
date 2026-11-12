@@ -6,7 +6,7 @@
 import { describe, expect, test } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { CARDS, FLOAT, GLASS } from "../src/lib/glass";
+import { CARDS, FLOAT, GLASS, rimStrips } from "../src/lib/glass";
 
 const read = (f: string) => readFileSync(join(__dirname, "..", f), "utf8");
 const [styles, d1, portal, states, type, glassSrc] = ["src/styles.css", "src/d1.css", "src/portal.css", "src/states.css", "src/type.css", "src/lib/glass.ts"].map(read);
@@ -121,5 +121,30 @@ describe("5f.5 no black lines", () => {
     // nothing else divides by a value that can reach zero
     expect(glassSrc).toMatch(/pow\(max\(sq, 1e-4\), -0\.75\)/);
     expect(glassSrc).toMatch(/max\(-ray\.z, 0\.25\)/);
+  });
+});
+
+describe("Nov 11 pass: the rim matches the frosted middle, and only the rim is drawn", () => {
+  test("only the rim band is drawn: four strips inset by the bevel (or the corner radius), or the whole surface when small", () => {
+    const v = rimStrips(400, 300, 20, 70); // bevel = min(70, 0.4 × 300) = 70, inset 71
+    const xs = (k: number) => [...v.slice(k * 12, k * 12 + 12)].filter((_, i) => i % 2 === 0);
+    const ys = (k: number) => [...v.slice(k * 12, k * 12 + 12)].filter((_, i) => i % 2 === 1);
+    expect(Math.min(...xs(0))).toBe(-1); expect(Math.max(...xs(0))).toBe(1);           // top strip: full width
+    expect(Math.max(...ys(0))).toBe(1); expect(Math.min(...ys(0))).toBeCloseTo(1 - (71 / 300) * 2); // 71 px tall
+    expect(Math.max(...xs(2))).toBeCloseTo((71 / 400) * 2 - 1);                         // left strip: 71 px wide
+    // a capsule bar 48 tall: its corner radius (24) covers half the height, so the whole bar is drawn
+    const bar = rimStrips(1100, 48, 24, 70);
+    expect([...bar.slice(0, 12)]).toEqual([-1, 1, 1, 1, -1, -1, -1, -1, 1, 1, 1, -1]);
+    expect([...bar.slice(12)].every((n) => n === -1 || n === 1)).toBe(true);
+  });
+  test("the rim is as blurry as the CSS frost, clipped between filters as CSS does, and sees the page's fades", () => {
+    expect(glassSrc).toMatch(/float lod = log2\(max\(1\.0, u_frost \* u_texScale \* 1\.5\)\)/);
+    expect(glassSrc).toMatch(/col = clamp\(mix\(vec3\(lum\), col, u_sat\), 0\.0, 1\.0\) \* u_bright;/);
+    // the phone's top scrim behind cards and chips, the desktop scroll fade behind the top bar, the fade above the tab bar
+    expect(glassSrc).toMatch(/return \{ y0: 0, h: 320, m: 0\.6, a: \[0\.92, 0\.6, 0\] \}/);
+    expect(glassSrc).toMatch(/h: 112, m: 0\.55, a: \[0\.92, 0\.55, 0\]/);
+    expect(glassSrc).toMatch(/m: 0\.6, a: \[0, 0\.6, 0\.92\]/);
+    const scrim = ALL.find((r) => r.sel.includes(".wp-shell:not(.overlay)::before") && /height: 320px/.test(r.body));
+    expect(scrim?.body).toMatch(/rgba\(var\(--ink\), \.92\) 0%, rgba\(var\(--ink\), \.6\) 60%, rgba\(var\(--ink\), 0\) 100%/);
   });
 });

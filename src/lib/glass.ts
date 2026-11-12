@@ -44,6 +44,9 @@ uniform float u_depth;   // how far in from the edge the glass bends
 uniform float u_refr;
 uniform float u_disp;
 uniform float u_frost;   // frost radius, device px
+uniform vec4 u_fade;     // a fade the page lays over the scene behind this surface: its top on screen relative to the
+                         // surface (render px), its height (0: none), where its middle stop is (0–1), unused
+uniform vec3 u_fadeA;    // the fade's ink at its top, its middle stop, its bottom
 uniform float u_texScale;// texture px per device px
 uniform float u_light;
 uniform vec2 u_ldir;
@@ -89,17 +92,28 @@ void main() {
   vec2 bendv = ray.xy / max(-ray.z, 0.25) * (height + 0.25 * b) * u_refr;
   float cap = 0.9 * b, m = length(bendv);
   bendv /= 1.0 + m / cap;
-  float lod = log2(max(1.0, u_frost * u_texScale)) - 0.6;
+  // Nov 11 check: as blurry as the CSS frost's Gaussian (fitted against it: mip footprint 1.5×, taps at 0.9× the frost)
+  // a little softer where the rim squeezes the scene hardest, so it doesn't shimmer as a card moves (Nov 11 pass)
+  float lod = log2(max(1.0, u_frost * u_texScale * 1.5)) + log2(1.0 + 0.5 * min(slope, 4.0));
   vec3 col = vec3(0.0);
   float k = u_disp * 0.08;                                     // red bends a little less, blue a little more
   for (int i = 0; i < 3; i++) {                               // three taps: the light frost (D169) needs no more
     float a = float(i) * 2.0944 + 0.4;
-    vec2 q = px + vec2(cos(a), sin(a)) * u_frost * 0.45;
+    vec2 q = px + vec2(cos(a), sin(a)) * u_frost * 0.9;
     col += vec3(scene(q + bendv * (1.0 - k), lod).r, scene(q + bendv, lod).g, scene(q + bendv * (1.0 + k), lod).b);
   }
   col /= 3.0;
+  // the page's fades lie between the scene and this surface (the phone's top scrim behind cards and chips, the desktop
+  // scroll fade behind the top bar, the fade above the phone's tab bar), so the bent scene is seen through them too, as
+  // the CSS middle sees it (Nov 11 check: without this a bright rim circled a dark middle)
+  if (u_fade.y > 0.0) {
+    float t = clamp((px.y + bendv.y - u_fade.x) / u_fade.y, 0.0, 1.0);
+    float fa = t < u_fade.z ? mix(u_fadeA.x, u_fadeA.y, t / u_fade.z) : mix(u_fadeA.y, u_fadeA.z, (t - u_fade.z) / (1.0 - u_fade.z));
+    col = mix(col, vec3(0.012, 0.004, 0.016), fa);
+  }
   float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
-  col = max(mix(vec3(lum), col, u_sat), 0.0) * u_bright;      // as the CSS frost: saturate(160 %) brightness(68 %)
+  col = clamp(mix(vec3(lum), col, u_sat), 0.0, 1.0) * u_bright; // as the CSS frost: saturate(160 %), clipped (as CSS clips
+                                                               // between filters), then brightness(68 %)
   vec3 ink = vec3(0.012, 0.004, 0.016), paper = vec3(0.957, 0.945, 0.914);
   col = mix(col, ink, u_veil);                                 // what the page lays over the scene there
   col = mix(col, ink, u_ink);                                  // the surface's own fill (as the CSS middle)
@@ -115,7 +129,7 @@ void main() {
   o = vec4(min(c, vec3(a)), a);
 }`;
 
-type Shape = { el: HTMLElement; cv: HTMLCanvasElement | null; ctx: CanvasRenderingContext2D | null; radius: number; frost: number; ink: number; veil: number; lazy: boolean; last: string; size: string };
+type Shape = { el: HTMLElement; cv: HTMLCanvasElement | null; ctx: CanvasRenderingContext2D | null; br: ImageBitmapRenderingContext | null; radius: number; frost: number; ink: number; veil: number; lazy: boolean; last: string; size: string };
 
 /** A surface's glass settings, from its CSS; null when the CSS doesn't make it glass here (a phone's page title row). */
 export function glassOf(el: Element): { frost: number; ink: number; veil: number; lazy: boolean } | null {
@@ -124,6 +138,25 @@ export function glassOf(el: Element): { frost: number; ink: number; veil: number
   if (!Number.isFinite(frost)) return null;
   const num = (name: string, d: number) => { const v = parseFloat(cs.getPropertyValue(name)); return Number.isFinite(v) ? v : d; };
   return { frost, ink: num("--lg-ink", 0.16), veil: num("--lg-veil", 0), lazy: num("--lg-lazy", 0) > 0 };
+}
+
+/** The rim band of a w × h surface as four strips (24 vertices, clip space), leaving out the flat middle the shader
+ *  would discard anyway: inset by the bevel's width, or the corner radius where that's larger. */
+export function rimStrips(w: number, h: number, radius: number, depth: number): Float32Array {
+  const b = Math.min(depth, GLASS.bevel * Math.min(w, h));
+  const R2 = Math.min(Math.max(radius, b), Math.min(w, h) / 2);
+  const i = Math.ceil(Math.max(b, R2)) + 1;
+  const out = new Float32Array(48);
+  // one rect covering the whole surface when the middle is too small to leave out
+  const rects: [number, number, number, number][] = 2 * i >= Math.min(w, h)
+    ? [[0, 0, w, h], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
+    : [[0, 0, w, i], [0, h - i, w, h], [0, i, i, h - i], [w - i, i, w, h - i]];
+  let k = 0;
+  for (const [x0, y0, x1, y1] of rects) {
+    const X0 = (x0 / w) * 2 - 1, X1 = (x1 / w) * 2 - 1, Y0 = 1 - (y0 / h) * 2, Y1 = 1 - (y1 / h) * 2;
+    for (const [x, y] of [[X0, Y0], [X1, Y0], [X0, Y1], [X0, Y1], [X1, Y0], [X1, Y1]]) { out[k++] = x; out[k++] = y; }
+  }
+  return out;
 }
 
 export function startGlass(host: HTMLElement): () => void {
@@ -141,26 +174,39 @@ export function startGlass(host: HTMLElement): () => void {
   } catch { /* no storage: the glass as usual */ }
   // only the cactus scene (another business keeps its own light and the CSS glass)
   if (!/cactus/.test(getComputedStyle(host).backgroundImage)) return () => {};
+  // Nov 11 pass: where the browser can (Safari 17+, Chrome), the glass is drawn in an OffscreenCanvas and each surface is
+  // handed its picture (transferToImageBitmap → bitmaprenderer: no copy); otherwise it's copied from a hidden canvas.
+  let off: OffscreenCanvas | null = null;
+  let gl: WebGL2RenderingContext | null = null;
+  try {
+    const probe = document.createElement("canvas").getContext("bitmaprenderer");
+    if (probe && typeof OffscreenCanvas !== "undefined") { off = new OffscreenCanvas(1, 1); gl = off.getContext("webgl2", { premultipliedAlpha: true, antialias: false, alpha: true }) as WebGL2RenderingContext | null; }
+  } catch { gl = null; }
+  if (!gl) off = null;
   const glc = document.createElement("canvas");
-  const gl = glc.getContext("webgl2", { premultipliedAlpha: true, antialias: false, alpha: true, preserveDrawingBuffer: true });
+  gl = gl ?? glc.getContext("webgl2", { premultipliedAlpha: true, antialias: false, alpha: true, preserveDrawingBuffer: true });
   if (!gl) return () => {};
+  const target: { width: number; height: number } = off ?? glc;
   const prog = program(gl);
   if (!prog) return () => {};
 
   const buf = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(48), gl.DYNAMIC_DRAW);
   const loc = gl.getAttribLocation(prog, "a");
   gl.enableVertexAttribArray(loc);
   gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
   gl.useProgram(prog);
   const U = (name: string) => gl.getUniformLocation(prog, name);
-  const u = { top: U("u_top"), img: U("u_img"), size: U("u_size"), r: U("u_r"), depth: U("u_depth"), refr: U("u_refr"), disp: U("u_disp"), frost: U("u_frost"), texScale: U("u_texScale"), light: U("u_light"), ldir: U("u_ldir"), dpr: U("u_dpr"), tex: U("u_tex"), ink: U("u_ink"), veil: U("u_veil"), sat: U("u_sat"), bright: U("u_bright") };
+  const u = { top: U("u_top"), img: U("u_img"), size: U("u_size"), r: U("u_r"), depth: U("u_depth"), refr: U("u_refr"), disp: U("u_disp"), frost: U("u_frost"), texScale: U("u_texScale"), light: U("u_light"), ldir: U("u_ldir"), dpr: U("u_dpr"), tex: U("u_tex"), ink: U("u_ink"), veil: U("u_veil"), sat: U("u_sat"), bright: U("u_bright"), fade: U("u_fade"), fadeA: U("u_fadeA") };
   const ang = (GLASS.lightAngle * Math.PI) / 180; // −45°: from the top left (screen y points down)
   gl.uniform2f(u.ldir, Math.cos(ang), Math.sin(ang));
-  gl.uniform1f(u.refr, GLASS.refraction);
-  gl.uniform1f(u.disp, GLASS.dispersion);
-  gl.uniform1f(u.light, GLASS.lightIntensity);
+  // a check for the build (tests and screenshots set window.__glassCheck): no bend, no colour split, no light, so a rim
+  // that doesn't vanish into the CSS middle is a mistake (a misplaced scene, a missing overlay, a different tint)
+  const check = !!(window as unknown as { __glassCheck?: boolean }).__glassCheck;
+  gl.uniform1f(u.refr, check ? 0 : GLASS.refraction);
+  gl.uniform1f(u.disp, check ? 0 : GLASS.dispersion);
+  gl.uniform1f(u.light, check ? 0 : GLASS.lightIntensity);
   gl.uniform1f(u.sat, GLASS.saturate);
   gl.uniform1f(u.bright, GLASS.brightness);
   gl.uniform1i(u.tex, 0);
@@ -197,7 +243,7 @@ export function startGlass(host: HTMLElement): () => void {
   load(phone());
 
   // ---------- which surfaces to draw ----------
-  const release = (s: Shape) => { s.cv?.remove(); s.cv = null; s.ctx = null; s.last = ""; s.size = ""; };
+  const release = (s: Shape) => { s.cv?.remove(); s.cv = null; s.ctx = null; s.br = null; s.last = ""; s.size = ""; };
   const collect = () => {
     if (!img) return;
     const next: Shape[] = [];
@@ -208,7 +254,7 @@ export function startGlass(host: HTMLElement): () => void {
       const had = shapes.find((x) => x.el === el);
       if (ok) {
         const radius = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
-        const sh = had ?? { el, cv: null, ctx: null, radius, frost: 0, ink: 0, veil: 0, lazy: false, last: "", size: "" };
+        const sh = had ?? { el, cv: null, ctx: null, br: null, radius, frost: 0, ink: 0, veil: 0, lazy: false, last: "", size: "" };
         if (sh.radius !== radius || sh.frost !== look!.frost || sh.ink !== look!.ink || sh.veil !== look!.veil || sh.lazy !== look!.lazy) Object.assign(sh, { radius, ...look!, last: "" });
         el.dataset.gl = "1";
         next.push(sh);
@@ -220,8 +266,62 @@ export function startGlass(host: HTMLElement): () => void {
     for (const s of shapes) ro.observe(s.el);
   };
 
+  // ---------- the page's fades behind a surface (portal.css "Phase 5f") ----------
+  type Fade = { y0: number; h: number; m: number; a: [number, number, number] };
+  const NONE: Fade = { y0: 0, h: 0, m: 0.5, a: [0, 0, 0] };
+  const fadeFor = (el: HTMLElement): Fade => {
+    const shell = el.closest(".wp-shell:not(.overlay)");
+    if (!shell) return NONE;
+    if (phone()) {
+      // the tab bar: content fades above it (112 tall from 30 px above it: 0 → 60 % at 60 % → 92 %)
+      if (el.classList.contains("wp-tabbar")) { const t = el.getBoundingClientRect().top - 30; return { y0: t, h: innerHeight - t, m: 0.6, a: [0, 0.6, 0.92] }; }
+      // cards and chips sit over the top scrim (.wp-shell::before: 320 tall, 92 % → 60 % at 60 % → 0)
+      if (el.closest(".main")) return { y0: 0, h: 320, m: 0.6, a: [0.92, 0.6, 0] };
+      return NONE;
+    }
+    // the desktop top bar, once the page has scrolled under it (.main::before: 112 tall, 92 % → 55 % at 55 % → 0)
+    const main = el.parentElement;
+    if (el.classList.contains("topbar") && main?.dataset.scrolled) return { y0: main.getBoundingClientRect().top, h: 112, m: 0.55, a: [0.92, 0.55, 0] };
+    return NONE;
+  };
+
   // ---------- drawing ----------
   const draw = () => {
+    const t0 = performance.now();
+    drawn = 0;
+    paint();
+    meter?.(performance.now() - t0, drawn);
+  };
+  let drawn = 0;
+  // ?glassmeter=1 (Nov 11, for Heston's iPhone): a small box with the frame rate while scrolling and the glass's share
+  // of each frame, so a real phone can report its own numbers. ?glassmeter=0 hides it.
+  let meter: ((ms: number, n: number) => void) | null = null;
+  try {
+    const m = new URLSearchParams(location.search).get("glassmeter");
+    if (m === "1" || m === "0") sessionStorage.setItem("wp.glassmeter", m);
+    if (sessionStorage.getItem("wp.glassmeter") === "1") {
+      const box = document.createElement("div");
+      box.setAttribute("aria-hidden", "true");
+      box.style.cssText = "position:fixed;z-index:9999;left:8px;top:calc(env(safe-area-inset-top,0px) + 8px);padding:6px 8px;border-radius:8px;background:rgba(0,0,0,.75);color:#fff;font:600 11px/1.3 ui-monospace,monospace;pointer-events:none;white-space:pre";
+      document.body.appendChild(box);
+      let frames: number[] = [], glassMs = 0, glassN = 0, surfaces = 0, last = performance.now(), shownAt = 0;
+      const tick = (now: number) => {
+        if (dead) { box.remove(); return; }
+        frames.push(now - last); last = now;
+        if (now - shownAt > 500) {
+          const busy = frames.filter((f) => f < 200);
+          const avg = busy.reduce((a, b) => a + b, 0) / Math.max(1, busy.length);
+          const slow = busy.filter((f) => f > 20).length;
+          box.textContent = `${Math.round(1000 / Math.max(avg, 1))} fps · ${avg.toFixed(1)} ms/frame\nslow frames ${slow}/${busy.length}\nglass ${glassN ? (glassMs / glassN).toFixed(2) : "0"} ms (CPU) · ${surfaces} redrawn`;
+          frames = []; glassMs = 0; glassN = 0; surfaces = 0; shownAt = now;
+        }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+      meter = (ms, n) => { if (n) { glassMs += ms; glassN++; surfaces = Math.max(surfaces, n); } };
+    }
+  } catch { /* no storage: no meter */ }
+  const paint = () => {
     raf = 0;
     if (!img || !tex || dead) return;
     if (img.phone !== phone()) load(phone());
@@ -252,8 +352,11 @@ export function startGlass(host: HTMLElement): () => void {
       const near = r.bottom > -NEAR && r.top < innerHeight + NEAR && r.right > -NEAR && r.left < innerWidth + NEAR && r.width >= 2 && r.height >= 2;
       const sliding = s.lazy && lazyMode && performance.now() < movingUntil;
       if (!near) { if (s.cv && !sliding) release(s); continue; }
+      // just off screen: keep its canvas but don't draw it until it comes into view (Nov 11 pass)
+      if (s.cv && (r.bottom <= 0 || r.top >= innerHeight || r.right <= 0 || r.left >= innerWidth)) { s.last = ""; continue; }
       const w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
-      const key = `${r.left.toFixed(1)}|${r.top.toFixed(1)}|${w}|${h}`, size = `${w}|${h}`;
+      const f = fadeFor(s.el);
+      const key = `${r.left.toFixed(1)}|${r.top.toFixed(1)}|${w}|${h}|${f.y0.toFixed(1)}|${f.h}`, size = `${w}|${h}`;
       if (s.cv && key === s.last) continue; // hasn't moved: its glass is still right
       // ?glass=lazy only (the Nov 11 first try; Heston: "when I press to scroll the effect goes away"): surfaces that
       // slide with the page (--lg-lazy) are redrawn where they stop; while they slide their rim steps aside (a quick fade,
@@ -265,26 +368,33 @@ export function startGlass(host: HTMLElement): () => void {
         s.cv.className = "wp-glass";
         s.cv.setAttribute("aria-hidden", "true");
         s.el.prepend(s.cv);
-        s.ctx = s.cv.getContext("2d");
+        if (off) s.br = s.cv.getContext("bitmaprenderer"); else s.ctx = s.cv.getContext("2d");
       }
       if (s.cv.width !== w || s.cv.height !== h) { s.cv.width = w; s.cv.height = h; }
-      if (glc.width < w || glc.height < h) { glc.width = Math.max(glc.width, w); glc.height = Math.max(glc.height, h); }
-      gl.viewport(0, glc.height - h, w, h);
+      if (off) { if (off.width !== w || off.height !== h) { off.width = w; off.height = h; } }
+      else if (glc.width < w || glc.height < h) { glc.width = Math.max(glc.width, w); glc.height = Math.max(glc.height, h); }
+      gl.viewport(0, target.height - h, w, h);
       gl.clearColor(0, 0, 0, 0);
       gl.enable(gl.SCISSOR_TEST);
-      gl.scissor(0, glc.height - h, w, h);
+      gl.scissor(0, target.height - h, w, h);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.disable(gl.SCISSOR_TEST);
-      gl.uniform1f(u.top, glc.height);
+      gl.uniform1f(u.top, target.height);
       gl.uniform2f(u.size, w, h);
       gl.uniform1f(u.r, s.radius * dpr);
       gl.uniform1f(u.frost, s.frost * dpr);
       gl.uniform1f(u.ink, s.ink);
       gl.uniform1f(u.veil, s.veil);
       useRes(dpr);
+      gl.uniform4f(u.fade, (f.y0 - r.top) * dpr, f.h * dpr, f.m, 0);
+      gl.uniform3f(u.fadeA, f.a[0], f.a[1], f.a[2]);
       gl.uniform4f(u.img, view.dx - (r.left - box.left) * dpr, view.dy - (r.top - box.top) * dpr, view.dw, view.dh);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-      if (s.ctx) { s.ctx.globalCompositeOperation = "copy"; s.ctx.drawImage(glc, 0, 0, w, h, 0, 0, w, h); } // replaces, no clear pass
+      // Nov 11 pass: only the rim band is drawn (four strips round the flat middle, which the CSS frost covers)
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, rimStrips(w, h, s.radius * dpr, GLASS.depth * dpr));
+      gl.drawArrays(gl.TRIANGLES, 0, 24);
+      drawn++;
+      if (off && s.br) s.br.transferFromImageBitmap(off.transferToImageBitmap()); // handed over, no copy
+      else if (s.ctx) { s.ctx.globalCompositeOperation = "copy"; s.ctx.drawImage(glc, 0, 0, w, h, 0, 0, w, h); } // replaces, no clear pass
       s.cv.classList.remove("stale");
     }
     // keep looking every frame while anything may be moving (a sheet sliding in, momentum scrolling the chips)
@@ -298,7 +408,7 @@ export function startGlass(host: HTMLElement): () => void {
 
   const ro = new ResizeObserver(() => kick());
   const mo = new MutationObserver((list) => { if (list.some((m) => !(m.target instanceof HTMLCanvasElement) && ![...m.addedNodes, ...m.removedNodes].every((n) => n instanceof HTMLCanvasElement))) changed(); });
-  mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "hidden", "data-full"] });
+  mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "hidden", "data-full", "data-scrolled"] });
   addEventListener("scroll", onScroll, { capture: true, passive: true });
   addEventListener("touchmove", onScroll, { passive: true });
   addEventListener("resize", changed);
@@ -308,7 +418,7 @@ export function startGlass(host: HTMLElement): () => void {
   const mq = matchMedia("(prefers-reduced-transparency: reduce), (prefers-contrast: more)");
   const onLook = () => { if (mq.matches) stop(); };
   mq.addEventListener?.("change", onLook);
-  glc.addEventListener("webglcontextlost", (e) => { e.preventDefault(); stop(); });
+  (off ?? glc).addEventListener("webglcontextlost", (e) => { e.preventDefault(); stop(); });
 
   function stop() {
     if (dead) return;
