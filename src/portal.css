@@ -3595,14 +3595,15 @@ canvas.wp-glass.stale { opacity: 0; transition-duration: 90ms; } /* ?glass=lazy 
 .wp-sidegap { display: none; }
 @media (min-width: 821px) {
   .wp-shell:not(.overlay) { --rail-w: 80px; }
-  .wp-shell:not(.overlay) > .wp-sidegap { display: block; flex: 0 0 calc(var(--sidebar-w) + 12px); transition: flex-basis 220ms var(--ease-out); }
+  .wp-shell:not(.overlay) > .wp-sidegap { display: block; flex: 0 0 calc(var(--sidebar-w) + 12px); transition: flex-basis 150ms var(--ease-out); }
   .wp-shell[data-menu="rail"] > .wp-sidegap, .wp-shell[data-menu="peek"] > .wp-sidegap { flex-basis: calc(var(--rail-w) + 12px); }
   .wp-shell:not(.overlay) > .wp-side:not(.drawer) {
     position: fixed; z-index: 30; top: 12px; left: 12px; bottom: 12px; margin: 0; height: auto;
-    transition: width 220ms var(--ease-out), box-shadow 220ms var(--ease-out);
+    transition: width 150ms var(--ease-out), box-shadow 150ms var(--ease-out);
   }
   .wp-shell[data-menu="rail"] > .wp-side:not(.drawer) { width: var(--rail-w); }
-  .wp-shell[data-menu="peek"] > .wp-side:not(.drawer) { box-shadow: var(--shadow-float); backdrop-filter: blur(22px) saturate(135%) brightness(.62); -webkit-backdrop-filter: blur(22px) saturate(135%) brightness(.62); background: linear-gradient(rgba(8, 6, 9, .6), rgba(8, 6, 9, .6)), var(--glass-fill); }
+  /* the open-on-hover menu is the same glass as every other floating panel (Heston, Nov 15 14:00), with the float shadow */
+  .wp-shell[data-menu="peek"] > .wp-side:not(.drawer) { box-shadow: var(--shadow-float); }
   .wp-shell:not(.overlay) .wp-brand .wp-deskmenu { display: inline-grid; margin: -6px 0 -6px -6px; flex: 0 0 auto; }
   /* names clip at the menu's edge instead of ending in "…" while it narrows */
   .wp-shell:not(.overlay) > .wp-side:not(.drawer) .wp-nav { overflow: hidden; }

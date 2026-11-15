@@ -253,10 +253,10 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
     if (deskTimer.current) { clearTimeout(deskTimer.current); deskTimer.current = null; }
     if (on) {
       if (!armed.current || !matchMedia("(pointer: fine)").matches) return;
-      deskTimer.current = window.setTimeout(() => setPeeking(true), 120); // passing over the rail on the way somewhere doesn't open it
+      setPeeking(true); // opens the moment the pointer arrives (Heston, Nov 15 14:00: "more responsive")
       return;
     }
-    deskTimer.current = window.setTimeout(() => setPeeking(false), 280);
+    deskTimer.current = window.setTimeout(() => setPeeking(false), 150); // a short grace, so a slip off the edge doesn't snap it shut
   }, []);
   const toggleDesk = useCallback((e?: React.MouseEvent) => {
     if (deskTimer.current) { clearTimeout(deskTimer.current); deskTimer.current = null; }

@@ -44,9 +44,12 @@ describe("D176 side menu toggle (follow-up Nov 15 13:34: shrink to the icons, or
     expect(shell).not.toContain("wp-deskmenu-fixed");
   });
 
-  it("176.6 hovering the rail opens it after a moment (only with a real pointer); right after a click it waits until the pointer has left the menu", () => {
+  it("176.6 hovering the rail opens it at once (only with a real pointer), the menu moves in 150 ms and is plain glass when open over the page; right after a click it waits until the pointer has left the menu", () => {
     expect(shell).toContain("pointer: fine");
-    expect(shell).toMatch(/setTimeout\(\(\) => setPeeking\(true\), 120\)/);
+    expect(shell).toMatch(/setPeeking\(true\); \/\/ opens the moment the pointer arrives/);
+    expect(shell).toMatch(/setTimeout\(\(\) => setPeeking\(false\), 150\)/);
+    expect(css).toMatch(/transition: width 150ms var\(--ease-out\)/);
+    expect(css).toMatch(/data-menu="peek"\] > \.wp-side:not\(\.drawer\) \{ box-shadow: var\(--shadow-float\); \}/); // plain glass, no dark veil
     expect(shell).toMatch(/armed\.current = false/);
     expect(shell).toMatch(/closest\?\.\("\.wp-side"\)\) \{ armed\.current = true/);
   });
