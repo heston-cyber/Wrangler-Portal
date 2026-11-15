@@ -10,7 +10,10 @@ export type IconName =
   | "check-circle" | "check" | "chevron-down" | "chevron-right" | "clock" | "close" | "document" | "download" | "edit" | "external"
   | "eye" | "folder" | "globe" | "home" | "inbox" | "info" | "invoice" | "lock" | "mail" | "map-pin" | "menu" | "minus"
   | "more" | "note" | "pause" | "phone" | "play" | "plus" | "quote" | "register" | "review" | "search" | "send"
-  | "settings" | "sign-out" | "sign" | "stage" | "upload" | "user" | "users" | "video";
+  | "settings" | "sign-out" | "sign" | "stage" | "upload" | "user" | "users" | "video"
+  // D176 (Nov 15): the side menu's submenu icons, stand-ins drawn in the repo (scripts/icons/make-submenu.py) until the design chat redraws them
+  | "booking" | "briefcase" | "briefing" | "building" | "call-sheet" | "camera" | "case" | "chart" | "clapper" | "clipboard" | "contract" | "flag"
+  | "funnel" | "layers" | "overview" | "package" | "presentation" | "questionnaire" | "repeat" | "scissors" | "star" | "template" | "wallet";
 
 export const ICON_NAMES = Object.keys(SVG).sort() as IconName[];
 

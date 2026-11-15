@@ -85,6 +85,20 @@ const OWNER_PRODUCTION: Sub[] = [
 // D151: the same for Docs (Proposals · Contracts) and People (Clients · Vendors): each name opens that tool's overview.
 export const STAGE_TO: Record<string, string> = { "Pre-pro": "/production/pre-pro", "Prin-pro": "/production/prin-pro", "Post-pro": "/production/post-pro", Delivery: "/production/delivery",
   Proposals: "/proposals/overview", Contracts: "/sign/overview", Clients: "/clients/overview", Vendors: "/vendors/overview" };
+// D176 (Nov 15): every submenu item gets an icon, one per kind of thing (the same kind has the same icon wherever it appears).
+export const SUB_ICON: Record<string, IconName> = {
+  "/production": "overview", "/payments": "overview", "/projects": "folder", "/vendors/bookings": "booking", "/vendors/briefings": "briefing",
+  "/production/call-sheets": "call-sheet", "/production/shoots": "clapper", "/production/calendar": "calendar", "/production/gear": "case",
+  "/review/overview": "review", "/activity": "activity", "/production/delivery": "package",
+  "/clients/pipeline": "funnel", "/clients": "building", "/clients/follow-ups": "flag", "/clients/testimonials": "star",
+  "/vendors": "users", "/vendors/payments": "wallet", "/proposals/new": "plus", "/sign/new": "plus", "/proposals": "register", "/sign/docs": "register",
+  "/proposals/templates": "template", "/sign/templates": "template", "/proposals/questionnaire": "questionnaire", "/sign/signature": "sign",
+  "/payments/invoices": "invoice", "/payments/quotes": "quote", "/payments/subscriptions": "repeat", "/payments/plans": "layers", "/payments/reports": "chart",
+  "/review": "register",
+};
+export const STAGE_ICON: Record<string, IconName> = { "Pre-pro": "clipboard", "Prin-pro": "camera", "Post-pro": "scissors", Delivery: "package",
+  Proposals: "presentation", Contracts: "contract", Clients: "user", Vendors: "briefcase" };
+export const subIcon = (to: string): IconName => SUB_ICON[to] ?? "folder"; // a shared project is a folder
 const groupsOf = (layer: Sub[]) => [...new Set(layer.map((s) => s.group).filter((g): g is string => !!g))];
 const stageItems = (layer: Sub[], g: string) => layer.filter((s) => s.group === g && !s.only);
 const inStage = (layer: Sub[], g: string, p: string) => starts(p, STAGE_TO[g]) || stageItems(layer, g).some((s) => s.match(p));
@@ -225,6 +239,43 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
     if (on) { if (matchMedia("(pointer: fine)").matches) setDrawerState((d) => d || "peek"); return; }
     peekTimer.current = window.setTimeout(() => setDrawerState((d) => (d === "peek" ? false : d)), 280);
   }, []);
+  // D176 (Heston, Nov 15): on a computer the side menu has a hamburger. Pinned: it sits in the page's left and pushes the page
+  // over (as before). Hidden: it slides away; hovering the hamburger slides it out over the page (peek); a click pins it again.
+  // The choice is remembered in this browser. Phones keep their own menu button (D172) and work surfaces keep their drawer.
+  const [pinned, setPinned] = useState(() => { try { return localStorage.getItem("wp.menu") !== "hidden"; } catch { return true; } });
+  const [peeking, setPeeking] = useState(false);
+  const deskTimer = useRef<number | null>(null);
+  const peekDesk = useCallback((on: boolean) => {
+    if (deskTimer.current) { clearTimeout(deskTimer.current); deskTimer.current = null; }
+    if (on) {
+      if (!matchMedia("(pointer: fine)").matches) return;
+      setPeeking(true);
+      // if the pointer never reaches the sliding menu (it can sit still), let it go again
+      deskTimer.current = window.setTimeout(() => { if (!document.querySelector(".wp-side:hover")) setPeeking(false); }, 1000);
+      return;
+    }
+    deskTimer.current = window.setTimeout(() => setPeeking(false), 280);
+  }, []);
+  // the menu itself only keeps a peek going (a menu sliding away under a still pointer must not bring itself back)
+  const peekingRef = useRef(false);
+  const keepDesk = useCallback((on: boolean) => {
+    if (on) { if (peekingRef.current && deskTimer.current) { clearTimeout(deskTimer.current); deskTimer.current = null; } return; }
+    if (!peekingRef.current) return;
+    if (deskTimer.current) clearTimeout(deskTimer.current);
+    deskTimer.current = window.setTimeout(() => setPeeking(false), 280);
+  }, []);
+  // after a click on the hamburger, the hamburger that appears under the pointer must not count as a hover until the pointer has moved off it
+  const armed = useRef(true);
+  const toggleDesk = useCallback((e?: React.MouseEvent) => {
+    if (e && e.detail > 0) {
+      armed.current = false;
+      const onMove = (m: PointerEvent) => { if (!(m.target as Element | null)?.closest?.(".wp-deskmenu")) { armed.current = true; window.removeEventListener("pointermove", onMove); } };
+      window.addEventListener("pointermove", onMove);
+    }
+    setPinned((was) => { const now = !was; try { localStorage.setItem("wp.menu", now ? "pinned" : "hidden"); } catch { /* private window */ } return now; });
+    setPeeking(false);
+  }, []);
+  useEffect(() => { peekingRef.current = peeking; }, [peeking]);
   const [search, setSearch] = useState(false);
   const { path } = useLocation();
   // Phones: while a text box has the keyboard, the tab bar steps aside (it would ride up above the keyboard) and the background holds still.
@@ -253,6 +304,12 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, [phoneMenu]);
+  useEffect(() => {
+    if (!peeking) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setPeeking(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [peeking]);
   useEffect(() => {
     if (!canSearch) return;
     const onKey = (e: KeyboardEvent) => {
@@ -286,12 +343,18 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
   const bell = side === "owner" && !navIn; // Phase 5e step 4: the owner's and the team's bell
   return (
     <Ctx.Provider value={ctx}>
-      <div className={`wp-shell${overlay ? " overlay" : ""}${side !== "owner" ? " client-side" : ""}`}>
+      <div className={`wp-shell${overlay ? " overlay" : ""}${side !== "owner" ? " client-side" : ""}`} data-menu={overlay ? undefined : pinned ? "pinned" : peeking ? "peek" : "hidden"}>
         {light && !overlay && <Light className={`wp-light ${side === "owner" ? "back" : "client"}`} src={lightSrc} />}
+        {!overlay && <div className="wp-sidegap" aria-hidden />}
+        {!overlay && !pinned && !peeking && (
+          <IconButton icon="menu" label="Show menu" iconSize={22} className="wp-deskmenu wp-deskmenu-fixed" onClick={toggleDesk}
+            onMouseEnter={() => { if (armed.current) peekDesk(true); }} onMouseLeave={() => peekDesk(false)} />
+        )}
         {showSidebar && (
           <Sidebar me={me} side={side} items={nav.main} logo={logo} bizName={bizName} subtitle={subtitle} recent={recent} top={top}
             drawer={(overlay && !!drawer) || phoneMenu} onClose={() => { setDrawer(false); setPhoneMenu(false); }} onSearch={onSearch} bell={bell}
-            onHover={overlay && drawer === "peek" ? peek : undefined} />
+            onHover={overlay && drawer === "peek" ? peek : !overlay && !pinned ? keepDesk : undefined}
+            deskMenu={overlay ? undefined : { pinned, toggle: toggleDesk }} />
         )}
         {((overlay && drawer) || phoneMenu) && <div className="wp-scrim" onClick={() => { setDrawer(false); setPhoneMenu(false); }} />}
         <PhoneTop me={me} side={side} items={[...nav.main, ...nav.tabs]} sections={nav.main} logo={logo} bizName={bizName} onSearch={onSearch} bell={bell} onMenu={() => setPhoneMenu(true)} />
@@ -321,9 +384,9 @@ function Logo({ src, name }: { src: string; name: string }) {
   return <span className="wp-logo"><span className="rec" aria-hidden /><img src={src} alt={name} /></span>;
 }
 
-function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onClose, onSearch, onHover, top, bell }: {
+function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onClose, onSearch, onHover, top, bell, deskMenu }: {
   me: Me; side: Side; items: Item[]; logo: string; bizName: string; subtitle?: string | null; recent: Recent[]; drawer: boolean; onClose: () => void; onSearch?: () => void; top?: React.ReactNode; bell?: boolean;
-  onHover?: (on: boolean) => void;
+  onHover?: (on: boolean) => void; deskMenu?: { pinned: boolean; toggle: () => void };
 }) {
   const { path } = useLocation();
   const uploads = useUploads().filter((u) => u.status === "starting" || u.status === "uploading");
@@ -360,7 +423,10 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
       onTouchStart={drawer ? (e) => { touchX.current = e.touches[0].clientX; } : undefined}
       onTouchEnd={drawer ? (e) => { const x0 = touchX.current; touchX.current = null; if (x0 != null && e.changedTouches[0].clientX - x0 < -60) onClose(); } : undefined}>
       <div className={`wp-brand${side === "client" ? " client" : ""}`}>
-        <a {...linkProps("/")} aria-label={`${bizName} home`}><Logo src={logo} name={bizName} /></a>
+        <span className="wp-brandl">
+          {deskMenu && <IconButton icon="menu" label={deskMenu.pinned ? "Hide menu" : "Keep menu open"} iconSize={22} className="wp-deskmenu" onClick={deskMenu.toggle} />}
+          <a {...linkProps("/")} aria-label={`${bizName} home`}><Logo src={logo} name={bizName} /></a>
+        </span>
         <span style={{ display: "flex", gap: 4 }}>
           {bell && <BellButton />}
           {onSearch && <IconButton icon="search" label="Search (⌘K)" onClick={onSearch} />}
@@ -388,7 +454,7 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
             {it.layer && isOpen(it) && (
               <>
                 {it.layer.filter((s) => !s.group).map((s) => (
-                  <a key={s.to} className={`wp-sub${it.layer!.some((x) => x.group) ? " wp-stage wp-stagetop" : ""}`} aria-current={s.match(path) ? "page" : undefined} {...linkProps(s.to)} title={s.label}><span>{s.label}</span></a>
+                  <a key={s.to} className={`wp-sub${it.layer!.some((x) => x.group) ? " wp-stage wp-stagetop" : ""}`} aria-current={s.match(path) ? "page" : undefined} {...linkProps(s.to)} title={s.label}><Icon name={subIcon(s.to)} size={18} /><span>{s.label}</span></a>
                 ))}
                 {it.layer.some((s) => s.group) && groupsOf(it.layer).map((g) => {
                   const kids = stageItems(it.layer!, g);
@@ -398,7 +464,7 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
                     <Fragment key={g}>
                       <div className="wp-stagewrap">
                         <a className={`wp-sub wp-stage${kids.length ? "" : " soon"}`} aria-current={starts(path, STAGE_TO[g]) ? "page" : undefined} {...linkProps(STAGE_TO[g])} title={`${g} overview`}>
-                          <span>{g}</span>{!kids.length && <span className="wp-soon">Soon</span>}
+                          <Icon name={STAGE_ICON[g] ?? "folder"} size={18} /><span>{g}</span>{!kids.length && <span className="wp-soon">Soon</span>}
                         </a>
                         {kids.length > 0 && (
                           <button type="button" className="layer-toggle stage-toggle" aria-expanded={on} aria-label={`${on ? "Close" : "Open"} ${g}`} onClick={() => setOpen((o) => ({ ...o, [key]: !on }))}>
@@ -408,7 +474,7 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
                       </div>
                       {on && kids.map((s) => (
                         <Fragment key={s.to}>
-                          <a className="wp-sub wp-stagesub" aria-current={s.match(path) ? "page" : undefined} {...linkProps(s.to)} title={s.label}><span>{s.label}</span></a>
+                          <a className="wp-sub wp-stagesub" aria-current={s.match(path) ? "page" : undefined} {...linkProps(s.to)} title={s.label}><Icon name={subIcon(s.to)} size={18} /><span>{s.label}</span></a>
                           {/* D150: the last-opened cuts sit under Post-pro, while you're in Post-pro */}
                           {s.to === "/activity" && side === "owner" && starts(path, "/review", "/v", "/activity") && recent.length > 0 && <LastOpened recent={recent} path={path} />}
                         </Fragment>

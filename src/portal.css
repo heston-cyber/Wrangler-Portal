@@ -2971,7 +2971,8 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 .wp-stagewrap .stage-toggle { position: absolute; right: 4px; display: grid; place-items: center; width: 28px; height: 28px; border: 0; background: none; border-radius: 8px; padding: 0; color: var(--accent); cursor: pointer; }
 .wp-stagewrap .stage-toggle:hover { background: var(--surface-block-hover); }
 .wp-stagewrap .stage-toggle:focus-visible { outline: 2px solid var(--accent-ring); }
-.wp-stagewrap .wp-stage, .wp-stagewrap .wp-stage[aria-current="page"] { color: var(--accent); } /* Heston (Nov 4, 21:29): the four stages in red */
+.wp-stagewrap .wp-stage, .wp-stagewrap .wp-stage[aria-current="page"] { color: var(--text-secondary); } /* D176 (Heston, Nov 15): no red text in the menu (was red from Nov 4) */
+.wp-stagewrap .wp-stage[aria-current="page"] { color: var(--text-primary); }
 .wp-stagewrap .wp-stage .wp-soon { color: var(--text-muted); }
 .wp-sub.wp-stagesub { padding-left: 64px; }
 .wp-soon { margin-left: 8px; font: 500 10px/1 var(--font-title); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-muted); }
@@ -3096,7 +3097,8 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
   .msg-scroll { padding: 14px 14px; } .msg-head { padding: 14px 14px; } .msg-compose { padding: 10px 12px 12px; }
 }
 .msg-thread .wp-empty { background: none; box-shadow: none; border: 0; backdrop-filter: none; }
-.wp-sub.wp-stagetop { color: var(--accent); font-weight: 600; } /* Heston (Nov 4, 21:30): Overview in red too */
+.wp-sub.wp-stagetop { color: var(--text-secondary); font-weight: 600; } /* D176: Overview is plain text too */
+.wp-sub.wp-stagetop[aria-current="page"] { color: var(--text-primary); }
 .msg-closed { margin: 0; padding: 14px 22px 18px; border-top: 1px solid var(--border-hairline); }
 .msg-acts { display: flex; gap: 8px; align-items: center; }
 
@@ -3573,3 +3575,36 @@ canvas.wp-glass.stale { opacity: 0; transition-duration: 90ms; } /* ?glass=lazy 
   .menu { animation: wp-menu-in 140ms var(--ease-out); transform-origin: top left; }
 }
 @media not all and (min-width: 821px), (prefers-reduced-motion: reduce) { .wp-hl, .tabs-hl { display: none; } }
+
+
+/* ---------- D176 (Heston, Nov 15): an icon on every submenu item ----------
+   Stage rows and ungrouped pages: an 18 px icon under the top-level icon, text in line with the top-level labels (48 px). Pages
+   under a stage are indented one step. The icons are red like the top-level ones; the text is not. */
+.wp-sub { gap: 15px; padding-left: 15px; }
+.wp-sub.wp-stagesub { gap: 10px; padding-left: 40px; }
+.wp-sub > .wp-icon { flex: 0 0 18px; width: 18px; height: 18px; color: var(--accent); }
+.wp-stagewrap .wp-stage > .wp-icon { color: var(--accent); }
+
+/* ---------- D176 (Heston, Nov 15): the side menu toggles (computer only) ----------
+   Pinned: today's layout. Hidden: the menu slides off the left and the page takes the width. Peek (hovering the hamburger):
+   it slides out over the page. A gap element in the layout animates the push; only transform moves on the glass. */
+.wp-brandl { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wp-deskmenu { display: none; }
+.wp-sidegap { display: none; }
+@media (min-width: 821px) {
+  .wp-shell:not(.overlay) > .wp-sidegap { display: block; flex: 0 0 calc(var(--sidebar-w) + 12px); transition: flex-basis 220ms var(--ease-out); }
+  .wp-shell[data-menu="hidden"] > .wp-sidegap, .wp-shell[data-menu="peek"] > .wp-sidegap { flex-basis: 0; }
+  .wp-shell:not(.overlay) > .wp-side:not(.drawer) {
+    position: fixed; z-index: 30; top: 12px; left: 12px; bottom: 12px; margin: 0; height: auto;
+    transition: transform 220ms var(--ease-out), visibility 0s;
+  }
+  .wp-shell[data-menu="hidden"] > .wp-side:not(.drawer) { transform: translateX(calc(-100% - 24px)); visibility: hidden; transition: transform 220ms var(--ease-out), visibility 0s 220ms; }
+  .wp-shell[data-menu="peek"] > .wp-side:not(.drawer) { box-shadow: var(--shadow-float); backdrop-filter: blur(22px) saturate(135%) brightness(.62); -webkit-backdrop-filter: blur(22px) saturate(135%) brightness(.62); background: linear-gradient(rgba(8, 6, 9, .6), rgba(8, 6, 9, .6)), var(--glass-fill); }
+  .wp-shell:not(.overlay) .wp-brand .wp-deskmenu { display: inline-grid; margin: -6px 0 -6px -6px; }
+  .wp-deskmenu-fixed { display: inline-grid; position: fixed; z-index: 31; top: 18px; left: 22px; width: 36px; height: 36px; margin: 0; }
+  /* the top bar steps aside for the hamburger while the menu is hidden */
+  .wp-shell[data-menu="hidden"]:not(.overlay) .main > .topbar, .wp-shell[data-menu="peek"]:not(.overlay) .main > .topbar { padding-left: 64px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wp-sidegap, .wp-shell:not(.overlay) > .wp-side:not(.drawer) { transition: none !important; }
+}
