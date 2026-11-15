@@ -1,1 +1,18 @@
-<svg viewBox="0 0 24 24" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g><path d="M4 3.5V20.5H20.5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M8 17V12" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M12 17V8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M16 17V11" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><g><path d="M3.125 2.625H4.875V4.375H3.125V2.625Z" style="fill:var(--icon-ground,#030104)"/><path d="M3.125 2.625H4.875V4.375H3.125V2.625Z" fill="currentColor" fill-opacity="0.65098"/><path d="M3.5 3.0H4.5V4.0H3.5V3.0Z" stroke-width="0.75" stroke="currentColor"/></g><g><path d="M19.625 19.625H21.375V21.375H19.625V19.625Z" style="fill:var(--icon-ground,#030104)"/><path d="M19.625 19.625H21.375V21.375H19.625V19.625Z" fill="currentColor" fill-opacity="0.65098"/><path d="M20.0 20.0H21.0V21.0H20.0V20.0Z" stroke-width="0.75" stroke="currentColor"/></g></g></svg>
+<svg viewBox="3.876 0.751 24 24" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+<g>
+<path d="M6.875 21.75H24.875" stroke-width="1.5" stroke-linejoin="round" stroke="currentColor"/>
+<path d="M8.875 21.75V13.75H11.875V21.75" stroke-width="1.5" stroke="currentColor"/>
+<path d="M14.375 21.75V6.75H17.375V21.75" stroke-width="1.5" stroke="currentColor"/>
+<path d="M19.875 21.75V10.75H22.875V21.75" stroke-width="1.5" stroke="currentColor"/>
+<g>
+<rect x="6" y="20.875" width="1.75" height="1.75" style="fill:var(--icon-ground,#030104)"/>
+<rect x="6" y="20.875" width="1.75" height="1.75" fill="currentColor" fill-opacity="0.65098"/>
+<rect x="6.375" y="21.25" width="1" height="1" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<rect x="24" y="20.875" width="1.75" height="1.75" style="fill:var(--icon-ground,#030104)"/>
+<rect x="24" y="20.875" width="1.75" height="1.75" fill="currentColor" fill-opacity="0.65098"/>
+<rect x="24.375" y="21.25" width="1" height="1" stroke-width="0.75" stroke="currentColor"/>
+</g>
+</g>
+</svg>

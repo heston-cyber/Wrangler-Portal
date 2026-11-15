@@ -8,7 +8,6 @@ import { Icon } from "../../ui/Icon";
 import { useToast } from "../../ui/kit";
 import { NewClient } from "../review/Projects";
 import { SelectList, type ItemSpec } from "../../ui/hold";
-import { CalendarPlus } from "lucide-react";
 import type { Id } from "../../../convex/_generated/dataModel";
 
 type ClientRow = NonNullable<ReturnType<typeof useQuery<typeof api.clients.directory>>>[number];
@@ -25,7 +24,7 @@ export function clientMenu(c: { _id: string; name: string }, add: (a: { who: str
   return {
     id: c._id, title: c.name, noShare: true,
     actions: [{
-      key: "followup", label: "Add follow-up", bulk: "Add follow-up", icon: <CalendarPlus size={16} />,
+      key: "followup", label: "Add follow-up", bulk: "Add follow-up", icon: <Icon name="calendar-plus" size={16} />,
       form: {
         title: (n) => (n === 1 ? `Add a follow-up for ${c.name}` : `Add a follow-up for ${n} clients`),
         fields: [{ key: "about", label: "About", optional: true, placeholder: "Follow up" }, { key: "due", label: "Due", type: "date" }],

@@ -1,1 +1,30 @@
-<svg viewBox="0 0 24 24" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g><path d="M5 20.5V4.5H14V20.5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M14 9.5H19V20.5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M3.5 20.5H20.5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M8 8H11" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M8 11.5H11" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M8 15H11" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><g><path d="M4.125 3.625H5.875V5.375H4.125V3.625Z" style="fill:var(--icon-ground,#030104)"/><path d="M4.125 3.625H5.875V5.375H4.125V3.625Z" fill="currentColor" fill-opacity="0.65098"/><path d="M4.5 4.0H5.5V5.0H4.5V4.0Z" stroke-width="0.75" stroke="currentColor"/></g><g><path d="M13.125 3.625H14.875V5.375H13.125V3.625Z" style="fill:var(--icon-ground,#030104)"/><path d="M13.125 3.625H14.875V5.375H13.125V3.625Z" fill="currentColor" fill-opacity="0.65098"/><path d="M13.5 4.0H14.5V5.0H13.5V4.0Z" stroke-width="0.75" stroke="currentColor"/></g></g></svg>
+<svg viewBox="3.876 3.876 24 24" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+<g>
+<path d="M8.875 24.875V6.875H18.875V24.875" stroke-width="1.5" stroke="currentColor"/>
+<path d="M18.875 12.875H22.875V24.875" stroke-width="1.5" stroke="currentColor"/>
+<path d="M6.875 24.875H24.875" stroke-width="1.5" stroke-linejoin="round" stroke="currentColor"/>
+<path d="M11.875 10.875H15.875" stroke-width="1.5" stroke-linejoin="round" stroke="currentColor"/>
+<path d="M11.875 14.875H15.875" stroke-width="1.5" stroke-linejoin="round" stroke="currentColor"/>
+<path d="M11.875 18.875H15.875" stroke-width="1.5" stroke-linejoin="round" stroke="currentColor"/>
+<g>
+<rect x="8" y="6" width="1.75" height="1.75" style="fill:var(--icon-ground,#030104)"/>
+<rect x="8" y="6" width="1.75" height="1.75" fill="currentColor" fill-opacity="0.65098"/>
+<rect x="8.375" y="6.375" width="1" height="1" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<rect x="18" y="6" width="1.75" height="1.75" style="fill:var(--icon-ground,#030104)"/>
+<rect x="18" y="6" width="1.75" height="1.75" fill="currentColor" fill-opacity="0.65098"/>
+<rect x="18.375" y="6.375" width="1" height="1" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<rect x="6" y="24" width="1.75" height="1.75" style="fill:var(--icon-ground,#030104)"/>
+<rect x="6" y="24" width="1.75" height="1.75" fill="currentColor" fill-opacity="0.65098"/>
+<rect x="6.375" y="24.375" width="1" height="1" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<rect x="24" y="24" width="1.75" height="1.75" style="fill:var(--icon-ground,#030104)"/>
+<rect x="24" y="24" width="1.75" height="1.75" fill="currentColor" fill-opacity="0.65098"/>
+<rect x="24.375" y="24.375" width="1" height="1" stroke-width="0.75" stroke="currentColor"/>
+</g>
+</g>
+</svg>
