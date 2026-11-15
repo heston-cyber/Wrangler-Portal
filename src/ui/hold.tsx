@@ -25,11 +25,22 @@ export type ItemAction = {
   danger?: boolean;
   /** asks first (single item); bulk asks with the count */
   confirm?: { title: string; body?: string; yes: string };
-  run: () => unknown;
+  run: (values?: Record<string, string>) => unknown;
   /** offered in select-several mode, with its label for many ("Delete", "Hide") */
   bulk?: string;
   /** a short line shown after it ran ("Deleted") */
   done?: string;
+  /** D177: a line for many, given how many went through ("Added 3 follow-ups.") */
+  doneMany?: (ok: number) => string;
+  /** D177: asks a few things once first (a small dialog), then runs for each item with what was typed */
+  form?: ActionForm;
+};
+
+/** D177: the questions an action asks before it runs (once, however many items are selected). */
+export type ActionForm = {
+  title: (n: number) => string;
+  fields: { key: string; label: string; type?: "text" | "date"; optional?: boolean; placeholder?: string }[];
+  yes: (n: number) => string;
 };
 
 export type ItemSpec = {
@@ -37,6 +48,8 @@ export type ItemSpec = {
   title: string;
   /** the portal page it opens (also what Share and Copy link use) */
   href?: string;
+  /** D177: a page only the owner can open (a client's record): no Share and no Copy link */
+  noShare?: boolean;
   /** links for someone outside (a client's review link, a vendor's briefing link) */
   share?: { label: string; url: string }[];
   actions?: ItemAction[];
@@ -146,22 +159,26 @@ export const useSelectList = () => useContext(ListContext);
 export function SelectList({ name, children }: { name: string; children: React.ReactNode }) {
   const [on, setOn] = useState(false);
   const [ids, setIds] = useState<string[]>([]);
+  const [note, setNote] = useState<string | null>(null); // kept here: the bar closes when everything went through, its message must stay
   const specs = useRef(new Map<string, ItemSpec>());
+  // stable on purpose: a row's cleanup (unregister) must run only when the row goes away, not on every selection change
+  const register = useCallback((spec: ItemSpec) => { specs.current.set(spec.id, spec); }, []);
+  const unregister = useCallback((id: string) => { specs.current.delete(id); }, []);
   const ctx = useMemo<ListCtx>(() => ({
     name, on,
     has: (id) => ids.includes(id),
     toggle: (id) => setIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id])),
     start: (id) => { setOn(true); setIds(id ? [id] : []); },
-    register: (spec) => { specs.current.set(spec.id, spec); },
-    unregister: (id) => { specs.current.delete(id); },
-  }), [name, on, ids]);
+    register, unregister,
+  }), [name, on, ids, register, unregister]);
   const done = useCallback(() => { setOn(false); setIds([]); }, []);
   // a selected item that's gone from the list (deleted, filtered away) leaves the selection
   useEffect(() => { if (on) setIds((s) => s.filter((id) => specs.current.has(id))); }, [on]);
   return (
     <ListContext.Provider value={ctx}>
       <div className={on ? "sel-on" : undefined} style={{ display: "contents" }}>{children}</div>
-      {on && <SelectBarFor name={name} ids={ids} specs={specs.current} all={() => setIds([...specs.current.keys()])} onDone={done} />}
+      {on && <SelectBarFor name={name} ids={ids} specs={specs.current} all={() => setIds([...specs.current.keys()])} onDone={done} onNote={setNote} />}
+      {note && <Toastish text={note} onGone={() => setNote(null)} />}
     </ListContext.Provider>
   );
 }
@@ -190,29 +207,40 @@ export function SelectTick({ on, label, onToggle }: { on: boolean; label: string
   );
 }
 
-function SelectBarFor({ name, ids, specs, all, onDone }: { name: string; ids: string[]; specs: Map<string, ItemSpec>; all: () => void; onDone: () => void }) {
+/** The actions every selected item has (by key), offered for many. */
+export function commonActions(picked: ItemSpec[]): ItemAction[] {
+  return picked.length ? (picked[0].actions ?? []).filter((a) => a.bulk && picked.every((s) => s.actions?.some((b) => b.key === a.key && b.bulk))) : [];
+}
+/** Runs one action on each selected item through the item's own version of it, so its own checks apply; says what couldn't be done. */
+export async function runMany(picked: ItemSpec[], a: ItemAction, values?: Record<string, string>): Promise<{ ok: number; failed: string[]; text: string }> {
+  let ok = 0;
+  const failed: string[] = [];
+  for (const s of picked) {
+    const mine = s.actions?.find((b) => b.key === a.key);
+    if (!mine) continue;
+    try { await mine.run(values); ok++; } catch (e) { failed.push(`${s.title}: ${errLine(e)}`); }
+  }
+  const lead = a.doneMany ? a.doneMany(ok) : `${a.done ?? "Done"}: ${ok}.`;
+  const text = failed.length ? `${a.doneMany ? lead : `${a.done ?? "Done"}: ${ok}.`} Not done: ${failed.length} (${failed.slice(0, 2).join("; ")}${failed.length > 2 ? "…" : ""})` : lead;
+  return { ok, failed, text };
+}
+
+function SelectBarFor({ name, ids, specs, all, onDone, onNote }: { name: string; ids: string[]; specs: Map<string, ItemSpec>; all: () => void; onDone: () => void; onNote: (t: string | null) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [ask, setAsk] = useState<ItemAction | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+  const [form, setForm] = useState<ItemAction | null>(null);
+  const setNote = onNote;
   const picked = ids.map((id) => specs.get(id)).filter((s): s is ItemSpec => !!s);
-  // the actions every selected item has (by key), offered for many
-  const common = picked.length
-    ? (picked[0].actions ?? []).filter((a) => a.bulk && picked.every((s) => s.actions?.some((b) => b.key === a.key && b.bulk)))
-    : [];
-  const links = picked.filter((s) => s.href);
-  const runAll = async (a: ItemAction) => {
+  const common = commonActions(picked);
+  const links = picked.filter((s) => s.href && !s.noShare);
+  const runAll = async (a: ItemAction, values?: Record<string, string>) => {
     setAsk(null);
+    setForm(null);
     setBusy(`${a.bulk}…`);
-    let ok = 0;
-    const failed: string[] = [];
-    for (const s of picked) {
-      const mine = s.actions?.find((b) => b.key === a.key);
-      if (!mine) continue;
-      try { await mine.run(); ok++; } catch (e) { failed.push(`${s.title}: ${errLine(e)}`); }
-    }
+    const r = await runMany(picked, a, values);
     setBusy(null);
-    setNote(failed.length ? `${a.done ?? "Done"}: ${ok}. Not done: ${failed.length} (${failed.slice(0, 2).join("; ")}${failed.length > 2 ? "…" : ""})` : `${a.done ?? "Done"}: ${ok}.`);
-    if (!failed.length) onDone();
+    setNote(r.text);
+    if (!r.failed.length) onDone();
   };
   const shareMany = async () => {
     const text = links.map((s) => `${s.title}\n${abs(s.href!)}`).join("\n\n");
@@ -229,13 +257,13 @@ function SelectBarFor({ name, ids, specs, all, onDone }: { name: string; ids: st
           {busy ? <span className="secondary">{busy}</span> : <>
             {links.length > 0 && <button className="btn sm" disabled={!ids.length} onClick={() => void shareMany()}><Share2 size={14} />Share</button>}
             {common.map((a) => (
-              <button key={a.key} className={`btn sm${a.danger ? " danger" : ""}`} disabled={!ids.length} onClick={() => (a.confirm || a.danger ? setAsk(a) : void runAll(a))}>{a.icon}{a.bulk}</button>
+              <button key={a.key} className={`btn sm${a.danger ? " danger" : ""}`} disabled={!ids.length} onClick={() => (a.form ? setForm(a) : a.confirm || a.danger ? setAsk(a) : void runAll(a))}>{a.icon}{a.bulk}</button>
             ))}
           </>}
           <button className="btn sm ghost" onClick={onDone} disabled={!!busy}><X size={14} />Done</button>
         </span>
       </div>
-      {note && <Toastish text={note} onGone={() => setNote(null)} />}
+      {form?.form && <FormAsk form={form.form} n={ids.length} onNo={() => setForm(null)} onYes={(v) => void runAll(form, v)} />}
       {ask && (
         <Confirm title={`${ask.bulk} ${ids.length} ${ids.length === 1 ? singular(name) : name}?`} body={ask.confirm?.body} yes={`${ask.bulk} ${ids.length}`}
           danger={ask.danger} onNo={() => setAsk(null)} onYes={() => void runAll(ask)} />
@@ -251,18 +279,19 @@ export function ItemMenuHost() {
   const narrow = useIsNarrow();
   const [ask, setAsk] = useState<{ a: ItemAction; spec: ItemSpec } | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const run = async (a: ItemAction) => {
-    try { await a.run(); if (a.done) setNote(a.done); } catch (e) { setNote(errLine(e)); }
+  const [formAsk, setFormAsk] = useState<ItemAction | null>(null);
+  const run = async (a: ItemAction, values?: Record<string, string>) => {
+    try { await a.run(values); if (a.done) setNote(a.done); } catch (e) { setNote(errLine(e)); }
   };
-  const choose = (a: ItemAction, spec: ItemSpec) => { closeItemMenu(); if (a.confirm) setAsk({ a, spec }); else void run(a); };
+  const choose = (a: ItemAction, spec: ItemSpec) => { closeItemMenu(); if (a.form) setFormAsk(a); else if (a.confirm) setAsk({ a, spec }); else void run(a); };
   let body: React.ReactNode = null;
   if (open) {
     const { spec, list } = open;
     const href = spec.href;
     const entries: React.ReactNode[] = [];
     if (href) entries.push(<Entry key="open" icon={<ExternalLink size={16} />} onSelect={() => { closeItemMenu(); navigate(href); }}>Open</Entry>);
-    if (href) entries.push(<Entry key="share" icon={<Share2 size={16} />} onSelect={async () => { closeItemMenu(); const r = await shareOrCopy({ title: spec.title, url: abs(href) }); if (r === "copied") setNote("Link copied."); }}>Share</Entry>);
-    if (href) entries.push(<Entry key="copy" icon={<Copy size={16} />} onSelect={async () => { closeItemMenu(); setNote((await copy(abs(href))) ? "Link copied." : "Couldn't copy the link."); }}>Copy link</Entry>);
+    if (href && !spec.noShare) entries.push(<Entry key="share" icon={<Share2 size={16} />} onSelect={async () => { closeItemMenu(); const r = await shareOrCopy({ title: spec.title, url: abs(href) }); if (r === "copied") setNote("Link copied."); }}>Share</Entry>);
+    if (href && !spec.noShare) entries.push(<Entry key="copy" icon={<Copy size={16} />} onSelect={async () => { closeItemMenu(); setNote((await copy(abs(href))) ? "Link copied." : "Couldn't copy the link."); }}>Copy link</Entry>);
     for (const s of spec.share ?? []) entries.push(<Entry key={`s-${s.label}`} icon={<Share2 size={16} />} onSelect={async () => { closeItemMenu(); const r = await shareOrCopy({ title: spec.title, url: s.url }); if (r === "copied") setNote("Link copied."); }}>{s.label}</Entry>);
     if (spec.select) entries.push(<Entry key="select" icon={<CheckSquare size={16} />} onSelect={() => { closeItemMenu(); spec.select!(); }}>Select</Entry>);
     else if (list && !list.on) entries.push(<Entry key="select" icon={<CheckSquare size={16} />} onSelect={() => { closeItemMenu(); list.start(spec.id); }}>Select</Entry>);
@@ -285,8 +314,35 @@ export function ItemMenuHost() {
       {body}
       {ask && <Confirm title={ask.a.confirm!.title} body={ask.a.confirm!.body} yes={ask.a.confirm!.yes} danger={ask.a.danger}
         onNo={() => setAsk(null)} onYes={() => { const a = ask.a; setAsk(null); void run(a); }} />}
+      {formAsk?.form && <FormAsk form={formAsk.form} n={1} onNo={() => setFormAsk(null)} onYes={(v) => { const a = formAsk; setFormAsk(null); void run(a, v); }} />}
       {note && <Toastish text={note} onGone={() => setNote(null)} />}
     </>
+  );
+}
+
+/** D177: the small dialog an action with `form` asks first. Required fields must be filled before it goes. */
+function FormAsk({ form, n, onYes, onNo }: { form: ActionForm; n: number; onYes: (v: Record<string, string>) => void; onNo: () => void }) {
+  const [v, setV] = useState<Record<string, string>>({});
+  const ready = form.fields.every((f) => f.optional || (v[f.key] ?? "").trim());
+  return (
+    <Modal onClose={onNo} label={form.title(n)} width={460}>
+      <form style={{ display: "grid", gap: 18 }} onSubmit={(e) => { e.preventDefault(); if (ready) onYes(v); }}>
+        <div className="dhead">
+          <h2 className="headline">{form.title(n)}</h2>
+          <button type="button" className="icon-btn" onClick={onNo} aria-label="Close"><X size={18} /></button>
+        </div>
+        {form.fields.map((f, i) => (
+          <label key={f.key} className="wp-field"><span className="wp-field-label">{f.label}{f.optional ? " (optional)" : ""}</span>
+            <input className="input" type={f.type ?? "text"} value={v[f.key] ?? ""} placeholder={f.placeholder} autoFocus={i === 0}
+              onChange={(e) => setV((o) => ({ ...o, [f.key]: e.target.value }))} />
+          </label>
+        ))}
+        <div className="dfoot">
+          <button type="button" className="btn" onClick={onNo}>Cancel</button>
+          <button type="submit" className="btn primary" disabled={!ready}>{form.yes(n)}</button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
