@@ -5,7 +5,8 @@
 import { ItemMenuHost } from "../ui/hold";
 import { BellButton } from "../modules/bell/BellButton";
 import { Light } from "./Light";
-import { Children, createContext, Fragment, isValidElement, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { Children, createContext, Fragment, isValidElement, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { deskMotion, nextSlide, pulse, slideDir } from "../lib/motion";
 import { useQuery } from "convex/react";
 import { useSignOutAsk } from "./SignOut";
 import { sideWord, useSideSwitch } from "./SideSwitch";
@@ -267,6 +268,17 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
     const section = all.find((it) => (it.tab ?? it.match)(path));
     return section?.layer ? trailOf(section, nav.main, path, side) : [];
   }, [nav, path, side]);
+  // D175: the page area slides in when you change pages: from the right going later down the menu or deeper, from the left going back.
+  const mainEl = useRef<HTMLDivElement>(null);
+  const lastPath = useRef(path);
+  useLayoutEffect(() => {
+    const prev = lastPath.current; if (prev === path) return;
+    lastPath.current = path;
+    const el = mainEl.current;
+    if (!el || !deskMotion()) return;
+    const dir = slideDir([...nav.main, ...nav.tabs], prev, path);
+    if (dir) pulse(el, "data-slide", nextSlide(el.getAttribute("data-slide") ?? undefined, dir));
+  }, [path]); // eslint-disable-line react-hooks/exhaustive-deps
   const ctx = useMemo(() => ({ openSidebar: () => setDrawerState("open"), peekSidebar: peek, openSearch: () => setSearch(true), overlay, side, trail }), [overlay, side, trail]);
   const showSidebar = !overlay || drawer;
   const lightSrc = side === "owner" ? lightBack : lightClient;
@@ -283,7 +295,7 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
         )}
         {((overlay && drawer) || phoneMenu) && <div className="wp-scrim" onClick={() => { setDrawer(false); setPhoneMenu(false); }} />}
         <PhoneTop me={me} side={side} items={[...nav.main, ...nav.tabs]} sections={nav.main} logo={logo} bizName={bizName} onSearch={onSearch} bell={bell} onMenu={() => setPhoneMenu(true)} />
-        <div className="main">{children}</div>
+        <div className="main" ref={mainEl}>{children}</div>
         <TabBar items={nav.tabs} />
       </div>
       {search && <SearchPalette onClose={() => setSearch(false)} />}
@@ -322,6 +334,27 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
   const isOpen = (it: Item) => open[it.to] ?? !!it.layerHas?.(path);
   const settingsOn = starts(path, "/settings");
   const touchX = useRef<number | null>(null); // a swipe left closes the drawer
+  // D175: the highlight behind the current item slides from the old item to the new one (desktop). Up to three pills: the
+  // section, and its page (and the stage above it). Only transform and size move; the items keep their own look on a phone.
+  const scrollEl = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const root = scrollEl.current; if (!root) return;
+    const on = deskMotion();
+    if (on) root.setAttribute("data-hl", ""); else { root.removeAttribute("data-hl"); return; }
+    // the deepest current item gets the first pill, so one pill travels from item to item; the section above it gets the next
+    const cur = Array.from(root.querySelectorAll<HTMLElement>(".wp-nav[aria-current=page], .wp-sub[aria-current=page], .wp-recent[aria-current=page]")).reverse();
+    const box = root.getBoundingClientRect();
+    root.querySelectorAll<HTMLElement>(".wp-hl").forEach((pill, i) => {
+      const el = cur[i];
+      if (!el) { pill.dataset.show = "0"; return; }
+      const r = el.getBoundingClientRect(), was = pill.dataset.show === "1";
+      if (!was) pill.style.transition = "none"; // a pill coming back appears where it belongs instead of sliding from where it was
+      pill.style.transform = `translate(${r.left - box.left + root.scrollLeft}px, ${r.top - box.top + root.scrollTop}px)`;
+      pill.style.width = `${r.width}px`; pill.style.height = `${r.height}px`; pill.dataset.show = "1";
+      if (!was) { void pill.offsetWidth; pill.style.transition = ""; }
+    });
+    if (!root.hasAttribute("data-ready")) requestAnimationFrame(() => root.setAttribute("data-ready", ""));
+  }, [path, open, items.length, recent.length, uploads.length]);
   return (
     <nav className={`wp-side${drawer ? " drawer" : ""}`} aria-label="Main" onMouseEnter={onHover && (() => onHover(true))} onMouseLeave={onHover && (() => onHover(false))}
       onTouchStart={drawer ? (e) => { touchX.current = e.touches[0].clientX; } : undefined}
@@ -335,7 +368,8 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
         </span>
       </div>
       {top}
-      <div className="scroll">
+      <div className="scroll" ref={scrollEl}>
+        <span className="wp-hl" aria-hidden /><span className="wp-hl" aria-hidden /><span className="wp-hl" aria-hidden />
         {items.map((it) => (
           <div key={it.to} style={{ display: "contents" }}>
             <div className={`wp-navwrap${it.layer ? " has-layer" : ""}`}>

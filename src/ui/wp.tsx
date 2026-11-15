@@ -1,7 +1,8 @@
 // The portal's components (Figma "02 · Components"), built on the classes in portal.css. Pages use these instead
 // of raw markup so every screen matches the approved design. Copy on the components comes from the page.
 import { SelectTick, useHold, useSelectable, type ItemSpec } from "./hold";
-import { forwardRef, useId, useState } from "react";
+import { forwardRef, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { deskMotion, nextSlide, pulse } from "../lib/motion";
 import { linkProps } from "../lib/router";
 import { Icon, type IconName } from "./Icon";
 
@@ -117,8 +118,43 @@ export function Tabs<K extends string>({ items, value, onChange, label }: { item
 }
 /** Filter pills (Pill tab). */
 export function PillTabs<K extends string>({ items, value, onChange, label }: { items: TabItem<K>[]; value: K; onChange: (k: K) => void; label: string }) {
+  // D175: on desktop the highlight slides from the old tab to the new one, and what sits under the tabs slides the same way
+  // (from the right going on, from the left going back). Transform and size only; a phone and "reduce motion" keep the plain look.
+  const root = useRef<HTMLDivElement>(null);
+  const last = useRef(-1);
+  const sig = items.map((t) => `${t.key}:${t.count ?? ""}`).join("|");
+  const place = () => {
+    const el = root.current; if (!el) return;
+    if (!deskMotion()) { el.removeAttribute("data-hl"); return; }
+    el.setAttribute("data-hl", "");
+    const btn = el.querySelector<HTMLElement>('[aria-selected="true"]'), pill = el.querySelector<HTMLElement>(".tabs-hl");
+    if (!btn || !pill) return;
+    pill.style.transform = `translate(${btn.offsetLeft}px, ${btn.offsetTop}px)`;
+    pill.style.width = `${btn.offsetWidth}px`; pill.style.height = `${btn.offsetHeight}px`; pill.dataset.show = "1";
+    if (!el.hasAttribute("data-ready")) requestAnimationFrame(() => el.setAttribute("data-ready", ""));
+  };
+  useLayoutEffect(() => {
+    place();
+    const el = root.current, at = items.findIndex((t) => t.key === value), from = last.current;
+    last.current = at;
+    if (!el || from < 0 || at < 0 || from === at || !deskMotion()) return;
+    // the content under the tabs row: the row's later siblings inside the page
+    const page = el.closest<HTMLElement>(".wp-page"); if (!page) return;
+    let row: HTMLElement = el;
+    while (row.parentElement && row.parentElement !== page) row = row.parentElement;
+    if (row.parentElement !== page) return;
+    page.querySelectorAll(":scope > [data-tabsrow]").forEach((x) => x.removeAttribute("data-tabsrow"));
+    row.setAttribute("data-tabsrow", "");
+    pulse(page, "data-tslide", nextSlide(page.getAttribute("data-tslide") ?? undefined, at > from ? "f" : "b"), 500, () => row.removeAttribute("data-tabsrow"));
+  }, [value, sig]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const el = root.current; if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(place); ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   return (
-    <div className="tabs" role="tablist" aria-label={label}>
+    <div className="tabs" role="tablist" aria-label={label} ref={root}>
+      <span className="tabs-hl" aria-hidden />
       {items.map((t) => (
         <button key={t.key} role="tab" type="button" className="tab" aria-selected={value === t.key} onClick={() => onChange(t.key)}>
           {t.label}{t.count !== undefined && <span className="count">{t.count}</span>}

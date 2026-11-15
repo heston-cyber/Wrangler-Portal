@@ -3530,3 +3530,46 @@ canvas.wp-glass.stale { opacity: 0; transition-duration: 90ms; } /* ?glass=lazy 
 :where(.wp-notice).glass { box-shadow: none; background: linear-gradient(var(--accent-tint), var(--accent-tint)), var(--glass-fill); }
 :where(.crm-col).glass { overflow: visible; }
 @media (max-width: 820px) { :where(.wp-morelist).glass { overflow: hidden; } }
+
+/* ---------- D175 (Heston, Nov 12): on desktop, changing pages, tabs and menus slides quickly ----------
+   Desktop with motion allowed only (phones and "reduce motion" keep the plain look). Only transform and size move, never opacity:
+   an opacity animation on a parent of glass makes the browser blur nothing until it ends. The f0/f1 and b0/b1 names are the
+   same slide twice, so that a second change replays it. */
+@keyframes wp-slide-f0 { from { transform: translateX(28px); } }
+@keyframes wp-slide-f1 { from { transform: translateX(28px); } }
+@keyframes wp-slide-b0 { from { transform: translateX(-28px); } }
+@keyframes wp-slide-b1 { from { transform: translateX(-28px); } }
+@keyframes wp-menu-in { from { transform: translateY(-8px) scale(.98); } }
+@media (min-width: 821px) and (prefers-reduced-motion: no-preference) {
+  /* the page area (the bar with the crumbs stays) */
+  .wp-shell .main[data-slide="f0"] { overflow-x: clip; } .wp-shell .main[data-slide="f1"] { overflow-x: clip; }
+  .wp-shell .main[data-slide="b0"] { overflow-x: clip; } .wp-shell .main[data-slide="b1"] { overflow-x: clip; }
+  .wp-shell .main[data-slide="f0"] > :not(.topbar):not(canvas) { animation: wp-slide-f0 200ms var(--ease-out); }
+  .wp-shell .main[data-slide="f1"] > :not(.topbar):not(canvas) { animation: wp-slide-f1 200ms var(--ease-out); }
+  .wp-shell .main[data-slide="b0"] > :not(.topbar):not(canvas) { animation: wp-slide-b0 200ms var(--ease-out); }
+  .wp-shell .main[data-slide="b1"] > :not(.topbar):not(canvas) { animation: wp-slide-b1 200ms var(--ease-out); }
+  /* what sits under a row of pill tabs */
+  .wp-page[data-tslide] { overflow-x: hidden; }
+  .wp-page[data-tslide="f0"] > [data-tabsrow] ~ * { animation: wp-slide-f0 200ms var(--ease-out); }
+  .wp-page[data-tslide="f1"] > [data-tabsrow] ~ * { animation: wp-slide-f1 200ms var(--ease-out); }
+  .wp-page[data-tslide="b0"] > [data-tabsrow] ~ * { animation: wp-slide-b0 200ms var(--ease-out); }
+  .wp-page[data-tslide="b1"] > [data-tabsrow] ~ * { animation: wp-slide-b1 200ms var(--ease-out); }
+  /* the pill-tab highlight */
+  .tabs { position: relative; }
+  .tabs-hl { position: absolute; left: 0; top: 0; width: 0; height: 0; border-radius: 999px; pointer-events: none; opacity: 0; box-sizing: border-box;
+    background: var(--accent-tint); border: 1px solid var(--accent-ring); }
+  .tabs-hl[data-show="1"] { opacity: 1; }
+  .tabs[data-ready] .tabs-hl { transition: transform 200ms var(--ease-out), width 200ms var(--ease-out), height 200ms var(--ease-out); }
+  .tabs[data-hl] > .tab { position: relative; z-index: 1; }
+  .tabs[data-hl] > .tab[aria-selected="true"] { background: transparent; border-color: transparent; }
+  /* the sidebar highlight */
+  .wp-side .scroll { position: relative; }
+  .wp-hl { position: absolute; left: 0; top: 0; width: 0; height: 0; border-radius: 10px; pointer-events: none; opacity: 0; z-index: 0; background: var(--surface-block-hover); }
+  .wp-hl[data-show="1"] { opacity: 1; }
+  .wp-side .scroll[data-ready] .wp-hl { transition: transform 200ms var(--ease-out), width 200ms var(--ease-out), height 200ms var(--ease-out); }
+  .wp-side .scroll[data-hl] .wp-navwrap, .wp-side .scroll[data-hl] .wp-sub, .wp-side .scroll[data-hl] .wp-stagewrap, .wp-side .scroll[data-hl] .wp-recent { position: relative; z-index: 1; }
+  .wp-side .scroll[data-hl] .wp-nav[aria-current="page"], .wp-side .scroll[data-hl] .wp-sub[aria-current="page"], .wp-side .scroll[data-hl] .wp-recent[aria-current="page"] { background: transparent; }
+  /* dropdowns and popups (crumb menus, right-click menus, the Create menu) slide down into place */
+  .menu { animation: wp-menu-in 140ms var(--ease-out); transform-origin: top left; }
+}
+@media not all and (min-width: 821px), (prefers-reduced-motion: reduce) { .wp-hl, .tabs-hl { display: none; } }
