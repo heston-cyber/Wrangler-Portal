@@ -11,38 +11,44 @@ const glass = readFileSync("src/lib/glass.ts", "utf8");
 const iconTs = readFileSync("src/ui/Icon.tsx", "utf8");
 const d176 = css.slice(css.indexOf("D176"));
 
-describe("D176 side menu toggle", () => {
-  it("176.1 the menu starts open and the choice is remembered in the browser", () => {
-    expect(shell).toMatch(/localStorage\.getItem\("wp\.menu"\) !== "hidden"/);
-    expect(shell).toMatch(/localStorage\.setItem\("wp\.menu", now \? "pinned" : "hidden"\)/);
+describe("D176 side menu toggle (follow-up Nov 15 13:34: shrink to the icons, or expand to the full width)", () => {
+  it("176.1 the menu starts full width and the choice is remembered in the browser (an older 'hidden' reads as the rail)", () => {
+    expect(shell).toMatch(/!\/\^\(rail\|hidden\)\$\/\.test\(localStorage\.getItem\("wp\.menu"\)/);
+    expect(shell).toMatch(/localStorage\.setItem\("wp\.menu", now \? "pinned" : "rail"\)/);
   });
 
-  it("176.2 three states are marked on the shell: pinned, peek (hover) and hidden", () => {
-    expect(shell).toMatch(/data-menu=/);
-    for (const s of ["pinned", "peek", "hidden"]) expect(shell).toContain(`"${s}"`);
-    expect(css).toContain('data-menu="hidden"');
+  it("176.2 three states are marked on the shell: pinned, rail (icons only) and peek (hovering the rail); none hides it", () => {
+    expect(shell).toMatch(/data-menu=\{overlay \? undefined : pinned \? "pinned" : peeking \? "peek" : "rail"\}/);
+    expect(css).toContain('data-menu="rail"');
     expect(css).toContain('data-menu="peek"');
+    expect(css).not.toContain('data-menu="hidden"');
+    expect(css).not.toMatch(/translateX\(calc\(-100% - 24px\)\)/);
   });
 
-  it("176.3 pinned pushes the page (a spacer the width of the menu); hidden and peek give the room back", () => {
-    expect(css).toMatch(/\.wp-sidegap \{[^}]*flex: 0 0 calc\(var\(--sidebar-w\)/);
-    expect(css).toMatch(/data-menu="hidden"\] > \.wp-sidegap, \.wp-shell\[data-menu="peek"\] > \.wp-sidegap \{ flex-basis: 0; \}/);
+  it("176.3 pinned pushes the page by the full menu; the rail and the peek push it by the rail only (the peek floats over)", () => {
+    expect(css).toMatch(/\.wp-sidegap \{[^}]*flex: 0 0 calc\(var\(--sidebar-w\) \+ 12px\)/);
+    expect(css).toMatch(/data-menu="rail"\] > \.wp-sidegap, \.wp-shell\[data-menu="peek"\] > \.wp-sidegap \{ flex-basis: calc\(var\(--rail-w\) \+ 12px\); \}/);
+    expect(css).toMatch(/--rail-w: 80px/);
   });
 
-  it("176.4 hidden: the menu slides off to the left and cannot be tabbed into; peek floats over the page", () => {
-    expect(css).toMatch(/data-menu="hidden"\] > \.wp-side:not\(\.drawer\) \{ transform: translateX\(calc\(-100% - 24px\)\); visibility: hidden;/);
+  it("176.4 the rail keeps the icons where they were and drops names, pages under a section, the logo, bell and search; the section you're in is highlighted", () => {
+    expect(css).toMatch(/data-menu="rail"\] > \.wp-side:not\(\.drawer\) \{ width: var\(--rail-w\); \}/);
+    expect(css).toMatch(/data-menu="rail"\] > \.wp-side:not\(\.drawer\) :is\(\.wp-sub, \.wp-stagewrap, \.wp-recent, \.wp-layerlabel, \.layer-toggle, \.wp-upload, \.wp-brandl > a, \.wp-brandr,/);
+    expect(css).toMatch(/data-menu="rail"\] > \.wp-side:not\(\.drawer\) \.wp-nav\.in \{ background/);
+    expect(shell).toMatch(/!it\.match\(path\) && it\.layerHas\?\.\(path\) \? " in"/);
     expect(css).toMatch(/data-menu="peek"\] > \.wp-side:not\(\.drawer\) \{[^}]*box-shadow: var\(--shadow-float\)/);
   });
 
-  it("176.5 a hamburger sits top left: inside the menu to hide or keep it, and fixed on the page while the menu is away", () => {
-    expect(shell).toMatch(/icon="menu" label="Show menu"[^>]*className="wp-deskmenu wp-deskmenu-fixed"/);
-    expect(shell).toMatch(/deskMenu\.pinned \? "Hide menu" : "Keep menu open"/);
+  it("176.5 the hamburger stays in the menu's top row in every state: it shrinks the menu to icons or keeps it open", () => {
+    expect(shell).toMatch(/deskMenu\.pinned \? "Shrink menu to icons" : "Keep menu open"/);
+    expect(shell).not.toContain("wp-deskmenu-fixed");
   });
 
-  it("176.6 hover peeks only with a real pointer, and the button that appears under a clicked pointer is not a hover", () => {
+  it("176.6 hovering the rail opens it after a moment (only with a real pointer); right after a click it waits until the pointer has left the menu", () => {
     expect(shell).toContain("pointer: fine");
+    expect(shell).toMatch(/setTimeout\(\(\) => setPeeking\(true\), 120\)/);
     expect(shell).toMatch(/armed\.current = false/);
-    expect(shell).toMatch(/if \(armed\.current\) peekDesk\(true\)/);
+    expect(shell).toMatch(/closest\?\.\("\.wp-side"\)\) \{ armed\.current = true/);
   });
 
   it("176.7 phones and the work-surface drawer are left alone: the toggle CSS only applies from 821 px up, and not to the drawer", () => {
@@ -53,7 +59,7 @@ describe("D176 side menu toggle", () => {
     expect(shell).toMatch(/\{!overlay && <div className="wp-sidegap"/);
   });
 
-  it("176.8 Reduce Motion: the menu still moves to its place, with no sliding", () => {
+  it("176.8 Reduce Motion: the menu still changes width, with no animation", () => {
     expect(d176).toMatch(/prefers-reduced-motion: reduce[\s\S]*wp-sidegap[\s\S]*transition: none/);
   });
 });

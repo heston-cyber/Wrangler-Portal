@@ -239,43 +239,35 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
     if (on) { if (matchMedia("(pointer: fine)").matches) setDrawerState((d) => d || "peek"); return; }
     peekTimer.current = window.setTimeout(() => setDrawerState((d) => (d === "peek" ? false : d)), 280);
   }, []);
-  // D176 (Heston, Nov 15): on a computer the side menu has a hamburger. Pinned: it sits in the page's left and pushes the page
-  // over (as before). Hidden: it slides away; hovering the hamburger slides it out over the page (peek); a click pins it again.
-  // The choice is remembered in this browser. Phones keep their own menu button (D172) and work surfaces keep their drawer.
-  const [pinned, setPinned] = useState(() => { try { return localStorage.getItem("wp.menu") !== "hidden"; } catch { return true; } });
+  // D176 (Heston, Nov 15): on a computer the side menu has a hamburger. Pinned: full width, pushing the page over (as
+  // before). Rail (D176 follow-up, Nov 15 13:34: "I dont want the menu to completly go away, just shrink to the icons, or
+  // expand to the full width"): only the icons, still pushing the page; hovering the rail opens the full menu over the page
+  // (peek) and a click on the hamburger keeps it open. The choice is remembered in this browser. Phones keep their own menu
+  // button (D172) and work surfaces keep their drawer.
+  const [pinned, setPinned] = useState(() => { try { return !/^(rail|hidden)$/.test(localStorage.getItem("wp.menu") ?? ""); } catch { return true; } });
   const [peeking, setPeeking] = useState(false);
   const deskTimer = useRef<number | null>(null);
-  const peekDesk = useCallback((on: boolean) => {
+  // after a click on the hamburger the pointer is still on the menu: that isn't a hover until it has left the menu once
+  const armed = useRef(true);
+  const hoverDesk = useCallback((on: boolean) => {
     if (deskTimer.current) { clearTimeout(deskTimer.current); deskTimer.current = null; }
     if (on) {
-      if (!matchMedia("(pointer: fine)").matches) return;
-      setPeeking(true);
-      // if the pointer never reaches the sliding menu (it can sit still), let it go again
-      deskTimer.current = window.setTimeout(() => { if (!document.querySelector(".wp-side:hover")) setPeeking(false); }, 1000);
+      if (!armed.current || !matchMedia("(pointer: fine)").matches) return;
+      deskTimer.current = window.setTimeout(() => setPeeking(true), 120); // passing over the rail on the way somewhere doesn't open it
       return;
     }
     deskTimer.current = window.setTimeout(() => setPeeking(false), 280);
   }, []);
-  // the menu itself only keeps a peek going (a menu sliding away under a still pointer must not bring itself back)
-  const peekingRef = useRef(false);
-  const keepDesk = useCallback((on: boolean) => {
-    if (on) { if (peekingRef.current && deskTimer.current) { clearTimeout(deskTimer.current); deskTimer.current = null; } return; }
-    if (!peekingRef.current) return;
-    if (deskTimer.current) clearTimeout(deskTimer.current);
-    deskTimer.current = window.setTimeout(() => setPeeking(false), 280);
-  }, []);
-  // after a click on the hamburger, the hamburger that appears under the pointer must not count as a hover until the pointer has moved off it
-  const armed = useRef(true);
   const toggleDesk = useCallback((e?: React.MouseEvent) => {
+    if (deskTimer.current) { clearTimeout(deskTimer.current); deskTimer.current = null; }
     if (e && e.detail > 0) {
       armed.current = false;
-      const onMove = (m: PointerEvent) => { if (!(m.target as Element | null)?.closest?.(".wp-deskmenu")) { armed.current = true; window.removeEventListener("pointermove", onMove); } };
+      const onMove = (m: PointerEvent) => { if (!(m.target as Element | null)?.closest?.(".wp-side")) { armed.current = true; window.removeEventListener("pointermove", onMove); } };
       window.addEventListener("pointermove", onMove);
     }
-    setPinned((was) => { const now = !was; try { localStorage.setItem("wp.menu", now ? "pinned" : "hidden"); } catch { /* private window */ } return now; });
+    setPinned((was) => { const now = !was; try { localStorage.setItem("wp.menu", now ? "pinned" : "rail"); } catch { /* private window */ } return now; });
     setPeeking(false);
   }, []);
-  useEffect(() => { peekingRef.current = peeking; }, [peeking]);
   const [search, setSearch] = useState(false);
   const { path } = useLocation();
   // Phones: while a text box has the keyboard, the tab bar steps aside (it would ride up above the keyboard) and the background holds still.
@@ -343,18 +335,14 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
   const bell = side === "owner" && !navIn; // Phase 5e step 4: the owner's and the team's bell
   return (
     <Ctx.Provider value={ctx}>
-      <div className={`wp-shell${overlay ? " overlay" : ""}${side !== "owner" ? " client-side" : ""}`} data-menu={overlay ? undefined : pinned ? "pinned" : peeking ? "peek" : "hidden"}>
+      <div className={`wp-shell${overlay ? " overlay" : ""}${side !== "owner" ? " client-side" : ""}`} data-menu={overlay ? undefined : pinned ? "pinned" : peeking ? "peek" : "rail"}>
         {light && !overlay && <Light className={`wp-light ${side === "owner" ? "back" : "client"}`} src={lightSrc} />}
         {!overlay && <div className="wp-sidegap" aria-hidden />}
-        {!overlay && !pinned && !peeking && (
-          <IconButton icon="menu" label="Show menu" iconSize={22} className="wp-deskmenu wp-deskmenu-fixed" onClick={toggleDesk}
-            onMouseEnter={() => { if (armed.current) peekDesk(true); }} onMouseLeave={() => peekDesk(false)} />
-        )}
         {showSidebar && (
           <Sidebar me={me} side={side} items={nav.main} logo={logo} bizName={bizName} subtitle={subtitle} recent={recent} top={top}
             drawer={(overlay && !!drawer) || phoneMenu} onClose={() => { setDrawer(false); setPhoneMenu(false); }} onSearch={onSearch} bell={bell}
-            onHover={overlay && drawer === "peek" ? peek : !overlay && !pinned ? keepDesk : undefined}
-            deskMenu={overlay ? undefined : { pinned, toggle: toggleDesk }} />
+            onHover={overlay && drawer === "peek" ? peek : !overlay && !pinned ? hoverDesk : undefined}
+            deskMenu={overlay ? undefined : { pinned, state: pinned ? "pinned" : peeking ? "peek" : "rail", toggle: toggleDesk }} />
         )}
         {((overlay && drawer) || phoneMenu) && <div className="wp-scrim" onClick={() => { setDrawer(false); setPhoneMenu(false); }} />}
         <PhoneTop me={me} side={side} items={[...nav.main, ...nav.tabs]} sections={nav.main} logo={logo} bizName={bizName} onSearch={onSearch} bell={bell} onMenu={() => setPhoneMenu(true)} />
@@ -386,7 +374,7 @@ function Logo({ src, name }: { src: string; name: string }) {
 
 function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onClose, onSearch, onHover, top, bell, deskMenu }: {
   me: Me; side: Side; items: Item[]; logo: string; bizName: string; subtitle?: string | null; recent: Recent[]; drawer: boolean; onClose: () => void; onSearch?: () => void; top?: React.ReactNode; bell?: boolean;
-  onHover?: (on: boolean) => void; deskMenu?: { pinned: boolean; toggle: () => void };
+  onHover?: (on: boolean) => void; deskMenu?: { pinned: boolean; state: string; toggle: () => void };
 }) {
   const { path } = useLocation();
   const uploads = useUploads().filter((u) => u.status === "starting" || u.status === "uploading");
@@ -400,12 +388,15 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
   // D175: the highlight behind the current item slides from the old item to the new one (desktop). Up to three pills: the
   // section, and its page (and the stage above it). Only transform and size move; the items keep their own look on a phone.
   const scrollEl = useRef<HTMLDivElement>(null);
+  // D176 rail: the menu changes width; the pills are placed again once it has
+  const [sized, setSized] = useState(0);
+  const onWidth = (e: React.TransitionEvent) => { if (e.target === e.currentTarget && e.propertyName === "width") setSized((n) => n + 1); };
   useLayoutEffect(() => {
     const root = scrollEl.current; if (!root) return;
     const on = deskMotion();
     if (on) root.setAttribute("data-hl", ""); else { root.removeAttribute("data-hl"); return; }
     // the deepest current item gets the first pill, so one pill travels from item to item; the section above it gets the next
-    const cur = Array.from(root.querySelectorAll<HTMLElement>(".wp-nav[aria-current=page], .wp-sub[aria-current=page], .wp-recent[aria-current=page]")).reverse();
+    const cur = Array.from(root.querySelectorAll<HTMLElement>(".wp-nav[aria-current=page], .wp-sub[aria-current=page], .wp-recent[aria-current=page]")).filter((el) => el.getClientRects().length > 0).reverse();
     const box = root.getBoundingClientRect();
     root.querySelectorAll<HTMLElement>(".wp-hl").forEach((pill, i) => {
       const el = cur[i];
@@ -417,17 +408,17 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
       if (!was) { void pill.offsetWidth; pill.style.transition = ""; }
     });
     if (!root.hasAttribute("data-ready")) requestAnimationFrame(() => root.setAttribute("data-ready", ""));
-  }, [path, open, items.length, recent.length, uploads.length]);
+  }, [path, open, items.length, recent.length, uploads.length, deskMenu?.state, sized]);
   return (
-    <nav className={`wp-side${drawer ? " drawer" : ""}`} aria-label="Main" onMouseEnter={onHover && (() => onHover(true))} onMouseLeave={onHover && (() => onHover(false))}
+    <nav className={`wp-side${drawer ? " drawer" : ""}`} aria-label="Main" onTransitionEnd={onWidth} onMouseEnter={onHover && (() => onHover(true))} onMouseLeave={onHover && (() => onHover(false))}
       onTouchStart={drawer ? (e) => { touchX.current = e.touches[0].clientX; } : undefined}
       onTouchEnd={drawer ? (e) => { const x0 = touchX.current; touchX.current = null; if (x0 != null && e.changedTouches[0].clientX - x0 < -60) onClose(); } : undefined}>
       <div className={`wp-brand${side === "client" ? " client" : ""}`}>
         <span className="wp-brandl">
-          {deskMenu && <IconButton icon="menu" label={deskMenu.pinned ? "Hide menu" : "Keep menu open"} iconSize={22} className="wp-deskmenu" onClick={deskMenu.toggle} />}
+          {deskMenu && <IconButton icon="menu" label={deskMenu.pinned ? "Shrink menu to icons" : "Keep menu open"} iconSize={22} className="wp-deskmenu" onClick={deskMenu.toggle} />}
           <a {...linkProps("/")} aria-label={`${bizName} home`}><Logo src={logo} name={bizName} /></a>
         </span>
-        <span style={{ display: "flex", gap: 4 }}>
+        <span className="wp-brandr">
           {bell && <BellButton />}
           {onSearch && <IconButton icon="search" label="Search (⌘K)" onClick={onSearch} />}
           {drawer && <IconButton icon="close" label="Close menu" onClick={onClose} />}
@@ -439,7 +430,7 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
         {items.map((it) => (
           <div key={it.to} style={{ display: "contents" }}>
             <div className={`wp-navwrap${it.layer ? " has-layer" : ""}`}>
-              <a className="wp-nav" aria-current={it.match(path) ? "page" : undefined} {...linkProps(it.to)}>
+              <a className={`wp-nav${!it.match(path) && it.layerHas?.(path) ? " in" : ""}`} aria-current={it.match(path) ? "page" : undefined} {...linkProps(it.to)} title={deskMenu?.state === "rail" ? it.label : undefined}>
                 <Icon name={it.icon} size={24} />
                 <span className="t">{it.label}</span>
                 {it.badge ? <Badge n={it.badge} label={`${it.badge} unread`} /> : null}

@@ -3586,24 +3586,36 @@ canvas.wp-glass.stale { opacity: 0; transition-duration: 90ms; } /* ?glass=lazy 
 .wp-stagewrap .wp-stage > .wp-icon { color: var(--accent); }
 
 /* ---------- D176 (Heston, Nov 15): the side menu toggles (computer only) ----------
-   Pinned: today's layout. Hidden: the menu slides off the left and the page takes the width. Peek (hovering the hamburger):
-   it slides out over the page. A gap element in the layout animates the push; only transform moves on the glass. */
+   Pinned: today's layout. Rail (follow-up, 13:34: "just shrink to the icons, or expand to the full width"): the menu keeps
+   only its icons, 80 px, and still pushes the page. Peek (hovering the rail): the full menu over the page, which stays put.
+   The icons keep their place in all three, so nothing jumps; the names are clipped by the menu's edge as it narrows. */
 .wp-brandl { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wp-brandr { display: flex; gap: 4px; }
 .wp-deskmenu { display: none; }
 .wp-sidegap { display: none; }
 @media (min-width: 821px) {
+  .wp-shell:not(.overlay) { --rail-w: 80px; }
   .wp-shell:not(.overlay) > .wp-sidegap { display: block; flex: 0 0 calc(var(--sidebar-w) + 12px); transition: flex-basis 220ms var(--ease-out); }
-  .wp-shell[data-menu="hidden"] > .wp-sidegap, .wp-shell[data-menu="peek"] > .wp-sidegap { flex-basis: 0; }
+  .wp-shell[data-menu="rail"] > .wp-sidegap, .wp-shell[data-menu="peek"] > .wp-sidegap { flex-basis: calc(var(--rail-w) + 12px); }
   .wp-shell:not(.overlay) > .wp-side:not(.drawer) {
     position: fixed; z-index: 30; top: 12px; left: 12px; bottom: 12px; margin: 0; height: auto;
-    transition: transform 220ms var(--ease-out), visibility 0s;
+    transition: width 220ms var(--ease-out), box-shadow 220ms var(--ease-out);
   }
-  .wp-shell[data-menu="hidden"] > .wp-side:not(.drawer) { transform: translateX(calc(-100% - 24px)); visibility: hidden; transition: transform 220ms var(--ease-out), visibility 0s 220ms; }
+  .wp-shell[data-menu="rail"] > .wp-side:not(.drawer) { width: var(--rail-w); }
   .wp-shell[data-menu="peek"] > .wp-side:not(.drawer) { box-shadow: var(--shadow-float); backdrop-filter: blur(22px) saturate(135%) brightness(.62); -webkit-backdrop-filter: blur(22px) saturate(135%) brightness(.62); background: linear-gradient(rgba(8, 6, 9, .6), rgba(8, 6, 9, .6)), var(--glass-fill); }
-  .wp-shell:not(.overlay) .wp-brand .wp-deskmenu { display: inline-grid; margin: -6px 0 -6px -6px; }
-  .wp-deskmenu-fixed { display: inline-grid; position: fixed; z-index: 31; top: 18px; left: 22px; width: 36px; height: 36px; margin: 0; }
-  /* the top bar steps aside for the hamburger while the menu is hidden */
-  .wp-shell[data-menu="hidden"]:not(.overlay) .main > .topbar, .wp-shell[data-menu="peek"]:not(.overlay) .main > .topbar { padding-left: 64px; }
+  .wp-shell:not(.overlay) .wp-brand .wp-deskmenu { display: inline-grid; margin: -6px 0 -6px -6px; flex: 0 0 auto; }
+  /* names clip at the menu's edge instead of ending in "…" while it narrows */
+  .wp-shell:not(.overlay) > .wp-side:not(.drawer) .wp-nav { overflow: hidden; }
+  .wp-shell:not(.overlay) > .wp-side:not(.drawer) .wp-nav > .t { flex: 0 0 auto; text-overflow: clip; }
+  .wp-shell:not(.overlay) > .wp-side:not(.drawer) .wp-nav > .wp-badge { margin-left: auto; }
+  .wp-shell:not(.overlay) > .wp-side:not(.drawer) .wp-brand { flex-wrap: nowrap; min-width: 0; }
+  /* the rail: icons only. The pages under a section, the brand's right side, chevrons and names step out of the way. */
+  .wp-shell[data-menu="rail"] > .wp-side:not(.drawer) :is(.wp-sub, .wp-stagewrap, .wp-recent, .wp-layerlabel, .layer-toggle, .wp-upload, .wp-brandl > a, .wp-brandr, .wp-acct .who, .wp-acct > .wp-icon) { display: none; }
+  .wp-shell[data-menu="rail"] > .wp-side:not(.drawer) .wp-nav { position: relative; }
+  /* in the rail the pages under a section are out of sight, so the section you're in carries the highlight */
+  .wp-shell[data-menu="rail"] > .wp-side:not(.drawer) .wp-nav.in { background: var(--surface-block-hover); }
+  .wp-shell[data-menu="rail"] > .wp-side:not(.drawer) .wp-nav > .t { visibility: hidden; } /* back the moment it widens, clipped by the edge */
+  .wp-shell[data-menu="rail"] > .wp-side:not(.drawer) .wp-nav > .wp-badge { position: absolute; left: 28px; top: 2px; margin: 0; transform: scale(.82); }
 }
 @media (prefers-reduced-motion: reduce) {
   .wp-sidegap, .wp-shell:not(.overlay) > .wp-side:not(.drawer) { transition: none !important; }
