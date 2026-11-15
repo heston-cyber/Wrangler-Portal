@@ -2971,7 +2971,8 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 .wp-stagewrap .stage-toggle { position: absolute; right: 4px; display: grid; place-items: center; width: 28px; height: 28px; border: 0; background: none; border-radius: 8px; padding: 0; color: var(--accent); cursor: pointer; }
 .wp-stagewrap .stage-toggle:hover { background: var(--surface-block-hover); }
 .wp-stagewrap .stage-toggle:focus-visible { outline: 2px solid var(--accent-ring); }
-.wp-stagewrap .wp-stage, .wp-stagewrap .wp-stage[aria-current="page"] { color: var(--accent); } /* Heston (Nov 4, 21:29): the four stages in red */
+.wp-stagewrap .wp-stage, .wp-stagewrap .wp-stage[aria-current="page"] { color: var(--text-secondary); } /* D176 (Heston, Nov 15): no red text in the menu (was red from Nov 4) */
+.wp-stagewrap .wp-stage[aria-current="page"] { color: var(--text-primary); }
 .wp-stagewrap .wp-stage .wp-soon { color: var(--text-muted); }
 .wp-sub.wp-stagesub { padding-left: 64px; }
 .wp-soon { margin-left: 8px; font: 500 10px/1 var(--font-title); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-muted); }
@@ -3096,7 +3097,8 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
   .msg-scroll { padding: 14px 14px; } .msg-head { padding: 14px 14px; } .msg-compose { padding: 10px 12px 12px; }
 }
 .msg-thread .wp-empty { background: none; box-shadow: none; border: 0; backdrop-filter: none; }
-.wp-sub.wp-stagetop { color: var(--accent); font-weight: 600; } /* Heston (Nov 4, 21:30): Overview in red too */
+.wp-sub.wp-stagetop { color: var(--text-secondary); font-weight: 600; } /* D176: Overview is plain text too */
+.wp-sub.wp-stagetop[aria-current="page"] { color: var(--text-primary); }
 .msg-closed { margin: 0; padding: 14px 22px 18px; border-top: 1px solid var(--border-hairline); }
 .msg-acts { display: flex; gap: 8px; align-items: center; }
 
@@ -3425,7 +3427,24 @@ canvas.wp-glass.stale { opacity: 0; transition-duration: 90ms; } /* ?glass=lazy 
   }
   .backdrop > .dialog[data-full] > .dbody { padding: calc(32px + env(safe-area-inset-top, 0px)) 20px calc(24px + env(safe-area-inset-bottom, 0px)); }
   .backdrop > .dialog[data-full] > .dgrab { display: none; }
+  /* D174 (Heston, Nov 12: "Make it a glass panel that animates up quickly"; "it should animate back down if tapped out of"):
+     the options sheet (Create, a hold on a row) is lighter glass, ink 45 %, with a lighter scrim, and rises from the bottom
+     in 200 ms. Only transform and the scrim's colour move: an opacity animation on the scrim (or the sheet) makes the
+     browser blur nothing until it ends, so the page behind took a second to blur. */
+  .backdrop:has(> .dialog:not([data-full]) .hold-sheet) { background-color: rgba(var(--ink), .32); animation: wp-sheet-scrim 200ms var(--ease-out); }
+  .backdrop > .dialog:not([data-full]):has(.hold-sheet) {
+    --lg-ink: .45; --lg-veil: .25;
+    background: linear-gradient(180deg, rgba(var(--paper), .06), rgba(var(--paper), 0)), linear-gradient(color-mix(in srgb, var(--surface-base) 45%, transparent), color-mix(in srgb, var(--surface-base) 45%, transparent));
+    animation: wp-sheet-up 200ms var(--ease-out);
+  }
+  .backdrop[data-closing]:has(> .dialog .hold-sheet) { animation: wp-sheet-scrim-out 170ms ease-in forwards; pointer-events: none; }
+  .backdrop[data-closing] > .dialog:has(.hold-sheet) { animation: wp-sheet-down 170ms cubic-bezier(.4, 0, 1, 1) forwards; }
 }
+@keyframes wp-sheet-up { from { transform: translateY(105%); } to { transform: none; } }
+@keyframes wp-sheet-down { from { transform: none; } to { transform: translateY(105%); } }
+@keyframes wp-sheet-scrim { from { background-color: rgba(var(--ink), 0); } }
+@keyframes wp-sheet-scrim-out { to { background-color: rgba(var(--ink), 0); } }
+@media (prefers-reduced-motion: reduce) { .backdrop, .backdrop > .dialog { animation: none !important; } }
 .dialog > .dbody { display: contents; }
 .dialog > .dgrab { display: none; }
 
@@ -3469,6 +3488,8 @@ canvas.wp-glass.stale { opacity: 0; transition-duration: 90ms; } /* ?glass=lazy 
 /* the phone's sheet: the item's name, then the options as full-width rows */
 .hold-sheet { display: grid; gap: 10px; }
 .hold-title { padding: 0 4px 6px; border-bottom: 1px solid var(--border-hairline); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* D174 (Heston, Nov 12: "Create should be serif font"): the sheet's title is set in the serif of the page titles ("Dashboard.") */
+.hold-title .rbold { font: 400 30px/32px var(--font-serif); letter-spacing: -0.015em; color: var(--text-primary); text-shadow: var(--glow-text); }
 .hold-sheet .menu-list { display: grid; gap: 2px; }
 .hold-sheet .mitem { display: flex; align-items: center; width: 100%; min-height: 48px; padding: 10px 12px; border-radius: 12px; font-size: var(--fs-text-regular); background: none; text-align: left; }
 .hold-sheet .mitem > svg, .hold-sheet .mitem .lucide { width: 20px; height: 20px; flex: none; }
@@ -3511,3 +3532,92 @@ canvas.wp-glass.stale { opacity: 0; transition-duration: 90ms; } /* ?glass=lazy 
 :where(.wp-notice).glass { box-shadow: none; background: linear-gradient(var(--accent-tint), var(--accent-tint)), var(--glass-fill); }
 :where(.crm-col).glass { overflow: visible; }
 @media (max-width: 820px) { :where(.wp-morelist).glass { overflow: hidden; } }
+
+/* ---------- D175 (Heston, Nov 12): on desktop, changing pages, tabs and menus slides quickly ----------
+   Desktop with motion allowed only (phones and "reduce motion" keep the plain look). Only transform and size move, never opacity:
+   an opacity animation on a parent of glass makes the browser blur nothing until it ends. The f0/f1 and b0/b1 names are the
+   same slide twice, so that a second change replays it. */
+@keyframes wp-slide-f0 { from { transform: translateX(28px); } }
+@keyframes wp-slide-f1 { from { transform: translateX(28px); } }
+@keyframes wp-slide-b0 { from { transform: translateX(-28px); } }
+@keyframes wp-slide-b1 { from { transform: translateX(-28px); } }
+@keyframes wp-menu-in { from { transform: translateY(-8px) scale(.98); } }
+@media (min-width: 821px) and (prefers-reduced-motion: no-preference) {
+  /* the page area (the bar with the crumbs stays) */
+  .wp-shell .main[data-slide="f0"] { overflow-x: clip; } .wp-shell .main[data-slide="f1"] { overflow-x: clip; }
+  .wp-shell .main[data-slide="b0"] { overflow-x: clip; } .wp-shell .main[data-slide="b1"] { overflow-x: clip; }
+  .wp-shell .main[data-slide="f0"] > :not(.topbar):not(canvas) { animation: wp-slide-f0 200ms var(--ease-out); }
+  .wp-shell .main[data-slide="f1"] > :not(.topbar):not(canvas) { animation: wp-slide-f1 200ms var(--ease-out); }
+  .wp-shell .main[data-slide="b0"] > :not(.topbar):not(canvas) { animation: wp-slide-b0 200ms var(--ease-out); }
+  .wp-shell .main[data-slide="b1"] > :not(.topbar):not(canvas) { animation: wp-slide-b1 200ms var(--ease-out); }
+  /* what sits under a row of pill tabs */
+  .wp-page[data-tslide] { overflow-x: hidden; }
+  .wp-page[data-tslide="f0"] > [data-tabsrow] ~ * { animation: wp-slide-f0 200ms var(--ease-out); }
+  .wp-page[data-tslide="f1"] > [data-tabsrow] ~ * { animation: wp-slide-f1 200ms var(--ease-out); }
+  .wp-page[data-tslide="b0"] > [data-tabsrow] ~ * { animation: wp-slide-b0 200ms var(--ease-out); }
+  .wp-page[data-tslide="b1"] > [data-tabsrow] ~ * { animation: wp-slide-b1 200ms var(--ease-out); }
+  /* the pill-tab highlight */
+  .tabs { position: relative; }
+  .tabs-hl { position: absolute; left: 0; top: 0; width: 0; height: 0; border-radius: 999px; pointer-events: none; opacity: 0; box-sizing: border-box;
+    background: var(--accent-tint); border: 1px solid var(--accent-ring); }
+  .tabs-hl[data-show="1"] { opacity: 1; }
+  .tabs[data-ready] .tabs-hl { transition: transform 200ms var(--ease-out), width 200ms var(--ease-out), height 200ms var(--ease-out); }
+  .tabs[data-hl] > .tab { position: relative; z-index: 1; }
+  .tabs[data-hl] > .tab[aria-selected="true"] { background: transparent; border-color: transparent; }
+  /* the sidebar highlight */
+  .wp-side .scroll { position: relative; }
+  .wp-hl { position: absolute; left: 0; top: 0; width: 0; height: 0; border-radius: 10px; pointer-events: none; opacity: 0; z-index: 0; background: var(--surface-block-hover); }
+  .wp-hl[data-show="1"] { opacity: 1; }
+  .wp-side .scroll[data-ready] .wp-hl { transition: transform 200ms var(--ease-out), width 200ms var(--ease-out), height 200ms var(--ease-out); }
+  .wp-side .scroll[data-hl] .wp-navwrap, .wp-side .scroll[data-hl] .wp-sub, .wp-side .scroll[data-hl] .wp-stagewrap, .wp-side .scroll[data-hl] .wp-recent { position: relative; z-index: 1; }
+  .wp-side .scroll[data-hl] .wp-nav[aria-current="page"], .wp-side .scroll[data-hl] .wp-sub[aria-current="page"], .wp-side .scroll[data-hl] .wp-recent[aria-current="page"] { background: transparent; }
+  /* dropdowns and popups (crumb menus, right-click menus, the Create menu) slide down into place */
+  .menu { animation: wp-menu-in 140ms var(--ease-out); transform-origin: top left; }
+}
+@media not all and (min-width: 821px), (prefers-reduced-motion: reduce) { .wp-hl, .tabs-hl { display: none; } }
+
+
+/* ---------- D176 (Heston, Nov 15): an icon on every submenu item ----------
+   Stage rows and ungrouped pages: an 18 px icon under the top-level icon, text in line with the top-level labels (48 px). Pages
+   under a stage are indented one step. The icons are red like the top-level ones; the text is not. */
+.wp-sub { gap: 15px; padding-left: 15px; }
+.wp-sub.wp-stagesub { gap: 10px; padding-left: 40px; }
+.wp-sub > .wp-icon { flex: 0 0 18px; width: 18px; height: 18px; color: var(--accent); }
+.wp-stagewrap .wp-stage > .wp-icon { color: var(--accent); }
+
+/* ---------- D176 (Heston, Nov 15): the side menu toggles (computer only) ----------
+   Pinned: today's layout. Rail (follow-up, 13:34: "just shrink to the icons, or expand to the full width"): the menu keeps
+   only its icons, 80 px, and still pushes the page. Peek (hovering the rail): the full menu over the page, which stays put.
+   The icons keep their place in all three, so nothing jumps; the names are clipped by the menu's edge as it narrows. */
+.wp-brandl { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wp-brandr { display: flex; gap: 4px; }
+.wp-deskmenu { display: none; }
+.wp-sidegap { display: none; }
+@media (min-width: 821px) {
+  .wp-shell:not(.overlay) { --rail-w: 80px; }
+  .wp-shell:not(.overlay) > .wp-sidegap { display: block; flex: 0 0 calc(var(--sidebar-w) + 12px); transition: flex-basis 150ms var(--ease-out); }
+  .wp-shell[data-menu="rail"] > .wp-sidegap, .wp-shell[data-menu="peek"] > .wp-sidegap { flex-basis: calc(var(--rail-w) + 12px); }
+  .wp-shell:not(.overlay) > .wp-side:not(.drawer) {
+    position: fixed; z-index: 30; top: 12px; left: 12px; bottom: 12px; margin: 0; height: auto;
+    transition: width 150ms var(--ease-out), box-shadow 150ms var(--ease-out);
+  }
+  .wp-shell[data-menu="rail"] > .wp-side:not(.drawer) { width: var(--rail-w); }
+  /* the open-on-hover menu is the same glass as every other floating panel (Heston, Nov 15 14:00), with the float shadow */
+  .wp-shell[data-menu="peek"] > .wp-side:not(.drawer) { box-shadow: var(--shadow-float); }
+  .wp-shell:not(.overlay) .wp-brand .wp-deskmenu { display: inline-grid; margin: -6px 0 -6px -6px; flex: 0 0 auto; }
+  /* names clip at the menu's edge instead of ending in "…" while it narrows */
+  .wp-shell:not(.overlay) > .wp-side:not(.drawer) .wp-nav { overflow: hidden; }
+  .wp-shell:not(.overlay) > .wp-side:not(.drawer) .wp-nav > .t { flex: 0 0 auto; text-overflow: clip; }
+  .wp-shell:not(.overlay) > .wp-side:not(.drawer) .wp-nav > .wp-badge { margin-left: auto; }
+  .wp-shell:not(.overlay) > .wp-side:not(.drawer) .wp-brand { flex-wrap: nowrap; min-width: 0; }
+  /* the rail: icons only. The pages under a section, the brand's right side, chevrons and names step out of the way. */
+  .wp-shell[data-menu="rail"] > .wp-side:not(.drawer) :is(.wp-sub, .wp-stagewrap, .wp-recent, .wp-layerlabel, .layer-toggle, .wp-upload, .wp-brandl > a, .wp-brandr, .wp-acct .who, .wp-acct > .wp-icon) { display: none; }
+  .wp-shell[data-menu="rail"] > .wp-side:not(.drawer) .wp-nav { position: relative; }
+  /* in the rail the pages under a section are out of sight, so the section you're in carries the highlight */
+  .wp-shell[data-menu="rail"] > .wp-side:not(.drawer) .wp-nav.in { background: var(--surface-block-hover); }
+  .wp-shell[data-menu="rail"] > .wp-side:not(.drawer) .wp-nav > .t { visibility: hidden; } /* back the moment it widens, clipped by the edge */
+  .wp-shell[data-menu="rail"] > .wp-side:not(.drawer) .wp-nav > .wp-badge { position: absolute; left: 28px; top: 2px; margin: 0; transform: scale(.82); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wp-sidegap, .wp-shell:not(.overlay) > .wp-side:not(.drawer) { transition: none !important; }
+}

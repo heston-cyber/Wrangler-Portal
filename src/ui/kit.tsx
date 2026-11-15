@@ -167,12 +167,23 @@ export const MenuLabel = ({ children }: { children: React.ReactNode }) => <div c
 // ---------- Modal ----------
 // Phase 5f: on a phone a dialog is a glass sheet at the bottom (portal.css); its content scrolls inside .dbody (so the
 // glass's rim stays put), and a sheet that would fill the screen fills it (data-full: radius 0, ink 92 %, D167).
-export function Modal({ onClose, children, label, width }: { onClose: () => void; children: React.ReactNode; label: string; width?: number }) {
+export function Modal({ onClose, children, label, width, slideOut }: { onClose: () => void; children: React.ReactNode; label: string; width?: number; slideOut?: boolean }) {
+  // D174: on a phone the options sheet slides back down when it's dismissed (Escape, a tap outside) instead of vanishing;
+  // `onClose` runs when the slide ends. A pick inside the sheet still closes it at once (the parent unmounts it).
+  const [closing, setClosing] = useState(false);
+  const timer = useRef<number>(0);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const dismiss = useCallback(() => {
+    if (!slideOut || window.innerWidth > 820 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) { onClose(); return; }
+    if (timer.current) return;
+    setClosing(true);
+    timer.current = window.setTimeout(onClose, 170);
+  }, [slideOut, onClose]);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); dismiss(); } };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
+  }, [dismiss]);
   const dialog = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -195,7 +206,7 @@ export function Modal({ onClose, children, label, width }: { onClose: () => void
     return () => { ro.disconnect(); mo.disconnect(); window.removeEventListener("resize", fit); };
   }, []);
   return createPortal(
-    <div className="backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="backdrop" data-closing={closing || undefined} onPointerDown={(e) => { if (e.target === e.currentTarget) dismiss(); }}>
       <div ref={dialog} className="dialog" role="dialog" aria-modal="true" aria-label={label} style={width ? { width: `min(${width}px, 100%)` } : undefined}>
         <span className="dgrab" aria-hidden />
         <div ref={body} className="dbody">{children}</div>

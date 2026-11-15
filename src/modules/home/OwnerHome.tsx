@@ -8,6 +8,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { SwRow } from "../settings/SiteWatch";
+import { CreateMenu } from "./CreateMenu";
 import { Button, ButtonLink, Card, Divider, EmptyState, InboxItem, ListRow, PageHeader, SectionHead, SkeletonRows, StatusChip } from "../../ui/wp";
 import type { IconName } from "../../ui/Icon";
 import { useToast } from "../../ui/kit";
@@ -323,7 +324,7 @@ export default function OwnerHome() {
     <>
     <TopBar><span className="here">Dashboard</span></TopBar>
     <div className="wp-page wp-home pov">
-      <PageHeader title="Dashboard." sub="What needs you today." actions={<><ButtonLink variant="secondary" to="/settings/tools" iconEnd={false}>Customize</ButtonLink><ButtonLink variant="primary" to="/production/call-sheets/new" iconEnd={false}>New call sheet</ButtonLink></>} />
+      <PageHeader title="Dashboard." sub="What needs you today." actions={<><ButtonLink variant="secondary" to="/settings/tools" iconEnd={false}>Customize</ButtonLink><CreateMenu /></>} />
       {watch && watch.open > 0 && <SiteWatchRow w={watch} />}
       <div className="pov-stats ov-tiles">
         <Tile label="Today" n={dash ? dash.tiles.today : "–"} sub={dash?.tiles.todayFirst ? `${dash.tiles.today === 1 ? "shoot" : "shoots"} · ${dash.tiles.todayFirst.client ?? dash.tiles.todayFirst.project}` : "no shoots"}

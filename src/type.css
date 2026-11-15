@@ -62,8 +62,8 @@
 :root:not([data-brand]) .wp-light.back,
 :root:not([data-brand]) .wp-light.client:not(.curtain) {
   background-color: var(--surface-base);
-  background-image: url("/bg/cactus-desktop.jpg");
-  background-image: image-set(url("/bg/cactus-desktop.webp") type("image/webp"), url("/bg/cactus-desktop.jpg") type("image/jpeg"));
+  background-image: url("/bg/cactus-desktop-2.jpg");
+  background-image: image-set(url("/bg/cactus-desktop-2.webp") type("image/webp"), url("/bg/cactus-desktop-2.jpg") type("image/jpeg"));
   background-position: center;
   background-size: cover;
   background-repeat: no-repeat;
@@ -79,8 +79,8 @@
 @media (max-width: 820px) {
   :root:not([data-brand]) .wp-light.back,
   :root:not([data-brand]) .wp-light.client:not(.curtain) {
-    background-image: url("/bg/cactus-phone.jpg");
-    background-image: image-set(url("/bg/cactus-phone.webp") type("image/webp"), url("/bg/cactus-phone.jpg") type("image/jpeg"));
+    background-image: url("/bg/cactus-phone-2.jpg");
+    background-image: image-set(url("/bg/cactus-phone-2.webp") type("image/webp"), url("/bg/cactus-phone-2.jpg") type("image/jpeg"));
     /* Heston (Nov 5, 19:20): the horizon sits where Figma has it (about 80% down); a screen shorter than the 844 frame loses sky at the top, not ground */
     background-position: center bottom;
   }

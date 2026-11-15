@@ -219,7 +219,7 @@ export function startGlass(host: HTMLElement): () => void {
 
   const phone = () => innerWidth <= 820;
   const load = (isPhone: boolean) => {
-    const name = isPhone ? "cactus-phone" : "cactus-desktop";
+    const name = isPhone ? "cactus-phone-2" : "cactus-desktop-2";
     const im = new Image();
     im.decoding = "async";
     im.onload = () => {

@@ -47,7 +47,8 @@ function mockClient(side: Side) {
       return { onUpdate: () => () => {}, localQueryResult: () => answerFor(name, args), localQueryLogs: () => undefined, journal: () => undefined };
     },
     query: async (query: unknown, args?: Record<string, unknown>) => answer(getFunctionName(query as never), args),
-    mutation: async () => null,
+    // D177: a test can set window.__kitCalls = [] to see what the page would have sent
+    mutation: async (m: unknown, args?: unknown) => { (window as unknown as { __kitCalls?: unknown[] }).__kitCalls?.push({ name: getFunctionName(m as never), args }); return null; },
     // A call-sheet guest's "Email me a code" answers as the server does (guests.sendCode).
     action: async (a: unknown) => (getFunctionName(a as never) === "guests:sendCode" ? { to: "r•••@example.com", minutes: 10 } : null),
     connectionState: () => ({ hasInflightRequests: false, isWebSocketConnected: true, timeOfOldestInflightRequest: null, hasEverConnected: true, connectionCount: 1, connectionRetries: 0, inflightMutations: 0, inflightActions: 0 }),
