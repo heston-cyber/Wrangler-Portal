@@ -1,6 +1,6 @@
 # Icons
 
-The 49 icons in `src/assets/icons/` come from the Figma file "Wrangler Portal — Design", page `02 · Components`, frame
+The 73 icons in `src/assets/icons/` come from the Figma file "Wrangler Portal — Design", page `02 · Components`, frame
 `Components · Icons` (node 6:2). `src/ui/Icon.tsx` loads them, and the red in them is `currentColor`, so every icon
 takes the business accent. The glow is CSS (`--glow-icon` in `src/portal.css`), not part of the file.
 

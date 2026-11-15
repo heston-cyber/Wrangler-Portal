@@ -1,1 +1,18 @@
-<svg viewBox="0 0 24 24" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g><path d="M4.5 11V9.5A3 3 0 0 1 7.5 6.5H19.5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M16.5 3.5L19.5 6.5L16.5 9.5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M19.5 13V14.5A3 3 0 0 1 16.5 17.5H4.5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M7.5 14.5L4.5 17.5L7.5 20.5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><g><path d="M3.625 10.125H5.375V11.875H3.625V10.125Z" style="fill:var(--icon-ground,#030104)"/><path d="M3.625 10.125H5.375V11.875H3.625V10.125Z" fill="currentColor" fill-opacity="0.65098"/><path d="M4.0 10.5H5.0V11.5H4.0V10.5Z" stroke-width="0.75" stroke="currentColor"/></g><g><path d="M18.625 12.125H20.375V13.875H18.625V12.125Z" style="fill:var(--icon-ground,#030104)"/><path d="M18.625 12.125H20.375V13.875H18.625V12.125Z" fill="currentColor" fill-opacity="0.65098"/><path d="M19.0 12.5H20.0V13.5H19.0V12.5Z" stroke-width="0.75" stroke="currentColor"/></g></g></svg>
+<svg viewBox="2.875 1.531 24 24" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+<g>
+<path d="M6.875 12.5303V9.53033H20.875" stroke-width="1.5" stroke="currentColor"/>
+<path d="M17.875 6.53033L20.875 9.53033L17.875 12.5303" stroke-width="1.5" stroke="currentColor"/>
+<path d="M22.875 14.5303V17.5303H8.875" stroke-width="1.5" stroke="currentColor"/>
+<path d="M11.875 14.5303L8.875 17.5303L11.875 20.5303" stroke-width="1.5" stroke="currentColor"/>
+<g>
+<rect x="6" y="11.6553" width="1.75" height="1.75" style="fill:var(--icon-ground,#030104)"/>
+<rect x="6" y="11.6553" width="1.75" height="1.75" fill="currentColor" fill-opacity="0.65098"/>
+<rect x="6.375" y="12.0303" width="1" height="1" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<rect x="22" y="13.6553" width="1.75" height="1.75" style="fill:var(--icon-ground,#030104)"/>
+<rect x="22" y="13.6553" width="1.75" height="1.75" fill="currentColor" fill-opacity="0.65098"/>
+<rect x="22.375" y="14.0303" width="1" height="1" stroke-width="0.75" stroke="currentColor"/>
+</g>
+</g>
+</svg>

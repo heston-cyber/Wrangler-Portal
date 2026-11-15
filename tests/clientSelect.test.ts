@@ -69,4 +69,16 @@ describe("D177 the Clients select bar", () => {
     // the bar's message lives in the list, so it stays after the bar closes on success
     expect(hold).toMatch(/\{note && <Toastish text=\{note\} onGone=\{\(\) => setNote\(null\)\} \/>\}\n    <\/ListContext\.Provider>/);
   });
+  it("178.1 Add follow-up uses the designer's calendar-plus icon (Q122), and the redrawn menu icons are in the icon folder", () => {
+    expect(page).toMatch(/<Icon name="calendar-plus" size=\{16\} \/>/);
+    expect(page).not.toMatch(/lucide-react.*CalendarPlus|CalendarPlus/);
+    const types = readFileSync("src/ui/Icon.tsx", "utf8");
+    for (const n of ["calendar-plus", "overview", "chart", "wallet", "clapper", "call-sheet"]) {
+      expect(types).toContain(`"${n}"`);
+      const svg = readFileSync(`src/assets/icons/${n}.svg`, "utf8");
+      expect(svg).toMatch(/width="24" height="24"/);
+      expect(svg).toContain("currentColor");
+      expect(svg).not.toMatch(/<filter|#FF0000/i);
+    }
+  });
 });

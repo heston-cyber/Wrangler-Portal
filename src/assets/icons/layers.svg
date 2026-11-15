@@ -1,1 +1,22 @@
-<svg viewBox="0 0 24 24" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g><path d="M12 3.5L21 8L12 12.5L3 8Z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M3 12L12 16.5L21 12" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M3 16L12 20.5L21 16" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><g><path d="M2.125 7.125H3.875V8.875H2.125V7.125Z" style="fill:var(--icon-ground,#030104)"/><path d="M2.125 7.125H3.875V8.875H2.125V7.125Z" fill="currentColor" fill-opacity="0.65098"/><path d="M2.5 7.5H3.5V8.5H2.5V7.5Z" stroke-width="0.75" stroke="currentColor"/></g><g><path d="M20.125 7.125H21.875V8.875H20.125V7.125Z" style="fill:var(--icon-ground,#030104)"/><path d="M20.125 7.125H21.875V8.875H20.125V7.125Z" fill="currentColor" fill-opacity="0.65098"/><path d="M20.5 7.5H21.5V8.5H20.5V7.5Z" stroke-width="0.75" stroke="currentColor"/></g></g></svg>
+<svg viewBox="4.543 3.876 24 24" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+<g>
+<path d="M16.5443 6.875L25.5443 11.875L16.5443 16.875L7.54434 11.875L16.5443 6.875Z" stroke-width="1.5" stroke-linecap="round" stroke="currentColor"/>
+<path d="M7.54434 15.875L16.5443 20.875L25.5443 15.875" stroke-width="1.5" stroke="currentColor"/>
+<path d="M7.54434 19.875L16.5443 24.875L25.5443 19.875" stroke-width="1.5" stroke="currentColor"/>
+<g>
+<rect x="15.6693" y="6" width="1.75" height="1.75" style="fill:var(--icon-ground,#030104)"/>
+<rect x="15.6693" y="6" width="1.75" height="1.75" fill="currentColor" fill-opacity="0.65098"/>
+<rect x="16.0443" y="6.375" width="1" height="1" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<rect x="24.6693" y="11" width="1.75" height="1.75" style="fill:var(--icon-ground,#030104)"/>
+<rect x="24.6693" y="11" width="1.75" height="1.75" fill="currentColor" fill-opacity="0.65098"/>
+<rect x="25.0443" y="11.375" width="1" height="1" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<rect x="6.66934" y="11" width="1.75" height="1.75" style="fill:var(--icon-ground,#030104)"/>
+<rect x="6.66934" y="11" width="1.75" height="1.75" fill="currentColor" fill-opacity="0.65098"/>
+<rect x="7.04434" y="11.375" width="1" height="1" stroke-width="0.75" stroke="currentColor"/>
+</g>
+</g>
+</svg>

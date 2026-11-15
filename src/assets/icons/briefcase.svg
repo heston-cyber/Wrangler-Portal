@@ -1,1 +1,29 @@
-<svg viewBox="0 0 24 24" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g><path d="M3.5 8H20.5V20H3.5Z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M9 8V5H15V8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M3.5 13H20.5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M10.5 11.5H13.5V14.5H10.5Z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><g><path d="M2.625 7.125H4.375V8.875H2.625V7.125Z" style="fill:var(--icon-ground,#030104)"/><path d="M2.625 7.125H4.375V8.875H2.625V7.125Z" fill="currentColor" fill-opacity="0.65098"/><path d="M3.0 7.5H4.0V8.5H3.0V7.5Z" stroke-width="0.75" stroke="currentColor"/></g><g><path d="M19.625 19.125H21.375V20.875H19.625V19.125Z" style="fill:var(--icon-ground,#030104)"/><path d="M19.625 19.125H21.375V20.875H19.625V19.125Z" fill="currentColor" fill-opacity="0.65098"/><path d="M20.0 19.5H21.0V20.5H20.0V19.5Z" stroke-width="0.75" stroke="currentColor"/></g></g></svg>
+<svg viewBox="3.876 1.750 24 24" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+<g>
+<path d="M6.875 9.75H24.875V21.75H6.875V9.75Z" stroke-width="1.5" stroke-linecap="round" stroke="currentColor"/>
+<path d="M12.875 9.75V6.75H18.875V9.75" stroke-width="1.5" stroke="currentColor"/>
+<path d="M6.875 14.75H13.875" stroke-width="1.5" stroke-linejoin="round" stroke="currentColor"/>
+<path d="M17.875 14.75H24.875" stroke-width="1.5" stroke-linejoin="round" stroke="currentColor"/>
+<path d="M13.875 13.75H17.875V16.75H13.875V13.75Z" stroke-width="1.5" stroke-linecap="round" stroke="currentColor"/>
+<g>
+<rect x="6" y="8.875" width="1.75" height="1.75" style="fill:var(--icon-ground,#030104)"/>
+<rect x="6" y="8.875" width="1.75" height="1.75" fill="currentColor" fill-opacity="0.65098"/>
+<rect x="6.375" y="9.25" width="1" height="1" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<rect x="24" y="8.875" width="1.75" height="1.75" style="fill:var(--icon-ground,#030104)"/>
+<rect x="24" y="8.875" width="1.75" height="1.75" fill="currentColor" fill-opacity="0.65098"/>
+<rect x="24.375" y="9.25" width="1" height="1" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<rect x="24" y="20.875" width="1.75" height="1.75" style="fill:var(--icon-ground,#030104)"/>
+<rect x="24" y="20.875" width="1.75" height="1.75" fill="currentColor" fill-opacity="0.65098"/>
+<rect x="24.375" y="21.25" width="1" height="1" stroke-width="0.75" stroke="currentColor"/>
+</g>
+<g>
+<rect x="6" y="20.875" width="1.75" height="1.75" style="fill:var(--icon-ground,#030104)"/>
+<rect x="6" y="20.875" width="1.75" height="1.75" fill="currentColor" fill-opacity="0.65098"/>
+<rect x="6.375" y="21.25" width="1" height="1" stroke-width="0.75" stroke="currentColor"/>
+</g>
+</g>
+</svg>
