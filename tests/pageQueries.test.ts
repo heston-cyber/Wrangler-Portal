@@ -194,6 +194,7 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "shotLists.get": { pages: ["owner"], args: () => "skip" },
   "shotLists.forShoot": { pages: ["owner"], args: () => "skip" },
   "shotLists.forBuild": { pages: ["owner"], args: () => "skip" }, // the builder's Shot list block
+  "shotLists.forProject": { pages: ["owner"], args: () => "skip" }, // the project Overview's Shot list card
   "callSheets.get": { pages: ["owner"], args: () => "skip" }, // the questions, the editor, Detail
   "callSheets.forClient": { pages: ["clientHome"], args: () => ({ callSheetId: "nope" }) }, // /call-sheets/<id>
   "callSheets.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Coming up

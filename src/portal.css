@@ -3755,3 +3755,9 @@ a.sl-day:hover .t { color: var(--text-accent); }
 .gst-shots .cs-shots-head, .gst-shots .cs-shot { color: var(--text-primary); }
 .gst-shots .cs-shot.done .t { color: var(--text-muted); }
 .gst-shots .cs-box { border-color: var(--text-muted); }
+.sl-card { padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; }
+.sl-card .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sl-card .big { margin: 0; font: 600 20px/28px var(--font-title); color: var(--text-primary); }
+.sl-card .wp-small { margin: 0; }
+.sl-cardline { color: var(--text-secondary); font-size: var(--fs-text-small); line-height: var(--lh-small); text-decoration: none; }
+.sl-cardline:hover { color: var(--text-primary); }

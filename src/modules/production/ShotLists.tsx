@@ -451,3 +451,35 @@ function RemoveList({ l, onClose }: { l: View; onClose: () => void }) {
       acts={<><Button onClick={onClose}>Cancel</Button><Button variant="danger" loading={busy} onClick={async () => { setBusy(true); await remove({ listId: l._id }); onClose(); navigate("/production/shot-lists"); }}>Delete</Button></>} />
   );
 }
+
+// ---------- the project Overview card (1038-39812) ----------
+
+/** "Shot list · 18 of 24 done", a line per shoot day ("Day 1 · Tue 11/3 · H-01 and H-02 · 6 left"), and Open. */
+export function ShotListCard({ projectId }: { projectId: string }) {
+  const d = useQuery(api.shotLists.forProject, { projectId });
+  const [making, setMaking] = useState(false);
+  if (!d) return null;
+  const total = d.lists.reduce((n, l) => n + l.total, 0), done = d.lists.reduce((n, l) => n + l.done, 0);
+  const lists = [...d.lists].sort((a, b) => (a.shoot?.day ?? 99) - (b.shoot?.day ?? 99));
+  const and = (xs: string[]) => xs.join(", ").replace(/, ([^,]*)$/, " and $1");
+  return (
+    <>
+      <Card className="pj-shots" label="Shot list">
+        <div className="sl-card">
+          <div className="top"><span className="sl-eyebrow">Shot list</span>
+            {lists.length > 0 ? <ButtonLink size="sm" to={`/production/shot-lists/${lists[0]._id}`} iconEnd={false}>Open</ButtonLink> : <Button size="sm" variant="ghost" onClick={() => setMaking(true)}>New shot list</Button>}</div>
+          {lists.length === 0 ? <p className="wp-small secondary">No shot list yet. Make one per shoot day, and tick shots off on set.</p> : <>
+            <p className="big">{total && done === total ? "All done" : `${done} of ${total} done`}</p>
+            <div className="sl-progress"><span className="bar" aria-hidden="true"><i style={{ width: `${total ? (100 * done) / total : 0}%` }} /></span></div>
+            {lists.map((l) => {
+              const codes = l.setups.filter((x) => !x.gap && x.code).map((x) => x.code as string);
+              return <a key={l._id} {...linkProps(`/production/shot-lists/${l._id}`)} className="sl-cardline">
+                {[dayLabel(l.shoot), codes.length ? and(codes) : "No setups yet", l.total ? (l.done === l.total ? "all done" : `${l.total - l.done} left`) : null].filter(Boolean).join(" · ")}</a>;
+            })}
+          </>}
+        </div>
+      </Card>
+      {making && <NewList projectId={projectId} onClose={() => setMaking(false)} />}
+    </>
+  );
+}
