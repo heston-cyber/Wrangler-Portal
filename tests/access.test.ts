@@ -124,6 +124,8 @@ const VENDOR = new Set(["help.list", "help.guide", "users.switchSide",
   "vendorPortal.w9UploadUrl", "vendorPortal.setW9", "vendorPayouts.mine", "vendorPayouts.setupLink", "vendorPayouts.refreshMine",
   // Phase 5b step 3: call sheets sent to them (only while booked on the project; tested in callSheets.test.ts)
   "vendorPortal.callSheet", "vendorPortal.callSheets", "vendorPortal.openCallSheet",
+  // Nov 16 (D180): the crew ticks a shot on a call sheet sent to them (shotLists.test.ts)
+  "vendorPortal.tickShot",
   // Phase 5e step 2: their own password, email and devices (security.test.ts)
   "security.state", "security.changePassword", "security.startEmailChange", "security.confirmEmailChange", "security.cancelEmailChange", "security.seenDevice", "security.signOutDevice"]);
 
@@ -404,6 +406,7 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "shoots.schedule": SHOOTS,
     "shoots.update": SHOOTS,
     "shoots.cancel": SHOOTS,
+    ...Object.fromEntries(["all", "forProject", "get", "forShoot", "create", "update", "remove", "addSetup", "editSetup", "removeSetup", "moveSetup", "addShots", "editShot", "removeShot", "moveShot", "tick", "reset"].map((f) => [`shotLists.${f}`, SHOOTS])),
     "sign.list": DOCS,
     "sign.get": DOCS,
     "sign.uploadUrl": DOCS,
