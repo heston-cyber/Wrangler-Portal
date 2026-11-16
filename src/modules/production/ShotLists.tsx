@@ -6,7 +6,7 @@ import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { Button, Card, EmptyState, Field, PageHeader, SkeletonRows, TextArea, TextField } from "../../ui/wp";
+import { Button, ButtonLink, Card, EmptyState, Field, PageHeader, SkeletonRows, TextArea, TextField } from "../../ui/wp";
 import { Icon } from "../../ui/Icon";
 import { Modal, useToast } from "../../ui/kit";
 import { Sep, TopBar } from "../../shell/Shell";
@@ -158,7 +158,7 @@ export function ShotListEditor({ listId }: { listId: string }) {
       <Crumbs><span className="here">{name}</span></Crumbs>
       <div className="wp-page prod sl-page">
         <PageHeader eyebrow="Shot list" title={`${name}.`} sub={sub}
-          actions={<><Button icon="plus" onClick={() => setDialog({ kind: "paste" })} disabled={!setups.length}>Paste shots</Button><Button variant="primary" onClick={() => setDialog({ kind: "setup" })}>Add setup</Button></>} />
+          actions={<>{l.shoot && <ButtonLink to={`/production/shoots/${l.shoot._id}/shot-list`} iconEnd={false}>On-set checklist</ButtonLink>}<Button icon="plus" onClick={() => setDialog({ kind: "paste" })} disabled={!setups.length}>Paste shots</Button><Button variant="primary" onClick={() => setDialog({ kind: "setup" })}>Add setup</Button></>} />
         <div className="sl-cols">
           <Card className="sl-main" label="Setups and shots">
             {l.setups.length === 0 ? <div className="sl-empty">

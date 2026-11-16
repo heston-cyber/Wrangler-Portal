@@ -26,8 +26,12 @@ export async function shootRows(ctx: QueryCtx, shoots: Shoot[]) {
     // Phase 5b step 3: its call sheet, if it has one (NO CALL SHEET · DRAFT · SENT · N OF M OPENED).
     const cs = await ctx.db.query("callSheets").withIndex("by_shoot", (q) => q.eq("shootId", s._id)).first();
     const sentTo = cs ? cs.recipients.filter((r) => r.sentAt) : []; // step 4: guests it went to count too
+    // Nov 16: its shot list (D179: one per shoot day), with how many shots are done.
+    const sl = await ctx.db.query("shotLists").withIndex("by_shoot", (q) => q.eq("shootId", s._id)).first();
+    const shots = sl ? await ctx.db.query("shots").withIndex("by_list", (q) => q.eq("listId", sl._id)).collect() : [];
     out.push({
       _id: s._id, projectId: p._id, project: p.name, label: label(p), client: clients.get(ck) ?? null,
+      shotList: sl ? { _id: sl._id, total: shots.length, done: shots.filter((x) => x.done).length } : null,
       date: s.date, call: s.call, location: s.location, crew: s.crew.length, confirmed: !!s.confirmed, moved: !!s.moved,
       sheet: cs ? { _id: cs._id, state: cs.status === "sent" ? "sent" as const : "draft" as const, built: !!cs.buildId, opened: sentTo.filter((r) => r.openedAt).length, of: sentTo.length, people: cs.recipients.filter((r) => r.on).length } : null,
     });

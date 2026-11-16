@@ -11,7 +11,7 @@ import { Button, ButtonLink, Card, DialogHeader, Divider, EmptyState, ListRow, P
 import { Icon } from "../../ui/Icon";
 import { Modal, useToast } from "../../ui/kit";
 import { Sep, TopBar } from "../../shell/Shell";
-import { linkProps } from "../../lib/router";
+import { linkProps, navigate } from "../../lib/router";
 import { errText } from "../docs/pages/common";
 import { sheetBits } from "./sheetBits";
 import { ShootDialog, clock, shootDay } from "../projects/Shoots";
@@ -56,8 +56,12 @@ function ShootLine({ s, today, first, phone, onSheet }: { s: ShootRow; today: st
     <div className="wp-rowwrap">{!first && <Divider />}
       <ListRow className="ilead ovact" lead={{ icon: "video" }} to={b.sent ? b.href : `/projects/${s.projectId}`} chevron={phone || b.sent}
         title={shootTitle(s)}
-        meta={[day(s.date, today), `Call ${clock(s.call)}`, s.location, onSheet && s.sheet ? `${s.sheet.people} on the sheet` : null].filter(Boolean).join(" · ")}
-        chip={b.chip} action={b.action} />
+        meta={[day(s.date, today), `Call ${clock(s.call)}`, s.location, onSheet && s.sheet ? `${s.sheet.people} on the sheet` : null, s.shotList ? `Shots ${s.shotList.done}/${s.shotList.total}` : null].filter(Boolean).join(" · ")}
+        chip={b.chip} action={b.action}
+        // Nov 16: the shoot's shot list, from its options (hold on a phone, right-click on a computer).
+        menu={{ id: s._id, title: shootTitle(s), href: b.sent ? b.href : `/projects/${s.projectId}`, actions: s.shotList
+          ? [{ key: "checklist", label: "On-set shot list", run: () => navigate(`/production/shoots/${s._id}/shot-list`) }, { key: "shots", label: "Edit the shot list", run: () => navigate(`/production/shot-lists/${s.shotList!._id}`) }]
+          : [] }} />
     </div>
   );
 }

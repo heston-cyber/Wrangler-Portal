@@ -226,3 +226,26 @@ describe("shot list pages (step 2)", () => {
       .toEqual([[12, true], [13, true], [47, false], [48, false], [46, true]]);
   });
 });
+
+describe("ticks on the phone (step 3, D182)", () => {
+  test("T-SL.4 a waiting tick shows at once, replaces an older one of the same shot, and the line says it's saved", async () => {
+    const { queueTick, shownDone, waitingLine } = await import("../src/modules/production/tickQueue");
+    let q = queueTick([], { shotId: "a", done: true, at: 1 });
+    q = queueTick(q, { shotId: "b", done: true, at: 2 });
+    q = queueTick(q, { shotId: "a", done: false, at: 3 });
+    expect(q).toEqual([{ shotId: "b", done: true, at: 2 }, { shotId: "a", done: false, at: 3 }]);
+    expect(shownDone(true, "a", q)).toBe(false); // the phone's untick, not the server's tick
+    expect(shownDone(true, "c", q)).toBe(true);
+    expect(waitingLine(1, false)).toBe("No signal · 1 tick saved on this phone · will sync");
+    expect(waitingLine(2, true)).toBe("Syncing 2 ticks…");
+    expect(waitingLine(0, false)).toBeNull();
+  });
+  test("the checklist page: Hide finished, Reset asks first with the frame's words, the header sticks", () => {
+    const page = require("node:fs").readFileSync("src/modules/production/ShotChecklist.tsx", "utf8") as string;
+    expect(page).toContain("Every shot goes back to not done, for everyone on the shoot.");
+    expect(page).toMatch(/Clear all \{done\} \{done === 1 \? "tick" : "ticks"\}\?/);
+    expect(page).toContain(`useTickQueue(\`wp.ticks.\${shootId}\``);
+    const css = require("node:fs").readFileSync("src/portal.css", "utf8") as string;
+    expect(css).toContain(".main:has(.sl-onset) { overflow: clip; }");
+  });
+});

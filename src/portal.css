@@ -3707,3 +3707,28 @@ a.sl-day:hover .t { color: var(--text-accent); }
 .sl-pick { text-align: left; background: none; border: 0; border-radius: var(--radius-md); padding: 10px 12px; color: var(--text-primary); font: var(--fs-text-regular)/var(--lh-regular) var(--font-body); cursor: pointer; }
 .sl-pick:hover:not(:disabled) { background: var(--surface-block-hover); }
 .sl-pick:disabled { color: var(--text-muted); cursor: default; }
+/* the on-set checklist (1036-21625 · 1036-22041 · 1036-22419) */
+.sl-onset { max-width: 760px; }
+.sl-onhead { position: sticky; top: 12px; z-index: 5; }
+.sl-onhead .wp-rows { padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; }
+.sl-onhead .wp-h4 { margin: 0; }
+.sl-onhead .wp-small { margin: 0; }
+.sl-progress { display: flex; align-items: center; gap: 12px; }
+.sl-progress .bar { flex: 1; height: 4px; }
+.sl-progress .c { font: 600 var(--fs-text-small)/1 var(--font-body); color: var(--text-primary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sl-onacts { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sl-signal { display: flex; align-items: center; gap: 8px; margin: 12px 0; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border-hairline); background: var(--glass-fill); backdrop-filter: blur(var(--blur-glass)); font-size: var(--fs-text-small); color: var(--text-primary); }
+.sl-signal .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-success); }
+.sl-signal.off .dot { background: #f5b301; }
+.sl-onset .sl-main { margin-top: 12px; }
+.sl-sethead.static { cursor: default; }
+.sl-sethead.static .ttl { font: 600 18px/26px var(--font-title); color: var(--text-primary); }
+.sl-shot.touch { grid-template-columns: 44px 44px minmax(0, 1fr) auto; padding: 0 20px 0 12px; min-height: 52px; }
+.sl-shot.touch .sl-tick .box { width: 26px; height: 26px; }
+.sl-shot.touch .num { color: var(--text-muted); font: 500 var(--fs-text-small)/1 var(--font-body); }
+.sl-tick.ro { cursor: default; }
+.sl-foot { margin: 12px 4px; }
+.sl-onset .sl-empty { padding: 20px 24px; margin: 0; }
+.sl-switch { display: inline-flex; align-items: center; gap: 10px; font-size: var(--fs-text-regular); color: var(--text-primary); cursor: pointer; }
+/* main clips sideways with overflow: hidden, which stops a sticky header; clip keeps the page from scrolling sideways without that */
+.main:has(.sl-onset) { overflow: clip; }

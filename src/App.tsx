@@ -91,6 +91,7 @@ const ProductionDelivery = lazy(() => import("./modules/production/Production").
 const ProductionShoots = lazy(() => import("./modules/production/Production").then((m) => ({ default: m.ProductionShoots })));
 // Phase 5b step 3: call sheets (the owner's pages), and the readers' page on the client side.
 const CallSheetsPage = lazy(() => import("./modules/production/CallSheets"));
+const ShotChecklistPage = lazy(() => import("./modules/production/ShotChecklist"));
 const ShotListsPage = lazy(() => import("./modules/production/ShotLists"));
 const ShotListEditor = lazy(() => import("./modules/production/ShotLists").then((m) => ({ default: m.ShotListEditor })));
 const GearPage = lazy(() => import("./modules/production/Gear")); // Phase 5d step 3
@@ -312,6 +313,7 @@ function SignedIn() {
   else if (/^\/sign\/templates\/?$/.test(path)) page = <Suspense fallback={<Loading />}><SignTemplates /></Suspense>;
   else if (path.startsWith("/sign")) page = <Suspense fallback={<Loading />}><SignHome /></Suspense>;
   else if (/^\/production\/?$/.test(path)) page = <Suspense fallback={<Loading />}><ProductionOverview /></Suspense>;
+  else if (/^\/production\/shoots\/[^/]+\/shot-list\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><ShotChecklistPage key={id} shootId={id} /></Suspense>; } // Nov 16
   else if (/^\/production\/shoots\/?$/.test(path)) page = <Suspense fallback={<Loading />}><ProductionShoots key={search} /></Suspense>;
   else if (/^\/messages\/?$/.test(path)) page = <Suspense fallback={<Loading />}><OwnerMessages /></Suspense>;
   else if (/^\/production\/(pre-pro|prin-pro|post-pro)\/?$/.test(path)) { const k = path.split("/")[2] as "pre-pro" | "prin-pro" | "post-pro"; page = <Suspense fallback={<Loading />}><ProductionStage key={k} stage={k} /></Suspense>; }
