@@ -24,6 +24,10 @@ export function initialsOf(name: string): string {
  * counting on from the highest number used so far.
  */
 export function parsePaste(text: string, used: Iterable<number>): Array<{ number: number; text: string }> {
+  return parsePasteRows(text, used).map(({ number, text }) => ({ number, text }));
+}
+/** The same, saying which numbers were kept as typed (the dialog's line: "#12, #13 and #46 as typed; the other two get #47 and #48"). */
+export function parsePasteRows(text: string, used: Iterable<number>): Array<{ number: number; text: string; typed: boolean }> {
   const taken = new Set(used);
   let next = Math.max(0, ...taken) + 1;
   const out: Array<{ number: number; text: string; want: number | null }> = [];
@@ -41,7 +45,7 @@ export function parsePaste(text: string, used: Iterable<number>): Array<{ number
   for (const r of out) if (r.want !== null && !taken.has(r.want)) { r.number = r.want; taken.add(r.want); }
   next = Math.max(next, Math.max(0, ...taken) + 1);
   for (const r of out) if (!r.number) { while (taken.has(next)) next++; r.number = next; taken.add(next); next++; }
-  return out.map(({ number, text }) => ({ number, text }));
+  return out.map(({ number, text, want }) => ({ number, text, typed: want === number }));
 }
 
 /** The next setup code: the last code's letters, one more ("M-02" after "M-01"); "S-01" for the first. */

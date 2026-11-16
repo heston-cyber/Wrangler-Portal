@@ -91,6 +91,8 @@ const ProductionDelivery = lazy(() => import("./modules/production/Production").
 const ProductionShoots = lazy(() => import("./modules/production/Production").then((m) => ({ default: m.ProductionShoots })));
 // Phase 5b step 3: call sheets (the owner's pages), and the readers' page on the client side.
 const CallSheetsPage = lazy(() => import("./modules/production/CallSheets"));
+const ShotListsPage = lazy(() => import("./modules/production/ShotLists"));
+const ShotListEditor = lazy(() => import("./modules/production/ShotLists").then((m) => ({ default: m.ShotListEditor })));
 const GearPage = lazy(() => import("./modules/production/Gear")); // Phase 5d step 3
 const GearItem = lazy(() => import("./modules/production/Gear").then((m) => ({ default: m.GearItem })));
 const CalendarPage = lazy(() => import("./modules/production/Calendar")); // Phase 5b step 5
@@ -317,6 +319,8 @@ function SignedIn() {
   else if (/^\/production\/gear\/?$/.test(path)) page = <Suspense fallback={<Loading />}><GearPage /></Suspense>;
   else if (/^\/production\/gear\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><GearItem key={id} gearId={id} /></Suspense>; }
   else if (/^\/production\/calendar\/?$/.test(path)) page = <Suspense fallback={<Loading />}><CalendarPage /></Suspense>;
+  else if (/^\/production\/shot-lists\/?$/.test(path)) page = <Suspense fallback={<Loading />}><ShotListsPage /></Suspense>; // Nov 16
+  else if (/^\/production\/shot-lists\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><ShotListEditor key={id} listId={id} /></Suspense>; }
   else if (/^\/production\/call-sheets\/?$/.test(path)) page = <Suspense fallback={<Loading />}><CallSheetsPage key={search} /></Suspense>;
   else if (/^\/production\/call-sheets\/new\/?$/.test(path)) page = <Suspense fallback={<Loading />}><NewCallSheet key={search} shootId={params.get("shoot")} templateId={params.get("template")} /></Suspense>;
   else if (/^\/production\/call-sheets\/templates\/[^/]+\/?$/.test(path)) { const id = path.split("/")[4]; page = <Suspense fallback={<Loading />}><CallSheetTemplate key={id} templateId={id} /></Suspense>; }

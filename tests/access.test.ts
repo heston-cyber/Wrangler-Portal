@@ -406,7 +406,7 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "shoots.schedule": SHOOTS,
     "shoots.update": SHOOTS,
     "shoots.cancel": SHOOTS,
-    ...Object.fromEntries(["all", "forProject", "get", "forShoot", "create", "update", "remove", "addSetup", "editSetup", "removeSetup", "moveSetup", "addShots", "editShot", "removeShot", "moveShot", "tick", "reset"].map((f) => [`shotLists.${f}`, SHOOTS])),
+    ...Object.fromEntries(["all", "newOptions", "forProject", "get", "forShoot", "create", "update", "remove", "addSetup", "editSetup", "removeSetup", "moveSetup", "addShots", "editShot", "removeShot", "moveShot", "tick", "reset"].map((f) => [`shotLists.${f}`, SHOOTS])),
     "sign.list": DOCS,
     "sign.get": DOCS,
     "sign.uploadUrl": DOCS,

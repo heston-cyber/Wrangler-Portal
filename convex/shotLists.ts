@@ -36,7 +36,7 @@ export async function listView(ctx: Ctx, list: List) {
   const d = list.shootId ? days.find((x) => x.s._id === list.shootId) : undefined;
   const p = await ctx.db.get(list.projectId);
   return {
-    _id: list._id, title: list.title ?? null, project: p ? { _id: p._id, label: label(p), name: p.name } : null,
+    _id: list._id, title: list.title ?? null, project: p ? { _id: p._id, label: label(p), name: p.name, client: p.client ?? null } : null,
     shoot: d ? { _id: d.s._id, day: d.day, date: d.s.date, call: d.s.call, wrap: d.s.wrap ?? null, location: d.s.location } : null,
     ...progress(shots),
     setups: setups.map((x) => ({
@@ -89,9 +89,24 @@ export const all = query({
       if (!p) continue;
       const days = await shootDays(ctx, l.projectId);
       const d = l.shootId ? days.find((x) => x.s._id === l.shootId) : undefined;
-      out.push({ _id: l._id, title: l.title ?? null, project: { _id: p._id, label: label(p) }, shoot: d ? { day: d.day, date: d.s.date } : null, ...progress(await shotsOf(ctx, l._id)), updatedAt: l.updatedAt });
+      out.push({ _id: l._id, title: l.title ?? null, project: { _id: p._id, label: label(p), client: p.client ?? null }, setups: (await setupsOf(ctx, l._id)).filter((x) => !x.gap).length, shoot: d ? { day: d.day, date: d.s.date } : null, ...progress(await shotsOf(ctx, l._id)), updatedAt: l.updatedAt });
     }
     return out.sort((a, b) => b.updatedAt - a.updatedAt);
+  },
+});
+
+/** New shot list: the projects, each with its shoot days (a day that already has a list can't take another). */
+export const newOptions = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAll(ctx, "shoots");
+    const lists = await ctx.db.query("shotLists").collect();
+    const out = [];
+    for (const p of (await ctx.db.query("projects").collect()).sort((a, b) => b.createdAt - a.createdAt)) {
+      const days = await shootDays(ctx, p._id);
+      out.push({ _id: p._id, label: label(p), client: p.client ?? null, days: days.map((d) => ({ _id: d.s._id, day: d.day, date: d.s.date, taken: lists.some((l) => l.shootId === d.s._id) })) });
+    }
+    return out;
   },
 });
 

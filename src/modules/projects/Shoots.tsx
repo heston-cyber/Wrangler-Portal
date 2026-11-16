@@ -25,7 +25,8 @@ type Shoot = Owner["shoots"][number];
 
 export function ShootsCard({ projectId, client, label }: { projectId: Id<"projects">; client: string | null; label: string }) {
   const d = useQuery(api.shoots.forProject, { projectId });
-  const [open, setOpen] = useState<null | "new" | Shoot>(null);
+  // Nov 16: a shot list's "Add a shoot day…" opens the project with ?schedule=1, straight into Schedule a shoot.
+  const [open, setOpen] = useState<null | "new" | Shoot>(() => (new URLSearchParams(location.search).get("schedule") ? "new" : null));
   const [toast, show] = useToast();
   if (d === undefined) return <Card className="pj-shoots" label="Shoots" head={<SectionHead label="Shoots" />}><SkeletonRows n={1} /></Card>;
   if (d === null) return null;

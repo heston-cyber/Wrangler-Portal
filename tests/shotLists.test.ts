@@ -9,7 +9,7 @@ import { anyApi } from "convex/server";
 import type { Id } from "../convex/_generated/dataModel";
 import { world } from "./payHarness";
 import { todayCentral } from "../convex/lib/bookings";
-import { initialsOf, nextCode, parsePaste, shotBlocks, tickLands } from "../convex/lib/shotList";
+import { initialsOf, nextCode, parsePaste, parsePasteRows, shotBlocks, tickLands } from "../convex/lib/shotList";
 
 const api = anyApi;
 beforeAll(() => {
@@ -200,5 +200,29 @@ describe("shot lists", () => {
     expect((await w.heston.query(api.shotLists.forShoot, { shootId })).done).toBe(0);
     await expect(jordan.mutation(api.shotLists.reset, { listId })).rejects.toThrow(); // Reset is the owner's
     expect(await jordan.mutation(api.vendorPortal.tickShot, { callSheetId: csId, shotId: ids[0], done: true, at: Date.now() + 1000 })).toEqual({ landed: true });
+  });
+});
+
+describe("shot list pages (step 2)", () => {
+  const read = (f: string) => require("node:fs").readFileSync(f, "utf8") as string;
+  test("Pre-pro › Shot lists sits after Call sheets with the designer's icon; the pages are routed", () => {
+    const shell = read("src/shell/Shell.tsx");
+    expect(shell).toMatch(/label: "Call sheets"[^\n]*\n\s*\{ group: "Pre-pro", to: "\/production\/shot-lists", label: "Shot lists"/);
+    expect(shell).toContain(`"/production/shot-lists": "shot-list"`);
+    expect(read("src/ui/Icon.tsx")).toContain(`"shot-list"`);
+    const svg = read("src/assets/icons/shot-list.svg");
+    expect(svg).toMatch(/width="24" height="24"/);
+    expect(svg).toContain("currentColor");
+    const app = read("src/App.tsx");
+    expect(app).toMatch(/\\\/production\\\/shot-lists\\\/\?\$/);
+    expect(app).toMatch(/<ShotListEditor key=\{id\} listId=\{id\} \/>/);
+  });
+  test("the Paste shots dialog's line follows the frame (1034-20542)", () => {
+    const page = read("src/modules/production/ShotLists.tsx");
+    expect(page).toContain("One shot per line. A number at the start of a line is kept.");
+    // The frame's example: the list has #1–#11 and #45; "#12, #13 and #46 as typed; the other two get #47 and #48".
+    const used = [...Array.from({ length: 11 }, (_, k) => k + 1), 45];
+    expect(parsePasteRows("12 Med cart\n13 IV pump\nShift huddle\nWindow light\n46 Badge tap", used).map((r) => [r.number, r.typed]))
+      .toEqual([[12, true], [13, true], [47, false], [48, false], [46, true]]);
   });
 });
