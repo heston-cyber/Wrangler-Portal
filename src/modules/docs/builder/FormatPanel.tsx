@@ -89,6 +89,7 @@ function FormatBody({ editor, accent, onSaveClause }: { editor: Editor; accent: 
     return <label className="field"><span className="ws-flabel">Space height (pt)</span><input className="input sm" type="number" min={4} max={200} value={Number(atom.node.attrs.size) || 18} onChange={(e) => setAtom(editor, atom.pos, { size: Math.max(4, Math.min(200, Number(e.target.value) || 18)) })} /></label>;
   }
   if (atom && atom.node.type.name === "weather") return <WeatherPanel key={atom.pos} editor={editor} pos={atom.pos} attrs={atom.node.attrs} />;
+  if (atom && atom.node.type.name === "shotlist") return <ShotListPanel key={atom.pos} editor={editor} pos={atom.pos} attrs={atom.node.attrs} />;
   if (atom) return <p className="caption secondary">{atom.node.type.name === "divider" ? "Divider lines are styled in Style › Separator." : atom.node.type.name === "pagebreak" ? "A new page starts here in the PDF." : "This block's settings are on the block itself."}</p>;
   const size = lineAttr(editor, "size", "body");
   const align = lineAttr(editor, "align", "left");
@@ -269,6 +270,36 @@ function WeatherPanel({ editor, pos, attrs }: { editor: Editor; pos: number; att
         {w?.state === "none" && <>{act("Type it in", typeOver, true)}{act("Remove the block", remove)}</>}
         {!w && act("Remove the block", remove)}
       </div>
+    </div>
+  );
+}
+
+/** Nov 16 (D180, D181; frame 1037-22115): the Shot list block's settings: which list (a call sheet starts on its own
+ *  shoot day's), whether the crew can tick it on their sheet, and a way to the list itself. */
+function ShotListPanel({ editor, pos, attrs }: { editor: Editor; pos: number; attrs: Record<string, unknown> }) {
+  const ctx = useContext(BuilderCtx);
+  const shots = ctx?.shots;
+  const listId = typeof attrs.listId === "string" ? attrs.listId : null;
+  const shown = shots ? (listId ?? shots.defaultId) : null;
+  return (
+    <div className="ws-wxpanel">
+      <span className="ws-flabel">Shot list block</span>
+      <p className="caption secondary">Shows a shoot day's setups and shots from the project's shot list. It stays live: changes and ticks made on set show here and wherever it's read.</p>
+      {!shots ? <p className="caption secondary">No shot lists to pick from here yet.</p> : <>
+        <label className="field"><span className="ws-flabel">Shoot day</span>
+          <select className="input sm" value={listId ?? ""} onChange={(e) => setAtom(editor, pos, { ...attrs, listId: e.target.value || null })}>
+            {shots.callSheet && <option value="">{shots.defaultId ? `This shoot day's list (${shots.lists.find((l) => l._id === shots.defaultId)?.pick ?? "linked"})` : "This shoot day's list (none linked yet)"}</option>}
+            {!shots.callSheet && !listId && <option value="">Pick a shot list</option>}
+            {shots.lists.filter((l) => !shots.callSheet || l._id !== shots.defaultId).map((l) => <option key={l._id} value={l._id}>{l.pick}</option>)}
+          </select></label>
+        {shots.callSheet && <label className="wsb-check"><input type="checkbox" checked={attrs.crewTick !== false} onChange={(e) => setAtom(editor, pos, { ...attrs, crewTick: e.target.checked })} />
+          <span>Crew can tick on the sheet<span className="caption secondary"> · You and the shoot's booked crew. Clients and guests only read it.</span></span></label>}
+        <p className="caption secondary">In the PDF: a printed list with empty boxes.</p>
+        <div className="ws-wxacts">
+          {shown && <a className="btn outline sm" href={`/production/shot-lists/${shown}`} target="_blank" rel="noopener noreferrer">Open shot list</a>}
+          <button type="button" className="btn ghost sm" onClick={() => editor.chain().focus().setNodeSelection(pos).deleteSelection().run()}>Remove the block</button>
+        </div>
+      </>}
     </div>
   );
 }

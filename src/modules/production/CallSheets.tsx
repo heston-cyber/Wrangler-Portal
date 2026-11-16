@@ -15,6 +15,7 @@ import { linkProps, navigate } from "../../lib/router";
 import { errText } from "../docs/pages/common";
 import { fieldValues, newId, pageOf, type Fields } from "../../../convex/lib/wsBuilder";
 import { clockOf, sheetDay, type Answers } from "../../../convex/lib/callSheet";
+import { ShotsCtx } from "./shotBlock";
 import { PeoplePicker, RemindSheet, SendUpdate, SheetView, groupsOf, opened, reachable, type CallSheetInfo } from "./callSheetParts";
 
 const Builder = lazy(() => import("../docs/builder/Builder"));
@@ -381,5 +382,11 @@ function SheetPreview({ cs, onClose }: { cs: CallSheetInfo; onClose: () => void 
 }
 function PreviewBody({ b }: { b: NonNullable<ReturnType<typeof useQuery<typeof api.builder.getBuild>>> }) {
   const page = pageOf(b.blocks);
-  return <SheetView page={page} values={fieldValues(b.fields as Fields, page)} accent={(b.style as { accent?: string })?.accent} />;
+  // Nov 16 (D181): the Shot list block shows the list live, as the crew will see it (without boxes to tick here).
+  const shots = useQuery(api.shotLists.forBuild, { buildId: b._id });
+  return (
+    <ShotsCtx.Provider value={shots ? { lists: shots.lists, defaultId: shots.defaultId } : null}>
+      <SheetView page={page} values={fieldValues(b.fields as Fields, page)} accent={(b.style as { accent?: string })?.accent} />
+    </ShotsCtx.Provider>
+  );
 }

@@ -12,6 +12,8 @@ import {
   type BuildDoc, type ItemRow, type LineAttrs, type PNode, type TextSize,
 } from "../../../../convex/lib/wsBuilder";
 import type { FontRow } from "../../../../convex/lib/wsBuilder";
+import type { ShotSnap } from "../../../../convex/lib/shotList";
+import { windowOf } from "../../production/shotTime";
 import { clockOf, locationOf, rowsOf, weatherOf, type ContactRow, type CrewRow, type ScheduleRow } from "../../../../convex/lib/callSheet";
 
 export type Assets = { fonts: FontRow[]; files: Record<string, string | null> };
@@ -207,6 +209,27 @@ export function DocPdf({ d, assets, label }: { d: BuildDoc; assets: Assets; labe
         return <View key={k} style={{ marginBottom: base * 0.9 }}>
           <View style={{ flexDirection: "row", borderBottomWidth: 0.6, borderBottomColor: st.muted, paddingBottom: 3, marginBottom: 3 }}>{cols.map(([c, w], i) => <Text key={i} style={{ flex: w, fontSize: base * 0.75, color: st.muted, textTransform: "uppercase", letterSpacing: 0.8 }}>{c}</Text>)}</View>
           {rows.map((r, i) => <View key={i} wrap={false} style={{ flexDirection: "row", paddingVertical: 2 }}>{r.map((c, j) => <Text key={j} style={{ flex: cols[j][1] }}>{fill(c ?? "", values)}</Text>)}</View>)}
+        </View>;
+      }
+      // Nov 16 (D181; frame 1037-22772): the shot list as it stood when this was printed, with empty boxes to tick by hand.
+      case "shotlist": {
+        const snap = a.snap as ShotSnap | null | undefined;
+        const capS = { fontSize: base * 0.8, color: st.muted, textTransform: "uppercase" as const, letterSpacing: 0.8, marginBottom: 4 };
+        if (!snap) return <View key={k} style={{ marginBottom: base * 0.9 }}><Text style={capS}>Shot list</Text><Text style={{ color: st.muted }}>No shot list for this day yet.</Text></View>;
+        const printedOn = new Date().toLocaleDateString("en-US", { month: "numeric", day: "numeric" });
+        return <View key={k} style={{ marginBottom: base * 0.9 }}>
+          <Text style={capS}>{`Printed ${printedOn}${snap.pick ? ` · ${snap.pick}` : ""} · Tick by hand on set`}</Text>
+          {snap.setups.map((x, i) => x.gap
+            ? <Text key={i} style={{ color: st.muted, fontSize: base * 0.85, marginVertical: 3 }}>{[windowOf(x.start, x.end), x.title].filter(Boolean).join(" · ")}</Text>
+            : <View key={i} style={{ marginTop: 6 }}>
+                <Text wrap={false} style={{ fontWeight: 700 }}>{[x.code, windowOf(x.start, x.end), x.title].filter(Boolean).join(" · ")}</Text>
+                {x.note ? <Text style={{ color: st.muted, fontSize: base * 0.85 }}>{x.note}</Text> : null}
+                {x.shots.map((sh, j) => <View key={j} wrap={false} style={{ flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 2 }}>
+                  <View style={{ width: base * 0.85, height: base * 0.85, borderWidth: 0.8, borderColor: st.muted, marginTop: 1.5 }} />
+                  <Text style={{ width: base * 2.2, color: st.muted }}>{`#${sh.number}`}</Text>
+                  <Text style={{ flex: 1 }}>{sh.text}{sh.note ? `  ·  ${sh.note}` : ""}</Text>
+                </View>)}
+              </View>)}
         </View>;
       }
       default: return null;

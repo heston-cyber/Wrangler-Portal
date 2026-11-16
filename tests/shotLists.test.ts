@@ -8,8 +8,10 @@ import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { anyApi } from "convex/server";
 import type { Id } from "../convex/_generated/dataModel";
 import { world } from "./payHarness";
+import { readerShots } from "../convex/shotLists";
+import { buildProblems, emptyFields, newNodes, type BuildDoc } from "../convex/lib/wsBuilder";
 import { todayCentral } from "../convex/lib/bookings";
-import { initialsOf, nextCode, parsePaste, parsePasteRows, shotBlocks, tickLands } from "../convex/lib/shotList";
+import { bakeShots, blockList, initialsOf, nextCode, parsePaste, parsePasteRows, shotBlocks, tickLands } from "../convex/lib/shotList";
 
 const api = anyApi;
 beforeAll(() => {
@@ -158,7 +160,7 @@ describe("shot lists", () => {
         recipients: [{ id: `crew:${kJ}`, kind: "crew", name: "Jordan Ellis", email: JORDAN, vendorId: jordanV, bookingId: kJ, on: true, sentAt: 1, addedAt: 0 },
           { id: `crew:${kS}`, kind: "crew", name: "Sam Rivera", email: SAMR, vendorId: samV, bookingId: kS, on: true, sentAt: 1, addedAt: 0 },
           { id: "client:maya@harbor.example", kind: "client", name: "Maya", email: "maya@harbor.example", on: true, sentAt: 1, addedAt: 0 }],
-        sent: { title: "CS", page: page(true), fields: {}, style: {}, at: 0, round: 0 }, history: [], createdAt: 0, updatedAt: 0 });
+        sent: { title: "CS", page: page(true), fields: emptyFields(), style: {}, at: 0, round: 0 }, history: [], createdAt: 0, updatedAt: 0 });
     });
 
     // The owner ticks; the crew ticks from the sheet: everyone sees both, with initials.
@@ -200,6 +202,25 @@ describe("shot lists", () => {
     expect((await w.heston.query(api.shotLists.forShoot, { shootId })).done).toBe(0);
     await expect(jordan.mutation(api.shotLists.reset, { listId })).rejects.toThrow(); // Reset is the owner's
     expect(await jordan.mutation(api.vendorPortal.tickShot, { callSheetId: csId, shotId: ids[0], done: true, at: Date.now() + 1000 })).toEqual({ landed: true });
+    // D181: the crew's sheet carries the list, live, with who ticked, and lets them tick; a client's view has no ticks.
+    const mine = await jordan.query(api.vendorPortal.callSheet, { callSheetId: csId });
+    expect(mine.shots).toMatchObject({ defaultId: listId, canTick: true });
+    expect(mine.shots.lists[0].setups[0].shots.map((s: { done: { initials: string } | null }) => s.done?.initials ?? null)).toEqual(["JE", null, null]);
+    const client = await w.t.run(async (ctx) => readerShots(ctx, page(true), w.p, shootId, false));
+    expect(client!.canTick).toBe(false);
+    expect(client!.lists[0].setups[0].shots.every((s) => s.done === null)).toBe(true);
+    // A block naming another project's list shows nothing of it.
+    const farList = await w.t.run(async (ctx) => {
+      const other = await ctx.db.insert("projects", { businessId: w.A, name: "Elsewhere", createdAt: 0 });
+      return await ctx.db.insert("shotLists", { businessId: w.A, projectId: other, createdAt: 0, updatedAt: 0 });
+    });
+    const far = await w.t.run(async (ctx) => readerShots(ctx, { type: "doc", content: [{ type: "shotlist", attrs: { listId: farList } }] }, w.p, shootId, true));
+    expect(far!.lists).toEqual([]);
+    expect(await w.t.run(async (ctx) => readerShots(ctx, { type: "doc", content: [] }, w.p, shootId, true))).toBeNull();
+    // The builder's source for the sheet's block: the project's lists, this shoot day's first.
+    const fb = await w.heston.query(api.shotLists.forBuild, { buildId: await w.t.run(async (ctx) => (await ctx.db.get(csId))!.buildId!) });
+    expect(fb).toMatchObject({ defaultId: listId, callSheet: true });
+    expect(fb.lists.map((l: { _id: string }) => l._id).sort()).toEqual([listId, otherList].sort());
   });
 });
 
@@ -247,5 +268,24 @@ describe("ticks on the phone (step 3, D182)", () => {
     expect(page).toContain(`useTickQueue(\`wp.ticks.\${shootId}\``);
     const css = require("node:fs").readFileSync("src/portal.css", "utf8") as string;
     expect(css).toContain(".main:has(.sl-onset) { overflow: clip; }");
+  });
+});
+
+describe("the Shot list block (step 4, D181)", () => {
+  test("T-SL.6 a new block; never in a contract; a printed page keeps the list as it stood", () => {
+    const nodes = newNodes("shotlist");
+    expect(nodes[1]).toEqual({ type: "shotlist", attrs: { listId: null, crewTick: true, snap: null } });
+    const doc = { title: "Agreement", page: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Terms" }] }, ...nodes] }, fields: emptyFields(), signers: [], style: {} } as unknown as BuildDoc;
+    expect(buildProblems(doc)).toContain("A shot list can't go in a contract: remove it.");
+    const lists = [{ _id: "L1", pick: "Day 1 · Tue 11/3 · H-01", setups: [{ gap: false, code: "H-01", start: "07:30", end: "09:00", title: "Counter", note: null, shots: [{ number: 1, text: "Hero pour", note: null }] }] }];
+    expect(blockList(null, lists, "L1")?._id).toBe("L1");
+    expect(blockList("nope", lists, "L1")).toBeNull();
+    const baked = bakeShots({ type: "doc", content: [{ type: "shotlist", attrs: { listId: null, crewTick: true, snap: null } }] }, lists, "L1");
+    expect((baked.content[0].attrs as { snap: { pick: string; setups: unknown[] } }).snap).toEqual({ pick: "Day 1 · Tue 11/3 · H-01", setups: lists[0].setups });
+  });
+  test("the builder offers the block on call sheets, briefings and proposals only (never a contract or a Help guide)", () => {
+    const b = require("node:fs").readFileSync("src/modules/docs/builder/Builder.tsx", "utf8") as string;
+    expect(b).toContain(`(x.kind !== "shotlist" || ((isCall || isBrief || isProp) && !isGuide && canShots))`);
+    expect(b).toContain("bakeShots(baked.page, shots.lists, shots.defaultId)");
   });
 });

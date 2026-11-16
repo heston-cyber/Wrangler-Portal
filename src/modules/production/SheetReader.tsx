@@ -6,15 +6,18 @@ import { Icon } from "../../ui/Icon";
 import { clockOf, locationOf, rowsOf, sheetDay, weatherLine, type ContactRow, type CrewRow, type ScheduleRow } from "../../../convex/lib/callSheet";
 import { fill, nodesOf, pageOf, type Page } from "../../../convex/lib/wsBuilder";
 import { SheetView } from "./callSheetParts";
+import { ShotBlockLive, ShotsCtx, type LiveList, type ShotsSource } from "./shotBlock";
 
 export type ReaderData = {
   title: string; date: string; page: unknown; values: Record<string, string>; accent: string | null;
   business: string; owner: string; replyTo: string; me: { call: string };
   updatedToday: boolean; change: { at: number; text: string } | null;
+  // Nov 16 (D181): the page's Shot list blocks, live (canTick: the crew, D180)
+  shots?: { defaultId: string | null; lists: LiveList[]; canTick: boolean } | null;
 };
 
 /** The sheet and its side cards. `head` shows the page heading on wide screens too (the client and vendor pages). */
-export function SheetReader({ d, head = false }: { d: ReaderData; head?: boolean }) {
+export function SheetReader({ d, head = false, tick }: { d: ReaderData; head?: boolean; tick?: ShotsSource["tick"] }) {
   const page = pageOf(d.page) as Page;
   const loc = locationOf(nodesOf(page, "location")[0]);
   const t = (s: string) => fill(s ?? "", d.values, "");
@@ -44,7 +47,17 @@ export function SheetReader({ d, head = false }: { d: ReaderData; head?: boolean
       <div className="gst-btns"><a className="btn outline sm" href={mail}>Email</a>{phone && <a className="btn outline sm" href={`tel:${phone.replace(/[^\d+]/g, "")}`}>Call</a>}</div>
     </section>
   );
+  const src: ShotsSource | null = d.shots ? { lists: d.shots.lists, defaultId: d.shots.defaultId, tick: d.shots.canTick ? tick ?? null : null } : null;
+  // On a phone the shot list gets its own card (the crew tick it there); the call sheet's own day's list first.
+  const shotBlock = nodesOf(page, "shotlist")[0];
+  const shotCard = shotBlock && src && (
+    <section className="gst-card glass gst-narrow gst-shots"><span className="wp-eyebrow">Shot list</span>
+      {src.tick?.line && <p className="wp-small secondary" role="status">{src.tick.line}</p>}
+      <ShotBlockLive attrs={(shotBlock.attrs ?? {}) as Record<string, unknown>} />
+    </section>
+  );
   return (
+    <ShotsCtx.Provider value={src}>
     <main className={`gst-main${head ? " csr" : ""}`}>
       <header className={`gst-head${head ? " csr-head" : " gst-narrow"}`}>
         <span className="wp-eyebrow">Call sheet</span>
@@ -57,6 +70,7 @@ export function SheetReader({ d, head = false }: { d: ReaderData; head?: boolean
         {schedule.length > 0 && <section className="gst-card glass gst-narrow"><span className="wp-eyebrow">Schedule</span>{dl(schedule.map((r) => [clockOf(r.time) || "·", t(r.what)] as [string, string]))}</section>}
         {(place || loc.address || loc.parking) && <section className="gst-card glass gst-narrow"><span className="wp-eyebrow">Where</span>{dl([[place || "Location", t(loc.address)], ["Parking", t(loc.parking)]])}</section>}
         {crew.length > 0 && <section className="gst-card glass gst-narrow"><span className="wp-eyebrow">Who’s on it</span>{dl(crew.map((r) => [t(r.name), t(r.role).replace(/ \(guest\)$/, "")] as [string, string]))}</section>}
+        {shotCard}
         {producerCard}
         <details className="gst-card glass gst-narrow gst-whole">
           <summary><span className="wp-eyebrow">The whole sheet</span>
@@ -66,5 +80,6 @@ export function SheetReader({ d, head = false }: { d: ReaderData; head?: boolean
         </details>
       </aside>
     </main>
+    </ShotsCtx.Provider>
   );
 }

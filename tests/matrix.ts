@@ -199,7 +199,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     // D148: Refresh forecast (owner only; looks the forecast up again for one of the owner's own sheets).
     "callSheets.refreshWeather": { callSheetId: ids.callSheetId },
     // Nov 16: shot lists (the owner's) and the crew's tick on a call sheet
-    "shotLists.all": {}, "shotLists.newOptions": {},"shotLists.forProject": { projectId: ids.projectId }, "shotLists.get": { listId: ids.shotListId }, "shotLists.forShoot": { shootId: ids.shootId },
+    "shotLists.all": {}, "shotLists.newOptions": {}, "shotLists.forBuild": { buildId: ids.buildId }, "shotLists.forProject": { projectId: ids.projectId }, "shotLists.get": { listId: ids.shotListId }, "shotLists.forShoot": { shootId: ids.shootId },
     "shotLists.create": { projectId: ids.projectId }, "shotLists.update": { listId: ids.shotListId, title: "Day 9" }, "shotLists.remove": { listId: ids.shotListId },
     "shotLists.addSetup": { listId: ids.shotListId, title: "X" }, "shotLists.editSetup": { setupId: ids.shotSetupId, title: "Y" }, "shotLists.removeSetup": { setupId: ids.shotSetupId },
     "shotLists.moveSetup": { setupId: ids.shotSetupId, index: 0 }, "shotLists.addShots": { setupId: ids.shotSetupId, text: "A shot" },

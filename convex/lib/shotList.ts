@@ -87,3 +87,21 @@ export function shotBlocks(page: unknown): Array<{ listId: string | null; crewTi
   walk(page);
   return out;
 }
+
+/** What a Shot list block shows, and what a printed page keeps (`snap`): the setups and shots, without ticks. */
+export type ShotSnap = { pick: string; setups: Array<{ gap: boolean; code: string | null; start: string | null; end: string | null; title: string; note: string | null; shots: Array<{ number: number; text: string; note: string | null }> }> };
+type ViewLike = { _id: string; pick: string; setups: ShotSnap["setups"] };
+export const snapFrom = (v: ViewLike): ShotSnap => ({ pick: v.pick, setups: v.setups.map((x) => ({ gap: x.gap, code: x.code, start: x.start, end: x.end, title: x.title, note: x.note, shots: x.shots.map((s) => ({ number: s.number, text: s.text, note: s.note })) })) });
+/** The list a block shows: its own, or (null) the call sheet's shoot day's. */
+export const blockList = <V extends { _id: string }>(listId: unknown, lists: V[], defaultId: string | null): V | null =>
+  lists.find((l) => l._id === (typeof listId === "string" ? listId : defaultId)) ?? null;
+/** Bake each block's list into the page before it's printed (the PDF is the list as it stood then, D181). */
+export function bakeShots<P>(page: P, lists: ViewLike[], defaultId: string | null): P {
+  const fix = (n: unknown): unknown => {
+    if (!n || typeof n !== "object") return n;
+    const node = n as { type?: string; attrs?: Record<string, unknown>; content?: unknown[] };
+    if (node.type === "shotlist") { const l = blockList(node.attrs?.listId, lists, defaultId); return { ...node, attrs: { ...node.attrs, snap: l ? snapFrom(l) : null } }; }
+    return Array.isArray(node.content) ? { ...node, content: node.content.map(fix) } : node;
+  };
+  return fix(page) as P;
+}

@@ -12,7 +12,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireAll } from "./lib/access";
 import { label } from "./lib/bookingRows";
-import { MAX_PASTE, MAX_SETUPS, MAX_SHOTS, NOTE_MAX, TEXT_MAX, initialsOf, isTime, nextCode, parsePaste, progress, tickLands, tidy } from "./lib/shotList";
+import { MAX_PASTE, MAX_SETUPS, MAX_SHOTS, NOTE_MAX, TEXT_MAX, initialsOf, isTime, nextCode, parsePaste, progress, shotBlocks, tickLands, tidy } from "./lib/shotList";
 
 type Ctx = QueryCtx | MutationCtx;
 type List = Doc<"shotLists">;
@@ -394,3 +394,53 @@ export const reset = mutation({
     return { cleared };
   },
 });
+
+// ---------- the Shot list block (D181) ----------
+
+/** "Day 1 · Tue 11/3 · H-01, H-02" (the block's shoot-day picker). */
+export function pickLabel(v: Awaited<ReturnType<typeof listView>>) {
+  const d = v.shoot ? `Day ${v.shoot.day} · ${new Date(`${v.shoot.date}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "numeric", day: "numeric" }).replace(",", "")}` : v.title || "No shoot day yet";
+  const codes = v.setups.filter((x) => !x.gap && x.code).map((x) => x.code);
+  return [v.project && !v.shoot ? v.project.label : null, d, codes.length ? codes.join(", ") : null].filter(Boolean).join(" · ");
+}
+
+/** The lists a builder page can show in its Shot list block: a call sheet's or briefing's project's lists (a call sheet's
+ *  own shoot day first, as `defaultId`), or every list for a proposal. (The builder only asks when the caller has Shoots and call sheets.) */
+export const forBuild = query({
+  args: { buildId: v.string() },
+  handler: async (ctx, { buildId }) => {
+    await requireAll(ctx, "shoots");
+    const id = ctx.db.normalizeId("wsBuilds", buildId);
+    if (!id) return null;
+    let projectId: Id<"projects"> | null = null, defaultId: Id<"shotLists"> | null = null;
+    const cs = await ctx.db.query("callSheets").withIndex("by_build", (q) => q.eq("buildId", id)).first();
+    if (cs) {
+      projectId = cs.projectId;
+      defaultId = (await ctx.db.query("shotLists").withIndex("by_shoot", (q) => q.eq("shootId", cs.shootId)).first())?._id ?? null;
+    } else {
+      const b = await ctx.db.query("briefings").withIndex("by_build", (q) => q.eq("buildId", id)).first();
+      projectId = b?.projectId ?? null;
+    }
+    const lists = projectId ? await ctx.db.query("shotLists").withIndex("by_project", (q) => q.eq("projectId", projectId!)).collect() : await ctx.db.query("shotLists").collect();
+    const views = await Promise.all(lists.map((l) => listView(ctx, l)));
+    return { defaultId, callSheet: !!cs, lists: views.sort((a, b) => (a.shoot?.date ?? "9").localeCompare(b.shoot?.date ?? "9")).map((x) => ({ ...x, pick: pickLabel(x) })) };
+  },
+});
+
+/** The lists a sent page's Shot list blocks show, live (D181), for one reader. Crew see who ticked and may tick (D180,
+ *  where the block allows); clients and guests see the shots only. Null when the page has no Shot list block. */
+export async function readerShots(ctx: QueryCtx, page: unknown, projectId: Id<"projects">, shootId: Id<"shoots"> | null, crew: boolean) {
+  const blocks = shotBlocks(page);
+  if (!blocks.length) return null;
+  const defaultId = shootId ? (await ctx.db.query("shotLists").withIndex("by_shoot", (q) => q.eq("shootId", shootId)).first())?._id ?? null : null;
+  const ids = new Set<string>(blocks.map((b) => b.listId ?? defaultId ?? "").filter(Boolean));
+  const lists = [];
+  for (const raw of ids) {
+    const id = ctx.db.normalizeId("shotLists", raw);
+    const l = id ? await ctx.db.get(id) : null;
+    if (!l || l.projectId !== projectId) continue; // only the page's own project's lists
+    const vw = await listView(ctx, l);
+    lists.push({ _id: vw._id, pick: pickLabel(vw), setups: vw.setups.map((x) => ({ ...x, shots: x.shots.map((s) => ({ ...s, done: crew ? s.done : null })) })) });
+  }
+  return { defaultId, lists, canTick: crew && blocks.some((b) => b.crewTick) };
+}

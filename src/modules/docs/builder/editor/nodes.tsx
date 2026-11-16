@@ -4,6 +4,8 @@ import { createContext, useContext } from "react";
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import { BookmarkPlus, Plus, X } from "lucide-react";
 import { fill, money, type BuildDoc, type ItemRow, type PNode, newId, totals } from "../../../../../convex/lib/wsBuilder";
+import { ShotBlockDoc, type LiveList } from "../../../production/shotBlock";
+import { blockList } from "../../../../../convex/lib/shotList";
 import { locationOf, shownWeather, weatherOf, type LocationAttrs, type WeatherView } from "../../../../../convex/lib/callSheet";
 import { StatusChip, type Tone } from "../../../../ui/wp";
 
@@ -19,6 +21,8 @@ export type BuilderCtxValue = {
   weather?: WeatherView | null;
   callSheetId?: string | null;
   onWeather?: () => void;
+  // Nov 16 (D181): the shot lists this page's Shot list blocks can show (shotLists.forBuild), live.
+  shots?: { lists: LiveList[]; defaultId: string | null; callSheet: boolean } | null;
 };
 
 /** The Weather block's four states (865:11728): its chip. */
@@ -162,6 +166,16 @@ function Atom({ node, updateAttributes, ctx }: NodeViewProps & { ctx: BuilderCtx
           ))}</tbody>
           <tfoot><tr><td colSpan={cols.length + 1}><button type="button" className="btn ghost sm" onClick={() => set([...rows, blank()])}><Plus size={13} />Add a row</button></td></tr></tfoot>
         </table>
+      );
+    }
+    // Nov 16 (D181): the Shot list block, live from the shot list; its settings are in Format.
+    case "shotlist": {
+      const list = ctx.shots ? blockList(a.listId, ctx.shots.lists, ctx.shots.defaultId) : null;
+      return (
+        <div className="wsb-cs-shots" title="Shot list: pick the day in Format">
+          {ctx.shots === undefined || ctx.shots === null ? <span className="secondary">The shot list shows here once this page belongs to a project's shoot or briefing.</span>
+            : <ShotBlockDoc list={list} boxes />}
+        </div>
       );
     }
     default: return null;

@@ -40,7 +40,7 @@ export type PNode = RichNode;
 export type Page = { type: "doc"; content: PNode[] };
 
 // Phase 5b step 3: the call sheet's own blocks (lib/callSheet.ts) come last; contracts never use them.
-export const ATOMS = ["parties", "items", "payment", "signatures", "divider", "pagebreak", "spacer", "location", "schedule", "crew", "contacts", "weather"] as const;
+export const ATOMS = ["parties", "items", "payment", "signatures", "divider", "pagebreak", "spacer", "location", "schedule", "crew", "contacts", "weather", "shotlist"] as const;
 export type AtomType = (typeof ATOMS)[number];
 export const isAtom = (t: string): t is AtomType => (ATOMS as readonly string[]).includes(t);
 /** Review L8: the call sheet's own blocks (lib/callSheet.ts CALL_ATOMS), which never belong in a contract. */
@@ -52,7 +52,7 @@ export type InsertKind = "title" | "heading" | "text" | "section" | "card" | Ato
 export const INSERT_LABEL: Record<InsertKind, string> = {
   title: "Title", heading: "Heading", text: "Text", section: "Section", card: "Card", parties: "Parties", items: "Line items",
   payment: "Payment schedule", signatures: "Signatures", divider: "Divider", pagebreak: "Page break", spacer: "Space",
-  location: "Location", schedule: "Schedule", crew: "Crew list", contacts: "Contacts", weather: "Weather",
+  location: "Location", schedule: "Schedule", crew: "Crew list", contacts: "Contacts", weather: "Weather", shotlist: "Shot list",
 };
 export const BLOCK_LABEL = INSERT_LABEL;
 
@@ -82,6 +82,9 @@ export function newNodes(kind: InsertKind): PNode[] {
     case "crew": return [line("Crew and talent", { size: "heading" }), atom("crew", { rows: [{ id: newId(), name: "", role: "", call: "", phone: "" }] })];
     case "contacts": return [line("Contacts", { size: "heading" }), atom("contacts", { rows: [{ id: newId(), label: "Producer", name: "", phone: "" }] })];
     case "weather": return [atom("weather", { typed: false, line: "" })]; // D148: fills from the forecast (lib/callSheet.ts)
+    // Nov 16 (D181): a project's shot list, always live where it's read (lib/shotList.ts); listId null = the call sheet's
+    // own shoot day. `snap` is the list as it stood when the page was last printed (the PDF), filled at send.
+    case "shotlist": return [line("Shot list", { size: "heading" }), atom("shotlist", { listId: null, crewTick: true, snap: null })];
   }
 }
 
@@ -299,8 +302,9 @@ export function signerKeys(page: Page): string[] {
 export function buildProblems(d: BuildDoc): string[] {
   const out: string[] = [];
   if (!d.title.trim()) out.push("Give the document a title.");
-  if (!textOf(d.page as PNode).trim() && !(d.page.content ?? []).some((n) => isAtom(n.type) && !isCallOnly(n.type))) out.push("Add some content.");
+  if (!textOf(d.page as PNode).trim() && !(d.page.content ?? []).some((n) => isAtom(n.type) && !isCallOnly(n.type) && n.type !== "shotlist")) out.push("Add some content.");
   if (CALL_ONLY.some((t) => nodesOf(d.page, t).length)) out.push("Call sheet blocks (call times, weather, schedule, crew, contacts) can't go in a contract: remove them.");
+  if (nodesOf(d.page, "shotlist").length) out.push("A shot list can't go in a contract: remove it."); // D181
   const keys = signerKeys(d.page);
   if (!nodesOf(d.page, "signatures").length) out.push("Add a signature block.");
   if (keys.includes("client")) {

@@ -3732,3 +3732,26 @@ a.sl-day:hover .t { color: var(--text-accent); }
 .sl-switch { display: inline-flex; align-items: center; gap: 10px; font-size: var(--fs-text-regular); color: var(--text-primary); cursor: pointer; }
 /* main clips sideways with overflow: hidden, which stops a sticky header; clip keeps the page from scrolling sideways without that */
 .main:has(.sl-onset) { overflow: clip; }
+/* Nov 16 (D181): the Shot list block, on paper (frames 1037-22115 builder, 1037-22495 the crew's sheet) */
+.cs-shots { margin: 8px 0 14px; padding: 14px 16px; border: 1.5px solid var(--cs-accent, var(--accent)); border-radius: 8px; font-size: 14px; line-height: 1.45; }
+.cs-shots .cs-cap { display: block; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #6b6862; margin-bottom: 8px; }
+.cs-shots.empty { border-style: dashed; color: #6b6862; }
+.cs-shots-set + .cs-shots-set, .cs-shots-gap + .cs-shots-set { margin-top: 10px; }
+.cs-shots-head { margin: 0; font-weight: 600; color: #111; }
+.cs-shots-note { margin: 0 0 4px; color: #6b6862; font-size: 13px; }
+.cs-shots-gap { margin: 8px 0 0; color: #6b6862; font-size: 13px; }
+.cs-shot { display: grid; grid-template-columns: auto 34px minmax(0, 1fr); gap: 0 8px; align-items: start; padding: 3px 0; color: #1d1d1f; }
+.cs-shot .n { color: #6b6862; font-variant-numeric: tabular-nums; }
+.cs-shot .t .sub { display: block; color: #6b6862; font-size: 12.5px; }
+.cs-shot.done .t { color: #8b8780; text-decoration: line-through; }
+.cs-box { width: 15px; height: 15px; margin-top: 3px; border: 1.2px solid #8b8780; border-radius: 3px; display: grid; place-items: center; font-size: 11px; line-height: 1; color: var(--cs-accent, var(--accent)); background: transparent; padding: 0; }
+.cs-box.tick { width: 26px; height: 26px; margin: -3px 0 0; border-radius: 6px; font-size: 16px; cursor: pointer; }
+.cs-shot:has(.cs-box.tick) { grid-template-columns: 26px 34px minmax(0, 1fr); padding: 5px 0; align-items: center; }
+.cs-shot.done .cs-box { border-color: var(--cs-accent, var(--accent)); }
+.wsb-cs-shots { margin: 4px 0; cursor: default; }
+.wsb-cs-shots .cs-shots { background: transparent; }
+.gst-shots .cs-shots { border: 0; padding: 0; margin: 4px 0 0; color: var(--text-primary); }
+.gst-shots .cs-shots .cs-cap, .gst-shots .cs-shots-note, .gst-shots .cs-shots-gap, .gst-shots .cs-shot .n, .gst-shots .cs-shot .t .sub { color: var(--text-secondary); }
+.gst-shots .cs-shots-head, .gst-shots .cs-shot { color: var(--text-primary); }
+.gst-shots .cs-shot.done .t { color: var(--text-muted); }
+.gst-shots .cs-box { border-color: var(--text-muted); }
