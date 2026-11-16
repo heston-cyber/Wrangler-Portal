@@ -36,6 +36,8 @@ import { proposalProblems } from "../../../../convex/lib/wsProposal";
 import { briefingProblems } from "../../../../convex/lib/wsBriefing";
 import { BriefingPanel, ShareBriefing, UpdateBriefing, type BriefingInfo } from "../../vendors/BriefingShare";
 import { OfferPeopleCard, SendOfferDialog } from "../../payments/SendOffer";
+import { bakeShots } from "../../../../convex/lib/shotList";
+import { usePerms } from "../../../lib/teamAccess";
 import { CALL_BLOCKS, bakeWeather, blockCard, callSheetProblems, isCallAtom, shownWeather, weatherOf } from "../../../../convex/lib/callSheet";
 import { PeoplePicker, SendSheet, SendUpdate, type CallSheetInfo } from "../../production/callSheetParts";
 
@@ -79,6 +81,8 @@ const INSERT: Array<{ kind: InsertKind; icon: React.ReactNode; hint: string }> =
   { kind: "location", icon: <Icon name="map-pin" size={18} />, hint: "Call times, address, parking and a map link" },
   { kind: "contacts", icon: <Icon name="phone" size={18} />, hint: "Who to call on the day" },
   { kind: "weather", icon: <CloudSun size={18} />, hint: "The forecast for the shoot's address, or your own line" },
+  // Nov 16 (D181): call sheets, briefings and proposals (never a contract)
+  { kind: "shotlist", icon: <Icon name="shot-list" size={18} />, hint: "A shoot day's setups and shots, live from the shot list" },
 ];
 const CALL_HIDES = new Set<InsertKind>(["parties", "items", "payment", "signatures"]);
 
@@ -94,6 +98,10 @@ export default function Builder({ mode }: { mode: Mode }) {
   const locked = !!prop && !P_OPEN.has(prop.status); // D161 (Nov 6): a sent briefing stays editable ("Update the link")
   const briefSent = !!brief && brief.state !== "draft";
   const build = useQuery(api.builder.getBuild, mode.kind === "build" ? { buildId: mode.buildId } : "skip");
+  // Nov 16 (D181): the shot lists its Shot list blocks can show (a call sheet's, a briefing's project's; any for a proposal).
+  const { perms, role } = usePerms();
+  const canShots = perms.shoots && role !== "editor";
+  const shots = useQuery(api.shotLists.forBuild, mode.kind === "build" && (isCall || isBrief || isProp) && canShots ? { buildId: mode.buildId } : "skip");
   const tpl = useQuery(api.builder.getTemplate, mode.kind === "template" ? { templateId: mode.templateId } : "skip");
   const profile = useQuery(api.builder.getProfile);
   const fonts = useQuery(api.builder.listFonts);
@@ -381,7 +389,10 @@ export default function Builder({ mode }: { mode: Mode }) {
   const render = async () => {
     const { renderPdf } = await import("./pdf");
     const wx = call?.weather ? shownWeather(weatherOf(nodesOf(doc.page, "weather")[0]), call.weather) : null;
-    return renderPdf(wx ? { ...doc, page: bakeWeather(doc.page, wx) } : doc, assets(), prop ? prop.number : brief ? undefined : build?.document?.label);
+    const baked = wx ? { ...doc, page: bakeWeather(doc.page, wx) } : doc;
+    // Nov 16 (D181): a printed page keeps each Shot list block's list as it stands now.
+    const printed = shots ? { ...baked, page: bakeShots(baked.page, shots.lists, shots.defaultId) } : baked;
+    return renderPdf(printed, assets(), prop ? prop.number : brief ? undefined : build?.document?.label);
   };
   const onPreview = async () => {
     setBusy("preview");
@@ -475,7 +486,7 @@ export default function Builder({ mode }: { mode: Mode }) {
   const extraKeys = keys.filter((k) => k !== "heston" && k !== "client");
 
   return (
-    <BuilderCtx.Provider value={{ doc, values, px, onDetails: () => setTab("details"), onSaveClause: (sec) => void onSaveClause(sec), callSheet: isCall, weather: call?.weather ?? null, callSheetId: call?._id ?? null, onWeather: () => setTab("format") }}>
+    <BuilderCtx.Provider value={{ doc, values, px, onDetails: () => setTab("details"), onSaveClause: (sec) => void onSaveClause(sec), callSheet: isCall, weather: call?.weather ?? null, callSheetId: call?._id ?? null, onWeather: () => setTab("format"), shots: shots ?? null }}>
       <TopBar right={<>
         <span className="wsb-undo">
           <button className="icon-btn sm" aria-label="Undo" title={`Undo (${mac ? "⌘Z" : "Ctrl+Z"})`} disabled={!hist.current.past.length} onClick={() => step("undo")}><Icon name="arrow-left" size={18} /></button>
@@ -567,7 +578,7 @@ export default function Builder({ mode }: { mode: Mode }) {
           {tab === "insert" && (
             <div className="wsb-pane">
               <span className="wsb-hint">{phone ? "Tap to add after the cursor, or press and hold to drag onto the page" : "Drag onto the page (or into a container), or click to add after the cursor"}</span>
-              {INSERT.filter((x) => (isCall ? !CALL_HIDES.has(x.kind) : !isCallAtom(x.kind)) && (!side || (x.kind !== "parties" && x.kind !== "signatures"))).map((x) => <button key={x.kind} className="wsb-insert" draggable onDragStart={(e) => dragNodes(e, newNodes(x.kind))} onDragEnd={() => endInsertDrag(editor)} {...touch.item(() => newNodes(x.kind), INSERT_LABEL[x.kind])} onClick={() => { if (touch.justDropped()) return; if (editor) insertKind(editor, x.kind); if (phone) setSheet(false); }}>{x.icon}<span><b>{INSERT_LABEL[x.kind]}</b><span className="secondary">{x.hint}</span></span></button>)}
+              {INSERT.filter((x) => (isCall ? !CALL_HIDES.has(x.kind) : !isCallAtom(x.kind)) && (!side || (x.kind !== "parties" && x.kind !== "signatures")) && (x.kind !== "shotlist" || ((isCall || isBrief || isProp) && !isGuide && canShots))).map((x) => <button key={x.kind} className="wsb-insert" draggable onDragStart={(e) => dragNodes(e, newNodes(x.kind))} onDragEnd={() => endInsertDrag(editor)} {...touch.item(() => newNodes(x.kind), INSERT_LABEL[x.kind])} onClick={() => { if (touch.justDropped()) return; if (editor) insertKind(editor, x.kind); if (phone) setSheet(false); }}>{x.icon}<span><b>{INSERT_LABEL[x.kind]}</b><span className="secondary">{x.hint}</span></span></button>)}
               {prop && prop.status !== "draft" && prop.status !== "waiting" && prop.status !== "ready" && <ProposalPeople p={prop} show={show} />}
               {prop && <PitchDeck p={prop} show={show} />}
               {brief && !briefSent && <BriefingPanel b={brief} show={show} onProject={(label) => setDoc((d) => ({ ...d, fields: { ...d.fields, project: label } }))} />}

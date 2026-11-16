@@ -13,7 +13,10 @@ import { addDays } from "./footage";
 
 type Shoot = Doc<"shoots">;
 
-export async function shootRows(ctx: QueryCtx, shoots: Shoot[]) {
+/** `withShots`: include each shoot's shot list counts (only for a caller with Shoots and call sheets; review L7). */
+/** Nov 16 (review L7): the shoots switch, as requireAll(ctx, "shoots") would decide it. */
+const canShots = (me: { team?: { role: string; perms: { shoots?: boolean } } }) => !me.team || (!!me.team.perms.shoots && me.team.role !== "editor");
+export async function shootRows(ctx: QueryCtx, shoots: Shoot[], withShots = false) {
   const projects = new Map<string, Doc<"projects"> | null>();
   const clients = new Map<string, string | null>();
   const out = [];
@@ -26,8 +29,12 @@ export async function shootRows(ctx: QueryCtx, shoots: Shoot[]) {
     // Phase 5b step 3: its call sheet, if it has one (NO CALL SHEET · DRAFT · SENT · N OF M OPENED).
     const cs = await ctx.db.query("callSheets").withIndex("by_shoot", (q) => q.eq("shootId", s._id)).first();
     const sentTo = cs ? cs.recipients.filter((r) => r.sentAt) : []; // step 4: guests it went to count too
+    // Nov 16: its shot list (D179: one per shoot day), with how many shots are done.
+    const sl = !withShots ? null : await ctx.db.query("shotLists").withIndex("by_shoot", (q) => q.eq("shootId", s._id)).first();
+    const shots = sl ? await ctx.db.query("shots").withIndex("by_list", (q) => q.eq("listId", sl._id)).collect() : [];
     out.push({
       _id: s._id, projectId: p._id, project: p.name, label: label(p), client: clients.get(ck) ?? null,
+      shotList: sl ? { _id: sl._id, total: shots.length, done: shots.filter((x) => x.done).length } : null,
       date: s.date, call: s.call, location: s.location, crew: s.crew.length, confirmed: !!s.confirmed, moved: !!s.moved,
       sheet: cs ? { _id: cs._id, state: cs.status === "sent" ? "sent" as const : "draft" as const, built: !!cs.buildId, opened: sentTo.filter((r) => r.openedAt).length, of: sentTo.length, people: cs.recipients.filter((r) => r.on).length } : null,
     });
@@ -96,13 +103,14 @@ export const overview = query({
 export const shoots = query({
   args: {},
   handler: async (ctx) => {
-    await requireAll(ctx, "production");
+    const me = await requireAll(ctx, "production");
+    const shots = canShots(me);
     const today = todayCentral();
     const all = await scheduled(ctx);
     const upcoming = all.filter((s) => s.date >= today);
     const past = all.filter((s) => s.date < today).reverse().slice(0, 100);
-    const up = await shootRows(ctx, upcoming);
-    return { today, upcoming: up, past: await shootRows(ctx, past), pastTotal: all.length - upcoming.length, needsSheet: up.filter((s) => s.sheet?.state !== "sent").length };
+    const up = await shootRows(ctx, upcoming, shots);
+    return { today, upcoming: up, past: await shootRows(ctx, past, shots), pastTotal: all.length - upcoming.length, needsSheet: up.filter((s) => s.sheet?.state !== "sent").length };
   },
 });
 

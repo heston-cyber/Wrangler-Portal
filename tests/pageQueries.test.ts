@@ -188,6 +188,13 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   // sent to); the vendor's reader and Home list (the vendor side; tests/callSheets.test.ts fires them as vendors).
   "callSheets.list": { pages: ["owner"], args: () => ({}) }, // Production › Call sheets
   "callSheets.newOptions": { pages: ["owner"], args: () => ({}) }, // New call sheet
+  // Nov 16: shot lists (Pre-pro › Shot lists, New shot list, the editor, the on-set checklist)
+  "shotLists.all": { pages: ["owner"], args: () => ({}) },
+  "shotLists.newOptions": { pages: ["owner"], args: () => ({}) },
+  "shotLists.get": { pages: ["owner"], args: () => "skip" },
+  "shotLists.forShoot": { pages: ["owner"], args: () => "skip" },
+  "shotLists.forBuild": { pages: ["owner"], args: () => "skip" }, // the builder's Shot list block
+  "shotLists.forProject": { pages: ["owner"], args: () => "skip" }, // the project Overview's Shot list card
   "callSheets.get": { pages: ["owner"], args: () => "skip" }, // the questions, the editor, Detail
   "callSheets.forClient": { pages: ["clientHome"], args: () => ({ callSheetId: "nope" }) }, // /call-sheets/<id>
   "callSheets.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Coming up

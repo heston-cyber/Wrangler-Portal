@@ -11,6 +11,7 @@ import { Icon } from "../../ui/Icon";
 import { Button, Checkbox, DialogHeader, IconButton, TextArea, TextField } from "../../ui/wp";
 import { errText } from "../docs/pages/common";
 import { fill, type PNode, type Page } from "../../../convex/lib/wsBuilder";
+import { ShotBlockLive } from "./shotBlock";
 import { clockOf, locationOf, rowsOf, sheetDay, weatherOf, type ContactRow, type CrewRow, type ScheduleRow } from "../../../convex/lib/callSheet";
 
 export type CallSheetInfo = NonNullable<FunctionReturnType<typeof api.callSheets.get>>;
@@ -256,6 +257,7 @@ function Block({ n, values }: { n: PNode; values: Record<string, string> }) {
       const rows = rowsOf<ContactRow>(n);
       return rows.length ? <div className="cs-rows">{rows.map((r) => <div key={r.id} className="cs-row"><span className="what"><span className="sub">{t(r.label)}</span><b>{t(r.name)}</b></span>{r.phone ? <a className="cs-tel" href={tel(t(r.phone))}>{t(r.phone)}</a> : null}</div>)}</div> : null;
     }
+    case "shotlist": return <ShotBlockLive attrs={a} />; // Nov 16 (D181): live from the shot list
     default: return null; // a contract's blocks never appear on a call sheet
   }
 }

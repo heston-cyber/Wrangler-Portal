@@ -73,6 +73,7 @@ const OWNER_PRODUCTION: Sub[] = [
   { group: "Pre-pro", to: "/vendors/bookings", label: "Bookings", match: (p) => starts(p, "/vendors/bookings") },
   { group: "Pre-pro", to: "/vendors/briefings", label: "Briefings", match: (p) => starts(p, "/vendors/briefings") },
   { group: "Pre-pro", to: "/production/call-sheets", label: "Call sheets", match: (p) => starts(p, "/production/call-sheets") },
+  { group: "Pre-pro", to: "/production/shot-lists", label: "Shot lists", match: (p) => starts(p, "/production/shot-lists") }, // Nov 16
   { group: "Prin-pro", to: "/production/shoots", label: "Shoots", match: (p) => starts(p, "/production/shoots") },
   { group: "Prin-pro", to: "/production/calendar", label: "Calendar", match: (p) => starts(p, "/production/calendar") },
   { group: "Prin-pro", to: "/production/gear", label: "Gear", match: (p) => starts(p, "/production/gear") },
@@ -88,7 +89,7 @@ export const STAGE_TO: Record<string, string> = { "Pre-pro": "/production/pre-pr
 // D176 (Nov 15): every submenu item gets an icon, one per kind of thing (the same kind has the same icon wherever it appears).
 export const SUB_ICON: Record<string, IconName> = {
   "/production": "overview", "/payments": "overview", "/projects": "folder", "/vendors/bookings": "booking", "/vendors/briefings": "briefing",
-  "/production/call-sheets": "call-sheet", "/production/shoots": "clapper", "/production/calendar": "calendar", "/production/gear": "case",
+  "/production/call-sheets": "call-sheet", "/production/shot-lists": "shot-list", "/production/shoots": "clapper", "/production/calendar": "calendar", "/production/gear": "case",
   "/review/overview": "review", "/activity": "activity", "/production/delivery": "package",
   "/clients/pipeline": "funnel", "/clients": "building", "/clients/follow-ups": "flag", "/clients/testimonials": "star",
   "/vendors": "users", "/vendors/payments": "wallet", "/proposals/new": "plus", "/sign/new": "plus", "/proposals": "register", "/sign/docs": "register",

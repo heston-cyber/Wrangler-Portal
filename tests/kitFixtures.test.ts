@@ -423,7 +423,20 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       await msg(lead, "lead", "Tom Silva", "tom@silvaroasters.example", "Looking forward to Friday. Should I send the brief ahead?", m(5));
       return { tid, lead, token: "kitleadthreadtoken000001" };
     });
+    // Nov 16: a shot list for the shoot (sample shots in the style of Heston's SSM Health list), some ticked.
+    const slKit = await (async () => {
+      const listId = await owner.mutation(api.shotLists.create, { projectId: w.p1, shootId });
+      await owner.mutation(api.shotLists.addSetup, { listId, gap: true, start: "06:30", end: "07:15", title: "Call at the hotel lobby, travel to the cafe" });
+      const m1 = await owner.mutation(api.shotLists.addSetup, { listId, code: "H-01", start: "07:30", end: "08:30", title: "Cafe front: exteriors", note: "Crew only. Sun is behind the building after 8:15; get the wides first." });
+      const m2 = await owner.mutation(api.shotLists.addSetup, { listId, start: "08:30", end: "09:30", title: "Bar: barista b-roll", note: "Baristas free 8:30–9:30 only." });
+      await owner.mutation(api.shotLists.addShots, { setupId: m1, text: "1 Exterior from street level\n2 Signage and entrance\n3 Door opening, first customer\n6 Window light on the counter\n45 Staff walking in at sunrise" });
+      await owner.mutation(api.shotLists.addShots, { setupId: m2, text: "Espresso pour, macro\nMilk steaming, slow motion\nBarista handing a cup over the bar" });
+      const v = await owner.query(api.shotLists.get, { listId });
+      for (const s of v.setups[1].shots.slice(0, 3)) await owner.mutation(api.shotLists.tick, { shotId: s._id, done: true, at: Date.now() });
+      return listId as string;
+    })();
     const OWNER: [string, Record<string, unknown>][] = [
+      ["shotLists.all", {}], ["shotLists.newOptions", {}], ["shotLists.get#" + slKit, { listId: slKit }], ["shotLists.forProject#" + w.p1, { projectId: w.p1 }], ["shotLists.forShoot#" + shootId, { shootId }],
       ["siteWatch.summary", {}], ["siteWatch.report", {}],
       ...sw.ids.map((id): [string, Record<string, unknown>] => ["siteWatch.finding#" + id, { id }]),
       ...sw.runs.map((id): [string, Record<string, unknown>] => ["siteWatch.run#" + id, { id }]),

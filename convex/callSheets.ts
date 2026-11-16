@@ -11,6 +11,7 @@
 //     it; Send an update freezes the new copy and sends email 42 once per person per update.
 //   - Readers: a client person (client side, /call-sheets/<id>) or a booked vendor (vendor side, vendorPortal.ts), each
 //     only for a sheet that was sent to them, on a project or booking they still have.
+import { readerShots } from "./shotLists";
 import { focusBusiness, internalAction, internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { audit } from "./lib/audit";
 import { v, ConvexError } from "convex/values";
@@ -667,6 +668,8 @@ export async function readerView(ctx: QueryCtx, cs: Sheet, me: Person) {
     updatedToday, change: updatedToday && last?.detail ? { at: last.at, text: last.detail } : null,
     business: b?.name ?? contact.name, owner: b?.ownerName?.trim() || contact.name, replyTo: b?.replyTo || contact.ownerEmail,
     me: { name: me.name, kind: me.kind, role: me.role ?? null, call: callFor(page, me) }, openedAt: me.openedAt ?? null,
+    // Nov 16 (D180, D181): the page's Shot list blocks, live; the crew may tick.
+    shots: await readerShots(ctx, page, cs.projectId, cs.shootId, me.kind === "crew"),
   };
 }
 

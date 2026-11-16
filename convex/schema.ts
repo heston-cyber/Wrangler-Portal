@@ -1354,6 +1354,43 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_project", ["projectId", "date"]).index("by_date", ["date"]),
 
+  // Shot lists (Nov 16, D179–D182; frames "5h / …", Handoff ready: Shot lists). One list per shoot day: made on the
+  // project in pre-pro, linked to one of its shoots once that day is scheduled (one list per shoot). A list holds
+  // setups (M-01 …, a time window, a title, a note) and gap lines ("Call at Aloft lobby"), and each setup holds shots.
+  shotLists: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    projectId: v.id("projects"),
+    shootId: v.optional(v.id("shoots")),      // the shoot day it's for; none until that day is scheduled and linked
+    title: v.optional(v.string()),            // e.g. "Day 1"; the shoot's date names it when empty
+    resetAt: v.optional(v.number()),          // the last Reset: a tick made (on a phone, offline) before it doesn't come back
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_project", ["projectId"]).index("by_shoot", ["shootId"]),
+  shotSetups: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    listId: v.id("shotLists"),
+    order: v.number(),
+    gap: v.optional(v.boolean()),             // a gap line: time and text only, no shots
+    code: v.optional(v.string()),             // "M-01"
+    start: v.optional(v.string()),            // HH:MM, 24-hour
+    end: v.optional(v.string()),
+    title: v.string(),
+    note: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_list", ["listId", "order"]),
+  shots: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    listId: v.id("shotLists"),
+    setupId: v.id("shotSetups"),
+    order: v.number(),
+    number: v.number(),                       // #1, #45 … (numbers can skip; unique in the list)
+    text: v.string(),
+    note: v.optional(v.string()),
+    done: v.optional(v.object({ name: v.string(), initials: v.string(), userId: v.optional(v.id("users")), vendorId: v.optional(v.id("vendors")) })),
+    tickAt: v.optional(v.number()),           // when the last tick or untick was made (on the phone); an older one loses (D182)
+    createdAt: v.number(),
+  }).index("by_list", ["listId"]).index("by_setup", ["setupId", "order"]),
+
   // Phase 5d step 1 (Nov 4, D119/D144): booking calls. One settings row per business (Settings › Booking calls), with the
   // busy times last read from the calendar it checks (read again when a lead opens the page, at most once a minute).
   callSettings: defineTable({
