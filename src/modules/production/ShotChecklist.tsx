@@ -62,7 +62,8 @@ export default function ShotChecklistPage({ shootId }: { shootId: string }) {
   const [toast, say] = useToast();
   const [hide, setHide] = useState(readHide);
   const [asking, setAsking] = useState(false);
-  const q = useTickQueue(`wp.ticks.${shootId}`, (t) => tickM(t));
+  const me = useQuery(api.users.me);
+  const q = useTickQueue(`wp.ticks.${me?.id ?? "nobody"}.${shootId}`, (t) => tickM(t));
   const crumbs = (here: string) => <TopBar><a {...linkProps("/production/prin-pro")}>Prin-pro</a><Sep /><a {...linkProps("/production/shoots")}>Shoots</a><Sep /><span className="here">{here}</span></TopBar>;
   if (l === undefined) return <>{crumbs("Shot list")}<div className="wp-page prod"><Card label="Loading"><SkeletonRows n={6} /></Card></div></>;
   if (l === null) return <>{crumbs("Shot list")}<div className="wp-page prod"><EmptyState icon="shot-list" title="No shot list for this shoot yet"

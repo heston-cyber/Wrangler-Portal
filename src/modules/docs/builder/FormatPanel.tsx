@@ -292,8 +292,9 @@ function ShotListPanel({ editor, pos, attrs }: { editor: Editor; pos: number; at
             {!shots.callSheet && !listId && <option value="">Pick a shot list</option>}
             {shots.lists.filter((l) => !shots.callSheet || l._id !== shots.defaultId).map((l) => <option key={l._id} value={l._id}>{l.pick}</option>)}
           </select></label>
-        {shots.callSheet && <label className="wsb-check"><input type="checkbox" checked={attrs.crewTick !== false} onChange={(e) => setAtom(editor, pos, { ...attrs, crewTick: e.target.checked })} />
+        {shots.callSheet && (!listId || listId === shots.defaultId) && <label className="wsb-check"><input type="checkbox" checked={attrs.crewTick !== false} onChange={(e) => setAtom(editor, pos, { ...attrs, crewTick: e.target.checked })} />
           <span>Crew can tick on the sheet<span className="caption secondary"> · You and the shoot's booked crew. Clients and guests only read it.</span></span></label>}
+        {shots.callSheet && listId && listId !== shots.defaultId && <p className="caption secondary">Another day's list: the crew read it here but tick only their own day's.</p>}
         <p className="caption secondary">In the PDF: a printed list with empty boxes.</p>
         <div className="ws-wxacts">
           {shown && <a className="btn outline sm" href={`/production/shot-lists/${shown}`} target="_blank" rel="noopener noreferrer">Open shot list</a>}

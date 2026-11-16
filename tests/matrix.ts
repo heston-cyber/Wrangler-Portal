@@ -324,7 +324,8 @@ export async function setup() {
       recipients: [{ id: "client:client@example.com", kind: "client", name: "Client", email: "client@example.com", on: true, sentAt: 0, addedAt: 0 }, { id: `crew:${bookingId}`, kind: "crew", name: "V", email: "v@x.example", vendorId, bookingId, on: true, sentAt: 0, addedAt: 0 },
         { id: "guest:matrix", kind: "guest", name: "Gail", email: "gail@x.example", role: "Talent", on: true, sentAt: 0, addedAt: 0 },
         { id: "guest:invited", kind: "guest", name: "Ivy", email: "ivy@x.example", role: "Talent", on: true, sentAt: 1, addedAt: 0 }],
-      sent: { title: "CS", page: { type: "doc", content: [] }, fields: {}, style: {}, at: 0, round: 0 }, history: [], createdAt: 0, updatedAt: 0 });
+      // Nov 16 (review L2): a Shot list block, so the reader paths run readerShots in the matrix too.
+      sent: { title: "CS", page: { type: "doc", content: [{ type: "shotlist", attrs: { listId: null, crewTick: true, snap: null } }] }, fields: {}, style: {}, at: 0, round: 0 }, history: [], createdAt: 0, updatedAt: 0 });
     // Phase 5b step 5: a Google Calendar connection with one event, and the shoot moved in Google (its Dashboard note).
     await ctx.db.insert("calendars", { businessId, email: "heston@gmail.example", refreshToken: "rt", calendarId: "cal@x", calendarName: "Wrangler", inviteVendors: true, inviteClient: false, connectedAt: 0,
       list: [{ id: "cal@x", name: "Wrangler", color: 0, on: true, writable: true, primary: true }] });

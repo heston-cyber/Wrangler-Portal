@@ -6,7 +6,7 @@ import { windowOf } from "./shotTime";
 import type { ShotSnap } from "../../../convex/lib/shotList";
 import { blockList } from "../../../convex/lib/shotList";
 
-export type LiveList = { _id: string; pick: string; setups: Array<ShotSnap["setups"][number] & { _id?: string; shots: Array<ShotSnap["setups"][number]["shots"][number] & { _id?: string; done?: { name: string; initials: string } | null }> }> };
+export type LiveList = { _id: string; pick: string; tickable?: boolean; setups: Array<ShotSnap["setups"][number] & { _id?: string; shots: Array<ShotSnap["setups"][number]["shots"][number] & { _id?: string; done?: { name: string; initials: string } | null }> }> };
 
 /** What a page's Shot list blocks read: the lists, the call sheet's own one, and (crew only) ticking. */
 export type ShotsSource = {
@@ -52,6 +52,7 @@ export function ShotBlockLive({ attrs }: { attrs: Record<string, unknown> }) {
   const src = useContext(ShotsCtx);
   const list = src ? blockList(attrs.listId, src.lists, src.defaultId) : null;
   // D180: crew tick here when the block allows it; clients and guests read it without boxes to tick.
-  const tick = src?.tick && attrs.crewTick !== false ? src.tick : null;
+  // Review M1: only the reader's own shoot day's list (tickable), as the server checks too.
+  const tick = src?.tick && attrs.crewTick !== false && list?.tickable ? src.tick : null;
   return <ShotBlockDoc list={list} snap={list ? null : (attrs.snap as ShotSnap | null)} boxes={!!tick} tick={tick} />;
 }

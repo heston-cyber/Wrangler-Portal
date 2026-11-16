@@ -31,11 +31,13 @@ const write = (key: string, q: Tick[]) => { try { if (q.length) localStorage.set
  * The queue for one page: `tick` shows at once, is saved on the phone, and is sent; it leaves the queue when the server
  * has it. Anything left from before (the page was closed with no signal) is sent again when the page opens.
  */
-export function useTickQueue(key: string, send: (t: Tick) => Promise<unknown>) {
+export function useTickQueue(key: string, send: (t: Tick & { sent: number }) => Promise<unknown>) {
   const [q, setQ] = useState<Tick[]>(() => read(key));
   const conn = useConvexConnectionState();
   const [netOnline, setNetOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const [synced, setSynced] = useState(false);
+  const [lost, setLost] = useState(false); // a tick a newer change (or a Reset) beat
+  useEffect(() => { if (!lost) return; const t = setTimeout(() => setLost(false), 4000); return () => clearTimeout(t); }, [lost]);
   const sending = useRef(new Set<string>());
   useEffect(() => {
     const on = () => setNetOnline(true), off = () => setNetOnline(false);
@@ -51,16 +53,18 @@ export function useTickQueue(key: string, send: (t: Tick) => Promise<unknown>) {
     if (sending.current.has(id)) return;
     sending.current.add(id);
     // The Convex client holds a mutation until it's connected again, so this settles once the server has answered.
-    send(t).then(() => {
+    // `sent`: the phone's clock now, so the server can tell how long the tick waited (review L1).
+    send({ ...t, sent: Date.now() }).then((r) => {
+      if ((r as { landed?: boolean } | null)?.landed === false) setLost(true);
       setQ((cur) => { const next = cur.filter((x) => !(x.shotId === t.shotId && x.at === t.at)); write(key, next); if (!next.length && waited.current) { waited.current = false; setSynced(true); } return next; });
     }, () => {
       // Refused (not a lost signal): drop it so the page shows what the server has.
       setQ((cur) => { const next = cur.filter((x) => !(x.shotId === t.shotId && x.at === t.at)); write(key, next); return next; });
     }).finally(() => sending.current.delete(id));
   }, [key, send]);
-  // Send what was left from before, once.
-  const once = useRef(false);
-  useEffect(() => { if (!once.current) { once.current = true; read(key).forEach(push); } }, [key, push]);
+  // What was left from before (this person, this page) is shown and sent again. The key names who's signed in
+  // (review L6), so ticks one person queued are never sent under someone else's login.
+  useEffect(() => { const left = read(key); setQ(left); left.forEach(push); }, [key, push]);
   useEffect(() => { if (!synced) return; const t = setTimeout(() => setSynced(false), 2500); return () => clearTimeout(t); }, [synced]);
   const tick = useCallback((shotId: string, done: boolean) => {
     const t = { shotId, done, at: Date.now() };
@@ -68,5 +72,5 @@ export function useTickQueue(key: string, send: (t: Tick) => Promise<unknown>) {
     setQ((cur) => { const next = queueTick(cur, t); write(key, next); return next; });
     push(t);
   }, [key, push]);
-  return { queue: q, tick, online, line: waitingLine(q.length, online), synced };
+  return { queue: q, tick, online, line: waitingLine(q.length, online) ?? (lost ? "A newer change to that shot won." : null), synced };
 }

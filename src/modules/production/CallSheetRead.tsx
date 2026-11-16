@@ -57,7 +57,8 @@ export function VendorCallSheetPage({ callSheetId }: { callSheetId: string }) {
   useOpen(callSheetId, !!d, open);
   // Nov 16 (D180, D182): the crew tick shots on the sheet; ticks with no signal wait on the phone.
   const tickShot = useMutation(api.vendorPortal.tickShot);
-  const q = useTickQueue(`wp.ticks.cs.${callSheetId}`, (t) => tickShot({ callSheetId, ...t }));
+  const me = useQuery(api.users.me);
+  const q = useTickQueue(`wp.ticks.${me?.id ?? "nobody"}.cs.${callSheetId}`, (t) => tickShot({ callSheetId, ...t }));
   const tick = d?.shots?.canTick ? { isDone: (id: string, server: boolean) => shownDone(server, id, q.queue), onTick: q.tick, line: q.line } : null;
   if (d === undefined) return <><TopBar><span className="here">Call sheet</span></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={5} /></Card></div></>;
   if (d === null) return <><TopBar><span className="here">Call sheet</span></TopBar><Missing home="/vendor/bookings" label="Your bookings" /></>;

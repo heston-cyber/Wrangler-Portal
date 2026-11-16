@@ -69,6 +69,12 @@ export function tickLands(at: number, now: number, shotTickAt: number | undefine
   return { lands: true, at: t };
 }
 
+/** Review L1: when a tick was made, on the server's clock: now, less how long the phone held it (its own clock at
+ *  ticking and at sending). Without `sent` (an older client) the phone's time is taken as it is. */
+export function serverTime(at: number, sent: number | undefined, now: number): number {
+  return sent === undefined ? at : now - Math.max(0, sent - at);
+}
+
 /** The checklist's numbers for one list: shots and how many are done. */
 export function progress(shots: Array<{ done?: unknown }>) {
   return { total: shots.length, done: shots.filter((s) => !!s.done).length };

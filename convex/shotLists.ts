@@ -12,7 +12,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireAll } from "./lib/access";
 import { label } from "./lib/bookingRows";
-import { MAX_PASTE, MAX_SETUPS, MAX_SHOTS, NOTE_MAX, TEXT_MAX, initialsOf, isTime, nextCode, parsePaste, progress, shotBlocks, tickLands, tidy } from "./lib/shotList";
+import { MAX_PASTE, MAX_SETUPS, MAX_SHOTS, NOTE_MAX, TEXT_MAX, initialsOf, isTime, nextCode, parsePaste, progress, serverTime, shotBlocks, tickLands, tidy } from "./lib/shotList";
 
 type Ctx = QueryCtx | MutationCtx;
 type List = Doc<"shotLists">;
@@ -364,20 +364,23 @@ export const moveShot = mutation({
 // ---------- ticking (D180, D182) ----------
 
 /** Set a shot done or not done, as `who` at the time it was made. Shared by the owner's tick and the crew's. */
-export async function applyTick(ctx: MutationCtx, s: Doc<"shots">, l: List, done: boolean, at: number, who: { name: string; userId?: Id<"users">; vendorId?: Id<"vendors"> }) {
-  if (!Number.isFinite(at)) throw new ConvexError("That tick has no time.");
-  const r = tickLands(at, Date.now(), s.tickAt, l.resetAt);
+export async function applyTick(ctx: MutationCtx, s: Doc<"shots">, l: List, done: boolean, at: number, who: { name: string; userId?: Id<"users">; vendorId?: Id<"vendors"> }, sent?: number) {
+  if (!Number.isFinite(at) || (sent !== undefined && !Number.isFinite(sent))) throw new ConvexError("That tick has no time.");
+  // Review L1: `at` and `sent` are the phone's clock (when it was ticked, when it was sent); how long it waited is
+  // measured on the phone and taken from the server's now, so a phone clock that's off doesn't matter.
+  const now = Date.now();
+  const r = tickLands(serverTime(at, sent, now), now, s.tickAt, l.resetAt);
   if (!r.lands) return { landed: false as const };
   await ctx.db.patch(s._id, { tickAt: r.at, done: done ? { name: who.name, initials: initialsOf(who.name), ...(who.userId ? { userId: who.userId } : {}), ...(who.vendorId ? { vendorId: who.vendorId } : {}) } : undefined });
   return { landed: true as const };
 }
 
 export const tick = mutation({
-  args: { shotId: v.string(), done: v.boolean(), at: v.number() },
+  args: { shotId: v.string(), done: v.boolean(), at: v.number(), sent: v.optional(v.number()) },
   handler: async (ctx, a) => {
     const me = await requireAll(ctx, "shoots");
     const { s, l } = await ownShot(ctx, a.shotId);
-    return await applyTick(ctx, s, l, a.done, a.at, { name: me.name, userId: me.userId });
+    return await applyTick(ctx, s, l, a.done, a.at, { name: me.name, userId: me.userId }, a.sent);
   },
 });
 
@@ -398,10 +401,10 @@ export const reset = mutation({
 // ---------- the Shot list block (D181) ----------
 
 /** "Day 1 · Tue 11/3 · H-01, H-02" (the block's shoot-day picker). */
-export function pickLabel(v: Awaited<ReturnType<typeof listView>>) {
+export function pickLabel(v: Awaited<ReturnType<typeof listView>>, withProject = true) {
   const d = v.shoot ? `Day ${v.shoot.day} · ${new Date(`${v.shoot.date}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "numeric", day: "numeric" }).replace(",", "")}` : v.title || "No shoot day yet";
   const codes = v.setups.filter((x) => !x.gap && x.code).map((x) => x.code);
-  return [v.project && !v.shoot ? v.project.label : null, d, codes.length ? codes.join(", ") : null].filter(Boolean).join(" · ");
+  return [withProject && v.project && !v.shoot ? v.project.label : null, d, codes.length ? codes.join(", ") : null].filter(Boolean).join(" · ");
 }
 
 /** The lists a builder page can show in its Shot list block: a call sheet's or briefing's project's lists (a call sheet's
@@ -411,7 +414,9 @@ export const forBuild = query({
   handler: async (ctx, { buildId }) => {
     await requireAll(ctx, "shoots");
     const id = ctx.db.normalizeId("wsBuilds", buildId);
-    if (!id) return null;
+    const build = id ? await ctx.db.get(id) : null;
+    // Review L3: only the pages that can hold the block (never a contract).
+    if (!id || !build || (build.kind !== "callsheet" && build.kind !== "briefing" && build.kind !== "proposal")) return null;
     let projectId: Id<"projects"> | null = null, defaultId: Id<"shotLists"> | null = null;
     const cs = await ctx.db.query("callSheets").withIndex("by_build", (q) => q.eq("buildId", id)).first();
     if (cs) {
@@ -440,7 +445,8 @@ export async function readerShots(ctx: QueryCtx, page: unknown, projectId: Id<"p
     const l = id ? await ctx.db.get(id) : null;
     if (!l || l.projectId !== projectId) continue; // only the page's own project's lists
     const vw = await listView(ctx, l);
-    lists.push({ _id: vw._id, pick: pickLabel(vw), setups: vw.setups.map((x) => ({ ...x, shots: x.shots.map((s) => ({ ...s, done: crew ? s.done : null })) })) });
+    // Review M1: the crew tick only their own shoot day's list (D180); review L5: no project label for clients and guests.
+    lists.push({ _id: vw._id, pick: pickLabel(vw, crew), tickable: crew && !!shootId && l.shootId === shootId, setups: vw.setups.map((x) => ({ ...x, shots: x.shots.map((s) => ({ ...s, done: crew ? s.done : null })) })) });
   }
-  return { defaultId, lists, canTick: crew && blocks.some((b) => b.crewTick) };
+  return { defaultId, lists, canTick: crew && blocks.some((b) => b.crewTick) && lists.some((l) => l.tickable) };
 }

@@ -11,7 +11,7 @@ import { world } from "./payHarness";
 import { readerShots } from "../convex/shotLists";
 import { buildProblems, emptyFields, newNodes, type BuildDoc } from "../convex/lib/wsBuilder";
 import { todayCentral } from "../convex/lib/bookings";
-import { bakeShots, blockList, initialsOf, nextCode, parsePaste, parsePasteRows, shotBlocks, tickLands } from "../convex/lib/shotList";
+import { bakeShots, blockList, initialsOf, serverTime, nextCode, parsePaste, parsePasteRows, shotBlocks, tickLands } from "../convex/lib/shotList";
 
 const api = anyApi;
 beforeAll(() => {
@@ -53,6 +53,11 @@ describe("shot list rules (lib/shotList.ts)", () => {
     expect(tickLands(100, 200, 150, undefined).lands).toBe(false);     // a newer tick already landed
     expect(tickLands(100, 200, undefined, 120).lands).toBe(false);     // Reset after it was made
     expect(tickLands(900, 200, undefined, undefined)).toEqual({ lands: true, at: 200 }); // a phone clock ahead counts as now
+    // Review L1: a phone 3 minutes slow ticks right after a Reset; held 10 s, it lands on the server's clock.
+    const now = 1_000_000, slow = 180_000;
+    expect(serverTime(now - slow - 10_000, now - slow, now)).toBe(now - 10_000);
+    expect(tickLands(serverTime(now - slow, now - slow, now), now, undefined, now - 1).lands).toBe(true);
+    expect(serverTime(500, undefined, now)).toBe(500);
     expect(shotBlocks({ type: "doc", content: [{ type: "line" }, { type: "shotlist", attrs: { listId: null } }, { type: "section", content: [{ type: "shotlist", attrs: { listId: "abc", crewTick: false } }] }] }))
       .toEqual([{ listId: null, crewTick: true }, { listId: "abc", crewTick: false }]);
   });
@@ -217,6 +222,28 @@ describe("shot lists", () => {
     const far = await w.t.run(async (ctx) => readerShots(ctx, { type: "doc", content: [{ type: "shotlist", attrs: { listId: farList } }] }, w.p, shootId, true));
     expect(far!.lists).toEqual([]);
     expect(await w.t.run(async (ctx) => readerShots(ctx, { type: "doc", content: [] }, w.p, shootId, true))).toBeNull();
+    // Review M1 (D180): a Day 2 sheet showing Day 1's list: the Day 2 crew read it but can't tick it.
+    const d1Shot = otherShot; // a shot of a list not linked to this sheet's shoot
+    await w.t.run(async (ctx) => { const cs = (await ctx.db.get(csId))!; await ctx.db.patch(csId, { sent: { ...cs.sent!, page: { type: "doc", content: [{ type: "shotlist", attrs: { listId: otherList, crewTick: true } }] } } }); });
+    await expect(jordan.mutation(api.vendorPortal.tickShot, { callSheetId: csId, shotId: d1Shot, done: true, at: Date.now() })).rejects.toThrow(/isn't on your call sheet/);
+    const named = await w.t.run(async (ctx) => readerShots(ctx, { type: "doc", content: [{ type: "shotlist", attrs: { listId: otherList, crewTick: true } }] }, w.p, shootId, true));
+    expect(named!.lists[0].tickable).toBe(false);
+    expect(named!.canTick).toBe(false);
+    await w.t.run(async (ctx) => { const cs = (await ctx.db.get(csId))!; await ctx.db.patch(csId, { sent: { ...cs.sent!, page: page(true) } }); });
+    // A shot can't move into another list's setup; another business's owner can't make a list on this project.
+    await expect(w.heston.mutation(api.shotLists.moveShot, { shotId: ids[0], setupId: os, index: 0 })).rejects.toThrow(/setup on this list/);
+    await expect(w.boss.mutation(api.shotLists.create, { projectId: w.p })).rejects.toThrow();
+    // A vendor of another business, with this business's sheet: refused.
+    const bVendor = await w.t.run(async (ctx) => {
+      const B = (await ctx.db.query("businesses").collect()).find((b) => b._id !== w.A)!._id;
+      const userId = await ctx.db.insert("users", { email: "bee@other.example", name: "Bee", role: "vendor" });
+      await ctx.db.insert("memberships", { businessId: B, email: "bee@other.example", userId, role: "vendor", createdAt: 0 });
+      await ctx.db.insert("vendors", { businessId: B, name: "Bee", email: "bee@other.example", roles: [], rates: [], createdAt: 0, updatedAt: 0 });
+      return `${userId}|${await ctx.db.insert("authSessions", { userId, expirationTime: Date.now() + 3_600_000 })}`;
+    });
+    await expect(w.t.withIdentity({ subject: bVendor }).mutation(api.vendorPortal.tickShot, { callSheetId: csId, shotId: ids[0], done: true, at: Date.now() })).rejects.toThrow();
+    // Review L5: a client's or guest's view never names the project.
+    expect((await w.t.run(async (ctx) => readerShots(ctx, { type: "doc", content: [{ type: "shotlist", attrs: { listId: otherList } }] }, w.p, shootId, false)))!.lists[0].pick).not.toMatch(/Launch|Harbor/);
     // The builder's source for the sheet's block: the project's lists, this shoot day's first.
     const fb = await w.heston.query(api.shotLists.forBuild, { buildId: await w.t.run(async (ctx) => (await ctx.db.get(csId))!.buildId!) });
     expect(fb).toMatchObject({ defaultId: listId, callSheet: true });
@@ -265,7 +292,7 @@ describe("ticks on the phone (step 3, D182)", () => {
     const page = require("node:fs").readFileSync("src/modules/production/ShotChecklist.tsx", "utf8") as string;
     expect(page).toContain("Every shot goes back to not done, for everyone on the shoot.");
     expect(page).toMatch(/Clear all \{done\} \{done === 1 \? "tick" : "ticks"\}\?/);
-    expect(page).toContain(`useTickQueue(\`wp.ticks.\${shootId}\``);
+    expect(page).toContain("useTickQueue(`wp.ticks.${me?.id ?? \"nobody\"}.${shootId}`"); // review L6: per person
     const css = require("node:fs").readFileSync("src/portal.css", "utf8") as string;
     expect(css).toContain(".main:has(.sl-onset) { overflow: clip; }");
   });

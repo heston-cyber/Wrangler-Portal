@@ -668,7 +668,7 @@ export const openCallSheet = mutation({
 /** A booked crew member ticks (or unticks) a shot on their call sheet: only for a sheet still sent to them, whose
  *  Shot list block shows that shot's list and lets crew tick. A tick made offline carries its own time (D182). */
 export const tickShot = mutation({
-  args: { callSheetId: v.string(), shotId: v.string(), done: v.boolean(), at: v.number() },
+  args: { callSheetId: v.string(), shotId: v.string(), done: v.boolean(), at: v.number(), sent: v.optional(v.number()) },
   handler: async (ctx, a) => {
     await myBusinesses(ctx);
     const id = ctx.db.normalizeId("callSheets", a.callSheetId);
@@ -679,9 +679,10 @@ export const tickShot = mutation({
     const sid = ctx.db.normalizeId("shots", a.shotId);
     const shot = sid ? await ctx.db.get(sid) : null;
     const list = shot ? await ctx.db.get(shot.listId) : null;
-    if (!shot || !list || list.projectId !== cs.projectId) throw new ConvexError("This shot isn't on your call sheet.");
+    // Review M1 (D180): only the shoot day this sheet is for, the one they're booked on.
+    if (!shot || !list || list.projectId !== cs.projectId || list.shootId !== cs.shootId) throw new ConvexError("This shot isn't on your call sheet.");
     const ok = shotBlocks(pageOf(cs.sent!.page)).some((b) => b.crewTick && (b.listId === list._id || (b.listId === null && list.shootId === cs.shootId)));
     if (!ok) throw new ConvexError("This shot isn't on your call sheet.");
-    return await applyTick(ctx, shot, list, a.done, a.at, { name: me.vendor.name, userId: me.user._id, vendorId: me.vendor._id });
+    return await applyTick(ctx, shot, list, a.done, a.at, { name: me.vendor.name, userId: me.user._id, vendorId: me.vendor._id }, a.sent);
   },
 });
