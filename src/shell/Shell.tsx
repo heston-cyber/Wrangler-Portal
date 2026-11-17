@@ -717,7 +717,7 @@ function ProductionTab({ it, path }: { it: Item; path: string }) {
       </a>
       {open && createPortal(<>
         <div className="wp-stagescrim" onPointerDown={() => { swallowNextClick(); setOpen(false); }} aria-hidden />
-        <div className="wp-stagepanel glass" role="menu" aria-label="Production stages" style={{ left, width: w, ["--ox" as string]: `${ox - left}px` }}>
+        <div className="wp-stagepanel" role="menu" aria-label="Production stages" style={{ left, width: w, ["--ox" as string]: `${ox - left}px` }}>
           {stages.map((s) => (
             <a key={s.to} role="menuitem" data-stage={s.to} className={`wp-stagerow${hot === s.to ? " hot" : ""}`} aria-current={starts(path, s.to) ? "page" : undefined} {...linkProps(s.to)} onClick={() => setOpen(false)}>
               <Icon name={s.icon} size={20} /><span>{s.short}</span>
