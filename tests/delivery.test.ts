@@ -88,6 +88,13 @@ describe("delivery", () => {
     const ended = await w.heston.query(api.delivery.get, { projectId: w.p });
     expect(ended.delivery.state).toBe("ended");
     expect(ended.delivery.items[0].assets).toHaveLength(1);
+    // Review M1: 5 days left gets the 7-day note, not the 30-day one; Review M3: no answer outside the question.
+    await w.heston.mutation(api.delivery.setTerm, { deliveryId, keptUntil: plus(today(), 5) });
+    await w.t.run(async (ctx) => { for (const i of await ctx.db.query("inboxItems").collect()) await ctx.db.delete(i._id); });
+    await w.t.mutation(anyApi.delivery.runDue, {});
+    expect((await inbox(w)).filter((i) => i.email === "maya@harbor.example").map((i) => i.title)).toEqual(["Your Delivery files leave in 7 days"]);
+    await w.heston.mutation(api.delivery.setTerm, { deliveryId, keptUntil: plus(today(), 300) });
+    await expect(w.maya.mutation(api.delivery.clientAnswer, { deliveryId, keep: false })).rejects.toThrow(/nothing to answer/);
     // A later date brings it back.
     await w.heston.mutation(api.delivery.setTerm, { deliveryId, keptUntil: plus(today(), 200) });
     expect((await w.maya.query(api.delivery.forClient, {}))).toHaveLength(1);
@@ -107,6 +114,13 @@ describe("delivery", () => {
     // The link can't reach a file outside what was shared.
     const hero = (await w.heston.query(api.delivery.get, { projectId: w.p })).delivery.items[0].assets[0]._id;
     await expect(w.t.action(api.delivery.assetUrl, { assetId: hero, token: one.token })).rejects.toThrow(/isn't available/);
+    // Review H1: a link stops when its maker loses the project (their share ends).
+    const three = await w.maya.mutation(api.delivery.makeLink, { deliveryId, downloads: true });
+    expect(await w.t.query(api.delivery.shared, { token: three.token })).not.toBeNull();
+    const sm = await w.t.run((ctx) => ctx.db.query("shareMembers").collect());
+    await w.t.run((ctx) => ctx.db.delete(sm[0]._id));
+    expect(await w.t.query(api.delivery.shared, { token: three.token })).toBeNull();
+    await w.t.run((ctx) => ctx.db.insert("shareMembers", { businessId: w.A, shareId: sm[0].shareId, email: "maya@harbor.example", addedAt: 0 }));
     // Someone else can't turn it off; Maya can.
     const linkId = (await w.maya.query(api.delivery.forClient, {}))[0].links[0]._id;
     await expect(w.sam.mutation(api.delivery.setLink, { linkId, on: false })).rejects.toThrow(/isn't yours/);
@@ -116,6 +130,10 @@ describe("delivery", () => {
     const two = await w.maya.mutation(api.delivery.makeLink, { deliveryId, downloads: true });
     const northline = await w.t.run((ctx) => ctx.db.insert("clients", { businessId: w.A, name: "Northline", createdAt: 0 }));
     await w.heston.mutation(api.homes.moveProject, { projectId: w.p, clientId: northline });
+    expect(await w.t.query(api.delivery.shared, { token: two.token })).toBeNull();
+    // Review H1: Maya can't turn it back on now the project is Northline's.
+    const twoId = (await w.t.run((ctx) => ctx.db.query("deliveryLinks").withIndex("by_token", (q) => q.eq("token", two.token)).first()))!._id;
+    await expect(w.maya.mutation(api.delivery.setLink, { linkId: twoId, on: true })).rejects.toThrow(/isn't available/);
     expect(await w.t.query(api.delivery.shared, { token: two.token })).toBeNull();
   });
 });

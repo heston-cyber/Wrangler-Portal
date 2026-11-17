@@ -167,6 +167,13 @@ export const move = mutation({
       const was = (await clientNow(ctx, d)) ?? (sh?.projectId ? String((await ctx.db.get(sh.projectId))?.clientId ?? "") || null : null);
       if (was && String(to?.clientId ?? "") !== was) await creativeLinksOff(ctx, a.kind, d._id);
     }
+    // Delivery review M9: a shoot day or lead now with another client takes its boards, docs and kits out of sharing too.
+    if ((a.kind === "shoot" || a.kind === "lead") && String((await clientNow(ctx, d)) ?? "") !== String(to?.clientId ?? "")) {
+      const f = a.kind === "shoot" ? "shootId" : "dealId";
+      for (const t of ["canvases", "creativeDocs", "brandKits"] as const)
+        for (const r of (await ctx.db.query(t).collect()).filter((x) => String((x as Record<string, unknown>)[f] ?? "") === String(d._id)))
+          await creativeLinksOff(ctx, t === "canvases" ? "canvas" : t === "creativeDocs" ? "creativeDoc" : "kit", r._id);
+    }
     if (a.kind === "task") for (const sub of await ctx.db.query("tasks").withIndex("by_parent", (q) => q.eq("parentId", d._id as Id<"tasks">)).collect()) await ctx.db.patch(sub._id, patch as never);
     if (a.kind === "shoot") {
       // A new client: the old client's confirmation goes, and the calendar event is brought up to date (review M4).

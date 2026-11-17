@@ -115,7 +115,7 @@ export function DeliveryPage({ projectId }: { projectId: string }) {
       {top}
       <div className="wp-page dl-page">
         <PageHeader eyebrow="Delivery" title={g.project.label} sub={<span className="hm-chip-row">{g.project.client ? <a className="hm-chip" {...linkProps(`/clients/${g.project.client._id}`)}><Icon name="building" size={14} />{g.project.client.name}</a> : <span className="hm-chip own">On its own</span>}<a className="hm-chip" {...linkProps(`/projects/${projectId}`)}><Icon name="folder" size={14} />Project</a></span>} />
-        {d.state === "published" && d.changed && <div className="wp-notice glass"><Icon name="info" size={18} /><span className="txt">{fresh ? `${fresh} new file${fresh === 1 ? "" : "s"} the client can't see yet.` : "Changes the client can't see yet."} Press Publish changes when it's ready.</span></div>}
+        {d.state === "published" && d.changed && <div className="wp-notice glass"><Icon name="info" size={18} /><span className="txt">{fresh ? `${fresh} new file${fresh === 1 ? "" : "s"} the client can't see yet. Press Publish changes when it's ready.` : "Names, order, covers and removals reach the client as you make them; Publish changes is for new files."}</span></div>}
         {d.state === "ended" && <div className="wp-notice glass"><Icon name="alert" size={18} /><span className="txt">This delivery ended {d.keptUntil ? longDay(d.keptUntil) : ""}: the client can't see it. Nothing was deleted. Change the date to bring it back.</span></div>}
         <div className="dl-cols">
           <div className="dl-main">
@@ -130,7 +130,7 @@ export function DeliveryPage({ projectId }: { projectId: string }) {
                     <button className="icon-btn sm" aria-label={`Remove ${x.name}`} onClick={() => void removeAsset({ assetId: x._id })}><Icon name="close" size={14} /></button>
                   </div>
                 ))}</div>}
-              <p className="secondary wp-small cr-pad">Drag to arrange. The client plays a fast copy and downloads the original.</p>
+              <p className="secondary wp-small cr-pad">Drag to arrange. The client plays and downloads the file itself (from Dropbox or the cut); there's no separate playback copy yet.</p>
             </Card>}
             <Card label="Photo albums" head={<SectionHead label="Photo albums" count={albums.length} action={<Button size="sm" onClick={() => setDialog({ k: "album" })}>New album</Button>} />}>
               {albums.length === 0 ? <p className="secondary cr-pad">No albums yet.</p> : albums.map((a) => (
@@ -388,10 +388,11 @@ function ShareLink({ d, onClose, show }: { d: NonNullable<ReturnType<typeof useQ
       <div className="crm-dialog">
         <DialogHeader title="Share a link" body="Anyone with the link can see what you shared, without signing in. Nothing else in your portal. Turn the link off any time." onClose={onClose} />
         <label className="wp-field"><span className="wp-field-label">Share</span><select className="input" value={what} onChange={(e) => setWhat(e.target.value)}><option value="">Everything</option>{d.items.map((i) => <option key={i._id} value={i._id}>{i.kind === "videos" ? "The videos" : i.title}</option>)}</select></label>
-        <label className="cr-switch"><input type="checkbox" checked={dl} onChange={(e) => setDl(e.target.checked)} /> Let people download</label>
+        <label className="cr-switch"><input type="checkbox" checked={dl} onChange={(e) => setDl(e.target.checked)} /> Show a Download button</label>
+        <p className="secondary wp-small">Without it there's no button, but people watching can still save what they see.</p>
         <div className="dfoot"><span className="sp" /><Button variant="primary" onClick={() => void make({ deliveryId: d._id, ...(what ? { itemId: what as Id<"deliveryItems"> } : {}), downloads: dl }).then(async (r) => show((await copy(shareUrl(r.token))) ? "Link copied." : shareUrl(r.token)), (e) => show(errLine(e)))}>Copy a new link</Button></div>
         {d.links.length > 0 && <div className="cv-people"><span className="wp-field-label">Your links</span>{d.links.map((l) => (
-          <div key={l._id} className="cv-person"><Icon name="globe" size={18} /><span className="t"><b>{l.itemId ? d.items.find((i) => i._id === l.itemId)?.title ?? "One album" : "Everything"}</b><span className="secondary">{l.on ? (l.downloads ? "On · downloads allowed" : "On · view only") : "Off"}</span></span>
+          <div key={l._id} className="cv-person"><Icon name="globe" size={18} /><span className="t"><b>{l.itemId ? d.items.find((i) => i._id === l.itemId)?.title ?? "One album" : "Everything"}</b><span className="secondary">{l.on ? (l.downloads ? "On · with Download" : "On · no Download button") : "Off"}</span></span>
             {l.on && <button className="btn ghost sm" onClick={() => void copy(shareUrl(l.token)).then(() => show("Copied."))}>Copy</button>}
             <button className="btn ghost sm" onClick={() => void setL({ linkId: l._id, on: !l.on })}>{l.on ? "Turn off" : "Turn on"}</button></div>
         ))}</div>}

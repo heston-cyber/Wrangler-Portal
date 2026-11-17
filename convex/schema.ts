@@ -767,7 +767,7 @@ export default defineSchema({
     subFailRule: v.optional(v.union(v.literal("past_due"), v.literal("cancel"))),
     // Phase 5 (D98): Settings › Payments › Footage storage. Missing: Wrangler on, $100/year, kept 30 days; others off.
     footage: v.optional(v.object({ on: v.boolean(), priceCents: v.number(), keepDays: v.number() })),
-    delivery: v.optional(v.object({ termYears: v.number(), priceCents: v.number(), offerRenewal: v.boolean() })), // 5n (D196): Settings › Payments › Delivery
+    delivery: v.optional(v.object({ termYears: v.number(), priceCents: v.number(), offerRenewal: v.boolean(), reminders: v.optional(v.boolean()) })), // 5n (D196): Settings › Payments › Delivery
     // Phase 2 Part B step 4 (D51): automatic invoice reminders, off until the owner turns them on (that's their OK).
     reminders: v.optional(v.object({
       on: v.boolean(),

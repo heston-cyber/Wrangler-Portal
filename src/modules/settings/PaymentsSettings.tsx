@@ -151,7 +151,7 @@ function DeliveryTerm({ show }: { show: (m: string) => void }) {
   const save = useMutation(api.delivery.saveSettings);
   const [price, setPrice] = useState<string | null>(null);
   if (!s) return null;
-  const put = (patch: Partial<{ termYears: number; priceCents: number; offerRenewal: boolean }>) => void save({ ...s, ...patch }).then(() => show("Saved."), (e) => show(err(e)));
+  const put = (patch: Partial<{ termYears: number; priceCents: number; offerRenewal: boolean; reminders: boolean }>) => void save({ ...s, ...patch }).then(() => show("Saved."), (e) => show(err(e)));
   const savePrice = () => { if (price === null) return; const n = Math.round(Number(price.replace(/[$,]/g, "").trim()) * 100); setPrice(null); if (Number.isFinite(n) && n !== s.priceCents) put({ priceCents: n }); };
   return (
     <div className="panel pay-card">
@@ -166,7 +166,11 @@ function DeliveryTerm({ show }: { show: (m: string) => void }) {
         <span><b>Offer a renewal</b><small>30 days before the end, clients see “Keep them another year?” in their Delivery.</small></span>
         <Toggle label="Offer a renewal" checked={s.offerRenewal} onChange={(on) => put({ offerRenewal: on })} />
       </div>
-      <p className="secondary pay-note">Reminders go to the client 30 days and 7 days before the end. When it ends, files leave Delivery; nothing is deleted from Dropbox. Change the term or price for one delivery on its page.</p>
+      <div className="pay-switch ft-switch">
+        <span><b>Remind the client</b><small>A note in their Inbox 30 days and 7 days before the end.</small></span>
+        <Toggle label="Remind the client" checked={s.reminders} onChange={(on) => put({ reminders: on })} />
+      </div>
+      <p className="secondary pay-note">When it ends, files leave Delivery; nothing is deleted from Dropbox. Change the term or price for one delivery on its page.</p>
     </div>
   );
 }

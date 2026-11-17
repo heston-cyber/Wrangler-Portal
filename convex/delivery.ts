@@ -22,10 +22,14 @@ import { businessOf } from "./lib/inbox";
 import { myProjects, portalPeople } from "./projects";
 import { resolveDownload } from "./library";
 import { audit } from "./lib/audit";
+import { defaultBusiness } from "./lib/business";
 
 type Ctx = QueryCtx | MutationCtx;
-export type DeliverySettings = { termYears: number; priceCents: number; offerRenewal: boolean };
-export const DEFAULT_DELIVERY: DeliverySettings = { termYears: 2, priceCents: 15000, offerRenewal: true };
+export type DeliverySettings = { termYears: number; priceCents: number; offerRenewal: boolean; reminders: boolean };
+// Wrangler's starting term and price are samples (the frames' "2 years" and "$0,000") for Heston to set in Settings.
+export const DEFAULT_DELIVERY: DeliverySettings = { termYears: 2, priceCents: 15000, offerRenewal: true, reminders: true };
+// Delivery review M5: other businesses start with no renewal offer and no automatic reminders until their owner turns them on.
+const OFF: DeliverySettings = { termYears: 2, priceCents: 15000, offerRenewal: false, reminders: false };
 const VIDEO = /\.(mp4|mov|m4v|webm)$/i, PHOTO = /\.(jpe?g|png|webp|heic|heif|gif|tiff?)$/i;
 export const mediaOf = (name: string): "video" | "photo" | "file" => (VIDEO.test(name) ? "video" : PHOTO.test(name) ? "photo" : "file");
 const tidy = (s: string | undefined, n: number) => (s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
@@ -35,14 +39,17 @@ const longDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en
 
 async function settingsOf(ctx: Ctx, biz: Id<"businesses"> | null | undefined): Promise<DeliverySettings> {
   const b = biz ? await ctx.db.get(biz) : null;
-  return { ...DEFAULT_DELIVERY, ...((b as { delivery?: DeliverySettings } | null)?.delivery ?? {}) };
+  const saved = (b as { delivery?: Partial<DeliverySettings> } | null)?.delivery;
+  const def = await defaultBusiness(ctx);
+  const base = !b || (def && def._id === b._id) ? DEFAULT_DELIVERY : OFF;
+  return { ...base, ...(saved ?? {}), reminders: saved?.reminders ?? (saved ? true : base.reminders) };
 }
 
 // ---------- Settings › Payments › Delivery ----------
 
 export const settings = query({ args: {}, handler: async (ctx) => { await requireAll(ctx, "payments"); return await settingsOf(ctx, businessInScope(ctx)); } });
 export const saveSettings = mutation({
-  args: { termYears: v.number(), priceCents: v.number(), offerRenewal: v.boolean() },
+  args: { termYears: v.number(), priceCents: v.number(), offerRenewal: v.boolean(), reminders: v.optional(v.boolean()) },
   handler: async (ctx, a) => {
     await requireAll(ctx, "payments");
     const biz = businessInScope(ctx);
@@ -50,7 +57,7 @@ export const saveSettings = mutation({
     if (!Number.isInteger(a.termYears) || a.termYears < 1 || a.termYears > 10) throw new ConvexError("Pick a term of 1 to 10 years.");
     const priceCents = Math.round(a.priceCents);
     if (!Number.isFinite(priceCents) || priceCents < 0 || priceCents > 1_000_000) throw new ConvexError("Set a yearly price up to $10,000.");
-    await ctx.db.patch(biz, { delivery: { termYears: a.termYears, priceCents, offerRenewal: a.offerRenewal }, updatedAt: Date.now() });
+    await ctx.db.patch(biz, { delivery: { termYears: a.termYears, priceCents, offerRenewal: a.offerRenewal, reminders: a.reminders ?? true }, updatedAt: Date.now() });
     return null;
   },
 });
@@ -167,7 +174,7 @@ export const editItem = mutation({
     if (!it) throw new ConvexError("That album isn't here any more.");
     const d = await deliveryOf(ctx, it.deliveryId);
     if (a.shootId) await shootOnProject(ctx, d, a.shootId);
-    if (a.coverId) { const x = await ctx.db.get(a.coverId); if (!x || x.itemId !== it._id || mediaOf(x.name) !== "photo") throw new ConvexError("Pick a photo in this album."); }
+    if (a.coverId) { const x = await ctx.db.get(a.coverId); if (!x || x.itemId !== it._id || mediaOf(x.name) !== "photo" || (it.published && !x.published)) throw new ConvexError(it.published ? "Pick a published photo in this album (publish the new ones first)." : "Pick a photo in this album."); }
     await ctx.db.patch(it._id, { ...(a.title !== undefined && it.kind === "album" ? { title: tidy(a.title, 80) || it.title } : {}), ...(a.shootId !== undefined ? { shootId: a.shootId ?? undefined } : {}), ...(a.coverId ? { coverId: a.coverId } : {}) });
     await touch(ctx, d);
     return null;
@@ -210,12 +217,16 @@ export const addFiles = mutation({
         const path = f.path.trim().toLowerCase();
         // Only the project's own Dropbox folder (the same rule as Final files).
         if (!p.dropboxFolder || !path.startsWith(`${p.dropboxFolder.toLowerCase().replace(/\/$/, "")}/`) || path.includes("..")) throw new ConvexError("That file isn't in this project's Dropbox folder.");
-        row = { name: tidy(f.name, 200) || path.split("/").pop()!, ...(f.size ? { size: f.size } : {}), source: "dropbox", dropboxPath: path };
+        // Review L7: the kind comes from the file itself (its path), not the name sent.
+        const base = path.split("/").pop()!;
+        const named = tidy(f.name, 200);
+        row = { name: named && named.split(".").pop()?.toLowerCase() === base.split(".").pop() ? named : base, ...(f.size ? { size: f.size } : {}), source: "dropbox", dropboxPath: path };
       } else {
         const ver = await ctx.db.get(f.versionId);
         const vid = ver ? await ctx.db.get(ver.videoId) : null;
         if (!ver || !vid || vid.projectId !== p._id) throw new ConvexError("That cut isn't in this project.");
-        row = { name: `${vid.title} v${ver.number}.mp4`.slice(0, 200), ...(ver.fileSize ? { size: ver.fileSize } : {}), source: "version", versionId: ver._id };
+        const ext = (/\.([a-z0-9]{2,5})$/i.exec(String((ver as { fileName?: string }).fileName ?? "")) ?? [, "mp4"])[1]!.toLowerCase(); // review L9
+        row = { name: `${vid.title} v${ver.number}.${VIDEO.test(`x.${ext}`) ? ext : "mp4"}`.slice(0, 200), ...(ver.fileSize ? { size: ver.fileSize } : {}), source: "version", versionId: ver._id };
       }
       const media = mediaOf(row.name);
       if (it.kind === "videos" ? media !== "video" : media !== "photo") throw new ConvexError(it.kind === "videos" ? `${row.name} isn't a video: add it to an album or Final files.` : `${row.name} isn't a photo.`);
@@ -297,10 +308,12 @@ export const setTerm = mutation({
   handler: async (ctx, a) => {
     await requireAll(ctx, "projects");
     const d = await deliveryOf(ctx, a.deliveryId);
-    if (a.keptUntil && !/^\d{4}-\d{2}-\d{2}$/.test(a.keptUntil)) throw new ConvexError("Pick a day.");
-    if (a.priceCents !== undefined) { await requireAll(ctx, "payments"); if (a.priceCents < 0 || a.priceCents > 1_000_000) throw new ConvexError("Set a yearly price up to $10,000."); }
+    if (a.keptUntil && (!/^\d{4}-\d{2}-\d{2}$/.test(a.keptUntil) || new Date(`${a.keptUntil}T12:00:00Z`).toISOString().slice(0, 10) !== a.keptUntil)) throw new ConvexError("Pick a day.");
+    // Review M2: how long it's kept, and the price, are money: Payments (a shorter date is anyone's with Projects).
+    if (a.priceCents !== undefined || a.termYears !== undefined || (a.keptUntil && a.keptUntil > (d.keptUntil ?? ""))) await requireAll(ctx, "payments");
+    if (a.priceCents !== undefined && (!Number.isFinite(a.priceCents) || a.priceCents < 0 || a.priceCents > 1_000_000)) throw new ConvexError("Set a yearly price up to $10,000.");
     if (a.termYears !== undefined && (!Number.isInteger(a.termYears) || a.termYears < 1 || a.termYears > 10)) throw new ConvexError("Pick a term of 1 to 10 years.");
-    await ctx.db.patch(d._id, { ...(a.keptUntil ? { keptUntil: a.keptUntil, reminded: [], ...(d.state === "ended" && a.keptUntil > todayCentral() ? { state: "published" as const, endedAt: undefined } : {}) } : {}), ...(a.priceCents !== undefined ? { priceCents: Math.round(a.priceCents) } : {}), ...(a.termYears !== undefined ? { termYears: a.termYears } : {}), updatedAt: Date.now() });
+    await ctx.db.patch(d._id, { ...(a.keptUntil ? { keptUntil: a.keptUntil, reminded: [], renewal: undefined, ...(d.state === "ended" && a.keptUntil > todayCentral() ? { state: "published" as const, endedAt: undefined } : {}) } : {}), ...(a.priceCents !== undefined ? { priceCents: Math.round(a.priceCents) } : {}), ...(a.termYears !== undefined ? { termYears: a.termYears } : {}), updatedAt: Date.now() });
     return null;
   },
 });
@@ -310,10 +323,11 @@ export const renewal = mutation({
   args: { deliveryId: v.string(), choice: v.union(v.literal("offer"), v.literal("free"), v.literal("end")) },
   handler: async (ctx, a) => {
     await requireAll(ctx, "projects");
+    if (a.choice !== "end") await requireAll(ctx, "payments"); // review M2: offering a price or a free year needs Payments
     const d = await deliveryOf(ctx, a.deliveryId);
     if (!d.keptUntil) throw new ConvexError("Publish it first.");
     const now = Date.now();
-    if (a.choice === "free") await ctx.db.patch(d._id, { keptUntil: addYears(d.keptUntil > todayCentral() ? d.keptUntil : todayCentral(), 1), renewal: { status: "free", at: now }, reminded: [], state: "published", endedAt: undefined, updatedAt: now });
+    if (a.choice === "free") await ctx.db.patch(d._id, { keptUntil: addYears(d.keptUntil > todayCentral() ? d.keptUntil : todayCentral(), 1), renewal: { status: "free", at: now }, reminded: [], ...(d.state === "ended" ? { state: "published" as const, endedAt: undefined } : {}), updatedAt: now });
     else if (a.choice === "offer") await ctx.db.patch(d._id, { renewal: { status: "offered", at: now }, updatedAt: now });
     else await ctx.db.patch(d._id, { renewal: { status: "ending", at: now }, updatedAt: now });
     return null;
@@ -328,10 +342,13 @@ export const renewed = mutation({
     const d = await deliveryOf(ctx, a.deliveryId);
     if (!d.keptUntil) throw new ConvexError("Publish it first.");
     const now = Date.now();
-    await ctx.db.patch(d._id, { keptUntil: addYears(d.keptUntil > todayCentral() ? d.keptUntil : todayCentral(), 1), renewal: { status: "renewed", at: now }, reminded: [], state: "published", endedAt: undefined, updatedAt: now });
+    await ctx.db.patch(d._id, { keptUntil: addYears(d.keptUntil > todayCentral() ? d.keptUntil : todayCentral(), 1), renewal: { status: "renewed", at: now }, reminded: [], ...(d.state === "ended" ? { state: "published" as const, endedAt: undefined } : {}), updatedAt: now });
     return null;
   },
 });
+
+/** Review L3: shown to the client only while published and not past its day (the daily job may not have run yet). */
+const live = (d: Doc<"deliveries">) => d.state === "published" && (!d.keptUntil || d.keptUntil >= todayCentral());
 
 // ---------- links to a file (play, download): the owner, a client who can see it, or a shared link ----------
 
@@ -353,7 +370,7 @@ export const assetFor = internalQuery({
     try { await requireAll(ctx, "projects"); } catch { owner = false; }
     if (!owner) {
       const me = await requireSignedIn(ctx);
-      if (me.kind !== "client" || !x.published || d.state !== "published" || !(await myProjects(ctx, me.email)).has(p._id)) throw new ConvexError("That file isn't available.");
+      if (me.kind !== "client" || !x.published || !live(d) || !(await myProjects(ctx, me.email)).has(p._id)) throw new ConvexError("That file isn't available.");
     }
     return { x, businessId: p.businessId ?? null, download: true };
   },
@@ -393,7 +410,7 @@ export const forClient = query({
     const out = [];
     for (const [, r] of mine) {
       const d = await ctx.db.query("deliveries").withIndex("by_project", (q) => q.eq("projectId", r.project._id)).first();
-      if (!d || d.state !== "published") continue;
+      if (!d || !live(d)) continue;
       const biz = d.businessId ? await ctx.db.get(d.businessId) : null;
       const s = await settingsOf(ctx, d.businessId);
       const today = todayCentral();
@@ -401,7 +418,7 @@ export const forClient = query({
       const links = (await ctx.db.query("deliveryLinks").withIndex("by_delivery", (q) => q.eq("deliveryId", d._id)).collect()).filter((l) => l.by === me.email.toLowerCase());
       out.push({
         _id: d._id, project: label(r.project), projectId: r.project._id, business: biz?.name ?? null, keptUntil: d.keptUntil ?? null, items: await shownTo(ctx, d),
-        offer: left !== null && left <= 30 && (d.renewal?.status === "offered" || (s.offerRenewal && !d.renewal)) ? { priceCents: d.priceCents ?? s.priceCents, until: d.keptUntil! } : null,
+        offer: offerShown(d, s, today) ? { priceCents: d.priceCents ?? s.priceCents, until: d.keptUntil! } : null,
         answered: d.renewal?.status === "kept" || d.renewal?.status === "declined" ? d.renewal.status : null,
         links: links.map((l) => ({ _id: l._id, token: l.token, itemId: l.itemId ?? null, downloads: l.downloads, on: l.on })),
       });
@@ -410,10 +427,16 @@ export const forClient = query({
   },
 });
 
+/** The renewal question shows 30 days before the end: offered by the owner, or on in Settings with nothing decided. */
+function offerShown(d: Doc<"deliveries">, s: DeliverySettings, today: string) {
+  const left = d.keptUntil ? daysBetween(today, d.keptUntil) : null;
+  return left !== null && left >= 0 && left <= 30 && (d.renewal?.status === "offered" || (s.offerRenewal && !d.renewal));
+}
 async function clientDelivery(ctx: Ctx, deliveryId: Id<"deliveries">) {
   const me = await requireSignedIn(ctx);
   const d = await ctx.db.get(deliveryId);
-  if (me.kind !== "client" || !d || d.state !== "published" || !(await myProjects(ctx, me.email)).has(d.projectId)) throw new ConvexError("That delivery isn't available.");
+  if (me.kind !== "client" || !d || !live(d) || !(await myProjects(ctx, me.email)).has(d.projectId)) throw new ConvexError("That delivery isn't available.");
+  focusBusiness(ctx, d.businessId); // review L4: a client of two businesses
   return { me, d };
 }
 
@@ -423,7 +446,11 @@ export const clientAnswer = mutation({
   handler: async (ctx, a) => {
     const { me, d } = await clientDelivery(ctx, a.deliveryId);
     const p = (await ctx.db.get(d.projectId))!;
+    // Review M3: only while the question is showing (never over the owner's free year, renewal or Let it end).
+    if (!offerShown(d, await settingsOf(ctx, d.businessId), todayCentral())) throw new ConvexError("There's nothing to answer right now.");
     await ctx.db.patch(d._id, { renewal: { status: a.keep ? "kept" : "declined", at: Date.now(), by: me.name?.trim() || me.email }, updatedAt: Date.now() });
+    // Review M4: the owner hears at once (bell, with a phone alert where Payments alerts are on).
+    if (d.businessId) await ctx.scheduler.runAfter(0, internal.bell.post, { businessId: d.businessId, kind: "payments", title: `${me.name?.trim() || me.email} ${a.keep ? "wants to keep" : "doesn't need"} ${label(p)}'s Delivery another year${a.keep ? ": send the invoice" : ""}`, key: `delivery-renewal:${d._id}:${d.keptUntil}`, link: `/delivery/${p._id}?renew=1`, projectId: p._id });
     await audit(ctx, { kind: "settings", where: "Post › Delivery", link: `/delivery/${p._id}`, text: `${me.name?.trim() || me.email} chose ${a.keep ? "Keep it" : "No thanks"} for ${label(p)}'s delivery`, businessId: d.businessId });
     return null;
   },
@@ -435,7 +462,7 @@ export const makeLink = mutation({
   handler: async (ctx, a) => {
     const { me, d } = await clientDelivery(ctx, a.deliveryId);
     if (a.itemId) { const it = await ctx.db.get(a.itemId); if (!it || it.deliveryId !== d._id || !it.published) throw new ConvexError("That album isn't in this delivery."); }
-    const mine = (await ctx.db.query("deliveryLinks").withIndex("by_delivery", (q) => q.eq("deliveryId", d._id)).collect()).filter((l) => l.by === me.email.toLowerCase());
+    const mine = (await ctx.db.query("deliveryLinks").withIndex("by_delivery", (q) => q.eq("deliveryId", d._id)).collect()).filter((l) => l.by === me.email.toLowerCase() && l.on);
     if (mine.length >= 30) throw new ConvexError("Turn an old link off first.");
     const token = randomToken(24);
     await ctx.db.insert("deliveryLinks", { deliveryId: d._id, ...(a.itemId ? { itemId: a.itemId } : {}), token, downloads: a.downloads, on: true, by: me.email.toLowerCase(), createdAt: Date.now() });
@@ -448,6 +475,8 @@ export const setLink = mutation({
     const me = await requireSignedIn(ctx);
     const l = await ctx.db.get(a.linkId);
     if (!l || l.by !== me.email.toLowerCase()) throw new ConvexError("That link isn't yours.");
+    // Delivery review H1: only while they can still open the project (a link turned off by a move stays off).
+    if (a.on) await clientDelivery(ctx, l.deliveryId);
     await ctx.db.patch(l._id, { ...(a.on !== undefined ? { on: a.on } : {}), ...(a.downloads !== undefined ? { downloads: a.downloads } : {}) });
     return null;
   },
@@ -458,7 +487,9 @@ async function linkByToken(ctx: Ctx, token: string) {
   const link = await ctx.db.query("deliveryLinks").withIndex("by_token", (q) => q.eq("token", token)).first();
   if (!link?.on) return null;
   const d = await ctx.db.get(link.deliveryId);
-  if (!d || d.state !== "published") return null;
+  if (!d || !live(d)) return null;
+  // Review H1: the link works only while its maker can still open the project.
+  if (!(await myProjects(ctx as QueryCtx, link.by)).has(d.projectId)) return null;
   return { link, d };
 }
 
@@ -488,12 +519,20 @@ export const runDue = internalMutation({
       const p = await ctx.db.get(d.projectId);
       if (!p) continue;
       const left = daysBetween(today, d.keptUntil);
-      if (left < 0) { await ctx.db.patch(d._id, { state: "ended", endedAt: Date.now() }); n++; continue; } // files leave Delivery; nothing is deleted
-      const due = [30, 7].find((x) => left <= x && !(d.reminded ?? []).includes(x));
-      if (!due || d.renewal?.status === "free" || d.renewal?.status === "renewed") continue;
+      if (left < 0) {
+        // Review M4: a client who chose Keep it isn't cut off while the owner hasn't answered; the owner is told instead.
+        if (d.renewal?.status === "kept") { if (d.businessId && !(d.reminded ?? []).includes(0)) { await ctx.scheduler.runAfter(0, internal.bell.post, { businessId: d.businessId, kind: "payments", title: `${label(p)}'s Delivery reached its day; the client chose Keep it: send the invoice or let it end`, key: `delivery-ended-kept:${d._id}:${d.keptUntil}`, link: `/delivery/${p._id}?renew=1`, projectId: p._id }); await ctx.db.patch(d._id, { reminded: [...(d.reminded ?? []), 0] }); } continue; }
+        await ctx.db.patch(d._id, { state: "ended", endedAt: Date.now() }); n++; continue; // files leave Delivery; nothing is deleted
+      }
+      const s = await settingsOf(ctx, d.businessId);
+      if (!s.reminders) continue; // review M5: the owner's switch
+      // Review M1: the nearest threshold (7 before 30); the ones above it count as sent too.
+      const due = [7, 30].find((x) => left <= x);
+      if (!due || (d.reminded ?? []).includes(due) || d.renewal?.status === "free" || d.renewal?.status === "renewed" || d.renewal?.status === "kept") continue;
+      const offering = offerShown(d, s, today);
       const biz = await businessOf(ctx, p);
       if (biz) for (const person of await portalPeople(ctx, p))
-        await postToInbox(ctx, { businessId: biz, clientId: p.clientId, email: person.email, kind: "final_files", title: due === 7 ? "Your Delivery files leave in 7 days" : "Your Delivery files: 30 days left", text: `${label(p)} · kept until ${longDay(d.keptUntil)}. Download anything you want to keep${due === 30 ? ", or keep it all for another year" : ""}.`, link: `/delivery?project=${p._id}`, linkLabel: "Open Delivery", source: { module: "projects", id: d._id }, key: `delivery:${d._id}:remind:${due}:${d.keptUntil}` });
+        await postToInbox(ctx, { businessId: biz, clientId: p.clientId, email: person.email, kind: "final_files", title: due === 7 ? "Your Delivery files leave in 7 days" : "Your Delivery files: 30 days left", text: `${label(p)} · kept until ${longDay(d.keptUntil)}. Download anything you want to keep${offering && d.renewal?.status !== "declined" ? ", or keep it all for another year" : ""}.`, link: `/delivery?project=${p._id}`, linkLabel: "Open Delivery", source: { module: "projects", id: d._id }, key: `delivery:${d._id}:remind:${due}:${d.keptUntil}` });
       await ctx.db.patch(d._id, { reminded: [...(d.reminded ?? []), ...[30, 7].filter((x) => x >= due)] });
       n++;
     }

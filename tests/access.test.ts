@@ -571,7 +571,7 @@ const WORK_OWN = "Work › My tasks: the tasks given to them (open, change the s
 for (const r of ["producer", "editor", "bookkeeper"] as const) TEAM[r]["work.mine"] = WORK_OWN;
 for (const f of ["all", "forProject", "get", "people", "create", "update", "done", "place", "remove", "lists", "createList", "saveList", "duplicateList", "removeList", "itemToTask", "templates", "saveTemplate", "removeTemplate", "useTemplate", "todoistProjects", "todoistImport"]) TEAM.producer[`work.${f}`] = PROJECTS;
 // 5n Delivery: Projects'; its term and price (Settings › Payments) and Renewed are Payments' (delivery.test.ts).
-for (const f of ["list", "get", "ensure", "addAlbum", "editItem", "removeItem", "addFiles", "editAsset", "removeAsset", "publish", "setTerm", "renewal", "assetUrl"]) TEAM.producer[`delivery.${f}`] = PROJECTS;
+for (const f of ["list", "get", "ensure", "addAlbum", "editItem", "removeItem", "addFiles", "editAsset", "removeAsset", "publish", "assetUrl"]) TEAM.producer[`delivery.${f}`] = PROJECTS;
 for (const f of ["settings", "saveSettings", "renewed"]) TEAM.bookkeeper[`delivery.${f}`] = PAYMENTS;
 // Phase 5e step 5: Reports, for the Bookkeeper (the Reports switch).
 for (const f of REPORT_FNS) TEAM.bookkeeper[f] = REPORTS;
