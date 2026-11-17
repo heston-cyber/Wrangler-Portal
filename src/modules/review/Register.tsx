@@ -110,7 +110,7 @@ export default function Register() {
             </div>
           )}
           {overview && unnumbered > 0 && (
-            <p className="caption secondary regnote">{unnumbered === 1 ? "1 video from before numbering isn't in the register." : `${unnumbered} videos from before numbering aren't in the register.`} They're still on the <a {...linkProps("/projects")}>Projects</a> page; add one from its page (⋯ › Add to the register).</p>
+            <p className="caption secondary regnote">{unnumbered === 1 ? "1 video from before numbering isn't in the register." : `${unnumbered} videos from before numbering aren't in the register.`} They're still on the <a {...linkProps("/review/library")}>All cuts</a> page; add one from its page (⋯ › Add to the register).</p>
           )}
         </div>
       </SettingsFrame>

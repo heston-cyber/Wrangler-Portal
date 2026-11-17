@@ -53,7 +53,7 @@ export async function ownLoginHere(db: Db, email: string, biz: Id<"businesses">,
 
 export type Why = "gone" | "notSent" | "ended" | "cancelled" | "over" | "closed";
 export type SheetState =
-  | { ok: true; cs: Doc<"callSheets">; r: Doc<"callSheets">["recipients"][number]; shoot: Doc<"shoots">; project: Doc<"projects"> }
+  | { ok: true; cs: Doc<"callSheets">; r: Doc<"callSheets">["recipients"][number]; shoot: Doc<"shoots">; project: Doc<"projects"> | null }
   | { ok: false; why: Why; cs: Doc<"callSheets"> | null; shoot: Doc<"shoots"> | null };
 
 /** Whether a pass's sheet is readable by its guest right now, read from the sheet itself. `db` is either the guarded
@@ -68,8 +68,8 @@ export async function sheetState(db: Db, pass: Pass, defaultBiz: Id<"businesses"
   if (cs.status !== "sent" || !cs.sent || !r.sentAt) return { ok: false, why: "notSent", cs, shoot };
   if (!shoot || shoot.status !== "scheduled") return { ok: false, why: "cancelled", cs, shoot };
   if (shoot.date < todayCentral()) return { ok: false, why: "over", cs, shoot };
-  const project = await db.get(cs.projectId);
-  if (!project || projectClosed(project)) return { ok: false, why: "closed", cs, shoot };
+  const project = cs.projectId ? await db.get(cs.projectId) : null; // D205: none for a shoot on its own
+  if (cs.projectId && (!project || projectClosed(project))) return { ok: false, why: "closed", cs, shoot };
   return { ok: true, cs, r, shoot, project };
 }
 

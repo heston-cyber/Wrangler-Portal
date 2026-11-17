@@ -52,7 +52,7 @@ export function TeamHome({ name }: { name: string | null }) {
         {loading ? <Card label="This week"><SkeletonRows n={3} label="Loading" /></Card>
           : (week.length || notes.length || overdue.length) ? (
             <Card label="This week" head={<SectionHead label="This week" count={week.length + notes.length + overdue.length} />}>
-              {week.map((s) => <ListRow key={s._id} lead={{ icon: "video" }} title={`${s.project}${s.client ? ` · ${s.client}` : ""}`} meta={`${dayText(s.date)} · ${s.call}`} to={`/projects/${s.projectId}`} chevron />)}
+              {week.map((s) => <ListRow key={s._id} lead={{ icon: "video" }} title={`${s.project}${s.client ? ` · ${s.client}` : ""}`} meta={`${dayText(s.date)} · ${s.call}`} to={s.projectId ? `/projects/${s.projectId}` : "/production/shoots"} chevron />)}
               {notes.slice(0, 6).map((v) => <ListRow key={v._id} lead={{ icon: "review" }} title={`Notes on ${v.title}${v.latest ? ` v${v.latest.number}` : ""}`} meta={`${v.openNotes} open ${v.openNotes === 1 ? "note" : "notes"}`} to={`/v/${v._id}`} chevron />)}
               {overdue.slice(0, 6).map((i) => <ListRow key={i._id} lead={{ icon: "invoice" }} title={`${i.title}${i.client ? ` · ${i.client.name}` : ""}`} meta={`Overdue · ${money(i.amountRemainingCents ?? 0)}`} to={`/payments/invoices/${i._id}`} chevron />)}
             </Card>

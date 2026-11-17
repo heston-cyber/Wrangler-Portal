@@ -20,12 +20,12 @@ describe("5g phone menu", () => {
 
   it("5g.2 the path says where you are, and the section crumb lists every menu item", () => {
     const t = trail("/vendors/briefings");
-    expect(t.map((c) => c.label)).toEqual(["Production", "Pre-pro", "Briefings"]);
+    expect(t.map((c) => c.label)).toEqual(["Production", "Briefings"]); // Nov 16: the new menu has no stages under Production
     expect(t[0].options.map((o) => o.label)).toEqual(owner.main.map((i) => i.label));
     expect(t[0].options.filter((o) => o.current).map((o) => o.label)).toEqual(["Production"]);
-    expect(trail("/production/pre-pro").map((c) => c.label)).toEqual(["Production", "Pre-pro"]);
-    expect(trail("/payments/invoices").map((c) => c.label)).toEqual(["Payments", "Invoices"]);
-    expect(trail("/proposals/templates").map((c) => c.label)).toEqual(["Docs", "Proposals", "Templates"]);
+    expect(trail("/payments/invoices").map((c) => c.label)).toEqual(["Sales and money", "Payments", "Invoices"]);
+    expect(trail("/proposals/templates").map((c) => c.label)).toEqual(["Sales and money", "Proposals", "Templates"]);
+    expect(trail("/projects/not-attached").map((c) => c.label)).toEqual(["Projects", "Not attached"]);
   });
 
   it("5g.3 every page in every layer can be reached from a crumb beside where you are", () => {

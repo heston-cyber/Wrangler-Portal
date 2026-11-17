@@ -13,6 +13,7 @@ import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps, navigate } from "../../lib/router";
 import { errLine, useHold, type ItemSpec } from "../../ui/hold";
 import { parsePasteRows } from "../../../convex/lib/shotList";
+import { AttachDialog } from "../projects/Homes";
 import { clock, shortDay, windowOf } from "./shotTime";
 export { clock, shortDay, windowOf };
 
@@ -38,14 +39,16 @@ export default function ShotListsPage() {
   // One row per project (its lists are its shoot days), in the order of its most recent change.
   const rows = useMemo(() => {
     const by = new Map<string, NonNullable<typeof all>>();
-    for (const l of all ?? []) by.set(l.project._id, [...(by.get(l.project._id) ?? []), l]);
+    // D204: a list on its own is its own row, named by its title.
+    for (const l of all ?? []) { const k = l.project?._id ?? l._id; by.set(k, [...(by.get(k) ?? []), l]); }
     return [...by.values()].map((ls) => {
       const days = [...ls].sort((a, b) => (a.shoot?.day ?? 99) - (b.shoot?.day ?? 99));
       const total = ls.reduce((n, l) => n + l.total, 0), done = ls.reduce((n, l) => n + l.done, 0);
       const empty = days.filter((l) => l.setups === 0);
+      const p = ls[0].project;
       return {
-        key: ls[0].project._id, open: days[0]._id, title: ls[0].project.client || ls[0].project.label,
-        sub: [ls[0].project.client ? ls[0].project.label : null, ...empty.map((l) => `${l.shoot ? `Day ${l.shoot.day}` : "A list"} has no setups yet`)].filter(Boolean).join(" · "),
+        key: p?._id ?? ls[0]._id, open: days[0]._id, title: p ? p.client || p.label : ls[0].title || "Shot list",
+        sub: [p ? (p.client ? p.label : null) : "On its own", ...empty.map((l) => `${l.shoot ? `Day ${l.shoot.day}` : "A list"} has no setups yet`)].filter(Boolean).join(" · "),
         days: days.map((l) => (l.shoot ? `Day ${l.shoot.day} · ${shortDay(l.shoot.date)}` : "Not linked to a day")).join(", "), total, done,
       };
     });
@@ -123,12 +126,13 @@ export function ShotListEditor({ listId }: { listId: string }) {
   const [over, setOver] = useState<string | null>(null);
   const moveShot = useMutation(api.shotLists.moveShot);
   const moveSetup = useMutation(api.shotLists.moveSetup);
+  const [homing, setHoming] = useState(false); // Nov 16: Attach / Move (How everything connects)
   const run = (p: Promise<unknown>, ok?: string) => p.then(() => ok && say(ok)).catch((e) => say(errLine(e)));
 
   if (l === undefined) return <><Crumbs><span className="here">…</span></Crumbs><div className="wp-page prod"><Card label="Loading"><SkeletonRows n={6} /></Card></div></>;
   if (l === null) return <><Crumbs /><div className="wp-page prod"><EmptyState icon="shot-list" title="This shot list isn't here any more" actions={<Button onClick={() => navigate("/production/shot-lists")}>All shot lists</Button>} /></div></>;
 
-  const name = l.project?.client || l.project?.label || "Shot list";
+  const name = l.project?.client || l.project?.label || l.title || "Shot list";
   const setups = l.setups.filter((x) => !x.gap);
   const sub = [l.project?.client ? l.project.label : null, dayLabel(l.shoot), plural(setups.length, "setup"), plural(l.total, "shot"), `${l.done} done`].filter(Boolean).join(" · ");
   const dropOn = (target: { setupId: string; index: number } | { setupIndex: number }) => {
@@ -141,9 +145,10 @@ export function ShotListEditor({ listId }: { listId: string }) {
   return (
     <>
       <Crumbs><span className="here">{name}</span></Crumbs>
+      {homing && <AttachDialog kind="shotList" id={l._id} name={name} hasHome={!!(l.project || l.shoot)} onClose={() => setHoming(false)} show={say} />}
       <div className="wp-page prod sl-page">
         <PageHeader eyebrow="Shot list" title={`${name}.`} sub={sub}
-          actions={<>{l.shoot && <ButtonLink to={`/production/shoots/${l.shoot._id}/shot-list`} iconEnd={false}>On-set checklist</ButtonLink>}<Button icon="plus" onClick={() => setDialog({ kind: "paste" })} disabled={!setups.length}>Paste shots</Button><Button variant="primary" onClick={() => setDialog({ kind: "setup" })}>Add setup</Button></>} />
+          actions={<><Button icon="attach" onClick={() => setHoming(true)}>{l.project || l.shoot ? "Move to…" : "Attach to…"}</Button>{l.shoot && <ButtonLink to={`/production/shoots/${l.shoot._id}/shot-list`} iconEnd={false}>On-set checklist</ButtonLink>}<Button icon="plus" onClick={() => setDialog({ kind: "paste" })} disabled={!setups.length}>Paste shots</Button><Button variant="primary" onClick={() => setDialog({ kind: "setup" })}>Add setup</Button></>} />
         <div className="sl-cols">
           <Card className="sl-main" label="Setups and shots">
             {l.setups.length === 0 ? <div className="sl-empty">

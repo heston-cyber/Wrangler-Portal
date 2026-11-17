@@ -9,12 +9,13 @@
 import { focusBusiness, internalAction, internalQuery, mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireMe, requireSignedIn, requireAll } from "./lib/access";
 import { businessContact, businessInScope } from "./lib/business";
-import { businessOf, postToInbox } from "./lib/inbox";
+import { postToInbox } from "./lib/inbox";
 import { myProjects, portalPeople } from "./projects";
+import { clientMayOpen, peopleAt, placeOf, type Placed } from "./lib/placed";
 import { label } from "./lib/bookingRows";
 import { mailBrandOf } from "./lib/mail";
 import { briefMail, ownerBriefMail } from "./lib/mails";
@@ -125,43 +126,82 @@ export const forProject = query({
     const id = ctx.db.normalizeId("projects", projectId);
     const p = id ? await ctx.db.get(id) : null;
     if (!p) return null;
-    const r = await ctx.db.query("briefs").withIndex("by_project", (q) => q.eq("projectId", p._id)).first();
+    const r = (await ctx.db.query("briefs").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect()).find((x) => x.status !== "draft");
     const people = (await portalPeople(ctx, p)).length;
     if (!r) return { brief: null, people };
     const qn = r.questions as Questionnaire;
     return {
       people,
       brief: {
-        _id: r._id, status: r.status, sentAt: r.sentAt, remindedAt: r.remindedAt ?? null, startedAt: r.startedAt ?? null, submittedAt: r.submittedAt ?? null,
+        _id: r._id, status: r.status, sentAt: r.sentAt ?? r.createdAt, remindedAt: r.remindedAt ?? null, startedAt: r.startedAt ?? null, submittedAt: r.submittedAt ?? null,
         by: await nameOf(ctx, r.submittedBy), updatedBy: await nameOf(ctx, r.updatedBy), submits: r.submits, updatedAt: r.updatedAt,
         answers: answerList(qn, r.answers as Answers), questions: questionsIn(qn),
-        remindAt: (r.remindedAt ?? r.sentAt) + REMIND_GAP + 1, // a query doesn't re-run as time passes: the page compares
+        remindAt: (r.remindedAt ?? r.sentAt ?? r.createdAt) + REMIND_GAP + 1, // a query doesn't re-run as time passes: the page compares
       },
     };
   },
 });
+
+/** Sends brief `r` (a draft, or a new one) to the people where it is: an Inbox item each and email 33. */
+async function sendBrief(ctx: MutationCtx, b: Doc<"businesses">, w: Placed, draft: Doc<"briefs"> | null) {
+  if (w.p && (await ctx.db.query("briefs").withIndex("by_project", (q) => q.eq("projectId", w.p!._id)).collect()).some((x) => x.status !== "draft"))
+    throw new ConvexError("The kickoff brief has already gone to this project.");
+  const people = await peopleAt(ctx, w);
+  if (!people.length) throw new ConvexError(w.p ? "Nobody at the client can open this project in the portal yet. Share the project with them first." : `Nobody at ${w.label} has the portal yet. Invite them first.`);
+  const qn = setOf(b); // the questions as they are at Send
+  const now = Date.now();
+  let briefId: Id<"briefs">;
+  if (draft) {
+    briefId = draft._id;
+    await ctx.db.patch(briefId, { questions: qn, status: "sent", sentAt: now, updatedAt: now, history: [...draft.history, { at: now, text: "Sent" }] });
+  } else {
+    briefId = await ctx.db.insert("briefs", {
+      ...(w.p ? { projectId: w.p._id } : { clientId: w.c!._id }), questions: qn, answers: {}, step: 0, status: "sent", sentAt: now, submits: 0,
+      history: [{ at: now, text: "Sent" }], createdAt: now, updatedAt: now,
+    });
+  }
+  for (const person of people) {
+    await postToInbox(ctx, { businessId: w.businessId!, clientId: w.clientId, email: person.email, kind: "brief", title: `Kickoff brief: ${w.label}`,
+      text: `About 10 minutes. ${coversOf(qn)}.`, link: `/briefs/${briefId}`, linkLabel: "Start", source: { module: "schedule", id: briefId }, key: `brief:${briefId}` });
+  }
+  await ctx.scheduler.runAfter(0, internal.briefs.mail, { briefId, kind: "sent", emails: people.map((x) => x.email) });
+  return { briefId, told: people.length };
+}
 
 export const send = mutation({
   args: { projectId: v.string() },
   handler: async (ctx, { projectId }) => {
     const { b } = await ownerBiz(ctx);
     const p = await ownedProject(ctx, projectId);
-    if (await ctx.db.query("briefs").withIndex("by_project", (q) => q.eq("projectId", p._id)).first()) throw new ConvexError("The kickoff brief has already gone to this project.");
-    const people = await portalPeople(ctx, p);
-    if (!people.length) throw new ConvexError("Nobody at the client can open this project in the portal yet. Share the project with them first.");
-    const qn = setOf(b);
+    const w = (await placeOf(ctx, { projectId: p._id }))!;
+    // A draft filed on this project goes out (hierarchy 3c); otherwise a new one is made and sent.
+    const draft = (await ctx.db.query("briefs").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect()).find((x) => x.status === "draft") ?? null;
+    return await sendBrief(ctx, b, w, draft);
+  },
+});
+
+/** Hierarchy 3c: a kickoff brief made on its own, as a draft (nothing is sent). Attach it with homes.move. */
+export const create = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const { b } = await ownerBiz(ctx);
     const now = Date.now();
-    const briefId = await ctx.db.insert("briefs", {
-      projectId: p._id, questions: qn, answers: {}, step: 0, status: "sent", sentAt: now, submits: 0,
-      history: [{ at: now, text: "Sent" }], createdAt: now, updatedAt: now,
-    });
-    const biz = await businessOf(ctx, p);
-    for (const person of people) {
-      await postToInbox(ctx, { businessId: biz!, clientId: p.clientId, email: person.email, kind: "brief", title: `Kickoff brief: ${label(p)}`,
-        text: `About 10 minutes. ${coversOf(qn)}.`, link: `/briefs/${briefId}`, linkLabel: "Start", source: { module: "schedule", id: briefId }, key: `brief:${briefId}` });
-    }
-    await ctx.scheduler.runAfter(0, internal.briefs.mail, { briefId, kind: "sent", emails: people.map((x) => x.email) });
-    return { briefId, told: people.length };
+    return await ctx.db.insert("briefs", { questions: setOf(b), answers: {}, step: 0, status: "draft", submits: 0, history: [{ at: now, text: "Made" }], createdAt: now, updatedAt: now });
+  },
+});
+
+/** Sends a draft once it's on a project or a client (the owner's own click). */
+export const sendDraft = mutation({
+  args: { briefId: v.string() },
+  handler: async (ctx, { briefId }) => {
+    const { b } = await ownerBiz(ctx);
+    const id = ctx.db.normalizeId("briefs", briefId);
+    const r = id ? await ctx.db.get(id) : null;
+    if (!r) throw new ConvexError("That brief isn't here any more.");
+    if (r.status !== "draft") throw new ConvexError("It's already been sent.");
+    const w = await placeOf(ctx, r);
+    if (!w) throw new ConvexError("Attach this to a project or client first.");
+    return await sendBrief(ctx, b, w, r);
   },
 });
 
@@ -172,10 +212,10 @@ export const remind = mutation({
     const r = await ctx.db.get(briefId);
     if (!r) throw new ConvexError("That brief isn't here any more.");
     if (r.status !== "sent") throw new ConvexError("They've already sent it back.");
-    if (Date.now() - (r.remindedAt ?? r.sentAt) <= REMIND_GAP) throw new ConvexError("They had an email about it today. Try again tomorrow.");
-    const p = await ctx.db.get(r.projectId);
-    const people = p ? await portalPeople(ctx, p) : [];
-    if (!people.length) throw new ConvexError("Nobody at the client can open this project in the portal now.");
+    if (Date.now() - (r.remindedAt ?? r.sentAt ?? 0) <= REMIND_GAP) throw new ConvexError("They had an email about it today. Try again tomorrow.");
+    const w = await placeOf(ctx, r);
+    const people = w ? await peopleAt(ctx, w) : [];
+    if (!people.length) throw new ConvexError(w?.p ? "Nobody at the client can open this project in the portal now." : "Nobody at the client has the portal now.");
     const now = Date.now();
     await ctx.db.patch(briefId, { remindedAt: now, updatedAt: now, history: [...r.history, { at: now, text: "Reminded" }] });
     await ctx.scheduler.runAfter(0, internal.briefs.mail, { briefId, kind: "reminder", emails: people.map((x) => x.email), at: now });
@@ -191,10 +231,10 @@ export const forEstimate = query({
     const id = ctx.db.normalizeId("briefs", briefId);
     const r = id ? await ctx.db.get(id) : null;
     if (!r) return null;
-    const p = await ctx.db.get(r.projectId);
-    if (!p) return null;
+    const w = await placeOf(ctx, r);
+    if (!w) return null;
     const lines = answerList(r.questions as Questionnaire, r.answers as Answers).flatMap((s) => s.answers.map((a) => `${a.question} ${a.answer}`));
-    return { projectId: p._id, clientId: p.clientId ?? null, title: p.name, scope: `From the kickoff brief:\n${lines.join("\n")}`.slice(0, 4000) };
+    return { projectId: w.p?._id ?? null, clientId: w.clientId ?? null, title: w.p?.name ?? w.label, scope: `From the kickoff brief:\n${lines.join("\n")}`.slice(0, 4000) };
   },
 });
 
@@ -205,13 +245,13 @@ async function clientBrief(ctx: Ctx, briefId: string) {
   if (me.kind !== "client") return null;
   const id = ctx.db.normalizeId("briefs", briefId);
   const r = id ? await ctx.db.get(id) : null;
-  if (!r) return null;
+  if (!r || r.status === "draft") return null;
   // A client of more than one business acts for this brief's (so what it schedules, like the owner's email, has a home).
   focusBusiness(ctx, r.businessId);
-  const row = (await myProjects(ctx as QueryCtx, me.email)).get(r.projectId);
-  if (!row) return null;
-  const b = row.project.businessId ? await ctx.db.get(row.project.businessId) : null;
-  return { me, r, p: row.project, b };
+  const w = await placeOf(ctx, r);
+  if (!w || !(await clientMayOpen(ctx, me.email, w))) return null;
+  const b = w.businessId ? await ctx.db.get(w.businessId) : null;
+  return { me, r, w, b };
 }
 
 export const forClientProject = query({
@@ -221,7 +261,7 @@ export const forClientProject = query({
     if (me.kind !== "client") return null;
     const id = ctx.db.normalizeId("projects", projectId);
     if (!id || !(await myProjects(ctx, me.email)).has(id)) return null;
-    const r = await ctx.db.query("briefs").withIndex("by_project", (q) => q.eq("projectId", id)).first();
+    const r = (await ctx.db.query("briefs").withIndex("by_project", (q) => q.eq("projectId", id)).collect()).find((x) => x.status !== "draft");
     return r ? { _id: r._id, status: r.status, started: !!r.startedAt, submittedAt: r.submittedAt ?? null } : null;
   },
 });
@@ -231,12 +271,12 @@ export const page = query({
   handler: async (ctx, { briefId }) => {
     const c = await clientBrief(ctx, briefId);
     if (!c) return null;
-    const contact = await businessContact(ctx, c.p.businessId ?? null);
+    const contact = await businessContact(ctx, c.w.businessId);
     const qn = c.r.questions as Questionnaire;
     return {
       _id: c.r._id, questions: qn, answers: c.r.answers as Answers, step: c.r.step, status: c.r.status, submittedAt: c.r.submittedAt ?? null,
       by: await nameOf(ctx, c.r.submittedBy), updatedBy: await nameOf(ctx, c.r.updatedBy), updatedAt: c.r.updatedAt,
-      project: { _id: c.p._id, label: label(c.p) }, business: c.b?.name ?? contact.name, owner: c.b?.ownerName?.trim() || contact.name, me: c.me.name ?? null,
+      project: c.w.p ? { _id: c.w.p._id, label: c.w.label } : null, place: c.w.label, business: c.b?.name ?? contact.name, owner: c.b?.ownerName?.trim() || contact.name, me: c.me.name ?? null,
     };
   },
 });
@@ -297,12 +337,12 @@ export const mailData = internalQuery({
   handler: async (ctx, { briefId }) => {
     const r = await ctx.db.get(briefId);
     if (!r) return null;
-    const p = await ctx.db.get(r.projectId);
-    if (!p) return null;
-    const biz = await businessOf(ctx, p);
+    const w = await placeOf(ctx, r);
+    if (!w) return null;
+    const biz = w.businessId;
     const qn = r.questions as Questionnaire;
     return {
-      r, project: label(p), projectId: p._id, biz, brand: await mailBrandOf(ctx, biz), owner: (await businessContact(ctx, biz)).ownerEmail, covers: coversOf(qn),
+      r, project: w.label, link: w.p ? `/projects/${w.p._id}` : `/clients/${w.c!._id}`, biz, brand: await mailBrandOf(ctx, biz), owner: (await businessContact(ctx, biz)).ownerEmail, covers: coversOf(qn),
       answers: answerList(qn, r.answers as Answers).flatMap((s) => s.answers), by: await nameOf(ctx, r.updatedBy ?? r.submittedBy),
     };
   },
@@ -329,7 +369,7 @@ export const mailOwner = internalAction({
     const d = await ctx.runQuery(internal.briefs.mailData, { briefId });
     if (!d?.owner || d.r.submits !== n) return;
     await deliverOnce(ctx, `brief-answered:${briefId}:${n}`, "brief_answered", d.owner, ownerBriefMail(d.brand, {
-      who: d.by ?? "The client", project: d.project, changed: n > 1, answers: d.answers, link: `${SITE()}/projects/${d.projectId}`,
+      who: d.by ?? "The client", project: d.project, changed: n > 1, answers: d.answers, link: `${SITE()}${d.link}`,
     }), d.brand.replyTo, d.biz);
   },
 });

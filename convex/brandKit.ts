@@ -33,8 +33,17 @@ async function ownerBiz(ctx: QueryCtx | MutationCtx) {
   return b;
 }
 
-/** The kit's row: the business, or one of its companies (the guard refuses another business's company). */
-async function holder(ctx: QueryCtx | MutationCtx, clientId: string | undefined): Promise<Doc<"businesses"> | Doc<"clients">> {
+type Holder = Doc<"businesses"> | Doc<"clients"> | Doc<"brandKits">;
+/** The kit's row: the business, one of its companies (the guard refuses another business's company), or (5l) a brand
+ *  kit made as creative work (Creative planning › Brand kits; Projects, not Settings). */
+async function holder(ctx: QueryCtx | MutationCtx, clientId: string | undefined, kitId?: string): Promise<Holder> {
+  if (kitId) {
+    await requireAll(ctx, "projects");
+    const kid = ctx.db.normalizeId("brandKits", kitId);
+    const k = kid ? await ctx.db.get(kid) : null;
+    if (!k) throw new ConvexError("That brand kit isn't here any more.");
+    return k;
+  }
   const b = await ownerBiz(ctx);
   if (!clientId) return b;
   const id = ctx.db.normalizeId("clients", clientId);
@@ -52,14 +61,14 @@ export function linkLabel(url: string) {
 }
 
 export const get = query({
-  args: { clientId: v.optional(v.string()) },
-  handler: async (ctx, { clientId }) => {
-    const row = await holder(ctx, clientId);
+  args: { clientId: v.optional(v.string()), kitId: v.optional(v.string()) },
+  handler: async (ctx, { clientId, kitId }) => {
+    const row = await holder(ctx, clientId, kitId);
     const k = kitOf(row);
-    const biz = !clientId ? (row as Doc<"businesses">) : null;
+    const biz = !clientId && !kitId ? (row as Doc<"businesses">) : null;
     const url = async (id?: Id<"_storage">) => (id ? await ctx.storage.getUrl(id) : null);
     return {
-      kind: clientId ? ("company" as const) : ("business" as const), name: row.name,
+      kind: kitId ? ("kit" as const) : clientId ? ("company" as const) : ("business" as const), name: row.name,
       // The business's logos and accent/background come from Settings › Business (shown, not edited here).
       logo: biz ? { dark: await url(biz.logoFileId), light: await url(biz.logoLightFileId), fileId: null } : { dark: await url(k.logoFileId), light: null, fileId: k.logoFileId ?? null },
       fixedColors: biz ? [biz.accent, biz.background].filter((x): x is string => !!x).map((hex, i) => ({ hex, name: i === 0 ? "Accent" : "Background" })) : [],
@@ -74,13 +83,14 @@ const HEX = /^#[0-9a-f]{6}$/i;
 export const save = mutation({
   args: {
     clientId: v.optional(v.id("clients")),
+    kitId: v.optional(v.string()),
     colors: v.array(v.object({ hex: v.string(), name: v.optional(v.string()) })),
     fonts: v.object({ heading: v.optional(v.string()), body: v.optional(v.string()) }),
     links: v.array(v.object({ url: v.string(), label: v.optional(v.string()) })),
     tone: v.array(v.string()),
   },
   handler: async (ctx, a) => {
-    const row = await holder(ctx, a.clientId);
+    const row = await holder(ctx, a.clientId, a.kitId);
     if (a.colors.length > 24 || a.links.length > 40 || a.tone.length > 30) throw new ConvexError("That's too many for one kit.");
     for (const c of a.colors) if (!HEX.test(c.hex.trim())) throw new ConvexError(`"${c.hex}" isn't a colour like #E10600.`);
     const links = a.links.map((l) => {
@@ -94,15 +104,15 @@ export const save = mutation({
       fonts: { ...(a.fonts.heading?.trim() ? { heading: a.fonts.heading.trim().slice(0, 80) } : {}), ...(a.fonts.body?.trim() ? { body: a.fonts.body.trim().slice(0, 80) } : {}) },
       links, tone: [...new Set(a.tone.map((t) => t.trim().slice(0, 30)).filter(Boolean))],
     };
-    await ctx.db.patch(row._id, { brandKit: kit });
+    await ctx.db.patch(row._id, a.kitId ? { brandKit: kit, updatedAt: Date.now() } : { brandKit: kit });
     return null;
   },
 });
 
 export const uploadUrl = mutation({
-  args: { clientId: v.optional(v.id("clients")) },
-  handler: async (ctx, { clientId }) => {
-    const row = await holder(ctx, clientId);
+  args: { clientId: v.optional(v.id("clients")), kitId: v.optional(v.string()) },
+  handler: async (ctx, { clientId, kitId }) => {
+    const row = await holder(ctx, clientId, kitId);
     if (kitOf(row).files.length >= MAX_FILES) throw new ConvexError(`A kit holds up to ${MAX_FILES} files. Remove one first, or link to it instead.`);
     return await ctx.storage.generateUploadUrl();
   },
@@ -110,7 +120,7 @@ export const uploadUrl = mutation({
 
 /** After the browser uploads: checks the size and file count (D90), then adds it (or sets the company's logo).
  *  A refused file is deleted and the reason returned (not thrown, so the delete isn't rolled back). */
-export async function attachFile(ctx: MutationCtx, row: Doc<"businesses"> | Doc<"clients">, storageId: Id<"_storage">, name: string, opts: { logo?: boolean; source?: string } = {}): Promise<string | null> {
+export async function attachFile(ctx: MutationCtx, row: Holder, storageId: Id<"_storage">, name: string, opts: { logo?: boolean; source?: string } = {}): Promise<string | null> {
   const meta = await ctx.db.system.get(storageId);
   if (!meta) return "The file didn't upload. Try again.";
   const kit = kitOf(row);
@@ -132,18 +142,18 @@ export async function attachFile(ctx: MutationCtx, row: Doc<"businesses"> | Doc<
 }
 
 export const addFile = mutation({
-  args: { clientId: v.optional(v.id("clients")), storageId: v.id("_storage"), name: v.string(), logo: v.optional(v.boolean()) },
+  args: { clientId: v.optional(v.id("clients")), kitId: v.optional(v.string()), storageId: v.id("_storage"), name: v.string(), logo: v.optional(v.boolean()) },
   handler: async (ctx, a) => {
-    const row = await holder(ctx, a.clientId);
-    if (a.logo && !a.clientId) throw new ConvexError("The business's logos are set in Settings › Business.");
+    const row = await holder(ctx, a.clientId, a.kitId);
+    if (a.logo && !a.clientId && !a.kitId) throw new ConvexError("The business's logos are set in Settings › Business.");
     return { error: await attachFile(ctx, row, a.storageId, a.name, { logo: a.logo }) };
   },
 });
 
 export const removeFile = mutation({
-  args: { clientId: v.optional(v.id("clients")), fileId: v.id("_storage"), logo: v.optional(v.boolean()) },
+  args: { clientId: v.optional(v.id("clients")), kitId: v.optional(v.string()), fileId: v.id("_storage"), logo: v.optional(v.boolean()) },
   handler: async (ctx, a) => {
-    const row = await holder(ctx, a.clientId);
+    const row = await holder(ctx, a.clientId, a.kitId);
     const kit = kitOf(row);
     if (a.logo) { if (kit.logoFileId !== a.fileId) throw new ConvexError("That logo isn't here."); await ctx.db.patch(row._id, { brandKit: { ...kit, logoFileId: undefined } }); }
     else {

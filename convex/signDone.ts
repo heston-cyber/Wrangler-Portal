@@ -75,7 +75,7 @@ async function finalInput(ctx: ActionCtx, d: Data): Promise<FinalInput> {
       key: s.signerKey, name: s.name, email: s.email, title: s.title ?? null, adoptedName: a.name, adoptedTitle: a.title ?? s.title ?? null, method: a.method,
       signaturePng: await bytesOf(ctx, a.signatureFileId), initialsPng: await bytesOf(ctx, a.initialsFileId), signatureSha256: a.signatureSha256, initialsSha256: a.initialsSha256,
       signedAt: s.signedAt, signedDate: s.signedDate ?? centralDate(s.signedAt), ip: s.signIp ?? null, userAgent: s.signUserAgent ?? null,
-      verifiedAt: s.verifiedAt ?? null, consentAt: s.consentAt ?? null, consentVersion: s.consentVersion ?? null, adoptedAt: a.at ?? null,
+      verifiedAt: s.verifiedAt ?? null, ...(s.inPerson ? { inPerson: s.inPerson } : {}), consentAt: s.consentAt ?? null, consentVersion: s.consentVersion ?? null, adoptedAt: a.at ?? null,
       initialed: s.initialed ?? [], viewedPages: s.viewedPages ?? [],
     });
   }

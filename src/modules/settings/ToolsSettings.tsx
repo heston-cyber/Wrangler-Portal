@@ -10,10 +10,11 @@ import { Icon, type IconName } from "../../ui/Icon";
 import { errText } from "../docs/pages/common";
 import { SetHead } from "./Frame";
 
-const TOOL_ICON: Record<ToolKey, IconName> = { dashboard: "home", people: "users", messages: "mail", docs: "document", payments: "invoice", production: "video", sent: "send" };
+const TOOL_ICON: Record<ToolKey, IconName> = { dashboard: "home", messages: "mail", work: "work", calendar: "calendar", projects: "folder", creative: "creative", production: "camera", post: "scissors", clients: "building", money: "wallet" };
 const TOOL_SUB: Record<ToolKey, string> = {
-  dashboard: "Today, clients and activity", people: "Clients and vendors", messages: "Conversations with clients and leads", docs: "Proposals and contracts",
-  payments: "Shows once Stripe is connected", production: "Pre-pro, shoots, Review and delivery", sent: "Notes and items you sent",
+  dashboard: "Today, clients and activity", messages: "Conversations, Inbox notes and what you sent", work: "Tasks, boards and to-do lists", calendar: "Shoots, edits and calls",
+  projects: "Every project, under its client or on its own", creative: "Creative docs, canvases, locations, brand kits", production: "Shoots, call sheets, shot lists, gear, crew",
+  post: "Review, delivery and activity", clients: "Companies, pipeline, follow-ups", money: "Proposals, contracts, payments, vendor payouts",
 };
 
 /** A list you can drag to reorder (mouse), or move with the arrow buttons (keyboard, phones). */
@@ -65,12 +66,12 @@ export function ToolsSettings({ show }: { show: (m: string) => void }) {
           const tab = visible.indexOf(k);
           return <>
             <Icon name={TOOL_ICON[k]} size={20} />
-            <span className="tl-txt"><b>{TOOL_LABEL[k]}</b><span className="secondary">{TOOL_SUB[k]}{on && tab >= 0 && tab < 4 ? " · on the phone tab bar" : ""}</span></span>
+            <span className="tl-txt"><b>{TOOL_LABEL[k]}</b><span className="secondary">{TOOL_SUB[k]}{on && ["dashboard", "projects", "production", "messages"].includes(k) ? " · on the phone tab bar" : ""}</span></span>
             <Toggle label={`${TOOL_LABEL[k]} on the menu`} checked={on} disabled={REQUIRED_TOOLS.includes(k)}
               onChange={(v) => put({ ...t, hidden: v ? t.hidden.filter((x) => x !== k) : [...t.hidden, k] })} />
           </>;
         }} />
-        <p className="wp-small secondary tl-note">The Dashboard always stays on. A tool off the menu still opens from links and search. On phones the first four go in the tab bar; the rest are under More.</p>
+        <p className="wp-small secondary tl-note">The Dashboard always stays on. A tool off the menu still opens from links and search. Tools stay in their group (Every day, Making the work, Running the business); the order counts inside each. On phones Dashboard, Projects, Production and Messages are in the tab bar; the rest are under More.</p>
       </div>
       <div className="panel pay-card tl-card">
         <span className="wp-eyebrow">Dashboard widgets</span>

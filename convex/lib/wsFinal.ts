@@ -12,7 +12,7 @@ export type FinalSigner = {
   adoptedName: string; adoptedTitle: string | null; method: string;
   signaturePng: Uint8Array; initialsPng: Uint8Array; signatureSha256: string; initialsSha256: string;
   signedAt: number; signedDate: string; ip: string | null; userAgent: string | null;
-  verifiedAt: number | null; consentAt: number | null; consentVersion: string | null; adoptedAt: number | null;
+  verifiedAt: number | null; inPerson?: { at: number; by: string; device: string; place?: string }; consentAt: number | null; consentVersion: string | null; adoptedAt: number | null;
   initialed: string[]; viewedPages: number[];
 };
 
@@ -79,7 +79,8 @@ export function certificate(d: FinalInput): string[] {
     if (isOwner) {
       L.push(`Signed when sending: ${t(s.signedAt)}, signed in to the owner's Wrangler account. Signature adopted ${t(s.adoptedAt)} (${s.method}).`);
     } else {
-      L.push(`Email confirmed with a one-time code sent to ${s.email}: ${t(s.verifiedAt)}.`);
+      if (s.inPerson) L.push(`Signed in person on ${s.inPerson.device}${s.inPerson.place ? ` at ${s.inPerson.place}` : ""}: ${s.inPerson.by} confirmed in person who was signing, ${t(s.inPerson.at)}. ${s.verifiedAt ? `Email confirmed with a one-time code sent to ${s.email}: ${t(s.verifiedAt)}.` : `Email not confirmed with a code; this copy was sent to ${s.email}.`}`);
+      else L.push(`Email confirmed with a one-time code sent to ${s.email}: ${t(s.verifiedAt)}.`);
       L.push(`Agreed to sign electronically: ${t(s.consentAt)} (disclosure ${s.consentVersion ?? "—"}).`);
       L.push(`Signature adopted (${s.method}): ${t(s.adoptedAt)}. Pages viewed: ${s.viewedPages.length ? [...s.viewedPages].sort((a, b) => a - b).map((p) => p + 1).join(", ") : "—"} of ${d.pages}.`);
       L.push(`Signed: ${t(s.signedAt)} from IP ${s.ip ?? "unknown"}${deviceName(s.userAgent) ? ` (${deviceName(s.userAgent)})` : ""}, after agreeing: "${d.statement}"`);
@@ -108,7 +109,7 @@ export function auditExport(d: FinalInput & { finalSha256: string; finalBytes: n
   const s = (x: FinalSigner) => ({
     key: x.key, name: x.adoptedName, title: x.adoptedTitle, email: x.email, method: x.method,
     signedAt: x.signedAt ? new Date(x.signedAt).toISOString() : null, ip: x.ip, userAgent: x.userAgent,
-    verifiedAt: x.verifiedAt ? new Date(x.verifiedAt).toISOString() : null, consentAt: x.consentAt ? new Date(x.consentAt).toISOString() : null, consentVersion: x.consentVersion,
+    verifiedAt: x.verifiedAt ? new Date(x.verifiedAt).toISOString() : null, ...(x.inPerson ? { inPerson: { ...x.inPerson, at: new Date(x.inPerson.at).toISOString() } } : {}), consentAt: x.consentAt ? new Date(x.consentAt).toISOString() : null, consentVersion: x.consentVersion,
     signatureSha256: x.signatureSha256, initialsSha256: x.initialsSha256, initialed: x.initialed, viewedPages: x.viewedPages,
   });
   return {

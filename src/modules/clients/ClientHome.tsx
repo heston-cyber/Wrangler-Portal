@@ -9,6 +9,8 @@ import { INBOX_ICON, Day, dayWord, monthDay, type InboxKind } from "../inbox/com
 import { clockText } from "../../lib/format";
 import { StageBar, STAGES, stageName } from "../projects/common";
 import { money } from "../payments/common";
+import { useState } from "react";
+import { ClientTaskRows } from "../work/portalTasks";
 
 const WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
 function headline(n: number) {
@@ -25,7 +27,8 @@ export default function ClientHome() {
   const project = projects?.[0];
   // Part B step 3: invoices still to pay join what's waiting (frame 150:1219: Pay opens the invoice page).
   const toPay = (billed ?? []).filter((b) => ["due", "overdue", "partly_paid", "failed"].includes(b.status));
-  const n = waiting ? waiting.cuts.length + waiting.docs.length + toPay.length : 0;
+  const [tasks, setTasks] = useState(0); // 5m (D199): tasks for the client, with Done
+  const n = waiting ? waiting.cuts.length + waiting.docs.length + toPay.length + tasks : 0;
   return (
     <>
       {/* Phase 5f: the glass top bar (desktop); one crumb, so it fades in as the title scrolls under it */}
@@ -64,6 +67,7 @@ export default function ClientHome() {
                 </div>
               ))}
             </>}
+          <ClientTaskRows onCount={setTasks} />
         </Card>
         {project && (
           <Card className="ch-project" label="Your project" head={<SectionHead label={projects!.length > 1 ? "Your projects" : "Your project"} count={projects!.length > 1 ? projects!.length : undefined} action={<ButtonLink size="sm" variant="ghost" to={`/projects/${project._id}`}><span className="pc-only">Open project</span><span className="ph-only">Open</span></ButtonLink>} />}>

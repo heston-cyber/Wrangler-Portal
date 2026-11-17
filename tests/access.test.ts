@@ -76,6 +76,13 @@ const OPEN: Record<string, string> = {
   // D147 (Nov 4): a briefing's no-login link (/b/<token>, email 58). Tested in briefingsShare.test.ts.
   "briefings.page": "a briefing link: answers only for a shared briefing's own long random token (a person's own, or the copied link); a turned-off link answers Withdrawn with the business and title only",
   "briefings.opened": "the same link: counts an open of that briefing only; a missing token, a draft or a turned-off link does nothing; rate-limited",
+  // 5l (D191, D183): Creative planning's view-only links, signed out. Tested in creative.test.ts.
+  "delivery.shared": "a client's Delivery link (/dl/<token>): answers only for that link's own long random token while it's on and the delivery is published, with only what was shared (published files)",
+  "creative.sharedDoc":"a creative doc's link (/cd/<token>): answers only for a doc's own long random token while its link is on, with the title and the PDF made at Share (team notes left out)",
+  "creative.sharedKit": "a brand kit's link (/kit/<token>): answers only for a kit's own long random token while its link is on, with the kit as it is now",
+  "canvas.shared": "a board's link (/cv/<token>): answers only for a shared person's own long random token, or the board's view-only link while it's on",
+  "canvas.sharedSave": "the same link: only a person shared with Can edit may save; it can't add or reach files (only the board's own stay), and an older save is refused",
+  "canvas.opened": "the same link: records when a shared person opened it; nothing for a view-only link or a missing token",
   "signCopies.page": "D160: a copied person's view-only link: answers only for a copy row's own long random token; a cancelled, replaced or expired document answers without its file (tested in signCc.test.ts)",
   "signCopies.opened": "the same link: counts an open of that copy only; rate-limited",
   "briefings.markRead": "the same link: records \"I've read it\" for that briefing only (named only on a person's own link); a missing token is refused; rate-limited",
@@ -113,6 +120,10 @@ const SIGNED_IN = new Set(["help.list", "help.guide", "messages.mine", "messages
   "footage.forClientProject", "footage.keep", "footage.decline", "testimonials.ask", "testimonials.send",
   // Phase 5b step 3: a call sheet sent to them (only one sent to them, on a project they can open; tested in callSheets.test.ts)
   "callSheets.forClient", "callSheets.forClientProject", "callSheets.opened",
+  // 5m (D199): tasks for the client, on projects they can open (or their client's), with Done (work.test.ts)
+  "work.forClient", "work.clientDone",
+  // 5n: their Delivery (published files on projects they can open), a file's link, the renewal answer, their own share links (delivery.test.ts)
+  "delivery.forClient", "delivery.assetUrl", "delivery.clientAnswer", "delivery.makeLink", "delivery.setLink",
   // Phase 5e step 2: their own password, email and devices (security.test.ts)
   "security.state", "security.changePassword", "security.startEmailChange", "security.confirmEmailChange", "security.cancelEmailChange", "security.seenDevice", "security.signOutDevice"]);
 // D133 (Phase 5): functions a vendor login may call: their own side of the portal (each checks the vendor's own records,
@@ -126,6 +137,8 @@ const VENDOR = new Set(["help.list", "help.guide", "users.switchSide",
   "vendorPortal.callSheet", "vendorPortal.callSheets", "vendorPortal.openCallSheet",
   // Nov 16 (D180): the crew ticks a shot on a call sheet sent to them (shotLists.test.ts)
   "vendorPortal.tickShot",
+  // 5m (D199): tasks given to them on purpose (For a vendor), with Done (work.test.ts)
+  "work.forVendor", "work.vendorDone",
   // Phase 5e step 2: their own password, email and devices (security.test.ts)
   "security.state", "security.changePassword", "security.startEmailChange", "security.confirmEmailChange", "security.cancelEmailChange", "security.seenDevice", "security.signOutDevice"]);
 
@@ -178,6 +191,8 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "briefs.resetSettings": PROJECTS,
     "briefs.forProject": PROJECTS,
     "briefs.send": PROJECTS,
+    "briefs.create": PROJECTS,
+    "briefs.sendDraft": PROJECTS,
     "briefs.remind": PROJECTS,
     "briefs.forEstimate": PROJECTS,
     "builder.getProfile": DOCS,
@@ -223,6 +238,7 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "calendarSync.moveDate": SHOOTS,
     "calendarSync.shootMoveDone": SHOOTS,
     "calendarSync.askConfirmAgain": SHOOTS,
+    "shoots.askClientConfirm": SHOOTS,
     "calendarSync.syncNow": SHOOTS,
     "callSheets.ensureStarters": SHOOTS,
     "callSheets.list": SHOOTS,
@@ -279,6 +295,7 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "crm.due": BUDGETS,
     "fileRequests.forProject": PROJECTS,
     "fileRequests.create": PROJECTS,
+    "fileRequests.sendDraft": PROJECTS,
     "fileRequests.setStatus": PROJECTS,
     "gear.list": PRODUCTION,
     "gear.get": PRODUCTION,
@@ -291,6 +308,17 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "gear.logMaintenance": PRODUCTION,
     "gear.exportCsv": PRODUCTION,
     "gear.forShoot": PRODUCTION,
+    // 5i–5k (Nov 17): releases need Shoots and Docs (tests/releases.test.ts); packing lists Production; places and the
+    // Shoot page Shoots.
+    // 541ac10 review H1: making the document (approval) and handing it over stay the owner's, like Approve and Send.
+    ...Object.fromEntries(["forShoot", "templates", "create", "get", "remove"].map((f) => [`releases.${f}`, DOCS])),
+    // 5l (Nov 17): Creative planning is Projects' (starting a briefing from a doc also needs Production; the builder Docs).
+    ...Object.fromEntries(["overview", "docs", "newDoc", "doc", "share", "shareOn", "removeDoc", "startBriefing", "kits", "newKit", "kit", "renameKit", "shareKit", "removeKit"].map((f) => [`creative.${f}`, PROJECTS])),
+    ...Object.fromEntries(["list", "create", "get", "save", "rename", "duplicate", "remove", "uploadUrl", "addFile", "dropUnused", "shareChoices", "addPerson", "setRole", "removePerson", "setLink", "stopSharing"].map((f) => [`canvas.${f}`, PROJECTS])),
+    "releases.markShot": SHOOTS,
+    ...Object.fromEntries(["lists", "get", "gearChoices", "create", "rename", "duplicate", "remove", "addGear", "addLine", "editLine", "removeLine", "moveLine", "forShoot", "useOnShoot", "tick", "flag"].map((f) => [`packing.${f}`, PRODUCTION])),
+    ...Object.fromEntries(["list", "get", "create", "update", "remove", "uploadUrl", "addPhoto", "removePhoto", "coverPhoto", "forShoot", "useForShoot", "unlink"].map((f) => [`places.${f}`, SHOOTS])),
+    "shootPage.get": SHOOTS,
     "gear.addToShoot": PRODUCTION,
     "gear.removeFromShoot": PRODUCTION,
     "inbox.forClient": CLIENTS,
@@ -407,6 +435,9 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "shoots.update": SHOOTS,
     "shoots.cancel": SHOOTS,
     ...Object.fromEntries(["all", "newOptions", "forProject", "get", "forShoot", "create", "update", "remove", "addSetup", "editSetup", "removeSetup", "moveSetup", "addShots", "editShot", "removeShot", "moveShot", "tick", "reset", "forBuild"].map((f) => [`shotLists.${f}`, SHOOTS])),
+    // Nov 16 (D204): Attach/Move. A thing's own switch decides (the matrix moves a shot list: Shoots); a project's move,
+    // what it carries and "Not attached" need Projects.
+    "homes.move": SHOOTS, "homes.places": SHOOTS, /* homes.moveProject: the matrix project carries a quote, so a Producer (no Payments) is refused (review M2, homes.test.ts) */ "homes.projectMove": PROJECTS, "homes.loose": PROJECTS, "homes.projectsBoard": PROJECTS, "homes.clientChoices": PROJECTS,
     "sign.list": DOCS,
     "sign.get": DOCS,
     "sign.uploadUrl": DOCS,
@@ -535,6 +566,13 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
 };
 // Phase 5e step 4: every team role has its own bell.
 for (const r of ["producer", "editor", "bookkeeper"] as const) for (const f of BELL_FNS) TEAM[r][f] = BELL;
+// 5m Work: My tasks is everyone's own (tasks given to them); the rest of Work is Projects' (work.test.ts).
+const WORK_OWN = "Work › My tasks: the tasks given to them (open, change the status, notes and checklist of their own; quick add for themselves), tested in work.test.ts";
+for (const r of ["producer", "editor", "bookkeeper"] as const) TEAM[r]["work.mine"] = WORK_OWN;
+for (const f of ["all", "forProject", "get", "people", "create", "update", "done", "place", "remove", "lists", "createList", "saveList", "duplicateList", "removeList", "itemToTask", "templates", "saveTemplate", "removeTemplate", "useTemplate", "todoistProjects", "todoistImport"]) TEAM.producer[`work.${f}`] = PROJECTS;
+// 5n Delivery: Projects'; its term and price (Settings › Payments) and Renewed are Payments' (delivery.test.ts).
+for (const f of ["list", "get", "ensure", "addAlbum", "editItem", "removeItem", "addFiles", "editAsset", "removeAsset", "publish", "assetUrl"]) TEAM.producer[`delivery.${f}`] = PROJECTS;
+for (const f of ["settings", "saveSettings", "renewed"]) TEAM.bookkeeper[`delivery.${f}`] = PAYMENTS;
 // Phase 5e step 5: Reports, for the Bookkeeper (the Reports switch).
 for (const f of REPORT_FNS) TEAM.bookkeeper[f] = REPORTS;
 

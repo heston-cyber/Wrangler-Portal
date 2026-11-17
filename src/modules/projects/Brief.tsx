@@ -148,7 +148,7 @@ export function ClientBriefPage({ briefId, preview }: { briefId?: string; previe
 
   const qn = (preview ? set?.questionnaire : d?.questions) as Questionnaire | undefined;
   const crumbs = preview ? <><a {...linkProps("/settings/brief")}>Settings</a><Sep /><a {...linkProps("/settings/brief/questions")}>Kickoff brief</a><Sep /><span className="here">Preview</span></>
-    : <><a {...linkProps("/review")}>Review</a>{d && <><Sep /><a {...linkProps(`/projects/${d.project._id}`)}>{d.project.label}</a></>}<Sep /><span className="here">Kickoff brief</span></>;
+    : <><a {...linkProps("/review")}>Review</a>{d && <><Sep />{d.project ? <a {...linkProps(`/projects/${d.project._id}`)}>{d.project.label}</a> : <span>{d.place}</span>}</>}<Sep /><span className="here">Kickoff brief</span></>;
   if (!preview && d === null) return <><TopBar>{crumbs}</TopBar><div className="wp-page"><EmptyState icon="note" title="This brief isn't here." body="It may not be shared with you any more." actions={<ButtonLink to="/inbox">Back to your Inbox</ButtonLink>} /></div></>;
   if (!qn || !a) return <><TopBar>{crumbs}</TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={5} /></Card></div></>;
 
@@ -200,7 +200,7 @@ export function ClientBriefPage({ briefId, preview }: { briefId?: string; previe
     go(step + 1);
   };
   const later = async () => {
-    try { if (live && dirty) { await save({ briefId: d!._id, changes: changesOf(a), step }); touched.current.clear(); setDirty(false); } navigate(`/projects/${d!.project._id}`); } catch (e) { show(errText(e)); }
+    try { if (live && dirty) { await save({ briefId: d!._id, changes: changesOf(a), step }); touched.current.clear(); setDirty(false); } navigate(d!.project ? `/projects/${d!.project._id}` : "/"); } catch (e) { show(errText(e)); }
   };
   const done = async () => {
     if (preview || !d) return;

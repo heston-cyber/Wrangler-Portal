@@ -37,7 +37,7 @@ const fields = {
 };
 type Fields = { date: string; call: string; wrap?: string; location: string; parking?: string; prepare: string[]; withOwner: boolean; bookingIds: Id<"vendorBookings">[]; calendar: boolean };
 
-async function clean(ctx: Ctx, p: Doc<"projects">, a: Fields, ownerName: string) {
+async function clean(ctx: Ctx, p: Doc<"projects"> | null, a: Fields, ownerName: string) {
   if (!isDay(a.date)) throw new ConvexError("Pick the shoot date.");
   if (!isTime(a.call)) throw new ConvexError("Pick the call time.");
   if (a.wrap && !isTime(a.wrap)) throw new ConvexError("Pick a wrap time, or leave it empty.");
@@ -49,6 +49,8 @@ async function clean(ctx: Ctx, p: Doc<"projects">, a: Fields, ownerName: string)
   const crew: Doc<"shoots">["crew"] = a.withOwner ? [{ name: ownerName, role: "Director", owner: true }] : [];
   for (const id of [...new Set(a.bookingIds)]) {
     const k = await ctx.db.get(id);
+    // D205: a shoot on its own has no project to book crew on yet.
+    if (!p) throw new ConvexError("Book crew on a project: attach this shoot to one first.");
     if (!k || k.projectId !== p._id || k.status === "declined" || k.status === "cancelled") throw new ConvexError("One of the crew isn't booked on this project any more.");
     const vendor = await ctx.db.get(k.vendorId);
     crew.push({ name: vendor?.name ?? "A vendor", role: k.role, vendorId: k.vendorId, bookingId: k._id });
@@ -65,11 +67,12 @@ async function ownedProject(ctx: Ctx, projectId: string) {
 async function ownedShoot(ctx: Ctx, shootId: Id<"shoots">) {
   const s = await ctx.db.get(shootId);
   if (!s) throw new ConvexError("That shoot isn't here any more.");
-  const p = await ctx.db.get(s.projectId);
-  if (!p) throw new ConvexError("This project doesn't exist any more.");
-  return { s, p };
+  const p = s.projectId ? await ctx.db.get(s.projectId) : null;
+  if (s.projectId && !p) throw new ConvexError("This project doesn't exist any more.");
+  return { s, p }; // p null: a shoot on its own (D205)
 }
-const ownerName = async (ctx: Ctx, p: Doc<"projects">, me?: { name: string | null }) => {
+const ownerName = async (ctx: Ctx, p: Doc<"projects"> | null, me?: { name: string | null }) => {
+  if (!p) return me?.name?.trim() || "The director"; // D205: a shoot on its own
   const biz = await businessOf(ctx, p);
   const b = biz ? await ctx.db.get(biz) : null;
   return b?.ownerName?.trim() || me?.name?.trim() || b?.name || "The director";
@@ -87,11 +90,16 @@ const view = (s: Doc<"shoots">) => ({
   crew: s.crew.map((c) => ({ name: c.name, role: c.role, owner: !!c.owner, bookingId: c.bookingId ?? null })), status: s.status,
   confirmed: s.confirmed ? { name: s.confirmed.name, at: s.confirmed.at } : null, moved: s.moved ? { date: s.moved.date, call: s.moved.call } : null,
   calendar: !!s.calendar, onCalendar: !!s.calendarEvent,
+  askConfirm: s.clientHold ? { from: s.clientHold.from ?? null } : null, // moved to another client: Ask to confirm
 });
 
 /** Tells the project's portal people: an Inbox item each, and email 29 or 30 (scheduled after the write).
  *  Phase 5b step 5: `delayMs` holds the email back (a move dragged on the calendar can be undone for a few seconds). */
-export async function tell(ctx: MutationCtx, p: Doc<"projects">, s: { _id: Id<"shoots">; date: string; call: string; location: string }, moved: Doc<"shoots">["moved"] | null, at: number, delayMs = 0) {
+export async function tell(ctx: MutationCtx, p: Doc<"projects"> | null, s: { _id: Id<"shoots">; date: string; call: string; location: string }, moved: Doc<"shoots">["moved"] | null, at: number, delayMs = 0) {
+  if (!p) return 0; // D205: a shoot on its own has no client to tell
+  // Moved to another client and not asked yet: nobody there is told (Heston, Nov 16; 3c review M). askClientConfirm
+  // clears the hold before it tells them.
+  if ((await ctx.db.get(s._id))?.clientHold) return 0;
   const biz = await businessOf(ctx, p);
   if (!biz) return 0;
   const people = await portalPeople(ctx, p);
@@ -132,14 +140,14 @@ export const forProject = query({
 });
 
 export const schedule = mutation({
-  args: { projectId: v.string(), ...fields },
+  args: { projectId: v.optional(v.string()), ...fields }, // D205: no project = a shoot on its own
   handler: async (ctx, a) => {
     const me = await requireAll(ctx, "shoots");
-    const p = await ownedProject(ctx, a.projectId);
+    const p = a.projectId ? await ownedProject(ctx, a.projectId) : null;
     const f = await clean(ctx, p, a, await ownerName(ctx, p, me));
     if (f.date < todayCentral()) throw new ConvexError("That date has passed.");
     const now = Date.now();
-    const shootId = await ctx.db.insert("shoots", { projectId: p._id, ...f, status: "scheduled", history: [{ at: now, text: "Scheduled" }], createdAt: now, updatedAt: now, calAt: now });
+    const shootId = await ctx.db.insert("shoots", { ...(p ? { projectId: p._id } : {}), ...f, status: "scheduled", history: [{ at: now, text: "Scheduled" }], createdAt: now, updatedAt: now, calAt: now });
     const told = await tell(ctx, p, { _id: shootId, ...f }, null, now);
     if (f.calendar) await queueCalendar(ctx, shootId, "all"); // the owner's own edit: Google sends the invites (Phase 4)
     return { shootId, told };
@@ -180,8 +188,8 @@ export const cancel = mutation({
     await queueCalendar(ctx, s._id, "all");
     // Review L12: its call sheet's guests can't open it any more (out of their "N new" for this business).
     for (const cs of await ctx.db.query("callSheets").withIndex("by_shoot", (q) => q.eq("shootId", s._id)).collect()) await passesOff(ctx, cs._id, true);
-    const biz = await businessOf(ctx, p);
-    if (biz) for (const person of await portalPeople(ctx, p)) {
+    const biz = p ? await businessOf(ctx, p) : null;
+    if (biz && p) for (const person of await portalPeople(ctx, p)) {
       await postToInbox(ctx, { businessId: biz, clientId: p.clientId, email: person.email, kind: "shoot", title: `Shoot cancelled: ${shootDay(s.date)}`,
         text: `${label(p)} · ${s.location}`, link: `/projects/${p._id}`, linkLabel: "Open project", source: { module: "schedule", id: s._id }, key: `shoot:${s._id}:cancelled` });
     }
@@ -196,8 +204,9 @@ async function clientShoot(ctx: QueryCtx, shootId: string) {
   if (me.kind !== "client") return null;
   const id = ctx.db.normalizeId("shoots", shootId);
   const s = id ? await ctx.db.get(id) : null;
-  if (!s || s.status !== "scheduled") return null;
-  const row = (await myProjects(ctx, me.email)).get(s.projectId);
+  // A shoot moved to this client waits for Ask {client} to confirm before they see it (3c review M).
+  if (!s || s.status !== "scheduled" || s.clientHold) return null;
+  const row = s.projectId ? (await myProjects(ctx, me.email)).get(s.projectId) : undefined; // D205: a shoot on its own has no client
   if (!row) return null;
   const p = row.project;
   const b = p.businessId ? await ctx.db.get(p.businessId) : null;
@@ -214,7 +223,7 @@ export const forClientProject = query({
     if (!id || !(await myProjects(ctx, me.email)).has(id)) return [];
     const today = todayCentral();
     return (await ctx.db.query("shoots").withIndex("by_project", (q) => q.eq("projectId", id).gte("date", today)).collect())
-      .filter((s) => s.status === "scheduled").map((s) => ({ _id: s._id, date: s.date, call: s.call, location: s.location, confirmed: !!s.confirmed }));
+      .filter((s) => s.status === "scheduled" && !s.clientHold).map((s) => ({ _id: s._id, date: s.date, call: s.call, location: s.location, confirmed: !!s.confirmed }));
   },
 });
 
@@ -233,6 +242,23 @@ export const page = query({
 });
 
 /** "Confirm the shoot": saved with their name and the time; the owner gets a note. */
+/** Heston (Nov 16): after a shoot moves to another client, "Ask {client} to confirm" tells the new client's people
+ *  (Inbox item and email 29) and, with Invite the client on, adds them to the calendar event (Google emails the invite). */
+export const askClientConfirm = mutation({
+  args: { shootId: v.id("shoots") },
+  handler: async (ctx, { shootId }) => {
+    await requireAll(ctx, ["shoots", "production"]);
+    const s = await ctx.db.get(shootId);
+    if (!s || s.status !== "scheduled") throw new ConvexError("That shoot isn't here any more.");
+    const p = await (s.projectId ? ctx.db.get(s.projectId) : null);
+    if (!s.clientHold || !p?.clientId) return { told: 0 };
+    const now = Date.now();
+    await ctx.db.patch(s._id, { clientHold: undefined, calAt: now, updatedAt: now, history: [...s.history, { at: now, text: `Asked ${p.client ?? "the client"} to confirm (moved from ${s.clientHold.from ?? "another client"})` }] });
+    if (s.calendar || s.calendarEvent) await queueCalendar(ctx, s._id, "all");
+    return { told: await tell(ctx, p, s, null, now) };
+  },
+});
+
 export const confirm = mutation({
   args: { shootId: v.id("shoots") },
   handler: async (ctx, { shootId }) => {
@@ -240,7 +266,7 @@ export const confirm = mutation({
     if (me.kind !== "client") throw new ConvexError("Not allowed.");
     const s = await ctx.db.get(shootId);
     if (s) focusBusiness(ctx, s.businessId); // a client of more than one business acts for this shoot's (review, Nov 2)
-    if (!s || s.status !== "scheduled" || !(await myProjects(ctx as unknown as QueryCtx, me.email)).has(s.projectId)) throw new ConvexError("This shoot isn't here any more.");
+    if (!s || s.status !== "scheduled" || !s.projectId || !(await myProjects(ctx as unknown as QueryCtx, me.email)).has(s.projectId)) throw new ConvexError("This shoot isn't here any more.");
     if (s.confirmed) return { already: true };
     if (s.date < todayCentral()) throw new ConvexError("That shoot has passed.");
     const now = Date.now();
@@ -258,7 +284,7 @@ export const mailData = internalQuery({
   handler: async (ctx, { shootId }) => {
     const s = await ctx.db.get(shootId);
     if (!s || s.status !== "scheduled") return null;
-    const p = await ctx.db.get(s.projectId);
+    const p = await (s.projectId ? ctx.db.get(s.projectId) : null);
     if (!p) return null;
     const biz = await businessOf(ctx, p);
     return { s, project: label(p), projectId: p._id, biz, brand: await mailBrandOf(ctx, biz), owner: (await businessContact(ctx, biz)).ownerEmail };

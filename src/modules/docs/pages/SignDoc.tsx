@@ -628,6 +628,7 @@ function signingStep(x: Data["signings"][number], now: number): { text: string; 
   if (x.lockedUntil && x.lockedUntil > now) return { text: "Locked: too many wrong codes", tone: "danger" };
   if (x.consentAt) return { text: "Agreed, signing", tone: "accent" };
   if (x.verifiedAt) return { text: "Confirmed their email", tone: "accent" };
+  if (x.inPersonAt) return { text: "Signing in person", tone: "accent" };
   if (x.openedAt) return { text: `Opened ${day(x.openedAt)}`, tone: "accent", at: x.openedAt };
   const at = x.lastEmailAt ?? x.sentAt ?? now;
   return { text: `Emailed ${day(at)}`, tone: "accent", at };

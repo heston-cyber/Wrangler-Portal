@@ -13,6 +13,7 @@ import { sha256Hex } from "./connector";
 import { SITE } from "./lib/site";
 import { forBusiness } from "./lib/functions";
 import { defaultBusiness } from "./lib/business";
+import { mayMoveProject, moveProjectByName } from "./homes";
 
 const clean = (s: string, max = 200) => s.trim().replace(/\s+/g, " ").slice(0, max);
 const site = () => SITE();
@@ -71,7 +72,7 @@ export const nextName = query({
 });
 
 // Finds a project by name (or "26122 Spirit Days" / job number), or makes it.
-async function projectFor(ctx: MutationCtx, a: { projectId?: Id<"projects">; projectName?: string; jobNumber?: string; client?: string }) {
+async function projectFor(ctx: MutationCtx, a: { projectId?: Id<"projects">; projectName?: string; jobNumber?: string; client?: string }, team: boolean) {
   if (a.projectId) {
     const p = await ctx.db.get(a.projectId);
     if (!p) throw new ConvexError("That project no longer exists.");
@@ -82,7 +83,11 @@ async function projectFor(ctx: MutationCtx, a: { projectId?: Id<"projects">; pro
   const client = a.client ? clean(a.client, 120) : undefined;
   const picked = pickProject(await ctx.db.query("projects").collect(), name, client);
   if (picked) {
-    if (picked.setClient && client) await ctx.db.patch(picked.project._id, { client });
+    if (picked.setClient && client) {
+      // Re-review M-c: filing an existing project under a client takes the same switches as Move.
+      if (team) await mayMoveProject(ctx, picked.project);
+      await moveProjectByName(ctx, picked.project, client);
+    }
     return picked.project._id;
   }
   const split = splitJob(name);
@@ -90,13 +95,13 @@ async function projectFor(ctx: MutationCtx, a: { projectId?: Id<"projects">; pro
   return await ctx.db.insert("projects", { name: split.name, ...(jobNumber ? { jobNumber } : {}), ...(client ? { client } : {}), createdAt: Date.now() });
 }
 
-async function register(ctx: MutationCtx, a: { title: string; shortTitle?: string; projectId?: Id<"projects">; projectName?: string; jobNumber?: string; client?: string }) {
+async function register(ctx: MutationCtx, a: { title: string; shortTitle?: string; projectId?: Id<"projects">; projectName?: string; jobNumber?: string; client?: string }, team = false) {
   const title = clean(a.title, 160);
   if (!title) throw new ConvexError("Give the video a title.");
   const shortTitle = (a.shortTitle ?? "").trim() || shortTitleFrom(title);
   const bad = shortTitleError(shortTitle);
   if (bad) throw new ConvexError(bad);
-  const projectId = await projectFor(ctx, a);
+  const projectId = await projectFor(ctx, a, team);
   const made = await insertVideo(ctx, { projectId, title, shortTitle });
   const p = await ctx.db.get(projectId);
   return { ...made, numberText: pad5(made.number), project: p?.name ?? "", client: p?.client ?? null, link: `${site()}/v/${made.videoId}` };
@@ -112,7 +117,7 @@ export const newVideo = mutation({
   args: regArgs,
   handler: async (ctx, a) => {
     await requireAll(ctx, "review");
-    return await register(ctx, a);
+    return await register(ctx, a, true);
   },
 });
 
@@ -154,7 +159,10 @@ export async function numberVideo(ctx: MutationCtx, a: { videoId: Id<"videos">; 
     number = await takeNumber(ctx);
   }
   await ctx.db.patch(a.videoId, { number, shortTitle });
-  if (a.client?.trim()) await ctx.db.patch(vid.projectId, { client: clean(a.client, 120) });
+  // A client named here moves the project to that client, by the same rules as Move (review M3).
+  const proj = a.client?.trim() ? await ctx.db.get(vid.projectId) : null;
+  // Re-review L-e: a project Move refuses (footage kept) stays put; the video is still numbered.
+  if (proj) try { await moveProjectByName(ctx, proj, clean(a.client!, 120)); } catch (e) { if (!(e instanceof ConvexError)) throw e; }
   return { number: pad5(number), title: vid.title, next: nextFileName({ number, shortTitle }, await highestVersion(ctx, a.videoId)) };
 }
 

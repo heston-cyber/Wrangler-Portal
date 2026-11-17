@@ -58,7 +58,7 @@ const coversShoot = (k: Doc<"vendorBookings"> | null, s: Doc<"shoots">) =>
 
 export async function shootOf(ctx: Ctx, shootId: Id<"shoots">) {
   const s = await ctx.db.get(shootId);
-  const p = s ? await ctx.db.get(s.projectId) : null;
+  const p = s ? await (s.projectId ? ctx.db.get(s.projectId) : null) : null;
   if (!s || !p) return null;
   const client = p.clientId ? (await ctx.db.get(p.clientId))?.name ?? null : null;
   return { s, p, client, title: client ? `${p.name} · ${client}` : label(p) };
@@ -281,6 +281,8 @@ export const create = mutation({
   handler: async (ctx, a) => {
     const me = await requireAll(ctx, "shoots");
     const sh = await shootOf(ctx, a.shootId);
+    // D205: a call sheet gathers the project's crew and client people, so a shoot on its own gets one once it's attached.
+    if (!sh && (await ctx.db.get(a.shootId))?.status === "scheduled") throw new ConvexError("Attach this shoot to a project first: a call sheet goes out to the project's crew and client.");
     if (!sh || sh.s.status !== "scheduled") throw new ConvexError("That shoot isn't here any more.");
     const had = await ctx.db.query("callSheets").withIndex("by_shoot", (q) => q.eq("shootId", a.shootId)).first();
     if (had) throw new ConvexError("That shoot already has a call sheet.");
@@ -669,7 +671,7 @@ export async function readerView(ctx: QueryCtx, cs: Sheet, me: Person) {
     business: b?.name ?? contact.name, owner: b?.ownerName?.trim() || contact.name, replyTo: b?.replyTo || contact.ownerEmail,
     me: { name: me.name, kind: me.kind, role: me.role ?? null, call: callFor(page, me) }, openedAt: me.openedAt ?? null,
     // Nov 16 (D180, D181): the page's Shot list blocks, live; the crew may tick.
-    shots: await readerShots(ctx, page, cs.projectId, cs.shootId, me.kind === "crew"),
+    shots: await readerShots(ctx, page, cs.projectId ?? null, cs.shootId, me.kind === "crew"),
   };
 }
 
@@ -682,7 +684,7 @@ async function clientSheet(ctx: QueryCtx, callSheetId: string) {
   const email = me.email.toLowerCase();
   // Review M1: still ticked (the owner can take someone off after Send) and the shoot still on.
   const r = cs.recipients.find((x) => x.kind === "client" && x.email === email && x.sentAt && x.on);
-  if (!r || !(await myProjects(ctx, email)).has(cs.projectId)) return null;
+  if (!r || !cs.projectId || !(await myProjects(ctx, email)).has(cs.projectId)) return null;
   const shoot = await ctx.db.get(cs.shootId);
   if (!shoot || shoot.status !== "scheduled") return null;
   return { cs, r, email };

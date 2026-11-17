@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { GearTabs } from "./Packing";
 import { Button, Card, DialogHeader, Divider, EmptyState, ListRow, PageHeader, PillTabs, SectionHead, SkeletonRows, StatusChip } from "../../ui/wp";
 import { Icon } from "../../ui/Icon";
 import { Modal, useToast } from "../../ui/kit";
@@ -48,10 +49,11 @@ export default function GearPage() {
   const rows = !d ? [] : d.items.filter((i) => i.status === show);
   return (
     <>
-      <TopBar><span className="secondary">Production</span><Sep /><a {...linkProps("/production/prin-pro")}>Prin-pro</a><Sep /><span className="here">Gear</span></TopBar>
+      <TopBar><a {...linkProps("/production")}>Production</a><Sep /><span className="here">Gear</span></TopBar>
       <div className="wp-page prod">
         <PageHeader title="Gear." sub="What you own, what it's insured for, and what's booked on a shoot."
           actions={<><Button onClick={() => setExporting(true)} disabled={!d || d.tiles.items === 0}>Export for insurer</Button><Button variant="primary" onClick={() => setAdding(true)}>Add gear</Button></>} />
+        <GearTabs on="items" />
         {d === undefined ? <Card label="Loading"><SkeletonRows n={4} /></Card> : d === null ? null : <>
           <div className="pov-stats prod-tiles">
             <Tile label="Items" value={d.tiles.items} sub="in service or in repair" />
@@ -250,7 +252,7 @@ export function GearItem({ gearId }: { gearId: string }) {
             </Card>
             <Card label="Booked on shoots" head={<SectionHead label="Booked on shoots" count={d.upcoming.length || undefined} />}>
               {d.upcoming.length === 0 && d.past.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "calendar" }} title="Not on any shoot." meta="Add it from a shoot's Edit window." />
-                : [...d.upcoming, ...d.past].map((s, i) => <div key={s.shootId} className="wp-rowwrap">{i > 0 && <Divider />}<ListRow className="ilead" lead={{ icon: "calendar" }} to={`/projects/${s.projectId}`} chevron title={`${s.project} · ${shootDay(s.date)}`} meta={`${clock(s.call)} call · ${s.location}`} chip={s.date < d.today ? <StatusChip tone="neutral">Past</StatusChip> : undefined} /></div>)}
+                : [...d.upcoming, ...d.past].map((s, i) => <div key={s.shootId} className="wp-rowwrap">{i > 0 && <Divider />}<ListRow className="ilead" lead={{ icon: "calendar" }} to={s.projectId ? `/projects/${s.projectId}` : "/production/shoots"} chevron title={`${s.project} · ${shootDay(s.date)}`} meta={`${clock(s.call)} call · ${s.location}`} chip={s.date < d.today ? <StatusChip tone="neutral">Past</StatusChip> : undefined} /></div>)}
             </Card>
           </div>
         </div>

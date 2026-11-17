@@ -13,7 +13,9 @@ export type IconName =
   | "settings" | "sign-out" | "sign" | "stage" | "upload" | "user" | "users" | "video"
   // D176 (Nov 15): the side menu's submenu icons, stand-ins drawn in the repo (scripts/icons/make-submenu.py) (redrawn by the design chat, Q122); calendar-plus is for "Add follow-up"
   | "booking" | "briefcase" | "calendar-plus" | "shot-list" | "briefing" | "building" | "call-sheet" | "camera" | "case" | "chart" | "clapper" | "clipboard" | "contract" | "flag"
-  | "funnel" | "layers" | "overview" | "package" | "presentation" | "questionnaire" | "repeat" | "scissors" | "star" | "template" | "wallet";
+  | "funnel" | "layers" | "overview" | "package" | "presentation" | "questionnaire" | "repeat" | "scissors" | "star" | "template" | "wallet"
+  // Nov 16 (How everything connects): the new menu's Work and Creative planning, and Attach/Move
+  | "work" | "creative" | "attach";
 
 export const ICON_NAMES = Object.keys(SVG).sort() as IconName[];
 

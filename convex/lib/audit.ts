@@ -7,7 +7,7 @@ import type { Id } from "../_generated/dataModel";
 import { viewerOf } from "./access";
 import { ROLE_NAMES } from "./perms";
 
-export type AuditKind = "sent" | "signed" | "paid" | "deleted" | "settings" | "signin" | "team" | "export";
+export type AuditKind = "sent" | "signed" | "paid" | "deleted" | "settings" | "signin" | "team" | "export" | "moved";
 export type AuditEvent = { kind: AuditKind; text: string; where?: string; link?: string; by?: { name: string; role: string }; businessId?: Id<"businesses"> | null };
 
 export async function audit(ctx: MutationCtx, e: AuditEvent) {

@@ -15,6 +15,7 @@ import { directLink, folderPlace, pickProject, placeFor, projectFolderOf, splitJ
 import { highestVersion, insertVideo, parseRegisterName, shortTitleError, shortTitleFrom, videoByNumber } from "./lib/register";
 import { signUrl } from "./lib/media";
 import { NEW_VERSION_DELAY_MS } from "./emails";
+import { moveProjectByName } from "./homes";
 import { SITE, SITE_SLASH } from "./lib/site";
 import { businessFor, defaultBusiness } from "./lib/business";
 
@@ -397,14 +398,23 @@ export const recordFolders = internalMutation({
     // A client's projects follow it: their client name, and their folders (which moved with the client folder).
     const renameClient = async (from: string, to: string, clientId: Id<"clients">, oldFolder: string, newFolder: string) => {
       await ctx.db.patch(clientId, { name: to, dropboxFolder: newFolder });
+      void from;
       for (const p of await ctx.db.query("projects").collect()) {
         const patch: Record<string, unknown> = {};
-        if (norm(p.client ?? "") === norm(from)) patch.client = to;
+        // Re-review M-b: this client's own projects (by id, never by name: two clients can share a name).
+        const mine = p.clientId === clientId;
+        if (mine && p.client !== to) patch.client = to;
         if (p.dropboxFolder && oldFolder !== newFolder && p.dropboxFolder.startsWith(oldFolder + "/")) patch.dropboxFolder = newFolder + p.dropboxFolder.slice(oldFolder.length);
         if (Object.keys(patch).length) await ctx.db.patch(p._id, patch);
+        // The writer relinks a project's client by name; set it back to this exact client.
+        if (mine && "client" in patch) await ctx.db.patch(p._id, { clientId });
       }
     };
 
+    // A client change from Dropbox goes through Move's rules; one Move refuses (footage kept) leaves the project put.
+    const tryMove = async (p: Doc<"projects">, client: string) => {
+      try { await moveProjectByName(ctx, p, client); return true; } catch (e) { if (!(e instanceof ConvexError)) throw e; return false; }
+    };
     const ensureProject = async (folderName: string, client: string | undefined, folder: string) => {
       const byFolder = await ctx.db.query("projects").withIndex("by_dropbox_folder", (q) => q.eq("dropboxFolder", folder)).first();
       const split = splitJob(folderName);
@@ -412,14 +422,17 @@ export const recordFolders = internalMutation({
         const patch: Record<string, unknown> = {};
         if (byFolder.name !== split.name) patch.name = split.name;
         if (split.jobNumber && byFolder.jobNumber !== split.jobNumber) patch.jobNumber = split.jobNumber;
-        if (client && norm(byFolder.client ?? "") !== norm(client)) patch.client = client;
         if (Object.keys(patch).length) { await ctx.db.patch(byFolder._id, patch); changed++; }
+        // Heston (Nov 16): a linked folder only links. A move on the site stands; the folder sitting under another
+        // client's folder never changes the project's client (one with no client is given it, by Move's rules).
+        if (client && !byFolder.clientId && (await tryMove(byFolder, client))) changed++;
         return;
       }
       const all = await ctx.db.query("projects").collect();
       const picked = pickProject(all.filter((p) => !p.dropboxFolder), folderName, client);
       if (picked) {
-        await ctx.db.patch(picked.project._id, { dropboxFolder: folder, ...(picked.setClient && client ? { client } : {}) });
+        await ctx.db.patch(picked.project._id, { dropboxFolder: folder });
+        if (picked.setClient && client) await tryMove(picked.project, client);
         return;
       }
       for (const g of goneLeft) {
@@ -430,7 +443,10 @@ export const recordFolders = internalMutation({
           // A job number the old folder name carried goes with it; one set on the site stays.
           const oldJob = splitJob(g.split("/").pop() ?? "").jobNumber;
           const jobNumber = split.jobNumber ?? (oldJob && old.jobNumber === oldJob ? undefined : old.jobNumber);
-          await ctx.db.patch(old._id, { name: split.name, dropboxFolder: folder, jobNumber, ...(client ? { client } : {}) });
+          await ctx.db.patch(old._id, { name: split.name, dropboxFolder: folder, jobNumber });
+          // A renamed folder renames; it never changes the project's client (Heston, Nov 16), only gives one to a
+          // project that has none, by Move's rules.
+          if (client && !old.clientId) await tryMove(old, client);
           changed++;
           return;
         }
@@ -585,7 +601,7 @@ export const findOrCreateTarget = internalMutation({
     const projects = await ctx.db.query("projects").collect();
     const picked = pickProject(projects, a.project, a.client);
     let project = picked?.project;
-    if (picked?.setClient && a.client) await ctx.db.patch(picked.project._id, { client: a.client.trim() });
+    if (picked?.setClient && a.client) await moveProjectByName(ctx, picked.project, a.client.trim());
     if (!project) {
       const { jobNumber, name } = splitJob(a.project);
       const id = await ctx.db.insert("projects", { name, ...(jobNumber ? { jobNumber } : {}), ...(a.client ? { client: a.client.trim() } : {}), createdAt: now });

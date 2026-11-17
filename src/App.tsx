@@ -34,6 +34,7 @@ import VideoPage from "./modules/review/VideoPage";
 import SharePage from "./modules/review/SharePage";
 import { lazy, Suspense, useEffect } from "react";
 import { MorePage, Shell } from "./shell/Shell";
+import type { ShootTab } from "./modules/production/ShootPage";
 import { UploadProvider } from "./shell/UploadDialog";
 import type { Id } from "../convex/_generated/dataModel";
 
@@ -94,6 +95,33 @@ const CallSheetsPage = lazy(() => import("./modules/production/CallSheets"));
 const ShotChecklistPage = lazy(() => import("./modules/production/ShotChecklist"));
 const ShotListsPage = lazy(() => import("./modules/production/ShotLists"));
 const ShotListEditor = lazy(() => import("./modules/production/ShotLists").then((m) => ({ default: m.ShotListEditor })));
+const ProjectsHub = lazy(() => import("./modules/projects/Homes")); // Nov 16: How everything connects
+const ShootPage = lazy(() => import("./modules/production/ShootPage")); // 5i (D203)
+const ReleaseSigning = lazy(() => import("./modules/production/ShootPage").then((m) => ({ default: m.ReleaseSigning })));
+const PackingListsPage = lazy(() => import("./modules/production/Packing")); // 5j
+const PackingListEditor = lazy(() => import("./modules/production/Packing").then((m) => ({ default: m.PackingListEditor })));
+const LocationsPage = lazy(() => import("./modules/production/Places")); // 5k
+// 5l: Creative planning (Overview, Docs, Brand kits; Canvas and mood boards) and its no-account share pages.
+const CreativeOverview = lazy(() => import("./modules/creative/Creative").then((m) => ({ default: m.CreativeOverview })));
+const CreativeDocs = lazy(() => import("./modules/creative/Creative").then((m) => ({ default: m.CreativeDocs })));
+const CreativeDocPage = lazy(() => import("./modules/creative/Creative").then((m) => ({ default: m.CreativeDocPage })));
+const BrandKits = lazy(() => import("./modules/creative/Creative").then((m) => ({ default: m.BrandKits })));
+const KitPage = lazy(() => import("./modules/creative/Creative").then((m) => ({ default: m.KitPage })));
+const SharedCreativeDoc = lazy(() => import("./modules/creative/Creative").then((m) => ({ default: m.SharedCreativeDoc })));
+const SharedKit = lazy(() => import("./modules/creative/Creative").then((m) => ({ default: m.SharedKit })));
+const DeliveryList = lazy(() => import("./modules/delivery/Delivery").then((m) => ({ default: m.DeliveryList }))); // 5n Delivery
+const DeliveryPage = lazy(() => import("./modules/delivery/Delivery").then((m) => ({ default: m.DeliveryPage })));
+const ClientDelivery = lazy(() => import("./modules/delivery/Delivery").then((m) => ({ default: m.ClientDelivery })));
+const SharedDelivery = lazy(() => import("./modules/delivery/Delivery").then((m) => ({ default: m.SharedDelivery })));
+const MyTasks = lazy(() => import("./modules/work/Work").then((m) => ({ default: m.MyTasks }))); // 5m Work
+const AllTasks = lazy(() => import("./modules/work/Work").then((m) => ({ default: m.AllTasks })));
+const TodoLists = lazy(() => import("./modules/work/Work").then((m) => ({ default: m.TodoLists })));
+const WorkTemplates = lazy(() => import("./modules/work/Work").then((m) => ({ default: m.Templates })));
+const CanvasList = lazy(() => import("./modules/creative/Canvas").then((m) => ({ default: m.CanvasList })));
+const CanvasPage = lazy(() => import("./modules/creative/Canvas").then((m) => ({ default: m.CanvasPage })));
+const SharedCanvas = lazy(() => import("./modules/creative/Canvas").then((m) => ({ default: m.SharedCanvas })));
+const PlacePage = lazy(() => import("./modules/production/Places").then((m) => ({ default: m.PlacePage })));
+const NotAttached = lazy(() => import("./modules/projects/Homes").then((m) => ({ default: m.NotAttached })));
 const GearPage = lazy(() => import("./modules/production/Gear")); // Phase 5d step 3
 const GearItem = lazy(() => import("./modules/production/Gear").then((m) => ({ default: m.GearItem })));
 const CalendarPage = lazy(() => import("./modules/production/Calendar")); // Phase 5b step 5
@@ -177,6 +205,10 @@ export default function App() {
     const mk = /^\/m\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
     if (mk) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><LeadMessages token={mk[1]} /></Suspense></KitApp></Suspense>;
     if (brief) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><BriefingLink token={brief[1]} /></Suspense></KitApp></Suspense>;
+    const dlk = /^\/dl\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path); // 5n: a client's Delivery link
+    if (dlk) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><SharedDelivery token={dlk[1]} /></Suspense></KitApp></Suspense>;
+    const cpub = /^\/(cd|kit|cv)\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path); // 5l: a creative doc, kit or board's link
+    if (cpub) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}>{cpub[1] === "cd" ? <SharedCreativeDoc token={cpub[2]} /> : cpub[1] === "kit" ? <SharedKit token={cpub[2]} /> : <SharedCanvas token={cpub[2]} />}</Suspense></KitApp></Suspense>;
     const inv = /^\/i\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
     if (inv) {
       const page = (inShell: boolean) => <Suspense fallback={<Loading />}><ClientInvoice token={inv[1]} inShell={inShell} /></Suspense>;
@@ -222,6 +254,14 @@ export default function App() {
   // D147: a briefing link (email 58's "Read the briefing", or a copied link), no account needed; the same page signed in or out.
   const briefingLink = /^\/b\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
   if (briefingLink) return <Suspense fallback={<Loading />}><BriefingLink key={briefingLink[1]} token={briefingLink[1]} /></Suspense>;
+  // 5l (D191, D183): a creative doc's, brand kit's or board's view-only link (/cd, /kit, /cv), no account needed.
+  const deliveryLink = /^\/dl\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path); // 5n: a client's Delivery link, no account
+  if (deliveryLink) return <Suspense fallback={<Loading />}><SharedDelivery key={deliveryLink[1]} token={deliveryLink[1]} /></Suspense>;
+  const creativeLink = /^\/(cd|kit|cv)\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
+  if (creativeLink) {
+    const [, k, tok] = creativeLink;
+    return <Suspense fallback={<Loading />}>{k === "cd" ? <SharedCreativeDoc key={tok} token={tok} /> : k === "kit" ? <SharedKit key={tok} token={tok} /> : <SharedCanvas key={tok} token={tok} />}</Suspense>;
+  }
   // An invoice link (Part B step 3, the "View and pay" button in email 08) works signed in or out too.
   const invoice = /^\/i\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
   if (invoice) {
@@ -278,7 +318,7 @@ function SignedIn() {
   }
   const params = new URLSearchParams(search);
   const video = /^\/v\/([^/]+)\/?$/.exec(path);
-  const project = /^\/projects\/([^/]+)\/?$/.exec(path);
+  const project = /^\/projects\/([^/]+)\/?$/.exec(path.replace(/^\/projects\/not-attached\/?$/, "/x"));
   const signDoc = /^\/sign\/d\/([^/]+)\/?$/.exec(path);
   const clientRec = /^\/clients\/([^/]+)\/?$/.exec(path);
   const sentNote = /^\/sent\/([^/]+)\/?$/.exec(path);
@@ -287,8 +327,10 @@ function SignedIn() {
   const OVERVIEW = { clients: ClientsOverview, review: ReviewOverview, sign: DocsOverview, proposals: ProposalsOverview, vendors: VendorsOverview } as const;
   if (overview) { const Page = OVERVIEW[overview[1] as keyof typeof OVERVIEW]; page = <Suspense fallback={<Loading />}><Page /></Suspense>; }
   else if (video) page = <VideoPage key={video[1]} videoId={video[1] as Id<"videos">} versionNumber={Number(params.get("version")) || null} noteId={params.get("note")} />;
-  else if (project) { const t = params.get("tab"); page = <Suspense fallback={<Loading />}><ProjectPage key={project[1]} projectId={project[1] as Id<"projects">} tab={(["cuts", "documents", "invoices", "delivery", "ledger"].includes(t ?? "") ? t : "overview") as ProjectTab} /></Suspense>; }
-  else if (path.startsWith("/projects")) page = <Projects key="all" />;
+  else if (project) { const t = params.get("tab"); page = <Suspense fallback={<Loading />}><ProjectPage key={project[1]} projectId={project[1] as Id<"projects">} tab={(["tasks", "cuts", "documents", "invoices", "delivery", "ledger"].includes(t ?? "") ? t : "overview") as ProjectTab} /></Suspense>; }
+  else if (/^\/projects\/not-attached\/?$/.test(path)) page = <Suspense fallback={<Loading />}><NotAttached /></Suspense>; // Nov 16: How everything connects
+  else if (path.startsWith("/projects")) page = <Suspense fallback={<Loading />}><ProjectsHub /></Suspense>;
+  else if (/^\/review\/library\/?$/.test(path)) page = <Projects key="all" />; // the cuts library (was /projects)
   else if (/^\/payments\/invoices\/new\/?$/.test(path)) page = <Suspense fallback={<Loading />}><InvoiceEditor key={search} clientId={params.get("client")} projectId={params.get("project")} /></Suspense>;
   else if (/^\/payments\/invoices\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><InvoiceDetail key={id} invoiceId={id} /></Suspense>; }
   else if (/^\/payments\/invoices\/?$/.test(path)) page = <Suspense fallback={<Loading />}><InvoicesPage key={search} /></Suspense>;
@@ -318,6 +360,24 @@ function SignedIn() {
   else if (/^\/messages\/?$/.test(path)) page = <Suspense fallback={<Loading />}><OwnerMessages /></Suspense>;
   else if (/^\/production\/(pre-pro|prin-pro|post-pro)\/?$/.test(path)) { const k = path.split("/")[2] as "pre-pro" | "prin-pro" | "post-pro"; page = <Suspense fallback={<Loading />}><ProductionStage key={k} stage={k} /></Suspense>; }
   else if (/^\/production\/delivery\/?$/.test(path)) page = <Suspense fallback={<Loading />}><ProductionDelivery /></Suspense>;
+  else if (/^\/production\/shoots\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; const t = params.get("tab"); page = <Suspense fallback={<Loading />}><ShootPage key={id} shootId={id} tab={(["callsheet", "shotlist", "gear", "releases", "locations"].includes(t ?? "") ? t : "overview") as ShootTab} /></Suspense>; } // 5i (D203)
+  else if (/^\/production\/gear\/packing\/?$/.test(path)) page = <Suspense fallback={<Loading />}><PackingListsPage /></Suspense>; // 5j
+  else if (/^\/production\/gear\/packing\/[^/]+\/?$/.test(path)) { const id = path.split("/")[4]; page = <Suspense fallback={<Loading />}><PackingListEditor key={id} listId={id} /></Suspense>; }
+  else if (/^\/delivery\/?$/.test(path)) page = <Suspense fallback={<Loading />}><DeliveryList /></Suspense>; // 5n
+  else if (/^\/delivery\/[^/]+\/?$/.test(path)) { const id = path.split("/")[2]; page = <Suspense fallback={<Loading />}><DeliveryPage key={id} projectId={id} /></Suspense>; }
+  else if (/^\/work\/?$/.test(path)) page = <Suspense fallback={<Loading />}><MyTasks /></Suspense>; // 5m
+  else if (/^\/work\/all\/?$/.test(path)) page = <Suspense fallback={<Loading />}><AllTasks key={search} /></Suspense>;
+  else if (/^\/work\/lists\/?$/.test(path)) page = <Suspense fallback={<Loading />}><TodoLists key={search} /></Suspense>;
+  else if (/^\/work\/templates\/?$/.test(path)) page = <Suspense fallback={<Loading />}><WorkTemplates /></Suspense>;
+  else if (/^\/creative\/?$/.test(path)) page = <Suspense fallback={<Loading />}><CreativeOverview /></Suspense>; // 5l
+  else if (/^\/creative\/docs\/?$/.test(path)) page = <Suspense fallback={<Loading />}><CreativeDocs key={search} /></Suspense>;
+  else if (/^\/creative\/docs\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><CreativeDocPage key={id} docId={id} /></Suspense>; }
+  else if (/^\/creative\/kits\/?$/.test(path)) page = <Suspense fallback={<Loading />}><BrandKits key={search} /></Suspense>;
+  else if (/^\/creative\/kits\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><KitPage key={id} kitId={id} /></Suspense>; }
+  else if (/^\/creative\/canvas\/?$/.test(path)) page = <Suspense fallback={<Loading />}><CanvasList key={search} /></Suspense>;
+  else if (/^\/creative\/canvas\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><CanvasPage key={id} canvasId={id} /></Suspense>; }
+  else if (/^\/creative\/locations\/?$/.test(path)) page = <Suspense fallback={<Loading />}><LocationsPage /></Suspense>; // 5k
+  else if (/^\/creative\/locations\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><PlacePage key={id} placeId={id} /></Suspense>; }
   else if (/^\/production\/gear\/?$/.test(path)) page = <Suspense fallback={<Loading />}><GearPage /></Suspense>;
   else if (/^\/production\/gear\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><GearItem key={id} gearId={id} /></Suspense>; }
   else if (/^\/production\/calendar\/?$/.test(path)) page = <Suspense fallback={<Loading />}><CalendarPage /></Suspense>;
@@ -377,6 +437,9 @@ function SignedIn() {
     else if (!canOpen(path, perms, true, me.team!.role)) page = <Suspense fallback={<Loading />}><NoAccess /></Suspense>;
     page = <NotAllowedBoundary key={path} fallback={<Suspense fallback={<Loading />}><NoAccess /></Suspense>}>{page}</NotAllowedBoundary>;
   }
+  // 5i (D193): signing a release in person is full screen: the signer sees nothing of the portal (no menu, no tabs).
+  const releaseSign = /^\/releases\/([^/]+)\/sign\/?$/.exec(path);
+  if (releaseSign && !team) return <Suspense fallback={<Loading />}><ReleaseSigning key={releaseSign[1]} releaseId={releaseSign[1]} /></Suspense>;
   // Work surfaces get no background light, so nothing competes with the video or the document.
   const workSurface = Boolean(video) || /^\/sign\/(b|d)\//.test(path) || /^\/sign\/templates\/[^/]+/.test(path) || /^\/production\/call-sheets\/([^/]+\/edit|templates\/[^/]+)/.test(path) || /^\/settings\/help\/edit\//.test(path);
   return (
@@ -413,6 +476,7 @@ function ClientRoutes({ me }: { me: { name: string | null; email: string } }) {
   if (/^\/inbox\/?$/.test(path)) return <ClientInbox itemId={params.get("item")} />;
   if (/^\/(docs|documents)\/?$/.test(path)) { const t = params.get("tab"); return <ClientDocuments tab={(t === "signed" || t === "cancelled" ? t : "to_sign") as DocTab} />; }
   if (/^\/review\/?$/.test(path)) return <ClientReview me={me} />;
+  if (/^\/delivery\/?$/.test(path)) return <Suspense fallback={<Loading />}><ClientDelivery key={search} /></Suspense>; // 5n
   if (/^\/payments(\/invoices)?\/?$/.test(path)) return <Suspense fallback={<Loading />}><ClientInvoices /></Suspense>;
   if (/^\/payments\/subscriptions\/?$/.test(path)) return <Suspense fallback={<Loading />}><ClientSubscriptions /></Suspense>;
   const shoot = /^\/shoots\/([^/]+)\/?$/.exec(path);

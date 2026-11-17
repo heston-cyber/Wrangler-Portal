@@ -114,8 +114,9 @@ export function DocPdf({ d, assets, label }: { d: BuildDoc; assets: Assets; labe
       case "paragraph": return lineView(n, k);
       case "bulletList": case "orderedList": return list(n, k);
       case "section": {
-        const card = a.look === "card";
-        return <View key={k} style={{ marginBottom: base * 0.7, ...(card ? { backgroundColor: tint(accent, st.page, 0.07), padding: 10, borderRadius: 6 } : {}) }}>
+        const card = a.look === "card" || a.look === "note";
+        return <View key={k} style={{ marginBottom: base * 0.7, ...(card ? { backgroundColor: tint(accent, st.page, a.look === "note" ? 0.13 : 0.07), padding: 10, borderRadius: 6 } : {}) }}>
+          {a.look === "note" && <Text style={{ fontSize: base * 0.7, color: st.muted, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>Team note</Text>}
           {(n.content ?? []).map((c, i) => node(c, `${k}.${i}`))}
           {!!a.initials && initialsRow(`${k}i`)}
         </View>;
@@ -201,6 +202,15 @@ export function DocPdf({ d, assets, label }: { d: BuildDoc; assets: Assets; labe
       case "weather": {
         const w = weatherOf(n);
         return w.line ? <View key={k} wrap={false} style={{ marginBottom: base * 0.9 }}><Text style={{ fontSize: base * 0.8, color: st.muted, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>Weather</Text><Text>{w.line}</Text></View> : null;
+      }
+      case "script": {
+        // 5l (D188): a two-column script (Time · Picture · Sound)
+        const rows = rowsOf<{ time: string; picture: string; sound: string }>(n);
+        const cols: Array<[string, number]> = [["Time", 0.7], ["Picture", 2.2], ["Sound", 2.2]];
+        return <View key={k} style={{ marginBottom: base * 0.9 }}>
+          <View style={{ flexDirection: "row", borderBottomWidth: 0.6, borderBottomColor: st.muted, paddingBottom: 3, marginBottom: 3 }}>{cols.map(([c, w], i) => <Text key={i} style={{ flex: w, fontSize: base * 0.75, color: st.muted, textTransform: "uppercase", letterSpacing: 0.8 }}>{c}</Text>)}</View>
+          {rows.map((r, i) => <View key={i} wrap={false} style={{ flexDirection: "row", paddingVertical: 3, gap: 8 }}>{[r.time, r.picture, r.sound].map((c, j) => <Text key={j} style={{ flex: cols[j][1] }}>{fill(c ?? "", values)}</Text>)}</View>)}
+        </View>;
       }
       case "schedule": case "crew": case "contacts": {
         const cols: Array<[string, number]> = n.type === "schedule" ? [["Time", 1], ["What", 2.4], ["Who", 1.2], ["Notes", 1.4]] : n.type === "crew" ? [["Name", 1.8], ["Role", 1.4], ["Call", 1], ["Phone", 1.4]] : [["", 1.2], ["Name", 1.8], ["Phone", 1.4]];

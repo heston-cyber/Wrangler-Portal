@@ -41,7 +41,9 @@ const isBriefing = (x: { kind?: string } | null | undefined) => x?.kind === "bri
 const isCallSheet = (x: { kind?: string } | null | undefined) => x?.kind === "callsheet";
 // Phase 5d step 4: a Help guide a business has edited (kind "guide"): its own kind, kept out of Docs, never signed.
 const isGuide = (x: { kind?: string } | null | undefined) => x?.kind === "guide";
-const isSide = (x: { kind?: string } | null | undefined) => isProposal(x) || isBriefing(x) || isCallSheet(x) || isGuide(x);
+// 5l: a creative doc (kind "creative"): kept out of Docs, never signed.
+const isCreative = (x: { kind?: string } | null | undefined) => x?.kind === "creative";
+const isSide = (x: { kind?: string } | null | undefined) => isProposal(x) || isBriefing(x) || isCallSheet(x) || isGuide(x) || isCreative(x);
 async function assertEditable(ctx: QueryCtx, b: { _id: Id<"wsBuilds">; kind?: string }) {
   if (isCallSheet(b)) return;
   if (isBriefing(b)) return; // D161 (Heston, Nov 6): a sent briefing stays editable; "Update the link" puts the new copy live
@@ -52,7 +54,7 @@ async function assertEditable(ctx: QueryCtx, b: { _id: Id<"wsBuilds">; kind?: st
 
 // ---------- profile and default style ----------
 
-async function profile(ctx: QueryCtx): Promise<Business> {
+export async function profile(ctx: QueryCtx): Promise<Business> {
   const row = await ctx.db.query("wsProfile").first();
   return { ...DEFAULT_BUSINESS, ...((row?.business as Partial<Business>) ?? {}) };
 }
@@ -156,6 +158,7 @@ export const deleteBuild = mutation({
     if (isProposal(b)) throw new ConvexError("This is a proposal. Delete it from Proposals.");
     if (isBriefing(b)) throw new ConvexError("This is a briefing. Delete it from Vendors › Briefings.");
     if (isCallSheet(b)) throw new ConvexError("This is a call sheet. Delete it from Production › Call sheets.");
+    if (isCreative(b)) throw new ConvexError("This is a creative doc. Delete it from Creative planning › Docs.");
     if (b.documentId && (await ctx.db.get(b.documentId))) throw new ConvexError("This one has gone to signing; it stays with its document.");
     await ctx.db.delete(buildId);
     return null;
@@ -206,6 +209,7 @@ export async function toSigningCore(ctx: ActionCtx, buildId: Id<"wsBuilds">, sto
   if (isProposal(r.build)) { await drop(); throw new Error("Proposals aren't signed. Send it from Proposals; once it's accepted, Start the contract makes the agreement."); }
   if (isBriefing(r.build)) { await drop(); throw new Error("Briefings aren't signed. Send it from Vendors › Briefings; the vendor presses “I’ve read it”."); }
   if (isCallSheet(r.build)) { await drop(); throw new Error("Call sheets aren't signed. Send it from Production › Call sheets."); }
+  if (isCreative(r.build)) { await drop(); throw new Error("Creative docs aren't signed. Share one from Creative planning › Docs."); }
   const d: BuildDoc = { title: r.build.title, page: pageOf(r.build.blocks), fields: r.build.fields as Fields, signers: (r.build.signers as ExtraSigner[]) ?? [], style: r.build.style as Style };
   const problems = buildProblems(d);
   if (problems.length) { await drop(); throw new Error(problems[0]); }

@@ -195,6 +195,51 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "shotLists.forShoot": { pages: ["owner"], args: () => "skip" },
   "shotLists.forBuild": { pages: ["owner"], args: () => "skip" }, // the builder's Shot list block
   "shotLists.forProject": { pages: ["owner"], args: () => "skip" }, // the project Overview's Shot list card
+  // 5i–5k (Nov 17): the Shoot page, releases, packing lists, locations
+  "shootPage.get": { pages: ["owner"], args: () => "skip" },
+  "releases.forShoot": { pages: ["owner"], args: () => "skip" },
+  "releases.get": { pages: ["owner"], args: () => "skip" },
+  "packing.lists": { pages: ["owner"], args: () => ({}) },
+  "packing.get": { pages: ["owner"], args: () => "skip" },
+  "packing.gearChoices": { pages: ["owner"], args: () => "skip" },
+  "packing.forShoot": { pages: ["owner"], args: () => "skip" },
+  "places.list": { pages: ["owner"], args: () => ({}) },
+  "places.get": { pages: ["owner"], args: () => "skip" },
+  "places.forShoot": { pages: ["owner"], args: () => "skip" },
+  // 5l (Nov 17): Creative planning (Overview, Docs, Brand kits, Canvas and mood boards) and its no-account links
+  "creative.overview": { pages: ["owner"], args: () => ({}) },
+  "creative.docs": { pages: ["owner"], args: () => ({}) },
+  "creative.doc": { pages: ["owner"], args: () => "skip" },
+  "creative.kits": { pages: ["owner"], args: () => ({}) },
+  "creative.kit": { pages: ["owner"], args: () => "skip" },
+  "canvas.list": { pages: ["owner"], args: () => ({}) },
+  "canvas.get": { pages: ["owner"], args: () => "skip" },
+  "canvas.shareChoices": { pages: ["owner"], args: () => "skip" },
+  "creative.sharedDoc": { pages: ["share"], args: () => ({ token: "x".repeat(24) }) }, // /cd/<token>
+  "creative.sharedKit": { pages: ["share"], args: () => ({ token: "x".repeat(24) }) }, // /kit/<token>
+  "canvas.shared": { pages: ["share"], args: () => ({ token: "x".repeat(24) }) }, // /cv/<token>
+  // 5n Delivery
+  "delivery.list": { pages: ["owner"], args: () => ({}) },
+  "delivery.get": { pages: ["owner"], args: () => "skip" },
+  "delivery.settings": { pages: ["owner"], args: () => ({}) },
+  "delivery.forClient": { pages: ["client"], args: () => ({}) },
+  "delivery.shared": { pages: ["share"], args: () => ({ token: "x".repeat(24) }) }, // /dl/<token>
+  // 5m Work
+  "work.mine": { pages: ["owner"], args: () => ({}) },
+  "work.all": { pages: ["owner"], args: () => ({}) },
+  "work.forProject": { pages: ["owner"], args: () => "skip" },
+  "work.get": { pages: ["owner"], args: () => "skip" },
+  "work.people": { pages: ["owner"], args: () => "skip" },
+  "work.lists": { pages: ["owner"], args: () => ({}) },
+  "work.templates": { pages: ["owner"], args: () => ({}) },
+  "work.forClient": { pages: ["client"], args: () => ({}) }, // the client's Home
+  "work.forVendor": { pages: ["vendor"], args: () => "skip" }, // the vendor's Home, for one business
+  // Nov 16: How everything connects (Projects by client, Not attached, Attach / Move, a project's Move)
+  "homes.projectsBoard": { pages: ["owner"], args: () => ({}) },
+  "homes.loose": { pages: ["owner"], args: () => ({}) },
+  "homes.clientChoices": { pages: ["owner"], args: () => ({}) },
+  "homes.places": { pages: ["owner"], args: () => "skip" }, // the picker, for one kind
+  "homes.projectMove": { pages: ["owner"], args: () => "skip" }, // the Move confirmation, for one project
   "callSheets.get": { pages: ["owner"], args: () => "skip" }, // the questions, the editor, Detail
   "callSheets.forClient": { pages: ["clientHome"], args: () => ({ callSheetId: "nope" }) }, // /call-sheets/<id>
   "callSheets.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Coming up

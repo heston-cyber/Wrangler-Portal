@@ -13,6 +13,7 @@ import { downloadFileUrl, downloadInfo, downloadName, signStillUrl, signedThumbU
 import { stillOk } from "./lib/stillOk";
 import { accessToVideo, accessToVersion, shareArg, versionShown } from "./lib/viewer";
 import { roundsFor } from "./lib/rounds";
+import { mayMoveProject, moveProjectByName } from "./homes";
 
 const clean = (s: string, max = 200) => s.trim().replace(/\s+/g, " ").slice(0, max);
 
@@ -121,11 +122,15 @@ export const renameProject = mutation({
     const name = clean(a.name, 120);
     if (!name) throw new ConvexError("Give the project a name.");
     const p = await ctx.db.get(a.projectId);
+    if (!p) throw new ConvexError("This project doesn't exist any more.");
+    // A new client name moves the project, by the same rules as Move (review M3). Leaving client out keeps it.
+    if (a.client !== undefined && clean(a.client, 120).toLowerCase() !== (p.client ?? "").trim().toLowerCase()) {
+      await mayMoveProject(ctx, p, !!clean(a.client, 120));
+      await moveProjectByName(ctx, p, clean(a.client, 120));
+    }
     await ctx.db.patch(a.projectId, {
       name,
       jobNumber: a.jobNumber !== undefined ? clean(a.jobNumber, 40) || undefined : undefined,
-      // Leaving client out keeps what's there; an empty string clears it.
-      client: a.client !== undefined ? clean(a.client, 120) || undefined : p?.client,
     });
   },
 });

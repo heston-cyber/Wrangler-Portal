@@ -16,6 +16,7 @@ import { ownerBookingAcceptedMail, ownerBookingDeclinedMail, ownerBriefingReadMa
 import { deliverOnce } from "./invoiceReminders";
 import { SITE } from "./lib/site";
 import { v, ConvexError } from "convex/values";
+import { queueCalendar } from "./calendar";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
@@ -213,6 +214,13 @@ export const decline = mutation({
     const note = (a.note ?? "").trim().slice(0, 500);
     const now = Date.now();
     await ctx.db.patch(a.bookingId, { status: "declined", declineReason: note ? `${reason}: ${note}` : reason, answeredAt: now, updatedAt: now });
+    // Hierarchy 3c review L4: a booking made for a shoot day comes off its crew (and quietly off its calendar event).
+    const k = await ctx.db.get(a.bookingId);
+    const sh = k?.shootId ? await ctx.db.get(k.shootId) : null;
+    if (sh && sh.crew.some((c) => c.bookingId === a.bookingId)) {
+      await ctx.db.patch(sh._id, { crew: sh.crew.filter((c) => c.bookingId !== a.bookingId), updatedAt: now, ...(sh.calendar || sh.calendarEvent ? { calAt: now } : {}) });
+      if (sh.calendar || sh.calendarEvent) await queueCalendar(ctx, sh._id, "none");
+    }
     await ctx.scheduler.runAfter(0, internal.vendorPortal.mailOwner, { what: "declined", id: a.bookingId }); // Nov 2: email for everything
     return null;
   },
@@ -639,7 +647,7 @@ export const callSheets = query({
         if (out.some((x) => x._id === cs._id)) continue;
         const r = await sentToVendor(ctx, cs, vendor._id);
         const s = r ? await ctx.db.get(cs.shootId) : null;
-        const p = s ? await ctx.db.get(s.projectId) : null;
+        const p = s ? await (s.projectId ? ctx.db.get(s.projectId) : null) : null;
         // The live date decides whether it's still coming up; the one shown is as sent (review L6).
         if (r && s && p && s.status === "scheduled" && s.date >= todayCentral()) out.push({ _id: cs._id, project: cs.sent!.heading ?? label(p), date: cs.sent!.date ?? s.date, opened: !!r.openedAt, sentAt: cs.sent!.at });
       }

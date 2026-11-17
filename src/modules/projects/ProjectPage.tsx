@@ -1,7 +1,7 @@
 // Phase 2 Part A (Oct 29): the owner's project page (S5 · Phase 2 › P2 / Owner / Project): header with the client,
 // tags and actions; tabs Overview · Cuts · Documents · Delivery (Invoices arrive with Part B). Overview holds the
 // stage bar, next step, cuts with their rounds, key dates, rounds, documents, final delivery and people.
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -22,10 +22,12 @@ import { RequestsCard } from "./Requests";
 import { FootageCard } from "./Footage";
 import { usePerms } from "../../lib/teamAccess";
 import { AssignedCard } from "../team/Assigned";
+import { HomeChip, MoveProjectDialog } from "./Homes";
+const ProjectTasks = lazy(() => import("../work/Work").then((m) => ({ default: m.ProjectTasks }))); // 5m (D197)
 import { StageBar, STAGES, stageName, type Stage, dateText, bytes, openFileLink } from "./common";
 
 type Page = NonNullable<ReturnType<typeof useQuery<typeof api.projects.page>>>;
-export type ProjectTab = "overview" | "cuts" | "documents" | "invoices" | "delivery" | "ledger";
+export type ProjectTab = "overview" | "tasks" | "cuts" | "documents" | "invoices" | "delivery" | "ledger";
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 function cutChip(v: Page["videos"][number]) {
@@ -382,14 +384,15 @@ export default function ProjectPage({ projectId, tab }: { projectId: Id<"project
   const page = useQuery(api.projects.page, { projectId });
   const [toast, show] = useToast();
   const [moving, setMoving] = useState<Stage | null>(null);
+  const [homeMove, setHomeMove] = useState(false);
   const [dialog, setDialog] = useState<"rounds" | "next" | "dates" | "files" | "share" | null>(null);
   const [postDefault, setPostDefault] = useState(true);
   const { perms } = usePerms(); // Phase 5e: a team member's tabs and cards follow their switches
   const pay = useQuery(api.payments.settings, perms.payments ? {} : "skip");
   const payOn = !!pay?.stripe && perms.payments; // Phase 2 Part B: the Invoices tab once Stripe is connected
   const setTab = (k: ProjectTab) => navigate(`/projects/${projectId}${k === "overview" ? "" : `?tab=${k}`}`);
-  if (page === undefined) return <><TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/projects")}>Projects</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
-  if (page === null) return <><TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/projects")}>Projects</a></TopBar><div className="wp-page"><EmptyState icon="folder" title="This project doesn't exist any more." actions={<ButtonLink to="/projects">All projects</ButtonLink>} /></div></>;
+  if (page === undefined) return <><TopBar><a {...linkProps("/projects")}>Projects</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
+  if (page === null) return <><TopBar><a {...linkProps("/projects")}>Projects</a></TopBar><div className="wp-page"><EmptyState icon="folder" title="This project doesn't exist any more." actions={<ButtonLink to="/projects">All projects</ButtonLink>} /></div></>;
   return (
     <>
       <TopBar right={<>
@@ -401,12 +404,13 @@ export default function ProjectPage({ projectId, tab }: { projectId: Id<"project
         <Button size="sm" onClick={() => setDialog("share")}>Share</Button>
         {page.client && <ButtonLink size="sm" variant="primary" to={`/sent/new?client=${page.client._id}`}>Post a note</ButtonLink>}
       </>}>
-        <a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/projects")}>Projects</a><Sep /><span className="here">{page.label}</span>
+        <a {...linkProps("/projects")}>Projects</a><Sep /><span className="here">{page.label}</span>
       </TopBar>
       <div className="wp-page cp pj">
         <a className="wp-setback" {...linkProps("/projects")}><Icon name="arrow-left" size={20} />Projects</a>
         <header className="pj-head">
-          {page.client && <a className="wp-eyebrow" {...linkProps(`/clients/${page.client._id}`)}>{page.client.name}</a>}
+          {/* Nov 16 (How everything connects): the home chip: the client, or "On its own" with Move to client… */}
+          <HomeChip client={page.client ? { _id: page.client._id, name: page.client.name } : null} onMove={perms.clients ? () => setHomeMove(true) : undefined} />
           <h1 className="wp-h2" title={page.label}>{page.label}</h1>
           <div className="tags pc-only">
             <span className="wp-tag">{plural(page.videos.length, "video", "videos")}</span>
@@ -416,18 +420,20 @@ export default function ProjectPage({ projectId, tab }: { projectId: Id<"project
         </header>
         <div className="ws-tabs cp-tabs">
           <Tabs label="Project" value={tab} onChange={setTab} items={[
-            { key: "overview", label: "Overview" }, { key: "cuts", label: "Cuts", count: page.videos.length },
+            { key: "overview", label: "Overview" }, ...(perms.projects ? [{ key: "tasks" as ProjectTab, label: "Tasks" }] : []), { key: "cuts", label: "Cuts", count: page.videos.length },
             { key: "documents", label: "Documents", count: page.documents.length },
             ...(payOn ? [{ key: "invoices" as ProjectTab, label: "Invoices" }] : []), { key: "delivery", label: "Delivery" }, ...(perms.clients && perms.value ? [{ key: "ledger" as ProjectTab, label: "Ledger" }] : []),
           ]} />
         </div>
         {tab === "overview" && <Overview page={page} onMove={setMoving} onRounds={() => setDialog("rounds")} onNext={() => setDialog("next")} onDates={() => setDialog("dates")} postDefault={postDefault} setPostDefault={setPostDefault} goTab={setTab} onAddFiles={() => setDialog("files")} />}
+        {tab === "tasks" && perms.projects && <Suspense fallback={null}><ProjectTasks projectId={projectId} show={show} /></Suspense>}
         {tab === "cuts" && <div className="pj-cutsTab"><Projects projectId={projectId} embedded /></div>}
         {tab === "documents" && <Documents page={page} />}
         {tab === "invoices" && payOn && <ProjectInvoices projectId={projectId} clientId={page.client?._id ?? null} />}
         {tab === "delivery" && <Delivery page={page} show={show} onAddFiles={() => setDialog("files")} />}
         {tab === "ledger" && perms.clients && perms.value && <LedgerTab projectId={projectId} show={show} />}
       </div>
+      {homeMove && <MoveProjectDialog projectId={projectId} onClose={() => setHomeMove(false)} show={show} />}
       {moving && <MoveStage page={page} to={moving} post={postDefault} onClose={() => setMoving(null)} show={show} />}
       {dialog === "rounds" && <RoundsDialog page={page} onClose={() => setDialog(null)} show={show} />}
       {dialog === "next" && <NextStepDialog page={page} onClose={() => setDialog(null)} show={show} />}
