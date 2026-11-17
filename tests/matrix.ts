@@ -205,7 +205,9 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "shotLists.moveSetup": { setupId: ids.shotSetupId, index: 0 }, "shotLists.addShots": { setupId: ids.shotSetupId, text: "A shot" },
     "shotLists.editShot": { shotId: ids.shotId, text: "Changed" }, "shotLists.removeShot": { shotId: ids.shotId }, "shotLists.moveShot": { shotId: ids.shotId, setupId: ids.shotSetupId, index: 0 },
     "shotLists.tick": { shotId: ids.shotId, done: true, at: Date.now() }, "shotLists.reset": { listId: ids.shotListId },
-    "vendorPortal.tickShot": { callSheetId: ids.callSheetId, shotId: ids.shotId, done: true, at: Date.now() },
+    "homes.move": { kind: "shotList", id: ids.shotListId, to: null }, "homes.places": { kind: "shotList" }, "homes.loose": {},
+    "homes.projectMove": { projectId: ids.projectId }, "homes.moveProject": { projectId: ids.projectId, clientId: null },
+    "vendorPortal.tickShot":{ callSheetId: ids.callSheetId, shotId: ids.shotId, done: true, at: Date.now() },
     "guests.intro": { token: ids.guestToken }, "guests.sendCode": { token: "nope-nope-nope-nope" },
     "guests.home": {}, "guests.sheet": { token: ids.guestToken }, "guests.opened": { token: ids.guestToken },
     // Phase 5e step 1: the team

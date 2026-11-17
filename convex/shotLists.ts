@@ -23,7 +23,8 @@ const setupsOf = async (ctx: Ctx, listId: Id<"shotLists">) => ctx.db.query("shot
 const shotsOf = async (ctx: Ctx, listId: Id<"shotLists">) => ctx.db.query("shots").withIndex("by_list", (q) => q.eq("listId", listId)).collect();
 
 /** The project's scheduled shoots in date order, numbered Day 1, Day 2 … */
-export async function shootDays(ctx: Ctx, projectId: Id<"projects">) {
+export async function shootDays(ctx: Ctx, projectId: Id<"projects"> | undefined) {
+  if (!projectId) return [];
   const shoots = (await ctx.db.query("shoots").withIndex("by_project", (q) => q.eq("projectId", projectId)).collect()).filter((s) => s.status === "scheduled");
   return shoots.sort((a, b) => a.date.localeCompare(b.date) || a.call.localeCompare(b.call)).map((s, i) => ({ s, day: i + 1 }));
 }
@@ -34,7 +35,7 @@ export async function listView(ctx: Ctx, list: List) {
   const shots = (await shotsOf(ctx, list._id)).sort((a, b) => a.order - b.order);
   const days = await shootDays(ctx, list.projectId);
   const d = list.shootId ? days.find((x) => x.s._id === list.shootId) : undefined;
-  const p = await ctx.db.get(list.projectId);
+  const p = list.projectId ? await ctx.db.get(list.projectId) : null;
   return {
     _id: list._id, title: list.title ?? null, project: p ? { _id: p._id, label: label(p), name: p.name, client: p.client ?? null } : null,
     shoot: d ? { _id: d.s._id, day: d.day, date: d.s.date, call: d.s.call, wrap: d.s.wrap ?? null, location: d.s.location } : null,
@@ -67,13 +68,14 @@ async function ownShot(ctx: Ctx, shotId: string) {
 const touch = (ctx: MutationCtx, l: List) => ctx.db.patch(l._id, { updatedAt: Date.now() });
 
 /** A shoot this list may be linked to: on the same project, still on, and without a list of its own already. */
-async function checkShoot(ctx: MutationCtx, projectId: Id<"projects">, shootId: string, except?: Id<"shotLists">) {
+async function checkShoot(ctx: MutationCtx, projectId: Id<"projects"> | undefined, shootId: string, except?: Id<"shotLists">) {
   const id = ctx.db.normalizeId("shoots", shootId);
   const s = id ? await ctx.db.get(id) : null;
-  if (!s || s.projectId !== projectId || s.status !== "scheduled") throw new ConvexError("Pick one of this project's shoot days.");
+  // D204: a list on its own can take any shoot day (it then lives on that shoot's project).
+  if (!s || (projectId && s.projectId !== projectId) || s.status !== "scheduled") throw new ConvexError("Pick one of this project's shoot days.");
   const other = (await ctx.db.query("shotLists").withIndex("by_shoot", (q) => q.eq("shootId", s._id)).collect()).find((x) => x._id !== except);
   if (other) throw new ConvexError("That shoot day already has a shot list.");
-  return s._id;
+  return s;
 }
 
 // ---------- the owner: lists ----------
@@ -85,11 +87,11 @@ export const all = query({
     await requireAll(ctx, "shoots");
     const out = [];
     for (const l of await ctx.db.query("shotLists").collect()) {
-      const p = await ctx.db.get(l.projectId);
-      if (!p) continue;
+      const p = l.projectId ? await ctx.db.get(l.projectId) : null;
+      if (l.projectId && !p) continue;
       const days = await shootDays(ctx, l.projectId);
       const d = l.shootId ? days.find((x) => x.s._id === l.shootId) : undefined;
-      out.push({ _id: l._id, title: l.title ?? null, project: { _id: p._id, label: label(p), client: p.client ?? null }, setups: (await setupsOf(ctx, l._id)).filter((x) => !x.gap).length, shoot: d ? { day: d.day, date: d.s.date } : null, ...progress(await shotsOf(ctx, l._id)), updatedAt: l.updatedAt });
+      out.push({ _id: l._id, title: l.title ?? null, project: p ? { _id: p._id, label: label(p), client: p.client ?? null } : null, setups: (await setupsOf(ctx, l._id)).filter((x) => !x.gap).length, shoot: d ? { day: d.day, date: d.s.date } : null, ...progress(await shotsOf(ctx, l._id)), updatedAt: l.updatedAt });
     }
     return out.sort((a, b) => b.updatedAt - a.updatedAt);
   },
@@ -135,7 +137,7 @@ export const get = query({
     const id = ctx.db.normalizeId("shotLists", listId);
     const l = id ? await ctx.db.get(id) : null;
     if (!l) return null;
-    const lists = await ctx.db.query("shotLists").withIndex("by_project", (q) => q.eq("projectId", l.projectId)).collect();
+    const lists = l.projectId ? await ctx.db.query("shotLists").withIndex("by_project", (q) => q.eq("projectId", l.projectId)).collect() : [l];
     const days = await shootDays(ctx, l.projectId);
     return {
       ...(await listView(ctx, l)),
@@ -163,16 +165,22 @@ export const forShoot = query({
 });
 
 export const create = mutation({
-  args: { projectId: v.string(), shootId: v.optional(v.string()), title: v.optional(v.string()) },
+  args: { projectId: v.optional(v.string()), shootId: v.optional(v.string()), title: v.optional(v.string()) },
   handler: async (ctx, a) => {
     await requireAll(ctx, "shoots");
-    const id = ctx.db.normalizeId("projects", a.projectId);
-    const p = id ? await ctx.db.get(id) : null;
-    if (!p) throw new ConvexError("This project doesn't exist any more.");
-    const shootId = a.shootId ? await checkShoot(ctx, p._id, a.shootId) : undefined;
+    // D204 (Nov 16): a list can be made on its own (it needs a name then) and attached later.
+    let projectId: Id<"projects"> | undefined;
+    if (a.projectId) {
+      const id = ctx.db.normalizeId("projects", a.projectId);
+      const p = id ? await ctx.db.get(id) : null;
+      if (!p) throw new ConvexError("This project doesn't exist any more.");
+      projectId = p._id;
+    }
+    const s = a.shootId ? await checkShoot(ctx, projectId, a.shootId) : null;
     const now = Date.now();
     const title = tidy(a.title, 60);
-    return await ctx.db.insert("shotLists", { projectId: p._id, ...(shootId ? { shootId } : {}), ...(title ? { title } : {}), createdAt: now, updatedAt: now });
+    if (!projectId && !s && !title) throw new ConvexError("Give the shot list a name.");
+    return await ctx.db.insert("shotLists", { ...(s ? { projectId: s.projectId, shootId: s._id } : projectId ? { projectId } : {}), ...(title ? { title } : {}), createdAt: now, updatedAt: now });
   },
 });
 
@@ -185,7 +193,7 @@ export const update = mutation({
     const patch: Partial<List> = { updatedAt: Date.now() };
     if (a.title !== undefined) patch.title = tidy(a.title, 60) || undefined;
     if (a.shootId === null) patch.shootId = undefined;
-    else if (a.shootId !== undefined) patch.shootId = await checkShoot(ctx, l.projectId, a.shootId, l._id);
+    else if (a.shootId !== undefined) { const sh = await checkShoot(ctx, l.projectId, a.shootId, l._id); patch.shootId = sh._id; patch.projectId = sh.projectId; }
     await ctx.db.patch(l._id, patch);
     return null;
   },
@@ -267,7 +275,7 @@ export const moveSetup = mutation({
     let to = l;
     if (a.listId && a.listId !== l._id) {
       to = await ownList(ctx, a.listId);
-      if (to.projectId !== l.projectId) throw new ConvexError("A setup can only move to a list on the same project.");
+      if (to.projectId !== l.projectId) throw new ConvexError("A setup can only move to a list on the same project."); // both on their own counts as the same
       const theirs = await shotsOf(ctx, to._id);
       const mine = (await ctx.db.query("shots").withIndex("by_setup", (q) => q.eq("setupId", x._id)).collect()).sort((p, q) => p.order - q.order);
       if (theirs.length + mine.length > MAX_SHOTS) throw new ConvexError(`A list holds up to ${MAX_SHOTS} shots.`);

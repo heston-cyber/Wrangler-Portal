@@ -873,6 +873,7 @@ export default defineSchema({
   // accepts or declines (D73, D86), recorded like quotes. Nothing moves or converts on its own (D84).
   proposals: defineTable({
     businessId: v.optional(v.id("businesses")),
+    projectId: v.optional(v.id("projects")),  // D204 (Nov 16): its home when it sits on a project
     buildId: v.id("wsBuilds"),
     number: v.string(),
     seq: v.number(),
@@ -907,7 +908,7 @@ export default defineSchema({
     createdBy: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_token", ["token"]).index("by_build", ["buildId"]).index("by_client", ["clientId"]).index("by_deal", ["dealId"]).index("by_updated", ["updatedAt"]).index("by_link_token", ["linkToken"]),
+  }).index("by_token", ["token"]).index("by_build", ["buildId"]).index("by_client", ["clientId"]).index("by_deal", ["dealId"]).index("by_updated", ["updatedAt"]).index("by_link_token", ["linkToken"]).index("by_project", ["projectId"]),
   // D149 (Nov 4): each person a quote or proposal was emailed to, with their own link: opens, and their accept or
   // decline. One person accepting closes every other link ("Already accepted on {date}", never who).
   offerRecipients: defineTable({
@@ -1359,7 +1360,7 @@ export default defineSchema({
   // setups (M-01 …, a time window, a title, a note) and gap lines ("Call at Aloft lobby"), and each setup holds shots.
   shotLists: defineTable({
     businessId: v.optional(v.id("businesses")),
-    projectId: v.id("projects"),
+    projectId: v.optional(v.id("projects")),  // D204 (Nov 16): a list can be made on its own and attached later
     shootId: v.optional(v.id("shoots")),      // the shoot day it's for; none until that day is scheduled and linked
     title: v.optional(v.string()),            // e.g. "Day 1"; the shoot's date names it when empty
     resetAt: v.optional(v.number()),          // the last Reset: a tick made (on a phone, offline) before it doesn't come back
@@ -1864,7 +1865,7 @@ export default defineSchema({
   auditLog: defineTable({
     businessId: v.optional(v.id("businesses")),
     at: v.number(),
-    kind: v.union(v.literal("sent"), v.literal("signed"), v.literal("paid"), v.literal("deleted"), v.literal("settings"), v.literal("signin"), v.literal("team"), v.literal("export")),
+    kind: v.union(v.literal("sent"), v.literal("signed"), v.literal("paid"), v.literal("deleted"), v.literal("settings"), v.literal("signin"), v.literal("team"), v.literal("export"), v.literal("moved")),
     who: v.string(),            // "Heston Hill", "Maya Brooks", "Stripe"
     role: v.string(),           // "Owner", "Producer", "Client", "System"
     userId: v.optional(v.id("users")),

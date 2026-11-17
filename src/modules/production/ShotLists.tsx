@@ -38,14 +38,16 @@ export default function ShotListsPage() {
   // One row per project (its lists are its shoot days), in the order of its most recent change.
   const rows = useMemo(() => {
     const by = new Map<string, NonNullable<typeof all>>();
-    for (const l of all ?? []) by.set(l.project._id, [...(by.get(l.project._id) ?? []), l]);
+    // D204: a list on its own is its own row, named by its title.
+    for (const l of all ?? []) { const k = l.project?._id ?? l._id; by.set(k, [...(by.get(k) ?? []), l]); }
     return [...by.values()].map((ls) => {
       const days = [...ls].sort((a, b) => (a.shoot?.day ?? 99) - (b.shoot?.day ?? 99));
       const total = ls.reduce((n, l) => n + l.total, 0), done = ls.reduce((n, l) => n + l.done, 0);
       const empty = days.filter((l) => l.setups === 0);
+      const p = ls[0].project;
       return {
-        key: ls[0].project._id, open: days[0]._id, title: ls[0].project.client || ls[0].project.label,
-        sub: [ls[0].project.client ? ls[0].project.label : null, ...empty.map((l) => `${l.shoot ? `Day ${l.shoot.day}` : "A list"} has no setups yet`)].filter(Boolean).join(" · "),
+        key: p?._id ?? ls[0]._id, open: days[0]._id, title: p ? p.client || p.label : ls[0].title || "Shot list",
+        sub: [p ? (p.client ? p.label : null) : "On its own", ...empty.map((l) => `${l.shoot ? `Day ${l.shoot.day}` : "A list"} has no setups yet`)].filter(Boolean).join(" · "),
         days: days.map((l) => (l.shoot ? `Day ${l.shoot.day} · ${shortDay(l.shoot.date)}` : "Not linked to a day")).join(", "), total, done,
       };
     });
@@ -128,7 +130,7 @@ export function ShotListEditor({ listId }: { listId: string }) {
   if (l === undefined) return <><Crumbs><span className="here">…</span></Crumbs><div className="wp-page prod"><Card label="Loading"><SkeletonRows n={6} /></Card></div></>;
   if (l === null) return <><Crumbs /><div className="wp-page prod"><EmptyState icon="shot-list" title="This shot list isn't here any more" actions={<Button onClick={() => navigate("/production/shot-lists")}>All shot lists</Button>} /></div></>;
 
-  const name = l.project?.client || l.project?.label || "Shot list";
+  const name = l.project?.client || l.project?.label || l.title || "Shot list";
   const setups = l.setups.filter((x) => !x.gap);
   const sub = [l.project?.client ? l.project.label : null, dayLabel(l.shoot), plural(setups.length, "setup"), plural(l.total, "shot"), `${l.done} done`].filter(Boolean).join(" · ");
   const dropOn = (target: { setupId: string; index: number } | { setupIndex: number }) => {

@@ -407,6 +407,9 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "shoots.update": SHOOTS,
     "shoots.cancel": SHOOTS,
     ...Object.fromEntries(["all", "newOptions", "forProject", "get", "forShoot", "create", "update", "remove", "addSetup", "editSetup", "removeSetup", "moveSetup", "addShots", "editShot", "removeShot", "moveShot", "tick", "reset", "forBuild"].map((f) => [`shotLists.${f}`, SHOOTS])),
+    // Nov 16 (D204): Attach/Move. A thing's own switch decides (the matrix moves a shot list: Shoots); a project's move,
+    // what it carries and "Not attached" need Projects.
+    "homes.move": SHOOTS, "homes.places": SHOOTS, "homes.moveProject": PROJECTS, "homes.projectMove": PROJECTS, "homes.loose": PROJECTS,
     "sign.list": DOCS,
     "sign.get": DOCS,
     "sign.uploadUrl": DOCS,

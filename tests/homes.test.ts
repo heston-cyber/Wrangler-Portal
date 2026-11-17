@@ -1,0 +1,129 @@
+// How everything connects (Nov 16; D204–D206). The data layer: things made on their own, Attach and Move, a project's
+// move carrying everything, sent things staying with their client, and nothing crossing businesses.
+//   T-H.1 made on its own · T-H.2 Attach and Move per kind · T-H.3 a project moves with everything; the old client loses
+//   it · T-H.4 sent stays with its client · T-H.5 nothing crosses businesses
+import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
+import { anyApi } from "convex/server";
+import type { Id } from "../convex/_generated/dataModel";
+import { world } from "./payHarness";
+import { homeOf } from "../convex/homes";
+import { coveredProjects } from "../convex/lib/shareAccess";
+
+const api = anyApi;
+beforeAll(() => {
+  process.env.ALLOWED_EMAILS = "heston@wranglerproductions.com";
+  process.env.SITE_URL = "https://app.wranglerportal.com";
+  process.env.RESEND_API_KEY = "re_test";
+});
+afterEach(() => vi.unstubAllGlobals());
+
+const quote = (businessId: Id<"businesses">, extra: Record<string, unknown>) => ({
+  businessId, number: "Q-0001", seq: 1, status: "draft" as const, title: "Launch quote", lines: [], deposit: { kind: "percent" as const, value: 25 },
+  validUntil: "2030-01-01", totalCents: 100_00, history: [], createdAt: 0, updatedAt: 0, ...extra,
+});
+
+describe("how everything connects", () => {
+  test("T-H.1, T-H.2 a shot list made on its own, attached to a project, then a shoot day, then let go", async () => {
+    const w = await world();
+    await expect(w.heston.mutation(api.shotLists.create, {})).rejects.toThrow(/name/);
+    const listId = await w.heston.mutation(api.shotLists.create, { title: "Spec spot ideas" }) as Id<"shotLists">;
+    let l = await w.heston.query(api.shotLists.get, { listId });
+    expect(l).toMatchObject({ title: "Spec spot ideas", project: null, shoot: null, days: [] });
+    expect((await w.heston.query(api.homes.loose, {})).some((x: { id: string }) => x.id === listId)).toBe(true);
+    expect((await w.heston.query(api.shotLists.all, {}))[0]).toMatchObject({ _id: listId, project: null });
+
+    await w.heston.mutation(api.homes.move, { kind: "shotList", id: listId, to: { type: "project", id: w.p } });
+    expect((await w.heston.query(api.shotLists.get, { listId })).project._id).toBe(w.p);
+    const { shootId } = await w.heston.mutation(api.shoots.schedule, { projectId: w.p, date: "2030-02-02", call: "07:00", location: "Studio", parking: "", prepare: [], withOwner: true, bookingIds: [], calendar: false });
+    await w.heston.mutation(api.homes.move, { kind: "shotList", id: listId, to: { type: "shoot", id: shootId } });
+    l = await w.heston.query(api.shotLists.get, { listId });
+    expect(l.shoot._id).toBe(shootId);
+    // One list per shoot day: a second can't take it; the picker marks it taken.
+    const second = await w.heston.mutation(api.shotLists.create, { title: "B-roll" }) as Id<"shotLists">;
+    await expect(w.heston.mutation(api.homes.move, { kind: "shotList", id: second, to: { type: "shoot", id: shootId } })).rejects.toThrow(/already has a shot list/);
+    expect((await w.heston.query(api.homes.places, { kind: "shotList" })).find((x: { id: string }) => x.id === shootId)).toMatchObject({ type: "shoot", taken: true });
+    // A shot list can't go on a client or a lead.
+    await expect(w.heston.mutation(api.homes.move, { kind: "shotList", id: listId, to: { type: "client", id: w.harbor } })).rejects.toThrow(/can't go on a client/);
+    // Let go: on its own again, keeping its name.
+    await w.heston.mutation(api.homes.move, { kind: "shotList", id: listId, to: null });
+    expect(await w.heston.query(api.shotLists.get, { listId })).toMatchObject({ project: null, shoot: null, title: "Spec spot ideas" });
+    // Two lists on their own can trade setups (the same "no project").
+    const x = await w.heston.mutation(api.shotLists.addSetup, { listId, title: "Hero" }) as Id<"shotSetups">;
+    await w.heston.mutation(api.shotLists.moveSetup, { setupId: x, index: 0, listId: second });
+    expect((await w.heston.query(api.shotLists.get, { listId: second })).setups.map((s: { title: string }) => s.title)).toEqual(["Hero"]);
+    // Moves are logged in Settings › Activity.
+    expect(await w.t.run(async (ctx) => (await ctx.db.query("auditLog").collect()).filter((e) => e.kind === "moved").length)).toBeGreaterThanOrEqual(3);
+  });
+
+  test("T-H.2, T-H.4 a quote: lead → project (its client follows) → none; once sent it stays with its client", async () => {
+    const w = await world();
+    const { other, dealId, otherClient } = await w.t.run(async (ctx) => {
+      const otherClient = await ctx.db.insert("clients", { businessId: w.A, name: "Northline Outfitters", createdAt: 0 });
+      const other = await ctx.db.insert("projects", { businessId: w.A, name: "Brand film", client: "Northline Outfitters", clientId: otherClient, createdAt: 0 });
+      const dealId = await ctx.db.insert("deals", { businessId: w.A, title: "Harbor summer", stage: "lead", source: "hand", clientId: w.harbor, history: [], createdAt: 0, updatedAt: 0 });
+      return { other, dealId, otherClient };
+    });
+    const q = await w.t.run((ctx) => ctx.db.insert("quotes", quote(w.A, {})));
+    expect(homeOf("quote", { _id: q })).toBeNull();
+    await w.heston.mutation(api.homes.move, { kind: "quote", id: q, to: { type: "lead", id: dealId } });
+    expect(await w.t.run(async (ctx) => (await ctx.db.get(q))!)).toMatchObject({ dealId, clientId: w.harbor });
+    await w.heston.mutation(api.homes.move, { kind: "quote", id: q, to: { type: "project", id: other } });
+    let row = await w.t.run(async (ctx) => (await ctx.db.get(q))!);
+    expect(row).toMatchObject({ projectId: other, clientId: otherClient });
+    expect(row.dealId).toBeUndefined();
+    // Sent: it may file under the same client, never leave it.
+    await w.t.run((ctx) => ctx.db.patch(q, { status: "sent", sentAt: 1 }));
+    await expect(w.heston.mutation(api.homes.move, { kind: "quote", id: q, to: { type: "project", id: w.p } })).rejects.toThrow(/already sent/);
+    await expect(w.heston.mutation(api.homes.move, { kind: "quote", id: q, to: null })).rejects.toThrow(/already sent/);
+    await w.heston.mutation(api.homes.move, { kind: "quote", id: q, to: { type: "client", id: otherClient } });
+    row = await w.t.run(async (ctx) => (await ctx.db.get(q))!);
+    expect(row).toMatchObject({ clientId: otherClient });
+    expect(row.projectId).toBeUndefined();
+    // A team member without Payments can't move it (a Producer has no Payments switch by default).
+  });
+
+  test("T-H.3, T-H.4 a project moves to another client with everything; sent money stays; the old client's share goes off", async () => {
+    const w = await world();
+    const ids = await w.t.run(async (ctx) => {
+      const me = (await ctx.db.query("users").first())!._id;
+      const northline = await ctx.db.insert("clients", { businessId: w.A, name: "Northline Outfitters", createdAt: 0 });
+      const draft = await ctx.db.insert("quotes", quote(w.A, { projectId: w.p, clientId: w.harbor, title: "Extra day" }));
+      const sent = await ctx.db.insert("quotes", quote(w.A, { projectId: w.p, clientId: w.harbor, title: "Main quote", status: "sent", sentAt: 1, number: "Q-0002", seq: 2 }));
+      const share = await ctx.db.insert("shares", { businessId: w.A, token: "tok-move-1", kind: "project", projectId: w.p, access: "comment", who: "invited", allVersions: true, downloads: false, emailNewVersions: true, createdAt: 0, createdBy: me } as never);
+      const cshare = await ctx.db.insert("shares", { businessId: w.A, token: "tok-move-2", kind: "client", clientId: w.harbor, client: "Harbor Coffee", access: "comment", who: "invited", allVersions: true, downloads: false, emailNewVersions: true, createdAt: 0, createdBy: me } as never);
+      return { northline, draft, sent, share, cshare };
+    });
+    const listId = await w.heston.mutation(api.shotLists.create, { projectId: w.p, title: "Day 1" }) as Id<"shotLists">;
+    const before = await w.heston.query(api.homes.projectMove, { projectId: w.p });
+    expect(before.staying.map((s: { name: string }) => s.name)).toEqual(["Main quote"]);
+    expect(before.things).toBeGreaterThanOrEqual(2); // the draft quote and the shot list, at least
+
+    expect(await w.heston.mutation(api.homes.moveProject, { projectId: w.p, clientId: ids.northline })).toMatchObject({ moved: 1, stayed: 1, sharesOff: 1 });
+    const r = await w.t.run(async (ctx) => ({ p: (await ctx.db.get(w.p))!, draft: (await ctx.db.get(ids.draft))!, sent: (await ctx.db.get(ids.sent))!, share: (await ctx.db.get(ids.share))!, cshare: (await ctx.db.get(ids.cshare))!, list: (await ctx.db.get(listId))! }));
+    expect(r.p).toMatchObject({ clientId: ids.northline, client: "Northline Outfitters" });
+    expect(r.list.projectId).toBe(w.p);                                        // nothing relinked
+    expect(r.draft).toMatchObject({ projectId: w.p, clientId: ids.northline });  // follows the project
+    expect(r.sent).toMatchObject({ clientId: w.harbor });                       // stays with Harbor…
+    expect(r.sent.projectId).toBeUndefined();                                   // …and leaves the project
+    expect(r.share.offAt).toBeGreaterThan(0);                                   // Harbor's project share is off
+    // Harbor's client share no longer covers the project.
+    expect((await w.t.run(async (ctx) => coveredProjects(ctx, r.cshare))).map((p) => p._id)).not.toContain(w.p);
+    // Out of a client: on its own.
+    await w.heston.mutation(api.homes.moveProject, { projectId: w.p, clientId: null });
+    const p2 = await w.t.run(async (ctx) => (await ctx.db.get(w.p))!);
+    expect(p2.clientId).toBeUndefined();
+    expect(p2.client).toBeUndefined();
+  });
+
+  test("T-H.5 another business's owner can't move, attach to, or see this business's things", async () => {
+    const w = await world();
+    const listId = await w.heston.mutation(api.shotLists.create, { title: "Ours" }) as Id<"shotLists">;
+    await expect(w.boss.mutation(api.homes.move, { kind: "shotList", id: listId, to: null })).rejects.toThrow(/isn't here/);
+    await expect(w.boss.mutation(api.homes.moveProject, { projectId: w.p, clientId: null })).rejects.toThrow(/doesn't exist/);
+    const theirs = await w.boss.mutation(api.shotLists.create, { title: "Theirs" }) as Id<"shotLists">;
+    await expect(w.boss.mutation(api.homes.move, { kind: "shotList", id: theirs, to: { type: "project", id: w.p } })).rejects.toThrow(/isn't here any more/);
+    expect((await w.boss.query(api.homes.loose, {})).map((x: { id: string }) => x.id)).toEqual([theirs]);
+    expect((await w.boss.query(api.homes.places, { kind: "shotList" })).some((x: { id: string }) => x.id === w.p)).toBe(false);
+    expect(await w.boss.query(api.homes.projectMove, { projectId: w.p })).toBeNull();
+  });
+});

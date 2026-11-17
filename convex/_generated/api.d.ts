@@ -57,6 +57,7 @@ import type * as calendarSync from "../calendarSync.js";
 import type * as clients from "../clients.js";
 import type * as shares from "../shares.js";
 import type * as production from "../production.js";
+import type * as homes from "../homes.js";
 import type * as shoots from "../shoots.js";
 import type * as shotLists from "../shotLists.js";
 import type * as siteWatch from "../siteWatch.js";
@@ -209,6 +210,7 @@ declare const fullApi: ApiFromModules<{
   clients: typeof clients;
   shares: typeof shares;
   production: typeof production;
+  homes: typeof homes;
   shoots: typeof shoots;
   shotLists: typeof shotLists;
   siteWatch: typeof siteWatch;
