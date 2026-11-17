@@ -258,11 +258,15 @@ export async function moveProjectCore(ctx: MutationCtx, p: Doc<"projects">, to: 
   // Unconfirmed footage storage offers go to the new client (or none).
   // Its answer was the old client's: the new client sees a fresh offer (re-review L-c).
   for (const f of fs) if (f.status === "offered" || f.status === "declined") await ctx.db.patch(f._id, { clientId: to?._id, status: "offered", answeredBy: undefined, updatedAt: Date.now() });
-  // The old client's people lose it at once: a project share made for them is turned off (client shares follow the
-  // project's client by themselves). Review links shared for one cut stay as they are.
+  // The old client's people lose it at once: its project shares and the review links shared for one of its cuts are
+  // turned off (Heston, Nov 16, "Approved"); the owner can share again. Client shares follow the project's client.
   let sharesOff = 0;
-  for (const s of await ctx.db.query("shares").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect())
-    if (s.kind === "project" && !s.offAt) { await ctx.db.patch(s._id, { offAt: Date.now() }); sharesOff++; }
+  const off = async (sh: Doc<"shares">) => { if (!sh.offAt && sh.kind !== "client") { await ctx.db.patch(sh._id, { offAt: Date.now() }); sharesOff++; } };
+  if (p.clientId) {
+    for (const sh of await ctx.db.query("shares").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect()) await off(sh);
+    for (const vid of await ctx.db.query("videos").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect())
+      for (const sh of await ctx.db.query("shares").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect()) await off((await ctx.db.get(sh._id))!);
+  }
   await audit(ctx, { kind: "moved", text: to ? `Moved project ${label(p)} to ${to.name}` : `Moved project ${label(p)} out of ${p.client ?? "its client"} (on its own now)` });
   return { moved: 1, stayed: sentStay.length, sharesOff };
 }

@@ -102,21 +102,24 @@ describe("how everything connects", () => {
       const sent = await ctx.db.insert("quotes", quote(w.A, { projectId: w.p, clientId: w.harbor, title: "Main quote", status: "sent", sentAt: 1, number: "Q-0002", seq: 2 }));
       const share = await ctx.db.insert("shares", { businessId: w.A, token: "tok-move-1", kind: "project", projectId: w.p, access: "comment", who: "invited", allVersions: true, downloads: false, emailNewVersions: true, createdAt: 0, createdBy: me } as never);
       const cshare = await ctx.db.insert("shares", { businessId: w.A, token: "tok-move-2", kind: "client", clientId: w.harbor, client: "Harbor Coffee", access: "comment", who: "invited", allVersions: true, downloads: false, emailNewVersions: true, createdAt: 0, createdBy: me } as never);
-      return { northline, draft, sent, share, cshare };
+      const vid = await ctx.db.insert("videos", { businessId: w.A, projectId: w.p, title: "Launch spot", createdAt: 0, updatedAt: 0 } as never);
+      const vshare = await ctx.db.insert("shares", { businessId: w.A, token: "tok-move-3", kind: "video", videoId: vid, access: "comment", who: "link", allVersions: false, downloads: false, emailNewVersions: false, createdAt: 0, createdBy: me } as never);
+      return { northline, draft, sent, share, cshare, vshare };
     });
     const listId = await w.heston.mutation(api.shotLists.create, { projectId: w.p, title: "Day 1" }) as Id<"shotLists">;
     const before = await w.heston.query(api.homes.projectMove, { projectId: w.p });
     expect(before.staying.map((s: { name: string }) => s.name)).toEqual(["Main quote"]);
     expect(before.things).toBeGreaterThanOrEqual(2); // the draft quote and the shot list, at least
 
-    expect(await w.heston.mutation(api.homes.moveProject, { projectId: w.p, clientId: ids.northline })).toMatchObject({ moved: 1, stayed: 1, sharesOff: 1 });
-    const r = await w.t.run(async (ctx) => ({ p: (await ctx.db.get(w.p))!, draft: (await ctx.db.get(ids.draft))!, sent: (await ctx.db.get(ids.sent))!, share: (await ctx.db.get(ids.share))!, cshare: (await ctx.db.get(ids.cshare))!, list: (await ctx.db.get(listId))! }));
+    expect(await w.heston.mutation(api.homes.moveProject, { projectId: w.p, clientId: ids.northline })).toMatchObject({ moved: 1, stayed: 1, sharesOff: 2 });
+    const r = await w.t.run(async (ctx) => ({ p: (await ctx.db.get(w.p))!, draft: (await ctx.db.get(ids.draft))!, sent: (await ctx.db.get(ids.sent))!, share: (await ctx.db.get(ids.share))!, cshare: (await ctx.db.get(ids.cshare))!, vshare: (await ctx.db.get(ids.vshare))!, list: (await ctx.db.get(listId))! }));
     expect(r.p).toMatchObject({ clientId: ids.northline, client: "Northline Outfitters" });
     expect(r.list.projectId).toBe(w.p);                                        // nothing relinked
     expect(r.draft).toMatchObject({ projectId: w.p, clientId: ids.northline });  // follows the project
     expect(r.sent).toMatchObject({ clientId: w.harbor });                       // stays with Harbor…
     expect(r.sent.projectId).toBeUndefined();                                   // …and leaves the project
     expect(r.share.offAt).toBeGreaterThan(0);                                   // Harbor's project share is off
+    expect(r.vshare.offAt).toBeGreaterThan(0);                                  // and the link shared for one cut
     // Harbor's client share no longer covers the project.
     expect((await w.t.run(async (ctx) => coveredProjects(ctx, r.cshare))).map((p) => p._id)).not.toContain(w.p);
     // Out of a client: on its own.

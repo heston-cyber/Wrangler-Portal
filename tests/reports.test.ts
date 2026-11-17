@@ -14,7 +14,12 @@ beforeAll(() => {
 const TZ = "America/Chicago";
 const RANGE = { from: "2026-01-01", to: "2026-03-31", tz: TZ };
 // Nov 6 fix: the business's own day (Central), as the report counts it; the UTC date was a day ahead every evening after 6 pm.
-const day = (n: number) => new Date(Date.now() + n * 86_400_000).toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+// Calendar days from today in Central time (adding 24-hour blocks drifts a day across the daylight-time change).
+const day = (n: number) => {
+  const d = new Date(`${new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" })}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
 type W = Awaited<ReturnType<typeof world>>;
 
 async function invoice(w: W, x: { title: string; status: "open" | "paid" | "void" | "draft"; total: number; paid?: number; due?: string; sentAt?: number; kind?: "final" | "subscription" | "other";
