@@ -639,7 +639,7 @@ export const callSheets = query({
         if (out.some((x) => x._id === cs._id)) continue;
         const r = await sentToVendor(ctx, cs, vendor._id);
         const s = r ? await ctx.db.get(cs.shootId) : null;
-        const p = s ? await ctx.db.get(s.projectId) : null;
+        const p = s ? await (s.projectId ? ctx.db.get(s.projectId) : null) : null;
         // The live date decides whether it's still coming up; the one shown is as sent (review L6).
         if (r && s && p && s.status === "scheduled" && s.date >= todayCentral()) out.push({ _id: cs._id, project: cs.sent!.heading ?? label(p), date: cs.sent!.date ?? s.date, opened: !!r.openedAt, sentAt: cs.sent!.at });
       }

@@ -260,7 +260,7 @@ export const eventFor = internalQuery({
     const s = await ctx.db.get(shootId);
     if (!s) return null;
     const c = await ctx.db.query("calendars").first();
-    const p = await ctx.db.get(s.projectId);
+    const p = await (s.projectId ? ctx.db.get(s.projectId) : null);
     const want = !!c?.calendarId && s.status === "scheduled" && !!s.calendar && !!p;
     if (!want) return { want: false as const, event: s.calendarEvent ?? null };
     const attendees: string[] = [];

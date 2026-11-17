@@ -250,7 +250,7 @@ export function GearItem({ gearId }: { gearId: string }) {
             </Card>
             <Card label="Booked on shoots" head={<SectionHead label="Booked on shoots" count={d.upcoming.length || undefined} />}>
               {d.upcoming.length === 0 && d.past.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "calendar" }} title="Not on any shoot." meta="Add it from a shoot's Edit window." />
-                : [...d.upcoming, ...d.past].map((s, i) => <div key={s.shootId} className="wp-rowwrap">{i > 0 && <Divider />}<ListRow className="ilead" lead={{ icon: "calendar" }} to={`/projects/${s.projectId}`} chevron title={`${s.project} · ${shootDay(s.date)}`} meta={`${clock(s.call)} call · ${s.location}`} chip={s.date < d.today ? <StatusChip tone="neutral">Past</StatusChip> : undefined} /></div>)}
+                : [...d.upcoming, ...d.past].map((s, i) => <div key={s.shootId} className="wp-rowwrap">{i > 0 && <Divider />}<ListRow className="ilead" lead={{ icon: "calendar" }} to={s.projectId ? `/projects/${s.projectId}` : "/production/shoots"} chevron title={`${s.project} · ${shootDay(s.date)}`} meta={`${clock(s.call)} call · ${s.location}`} chip={s.date < d.today ? <StatusChip tone="neutral">Past</StatusChip> : undefined} /></div>)}
             </Card>
           </div>
         </div>

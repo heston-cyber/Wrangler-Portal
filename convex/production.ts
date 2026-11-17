@@ -21,11 +21,13 @@ export async function shootRows(ctx: QueryCtx, shoots: Shoot[], withShots = fals
   const clients = new Map<string, string | null>();
   const out = [];
   for (const s of shoots) {
-    if (!projects.has(s.projectId)) projects.set(s.projectId, await ctx.db.get(s.projectId));
-    const p = projects.get(s.projectId);
-    if (!p) continue;
-    const ck = String(p.clientId ?? "");
-    if (!clients.has(ck)) clients.set(ck, p.clientId ? (await ctx.db.get(p.clientId))?.name ?? null : null);
+    const pk = String(s.projectId ?? "");
+    if (!projects.has(pk)) projects.set(pk, s.projectId ? await ctx.db.get(s.projectId) : null);
+    const p = projects.get(pk) ?? null;
+    if (s.projectId && !p) continue; // its project is gone
+    // D205: a shoot on its own has no project or client ("On its own").
+    const ck = String(p?.clientId ?? "");
+    if (!clients.has(ck)) clients.set(ck, p?.clientId ? (await ctx.db.get(p.clientId))?.name ?? null : null);
     // Phase 5b step 3: its call sheet, if it has one (NO CALL SHEET · DRAFT · SENT · N OF M OPENED).
     const cs = await ctx.db.query("callSheets").withIndex("by_shoot", (q) => q.eq("shootId", s._id)).first();
     const sentTo = cs ? cs.recipients.filter((r) => r.sentAt) : []; // step 4: guests it went to count too
@@ -33,7 +35,7 @@ export async function shootRows(ctx: QueryCtx, shoots: Shoot[], withShots = fals
     const sl = !withShots ? null : await ctx.db.query("shotLists").withIndex("by_shoot", (q) => q.eq("shootId", s._id)).first();
     const shots = sl ? await ctx.db.query("shots").withIndex("by_list", (q) => q.eq("listId", sl._id)).collect() : [];
     out.push({
-      _id: s._id, projectId: p._id, project: p.name, label: label(p), client: clients.get(ck) ?? null,
+      _id: s._id, projectId: p?._id ?? null, project: p?.name ?? "On its own", label: p ? label(p) : "Shoot on its own", client: clients.get(ck) ?? null,
       shotList: sl ? { _id: sl._id, total: shots.length, done: shots.filter((x) => x.done).length } : null,
       date: s.date, call: s.call, location: s.location, crew: s.crew.length, confirmed: !!s.confirmed, moved: !!s.moved,
       sheet: cs ? { _id: cs._id, state: cs.status === "sent" ? "sent" as const : "draft" as const, built: !!cs.buildId, opened: sentTo.filter((r) => r.openedAt).length, of: sentTo.length, people: cs.recipients.filter((r) => r.on).length } : null,
@@ -75,7 +77,7 @@ export const overview = query({
     const edits = await liveEdits(ctx, today);
     // This week: shoots and the projects' key dates, in date order.
     const rows = await shootRows(ctx, week);
-    const items: Array<{ date: string; text: string; projectId: string; kind: "shoot" | "date" }> = rows.map((s) => ({ date: s.date, text: `${s.client ?? s.project} shoot`, projectId: s.projectId, kind: "shoot" as const }));
+    const items: Array<{ date: string; text: string; projectId: string | null; kind: "shoot" | "date" }> = rows.map((s) => ({ date: s.date, text: `${s.client ?? s.project} shoot`, projectId: s.projectId, kind: "shoot" as const }));
     for (const p of await ctx.db.query("projects").collect()) {
       for (const d of p.keyDates ?? []) if (d.date >= today && d.date <= weekEnd && !/^shoot$/i.test(d.label.trim())) items.push({ date: d.date, text: `${p.name} · ${d.label}`, projectId: p._id, kind: "date" });
     }

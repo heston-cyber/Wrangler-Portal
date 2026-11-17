@@ -22,7 +22,7 @@ export type Home = { type: HomeType; id: string } | null;
 // ---------- the kinds (what can live where, the doc's table) ----------
 
 type KindDef = {
-  table: "shotLists" | "quotes" | "estimates" | "proposals" | "invoices" | "subscriptions" | "briefings" | "deals";
+  table: "shoots" | "shotLists" | "quotes" | "estimates" | "proposals" | "invoices" | "subscriptions" | "briefings" | "deals";
   noun: string;
   perm: Perm;
   homes: HomeType[];
@@ -32,6 +32,9 @@ type KindDef = {
   fixed?: (d: Record<string, unknown>) => string | null;
 };
 export const KINDS = {
+  // D205: a shoot day moves between projects (or to none) with its call sheet and shot list; crew booked on its
+  // project keep it there.
+  shoot: { table: "shoots", noun: "shoot", perm: "shoots", homes: ["project"], fixed: (d) => (Array.isArray(d.crew) && (d.crew as Array<{ bookingId?: string }>).some((c) => c.bookingId) ? "Crew booked on this project are on this shoot: take them off it first." : d.status !== "scheduled" ? "That shoot was cancelled." : null) },
   shotList: { table: "shotLists", noun: "shot list", perm: "shoots", homes: ["project", "shoot"] },
   quote: { table: "quotes", noun: "quote", perm: "payments", homes: ["lead", "client", "project"], sent: (d) => d.status !== "draft" },
   estimate: { table: "estimates", noun: "estimate", perm: "clients", homes: ["lead", "client", "project"] },
@@ -73,8 +76,8 @@ async function resolve(ctx: Ctx, h: NonNullable<Home>): Promise<Place> {
   if (h.type === "shoot") {
     const id = ctx.db.normalizeId("shoots", h.id); const s = id ? await ctx.db.get(id) : null;
     if (!s || s.status !== "scheduled") missing();
-    const p = await ctx.db.get(s!.projectId);
-    return { type: "shoot", id: s!._id, clientId: p?.clientId ?? null, projectId: s!.projectId, shoot: s!, dealId: null, name: `${p ? label(p) : "Shoot"} · ${s!.date}` };
+    const p = await (s!.projectId ? ctx.db.get(s!.projectId) : null);
+    return { type: "shoot", id: s!._id, clientId: p?.clientId ?? null, projectId: s!.projectId ?? null, shoot: s!, dealId: null, name: `${p ? label(p) : "Shoot"} · ${s!.date}` };
   }
   const id = ctx.db.normalizeId("deals", h.id); const d = id ? await ctx.db.get(id) : null;
   if (!d) missing();
@@ -131,7 +134,12 @@ export const move = mutation({
     const to = a.to ? await resolve(ctx, a.to) : null;
     const patch = await patchFor(ctx, a.kind as Kind, d, to);
     await ctx.db.patch(d._id as never, patch as never);
-    const name = String(d.title ?? d.number ?? def.noun);
+    if (a.kind === "shoot") {
+      // Its day-of things go with it: the call sheet and the shot list live on the shoot's project.
+      for (const cs of await ctx.db.query("callSheets").withIndex("by_shoot", (q) => q.eq("shootId", d._id as Id<"shoots">)).collect()) await ctx.db.patch(cs._id, { projectId: to?.projectId ?? undefined });
+      for (const l of await ctx.db.query("shotLists").withIndex("by_shoot", (q) => q.eq("shootId", d._id as Id<"shoots">)).collect()) await ctx.db.patch(l._id, { projectId: to?.projectId ?? undefined });
+    }
+    const name = String(d.title ?? d.number ?? (a.kind === "shoot" ? `${d.date} · ${d.location}` : def.noun));
     await audit(ctx, { kind: "moved", text: to ? `Moved ${def.noun} "${name}" to ${to.name}` : `Took ${def.noun} "${name}" off its ${homeOf(a.kind as Kind, d)?.type ?? "home"} (on its own now)` });
     return null;
   },

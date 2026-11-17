@@ -126,4 +126,28 @@ describe("how everything connects", () => {
     expect((await w.boss.query(api.homes.places, { kind: "shotList" })).some((x: { id: string }) => x.id === w.p)).toBe(false);
     expect(await w.boss.query(api.homes.projectMove, { projectId: w.p })).toBeNull();
   });
+
+  test("T-H.1, T-H.2 (D205) a shoot day on its own: scheduled, listed, its shot list goes with it into a project", async () => {
+    const w = await world();
+    const { shootId } = await w.heston.mutation(api.shoots.schedule, { date: "2030-03-03", call: "08:00", location: "Riverfront", parking: "", prepare: [], withOwner: true, bookingIds: [], calendar: false });
+    const row = (await w.heston.query(api.production.shoots, {})).upcoming.find((x: { _id: string }) => x._id === shootId);
+    expect(row).toMatchObject({ projectId: null, label: "Shoot on its own", client: null });
+    expect((await w.heston.query(api.homes.loose, {})).some((x: { id: string }) => x.id === shootId)).toBe(true);
+    await expect(w.heston.mutation(api.shoots.schedule, { date: "2030-03-04", call: "08:00", location: "X", parking: "", prepare: [], withOwner: false, bookingIds: ["nope" as never], calendar: false })).rejects.toThrow();
+    // A call sheet waits until it's on a project (it goes to the project's crew and client).
+    await expect(w.heston.mutation(api.callSheets.create, { shootId, how: "blank" })).rejects.toThrow(/Attach this shoot to a project first/);
+    // Its shot list lives with it; the client can't see or confirm a shoot that's on its own.
+    const listId = await w.heston.mutation(api.shotLists.create, { shootId, title: "B-roll" }) as Id<"shotLists">;
+    expect((await w.heston.query(api.shotLists.forShoot, { shootId }))._id).toBe(listId);
+    expect(await w.maya.query(api.shoots.page, { shootId })).toBeNull();
+    // Attach it to a project: the shot list follows; then the call sheet can be made.
+    await w.heston.mutation(api.homes.move, { kind: "shoot", id: shootId, to: { type: "project", id: w.p } });
+    expect(await w.t.run(async (ctx) => (await ctx.db.get(listId))!.projectId)).toBe(w.p);
+    expect(await w.heston.mutation(api.callSheets.create, { shootId, how: "blank" })).toBeTruthy();
+    // Edit and cancel work on a shoot on its own too.
+    const two = (await w.heston.mutation(api.shoots.schedule, { date: "2030-03-05", call: "08:00", location: "Lot", parking: "", prepare: [], withOwner: true, bookingIds: [], calendar: false })).shootId;
+    await w.heston.mutation(api.shoots.update, { shootId: two, date: "2030-03-06", call: "09:00", location: "Lot B", parking: "", prepare: [], withOwner: true, bookingIds: [], calendar: false });
+    await w.heston.mutation(api.shoots.cancel, { shootId: two });
+    await expect(w.heston.mutation(api.homes.move, { kind: "shoot", id: two, to: { type: "project", id: w.p } })).rejects.toThrow(/cancelled/);
+  });
 });

@@ -428,7 +428,7 @@ export const forBuild = query({
     let projectId: Id<"projects"> | null = null, defaultId: Id<"shotLists"> | null = null;
     const cs = await ctx.db.query("callSheets").withIndex("by_build", (q) => q.eq("buildId", id)).first();
     if (cs) {
-      projectId = cs.projectId;
+      projectId = cs.projectId ?? null;
       defaultId = (await ctx.db.query("shotLists").withIndex("by_shoot", (q) => q.eq("shootId", cs.shootId)).first())?._id ?? null;
     } else {
       const b = await ctx.db.query("briefings").withIndex("by_build", (q) => q.eq("buildId", id)).first();
@@ -442,7 +442,7 @@ export const forBuild = query({
 
 /** The lists a sent page's Shot list blocks show, live (D181), for one reader. Crew see who ticked and may tick (D180,
  *  where the block allows); clients and guests see the shots only. Null when the page has no Shot list block. */
-export async function readerShots(ctx: QueryCtx, page: unknown, projectId: Id<"projects">, shootId: Id<"shoots"> | null, crew: boolean) {
+export async function readerShots(ctx: QueryCtx, page: unknown, projectId: Id<"projects"> | null, shootId: Id<"shoots"> | null, crew: boolean) {
   const blocks = shotBlocks(page);
   if (!blocks.length) return null;
   const defaultId = shootId ? (await ctx.db.query("shotLists").withIndex("by_shoot", (q) => q.eq("shootId", shootId)).first())?._id ?? null : null;
@@ -451,7 +451,7 @@ export async function readerShots(ctx: QueryCtx, page: unknown, projectId: Id<"p
   for (const raw of ids) {
     const id = ctx.db.normalizeId("shotLists", raw);
     const l = id ? await ctx.db.get(id) : null;
-    if (!l || l.projectId !== projectId) continue; // only the page's own project's lists
+    if (!l || (l.projectId ?? null) !== projectId) continue; // only the page's own project's lists (a shoot on its own: lists on their own)
     const vw = await listView(ctx, l);
     // Review M1: the crew tick only their own shoot day's list (D180); review L5: no project label for clients and guests.
     lists.push({ _id: vw._id, pick: pickLabel(vw, crew), tickable: crew && !!shootId && l.shootId === shootId, setups: vw.setups.map((x) => ({ ...x, shots: x.shots.map((s) => ({ ...s, done: crew ? s.done : null })) })) });

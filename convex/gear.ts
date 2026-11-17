@@ -93,7 +93,7 @@ export const get = query({
     for (const b of await ctx.db.query("gearBookings").withIndex("by_gear", (q) => q.eq("gearId", g._id)).collect()) {
       const s = await ctx.db.get(b.shootId);
       if (!s || s.status !== "scheduled") continue;
-      const p = await ctx.db.get(s.projectId);
+      const p = await (s.projectId ? ctx.db.get(s.projectId) : null);
       shoots.push({ shootId: s._id, projectId: s.projectId, project: p?.name ?? "A project", date: s.date, call: s.call, location: s.location });
     }
     shoots.sort((a, b) => a.date.localeCompare(b.date));
@@ -241,7 +241,7 @@ export const forShoot = query({
         if (o.shootId === s._id) continue;
         const os = await ctx.db.get(o.shootId);
         if (!os || os.status !== "scheduled" || os.date !== s.date) continue;
-        const p = await ctx.db.get(os.projectId);
+        const p = await (os.projectId ? ctx.db.get(os.projectId) : null);
         clash.push({ shootId: os._id, project: p?.name ?? "another project", call: os.call });
       }
       items.push({ bookingId: b._id, gearId: g._id, name: g.name, kind: g.kind, status: g.status, clash });

@@ -1326,7 +1326,7 @@ export default defineSchema({
   // call time or place clears the confirmation and asks again (email 30). Times are the business's local wall clock.
   shoots: defineTable({
     businessId: v.optional(v.id("businesses")),
-    projectId: v.id("projects"),
+    projectId: v.optional(v.id("projects")),   // D205 (Nov 16): a shoot day can be on its own (a quick b-roll day)
     date: v.string(),                         // YYYY-MM-DD
     call: v.string(),                         // HH:MM, 24-hour
     wrap: v.optional(v.string()),             // HH:MM
@@ -1514,7 +1514,7 @@ export default defineSchema({
   callSheets: defineTable({
     businessId: v.optional(v.id("businesses")),
     shootId: v.id("shoots"),
-    projectId: v.id("projects"),
+    projectId: v.optional(v.id("projects")), // D205: none for a shoot on its own
     buildId: v.optional(v.id("wsBuilds")),
     templateId: v.optional(v.id("wsTemplates")),
     how: v.union(v.literal("questions"), v.literal("template"), v.literal("blank")),

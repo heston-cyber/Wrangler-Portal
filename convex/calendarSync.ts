@@ -118,7 +118,7 @@ export const range = query({
     const people = new Map<string, string[]>();
     for (const s of await ctx.db.query("shoots").withIndex("by_date", (q) => q.gte("date", from).lte("date", to)).collect()) {
       if (s.status !== "scheduled") continue;
-      const p = await ctx.db.get(s.projectId);
+      const p = await (s.projectId ? ctx.db.get(s.projectId) : null);
       if (!p) continue;
       if (!people.has(p._id)) people.set(p._id, (await portalPeople(ctx, p)).map((x) => x.email));
       const them = people.get(p._id) ?? [];
@@ -165,7 +165,7 @@ export const linkOptions = query({
     const shoots = [];
     for (const s of await ctx.db.query("shoots").withIndex("by_date", (q) => q.gte("date", addDays(today, -7))).take(100)) {
       if (s.status !== "scheduled") continue;
-      const p = await ctx.db.get(s.projectId);
+      const p = await (s.projectId ? ctx.db.get(s.projectId) : null);
       if (p) shoots.push({ _id: s._id, label: `Shoot ${shortDay(s.date)} · ${p.name}` });
     }
     const projects = (await ctx.db.query("projects").order("desc").take(200)).filter((p) => !(p.stage === "delivery" && p.deliveryUnlockedAt)).map((p) => ({ _id: p._id, label: label(p) }));
@@ -350,7 +350,7 @@ export const moveShoot = mutation({
     const id = ctx.db.normalizeId("shoots", a.shootId);
     const s = id ? await ctx.db.get(id) : null;
     if (!s || s.status !== "scheduled") throw new ConvexError("That shoot isn't here any more.");
-    const p = await ctx.db.get(s.projectId);
+    const p = await (s.projectId ? ctx.db.get(s.projectId) : null);
     if (!p) throw new ConvexError("This project doesn't exist any more.");
     // Review fix M1: Google would keep the old time (and its guests the old invite) until a reconnect, so not while it's off.
     if ((await conn(ctx))?.disconnectedAt) throw new ConvexError("Google Calendar is disconnected. Reconnect Google before moving shoots on the calendar.");
@@ -376,7 +376,7 @@ export const moveShoot = mutation({
 type DragWas = { date: string; call: string; wrap: string | null; moved: Doc<"shoots">["moved"] | null; confirmed: Doc<"shoots">["confirmed"] | null; notify: boolean };
 /** A drag taken back: the "please confirm again" Inbox items go (their email hasn't left yet, and now won't). */
 async function dropDragNotes(ctx: MutationCtx, s: Doc<"shoots">, at: number) {
-  const p = await ctx.db.get(s.projectId);
+  const p = await (s.projectId ? ctx.db.get(s.projectId) : null);
   if (p) for (const person of await portalPeople(ctx, p)) {
     const it = await ctx.db.query("inboxItems").withIndex("by_key", (q) => q.eq("key", `shoot:${s._id}:${at}:${person.email.toLowerCase()}`)).first();
     if (it) await ctx.db.delete(it._id);
@@ -452,7 +452,7 @@ export const askConfirmAgain = mutation({
     const { s, g } = await movedShoot(ctx, shootId);
     if (g.doneAt) return { told: 0 };
     if (g.kept) { await ctx.db.patch(s._id, { googleMove: { ...g, doneAt: Date.now() } }); return { told: 0 }; } // nothing moved
-    const p = await ctx.db.get(s.projectId);
+    const p = await (s.projectId ? ctx.db.get(s.projectId) : null);
     if (!p || s.status !== "scheduled") throw new ConvexError("That shoot isn't here any more.");
     const now = Date.now();
     const was = { date: g.was.date, call: g.was.call, location: g.was.location, at: now };
@@ -466,7 +466,7 @@ export async function shootMoveNeeds(ctx: QueryCtx) {
   const out = [];
   for (const s of await ctx.db.query("shoots").withIndex("by_date", (q) => q.gte("date", addDays(todayCentral(), -1))).collect()) {
     if (!s.googleMove || s.googleMove.doneAt || s.status !== "scheduled") continue;
-    const p = await ctx.db.get(s.projectId);
+    const p = await (s.projectId ? ctx.db.get(s.projectId) : null);
     if (!p) continue;
     const sheet = await ctx.db.query("callSheets").withIndex("by_shoot", (q) => q.eq("shootId", s._id)).first();
     out.push({ kind: "shootMoved" as const, at: s.googleMove.at, shootId: s._id, projectId: p._id, project: label(p), date: s.date, call: s.call, wasDate: s.googleMove.was.date, wasCall: s.googleMove.was.call,
