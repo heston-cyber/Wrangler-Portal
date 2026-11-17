@@ -751,6 +751,7 @@ export function MorePage({ me, side }: { me: Me; side: Side }) {
     ? [
       ...rest.map((it) => ({ to: it.to, icon: it.icon, title: it.label, sub: TOOL_SUB[it.to] })),
       { to: "/settings", icon: "settings", title: "Settings", sub: "Business, Register, Dropbox, connectors…" },
+      { to: "/settings/haptics", icon: "info", title: "Haptics test", sub: "For now: which haptic taps this phone allows" }, // Nov 17, until haptics are settled
       { to: "/settings/account", icon: "user", title: "Account", sub: `${me.name ?? ""}${me.name ? " · " : ""}${me.email}` },
       { icon: "sign-out", title: "Sign out", onClick: signOut },
     ]
