@@ -14,6 +14,8 @@ import { claimUpload, deleteFile } from "./lib/fileOwners";
 import { businessInScope } from "./lib/business";
 import { geocode } from "./lib/weather";
 import { label } from "./lib/bookingRows";
+import { todayCentral } from "./lib/bookings";
+import { queueCalendar } from "./calendar";
 
 type Ctx = QueryCtx | MutationCtx;
 const tidy = (s: string | undefined, n: number) => (s ?? "").trim().slice(0, n);
@@ -220,9 +222,17 @@ export const useForShoot = mutation({
     if (!s || s.status !== "scheduled") throw new ConvexError("That shoot isn't here any more.");
     if (!(await ctx.db.query("placeLinks").withIndex("by_shoot", (q) => q.eq("shootId", s._id)).collect()).some((l) => l.placeId === p._id))
       await ctx.db.insert("placeLinks", { placeId: p._id, shootId: s._id, createdAt: Date.now() });
-    // The shoot's place is the address (the call sheet's Location block and the calendar read it). Nobody is emailed:
-    // changing what the client was told stays the owner's Edit shoot.
-    if (a.asPlace) await ctx.db.patch(s._id, { location: (p.address || p.name).slice(0, 200), updatedAt: Date.now() });
+    // The shoot's place is the address (the call sheet's Location block and the calendar read it). 541ac10 review M3:
+    // a new place is a move, as in Edit shoot: a history line, the client's confirmation cleared (the Shoot page then
+    // offers Ask to confirm), and the calendar event brought up to date quietly. Nobody is emailed or told (rule 3):
+    // telling the client stays the owner's own click.
+    const loc = (p.address || p.name).slice(0, 200);
+    if (a.asPlace && loc !== s.location) {
+      if (s.date < todayCentral()) throw new ConvexError("That shoot's date has passed.");
+      const now = Date.now();
+      await ctx.db.patch(s._id, { location: loc, updatedAt: now, calAt: now, moved: { date: s.date, call: s.call, location: s.location, at: now }, confirmed: undefined, history: [...s.history, { at: now, text: `Place changed from ${s.location} to ${p.name}` }] });
+      await queueCalendar(ctx, s._id, "none");
+    }
     return null;
   },
 });

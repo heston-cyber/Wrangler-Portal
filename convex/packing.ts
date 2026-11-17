@@ -263,9 +263,11 @@ export const tick = mutation({
     const l = await ctx.db.get(x.listId);
     if (!l?.shootId) throw new ConvexError("Ticks are for a shoot's list.");
     const now = Date.now();
-    const t = tickLands(serverTime(a.at, a.sent, now), now, x.tickAt, undefined);
+    // Review L9: each pass keeps its own last tick, so a late load-in untick isn't lost to a newer wrap tick.
+    const last = a.pass === "loaded" ? x.tickAt : x.backAt;
+    const t = tickLands(serverTime(a.at, a.sent, now), now, last, undefined);
     if (!t.lands) return { landed: false };
-    await ctx.db.patch(x._id, { [a.pass]: a.done ? { name: me.name?.trim() || me.email, at: t.at } : undefined, tickAt: t.at } as Partial<Doc<"packLines">>);
+    await ctx.db.patch(x._id, { [a.pass]: a.done ? { name: me.name?.trim() || me.email, at: t.at } : undefined, [a.pass === "loaded" ? "tickAt" : "backAt"]: t.at } as Partial<Doc<"packLines">>);
     return { landed: true };
   },
 });
@@ -274,17 +276,24 @@ export const tick = mutation({
 export const flag = mutation({
   args: { lineId: v.string(), flag: v.union(v.literal("lost"), v.literal("repair"), v.null()) },
   handler: async (ctx, a) => {
-    await requireAll(ctx, "production");
+    const me = await requireAll(ctx, "production");
     const x = await lineOf(ctx, a.lineId);
     const l = await ctx.db.get(x.listId);
     if (!l?.shootId) throw new ConvexError("Only a shoot's list is checked at wrap.");
     const s = await ctx.db.get(l.shootId);
-    await ctx.db.patch(x._id, { flag: a.flag ?? undefined });
+    if ((x.flag ?? null) === a.flag) return null; // review L8: a second tap adds nothing
     const g = x.gearId ? await ctx.db.get(x.gearId) : null;
+    const who = me.name?.trim() || me.email;
     if (g && a.flag) {
-      const note = `${a.flag === "lost" ? "Lost" : "Sent for repair"} after the shoot on ${s?.date ?? "?"}.`;
+      // Review L8: who flagged it, and the item's status before, so clearing the flag puts it back.
+      const note = `${a.flag === "lost" ? "Marked lost" : "Sent for repair"} after the shoot on ${s?.date ?? "?"} by ${who}.`;
       await ctx.db.patch(g._id, { status: a.flag === "lost" ? "retired" : "in_repair", notes: [g.notes, note].filter(Boolean).join("\n").slice(0, 2000), updatedAt: Date.now() });
-    }
+      await ctx.db.patch(x._id, { flag: a.flag, gearWas: x.gearWas ?? g.status });
+    } else if (g && !a.flag) {
+      const back = (x.gearWas ?? "in_service") as typeof g.status;
+      await ctx.db.patch(g._id, { status: back, notes: [g.notes, `Flag cleared by ${who} (back to ${back === "in_service" ? "in service" : back.replace("_", " ")}).`].filter(Boolean).join("\n").slice(0, 2000), updatedAt: Date.now() });
+      await ctx.db.patch(x._id, { flag: undefined, gearWas: undefined });
+    } else await ctx.db.patch(x._id, { flag: a.flag ?? undefined });
     return null;
   },
 });

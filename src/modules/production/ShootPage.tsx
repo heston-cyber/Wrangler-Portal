@@ -44,7 +44,7 @@ export default function ShootPage({ shootId, tab }: { shootId: string; tab: Shoo
     { key: "overview", label: "Overview" },
     { key: "callsheet", label: "Call sheet" },
     { key: "shotlist", label: "Shot list", count: d.shotList ? `${d.shotList.done}/${d.shotList.total}` : undefined },
-    { key: "gear", label: "Gear", count: d.gear ? `${d.gear.back || d.gear.loaded}/${d.gear.total}${d.gear.back ? " back" : d.gear.loaded ? " loaded" : ""}` : undefined },
+    ...(d.canGear ? [{ key: "gear" as ShootTab, label: "Gear", count: d.gear ? `${d.gear.back || d.gear.loaded}/${d.gear.total}${d.gear.back ? " back" : d.gear.loaded ? " loaded" : ""}` : undefined }] : []),
     ...(d.releases ? [{ key: "releases" as ShootTab, label: "Releases", count: d.releases.missing ? `${d.releases.missing} missing` : d.releases.signed ? `${d.releases.signed} signed` : undefined, warn: !!d.releases.missing }] : []),
     { key: "locations", label: "Locations", count: d.places ? String(d.places) : undefined },
   ];
@@ -78,7 +78,7 @@ export default function ShootPage({ shootId, tab }: { shootId: string; tab: Shoo
         {tab === "overview" && <Overview d={d} go={go} />}
         {tab === "callsheet" && <CallSheetTab d={d} />}
         {tab === "shotlist" && <ShotListTab d={d} />}
-        {tab === "gear" && <GearTab shootId={d._id} show={show} />}
+        {tab === "gear" && d.canGear && <GearTab shootId={d._id} show={show} />}
         {tab === "releases" && d.releases && <ReleasesTab shootId={d._id} show={show} />}
         {tab === "locations" && <LocationsTab shootId={d._id} show={show} />}
       </div>
@@ -98,7 +98,7 @@ function Overview({ d, go }: { d: Page; go: (t: ShootTab) => void }) {
     { t: "callsheet", icon: "call-sheet", label: "Call sheet", v: !d.sheet ? "Not made yet" : d.sheet.state === "sent" ? `Sent${d.sheet.sentAt ? ` ${dayText(new Date(d.sheet.sentAt).toISOString().slice(0, 10))}` : ""} · ${d.sheet.opened} of ${d.sheet.of} opened` : "Draft" },
     { t: "shotlist", icon: "shot-list", label: "Shot list", v: d.shotList ? `${d.shotList.done} of ${d.shotList.total} done` : "None yet" },
     ...(d.releases ? [{ t: "releases" as ShootTab, icon: "sign" as IconName, label: "Releases", v: [d.releases.signed ? `${d.releases.signed} signed` : null, d.releases.missing ? `${d.releases.missing} missing` : null].filter(Boolean).join(" · ") || "None", warn: !!d.releases.missing }] : []),
-    { t: "gear", icon: "case", label: "Gear", v: d.gear ? `${d.gear.loaded} packed · ${d.gear.back} back` : "No packing list" },
+    ...(d.canGear ? [{ t: "gear" as ShootTab, icon: "case" as IconName, label: "Gear", v: d.gear ? `${d.gear.loaded} packed · ${d.gear.back} back` : "No packing list" }] : []),
     { t: "locations", icon: "map-pin", label: "Locations", v: d.places ? `${d.places} ${d.places === 1 ? "place" : "places"}` : "None linked" },
   ];
   return (

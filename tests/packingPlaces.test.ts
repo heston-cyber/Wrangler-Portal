@@ -35,6 +35,12 @@ describe("packing lists", () => {
     // At wrap: lost.
     await w.heston.mutation(api.packing.flag, { lineId: line, flag: "lost" });
     expect(await w.t.run(async (ctx) => (await ctx.db.get(gearId))!.status)).toBe("retired");
+    // Review L8: clearing the flag puts the item back as it was; a second tap adds nothing.
+    await w.heston.mutation(api.packing.flag, { lineId: line, flag: null });
+    expect(await w.t.run(async (ctx) => (await ctx.db.get(gearId))!.status)).toBe("in_service");
+    await w.heston.mutation(api.packing.flag, { lineId: line, flag: "lost" });
+    await w.heston.mutation(api.packing.flag, { lineId: line, flag: "lost" });
+    expect((await w.t.run(async (ctx) => (await ctx.db.get(gearId))!.notes ?? "")).match(/Marked lost/g)).toHaveLength(2);
     // The Shoot page counts it.
     expect((await w.heston.query(api.shootPage.get, { shootId })).gear).toMatchObject({ total: 3, loaded: 1, back: 0 });
     // A client can't see any of it.

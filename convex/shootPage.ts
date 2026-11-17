@@ -38,7 +38,10 @@ export const get = query({
       const miss = shots.filter((x) => x.releaseNeeded && !covered.has(x._id));
       releases = { signed, missing: miss.length, missingShots: miss.map((x) => x.number) };
     } catch { releases = null; }
-    const packing = await ctx.db.query("packLists").withIndex("by_shoot", (q) => q.eq("shootId", s._id)).first();
+    // Review L11: packing lists are Production's; without it the Gear tab isn't offered.
+    let canGear = true;
+    try { await requireAll(ctx, "production"); } catch { canGear = false; }
+    const packing = canGear ? await ctx.db.query("packLists").withIndex("by_shoot", (q) => q.eq("shootId", s._id)).first() : null;
     const lines = packing ? await ctx.db.query("packLines").withIndex("by_list", (q) => q.eq("listId", packing._id)).collect() : [];
     const places = await ctx.db.query("placeLinks").withIndex("by_shoot", (q) => q.eq("shootId", s._id)).collect();
     return {
@@ -51,7 +54,7 @@ export const get = query({
       shotList: list ? { _id: list._id, total: shots.length, done: shots.filter((x) => x.done).length } : null,
       releases,
       gear: packing ? { _id: packing._id, total: lines.reduce((n, l) => n + l.qty, 0), loaded: lines.reduce((n, l) => n + (l.loaded ? l.qty : 0), 0), back: lines.reduce((n, l) => n + (l.back ? l.qty : 0), 0) } : null,
-      places: places.length,
+      places: places.length, canGear,
       value: seesValue(me),
     };
   },

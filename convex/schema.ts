@@ -1605,7 +1605,9 @@ export default defineSchema({
     loaded: v.optional(v.object({ name: v.string(), at: v.number() })),
     back: v.optional(v.object({ name: v.string(), at: v.number() })),
     tickAt: v.optional(v.number()),              // the last tick's time (an older offline tick loses, as for shot lists)
+    backAt: v.optional(v.number()),              // 541ac10 review L9: the wrap pass's own last tick (tickAt is load-in's)
     flag: v.optional(v.union(v.literal("lost"), v.literal("repair"))), // at wrap: Mark as lost / In repair
+    gearWas: v.optional(v.string()),             // review L8: the Gear item's status before the flag (put back when cleared)
   }).index("by_list", ["listId", "order"]),
 
   // 5k (D192, Nov 16): location scouting. A place in the bank, with its details, photos and where it is (for the map
