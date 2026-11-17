@@ -4,21 +4,23 @@
 // Nov 16 (How everything connects, D204–D206, Q133): ten tools in three groups. People splits into Clients and crew
 // (Production); Docs and Payments merge into Sales and money; Sent folds into Messages; Calendar moves up; the stages
 // become Creative planning, Production and Post. Every old address keeps working.
-export const TOOLS = ["dashboard", "messages", "work", "calendar", "projects", "creative", "production", "post", "clients", "money"] as const;
+// Nov 17 (Heston, approved 09:00): Production is the hub of the pipeline: Creative planning and Post live inside it
+// (Creative planning, Pre-pro, Prin-pro, Post-pro, Delivery), so they leave the menu's own list.
+export const TOOLS = ["dashboard", "messages", "work", "calendar", "projects", "production", "clients", "money"] as const;
 export type ToolKey = (typeof TOOLS)[number];
 export const TOOL_LABEL: Record<ToolKey, string> = {
-  dashboard: "Dashboard", messages: "Messages", work: "Work", calendar: "Calendar", projects: "Projects", creative: "Creative planning",
-  production: "Production", post: "Post", clients: "Clients", money: "Sales and money",
+  dashboard: "Dashboard", messages: "Messages", work: "Work", calendar: "Calendar", projects: "Projects",
+  production: "Production", clients: "Clients", money: "Sales and money",
 };
 export const TOOL_GROUPS = [
   { label: "Every day", tools: ["dashboard", "messages", "work", "calendar"] },
-  { label: "Making the work", tools: ["projects", "creative", "production", "post"] },
+  { label: "Making the work", tools: ["projects", "production"] },
   { label: "Running the business", tools: ["clients", "money"] },
 ] as const satisfies ReadonlyArray<{ label: string; tools: readonly ToolKey[] }>;
 export const groupOf = (k: ToolKey) => TOOL_GROUPS.findIndex((g) => (g.tools as readonly string[]).includes(k));
 export const REQUIRED_TOOLS: ToolKey[] = ["dashboard"]; // always on the menu
 // Tools from earlier menus, and where they are now.
-const FOLDED: Record<string, ToolKey> = { review: "post", clients: "clients", vendors: "production", proposals: "money", people: "clients", docs: "money", payments: "money", sent: "messages" };
+const FOLDED: Record<string, ToolKey> = { creative: "production", post: "production", review: "production", clients: "clients", vendors: "production", proposals: "money", people: "clients", docs: "money", payments: "money", sent: "messages" };
 
 export const WIDGETS = ["coming_up", "needs", "followups", "clients", "live_edits", "money", "activity", "recurring", "revenue_year", "outstanding"] as const; // Phase 5b: Coming up, Live edits, Money this month; Phase 5e step 5: the Reports widgets
 export type WidgetKey = (typeof WIDGETS)[number];

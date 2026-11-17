@@ -20,7 +20,13 @@ describe("5g phone menu", () => {
 
   it("5g.2 the path says where you are, and the section crumb lists every menu item", () => {
     const t = trail("/vendors/briefings");
-    expect(t.map((c) => c.label)).toEqual(["Production", "Briefings"]); // Nov 16: the new menu has no stages under Production
+    expect(t.map((c) => c.label)).toEqual(["Production", "Pre-pro", "Briefings"]); // Nov 17: Production is the hub again, in five stages
+    expect(t[1].options.map((o) => o.label)).toEqual(["Creative planning", "Pre-pro", "Prin-pro", "Post-pro", "Delivery"]);
+    expect(trail("/creative/canvas").map((c) => c.label)).toEqual(["Production", "Creative planning", "Canvas and mood boards"]);
+    expect(trail("/review/library").map((c) => c.label)).toEqual(["Production", "Post-pro", "All cuts"]);
+    expect(trail("/delivery").map((c) => c.label)).toEqual(["Production", "Delivery"]);
+    expect(owner.main.map((i) => i.label)).not.toContain("Creative planning");
+    expect(owner.main.map((i) => i.label)).not.toContain("Post");
     expect(t[0].options.map((o) => o.label)).toEqual(owner.main.map((i) => i.label));
     expect(t[0].options.filter((o) => o.current).map((o) => o.label)).toEqual(["Production"]);
     expect(trail("/payments/invoices").map((c) => c.label)).toEqual(["Sales and money", "Payments", "Invoices"]);

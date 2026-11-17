@@ -42,7 +42,7 @@ export function DeliveryList() {
   const without = (board?.projects ?? []).filter((p) => !(d?.deliveries ?? []).some((x) => x.projectId === p._id));
   return (
     <>
-      <TopBar><a {...linkProps("/review/overview")}>Post</a><Sep /><span className="here">Delivery</span></TopBar>
+      <TopBar><a {...linkProps("/production")}>Production</a><Sep /><span className="here">Delivery</span></TopBar>
       <div className="wp-page">
         <PageHeader eyebrow="Post" title="Delivery" sub="Final files kept for your clients, separate from Review. Videos and photo albums, published when you’re ready." actions={<Button variant="primary" icon="plus" onClick={() => setPicking(true)}>New delivery</Button>} />
         <div className="wk-bar">
@@ -103,7 +103,7 @@ export function DeliveryPage({ projectId }: { projectId: string }) {
       <span className={`ws-save hide-sm ${d.changed ? "" : "saved"}`}>{d.state === "draft" ? "Draft" : d.state === "ended" ? "Ended" : d.changed ? "Unpublished changes" : "Published"}</span>
       <Button size="sm" variant="ghost" className="hide-sm" onClick={() => setDialog({ k: "preview" })}>Preview as client</Button>
       <Button size="sm" variant="primary" disabled={d.state !== "draft" && !d.changed} onClick={() => setDialog({ k: "publish" })}>{d.state === "draft" ? "Publish" : "Publish changes"}</Button>
-    </> : undefined}><a {...linkProps("/review/overview")}>Post</a><Sep /><a {...linkProps("/delivery")}>Delivery</a><Sep /><span className="here">{g.project.label}</span></TopBar>
+    </> : undefined}><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/delivery")}>Delivery</a><Sep /><span className="here">{g.project.label}</span></TopBar>
   );
   if (!d) return <>{top}<div className="wp-page"><PageHeader eyebrow="Delivery" title={g.project.label} /><div className="wp-tablecard glass"><EmptyState icon="package" title="No delivery yet." body="A long-term home for this project's final videos and photo albums, separate from Review." actions={<Button variant="primary" onClick={() => void ensure({ projectId }).catch((e) => show(errLine(e)))}>Make the delivery</Button>} /></div></div>{toast}</>;
   const left = d.keptUntil ? Math.round((Date.parse(`${d.keptUntil}T12:00:00Z`) - Date.now()) / 86_400_000) : null;

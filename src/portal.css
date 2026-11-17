@@ -571,6 +571,19 @@ a.wp-row:hover, button.wp-row:hover, .wp-row.hover { background: var(--surface-b
   .wp-tab:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: -2px; }
   .wp-tab[aria-current="page"] { color: var(--text-primary); }
   .wp-tab[aria-current="page"] .wp-icon { opacity: 1; }
+  /* Nov 17: the Production tab's hold panel (five stages, glass, rises from the tab). */
+  .wp-tab.has-hold { touch-action: none; -webkit-touch-callout: none; -webkit-user-drag: none; -webkit-user-select: none; user-select: none; }
+  .wp-tab.has-hold.holding { background: var(--accent-tint); transform: scale(.94); transition: transform 380ms ease-out, background 380ms; }
+  .wp-stagescrim { position: fixed; inset: 0; z-index: 59; background: rgba(0,0,0,.5); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); animation: wpFadeIn 180ms ease-out both; }
+  .wp-stagepanel { position: fixed; z-index: 61; bottom: calc(96px + env(safe-area-inset-bottom, 0px) * .5); display: grid; gap: 2px; padding: 8px; border-radius: 22px;
+    background: rgba(24, 19, 23, .72) !important; -webkit-backdrop-filter: blur(28px) saturate(1.6) !important; backdrop-filter: blur(28px) saturate(1.6) !important;
+    box-shadow: inset 0 0 0 1px rgba(var(--paper), .14), inset 0 1px 0 rgba(var(--paper), .18), 0 18px 50px rgba(0,0,0,.55);
+    transform-origin: var(--ox, 50%) calc(100% + 40px); animation: wpStagePop 320ms cubic-bezier(.34, 1.56, .64, 1) both; }
+  .wp-stagerow { -webkit-user-drag: none; -webkit-touch-callout: none; display: flex; align-items: center; gap: 14px; padding: 13px 14px; border-radius: 14px; color: var(--text-primary); text-decoration: none; font: 500 16px/1.2 var(--font-body); }
+  .wp-stagerow .wp-icon, .wp-stagerow .lucide { color: var(--accent); }
+  .wp-stagerow.hot, .wp-stagerow:active { background: rgba(var(--paper), .1); }
+  .wp-stagerow[aria-current="page"] { background: var(--accent-tint); }
+  @media (prefers-reduced-motion: reduce) { .wp-stagepanel, .wp-stagescrim { animation: none; } }
   .wp-tab .wp-badge { position: absolute; top: -2px; left: calc(50% + 6px); min-width: 18px; height: 18px; font-size: 10px; padding: 0 5px; }
   .toast { bottom: 104px; }
   .client-side .topbar { padding: 0 16px 18px; }
@@ -2576,6 +2589,14 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 @media (max-width: 600px) { .tm-foot .sp { flex-basis: 100%; height: 0; } }
 
 /* Phase 5b (Nov 3): Production › Overview and Shoots (760:637, 763:2708; phone 769:6647). Built on Payments' overview look. */
+/* Nov 17: Production is the hub: five stage cards, in order. */
+.prod-stages { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+.prod-stage { position: relative; display: grid; gap: 6px; align-content: start; padding: 16px; border-radius: 18px; color: var(--text-primary); text-decoration: none; min-height: 116px; }
+.prod-stage:hover { background: var(--surface-block-hover); }
+.prod-stage .wp-icon, .prod-stage .lucide { color: var(--accent); }
+.prod-stage b { font: 600 15px/1.25 var(--font-body); }
+.prod-stage .n { position: absolute; top: 14px; right: 16px; font: 500 12px/1 var(--font-body); color: var(--text-tertiary, rgba(var(--paper), .4)); }
+@media (max-width: 900px) { .prod-stages { grid-template-columns: 1fr; gap: 8px; } .prod-stage { grid-template-columns: 22px 1fr; column-gap: 12px; min-height: 0; padding: 14px 16px; } .prod-stage b { align-self: center; } .prod-stage .secondary { grid-column: 2; } }
 .prod-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } /* step 3: the fourth tile, Call sheets */
 .prod-week dd a { color: var(--text-primary); text-decoration: none; }
 .prod-week dd a:hover { text-decoration: underline; }
@@ -4258,3 +4279,6 @@ textarea.cv-boxtxt { pointer-events: auto; display: block; padding-top: calc(50%
   .cv-shared .cv-bl { bottom: calc(80px + env(safe-area-inset-bottom)); }
   .cv-menubtn { left: 8px; top: 8px; }
 }
+
+@keyframes wpStagePop { from { opacity: 0; transform: translateY(18px) scale(.55); } 60% { opacity: 1; } to { opacity: 1; transform: none; } }
+@keyframes wpFadeIn { from { opacity: 0; } to { opacity: 1; } }

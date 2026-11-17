@@ -22,7 +22,7 @@ const mapsUrl = (q: string) => `https://maps.apple.com/?q=${encodeURIComponent(q
 const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
 
 const Crumbs = ({ here }: { here?: string }) => (
-  <TopBar><a {...linkProps("/creative")}>Creative planning</a><Sep />{here ? <><a {...linkProps("/creative/locations")}>Locations</a><Sep /><span className="here">{here}</span></> : <span className="here">Locations</span>}</TopBar>
+  <TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/creative")}>Creative planning</a><Sep />{here ? <><a {...linkProps("/creative/locations")}>Locations</a><Sep /><span className="here">{here}</span></> : <span className="here">Locations</span>}</TopBar>
 );
 
 // ---------- Add / edit a place ----------

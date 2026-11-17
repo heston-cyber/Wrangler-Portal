@@ -47,7 +47,7 @@ export function CanvasList() {
   const n = (k: string) => all.filter((c) => (k === "shared" ? c.shared > 0 : k === "loose" ? !c.home : c.kind === k)).length;
   return (
     <>
-      <TopBar><a {...linkProps("/creative")}>Creative planning</a><Sep /><span className="here">Canvas and mood boards</span></TopBar>
+      <TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/creative")}>Creative planning</a><Sep /><span className="here">Canvas and mood boards</span></TopBar>
       <div className="wp-page">
         <PageHeader eyebrow="Creative planning" title="Canvas and mood boards" sub="Boards for ideas, references and plans. Only your business sees them until you share one." actions={<Button variant="primary" icon="plus" onClick={() => setOpen("canvas")}>New canvas</Button>} />
         {list !== undefined && all.length > 0 && <PillTabs label="Filter" value={f} onChange={setF} items={[{ key: "all", label: "All", count: all.length }, { key: "canvas", label: "Canvases", count: n("canvas") }, { key: "mood", label: "Mood boards", count: n("mood") }, { key: "shared", label: "Shared", count: n("shared") }, { key: "loose", label: "Not attached", count: n("loose") }]} />}
@@ -131,8 +131,8 @@ export function CanvasPage({ canvasId }: { canvasId: string }) {
   const [ask, confirmNode] = useConfirm();
   const [dialog, setDialog] = useState<null | "share" | "move" | "rename">(null);
   const [nameDraft, setNameDraft] = useState("");
-  if (c === undefined) return <><TopBar><a {...linkProps("/creative")}>Creative planning</a><Sep /><a {...linkProps("/creative/canvas")}>Canvas and mood boards</a></TopBar><div className="wp-page"><SkeletonRows n={4} /></div></>;
-  if (c === null) return <><TopBar><a {...linkProps("/creative")}>Creative planning</a><Sep /><a {...linkProps("/creative/canvas")}>Canvas and mood boards</a></TopBar><div className="wp-page"><EmptyState icon="creative" title="This board isn't here." actions={<Button onClick={() => navigate("/creative/canvas")}>All boards</Button>} /></div></>;
+  if (c === undefined) return <><TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/creative")}>Creative planning</a><Sep /><a {...linkProps("/creative/canvas")}>Canvas and mood boards</a></TopBar><div className="wp-page"><SkeletonRows n={4} /></div></>;
+  if (c === null) return <><TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/creative")}>Creative planning</a><Sep /><a {...linkProps("/creative/canvas")}>Canvas and mood boards</a></TopBar><div className="wp-page"><EmptyState icon="creative" title="This board isn't here." actions={<Button onClick={() => navigate("/creative/canvas")}>All boards</Button>} /></div></>;
   const upload = async (file: File, onProgress: (p: number) => void) => {
     const url = await uploadUrl({ canvasId });
     const storageId = await new Promise<Id<"_storage">>((resolve, reject) => {
