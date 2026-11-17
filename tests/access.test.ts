@@ -223,6 +223,7 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "calendarSync.moveDate": SHOOTS,
     "calendarSync.shootMoveDone": SHOOTS,
     "calendarSync.askConfirmAgain": SHOOTS,
+    "shoots.askClientConfirm": SHOOTS,
     "calendarSync.syncNow": SHOOTS,
     "callSheets.ensureStarters": SHOOTS,
     "callSheets.list": SHOOTS,

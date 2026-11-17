@@ -224,7 +224,9 @@ describe("how everything connects", () => {
     // L3: once its call sheet is sent, the shoot stays on its project.
     const csId = await w.heston.mutation(api.callSheets.create, { shootId, how: "blank" });
     await w.t.run((ctx) => ctx.db.patch(csId as Id<"callSheets">, { status: "sent" } as never));
-    await expect(w.heston.mutation(api.homes.move, { kind: "shoot", id: shootId, to: null })).rejects.toThrow(/call sheet was sent/);
+    // Heston (Nov 16): it moves without problems; the sheet goes with it.
+    await w.heston.mutation(api.homes.move, { kind: "shoot", id: shootId, to: null });
+    expect(await w.t.run(async (ctx) => (await ctx.db.get(csId as Id<"callSheets">))!.projectId ?? null)).toBeNull();
     // M7: a lead moved to another client takes its plain quote; an addressed one stays with Harbor and leaves the lead.
     const dealId = await w.t.run((ctx) => ctx.db.insert("deals", { businessId: w.A, title: "Harbor summer", stage: "lead", source: "hand", clientId: w.harbor, history: [], createdAt: 0, updatedAt: 0 }));
     const plain = await w.t.run((ctx) => ctx.db.insert("quotes", quote(w.A, { dealId, clientId: w.harbor, title: "Plain" })));
@@ -246,12 +248,18 @@ describe("how everything connects", () => {
     const fsId = await w.t.run((ctx) => ctx.db.insert("footageStorage", { businessId: w.A, projectId: w.p, clientId: w.harbor, priceCents: 1, offeredAt: 0, keepUntil: "2030-01-01", status: "declined", answeredBy: { email: "maya@harbor.example", name: "Maya Brooks", at: 1 }, history: [], createdAt: 0, updatedAt: 0 } as never));
     await w.heston.mutation(api.homes.moveProject, { projectId: w.p, clientId: north });
     expect((await syncs()).slice(before)).toEqual(["none"]);
+    // Northline's people stay off the event and untold until Ask to confirm.
+    expect(await w.t.run(async (ctx) => (await ctx.db.get(shootId))!.clientHold)).toMatchObject({ from: "Harbor Coffee" });
+    const ask = await w.heston.mutation(api.shoots.askClientConfirm, { shootId });
+    expect(ask.told).toBe(0); // Northline has no portal people in the test world
+    expect(await w.t.run(async (ctx) => (await ctx.db.get(shootId))!.clientHold ?? null)).toBeNull();
+    expect((await syncs()).slice(before)).toEqual(["none", "all"]);
     const f = await w.t.run(async (ctx) => (await ctx.db.get(fsId))!);
     expect(f).toMatchObject({ clientId: north, status: "offered" }); expect(f.answeredBy ?? null).toBeNull();
     // L-f: moved to another project of the same client: the event is still brought up to date, quietly.
     const other = await w.t.run((ctx) => ctx.db.insert("projects", { businessId: w.A, name: "Second", client: "Northline", clientId: north, createdAt: 0 }));
     await w.heston.mutation(api.homes.move, { kind: "shoot", id: shootId, to: { type: "project", id: other } });
-    expect((await syncs()).slice(before)).toEqual(["none", "none"]);
+    expect((await syncs()).slice(before)).toEqual(["none", "all", "none"]);
 
     // M-d: a sent invoice with no client on a project with no client leaves the project and stays unattached.
     const lone = await w.t.run((ctx) => ctx.db.insert("projects", { businessId: w.A, name: "Lone", createdAt: 0 }));

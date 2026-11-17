@@ -265,7 +265,8 @@ export const eventFor = internalQuery({
     if (!want) return { want: false as const, event: s.calendarEvent ?? null };
     const attendees: string[] = [];
     if (c!.inviteVendors) for (const m of s.crew) if (m.vendorId) { const vd = await ctx.db.get(m.vendorId); if (vd?.email) attendees.push(vd.email); }
-    if (c!.inviteClient) for (const x of await portalPeople(ctx, p!)) attendees.push(x.email);
+    // A shoot moved to another client keeps that client's people off the event until Ask to confirm (s.clientHold).
+    if (c!.inviteClient && !s.clientHold) for (const x of await portalPeople(ctx, p!)) attendees.push(x.email);
     const h = Number(s.call.slice(0, 2));
     const end = s.wrap ?? (h >= 22 ? "23:59" : `${String(h + 2).padStart(2, "0")}${s.call.slice(2)}`);
     return {

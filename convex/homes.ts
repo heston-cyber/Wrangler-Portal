@@ -141,12 +141,12 @@ export const move = mutation({
     if (!d) throw new ConvexError(`This ${def.noun} isn't here any more.`);
     if (a.to && !(await canPlace(ctx, a.to.type))) throw new ConvexError("Not allowed.");
     const to = a.to ? await resolve(ctx, a.to) : null;
-    if (a.kind === "shoot") await shootMayMove(ctx, d._id as Id<"shoots">);
     const patch = await patchFor(ctx, a.kind as Kind, d, to);
     await ctx.db.patch(d._id as never, patch as never);
     if (a.kind === "shoot") {
       // A new client: the old client's confirmation goes, and the calendar event is brought up to date (review M4).
-      if (String(await clientNow(ctx, d)) !== String(to?.clientId ?? null)) await clientChanged(ctx, d._id as Id<"shoots">);
+      const was = await clientNow(ctx, d);
+      if (String(was) !== String(to?.clientId ?? null)) await clientChanged(ctx, d._id as Id<"shoots">, await clientName(ctx, was), to?.clientId ?? null);
       else if (String(d.projectId ?? "") !== String(to?.projectId ?? "")) await recal(ctx, d._id as Id<"shoots">); // re-review L-f
       // Its day-of things go with it: the call sheet and the shot list live on the shoot's project.
       for (const cs of await ctx.db.query("callSheets").withIndex("by_shoot", (q) => q.eq("shootId", d._id as Id<"shoots">)).collect()) await ctx.db.patch(cs._id, { projectId: to?.projectId ?? undefined });
@@ -176,19 +176,18 @@ export const move = mutation({
   },
 });
 
-/** Review L3: a shoot whose call sheet was sent stays on its project (its people and guests read it there). */
-async function shootMayMove(ctx: Ctx, shootId: Id<"shoots">) {
-  const cs = await ctx.db.query("callSheets").withIndex("by_shoot", (q) => q.eq("shootId", shootId)).first();
-  if (cs?.status === "sent") throw new ConvexError("Its call sheet was sent: the shoot stays on its project.");
-}
+// A shoot whose call sheet was sent moves too (Heston, Nov 16: "able to move no problem"): its crew and guests keep
+// reading it; the old client's people lose it with the project (callSheets.clientSheet checks their projects).
 /** Review M4: a shoot now with another client (or none) loses the old client's confirmation. Its calendar event is
  *  rewritten with "none": Google emails nobody (rule 3; re-review H). Ask to confirm stays the owner's own click. */
-async function clientChanged(ctx: MutationCtx, shootId: Id<"shoots">) {
+async function clientChanged(ctx: MutationCtx, shootId: Id<"shoots">, from: string | null, to: Id<"clients"> | null) {
   const s = await ctx.db.get(shootId);
   if (!s) return;
-  await ctx.db.patch(s._id, { confirmed: undefined, moved: undefined });
+  // Heston (Nov 16): the new client's people join the calendar event, and are told, only when he presses Ask to confirm.
+  await ctx.db.patch(s._id, { confirmed: undefined, moved: undefined, clientHold: to ? { at: Date.now(), ...(from ? { from } : {}) } : undefined });
   await recal(ctx, shootId);
 }
+const clientName = async (ctx: Ctx, id: string | null) => (id ? (await ctx.db.get(id as Id<"clients">))?.name ?? null : null);
 /** The shoot's calendar event brought up to date quietly (a new project name and link, its guests), emailing nobody. */
 async function recal(ctx: MutationCtx, shootId: Id<"shoots">) {
   const s = await ctx.db.get(shootId);
@@ -255,7 +254,7 @@ export async function moveProjectCore(ctx: MutationCtx, p: Doc<"projects">, to: 
   if (((await ctx.db.get(p._id))?.clientId ?? null) !== (to?._id ?? null)) throw new ConvexError("The project didn't take its new client. Nothing was moved.");
   // Review M4: its shoot days lose the old client's confirmation; their calendar events are brought up to date.
   for (const s of await ctx.db.query("shoots").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect())
-    if (s.status === "scheduled") await clientChanged(ctx, s._id);
+    if (s.status === "scheduled") await clientChanged(ctx, s._id, p.client ?? null, to?._id ?? null);
   // Unconfirmed footage storage offers go to the new client (or none).
   // Its answer was the old client's: the new client sees a fresh offer (re-review L-c).
   for (const f of fs) if (f.status === "offered" || f.status === "declined") await ctx.db.patch(f._id, { clientId: to?._id, status: "offered", answeredBy: undefined, updatedAt: Date.now() });
@@ -276,6 +275,18 @@ export async function moveProjectByName(ctx: MutationCtx, p: Doc<"projects">, na
   await moveProjectCore(ctx, p, id ? await ctx.db.get(id) : null);
 }
 
+/** Heston (Nov 16): Move warns when the old client has been active on the project. Their messages on its thread and
+ *  their review notes go with it, and the new client's people can read them. */
+async function oldClientActivity(ctx: Ctx, p: Doc<"projects">) {
+  if (!p.clientId) return null;
+  let messages = 0, notes = 0;
+  const th = await ctx.db.query("msgThreads").withIndex("by_project", (q) => q.eq("projectId", p._id)).first();
+  if (th) messages = (await ctx.db.query("messages").withIndex("by_thread", (q) => q.eq("threadId", th._id)).collect()).filter((m) => m.side === "client").length;
+  for (const vid of await ctx.db.query("videos").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect())
+    notes += (await ctx.db.query("notes").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect()).filter((n) => n.authorKind === "client").length;
+  return messages || notes ? { name: p.client ?? null, messages, notes } : null;
+}
+
 export const projectMove = query({
   args: { projectId: v.string() },
   handler: async (ctx, { projectId }) => {
@@ -287,7 +298,7 @@ export const projectMove = query({
     let payments = true;
     try { await requireAll(ctx, "payments"); } catch { payments = false; }
     // Without Payments the money documents aren't named, and the move needs someone who has it.
-    return { label: label(p), clientId: p.clientId ?? null, client: p.client ?? null, things: c.moving, staying: payments ? c.sentStay : [], needsPayments: !payments && c.money > 0 };
+    return { label: label(p), clientId: p.clientId ?? null, client: p.client ?? null, things: c.moving, staying: payments ? c.sentStay : [], needsPayments: !payments && c.money > 0, oldClient: await oldClientActivity(ctx, p) };
   },
 });
 

@@ -423,11 +423,9 @@ export const recordFolders = internalMutation({
         if (byFolder.name !== split.name) patch.name = split.name;
         if (split.jobNumber && byFolder.jobNumber !== split.jobNumber) patch.jobNumber = split.jobNumber;
         if (Object.keys(patch).length) { await ctx.db.patch(byFolder._id, patch); changed++; }
-        // A new client folder moves the project to that client, by the same rules as Move (review M3).
-        if (client && norm(byFolder.client ?? "") !== norm(client)) {
-          // Footage the client is keeping holds it with them: the sync leaves that project where it is.
-          if (await tryMove(byFolder, client)) changed++;
-        }
+        // Heston (Nov 16): a linked folder only links. A move on the site stands; the folder sitting under another
+        // client's folder never changes the project's client (one with no client is given it, by Move's rules).
+        if (client && !byFolder.clientId && (await tryMove(byFolder, client))) changed++;
         return;
       }
       const all = await ctx.db.query("projects").collect();
@@ -446,8 +444,9 @@ export const recordFolders = internalMutation({
           const oldJob = splitJob(g.split("/").pop() ?? "").jobNumber;
           const jobNumber = split.jobNumber ?? (oldJob && old.jobNumber === oldJob ? undefined : old.jobNumber);
           await ctx.db.patch(old._id, { name: split.name, dropboxFolder: folder, jobNumber });
-          // A new client folder moves it by the same rules as Move (re-review M-a); one it can't move stays put.
-          if (client && norm(old.client ?? "") !== norm(client)) await tryMove(old, client);
+          // A renamed folder renames; it never changes the project's client (Heston, Nov 16), only gives one to a
+          // project that has none, by Move's rules.
+          if (client && !old.clientId) await tryMove(old, client);
           changed++;
           return;
         }

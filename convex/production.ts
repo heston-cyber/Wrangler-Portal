@@ -37,7 +37,7 @@ export async function shootRows(ctx: QueryCtx, shoots: Shoot[], withShots = fals
     out.push({
       _id: s._id, projectId: p?._id ?? null, project: p?.name ?? "On its own", label: p ? label(p) : "Shoot on its own", client: clients.get(ck) ?? null,
       shotList: sl ? { _id: sl._id, total: shots.length, done: shots.filter((x) => x.done).length } : null,
-      date: s.date, call: s.call, location: s.location, crew: s.crew.length, confirmed: !!s.confirmed, moved: !!s.moved,
+      date: s.date, call: s.call, location: s.location, crew: s.crew.length, confirmed: !!s.confirmed, moved: !!s.moved, askConfirm: !!s.clientHold,
       sheet: cs ? { _id: cs._id, state: cs.status === "sent" ? "sent" as const : "draft" as const, built: !!cs.buildId, opened: sentTo.filter((r) => r.openedAt).length, of: sentTo.length, people: cs.recipients.filter((r) => r.on).length } : null,
     });
   }

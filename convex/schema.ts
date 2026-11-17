@@ -1347,6 +1347,9 @@ export default defineSchema({
     // Review fix H2: when the portal last changed what's on the calendar event (date, call, wrap, place, crew, what to
     // prepare, the calendar tick). A client confirming doesn't change it, so it never beats a newer change made in Google.
     calAt: v.optional(v.number()),
+    // Nov 16 (Heston, Q1 of the hierarchy re-review): moved to another client. Their people stay off the calendar event,
+    // and nobody there is told, until the owner presses Ask {client} to confirm (shoots.askClientConfirm).
+    clientHold: v.optional(v.object({ at: v.number(), from: v.optional(v.string()) })),
     calError: v.optional(v.string()),         // the last write to Google Calendar failed (cleared by the next good one)
     // Phase 5b step 5: a move made by dragging it on the calendar, for Undo (about 8 seconds).
     dragUndo: v.optional(v.object({ at: v.number(), was: v.any() })),

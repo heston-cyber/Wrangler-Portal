@@ -193,7 +193,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "calendarSync.undoMove": { eventId: ids.calendarEventId }, "calendarSync.remove": { eventId: ids.calendarEventId },
     "calendarSync.moveShoot": { shootId: ids.shootId, date: "2030-01-03", call: "08:00", notify: false }, "calendarSync.undoShoot": { shootId: ids.shootId },
     "calendarSync.moveDate": { projectId: ids.projectId, label: "Cut 1 due", from: "2030-01-05", to: "2030-01-06" },
-    "calendarSync.shootMoveDone": { shootId: ids.shootId }, "calendarSync.askConfirmAgain": { shootId: ids.shootId }, "calendarSync.syncNow": {},
+    "calendarSync.shootMoveDone": { shootId: ids.shootId }, "calendarSync.askConfirmAgain": { shootId: ids.shootId }, "shoots.askClientConfirm": { shootId: ids.shootId }, "calendarSync.syncNow": {},
     // Phase 5b step 4: call-sheet guests (the owner's End access; the guest's link, code and pages)
     "callSheets.endGuest": { callSheetId: ids.callSheetId, id: "guest:matrix" }, "callSheets.restoreGuest": { callSheetId: ids.callSheetId, id: "guest:matrix" },
     // D148: Refresh forecast (owner only; looks the forecast up again for one of the owner's own sheets).

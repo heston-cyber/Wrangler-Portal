@@ -125,7 +125,7 @@ export const range = query({
       const client = p.clientId ? (await ctx.db.get(p.clientId))?.name ?? null : null;
       const sheet = await ctx.db.query("callSheets").withIndex("by_shoot", (q) => q.eq("shootId", s._id)).first();
       // Who Google emails about it: the booked vendors and (review fix L2) the client's people, as Settings › Calendar says.
-      const guests = ok && s.calendarEvent ? [...(c!.inviteVendors ? s.crew.filter((m) => m.vendorId).map((m) => m.name) : []), ...(c!.inviteClient ? them : [])] : [];
+      const guests = ok && s.calendarEvent ? [...(c!.inviteVendors ? s.crew.filter((m) => m.vendorId).map((m) => m.name) : []), ...(c!.inviteClient && !s.clientHold ? them : [])] : [];
       const onCal = ok && !!c!.calendarId && !!s.calendar;
       shoots.push({
         _id: s._id, projectId: p._id, project: p.name, label: label(p), client, date: s.date, call: s.call, wrap: s.wrap ?? null, location: s.location,

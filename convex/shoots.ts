@@ -90,6 +90,7 @@ const view = (s: Doc<"shoots">) => ({
   crew: s.crew.map((c) => ({ name: c.name, role: c.role, owner: !!c.owner, bookingId: c.bookingId ?? null })), status: s.status,
   confirmed: s.confirmed ? { name: s.confirmed.name, at: s.confirmed.at } : null, moved: s.moved ? { date: s.moved.date, call: s.moved.call } : null,
   calendar: !!s.calendar, onCalendar: !!s.calendarEvent,
+  askConfirm: s.clientHold ? { from: s.clientHold.from ?? null } : null, // moved to another client: Ask to confirm
 });
 
 /** Tells the project's portal people: an Inbox item each, and email 29 or 30 (scheduled after the write).
@@ -237,6 +238,23 @@ export const page = query({
 });
 
 /** "Confirm the shoot": saved with their name and the time; the owner gets a note. */
+/** Heston (Nov 16): after a shoot moves to another client, "Ask {client} to confirm" tells the new client's people
+ *  (Inbox item and email 29) and, with Invite the client on, adds them to the calendar event (Google emails the invite). */
+export const askClientConfirm = mutation({
+  args: { shootId: v.id("shoots") },
+  handler: async (ctx, { shootId }) => {
+    await requireAll(ctx, ["shoots", "production"]);
+    const s = await ctx.db.get(shootId);
+    if (!s || s.status !== "scheduled") throw new ConvexError("That shoot isn't here any more.");
+    const p = await (s.projectId ? ctx.db.get(s.projectId) : null);
+    if (!s.clientHold || !p?.clientId) return { told: 0 };
+    const now = Date.now();
+    await ctx.db.patch(s._id, { clientHold: undefined, calAt: now, updatedAt: now, history: [...s.history, { at: now, text: `Asked ${p.client ?? "the client"} to confirm (moved from ${s.clientHold.from ?? "another client"})` }] });
+    if (s.calendar || s.calendarEvent) await queueCalendar(ctx, s._id, "all");
+    return { told: await tell(ctx, p, s, null, now) };
+  },
+});
+
 export const confirm = mutation({
   args: { shootId: v.id("shoots") },
   handler: async (ctx, { shootId }) => {

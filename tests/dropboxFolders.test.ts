@@ -179,7 +179,7 @@ describe("a flagged render in a project folder", () => {
     expect(await t.query(internal.dropbox.folderNote, { pathLower: "/misc/00001_x_v1.mp4", pathDisplay: "/misc/00001_x_v1.mp4", projectId: tests })).toBeNull();
   });
 
-  test("re-review M-a, M-b: a renamed client folder renames only its own client's projects; a renamed project folder moves by Move's rules", async () => {
+  test("re-review M-a, M-b: a renamed client folder renames only its own client's projects; a renamed project folder never changes a project's client", async () => {
     const { t, folders } = await setup();
     // Two clients called Northline: B owns the folder; A's project only shares the name.
     const ids = await t.run(async (ctx) => {
@@ -194,19 +194,17 @@ describe("a flagged render in a project folder", () => {
     const r = await t.run(async (ctx) => ({ pa: (await ctx.db.get(ids.pa))!, pb: (await ctx.db.get(ids.pb))! }));
     expect(r.pb).toMatchObject({ client: "Northline Co", clientId: ids.b });
     expect(r.pa).toMatchObject({ client: "Northline", clientId: ids.a });
-    // B film was moved on the site to Prairie (its folder stayed under Northline Co). Renaming the folder in place takes
-    // it back to Northline Co by Move's rules, so kept footage holds it with Prairie.
+    // B film was moved on the site to Prairie (its folder stayed under Northline Co). Heston (Nov 16): the folder only
+    // links, so renaming it in place renames the project and leaves it with Prairie.
     const prairie = await t.run(async (ctx) => {
       const c = await ctx.db.insert("clients", { name: "Prairie", createdAt: 2 });
       await ctx.db.patch(ids.pb, { client: "Prairie" }); await ctx.db.patch(ids.pb, { clientId: c });
-      await ctx.db.insert("footageStorage", { projectId: ids.pb, clientId: c, priceCents: 1, offeredAt: 0, keepUntil: "2030-01-01", status: "kept", history: [], createdAt: 0, updatedAt: 0 } as never);
       return c;
     });
     await folders(["/Clients/Northline Co/B film cut"], ["/Clients/Northline Co/B film"]);
     expect(await t.run(async (ctx) => (await ctx.db.get(ids.pb))!)).toMatchObject({ name: "B film cut", clientId: prairie, client: "Prairie", dropboxFolder: "/clients/northline co/b film cut" });
-    // Without kept footage the same rename moves it back to Northline Co (client B).
-    await t.run(async (ctx) => { for (const f of await ctx.db.query("footageStorage").collect()) await ctx.db.delete(f._id); });
-    await folders(["/Clients/Northline Co/B film"], ["/Clients/Northline Co/B film cut"]);
-    expect(await t.run(async (ctx) => (await ctx.db.get(ids.pb))!)).toMatchObject({ clientId: ids.b, client: "Northline Co" });
+    // A full re-list doesn't move it back either.
+    await folders(["/Clients/Northline Co", "/Clients/Northline Co/B film cut"]);
+    expect(await t.run(async (ctx) => (await ctx.db.get(ids.pb))!.clientId)).toBe(prairie);
   });
 });
