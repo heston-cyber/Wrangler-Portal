@@ -17,7 +17,7 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps, navigate } from "../../lib/router";
-import { Modal, useConfirm, useToast } from "../../ui/kit";
+import { Modal, swallowNextClick, useConfirm, useToast } from "../../ui/kit";
 import { Button, DialogHeader, EmptyState, PageHeader, PillTabs, SkeletonRows, TextField } from "../../ui/wp";
 import { Icon } from "../../ui/Icon";
 import { errLine } from "../../ui/hold";
@@ -516,7 +516,7 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
     if ((e.target as HTMLElement).closest(".cv-ui")) return;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    setCtxMenu(null); setPop(null);
+    if (ctxMenu || pop) { setCtxMenu(null); setPop(null); swallowNextClick(); return; } // Heston (10:47): a tap outside an open menu only closes it
     if (pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()];
       gesture.current = { kind: "pinch", d: Math.hypot(a.x - b.x, a.y - b.y), z: zoom, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };

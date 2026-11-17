@@ -38,6 +38,7 @@ export function Menu({ trigger, children, align = "start", side = "bottom", labe
     if (!open) return;
     const onDown = (e: PointerEvent) => {
       if (pop.current?.contains(e.target as Node) || btn.current?.contains(e.target as Node)) return;
+      swallowNextClick();
       setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); setOpen(false); btn.current?.focus(); } };
@@ -81,6 +82,15 @@ export function MenuItem({ icon, children, onSelect, kbd, checked, danger, disab
 export const MenuSep = () => <div className="sep" role="separator" />;
 
 // ---------- ContextMenu: the same menu, opened at the pointer (right-click) or under a ⋯ button ----------
+/** Heston (Nov 17, 10:47): a tap outside an open menu only closes it. The tap's click (and its link or button) is
+ *  swallowed, so nothing under the menu is opened by the same tap; the next tap works as usual. */
+export function swallowNextClick() {
+  const stop = (e: Event) => { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); done(); };
+  const done = () => { window.removeEventListener("click", stop, true); window.clearTimeout(timer); };
+  const timer = window.setTimeout(done, 800);
+  window.addEventListener("click", stop, true);
+}
+
 export function ContextMenu({ at, onClose, children, label }: { at: { x: number; y: number }; onClose: () => void; children: React.ReactNode; label?: string }) {
   const pop = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
@@ -94,7 +104,7 @@ export function ContextMenu({ at, onClose, children, label }: { at: { x: number;
   }, [at.x, at.y]);
   useEffect(() => {
     const inMenu = (t: EventTarget | null) => !!(t as HTMLElement | null)?.closest?.(".menu"); // this menu or one of its submenus
-    const onDown = (e: PointerEvent) => { if (!inMenu(e.target)) onClose(); };
+    const onDown = (e: PointerEvent) => { if (!inMenu(e.target)) { swallowNextClick(); onClose(); } };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") { e.stopPropagation(); onClose(); return; }
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -206,7 +216,7 @@ export function Modal({ onClose, children, label, width, slideOut }: { onClose: 
     return () => { ro.disconnect(); mo.disconnect(); window.removeEventListener("resize", fit); };
   }, []);
   return createPortal(
-    <div className="backdrop" data-closing={closing || undefined} onPointerDown={(e) => { if (e.target === e.currentTarget) dismiss(); }}>
+    <div className="backdrop" data-closing={closing || undefined} onPointerDown={(e) => { if (e.target === e.currentTarget) { swallowNextClick(); dismiss(); } }}>
       <div ref={dialog} className="dialog" role="dialog" aria-modal="true" aria-label={label} style={width ? { width: `min(${width}px, 100%)` } : undefined}>
         <span className="dgrab" aria-hidden />
         <div ref={body} className="dbody">{children}</div>
@@ -287,7 +297,7 @@ export function useContextMenu(): [(e: React.MouseEvent, items: React.ReactNode,
   }, [at]);
   useEffect(() => {
     if (!at) return;
-    const onDown = (e: PointerEvent) => { if (!pop.current?.contains(e.target as Node)) setAt(null); };
+    const onDown = (e: PointerEvent) => { if (!pop.current?.contains(e.target as Node)) { swallowNextClick(); setAt(null); } };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setAt(null); };
     window.addEventListener("pointerdown", onDown, true);
     window.addEventListener("keydown", onKey, true);

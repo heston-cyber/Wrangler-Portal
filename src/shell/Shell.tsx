@@ -17,7 +17,7 @@ import { linkProps, navigate, useLocation } from "../lib/router";
 import { useUploads } from "../lib/uploads";
 import { canOpen, usePerms } from "../lib/teamAccess";
 import { useBrand, type Brand } from "../lib/brand";
-import { Menu, MenuItem, MenuSep, Modal, Thumb } from "../ui/kit";
+import { Menu, MenuItem, MenuSep, Modal, Thumb, swallowNextClick } from "../ui/kit";
 import { Icon, type IconName } from "../ui/Icon";
 import { PIPELINE } from "./pipeline";
 import { hapticHold, hapticRelease } from "../lib/haptic";
@@ -716,7 +716,7 @@ function ProductionTab({ it, path }: { it: Item; path: string }) {
         {it.badge ? <Badge n={it.badge} /> : null}
       </a>
       {open && createPortal(<>
-        <div className="wp-stagescrim" onPointerDown={() => setOpen(false)} aria-hidden />
+        <div className="wp-stagescrim" onPointerDown={() => { swallowNextClick(); setOpen(false); }} aria-hidden />
         <div className="wp-stagepanel glass" role="menu" aria-label="Production stages" style={{ left, width: w, ["--ox" as string]: `${ox - left}px` }}>
           {stages.map((s) => (
             <a key={s.to} role="menuitem" data-stage={s.to} className={`wp-stagerow${hot === s.to ? " hot" : ""}`} aria-current={starts(path, s.to) ? "page" : undefined} {...linkProps(s.to)} onClick={() => setOpen(false)}>
