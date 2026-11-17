@@ -146,7 +146,7 @@ export function DeliveryPage({ projectId }: { projectId: string }) {
                       {a.coverId === x._id && <span className="dl-cover">Cover</span>}
                       {!x.published && <span className="dl-new">New</span>}
                       <button className="dl-more" aria-label="Photo options" onClick={() => setMenu(menu === x._id ? null : x._id)}><Icon name="more" size={14} /></button>
-                      {menu === x._id && <div className="cv-menu glass dl-menu" role="menu" onMouseLeave={() => setMenu(null)}>
+                      {menu === x._id && <div className="cv-menu pop-glass dl-menu" role="menu" onMouseLeave={() => setMenu(null)}>
                         <button role="menuitem" onClick={() => { setMenu(null); void editItem({ itemId: a._id, coverId: x._id }); }}>Make it the cover</button>
                         <DownloadItem assetId={x._id} label="Download original" />
                         <button role="menuitem" className="danger" onClick={() => { setMenu(null); void removeAsset({ assetId: x._id }); }}>Remove from album</button>

@@ -22,7 +22,11 @@
 export const GLASS = { frost: 4, frostClear: 2, refraction: 1.5, depth: 70, bevel: 0.4, dispersion: 0.85, lightAngle: -45, lightIntensity: 0.5, saturate: 1.6, brightness: 0.68 } as const;
 
 /** The floating layer: every surface drawn as glass (portal.css gives the same list its CSS glass). */
-export const FLOAT = ".wp-side, .wp-shell:not(.overlay) .main > .topbar, .wp-tabbar, .wp-layerchip, .menu, .dialog, .bell-panel, .toast, .cal-pop, .selbar";
+// Nov 17 (Heston, 12:17: "the glass is not actually showing what's behind the pop-up"): menus, dialogs and sheets, the
+// bell panel and the calendar's pop-up left this list; the WebGL draws the cactus scene, so they frost the real page
+// with CSS instead (portal.css, "pop-ups show what's really behind them").
+export const FLOAT = ".wp-side, .wp-shell:not(.overlay) .main > .topbar, .wp-tabbar, .wp-layerchip, .toast, .selbar";
+export const POPUPS = ".menu, .dialog, .bell-panel, .cal-pop";
 /** D168 (Heston, Nov 11: "The rectangles should be glass"): the cards and stat tiles are the same bending glass. */
 export const CARDS = ".glass, .pov-stat";
 const ALL = `${FLOAT}, ${CARDS}`;

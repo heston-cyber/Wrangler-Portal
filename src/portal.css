@@ -3366,6 +3366,23 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
 }
+/* Nov 17 (Heston, 12:17): pop-ups show what's really behind them. The WebGL glass paints the cactus scene, so menus,
+   dialogs, the bell panel and the calendar pop-up are frosted by the CSS over the page itself, dark enough to read. */
+.menu, .dialog, .bell-panel, .cal-pop, .pop-glass {
+  background: rgba(14, 12, 15, .42);
+  backdrop-filter: blur(22px) saturate(170%) brightness(.62); -webkit-backdrop-filter: blur(22px) saturate(170%) brightness(.62);
+}
+/* the page's own small menus (Delivery's row menu, Work's, the guest menu): the same frost and 1 px edge, no WebGL */
+.pop-glass { isolation: isolate; box-shadow: var(--shadow-float); } /* each keeps its own position (absolute or fixed) */
+.pop-glass::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none; z-index: 2;
+  background: var(--glass-edge);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .menu, .dialog, .bell-panel, .cal-pop, .pop-glass { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgb(14, 12, 15); }
+}
 /* Glass/effect-clear: the phone tab bar, layer chips, toasts, small controls */
 .wp-tabbar, .wp-layerchip, .toast, .selbar { --lg-frost: 2; backdrop-filter: var(--blur-glass-clear); -webkit-backdrop-filter: var(--blur-glass-clear); }
 /* Glass/float (+ Shadow/float): dialogs, sheets, menus, popovers, the bell panel; Glass/float-clear: toasts */
@@ -3450,6 +3467,8 @@ canvas.wp-glass.stale { opacity: 0; transition-duration: 90ms; } /* ?glass=lazy 
   }
   .backdrop > .dialog[data-full] > .dbody { padding: calc(32px + env(safe-area-inset-top, 0px)) 20px calc(24px + env(safe-area-inset-bottom, 0px)); }
   .backdrop > .dialog[data-full] > .dgrab { display: none; }
+  /* Nov 17: a sheet that doesn't fill the screen lets the page show through its frost (Heston, 12:17) */
+  .backdrop > .dialog:not([data-full]) { background: color-mix(in srgb, var(--surface-base) 50%, transparent); backdrop-filter: blur(24px) saturate(170%) brightness(.72); -webkit-backdrop-filter: blur(24px) saturate(170%) brightness(.72); }
   /* D174 (Heston, Nov 12: "Make it a glass panel that animates up quickly"; "it should animate back down if tapped out of"):
      the options sheet (Create, a hold on a row) is lighter glass, ink 45 %, with a lighter scrim, and rises from the bottom
      in 200 ms. Only transform and the scrim's colour move: an opacity animation on the scrim (or the sheet) makes the
