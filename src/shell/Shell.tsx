@@ -680,8 +680,7 @@ function ProductionTab({ it, path }: { it: Item; path: string }) {
   }, [open]);
   useEffect(() => {
     if (!open || !dragging) return;
-    let last: string | null = null;
-    const move = (e: PointerEvent) => { const h = under(e.clientX, e.clientY); if (h && h !== last) haptic(); last = h; setHot(h); };
+    const move = (e: PointerEvent) => setHot(under(e.clientX, e.clientY)); // Heston (10:01): the tap is for the hold itself
     const up = (e: PointerEvent) => { setDragging(false); const to = under(e.clientX, e.clientY); if (to) { setOpen(false); navigate(to); } };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
