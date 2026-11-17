@@ -8,7 +8,7 @@ export const BUSINESS_TABLES = [
   "dropFiles", "transcripts", "waveforms", "clients", "stillFiles",
   "wsDocuments", "wsBuilds", "wsTemplates", "wsClauses", "wsStyles", "wsProfile", "wsFonts", "wsConnectorKeys",
   "wsDropbox", "wsSignings", "wsVersions", "wsRequests", "wsOwnerSignatures", "wsCopies",
-  "clientPeople", "inboxItems", "inboxNotes", "clientApprovals", "deliveryFiles", "invoices", "plans", "subscriptions", "deals", "estimates", "followUps", "ledgerEntries", "quotes", "proposals", "proposalFiles", "vendors", "vendorBookings", "shotLists", "releases", "packLists", "packLines", "places", "placeLinks", "creativeDocs", "canvases", "canvasPeople", "brandKits", "shotSetups", "shots", "briefings", "vendorInvoices", "shoots", "fileRequests", "fileUploads", "calendars", "briefs", "footageStorage", "testimonials", "callSheets",
+  "clientPeople", "inboxItems", "inboxNotes", "clientApprovals", "deliveryFiles", "invoices", "plans", "subscriptions", "deals", "estimates", "followUps", "ledgerEntries", "quotes", "proposals", "proposalFiles", "vendors", "vendorBookings", "shotLists", "releases", "packLists", "packLines", "places", "placeLinks", "creativeDocs", "canvases", "canvasPeople", "brandKits", "tasks", "todoLists", "taskTemplates", "shotSetups", "shots", "briefings", "vendorInvoices", "shoots", "fileRequests", "fileUploads", "calendars", "briefs", "footageStorage", "testimonials", "callSheets",
   "calendarEvents", // Phase 5b step 5
   "briefingRecipients", // D147 (Nov 4)
   "offerRecipients", // D149 (Nov 4)

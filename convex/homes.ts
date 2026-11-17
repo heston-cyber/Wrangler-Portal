@@ -24,7 +24,7 @@ export type Home = { type: HomeType; id: string } | null;
 // ---------- the kinds (what can live where, the doc's table) ----------
 
 type KindDef = {
-  table: "shoots" | "shotLists" | "quotes" | "estimates" | "proposals" | "invoices" | "subscriptions" | "briefings" | "deals" | "briefs" | "fileRequests" | "creativeDocs" | "canvases" | "brandKits";
+  table: "shoots" | "shotLists" | "quotes" | "estimates" | "proposals" | "invoices" | "subscriptions" | "briefings" | "deals" | "briefs" | "fileRequests" | "creativeDocs" | "canvases" | "brandKits" | "tasks" | "todoLists";
   noun: string;
   perm: Perm;
   homes: HomeType[];
@@ -55,6 +55,9 @@ export const KINDS = {
   creativeDoc: { table: "creativeDocs", noun: "creative doc", perm: "projects", homes: ["client", "project", "shoot", "lead"] },
   canvas: { table: "canvases", noun: "canvas", perm: "projects", homes: ["client", "project", "shoot", "lead"] },
   kit: { table: "brandKits", noun: "brand kit", perm: "projects", homes: ["client", "project", "lead"] },
+  // 5m Work: tasks and to-do lists (a task's subtasks follow it).
+  task: { table: "tasks", noun: "task", perm: "projects", homes: ["client", "project", "shoot", "lead"], fixed: (d) => (d.parentId ? "A subtask goes where its task goes." : null) },
+  todoList: { table: "todoLists", noun: "to-do list", perm: "projects", homes: ["client", "project", "shoot", "lead"] },
 } as const satisfies Record<string, KindDef>;
 export type Kind = keyof typeof KINDS;
 const MONEY = ["quote", "estimate", "proposal", "invoice", "subscription"] as Kind[];
@@ -158,6 +161,7 @@ export const move = mutation({
     const to = a.to ? await resolve(ctx, a.to) : null;
     const patch = await patchFor(ctx, a.kind as Kind, d, to);
     await ctx.db.patch(d._id as never, patch as never);
+    if (a.kind === "task") for (const sub of await ctx.db.query("tasks").withIndex("by_parent", (q) => q.eq("parentId", d._id as Id<"tasks">)).collect()) await ctx.db.patch(sub._id, patch as never);
     if (a.kind === "shoot") {
       // A new client: the old client's confirmation goes, and the calendar event is brought up to date (review M4).
       const was = await clientNow(ctx, d);
@@ -236,7 +240,7 @@ async function projectContents(ctx: Ctx, p: Doc<"projects">) {
       if ((KINDS[k] as KindDef).sent?.(r)) sentStay.push({ kind: k, id: r._id, name: k === "brief" ? "Kickoff brief" : String(r.title ?? "File request") });
       else moving++;
     }
-  for (const t of ["shoots", "shotLists", "briefings", "vendorBookings", "videos", "callSheets", "creativeDocs", "canvases", "brandKits"] as const)
+  for (const t of ["shoots", "shotLists", "briefings", "vendorBookings", "videos", "callSheets", "creativeDocs", "canvases", "brandKits", "tasks", "todoLists"] as const)
     moving += (await ctx.db.query(t).withIndex("by_project" as never, ((q: { eq: (f: string, v: unknown) => unknown }) => q.eq("projectId", p._id)) as never).collect()).length;
   return { moving, sentStay, money };
 }
@@ -377,7 +381,7 @@ export const projectsBoard = query({
     for (const k of Object.keys(KINDS) as Kind[]) {
       const def = KINDS[k] as KindDef;
       try { await requireAll(ctx, def.perm); } catch { continue; }
-      for (const r of (await ctx.db.query(def.table).collect()) as Array<Record<string, unknown>>) if (!homeOf(k, r) && r.status !== "cancelled") loose++;
+      for (const r of (await ctx.db.query(def.table).collect()) as Array<Record<string, unknown>>) if (!homeOf(k, r) && r.status !== "cancelled" && !(k === "task" && (r.parentId || r.status === "done"))) loose++;
     }
     return {
       today, loose,
@@ -435,7 +439,7 @@ export const loose = query({
       const def = KINDS[k] as KindDef;
       try { await requireAll(ctx, def.perm); } catch { continue; }
       for (const r of (await ctx.db.query(def.table).collect()) as Array<Record<string, unknown> & { _id: string; _creationTime: number }>)
-        if (!homeOf(k, r) && r.status !== "cancelled") out.push({ kind: k, id: r._id, name: k === "creativeDoc" ? ((await ctx.db.get(r.buildId as Id<"wsBuilds">))?.title ?? def.noun) : String(r.title ?? r.name ?? r.number ?? def.noun), at: Number(r.updatedAt ?? r._creationTime) });
+        if (!homeOf(k, r) && r.status !== "cancelled" && !(k === "task" && (r.parentId || r.status === "done"))) out.push({ kind: k, id: r._id, name: k === "creativeDoc" ? ((await ctx.db.get(r.buildId as Id<"wsBuilds">))?.title ?? def.noun) : String(r.title ?? r.name ?? r.number ?? def.noun), at: Number(r.updatedAt ?? r._creationTime) });
     }
     return out.sort((x, y) => y.at - x.at);
   },

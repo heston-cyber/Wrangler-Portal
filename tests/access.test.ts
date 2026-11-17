@@ -119,6 +119,8 @@ const SIGNED_IN = new Set(["help.list", "help.guide", "messages.mine", "messages
   "footage.forClientProject", "footage.keep", "footage.decline", "testimonials.ask", "testimonials.send",
   // Phase 5b step 3: a call sheet sent to them (only one sent to them, on a project they can open; tested in callSheets.test.ts)
   "callSheets.forClient", "callSheets.forClientProject", "callSheets.opened",
+  // 5m (D199): tasks for the client, on projects they can open (or their client's), with Done (work.test.ts)
+  "work.forClient", "work.clientDone",
   // Phase 5e step 2: their own password, email and devices (security.test.ts)
   "security.state", "security.changePassword", "security.startEmailChange", "security.confirmEmailChange", "security.cancelEmailChange", "security.seenDevice", "security.signOutDevice"]);
 // D133 (Phase 5): functions a vendor login may call: their own side of the portal (each checks the vendor's own records,
@@ -132,6 +134,8 @@ const VENDOR = new Set(["help.list", "help.guide", "users.switchSide",
   "vendorPortal.callSheet", "vendorPortal.callSheets", "vendorPortal.openCallSheet",
   // Nov 16 (D180): the crew ticks a shot on a call sheet sent to them (shotLists.test.ts)
   "vendorPortal.tickShot",
+  // 5m (D199): tasks given to them on purpose (For a vendor), with Done (work.test.ts)
+  "work.forVendor", "work.vendorDone",
   // Phase 5e step 2: their own password, email and devices (security.test.ts)
   "security.state", "security.changePassword", "security.startEmailChange", "security.confirmEmailChange", "security.cancelEmailChange", "security.seenDevice", "security.signOutDevice"]);
 
@@ -559,6 +563,10 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
 };
 // Phase 5e step 4: every team role has its own bell.
 for (const r of ["producer", "editor", "bookkeeper"] as const) for (const f of BELL_FNS) TEAM[r][f] = BELL;
+// 5m Work: My tasks is everyone's own (tasks given to them); the rest of Work is Projects' (work.test.ts).
+const WORK_OWN = "Work › My tasks: the tasks given to them (open, change the status, notes and checklist of their own; quick add for themselves), tested in work.test.ts";
+for (const r of ["producer", "editor", "bookkeeper"] as const) TEAM[r]["work.mine"] = WORK_OWN;
+for (const f of ["all", "forProject", "get", "people", "create", "update", "done", "place", "remove", "lists", "createList", "saveList", "duplicateList", "removeList", "itemToTask", "templates", "saveTemplate", "removeTemplate", "useTemplate", "todoistProjects", "todoistImport"]) TEAM.producer[`work.${f}`] = PROJECTS;
 // Phase 5e step 5: Reports, for the Bookkeeper (the Reports switch).
 for (const f of REPORT_FNS) TEAM.bookkeeper[f] = REPORTS;
 

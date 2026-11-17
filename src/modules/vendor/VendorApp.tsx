@@ -25,6 +25,7 @@ import wpLogo from "../../assets/d1/wp-logo.png";
 import { Ctx, type Biz } from "./ctx";
 import { HelpScreen } from "../help/Help";
 import { VendorCallSheetPage } from "../production/CallSheetRead";
+import { VendorTasksCard } from "../work/portalTasks";
 import { InvoiceEditor, VendorInvoice, VendorInvoices, VendorReview, VendorSettings, HomeInvoices } from "./VendorWork";
 const KEY = "wr.vendorBiz";
 const read = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
@@ -146,6 +147,7 @@ function VendorHome() {
           actions={h.upcoming.length ? <><ButtonLink to="/vendor/invoices/new">Log hours</ButtonLink><ButtonLink variant="primary" to="/vendor/invoices/new">Send an invoice</ButtonLink></> : undefined} />
         <div className="wp-homecols">
           <div className="col">
+            <VendorTasksCard businessId={biz ?? null} from={h.business} />
             {h.offered.map((x) => (
               <Card key={x._id} label="New booking" head={<SectionHead label="New booking" count={h.offered.length > 1 ? undefined : 1} />}>
                 <div className="vp-offer">

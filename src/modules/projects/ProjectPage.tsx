@@ -1,7 +1,7 @@
 // Phase 2 Part A (Oct 29): the owner's project page (S5 · Phase 2 › P2 / Owner / Project): header with the client,
 // tags and actions; tabs Overview · Cuts · Documents · Delivery (Invoices arrive with Part B). Overview holds the
 // stage bar, next step, cuts with their rounds, key dates, rounds, documents, final delivery and people.
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -23,10 +23,11 @@ import { FootageCard } from "./Footage";
 import { usePerms } from "../../lib/teamAccess";
 import { AssignedCard } from "../team/Assigned";
 import { HomeChip, MoveProjectDialog } from "./Homes";
+const ProjectTasks = lazy(() => import("../work/Work").then((m) => ({ default: m.ProjectTasks }))); // 5m (D197)
 import { StageBar, STAGES, stageName, type Stage, dateText, bytes, openFileLink } from "./common";
 
 type Page = NonNullable<ReturnType<typeof useQuery<typeof api.projects.page>>>;
-export type ProjectTab = "overview" | "cuts" | "documents" | "invoices" | "delivery" | "ledger";
+export type ProjectTab = "overview" | "tasks" | "cuts" | "documents" | "invoices" | "delivery" | "ledger";
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 function cutChip(v: Page["videos"][number]) {
@@ -419,12 +420,13 @@ export default function ProjectPage({ projectId, tab }: { projectId: Id<"project
         </header>
         <div className="ws-tabs cp-tabs">
           <Tabs label="Project" value={tab} onChange={setTab} items={[
-            { key: "overview", label: "Overview" }, { key: "cuts", label: "Cuts", count: page.videos.length },
+            { key: "overview", label: "Overview" }, ...(perms.projects ? [{ key: "tasks" as ProjectTab, label: "Tasks" }] : []), { key: "cuts", label: "Cuts", count: page.videos.length },
             { key: "documents", label: "Documents", count: page.documents.length },
             ...(payOn ? [{ key: "invoices" as ProjectTab, label: "Invoices" }] : []), { key: "delivery", label: "Delivery" }, ...(perms.clients && perms.value ? [{ key: "ledger" as ProjectTab, label: "Ledger" }] : []),
           ]} />
         </div>
         {tab === "overview" && <Overview page={page} onMove={setMoving} onRounds={() => setDialog("rounds")} onNext={() => setDialog("next")} onDates={() => setDialog("dates")} postDefault={postDefault} setPostDefault={setPostDefault} goTab={setTab} onAddFiles={() => setDialog("files")} />}
+        {tab === "tasks" && perms.projects && <Suspense fallback={null}><ProjectTasks projectId={projectId} show={show} /></Suspense>}
         {tab === "cuts" && <div className="pj-cutsTab"><Projects projectId={projectId} embedded /></div>}
         {tab === "documents" && <Documents page={page} />}
         {tab === "invoices" && payOn && <ProjectInvoices projectId={projectId} clientId={page.client?._id ?? null} />}

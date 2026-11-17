@@ -1559,6 +1559,47 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_project", ["projectId"]).index("by_link", ["link.token"]),
+  // 5m Work (D197–D200): tasks. On a client, project, shoot day or lead, or on nothing (D204). audience: who sees it
+  // (the team; the client's people, in their portal with Done; or one vendor, in theirs). Subtasks have a parentId.
+  tasks: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    title: v.string(),
+    notes: v.optional(v.string()),
+    status: v.union(v.literal("todo"), v.literal("doing"), v.literal("waiting"), v.literal("done")),
+    priority: v.union(v.literal("high"), v.literal("normal"), v.literal("low")),
+    due: v.optional(v.string()),                 // YYYY-MM-DD
+    clientId: v.optional(v.id("clients")), projectId: v.optional(v.id("projects")), shootId: v.optional(v.id("shoots")), dealId: v.optional(v.id("deals")),
+    assignee: v.optional(v.object({ email: v.string(), name: v.optional(v.string()) })),
+    assigneeEmail: v.optional(v.string()),       // lower-case, for My tasks
+    audience: v.union(v.literal("team"), v.literal("client"), v.literal("vendor")),
+    vendorId: v.optional(v.id("vendors")),
+    parentId: v.optional(v.id("tasks")),
+    checklist: v.optional(v.array(v.object({ id: v.string(), text: v.string(), done: v.boolean() }))),
+    repeat: v.optional(v.object({ every: v.union(v.literal("day"), v.literal("week"), v.literal("month")), after: v.boolean() })),
+    doneAt: v.optional(v.number()), doneBy: v.optional(v.string()),
+    order: v.number(),
+    createdBy: v.optional(v.string()),
+    fromTemplate: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_parent", ["parentId"]).index("by_assignee", ["assigneeEmail"]).index("by_order", ["order"]).index("by_audience", ["audience"]).index("by_vendor", ["vendorId"]).index("by_project", ["projectId"]),
+  // 5m round 2: To-do lists (no dates or owners; an item can turn into a task) and task templates (When counts from the
+  // shoot day or the delivery day; Who is a role, picked when the template is used).
+  todoLists: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    name: v.string(),
+    items: v.array(v.object({ id: v.string(), text: v.string(), done: v.boolean() })),
+    clientId: v.optional(v.id("clients")), projectId: v.optional(v.id("projects")), shootId: v.optional(v.id("shoots")), dealId: v.optional(v.id("deals")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_project", ["projectId"]),
+  taskTemplates: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    name: v.string(),
+    items: v.array(v.object({ id: v.string(), title: v.string(), from: v.union(v.literal("shoot"), v.literal("delivery")), days: v.number(), role: v.string(), audience: v.union(v.literal("team"), v.literal("client"), v.literal("vendor")), priority: v.union(v.literal("high"), v.literal("normal"), v.literal("low")) })),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }),
   // D183 (Q137 d): a canvas shared with one person, Can view or Can edit, each with their own link (the owner copies it;
   // nothing is emailed). Removing the row ends their access.
   canvasPeople: defineTable({

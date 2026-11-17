@@ -1,7 +1,8 @@
 // 5l: the pieces Creative planning's pages and the builder's creative mode share (kept apart from Creative.tsx, which
 // imports the builder).
 import { useState } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
+import type { HomeKind } from "../projects/Homes";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { linkProps, navigate } from "../../lib/router";
@@ -10,6 +11,7 @@ import { Button, DialogHeader } from "../../ui/wp";
 import { Icon, type IconName } from "../../ui/Icon";
 import { errLine } from "../../ui/hold";
 
+type HomeIn = { type: "client" | "project" | "shoot" | "lead"; id: string } | null;
 export type HomeInfo = { type: string; id: string; name: string } | null;
 export const HOME_ICON: Record<string, IconName> = { client: "building", project: "folder", shoot: "clapper", lead: "funnel" };
 export const homeLink = (h: NonNullable<HomeInfo>) => (h.type === "client" ? `/clients/${h.id}` : h.type === "project" ? `/projects/${h.id}` : h.type === "shoot" ? `/production/shoots/${h.id}` : `/clients/deals/${h.id}`);
@@ -72,6 +74,22 @@ export function StartBriefing({ docId, onClose, show }: { docId: string; onClose
         </div>
       </div>
     </Modal>
+  );
+}
+
+
+/** Home (optional), for New dialogs: the places this kind can go. */
+export function HomeSelect({ kind, value, onChange }: { kind: HomeKind; value: HomeIn; onChange: (h: HomeIn) => void }) {
+  const places = useQuery(api.homes.places, { kind });
+  const key = value ? `${value.type}:${value.id}` : "";
+  return (
+    <label className="wp-field"><span className="wp-field-label">Home (optional)</span>
+      <select className="input" value={key} onChange={(e) => { const [type, id] = e.target.value.split(":"); onChange(e.target.value ? { type: type as "client", id } : null); }}>
+        <option value="">Not attached</option>
+        {(places ?? []).filter((p) => !p.taken).map((p) => <option key={`${p.type}:${p.id}`} value={`${p.type}:${p.id}`}>{p.type === "client" ? "Client" : p.type === "lead" ? "Lead" : p.type === "shoot" ? "Shoot day" : "Project"} · {p.name}</option>)}
+      </select>
+      <span className="wp-hint">Leave it empty to keep it on its own. You can attach it later.</span>
+    </label>
   );
 }
 

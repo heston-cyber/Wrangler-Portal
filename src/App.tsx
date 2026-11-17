@@ -109,6 +109,10 @@ const BrandKits = lazy(() => import("./modules/creative/Creative").then((m) => (
 const KitPage = lazy(() => import("./modules/creative/Creative").then((m) => ({ default: m.KitPage })));
 const SharedCreativeDoc = lazy(() => import("./modules/creative/Creative").then((m) => ({ default: m.SharedCreativeDoc })));
 const SharedKit = lazy(() => import("./modules/creative/Creative").then((m) => ({ default: m.SharedKit })));
+const MyTasks = lazy(() => import("./modules/work/Work").then((m) => ({ default: m.MyTasks }))); // 5m Work
+const AllTasks = lazy(() => import("./modules/work/Work").then((m) => ({ default: m.AllTasks })));
+const TodoLists = lazy(() => import("./modules/work/Work").then((m) => ({ default: m.TodoLists })));
+const WorkTemplates = lazy(() => import("./modules/work/Work").then((m) => ({ default: m.Templates })));
 const CanvasList = lazy(() => import("./modules/creative/Canvas").then((m) => ({ default: m.CanvasList })));
 const CanvasPage = lazy(() => import("./modules/creative/Canvas").then((m) => ({ default: m.CanvasPage })));
 const SharedCanvas = lazy(() => import("./modules/creative/Canvas").then((m) => ({ default: m.SharedCanvas })));
@@ -315,7 +319,7 @@ function SignedIn() {
   const OVERVIEW = { clients: ClientsOverview, review: ReviewOverview, sign: DocsOverview, proposals: ProposalsOverview, vendors: VendorsOverview } as const;
   if (overview) { const Page = OVERVIEW[overview[1] as keyof typeof OVERVIEW]; page = <Suspense fallback={<Loading />}><Page /></Suspense>; }
   else if (video) page = <VideoPage key={video[1]} videoId={video[1] as Id<"videos">} versionNumber={Number(params.get("version")) || null} noteId={params.get("note")} />;
-  else if (project) { const t = params.get("tab"); page = <Suspense fallback={<Loading />}><ProjectPage key={project[1]} projectId={project[1] as Id<"projects">} tab={(["cuts", "documents", "invoices", "delivery", "ledger"].includes(t ?? "") ? t : "overview") as ProjectTab} /></Suspense>; }
+  else if (project) { const t = params.get("tab"); page = <Suspense fallback={<Loading />}><ProjectPage key={project[1]} projectId={project[1] as Id<"projects">} tab={(["tasks", "cuts", "documents", "invoices", "delivery", "ledger"].includes(t ?? "") ? t : "overview") as ProjectTab} /></Suspense>; }
   else if (/^\/projects\/not-attached\/?$/.test(path)) page = <Suspense fallback={<Loading />}><NotAttached /></Suspense>; // Nov 16: How everything connects
   else if (path.startsWith("/projects")) page = <Suspense fallback={<Loading />}><ProjectsHub /></Suspense>;
   else if (/^\/review\/library\/?$/.test(path)) page = <Projects key="all" />; // the cuts library (was /projects)
@@ -351,6 +355,10 @@ function SignedIn() {
   else if (/^\/production\/shoots\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; const t = params.get("tab"); page = <Suspense fallback={<Loading />}><ShootPage key={id} shootId={id} tab={(["callsheet", "shotlist", "gear", "releases", "locations"].includes(t ?? "") ? t : "overview") as ShootTab} /></Suspense>; } // 5i (D203)
   else if (/^\/production\/gear\/packing\/?$/.test(path)) page = <Suspense fallback={<Loading />}><PackingListsPage /></Suspense>; // 5j
   else if (/^\/production\/gear\/packing\/[^/]+\/?$/.test(path)) { const id = path.split("/")[4]; page = <Suspense fallback={<Loading />}><PackingListEditor key={id} listId={id} /></Suspense>; }
+  else if (/^\/work\/?$/.test(path)) page = <Suspense fallback={<Loading />}><MyTasks /></Suspense>; // 5m
+  else if (/^\/work\/all\/?$/.test(path)) page = <Suspense fallback={<Loading />}><AllTasks key={search} /></Suspense>;
+  else if (/^\/work\/lists\/?$/.test(path)) page = <Suspense fallback={<Loading />}><TodoLists key={search} /></Suspense>;
+  else if (/^\/work\/templates\/?$/.test(path)) page = <Suspense fallback={<Loading />}><WorkTemplates /></Suspense>;
   else if (/^\/creative\/?$/.test(path)) page = <Suspense fallback={<Loading />}><CreativeOverview /></Suspense>; // 5l
   else if (/^\/creative\/docs\/?$/.test(path)) page = <Suspense fallback={<Loading />}><CreativeDocs key={search} /></Suspense>;
   else if (/^\/creative\/docs\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><CreativeDocPage key={id} docId={id} /></Suspense>; }

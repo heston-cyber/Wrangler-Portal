@@ -15,7 +15,8 @@ import { errLine } from "../../ui/hold";
 import { AttachDialog, type HomeKind } from "../projects/Homes";
 import { BrandKitEditor } from "../settings/BrandKit";
 import Builder from "../docs/builder/Builder";
-import { HOME_ICON, HomeTag, copyText, homeLink, shareUrl } from "./parts";
+import { HOME_ICON, HomeSelect, HomeTag, copyText, homeLink, shareUrl } from "./parts";
+export { HomeSelect };
 
 type HomeIn = { type: "client" | "project" | "shoot" | "lead"; id: string } | null;
 const ago = (t: number) => {
@@ -24,21 +25,6 @@ const ago = (t: number) => {
   const h = Math.round(m / 60); if (h < 24) return `${h} h ago`;
   return new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 };
-
-/** Home (optional), for New dialogs: the places this kind can go. */
-export function HomeSelect({ kind, value, onChange }: { kind: HomeKind; value: HomeIn; onChange: (h: HomeIn) => void }) {
-  const places = useQuery(api.homes.places, { kind });
-  const key = value ? `${value.type}:${value.id}` : "";
-  return (
-    <label className="wp-field"><span className="wp-field-label">Home (optional)</span>
-      <select className="input" value={key} onChange={(e) => { const [type, id] = e.target.value.split(":"); onChange(e.target.value ? { type: type as "client", id } : null); }}>
-        <option value="">Not attached</option>
-        {(places ?? []).filter((p) => !p.taken).map((p) => <option key={`${p.type}:${p.id}`} value={`${p.type}:${p.id}`}>{p.type === "client" ? "Client" : p.type === "lead" ? "Lead" : p.type === "shoot" ? "Shoot day" : "Project"} · {p.name}</option>)}
-      </select>
-      <span className="wp-hint">Leave it empty to keep it on its own. You can attach it later.</span>
-    </label>
-  );
-}
 
 const crumbs = (here?: React.ReactNode, mid?: { to: string; label: string }) => (
   <TopBar><a {...linkProps("/creative")}>Creative planning</a>{mid && <><Sep /><a {...linkProps(mid.to)}>{mid.label}</a></>}{here && <><Sep /><span className="here">{here}</span></>}</TopBar>

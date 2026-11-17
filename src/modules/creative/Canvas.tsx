@@ -19,8 +19,8 @@ import { Button, DialogHeader, EmptyState, PageHeader, PillTabs, SkeletonRows, T
 import { Icon } from "../../ui/Icon";
 import { errLine } from "../../ui/hold";
 import { AttachDialog } from "../projects/Homes";
-import { HomeTag, copyText, shareUrl } from "./parts";
-import { HomeSelect } from "./Creative";
+import { HomeSelect, HomeTag, copyText, shareUrl } from "./parts";
+
 import { BOARD, type CanvasItem, type CanvasType } from "../../../convex/lib/canvas";
 import { openPdf, renderPage, type PdfDoc } from "../docs/lib/pdf";
 

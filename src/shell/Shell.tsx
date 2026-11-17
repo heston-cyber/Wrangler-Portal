@@ -95,7 +95,7 @@ export const SUB_ICON: Record<string, IconName> = {
   "/vendors": "users", "/vendors/payments": "wallet", "/proposals/new": "plus", "/sign/new": "plus", "/proposals": "register", "/sign/docs": "register",
   "/proposals/templates": "template", "/sign/templates": "template", "/proposals/questionnaire": "questionnaire", "/sign/signature": "sign",
   "/payments/invoices": "invoice", "/payments/quotes": "quote", "/payments/subscriptions": "repeat", "/payments/plans": "layers", "/payments/reports": "chart",
-  "/review": "register", "/projects/not-attached": "attach", "/creative": "overview", "/creative/locations": "map-pin", "/creative/docs": "document", "/creative/canvas": "creative", "/creative/kits": "layers", "/review/library": "video", "/production/post-pro": "overview", "/sign/overview": "overview", "/clients/overview": "overview",
+  "/review": "register", "/projects/not-attached": "attach", "/creative": "overview", "/creative/locations": "map-pin", "/creative/docs": "document", "/creative/canvas": "creative", "/creative/kits": "layers", "/work": "user", "/work/all": "work", "/work/lists": "check-circle", "/work/templates": "template", "/review/library": "video", "/production/post-pro": "overview", "/sign/overview": "overview", "/clients/overview": "overview",
 };
 export const STAGE_ICON: Record<string, IconName> = { "Pre-pro": "clipboard", "Prin-pro": "camera", "Post-pro": "scissors", Delivery: "package",
   Proposals: "presentation", Contracts: "contract", Clients: "user", Vendors: "briefcase", Payments: "invoice" };
@@ -127,6 +127,14 @@ const NEW_PROJECTS: Sub[] = [
   { to: "/projects/not-attached", label: "Not attached", match: (p) => starts(p, "/projects/not-attached") },
 ];
 const inNewProjects = (p: string) => starts(p, "/projects");
+// 5m Work (round 1 answers): My tasks, All tasks (with the view switch), To-do lists, Templates.
+const NEW_WORK: Sub[] = [
+  { to: "/work", label: "My tasks", match: (p) => p === "/work" || p === "/work/" },
+  { to: "/work/all", label: "All tasks", match: (p) => starts(p, "/work/all") },
+  { to: "/work/lists", label: "To-do lists", match: (p) => starts(p, "/work/lists") },
+  { to: "/work/templates", label: "Templates", match: (p) => starts(p, "/work/templates") },
+];
+const inWork = (p: string) => starts(p, "/work");
 const NEW_PRODUCTION: Sub[] = [
   { to: "/production", label: "Overview", match: (p) => p === "/production" || p === "/production/" },
   { to: "/production/shoots", label: "Shoots", match: (p) => starts(p, "/production/shoots") },
@@ -169,7 +177,7 @@ export function ownerItems(payments = false, saved: Tools = DEFAULT_TOOLS, msgs 
   const byKey: Record<ToolKey, Item | null> = {
     dashboard: { to: "/", label: "Dashboard", icon: "home", match: (p) => p === "/", group: g("dashboard") },
     messages: { to: "/messages", label: "Messages", icon: "mail", match: (p) => starts(p, "/messages", "/sent"), badge: msgs, group: g("messages") }, // Sent folds in
-    work: null, // Work (5m) joins the menu when it's built
+    work: { to: "/work", label: "Work", icon: "work", match: () => false, tab: inWork, layer: NEW_WORK, layerHas: inWork, group: g("work") },
     calendar: { to: "/production/calendar", label: "Calendar", icon: "calendar", match: (p) => starts(p, "/production/calendar"), group: g("calendar") },
     projects: { to: "/projects", label: "Projects", icon: "folder", match: () => false, tab: inNewProjects, layer: NEW_PROJECTS, layerHas: inNewProjects, group: g("projects") },
     creative: { to: "/creative", label: "Creative planning", icon: "creative", match: () => false, tab: inCreative, layer: NEW_CREATIVE, layerHas: inCreative, group: g("creative") },
