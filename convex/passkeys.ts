@@ -23,8 +23,8 @@ const transports = (t?: string[]) => t as AuthenticatorTransportFuture[] | undef
 export const registerOptions = action({
   args: { origin: v.string() },
   handler: async (ctx, a) => {
+    const me = await ctx.runQuery(internal.handBack.forRegister, {}); // who's asking first, then where from
     const { rpID } = site(a.origin);
-    const me = await ctx.runQuery(internal.handBack.forRegister, {});
     const opts = await generateRegistrationOptions({
       rpName: "Wrangler Portal", rpID, userID: me.userId, userName: me.email, userDisplayName: me.name,
       attestationType: "none",
@@ -39,8 +39,8 @@ export const registerOptions = action({
 export const register = action({
   args: { origin: v.string(), response: v.any(), device: v.string() },
   handler: async (ctx, a) => {
-    const { origin, rpID } = site(a.origin);
     const challenge = await ctx.runMutation(internal.handBack.takeChallenge, {});
+    const { origin, rpID } = site(a.origin);
     if (!challenge) throw new ConvexError("That took too long. Try again.");
     let out;
     try { out = await verifyRegistrationResponse({ response: a.response, expectedChallenge: challenge, expectedOrigin: origin, expectedRPID: rpID, requireUserVerification: true }); }
@@ -59,8 +59,8 @@ export const register = action({
 export const unlockOptions = action({
   args: { origin: v.string() },
   handler: async (ctx, a) => {
-    const { rpID } = site(a.origin);
     const keys = await ctx.runQuery(internal.handBack.lockKeys, {});
+    const { rpID } = site(a.origin);
     if (!keys.length) throw new ConvexError("No passkey yet: use your PIN.");
     const opts = await generateAuthenticationOptions({ rpID, userVerification: "required", allowCredentials: keys.map((k) => ({ id: isoBase64URL.toBuffer(k.id), type: "public-key" as const, transports: transports(k.transports) })) });
     await ctx.runMutation(internal.handBack.lockChallenge, { value: opts.challenge });
@@ -71,8 +71,8 @@ export const unlockOptions = action({
 export const unlock = action({
   args: { origin: v.string(), response: v.any() },
   handler: async (ctx, a): Promise<{ ok: boolean }> => {
-    const { origin, rpID } = site(a.origin);
     const keys = await ctx.runQuery(internal.handBack.lockKeys, {});
+    const { origin, rpID } = site(a.origin);
     const challenge = await ctx.runMutation(internal.handBack.takeLockChallenge, {});
     if (!challenge) throw new ConvexError("That took too long. Try again.");
     const key = keys.find((k) => k.id === a.response?.id);
