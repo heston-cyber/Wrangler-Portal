@@ -20,7 +20,7 @@ import { useBrand, type Brand } from "../lib/brand";
 import { Menu, MenuItem, MenuSep, Modal, Thumb } from "../ui/kit";
 import { Icon, type IconName } from "../ui/Icon";
 import { PIPELINE } from "./pipeline";
-import { haptic } from "../lib/haptic";
+import { hapticHold, hapticRelease } from "../lib/haptic";
 import { Avatar, Badge, IconButton } from "../ui/wp";
 import { projectLabel } from "../lib/format";
 import wpLogo from "../assets/d1/wp-logo.png";
@@ -681,7 +681,7 @@ function ProductionTab({ it, path }: { it: Item; path: string }) {
   useEffect(() => {
     if (!open || !dragging) return;
     const move = (e: PointerEvent) => setHot(under(e.clientX, e.clientY)); // Heston (10:01): the tap is for the hold itself
-    const up = (e: PointerEvent) => { setDragging(false); const to = under(e.clientX, e.clientY); if (to) { setOpen(false); navigate(to); } };
+    const up = (e: PointerEvent) => { hapticRelease(); setDragging(false); const to = under(e.clientX, e.clientY); if (to) { setOpen(false); navigate(to); } };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", up);
@@ -692,7 +692,7 @@ function ProductionTab({ it, path }: { it: Item; path: string }) {
     const r = tab.current?.getBoundingClientRect();
     if (r) setOx(r.left + r.width / 2);
     t.current.held = true; setHot(null); setOpen(true); setDragging(true);
-    haptic(); // Nov 17 (Heston, 09:33)
+    hapticHold(); // Nov 17 (Heston, 09:33): Android now; iPhone as the finger lifts
     tab.current?.classList.remove("holding");
   };
   const w = Math.min(280, (typeof window !== "undefined" ? window.innerWidth : 390) - 32);

@@ -11,7 +11,7 @@
 //   actions every selected item has (bulk). Each item goes through its own action, so its own checks; the bar says what
 //   couldn't be done.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { haptic } from "../lib/haptic";
+import { hapticHold, hapticRelease } from "../lib/haptic";
 import { createPortal } from "react-dom";
 import { Check, CheckSquare, Copy, ExternalLink, Share2, X } from "lucide-react";
 import { navigate } from "../lib/router";
@@ -97,12 +97,12 @@ export function useHoldAt(onOpen: ((x: number, y: number) => void) | null | unde
         t.current.timer = 0;
         t.current.held = true;
         t.current.el?.classList.remove("holding");
-        haptic(); // Nov 17 (Heston): a tap of feedback when a long press opens its menu
+        hapticHold(); // Nov 17 (Heston): a tap of feedback when a long press opens its menu (Android now, iPhone on release)
         open(t.current.x, t.current.y);
       }, HOLD_MS);
     },
     onPointerMove: (e) => { if (t.current.timer && Math.hypot(e.clientX - t.current.x, e.clientY - t.current.y) > SLOP) cancel(); },
-    onPointerUp: cancel,
+    onPointerUp: () => { cancel(); if (t.current.held) hapticRelease(); },
     onPointerCancel: cancel,
     onPointerLeave: cancel,
     // a right-click on a computer (and a long press on Android, which sends one)
