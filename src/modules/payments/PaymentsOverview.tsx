@@ -7,6 +7,7 @@ import { ButtonLink, Card, Divider, EmptyState, ListRow, PageHeader, SectionHead
 import { Icon, type IconName } from "../../ui/Icon";
 import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps } from "../../lib/router";
+import { CreateMenu, PAYMENTS_CREATE } from "../home/CreateMenu";
 import { dateShort, money } from "./common";
 
 const ICON: Record<string, IconName> = { paid: "check-circle", viewed: "eye", sent: "send", processing: "clock", failed: "alert", refunded: "arrow-left" };
@@ -56,7 +57,7 @@ export default function PaymentsOverview() {
       <TopBar><span className="secondary">Payments</span><Sep /><span className="here">Overview</span></TopBar>
       <div className="wp-page pov">
         <PageHeader title="Payments." sub="Money in, at a glance."
-          actions={o && !off ? <ButtonLink variant="primary" icon="plus" to="/payments/invoices/new">New invoice</ButtonLink> : undefined} />
+          actions={o && !off ? <CreateMenu items={PAYMENTS_CREATE} /> : undefined} />
         {off && (
           <div className="wp-notice warn glass">
             <Icon name="alert" size={20} />

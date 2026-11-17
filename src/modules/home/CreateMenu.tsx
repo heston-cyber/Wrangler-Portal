@@ -3,7 +3,7 @@
 // A popup under the button on a computer, the same bottom sheet as the hold menus on a phone (MenuSurface). A team
 // member sees only what their role allows (pathNeeds, the same rule as the side menu); with nothing allowed, no button.
 import { Suspense, lazy, useRef, useState } from "react";
-import { Backpack, ChevronDown, ClipboardList, Clapperboard, FileSignature, FileText, ListChecks, MapPin, NotebookText, Package, Palette, Receipt, ReceiptText, Shapes, SwatchBook, UserPlus } from "lucide-react";
+import { Backpack, ChevronDown, Repeat, ClipboardList, Clapperboard, FileSignature, FileText, ListChecks, MapPin, NotebookText, Package, Palette, Receipt, ReceiptText, Shapes, SwatchBook, UserPlus } from "lucide-react";
 import { Button } from "../../ui/wp";
 import { MenuItem, MenuSep, useToast } from "../../ui/kit";
 import { MenuSurface } from "../../ui/hold";
@@ -45,6 +45,13 @@ export const PRODUCTION_CREATE: Item[] = [
   { key: "shoot", label: "Shoot", icon: <Clapperboard size={I} />, needs: "/production/shoots", dialog: "shoot", sep: true },
   { key: "packing", label: "Packing list", icon: <Backpack size={I} />, needs: "/production/gear", to: "/production/gear/packing?new=1" },
   { key: "delivery", label: "Delivery", icon: <Package size={I} />, needs: "/delivery", to: "/delivery?new=1", sep: true },
+];
+
+// Nov 17 (Heston, 11:46): the Payments page's button is Create too: a new invoice, quote or subscription.
+export const PAYMENTS_CREATE: Item[] = [
+  { key: "invoice", label: "Invoice", icon: <Receipt size={I} />, needs: "/payments/invoices/new", to: "/payments/invoices/new" },
+  { key: "quote", label: "Quote", icon: <ReceiptText size={I} />, needs: "/payments/quotes/new", to: "/payments/quotes/new" },
+  { key: "subscription", label: "Subscription", icon: <Repeat size={I} />, needs: "/payments/subscriptions/new", to: "/payments/subscriptions/new" },
 ];
 
 export function CreateMenu({ items: list = CREATE_ITEMS }: { items?: Item[] } = {}) {
