@@ -270,3 +270,30 @@ describe("Phase 5e · team members", () => {
     await expect(pr.as.query(api.team.page, {})).rejects.toThrow(/Not allowed/);
   }, 30_000);
 });
+
+describe("Nov 17 · creative docs need Projects only (Heston, Q4)", () => {
+  test("Q4: a Producer with Docs off opens and saves a creative doc, but not a contract draft or the clauses", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const { as: riley } = await join(w, mails);
+    await w.heston.mutation(api.team.setRolePerm, { role: "producer", perm: "docs", on: false });
+    const made = await w.heston.mutation(api.creative.newDoc, { kind: "treatment", title: "Launch film" });
+    const contract = await w.heston.mutation(api.builder.createBuild, {});
+    const b = await riley.query(api.builder.getBuild, { buildId: made.buildId });
+    expect(b).toMatchObject({ kind: "creative" });
+    await riley.mutation(api.builder.saveBuild, { buildId: made.buildId, title: "Launch film v2", blocks: b.blocks, fields: b.fields, signers: b.signers, style: b.style });
+    expect((await w.heston.query(api.builder.getBuild, { buildId: made.buildId })).title).toBe("Launch film v2");
+    // What the page draws with opens too; the contract side doesn't.
+    expect(await riley.query(api.builder.getProfile, {})).toBeTruthy();
+    await riley.query(api.builder.listFonts, {});
+    await riley.query(api.builder.listStyles, {});
+    await expect(riley.query(api.builder.getBuild, { buildId: contract })).rejects.toThrow(/Not allowed/);
+    await expect(riley.mutation(api.builder.saveBuild, { buildId: contract, title: "x", blocks: b.blocks, fields: b.fields, signers: [], style: b.style })).rejects.toThrow(/Not allowed/);
+    await expect(riley.query(api.builder.listClauses, {})).rejects.toThrow(/Not allowed/);
+    await expect(riley.query(api.builder.listBuilds, {})).rejects.toThrow(/Not allowed/);
+    // With Projects off too, the creative doc closes.
+    await w.heston.mutation(api.team.setRolePerm, { role: "producer", perm: "projects", on: false });
+    await expect(riley.query(api.builder.getBuild, { buildId: made.buildId })).rejects.toThrow(/Not allowed/);
+  });
+});

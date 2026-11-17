@@ -116,7 +116,7 @@ export default function Builder({ mode }: { mode: Mode }) {
   const tpl = useQuery(api.builder.getTemplate, mode.kind === "template" ? { templateId: mode.templateId } : "skip");
   const profile = useQuery(api.builder.getProfile);
   const fonts = useQuery(api.builder.listFonts);
-  const clauses = useQuery(api.builder.listClauses);
+  const clauses = useQuery(api.builder.listClauses, mode.kind === "build" && mode.creative ? "skip" : {}); // Q4: creative docs need Projects only
   const saveBuild = useMutation(api.builder.saveBuild);
   const updateTemplate = useMutation(api.builder.updateTemplate);
   const saveAsTemplate = useMutation(api.builder.saveAsTemplate);

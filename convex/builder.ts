@@ -44,6 +44,13 @@ const isGuide = (x: { kind?: string } | null | undefined) => x?.kind === "guide"
 // 5l: a creative doc (kind "creative"): kept out of Docs, never signed.
 const isCreative = (x: { kind?: string } | null | undefined) => x?.kind === "creative";
 const isSide = (x: { kind?: string } | null | undefined) => isProposal(x) || isBriefing(x) || isCallSheet(x) || isGuide(x) || isCreative(x);
+// Heston (Nov 17, Q4 "go with your suggestions"): a creative doc needs Projects only (it's never signed and has no prices);
+// everything else in the builder stays behind Docs. What the builder page reads to draw any page (letterhead, fonts,
+// styles, its images, an image upload) opens with either switch.
+const PAGE_READ = ["docs", "projects"] as const;
+async function requireForBuild(ctx: QueryCtx, b: { kind?: string } | null) {
+  return requireAll(ctx, isCreative(b) ? "projects" : "docs");
+}
 async function assertEditable(ctx: QueryCtx, b: { _id: Id<"wsBuilds">; kind?: string }) {
   if (isCallSheet(b)) return;
   if (isBriefing(b)) return; // D161 (Heston, Nov 6): a sent briefing stays editable; "Update the link" puts the new copy live
@@ -66,7 +73,7 @@ export async function defaultStyle(ctx: QueryCtx): Promise<Style> {
   return PRESET_STYLES[preset] ?? DEFAULT_STYLE;
 }
 
-export const getProfile = query({ args: {}, handler: async (ctx) => { await requireAll(ctx, "docs"); return profile(ctx); } });
+export const getProfile = query({ args: {}, handler: async (ctx) => { await requireAll(ctx, PAGE_READ); return profile(ctx); } });
 export const saveProfile = mutation({
   args: { business: v.object({ name: v.string(), legalName: v.string(), contact: v.string(), title: v.string(), email: v.string(), phone: v.string(), address: v.string() }) },
   handler: async (ctx, { business }) => {
@@ -92,9 +99,10 @@ export const listBuilds = query({
 export const getBuild = query({
   args: { buildId: v.id("wsBuilds") },
   handler: async (ctx, { buildId }) => {
-    await requireAll(ctx, "docs");
+    await requireAll(ctx, PAGE_READ);
     const b = await ctx.db.get(buildId);
     if (!b) return null;
+    await requireForBuild(ctx, b);
     const doc = b.documentId ? await ctx.db.get(b.documentId) : null;
     // D148: a call sheet's old "Add the weather the day before" tick opens as a Weather block (saved with the next edit).
     const blocks = isCallSheet(b) ? migrateWeather(pageOf(b.blocks)).page : b.blocks;
@@ -137,9 +145,10 @@ const docArgs = { title: v.string(), blocks: v.any(), fields: v.any(), signers: 
 export const saveBuild = mutation({
   args: { buildId: v.id("wsBuilds"), ...docArgs },
   handler: async (ctx, a) => {
-    await requireAll(ctx, "docs");
+    await requireAll(ctx, PAGE_READ);
     const b = await ctx.db.get(a.buildId);
     if (!b) throw new ConvexError("That document doesn't exist.");
+    await requireForBuild(ctx, b);
     await assertStyleFiles(ctx, a.style, b.style, businessInScope(ctx)); // second 5e review: only this business's own images
     await assertEditable(ctx, b);
     tooBig(a.blocks, a.fields, a.signers, a.style);
@@ -385,7 +394,7 @@ export const deleteClause = mutation({
 export const listStyles = query({
   args: {},
   handler: async (ctx) => {
-    await requireAll(ctx, "docs");
+    await requireAll(ctx, PAGE_READ);
     const saved = await ctx.db.query("wsStyles").withIndex("by_updated").order("desc").collect();
     const preset = (await ctx.db.query("counters").withIndex("by_key", (q) => q.eq("key", "wsDefaultPreset")).first())?.value ?? 0;
     const anySaved = saved.some((s) => s.isDefault);
@@ -433,13 +442,13 @@ export const deleteStyle = mutation({
 
 // ---------- files: images (logo, cover) and fonts ----------
 
-export const uploadUrl = mutation({ args: {}, handler: async (ctx) => { await requireAll(ctx, "docs"); return ctx.storage.generateUploadUrl(); } });
+export const uploadUrl = mutation({ args: {}, handler: async (ctx) => { await requireAll(ctx, PAGE_READ); return ctx.storage.generateUploadUrl(); } });
 
 /** Links for files a style uses (logo, cover image). */
 export const fileUrls = query({
   args: { ids: v.array(v.id("_storage")) },
   handler: async (ctx, { ids }) => {
-    await requireAll(ctx, "docs");
+    await requireAll(ctx, PAGE_READ);
     // Review fix (Nov 6): only images this business's own styles, drafts and templates use (and only its own files).
     const used = new Set<string>();
     const pick = (st: unknown) => { const x = st as Record<string, { fileId?: string } | undefined> | null; for (const k of ["logo", "cover", "backdropImage"]) { const f = x?.[k]?.fileId; if (f) used.add(f); } };
@@ -456,7 +465,7 @@ export const fileUrls = query({
 export const checkImage = action({
   args: { storageId: v.id("_storage") },
   handler: async (ctx, { storageId }): Promise<{ ok: true }> => {
-    await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs"] });
+    await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs", "projects"] });
     const claim = await claimIn(ctx, storageId, "style-image");
     const b = await ctx.storage.get(storageId);
     const bad = async (m: string) => { await discardIn(ctx, storageId, claim); throw new ConvexError(m); }; // only this call's own fresh upload
@@ -472,7 +481,7 @@ export const checkImage = action({
 export const listFonts = query({
   args: {},
   handler: async (ctx) => {
-    await requireAll(ctx, "docs");
+    await requireAll(ctx, PAGE_READ);
     const rows = await ctx.db.query("wsFonts").collect();
     return Promise.all(rows.map(async (f) => ({ _id: f._id, family: f.family, weight: f.weight, italic: f.italic, source: f.source, fileName: f.fileName, url: await ctx.storage.getUrl(f.fileId) })));
   },
