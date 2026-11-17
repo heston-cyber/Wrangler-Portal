@@ -185,6 +185,8 @@ describe("pay in portal", () => {
     const { inv, jordan } = await approved(w);
     await jordan.action(api.vendorPayouts.setupLink, { businessId: w.A });
     s.ach = "active"; s.bank = true;
+    // Phase 6 sweep M3: with no bank seen yet, the first press shows the bank Stripe has and asks for another press
+    await expect(w.heston.action(api.vendorPayouts.pay, { invoiceId: inv })).rejects.toThrow(/bank changed to .*6789\. Check it, then press Pay again/);
     await w.heston.action(api.vendorPayouts.pay, { invoiceId: inv });
     s.down = true;
     expect(await w.heston.action(api.vendorPayouts.checkNow, { invoiceId: inv })).toBe("unreachable");

@@ -474,7 +474,8 @@ async function byToken(ctx: QueryCtx | MutationCtx, token: string): Promise<Foun
   const x = await ctx.db.query("briefings").withIndex("by_link_token", (q) => q.eq("linkToken", token)).first();
   return x && x.status === "sent" ? { x, r: null } : null;
 }
-const isOwnerCall = (ctx: object) => !!(ctx as { scope?: { isOwner: boolean } | null }).scope?.isOwner;
+// Phase 6 sweep L7: the owner's side (owner or team) opening a page isn't the person reading it
+const isOwnerCall = (ctx: object) => { const s = (ctx as { scope?: { isOwner: boolean; isTeam?: boolean } | null }).scope; return !!(s?.isOwner || s?.isTeam); };
 
 export const page = query({
   args: { token: v.string() },

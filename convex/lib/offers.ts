@@ -128,7 +128,8 @@ export function stateFor(f: Found) {
 
 /** The page opened: counted for its person, for the copied link, or (before D149) the doc. The owner looking isn't. */
 export async function noteOpen(ctx: MutationCtx, f: Found) {
-  if ((ctx as unknown as { scope?: { isOwner: boolean } | null }).scope?.isOwner) return;
+  const sc = (ctx as unknown as { scope?: { isOwner: boolean; isTeam?: boolean } | null }).scope;
+  if (sc?.isOwner || sc?.isTeam) return; // Phase 6 sweep L7: a team member opening it isn't the client viewing it
   const now = Date.now(), d = f.doc;
   if (f.via === "email") {
     try { await bump(ctx, "offerLink", `open:${f.r!.token}`); } catch { return; }

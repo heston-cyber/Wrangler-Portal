@@ -126,7 +126,10 @@ export const pay = action({
         await ctx.runMutation(internal.vendorPayouts.saveRecipient, { vendorId: c.vendorId, ready: false, needsInfo: st.needsInfo, payoutMethodId: st.payoutMethodId ?? undefined, last4: st.last4 ?? undefined, bankName: st.bankName ?? undefined });
         throw new ConvexError(`${c.first}'s direct deposit isn't ready at Stripe. Ask them to finish it in their portal's Settings.`);
       }
-      if (last4 !== undefined && st.last4 !== last4) {
+      // Phase 6 sweep M3: the bank must be the one the owner saw (the dialog's), or, with none sent, the one last saved;
+      // a bank changed at Stripe since then is shown and needs another press.
+      const expected = last4 ?? c.savedLast4;
+      if (st.last4 !== expected) {
         await ctx.runMutation(internal.vendorPayouts.saveRecipient, { vendorId: c.vendorId, ready: true, payoutMethodId: st.payoutMethodId, last4: st.last4 ?? undefined, bankName: st.bankName ?? undefined });
         throw new ConvexError(`${c.first}'s bank changed to ${st.bankName ? `${st.bankName} ` : ""}••••${st.last4 ?? "?"}. Check it, then press Pay again.`);
       }
@@ -199,7 +202,7 @@ export const claim = internalMutation({
     await ctx.db.patch(invoiceId, { payout: { status: "starting", attempt, mode: payoutsMode() ?? "test", startedAt: now, by: me.name ?? me.email }, updatedAt: now });
     // 5e review (Heston, Nov 6, answer d): whoever presses Pay (a Bookkeeper may), it's in Settings › Activity.
     await audit(ctx, { kind: "paid", text: `started a direct deposit of ${usd(x.totalCents)} to ${vendor.name} (${x.number})`, where: "Vendors › Payments", link: `/vendors/payments/${invoiceId}` });
-    return { vendorId: vendor._id, recipientId: vendor.payout.recipientId, cents: x.totalCents, number: x.number, attempt, key, first: vendor.name.split(" ")[0] };
+    return { vendorId: vendor._id, recipientId: vendor.payout.recipientId, savedLast4: vendor.payout.last4 ?? null, cents: x.totalCents, number: x.number, attempt, key, first: vendor.name.split(" ")[0] };
   },
 });
 const isAttempt = (x: Doc<"vendorInvoices"> | null, attempt: number) => !!x?.payout && x.payout.attempt === attempt;
@@ -400,7 +403,8 @@ export const setupLink = action({
       let recipientId = v0.recipientId;
       if (!recipientId) {
         const acct = await payoutsCall("POST", "core/accounts", {
-          idem: `wp-vendor-${v0.vendorId}-${payoutsMode()}`,
+          // Phase 6 sweep M3: a new vendor email starts a new recipient (the old one's bank isn't carried over)
+          idem: `wp-vendor-${v0.vendorId}-${v0.email}-${payoutsMode()}`,
           body: {
             contact_email: v0.email, display_name: v0.name.slice(0, 100),
             identity: { country: "us", entity_type: as ?? "individual" },

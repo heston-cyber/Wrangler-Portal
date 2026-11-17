@@ -129,8 +129,8 @@ export const markViewed = mutation({
   handler: async (ctx, { token }) => {
     const i = await byToken(ctx, token);
     if (!i || i.viewedAt) return null;
-    const scope = (ctx as unknown as { scope?: { isOwner: boolean } }).scope;
-    if (scope?.isOwner) return null; // the owner checking the client's page isn't the client viewing it
+    const scope = (ctx as unknown as { scope?: { isOwner: boolean; isTeam?: boolean } }).scope;
+    if (scope?.isOwner || scope?.isTeam) return null; // Phase 6 sweep L7: the team too // the owner checking the client's page isn't the client viewing it
     focusBusiness(ctx, i.businessId);
     const me = await signedInEmail(ctx);
     const now = Date.now();
@@ -276,6 +276,9 @@ export const applyChargeEvent = internalMutation({
     if (type.startsWith("charge.dispute.")) {
       const status = String(o.status ?? "needs_response");
       const closed = type === "charge.dispute.closed";
+      // Phase 6 sweep L2: the same event delivered twice at once doesn't write the line twice.
+      const kind = closed ? "dispute_closed" : "disputed";
+      if (i.disputed?.status === status && i.history.some((h) => h.kind === kind && h.at >= i.disputed!.at)) return null;
       await ctx.db.patch(i._id, {
         disputed: { at: now, status, cents: Number(o.amount ?? 0), ...(o.reason ? { reason: String(o.reason) } : {}) },
         history: [...i.history, { kind: closed ? "dispute_closed" : "disputed", at: now, detail: closed ? (status === "won" ? "Dispute won" : status === "lost" ? "Dispute lost" : `Dispute ${status}`) : `${money(Number(o.amount ?? 0))} disputed${o.reason ? ` (${String(o.reason).replace(/_/g, " ")})` : ""}. Respond in Stripe.` }].slice(-60),

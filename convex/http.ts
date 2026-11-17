@@ -6,7 +6,6 @@ import { callback as dropboxCallback, webhookNotify, webhookVerify } from "./dro
 import { feed as registerFeed } from "./register";
 import { stop as emailStop } from "./emails";
 import { og } from "./og";
-import { ip as wsS0Ip } from "./wsS0";
 import { respond as quoteRespond } from "./quotes";
 import { respond as proposalRespond } from "./proposals";
 import { api as wsApi, preflight as wsPreflight } from "./signing";
@@ -59,8 +58,6 @@ http.route({ path: "/ws-verify", method: "POST", handler: wsVerify });
 http.route({ path: "/ws-verify", method: "OPTIONS", handler: wsPreflight });
 http.route({ path: "/ws-dropbox/callback", method: "GET", handler: wsDropboxCallback });
 
-// Wrangler Sign Phase S0 (Oct 26, temporary): which IP headers reach the backend.
-http.route({ path: "/ws-s0/ip", method: "GET", handler: wsS0Ip });
 
 // Phase 2 Part B: Stripe Connect events (account changes now; invoices and payments next).
 http.route({ path: "/stripe/connect", method: "POST", handler: connectWebhook });
