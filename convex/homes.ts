@@ -390,7 +390,7 @@ export const projectsBoard = query({
 export const clientChoices = query({
   args: {},
   handler: async (ctx) => {
-    await requireAll(ctx, ["projects", "clients"]);
+    await requireAll(ctx, "projects"); await requireAll(ctx, "clients"); // both (a list passes on either)
     return (await ctx.db.query("clients").collect()).map((c) => ({ _id: c._id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name));
   },
 });

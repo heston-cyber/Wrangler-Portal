@@ -95,7 +95,7 @@ export const SUB_ICON: Record<string, IconName> = {
   "/vendors": "users", "/vendors/payments": "wallet", "/proposals/new": "plus", "/sign/new": "plus", "/proposals": "register", "/sign/docs": "register",
   "/proposals/templates": "template", "/sign/templates": "template", "/proposals/questionnaire": "questionnaire", "/sign/signature": "sign",
   "/payments/invoices": "invoice", "/payments/quotes": "quote", "/payments/subscriptions": "repeat", "/payments/plans": "layers", "/payments/reports": "chart",
-  "/review": "register", "/projects/not-attached": "attach", "/review/library": "video", "/production/post-pro": "overview", "/sign/overview": "overview", "/clients/overview": "overview",
+  "/review": "register", "/projects/not-attached": "attach", "/creative": "overview", "/creative/locations": "map-pin", "/review/library": "video", "/production/post-pro": "overview", "/sign/overview": "overview", "/clients/overview": "overview",
 };
 export const STAGE_ICON: Record<string, IconName> = { "Pre-pro": "clipboard", "Prin-pro": "camera", "Post-pro": "scissors", Delivery: "package",
   Proposals: "presentation", Contracts: "contract", Clients: "user", Vendors: "briefcase", Payments: "invoice" };
@@ -144,6 +144,11 @@ const NEW_POST: Sub[] = [
   { to: "/production/delivery", label: "Delivery", match: (p) => starts(p, "/production/delivery") },
   { to: "/activity", label: "Activity", match: (p) => starts(p, "/activity") },
 ];
+const NEW_CREATIVE: Sub[] = [
+  { to: "/creative", label: "Overview", match: (p) => p === "/creative" || p === "/creative/" },
+  { to: "/creative/locations", label: "Locations", match: (p) => starts(p, "/creative/locations") },
+];
+const inCreative = (p: string) => starts(p, "/creative");
 const inPost = (p: string) => starts(p, "/review", "/v", "/production/delivery", "/production/post-pro", "/activity");
 const NEW_CLIENTS: Sub[] = [{ to: "/clients/overview", label: "Overview", match: (p) => starts(p, "/clients/overview") }, ...OWNER_CLIENTS];
 const moneyLayer = (payments: boolean): Sub[] => [
@@ -164,7 +169,7 @@ export function ownerItems(payments = false, saved: Tools = DEFAULT_TOOLS, msgs 
     work: null, // Work (5m) joins the menu when it's built
     calendar: { to: "/production/calendar", label: "Calendar", icon: "calendar", match: (p) => starts(p, "/production/calendar"), group: g("calendar") },
     projects: { to: "/projects", label: "Projects", icon: "folder", match: () => false, tab: inNewProjects, layer: NEW_PROJECTS, layerHas: inNewProjects, group: g("projects") },
-    creative: null, // Creative planning (5l) joins the menu when it's built
+    creative: { to: "/creative", label: "Creative planning", icon: "creative", match: () => false, tab: inCreative, layer: NEW_CREATIVE, layerHas: inCreative, group: g("creative") },
     production: { to: "/production", label: "Production", icon: "camera", match: () => false, tab: inNewProduction, layer: NEW_PRODUCTION, layerHas: inNewProduction, group: g("production") },
     post: { to: "/review/overview", label: "Post", icon: "scissors", match: () => false, tab: inPost, layer: NEW_POST, layerHas: inPost, group: g("post") },
     clients: { to: "/clients/overview", label: "Clients", icon: "building", match: () => false, tab: inClients, layer: NEW_CLIENTS, layerHas: inClients, group: g("clients") },

@@ -510,7 +510,7 @@ export default defineSchema({
     businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     name: v.string(),
     description: v.optional(v.string()),
-    kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"), v.literal("callsheet"), v.literal("guide"))),  // a proposal, briefing, call-sheet or Help-guide template, kept apart from contract templates
+    kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"), v.literal("callsheet"), v.literal("guide"), v.literal("release"))),  // a proposal, briefing, call-sheet or Help-guide template, kept apart from contract templates; 5i: a release (a contract template, chipped Release)
     guideSlug: v.optional(v.string()),       // Phase 5d step 4: which of Wrangler's Help guides this business has edited
     blocks: v.any(),
     fields: v.any(),
@@ -1393,8 +1393,25 @@ export default defineSchema({
     note: v.optional(v.string()),
     done: v.optional(v.object({ name: v.string(), initials: v.string(), userId: v.optional(v.id("users")), vendorId: v.optional(v.id("vendors")) })),
     tickAt: v.optional(v.number()),           // when the last tick or untick was made (on the phone); an older one loses (D182)
+    releaseNeeded: v.optional(v.boolean()),   // 5i: true "Release needed", false "Doesn't need a release", missing: not marked
     createdAt: v.number(),
   }).index("by_list", ["listId"]).index("by_setup", ["setupId", "order"]),
+  // 5i (D193, D203): a release signed in person on set. The document itself is a Sign document (wsDocuments) made from
+  // a release template; this row ties it to its shoot day (or project) and the shots it covers.
+  releases: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    shootId: v.optional(v.id("shoots")),
+    projectId: v.optional(v.id("projects")),
+    kind: v.union(v.literal("talent"), v.literal("location"), v.literal("minor")),
+    name: v.string(),                          // who signs (the guardian, for a minor)
+    email: v.string(),
+    minorName: v.optional(v.string()),
+    shotIds: v.array(v.id("shots")),
+    buildId: v.id("wsBuilds"),
+    documentId: v.optional(v.id("wsDocuments")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_shoot", ["shootId"]).index("by_project", ["projectId"]).index("by_document", ["documentId"]),
 
   // Phase 5d step 1 (Nov 4, D119/D144): booking calls. One settings row per business (Settings › Booking calls), with the
   // busy times last read from the calendar it checks (read again when a lead opens the page, at most once a minute).
@@ -1509,6 +1526,57 @@ export default defineSchema({
     shootId: v.id("shoots"),
     createdAt: v.number(),
   }).index("by_shoot", ["shootId"]).index("by_gear", ["gearId"]),
+
+  // 5j (D194, Nov 16): packing lists. A saved list (no shootId) is a kit you reuse; a shoot gets its own copy, which is
+  // what's ticked at load-in and wrap. Lines from Gear keep the item (serial, clash with other shoots that day);
+  // loose lines are just text.
+  packLists: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    name: v.string(),
+    shootId: v.optional(v.id("shoots")),
+    fromListId: v.optional(v.id("packLists")),  // the saved list a shoot's copy started from
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_shoot", ["shootId"]),
+  packLines: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    listId: v.id("packLists"),
+    order: v.number(),
+    gearId: v.optional(v.id("gear")),
+    text: v.string(),                            // the gear's name when it's from Gear (kept if the item goes)
+    qty: v.number(),
+    loaded: v.optional(v.object({ name: v.string(), at: v.number() })),
+    back: v.optional(v.object({ name: v.string(), at: v.number() })),
+    tickAt: v.optional(v.number()),              // the last tick's time (an older offline tick loses, as for shot lists)
+    flag: v.optional(v.union(v.literal("lost"), v.literal("repair"))), // at wrap: Mark as lost / In repair
+  }).index("by_list", ["listId", "order"]),
+
+  // 5k (D192, Nov 16): location scouting. A place in the bank, with its details, photos and where it is (for the map
+  // and the sun). It can be attached to a client or project, and used for shoots (placeLinks).
+  places: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    name: v.string(),
+    address: v.string(),
+    lat: v.optional(v.number()),
+    lng: v.optional(v.number()),
+    parking: v.optional(v.string()),             // parking and load-in
+    power: v.optional(v.string()),
+    permits: v.optional(v.string()),
+    contacts: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    tags: v.array(v.string()),
+    photos: v.array(v.object({ fileId: v.id("_storage"), name: v.string() })),
+    clientId: v.optional(v.id("clients")),
+    projectId: v.optional(v.id("projects")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_client", ["clientId"]).index("by_project", ["projectId"]),
+  placeLinks: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    placeId: v.id("places"),
+    shootId: v.id("shoots"),
+    createdAt: v.number(),
+  }).index("by_shoot", ["shootId"]).index("by_place", ["placeId"]),
 
   // Phase 5b step 3 (Nov 3): call sheets (D126, S5 · Phase 5b 765:2852 …). One per shoot. The page is a builder document
   // (its wsBuilds row, kind "callsheet"); until the quick questionnaire is finished there's no build yet, only answers.

@@ -34,6 +34,7 @@ import VideoPage from "./modules/review/VideoPage";
 import SharePage from "./modules/review/SharePage";
 import { lazy, Suspense, useEffect } from "react";
 import { MorePage, Shell } from "./shell/Shell";
+import type { ShootTab } from "./modules/production/ShootPage";
 import { UploadProvider } from "./shell/UploadDialog";
 import type { Id } from "../convex/_generated/dataModel";
 
@@ -95,6 +96,12 @@ const ShotChecklistPage = lazy(() => import("./modules/production/ShotChecklist"
 const ShotListsPage = lazy(() => import("./modules/production/ShotLists"));
 const ShotListEditor = lazy(() => import("./modules/production/ShotLists").then((m) => ({ default: m.ShotListEditor })));
 const ProjectsHub = lazy(() => import("./modules/projects/Homes")); // Nov 16: How everything connects
+const ShootPage = lazy(() => import("./modules/production/ShootPage")); // 5i (D203)
+const ReleaseSigning = lazy(() => import("./modules/production/ShootPage").then((m) => ({ default: m.ReleaseSigning })));
+const PackingListsPage = lazy(() => import("./modules/production/Packing")); // 5j
+const PackingListEditor = lazy(() => import("./modules/production/Packing").then((m) => ({ default: m.PackingListEditor })));
+const LocationsPage = lazy(() => import("./modules/production/Places")); // 5k
+const PlacePage = lazy(() => import("./modules/production/Places").then((m) => ({ default: m.PlacePage })));
 const NotAttached = lazy(() => import("./modules/projects/Homes").then((m) => ({ default: m.NotAttached })));
 const GearPage = lazy(() => import("./modules/production/Gear")); // Phase 5d step 3
 const GearItem = lazy(() => import("./modules/production/Gear").then((m) => ({ default: m.GearItem })));
@@ -322,6 +329,12 @@ function SignedIn() {
   else if (/^\/messages\/?$/.test(path)) page = <Suspense fallback={<Loading />}><OwnerMessages /></Suspense>;
   else if (/^\/production\/(pre-pro|prin-pro|post-pro)\/?$/.test(path)) { const k = path.split("/")[2] as "pre-pro" | "prin-pro" | "post-pro"; page = <Suspense fallback={<Loading />}><ProductionStage key={k} stage={k} /></Suspense>; }
   else if (/^\/production\/delivery\/?$/.test(path)) page = <Suspense fallback={<Loading />}><ProductionDelivery /></Suspense>;
+  else if (/^\/production\/shoots\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; const t = params.get("tab"); page = <Suspense fallback={<Loading />}><ShootPage key={id} shootId={id} tab={(["callsheet", "shotlist", "gear", "releases", "locations"].includes(t ?? "") ? t : "overview") as ShootTab} /></Suspense>; } // 5i (D203)
+  else if (/^\/production\/gear\/packing\/?$/.test(path)) page = <Suspense fallback={<Loading />}><PackingListsPage /></Suspense>; // 5j
+  else if (/^\/production\/gear\/packing\/[^/]+\/?$/.test(path)) { const id = path.split("/")[4]; page = <Suspense fallback={<Loading />}><PackingListEditor key={id} listId={id} /></Suspense>; }
+  else if (/^\/creative\/?$/.test(path)) page = <Suspense fallback={<Loading />}><LocationsPage /></Suspense>; // until Creative planning's Overview (5l)
+  else if (/^\/creative\/locations\/?$/.test(path)) page = <Suspense fallback={<Loading />}><LocationsPage /></Suspense>; // 5k
+  else if (/^\/creative\/locations\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><PlacePage key={id} placeId={id} /></Suspense>; }
   else if (/^\/production\/gear\/?$/.test(path)) page = <Suspense fallback={<Loading />}><GearPage /></Suspense>;
   else if (/^\/production\/gear\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><GearItem key={id} gearId={id} /></Suspense>; }
   else if (/^\/production\/calendar\/?$/.test(path)) page = <Suspense fallback={<Loading />}><CalendarPage /></Suspense>;
@@ -381,6 +394,9 @@ function SignedIn() {
     else if (!canOpen(path, perms, true, me.team!.role)) page = <Suspense fallback={<Loading />}><NoAccess /></Suspense>;
     page = <NotAllowedBoundary key={path} fallback={<Suspense fallback={<Loading />}><NoAccess /></Suspense>}>{page}</NotAllowedBoundary>;
   }
+  // 5i (D193): signing a release in person is full screen: the signer sees nothing of the portal (no menu, no tabs).
+  const releaseSign = /^\/releases\/([^/]+)\/sign\/?$/.exec(path);
+  if (releaseSign && !team) return <Suspense fallback={<Loading />}><ReleaseSigning key={releaseSign[1]} releaseId={releaseSign[1]} /></Suspense>;
   // Work surfaces get no background light, so nothing competes with the video or the document.
   const workSurface = Boolean(video) || /^\/sign\/(b|d)\//.test(path) || /^\/sign\/templates\/[^/]+/.test(path) || /^\/production\/call-sheets\/([^/]+\/edit|templates\/[^/]+)/.test(path) || /^\/settings\/help\/edit\//.test(path);
   return (

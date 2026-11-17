@@ -195,6 +195,17 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "shotLists.forShoot": { pages: ["owner"], args: () => "skip" },
   "shotLists.forBuild": { pages: ["owner"], args: () => "skip" }, // the builder's Shot list block
   "shotLists.forProject": { pages: ["owner"], args: () => "skip" }, // the project Overview's Shot list card
+  // 5i–5k (Nov 17): the Shoot page, releases, packing lists, locations
+  "shootPage.get": { pages: ["owner"], args: () => "skip" },
+  "releases.forShoot": { pages: ["owner"], args: () => "skip" },
+  "releases.get": { pages: ["owner"], args: () => "skip" },
+  "packing.lists": { pages: ["owner"], args: () => ({}) },
+  "packing.get": { pages: ["owner"], args: () => "skip" },
+  "packing.gearChoices": { pages: ["owner"], args: () => "skip" },
+  "packing.forShoot": { pages: ["owner"], args: () => "skip" },
+  "places.list": { pages: ["owner"], args: () => ({}) },
+  "places.get": { pages: ["owner"], args: () => "skip" },
+  "places.forShoot": { pages: ["owner"], args: () => "skip" },
   // Nov 16: How everything connects (Projects by client, Not attached, Attach / Move, a project's Move)
   "homes.projectsBoard": { pages: ["owner"], args: () => ({}) },
   "homes.loose": { pages: ["owner"], args: () => ({}) },

@@ -515,6 +515,42 @@ async function sendCore(ctx: MutationCtx, versionId: Id<"wsVersions">, expiresIn
   }
 }
 
+// ---------- releases on set (5i, D193): sent in person ----------
+
+/** Approves a release's current version (the same check and lock as Approve; a release has no owner signature). */
+export async function approveForRelease(ctx: MutationCtx, versionId: Id<"wsVersions">) { return approveCore(ctx, versionId, OWNER_KEY); }
+
+/**
+ * "Send" for a release signed in person on the owner's phone (D193). The same as Send except that no link is emailed:
+ * the signer is in front of the owner, so the email-code step is replaced by the owner's in-person check, which the
+ * trail records (device, time, the shoot's place). Every signing step after that (consent, read, adopt, initial,
+ * Sign) is the existing one, unchanged (rule 9). The link lasts a day.
+ */
+export async function sendInPersonCore(ctx: MutationCtx, versionId: Id<"wsVersions">, how: { device: string; place: string | null; by: string }) {
+  const ver = await ctx.db.get(versionId);
+  if (!ver) throw new ConvexError("That version doesn't exist.");
+  const doc = (await ctx.db.get(ver.documentId))!;
+  if (doc.status !== "approved" || doc.currentVersion !== ver.number || !ver.approvedAt) throw new ConvexError("Only the current, approved version can be signed.");
+  await applyOwner(ctx, versionId); // refuses if anything changed since approval
+  const clients = ver.signers.filter((x) => x.key !== OWNER_KEY);
+  if (clients.length !== 1) throw new ConvexError("A release has one signer.");
+  const c = clients[0];
+  const now = Date.now();
+  const token = randomToken(18), session = randomToken(32);
+  const where = how.place ? ` at ${how.place} (the shoot's place)` : "";
+  await audit(ctx, { kind: "sent", text: `handed ${doc.title} to ${c.name} to sign in person`, where: "Docs › Contracts", link: `/sign/d/${doc._id}`, businessId: doc.businessId });
+  const signingId = await ctx.db.insert("wsSignings", {
+    documentId: doc._id, versionNumber: ver.number, signerKey: c.key, name: c.name, email: c.email.toLowerCase(), title: c.title, order: 1,
+    token, status: "sent", sentAt: now,
+  });
+  await appendEvent(ctx, doc._id, { kind: "sent", actor: OWNER_KEY, versionNumber: ver.number, email: c.email, detail: `Handed to ${c.name} to sign in person on ${how.device}${where}. No link was emailed.` });
+  await ctx.db.patch(signingId, { sessionHash: await sha256Hex(`${token}:${session}`), sessionExpiresAt: now + 30 * 60_000, verifiedAt: now });
+  await appendEvent(ctx, doc._id, { kind: "in_person", actor: OWNER_KEY, versionNumber: ver.number, email: c.email, detail: `Signing in person on ${how.device}${where}: ${how.by} checked who is signing in person (no email code). A signed copy goes to ${c.email}.` });
+  await ctx.db.patch(doc._id, { status: "sent", sentAt: now, sentVersion: ver.number, expiresAt: now + 86_400_000, updatedAt: now });
+  await closeRequests(ctx, doc._id, ["approve", "send"]);
+  return { token, session };
+}
+
 async function sentDoc(ctx: MutationCtx, documentId: Id<"wsDocuments">) {
   const doc = await ctx.db.get(documentId);
   if (!doc) throw new ConvexError("That document doesn't exist.");

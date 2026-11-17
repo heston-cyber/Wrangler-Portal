@@ -54,12 +54,12 @@ function ShootLine({ s, today, first, phone, onSheet }: { s: ShootRow; today: st
   const b = sheetBits(s, today);
   return (
     <div className="wp-rowwrap">{!first && <Divider />}
-      <ListRow className="ilead ovact" lead={{ icon: "video" }} to={b.sent ? b.href : s.projectId ? `/projects/${s.projectId}` : "/production/shoots"} chevron={phone || b.sent}
+      <ListRow className="ilead ovact" lead={{ icon: "video" }} to={`/production/shoots/${s._id}`} chevron
         title={shootTitle(s)}
         meta={[day(s.date, today), `Call ${clock(s.call)}`, s.location, onSheet && s.sheet ? `${s.sheet.people} on the sheet` : null, s.shotList ? `Shots ${s.shotList.done}/${s.shotList.total}` : null].filter(Boolean).join(" · ")}
         chip={b.chip} action={b.action}
         // Nov 16: the shoot's shot list, from its options (hold on a phone, right-click on a computer).
-        menu={{ id: s._id, title: shootTitle(s), href: b.sent ? b.href : s.projectId ? `/projects/${s.projectId}` : "/production/shoots", actions: s.shotList
+        menu={{ id: s._id, title: shootTitle(s), href: `/production/shoots/${s._id}`, actions: s.shotList
           ? [{ key: "checklist", label: "On-set shot list", run: () => navigate(`/production/shoots/${s._id}/shot-list`) }, { key: "shots", label: "Edit the shot list", run: () => navigate(`/production/shot-lists/${s.shotList!._id}`) }]
           : [] }} />
     </div>

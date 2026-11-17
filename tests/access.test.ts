@@ -295,6 +295,13 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "gear.logMaintenance": PRODUCTION,
     "gear.exportCsv": PRODUCTION,
     "gear.forShoot": PRODUCTION,
+    // 5i–5k (Nov 17): releases need Shoots and Docs (tests/releases.test.ts); packing lists Production; places and the
+    // Shoot page Shoots.
+    ...Object.fromEntries(["forShoot", "templates", "create", "prepare", "handOver", "get", "remove"].map((f) => [`releases.${f}`, DOCS])),
+    "releases.markShot": SHOOTS,
+    ...Object.fromEntries(["lists", "get", "gearChoices", "create", "rename", "duplicate", "remove", "addGear", "addLine", "editLine", "removeLine", "moveLine", "forShoot", "useOnShoot", "tick", "flag"].map((f) => [`packing.${f}`, PRODUCTION])),
+    ...Object.fromEntries(["list", "get", "create", "update", "remove", "uploadUrl", "addPhoto", "removePhoto", "coverPhoto", "forShoot", "useForShoot", "unlink"].map((f) => [`places.${f}`, SHOOTS])),
+    "shootPage.get": SHOOTS,
     "gear.addToShoot": PRODUCTION,
     "gear.removeFromShoot": PRODUCTION,
     "inbox.forClient": CLIENTS,

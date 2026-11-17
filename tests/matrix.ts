@@ -148,6 +148,18 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "gear.list": {}, "gear.get": { gearId: "nope" }, "gear.add": { name: "G", kind: "lens" }, "gear.update": { gearId: ids.gearId, name: "G", kind: "lens" }, "gear.setStatus": { gearId: ids.gearId, status: "in_repair" },
     "gear.uploadUrl": {}, "gear.setPhoto": { gearId: ids.gearId, storageId: ids.storageId }, "gear.removePhoto": { gearId: ids.gearId },
     "gear.logMaintenance": { gearId: ids.gearId, date: "2030-02-01", what: "Serviced" }, "gear.exportCsv": {},
+    // 5i–5k (Nov 17): releases, packing lists, places, the Shoot page
+    "releases.forShoot": { shootId: ids.shootId }, "releases.templates": {}, "releases.create": { shootId: ids.shootId, templateId: ids.templateId, name: "N", email: "n@x.example", shotIds: [] },
+    "releases.prepare": { releaseId: ids.releaseId, storageId: ids.storageId }, "releases.handOver": { releaseId: ids.releaseId, device: "iPhone" }, "releases.get": { releaseId: ids.releaseId },
+    "releases.markShot": { shotId: ids.shotId, needed: true }, "releases.remove": { releaseId: ids.releaseId },
+    "packing.lists": {}, "packing.get": { listId: ids.packListId }, "packing.gearChoices": { listId: ids.packListId }, "packing.create": { name: "Kit 2" }, "packing.rename": { listId: ids.packListId, name: "Kit" },
+    "packing.duplicate": { listId: ids.packListId }, "packing.remove": { listId: "nope" }, "packing.addGear": { listId: ids.packListId, gearIds: [ids.gearId] }, "packing.addLine": { listId: ids.packListId, text: "Tape" },
+    "packing.editLine": { lineId: ids.packLineId, qty: 2 }, "packing.removeLine": { lineId: "nope" }, "packing.moveLine": { lineId: ids.packLineId, index: 0 }, "packing.forShoot": { shootId: ids.shootId },
+    "packing.useOnShoot": { shootId: ids.shootId, listId: ids.packListId }, "packing.tick": { lineId: ids.packLineId, pass: "loaded", done: true, at: 1 }, "packing.flag": { lineId: ids.packLineId, flag: null },
+    "places.list": {}, "places.get": { placeId: ids.placeId }, "places.create": { name: "P", address: "" }, "places.update": { placeId: ids.placeId, name: "Lobby", address: "1 Main St" },
+    "places.remove": { placeId: "nope" }, "places.uploadUrl": {}, "places.addPhoto": { placeId: ids.placeId, storageId: ids.storageId, name: "p.jpg" }, "places.removePhoto": { placeId: ids.placeId, fileId: ids.storageId },
+    "places.coverPhoto": { placeId: ids.placeId, fileId: ids.storageId }, "places.forShoot": { shootId: ids.shootId }, "places.useForShoot": { placeId: ids.placeId, shootId: ids.shootId, asPlace: false }, "places.unlink": { placeId: ids.placeId, shootId: ids.shootId },
+    "shootPage.get": { shootId: ids.shootId },
     "gear.forShoot": { shootId: "nope" }, "gear.addToShoot": { shootId: ids.shootId, gearId: ids.gearId }, "gear.removeFromShoot": { shootId: ids.shootId, gearId: ids.gearId },
     "shoots.forProject": { projectId: "nope" }, "shoots.schedule": { projectId: ids.projectId, ...{ date: "2030-01-02", call: "07:00", location: "X", prepare: [], withOwner: true, bookingIds: [], calendar: false } }, "shoots.update": { shootId: ids.shootId, ...{ date: "2030-01-02", call: "07:00", location: "X", prepare: [], withOwner: true, bookingIds: [], calendar: false } }, "shoots.cancel": { shootId: ids.shootId },
     "shoots.forClientProject": { projectId: "nope" }, "shoots.page": { shootId: "nope" }, "shoots.confirm": { shootId: ids.shootId },
@@ -298,6 +310,11 @@ export async function setup() {
     const shotListId = await ctx.db.insert("shotLists", { projectId, shootId, createdAt: 0, updatedAt: 0 });
     const shotSetupId = await ctx.db.insert("shotSetups", { listId: shotListId, order: 1, code: "M-01", title: "Lobby", createdAt: 0 });
     const shotId = await ctx.db.insert("shots", { listId: shotListId, setupId: shotSetupId, order: 1, number: 1, text: "Exterior", createdAt: 0 });
+    // 5i–5k (Nov 17): a release on the shoot, a packing list with a line, a place.
+    const releaseId = await ctx.db.insert("releases", { shootId, projectId, kind: "talent", name: "Riley", email: "riley@x.example", shotIds: [shotId], buildId, createdAt: 0, updatedAt: 0 });
+    const packListId = await ctx.db.insert("packLists", { name: "Kit", createdAt: 0, updatedAt: 0 });
+    const packLineId = await ctx.db.insert("packLines", { listId: packListId, order: 1, gearId, text: "Camera", qty: 1 });
+    const placeId = await ctx.db.insert("places", { name: "Lobby", address: "1 Main St", tags: [], photos: [], createdAt: 0, updatedAt: 0 });
     // Phase 5d step 1: booking calls: the settings and one booked call (its private link's token).
     await ctx.db.insert("callSettings", { lengthMin: 30, bufferMin: 10, aheadDays: 30, noticeHours: 4, hours: [0, 1, 2, 3, 4, 5, 6].map((d) => ({ on: d < 5, start: "09:00", end: "17:00" })), updatedAt: 0 });
     const callToken = "matrixcalltoken0123456789";
@@ -363,7 +380,7 @@ export async function setup() {
     // Phase 5e step 6: an export ready to download, and a finished deletion whose safety-net export the admins keep
     const dataExportId = await ctx.db.insert("dataExports", { businessId: teamBiz, status: "ready", requestedAt: 0, requestedBy: owner, fileId: storageId, bytes: 1, readyAt: 0, expiresAt: Date.now() + 86_400_000 });
     const deletionId = await ctx.db.insert("businessDeletions", { businessId: teamBiz, name: "Gone Films", ownerEmail: "gone@x.example", requestedBy: "Gone", requestedAt: 0, deleteAt: 0, status: "done", finalExportId: storageId, finalBytes: 1, purgeAt: Date.now() + 86_400_000 });
-    return { shotListId, shotSetupId, shotId, teamInviteId, bellItemId, dataExportId, deletionId, teamMemberId: producer.m, producerSub: producer.sub, editorSub: editor.sub, bookkeeperSub: bookkeeper.sub, threadId, callId, callToken, gearId, offerPersonId, calendarEventId, guestToken, guestInvitedSub: await sess(invitedGuest), guestSub: await sess(guestUser), callSheetId, testimonialId, vendorSub: await sess(vendorUser), briefId, fileRequestId, fileUploadId, shootId, vendorInvoiceId, businessId, briefingId, bookingId, vendorId, proposalId, quoteId, dealId, followUpId, estimateId, entryId, subscriptionId, planId, invoiceId, deliveryFileId, clientRecId, personId, inboxItemId, inboxNoteId, requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
+    return { shotListId, shotSetupId, shotId, releaseId, packListId, packLineId, placeId, teamInviteId, bellItemId, dataExportId, deletionId, teamMemberId: producer.m, producerSub: producer.sub, editorSub: editor.sub, bookkeeperSub: bookkeeper.sub, threadId, callId, callToken, gearId, offerPersonId, calendarEventId, guestToken, guestInvitedSub: await sess(invitedGuest), guestSub: await sess(guestUser), callSheetId, testimonialId, vendorSub: await sess(vendorUser), briefId, fileRequestId, fileUploadId, shootId, vendorInvoiceId, businessId, briefingId, bookingId, vendorId, proposalId, quoteId, dealId, followUpId, estimateId, entryId, subscriptionId, planId, invoiceId, deliveryFileId, clientRecId, personId, inboxItemId, inboxNoteId, requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
   });
   return { t, ids };
 }

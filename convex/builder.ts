@@ -52,7 +52,7 @@ async function assertEditable(ctx: QueryCtx, b: { _id: Id<"wsBuilds">; kind?: st
 
 // ---------- profile and default style ----------
 
-async function profile(ctx: QueryCtx): Promise<Business> {
+export async function profile(ctx: QueryCtx): Promise<Business> {
   const row = await ctx.db.query("wsProfile").first();
   return { ...DEFAULT_BUSINESS, ...((row?.business as Partial<Business>) ?? {}) };
 }
