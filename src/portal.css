@@ -4063,6 +4063,7 @@ textarea.cv-boxtxt { pointer-events: auto; display: block; padding-top: calc(50%
 .cv-menubtn { left: 12px; top: 12px; }
 .cv-menubtn > .cv-tbtn, .cv-help { background: var(--cv-island); box-shadow: 0 0 0 1px var(--cv-line); }
 .cv-ui.cv-help { position: absolute; right: 12px; bottom: 12px; border-radius: 50%; }
+.cv-ui.cv-done { right: 8px; top: 8px; padding: 9px 18px; border: 0; border-radius: 999px; background: var(--cv-on); color: var(--cv-on-ink); font: 600 15px/1 var(--font-body); box-shadow: 0 0 0 1px var(--cv-sel); }
 .cv-stage .lucide { color: inherit; } /* the app tints icons red; the board's tools stay neutral */
 .cv-bl { left: 12px; bottom: 12px; display: flex; gap: 8px; }
 .cv-group { display: flex; align-items: center; padding: 2px; border-radius: 10px; background: var(--cv-island); box-shadow: 0 0 0 1px var(--cv-line); }

@@ -392,6 +392,18 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
     return () => window.removeEventListener("resize", size);
   }, []);
   useEffect(() => { fit(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Phone (Heston, Nov 17): typing opens the keyboard over the bottom half, so the thing being typed in moves up near
+  // the top of the board, and the bars at the bottom step aside until Done.
+  useEffect(() => {
+    if (!phone || !editing) return;
+    const it = itemsRef.current.find((i) => i.id === editing); const r = viewRef.current?.getBoundingClientRect(); if (!it || !r) return;
+    const z = Math.max(zoom, 0.8); // big enough to read what you type
+    const sx = pan.x + it.x * z, sy = pan.y + it.y * z;
+    const nx = z !== zoom || sx < 8 || sx + Math.min(it.w * z, r.width - 16) > r.width - 8 ? pan.x - sx + 16 : pan.x;
+    const ny = z !== zoom || sy < 60 || sy > r.height * 0.3 ? pan.y - sy + 64 : pan.y;
+    if (z !== zoom) setZoom(z);
+    if (nx !== pan.x || ny !== pan.y) setPan({ x: nx, y: ny });
+  }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Wheel: ctrl/⌘ (and trackpad pinch) zooms; otherwise it moves the board.
   useEffect(() => {
@@ -730,7 +742,8 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
       {/* The style panel, on the left */}
       {showPanel && <StylePanel items={panelFor} st={st} onStyle={restyle} onLayer={selected.length ? layer : undefined} table={tool === "table" ? { rows: st.rows, cols: st.cols, set: (rows, cols) => setSt((s) => ({ ...s, rows, cols })) } : undefined} />}
 
-      {phone && <nav className="cv-ui cv-phonebar" aria-label="Tools">
+      {phone && editing && <button className="cv-ui cv-done" onPointerDown={(e) => e.preventDefault()} onClick={() => { (document.activeElement as HTMLElement | null)?.blur(); setEditing(null); }}>Done</button>}
+      {phone && !editing && <nav className="cv-ui cv-phonebar" aria-label="Tools">
         {MAIN.filter((t) => t.phone && (canEdit || t.k === "select" || t.k === "pan")).filter((t) => uploads || t.k !== "image").map((t) => <button key={t.k} className={tool === t.k ? "on" : ""} onClick={() => pick(t.k)}>{t.icon}<span>{t.k === "image" ? "Photo" : t.label}</span></button>)}
         {canEdit && <button className={pop === "tools" ? "on" : ""} onClick={() => setPop(pop === "tools" ? null : "tools")}><MoreHorizontal size={18} /><span>Tools</span></button>}
       </nav>}
@@ -753,7 +766,7 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
       )}
 
       {/* Bottom left: zoom, then undo and redo */}
-      <div className="cv-ui cv-bl">
+      {!(phone && editing) && <div className="cv-ui cv-bl">
         <div className="cv-group">
           <button className="cv-tbtn" aria-label="Zoom out" onClick={() => zoomTo(zoom / 1.25)}><Minus size={16} /></button>
           <button className="cv-pct" onClick={() => zoomTo(1)} title="Reset to 100%">{Math.round(zoom * 100)}%</button>
@@ -763,7 +776,7 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
           <button className="cv-tbtn" aria-label="Undo" title="Undo (⌘Z)" disabled={!hist.current.past.length} onClick={undo}><Undo2 size={17} /></button>
           <button className="cv-tbtn" aria-label="Redo" title="Redo (⇧⌘Z)" disabled={!hist.current.future.length} onClick={redo}><Redo2 size={17} /></button>
         </div>}
-      </div>
+      </div>}
       {!phone && <button className="cv-ui cv-tbtn cv-help" aria-label="Keyboard shortcuts" onClick={() => setPop("help")}><CircleQuestionMark size={18} /></button>}
       </div>
 
