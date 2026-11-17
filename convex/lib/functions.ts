@@ -11,7 +11,6 @@
 // is refused. Internal functions are trusted server code: they keep plain access and stamp the default business.
 // A record with no businessId (only in tests now: every live record is tagged) counts as the default business's.
 import { customAction, customCtx, customMutation, customQuery } from "convex-helpers/server/customFunctions";
-import { sessionBlocked } from "./sessionLock";
 import { v } from "convex/values";
 import { wrapDatabaseReader, wrapDatabaseWriter, type Rules } from "convex-helpers/server/rowLevelSecurity";
 import { getAuthUserId } from "@convex-dev/auth/server";
@@ -42,8 +41,8 @@ export async function scopeFor(ctx: QueryCtx | MutationCtx): Promise<Scope> {
   if (!email) return scope;
   // Phase 5b step 4 (D127): a call-sheet guest gets no owner or client reach, like someone signed out (lib/guests.ts).
   if (user?.role === "guest") return scope;
-  // Q2 review L1 and H1 (Nov 17): a handed-over phone, or a session ended on the server, reaches no business at all.
-  if (await sessionBlocked(ctx)) return scope;
+  // Second review A (Nov 17): a blocked session keeps its own business here (an action already running can't spill into
+  // another business); refusing it is viewerOf's and the sign-in helpers' job (lib/sessionLock.ts).
   const ms = (await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", email)).collect()).filter((m) => !m.revokedAt);
   const ownerM = ms.filter((m) => m.role === "owner").sort((a, b) => a.createdAt - b.createdAt)[0];
   if (ownerM) { scope.owner = ownerM.businessId; scope.isOwner = true; return scope; }

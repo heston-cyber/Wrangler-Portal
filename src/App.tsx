@@ -280,10 +280,10 @@ export default function App() {
   return <SignedIn />;
 }
 
-function LockedOut({ onSignOut }: { onSignOut: () => void }) {
+function LockedOut({ onSignOut, ended }: { onSignOut: () => void; ended?: boolean }) {
   useEffect(() => { onSignOut(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <SystemPage icon="lock" eyebrow="Wrangler Portal" title="This phone was signed out." body="Too many wrong PINs. Sign in again with your password.">
+    <SystemPage icon="lock" eyebrow="Wrangler Portal" title={ended ? "You were signed out." : "This phone was signed out."} body={ended ? "This device was signed out. Sign in again with your password." : "Sign in again with your password."}>
       <Button style={{ alignSelf: "flex-start" }} onClick={() => location.assign("/")}>Sign in</Button>
     </SystemPage>
   );
@@ -306,6 +306,7 @@ function SignedIn() {
   // (the same element as the release page's own route, so the signing in progress keeps its place).
   // Review H1: after five wrong PINs the session was ended on the server; this browser signs out too.
   if (me?.locked?.signedOut) return <LockedOut onSignOut={() => void signOut()} />;
+  if (me && "ended" in me && me.ended) return <LockedOut ended onSignOut={() => void signOut()} />; // second review L1
   if (me?.locked) return <Suspense fallback={<Loading />}><ReleaseSigning key={me.locked.releaseId} releaseId={me.locked.releaseId} /></Suspense>;
   // Phase 5b step 4 (D127): a call-sheet guest sees their call sheets and nothing else, whatever address they open.
   if (me && me.role === "guest") return <Suspense fallback={<Loading />}><GuestApp token={null} /></Suspense>;

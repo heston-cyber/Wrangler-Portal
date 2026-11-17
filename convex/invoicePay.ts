@@ -7,6 +7,7 @@
 //     back from Stripe: paid, processing (a bank payment clearing) or failed, each with "Visa •••• 4242".
 //   - Send (the owner's confirm) emails the invoice (email 08) and posts "Invoice to pay" to the person's Inbox.
 import { viewerOf, requireAll } from "./lib/access";
+import { sessionBlocked } from "./lib/sessionLock";
 import { action } from "./_generated/server";
 import { internalAction, internalMutation, internalQuery, mutation, query, focusBusiness, forBusiness } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
@@ -39,6 +40,7 @@ async function byToken(ctx: QueryCtx | MutationCtx, token: string) {
 
 async function signedInEmail(ctx: QueryCtx | MutationCtx): Promise<{ email: string; name: string | null } | null> {
   const userId = await getAuthUserId(ctx);
+  if (userId && (await sessionBlocked(ctx))) return null; // second review B
   const u = userId ? await ctx.db.get(userId) : null;
   if (u?.role === "guest") return null; // Phase 5b step 4: a call-sheet guest sees no billing (D127)
   return u?.email ? { email: String(u.email).toLowerCase(), name: (u.name as string | undefined) ?? null } : null;

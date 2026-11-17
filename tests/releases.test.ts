@@ -143,8 +143,25 @@ describe("releases on set", () => {
     expect(await elsewhere.query(api.handBack.mine, {})).toMatchObject({ pin: true });
     // The mark is cleared once the token can't be used any more (the 6-hourly sweep).
     expect(await x.t.run((ctx) => ctx.db.query("sessionLocks").collect())).toHaveLength(1);
-    await x.t.run(async (ctx) => { for (const l of await ctx.db.query("sessionLocks").collect()) await ctx.db.patch(l._id, { at: Date.now() - 4 * 3_600_000 }); });
+    await x.t.run(async (ctx) => { for (const l of await ctx.db.query("sessionLocks").collect()) await ctx.db.patch(l._id, { at: Date.now() - 4 * 3_600_000, signedOutAt: Date.now() - 4 * 3_600_000 }); });
     expect(await x.t.mutation(internal.handBack.sweep, {})).toBe(1);
+  });
+
+  test("Q2 second review: a PIN saved under another server secret can't be checked (no try spent); Sign this phone out instead", async () => {
+    const x = await setup();
+    await x.t.run((ctx) => ctx.db.patch(x.releaseId, { documentId: x.documentId }));
+    await x.me.mutation(api.sign.approve, { versionId: x.versionId });
+    await x.me.mutation(api.handBack.setPin, { pin: "2580" });
+    await x.me.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone", checked: true });
+    const was = process.env.HANDBACK_PEPPER;
+    process.env.HANDBACK_PEPPER = "a-new-secret";
+    try {
+      expect(await x.me.mutation(api.handBack.unlockWithPin, { pin: "2580" })).toEqual({ ok: false, reset: true });
+      expect((await x.t.run((ctx) => ctx.db.query("sessionLocks").collect()))[0].tries).toBe(0);
+    } finally { if (was === undefined) delete process.env.HANDBACK_PEPPER; else process.env.HANDBACK_PEPPER = was; }
+    await x.me.mutation(api.handBack.signOutHere, {});
+    expect(await x.me.query(api.users.me, {})).toMatchObject({ allowed: false, locked: { signedOut: true } });
+    await expect(x.me.query(api.releases.forShoot, { shootId: x.ids.shootId })).rejects.toThrow(/Not allowed/);
   });
 
   test("T-RL.2 a draft can be removed; shots must be on the day's list; someone without Docs is refused", async () => {

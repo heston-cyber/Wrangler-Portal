@@ -1,5 +1,5 @@
 import { internalQuery, mutation, query } from "./lib/functions";
-import { lockOf } from "./lib/sessionLock";
+import { lockOf, sessionBlocked } from "./lib/sessionLock";
 import { v, ConvexError } from "convex/values";
 import { projectOf, projectsFor, requireMe, requireSignedIn, viewerOf } from "./lib/access";
 import { PERMS } from "./lib/perms";
@@ -21,6 +21,8 @@ export const me = query({
     const email = (user.email ?? "").toLowerCase();
     const local = email.split("@")[0] ?? "";
     const fallback = local ? local[0].toUpperCase() + local.slice(1) : null;
+    // Second review L1: a session ended on the server (any way) tells the browser to sign out.
+    if (await sessionBlocked(ctx) && !(await lockOf(ctx))) return { id: userId, email, name: (user.name as string | undefined) || fallback, allowed: false, role: null, sides: [] as Awaited<ReturnType<typeof sidesOf>>, team: null, tools: undefined as ReturnType<typeof toolsOf> | undefined, locked: null, ended: true };
     // Q2 (Nov 17): a phone handed over for a release shows its release and the hand-back, whatever page is opened.
     const lock = await lockOf(ctx);
     if (lock && lock.userId === userId) {

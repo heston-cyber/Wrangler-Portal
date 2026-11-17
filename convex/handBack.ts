@@ -18,6 +18,9 @@ export const PIN_TRIES = 5;
 const CHALLENGE_MS = 5 * 60_000;
 const pepper = () => process.env.HANDBACK_PEPPER || process.env.JWT_PRIVATE_KEY || "";
 const pinHash = async (salt: string, pin: string) => sha256Hex(`wp-handback:${await sha256Hex(pepper())}:${salt}:${pin}`);
+/** Second review L2: a tag of the secret the PIN was saved with; a different secret now means the PIN must be set again. */
+const pinKey = async () => (await sha256Hex(`wp-handback-key:${pepper()}`)).slice(0, 12);
+const pinUsable = async (r: Doc<"handBack"> | null) => !!r?.pinHash && r.pinKey === (await pinKey());
 const rowOf = (ctx: Ctx, userId: Id<"users">) => ctx.db.query("handBack").withIndex("by_user", (q) => q.eq("userId", userId)).first();
 
 /** The owner's hand-back setup: is there a PIN, and how many passkeys (never the PIN or keys themselves). */
@@ -26,7 +29,7 @@ export const mine = query({
   handler: async (ctx) => {
     const me = await requireOwner(ctx);
     const r = await rowOf(ctx, me.userId);
-    return { pin: !!r?.pinHash, passkeys: (r?.passkeys ?? []).map((k) => ({ id: k.id, device: k.device, at: k.at })) };
+    return { pin: await pinUsable(r), passkeys: (r?.passkeys ?? []).map((k) => ({ id: k.id, device: k.device, at: k.at })) };
   },
 });
 
@@ -39,8 +42,9 @@ export const setPin = mutation({
     const salt = randomToken(16);
     const hash = await pinHash(salt, pin);
     const r = await rowOf(ctx, me.userId);
-    if (r) await ctx.db.patch(r._id, { pinSalt: salt, pinHash: hash, updatedAt: Date.now() });
-    else await ctx.db.insert("handBack", { userId: me.userId, pinSalt: salt, pinHash: hash, passkeys: [], updatedAt: Date.now() });
+    const key = await pinKey();
+    if (r) await ctx.db.patch(r._id, { pinSalt: salt, pinHash: hash, pinKey: key, updatedAt: Date.now() });
+    else await ctx.db.insert("handBack", { userId: me.userId, pinSalt: salt, pinHash: hash, pinKey: key, passkeys: [], updatedAt: Date.now() });
     return null;
   },
 });
@@ -61,7 +65,7 @@ export async function lockForRelease(ctx: MutationCtx, userId: Id<"users">, rele
   const sessionId = await getAuthSessionId(ctx);
   if (!sessionId) throw new ConvexError("Sign in first.");
   const r = await rowOf(ctx, userId);
-  if (!r?.pinHash) throw new ConvexError("Set your hand-back PIN first.");
+  if (!(await pinUsable(r))) throw new ConvexError("Set your hand-back PIN first.");
   for (const old of await ctx.db.query("sessionLocks").withIndex("by_session", (q) => q.eq("sessionId", sessionId)).collect()) await ctx.db.delete(old._id);
   await ctx.db.insert("sessionLocks", { sessionId, userId, releaseId, tries: 0, at: Date.now() });
 }
@@ -69,9 +73,11 @@ export async function lockForRelease(ctx: MutationCtx, userId: Id<"users">, rele
 /** Hand back with the PIN. Wrong: tries left; the fifth wrong one signs this session out. */
 export const unlockWithPin = mutation({
   args: { pin: v.string() },
-  handler: async (ctx, { pin }): Promise<{ ok: true } | { ok: false; left: number } | { ok: false; signedOut: true }> => {
+  handler: async (ctx, { pin }): Promise<{ ok: true } | { ok: false; left: number } | { ok: false; signedOut: true } | { ok: false; reset: true }> => {
     const lock = await liveLock(ctx);
     const r = await rowOf(ctx, lock.userId);
+    // The server's secret changed since the PIN was saved: it can't be checked, so no try is spent (Face ID, or sign out).
+    if (!(await pinUsable(r))) return { ok: false, reset: true };
     if (r?.pinHash && r.pinSalt && /^\d{4}$/.test(pin) && (await pinHash(r.pinSalt, pin)) === r.pinHash) {
       await ctx.db.delete(lock._id);
       return { ok: true };
@@ -92,7 +98,7 @@ async function liveLock(ctx: Ctx) {
 
 /** Too many wrong tries: this session (only) is signed out; its lock stays, marked, until the token can't be used. */
 async function signOutLocked(ctx: MutationCtx, lock: Doc<"sessionLocks">) {
-  await ctx.db.patch(lock._id, { signedOut: true, tries: PIN_TRIES, challenge: undefined });
+  await ctx.db.patch(lock._id, { signedOut: true, signedOutAt: Date.now(), tries: PIN_TRIES, challenge: undefined });
   for (const t of await ctx.db.query("authRefreshTokens").withIndex("sessionId", (q) => q.eq("sessionId", lock.sessionId)).collect()) await ctx.db.delete(t._id);
   if (await ctx.db.get(lock.sessionId)) await ctx.db.delete(lock.sessionId);
   for (const d of await ctx.db.query("sessionDevices").withIndex("by_session", (q) => q.eq("sessionId", lock.sessionId)).collect()) await ctx.db.delete(d._id);
@@ -181,13 +187,20 @@ export const unlockedByPasskey = internalMutation({
   },
 });
 
-/** Review L3: daily, marks and locks whose session has ended and whose token can no longer be used are cleared. */
+/** Sign this handed-over phone out instead of unlocking it (the owner signs in again with their password). Nothing of
+ *  the business is shown or changed, so the signer gains nothing by it. */
+export const signOutHere = mutation({
+  args: {},
+  handler: async (ctx) => { await signOutLocked(ctx, await liveLock(ctx)); return null; },
+});
+
+/** Review L3: every 6 hours, marks and locks whose session has ended and whose token can no longer be used are cleared. */
 export const sweep = internalMutation({
   args: {},
   handler: async (ctx) => {
     const old = Date.now() - 3 * 3_600_000; // tokens live an hour; a margin
     let n = 0;
-    for (const l of await ctx.db.query("sessionLocks").collect()) if (l.at < old && !(await ctx.db.get(l.sessionId))) { await ctx.db.delete(l._id); n++; }
+    for (const l of await ctx.db.query("sessionLocks").collect()) if ((l.signedOutAt ?? l.at) < old && !(await ctx.db.get(l.sessionId))) { await ctx.db.delete(l._id); n++; }
     return n;
   },
 });

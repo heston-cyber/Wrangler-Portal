@@ -446,13 +446,20 @@ function HandBack({ name, onDone }: { name: string | null; onDone: () => void })
     } catch (e) { setMsg((e as Error).name === "NotAllowedError" ? "Cancelled. Use your PIN." : errLine(e)); }
     finally { setBusy(false); }
   };
+  const signOutHere = useMutation(api.handBack.signOutHere);
+  // Signed out (too many PINs, or by choice): the browser signs out too, and the signer's place is forgotten.
+  const leave = async () => {
+    try { for (const k of Object.keys(sessionStorage)) if (k.startsWith("wp-release-token:")) sessionStorage.removeItem(k); } catch { /* private mode */ }
+    await signOut(); location.assign("/");
+  };
   const withPin = async () => {
     setBusy(true); setMsg(null);
     try {
       const out = await unlockPin({ pin });
       if (out.ok) { onDone(); return; }
       setPin("");
-      if ("signedOut" in out) { setMsg("Too many wrong PINs: this phone is signed out."); await signOut(); location.assign("/"); return; }
+      if ("signedOut" in out) { setMsg("Too many wrong PINs: this phone is signed out."); await leave(); return; }
+      if ("reset" in out) { setMsg("Your PIN can't be checked on this phone any more. Use Face ID, or sign this phone out and sign in again."); return; }
       setMsg(`That isn't the PIN. ${out.left} ${out.left === 1 ? "try" : "tries"} left.`);
     } catch (e) { setMsg(errLine(e)); }
     finally { setBusy(false); }
@@ -466,6 +473,7 @@ function HandBack({ name, onDone }: { name: string | null; onDone: () => void })
         <Button type="submit" disabled={pin.length !== 4 || busy}>Unlock</Button>
       </form>
       {msg && <p className="rl-err" role="alert">{msg}</p>}
+      <button type="button" className="btn ghost sm" disabled={busy} onClick={() => { setBusy(true); void signOutHere({}).then(leave, (e) => { setMsg(errLine(e)); setBusy(false); }); }}>Sign this phone out instead</button>
     </div>
   );
 }

@@ -2126,6 +2126,7 @@ export default defineSchema({
     tries: v.number(),
     challenge: v.optional(v.object({ value: v.string(), at: v.number() })), // a passkey unlock waiting for its answer
     signedOut: v.optional(v.boolean()), // review H1: five wrong PINs ended this session; kept so it never answers again
+    signedOutAt: v.optional(v.number()), // second review L1: the sweep counts from here
     at: v.number(),
   }).index("by_session", ["sessionId"]).index("by_user", ["userId"]),
   // The owner's own ways to unlock (a login's, not a business's): a PIN (salted hash) and passkeys on their devices.
@@ -2133,6 +2134,7 @@ export default defineSchema({
     userId: v.id("users"),
     pinSalt: v.optional(v.string()),
     pinHash: v.optional(v.string()),
+    pinKey: v.optional(v.string()),      // second review L2: which server secret the hash was made with (a short tag)
     passkeys: v.array(v.object({ id: v.string(), publicKey: v.string(), counter: v.number(), transports: v.optional(v.array(v.string())), device: v.string(), at: v.number() })),
     challenge: v.optional(v.object({ value: v.string(), at: v.number() })), // adding a passkey, waiting for its answer
     updatedAt: v.number(),
