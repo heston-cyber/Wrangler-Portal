@@ -1,6 +1,7 @@
 // Phase 5e step 4 (Nov 5): the bell beside Search (824:21452: nothing new, a count, 9+) and its panel (822:18106 …
 // 822:22370: All, Quotes, Contracts, Money, Messages; Mark all read; See all). Kept apart from the pages so the shell
 // can import it.
+import { swallowNextClick } from "../../ui/kit";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMutation, useQuery } from "convex/react";
@@ -40,7 +41,7 @@ function BellPanel({ anchor, onClose }: { anchor: React.RefObject<HTMLSpanElemen
   const openRow = useOpenRow();
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const onDown = (e: MouseEvent) => { const t = e.target as Node; if (!ref.current?.contains(t) && !anchor.current?.contains(t)) onClose(); };
+    const onDown = (e: MouseEvent) => { const t = e.target as Node; if (!ref.current?.contains(t) && !anchor.current?.contains(t)) { swallowNextClick(); onClose(); } }; // Nov 17: the closing tap opens nothing
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("mousedown", onDown); window.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("mousedown", onDown); window.removeEventListener("keydown", onKey); };

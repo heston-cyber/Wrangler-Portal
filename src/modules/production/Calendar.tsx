@@ -11,7 +11,7 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Button, ButtonLink, Card, DialogHeader, PageHeader, PillTabs, SkeletonRows, Toggle } from "../../ui/wp";
 import { Icon } from "../../ui/Icon";
-import { Modal, useConfirm, useIsNarrow, useToast } from "../../ui/kit";
+import { Modal, useConfirm, useIsNarrow, useToast, swallowNextClick } from "../../ui/kit";
 import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps } from "../../lib/router";
 import { errText } from "../docs/pages/common";
@@ -627,7 +627,7 @@ function Popover({ item, rect, d, narrow, onClose, onEdit }: { item: Item; rect:
   const picked = d?.conn.calendars.find((c) => c.picked)?.name ?? null;
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
-    const click = (e: PointerEvent) => { if (ref.current && !ref.current.contains(e.target as Node) && !(e.target as HTMLElement).closest?.(".dialog")) onClose(); };
+    const click = (e: PointerEvent) => { if (ref.current && !ref.current.contains(e.target as Node) && !(e.target as HTMLElement).closest?.(".dialog")) { swallowNextClick(); onClose(); } }; // Nov 17: the closing tap opens nothing
     window.addEventListener("keydown", k, true);
     const t = setTimeout(() => window.addEventListener("pointerdown", click), 0);
     ref.current?.querySelector<HTMLElement>("button, a")?.focus();
