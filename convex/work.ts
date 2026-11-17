@@ -175,6 +175,9 @@ export const create = mutation({
     const parent = a.parentId ? await ctx.db.get(a.parentId) : null;
     if (a.parentId && !parent) throw new ConvexError("That task isn't here any more.");
     const home = parent ? { ...(parent.clientId ? { clientId: parent.clientId } : {}), ...(parent.projectId ? { projectId: parent.projectId } : {}), ...(parent.shootId ? { shootId: parent.shootId } : {}), ...(parent.dealId ? { dealId: parent.dealId } : {}) } : await homeFields(ctx, a.home);
+    // Review M1: quick add is for yourself and the team only; anything for a client or vendor needs Projects.
+    if (a.mine && !a.home && !a.parentId && (a.audience && a.audience !== "team" || a.vendorId)) throw new ConvexError("Tasks for a client or vendor are made in All tasks.");
+    if (a.vendorId) await liveVendor(ctx, a.vendorId);
     const assignee = a.mine ? { email: me.email.toLowerCase(), name: who(me) } : a.assignee ? { email: tidy(a.assignee.email, 200).toLowerCase(), ...(a.assignee.name ? { name: tidy(a.assignee.name, 80) } : {}) } : undefined;
     const now = Date.now();
     const id = await ctx.db.insert("tasks", {
@@ -187,6 +190,10 @@ export const create = mutation({
   },
 });
 
+async function liveVendor(ctx: Ctx, id: Id<"vendors">) {
+  const v2 = await ctx.db.get(id);
+  if (!v2 || v2.archivedAt) throw new ConvexError("That vendor isn't on your list.");
+}
 /** A task for the client needs a project or client to be seen; one for a vendor needs the vendor. */
 async function checkAudience(ctx: MutationCtx, t: Doc<"tasks">) {
   if (t.audience === "vendor" && !t.vendorId) throw new ConvexError("Pick the vendor who sees it.");
@@ -214,6 +221,7 @@ export const update = mutation({
     if (a.due !== undefined) { if (a.due && !DAY.test(a.due)) throw new ConvexError("Pick a due date."); p.due = a.due ?? undefined; }
     if (a.assignee !== undefined) { p.assignee = a.assignee ? { email: tidy(a.assignee.email, 200).toLowerCase(), ...(a.assignee.name ? { name: tidy(a.assignee.name, 80) } : {}) } : undefined; p.assigneeEmail = p.assignee?.email; }
     if (a.audience) p.audience = a.audience;
+    if (a.vendorId) await liveVendor(ctx, a.vendorId);
     if (a.vendorId !== undefined) p.vendorId = a.vendorId ?? undefined;
     if (a.repeat !== undefined) p.repeat = a.repeat ?? undefined;
     if (a.checklist) { if (a.checklist.length > 100) throw new ConvexError("A checklist holds up to 100 items."); p.checklist = a.checklist.map((c) => ({ id: c.id.slice(0, 40), text: c.text.slice(0, 300), done: c.done })); }
@@ -302,6 +310,7 @@ export const forClient = query({
     const projects = await myProjects(ctx, email);
     const out = [];
     for (const t of await ctx.db.query("tasks").withIndex("by_audience", (q) => q.eq("audience", "client")).collect()) {
+      if (t.parentId) continue; // review L4: subtasks stay with the team
       if (t.status === "done" && (t.doneAt ?? 0) < Date.now() - 3 * 86_400_000) continue;
       const p = await projectOfTask(ctx, t);
       if (p ? !projects.has(p._id) : !(await clientSees(ctx, email, t))) continue;
@@ -459,6 +468,7 @@ export const useTemplate = mutation({
       const due = base ? shift(base, it.days) : undefined;
       const assignee = r?.email ? { email: r.email.toLowerCase().slice(0, 200), ...(r.name ? { name: r.name.slice(0, 80) } : {}) } : undefined;
       if (it.audience === "vendor" && !r?.vendorId) continue; // no vendor picked for that role: left out (the summary says so)
+      if (it.audience === "vendor" && r?.vendorId) await liveVendor(ctx, r.vendorId);
       await ctx.db.insert("tasks", {
         title: it.title, status: "todo", priority: it.priority, ...(due ? { due } : {}), projectId: p._id, audience: it.audience, ...(assignee ? { assignee, assigneeEmail: assignee.email } : {}),
         ...(it.audience === "vendor" && r?.vendorId ? { vendorId: r.vendorId } : {}), order: await nextOrder(ctx), createdBy: who(me), fromTemplate: tpl.name, createdAt: now, updatedAt: now,

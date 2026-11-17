@@ -135,6 +135,14 @@ describe("creative planning", () => {
     // Stop sharing: every person's link stops.
     await w.heston.mutation(api.canvas.stopSharing, { canvasId: id });
     expect(await w.t.query(api.canvas.shared, { token: editor.token })).toBeNull();
+    // Review M2: a board, doc and kit on a project that moves to another client stop being shared.
+    const onProject = await w.heston.mutation(api.canvas.create, { name: "Launch board", kind: "canvas", home: { type: "project", id: w.p } });
+    const maya = await w.heston.mutation(api.canvas.addPerson, { canvasId: onProject, email: "maya@harbor.example", role: "edit" });
+    const lk = await w.heston.mutation(api.canvas.setLink, { canvasId: onProject, on: true });
+    const northline = await w.t.run((ctx) => ctx.db.insert("clients", { businessId: w.A, name: "Northline", createdAt: 0 }));
+    await w.heston.mutation(api.homes.moveProject, { projectId: w.p, clientId: northline });
+    expect(await w.t.query(api.canvas.shared, { token: maya.token })).toBeNull();
+    expect(await w.t.query(api.canvas.shared, { token: lk.token })).toBeNull();
     // Another business's owner sees and changes nothing.
     expect(await w.boss.query(api.canvas.list, {})).toEqual([]);
     expect(await w.boss.query(api.canvas.get, { canvasId: id })).toBeNull();

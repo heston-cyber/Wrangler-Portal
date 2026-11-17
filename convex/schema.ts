@@ -767,6 +767,7 @@ export default defineSchema({
     subFailRule: v.optional(v.union(v.literal("past_due"), v.literal("cancel"))),
     // Phase 5 (D98): Settings › Payments › Footage storage. Missing: Wrangler on, $100/year, kept 30 days; others off.
     footage: v.optional(v.object({ on: v.boolean(), priceCents: v.number(), keepDays: v.number() })),
+    delivery: v.optional(v.object({ termYears: v.number(), priceCents: v.number(), offerRenewal: v.boolean() })), // 5n (D196): Settings › Payments › Delivery
     // Phase 2 Part B step 4 (D51): automatic invoice reminders, off until the owner turns them on (that's their OK).
     reminders: v.optional(v.object({
       on: v.boolean(),
@@ -1559,6 +1560,57 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_project", ["projectId"]).index("by_link", ["link.token"]),
+  // 5n Delivery (D195, D196): one per project; a Video folder and Photo albums (items) of files (assets) that are the
+  // project's own (its Dropbox folder, or its cuts). Published by hand; kept until a day; client share links.
+  deliveries: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    projectId: v.id("projects"),
+    state: v.union(v.literal("draft"), v.literal("published"), v.literal("ended")),
+    changed: v.boolean(),                        // published, with changes not published yet
+    publishedAt: v.optional(v.number()),
+    keptUntil: v.optional(v.string()),           // YYYY-MM-DD
+    termYears: v.optional(v.number()), priceCents: v.optional(v.number()), // this delivery's own (else Settings)
+    renewal: v.optional(v.object({ status: v.union(v.literal("offered"), v.literal("kept"), v.literal("declined"), v.literal("free"), v.literal("ending"), v.literal("renewed")), at: v.number(), by: v.optional(v.string()) })),
+    reminded: v.optional(v.array(v.number())),   // 30, 7: reminders sent for this keptUntil
+    endedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_project", ["projectId"]),
+  deliveryItems: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    deliveryId: v.id("deliveries"),
+    kind: v.union(v.literal("videos"), v.literal("album")),
+    title: v.string(),
+    shootId: v.optional(v.id("shoots")),         // an album's shoot-day tag
+    coverId: v.optional(v.id("deliveryAssets")),
+    order: v.number(),
+    published: v.boolean(),
+    createdAt: v.number(),
+  }).index("by_delivery", ["deliveryId"]),
+  deliveryAssets: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    deliveryId: v.id("deliveries"),
+    itemId: v.id("deliveryItems"),
+    name: v.string(),
+    size: v.optional(v.number()),
+    source: v.union(v.literal("dropbox"), v.literal("version")),
+    dropboxPath: v.optional(v.string()),
+    versionId: v.optional(v.id("versions")),
+    shootId: v.optional(v.id("shoots")),         // a video's shoot-day tag
+    order: v.number(),
+    published: v.boolean(),
+    createdAt: v.number(),
+  }).index("by_delivery", ["deliveryId"]).index("by_item", ["itemId"]),
+  deliveryLinks: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    deliveryId: v.id("deliveries"),
+    itemId: v.optional(v.id("deliveryItems")),   // one folder or album; none: everything
+    token: v.string(),
+    downloads: v.boolean(),
+    on: v.boolean(),
+    by: v.string(),                              // the client who made it (lower-case email)
+    createdAt: v.number(),
+  }).index("by_delivery", ["deliveryId"]).index("by_token", ["token"]),
   // 5m Work (D197–D200): tasks. On a client, project, shoot day or lead, or on nothing (D204). audience: who sees it
   // (the team; the client's people, in their portal with Done; or one vendor, in theirs). Subtasks have a parentId.
   tasks: defineTable({

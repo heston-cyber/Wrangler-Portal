@@ -144,6 +144,33 @@ function FootageStorage({ show }: { show: (m: string) => void }) {
   );
 }
 
+/** 5n (1100-43877, D196): Delivery: the included term and the yearly price after it, and whether a renewal is offered.
+ *  One delivery's own term or price changes on its page ("Change for this delivery"). */
+function DeliveryTerm({ show }: { show: (m: string) => void }) {
+  const s = useQuery(api.delivery.settings, {});
+  const save = useMutation(api.delivery.saveSettings);
+  const [price, setPrice] = useState<string | null>(null);
+  if (!s) return null;
+  const put = (patch: Partial<{ termYears: number; priceCents: number; offerRenewal: boolean }>) => void save({ ...s, ...patch }).then(() => show("Saved."), (e) => show(err(e)));
+  const savePrice = () => { if (price === null) return; const n = Math.round(Number(price.replace(/[$,]/g, "").trim()) * 100); setPrice(null); if (Number.isFinite(n) && n !== s.priceCents) put({ priceCents: n }); };
+  return (
+    <div className="panel pay-card">
+      <span className="wp-eyebrow">Delivery</span>
+      <div className="pay-grid ft-grid">
+        <label className="wp-field"><span className="wp-field-label">Included term</span>
+          <select className="input" value={s.termYears} onChange={(e) => put({ termYears: Number(e.target.value) })}>{[1, 2, 3, 4, 5, 10].map((n) => <option key={n} value={n}>{n} year{n === 1 ? "" : "s"}</option>)}</select></label>
+        <label className="wp-field"><span className="wp-field-label">Then, per year</span>
+          <input className="input" inputMode="decimal" value={price ?? `$${(s.priceCents / 100).toFixed(2)}`} onFocus={() => setPrice((s.priceCents / 100).toFixed(2))} onChange={(e) => setPrice(e.target.value)} onBlur={savePrice} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} aria-label="Price per year after the term" /></label>
+      </div>
+      <div className="pay-switch ft-switch">
+        <span><b>Offer a renewal</b><small>30 days before the end, clients see “Keep them another year?” in their Delivery.</small></span>
+        <Toggle label="Offer a renewal" checked={s.offerRenewal} onChange={(on) => put({ offerRenewal: on })} />
+      </div>
+      <p className="secondary pay-note">Reminders go to the client 30 days and 7 days before the end. When it ends, files leave Delivery; nothing is deleted from Dropbox. Change the term or price for one delivery on its page.</p>
+    </div>
+  );
+}
+
 const day = (t: number) => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 export function PaymentsSettings({ show }: { show: (m: string) => void }) {
@@ -277,7 +304,7 @@ export function PaymentsSettings({ show }: { show: (m: string) => void }) {
       )}
       {st.status === "connected" && <Reminders r={s.reminders} show={show} />}
       {st.status === "connected" && <SubFail show={show} />}
-      <FootageStorage show={show} />
+      <FootageStorage show={show} /><DeliveryTerm show={show} />
       <VendorPayouts />
       {asking && (
         <Modal onClose={() => setAsking(false)} label="Disconnect Stripe" width={560}>

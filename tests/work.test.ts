@@ -141,6 +141,9 @@ describe("work", () => {
     await expect(pat.mutation(api.work.update, { taskId: given, title: "New name" })).rejects.toThrow(/Not allowed/);
     await expect(pat.mutation(api.work.done, { taskId: other, done: true })).rejects.toThrow(/Not allowed/);
     await pat.mutation(api.work.create, { title: "Clean the cards", mine: true });
+    // Review M1: quick add can't reach a vendor's or client's portal.
+    const vid = await w.heston.mutation(api.vendors.add, { name: "Jordan Ellis", email: "jordan@crew.example", roles: ["Shooter"], rates: [], invite: false }) as Id<"vendors">;
+    await expect(pat.mutation(api.work.create, { title: "Sneaky", mine: true, audience: "vendor", vendorId: vid })).rejects.toThrow(/made in All tasks/);
     await expect(pat.mutation(api.work.create, { title: "Elsewhere", home: { type: "project", id: w.p } })).rejects.toThrow();
   });
 });

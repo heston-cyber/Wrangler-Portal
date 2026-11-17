@@ -28,6 +28,7 @@ export function pathNeeds(path: string): Perm[] | "any" | "owner" {
   if (starts(path, "/v", "/review", "/register")) return ["review"];
   if (starts(path, "/projects")) return ["projects", "review"];
   if (starts(path, "/activity")) return "owner";
+  if (starts(path, "/delivery")) return ["projects"]; // 5n
   if (path === "/work" || path === "/work/") return "any"; // 5m: My tasks: everyone's own
   if (starts(path, "/work")) return ["projects"];
   if (starts(path, "/creative/locations")) return ["shoots"]; // 5k: places are Shoots'

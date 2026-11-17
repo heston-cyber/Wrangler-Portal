@@ -65,6 +65,7 @@ import type * as places from "../places.js";
 import type * as creative from "../creative.js";
 import type * as canvas from "../canvas.js";
 import type * as work from "../work.js";
+import type * as delivery from "../delivery.js";
 import type * as shootPage from "../shootPage.js";
 import type * as packing from "../packing.js";
 import type * as siteWatch from "../siteWatch.js";
@@ -227,6 +228,7 @@ declare const fullApi: ApiFromModules<{
   creative: typeof creative;
   canvas: typeof canvas;
   work: typeof work;
+  delivery: typeof delivery;
   shootPage: typeof shootPage;
   packing: typeof packing;
   siteWatch: typeof siteWatch;

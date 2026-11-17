@@ -34,6 +34,7 @@ async function homeFields(ctx: MutationCtx, h: HomeIn, allow: Array<"client" | "
   if (!id || !(await ctx.db.get(id))) throw new ConvexError("That home isn't here any more.");
   if (h.type === "client") await requireAll(ctx, "clients");
   if (h.type === "lead") await requireAll(ctx, "clients");
+  if (h.type === "shoot") await requireAll(ctx, "shoots"); // review L2
   return { [{ client: "clientId", project: "projectId", shoot: "shootId", lead: "dealId" }[h.type]]: id } as Homed;
 }
 
@@ -59,7 +60,9 @@ export const overview = query({
     }
     for (const c of await ctx.db.query("canvases").collect()) recent.push({ kind: "canvas", id: c._id, name: c.name, sub: c.kind === "mood" ? "Mood board" : "Canvas", home: await homeChip(ctx, c), at: c.updatedAt, to: `/creative/canvas/${c._id}` });
     for (const k of await ctx.db.query("brandKits").collect()) recent.push({ kind: "kit", id: k._id, name: k.name, sub: "Brand kit", home: await homeChip(ctx, k), at: k.updatedAt, to: `/creative/kits/${k._id}` });
-    for (const p of await ctx.db.query("places").collect()) recent.push({ kind: "place", id: p._id, name: p.name, sub: "Place", home: await homeChip(ctx, p), at: p.updatedAt, to: `/creative/locations/${p._id}` });
+    let shoots = true;
+    try { await requireAll(ctx, "shoots"); } catch { shoots = false; } // review L3: places are Shoots'
+    for (const p of shoots ? await ctx.db.query("places").collect() : []) recent.push({ kind: "place", id: p._id, name: p.name, sub: "Place", home: await homeChip(ctx, p), at: p.updatedAt, to: `/creative/locations/${p._id}` });
     recent.sort((a, b) => b.at - a.at);
     const homes = new Map<string, { name: string; type: string; id: string; n: number }>();
     for (const r of recent) if (r.home) { const k = `${r.home.type}:${r.home.id}`; const h = homes.get(k) ?? { ...r.home, n: 0 }; h.n++; homes.set(k, h); }

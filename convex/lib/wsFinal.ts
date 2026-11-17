@@ -109,7 +109,7 @@ export function auditExport(d: FinalInput & { finalSha256: string; finalBytes: n
   const s = (x: FinalSigner) => ({
     key: x.key, name: x.adoptedName, title: x.adoptedTitle, email: x.email, method: x.method,
     signedAt: x.signedAt ? new Date(x.signedAt).toISOString() : null, ip: x.ip, userAgent: x.userAgent,
-    verifiedAt: x.verifiedAt ? new Date(x.verifiedAt).toISOString() : null, consentAt: x.consentAt ? new Date(x.consentAt).toISOString() : null, consentVersion: x.consentVersion,
+    verifiedAt: x.verifiedAt ? new Date(x.verifiedAt).toISOString() : null, ...(x.inPerson ? { inPerson: { ...x.inPerson, at: new Date(x.inPerson.at).toISOString() } } : {}), consentAt: x.consentAt ? new Date(x.consentAt).toISOString() : null, consentVersion: x.consentVersion,
     signatureSha256: x.signatureSha256, initialsSha256: x.initialsSha256, initialed: x.initialed, viewedPages: x.viewedPages,
   });
   return {

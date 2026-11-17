@@ -16,6 +16,8 @@ crons.interval("subscription upcoming charges", { hours: 1 }, internal.subscript
 crons.interval("file request reminders", { hours: 1 }, internal.fileRequests.remindDue, {});
 // Phase 5 (Nov 3): raw footage keep days (email 36) and storage renewals (D140). Never deletes anything.
 crons.interval("raw footage keep days", { hours: 1 }, internal.footage.runDue, {});
+// 5n (D196): Delivery reminders 30 and 7 days before Kept until; ended deliveries leave Delivery (nothing is deleted).
+crons.daily("delivery terms", { hourUTC: 15, minuteUTC: 17 }, internal.delivery.runDue, {});
 crons.interval("vendor payouts", { minutes: 15 }, internal.vendorPayouts.poll, {});
 // Phase 5c (Nov 3, D128): Site watch's own daily look (8 am Central in winter). The agent runs its own schedule too.
 crons.daily("site watch", { hourUTC: 14, minuteUTC: 7 }, internal.siteWatch.check, {});

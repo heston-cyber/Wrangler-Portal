@@ -161,6 +161,12 @@ export const move = mutation({
     const to = a.to ? await resolve(ctx, a.to) : null;
     const patch = await patchFor(ctx, a.kind as Kind, d, to);
     await ctx.db.patch(d._id as never, patch as never);
+    // Review M2: a creative thing that changes client stops being shared (the old client's people lose it).
+    if (a.kind === "canvas" || a.kind === "creativeDoc" || a.kind === "kit") {
+      const sh = d.shootId ? await ctx.db.get(d.shootId as Id<"shoots">) : null;
+      const was = (await clientNow(ctx, d)) ?? (sh?.projectId ? String((await ctx.db.get(sh.projectId))?.clientId ?? "") || null : null);
+      if (was && String(to?.clientId ?? "") !== was) await creativeLinksOff(ctx, a.kind, d._id);
+    }
     if (a.kind === "task") for (const sub of await ctx.db.query("tasks").withIndex("by_parent", (q) => q.eq("parentId", d._id as Id<"tasks">)).collect()) await ctx.db.patch(sub._id, patch as never);
     if (a.kind === "shoot") {
       // A new client: the old client's confirmation goes, and the calendar event is brought up to date (review M4).
@@ -213,6 +219,25 @@ async function recal(ctx: MutationCtx, shootId: Id<"shoots">) {
   if (!s || !(s.calendar || s.calendarEvent)) return;
   await ctx.db.patch(s._id, { calAt: Date.now() });
   await queueCalendar(ctx, s._id, "none");
+}
+
+
+/** Review M2 (Nov 17): a canvas, creative doc or brand kit leaving a client: its share links stop (the old client's
+ *  people lose it at once, as with a project's review links). The owner can share again. Returns how many stopped. */
+async function creativeLinksOff(ctx: MutationCtx, kind: "canvas" | "creativeDoc" | "kit", id: string) {
+  let n = 0;
+  if (kind === "canvas") {
+    const c = await ctx.db.get(id as Id<"canvases">);
+    if (c?.link?.on) { await ctx.db.patch(c._id, { link: { ...c.link, on: false } }); n++; }
+    for (const pp of await ctx.db.query("canvasPeople").withIndex("by_canvas", (q) => q.eq("canvasId", id as Id<"canvases">)).collect()) { await ctx.db.delete(pp._id); n++; }
+  } else if (kind === "creativeDoc") {
+    const d = await ctx.db.get(id as Id<"creativeDocs">);
+    if (d?.share?.on) { await ctx.db.patch(d._id, { share: { ...d.share, on: false } }); n++; }
+  } else {
+    const k = await ctx.db.get(id as Id<"brandKits">);
+    if (k?.share?.on) { await ctx.db.patch(k._id, { share: { ...k.share, on: false } }); n++; }
+  }
+  return n;
 }
 
 // ---------- Move a project (D204: everything on it goes with it) ----------
@@ -296,6 +321,17 @@ export async function moveProjectCore(ctx: MutationCtx, p: Doc<"projects">, to: 
     for (const vid of await ctx.db.query("videos").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect())
       for (const sh of await ctx.db.query("shares").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect()) await off((await ctx.db.get(sh._id))!);
   }
+  // Review M2: boards, creative docs and brand kits on it (or on its shoot days) stop being shared.
+  if (p.clientId) {
+    const shootIds = new Set((await ctx.db.query("shoots").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect()).map((x) => String(x._id)));
+    const on = (r: { projectId?: Id<"projects">; shootId?: Id<"shoots"> }) => r.projectId === p._id || (!!r.shootId && shootIds.has(String(r.shootId)));
+    for (const c of (await ctx.db.query("canvases").collect()).filter(on)) sharesOff += await creativeLinksOff(ctx, "canvas", c._id);
+    for (const c of (await ctx.db.query("creativeDocs").collect()).filter(on)) sharesOff += await creativeLinksOff(ctx, "creativeDoc", c._id);
+    for (const c of (await ctx.db.query("brandKits").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect())) sharesOff += await creativeLinksOff(ctx, "kit", c._id);
+  }
+  // 5n: links the old client's people made to its Delivery stop working too.
+  if (p.clientId) for (const dl of await ctx.db.query("deliveries").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect())
+    for (const l of await ctx.db.query("deliveryLinks").withIndex("by_delivery", (q) => q.eq("deliveryId", dl._id)).collect()) if (l.on) { await ctx.db.patch(l._id, { on: false }); sharesOff++; }
   await audit(ctx, { kind: "moved", text: to ? `Moved project ${label(p)} to ${to.name}` : `Moved project ${label(p)} out of ${p.client ?? "its client"} (on its own now)` });
   return { moved: 1, stayed: sentStay.length, sharesOff };
 }

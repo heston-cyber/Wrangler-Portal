@@ -77,7 +77,8 @@ const OPEN: Record<string, string> = {
   "briefings.page": "a briefing link: answers only for a shared briefing's own long random token (a person's own, or the copied link); a turned-off link answers Withdrawn with the business and title only",
   "briefings.opened": "the same link: counts an open of that briefing only; a missing token, a draft or a turned-off link does nothing; rate-limited",
   // 5l (D191, D183): Creative planning's view-only links, signed out. Tested in creative.test.ts.
-  "creative.sharedDoc": "a creative doc's link (/cd/<token>): answers only for a doc's own long random token while its link is on, with the title and the PDF made at Share (team notes left out)",
+  "delivery.shared": "a client's Delivery link (/dl/<token>): answers only for that link's own long random token while it's on and the delivery is published, with only what was shared (published files)",
+  "creative.sharedDoc":"a creative doc's link (/cd/<token>): answers only for a doc's own long random token while its link is on, with the title and the PDF made at Share (team notes left out)",
   "creative.sharedKit": "a brand kit's link (/kit/<token>): answers only for a kit's own long random token while its link is on, with the kit as it is now",
   "canvas.shared": "a board's link (/cv/<token>): answers only for a shared person's own long random token, or the board's view-only link while it's on",
   "canvas.sharedSave": "the same link: only a person shared with Can edit may save; it can't add or reach files (only the board's own stay), and an older save is refused",
@@ -121,6 +122,8 @@ const SIGNED_IN = new Set(["help.list", "help.guide", "messages.mine", "messages
   "callSheets.forClient", "callSheets.forClientProject", "callSheets.opened",
   // 5m (D199): tasks for the client, on projects they can open (or their client's), with Done (work.test.ts)
   "work.forClient", "work.clientDone",
+  // 5n: their Delivery (published files on projects they can open), a file's link, the renewal answer, their own share links (delivery.test.ts)
+  "delivery.forClient", "delivery.assetUrl", "delivery.clientAnswer", "delivery.makeLink", "delivery.setLink",
   // Phase 5e step 2: their own password, email and devices (security.test.ts)
   "security.state", "security.changePassword", "security.startEmailChange", "security.confirmEmailChange", "security.cancelEmailChange", "security.seenDevice", "security.signOutDevice"]);
 // D133 (Phase 5): functions a vendor login may call: their own side of the portal (each checks the vendor's own records,
@@ -567,6 +570,9 @@ for (const r of ["producer", "editor", "bookkeeper"] as const) for (const f of B
 const WORK_OWN = "Work › My tasks: the tasks given to them (open, change the status, notes and checklist of their own; quick add for themselves), tested in work.test.ts";
 for (const r of ["producer", "editor", "bookkeeper"] as const) TEAM[r]["work.mine"] = WORK_OWN;
 for (const f of ["all", "forProject", "get", "people", "create", "update", "done", "place", "remove", "lists", "createList", "saveList", "duplicateList", "removeList", "itemToTask", "templates", "saveTemplate", "removeTemplate", "useTemplate", "todoistProjects", "todoistImport"]) TEAM.producer[`work.${f}`] = PROJECTS;
+// 5n Delivery: Projects'; its term and price (Settings › Payments) and Renewed are Payments' (delivery.test.ts).
+for (const f of ["list", "get", "ensure", "addAlbum", "editItem", "removeItem", "addFiles", "editAsset", "removeAsset", "publish", "setTerm", "renewal", "assetUrl"]) TEAM.producer[`delivery.${f}`] = PROJECTS;
+for (const f of ["settings", "saveSettings", "renewed"]) TEAM.bookkeeper[`delivery.${f}`] = PAYMENTS;
 // Phase 5e step 5: Reports, for the Bookkeeper (the Reports switch).
 for (const f of REPORT_FNS) TEAM.bookkeeper[f] = REPORTS;
 

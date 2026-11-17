@@ -29,9 +29,11 @@ async function boardOf(ctx: Ctx, canvasId: string) {
   return c;
 }
 const itemsOf = (c: Doc<"canvases">) => (Array.isArray(c.items) ? (c.items as CanvasItem[]) : []);
-async function urls(ctx: Ctx, c: Doc<"canvases">) {
+async function urls(ctx: Ctx, c: Doc<"canvases">, onlyUsed = false) {
   const out: Record<string, string | null> = {};
-  for (const f of c.files) out[f] = await ctx.storage.getUrl(f);
+  // Review L5: a shared link gets only the files on the board now.
+  const used = new Set(itemsOf(c).map((x) => x.fileId).filter(Boolean) as string[]);
+  for (const f of c.files) if (!onlyUsed || used.has(f)) out[f] = await ctx.storage.getUrl(f);
   return out;
 }
 /** A small picture of the board for its card: the items' boxes, with photo addresses (at most 30). */
@@ -286,7 +288,7 @@ export const shared = query({
     if (!f) return null;
     focusBusiness(ctx, f.c.businessId);
     const biz = f.c.businessId ? await ctx.db.get(f.c.businessId) : null;
-    return { name: f.c.name, kind: f.c.kind, from: biz?.name ?? null, role: f.role, items: itemsOf(f.c), rev: f.c.rev, files: await urls(ctx, f.c), at: f.c.updatedAt };
+    return { name: f.c.name, kind: f.c.kind, from: biz?.name ?? null, role: f.role, items: itemsOf(f.c), rev: f.c.rev, files: await urls(ctx, f.c, true), at: f.c.updatedAt };
   },
 });
 

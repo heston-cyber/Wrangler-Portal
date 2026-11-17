@@ -95,7 +95,7 @@ export const SUB_ICON: Record<string, IconName> = {
   "/vendors": "users", "/vendors/payments": "wallet", "/proposals/new": "plus", "/sign/new": "plus", "/proposals": "register", "/sign/docs": "register",
   "/proposals/templates": "template", "/sign/templates": "template", "/proposals/questionnaire": "questionnaire", "/sign/signature": "sign",
   "/payments/invoices": "invoice", "/payments/quotes": "quote", "/payments/subscriptions": "repeat", "/payments/plans": "layers", "/payments/reports": "chart",
-  "/review": "register", "/projects/not-attached": "attach", "/creative": "overview", "/creative/locations": "map-pin", "/creative/docs": "document", "/creative/canvas": "creative", "/creative/kits": "layers", "/work": "user", "/work/all": "work", "/work/lists": "check-circle", "/work/templates": "template", "/review/library": "video", "/production/post-pro": "overview", "/sign/overview": "overview", "/clients/overview": "overview",
+  "/review": "register", "/projects/not-attached": "attach", "/creative": "overview", "/creative/locations": "map-pin", "/creative/docs": "document", "/creative/canvas": "creative", "/creative/kits": "layers", "/work": "user", "/work/all": "work", "/work/lists": "check-circle", "/work/templates": "template", "/delivery": "package", "/review/library": "video", "/production/post-pro": "overview", "/sign/overview": "overview", "/clients/overview": "overview",
 };
 export const STAGE_ICON: Record<string, IconName> = { "Pre-pro": "clipboard", "Prin-pro": "camera", "Post-pro": "scissors", Delivery: "package",
   Proposals: "presentation", Contracts: "contract", Clients: "user", Vendors: "briefcase", Payments: "invoice" };
@@ -149,7 +149,7 @@ const inNewProduction = (p: string) => (starts(p, "/production", "/vendors") && 
 const NEW_POST: Sub[] = [
   { to: "/review/overview", label: "Review", match: (p) => starts(p, "/review", "/v") && !starts(p, "/review/library") },
   { to: "/review/library", label: "All cuts", match: (p) => starts(p, "/review/library") },
-  { to: "/production/delivery", label: "Delivery", match: (p) => starts(p, "/production/delivery") },
+  { to: "/delivery", label: "Delivery", match: (p) => starts(p, "/delivery", "/production/delivery") },
   { to: "/activity", label: "Activity", match: (p) => starts(p, "/activity") },
 ];
 const NEW_CREATIVE: Sub[] = [
@@ -160,7 +160,7 @@ const NEW_CREATIVE: Sub[] = [
   { to: "/creative/kits", label: "Brand kits", match: (p) => starts(p, "/creative/kits") },
 ];
 const inCreative = (p: string) => starts(p, "/creative");
-const inPost = (p: string) => starts(p, "/review", "/v", "/production/delivery", "/production/post-pro", "/activity");
+const inPost = (p: string) => starts(p, "/review", "/v", "/delivery", "/production/delivery", "/production/post-pro", "/activity");
 const NEW_CLIENTS: Sub[] = [{ to: "/clients/overview", label: "Overview", match: (p) => starts(p, "/clients/overview") }, ...OWNER_CLIENTS];
 const moneyLayer = (payments: boolean): Sub[] => [
   ...OWNER_PROPOSALS.map((x) => ({ ...x, group: "Proposals" })),
@@ -234,12 +234,13 @@ function clientItems(shared: SharedProject[], unread: number, payments = false, 
   const inbox: Item = { to: "/inbox", label: "Inbox", icon: "inbox", match: (p) => starts(p, "/inbox"), badge: unread };
   const review: Item = { to: "/review", label: "Review", icon: "review", match: () => false, tab: (p) => starts(p, "/review", "/s", "/projects"), layer, layerHas: (p) => starts(p, "/review", "/s", "/projects") };
   const docs: Item = { to: "/docs", label: "Docs", icon: "document", match: (p) => starts(p, "/docs") };
+  const delivery: Item = { to: "/delivery", label: "Delivery", icon: "package", match: (p) => starts(p, "/delivery") }; // 5n: after Review (under More on a phone)
   const messages: Item = { to: "/messages", label: "Messages", icon: "mail", match: (p) => starts(p, "/messages"), badge: msgs }; // Phase 5d step 2
   const more: Item = { to: "/more", label: "More", icon: "menu", match: (p) => starts(p, "/more", "/settings", "/payments", "/i", "/sub") };
   // Part B step 3: Payments › Invoices once something has been billed to them (2b: or a subscription started for them).
   const inPay = (p: string) => starts(p, "/payments", "/i", "/sub");
   const pay: Item = { to: "/payments/invoices", label: "Payments", icon: "invoice", match: (p) => p === "/payments", tab: inPay, layer: CLIENT_PAYMENTS, layerHas: inPay };
-  return { main: payments ? [home, inbox, messages, review, docs, pay] : [home, inbox, messages, review, docs], tabs: [home, inbox, review, docs, more] };
+  return { main: payments ? [home, inbox, messages, review, delivery, docs, pay] : [home, inbox, messages, review, delivery, docs], tabs: [home, inbox, review, docs, more] };
 }
 
 // ---------- the shell ----------

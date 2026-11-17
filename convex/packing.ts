@@ -291,6 +291,8 @@ export const flag = mutation({
       await ctx.db.patch(x._id, { flag: a.flag, gearWas: x.gearWas ?? g.status });
     } else if (g && !a.flag) {
       const back = (x.gearWas ?? "in_service") as typeof g.status;
+      // Review L7: put it back only if nothing changed it since this flag.
+      if (g.status !== (x.flag === "lost" ? "retired" : "in_repair")) { await ctx.db.patch(x._id, { flag: undefined, gearWas: undefined }); return null; }
       await ctx.db.patch(g._id, { status: back, notes: [g.notes, `Flag cleared by ${who} (back to ${back === "in_service" ? "in service" : back.replace("_", " ")}).`].filter(Boolean).join("\n").slice(0, 2000), updatedAt: Date.now() });
       await ctx.db.patch(x._id, { flag: undefined, gearWas: undefined });
     } else await ctx.db.patch(x._id, { flag: a.flag ?? undefined });

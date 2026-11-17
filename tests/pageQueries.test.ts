@@ -218,6 +218,12 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "creative.sharedDoc": { pages: ["share"], args: () => ({ token: "x".repeat(24) }) }, // /cd/<token>
   "creative.sharedKit": { pages: ["share"], args: () => ({ token: "x".repeat(24) }) }, // /kit/<token>
   "canvas.shared": { pages: ["share"], args: () => ({ token: "x".repeat(24) }) }, // /cv/<token>
+  // 5n Delivery
+  "delivery.list": { pages: ["owner"], args: () => ({}) },
+  "delivery.get": { pages: ["owner"], args: () => "skip" },
+  "delivery.settings": { pages: ["owner"], args: () => ({}) },
+  "delivery.forClient": { pages: ["client"], args: () => ({}) },
+  "delivery.shared": { pages: ["share"], args: () => ({ token: "x".repeat(24) }) }, // /dl/<token>
   // 5m Work
   "work.mine": { pages: ["owner"], args: () => ({}) },
   "work.all": { pages: ["owner"], args: () => ({}) },
