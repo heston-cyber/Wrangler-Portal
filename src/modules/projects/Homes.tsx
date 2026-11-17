@@ -107,7 +107,7 @@ export function MoveProjectDialog({ projectId, onClose, show }: { projectId: str
           <ul className="hm-what">
             <li><Icon name="check" size={16} /><span>Its shoots, call sheets, shot lists, briefs, requests, cuts and drafts go with it. Nothing is copied or relinked.</span></li>
             {info.staying.length > 0 && <li><Icon name="lock" size={16} /><span>Stays with {info.client ?? "its client"} because it was sent or addressed: {info.staying.map((s) => s.name).join(", ")}.</span></li>}
-            {info.client && <li><Icon name="eye" size={16} /><span>{info.client}'s people stop seeing this project in their portal straight away. Their review links turn off; share again from each cut.</span></li>}
+            {info.client && <li><Icon name="eye" size={16} /><span>{info.client}'s people stop seeing this project in their portal straight away. Their review links turn off; share again from each cut. Boards, creative docs and kits on it stop being shared, except crew's links to boards.</span></li>}
             {oc && <li className="warn"><Icon name="alert" size={16} /><span>{oc.name ?? "The old client"}'s {[oc.messages ? plural(oc.messages, "message") : null, oc.notes ? plural(oc.notes, "review note") : null].filter(Boolean).join(" and ")} go with it.{to.id ? ` ${to.name}'s people will see them.` : ""}</span></li>}
             {info.needsPayments && <li className="warn"><Icon name="alert" size={16} /><span>It has quotes or invoices: someone with Payments has to move it.</span></li>}
           </ul>

@@ -16,6 +16,7 @@ import { label } from "./lib/bookingRows";
 import type { Perm } from "./lib/perms";
 import { queueCalendar } from "./calendar";
 import { linkClient } from "./lib/functions";
+import { clientPeople } from "./lib/placed";
 
 type Ctx = QueryCtx | MutationCtx;
 export type HomeType = "client" | "project" | "shoot" | "lead";
@@ -165,14 +166,14 @@ export const move = mutation({
     if (a.kind === "canvas" || a.kind === "creativeDoc" || a.kind === "kit") {
       const sh = d.shootId ? await ctx.db.get(d.shootId as Id<"shoots">) : null;
       const was = (await clientNow(ctx, d)) ?? (sh?.projectId ? String((await ctx.db.get(sh.projectId))?.clientId ?? "") || null : null);
-      if (was && String(to?.clientId ?? "") !== was) await creativeLinksOff(ctx, a.kind, d._id);
+      if (was && String(to?.clientId ?? "") !== was) await creativeLinksOff(ctx, a.kind, d._id, was as Id<"clients">);
     }
     // Delivery review M9: a shoot day or lead now with another client takes its boards, docs and kits out of sharing too.
     if ((a.kind === "shoot" || a.kind === "lead") && String((await clientNow(ctx, d)) ?? "") !== String(to?.clientId ?? "")) {
       const f = a.kind === "shoot" ? "shootId" : "dealId";
       for (const t of ["canvases", "creativeDocs", "brandKits"] as const)
         for (const r of (await ctx.db.query(t).collect()).filter((x) => String((x as Record<string, unknown>)[f] ?? "") === String(d._id)))
-          await creativeLinksOff(ctx, t === "canvases" ? "canvas" : t === "creativeDocs" ? "creativeDoc" : "kit", r._id);
+          await creativeLinksOff(ctx, t === "canvases" ? "canvas" : t === "creativeDocs" ? "creativeDoc" : "kit", r._id, (await clientNow(ctx, d)) as Id<"clients"> | null);
     }
     if (a.kind === "task") for (const sub of await ctx.db.query("tasks").withIndex("by_parent", (q) => q.eq("parentId", d._id as Id<"tasks">)).collect()) await ctx.db.patch(sub._id, patch as never);
     if (a.kind === "shoot") {
@@ -230,13 +231,30 @@ async function recal(ctx: MutationCtx, shootId: Id<"shoots">) {
 
 
 /** Review M2 (Nov 17): a canvas, creative doc or brand kit leaving a client: its share links stop (the old client's
- *  people lose it at once, as with a project's review links). The owner can share again. Returns how many stopped. */
-async function creativeLinksOff(ctx: MutationCtx, kind: "canvas" | "creativeDoc" | "kit", id: string) {
+ *  people lose it at once, as with a project's review links). The owner can share again. Returns how many stopped.
+ *  Heston (Nov 17, Q5): on a board, crew keep their links (they work for the business, not the client): a person whose
+ *  email is one of the business's vendors and isn't any client's person here. The view-only link still stops. */
+async function creativeLinksOff(ctx: MutationCtx, kind: "canvas" | "creativeDoc" | "kit", id: string, from?: Id<"clients"> | null) {
   let n = 0;
   if (kind === "canvas") {
     const c = await ctx.db.get(id as Id<"canvases">);
     if (c?.link?.on) { await ctx.db.patch(c._id, { link: { ...c.link, on: false } }); n++; }
-    for (const pp of await ctx.db.query("canvasPeople").withIndex("by_canvas", (q) => q.eq("canvasId", id as Id<"canvases">)).collect()) { await ctx.db.delete(pp._id); n++; }
+    const crew = new Set((await ctx.db.query("vendors").collect()).map((x) => (x.email ?? "").toLowerCase()).filter(Boolean));
+    // Anyone who is (or was) a client's person here, whichever share they came through, loses it, crew or not.
+    const theirs = new Set<string>();
+    for (const s of await ctx.db.query("shares").collect()) {
+      if (s.kind !== "client") continue;
+      for (const m of await ctx.db.query("shareMembers").withIndex("by_share", (q) => q.eq("shareId", s._id)).collect()) theirs.add(m.email.toLowerCase());
+    }
+    for (const x of await ctx.db.query("clientPeople").collect()) theirs.add(x.email.toLowerCase());
+    for (const m of await ctx.db.query("memberships").collect()) if (m.role === "client") theirs.add(m.email.toLowerCase());
+    const old = from ? await ctx.db.get(from) : null;
+    if (old) for (const x of await clientPeople(ctx, old)) theirs.add(x.email.toLowerCase());
+    for (const pp of await ctx.db.query("canvasPeople").withIndex("by_canvas", (q) => q.eq("canvasId", id as Id<"canvases">)).collect()) {
+      const e = pp.email.toLowerCase();
+      if (crew.has(e) && !theirs.has(e)) continue;
+      await ctx.db.delete(pp._id); n++;
+    }
   } else if (kind === "creativeDoc") {
     const d = await ctx.db.get(id as Id<"creativeDocs">);
     if (d?.share?.on) { await ctx.db.patch(d._id, { share: { ...d.share, on: false } }); n++; }
@@ -332,7 +350,7 @@ export async function moveProjectCore(ctx: MutationCtx, p: Doc<"projects">, to: 
   if (p.clientId) {
     const shootIds = new Set((await ctx.db.query("shoots").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect()).map((x) => String(x._id)));
     const on = (r: { projectId?: Id<"projects">; shootId?: Id<"shoots"> }) => r.projectId === p._id || (!!r.shootId && shootIds.has(String(r.shootId)));
-    for (const c of (await ctx.db.query("canvases").collect()).filter(on)) sharesOff += await creativeLinksOff(ctx, "canvas", c._id);
+    for (const c of (await ctx.db.query("canvases").collect()).filter(on)) sharesOff += await creativeLinksOff(ctx, "canvas", c._id, p.clientId);
     for (const c of (await ctx.db.query("creativeDocs").collect()).filter(on)) sharesOff += await creativeLinksOff(ctx, "creativeDoc", c._id);
     for (const c of (await ctx.db.query("brandKits").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect())) sharesOff += await creativeLinksOff(ctx, "kit", c._id);
   }

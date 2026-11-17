@@ -154,10 +154,17 @@ describe("creative planning", () => {
     const onProject = await w.heston.mutation(api.canvas.create, { name: "Launch board", kind: "canvas", home: { type: "project", id: w.p } });
     const maya = await w.heston.mutation(api.canvas.addPerson, { canvasId: onProject, email: "maya@harbor.example", role: "edit" });
     const lk = await w.heston.mutation(api.canvas.setLink, { canvasId: onProject, on: true });
+    // Heston (Nov 17, Q5): crew keep their board links; anyone else (and a vendor who is also the old client's) loses it.
+    await w.t.run((ctx) => ctx.db.insert("vendors", { businessId: w.A, name: "Ana Cruz", email: "Ana@Crew.example", roles: ["Shooter"], rates: [], createdAt: 0, updatedAt: 0 } as never));
+    await w.t.run((ctx) => ctx.db.insert("vendors", { businessId: w.A, name: "Maya (also crew)", email: "maya@harbor.example", roles: [], rates: [], createdAt: 0, updatedAt: 0 } as never));
+    const ana = await w.heston.mutation(api.canvas.addPerson, { canvasId: onProject, email: "ana@crew.example", role: "edit" });
+    const stranger = await w.heston.mutation(api.canvas.addPerson, { canvasId: onProject, email: "someone@else.example", role: "view" });
     const northline = await w.t.run((ctx) => ctx.db.insert("clients", { businessId: w.A, name: "Northline", createdAt: 0 }));
     await w.heston.mutation(api.homes.moveProject, { projectId: w.p, clientId: northline });
     expect(await w.t.query(api.canvas.shared, { token: maya.token })).toBeNull();
     expect(await w.t.query(api.canvas.shared, { token: lk.token })).toBeNull();
+    expect(await w.t.query(api.canvas.shared, { token: stranger.token })).toBeNull();
+    expect(await w.t.query(api.canvas.shared, { token: ana.token })).toMatchObject({ name: "Launch board", role: "edit" });
     // Another business's owner sees and changes nothing.
     expect(await w.boss.query(api.canvas.list, {})).toEqual([]);
     expect(await w.boss.query(api.canvas.get, { canvasId: id })).toBeNull();
