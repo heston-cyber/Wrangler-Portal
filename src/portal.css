@@ -578,7 +578,6 @@ a.wp-row:hover, button.wp-row:hover, .wp-row.hover { background: var(--surface-b
   .wp-stagepanel { position: fixed; z-index: 62; bottom: calc(96px + env(safe-area-inset-bottom, 0px) * .5); display: grid; gap: 2px; padding: 8px; border-radius: 22px;
     /* Frosted over what's really behind it (Heston 11:43: the site's card glass paints the background picture, not the
        page), light like the site's glass (09:33: "too dark") with its 1 px edge */
-    background: rgba(var(--paper), .07); -webkit-backdrop-filter: blur(20px) saturate(170%) brightness(.8); backdrop-filter: blur(20px) saturate(170%) brightness(.8);
     box-shadow: inset 0 0 0 1px rgba(var(--paper), .2), inset 0 1px 0 rgba(var(--paper), .3), 0 12px 40px rgba(0,0,0,.35);
     transform-origin: var(--ox, 50%) calc(100% + 40px); animation: wpStagePop 320ms cubic-bezier(.34, 1.56, .64, 1) both; }
   .wp-stagerow { -webkit-user-drag: none; -webkit-touch-callout: none; display: flex; align-items: center; gap: 14px; padding: 13px 14px; border-radius: 14px; color: var(--text-primary); text-decoration: none; font: 500 16px/1.2 var(--font-body); }
@@ -3366,11 +3365,12 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
 }
-/* Nov 17 (Heston, 12:17): pop-ups show what's really behind them. The WebGL glass paints the cactus scene, so menus,
-   dialogs, the bell panel and the calendar pop-up are frosted by the CSS over the page itself, dark enough to read. */
-.menu, .dialog, .bell-panel, .cal-pop, .pop-glass {
-  background: rgba(14, 12, 15, .42);
-  backdrop-filter: blur(22px) saturate(170%) brightness(.62); -webkit-backdrop-filter: blur(22px) saturate(170%) brightness(.62);
+/* Nov 17 (Heston, 12:17 and 12:55: "you should be able to see the page behind the menu popup, the same way the side menu
+   looks"): pop-ups are the side menu's own glass, its fill and 4 px frost over the real page. They aren't WebGL glass:
+   on a surface this small its rim (the background picture, bent) covered nearly all of it. */
+.menu, .dialog, .bell-panel, .cal-pop, .pop-glass, .wp-stagepanel {
+  background: var(--glass-fill);
+  backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass);
 }
 /* the page's own small menus (Delivery's row menu, Work's, the guest menu): the same frost and 1 px edge, no WebGL */
 .pop-glass { isolation: isolate; box-shadow: var(--shadow-float); } /* each keeps its own position (absolute or fixed) */
@@ -3380,9 +3380,7 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
 }
-@media (prefers-reduced-transparency: reduce) {
-  .menu, .dialog, .bell-panel, .cal-pop, .pop-glass { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgb(14, 12, 15); }
-}
+
 /* Glass/effect-clear: the phone tab bar, layer chips, toasts, small controls */
 .wp-tabbar, .wp-layerchip, .toast, .selbar { --lg-frost: 2; backdrop-filter: var(--blur-glass-clear); -webkit-backdrop-filter: var(--blur-glass-clear); }
 /* Glass/float (+ Shadow/float): dialogs, sheets, menus, popovers, the bell panel; Glass/float-clear: toasts */
@@ -3467,8 +3465,8 @@ canvas.wp-glass.stale { opacity: 0; transition-duration: 90ms; } /* ?glass=lazy 
   }
   .backdrop > .dialog[data-full] > .dbody { padding: calc(32px + env(safe-area-inset-top, 0px)) 20px calc(24px + env(safe-area-inset-bottom, 0px)); }
   .backdrop > .dialog[data-full] > .dgrab { display: none; }
-  /* Nov 17: a sheet that doesn't fill the screen lets the page show through its frost (Heston, 12:17) */
-  .backdrop > .dialog:not([data-full]) { background: color-mix(in srgb, var(--surface-base) 50%, transparent); backdrop-filter: blur(24px) saturate(170%) brightness(.72); -webkit-backdrop-filter: blur(24px) saturate(170%) brightness(.72); }
+  /* Nov 17 (Heston, 12:55): a sheet that doesn't fill the screen is the side menu's glass too, the page showing through */
+  .backdrop > .dialog:not([data-full]), .backdrop > .dialog:not([data-full]):has(.hold-sheet) { background: var(--glass-fill); backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass); }
   /* D174 (Heston, Nov 12: "Make it a glass panel that animates up quickly"; "it should animate back down if tapped out of"):
      the options sheet (Create, a hold on a row) is lighter glass, ink 45 %, with a lighter scrim, and rises from the bottom
      in 200 ms. Only transform and the scrim's colour move: an opacity animation on the scrim (or the sheet) makes the
@@ -3495,7 +3493,7 @@ canvas.wp-glass.stale { opacity: 0; transition-duration: 90ms; } /* ?glass=lazy 
    no glass effect, no blur, no shadow. Increase contrast: the same fill, a 2 px Glass/contrast-edge. */
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   .glass, .pov-stat, .panel, .note, .vcard, .rect, .regwrap, .nextrender, .ws-card, .ws-hubcard, .wst-card, .wst-clause, .ws-sigform, .ws-sigcard, .wsx-card, .ws-note, .drop, .wp-morelist,
-  .wp-side, .wp-tabbar, .wp-layerchip, .menu, .dialog, .backdrop > .dialog, .backdrop > .dialog[data-full], .bell-panel, .toast, .cal-pop, .selbar, .wp-shell .main > .topbar {
+  .wp-side, .wp-tabbar, .wp-layerchip, .menu, .dialog, .backdrop > .dialog, .backdrop > .dialog[data-full], .bell-panel, .toast, .cal-pop, .selbar, .wp-shell .main > .topbar, .pop-glass, .wp-stagepanel {
     background: var(--glass-solid) !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
     box-shadow: inset 0 0 0 1px var(--glass-solid-edge) !important;
   }
