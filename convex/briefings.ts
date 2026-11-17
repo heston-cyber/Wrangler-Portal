@@ -20,7 +20,7 @@ import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireMe, requireAll } from "./lib/access";
+import { ownerSideLooking, requireMe, requireAll } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import { insertBuild } from "./builder";
 import { pageOf, type BuildDoc, type ExtraSigner, type Fields, type Page, type Style } from "./lib/wsBuilder";
@@ -474,8 +474,6 @@ async function byToken(ctx: QueryCtx | MutationCtx, token: string): Promise<Foun
   const x = await ctx.db.query("briefings").withIndex("by_link_token", (q) => q.eq("linkToken", token)).first();
   return x && x.status === "sent" ? { x, r: null } : null;
 }
-// Phase 6 sweep L7: the owner's side (owner or team) opening a page isn't the person reading it
-const isOwnerCall = (ctx: object) => { const s = (ctx as { scope?: { isOwner: boolean; isTeam?: boolean } | null }).scope; return !!(s?.isOwner || s?.isTeam); };
 
 export const page = query({
   args: { token: v.string() },
@@ -504,7 +502,7 @@ export const opened = mutation({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
     const f = await byToken(ctx, token);
-    if (!f || f.x.linkOff || isOwnerCall(ctx)) return null;
+    if (!f || f.x.linkOff || (await ownerSideLooking(ctx, f.r?.email))) return null; // Phase 6 sweep L7
     focusBusiness(ctx, f.x.businessId);
     try { await bump(ctx, "briefingLink", `open:${token}`); } catch { return null; } // a page reloaded all hour stops counting
     const now = Date.now();
@@ -523,7 +521,7 @@ export const markRead = mutation({
     const f = await byToken(ctx, token);
     if (!f) throw new ConvexError("This briefing isn't here.");
     if (f.x.linkOff) throw new ConvexError("This briefing was withdrawn.");
-    if (isOwnerCall(ctx)) return null; // the owner checking the page isn't the person reading it
+    if (await ownerSideLooking(ctx, f.r?.email)) return null; // the owner's side checking the page isn't the person reading it
     focusBusiness(ctx, f.x.businessId);
     await bump(ctx, "briefingLink", `read:${token}`);
     const now = Date.now();

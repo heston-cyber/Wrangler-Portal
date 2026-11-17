@@ -6,7 +6,7 @@
 //   - After a payment (and on every invoice event from the Connect webhook) the portal reads the invoice's payments
 //     back from Stripe: paid, processing (a bank payment clearing) or failed, each with "Visa •••• 4242".
 //   - Send (the owner's confirm) emails the invoice (email 08) and posts "Invoice to pay" to the person's Inbox.
-import { viewerOf, requireAll } from "./lib/access";
+import { viewerOf, requireAll, ownerSideLooking } from "./lib/access";
 import { sessionBlocked } from "./lib/sessionLock";
 import { action } from "./_generated/server";
 import { internalAction, internalMutation, internalQuery, mutation, query, focusBusiness, forBusiness } from "./lib/functions";
@@ -129,8 +129,7 @@ export const markViewed = mutation({
   handler: async (ctx, { token }) => {
     const i = await byToken(ctx, token);
     if (!i || i.viewedAt) return null;
-    const scope = (ctx as unknown as { scope?: { isOwner: boolean; isTeam?: boolean } }).scope;
-    if (scope?.isOwner || scope?.isTeam) return null; // Phase 6 sweep L7: the team too // the owner checking the client's page isn't the client viewing it
+    if (await ownerSideLooking(ctx, i.billTo.email)) return null; // Phase 6 sweep L7: the owner's side checking the client's page isn't the client viewing it
     focusBusiness(ctx, i.businessId);
     const me = await signedInEmail(ctx);
     const now = Date.now();
@@ -276,11 +275,13 @@ export const applyChargeEvent = internalMutation({
     if (type.startsWith("charge.dispute.")) {
       const status = String(o.status ?? "needs_response");
       const closed = type === "charge.dispute.closed";
-      // Phase 6 sweep L2: the same event delivered twice at once doesn't write the line twice.
-      const kind = closed ? "dispute_closed" : "disputed";
-      if (i.disputed?.status === status && i.history.some((h) => h.kind === kind && h.at >= i.disputed!.at)) return null;
+      // Phase 6 sweep L2 (and its review): the same dispute's event delivered twice doesn't write the line twice, and a
+      // late "created" for a dispute already closed doesn't open it again. Another dispute (a second charge) is its own.
+      const did = o.id ? String(o.id) : undefined;
+      const same = !!did && i.disputed?.id === did;
+      if (same && (i.disputed!.status === status || (!closed && i.history.some((h) => h.kind === "dispute_closed" && h.at >= i.disputed!.at)))) return null;
       await ctx.db.patch(i._id, {
-        disputed: { at: now, status, cents: Number(o.amount ?? 0), ...(o.reason ? { reason: String(o.reason) } : {}) },
+        disputed: { at: now, status, cents: Number(o.amount ?? 0), ...(o.reason ? { reason: String(o.reason) } : {}), ...(did ? { id: did } : {}) },
         history: [...i.history, { kind: closed ? "dispute_closed" : "disputed", at: now, detail: closed ? (status === "won" ? "Dispute won" : status === "lost" ? "Dispute lost" : `Dispute ${status}`) : `${money(Number(o.amount ?? 0))} disputed${o.reason ? ` (${String(o.reason).replace(/_/g, " ")})` : ""}. Respond in Stripe.` }].slice(-60),
         updatedAt: now,
       });

@@ -251,7 +251,10 @@ export const connectWebhook = httpAction(async (ctx, req) => {
   let ev: StripeResult;
   try { ev = JSON.parse(body); } catch { return new Response("bad body", { status: 400 }); }
   // Phase 6 sweep L2: an event from the other Stripe mode (test while live, or the reverse) is acknowledged and ignored.
-  const mode = keyMode(platformKey());
+  // A key of a form the portal doesn't know answers 500, so Stripe keeps the event and tries again (review).
+  const key = platformKey();
+  const mode = !key ? null : /^(sk|rk)_live_/.test(key) ? "live" : /^(sk|rk)_test_/.test(key) ? "test" : "unknown";
+  if (mode === "unknown") return new Response("unknown key", { status: 500 });
   if (mode && !!ev.livemode !== (mode === "live")) return new Response("other mode", { status: 200 });
   // Review fix (Oct 30): the event is recorded as handled only once it has been handled, so if anything below fails
   // (a 500), Stripe's retry does the work instead of being told "already handled". Every step below is safe to repeat.

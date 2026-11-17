@@ -1183,7 +1183,7 @@ export default defineSchema({
     reminders: v.optional(v.array(v.object({ at: v.number(), kind: v.union(v.literal("before"), v.literal("overdue")), auto: v.boolean() }))),
     payments: v.optional(v.array(v.object({ id: v.string(), at: v.number(), method: v.string(), cents: v.number(), status: v.union(v.literal("paid"), v.literal("processing"), v.literal("failed")), refundedCents: v.optional(v.number()) }))),
     refundedCents: v.optional(v.number()),
-    disputed: v.optional(v.object({ at: v.number(), status: v.string(), cents: v.optional(v.number()), reason: v.optional(v.string()) })),
+    disputed: v.optional(v.object({ at: v.number(), status: v.string(), cents: v.optional(v.number()), reason: v.optional(v.string()), id: v.optional(v.string()) })),
     stripe: v.optional(v.object({
       accountId: v.string(), invoiceId: v.string(), customerId: v.string(),
       number: v.optional(v.string()), hostedUrl: v.optional(v.string()), pdfUrl: v.optional(v.string()), livemode: v.boolean(),

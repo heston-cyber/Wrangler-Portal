@@ -232,8 +232,9 @@ export const leadPage = query({
  *  before; attaching claims it for this caller. 25 MB at most each, 10 at most. A refused file is left alone: it may
  *  not be the caller's, so it's never deleted here. */
 const FRESH_UPLOAD = 30 * 60_000;
-const ACTIVE_TYPE = /^(text\/html|application\/xhtml|image\/svg|text\/xml|application\/xml|text\/javascript|application\/(x-)?javascript|application\/ecmascript)/i;
-const ACTIVE_NAME = /\.(html?|xhtml|svgz?|xml|js|mjs)$/i;
+// Phase 6 review: any XML flavour (application/*+xml, XSL) renders and can run script too
+const ACTIVE_TYPE = /^(text\/html|application\/xhtml|image\/svg|text\/xml|application\/xml|text\/javascript|application\/(x-)?javascript|application\/ecmascript|text\/xsl|[a-z]+\/[^;]*\+xml)/i;
+const ACTIVE_NAME = /\.(html?|xhtml|svgz?|xml|xsl|xslt|js|mjs)$/i;
 async function checkFiles(ctx: MutationCtx, files: Array<{ storageId: Id<"_storage">; name: string }>, by: string, businessId: Id<"businesses"> | null) {
   const no = (msg: string) => ({ error: msg, files: [] as Doc<"messages">["files"] });
   if (files.length > MAX_FILES) return no(`Up to ${MAX_FILES} files a message.`);

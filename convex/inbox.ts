@@ -105,11 +105,14 @@ export const forClient = query({
 });
 
 const MONEY_TITLE: Record<string, string> = { invoice: "Invoice", payment: "Payment", subscription: "Subscription" };
+/** Phase 6 review: a dollar amount in any other item (the raw-footage offer's "$100/year") is hidden too. */
+const hideAmounts = (s: string) => s.replace(/\$\s?[\d,]+(?:\.\d{1,2})?/g, "$•••");
 /** Phase 6 sweep M2: an Inbox item as the owner's side sees it in "Their Inbox". */
 export function ownerSide<T extends { kind: string; title: string; text: string; link: string | null; linkLabel: string | null }>(i: T, money: boolean): T {
   if (MONEY_TITLE[i.kind] && !money) return { ...i, title: MONEY_TITLE[i.kind], text: "Details need the Payments switch.", link: null, linkLabel: null };
-  if (i.kind === "to_sign") return { ...i, link: null, linkLabel: null };
-  return i;
+  const j = money ? i : { ...i, title: hideAmounts(i.title), text: hideAmounts(i.text) };
+  if (i.kind === "to_sign") return { ...j, link: null, linkLabel: null };
+  return j;
 }
 
 /** Who a note to this client would reach: their people with portal access. */
@@ -160,7 +163,8 @@ export const notes = query({
 export const sent = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, { limit }) => {
-    await requireAll(ctx, "clients");
+    const me = await requireAll(ctx, "clients");
+    const money = !me.team || me.team.perms.payments; // Phase 6 review: as Their Inbox (ownerSide)
     const max = Math.min(Math.max(limit ?? 100, 1), 300);
     type Row = {
       key: string; type: "draft" | "note" | "auto"; kind: string; title: string; subject: string | null; to: string; at: number;
@@ -213,8 +217,9 @@ export const sent = query({
         const u = p?.name ? null : await ctx.db.query("users").withIndex("email", (q) => q.eq("email", r.email)).unique();
         to = people.length > 1 ? `${people.length} people` : p?.name ?? (u?.name as string | undefined) ?? r.email;
       }
+      const seen = ownerSide({ kind: r.kind, title: r.title.replace(/ at \d\d:\d\d:\d\d[:;]\d\d$/, ""), text: r.text, link: null, linkLabel: null }, money);
       out.push({
-        key: k, type: "auto", kind: r.kind, title: r.title.replace(/ at \d\d:\d\d:\d\d[:;]\d\d$/, ""), subject: r.text.split(" · ")[0] || null, to,
+        key: k, type: "auto", kind: r.kind, title: seen.title, subject: seen.text.split(" · ")[0] || null, to,
         at: Math.min(...people.map((x) => x.createdAt)), sentTo: people.length, readBy: people.filter((x) => x.readAt).length, emailed: people.some((x) => x.emailedAt), draftedBy: null, open,
       });
     }

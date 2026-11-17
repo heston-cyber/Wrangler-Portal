@@ -162,12 +162,15 @@ describe("two businesses", () => {
       await ctx.db.insert("vendors", { businessId: b, name: "B Vendor", email: "bv@otherfilms.example", roles: [], rates: [], createdAt: 1, updatedAt: 1, joinedAt: 1 } as never);
       return `${u}|${await ctx.db.insert("authSessions", { userId: u, expirationTime: Date.now() + 3_600_000 })}`;
     });
+    // Review (Nov 17): V carries the details a leak would show without an id (name, email, pay note, address, bank).
+    await t.run(async (ctx) => { await ctx.db.patch(ids.vendorId, { name: "Vincent Vendore", payMethod: { method: "zelle", note: "Zelle to vincent-secret" }, address: "77 Hidden Lane", payout: { recipientId: "acct_vsecret", mode: "test", ready: true, payoutMethodId: "pm_vsecret", last4: "9876", bankName: "Secret Bank", checkedAt: 0 } } as never); });
+    const vDetails = ["Vincent Vendore", "v@x.example", "vincent-secret", "77 Hidden Lane", "acct_vsecret", "pm_vsecret", "Secret Bank"];
     const mineVee = (r: Record<string, unknown>) => r.email === "vee@x.example";
     const rowsOf = async () => { const s = await snapshot(t, a, true); const m = new Map<string, string>(); for (const [table, rows] of Object.entries(s)) for (const r of rows as Array<Record<string, unknown>>) if (!mineVee(r)) m.set(`${table}:${String(r._id)}`, JSON.stringify(r)); return m; };
     const before = await rowsOf();
     const table = argsFor(ids);
     const theirs = ["vendorId", "bookingId", "briefingId", "vendorInvoiceId", "clientRecId", "personId", "invoiceId", "quoteId", "proposalId", "subscriptionId", "dealId", "estimateId", "entryId", "inboxItemId", "inboxNoteId", "threadId", "deliveryId", "releaseId", "testimonialId", "callId"];
-    const vIds = theirs.map((k) => String((ids as Record<string, unknown>)[k])).filter((x) => x && x !== "undefined");
+    const vIds = [...theirs.map((k) => String((ids as Record<string, unknown>)[k])).filter((x) => x && x !== "undefined"), ...vDetails];
     const aIds = Object.entries(ids).filter(([k]) => !/Sub$/.test(k) && k !== "storageId").map(([, v]) => String(v));
     const leaks: string[] = [];
     const answered: Record<string, string[]> = {};

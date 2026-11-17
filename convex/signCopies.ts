@@ -9,6 +9,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { appendEvent } from "./lib/wsAudit";
+import { ownerSideLooking } from "./lib/access";
 import { docLabel, OWNER_KEY } from "./lib/wsLayout";
 import { randomToken } from "./lib/hash";
 import { bump } from "./lib/rate";
@@ -151,6 +152,7 @@ export const opened = mutation({
   handler: async (ctx, { token }) => {
     const c = await byToken(ctx, token);
     if (!c) return null;
+    if (await ownerSideLooking(ctx, c.email)) return null; // Phase 6 review: the owner's side checking it isn't the copied person
     focusBusiness(ctx, c.businessId);
     try { await bump(ctx as unknown as MutationCtx, "briefingLink", `copy:${token}`); } catch { return null; } // a page reloaded all hour stops counting
     const first = !c.openedAt;

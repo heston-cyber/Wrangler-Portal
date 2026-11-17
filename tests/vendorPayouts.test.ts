@@ -327,6 +327,20 @@ describe("pay in portal", () => {
     expect(posts(s)[0].body.to.payout_method).toBe("pm_new");
   });
 
+  test("Phase 6 review: a different payout method with the same last four digits is a changed bank; Activity logs only real starts", async () => {
+    const w = await world();
+    const { s, inv } = await ready(w);
+    await w.heston.query(api.vendorPayouts.forInvoice, { invoiceId: inv }); // the dialog opens: pm_1 ••••6789
+    s.banks = [{ id: "pm_swap", last4: "6789" }]; s.def = "pm_swap"; // swapped at Stripe, same last four
+    await expect(w.heston.action(api.vendorPayouts.pay, { invoiceId: inv, last4: "6789", payoutMethodId: "pm_1" })).rejects.toThrow(/bank changed/);
+    expect(s.made.size).toBe(0);
+    const started = async () => (await w.t.run((ctx) => ctx.db.query("auditLog").collect())).filter((a) => /started a direct deposit/.test(a.text)).length;
+    expect(await started()).toBe(0);
+    await w.heston.action(api.vendorPayouts.pay, { invoiceId: inv, last4: "6789", payoutMethodId: "pm_swap" });
+    expect(posts(s)[0].body.to.payout_method).toBe("pm_swap");
+    expect(await started()).toBe(1);
+  });
+
   test("a slow check about an old attempt can't overwrite a newer one; a failed email doesn't block the record", async () => {
     const w = await world();
     const { s, inv } = await ready(w);

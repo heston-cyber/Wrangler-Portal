@@ -12,7 +12,7 @@ import { anyApi } from "convex/server";
 import type { Id } from "../convex/_generated/dataModel";
 import { rolePerms } from "../convex/lib/perms";
 import { signForTest } from "../convex/lib/stripeApi";
-import { world } from "./payHarness";
+import { fakeStripe, sent, world } from "./payHarness";
 
 const api = anyApi;
 type W = Awaited<ReturnType<typeof world>>;
@@ -42,6 +42,13 @@ describe("Phase 6 sweep fixes", () => {
     expect(by("invoice")).toMatchObject({ title: "Invoice", text: "Details need the Payments switch.", link: null });
     expect(JSON.stringify(theirs)).not.toMatch(/paytoken123|4,200|signertoken/);
     expect(by("cut_ready")).toMatchObject({ title: "Launch 30s v2 is ready", link: "/v/abc" }); // other items as they are
+    // Phase 6 review: the Sent list too, and an amount inside any other item (the raw-footage offer)
+    await w.t.run(async (ctx) => { await ctx.db.insert("inboxItems", { businessId: w.A, clientId: w.harbor, email: "maya@harbor.example", kind: "final_files", title: "Keep your raw footage?", text: "Kept until Dec 1. Keep it for $100/year?", link: "/projects/x", source: { module: "projects", id: "p1" }, key: "footage:1:maya@harbor.example", createdAt: 4 }); });
+    const sentRows = await riley.query(api.inbox.sent, {});
+    expect(JSON.stringify(sentRows)).not.toMatch(/4,200|\$100/);
+    expect(sentRows.find((r: { kind: string }) => r.kind === "invoice")).toMatchObject({ title: "Invoice" });
+    expect(JSON.stringify(await riley.query(api.inbox.forClient, { clientId: w.harbor }))).not.toMatch(/\$100/);
+    expect(JSON.stringify(await w.heston.query(api.inbox.sent, {}))).toMatch(/4,200/); // the owner sees it all
     const mine = await w.heston.query(api.inbox.forClient, { clientId: w.harbor });
     expect(mine.find((e: { kind: string }) => e.kind === "invoice")).toMatchObject({ title: "Invoice WRNGLR-0007 · $4,200.00", link: "/i/paytoken123" });
     expect(mine.find((e: { kind: string }) => e.kind === "to_sign")).toMatchObject({ title: "Sign: Service agreement", link: null });
@@ -59,7 +66,7 @@ describe("Phase 6 sweep fixes", () => {
     await w.heston.mutation(api.vendors.update, { vendorId: v, ...details, email: "someone@new.example" });
     expect((await w.t.run(async (ctx) => ctx.db.get(v)))!.payout).toBeUndefined();
     const src = readFileSync("convex/vendorPayouts.ts", "utf8");
-    expect(src).toContain("const expected = last4 ?? c.savedLast4;");
+    expect(src).toContain("const method = payoutMethodId ?? c.savedMethod;"); // the bank check itself: vendorPayouts.test.ts
     expect(src).toContain("idem: `wp-vendor-${v0.vendorId}-${v0.email}-${payoutsMode()}`");
   });
 
@@ -93,8 +100,16 @@ describe("Phase 6 sweep fixes", () => {
     expect(await w.maya.mutation(api.messages.clientSend, { threadId: tid, text: "logos", files: [{ storageId: ok, name: "logos.zip" }] })).toMatchObject({ error: null });
   });
 
-  test("S6.5 a team member opening a client page isn't the client viewing it; the S0 route is gone; referrer policy", () => {
-    for (const f of ["convex/invoicePay.ts", "convex/lib/offers.ts", "convex/briefings.ts"]) expect(readFileSync(f, "utf8"), f).toMatch(/isOwner \|\| s(c|cope)?\??\.isTeam/);
+  test("S6.5 a team member opening a client page isn't the client viewing it; the S0 route is gone; referrer policy", async () => {
+    const w = await world();
+    fakeStripe();
+    const { id, token } = await sent(w);
+    const riley = await producer(w);
+    await riley.mutation(api.invoicePay.markViewed, { token });
+    expect((await w.t.run((ctx) => ctx.db.get(id)))!.viewedAt).toBeUndefined();
+    await w.maya.mutation(api.invoicePay.markViewed, { token });
+    expect((await w.t.run((ctx) => ctx.db.get(id)))!.viewedAt).toEqual(expect.any(Number));
+    for (const f of ["convex/invoicePay.ts", "convex/lib/offers.ts", "convex/briefings.ts", "convex/signCopies.ts"]) expect(readFileSync(f, "utf8"), f).toMatch(/ownerSideLooking\(ctx/);
     expect(readFileSync("convex/http.ts", "utf8")).not.toContain("/ws-s0/ip");
     expect(readFileSync("index.html", "utf8")).toContain('<meta name="referrer" content="strict-origin" />');
   });

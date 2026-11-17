@@ -154,3 +154,14 @@ export async function requireAll(ctx: QueryCtx | MutationCtx, perm: Perm | reado
   if (me.team && assignedOnly(me.team.role)) throw new ConvexError("Not allowed.");
   return me;
 }
+
+/** Phase 6 review (L7): the owner's side (the owner or a team member) looking at a page meant for `reader`, rather than
+ *  the reader themself (a team member can be a briefing's named recipient). Views and reads aren't recorded then. */
+export async function ownerSideLooking(ctx: QueryCtx | MutationCtx, reader?: string | null): Promise<boolean> {
+  const s = (ctx as unknown as { scope?: { isOwner: boolean; isTeam?: boolean } | null }).scope;
+  if (!s?.isOwner && !s?.isTeam) return false;
+  if (!reader) return true;
+  const uid = await getAuthUserId(ctx);
+  const u = uid ? await ctx.db.get(uid) : null;
+  return (u?.email ?? "").toLowerCase() !== reader.trim().toLowerCase();
+}

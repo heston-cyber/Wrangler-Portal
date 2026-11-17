@@ -93,7 +93,9 @@ export async function deliveredBefore(ctx: MutationCtx, projectId: Id<"projects"
   const item = await ctx.db.query("inboxItems").withIndex("by_key", (q) => q.gte("key", `final:${projectId}:`).lt("key", `final:${projectId};`)).first();
   if (item) return true;
   const deals = await ctx.db.query("deals").withIndex("by_project", (q) => q.eq("projectId", projectId)).collect();
-  return deals.some((d) => d.stage === "delivered" || d.stage === "paid");
+  // Phase 6 review: the card's delivery itself (its stage now, or a "delivered" line in its history), not a later stage:
+  // a final invoice paid before any files, or a card moved to Paid by hand, isn't a delivery.
+  return deals.some((d) => d.stage === "delivered" || d.history.some((h) => h.kind === "delivered"));
 }
 
 /**

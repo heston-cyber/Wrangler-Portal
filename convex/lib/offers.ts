@@ -8,6 +8,7 @@
 //   - Whoever accepts becomes the contact; someone who isn't a client becomes a quiet lead (Clients, not on the board).
 //   - Stop one person's link; make a new copied link (Nov 4).
 // A quote or proposal sent before D149 keeps its one link (the doc's own token), named for its contact.
+import { ownerSideLooking } from "./access";
 import { ConvexError } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
@@ -128,8 +129,7 @@ export function stateFor(f: Found) {
 
 /** The page opened: counted for its person, for the copied link, or (before D149) the doc. The owner looking isn't. */
 export async function noteOpen(ctx: MutationCtx, f: Found) {
-  const sc = (ctx as unknown as { scope?: { isOwner: boolean; isTeam?: boolean } | null }).scope;
-  if (sc?.isOwner || sc?.isTeam) return; // Phase 6 sweep L7: a team member opening it isn't the client viewing it
+  if (await ownerSideLooking(ctx, f.r?.email)) return; // Phase 6 sweep L7: the owner's side opening it isn't the client viewing it
   const now = Date.now(), d = f.doc;
   if (f.via === "email") {
     try { await bump(ctx, "offerLink", `open:${f.r!.token}`); } catch { return; }
