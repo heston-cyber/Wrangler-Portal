@@ -344,8 +344,10 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
     const r = viewRef.current?.getBoundingClientRect(); if (!r) return;
     const xs = itemsRef.current;
     const b = xs.length ? xs.reduce((a, i) => ({ x0: Math.min(a.x0, i.x), y0: Math.min(a.y0, i.y), x1: Math.max(a.x1, i.x + i.w), y1: Math.max(a.y1, i.y + i.h) }), { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity }) : { x0: 0, y0: 0, x1: BOARD.w, y1: BOARD.h };
-    const z = clampZoom(Math.min((r.width - 80) / (b.x1 - b.x0 || 1), (r.height - 80) / (b.y1 - b.y0 || 1)));
-    setZoom(z); setPan({ x: r.width / 2 - ((b.x0 + b.x1) / 2) * z, y: r.height / 2 - ((b.y0 + b.y1) / 2) * z });
+    // Leave room for the toolbar on the left (desktop) and the frame titles above.
+    const left = window.matchMedia("(max-width: 600px)").matches ? 16 : 84;
+    const z = clampZoom(Math.min((r.width - left - 40) / (b.x1 - b.x0 || 1), (r.height - 120) / (b.y1 - b.y0 || 1)));
+    setZoom(z); setPan({ x: left + (r.width - left - 40) / 2 - ((b.x0 + b.x1) / 2) * z, y: 20 + (r.height - 40) / 2 - ((b.y0 + b.y1) / 2) * z });
   };
   useEffect(() => { fit(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

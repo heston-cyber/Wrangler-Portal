@@ -4186,3 +4186,11 @@ a.sl-day:hover .t { color: var(--text-accent); }
 .dl-switch { width: auto; margin-bottom: 14px; }
 .dl-offer { align-items: center; gap: 14px; flex-wrap: wrap; }
 @media (max-width: 900px) { .dl-cols { grid-template-columns: 1fr; } }
+@media (max-width: 600px) {
+  /* The app's tab bar sits at the bottom on a phone: the board's bar and zoom sit above it. */
+  .wp-shell .cv-phonebar, .cv-phonebar { bottom: calc(104px + env(safe-area-inset-bottom)); }
+  .cv-zoom { bottom: calc(170px + env(safe-area-inset-bottom)); right: 8px; }
+  .cv-sheet { bottom: calc(172px + env(safe-area-inset-bottom)); }
+  .cv-shared .cv-phonebar { bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .cv-shared .cv-zoom { bottom: calc(80px + env(safe-area-inset-bottom)); }
+}

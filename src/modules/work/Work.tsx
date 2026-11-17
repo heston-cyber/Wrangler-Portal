@@ -64,6 +64,7 @@ export function MyTasks() {
   const [open, setOpen] = useState<string | null>(null);
   const today = d?.today ?? "";
   const groups = useMemo(() => {
+    if (!d) return [];
     const ts = (d?.tasks ?? []).filter((t) => t.status !== "done").sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
     const end = plusDays(today, 7 - new Date(`${today}T12:00:00Z`).getUTCDay());
     return [
