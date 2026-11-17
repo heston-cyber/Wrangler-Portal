@@ -3501,7 +3501,9 @@ canvas.wp-glass.stale { opacity: 0; transition-duration: 90ms; } /* ?glass=lazy 
    D170 (Nov 11): hold for options. src/ui/hold.tsx: a hold on a phone or a right-click opens an item's options; a list
    can select several, with a glass bar at the bottom.
    ====================================================================================================================== */
-[data-hold] { -webkit-touch-callout: none; } /* not the browser's link menu */
+/* not the browser's link menu (Heston, Nov 17: Chrome on iPhone opened its own over the card): the links inside a held
+   row or card too, since the callout is decided on the link the finger is on */
+[data-hold], [data-hold] a, [data-hold] img, .wp-tabbar a { -webkit-touch-callout: none; -webkit-user-drag: none; }
 @media (hover: none) { [data-hold] { -webkit-user-select: none; user-select: none; } }
 [data-hold].holding { transform: scale(.985); background-color: var(--surface-block-hover); transition: transform 380ms var(--ease-out), background-color 380ms var(--ease-out); }
 @media (prefers-reduced-motion: reduce) { [data-hold].holding { transform: none; } }
