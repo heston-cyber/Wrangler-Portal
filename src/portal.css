@@ -574,8 +574,8 @@ a.wp-row:hover, button.wp-row:hover, .wp-row.hover { background: var(--surface-b
   /* Nov 17: the Production tab's hold panel (five stages, glass, rises from the tab). */
   .wp-tab.has-hold { touch-action: none; -webkit-touch-callout: none; -webkit-user-drag: none; -webkit-user-select: none; user-select: none; }
   .wp-tab.has-hold.holding { background: var(--accent-tint); transform: scale(.94); transition: transform 380ms ease-out, background 380ms; }
-  .wp-stagescrim { position: fixed; inset: 0; z-index: 59; background: rgba(0,0,0,.14); animation: wpFadeIn 180ms ease-out both; }
-  .wp-stagepanel { position: fixed; z-index: 61; bottom: calc(96px + env(safe-area-inset-bottom, 0px) * .5); display: grid; gap: 2px; padding: 8px; border-radius: 22px;
+  .wp-stagescrim { position: fixed; inset: 0; z-index: 61; /* over the tab bar too: tapping any tab (Production as well) only closes the panel (Heston 11:34) */ background: rgba(0,0,0,.14); animation: wpFadeIn 180ms ease-out both; }
+  .wp-stagepanel { position: fixed; z-index: 62; bottom: calc(96px + env(safe-area-inset-bottom, 0px) * .5); display: grid; gap: 2px; padding: 8px; border-radius: 22px;
     /* the site's own glass (Heston, 09:33: "match the site more, it's too dark"), frosted a little more so the rows read */
     background: var(--glass-fill); -webkit-backdrop-filter: blur(14px) saturate(160%) brightness(.9); backdrop-filter: blur(14px) saturate(160%) brightness(.9);
     box-shadow: var(--card-shadow);
