@@ -125,7 +125,7 @@ export const renameProject = mutation({
     if (!p) throw new ConvexError("This project doesn't exist any more.");
     // A new client name moves the project, by the same rules as Move (review M3). Leaving client out keeps it.
     if (a.client !== undefined && clean(a.client, 120).toLowerCase() !== (p.client ?? "").trim().toLowerCase()) {
-      await mayMoveProject(ctx, p);
+      await mayMoveProject(ctx, p, !!clean(a.client, 120));
       await moveProjectByName(ctx, p, clean(a.client, 120));
     }
     await ctx.db.patch(a.projectId, {

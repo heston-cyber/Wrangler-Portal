@@ -147,6 +147,7 @@ export const move = mutation({
     if (a.kind === "shoot") {
       // A new client: the old client's confirmation goes, and the calendar event is brought up to date (review M4).
       if (String(await clientNow(ctx, d)) !== String(to?.clientId ?? null)) await clientChanged(ctx, d._id as Id<"shoots">);
+      else if (String(d.projectId ?? "") !== String(to?.projectId ?? "")) await recal(ctx, d._id as Id<"shoots">); // re-review L-f
       // Its day-of things go with it: the call sheet and the shot list live on the shoot's project.
       for (const cs of await ctx.db.query("callSheets").withIndex("by_shoot", (q) => q.eq("shootId", d._id as Id<"shoots">)).collect()) await ctx.db.patch(cs._id, { projectId: to?.projectId ?? undefined });
       for (const l of await ctx.db.query("shotLists").withIndex("by_shoot", (q) => q.eq("shootId", d._id as Id<"shoots">)).collect()) await ctx.db.patch(l._id, { projectId: to?.projectId ?? undefined });
@@ -154,12 +155,19 @@ export const move = mutation({
     // A lead moved to another client takes its unaddressed quotes, proposals and estimates along; the rest stay with
     // their client and leave the lead (review M7).
     if (a.kind === "lead" && String(d.clientId ?? "") !== String(to?.clientId ?? "")) {
+      const docs: Array<{ def2: KindDef; r: Record<string, unknown> & { _id: string } }> = [];
       for (const k of ["quote", "proposal", "estimate"] as Kind[]) {
         const def2 = KINDS[k] as KindDef;
-        for (const r of (await ctx.db.query(def2.table as "quotes").withIndex("by_deal", (q) => q.eq("dealId", d._id as Id<"deals">)).collect()) as Array<Record<string, unknown> & { _id: string }>) {
-          if (def2.sent?.(r)) await ctx.db.patch(r._id as Id<"quotes">, { dealId: undefined, clientId: (r.clientId as Id<"clients"> | undefined) ?? (d.clientId as Id<"clients"> | undefined) } as never);
-          else await ctx.db.patch(r._id as Id<"quotes">, { clientId: to?.clientId ?? undefined } as never);
-        }
+        for (const r of (await ctx.db.query(def2.table as "quotes").withIndex("by_deal", (q) => q.eq("dealId", d._id as Id<"deals">)).collect()) as Array<Record<string, unknown> & { _id: string }>) docs.push({ def2, r });
+      }
+      // Re-review L-b: the lead's quotes need Payments and its proposals Docs, as when moving them one by one.
+      for (const perm of new Set(docs.map((x) => x.def2.perm))) await requireAll(ctx, perm);
+      for (const { def2, r } of docs) {
+        const theirs = (r.clientId as Id<"clients"> | undefined) ?? (d.clientId as Id<"clients"> | undefined);
+        // Addressed or sent with a client to stay with: it stays and leaves the lead. With no client anywhere it goes
+        // with the lead (re-review M-e). The rest follow.
+        if (def2.sent?.(r) && theirs) await ctx.db.patch(r._id as Id<"quotes">, { dealId: undefined, clientId: theirs } as never);
+        else await ctx.db.patch(r._id as Id<"quotes">, { clientId: to?.clientId ?? undefined } as never);
       }
     }
     const name = String(d.title ?? d.number ?? (a.kind === "shoot" ? `${d.date} · ${d.location}` : def.noun));
@@ -173,13 +181,20 @@ async function shootMayMove(ctx: Ctx, shootId: Id<"shoots">) {
   const cs = await ctx.db.query("callSheets").withIndex("by_shoot", (q) => q.eq("shootId", shootId)).first();
   if (cs?.status === "sent") throw new ConvexError("Its call sheet was sent: the shoot stays on its project.");
 }
-/** Review M4: a shoot now with another client (or none) loses the old client's confirmation; its calendar event is
- *  rewritten. Nobody new is emailed (rule 3): Ask to confirm stays the owner's own click. */
+/** Review M4: a shoot now with another client (or none) loses the old client's confirmation. Its calendar event is
+ *  rewritten with "none": Google emails nobody (rule 3; re-review H). Ask to confirm stays the owner's own click. */
 async function clientChanged(ctx: MutationCtx, shootId: Id<"shoots">) {
   const s = await ctx.db.get(shootId);
   if (!s) return;
-  await ctx.db.patch(s._id, { confirmed: undefined, moved: undefined, calAt: Date.now() });
-  if (s.calendar || s.calendarEvent) await queueCalendar(ctx, s._id, "all");
+  await ctx.db.patch(s._id, { confirmed: undefined, moved: undefined });
+  await recal(ctx, shootId);
+}
+/** The shoot's calendar event brought up to date quietly (a new project name and link, its guests), emailing nobody. */
+async function recal(ctx: MutationCtx, shootId: Id<"shoots">) {
+  const s = await ctx.db.get(shootId);
+  if (!s || !(s.calendar || s.calendarEvent)) return;
+  await ctx.db.patch(s._id, { calAt: Date.now() });
+  await queueCalendar(ctx, s._id, "none");
 }
 
 // ---------- Move a project (D204: everything on it goes with it) ----------
@@ -195,8 +210,9 @@ async function projectContents(ctx: Ctx, p: Doc<"projects">) {
     const rows = (await ctx.db.query(t).collect()).filter((x) => (x as { projectId?: string }).projectId === p._id) as Array<Record<string, unknown> & { _id: string }>;
     for (const r of rows) {
       if (k !== "estimate") money++;
-      // Addressed or sent, with a client to stay with (review H3: one with no client anywhere goes with the project).
-      if ((KINDS[k] as KindDef).sent?.(r) && (r.clientId || p.clientId)) sentStay.push({ kind: k, id: r._id, name: String(r.title ?? r.number ?? KINDS[k].noun) });
+      // Addressed or sent: it stays with its client (H3: the project's old one when it has none of its own). One with no
+      // client anywhere leaves the project and stays unattached (re-review M-d: the new client never sees it).
+      if ((KINDS[k] as KindDef).sent?.(r)) sentStay.push({ kind: k, id: r._id, name: String(r.title ?? r.number ?? KINDS[k].noun) });
       else moving++;
     }
   }
@@ -206,8 +222,9 @@ async function projectContents(ctx: Ctx, p: Doc<"projects">) {
 }
 
 /** Review M2: a project carrying quotes, proposals, invoices or subscriptions also needs the Payments switch to move. */
-async function mayMoveProject(ctx: Ctx, p: Doc<"projects">) {
+async function mayMoveProject(ctx: Ctx, p: Doc<"projects">, toClient = true) {
   await requireAll(ctx, "projects");
+  if (toClient) await requireAll(ctx, "clients"); // re-review L-h: as filing anything under a client (M1)
   if ((await projectContents(ctx, p)).money) await requireAll(ctx, "payments");
 }
 
@@ -240,7 +257,8 @@ export async function moveProjectCore(ctx: MutationCtx, p: Doc<"projects">, to: 
   for (const s of await ctx.db.query("shoots").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect())
     if (s.status === "scheduled") await clientChanged(ctx, s._id);
   // Unconfirmed footage storage offers go to the new client (or none).
-  for (const f of fs) if (f.status === "offered" || f.status === "declined") await ctx.db.patch(f._id, { clientId: to?._id });
+  // Its answer was the old client's: the new client sees a fresh offer (re-review L-c).
+  for (const f of fs) if (f.status === "offered" || f.status === "declined") await ctx.db.patch(f._id, { clientId: to?._id, status: "offered", answeredBy: undefined, updatedAt: Date.now() });
   // The old client's people lose it at once: a project share made for them is turned off (client shares follow the
   // project's client by themselves). Review links shared for one cut stay as they are.
   let sharesOff = 0;
@@ -280,7 +298,7 @@ export const moveProject = mutation({
     const id = ctx.db.normalizeId("projects", a.projectId);
     const p = id ? await ctx.db.get(id) : null;
     if (!p) throw new ConvexError("This project doesn't exist any more.");
-    await mayMoveProject(ctx, p);
+    await mayMoveProject(ctx, p, !!a.clientId);
     let to: Doc<"clients"> | null = null;
     if (a.clientId) {
       const cid = ctx.db.normalizeId("clients", a.clientId);

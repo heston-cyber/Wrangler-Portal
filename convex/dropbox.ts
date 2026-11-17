@@ -398,14 +398,23 @@ export const recordFolders = internalMutation({
     // A client's projects follow it: their client name, and their folders (which moved with the client folder).
     const renameClient = async (from: string, to: string, clientId: Id<"clients">, oldFolder: string, newFolder: string) => {
       await ctx.db.patch(clientId, { name: to, dropboxFolder: newFolder });
+      void from;
       for (const p of await ctx.db.query("projects").collect()) {
         const patch: Record<string, unknown> = {};
-        if (norm(p.client ?? "") === norm(from)) patch.client = to;
+        // Re-review M-b: this client's own projects (by id, never by name: two clients can share a name).
+        const mine = p.clientId === clientId;
+        if (mine && p.client !== to) patch.client = to;
         if (p.dropboxFolder && oldFolder !== newFolder && p.dropboxFolder.startsWith(oldFolder + "/")) patch.dropboxFolder = newFolder + p.dropboxFolder.slice(oldFolder.length);
         if (Object.keys(patch).length) await ctx.db.patch(p._id, patch);
+        // The writer relinks a project's client by name; set it back to this exact client.
+        if (mine && "client" in patch) await ctx.db.patch(p._id, { clientId });
       }
     };
 
+    // A client change from Dropbox goes through Move's rules; one Move refuses (footage kept) leaves the project put.
+    const tryMove = async (p: Doc<"projects">, client: string) => {
+      try { await moveProjectByName(ctx, p, client); return true; } catch (e) { if (!(e instanceof ConvexError)) throw e; return false; }
+    };
     const ensureProject = async (folderName: string, client: string | undefined, folder: string) => {
       const byFolder = await ctx.db.query("projects").withIndex("by_dropbox_folder", (q) => q.eq("dropboxFolder", folder)).first();
       const split = splitJob(folderName);
@@ -417,7 +426,7 @@ export const recordFolders = internalMutation({
         // A new client folder moves the project to that client, by the same rules as Move (review M3).
         if (client && norm(byFolder.client ?? "") !== norm(client)) {
           // Footage the client is keeping holds it with them: the sync leaves that project where it is.
-          try { await moveProjectByName(ctx, byFolder, client); changed++; } catch (e) { if (!(e instanceof ConvexError)) throw e; }
+          if (await tryMove(byFolder, client)) changed++;
         }
         return;
       }
@@ -425,7 +434,7 @@ export const recordFolders = internalMutation({
       const picked = pickProject(all.filter((p) => !p.dropboxFolder), folderName, client);
       if (picked) {
         await ctx.db.patch(picked.project._id, { dropboxFolder: folder });
-        if (picked.setClient && client) await moveProjectByName(ctx, picked.project, client);
+        if (picked.setClient && client) await tryMove(picked.project, client);
         return;
       }
       for (const g of goneLeft) {
@@ -436,7 +445,9 @@ export const recordFolders = internalMutation({
           // A job number the old folder name carried goes with it; one set on the site stays.
           const oldJob = splitJob(g.split("/").pop() ?? "").jobNumber;
           const jobNumber = split.jobNumber ?? (oldJob && old.jobNumber === oldJob ? undefined : old.jobNumber);
-          await ctx.db.patch(old._id, { name: split.name, dropboxFolder: folder, jobNumber, ...(client ? { client } : {}) });
+          await ctx.db.patch(old._id, { name: split.name, dropboxFolder: folder, jobNumber });
+          // A new client folder moves it by the same rules as Move (re-review M-a); one it can't move stays put.
+          if (client && norm(old.client ?? "") !== norm(client)) await tryMove(old, client);
           changed++;
           return;
         }

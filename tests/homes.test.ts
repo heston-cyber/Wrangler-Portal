@@ -234,4 +234,39 @@ describe("how everything connects", () => {
     expect(r.plain).toMatchObject({ dealId, clientId: north });
     expect(r.sent).toMatchObject({ clientId: w.harbor }); expect(r.sent.dealId).toBeUndefined();
   });
+
+  test("second review: calendar quietly, sent with no client, leads with no client, lead switches, footage answer (H, M-d, M-e, L-b, L-c, L-f)", async () => {
+    const w = await world();
+    const north = await w.t.run((ctx) => ctx.db.insert("clients", { businessId: w.A, name: "Northline", createdAt: 0 }));
+    // H: a shoot on the calendar whose project changes client is re-synced with "none" (Google emails nobody).
+    const { shootId } = await w.heston.mutation(api.shoots.schedule, { projectId: w.p, date: "2030-02-02", call: "07:00", location: "Studio", parking: "", prepare: [], withOwner: true, bookingIds: [], calendar: true });
+    const syncs = () => w.t.run(async (ctx) => (await ctx.db.system.query("_scheduled_functions").collect()).filter((f) => f.name.includes("syncShoot")).map((f) => (f.args[0] as { sendUpdates?: string }).sendUpdates));
+    const before = (await syncs()).length;
+    // L-c: an offer Harbor declined becomes a fresh offer for Northline.
+    const fsId = await w.t.run((ctx) => ctx.db.insert("footageStorage", { businessId: w.A, projectId: w.p, clientId: w.harbor, priceCents: 1, offeredAt: 0, keepUntil: "2030-01-01", status: "declined", answeredBy: { email: "maya@harbor.example", name: "Maya Brooks", at: 1 }, history: [], createdAt: 0, updatedAt: 0 } as never));
+    await w.heston.mutation(api.homes.moveProject, { projectId: w.p, clientId: north });
+    expect((await syncs()).slice(before)).toEqual(["none"]);
+    const f = await w.t.run(async (ctx) => (await ctx.db.get(fsId))!);
+    expect(f).toMatchObject({ clientId: north, status: "offered" }); expect(f.answeredBy ?? null).toBeNull();
+    // L-f: moved to another project of the same client: the event is still brought up to date, quietly.
+    const other = await w.t.run((ctx) => ctx.db.insert("projects", { businessId: w.A, name: "Second", client: "Northline", clientId: north, createdAt: 0 }));
+    await w.heston.mutation(api.homes.move, { kind: "shoot", id: shootId, to: { type: "project", id: other } });
+    expect((await syncs()).slice(before)).toEqual(["none", "none"]);
+
+    // M-d: a sent invoice with no client on a project with no client leaves the project and stays unattached.
+    const lone = await w.t.run((ctx) => ctx.db.insert("projects", { businessId: w.A, name: "Lone", createdAt: 0 }));
+    const q = await w.t.run((ctx) => ctx.db.insert("quotes", quote(w.A, { projectId: lone, title: "Sent to Jane", status: "sent", sentAt: 1 })));
+    await w.heston.mutation(api.homes.moveProject, { projectId: lone, clientId: north });
+    const qr = await w.t.run(async (ctx) => (await ctx.db.get(q))!);
+    expect(qr.projectId).toBeUndefined(); expect(qr.clientId).toBeUndefined();
+
+    // M-e: a lead with no client takes its addressed, clientless quote along when it's filed under a client.
+    const dealId = await w.t.run((ctx) => ctx.db.insert("deals", { businessId: w.A, title: "Website lead", stage: "lead", source: "hand", history: [], createdAt: 0, updatedAt: 0 }));
+    const lq = await w.t.run((ctx) => ctx.db.insert("quotes", quote(w.A, { dealId, title: "For Jane", contact: { name: "Jane", email: "jane@x.example" }, number: "Q-0005", seq: 5 })));
+    // L-b: someone with Clients but not Payments can't move a lead that carries a quote.
+    const producer = await member(w, "pat@x.example", "producer", ["projects", "clients"]);
+    await expect(producer.mutation(api.homes.move, { kind: "lead", id: dealId, to: { type: "client", id: north } })).rejects.toThrow(/Not allowed/);
+    await w.heston.mutation(api.homes.move, { kind: "lead", id: dealId, to: { type: "client", id: north } });
+    expect(await w.t.run(async (ctx) => (await ctx.db.get(lq))!)).toMatchObject({ dealId, clientId: north });
+  });
 });
