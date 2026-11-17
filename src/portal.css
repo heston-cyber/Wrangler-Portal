@@ -3586,7 +3586,7 @@ canvas.wp-glass.stale { opacity: 0; transition-duration: 90ms; } /* ?glass=lazy 
 @keyframes wp-slide-b0 { from { transform: translateX(-28px); } }
 @keyframes wp-slide-b1 { from { transform: translateX(-28px); } }
 @keyframes wp-menu-in { from { transform: translateY(-8px) scale(.98); } }
-@media (min-width: 821px) and (prefers-reduced-motion: no-preference) {
+@media (prefers-reduced-motion: no-preference) {
   /* the page area (the bar with the crumbs stays) */
   .wp-shell .main[data-slide="f0"] { overflow-x: clip; } .wp-shell .main[data-slide="f1"] { overflow-x: clip; }
   .wp-shell .main[data-slide="b0"] { overflow-x: clip; } .wp-shell .main[data-slide="b1"] { overflow-x: clip; }
@@ -3618,7 +3618,7 @@ canvas.wp-glass.stale { opacity: 0; transition-duration: 90ms; } /* ?glass=lazy 
   /* dropdowns and popups (crumb menus, right-click menus, the Create menu) slide down into place */
   .menu { animation: wp-menu-in 140ms var(--ease-out); transform-origin: top left; }
 }
-@media not all and (min-width: 821px), (prefers-reduced-motion: reduce) { .wp-hl, .tabs-hl { display: none; } }
+@media (prefers-reduced-motion: reduce) { .wp-hl, .tabs-hl { display: none; } }
 
 
 /* ---------- D176 (Heston, Nov 15): an icon on every submenu item ----------

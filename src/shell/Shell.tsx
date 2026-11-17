@@ -13,7 +13,7 @@ import { useSignOutAsk } from "./SignOut";
 import { sideWord, useSideSwitch } from "./SideSwitch";
 import { DEFAULT_TOOLS, TOOL_GROUPS, groupOf, toolsOf, type ToolKey, type Tools } from "../../convex/lib/tools";
 import { api } from "../../convex/_generated/api";
-import { linkProps, navigate, useLocation } from "../lib/router";
+import { cameBackByBrowser, linkProps, navigate, useLocation } from "../lib/router";
 import { useUploads } from "../lib/uploads";
 import { canOpen, usePerms } from "../lib/teamAccess";
 import { useBrand, type Brand } from "../lib/brand";
@@ -379,7 +379,7 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
     const prev = lastPath.current; if (prev === path) return;
     lastPath.current = path;
     const el = mainEl.current;
-    if (!el || !deskMotion()) return;
+    if (!el || !deskMotion() || cameBackByBrowser()) return;
     const dir = slideDir([...nav.main, ...nav.tabs], prev, path);
     if (dir) pulse(el, "data-slide", nextSlide(el.getAttribute("data-slide") ?? undefined, dir));
   }, [path]); // eslint-disable-line react-hooks/exhaustive-deps

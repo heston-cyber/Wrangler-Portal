@@ -9,7 +9,7 @@ const css = readFileSync("src/portal.css", "utf8");
 const shell = readFileSync("src/shell/Shell.tsx", "utf8");
 const wp = readFileSync("src/ui/wp.tsx", "utf8");
 const d175 = css.slice(css.indexOf("D175 (Heston, Nov 12"));
-const desk = d175.slice(d175.indexOf("@media (min-width: 821px) and (prefers-reduced-motion: no-preference) {"));
+const desk = d175.slice(d175.indexOf("@media (prefers-reduced-motion: no-preference) {"));
 
 describe("D175 slides", () => {
   const items = [...ownerItems(true).main, ...ownerItems(true).tabs];
@@ -40,14 +40,14 @@ describe("D175 slides", () => {
     expect(nextSlide("f1", "b")).toBe("b0");
   });
 
-  it("175.5 every slide lives inside the desktop-with-motion query; phones and reduce motion get none", () => {
+  it("175.5 every slide lives inside the motion-allowed query (desktop and phones); reduce motion gets none", () => {
     expect(desk.length).toBeGreaterThan(1000);
     for (const sel of ['.main[data-slide="f0"] > :not(.topbar)', "[data-tabsrow] ~ *", ".tabs-hl", ".wp-hl", ".menu { animation: wp-menu-in"]) {
       expect(desk, sel).toContain(sel);
-      expect(d175.slice(0, d175.indexOf(sel)).includes("@media (min-width: 821px) and (prefers-reduced-motion: no-preference) {"), sel).toBe(true);
+      expect(d175.slice(0, d175.indexOf(sel)).includes("@media (prefers-reduced-motion: no-preference) {"), sel).toBe(true);
     }
-    expect(d175).toMatch(/@media not all and \(min-width: 821px\), \(prefers-reduced-motion: reduce\) \{ \.wp-hl, \.tabs-hl \{ display: none; \} \}/);
-    expect(readFileSync("src/lib/motion.ts", "utf8")).toContain("(min-width: 821px) and (prefers-reduced-motion: no-preference)");
+    expect(d175).toMatch(/@media \(prefers-reduced-motion: reduce\) \{ \.wp-hl, \.tabs-hl \{ display: none; \} \}/);
+    expect(readFileSync("src/lib/motion.ts", "utf8")).toContain("(prefers-reduced-motion: no-preference)");
   });
 
   it("175.6 only transform (and size) moves: no keyframe or transition on these slides touches opacity", () => {
@@ -72,6 +72,13 @@ describe("D175 slides", () => {
     expect(wp).toContain('className="tabs-hl"');
     expect(wp).toContain("deskMotion()");
     expect(wp).toContain('"data-tslide"');
+  });
+
+  it("175.10 a change of page by the browser's back (swipe from the edge, back button) doesn't slide a second time", () => {
+    const router = readFileSync("src/lib/router.ts", "utf8");
+    expect(router).toContain('addEventListener("popstate", () => { byBrowser = true; })');
+    expect(router).toContain("byBrowser = false;");
+    expect(shell).toContain("cameBackByBrowser()");
   });
 
   it("175.9 the sidebar highlight is three pills that follow the current items", () => {
