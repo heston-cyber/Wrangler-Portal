@@ -164,7 +164,7 @@ export function DeliveryPage({ projectId }: { projectId: string }) {
                 <b className="dl-big">{d.keptUntil ? longDay(d.keptUntil) : `${d.termYears} year${d.termYears === 1 ? "" : "s"} from publishing`}</b>
                 <p className="secondary wp-small">{d.termYears} year{d.termYears === 1 ? "" : "s"} included, then {usd(d.priceCents)} a year to keep it. You set the term and price in Settings.</p>
                 {left !== null && left <= 30 && d.state !== "ended" && <Button size="sm" onClick={() => setDialog({ k: "renew" })}>Renewal…</Button>}
-                {d.renewal && <p className="wp-small">{d.renewal.status === "kept" ? `${d.renewal.by ?? "The client"} chose Keep it. Send them the invoice, then mark it renewed.` : d.renewal.status === "declined" ? `${d.renewal.by ?? "The client"} said No thanks.` : d.renewal.status === "offered" ? "Renewal offered in their Delivery." : d.renewal.status === "free" ? "Kept another year, free." : d.renewal.status === "ending" ? "Letting it end." : "Renewed."}</p>}
+                {d.renewal && <p className="wp-small">{d.renewal.status === "kept" ? (d.renewalInvoiceId ? <>{d.renewal.by ?? "The client"} chose Keep it. Their invoice is drafted: <a {...linkProps(`/payments/invoices/${d.renewalInvoiceId}`)}>open it and send it</a>. Paid, it adds the year.</> : `${d.renewal.by ?? "The client"} chose Keep it. Send them the invoice, then mark it renewed.`) : d.renewal.status === "declined" ? `${d.renewal.by ?? "The client"} said No thanks.` : d.renewal.status === "offered" ? "Renewal offered in their Delivery." : d.renewal.status === "free" ? "Kept another year, free." : d.renewal.status === "ending" ? "Letting it end." : "Renewed."}</p>}
               </div>
             </Card>
             <Card label="Who sees it" head={<SectionHead label="Who sees it" count={d.people.length} />}>
@@ -253,10 +253,10 @@ function Renewal({ d, onClose, show }: { d: NonNullable<Data["delivery"]>; onClo
       <div className="crm-dialog hm-pick">
         <DialogHeader eyebrow="Renewal" title={d.keptUntil ? `Ends ${longDay(d.keptUntil)}` : "Renewal"} body={d.keptUntil ? `On ${longDay(d.keptUntil)} the files leave Delivery. The client is reminded 7 days before to download them.` : undefined} onClose={onClose} />
         <div className="hm-list">
-          <button className="hm-row" onClick={() => go("offer")}><Icon name="invoice" size={18} /><span className="t"><b>Offer a renewal</b><span className="secondary">A Keep it button in their Delivery, {usd(d.priceCents)} a year. If they choose it, you send the invoice.</span></span></button>
+          <button className="hm-row" onClick={() => go("offer")}><Icon name="invoice" size={18} /><span className="t"><b>Offer a renewal</b><span className="secondary">A Keep it button in their Delivery, {usd(d.priceCents)} a year. If they choose it, their invoice is drafted for you to send.</span></span></button>
           <button className="hm-row" onClick={() => go("free")}><Icon name="star" size={18} /><span className="t"><b>Keep it another year, free</b></span></button>
           <button className="hm-row" onClick={() => go("end")}><Icon name="clock" size={18} /><span className="t"><b>Let it end</b><span className="secondary">Nothing is deleted from Dropbox.</span></span></button>
-          {d.renewal?.status === "kept" && <button className="hm-row" onClick={() => void renewed({ deliveryId: d._id }).then(() => { show("Renewed for a year."); onClose(); }, (e) => show(errLine(e)))}><Icon name="check-circle" size={18} /><span className="t"><b>Mark it renewed</b><span className="secondary">After you've sent their invoice: another year.</span></span></button>}
+          {d.renewal?.status === "kept" && <button className="hm-row" onClick={() => void renewed({ deliveryId: d._id }).then(() => { show("Renewed for a year."); onClose(); }, (e) => show(errLine(e)))}><Icon name="check-circle" size={18} /><span className="t"><b>Mark it renewed</b><span className="secondary">Paid another way, or no invoice: another year now. A paid invoice adds it by itself.</span></span></button>}
         </div>
       </div>
     </Modal>

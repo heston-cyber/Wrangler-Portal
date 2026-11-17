@@ -1172,6 +1172,7 @@ export default defineSchema({
     // on the invoice (method shown as "Visa •••• 4242" or "Bank •••• 6789"; never full numbers).
     fromContract: v.optional(v.string()),                // "contract:<document>:v<n>": the deposit drafted when a contract was signed
     storageId: v.optional(v.id("footageStorage")),       // Phase 5: a year of raw footage storage (D33), first year or a renewal (D140)
+    deliveryId: v.optional(v.id("deliveries")),          // Nov 17 (Q6): another year of a project's Delivery, drafted when the client chose Keep it
     payToken: v.optional(v.string()),
     // Review fixes (Oct 30): a send in progress keeps what it has made in Stripe so far, so a failed send cleans up
     // and a retry neither duplicates nor gets stuck; syncedAt spaces out reads from Stripe.
@@ -1572,6 +1573,7 @@ export default defineSchema({
     termYears: v.optional(v.number()), priceCents: v.optional(v.number()), // this delivery's own (else Settings)
     renewal: v.optional(v.object({ status: v.union(v.literal("offered"), v.literal("kept"), v.literal("declined"), v.literal("free"), v.literal("ending"), v.literal("renewed")), at: v.number(), by: v.optional(v.string()) })),
     reminded: v.optional(v.array(v.number())),   // 30, 7: reminders sent for this keptUntil
+    renewalInvoiceId: v.optional(v.id("invoices")), // Q6: the drafted invoice another year waits on (paid: a year added)
     endedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),

@@ -19,6 +19,7 @@ import { announceSent } from "./invoicePay";
 import { nextReminder } from "./invoiceReminders";
 import { crmProject } from "./crm";
 import { storageDropped, storagePaid } from "./footage";
+import { deliveryDropped, deliveryPaid } from "./delivery";
 
 const DAY = 86_400_000;
 const MIN_CENTS = 50; // Stripe's smallest card charge in USD
@@ -286,6 +287,7 @@ export const deleteDraft = mutation({
     if (!i) return null;
     if (i.status !== "draft") throw new ConvexError("Only a draft can be deleted. Void a sent invoice instead.");
     if (i.storageId) await storageDropped(ctx, i, "deleted"); // Phase 5: a storage draft deleted goes back to not kept
+    if (i.deliveryId) await deliveryDropped(ctx, i); // Q6
     await ctx.db.delete(i._id);
     return null;
   },
@@ -349,6 +351,7 @@ export const recordSent = internalMutation({
     // Phase 5 (review L5): a storage invoice paid at send (a credit balance covered it): the webhook will see it already
     // paid and skip, so the year is recorded here.
     if (sent?.status === "paid" && sent.storageId) await storagePaid(ctx, sent);
+    if (sent?.status === "paid" && sent.deliveryId) await deliveryPaid(ctx, sent); // Q6
   },
 });
 
@@ -640,6 +643,8 @@ export const applyStripeInvoice = internalMutation({
     // Phase 5: a raw footage storage invoice paid keeps the footage a year; voided, it goes back to not kept.
     if (i.storageId && status === "paid" && i.status !== "paid") await storagePaid(ctx, i);
     if (i.storageId && status === "void" && i.status !== "void") await storageDropped(ctx, i, "voided");
+    if (i.deliveryId && status === "paid" && i.status !== "paid") await deliveryPaid(ctx, i); // Q6
+    if (i.deliveryId && status === "void" && i.status !== "void") await deliveryDropped(ctx, i);
     // A final invoice paid in full opens the project's final files (the Part A lock, now automatic).
     if (status === "paid" && i.status !== "paid" && i.kind === "final" && i.projectId) {
       const p = await ctx.db.get(i.projectId);

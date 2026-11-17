@@ -2,7 +2,7 @@
 //   T-DL.1 one delivery per project; files only from the project's own Dropbox folder or cuts; the client sees only what's
 //          published; Publish starts the term (Settings) and can tell the client; arrange and shoot tags
 //   T-DL.2 the term: reminders 30 and 7 days before, once each; it ends (the client sees nothing; nothing is deleted);
-//          renewal answer recorded; the owner marks it renewed
+//          renewal: Keep it drafts next year's invoice (Q6), paid adds the year; the owner can mark it renewed
 //   T-DL.3 a client's share link: only what was shared, off any time; another client or business gets nothing
 import { describe, expect, test } from "vitest";
 import { anyApi } from "convex/server";
@@ -77,10 +77,27 @@ describe("delivery", () => {
     expect(offer).toMatchObject({ priceCents: 15000 });
     await w.maya.mutation(api.delivery.clientAnswer, { deliveryId, keep: true });
     expect((await w.heston.query(api.delivery.get, { projectId: w.p })).delivery.renewal).toMatchObject({ status: "kept", by: "Maya Brooks" });
-    // Nothing was charged; the owner marks it renewed once the invoice is sent.
-    expect(await w.t.run((ctx) => ctx.db.query("invoices").collect())).toEqual([]);
+    // Heston (Nov 17, Q6): Keep it drafts next year's invoice for the owner to send (nothing sent, nothing charged).
+    const invs = await w.t.run((ctx) => ctx.db.query("invoices").collect());
+    expect(invs).toHaveLength(1);
+    expect(invs[0]).toMatchObject({ status: "draft", deliveryId, projectId: w.p, totalCents: 15000, billTo: { email: "maya@harbor.example", name: "Maya Brooks" } });
+    expect((await w.heston.query(api.delivery.get, { projectId: w.p })).delivery.renewalInvoiceId).toBe(invs[0]._id);
+    const nextYear = plus(today(), 20).replace(/^(\d{4})/, (y) => String(Number(y) + 1));
+    // Deleting the draft: the client can answer again; Keep it drafts a fresh one.
+    await w.heston.mutation(api.invoices.deleteDraft, { invoiceId: invs[0]._id });
+    expect((await w.heston.query(api.delivery.get, { projectId: w.p })).delivery).toMatchObject({ renewal: { status: "offered" }, renewalInvoiceId: null });
+    await w.maya.mutation(api.delivery.clientAnswer, { deliveryId, keep: true });
+    const inv2 = (await w.t.run((ctx) => ctx.db.query("invoices").collect()))[0];
+    // Sent and paid (Stripe test mode): the year is added by itself.
+    await w.t.run((ctx) => ctx.db.patch(inv2._id, { status: "open", stripe: { accountId: "acct_A", invoiceId: "in_dl", customerId: "cus_1", livemode: false } }));
+    await w.t.mutation(anyApi.invoices.applyStripeInvoice, { accountId: "acct_A", invoice: { id: "in_dl", status: "paid", total: 15000, amount_paid: 15000, amount_remaining: 0 }, eventType: "invoice.paid" });
+    expect((await w.heston.query(api.delivery.get, { projectId: w.p })).delivery).toMatchObject({ keptUntil: nextYear, renewal: { status: "renewed" }, renewalInvoiceId: null });
+    // Paid twice (a repeated webhook) adds nothing more; Mark it renewed still works for a renewal paid another way.
+    await w.t.mutation(anyApi.invoices.applyStripeInvoice, { accountId: "acct_A", invoice: { id: "in_dl", status: "paid", total: 15000, amount_paid: 15000, amount_remaining: 0 }, eventType: "invoice.paid" });
+    expect((await w.heston.query(api.delivery.get, { projectId: w.p })).delivery.keptUntil).toBe(nextYear);
+    await w.heston.mutation(api.delivery.setTerm, { deliveryId, keptUntil: plus(today(), 20) });
     await w.heston.mutation(api.delivery.renewed, { deliveryId });
-    expect((await w.heston.query(api.delivery.get, { projectId: w.p })).delivery.keptUntil).toBe(plus(today(), 20).replace(/^(\d{4})/, (y) => String(Number(y) + 1)));
+    expect((await w.heston.query(api.delivery.get, { projectId: w.p })).delivery.keptUntil).toBe(nextYear);
     // Past the date: it ends; the client sees nothing; the files are still listed for the owner.
     await w.heston.mutation(api.delivery.setTerm, { deliveryId, keptUntil: plus(today(), -1) });
     await w.t.mutation(anyApi.delivery.runDue, {});
