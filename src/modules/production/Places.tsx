@@ -108,7 +108,7 @@ export default function LocationsPage() {
   const [view, setView] = useState<View>("archive");
   const [q, setQ] = useState("");
   const [tag, setTag] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState(() => new URLSearchParams(location.search).has("new")); // Nov 17: Production › Create › Location
   const [toast, show] = useToast();
   const tags = useMemo(() => [...new Set((places ?? []).flatMap((p) => p.tags))].sort(), [places]);
   const shown = (places ?? []).filter((p) => (!tag || p.tags.includes(tag)) && (!q.trim() || `${p.name} ${p.address} ${p.tags.join(" ")}`.toLowerCase().includes(q.trim().toLowerCase())));

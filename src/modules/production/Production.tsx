@@ -4,6 +4,7 @@
 // and Sync now, and Production › Calendar (Calendar.tsx).
 import { useEffect, useState } from "react";
 import { PIPELINE } from "../../shell/pipeline";
+import { CreateMenu, PRODUCTION_CREATE } from "../home/CreateMenu";
 import { canOpen, usePerms } from "../../lib/teamAccess";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -165,7 +166,7 @@ export default function ProductionOverview() {
     <>
       <TopBar><span className="secondary">Production</span><Sep /><span className="here">Overview</span></TopBar>
       <div className="wp-page pov prod">
-        <PageHeader title="Production." sub="The whole pipeline: creative planning, pre-pro, the shoot, post and delivery." actions={<ButtonLink variant="primary" to="/production/call-sheets/new" iconEnd={false}>New call sheet</ButtonLink>} />
+        <PageHeader title="Production." sub="The whole pipeline: creative planning, pre-pro, the shoot, post and delivery." actions={<CreateMenu items={PRODUCTION_CREATE} />} />
         <StageCards o={o ?? null} />
         {o === undefined ? <>
           <div className="pov-stats prod-tiles">{[0, 1, 2, 3].map((i) => <div key={i} className="pov-stat prod-tile"><SkeletonRows n={1} /></div>)}</div>

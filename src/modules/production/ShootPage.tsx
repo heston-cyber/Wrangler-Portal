@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { usePerms } from "../../lib/teamAccess";
 import { useConvex, useMutation, useQuery, useAction } from "convex/react";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Button, ButtonLink, Card, DialogHeader, EmptyState, PageHeader, SkeletonRows, TextField } from "../../ui/wp";
@@ -321,10 +322,13 @@ export function ReleaseSigning({ releaseId }: { releaseId: string }) {
   const r = useQuery(api.releases.get, { releaseId });
   const me = useQuery(api.users.me);
   const locked = !!me?.locked;
-  const setup = useQuery(api.handBack.mine, me && !locked ? {} : "skip");
+  const setup = useQuery(api.handBack.mine, me && !locked && me.allowed ? {} : "skip"); // review L8: the owner's own
   const handOver = useMutation(api.releases.handOver);
   const make = useMakeRelease();
-  const [token, setToken] = useState<string | null>(null);
+  // Review L9: the signer's place survives a reload while the phone is handed over (this tab only).
+  const tokenKey = `wp-release-token:${releaseId}`;
+  const [token, setTokenRaw] = useState<string | null>(() => { try { return sessionStorage.getItem(tokenKey); } catch { return null; } });
+  const setToken = (x: string | null) => { setTokenRaw(x); try { if (x) sessionStorage.setItem(tokenKey, x); else sessionStorage.removeItem(tokenKey); } catch { /* private mode */ } };
   const [handing, setHanding] = useState(false); // Q2: the owner's unlock, over the signing
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -345,7 +349,7 @@ export function ReleaseSigning({ releaseId }: { releaseId: string }) {
     <div className="rl-full"><div className="rl-card glass">
       {r.state === "signed" ? <><span className="rl-ok"><Icon name="check-circle" size={28} /></span><h1 className="headline">Signed.</h1><p className="secondary">A copy is on its way to {r.email}. Hand the phone back.</p></>
         : <><span className="wp-eyebrow">Signing in person</span><h1 className="headline">{token ? "Hand back" : `Handed to ${r.name}`}</h1><p className="secondary">{token ? `${r.name} hasn't finished signing. Unlock to take the phone back.` : "This phone is with the signer. Unlock to take it back."}</p></>}
-      <HandBack name={me?.name ?? null} onDone={() => navigate(shootUrl)} />
+      <HandBack name={me?.name ?? null} onDone={() => { setToken(null); navigate(shootUrl); }} />
       {handing && token && <button type="button" className="btn ghost" onClick={() => setHanding(false)}>Back to signing</button>}
     </div></div>
   );
@@ -424,6 +428,7 @@ function UnlockSetup({ pin, passkeys }: { pin: boolean; passkeys: number }) {
 
 /** Q2: the owner takes the phone back: Face ID or the passcode (a passkey), or the PIN (5 tries, then signed out). */
 function HandBack({ name, onDone }: { name: string | null; onDone: () => void }) {
+  const { signOut } = useAuthActions();
   const unlockPin = useMutation(api.handBack.unlockWithPin);
   const options = useAction(api.passkeys.unlockOptions);
   const unlock = useAction(api.passkeys.unlock);
@@ -447,7 +452,7 @@ function HandBack({ name, onDone }: { name: string | null; onDone: () => void })
       const out = await unlockPin({ pin });
       if (out.ok) { onDone(); return; }
       setPin("");
-      if ("signedOut" in out) { setMsg("Too many wrong PINs: this phone is signed out."); setTimeout(() => location.assign("/"), 1500); return; }
+      if ("signedOut" in out) { setMsg("Too many wrong PINs: this phone is signed out."); await signOut(); location.assign("/"); return; }
       setMsg(`That isn't the PIN. ${out.left} ${out.left === 1 ? "try" : "tries"} left.`);
     } catch (e) { setMsg(errLine(e)); }
     finally { setBusy(false); }

@@ -8,7 +8,7 @@
 //          certificate says who checked them in person
 import { convexTest } from "convex-test";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
-import { api } from "../convex/_generated/api";
+import { api, internal } from "../convex/_generated/api";
 import schema from "../convex/schema";
 import type { Id } from "../convex/_generated/dataModel";
 import { PDFDocument, StandardFonts } from "@cantoo/pdf-lib";
@@ -132,7 +132,19 @@ describe("releases on set", () => {
     const s = x.ids.sub.split("|")[1] as Id<"authSessions">;
     expect(await x.t.run((ctx) => ctx.db.get(s))).toBeNull();
     expect(await x.t.run((ctx) => ctx.db.get(other))).not.toBeNull(); // their other devices stay signed in
-    expect(await x.t.run((ctx) => ctx.db.query("sessionLocks").collect())).toEqual([]);
+    // Review H1: the same sign-in (its token still valid) gets nothing back: not the business, not a new PIN, no unlock.
+    expect(await x.me.query(api.users.me, {})).toMatchObject({ allowed: false, locked: { signedOut: true } });
+    await expect(x.me.query(api.releases.forShoot, { shootId: x.ids.shootId })).rejects.toThrow(/Not allowed/);
+    await expect(x.me.mutation(api.handBack.setPin, { pin: "1111" })).rejects.toThrow(/Not allowed/);
+    await expect(x.me.mutation(api.handBack.unlockWithPin, { pin: "2580" })).rejects.toThrow(/Not allowed/);
+    await expect(x.me.query(api.handBack.mine, {})).rejects.toThrow(/Not allowed/);
+    // Their other sign-in still works as the owner.
+    const elsewhere = x.t.withIdentity({ subject: `${x.ids.sub.split("|")[0]}|${other}` });
+    expect(await elsewhere.query(api.handBack.mine, {})).toMatchObject({ pin: true });
+    // The mark is cleared once the token can't be used any more (the 6-hourly sweep).
+    expect(await x.t.run((ctx) => ctx.db.query("sessionLocks").collect())).toHaveLength(1);
+    await x.t.run(async (ctx) => { for (const l of await ctx.db.query("sessionLocks").collect()) await ctx.db.patch(l._id, { at: Date.now() - 4 * 3_600_000 }); });
+    expect(await x.t.mutation(internal.handBack.sweep, {})).toBe(1);
   });
 
   test("T-RL.2 a draft can be removed; shots must be on the day's list; someone without Docs is refused", async () => {

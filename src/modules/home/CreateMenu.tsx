@@ -3,9 +3,9 @@
 // A popup under the button on a computer, the same bottom sheet as the hold menus on a phone (MenuSurface). A team
 // member sees only what their role allows (pathNeeds, the same rule as the side menu); with nothing allowed, no button.
 import { Suspense, lazy, useRef, useState } from "react";
-import { ChevronDown, ClipboardList, Clapperboard, FileSignature, FileText, NotebookText, Receipt, ReceiptText, UserPlus } from "lucide-react";
+import { Backpack, ChevronDown, ClipboardList, Clapperboard, FileSignature, FileText, ListChecks, MapPin, NotebookText, Package, Palette, Receipt, ReceiptText, Shapes, SwatchBook, UserPlus } from "lucide-react";
 import { Button } from "../../ui/wp";
-import { MenuItem, useToast } from "../../ui/kit";
+import { MenuItem, MenuSep, useToast } from "../../ui/kit";
 import { MenuSurface } from "../../ui/hold";
 import { navigate } from "../../lib/router";
 import { pathNeeds, usePerms } from "../../lib/teamAccess";
@@ -16,7 +16,7 @@ const NewShoot = lazy(() => import("../production/Production").then((m) => ({ de
 const NewClient = lazy(() => import("../review/Projects").then((m) => ({ default: m.NewClient })));
 
 type Dialog = "shoot" | "briefing" | "client";
-type Item = { key: string; label: string; icon: React.ReactNode; needs: string; to?: string; dialog?: Dialog };
+type Item = { key: string; label: string; icon: React.ReactNode; needs: string; to?: string; dialog?: Dialog; sep?: boolean };
 const I = 16;
 
 // Heston's order, then the rest. `needs` is a path whose access rule decides who sees the item.
@@ -31,7 +31,23 @@ export const CREATE_ITEMS: Item[] = [
   { key: "client", label: "Client", icon: <UserPlus size={I} />, needs: "/clients", dialog: "client" },
 ];
 
-export function CreateMenu() {
+// Nov 17 (Heston, 09:33): the Production page's Create: everything that's made inside Production, stage by stage
+// (Creative planning · Pre-pro · Prin-pro · Delivery); a line between stages.
+export const PRODUCTION_CREATE: Item[] = [
+  { key: "doc", label: "Creative doc", icon: <FileText size={I} />, needs: "/creative/docs", to: "/creative/docs?new=1" },
+  { key: "canvas", label: "Canvas", icon: <Shapes size={I} />, needs: "/creative/canvas", to: "/creative/canvas?new=1" },
+  { key: "mood", label: "Mood board", icon: <Palette size={I} />, needs: "/creative/canvas", to: "/creative/canvas?new=mood" },
+  { key: "place", label: "Location", icon: <MapPin size={I} />, needs: "/creative/locations", to: "/creative/locations?new=1" },
+  { key: "kit", label: "Brand kit", icon: <SwatchBook size={I} />, needs: "/creative/kits", to: "/creative/kits?new=1" },
+  { key: "shotlist", label: "Shot list", icon: <ListChecks size={I} />, needs: "/production/shot-lists", to: "/production/shot-lists?new=1", sep: true },
+  { key: "callsheet", label: "Call sheet", icon: <ClipboardList size={I} />, needs: "/production/call-sheets", to: "/production/call-sheets/new" },
+  { key: "briefing", label: "Briefing", icon: <NotebookText size={I} />, needs: "/vendors/briefings", dialog: "briefing" },
+  { key: "shoot", label: "Shoot", icon: <Clapperboard size={I} />, needs: "/production/shoots", dialog: "shoot", sep: true },
+  { key: "packing", label: "Packing list", icon: <Backpack size={I} />, needs: "/production/gear", to: "/production/gear/packing?new=1" },
+  { key: "delivery", label: "Delivery", icon: <Package size={I} />, needs: "/delivery", to: "/delivery?new=1", sep: true },
+];
+
+export function CreateMenu({ items: list = CREATE_ITEMS }: { items?: Item[] } = {}) {
   const { perms, team, loading } = usePerms();
   const [at, setAt] = useState<{ x: number; y: number } | null>(null);
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -41,7 +57,7 @@ export function CreateMenu() {
     const n = pathNeeds(path);
     return n === "any" || (n === "owner" ? !team : n.some((p) => perms[p]));
   };
-  const items = CREATE_ITEMS.filter((i) => allowed(i.needs));
+  const items = list.filter((i) => allowed(i.needs));
   if (loading || !items.length) return null;
   const close = () => setAt(null);
   const pick = (i: Item) => { close(); if (i.to) navigate(i.to); else if (i.dialog) setDialog(i.dialog); };
@@ -53,7 +69,7 @@ export function CreateMenu() {
       </Button>
       {at && (
         <MenuSurface at={at} onClose={close} label="Create" title="Create">
-          {items.map((i) => <MenuItem key={i.key} icon={i.icon} onSelect={() => pick(i)}>{i.label}</MenuItem>)}
+          {items.map((i, k) => <span key={i.key} style={{ display: "contents" }}>{i.sep && k > 0 && <MenuSep />}<MenuItem icon={i.icon} onSelect={() => pick(i)}>{i.label}</MenuItem></span>)}
         </MenuSurface>
       )}
       <Suspense fallback={null}>

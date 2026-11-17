@@ -11,6 +11,7 @@ import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireAll } from "./lib/access";
+import { businessInScope } from "./lib/business";
 import { audit } from "./lib/audit";
 import { label } from "./lib/bookingRows";
 import type { Perm } from "./lib/perms";
@@ -230,24 +231,42 @@ async function recal(ctx: MutationCtx, shootId: Id<"shoots">) {
 }
 
 
+/** Q5 (review L7): who counts as crew here (this business's vendors, archived ones aside) and who is a client's person
+ *  here (anyone on a client's shares or review links, booked editors' own Review links aside, a client contact, or a
+ *  client login of this business). Read once per change, however many boards it touches. */
+const crewCache = new WeakMap<object, Promise<{ crew: Set<string>; theirs: Set<string> }>>();
+function crewAndClients(ctx: MutationCtx) {
+  let p = crewCache.get(ctx);
+  if (!p) {
+    p = (async () => {
+      const crew = new Set((await ctx.db.query("vendors").collect()).filter((x) => !x.archivedAt).map((x) => (x.email ?? "").toLowerCase()).filter(Boolean));
+      const editorShares = new Set((await ctx.db.query("vendorBookings").collect()).map((k) => String(k.reviewShareId ?? "")).filter(Boolean));
+      const theirs = new Set<string>();
+      for (const s of await ctx.db.query("shares").collect()) {
+        if (editorShares.has(String(s._id))) continue;
+        for (const m of await ctx.db.query("shareMembers").withIndex("by_share", (q) => q.eq("shareId", s._id)).collect()) theirs.add(m.email.toLowerCase());
+      }
+      for (const x of await ctx.db.query("clientPeople").collect()) theirs.add(x.email.toLowerCase());
+      const biz = businessInScope(ctx);
+      for (const m of await ctx.db.query("memberships").collect()) if (m.role === "client" && !m.revokedAt && (!biz || m.businessId === biz)) theirs.add(m.email.toLowerCase());
+      for (const i of await ctx.db.query("invites").collect()) if (!i.revokedAt && (!biz || i.businessId === biz)) theirs.add(String(i.email ?? "").toLowerCase());
+      return { crew, theirs };
+    })();
+    crewCache.set(ctx, p);
+  }
+  return p.then((x) => ({ crew: x.crew, theirs: new Set(x.theirs) }));
+}
+
 /** Review M2 (Nov 17): a canvas, creative doc or brand kit leaving a client: its share links stop (the old client's
  *  people lose it at once, as with a project's review links). The owner can share again. Returns how many stopped.
  *  Heston (Nov 17, Q5): on a board, crew keep their links (they work for the business, not the client): a person whose
- *  email is one of the business's vendors and isn't any client's person here. The view-only link still stops. */
+ *  email is one of the business's vendors and isn't a client's person here (crewAndClients). The view-only link stops. */
 async function creativeLinksOff(ctx: MutationCtx, kind: "canvas" | "creativeDoc" | "kit", id: string, from?: Id<"clients"> | null) {
   let n = 0;
   if (kind === "canvas") {
     const c = await ctx.db.get(id as Id<"canvases">);
     if (c?.link?.on) { await ctx.db.patch(c._id, { link: { ...c.link, on: false } }); n++; }
-    const crew = new Set((await ctx.db.query("vendors").collect()).map((x) => (x.email ?? "").toLowerCase()).filter(Boolean));
-    // Anyone who is (or was) a client's person here, whichever share they came through, loses it, crew or not.
-    const theirs = new Set<string>();
-    for (const s of await ctx.db.query("shares").collect()) {
-      if (s.kind !== "client") continue;
-      for (const m of await ctx.db.query("shareMembers").withIndex("by_share", (q) => q.eq("shareId", s._id)).collect()) theirs.add(m.email.toLowerCase());
-    }
-    for (const x of await ctx.db.query("clientPeople").collect()) theirs.add(x.email.toLowerCase());
-    for (const m of await ctx.db.query("memberships").collect()) if (m.role === "client") theirs.add(m.email.toLowerCase());
+    const { crew, theirs } = await crewAndClients(ctx);
     const old = from ? await ctx.db.get(from) : null;
     if (old) for (const x of await clientPeople(ctx, old)) theirs.add(x.email.toLowerCase());
     for (const pp of await ctx.db.query("canvasPeople").withIndex("by_canvas", (q) => q.eq("canvasId", id as Id<"canvases">)).collect()) {

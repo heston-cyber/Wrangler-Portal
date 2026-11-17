@@ -1574,6 +1574,7 @@ export default defineSchema({
     renewal: v.optional(v.object({ status: v.union(v.literal("offered"), v.literal("kept"), v.literal("declined"), v.literal("free"), v.literal("ending"), v.literal("renewed")), at: v.number(), by: v.optional(v.string()) })),
     reminded: v.optional(v.array(v.number())),   // 30, 7: reminders sent for this keptUntil
     renewalInvoiceId: v.optional(v.id("invoices")), // Q6: the drafted invoice another year waits on (paid: a year added)
+    renewalsPaid: v.optional(v.array(v.id("invoices"))), // review M1: renewal invoices already credited (each adds a year once)
     endedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -2124,6 +2125,7 @@ export default defineSchema({
     releaseId: v.id("releases"),
     tries: v.number(),
     challenge: v.optional(v.object({ value: v.string(), at: v.number() })), // a passkey unlock waiting for its answer
+    signedOut: v.optional(v.boolean()), // review H1: five wrong PINs ended this session; kept so it never answers again
     at: v.number(),
   }).index("by_session", ["sessionId"]).index("by_user", ["userId"]),
   // The owner's own ways to unlock (a login's, not a business's): a PIN (salted hash) and passkeys on their devices.

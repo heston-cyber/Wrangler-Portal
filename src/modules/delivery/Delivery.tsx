@@ -27,7 +27,7 @@ export function DeliveryList() {
   const [toast, show] = useToast();
   const [by, setBy] = useState<"client" | "project" | "shoot">("client");
   const [f, setF] = useState<"all" | "draft" | "ending">("all");
-  const [picking, setPicking] = useState(false);
+  const [picking, setPicking] = useState(() => new URLSearchParams(location.search).has("new")); // Nov 17: Production › Create
   const rows = (d?.deliveries ?? []).filter((x) => f === "all" || (f === "draft" ? x.state === "draft" || x.changed : x.endingSoon));
   const groups = useMemo(() => {
     const m = new Map<string, { name: string; rows: typeof rows; sub?: string }>();

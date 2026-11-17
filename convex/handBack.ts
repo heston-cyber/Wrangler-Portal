@@ -1,7 +1,9 @@
 // Q2 (Heston, Nov 17, "go with your suggestions"): handing the phone back after a release signed in person asks for the
 // owner: Face ID or the phone's passcode (a passkey, passkeys.ts) or their 4-digit PIN. Hand over locks this sign-in
 // (lib/sessionLock.ts; viewerOf answers nothing for it, in any tab) until one of them unlocks it. Five wrong PINs sign
-// the session out (the owner signs in again with their password).
+// the session out (the owner signs in again with their password). Review H1: the lock stays as a "signed out" mark, and
+// a session whose row is gone answers nothing (lib/sessionLock.ts), so the phone can't come back as the owner on its
+// still-valid token. Review L5: the PIN's hash is keyed with a server secret that isn't in exports.
 import { getAuthSessionId, getAuthUserId } from "@convex-dev/auth/server";
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
@@ -14,7 +16,8 @@ import { randomToken, sha256Hex } from "./lib/hash";
 type Ctx = QueryCtx | MutationCtx;
 export const PIN_TRIES = 5;
 const CHALLENGE_MS = 5 * 60_000;
-const pinHash = (salt: string, pin: string) => sha256Hex(`wp-handback:${salt}:${pin}`);
+const pepper = () => process.env.HANDBACK_PEPPER || process.env.JWT_PRIVATE_KEY || "";
+const pinHash = async (salt: string, pin: string) => sha256Hex(`wp-handback:${await sha256Hex(pepper())}:${salt}:${pin}`);
 const rowOf = (ctx: Ctx, userId: Id<"users">) => ctx.db.query("handBack").withIndex("by_user", (q) => q.eq("userId", userId)).first();
 
 /** The owner's hand-back setup: is there a PIN, and how many passkeys (never the PIN or keys themselves). */
@@ -67,8 +70,7 @@ export async function lockForRelease(ctx: MutationCtx, userId: Id<"users">, rele
 export const unlockWithPin = mutation({
   args: { pin: v.string() },
   handler: async (ctx, { pin }): Promise<{ ok: true } | { ok: false; left: number } | { ok: false; signedOut: true }> => {
-    const lock = await lockOf(ctx);
-    if (!lock || lock.userId !== (await getAuthUserId(ctx))) throw new ConvexError("Not allowed.");
+    const lock = await liveLock(ctx);
     const r = await rowOf(ctx, lock.userId);
     if (r?.pinHash && r.pinSalt && /^\d{4}$/.test(pin) && (await pinHash(r.pinSalt, pin)) === r.pinHash) {
       await ctx.db.delete(lock._id);
@@ -81,9 +83,16 @@ export const unlockWithPin = mutation({
   },
 });
 
-/** Too many wrong tries: this session (only) is signed out and its lock goes with it. */
+/** The caller's own lock, still handed over (not one already signed out). */
+async function liveLock(ctx: Ctx) {
+  const lock = await lockOf(ctx);
+  if (!lock || lock.signedOut || lock.userId !== (await getAuthUserId(ctx))) throw new ConvexError("Not allowed.");
+  return lock;
+}
+
+/** Too many wrong tries: this session (only) is signed out; its lock stays, marked, until the token can't be used. */
 async function signOutLocked(ctx: MutationCtx, lock: Doc<"sessionLocks">) {
-  await ctx.db.delete(lock._id);
+  await ctx.db.patch(lock._id, { signedOut: true, tries: PIN_TRIES, challenge: undefined });
   for (const t of await ctx.db.query("authRefreshTokens").withIndex("sessionId", (q) => q.eq("sessionId", lock.sessionId)).collect()) await ctx.db.delete(t._id);
   if (await ctx.db.get(lock.sessionId)) await ctx.db.delete(lock.sessionId);
   for (const d of await ctx.db.query("sessionDevices").withIndex("by_session", (q) => q.eq("sessionId", lock.sessionId)).collect()) await ctx.db.delete(d._id);
@@ -137,8 +146,7 @@ export const addPasskey = internalMutation({
 export const lockKeys = internalQuery({
   args: {},
   handler: async (ctx) => {
-    const lock = await lockOf(ctx);
-    if (!lock || lock.userId !== (await getAuthUserId(ctx))) throw new ConvexError("Not allowed.");
+    const lock = await liveLock(ctx);
     const r = await rowOf(ctx, lock.userId);
     return (r?.passkeys ?? []).map((k) => ({ id: k.id, publicKey: k.publicKey, counter: k.counter, transports: k.transports }));
   },
@@ -146,8 +154,7 @@ export const lockKeys = internalQuery({
 export const lockChallenge = internalMutation({
   args: { value: v.string() },
   handler: async (ctx, { value }) => {
-    const lock = await lockOf(ctx);
-    if (!lock || lock.userId !== (await getAuthUserId(ctx))) throw new ConvexError("Not allowed.");
+    const lock = await liveLock(ctx);
     await ctx.db.patch(lock._id, { challenge: { value, at: Date.now() } });
     return null;
   },
@@ -155,8 +162,7 @@ export const lockChallenge = internalMutation({
 export const takeLockChallenge = internalMutation({
   args: {},
   handler: async (ctx) => {
-    const lock = await lockOf(ctx);
-    if (!lock || lock.userId !== (await getAuthUserId(ctx))) throw new ConvexError("Not allowed.");
+    const lock = await liveLock(ctx);
     const c = lock.challenge;
     await ctx.db.patch(lock._id, { challenge: undefined });
     return c && Date.now() - c.at < CHALLENGE_MS ? c.value : null;
@@ -166,12 +172,22 @@ export const takeLockChallenge = internalMutation({
 export const unlockedByPasskey = internalMutation({
   args: { id: v.string(), counter: v.number() },
   handler: async (ctx, a) => {
-    const lock = await lockOf(ctx);
-    if (!lock || lock.userId !== (await getAuthUserId(ctx))) throw new ConvexError("Not allowed.");
+    const lock = await liveLock(ctx);
     const r = await rowOf(ctx, lock.userId);
     if (!r?.passkeys.some((k) => k.id === a.id)) throw new ConvexError("Not allowed.");
     await ctx.db.patch(r._id, { passkeys: r.passkeys.map((k) => (k.id === a.id ? { ...k, counter: a.counter } : k)), updatedAt: Date.now() });
     await ctx.db.delete(lock._id);
     return null;
+  },
+});
+
+/** Review L3: daily, marks and locks whose session has ended and whose token can no longer be used are cleared. */
+export const sweep = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const old = Date.now() - 3 * 3_600_000; // tokens live an hour; a margin
+    let n = 0;
+    for (const l of await ctx.db.query("sessionLocks").collect()) if (l.at < old && !(await ctx.db.get(l.sessionId))) { await ctx.db.delete(l._id); n++; }
+    return n;
   },
 });

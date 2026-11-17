@@ -7,6 +7,7 @@
 // own link (/cv/<token>): Can view reads it, Can edit changes it (no uploads).
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import rough from "roughjs";
+import { haptic } from "../../lib/haptic";
 import { useMutation, useQuery } from "convex/react";
 import {
   MousePointer2, Hand, Pencil, Eraser, Type, Square, Circle, ArrowRight, Minus as LineIcon, ImagePlus, Box, Lock, LockOpen, Undo2, Redo2, Minus, Plus, Menu, CircleQuestionMark,
@@ -40,7 +41,7 @@ const mb = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024)
 export function CanvasList() {
   const list = useQuery(api.canvas.list);
   const [f, setF] = useState<"all" | "canvas" | "mood" | "shared" | "loose">("all");
-  const [open, setOpen] = useState<null | "canvas" | "mood">(() => (new URLSearchParams(location.search).has("new") ? "canvas" : null));
+  const [open, setOpen] = useState<null | "canvas" | "mood">(() => (new URLSearchParams(location.search).get("new") === "mood" ? "mood" : new URLSearchParams(location.search).has("new") ? "canvas" : null));
   const [toast, show] = useToast();
   const all = list ?? [];
   const rows = all.filter((c) => f === "all" || (f === "shared" ? c.shared > 0 : f === "loose" ? !c.home : c.kind === f));
@@ -547,7 +548,7 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
       setSel(next);
       const start = new Map(itemsRef.current.filter((i) => next.includes(i.id) && !i.locked).map((i) => [i.id, { x: i.x, y: i.y }]));
       gesture.current = { kind: "move", sx: e.clientX, sy: e.clientY, start, moved: false };
-      if (e.pointerType === "touch") { const cx = e.clientX, cy = e.clientY; holdTimer.current = window.setTimeout(() => { setCtxMenu({ x: cx, y: cy }); gesture.current = null; }, 500); }
+      if (e.pointerType === "touch") { const cx = e.clientX, cy = e.clientY; holdTimer.current = window.setTimeout(() => { haptic(); setCtxMenu({ x: cx, y: cy }); gesture.current = null; }, 500); }
       return;
     }
     if (e.pointerType === "touch") { gesture.current = { kind: "pan", sx: e.clientX, sy: e.clientY, px: pan.x, py: pan.y }; setSel([]); setEditing(null); return; }

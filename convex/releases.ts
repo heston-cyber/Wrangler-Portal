@@ -174,7 +174,8 @@ export const handOver = mutation({
     const device = tidy(a.device, 40) || "a phone";
     const owner = (me.name ?? "").trim().split(" ")[0] || "The owner";
     const out = await sendInPersonCore(ctx, ver!._id, { device: `${owner}'s ${device}`, place: s?.location ?? null, by: me.name?.trim() || me.email });
-    // Q2 (Nov 17): this sign-in locks until the owner hands it back (PIN or passkey); with no PIN set, nothing happens.
+    // Q2 (Nov 17): this sign-in locks until the owner hands it back (PIN or passkey). With no PIN set, the hand-over is
+    // refused and nothing above it is kept (the mutation rolls back).
     await lockForRelease(ctx, me.userId, r._id);
     await ctx.db.patch(r._id, { updatedAt: Date.now() });
     return { ...out, signer: r.name };

@@ -25,7 +25,7 @@ export const me = query({
     const lock = await lockOf(ctx);
     if (lock && lock.userId === userId) {
       const r = await ctx.db.get(lock.releaseId);
-      return { id: userId, email, name: (user.name as string | undefined) || fallback, allowed: false, role: null, sides: [] as Awaited<ReturnType<typeof sidesOf>>, team: null, tools: undefined as ReturnType<typeof toolsOf> | undefined, locked: { releaseId: lock.releaseId, signer: r?.name ?? "the signer" } };
+      return { id: userId, email, name: (user.name as string | undefined) || fallback, allowed: false, role: null, sides: [] as Awaited<ReturnType<typeof sidesOf>>, team: null, tools: undefined as ReturnType<typeof toolsOf> | undefined, locked: { releaseId: lock.releaseId, signer: r?.name ?? "the signer", signedOut: !!lock.signedOut } };
     }
     const v = await viewerOf(ctx);
     const owner = v.kind === "owner";

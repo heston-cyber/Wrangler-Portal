@@ -280,6 +280,15 @@ export default function App() {
   return <SignedIn />;
 }
 
+function LockedOut({ onSignOut }: { onSignOut: () => void }) {
+  useEffect(() => { onSignOut(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <SystemPage icon="lock" eyebrow="Wrangler Portal" title="This phone was signed out." body="Too many wrong PINs. Sign in again with your password.">
+      <Button style={{ alignSelf: "flex-start" }} onClick={() => location.assign("/")}>Sign in</Button>
+    </SystemPage>
+  );
+}
+
 function SignedIn() {
   const me = useQuery(api.users.me);
   useDeviceCheckIn(!!me && me.role !== "guest" && me.role !== null); // Phase 5e step 2: Settings › Security's devices, email 47
@@ -295,6 +304,8 @@ function SignedIn() {
   if (me === undefined) return <Loading />;
   // Q2 (Nov 17): a phone handed over for a release shows only that release and its hand-back, whatever page is opened
   // (the same element as the release page's own route, so the signing in progress keeps its place).
+  // Review H1: after five wrong PINs the session was ended on the server; this browser signs out too.
+  if (me?.locked?.signedOut) return <LockedOut onSignOut={() => void signOut()} />;
   if (me?.locked) return <Suspense fallback={<Loading />}><ReleaseSigning key={me.locked.releaseId} releaseId={me.locked.releaseId} /></Suspense>;
   // Phase 5b step 4 (D127): a call-sheet guest sees their call sheets and nothing else, whatever address they open.
   if (me && me.role === "guest") return <Suspense fallback={<Loading />}><GuestApp token={null} /></Suspense>;

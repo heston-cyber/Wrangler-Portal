@@ -34,7 +34,7 @@ export default function PackingListsPage() {
   const create = useMutation(api.packing.create);
   const duplicate = useMutation(api.packing.duplicate);
   const [toast, show] = useToast();
-  const [naming, setNaming] = useState(false);
+  const [naming, setNaming] = useState(() => new URLSearchParams(location.search).has("new")); // Nov 17: Production › Create
   const [name, setName] = useState("");
   const make = async () => { try { const id = await create({ name }); navigate(`/production/gear/packing/${id}`); } catch (e) { show(errLine(e)); } };
   return (

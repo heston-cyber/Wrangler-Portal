@@ -9,6 +9,8 @@ crons.interval("dropbox drop folder", { minutes: 1 }, internal.dropbox.sync, {})
 crons.interval("bunny storage sizes", { hours: 12 }, internal.uploads.refreshStorage, {});
 // Phase 2 Part B step 4 (D51): automatic invoice reminders, for businesses that turned them on.
 crons.interval("invoice reminders", { hours: 1 }, internal.invoiceReminders.runDue, {});
+// Q2 review L3 (Nov 17): handed-over sign-ins whose session ended are cleared once their token can no longer be used.
+crons.interval("hand-back sweep", { hours: 6 }, internal.handBack.sweep, {});
 // Phase 2b (D62): the upcoming-charge email, 7 days before each subscription charge.
 crons.interval("subscription upcoming charges", { hours: 1 }, internal.subscriptions.runUpcoming, {});
 // Pay in portal (Nov 2): vendor payouts still on their way (or recently posted, in case the bank returns one).

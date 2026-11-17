@@ -83,6 +83,11 @@ describe("delivery", () => {
     expect(invs[0]).toMatchObject({ status: "draft", deliveryId, projectId: w.p, totalCents: 15000, billTo: { email: "maya@harbor.example", name: "Maya Brooks" } });
     expect((await w.heston.query(api.delivery.get, { projectId: w.p })).delivery.renewalInvoiceId).toBe(invs[0]._id);
     const nextYear = plus(today(), 20).replace(/^(\d{4})/, (y) => String(Number(y) + 1));
+    // Review M1: while it waits, the renewal can't be changed under it, and the client can't make a second one.
+    await expect(w.heston.mutation(api.delivery.renewal, { deliveryId, choice: "offer" })).rejects.toThrow(/renewal invoice is waiting/);
+    await expect(w.heston.mutation(api.delivery.renewal, { deliveryId, choice: "free" })).rejects.toThrow(/renewal invoice is waiting/);
+    await expect(w.heston.mutation(api.delivery.renewed, { deliveryId })).rejects.toThrow(/renewal invoice is waiting/);
+    await expect(w.heston.mutation(api.delivery.setTerm, { deliveryId, keptUntil: plus(today(), 25) })).rejects.toThrow(/renewal invoice is waiting/);
     // Deleting the draft: the client can answer again; Keep it drafts a fresh one.
     await w.heston.mutation(api.invoices.deleteDraft, { invoiceId: invs[0]._id });
     expect((await w.heston.query(api.delivery.get, { projectId: w.p })).delivery).toMatchObject({ renewal: { status: "offered" }, renewalInvoiceId: null });
@@ -92,6 +97,7 @@ describe("delivery", () => {
     await w.t.run((ctx) => ctx.db.patch(inv2._id, { status: "open", stripe: { accountId: "acct_A", invoiceId: "in_dl", customerId: "cus_1", livemode: false } }));
     await w.t.mutation(anyApi.invoices.applyStripeInvoice, { accountId: "acct_A", invoice: { id: "in_dl", status: "paid", total: 15000, amount_paid: 15000, amount_remaining: 0 }, eventType: "invoice.paid" });
     expect((await w.heston.query(api.delivery.get, { projectId: w.p })).delivery).toMatchObject({ keptUntil: nextYear, renewal: { status: "renewed" }, renewalInvoiceId: null });
+    expect((await w.heston.query(api.delivery.get, { projectId: w.p })).delivery.renewalInvoiceId).toBeNull();
     // Paid twice (a repeated webhook) adds nothing more; Mark it renewed still works for a renewal paid another way.
     await w.t.mutation(anyApi.invoices.applyStripeInvoice, { accountId: "acct_A", invoice: { id: "in_dl", status: "paid", total: 15000, amount_paid: 15000, amount_remaining: 0 }, eventType: "invoice.paid" });
     expect((await w.heston.query(api.delivery.get, { projectId: w.p })).delivery.keptUntil).toBe(nextYear);

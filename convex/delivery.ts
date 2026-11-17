@@ -314,6 +314,7 @@ export const setTerm = mutation({
     if (a.priceCents !== undefined || a.termYears !== undefined || (a.keptUntil && a.keptUntil > (d.keptUntil ?? ""))) await requireAll(ctx, "payments");
     if (a.priceCents !== undefined && (!Number.isFinite(a.priceCents) || a.priceCents < 0 || a.priceCents > 1_000_000)) throw new ConvexError("Set a yearly price up to $10,000.");
     if (a.termYears !== undefined && (!Number.isInteger(a.termYears) || a.termYears < 1 || a.termYears > 10)) throw new ConvexError("Pick a term of 1 to 10 years.");
+    if (a.keptUntil && a.keptUntil !== d.keptUntil && (await waitingInvoice(ctx, d))) throw new ConvexError(WAITING);
     await ctx.db.patch(d._id, { ...(a.keptUntil ? { keptUntil: a.keptUntil, reminded: [], renewal: undefined, ...(d.state === "ended" && a.keptUntil > todayCentral() ? { state: "published" as const, endedAt: undefined } : {}) } : {}), ...(a.priceCents !== undefined ? { priceCents: Math.round(a.priceCents) } : {}), ...(a.termYears !== undefined ? { termYears: a.termYears } : {}), updatedAt: Date.now() });
     return null;
   },
@@ -327,6 +328,7 @@ export const renewal = mutation({
     if (a.choice !== "end") await requireAll(ctx, "payments"); // review M2: offering a price or a free year needs Payments
     const d = await deliveryOf(ctx, a.deliveryId);
     if (!d.keptUntil) throw new ConvexError("Publish it first.");
+    if (await waitingInvoice(ctx, d)) throw new ConvexError(WAITING);
     const now = Date.now();
     if (a.choice === "free") await ctx.db.patch(d._id, { keptUntil: addYears(d.keptUntil > todayCentral() ? d.keptUntil : todayCentral(), 1), renewal: { status: "free", at: now }, reminded: [], ...(d.state === "ended" ? { state: "published" as const, endedAt: undefined } : {}), updatedAt: now });
     else if (a.choice === "offer") await ctx.db.patch(d._id, { renewal: { status: "offered", at: now }, updatedAt: now });
@@ -342,6 +344,7 @@ export const renewed = mutation({
     await requireAll(ctx, "payments");
     const d = await deliveryOf(ctx, a.deliveryId);
     if (!d.keptUntil) throw new ConvexError("Publish it first.");
+    if (await waitingInvoice(ctx, d)) throw new ConvexError(WAITING);
     const now = Date.now();
     await ctx.db.patch(d._id, { keptUntil: addYears(d.keptUntil > todayCentral() ? d.keptUntil : todayCentral(), 1), renewal: { status: "renewed", at: now }, renewalInvoiceId: undefined, reminded: [], ...(d.state === "ended" ? { state: "published" as const, endedAt: undefined } : {}), updatedAt: now });
     return null;
@@ -441,6 +444,13 @@ async function clientDelivery(ctx: Ctx, deliveryId: Id<"deliveries">) {
   return { me, d };
 }
 
+/** Review M1 (Nov 17): the renewal invoice this delivery is waiting on (drafted, sending or sent, not paid or voided). */
+async function waitingInvoice(ctx: Ctx, d: Doc<"deliveries">) {
+  const i = d.renewalInvoiceId ? await ctx.db.get(d.renewalInvoiceId) : null;
+  return i && (i.status === "draft" || i.status === "sending" || i.status === "open") ? i : null;
+}
+const WAITING = "Its renewal invoice is waiting: paid, it adds the year. Delete or void it first (Payments › Invoices) to change the renewal.";
+
 /** Q6: next year's invoice, drafted (never sent): billed to the client person who chose Keep it, due by the end date. */
 async function draftRenewal(ctx: MutationCtx, d: Doc<"deliveries">, p: Doc<"projects">, who: { name: string; email: string }, priceCents: number) {
   const now = Date.now();
@@ -458,12 +468,13 @@ async function draftRenewal(ctx: MutationCtx, d: Doc<"deliveries">, p: Doc<"proj
   });
 }
 
-/** Q6 (called from invoices when one is paid): the invoice this delivery's year waits on adds the year. */
+/** Q6 (called from invoices when one is paid): a paid renewal invoice adds the year, once each. */
 export async function deliveryPaid(ctx: MutationCtx, i: Doc<"invoices">) {
   const d = i.deliveryId ? await ctx.db.get(i.deliveryId) : null;
-  if (!d || d.renewalInvoiceId !== i._id || !d.keptUntil) return;
+  // Review M1: any paid renewal invoice of this delivery adds its year, once (not only the one it points at).
+  if (!d || !d.keptUntil || (d.renewalsPaid ?? []).includes(i._id)) return;
   const now = Date.now();
-  await ctx.db.patch(d._id, { keptUntil: addYears(d.keptUntil > todayCentral() ? d.keptUntil : todayCentral(), 1), renewal: { status: "renewed", at: now }, renewalInvoiceId: undefined, reminded: [], ...(d.state === "ended" ? { state: "published" as const, endedAt: undefined } : {}), updatedAt: now });
+  await ctx.db.patch(d._id, { keptUntil: addYears(d.keptUntil > todayCentral() ? d.keptUntil : todayCentral(), 1), renewal: { status: "renewed", at: now }, renewalsPaid: [...(d.renewalsPaid ?? []), i._id], ...(d.renewalInvoiceId === i._id ? { renewalInvoiceId: undefined } : {}), reminded: [], ...(d.state === "ended" ? { state: "published" as const, endedAt: undefined } : {}), updatedAt: now });
   const p = await ctx.db.get(d.projectId);
   if (d.businessId && p) await ctx.scheduler.runAfter(0, internal.bell.post, { businessId: d.businessId, kind: "payments", title: `${label(p)}'s Delivery renewal is paid: kept another year`, key: `delivery-paid:${d._id}:${i._id}`, link: `/delivery/${p._id}`, projectId: p._id });
 }
@@ -487,7 +498,8 @@ export const clientAnswer = mutation({
     // Heston (Nov 17, Q6): Keep it drafts next year's invoice for the owner to send, as storage renewals do (D140).
     // Nothing goes to the client until the owner sends it; paid, the delivery gets its year (deliveryPaid).
     const price = Math.round(d.priceCents ?? (await settingsOf(ctx, d.businessId)).priceCents);
-    const invoiceId = a.keep && price > 0 ? await draftRenewal(ctx, d, p, { name: by, email: me.email }, price) : undefined;
+    const waiting = await waitingInvoice(ctx, d); // review M1: never a second one while one waits
+    const invoiceId = !a.keep ? undefined : waiting ? waiting._id : price > 0 ? await draftRenewal(ctx, d, p, { name: by, email: me.email }, price) : undefined;
     await ctx.db.patch(d._id, { renewal: { status: a.keep ? "kept" : "declined", at: Date.now(), by }, ...(invoiceId ? { renewalInvoiceId: invoiceId } : {}), updatedAt: Date.now() });
     // Review M4: the owner hears at once (bell, with a phone alert where Payments alerts are on).
     if (d.businessId) await ctx.scheduler.runAfter(0, internal.bell.post, { businessId: d.businessId, kind: "payments", title: `${by} ${a.keep ? "wants to keep" : "doesn't need"} ${label(p)}'s Delivery another year${a.keep ? (invoiceId ? ": the invoice is drafted, send it" : ": send the invoice") : ""}`, key: `delivery-renewal:${d._id}:${d.keptUntil}`, link: invoiceId ? `/payments/invoices/${invoiceId}` : `/delivery/${p._id}?renew=1`, projectId: p._id });

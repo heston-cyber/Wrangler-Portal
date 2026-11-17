@@ -13,10 +13,11 @@ import { SITE } from "./lib/site";
 /** Where the portal runs (SITE_URL: the live site, or the preview's own) and local development only. The passkey
  *  belongs to the site's parent domain, so one works on the live site and the preview alike. */
 function site(origin: string) {
-  const ok = [new URL(SITE()).origin, "http://localhost:5173", "http://localhost:5199"];
+  // Review L6: local development's addresses only where it's switched on; the passkey's domain can be set (RP_ID).
+  const ok = [new URL(SITE()).origin, ...(process.env.PASSKEY_LOCALHOST === "1" ? ["http://localhost:5173", "http://localhost:5199"] : [])];
   if (!ok.includes(origin)) throw new ConvexError("Passkeys work on the portal's own address.");
   const host = new URL(origin).hostname;
-  return { origin, rpID: host === "localhost" ? "localhost" : host.split(".").slice(-2).join(".") };
+  return { origin, rpID: host === "localhost" ? "localhost" : process.env.RP_ID || host.split(".").slice(-2).join(".") };
 }
 const transports = (t?: string[]) => t as AuthenticatorTransportFuture[] | undefined;
 

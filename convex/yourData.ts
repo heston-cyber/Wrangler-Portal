@@ -547,7 +547,7 @@ export const deleteStep = internalMutation({
         if (await stillBelongs(ctx as unknown as MutationCtx, u)) continue;
         await endSessions(ctx as unknown as MutationCtx, u);
         for (const a of await ctx.db.query("authAccounts").withIndex("userIdAndProvider", (q) => q.eq("userId", u)).collect()) await ctx.db.delete(a._id);
-        for (const t of ["sessionDevices", "emailChanges", "alertPrefs", "pushSubs"] as const) for (const row of await ctx.db.query(t).withIndex("by_user", (q) => q.eq("userId", u)).collect()) await ctx.db.delete(row._id);
+        for (const t of ["sessionDevices", "emailChanges", "alertPrefs", "pushSubs", "handBack", "sessionLocks"] as const) for (const row of await ctx.db.query(t).withIndex("by_user", (q) => q.eq("userId", u)).collect()) await ctx.db.delete(row._id);
         for (const row of await ctx.db.query("userPrefs").withIndex("by_user_key", (q) => q.eq("userId", u)).collect()) await ctx.db.delete(row._id);
         await ctx.db.delete(u);
       }
