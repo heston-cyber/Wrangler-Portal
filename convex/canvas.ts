@@ -40,7 +40,7 @@ async function urls(ctx: Ctx, c: Doc<"canvases">, onlyUsed = false) {
 async function preview(ctx: Ctx, c: Doc<"canvases">) {
   const it = itemsOf(c).slice(0, 60);
   const shown = [];
-  for (const x of it.slice(0, 30)) shown.push({ type: x.type, x: x.x, y: x.y, w: x.w, h: x.h, color: x.color ?? null, src: x.type === "image" && x.fileId ? await ctx.storage.getUrl(x.fileId as Id<"_storage">) : null });
+  for (const x of it.slice(0, 30)) shown.push({ type: x.type, x: x.x, y: x.y, w: x.w, h: x.h, color: x.color ?? null, fill: x.fill ?? null, pts: x.type === "arrow" || x.type === "line" ? (x.points ?? []).slice(0, 4) : null, src: x.type === "image" && x.fileId ? await ctx.storage.getUrl(x.fileId as Id<"_storage">) : null });
   return shown;
 }
 

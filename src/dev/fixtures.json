@@ -17793,6 +17793,75 @@
      ],
      "stroke": 4,
      "color": "#E10600"
+    },
+    {
+     "id": "e1",
+     "type": "ellipse",
+     "x": 1640,
+     "y": 170,
+     "w": 220,
+     "h": 150,
+     "z": 9,
+     "color": "#56A2E8",
+     "fill": "#154163",
+     "stroke": 2,
+     "rough": 1,
+     "seed": 11
+    },
+    {
+     "id": "a1",
+     "type": "arrow",
+     "x": 1520,
+     "y": 250,
+     "w": 110,
+     "h": 10,
+     "z": 10,
+     "points": [
+      110,
+      0,
+      0,
+      10
+     ],
+     "color": "#D3D3D3",
+     "stroke": 2,
+     "rough": 1,
+     "seed": 5
+    },
+    {
+     "id": "r1",
+     "type": "box",
+     "x": 1640,
+     "y": 380,
+     "w": 240,
+     "h": 140,
+     "z": 11,
+     "color": "#FF8383",
+     "fill": null,
+     "stroke": 2,
+     "rough": 1,
+     "round": true,
+     "seed": 9,
+     "text": "Hero shot"
+    },
+    {
+     "id": "ln1",
+     "type": "line",
+     "x": 1640,
+     "y": 560,
+     "w": 240,
+     "h": 40,
+     "z": 12,
+     "points": [
+      0,
+      40,
+      240,
+      0
+     ],
+     "color": "#3A994C",
+     "stroke": 4,
+     "dash": "dashed",
+     "rough": 0,
+     "seed": 3
     }
    ],
    "rev": 3,

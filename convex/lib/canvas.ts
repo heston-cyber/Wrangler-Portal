@@ -1,7 +1,9 @@
 // 5l round 2: what a board's items are, and the checks every save goes through (server and the board share them).
 import { ConvexError } from "convex/values";
 
-export type CanvasType = "note" | "box" | "text" | "pen" | "image" | "pdf" | "file" | "link" | "table" | "frame";
+// Nov 17 (Heston): rectangles ("box"), circles ("ellipse"), arrows and lines, with stroke, background, width, style,
+// sloppiness, edges and opacity, as in the canvas style panel.
+export type CanvasType = "note" | "box" | "ellipse" | "arrow" | "line" | "text" | "pen" | "image" | "pdf" | "file" | "link" | "table" | "frame";
 export type CanvasItem = {
   id: string; type: CanvasType; x: number; y: number; w: number; h: number; z: number;
   locked?: boolean;
@@ -11,7 +13,12 @@ export type CanvasItem = {
   text?: string;             // note, text, box label, frame title, link title
   size?: "S" | "M" | "L" | "XL"; weight?: "regular" | "bold";
   points?: number[];         // pen: x,y pairs relative to the item
-  stroke?: number;           // pen width
+  stroke?: number;           // stroke width (pen, shapes, lines)
+  dash?: "solid" | "dashed" | "dotted";
+  rough?: 0 | 1 | 2;         // sloppiness: clean, a little rough, very rough
+  round?: boolean;           // rectangle edges
+  opacity?: number;          // 0–100
+  seed?: number;             // keeps a rough shape's look the same on every draw
   fileId?: string; name?: string; mime?: string; bytes?: number; page?: number; // image, pdf, file
   url?: string; site?: string; // link
   rows?: string[][];         // table cells
@@ -19,7 +26,7 @@ export type CanvasItem = {
 
 export const CANVAS_LIMITS = { bytes: 25 * 1024 * 1024, files: 200, items: 2000 } as const;
 export const BOARD = { w: 4000, h: 3000 } as const; // the board's edge (Q137: "Board on the page background with its edge visible")
-const TYPES = new Set<CanvasType>(["note", "box", "text", "pen", "image", "pdf", "file", "link", "table", "frame"]);
+const TYPES = new Set<CanvasType>(["note", "box", "ellipse", "arrow", "line", "text", "pen", "image", "pdf", "file", "link", "table", "frame"]);
 const HEX = /^#[0-9a-f]{6}$/i;
 const num = (n: unknown, lo: number, hi: number, d = 0) => (typeof n === "number" && Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d);
 const str = (s: unknown, n: number) => (typeof s === "string" ? s.slice(0, n) : undefined);
@@ -49,6 +56,12 @@ export function cleanItems(raw: unknown, files: Set<string>): CanvasItem[] {
     if (r.weight === "bold" || r.weight === "regular") it.weight = r.weight;
     if (Array.isArray(r.points)) it.points = (r.points as unknown[]).slice(0, 4000).map((n) => Math.round(num(n, -BOARD.w, BOARD.w) * 10) / 10);
     if (r.stroke !== undefined) it.stroke = num(r.stroke, 1, 40, 3);
+    if (r.dash === "solid" || r.dash === "dashed" || r.dash === "dotted") it.dash = r.dash;
+    if (r.rough === 0 || r.rough === 1 || r.rough === 2) it.rough = r.rough;
+    if (typeof r.round === "boolean") it.round = r.round;
+    if (r.opacity !== undefined) it.opacity = Math.round(num(r.opacity, 0, 100, 100));
+    if (r.seed !== undefined) it.seed = Math.round(num(r.seed, 1, 2 ** 31 - 1, 1));
+    if ((r.type === "arrow" || r.type === "line") && (it.points?.length ?? 0) < 4) continue;
     if (fileId) { it.fileId = fileId; it.name = str(r.name, 140) ?? "File"; it.mime = str(r.mime, 100) ?? ""; it.bytes = num(r.bytes, 0, CANVAS_LIMITS.bytes); if (r.page !== undefined) it.page = Math.round(num(r.page, 1, 999, 1)); }
     if (r.type === "link") { const u = str(r.url, 500) ?? ""; if (!/^https?:\/\//i.test(u)) continue; it.url = u; it.site = str(r.site, 80) ?? ""; }
     if (Array.isArray(r.rows)) it.rows = (r.rows as unknown[]).slice(0, 40).map((row) => (Array.isArray(row) ? row.slice(0, 20).map((c) => str(c, 500) ?? "") : []));

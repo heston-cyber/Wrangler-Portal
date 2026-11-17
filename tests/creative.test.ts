@@ -119,6 +119,21 @@ describe("creative planning", () => {
     expect(refusedFile("deck.pdf", "application/pdf", 10)).toBeNull();
     expect(() => cleanItems([{ id: "a", type: "link", url: "javascript:alert(1)", x: 0, y: 0, w: 1, h: 1, z: 0 }], new Set())).not.toThrow();
     expect(cleanItems([{ id: "a", type: "link", url: "javascript:alert(1)", x: 0, y: 0, w: 1, h: 1, z: 0 }], new Set())).toEqual([]);
+    // Nov 17 shapes: circles, arrows and lines keep their style; an arrow without ends, a bad style or a diamond is dropped or ignored.
+    const shapes = cleanItems([
+      { id: "c", type: "ellipse", x: 0, y: 0, w: 100, h: 80, z: 1, color: "#FF8383", fill: "#154163", stroke: 4, dash: "dashed", rough: 2, opacity: 60, seed: 42 },
+      { id: "a", type: "arrow", x: 0, y: 0, w: 200, h: 10, z: 2, points: [0, 0, 200, 10], stroke: 2, dash: "dotted", rough: 0 },
+      { id: "l", type: "line", x: 0, y: 0, w: 50, h: 50, z: 3, points: [0, 50, 50, 0], dash: "wavy", rough: 7, opacity: 400, round: "yes" },
+      { id: "r", type: "box", x: 0, y: 0, w: 50, h: 50, z: 4, round: false, fill: null },
+      { id: "x", type: "arrow", x: 0, y: 0, w: 20, h: 20, z: 5 },
+      { id: "d", type: "diamond", x: 0, y: 0, w: 20, h: 20, z: 6 },
+    ], new Set());
+    expect(shapes.map((i) => i.id)).toEqual(["c", "a", "l", "r"]);
+    expect(shapes[0]).toMatchObject({ type: "ellipse", fill: "#154163", stroke: 4, dash: "dashed", rough: 2, opacity: 60, seed: 42 });
+    expect(shapes[1]).toMatchObject({ points: [0, 0, 200, 10], dash: "dotted", rough: 0 });
+    expect(shapes[2]).toMatchObject({ opacity: 100 });
+    expect(shapes[2].dash).toBeUndefined(); expect(shapes[2].rough).toBeUndefined(); expect(shapes[2].round).toBeUndefined();
+    expect(shapes[3]).toMatchObject({ round: false, fill: null });
     // Shared with two people: Can view reads, Can edit saves; neither can upload.
     const viewer = await w.heston.mutation(api.canvas.addPerson, { canvasId: id, email: "maya@harbor.example", role: "view" });
     const editor = await w.heston.mutation(api.canvas.addPerson, { canvasId: id, email: "crew@crew.example", name: "Ana (crew)", role: "edit" });
