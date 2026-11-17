@@ -4,6 +4,7 @@
 // Only the business sees a board until it's shared (D183): with a person (Can view / Can edit, their own link, which
 // the owner copies; nothing is emailed) or by one view-only link. Uploads: 25 MB a file (D90's limit), programs and
 // web pages refused. A mood board is a canvas that starts from the Mood board layout. Owner and team with Projects.
+import { fileLink } from "./lib/fileLinks";
 import { mutation, query, focusBusiness } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -33,14 +34,14 @@ async function urls(ctx: Ctx, c: Doc<"canvases">, onlyUsed = false) {
   const out: Record<string, string | null> = {};
   // Review L5: a shared link gets only the files on the board now.
   const used = new Set(itemsOf(c).map((x) => x.fileId).filter(Boolean) as string[]);
-  for (const f of c.files) if (!onlyUsed || used.has(f)) out[f] = await ctx.storage.getUrl(f);
+  for (const f of c.files) if (!onlyUsed || used.has(f)) out[f] = await fileLink(f, "file"); // Phase 6 M1: a 10-20 minute link
   return out;
 }
 /** A small picture of the board for its card: the items' boxes, with photo addresses (at most 30). */
 async function preview(ctx: Ctx, c: Doc<"canvases">) {
   const it = itemsOf(c).slice(0, 60);
   const shown = [];
-  for (const x of it.slice(0, 30)) shown.push({ type: x.type, x: x.x, y: x.y, w: x.w, h: x.h, color: x.color ?? null, fill: x.fill ?? null, pts: x.type === "arrow" || x.type === "line" ? (x.points ?? []).slice(0, 4) : null, src: x.type === "image" && x.fileId ? await ctx.storage.getUrl(x.fileId as Id<"_storage">) : null });
+  for (const x of it.slice(0, 30)) shown.push({ type: x.type, x: x.x, y: x.y, w: x.w, h: x.h, color: x.color ?? null, fill: x.fill ?? null, pts: x.type === "arrow" || x.type === "line" ? (x.points ?? []).slice(0, 4) : null, src: x.type === "image" && x.fileId ? await fileLink(x.fileId, "image") : null });
   return shown;
 }
 

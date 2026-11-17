@@ -3,6 +3,7 @@
 // attached later (D204: homes.move). A doc or kit is shared by a view-only link (D191): a doc's link shows the PDF made
 // at Share (Update the link makes a new one; team notes stay out), a kit's link shows the kit as it is now. Owner and
 // team with Projects.
+import { fileLink } from "./lib/fileLinks";
 import { focusBusiness, mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -168,7 +169,7 @@ export const sharedDoc = query({
     focusBusiness(ctx, d.businessId);
     const b = await ctx.db.get(d.buildId);
     const biz = d.businessId ? await ctx.db.get(d.businessId) : null;
-    return { title: b?.title ?? "Creative doc", kind: CREATIVE_NAME[d.kind], from: biz?.name ?? null, pdf: await ctx.storage.getUrl(d.share.fileId), at: d.share.at };
+    return { title: b?.title ?? "Creative doc", kind: CREATIVE_NAME[d.kind], from: biz?.name ?? null, pdf: await fileLink(d.share.fileId, `${b?.title ?? "Creative doc"}.pdf`), at: d.share.at }; // Phase 6 M1
   },
 });
 
@@ -300,8 +301,8 @@ export const sharedKit = query({
     const d = kitData(k);
     const biz = k.businessId ? await ctx.db.get(k.businessId) : null;
     return {
-      name: k.name, from: biz?.name ?? null, logo: d.logoFileId ? await ctx.storage.getUrl(d.logoFileId) : null, colors: d.colors, fonts: d.fonts, links: d.links, tone: d.tone,
-      files: await Promise.all(d.files.map(async (f) => ({ name: f.name, size: f.size, url: await ctx.storage.getUrl(f.fileId) }))),
+      name: k.name, from: biz?.name ?? null, logo: await fileLink(d.logoFileId, "logo"), colors: d.colors, fonts: d.fonts, links: d.links, tone: d.tone, // Phase 6 M1
+      files: await Promise.all(d.files.map(async (f) => ({ name: f.name, size: f.size, url: await fileLink(f.fileId, f.name) }))),
     };
   },
 });

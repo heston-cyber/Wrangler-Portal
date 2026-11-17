@@ -5,6 +5,7 @@
 // email's link opens /p/<token>, where they accept or decline (D86) with their typed name, recorded with the time, IP
 // and device, the same way quotes and signing record it. Nothing moves or converts on its own (D84): the Send dialog's
 // "Also move to Quoted" box is unticked by default, and an accepted proposal asks "Start the contract?" (D75).
+import { fileLink } from "./lib/fileLinks";
 import { action, httpAction } from "./_generated/server";
 import { audit } from "./lib/audit";
 import { internalAction, internalMutation, internalQuery, mutation, query, focusBusiness } from "./lib/functions";
@@ -438,8 +439,9 @@ export const page = query({
     const build = await ctx.db.get(p.buildId);
     return {
       number: p.number, title: build?.title ?? "Proposal", status: p.status as "sent" | "accepted" | "declined" | "void", for: forWho(f), via: f.via === "link" ? "link" as const : "email" as const,
-      totalCents: p.totalCents ?? 0, depositCents: p.depositCents ?? 0, depositPct: p.depositPct ?? 0, sentAt: p.sentAt ?? p.createdAt, fromName: p.fromName ?? null,
-      pdfUrl: p.pdfId ? await ctx.storage.getUrl(p.pdfId) : null, answer: stateFor(f),
+      // Phase 6 (Heston, Nov 17): a withdrawn proposal shows its banner only, so its price and PDF aren't sent either
+      totalCents: p.status === "void" ? 0 : p.totalCents ?? 0, depositCents: p.status === "void" ? 0 : p.depositCents ?? 0, depositPct: p.status === "void" ? 0 : p.depositPct ?? 0, sentAt: p.sentAt ?? p.createdAt, fromName: p.fromName ?? null,
+      pdfUrl: p.status === "void" ? null : await fileLink(p.pdfId, `${p.number} ${build?.title ?? "Proposal"}.pdf`), answer: stateFor(f), // Phase 6 M1: a 10-20 minute link; a withdrawn one shows only its banner
       business: { name: b?.name ?? "", logoUrl: b?.logoFileId ? await ctx.storage.getUrl(b.logoFileId) : null, email: b?.replyTo ?? null },
     };
   },
@@ -789,10 +791,10 @@ export const connectorList = internalQuery({
 async function kitOut(ctx: QueryCtx, row: { name: string; brandKit?: unknown; logoFileId?: Id<"_storage">; accent?: string; background?: string } | null) {
   if (!row) return null;
   const k: Kit = { ...EMPTY_KIT, ...((row.brandKit as Partial<Kit> | undefined) ?? {}) };
-  const url = async (id?: Id<"_storage">) => (id ? await ctx.storage.getUrl(id) : null);
+  const url = async (id?: Id<"_storage">, name = "file") => fileLink(id, name); // Phase 6 M1: the connector gets 10-20 minute links
   return {
     name: row.name, logo_url: (await url(k.logoFileId)) ?? (await url(row.logoFileId)), colors: [...[row.accent, row.background].filter(Boolean).map((hex) => ({ hex: hex! })), ...k.colors],
-    fonts: k.fonts, links: k.links, tone_words: k.tone, files: await Promise.all(k.files.map(async (f) => ({ name: f.name, type: f.type, url: await url(f.fileId) }))),
+    fonts: k.fonts, links: k.links, tone_words: k.tone, files: await Promise.all(k.files.map(async (f) => ({ name: f.name, type: f.type, url: await url(f.fileId, f.name) }))),
   };
 }
 
@@ -812,7 +814,7 @@ export const connectorGet = internalQuery({
     const brandAnswers = { colors: bound(qn, ans, "brand.colors") ?? [], fonts: { heading: bound(qn, ans, "brand.heading") ?? null, body: bound(qn, ans, "brand.body") ?? null }, links: bound(qn, ans, "brand.links") ?? [], tone_words: bound(qn, ans, "brand.tone") ?? [] };
     const files = [];
     const own = await ownFiles(ctx, p._id);
-    for (const f of filesIn(ans)) if (own.has(f.fileId)) files.push({ name: f.name, type: f.type, url: await ctx.storage.getUrl(f.fileId as Id<"_storage">) });
+    for (const f of filesIn(ans)) if (own.has(f.fileId)) files.push({ name: f.name, type: f.type, url: await fileLink(f.fileId, f.name) });
     return {
       number: p.number, status: p.status, filling: !!p.filling, title: build.title, link: `${SITE()}/proposals/${p._id}`,
       client: { name: d.fields.client.name, email: d.fields.client.email, company: d.fields.client.company }, project: d.fields.project,

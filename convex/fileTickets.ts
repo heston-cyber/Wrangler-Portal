@@ -8,6 +8,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { randomToken } from "./lib/hash";
+import { checkFileLink } from "./lib/fileLinks";
 
 export const TICKET_MS = 10 * 60_000;
 const TOKEN = /^[A-Za-z0-9_-]{20,64}$/;
@@ -37,4 +38,19 @@ export const route = httpAction(async (ctx, req) => {
   const blob = t ? await ctx.storage.get(t.fileId) : null;
   if (!t || !blob) return new Response("This link has expired. Open the file again from the portal.", { status: 404, headers: { ...headers, "Content-Type": "text/plain" } });
   return new Response(blob, { status: 200, headers: { ...headers, "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${t.name.replace(/"/g, "")}"` } });
+});
+
+const INLINE = /^(application\/pdf|image\/(png|jpeg|gif|webp|avif)|video\/(mp4|quicktime|webm)|audio\/(mpeg|mp4|wav))$/i;
+/** Phase 6 sweep M1: /fl/<file>/<expiry>/<signature>/<name>, a signed link made by lib/fileLinks.ts. Pictures, PDFs and
+ *  media open in place; anything else downloads (never runs on this address). */
+export const linkRoute = httpAction(async (ctx, req) => {
+  const headers: Record<string, string> = { "Cache-Control": "private, max-age=600", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "Access-Control-Allow-Origin": "*" };
+  let path = "";
+  try { path = new URL(req.url).pathname; } catch { path = ""; }
+  const ok = await checkFileLink(path);
+  const blob = ok ? await ctx.storage.get(ok.fileId as Id<"_storage">) : null;
+  if (!ok || !blob) return new Response("This link has expired. Open the file again from the page you found it on.", { status: 404, headers: { ...headers, "Cache-Control": "no-store", "Content-Type": "text/plain" } });
+  const type = blob.type || "application/octet-stream";
+  const inline = INLINE.test(type);
+  return new Response(blob, { status: 200, headers: { ...headers, "Content-Type": inline ? type : "application/octet-stream", "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${ok.name.replace(/"/g, "")}"` } });
 });

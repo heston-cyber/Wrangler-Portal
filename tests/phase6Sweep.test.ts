@@ -49,6 +49,11 @@ describe("Phase 6 sweep fixes", () => {
     expect(sentRows.find((r: { kind: string }) => r.kind === "invoice")).toMatchObject({ title: "Invoice" });
     expect(JSON.stringify(await riley.query(api.inbox.forClient, { clientId: w.harbor }))).not.toMatch(/\$100/);
     expect(JSON.stringify(await w.heston.query(api.inbox.sent, {}))).toMatch(/4,200/); // the owner sees it all
+    // and the CRM contact's activity lines (Phase 6, Heston Nov 17: invoices and payments follow Payments)
+    const person = await w.t.run(async (ctx) => (await ctx.db.query("clientPeople").collect()).find((p) => p.email === "maya@harbor.example")!._id);
+    const act = (await riley.query(api.crm.contact, { personId: person })).activity;
+    expect(JSON.stringify(act)).not.toMatch(/4,200|\$100/);
+    expect(JSON.stringify((await w.heston.query(api.crm.contact, { personId: person })).activity)).toMatch(/4,200/);
     const mine = await w.heston.query(api.inbox.forClient, { clientId: w.harbor });
     expect(mine.find((e: { kind: string }) => e.kind === "invoice")).toMatchObject({ title: "Invoice WRNGLR-0007 · $4,200.00", link: "/i/paytoken123" });
     expect(mine.find((e: { kind: string }) => e.kind === "to_sign")).toMatchObject({ title: "Sign: Service agreement", link: null });

@@ -58,6 +58,17 @@ export default function ClientProposal({ token }: { token: string }) {
   const s = p.status;
   const chip = s === "sent" ? <StatusChip tone="accent">Open</StatusChip> : s === "accepted" ? <StatusChip tone="success">Accepted</StatusChip> : s === "declined" ? <StatusChip tone="danger">Declined</StatusChip> : <StatusChip tone="neutral">Withdrawn</StatusChip>;
   const forName = p.for.anyone ? "Anyone with the link" : p.for.name; // D149: this viewer only
+  // Phase 6 (Heston, Nov 17): a withdrawn proposal shows its banner only, not its pages or price.
+  if (s === "void") return (
+    <Frame inShell={false} bar={null} brand={{ name: p.business.name, logoUrl: p.business.logoUrl }}>
+      <div className="q-public-top"><span className="wp-small">Proposal from {biz}</span></div>
+      <header className="wp-pagehead inv-head">
+        <div className="txt"><span className="wp-eyebrow">Proposal · {p.number}</span><h1 className="wp-h2">{p.title.replace(/\.$/, "")}.</h1></div>
+        {chip}
+      </header>
+      <Banner tone="neutral" icon="info" title="This proposal was withdrawn." text={`${biz} may send you a new one.`} />
+    </Frame>
+  );
   return (
     <Frame inShell={false} bar={null} brand={{ name: p.business.name, logoUrl: p.business.logoUrl }}>
       <div className="q-public-top"><span className="wp-small">Proposal from {biz}</span><span className="sp" />
@@ -77,7 +88,7 @@ export default function ClientProposal({ token }: { token: string }) {
               {s === "sent" && p.depositCents > 0 && <><dt>Deposit to book ({p.depositPct}%)</dt><dd>{money(p.depositCents)}</dd></>}
             </dl>
             <OfferAnswer kind="proposal" token={token} via={p.via} answer={p.answer} open={s === "sent"} biz={biz} number={p.number} replyTo={p.business.email ?? null}
-              closedNote={s === "void" ? <Banner tone="neutral" icon="info" title="This proposal was withdrawn." text={`${biz} may send you a new one.`} /> : null} />
+              closedNote={null} />
           </section>
         </div>
       </div>

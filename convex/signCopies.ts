@@ -3,6 +3,7 @@
 // cancellation if it's cancelled, no reminders; contracts only for now; built in the existing styles without frames.
 // The signers' own email says who is copied. A copy link (/c/<token>) only reads: it never reaches the signing steps,
 // which take wsSignings tokens only (rule 9: signing is unchanged).
+import { fileLink } from "./lib/fileLinks";
 import { internalAction, internalMutation, internalQuery, mutation, query, focusBusiness } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
@@ -136,7 +137,7 @@ export const page = query({
     const signings = (await ctx.db.query("wsSignings").withIndex("by_document", (q) => q.eq("documentId", doc._id).eq("versionNumber", c.versionNumber)).collect()).sort((a, b) => a.order - b.order);
     const ver = await ctx.db.query("wsVersions").withIndex("by_document", (q) => q.eq("documentId", doc._id)).collect().then((vs) => vs.find((x) => x.number === c.versionNumber));
     const signed = doc.status === "completed" && doc.final;
-    const fileUrl = signed ? await ctx.storage.getUrl(doc.final!.fileId) : ver ? await ctx.storage.getUrl(ver.fileId) : null;
+    const fileUrl = signed ? await fileLink(doc.final!.fileId, doc.final!.fileName) : ver ? await fileLink(ver.fileId, ver.fileName ?? `${docLabel(doc.number)}.pdf`) : null; // Phase 6 M1: a 10-20 minute link
     return {
       ...base, state: signed ? "signed" as const : "sent" as const, fileUrl, fileName: signed ? doc.final!.fileName : ver?.fileName ?? `${docLabel(doc.number)}.pdf`,
       completedAt: doc.completedAt ?? null, expiresAt: doc.expiresAt ?? null,

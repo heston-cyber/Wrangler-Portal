@@ -1,6 +1,7 @@
 // Wrangler Sign's Claude connector, data side (Phase S4, Oct 27): its keys (separate from Wrangler Review's, so one
 // can be revoked without the other) and the lookups its tools use. Keys are stored only as SHA-256 hashes; the full
 // key is shown once, on the Contracts page.
+import { fileLink } from "./lib/fileLinks";
 import { action } from "./_generated/server";
 import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
 import type { QueryCtx } from "./_generated/server";
@@ -135,6 +136,7 @@ export const signedCopy = internalQuery({
   handler: async (ctx, { documentId }) => {
     const doc = (await ctx.db.get(documentId))!;
     if (!doc.final) return null;
-    return { document: docLabel(doc.number), title: doc.title, file_name: doc.final.fileName, sha256: doc.final.sha256, bytes: doc.final.bytes, url: await ctx.storage.getUrl(doc.final.fileId), fileId: doc.final.fileId, completed: doc.completedAt ? new Date(doc.completedAt).toISOString() : null };
+    // Phase 6 M1: the link lasts 10-20 minutes
+    return { document: docLabel(doc.number), title: doc.title, file_name: doc.final.fileName, sha256: doc.final.sha256, bytes: doc.final.bytes, url: await fileLink(doc.final.fileId, doc.final.fileName), fileId: doc.final.fileId, completed: doc.completedAt ? new Date(doc.completedAt).toISOString() : null };
   },
 });

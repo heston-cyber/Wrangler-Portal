@@ -94,13 +94,15 @@ describe("Phase 5e · Your data", () => {
     expect(everything).not.toMatch(/STRIPEHOSTEDSECRET|STRIPEPDFSECRET|UNSUBSCRIBEKEYSECRET/);
     expect(files["records/inboxItems.json"]).toContain("/i/[removed]");
     expect(files["records/invoices.json"]).toContain("acct_1Pq9WranglerAcct"); // Stripe's own ids aren't secrets
-    expect(files["files.csv"].trim().split("\r\n").filter((l) => l.startsWith("vendors,"))).toHaveLength(1); // the W-9, not the pasted id
+    expect(files["files.csv"].trim().split("\r\n").filter((l) => l.startsWith("vendors,"))).toHaveLength(0); // Phase 6 H1: no W-9, nor the pasted id
     expect(files["files.csv"]).toMatch(/clients,[a-z0-9]+,brandKit\.files\[0\]\.fileId,http/); // a file in a brand kit
     expect(files["files.csv"]).not.toMatch(/brandKit\.files\[1\]/); // the planted pointer at B's file
     expect(files["records/connectorKeys.json"]).toBeUndefined();
     for (const [name, text] of Object.entries(files)) if (name.endsWith(".json")) for (const k of keysIn(JSON.parse(text))) expect(SECRET_FIELDS.has(k), `${name}: ${k}`).toBe(false);
-    expect(files["files.csv"]).toMatch(/vendors,[a-z0-9]+,w9\.fileId,http/);
-    expect(files["vendors.csv"]).toContain("Jordan Ellis,jordan@x.example,Shooter,Yes");
+    // Phase 6 sweep H1 (Heston, Nov 17): no W-9 link anywhere in the zip; vendors.csv says when it was uploaded
+    expect(files["files.csv"]).not.toMatch(/w9/);
+    expect(files["vendors.csv"]).toContain("Jordan Ellis,jordan@x.example,Shooter,\"Yes, uploaded 1970-01-01 (open it from the vendor's page)\"");
+    expect(files["README.txt"]).toContain("W-9s are not in this export");
     expect(mails.filter((m) => m.to === "heston@wranglerproductions.com").map((m) => m.subject)).toEqual(["Your Wrangler Productions export is ready"]);
     const rows = await w.t.run(async (ctx) => (await ctx.db.query("auditLog").collect()).map((r) => r.text));
     expect(rows).toContain("asked for an export of everything");
@@ -223,7 +225,7 @@ describe("Phase 5e · Your data", () => {
     const st = await w.heston.query(api.yourData.state, {});
     expect(st.safety).toEqual([expect.objectContaining({ name: "Other Films" })]);
     expect(await w.heston.mutation(api.yourData.finalExportLink, { deletionId: d._id })).toMatch(/^http/);
-    expect(files["files.csv"]).toMatch(/vendors,[a-z0-9]+,w9\.fileId,http/);
+    expect(files["files.csv"]).not.toMatch(/w9/); // Phase 6 H1: the safety net holds no W-9 link either
     // Day 30 after: the export and the files kept with it go; Wrangler's file stays.
     vi.setSystemTime(deleteAt + 31 * 86_400_000);
     await w.t.mutation(internal.yourData.purge, {});
