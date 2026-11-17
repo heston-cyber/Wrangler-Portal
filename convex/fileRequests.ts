@@ -16,6 +16,7 @@ import type { ActionCtx, MutationCtx, QueryCtx } from "./_generated/server";
 import { requireMe, requireSignedIn, requireAll } from "./lib/access";
 import { businessOf, postToInbox } from "./lib/inbox";
 import { myProjects, portalPeople } from "./projects";
+import { clientMayOpen, peopleAt, placeOf, type Placed } from "./lib/placed";
 import { label } from "./lib/bookingRows";
 import { todayCentral } from "./lib/bookings";
 import { businessContact } from "./lib/business";
@@ -45,6 +46,8 @@ async function baseFolder(ctx: Ctx, p: Doc<"projects">) {
   const client = p.clientId ? (await ctx.db.get(p.clientId))?.name : p.client;
   return `/File requests/${safeName(client || "No client", 80)}/${safeName(label(p), 80)}`;
 }
+/** Hierarchy 3c: a request on a client with no project files under the client's own folder. */
+const baseAt = async (ctx: Ctx, w: Placed) => (w.p ? await baseFolder(ctx, w.p) : `/File requests/${safeName(w.c!.name, 80)}`);
 async function ownedProject(ctx: Ctx, projectId: string) {
   const id = ctx.db.normalizeId("projects", projectId);
   const p = id ? await ctx.db.get(id) : null;
@@ -73,34 +76,72 @@ export const forProject = query({
   },
 });
 
+/** Asks for files where `w` is: picks the folder, opens the request, an Inbox item each and email 31. */
+async function ask(ctx: MutationCtx, w: Placed, f: { title: string; details?: string; due: string; folderName?: string; remind: boolean }, draft: Doc<"fileRequests"> | null) {
+  if (f.due < todayCentral()) throw new ConvexError("That date has passed.");
+  if (!(await ctx.db.query("dropbox").first())) throw new ConvexError("Connect Dropbox first (Settings › Dropbox drop folder): the files go to your Dropbox.");
+  const base = `${await baseAt(ctx, w)}/${safeName(f.folderName?.trim() || requestFor(f.title), 80)}`;
+  const near = w.p
+    ? await ctx.db.query("fileRequests").withIndex("by_project", (q) => q.eq("projectId", w.p!._id)).collect()
+    : await ctx.db.query("fileRequests").withIndex("by_client", (q) => q.eq("clientId", w.c!._id)).collect();
+  const used = new Set(near.map((r) => r.folder.toLowerCase()).filter(Boolean));
+  let folder = base;
+  for (let n = 2; used.has(folder.toLowerCase()); n++) folder = `${base} ${n}`;
+  const now = Date.now();
+  let requestId: Id<"fileRequests">;
+  if (draft) {
+    requestId = draft._id;
+    await ctx.db.patch(requestId, { folder, status: "open", updatedAt: now, history: [...draft.history, { at: now, text: "Asked" }] });
+  } else {
+    requestId = await ctx.db.insert("fileRequests", {
+      ...(w.p ? { projectId: w.p._id } : { clientId: w.c!._id }), title: f.title, ...(f.details ? { details: f.details } : {}), due: f.due, folder, remind: f.remind, status: "open", files: [],
+      history: [{ at: now, text: "Asked" }], createdAt: now, updatedAt: now,
+    });
+  }
+  const people = w.businessId ? await peopleAt(ctx, w) : [];
+  for (const person of people) {
+    await postToInbox(ctx, { businessId: w.businessId!, clientId: w.clientId, email: person.email, kind: "files", title: `Files requested: ${requestFor(f.title).replace(/^./, (c) => c.toLowerCase())}`,
+      text: `Due ${shootDay(f.due)}.`, link: `/requests/${requestId}`, linkLabel: "Upload", source: { module: "schedule", id: requestId }, key: `files:${requestId}` });
+  }
+  if (people.length) await ctx.scheduler.runAfter(0, internal.fileRequests.mail, { requestId, kind: "asked", emails: people.map((x) => x.email) });
+  return { requestId, told: people.length, folder };
+}
+
 export const create = mutation({
-  args: { projectId: v.string(), title: v.string(), details: v.optional(v.string()), due: v.string(), folderName: v.optional(v.string()), remind: v.boolean() },
+  // Hierarchy 3c: with no project it's saved as a draft on its own; nothing is sent until it's attached and sent.
+  args: { projectId: v.optional(v.string()), title: v.string(), details: v.optional(v.string()), due: v.string(), folderName: v.optional(v.string()), remind: v.boolean() },
   handler: async (ctx, a) => {
     await requireAll(ctx, "projects");
-    const p = await ownedProject(ctx, a.projectId);
     const title = tidy(a.title, 120);
     if (!title) throw new ConvexError("Say what you need.");
     if (!isDay(a.due)) throw new ConvexError("Pick a due date.");
-    if (a.due < todayCentral()) throw new ConvexError("That date has passed.");
-    if (!(await ctx.db.query("dropbox").first())) throw new ConvexError("Connect Dropbox first (Settings › Dropbox drop folder): the files go to your Dropbox.");
-    const base = `${await baseFolder(ctx, p)}/${safeName(a.folderName?.trim() || requestFor(title), 80)}`;
-    const used = new Set((await ctx.db.query("fileRequests").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect()).map((r) => r.folder.toLowerCase()));
-    let folder = base;
-    for (let n = 2; used.has(folder.toLowerCase()); n++) folder = `${base} ${n}`;
     const details = (a.details ?? "").trim().slice(0, 1000);
-    const now = Date.now();
-    const requestId = await ctx.db.insert("fileRequests", {
-      projectId: p._id, title, ...(details ? { details } : {}), due: a.due, folder, remind: a.remind, status: "open", files: [],
-      history: [{ at: now, text: "Asked" }], createdAt: now, updatedAt: now,
-    });
-    const biz = await businessOf(ctx, p);
-    const people = biz ? await portalPeople(ctx, p) : [];
-    for (const person of people) {
-      await postToInbox(ctx, { businessId: biz!, clientId: p.clientId, email: person.email, kind: "files", title: `Files requested: ${requestFor(title).replace(/^./, (c) => c.toLowerCase())}`,
-        text: `Due ${shootDay(a.due)}.`, link: `/requests/${requestId}`, linkLabel: "Upload", source: { module: "schedule", id: requestId }, key: `files:${requestId}` });
+    if (a.projectId === undefined) {
+      if (a.due < todayCentral()) throw new ConvexError("That date has passed.");
+      const now = Date.now();
+      const requestId = await ctx.db.insert("fileRequests", {
+        title, ...(details ? { details } : {}), due: a.due, folder: "", remind: a.remind, status: "draft", files: [],
+        history: [{ at: now, text: "Made" }], createdAt: now, updatedAt: now,
+      });
+      return { requestId, told: 0, folder: "" };
     }
-    if (people.length) await ctx.scheduler.runAfter(0, internal.fileRequests.mail, { requestId, kind: "asked", emails: people.map((x) => x.email) });
-    return { requestId, told: people.length, folder };
+    const p = await ownedProject(ctx, a.projectId);
+    return await ask(ctx, (await placeOf(ctx, { projectId: p._id }))!, { title, details: details || undefined, due: a.due, folderName: a.folderName, remind: a.remind }, null);
+  },
+});
+
+/** Sends a draft once it's on a project or a client (the owner's own click). */
+export const sendDraft = mutation({
+  args: { requestId: v.string() },
+  handler: async (ctx, { requestId }) => {
+    await requireAll(ctx, "projects");
+    const id = ctx.db.normalizeId("fileRequests", requestId);
+    const r = id ? await ctx.db.get(id) : null;
+    if (!r) throw new ConvexError("That request isn't here any more.");
+    if (r.status !== "draft") throw new ConvexError("It's already been sent.");
+    const w = await placeOf(ctx, r);
+    if (!w) throw new ConvexError("Attach this to a project or client first.");
+    return await ask(ctx, w, { title: r.title, details: r.details, due: r.due, remind: r.remind }, r);
   },
 });
 
@@ -111,6 +152,7 @@ export const setStatus = mutation({
     const r = await ctx.db.get(requestId);
     if (!r) throw new ConvexError("That request isn't here any more.");
     if (r.status === "cancelled") throw new ConvexError("That request was cancelled.");
+    if (r.status === "draft" && status !== "cancelled") throw new ConvexError("Send it first.");
     const now = Date.now();
     await ctx.db.patch(requestId, { status, updatedAt: now, history: [...r.history, { at: now, text: status === "open" ? "Reopened" : status === "closed" ? "Closed" : "Cancelled" }] });
     return null;
@@ -124,11 +166,11 @@ async function clientRequest(ctx: QueryCtx | MutationCtx, requestId: string) {
   if (me.kind !== "client") return null;
   const id = ctx.db.normalizeId("fileRequests", requestId);
   const r = id ? await ctx.db.get(id) : null;
-  if (!r || r.status === "cancelled") return null;
-  const row = (await myProjects(ctx as QueryCtx, me.email)).get(r.projectId);
-  if (!row) return null;
-  const b = row.project.businessId ? await ctx.db.get(row.project.businessId) : null;
-  return { me, r, p: row.project, b };
+  if (!r || r.status === "cancelled" || r.status === "draft") return null;
+  const w = await placeOf(ctx, r);
+  if (!w || !(await clientMayOpen(ctx, me.email, w))) return null;
+  const b = w.businessId ? await ctx.db.get(w.businessId) : null;
+  return { me, r, w, b };
 }
 
 export const forClientProject = query({
@@ -148,11 +190,11 @@ export const page = query({
   handler: async (ctx, { requestId }) => {
     const c = await clientRequest(ctx, requestId);
     if (!c) return null;
-    const contact = await businessContact(ctx, c.p.businessId ?? null);
+    const contact = await businessContact(ctx, c.w.businessId);
     return {
       _id: c.r._id, title: c.r.title, details: c.r.details ?? null, due: c.r.due, open: c.r.status === "open", remind: c.r.remind,
       files: c.r.files.map((f) => ({ name: f.name, size: f.size, at: f.at, mine: f.by === c.me.email })),
-      project: { _id: c.p._id, label: label(c.p) }, business: c.b?.name ?? contact.name, owner: c.b?.ownerName?.trim() || contact.name,
+      project: c.w.p ? { _id: c.w.p._id, label: c.w.label } : null, place: c.w.label, business: c.b?.name ?? contact.name, owner: c.b?.ownerName?.trim() || contact.name,
       maxBytes: MAX_BYTES, today: todayCentral(),
     };
   },
@@ -234,7 +276,7 @@ export const openUpload = internalMutation({
       requestId: a.requestId, email: c.me.email, name: a.name, size: a.size, path: "", mode: a.mode, ...(a.token ? { token: a.token } : {}),
       offset: 0, status: "uploading", expiresAt: now + UPLOAD_HOURS * 3_600_000, createdAt: now,
     });
-    return { uploadId, folder: c.r.folder, businessId: (await businessOf(ctx, c.p)) };
+    return { uploadId, folder: c.r.folder, businessId: c.w.businessId };
   },
 });
 /** A name for the file that's free in Dropbox, on the request and among uploads still on their way: "name (2).ext". */
@@ -289,9 +331,9 @@ export const mineUpload = internalQuery({
     const u = await ctx.db.get(uploadId);
     if (!u || u.email !== me.email || u.expiresAt < Date.now()) return null;
     const r = await ctx.db.get(u.requestId);
-    const p = r && r.status !== "cancelled" ? await ctx.db.get(r.projectId) : null;
-    if (!p) return null;
-    return { ...u, businessId: await businessOf(ctx, p) };
+    const w = r && r.status !== "cancelled" && r.status !== "draft" ? await placeOf(ctx, r) : null;
+    if (!w) return null;
+    return { ...u, businessId: w.businessId };
   },
 });
 
@@ -371,9 +413,9 @@ export const uploadByToken = internalQuery({
     const u = await ctx.db.query("fileUploads").withIndex("by_token", (q) => q.eq("token", token)).first();
     if (!u || u.mode !== "chunks") return null;
     const r = await ctx.db.get(u.requestId);
-    const p = r ? await ctx.db.get(r.projectId) : null;
-    if (!r || !p) return null;
-    return { ...u, open: r.status === "open", businessId: await businessOf(ctx, p) };
+    const w = r ? await placeOf(ctx, r) : null;
+    if (!r || !w) return null;
+    return { ...u, open: r.status === "open", businessId: w.businessId };
   },
 });
 export const advance = internalMutation({
@@ -406,10 +448,10 @@ export const mailData = internalQuery({
   handler: async (ctx, { requestId }) => {
     const r = await ctx.db.get(requestId);
     if (!r || r.status !== "open") return null;
-    const p = await ctx.db.get(r.projectId);
-    if (!p) return null;
-    const biz = await businessOf(ctx, p);
-    return { r, project: label(p), projectId: p._id, biz, brand: await mailBrandOf(ctx, biz), owner: (await businessContact(ctx, biz)).ownerEmail, people: (await portalPeople(ctx, p)).map((x) => x.email) };
+    const w = await placeOf(ctx, r);
+    if (!w) return null;
+    const biz = w.businessId;
+    return { r, project: w.label, biz, brand: await mailBrandOf(ctx, biz), owner: (await businessContact(ctx, biz)).ownerEmail, people: (await peopleAt(ctx, w)).map((x) => x.email) };
   },
 });
 export const mail = internalAction({
@@ -435,7 +477,7 @@ export const mailOwner = internalAction({
     if (!d) return;
     await ctx.runMutation(internal.fileRequests.ownerMailed, { requestId, at });
     await deliverOnce(ctx, `files-uploaded:${requestId}:${at}`, "files_uploaded", d.owner, ownerFilesMail(d.brand, {
-      who: d.who, count: d.count, title: d.title, project: d.project, folder: d.folder, link: `${SITE()}/projects/${d.projectId}`,
+      who: d.who, count: d.count, title: d.title, project: d.project, folder: d.folder, link: `${SITE()}${d.link}`,
     }), d.brand.replyTo, d.biz);
   },
 });
@@ -445,15 +487,15 @@ export const ownerMailData = internalQuery({
   handler: async (ctx, { requestId, at }) => {
     const r = await ctx.db.get(requestId);
     if (!r || r.lastUploadAt !== at) return null;
-    const p = await ctx.db.get(r.projectId);
-    if (!p) return null;
-    const biz = await businessOf(ctx, p);
+    const w = await placeOf(ctx, r);
+    if (!w) return null;
+    const biz = w.businessId;
     const fresh = r.files.filter((f) => f.at > (r.ownerMailedAt ?? 0) && f.at <= at);
     if (!fresh.length) return null;
     const by = fresh[fresh.length - 1].by;
     const who = (await ctx.db.query("users").withIndex("email", (q) => q.eq("email", by)).first())?.name ?? by;
     const owner = (await businessContact(ctx, biz)).ownerEmail;
-    return owner ? { owner, who, count: fresh.length, title: r.title, project: label(p), projectId: p._id, folder: r.folder, biz, brand: await mailBrandOf(ctx, biz) } : null;
+    return owner ? { owner, who, count: fresh.length, title: r.title, project: w.label, link: w.p ? `/projects/${w.p._id}` : `/clients/${w.c!._id}`, folder: r.folder, biz, brand: await mailBrandOf(ctx, biz) } : null;
   },
 });
 
@@ -487,8 +529,8 @@ export const dueTomorrow = internalQuery({
       .filter((r) => r.remind && !r.remindedAt && !r.files.length && Date.now() - r.createdAt > 12 * 3_600_000); // not hours after email 31
     const out = [];
     for (const r of rows) {
-      const p = await ctx.db.get(r.projectId);
-      if (p) out.push({ requestId: r._id, emails: (await portalPeople(ctx, p)).map((x) => x.email) });
+      const w = await placeOf(ctx, r);
+      if (w) out.push({ requestId: r._id, emails: (await peopleAt(ctx, w)).map((x) => x.email) });
     }
     return out;
   },

@@ -24,7 +24,7 @@ export type Home = { type: HomeType; id: string } | null;
 // ---------- the kinds (what can live where, the doc's table) ----------
 
 type KindDef = {
-  table: "shoots" | "shotLists" | "quotes" | "estimates" | "proposals" | "invoices" | "subscriptions" | "briefings" | "deals";
+  table: "shoots" | "shotLists" | "quotes" | "estimates" | "proposals" | "invoices" | "subscriptions" | "briefings" | "deals" | "briefs" | "fileRequests";
   noun: string;
   perm: Perm;
   homes: HomeType[];
@@ -47,8 +47,13 @@ export const KINDS = {
   subscription: { table: "subscriptions", noun: "subscription", perm: "payments", homes: ["client", "project"], sent: () => true },
   briefing: { table: "briefings", noun: "briefing", perm: "production", homes: ["project"], fixed: (d) => (d.bookingId ? "This briefing is for a booking: it stays with that booking's project." : null) },
   lead: { table: "deals", noun: "lead", perm: "clients", homes: ["client"] },
+  // Hierarchy 3c: made on their own as drafts; sent (by the owner's click) once on a project or a client. Once sent
+  // they stay with that client, like money documents.
+  brief: { table: "briefs", noun: "kickoff brief", perm: "projects", homes: ["client", "project"], sent: (d) => d.status !== "draft" },
+  fileRequest: { table: "fileRequests", noun: "file request", perm: "projects", homes: ["client", "project"], sent: (d) => d.status !== "draft", fixed: (d) => (d.status === "cancelled" ? "That request was cancelled." : null) },
 } as const satisfies Record<string, KindDef>;
 export type Kind = keyof typeof KINDS;
+const MONEY = ["quote", "estimate", "proposal", "invoice", "subscription"] as Kind[];
 const kindArg = v.union(...(Object.keys(KINDS) as Kind[]).map((k) => v.literal(k)));
 
 /** The fields a kind's home is written to. */
@@ -120,8 +125,12 @@ async function patchFor(ctx: MutationCtx, k: Kind, d: Record<string, unknown> & 
       } else patch.projectId = to.projectId ?? undefined;
     } else {
       patch[FIELD[to.type]] = to.type === "shoot" ? to.shoot!._id : to.id;
-      // Money documents keep their client in step with their home (the code that sends them reads it).
-      if (has(k, "client") && to.type !== "client") patch.clientId = to.clientId ?? undefined;
+      // Money documents keep their client in step with their home (the code that sends them reads it). A brief or file
+      // request keeps clientId only when it's on a client itself (on a project, the project's client is read).
+      if (has(k, "client") && to.type !== "client" && (MONEY as readonly string[]).includes(k)) patch.clientId = to.clientId ?? undefined;
+      // One kickoff brief goes to a project.
+      if (k === "brief" && to.type === "project" && d.status !== "draft" && (await ctx.db.query("briefs").withIndex("by_project", (q) => q.eq("projectId", to.id as Id<"projects">)).collect()).some((x) => x._id !== d._id && x.status !== "draft"))
+        throw new ConvexError("That project already has its kickoff brief.");
     }
   } else if (k === "shotList" && !d.title) patch.title = "Shot list"; // a list on its own needs a name
   return patch;
@@ -198,7 +207,6 @@ async function recal(ctx: MutationCtx, shootId: Id<"shoots">) {
 
 // ---------- Move a project (D204: everything on it goes with it) ----------
 
-const MONEY = ["quote", "estimate", "proposal", "invoice", "subscription"] as Kind[];
 
 /** What moving a project takes along and what stays (the confirmation: "Move Launch and its 11 things to Northline?"). */
 async function projectContents(ctx: Ctx, p: Doc<"projects">) {

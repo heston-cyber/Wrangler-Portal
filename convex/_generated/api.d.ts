@@ -147,6 +147,7 @@ import type * as lib_audit from "../lib/audit.js";
 import type * as lib_bell from "../lib/bell.js";
 import type * as lib_perms from "../lib/perms.js";
 import type * as lib_shotList from "../lib/shotList.js";
+import type * as lib_placed from "../lib/placed.js";
 import type * as lib_site from "../lib/site.js";
 import type * as messages from "../messages.js";
 import type * as migrations from "../migrations.js";
@@ -273,6 +274,7 @@ declare const fullApi: ApiFromModules<{
   "lib/bell": typeof lib_bell;
   "lib/perms": typeof lib_perms;
   "lib/shotList": typeof lib_shotList;
+  "lib/placed": typeof lib_placed;
   "lib/site": typeof lib_site;
   messages: typeof messages;
   migrations: typeof migrations;

@@ -26,7 +26,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 
 type Owner = NonNullable<ReturnType<typeof useQuery<typeof api.fileRequests.forProject>>>;
 type Req = Owner["requests"][number];
-const ownerChip = (r: Req, today: string) => r.status === "closed" ? <StatusChip tone="neutral">Closed</StatusChip>
+const ownerChip = (r: Req, today: string) => r.status === "draft" ? <StatusChip tone="neutral">Not sent</StatusChip> : r.status === "closed" ? <StatusChip tone="neutral">Closed</StatusChip>
   : r.files.length ? <StatusChip tone="success">Uploaded</StatusChip> : r.due < today ? <StatusChip tone="danger">Overdue</StatusChip> : <StatusChip tone="warning">Waiting</StatusChip>;
 
 // ---------- the owner ----------
@@ -40,7 +40,7 @@ export function RequestRows({ d, onOpen }: { d: Owner; onOpen: (r: Req) => void 
     return (
       <div key={r._id} className="wp-rowwrap">{i > 0 && <Divider />}
         <ListRow className="ilead" lead={{ icon: "upload" }} onClick={() => onOpen(r)} chevron title={forName(r.title)}
-          meta={[`Due ${shortDay(r.due)}`, r.files.length ? `${plural(r.files.length, "file", "files")} uploaded${last ? ` ${monthDay(last)}` : ""}` : null, `in Dropbox › ${r.folder.split("/").slice(1).join(" › ")}`].filter(Boolean).join(" · ")}
+          meta={[`Due ${shortDay(r.due)}`, r.files.length ? `${plural(r.files.length, "file", "files")} uploaded${last ? ` ${monthDay(last)}` : ""}` : null, r.folder ? `in Dropbox › ${r.folder.split("/").slice(1).join(" › ")}` : null].filter(Boolean).join(" · ")}
           chip={ownerChip(r, d.today)} />
       </div>
     );
@@ -89,6 +89,9 @@ export function AskForFiles({ projectId, label, d, client, onClose, show }: { pr
 
 export function RequestDialog({ r, today, onClose, show }: { r: Req; today: string; onClose: () => void; show: (t: string) => void }) {
   const setStatus = useMutation(api.fileRequests.setStatus);
+  // Hierarchy 3c: a request made on its own and attached here waits for the owner's Send.
+  const sendDraft = useMutation(api.fileRequests.sendDraft);
+  const send = async () => { try { const x = await sendDraft({ requestId: r._id }); show(x.told ? "Sent." : "Saved. Nobody can open the project yet."); onClose(); } catch (e) { show(errText(e)); } };
   const [ask, confirmDialog] = useConfirm();
   const go = async (status: "open" | "closed" | "cancelled") => {
     if (status === "cancelled" && !(await ask({ title: "Cancel this request?", body: "It comes off the client's pages. Files already uploaded stay in your Dropbox.", yes: "Cancel request", no: "Keep it" }))) return;
@@ -103,11 +106,12 @@ export function RequestDialog({ r, today, onClose, show }: { r: Req; today: stri
             {r.files.length === 0 ? <p className="secondary">Nothing uploaded yet.{r.remind ? " They get a reminder the day before it's due." : ""}</p>
               : r.files.map((f, i) => <div key={i} className="vd-row"><span className="rq-name"><Icon name="document" size={16} />{f.name}</span><span className="secondary">{bytes(f.size)} · {monthDay(f.at)}</span></div>)}
           </div>
-          <p className="wp-small secondary">In your Dropbox: Apps › Wrangler Review{r.folder.replace(/\//g, " › ")}</p>
+          {r.folder && <p className="wp-small secondary">In your Dropbox: Apps › Wrangler Review{r.folder.replace(/\//g, " › ")}</p>}
           <div className="dfoot">
             {r.status !== "cancelled" && <button className="btn ghost sh-cancel" type="button" onClick={() => void go("cancelled")}>Cancel request</button>}
-            {r.status === "open" ? <Button onClick={() => void go("closed")}>Close it</Button> : <Button onClick={() => void go("open")}>Reopen</Button>}
-            <Button variant="primary" onClick={onClose}>Done</Button>
+            {r.status === "draft" ? <Button variant="primary" onClick={() => void send()}>Send</Button> : <>
+              {r.status === "open" ? <Button onClick={() => void go("closed")}>Close it</Button> : <Button onClick={() => void go("open")}>Reopen</Button>}
+              <Button variant="primary" onClick={onClose}>Done</Button></>}
           </div>
           {r.status === "open" && r.due < today && !r.files.length && <p className="wp-small secondary">It's past due. They can still upload until you close it.</p>}
         </div>
@@ -192,7 +196,7 @@ export function ClientRequestPage({ requestId }: { requestId: string }) {
   };
   const add = (files: FileList | null) => { if (files) for (const f of Array.from(files)) void one(f); if (input.current) input.current.value = ""; };
 
-  const top = <TopBar><a {...linkProps("/review")}>Review</a>{d && <><Sep /><a {...linkProps(`/projects/${d.project._id}`)}>{d.project.label}</a></>}<Sep /><span className="here">Files for {d?.business.split(" ")[0] ?? "the studio"}</span></TopBar>;
+  const top = <TopBar><a {...linkProps("/review")}>Review</a>{d && <><Sep />{d.project ? <a {...linkProps(`/projects/${d.project._id}`)}>{d.project.label}</a> : <span>{d.place}</span>}</>}<Sep /><span className="here">Files for {d?.business.split(" ")[0] ?? "the studio"}</span></TopBar>;
   if (d === undefined) return <>{top}<div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
   if (d === null) return <>{top}<div className="wp-page"><EmptyState icon="upload" title="This request isn't here." body="It may have been cancelled." actions={<ButtonLink to="/inbox">Back to your Inbox</ButtonLink>} /></div></>;
   const ownerFirst = d.owner.split(" ")[0];
@@ -206,7 +210,7 @@ export function ClientRequestPage({ requestId }: { requestId: string }) {
       {top}
       <div className="wp-page rq-page">
         <header className="pj-head sh-head">
-          <span className="wp-eyebrow">File request · {d.project.label}</span>
+          <span className="wp-eyebrow">File request · {d.place}</span>
           <h1 className="wp-h2">{d.title.replace(/\.$/, "")}.</h1>
           <span className="sh-sub"><span className="secondary">Requested by {d.owner} · due {shootDay(d.due)}</span>
             {total ? <StatusChip tone="success">Uploaded</StatusChip> : past ? <StatusChip tone="danger">Past due</StatusChip> : <StatusChip tone="warning">Due {shortDay(d.due)}</StatusChip>}</span>

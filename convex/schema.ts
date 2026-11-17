@@ -1016,11 +1016,12 @@ export default defineSchema({
     offeredAt: v.number(),
     answeredAt: v.optional(v.number()),                     // accepted or declined (the vendor side, step 4)
     cancelledAt: v.optional(v.number()),
+    shootId: v.optional(v.id("shoots")),                    // hierarchy 3c: booked for this shoot day (on its crew)
     reviewShareId: v.optional(v.id("shares")),              // step 4: a booked editor's Review access (D93, D103)
     createdBy: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_vendor", ["vendorId"]).index("by_project", ["projectId"]),
+  }).index("by_vendor", ["vendorId"]).index("by_project", ["projectId"]).index("by_shoot", ["shootId"]),
 
   // Phase 3c step 4 · a vendor's invoice for a booking (S5 · Phase 3c 734:3527, 734:3958): hours × the agreed rate, or
   // line items. Sent to the owner (email 26 and a Home alert); approved and marked paid by the owner in step 5. Nothing
@@ -1556,21 +1557,23 @@ export default defineSchema({
   // Apps/Wrangler Review/File requests/<Client>/<Project>/<Request> (Heston, Nov 2), which the render watcher ignores.
   fileRequests: defineTable({
     businessId: v.optional(v.id("businesses")),
-    projectId: v.id("projects"),
+    // Hierarchy 3c (D204): made on its own as a draft, attached to a project or a client, sent once attached.
+    projectId: v.optional(v.id("projects")),
+    clientId: v.optional(v.id("clients")),   // only when it's on a client with no project
     title: v.string(),
     details: v.optional(v.string()),
     due: v.string(),                          // YYYY-MM-DD
-    folder: v.string(),                       // in the app folder, as shown: "/File requests/Harbor Coffee/26127 Launch/Logo and brand guide"
+    folder: v.string(),                       // "" while a draft (set at Send). In the app folder, as shown: "/File requests/Harbor Coffee/26127 Launch/Logo and brand guide"
     remind: v.boolean(),                      // email 32 the day before, if nothing's uploaded
     remindedAt: v.optional(v.number()),
-    status: v.union(v.literal("open"), v.literal("closed"), v.literal("cancelled")),
+    status: v.union(v.literal("draft"), v.literal("open"), v.literal("closed"), v.literal("cancelled")),
     files: v.array(v.object({ name: v.string(), size: v.number(), path: v.string(), at: v.number(), by: v.string() })),
     lastUploadAt: v.optional(v.number()),
     ownerMailedAt: v.optional(v.number()),      // the owner's last "files arrived" email covered files up to here
     history: v.array(v.object({ at: v.number(), text: v.string() })),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_project", ["projectId"]).index("by_status_due", ["status", "due"]),
+  }).index("by_project", ["projectId"]).index("by_status_due", ["status", "due"]).index("by_client", ["clientId"]),
 
   // One file on its way into a request's folder: straight to Dropbox (up to 150 MB, a one-time link) or in pieces
   // through the portal (/upload/chunk, with this row's random token). Rows are kept as the upload log.
@@ -1595,12 +1598,14 @@ export default defineSchema({
   // answers the same one; answers save as they're typed.
   briefs: defineTable({
     businessId: v.optional(v.id("businesses")),
-    projectId: v.id("projects"),
+    // Hierarchy 3c (D204): made on its own as a draft, attached to a project or a client, sent once attached.
+    projectId: v.optional(v.id("projects")),
+    clientId: v.optional(v.id("clients")),   // only when it's on a client with no project
     questions: v.any(),                       // the Questionnaire as sent (lib/questionnaire.ts)
     answers: v.any(),                         // { [questionId]: value }
     step: v.number(),                         // where they left off
-    status: v.union(v.literal("sent"), v.literal("submitted")),
-    sentAt: v.number(),
+    status: v.union(v.literal("draft"), v.literal("sent"), v.literal("submitted")),
+    sentAt: v.optional(v.number()),
     remindedAt: v.optional(v.number()),
     startedAt: v.optional(v.number()),        // first answer saved
     submittedAt: v.optional(v.number()),      // the first time it was sent back
@@ -1610,7 +1615,7 @@ export default defineSchema({
     history: v.array(v.object({ at: v.number(), text: v.string() })),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_project", ["projectId"]),
+  }).index("by_project", ["projectId"]).index("by_client", ["clientId"]),
 
   // Phase 5 (Nov 3): raw footage after delivery (D33, D98, D140). One per project, made when its final files first open.
   // The portal never deletes files: it only keeps the offer, the invoices and the dates, and reminds the owner.

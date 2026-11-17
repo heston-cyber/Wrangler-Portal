@@ -280,4 +280,65 @@ describe("how everything connects", () => {
     await w.heston.mutation(api.homes.move, { kind: "lead", id: dealId, to: { type: "client", id: north } });
     expect(await w.t.run(async (ctx) => (await ctx.db.get(lq))!)).toMatchObject({ dealId, clientId: north });
   });
+
+  test("T-H.6 (3c) a kickoff brief and a file request made on their own; sent once attached; a booking for a shoot day", async () => {
+    const w = await world();
+    vi.stubGlobal("fetch", async () => new Response("{}", { status: 500 }));
+    // Harbor's client share: Maya is on it (client-level things go to her); Sam isn't.
+    await w.t.run(async (ctx) => {
+      const owner = (await ctx.db.query("users").first())!._id;
+      const s = await ctx.db.insert("shares", { businessId: w.A, token: "tok-client-3c", kind: "client", clientId: w.harbor, client: "Harbor Coffee", access: "comment", who: "invited", allVersions: true, downloads: false, emailNewVersions: true, createdAt: 0, createdBy: owner } as never);
+      await ctx.db.insert("shareMembers", { businessId: w.A, shareId: s, email: "maya@harbor.example", addedAt: 0 });
+    });
+    // A brief on its own: a draft, in Not attached, nobody told; Send waits for a home.
+    const briefId = await w.heston.mutation(api.briefs.create, {}) as Id<"briefs">;
+    expect((await w.heston.query(api.homes.loose, {})).some((x: { id: string }) => x.id === briefId)).toBe(true);
+    await expect(w.heston.mutation(api.briefs.sendDraft, { briefId })).rejects.toThrow(/Attach this to a project or client first/);
+    expect(await w.maya.query(api.briefs.page, { briefId })).toBeNull();
+    // On Harbor (no project): Send goes to Harbor's people; Maya opens it, Sam can't.
+    await w.heston.mutation(api.homes.move, { kind: "brief", id: briefId, to: { type: "client", id: w.harbor } });
+    expect(await w.maya.query(api.briefs.page, { briefId })).toBeNull(); // still a draft
+    expect((await w.heston.mutation(api.briefs.sendDraft, { briefId })).told).toBe(1);
+    expect(await w.maya.query(api.briefs.page, { briefId })).toMatchObject({ project: null, place: "Harbor Coffee" });
+    expect(await w.sam.query(api.briefs.page, { briefId })).toBeNull();
+    await expect(w.heston.mutation(api.briefs.sendDraft, { briefId })).rejects.toThrow(/already been sent/);
+    // Sent: it stays with Harbor; it can file under Harbor's project.
+    const north = await w.t.run(async (ctx) => {
+      const c = await ctx.db.insert("clients", { businessId: w.A, name: "Northline", createdAt: 0 });
+      return { c, p: await ctx.db.insert("projects", { businessId: w.A, name: "Other", client: "Northline", clientId: c, createdAt: 0 }) };
+    });
+    await expect(w.heston.mutation(api.homes.move, { kind: "brief", id: briefId, to: { type: "project", id: north.p } })).rejects.toThrow(/stays with the client/);
+    await w.heston.mutation(api.homes.move, { kind: "brief", id: briefId, to: { type: "project", id: w.p } });
+    expect((await w.maya.query(api.briefs.page, { briefId }))?.project?._id).toBe(w.p); // Harbor's share covers its projects
+    expect((await w.heston.query(api.briefs.forProject, { projectId: w.p })).brief._id).toBe(briefId);
+    // A second sent brief can't join the project.
+    const two = await w.heston.mutation(api.briefs.create, {}) as Id<"briefs">;
+    await w.heston.mutation(api.homes.move, { kind: "brief", id: two, to: { type: "client", id: w.harbor } });
+    await w.heston.mutation(api.briefs.sendDraft, { briefId: two });
+    await expect(w.heston.mutation(api.homes.move, { kind: "brief", id: two, to: { type: "project", id: w.p } })).rejects.toThrow(/already has its kickoff brief/);
+
+    // A file request on its own: a draft, no folder, nothing sent; attached to the project, Send asks (Dropbox first).
+    const { requestId } = await w.heston.mutation(api.fileRequests.create, { title: "Logo files", due: "2030-01-02", remind: false });
+    expect(await w.t.run(async (ctx) => (await ctx.db.get(requestId as Id<"fileRequests">))!)).toMatchObject({ status: "draft", folder: "" });
+    await expect(w.heston.mutation(api.fileRequests.sendDraft, { requestId })).rejects.toThrow(/Attach this/);
+    await w.heston.mutation(api.homes.move, { kind: "fileRequest", id: requestId, to: { type: "project", id: w.p } });
+    await expect(w.heston.mutation(api.fileRequests.sendDraft, { requestId })).rejects.toThrow(/Connect Dropbox first/);
+    await w.t.run((ctx) => ctx.db.insert("dropbox", { businessId: w.A, accountId: "acct-a", refreshToken: "ra", connectedAt: 0 } as never));
+    const sent = await w.heston.mutation(api.fileRequests.sendDraft, { requestId });
+    expect(sent.folder).toMatch(/^\/File requests\/Harbor Coffee\/26127 Launch\/Logo files/);
+    expect(await w.t.run(async (ctx) => (await ctx.db.get(requestId as Id<"fileRequests">))!.status)).toBe("open");
+
+    // A booking for a shoot day joins its crew; cancelling takes it off. A shoot on its own can't book.
+    const vendorId = await w.t.run((ctx) => ctx.db.insert("vendors", { businessId: w.A, name: "Jordan Ellis", email: "jordan@x.example", roles: ["Shooter"], rates: [], createdAt: 0, updatedAt: 0 } as never));
+    const { shootId } = await w.heston.mutation(api.shoots.schedule, { projectId: w.p, date: "2030-02-02", call: "07:00", location: "Studio", parking: "", prepare: [], withOwner: true, bookingIds: [], calendar: false });
+    const base = { vendorId, projectId: w.p, role: "Shooter", start: "2030-02-02", end: "2030-02-02", cents: 80000, unit: "day" as const };
+    await expect(w.heston.mutation(api.bookings.create, { ...base, start: "2030-02-03", end: "2030-02-03", shootId })).rejects.toThrow(/don't include the shoot day/);
+    const bookingId = await w.heston.mutation(api.bookings.create, { ...base, shootId });
+    expect((await w.t.run(async (ctx) => (await ctx.db.get(shootId))!.crew)).map((c) => c.bookingId ?? null)).toContain(bookingId);
+    await expect(w.heston.mutation(api.homes.move, { kind: "shoot", id: shootId, to: null })).rejects.toThrow(/Crew booked/);
+    await w.heston.mutation(api.bookings.cancel, { bookingId });
+    expect((await w.t.run(async (ctx) => (await ctx.db.get(shootId))!.crew)).some((c) => c.bookingId === bookingId)).toBe(false);
+    const loose = (await w.heston.mutation(api.shoots.schedule, { date: "2030-03-03", call: "08:00", location: "Lot", parking: "", prepare: [], withOwner: true, bookingIds: [], calendar: false })).shootId;
+    await expect(w.heston.mutation(api.bookings.create, { ...base, start: "2030-03-03", end: "2030-03-03", shootId: loose })).rejects.toThrow(/Attach this shoot to a project first/);
+  });
 });

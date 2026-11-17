@@ -4,6 +4,7 @@
 // decline it in their vendor portal (step 4). Nothing here moves money (D92). Owner only.
 import { internalAction, internalQuery, mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
+import { queueCalendar } from "./calendar";
 import { internal } from "./_generated/api";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireMe, requireAll, seesValue } from "./lib/access";
@@ -111,6 +112,7 @@ export const create = mutation({
     vendorId: v.id("vendors"), projectId: v.id("projects"), role: v.string(), start: v.string(), end: v.string(),
     cents: v.number(), unit: v.union(v.literal("day"), v.literal("hour")), hours: v.optional(v.number()),
     suggestedCents: v.optional(v.number()), location: v.optional(v.string()), note: v.optional(v.string()),
+    shootId: v.optional(v.id("shoots")), // hierarchy 3c: booked for this shoot day (it joins the shoot's crew)
   },
   handler: async (ctx, a) => {
     const { me } = await ownerBiz(ctx);
@@ -128,13 +130,25 @@ export const create = mutation({
       if (!(Number(a.hours) > 0 && Number(a.hours) <= 2000)) throw new ConvexError("Add the hours you expect.");
       hours = Math.round(a.hours! * 100) / 100;
     }
+    const shoot = a.shootId ? await ctx.db.get(a.shootId) : null;
+    if (a.shootId) {
+      if (!shoot || shoot.status !== "scheduled") throw new ConvexError("That shoot isn't here any more.");
+      if (!shoot.projectId) throw new ConvexError("Attach this shoot to a project first: crew are booked on a project.");
+      if (shoot.projectId !== a.projectId) throw new ConvexError("That shoot is on another project.");
+      if (shoot.date < a.start || shoot.date > a.end) throw new ConvexError("The booking's dates don't include the shoot day.");
+    }
     const now = Date.now();
     const id = await ctx.db.insert("vendorBookings", {
       vendorId: a.vendorId, projectId: a.projectId, role, start: a.start, end: a.end, rate: { cents: a.cents, unit: a.unit },
       ...(hours ? { hours } : {}), ...(a.suggestedCents && a.suggestedCents > 0 ? { suggestedCents: Math.round(a.suggestedCents) } : {}),
       ...(clip(a.location, 160) ? { location: clip(a.location, 160) } : {}), ...(clip(a.note, 1000) ? { note: clip(a.note, 1000) } : {}),
-      status: "offered", offeredAt: now, createdBy: me.name ?? me.email, createdAt: now, updatedAt: now,
+      status: "offered", offeredAt: now, createdBy: me.name ?? me.email, ...(shoot ? { shootId: shoot._id } : {}), createdAt: now, updatedAt: now,
     });
+    if (shoot) {
+      // On the shoot's crew at once (as when the owner picks booked crew); its calendar event is updated quietly.
+      await ctx.db.patch(shoot._id, { crew: [...shoot.crew, { name: vendor.name, role, vendorId: vendor._id, bookingId: id }], updatedAt: now, history: [...shoot.history, { at: now, text: `Booked ${vendor.name} (${role})` }] });
+      if (shoot.calendar || shoot.calendarEvent) { await ctx.db.patch(shoot._id, { calAt: now }); await queueCalendar(ctx, shoot._id, "none"); }
+    }
     await ctx.scheduler.runAfter(0, internal.bookings.mailOffer, { bookingId: id });
     return id;
   },
@@ -152,6 +166,12 @@ export const cancel = mutation({
     const now = Date.now();
     await ctx.db.patch(bookingId, { status: "cancelled", cancelledAt: now, updatedAt: now });
     if (x.reviewShareId) { const sh = await ctx.db.get(x.reviewShareId); if (sh && !sh.offAt) await ctx.db.patch(sh._id, { offAt: now }); } // a booked editor's Review access ends
+    // Hierarchy 3c: a booking made for a shoot day comes off that shoot's crew.
+    const sh = x.shootId ? await ctx.db.get(x.shootId) : null;
+    if (sh && sh.crew.some((c) => c.bookingId === x._id)) {
+      await ctx.db.patch(sh._id, { crew: sh.crew.filter((c) => c.bookingId !== x._id), updatedAt: now });
+      if (sh.calendar || sh.calendarEvent) { await ctx.db.patch(sh._id, { calAt: now }); await queueCalendar(ctx, sh._id, "none"); }
+    }
     await ctx.scheduler.runAfter(0, internal.bookings.mailCancelled, { bookingId, wasAccepted: x.status === "accepted" });
     return null;
   },
