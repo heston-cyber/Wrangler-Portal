@@ -24,6 +24,7 @@ export const BUSINESS_TABLES = [
 export const GLOBAL_TABLES = [
   "users", "businesses", "memberships", "guestPasses", "rateLimits", "fileTickets", "oauthStates", "emailLog", "stripeEvents", "userPrefs", "playerLogs", "phase0Runs", "r1Results", "siteWatchFindings", "siteWatchRuns", "siteWatchSettings",
   "sessionDevices", "emailChanges", // Phase 5e step 2: a login's own, not a business's
+  "sessionLocks", "handBack", // Q2 (Nov 17): handing a phone over for a release, and the owner's ways to unlock it
   "alertPrefs", "pushSubs", "pushKeys", // Phase 5e step 4
   "businessDeletions", "deletionFiles", "fileOwners", // Phase 5e step 6: outlive the business they delete
 ] as readonly string[];

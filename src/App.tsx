@@ -293,6 +293,9 @@ function SignedIn() {
   if (signer) return <Suspense fallback={<Loading />}><SignerApp key={signer[1]} token={signer[1]} /></Suspense>;
   if (isSignHost()) return <SignHostHome />;
   if (me === undefined) return <Loading />;
+  // Q2 (Nov 17): a phone handed over for a release shows only that release and its hand-back, whatever page is opened
+  // (the same element as the release page's own route, so the signing in progress keeps its place).
+  if (me?.locked) return <Suspense fallback={<Loading />}><ReleaseSigning key={me.locked.releaseId} releaseId={me.locked.releaseId} /></Suspense>;
   // Phase 5b step 4 (D127): a call-sheet guest sees their call sheets and nothing else, whatever address they open.
   if (me && me.role === "guest") return <Suspense fallback={<Loading />}><GuestApp token={null} /></Suspense>;
   // Phase 3c step 4: vendors get the vendor side (their bookings, briefings and invoices), nothing else.

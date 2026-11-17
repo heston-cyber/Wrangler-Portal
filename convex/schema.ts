@@ -2115,6 +2115,26 @@ export default defineSchema({
     firstSeen: v.number(),
     lastSeen: v.number(),
   }).index("by_user", ["userId"]).index("by_session", ["sessionId"]),
+  // Q2 (Heston, Nov 17): handing a phone over for a release locks that sign-in (this browser's session) until the owner
+  // hands it back with Face ID or the phone's passcode (a passkey) or their 4-digit PIN. While locked, nothing of the
+  // business answers on that session, in any tab. 5 wrong PINs sign the session out.
+  sessionLocks: defineTable({
+    sessionId: v.id("authSessions"),
+    userId: v.id("users"),
+    releaseId: v.id("releases"),
+    tries: v.number(),
+    challenge: v.optional(v.object({ value: v.string(), at: v.number() })), // a passkey unlock waiting for its answer
+    at: v.number(),
+  }).index("by_session", ["sessionId"]).index("by_user", ["userId"]),
+  // The owner's own ways to unlock (a login's, not a business's): a PIN (salted hash) and passkeys on their devices.
+  handBack: defineTable({
+    userId: v.id("users"),
+    pinSalt: v.optional(v.string()),
+    pinHash: v.optional(v.string()),
+    passkeys: v.array(v.object({ id: v.string(), publicKey: v.string(), counter: v.number(), transports: v.optional(v.array(v.string())), device: v.string(), at: v.number() })),
+    challenge: v.optional(v.object({ value: v.string(), at: v.number() })), // adding a passkey, waiting for its answer
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
   // A change of sign-in email waiting for its 6-digit code (sent to the new address; 10 minutes; 5 tries).
   emailChanges: defineTable({
     userId: v.id("users"),

@@ -79,8 +79,18 @@ describe("releases on set", () => {
     await x.t.run((ctx) => ctx.db.patch(x.releaseId, { documentId: x.documentId }));
     await x.me.mutation(api.sign.approve, { versionId: x.versionId });
     expect((await x.me.query(api.releases.get, { releaseId: x.releaseId }))!.state).toBe("ready");
+    // Q2 (Nov 17): a hand-back PIN comes first.
+    await expect(x.me.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone", checked: true })).rejects.toThrow(/hand-back PIN/);
+    await expect(x.me.mutation(api.handBack.setPin, { pin: "12a4" })).rejects.toThrow(/4 digits/);
+    await x.me.mutation(api.handBack.setPin, { pin: "2580" });
+    expect(await x.me.query(api.handBack.mine, {})).toEqual({ pin: true, passkeys: [] });
     const h = await x.me.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone", checked: true });
-    await expect(x.me.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone", checked: true })).rejects.toThrow(/already out for signing/);
+    // Handed over: this sign-in answers nothing of the business (any page), only its release and the hand-back.
+    expect(await x.me.query(api.users.me, {})).toMatchObject({ allowed: false, locked: { releaseId: x.releaseId, signer: "Riley Quinn" } });
+    await expect(x.me.query(api.releases.forShoot, { shootId: x.ids.shootId })).rejects.toThrow(/Not allowed/);
+    await expect(x.me.query(api.handBack.mine, {})).rejects.toThrow(/Not allowed/);
+    await expect(x.me.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone", checked: true })).rejects.toThrow(/Not allowed/);
+    expect((await x.me.query(api.releases.get, { releaseId: x.releaseId }))!.state).toBe("signing");
     await x.flush();
     expect(x.mails.filter((m) => m.to === SIGNER)).toEqual([]); // no link was emailed
     // The signer's steps are Sign's own: the session the hand-over gave opens the document; Sign waits for consent.
@@ -90,6 +100,11 @@ describe("releases on set", () => {
     expect(await x.call("adopt", { token: h.token, session: h.session, name: "Riley Quinn", method: "typed", signature: PNG_B64, initials: PNG_B64 })).toMatchObject({ ok: true });
     expect(await x.call("sign", { token: h.token, session: h.session, agreed: true })).toMatchObject({ ok: true, complete: true });
     expect((await x.me.query(api.releases.get, { releaseId: x.releaseId }))!.state).toBe("signed");
+    // Hand back: a wrong PIN counts down; the right one unlocks; the business answers again.
+    expect(await x.me.mutation(api.handBack.unlockWithPin, { pin: "1111" })).toEqual({ ok: false, left: 4 });
+    expect(await x.me.mutation(api.handBack.unlockWithPin, { pin: "2580" })).toEqual({ ok: true });
+    expect((await x.me.query(api.users.me, {}))!.locked).toBeNull();
+    await expect(x.me.mutation(api.handBack.unlockWithPin, { pin: "2580" })).rejects.toThrow(/Not allowed/);
     const ev = (await x.me.query(api.sign.get, { documentId: x.documentId }))!.events;
     expect(ev.find((e) => e.kind === "in_person")?.detail).toMatch(/Signing in person on Alex's iPhone at Mercy Clinic, Springfield, MO \(the shoot's place\)/);
     expect(ev.find((e) => e.kind === "sent")?.detail).toMatch(/No link was emailed/);
@@ -100,6 +115,24 @@ describe("releases on set", () => {
     expect(sg.inPerson).toMatchObject({ by: "Alex Owner", device: "Alex's iPhone", place: "Mercy Clinic, Springfield, MO" });
     // The shot it covers no longer counts as missing.
     expect((await x.me.query(api.releases.forShoot, { shootId: x.ids.shootId }))!.missing).toEqual([]);
+  });
+
+  test("Q2 five wrong PINs sign the handed-over session out (only that one); a passkey can't be added while handed over", async () => {
+    const x = await setup();
+    await x.t.run((ctx) => ctx.db.patch(x.releaseId, { documentId: x.documentId }));
+    await x.me.mutation(api.sign.approve, { versionId: x.versionId });
+    await x.me.mutation(api.handBack.setPin, { pin: "2580" });
+    const other = await x.t.run(async (ctx) => { const u = (await ctx.db.query("users").first())!._id; return ctx.db.insert("authSessions", { userId: u, expirationTime: Date.now() + 3_600_000 }); });
+    await x.me.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone", checked: true });
+    await expect(x.me.action(api.passkeys.registerOptions, { origin: "https://app.wranglerportal.com" })).rejects.toThrow(/Not allowed/);
+    await expect(x.me.action(api.passkeys.unlockOptions, { origin: "https://evil.example" })).rejects.toThrow(/portal's own address/);
+    await expect(x.me.action(api.passkeys.unlockOptions, { origin: "https://app.wranglerportal.com" })).rejects.toThrow(/No passkey yet/);
+    for (const left of [4, 3, 2, 1]) expect(await x.me.mutation(api.handBack.unlockWithPin, { pin: "0000" })).toEqual({ ok: false, left });
+    expect(await x.me.mutation(api.handBack.unlockWithPin, { pin: "0000" })).toEqual({ ok: false, signedOut: true });
+    const s = x.ids.sub.split("|")[1] as Id<"authSessions">;
+    expect(await x.t.run((ctx) => ctx.db.get(s))).toBeNull();
+    expect(await x.t.run((ctx) => ctx.db.get(other))).not.toBeNull(); // their other devices stay signed in
+    expect(await x.t.run((ctx) => ctx.db.query("sessionLocks").collect())).toEqual([]);
   });
 
   test("T-RL.2 a draft can be removed; shots must be on the day's list; someone without Docs is refused", async () => {

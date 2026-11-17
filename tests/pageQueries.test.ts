@@ -199,6 +199,7 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "shootPage.get": { pages: ["owner"], args: () => "skip" },
   "releases.forShoot": { pages: ["owner"], args: () => "skip" },
   "releases.get": { pages: ["owner"], args: () => "skip" },
+  "handBack.mine": { pages: ["owner"], args: () => ({}) }, // Q2: the hand-over screen's PIN and Face ID setup (owner only)
   "packing.lists": { pages: ["owner"], args: () => ({}) },
   "packing.get": { pages: ["owner"], args: () => "skip" },
   "packing.gearChoices": { pages: ["owner"], args: () => "skip" },

@@ -1,4 +1,5 @@
 import { internalQuery, mutation, query } from "./lib/functions";
+import { lockOf } from "./lib/sessionLock";
 import { v, ConvexError } from "convex/values";
 import { projectOf, projectsFor, requireMe, requireSignedIn, viewerOf } from "./lib/access";
 import { PERMS } from "./lib/perms";
@@ -20,6 +21,12 @@ export const me = query({
     const email = (user.email ?? "").toLowerCase();
     const local = email.split("@")[0] ?? "";
     const fallback = local ? local[0].toUpperCase() + local.slice(1) : null;
+    // Q2 (Nov 17): a phone handed over for a release shows its release and the hand-back, whatever page is opened.
+    const lock = await lockOf(ctx);
+    if (lock && lock.userId === userId) {
+      const r = await ctx.db.get(lock.releaseId);
+      return { id: userId, email, name: (user.name as string | undefined) || fallback, allowed: false, role: null, sides: [] as Awaited<ReturnType<typeof sidesOf>>, team: null, tools: undefined as ReturnType<typeof toolsOf> | undefined, locked: { releaseId: lock.releaseId, signer: r?.name ?? "the signer" } };
+    }
     const v = await viewerOf(ctx);
     const owner = v.kind === "owner";
     // Phase 5b step 4: a call-sheet guest's login (D127): the page shows it the guest pages and nothing else.
@@ -28,7 +35,7 @@ export const me = query({
     const sides = owner || role === "guest" || role === "team" ? [] : await sidesOf(ctx, email);
     // Phase 5e: a team member's role and switches decide their menu (the server checks every call again).
     const team = v.kind === "team" ? { role: v.team.role, perms: v.team.perms } : null;
-    return { id: userId, email, name: (user.name as string | undefined) || fallback, allowed: owner, role, sides, team, ...(owner ? { tools: toolsOf(user.tools) } : {}) };
+    return { id: userId, email, name: (user.name as string | undefined) || fallback, allowed: owner, role, sides, team, locked: null, ...(owner ? { tools: toolsOf(user.tools) } : {}) };
   },
 });
 

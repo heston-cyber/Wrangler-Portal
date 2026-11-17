@@ -151,6 +151,10 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     // 5i–5k (Nov 17): releases, packing lists, places, the Shoot page
     "releases.forShoot": { shootId: ids.shootId }, "releases.templates": {}, "releases.create": { shootId: ids.shootId, templateId: ids.templateId, name: "N", email: "n@x.example", shotIds: [] },
     "releases.prepare": { releaseId: ids.releaseId, storageId: ids.storageId }, "releases.handOver": { releaseId: ids.releaseId, device: "iPhone", checked: true }, "releases.get": { releaseId: ids.releaseId },
+    // Q2 (Nov 17): the hand-back, the owner's own (setup) or the handed-over session's own (unlock): nobody else's.
+    "handBack.mine": {}, "handBack.setPin": { pin: "1234" }, "handBack.removePasskey": { id: "x" }, "handBack.unlockWithPin": { pin: "1234" },
+    "passkeys.registerOptions": { origin: "https://app.wranglerportal.com" }, "passkeys.register": { origin: "https://app.wranglerportal.com", response: {}, device: "iPhone" },
+    "passkeys.unlockOptions": { origin: "https://app.wranglerportal.com" }, "passkeys.unlock": { origin: "https://app.wranglerportal.com", response: {} },
     "releases.markShot": { shotId: ids.shotId, needed: true }, "releases.remove": { releaseId: ids.releaseId },
     "packing.lists": {}, "packing.get": { listId: ids.packListId }, "packing.gearChoices": { listId: ids.packListId }, "packing.create": { name: "Kit 2" }, "packing.rename": { listId: ids.packListId, name: "Kit" },
     "packing.duplicate": { listId: ids.packListId }, "packing.remove": { listId: "nope" }, "packing.addGear": { listId: ids.packListId, gearIds: [ids.gearId] }, "packing.addLine": { listId: ids.packListId, text: "Tape" },

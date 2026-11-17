@@ -3888,6 +3888,15 @@ a.sl-day:hover .t { color: var(--text-accent); }
 .rl-wait { color: var(--text-secondary); }
 .rl-signer { min-height: 100dvh; }
 .rl-bar { position: sticky; top: 0; z-index: 5; padding: 8px 16px; text-align: center; background: rgba(0,0,0,.55); backdrop-filter: blur(12px); }
+.rl-bar { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.rl-handback { position: absolute; right: 12px; border: 0; background: none; color: var(--text-secondary); font: 500 13px/1 var(--font-body); padding: 6px 4px; cursor: pointer; }
+.rl-unlockset, .rl-unlock { width: 100%; display: grid; gap: 10px; justify-items: stretch; text-align: center; padding: 14px; border-radius: 14px; background: rgba(var(--paper), .05); }
+.rl-unlockset .rl-links { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.rl-unlockset .rl-links .btn, .rl-unlockset > .btn.sm { width: auto; justify-self: center; }
+.rl-pins, .rl-pinrow { display: flex; gap: 8px; }
+.rl-pins .input, .rl-pinrow .input { flex: 1; min-width: 0; text-align: center; font-size: 22px; letter-spacing: .4em; }
+.rl-pinrow .btn { width: auto; }
+.rl-pins .input::placeholder, .rl-pinrow .input::placeholder { letter-spacing: normal; font-size: 16px; }
 /* packing lists */
 .pk-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 16px; }
 .pk-card { border-radius: var(--radius-card); padding: 16px 18px; display: grid; gap: 10px; }
