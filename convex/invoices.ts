@@ -487,8 +487,13 @@ export const draftFromContract = internalMutation({
     const due = new Date(now + Math.max(0, a.dueDays) * DAY);
     const dueDate = `${due.getUTCFullYear()}-${String(due.getUTCMonth() + 1).padStart(2, "0")}-${String(due.getUTCDate()).padStart(2, "0")}`;
     const lines = [{ id: "deposit", description: `${a.description} · ${a.docTitle}`.slice(0, 300), qty: 1, unitCents: Math.round(a.amountCents) }];
+    // Phase 6 master test F1: the contract's CRM card names the job's project, so the deposit goes on it (when the
+    // project is this business's and the same client's as the person billed; otherwise it waits in Not attached).
+    const deal = (await ctx.db.query("deals").withIndex("by_document", (q) => q.eq("documentId", a.documentId)).collect()).find((d) => (d.businessId ?? null) === biz && d.projectId);
+    const proj = deal?.projectId ? await ctx.db.get(deal.projectId) : null;
+    const projectId = proj && (proj.businessId ?? null) === biz && person?.clientId && proj.clientId === person.clientId ? proj._id : null;
     const invoiceId = await ctx.db.insert("invoices", {
-      ...(biz ? { businessId: biz } : {}), ...(person?.clientId ? { clientId: person.clientId } : {}),
+      ...(biz ? { businessId: biz } : {}), ...(person?.clientId ? { clientId: person.clientId } : {}), ...(projectId ? { projectId } : {}),
       kind: /deposit/i.test(a.description) ? "deposit" : "other", title: `${a.description} · ${a.label}`.slice(0, 120),
       billTo: { name: a.billTo.name.trim() || email, email }, lines, dueDate, status: "draft",
       totalCents: lines[0].unitCents, amountPaidCents: 0, amountRemainingCents: lines[0].unitCents,
@@ -638,8 +643,6 @@ export const applyStripeInvoice = internalMutation({
       stripe: { ...i.stripe!, number: s.number ?? i.stripe!.number, hostedUrl: s.hosted_invoice_url ?? i.stripe!.hostedUrl, pdfUrl: s.invoice_pdf ?? i.stripe!.pdfUrl },
       history: history.slice(-60), updatedAt: now,
     });
-    // Phase 3: the final invoice paid moves the pipeline card to Paid (forward only, D60).
-    if (status === "paid" && i.status !== "paid" && i.kind === "final" && i.projectId) await crmProject(ctx, i.projectId, "paid", `${i.number ?? "final invoice"} paid`);
     // Phase 5: a raw footage storage invoice paid keeps the footage a year; voided, it goes back to not kept.
     if (i.storageId && status === "paid" && i.status !== "paid") await storagePaid(ctx, i);
     if (i.storageId && status === "void" && i.status !== "void") await storageDropped(ctx, i, "voided");
@@ -653,6 +656,10 @@ export const applyStripeInvoice = internalMutation({
         await ctx.db.patch(i._id, { history: [...history, { kind: told === null ? "delivery_waiting" : "delivery_opened", at: now, detail: told === null ? "No final files added yet; unlock them on the project's Delivery tab when they are" : "Final files opened for the client" }].slice(-60) });
       }
     }
+    // Phase 3: the final invoice paid moves the pipeline card to Paid (forward only, D60). Phase 6 master test B1: after
+    // the files open, so the first delivery still counts as the first (a Paid card read as "delivered before" and the
+    // raw-footage offer never came).
+    if (status === "paid" && i.status !== "paid" && i.kind === "final" && i.projectId) await crmProject(ctx, i.projectId, "paid", `${i.number ?? "final invoice"} paid`);
     return i._id;
   },
 });
