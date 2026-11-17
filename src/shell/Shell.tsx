@@ -20,7 +20,7 @@ import { useBrand, type Brand } from "../lib/brand";
 import { Menu, MenuItem, MenuSep, Modal, Thumb, swallowNextClick } from "../ui/kit";
 import { Icon, type IconName } from "../ui/Icon";
 import { PIPELINE } from "./pipeline";
-import { hapticHold, hapticRelease } from "../lib/haptic";
+import { hapticHold } from "../lib/haptic";
 import { Avatar, Badge, IconButton } from "../ui/wp";
 import { projectLabel } from "../lib/format";
 import wpLogo from "../assets/d1/wp-logo.png";
@@ -681,7 +681,7 @@ function ProductionTab({ it, path }: { it: Item; path: string }) {
   useEffect(() => {
     if (!open || !dragging) return;
     const move = (e: PointerEvent) => setHot(under(e.clientX, e.clientY)); // Heston (10:01): the tap is for the hold itself
-    const up = (e: PointerEvent) => { hapticRelease(); setDragging(false); const to = under(e.clientX, e.clientY); if (to) { setOpen(false); navigate(to); } };
+    const up = (e: PointerEvent) => { setDragging(false); const to = under(e.clientX, e.clientY); if (to) { setOpen(false); navigate(to); } };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", up);
@@ -751,7 +751,6 @@ export function MorePage({ me, side }: { me: Me; side: Side }) {
     ? [
       ...rest.map((it) => ({ to: it.to, icon: it.icon, title: it.label, sub: TOOL_SUB[it.to] })),
       { to: "/settings", icon: "settings", title: "Settings", sub: "Business, Register, Dropbox, connectors…" },
-      { to: "/settings/haptics", icon: "info", title: "Haptics test", sub: "For now: which haptic taps this phone allows" }, // Nov 17, until haptics are settled
       { to: "/settings/account", icon: "user", title: "Account", sub: `${me.name ?? ""}${me.name ? " · " : ""}${me.email}` },
       { icon: "sign-out", title: "Sign out", onClick: signOut },
     ]

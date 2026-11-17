@@ -7,7 +7,7 @@
 // own link (/cv/<token>): Can view reads it, Can edit changes it (no uploads).
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import rough from "roughjs";
-import { hapticHold, hapticRelease } from "../../lib/haptic";
+import { hapticHold } from "../../lib/haptic";
 import { useMutation, useQuery } from "convex/react";
 import {
   MousePointer2, Hand, Pencil, Eraser, Type, Square, Circle, ArrowRight, Minus as LineIcon, ImagePlus, Box, Lock, LockOpen, Undo2, Redo2, Minus, Plus, Menu, CircleQuestionMark,
@@ -494,7 +494,6 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
     | { kind: "draw" } | { kind: "make"; type: "box" | "ellipse" | "frame" | "arrow" | "line"; x0: number; y0: number } | { kind: "marquee"; x0: number; y0: number; add: string[] } | { kind: "erase" } | { kind: "pinch"; d: number; z: number; cx: number; cy: number };
   const gesture = useRef<G | null>(null);
   const holdTimer = useRef<number | null>(null);
-  const held = useRef(false);
   const styleFor = (type: string): Partial<CanvasItem> => ({
     color: st.color, ...(st.opacity < 100 ? { opacity: st.opacity } : {}),
     ...(SHAPES.has(type) || LINES.has(type) ? { stroke: st.stroke, dash: st.dash, rough: st.rough, seed: seed() } : {}),
@@ -549,7 +548,7 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
       setSel(next);
       const start = new Map(itemsRef.current.filter((i) => next.includes(i.id) && !i.locked).map((i) => [i.id, { x: i.x, y: i.y }]));
       gesture.current = { kind: "move", sx: e.clientX, sy: e.clientY, start, moved: false };
-      if (e.pointerType === "touch") { const cx = e.clientX, cy = e.clientY; holdTimer.current = window.setTimeout(() => { hapticHold(); held.current = true; setCtxMenu({ x: cx, y: cy }); gesture.current = null; }, 500); }
+      if (e.pointerType === "touch") { const cx = e.clientX, cy = e.clientY; holdTimer.current = window.setTimeout(() => { hapticHold(); setCtxMenu({ x: cx, y: cy }); gesture.current = null; }, 500); }
       return;
     }
     if (e.pointerType === "touch") { gesture.current = { kind: "pan", sx: e.clientX, sy: e.clientY, px: pan.x, py: pan.y }; setSel([]); setEditing(null); return; }
@@ -602,7 +601,6 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
     } else if (g.kind === "marquee") setMarquee((m) => (m ? { ...m, x1: p.x, y1: p.y } : m));
   };
   const onUp = (e: React.PointerEvent) => {
-    if (held.current) { held.current = false; hapticRelease(); } // the iPhone's tap for the hold menu, as the finger lifts
     pointers.current.delete(e.pointerId);
     if (holdTimer.current) { clearTimeout(holdTimer.current); holdTimer.current = null; }
     const g = gesture.current; gesture.current = null;

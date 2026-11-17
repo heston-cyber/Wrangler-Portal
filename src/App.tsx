@@ -97,7 +97,6 @@ const ShotListsPage = lazy(() => import("./modules/production/ShotLists"));
 const ShotListEditor = lazy(() => import("./modules/production/ShotLists").then((m) => ({ default: m.ShotListEditor })));
 const ProjectsHub = lazy(() => import("./modules/projects/Homes")); // Nov 16: How everything connects
 const ShootPage = lazy(() => import("./modules/production/ShootPage")); // 5i (D203)
-const HapticTest = lazy(() => import("./modules/settings/HapticTest"));
 const ReleaseSigning = lazy(() => import("./modules/production/ShootPage").then((m) => ({ default: m.ReleaseSigning })));
 const PackingListsPage = lazy(() => import("./modules/production/Packing")); // 5j
 const PackingListEditor = lazy(() => import("./modules/production/Packing").then((m) => ({ default: m.PackingListEditor })));
@@ -374,7 +373,6 @@ function SignedIn() {
   else if (/^\/production\/shoots\/[^/]+\/shot-list\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><ShotChecklistPage key={id} shootId={id} /></Suspense>; } // Nov 16
   else if (/^\/production\/shoots\/?$/.test(path)) page = <Suspense fallback={<Loading />}><ProductionShoots key={search} /></Suspense>;
   else if (/^\/messages\/?$/.test(path)) page = <Suspense fallback={<Loading />}><OwnerMessages /></Suspense>;
-  else if (/^\/settings\/haptics\/?$/.test(path)) page = <Suspense fallback={<Loading />}><HapticTest /></Suspense>; // Nov 17: what this phone allows
   else if (/^\/production\/(pre-pro|prin-pro|post-pro)\/?$/.test(path)) { const k = path.split("/")[2] as "pre-pro" | "prin-pro" | "post-pro"; page = <Suspense fallback={<Loading />}><ProductionStage key={k} stage={k} /></Suspense>; }
   else if (/^\/production\/delivery\/?$/.test(path)) page = <Suspense fallback={<Loading />}><ProductionDelivery /></Suspense>;
   else if (/^\/production\/shoots\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; const t = params.get("tab"); page = <Suspense fallback={<Loading />}><ShootPage key={id} shootId={id} tab={(["callsheet", "shotlist", "gear", "releases", "locations"].includes(t ?? "") ? t : "overview") as ShootTab} /></Suspense>; } // 5i (D203)
