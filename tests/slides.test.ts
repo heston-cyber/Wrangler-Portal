@@ -17,8 +17,8 @@ describe("D175 slides", () => {
   it("175.1 a later item in the menu slides in from the right, an earlier one from the left", () => {
     expect(slideDir(items, "/", "/payments")).toBe("f");
     expect(slideDir(items, "/payments", "/")).toBe("b");
-    expect(slideDir(items, "/clients/overview", "/production")).toBe("f");
-    expect(slideDir(items, "/sent", "/messages")).toBe("b");
+    expect(slideDir(items, "/production", "/clients/overview")).toBe("f"); // Nov 16: Production comes before Clients
+    expect(slideDir(items, "/messages", "/projects")).toBe("f");
   });
 
   it("175.2 inside one item, the pages of its layer follow the layer's order; deeper is forward, back is back", () => {

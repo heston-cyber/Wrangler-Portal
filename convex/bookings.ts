@@ -132,6 +132,7 @@ export const create = mutation({
     }
     const shoot = a.shootId ? await ctx.db.get(a.shootId) : null;
     if (a.shootId) {
+      await requireAll(ctx, "shoots"); // 3c review L5: a shoot's crew is the Shoots switch's
       if (!shoot || shoot.status !== "scheduled") throw new ConvexError("That shoot isn't here any more.");
       if (!shoot.projectId) throw new ConvexError("Attach this shoot to a project first: crew are booked on a project.");
       if (shoot.projectId !== a.projectId) throw new ConvexError("That shoot is on another project.");

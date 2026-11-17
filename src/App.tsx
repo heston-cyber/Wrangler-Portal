@@ -94,6 +94,8 @@ const CallSheetsPage = lazy(() => import("./modules/production/CallSheets"));
 const ShotChecklistPage = lazy(() => import("./modules/production/ShotChecklist"));
 const ShotListsPage = lazy(() => import("./modules/production/ShotLists"));
 const ShotListEditor = lazy(() => import("./modules/production/ShotLists").then((m) => ({ default: m.ShotListEditor })));
+const ProjectsHub = lazy(() => import("./modules/projects/Homes")); // Nov 16: How everything connects
+const NotAttached = lazy(() => import("./modules/projects/Homes").then((m) => ({ default: m.NotAttached })));
 const GearPage = lazy(() => import("./modules/production/Gear")); // Phase 5d step 3
 const GearItem = lazy(() => import("./modules/production/Gear").then((m) => ({ default: m.GearItem })));
 const CalendarPage = lazy(() => import("./modules/production/Calendar")); // Phase 5b step 5
@@ -278,7 +280,7 @@ function SignedIn() {
   }
   const params = new URLSearchParams(search);
   const video = /^\/v\/([^/]+)\/?$/.exec(path);
-  const project = /^\/projects\/([^/]+)\/?$/.exec(path);
+  const project = /^\/projects\/([^/]+)\/?$/.exec(path.replace(/^\/projects\/not-attached\/?$/, "/x"));
   const signDoc = /^\/sign\/d\/([^/]+)\/?$/.exec(path);
   const clientRec = /^\/clients\/([^/]+)\/?$/.exec(path);
   const sentNote = /^\/sent\/([^/]+)\/?$/.exec(path);
@@ -288,7 +290,9 @@ function SignedIn() {
   if (overview) { const Page = OVERVIEW[overview[1] as keyof typeof OVERVIEW]; page = <Suspense fallback={<Loading />}><Page /></Suspense>; }
   else if (video) page = <VideoPage key={video[1]} videoId={video[1] as Id<"videos">} versionNumber={Number(params.get("version")) || null} noteId={params.get("note")} />;
   else if (project) { const t = params.get("tab"); page = <Suspense fallback={<Loading />}><ProjectPage key={project[1]} projectId={project[1] as Id<"projects">} tab={(["cuts", "documents", "invoices", "delivery", "ledger"].includes(t ?? "") ? t : "overview") as ProjectTab} /></Suspense>; }
-  else if (path.startsWith("/projects")) page = <Projects key="all" />;
+  else if (/^\/projects\/not-attached\/?$/.test(path)) page = <Suspense fallback={<Loading />}><NotAttached /></Suspense>; // Nov 16: How everything connects
+  else if (path.startsWith("/projects")) page = <Suspense fallback={<Loading />}><ProjectsHub /></Suspense>;
+  else if (/^\/review\/library\/?$/.test(path)) page = <Projects key="all" />; // the cuts library (was /projects)
   else if (/^\/payments\/invoices\/new\/?$/.test(path)) page = <Suspense fallback={<Loading />}><InvoiceEditor key={search} clientId={params.get("client")} projectId={params.get("project")} /></Suspense>;
   else if (/^\/payments\/invoices\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><InvoiceDetail key={id} invoiceId={id} /></Suspense>; }
   else if (/^\/payments\/invoices\/?$/.test(path)) page = <Suspense fallback={<Loading />}><InvoicesPage key={search} /></Suspense>;

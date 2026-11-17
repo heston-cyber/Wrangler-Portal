@@ -13,6 +13,7 @@ import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps, navigate } from "../../lib/router";
 import { errLine, useHold, type ItemSpec } from "../../ui/hold";
 import { parsePasteRows } from "../../../convex/lib/shotList";
+import { AttachDialog } from "../projects/Homes";
 import { clock, shortDay, windowOf } from "./shotTime";
 export { clock, shortDay, windowOf };
 
@@ -125,6 +126,7 @@ export function ShotListEditor({ listId }: { listId: string }) {
   const [over, setOver] = useState<string | null>(null);
   const moveShot = useMutation(api.shotLists.moveShot);
   const moveSetup = useMutation(api.shotLists.moveSetup);
+  const [homing, setHoming] = useState(false); // Nov 16: Attach / Move (How everything connects)
   const run = (p: Promise<unknown>, ok?: string) => p.then(() => ok && say(ok)).catch((e) => say(errLine(e)));
 
   if (l === undefined) return <><Crumbs><span className="here">…</span></Crumbs><div className="wp-page prod"><Card label="Loading"><SkeletonRows n={6} /></Card></div></>;
@@ -143,9 +145,10 @@ export function ShotListEditor({ listId }: { listId: string }) {
   return (
     <>
       <Crumbs><span className="here">{name}</span></Crumbs>
+      {homing && <AttachDialog kind="shotList" id={l._id} name={name} hasHome={!!(l.project || l.shoot)} onClose={() => setHoming(false)} show={say} />}
       <div className="wp-page prod sl-page">
         <PageHeader eyebrow="Shot list" title={`${name}.`} sub={sub}
-          actions={<>{l.shoot && <ButtonLink to={`/production/shoots/${l.shoot._id}/shot-list`} iconEnd={false}>On-set checklist</ButtonLink>}<Button icon="plus" onClick={() => setDialog({ kind: "paste" })} disabled={!setups.length}>Paste shots</Button><Button variant="primary" onClick={() => setDialog({ kind: "setup" })}>Add setup</Button></>} />
+          actions={<><Button icon="attach" onClick={() => setHoming(true)}>{l.project || l.shoot ? "Move to…" : "Attach to…"}</Button>{l.shoot && <ButtonLink to={`/production/shoots/${l.shoot._id}/shot-list`} iconEnd={false}>On-set checklist</ButtonLink>}<Button icon="plus" onClick={() => setDialog({ kind: "paste" })} disabled={!setups.length}>Paste shots</Button><Button variant="primary" onClick={() => setDialog({ kind: "setup" })}>Add setup</Button></>} />
         <div className="sl-cols">
           <Card className="sl-main" label="Setups and shots">
             {l.setups.length === 0 ? <div className="sl-empty">

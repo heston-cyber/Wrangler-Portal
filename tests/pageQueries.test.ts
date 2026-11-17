@@ -195,6 +195,12 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "shotLists.forShoot": { pages: ["owner"], args: () => "skip" },
   "shotLists.forBuild": { pages: ["owner"], args: () => "skip" }, // the builder's Shot list block
   "shotLists.forProject": { pages: ["owner"], args: () => "skip" }, // the project Overview's Shot list card
+  // Nov 16: How everything connects (Projects by client, Not attached, Attach / Move, a project's Move)
+  "homes.projectsBoard": { pages: ["owner"], args: () => ({}) },
+  "homes.loose": { pages: ["owner"], args: () => ({}) },
+  "homes.clientChoices": { pages: ["owner"], args: () => ({}) },
+  "homes.places": { pages: ["owner"], args: () => "skip" }, // the picker, for one kind
+  "homes.projectMove": { pages: ["owner"], args: () => "skip" }, // the Move confirmation, for one project
   "callSheets.get": { pages: ["owner"], args: () => "skip" }, // the questions, the editor, Detail
   "callSheets.forClient": { pages: ["clientHome"], args: () => ({ callSheetId: "nope" }) }, // /call-sheets/<id>
   "callSheets.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Coming up

@@ -3622,6 +3622,15 @@ canvas.wp-glass.stale { opacity: 0; transition-duration: 90ms; } /* ?glass=lazy 
   .wp-sidegap, .wp-shell:not(.overlay) > .wp-side:not(.drawer) { transition: none !important; }
 }
 
+/* ---------- The new menu (Nov 16, How everything connects: frames 6c 1059-28911, rail 1060-29164) ---------- */
+/* Group names in caps above each group; in the rail the names go and a gap with a hairline marks the groups */
+.wp-navgroup { font-family: var(--font-title); font-weight: 500; font-size: var(--fs-label-small); line-height: var(--lh-label-small); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-faint); padding: 14px 12px 6px; }
+.wp-navgroup.first { padding-top: 6px; }
+@media (min-width: 1024px) {
+  .wp-shell[data-menu="rail"] > .wp-side:not(.drawer) .wp-navgroup { font-size: 0; line-height: 0; padding: 0; margin: 10px 14px; height: 1px; background: var(--border-subtle, rgba(255,255,255,.08)); }
+  .wp-shell[data-menu="rail"] > .wp-side:not(.drawer) .wp-navgroup.first { height: 0; margin: 4px 0; background: none; }
+}
+
 /* ---------- Shot lists (Nov 16; frames 5h / …: list 1033-18757, editor 1034-19371, phone 1035-21337) ---------- */
 .sl-table .sl-thead, .sl-table .sl-trow { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.2fr) 80px 180px; gap: 16px; align-items: center; padding: 14px 20px; }
 .sl-thead { font: 600 var(--fs-label-small)/var(--lh-label-small) var(--font-body); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-muted); }
@@ -3761,3 +3770,55 @@ a.sl-day:hover .t { color: var(--text-accent); }
 .sl-card .wp-small { margin: 0; }
 .sl-cardline { color: var(--text-secondary); font-size: var(--fs-text-small); line-height: var(--lh-small); text-decoration: none; }
 .sl-cardline:hover { color: var(--text-primary); }
+
+/* ---------- How everything connects (Nov 16): Projects by client, Not attached, Attach / Move ---------- */
+.hm-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0 20px; }
+.hm-toolbar > :first-child { flex: 1 1 auto; }
+.hm-loose { display: inline-flex; gap: 8px; align-items: center; padding: 7px 14px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--border-subtle, rgba(255,255,255,.12)); color: var(--text-primary); text-decoration: none; font: 500 var(--fs-text-small)/1 var(--font-body); }
+.hm-loose:hover { background: var(--surface-block-hover); }
+.hm-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: 16px; align-items: start; }
+.hm-groups.one { grid-template-columns: 1fr; }
+.hm-group { border-radius: var(--radius-card); padding: 16px 18px; display: grid; gap: 8px; }
+.hm-group.own { border: 1px dashed var(--border-strong, rgba(255,255,255,.28)); }
+.hm-ghead { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.hm-ghead > .wp-icon { color: var(--accent); }
+.hm-ghead b { font: 600 var(--fs-text)/1.2 var(--font-body); }
+.hm-ghead .secondary { font-size: var(--fs-text-small); }
+.hm-ghead .sp { flex: 1; }
+.hm-glink { color: var(--text-primary); font: 500 var(--fs-text-small)/1 var(--font-body); text-decoration: none; }
+.hm-glink:hover { text-decoration: underline; }
+.hm-prow { display: flex; align-items: center; gap: 6px; }
+.hm-plink { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--surface-block); color: inherit; text-decoration: none; }
+.hm-plink:hover { background: var(--surface-block-hover); }
+.hm-plink .t { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.hm-plink .t b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm-plink .t .secondary { font-size: var(--fs-text-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm-plink > .wp-icon { color: var(--accent); }
+.hm-stage { flex: 0 0 auto; padding: 2px 9px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--border-strong, rgba(255,255,255,.28)); font: 500 11px/1.4 var(--font-body); color: var(--text-secondary); }
+.hm-rowmove { flex: 0 0 auto; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 10px; background: none; color: var(--accent); cursor: pointer; }
+.hm-rowmove:hover { background: var(--surface-block-hover); }
+.hm-kind { margin-bottom: 16px; padding: 14px 18px; }
+.hm-khead { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; }
+.hm-khead > .wp-icon { color: var(--accent); }
+.hm-krow { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border-faint); }
+.hm-krow .t { flex: 1; min-width: 0; color: var(--text-primary); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm-krow a.t:hover { text-decoration: underline; }
+.hm-krow .btn { display: inline-flex; gap: 6px; align-items: center; }
+.hm-pick { display: grid; gap: 12px; }
+.hm-list { display: grid; gap: 4px; max-height: min(52vh, 420px); overflow: auto; }
+.hm-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 0; border-radius: 12px; background: var(--surface-block); color: inherit; text-align: left; cursor: pointer; }
+.hm-row:hover:not(:disabled) { background: var(--surface-block-hover); }
+.hm-row:disabled { opacity: .45; cursor: default; }
+.hm-row > .wp-icon { color: var(--accent); flex: 0 0 auto; }
+.hm-row .t { display: grid; gap: 2px; min-width: 0; }
+.hm-row .t .secondary { font-size: var(--fs-text-small); }
+.hm-none { margin: 8px 4px; }
+.hm-what { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.hm-what li { display: flex; gap: 10px; align-items: flex-start; }
+.hm-what li > .wp-icon { color: var(--accent); margin-top: 2px; flex: 0 0 auto; }
+.hm-what li.warn { color: var(--text-primary); }
+.hm-chip-row { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.hm-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--border-strong, rgba(255,255,255,.28)); color: var(--text-primary); font: 500 var(--fs-text-small)/1.4 var(--font-body); text-decoration: none; }
+.hm-chip > .wp-icon { color: var(--accent); }
+.hm-chip.own { box-shadow: none; border: 1px dashed var(--border-strong, rgba(255,255,255,.28)); color: var(--text-secondary); }
+.hm-move { border: 0; background: none; padding: 0; color: var(--text-primary); font: 500 var(--fs-text-small)/1 var(--font-body); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }

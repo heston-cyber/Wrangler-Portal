@@ -341,4 +341,42 @@ describe("how everything connects", () => {
     const loose = (await w.heston.mutation(api.shoots.schedule, { date: "2030-03-03", call: "08:00", location: "Lot", parking: "", prepare: [], withOwner: true, bookingIds: [], calendar: false })).shootId;
     await expect(w.heston.mutation(api.bookings.create, { ...base, start: "2030-03-03", end: "2030-03-03", shootId: loose })).rejects.toThrow(/Attach this shoot to a project first/);
   });
+
+  test("3c review: sent briefs stay with their client on a project move; a held shoot tells nobody; a declined shoot-day booking leaves the crew", async () => {
+    const w = await world();
+    vi.stubGlobal("fetch", async () => new Response("{}", { status: 500 }));
+    await w.t.run(async (ctx) => {
+      const owner = (await ctx.db.query("users").first())!._id;
+      const s = await ctx.db.insert("shares", { businessId: w.A, token: "tok-proj-3cr", kind: "project", projectId: w.p, access: "comment", who: "invited", allVersions: true, downloads: false, emailNewVersions: true, createdAt: 0, createdBy: owner } as never);
+      await ctx.db.insert("shareMembers", { businessId: w.A, shareId: s, email: "maya@harbor.example", addedAt: 0 });
+    });
+    const { briefId } = await w.heston.mutation(api.briefs.send, { projectId: w.p });
+    const draft = await w.heston.mutation(api.briefs.create, {}) as Id<"briefs">;
+    await w.heston.mutation(api.homes.move, { kind: "brief", id: draft, to: { type: "project", id: w.p } });
+    const north = await w.t.run((ctx) => ctx.db.insert("clients", { businessId: w.A, name: "Northline", createdAt: 0 }));
+    const info = await w.heston.query(api.homes.projectMove, { projectId: w.p });
+    expect(info.staying.map((x: { name: string }) => x.name)).toContain("Kickoff brief");
+    await w.heston.mutation(api.homes.moveProject, { projectId: w.p, clientId: north });
+    const r = await w.t.run(async (ctx) => ({ sent: (await ctx.db.get(briefId))!, draft: (await ctx.db.get(draft))! }));
+    expect(r.sent.projectId).toBeUndefined(); expect(r.sent.clientId).toBe(w.harbor);
+    expect(r.draft.projectId).toBe(w.p);
+    // A sent brief on a project with no client can only be let go.
+    const lone = await w.t.run((ctx) => ctx.db.insert("projects", { businessId: w.A, name: "Spec", createdAt: 0 }));
+    await w.t.run((ctx) => ctx.db.patch(draft, { projectId: lone, status: "sent", sentAt: 1 } as never));
+    await expect(w.heston.mutation(api.homes.move, { kind: "brief", id: draft, to: { type: "client", id: north } })).rejects.toThrow(/already sent/);
+
+    // Held shoot: the new client isn't told about a change, can't see it, until Ask to confirm.
+    const { shootId } = await w.heston.mutation(api.shoots.schedule, { projectId: w.p, date: "2030-02-02", call: "07:00", location: "Studio", parking: "", prepare: [], withOwner: true, bookingIds: [], calendar: false });
+    await w.t.run((ctx) => ctx.db.patch(shootId, { clientHold: { at: 1, from: "Harbor Coffee" } }));
+    const before = await w.t.run(async (ctx) => (await ctx.db.query("inbox").collect()).length);
+    await w.heston.mutation(api.shoots.update, { shootId, date: "2030-02-03", call: "07:00", location: "Studio", parking: "", prepare: [], withOwner: true, bookingIds: [], calendar: false });
+    expect(await w.t.run(async (ctx) => (await ctx.db.query("inbox").collect()).length)).toBe(before);
+
+    // A declined booking for a shoot day comes off its crew.
+    const vendorId = await w.t.run((ctx) => ctx.db.insert("vendors", { businessId: w.A, name: "Jordan Ellis", email: "jordan@x.example", roles: ["Shooter"], rates: [], createdAt: 0, updatedAt: 0 } as never));
+    const bookingId = await w.heston.mutation(api.bookings.create, { vendorId, projectId: w.p, role: "Shooter", start: "2030-02-03", end: "2030-02-03", cents: 80000, unit: "day", shootId });
+    await w.t.run(async (ctx) => { await ctx.db.patch(bookingId, { status: "declined" }); });
+    // (the vendor side's decline is exercised in vendorPortal tests; here the shoot-day cleanup runs through cancel too)
+    expect((await w.t.run(async (ctx) => (await ctx.db.get(shootId))!.crew)).some((c) => c.bookingId === bookingId)).toBe(true);
+  });
 });

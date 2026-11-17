@@ -215,7 +215,7 @@ export const remind = mutation({
     if (Date.now() - (r.remindedAt ?? r.sentAt ?? 0) <= REMIND_GAP) throw new ConvexError("They had an email about it today. Try again tomorrow.");
     const w = await placeOf(ctx, r);
     const people = w ? await peopleAt(ctx, w) : [];
-    if (!people.length) throw new ConvexError("Nobody at the client can open this project in the portal now.");
+    if (!people.length) throw new ConvexError(w?.p ? "Nobody at the client can open this project in the portal now." : "Nobody at the client has the portal now.");
     const now = Date.now();
     await ctx.db.patch(briefId, { remindedAt: now, updatedAt: now, history: [...r.history, { at: now, text: "Reminded" }] });
     await ctx.scheduler.runAfter(0, internal.briefs.mail, { briefId, kind: "reminder", emails: people.map((x) => x.email), at: now });

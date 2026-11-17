@@ -111,6 +111,8 @@ async function patchFor(ctx: MutationCtx, k: Kind, d: Record<string, unknown> & 
   if (why) throw new ConvexError(why);
   if (def.sent?.(d)) {
     const was = await clientNow(ctx, d);
+    // 3c review L3: a sent brief or request with no client went to the people of where it was: it can only be let go.
+    if (!was && (k === "brief" || k === "fileRequest") && to) throw new ConvexError(`This ${def.noun} was already sent: it stays where it is, or goes on its own.`);
     if (was && (!to || String(to.clientId ?? "") !== was)) throw new ConvexError(`This ${def.noun} is addressed to someone or already sent: it stays with the client it's for. File it under one of their projects, or under the client.`);
   }
   const patch: Record<string, unknown> = {};
@@ -223,7 +225,14 @@ async function projectContents(ctx: Ctx, p: Doc<"projects">) {
       else moving++;
     }
   }
-  for (const t of ["shoots", "shotLists", "briefings", "briefs", "fileRequests", "vendorBookings", "videos", "callSheets"] as const)
+  // 3c review H: a sent kickoff brief or file request holds the client's answers and files: it stays with that client
+  // (at client level), like sent money documents; drafts go with the project.
+  for (const k of ["brief", "fileRequest"] as Kind[])
+    for (const r of (await ctx.db.query(KINDS[k].table as "briefs").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect()) as Array<Record<string, unknown> & { _id: string }>) {
+      if ((KINDS[k] as KindDef).sent?.(r)) sentStay.push({ kind: k, id: r._id, name: k === "brief" ? "Kickoff brief" : String(r.title ?? "File request") });
+      else moving++;
+    }
+  for (const t of ["shoots", "shotLists", "briefings", "vendorBookings", "videos", "callSheets"] as const)
     moving += (await ctx.db.query(t).withIndex("by_project" as never, ((q: { eq: (f: string, v: unknown) => unknown }) => q.eq("projectId", p._id)) as never).collect()).length;
   return { moving, sentStay, money };
 }
@@ -256,6 +265,8 @@ export async function moveProjectCore(ctx: MutationCtx, p: Doc<"projects">, to: 
       else await ctx.db.patch(r._id, { clientId: to?._id } as never);
     }
   }
+  // Sent briefs and requests leave the project for its old client (or for no home, when it had none).
+  for (const x of sentStay) if (x.kind === "brief" || x.kind === "fileRequest") await ctx.db.patch(x.id as Id<"briefs">, { projectId: undefined, clientId: p.clientId } as never);
   // Review H2: the name first (the writer relinks a project's client by name), then the exact client picked.
   await ctx.db.patch(p._id, { client: to?.name });
   await ctx.db.patch(p._id, { clientId: to?._id });
@@ -271,7 +282,9 @@ export async function moveProjectCore(ctx: MutationCtx, p: Doc<"projects">, to: 
   let sharesOff = 0;
   const off = async (sh: Doc<"shares">) => { if (!sh.offAt && sh.kind !== "client") { await ctx.db.patch(sh._id, { offAt: Date.now() }); sharesOff++; } };
   if (p.clientId) {
-    for (const sh of await ctx.db.query("shares").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect()) await off(sh);
+    // A booked editor's Review access is a project share too: it isn't the client's, so it stays (3c review, older).
+    const crew = new Set((await ctx.db.query("vendorBookings").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect()).map((k) => String(k.reviewShareId ?? "")));
+    for (const sh of await ctx.db.query("shares").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect()) if (!crew.has(sh._id)) await off(sh);
     for (const vid of await ctx.db.query("videos").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect())
       for (const sh of await ctx.db.query("shares").withIndex("by_video", (q) => q.eq("videoId", vid._id)).collect()) await off((await ctx.db.get(sh._id))!);
   }
@@ -334,6 +347,54 @@ export const moveProject = mutation({
 
 export { mayMoveProject };
 
+// ---------- Projects (the new menu's Projects page: by client, with "On their own") ----------
+
+const STAGE_NAME: Record<string, string> = { discovery: "Discovery", strategy: "Strategy", production: "Production", polish: "Polish", delivery: "Delivery" };
+
+/** Every project with its client (or none), stage and a one-line summary; the clients with projects; the loose count. */
+export const projectsBoard = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAll(ctx, "projects");
+    const projects = await ctx.db.query("projects").collect();
+    const clients = new Map((await ctx.db.query("clients").collect()).map((c) => [c._id as string, c]));
+    const count = new Map<string, { shoots: number; next: string | null; lists: number; docs: number; cuts: number }>();
+    const of = (id: string | undefined) => { if (!id) return null; let c = count.get(id); if (!c) count.set(id, (c = { shoots: 0, next: null, lists: 0, docs: 0, cuts: 0 })); return c; };
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+    for (const s of await ctx.db.query("shoots").collect()) {
+      const c = of(s.projectId); if (!c || s.status !== "scheduled") continue;
+      c.shoots++; if (s.date >= today && (!c.next || s.date < c.next)) c.next = s.date;
+    }
+    for (const l of await ctx.db.query("shotLists").collect()) { const c = of(l.projectId); if (c) c.lists++; }
+    for (const t of ["quotes", "proposals", "invoices", "briefs", "fileRequests"] as const)
+      for (const d of (await ctx.db.query(t).collect()) as Array<{ projectId?: Id<"projects"> }>) { const c = of(d.projectId); if (c) c.docs++; }
+    for (const v of await ctx.db.query("videos").collect()) { const c = of(v.projectId); if (c) c.cuts++; }
+    let loose = 0;
+    for (const k of Object.keys(KINDS) as Kind[]) {
+      const def = KINDS[k] as KindDef;
+      try { await requireAll(ctx, def.perm); } catch { continue; }
+      for (const r of (await ctx.db.query(def.table).collect()) as Array<Record<string, unknown>>) if (!homeOf(k, r) && r.status !== "cancelled") loose++;
+    }
+    return {
+      today, loose,
+      projects: projects.map((p) => {
+        const c = count.get(p._id) ?? { shoots: 0, next: null, lists: 0, docs: 0, cuts: 0 };
+        const cl = p.clientId ? clients.get(p.clientId) : undefined;
+        return { _id: p._id, label: label(p), clientId: cl?._id ?? null, client: cl?.name ?? null, stage: p.stage ?? "discovery", stageName: STAGE_NAME[p.stage ?? "discovery"], ...c, updatedAt: p.updatedAt ?? p.createdAt };
+      }).sort((a, b) => b.updatedAt - a.updatedAt),
+    };
+  },
+});
+
+/** The clients a project can move to (Move to client…). */
+export const clientChoices = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAll(ctx, ["projects", "clients"]);
+    return (await ctx.db.query("clients").collect()).map((c) => ({ _id: c._id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
+
 // ---------- the picker, and "Not attached" ----------
 
 /** The Attach/Move picker: the places this kind can go (a shoot day that already has a list is marked for shot lists). */
@@ -370,7 +431,7 @@ export const loose = query({
       const def = KINDS[k] as KindDef;
       try { await requireAll(ctx, def.perm); } catch { continue; }
       for (const r of (await ctx.db.query(def.table).collect()) as Array<Record<string, unknown> & { _id: string; _creationTime: number }>)
-        if (!homeOf(k, r)) out.push({ kind: k, id: r._id, name: String(r.title ?? r.number ?? def.noun), at: Number(r.updatedAt ?? r._creationTime) });
+        if (!homeOf(k, r) && r.status !== "cancelled") out.push({ kind: k, id: r._id, name: String(r.title ?? r.number ?? def.noun), at: Number(r.updatedAt ?? r._creationTime) });
     }
     return out.sort((x, y) => y.at - x.at);
   },

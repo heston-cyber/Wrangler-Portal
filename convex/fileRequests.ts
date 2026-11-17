@@ -47,7 +47,8 @@ async function baseFolder(ctx: Ctx, p: Doc<"projects">) {
   return `/File requests/${safeName(client || "No client", 80)}/${safeName(label(p), 80)}`;
 }
 /** Hierarchy 3c: a request on a client with no project files under the client's own folder. */
-const baseAt = async (ctx: Ctx, w: Placed) => (w.p ? await baseFolder(ctx, w.p) : `/File requests/${safeName(w.c!.name, 80)}`);
+// Its own subfolder, so a request can't land in the root of one of the client's project folders (3c review L6).
+const baseAt = async (ctx: Ctx, w: Placed) => (w.p ? await baseFolder(ctx, w.p) : `/File requests/${safeName(w.c!.name, 80)}/Not on a project`);
 async function ownedProject(ctx: Ctx, projectId: string) {
   const id = ctx.db.normalizeId("projects", projectId);
   const p = id ? await ctx.db.get(id) : null;

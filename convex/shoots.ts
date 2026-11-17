@@ -97,6 +97,9 @@ const view = (s: Doc<"shoots">) => ({
  *  Phase 5b step 5: `delayMs` holds the email back (a move dragged on the calendar can be undone for a few seconds). */
 export async function tell(ctx: MutationCtx, p: Doc<"projects"> | null, s: { _id: Id<"shoots">; date: string; call: string; location: string }, moved: Doc<"shoots">["moved"] | null, at: number, delayMs = 0) {
   if (!p) return 0; // D205: a shoot on its own has no client to tell
+  // Moved to another client and not asked yet: nobody there is told (Heston, Nov 16; 3c review M). askClientConfirm
+  // clears the hold before it tells them.
+  if ((await ctx.db.get(s._id))?.clientHold) return 0;
   const biz = await businessOf(ctx, p);
   if (!biz) return 0;
   const people = await portalPeople(ctx, p);
@@ -201,7 +204,8 @@ async function clientShoot(ctx: QueryCtx, shootId: string) {
   if (me.kind !== "client") return null;
   const id = ctx.db.normalizeId("shoots", shootId);
   const s = id ? await ctx.db.get(id) : null;
-  if (!s || s.status !== "scheduled") return null;
+  // A shoot moved to this client waits for Ask {client} to confirm before they see it (3c review M).
+  if (!s || s.status !== "scheduled" || s.clientHold) return null;
   const row = s.projectId ? (await myProjects(ctx, me.email)).get(s.projectId) : undefined; // D205: a shoot on its own has no client
   if (!row) return null;
   const p = row.project;
@@ -219,7 +223,7 @@ export const forClientProject = query({
     if (!id || !(await myProjects(ctx, me.email)).has(id)) return [];
     const today = todayCentral();
     return (await ctx.db.query("shoots").withIndex("by_project", (q) => q.eq("projectId", id).gte("date", today)).collect())
-      .filter((s) => s.status === "scheduled").map((s) => ({ _id: s._id, date: s.date, call: s.call, location: s.location, confirmed: !!s.confirmed }));
+      .filter((s) => s.status === "scheduled" && !s.clientHold).map((s) => ({ _id: s._id, date: s.date, call: s.call, location: s.location, confirmed: !!s.confirmed }));
   },
 });
 

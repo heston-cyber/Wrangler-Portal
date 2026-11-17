@@ -10,7 +10,7 @@ import { deskMotion, nextSlide, pulse, slideDir } from "../lib/motion";
 import { useQuery } from "convex/react";
 import { useSignOutAsk } from "./SignOut";
 import { sideWord, useSideSwitch } from "./SideSwitch";
-import { DEFAULT_TOOLS, toolsOf, type ToolKey, type Tools } from "../../convex/lib/tools";
+import { DEFAULT_TOOLS, TOOL_GROUPS, groupOf, toolsOf, type ToolKey, type Tools } from "../../convex/lib/tools";
 import { api } from "../../convex/_generated/api";
 import { linkProps, navigate, useLocation } from "../lib/router";
 import { useUploads } from "../lib/uploads";
@@ -35,7 +35,7 @@ export const useShell = () => useContext(Ctx);
 // D151 (Nov 4, 21:40): Docs (Proposals · Contracts) and People (Clients · Vendors) are grouped the same way.
 // `only`: a group with no pages under it yet (Delivery): it names the group, and isn't listed itself.
 type Sub = { to: string; label: string; match: (p: string) => boolean; group?: string; only?: boolean };
-export type Item = { to: string; label: string; icon: IconName; match: (p: string) => boolean; tab?: (p: string) => boolean; layer?: Sub[]; layerHas?: (p: string) => boolean; badge?: number };
+export type Item = { to: string; label: string; icon: IconName; match: (p: string) => boolean; tab?: (p: string) => boolean; layer?: Sub[]; layerHas?: (p: string) => boolean; badge?: number; group?: string };
 
 const starts = (p: string, ...pre: string[]) => pre.some((x) => p === x || p.startsWith(x + "/"));
 const OWNER_DOCS: Sub[] = [
@@ -85,7 +85,7 @@ const OWNER_PRODUCTION: Sub[] = [
 // its "Coming soon" page for now, so it has no pages under it.
 // D151: the same for Docs (Proposals · Contracts) and People (Clients · Vendors): each name opens that tool's overview.
 export const STAGE_TO: Record<string, string> = { "Pre-pro": "/production/pre-pro", "Prin-pro": "/production/prin-pro", "Post-pro": "/production/post-pro", Delivery: "/production/delivery",
-  Proposals: "/proposals/overview", Contracts: "/sign/overview", Clients: "/clients/overview", Vendors: "/vendors/overview" };
+  Proposals: "/proposals/overview", Contracts: "/sign/overview", Clients: "/clients/overview", Vendors: "/vendors/overview", Payments: "/payments" };
 // D176 (Nov 15): every submenu item gets an icon, one per kind of thing (the same kind has the same icon wherever it appears).
 export const SUB_ICON: Record<string, IconName> = {
   "/production": "overview", "/payments": "overview", "/projects": "folder", "/vendors/bookings": "booking", "/vendors/briefings": "briefing",
@@ -95,10 +95,10 @@ export const SUB_ICON: Record<string, IconName> = {
   "/vendors": "users", "/vendors/payments": "wallet", "/proposals/new": "plus", "/sign/new": "plus", "/proposals": "register", "/sign/docs": "register",
   "/proposals/templates": "template", "/sign/templates": "template", "/proposals/questionnaire": "questionnaire", "/sign/signature": "sign",
   "/payments/invoices": "invoice", "/payments/quotes": "quote", "/payments/subscriptions": "repeat", "/payments/plans": "layers", "/payments/reports": "chart",
-  "/review": "register",
+  "/review": "register", "/projects/not-attached": "attach", "/review/library": "video", "/production/post-pro": "overview", "/sign/overview": "overview", "/clients/overview": "overview",
 };
 export const STAGE_ICON: Record<string, IconName> = { "Pre-pro": "clipboard", "Prin-pro": "camera", "Post-pro": "scissors", Delivery: "package",
-  Proposals: "presentation", Contracts: "contract", Clients: "user", Vendors: "briefcase" };
+  Proposals: "presentation", Contracts: "contract", Clients: "user", Vendors: "briefcase", Payments: "invoice" };
 export const subIcon = (to: string): IconName => SUB_ICON[to] ?? "folder"; // a shared project is a folder
 const groupsOf = (layer: Sub[]) => [...new Set(layer.map((s) => s.group).filter((g): g is string => !!g))];
 const stageItems = (layer: Sub[], g: string) => layer.filter((s) => s.group === g && !s.only);
@@ -120,23 +120,61 @@ const inDocsAll = (p: string) => inDocs(p) || inProposals(p);
 const OWNER_PEOPLE: Sub[] = [...OWNER_CLIENTS.map((x) => ({ ...x, group: "Clients" })), ...OWNER_VENDORS.map((x) => ({ ...x, group: "Vendors" }))];
 const inPeople = (p: string) => inClients(p) || inVendors(p);
 
-// Nov 2 (Heston): Settings › Tools sets this owner's menu: the order, which tools are on it, and Home is now Dashboard.
-// Phones: the first four tools on the menu, then More (the rest, then Settings).
+// Nov 16 (How everything connects, Q133): ten items in three groups (Every day · Making the work · Running the
+// business), Settings at the foot. Every old address keeps working; the old layers' pages sit under their new items.
+const NEW_PROJECTS: Sub[] = [
+  { to: "/projects", label: "All projects", match: (p) => starts(p, "/projects") && !starts(p, "/projects/not-attached") },
+  { to: "/projects/not-attached", label: "Not attached", match: (p) => starts(p, "/projects/not-attached") },
+];
+const inNewProjects = (p: string) => starts(p, "/projects");
+const NEW_PRODUCTION: Sub[] = [
+  { to: "/production", label: "Overview", match: (p) => p === "/production" || p === "/production/" },
+  { to: "/production/shoots", label: "Shoots", match: (p) => starts(p, "/production/shoots") },
+  { to: "/production/call-sheets", label: "Call sheets", match: (p) => starts(p, "/production/call-sheets") },
+  { to: "/production/shot-lists", label: "Shot lists", match: (p) => starts(p, "/production/shot-lists") },
+  { to: "/production/gear", label: "Gear", match: (p) => starts(p, "/production/gear") },
+  { to: "/vendors", label: "Crew", match: (p) => starts(p, "/vendors") && !starts(p, "/vendors/overview", "/vendors/bookings", "/vendors/briefings", "/vendors/payments") },
+  { to: "/vendors/bookings", label: "Bookings", match: (p) => starts(p, "/vendors/bookings") },
+  { to: "/vendors/briefings", label: "Briefings", match: (p) => starts(p, "/vendors/briefings") },
+];
+const inNewProduction = (p: string) => (starts(p, "/production", "/vendors") && !starts(p, "/production/calendar", "/production/delivery", "/production/post-pro", "/vendors/payments"));
+const NEW_POST: Sub[] = [
+  { to: "/review/overview", label: "Review", match: (p) => starts(p, "/review", "/v") && !starts(p, "/review/library") },
+  { to: "/review/library", label: "All cuts", match: (p) => starts(p, "/review/library") },
+  { to: "/production/delivery", label: "Delivery", match: (p) => starts(p, "/production/delivery") },
+  { to: "/activity", label: "Activity", match: (p) => starts(p, "/activity") },
+];
+const inPost = (p: string) => starts(p, "/review", "/v", "/production/delivery", "/production/post-pro", "/activity");
+const NEW_CLIENTS: Sub[] = [{ to: "/clients/overview", label: "Overview", match: (p) => starts(p, "/clients/overview") }, ...OWNER_CLIENTS];
+const moneyLayer = (payments: boolean): Sub[] => [
+  ...OWNER_PROPOSALS.map((x) => ({ ...x, group: "Proposals" })),
+  ...OWNER_DOCS.map((x) => ({ ...x, label: x.label === "All docs" ? "All contracts" : x.label === "New document" ? "New contract" : x.label, group: "Contracts" })),
+  ...(payments ? OWNER_PAYMENTS.filter((x) => x.to !== "/payments").map((x) => ({ ...x, group: "Payments" })) : []),
+  { to: "/vendors/payments", label: "Vendor payments", match: (p) => starts(p, "/vendors/payments"), group: "Payments" },
+];
+const inMoney = (p: string) => inDocsAll(p) || inPayments(p) || starts(p, "/vendors/payments");
+
+const TAB_ORDER = ["/", "/projects", "/production", "/messages"];
 export function ownerItems(payments = false, saved: Tools = DEFAULT_TOOLS, msgs = 0): { main: Item[]; tabs: Item[] } {
-  const tools = toolsOf(saved); // D150: a menu saved with Review shows Production in its place, even before the server re-saves it
-  const home: Item = { to: "/", label: "Dashboard", icon: "home", match: (p) => p === "/" };
-  const people: Item = { to: "/clients/overview", label: "People", icon: "users", match: () => false, tab: inPeople, layer: OWNER_PEOPLE, layerHas: inPeople };
-  // Phase 5d step 2 (D144/58): Messages is its own item, after Clients.
-  const messages: Item = { to: "/messages", label: "Messages", icon: "mail", match: (p) => starts(p, "/messages"), badge: msgs };
-  const docs: Item = { to: "/sign/overview", label: "Docs", icon: "document", match: () => false, tab: inDocsAll, layer: OWNER_DOCS_ALL, layerHas: inDocsAll };
-  const production: Item = { to: "/production", label: "Production", icon: "video", match: () => false, tab: inProduction, layer: OWNER_PRODUCTION, layerHas: inProduction };
-  const sent: Item = { to: "/sent", label: "Sent", icon: "send", match: (p) => starts(p, "/sent") };
-  // Phase 2 Part B: Payments › Invoices once the business has connected Stripe (D45).
-  const pay: Item = { to: "/payments", label: "Payments", icon: "invoice", match: () => false, tab: inPayments, layer: OWNER_PAYMENTS, layerHas: inPayments };
-  const byKey: Record<ToolKey, Item | null> = { dashboard: home, people, messages, docs, payments: payments ? pay : null, production, sent };
+  const tools = toolsOf(saved);
+  const g = (k: ToolKey) => TOOL_GROUPS[groupOf(k)].label;
+  const byKey: Record<ToolKey, Item | null> = {
+    dashboard: { to: "/", label: "Dashboard", icon: "home", match: (p) => p === "/", group: g("dashboard") },
+    messages: { to: "/messages", label: "Messages", icon: "mail", match: (p) => starts(p, "/messages", "/sent"), badge: msgs, group: g("messages") }, // Sent folds in
+    work: null, // Work (5m) joins the menu when it's built
+    calendar: { to: "/production/calendar", label: "Calendar", icon: "calendar", match: (p) => starts(p, "/production/calendar"), group: g("calendar") },
+    projects: { to: "/projects", label: "Projects", icon: "folder", match: () => false, tab: inNewProjects, layer: NEW_PROJECTS, layerHas: inNewProjects, group: g("projects") },
+    creative: null, // Creative planning (5l) joins the menu when it's built
+    production: { to: "/production", label: "Production", icon: "camera", match: () => false, tab: inNewProduction, layer: NEW_PRODUCTION, layerHas: inNewProduction, group: g("production") },
+    post: { to: "/review/overview", label: "Post", icon: "scissors", match: () => false, tab: inPost, layer: NEW_POST, layerHas: inPost, group: g("post") },
+    clients: { to: "/clients/overview", label: "Clients", icon: "building", match: () => false, tab: inClients, layer: NEW_CLIENTS, layerHas: inClients, group: g("clients") },
+    money: { to: payments ? "/payments" : "/proposals/overview", label: "Sales and money", icon: "wallet", match: () => false, tab: inMoney, layer: moneyLayer(payments), layerHas: inMoney, group: g("money") },
+  };
   const main = tools.order.filter((k) => !tools.hidden.includes(k)).map((k) => byKey[k]).filter((x): x is Item => !!x);
-  const tabbed = main.slice(0, 4);
-  const rest = main.slice(4);
+  // Phones (Q133 a): Dashboard · Projects · Production · Messages, then More.
+  const pick = (to: string) => main.find((x) => x.to === to);
+  const tabbed = TAB_ORDER.map(pick).filter((x): x is Item => !!x);
+  const rest = main.filter((x) => !tabbed.includes(x));
   const inRest = (p: string) => rest.some((it) => (it.tab ?? it.match)(p));
   const more: Item = { to: "/more", label: "More", icon: "menu", match: (p) => starts(p, "/more", "/settings") || inRest(p) };
   return { main, tabs: [...tabbed, more] };
@@ -162,8 +200,10 @@ function teamItems(can: (p: string) => boolean, role: string | null, payments = 
     if (!it.layer && !can(it.to)) continue;
     main.push({ ...it, to: can(it.to) ? it.to : layer![0].to, ...(layer ? { layer } : {}) });
   }
-  const tabbed = main.slice(0, 4);
-  const rest = main.slice(4);
+  const tabbed = TAB_ORDER.map((to) => main.find((x) => x.to === to || (x.layer ?? []).some((s) => s.to === to && x.to === s.to))).filter((x): x is Item => !!x);
+  for (const it of main) if (tabbed.length < 4 && !tabbed.includes(it)) tabbed.push(it); // a team member without some of them: the next items
+  const rest = main.filter((x) => !tabbed.includes(x));
+  void TOOL_GROUPS;
   const inRest = (p: string) => rest.some((it) => (it.tab ?? it.match)(p));
   const more: Item = { to: "/more", label: "More", icon: "menu", match: (p) => starts(p, "/more", "/settings") || inRest(p) };
   return { main, tabs: [...tabbed, more] };
@@ -428,8 +468,9 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
       {top}
       <div className="scroll" ref={scrollEl}>
         <span className="wp-hl" aria-hidden /><span className="wp-hl" aria-hidden /><span className="wp-hl" aria-hidden />
-        {items.map((it) => (
+        {items.map((it, i) => (
           <div key={it.to} style={{ display: "contents" }}>
+            {it.group && it.group !== items[i - 1]?.group && <div className={`wp-navgroup${i === 0 ? " first" : ""}`} aria-hidden>{it.group}</div>}
             <div className={`wp-navwrap${it.layer ? " has-layer" : ""}`}>
               <a className={`wp-nav${!it.match(path) && it.layerHas?.(path) ? " in" : ""}`} aria-current={it.match(path) ? "page" : undefined} {...linkProps(it.to)} title={deskMenu?.state === "rail" ? it.label : undefined}>
                 <Icon name={it.icon} size={24} />
@@ -610,8 +651,10 @@ export function MorePage({ me, side }: { me: Me; side: Side }) {
   // The owner's: the tools on their menu that don't fit the tab bar (Settings › Tools sets which and in what order).
   const tools = useQuery(api.users.me, side === "owner" ? {} : "skip")?.tools as Tools | undefined;
   const TOOL_SUB: Record<string, string> = { "/messages": "Conversations with clients and leads", "/": "Today, clients and activity", "/clients/overview": "Pipeline, companies, follow-ups", "/review": "Projects and activity", "/review/overview": "Projects and activity", "/sign/overview": "Documents and templates",
-    "/proposals/overview": "Written pitches, templates", "/payments": "Overview, invoices and subscriptions", "/vendors/overview": "Shooters, editors and crew you hire", "/sent": "Notes and items you sent" };
-  const rest = side === "owner" ? ownerItems(!!pay?.stripe, tools).main.slice(4) : [];
+    "/proposals/overview": "Written pitches, templates", "/payments": "Overview, invoices and subscriptions", "/vendors/overview": "Shooters, editors and crew you hire", "/sent": "Notes and items you sent",
+    "/production/calendar": "Shoots, edits and calls", "/projects": "Every project, under its client or on its own", "/production": "Shoots, call sheets, shot lists, gear, crew" };
+  const own = side === "owner" ? ownerItems(!!pay?.stripe, tools) : null;
+  const rest = own ? own.main.filter((x) => !own.tabs.some((t) => t.to === x.to)) : [];
   const rows: { to?: string; icon: IconName; title: string; sub?: string; onClick?: () => void }[] = side === "owner"
     ? [
       ...rest.map((it) => ({ to: it.to, icon: it.icon, title: it.label, sub: TOOL_SUB[it.to] })),
