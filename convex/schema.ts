@@ -500,7 +500,7 @@ export default defineSchema({
     style: v.any(),
     signers: v.any(),                       // client signers (name, email, title) for when it's sent
     templateId: v.optional(v.id("wsTemplates")),
-    kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"), v.literal("callsheet"))),  // Phase 3b: a proposal (Proposals); 3c: a briefing (D97); 5b: a call sheet. Never a contract; kept out of Docs
+    kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"), v.literal("callsheet"), v.literal("creative"))),  // Phase 3b: a proposal (Proposals); 3c: a briefing (D97); 5b: a call sheet; 5l: a creative doc. Never a contract; kept out of Docs
     documentId: v.optional(v.id("wsDocuments")), // set once it has gone to signing
     renderedAt: v.optional(v.number()),
     createdAt: v.number(),
@@ -512,6 +512,7 @@ export default defineSchema({
     description: v.optional(v.string()),
     kind: v.optional(v.union(v.literal("proposal"), v.literal("briefing"), v.literal("callsheet"), v.literal("guide"), v.literal("release"))),  // a proposal, briefing, call-sheet or Help-guide template, kept apart from contract templates; 5i: a release (a contract template, chipped Release)
     guideSlug: v.optional(v.string()),       // Phase 5d step 4: which of Wrangler's Help guides this business has edited
+    releaseKind: v.optional(v.union(v.literal("talent"), v.literal("location"), v.literal("minor"))), // 541ac10 review L6: a release template's kind, kept when it's renamed
     blocks: v.any(),
     fields: v.any(),
     style: v.any(),
@@ -587,6 +588,8 @@ export default defineSchema({
     failTotal: v.optional(v.number()),           // wrong codes over the link's whole life
     lockedUntil: v.optional(v.number()),
     verifiedAt: v.optional(v.number()),
+    // 5i (541ac10 review H2): signed in person on the owner's phone: who checked them, on what, where. No email code.
+    inPerson: v.optional(v.object({ at: v.number(), by: v.string(), device: v.string(), place: v.optional(v.string()) })),
     sessionHash: v.optional(v.string()),
     sessionExpiresAt: v.optional(v.number()),
     consentAt: v.optional(v.number()),
@@ -1526,6 +1529,60 @@ export default defineSchema({
     shootId: v.id("shoots"),
     createdAt: v.number(),
   }).index("by_shoot", ["shootId"]).index("by_gear", ["gearId"]),
+
+  // 5l (D187–D191, Nov 17): Creative planning. A creative doc is a builder page (wsBuilds kind "creative": never signed)
+  // with a home (D204: a client, project, shoot day or lead, or none). Shared as a view-only link (D191): the PDF made
+  // at Share (or Update the link), team notes left out.
+  creativeDocs: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    buildId: v.id("wsBuilds"),
+    kind: v.union(v.literal("treatment"), v.literal("script"), v.literal("interview"), v.literal("brief"), v.literal("blank")),
+    clientId: v.optional(v.id("clients")), projectId: v.optional(v.id("projects")), shootId: v.optional(v.id("shoots")), dealId: v.optional(v.id("deals")),
+    share: v.optional(v.object({ token: v.string(), fileId: v.id("_storage"), on: v.boolean(), at: v.number() })),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_build", ["buildId"]).index("by_project", ["projectId"]).index("by_share", ["share.token"]),
+  // 5l (D183–D185): a canvas or mood board: a fixed-size board of items (notes, boxes, strokes, photos, files, links,
+  // tables, frames, text), saved live as one list (no live cursors). Only the business sees it until it's shared with
+  // people of its project (client people, crew) as Can view or Can edit, or by a view-only link.
+  canvases: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    name: v.string(),
+    kind: v.union(v.literal("canvas"), v.literal("mood")),
+    items: v.any(),                              // CanvasItem[] (lib/canvas.ts)
+    rev: v.number(),                             // bumped on each save, so an older save can't overwrite a newer one
+    clientId: v.optional(v.id("clients")), projectId: v.optional(v.id("projects")), shootId: v.optional(v.id("shoots")), dealId: v.optional(v.id("deals")),
+    // D183: one view-only link that can be turned off; people it's shared with are canvasPeople rows.
+    link: v.optional(v.object({ token: v.string(), on: v.boolean() })),
+    files: v.array(v.id("_storage")),            // uploads it holds (so they're its business's and deleted with it)
+    editedBy: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_project", ["projectId"]).index("by_link", ["link.token"]),
+  // D183 (Q137 d): a canvas shared with one person, Can view or Can edit, each with their own link (the owner copies it;
+  // nothing is emailed). Removing the row ends their access.
+  canvasPeople: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    canvasId: v.id("canvases"),
+    email: v.string(),
+    name: v.optional(v.string()),
+    role: v.union(v.literal("view"), v.literal("edit")),
+    token: v.string(),
+    openedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  }).index("by_canvas", ["canvasId"]).index("by_token", ["token"]),
+  // 5l round 3 (D71, D90): brand kits as creative work: any number, on their own or attached to a client, lead or
+  // project; `brandKit` has the same shape as a business's or company's kit (convex/brandKit.ts).
+  brandKits: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    name: v.string(),
+    brandKit: v.optional(v.any()),
+    clientId: v.optional(v.id("clients")), projectId: v.optional(v.id("projects")), dealId: v.optional(v.id("deals")),
+    copiedFrom: v.optional(v.object({ name: v.string(), at: v.number() })),
+    share: v.optional(v.object({ token: v.string(), on: v.boolean() })),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_client", ["clientId"]).index("by_project", ["projectId"]).index("by_share", ["share.token"]),
 
   // 5j (D194, Nov 16): packing lists. A saved list (no shootId) is a kit you reuse; a shoot gets its own copy, which is
   // what's ticked at load-in and wrap. Lines from Gear keep the item (serial, clash with other shoots that day);

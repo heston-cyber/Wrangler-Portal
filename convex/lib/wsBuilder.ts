@@ -35,12 +35,12 @@ export type Fmt = {
 };
 export type LineAttrs = { size?: TextSize; align?: Fmt["align"] | null; color?: string | null; deco?: "focus" | "block" | null; font?: "heading" | "body" | null };
 export type ItemRow = { id: string; description: string; qty: number; rate: number };
-export type SectionAttrs = { look?: "plain" | "card"; initials?: boolean; clauseId?: string | null };
+export type SectionAttrs = { look?: "plain" | "card" | "note"; initials?: boolean; clauseId?: string | null };
 export type PNode = RichNode;
 export type Page = { type: "doc"; content: PNode[] };
 
 // Phase 5b step 3: the call sheet's own blocks (lib/callSheet.ts) come last; contracts never use them.
-export const ATOMS = ["parties", "items", "payment", "signatures", "divider", "pagebreak", "spacer", "location", "schedule", "crew", "contacts", "weather", "shotlist"] as const;
+export const ATOMS = ["parties", "items", "payment", "signatures", "divider", "pagebreak", "spacer", "location", "schedule", "crew", "contacts", "weather", "shotlist", "script"] as const;
 export type AtomType = (typeof ATOMS)[number];
 export const isAtom = (t: string): t is AtomType => (ATOMS as readonly string[]).includes(t);
 /** Review L8: the call sheet's own blocks (lib/callSheet.ts CALL_ATOMS), which never belong in a contract. */
@@ -48,11 +48,11 @@ export const CALL_ONLY = ["location", "schedule", "crew", "contacts", "weather"]
 const isCallOnly = (t: string) => (CALL_ONLY as readonly string[]).includes(t);
 
 /** What the Insert panel adds. */
-export type InsertKind = "title" | "heading" | "text" | "section" | "card" | AtomType;
+export type InsertKind = "title" | "heading" | "text" | "section" | "card" | "note" | AtomType;
 export const INSERT_LABEL: Record<InsertKind, string> = {
-  title: "Title", heading: "Heading", text: "Text", section: "Section", card: "Card", parties: "Parties", items: "Line items",
+  title: "Title", heading: "Heading", text: "Text", section: "Section", card: "Card", note: "Team note", parties: "Parties", items: "Line items",
   payment: "Payment schedule", signatures: "Signatures", divider: "Divider", pagebreak: "Page break", spacer: "Space",
-  location: "Location", schedule: "Schedule", crew: "Crew list", contacts: "Contacts", weather: "Weather", shotlist: "Shot list",
+  location: "Location", schedule: "Schedule", crew: "Crew list", contacts: "Contacts", weather: "Weather", shotlist: "Shot list", script: "Script rows",
 };
 export const BLOCK_LABEL = INSERT_LABEL;
 
@@ -69,6 +69,8 @@ export function newNodes(kind: InsertKind): PNode[] {
     case "text": return [line("")];
     case "section": return [section([line("Section title", { size: "heading" }), line("")])];
     case "card": return [section([line("")], { look: "card" })];
+    // 5l (D191): a note for the team on a creative doc; it stays off the shared page.
+    case "note": return [section([line("")], { look: "note" })];
     case "parties": return [line("Parties", { size: "heading" }), atom("parties")];
     case "items": return [line("Services & pricing", { size: "heading" }), atom("items", { rows: [{ id: newId(), description: "", qty: 1, rate: 0 }] })];
     case "payment": return [section([line("Payment", { size: "heading" }), line("A {deposit.percent} deposit of {deposit} is due on signing. The balance of {balance} is due on delivery."), atom("payment", { depositPct: 25, invoiceDeposit: true, initials: false })])];
@@ -85,6 +87,8 @@ export function newNodes(kind: InsertKind): PNode[] {
     // Nov 16 (D181): a project's shot list, always live where it's read (lib/shotList.ts); listId null = the call sheet's
     // own shoot day. `snap` is the list as it stood when the page was last printed (the PDF), filled at send.
     case "shotlist": return [line("Shot list", { size: "heading" }), atom("shotlist", { listId: null, crewTick: true, snap: null })];
+    // 5l (D188): a two-column script's rows: Time · Picture · Sound (creative docs only; never signed)
+    case "script": return [atom("script", { rows: [{ id: newId(), time: "", picture: "", sound: "" }] })];
   }
 }
 

@@ -3,6 +3,9 @@
 // unchanged (consent, adopt, initial, Sign), and the finished copy goes to the email typed for them.
 //   T-RL.1 hand over → sign → signed; the trail; no invite email
 //   T-RL.2 refusals: not approved, twice, someone without Docs; a draft can be removed; shots must be on the day's list
+//   T-RL.3 (541ac10 review): only the owner hands over; only a release's own document, with no owner signature, no
+//          payment and the release's signer, goes the in-person way; the email isn't marked confirmed and the
+//          certificate says who checked them in person
 import { convexTest } from "convex-test";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { api } from "../convex/_generated/api";
@@ -10,6 +13,7 @@ import schema from "../convex/schema";
 import type { Id } from "../convex/_generated/dataModel";
 import { PDFDocument, StandardFonts } from "@cantoo/pdf-lib";
 import { PERMS } from "../convex/lib/perms";
+import { certificate } from "../convex/lib/wsFinal";
 
 const modules = import.meta.glob("../convex/**/*.ts");
 const OWNER = "owner@studio.example";
@@ -71,12 +75,12 @@ describe("releases on set", () => {
   test("T-RL.1 hand over, sign with Sign's own steps, signed; the trail says in person; no invite email", async () => {
     const x = await setup();
     // Not approved yet: nothing to hand over.
-    await expect(x.me.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone" })).rejects.toThrow(/isn't ready/);
+    await expect(x.me.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone", checked: true })).rejects.toThrow(/isn't ready/);
     await x.t.run((ctx) => ctx.db.patch(x.releaseId, { documentId: x.documentId }));
     await x.me.mutation(api.sign.approve, { versionId: x.versionId });
     expect((await x.me.query(api.releases.get, { releaseId: x.releaseId }))!.state).toBe("ready");
-    const h = await x.me.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone" });
-    await expect(x.me.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone" })).rejects.toThrow(/already out for signing/);
+    const h = await x.me.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone", checked: true });
+    await expect(x.me.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone", checked: true })).rejects.toThrow(/already out for signing/);
     await x.flush();
     expect(x.mails.filter((m) => m.to === SIGNER)).toEqual([]); // no link was emailed
     // The signer's steps are Sign's own: the session the hand-over gave opens the document; Sign waits for consent.
@@ -90,6 +94,10 @@ describe("releases on set", () => {
     expect(ev.find((e) => e.kind === "in_person")?.detail).toMatch(/Signing in person on Alex's iPhone at Mercy Clinic, Springfield, MO \(the shoot's place\)/);
     expect(ev.find((e) => e.kind === "sent")?.detail).toMatch(/No link was emailed/);
     expect(ev.some((e) => e.kind === "code_sent")).toBe(false);
+    // Review H2: no code, so the email isn't marked confirmed; the in-person check is kept apart.
+    const sg = await x.t.run(async (ctx) => (await ctx.db.query("wsSignings").collect())[0]);
+    expect(sg.verifiedAt ?? null).toBeNull();
+    expect(sg.inPerson).toMatchObject({ by: "Alex Owner", device: "Alex's iPhone", place: "Mercy Clinic, Springfield, MO" });
     // The shot it covers no longer counts as missing.
     expect((await x.me.query(api.releases.forShoot, { shootId: x.ids.shootId }))!.missing).toEqual([]);
   });
@@ -125,6 +133,46 @@ describe("releases on set", () => {
     });
     const pat = x.t.withIdentity({ subject: sub });
     await expect(pat.query(api.releases.forShoot, { shootId: x.ids.shootId })).rejects.toThrow();
-    await expect(pat.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone" })).rejects.toThrow();
+    await expect(pat.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone", checked: true })).rejects.toThrow();
+  });
+
+  test("T-RL.3 owner only; release documents only; the certificate's in-person line", async () => {
+    const x = await setup();
+    await x.t.run((ctx) => ctx.db.patch(x.releaseId, { documentId: x.documentId }));
+    await x.me.mutation(api.sign.approve, { versionId: x.versionId });
+    const producer = await x.t.run(async (ctx) => {
+      const b2 = (await ctx.db.query("businesses").first())?._id;
+      const u = await ctx.db.insert("users", { email: "producer@studio.example", name: "Jo", role: "team", emailVerificationTime: 0 });
+      await ctx.db.insert("memberships", { ...(b2 ? { businessId: b2 } : {}), email: "producer@studio.example", userId: u, role: "team", teamRole: "producer", perms: Object.fromEntries(PERMS.map((p) => [p, p !== "settings" && p !== "payments" && p !== "value"])), createdAt: 1 } as never);
+      return `${u}|${await ctx.db.insert("authSessions", { userId: u, expirationTime: Date.now() + 3_600_000 })}`;
+    });
+    const jo = x.t.withIdentity({ subject: producer });
+    // A team member with Docs and Shoots can see and fill in releases, but not approve or hand them over.
+    expect(await jo.query(api.releases.forShoot, { shootId: x.ids.shootId })).not.toBeNull();
+    await expect(jo.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone", checked: true })).rejects.toThrow(/Not allowed/);
+    const sid = await x.t.run((ctx) => ctx.storage.store(new Blob([new Uint8Array([37, 80, 68, 70])], { type: "application/pdf" })));
+    await expect(jo.action(api.releases.prepare, { releaseId: x.releaseId, storageId: sid })).rejects.toThrow(/Not allowed/);
+    // A signer who isn't the release's is refused.
+    await x.t.run((ctx) => ctx.db.patch(x.releaseId, { email: "someone@else.example" }));
+    await expect(x.me.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone", checked: true })).rejects.toThrow(/isn't Riley Quinn/);
+    await x.t.run((ctx) => ctx.db.patch(x.releaseId, { email: SIGNER }));
+    // An owner signature or a payment is refused (they're sent from Contracts).
+    const ver = await x.t.run(async (ctx) => (await ctx.db.get(x.versionId))!);
+    await x.t.run((ctx) => ctx.db.patch(x.versionId, { signers: [...ver.signers, { key: "heston", name: "Alex Owner", email: OWNER, order: 0 }] } as never));
+    await expect(x.me.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone", checked: true })).rejects.toThrow(/no business signature/);
+    await x.t.run((ctx) => ctx.db.patch(x.versionId, { signers: ver.signers, payment: { amountCents: 5000, description: "Deposit" } } as never));
+    await expect(x.me.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone", checked: true })).rejects.toThrow(/no payment/);
+    await x.t.run((ctx) => ctx.db.patch(x.versionId, { payment: ver.payment } as never));
+    // A document that isn't a release's can't be signed in person.
+    await x.t.run((ctx) => ctx.db.patch(x.releaseId, { documentId: undefined }));
+    const { sendInPersonCore } = await import("../convex/sign");
+    await expect(x.t.run((ctx) => sendInPersonCore(ctx as never, x.versionId, { device: "iPhone", place: null, by: "Alex" }))).rejects.toThrow(/Only a release/);
+    // The certificate: who checked them, and that the email wasn't confirmed.
+    const s0 = { key: "client", name: "Riley Quinn", email: SIGNER, title: null, adoptedName: "Riley Quinn", adoptedTitle: null, method: "typed", signaturePng: new Uint8Array(), initialsPng: new Uint8Array(), signatureSha256: "a", initialsSha256: "b", signedAt: 2, signedDate: "2030-11-16", ip: null, userAgent: null, verifiedAt: null, consentAt: 1, consentVersion: "v1", adoptedAt: 1, initialed: [], viewedPages: [0], inPerson: { at: 1, by: "Alex Owner", device: "Alex's iPhone", place: "Mercy Clinic" } };
+    const lines = certificate({ label: "WRNGLR-0001", title: "Talent release", company: "Studio", versionNumber: 1, fileName: "r.pdf", fileSha256: "x", lockHash: "y", pages: 1, sentAt: 1, completedAt: 2, signingOrder: "any", owner: null, signers: [s0], boxes: [], events: [], statement: "I agree", verifyUrl: "https://example.test" });
+    const text = lines.join("\n");
+    expect(text).toMatch(/Signed in person on Alex's iPhone at Mercy Clinic: Alex Owner confirmed in person who was signing/);
+    expect(text).toMatch(/Email not confirmed with a code/);
+    expect(text).not.toMatch(/one-time code sent/);
   });
 });

@@ -125,7 +125,7 @@ async function getCore(ctx: QueryCtx, documentId: Id<"wsDocuments">, versionNumb
       owner: { email: (await ownerEmailOf(ctx)), name: sig?.name ?? null, title: sig?.title ?? null, adopted: !!sig },
       signings: doc.sentVersion !== undefined ? (await ctx.db.query("wsSignings").withIndex("by_document", (q) => q.eq("documentId", documentId).eq("versionNumber", doc.sentVersion!)).collect())
         .sort((a, b) => a.order - b.order)
-        .map((x) => ({ key: x.signerKey, name: x.name, email: x.email, order: x.order, status: x.status, link: signLink(x.token), sentAt: x.sentAt ?? null, lastEmailAt: x.lastEmailAt ?? null, openedAt: x.openedAt ?? null, verifiedAt: x.verifiedAt ?? null, consentAt: x.consentAt ?? null, signedAt: x.signedAt ?? null, lockedUntil: x.lockedUntil ?? null })) : [],
+        .map((x) => ({ key: x.signerKey, name: x.name, email: x.email, order: x.order, status: x.status, link: signLink(x.token), sentAt: x.sentAt ?? null, lastEmailAt: x.lastEmailAt ?? null, openedAt: x.openedAt ?? null, verifiedAt: x.verifiedAt ?? null, inPersonAt: x.inPerson?.at ?? null, consentAt: x.consentAt ?? null, signedAt: x.signedAt ?? null, lockedUntil: x.lockedUntil ?? null })) : [],
       problems: approvalProblems({ signers: shown.signers, boxes: shown.boxes, pages: shown.pages.length, payment: shown.payment ?? null, ownerSignatureAdopted: !!sig }),
     };
   }
@@ -518,7 +518,26 @@ async function sendCore(ctx: MutationCtx, versionId: Id<"wsVersions">, expiresIn
 // ---------- releases on set (5i, D193): sent in person ----------
 
 /** Approves a release's current version (the same check and lock as Approve; a release has no owner signature). */
-export async function approveForRelease(ctx: MutationCtx, versionId: Id<"wsVersions">) { return approveCore(ctx, versionId, OWNER_KEY); }
+export async function approveForRelease(ctx: MutationCtx, versionId: Id<"wsVersions">) {
+  const ver = await ctx.db.get(versionId);
+  if (!ver) throw new ConvexError("That version doesn't exist.");
+  await releaseOnly(ctx, ver);
+  return approveCore(ctx, versionId, OWNER_KEY);
+}
+
+/** 541ac10 review H1: only a release's own document goes the in-person way: one signer (the release's), no owner
+ *  signature and no payment. Anything else is approved and sent from Contracts. */
+async function releaseOnly(ctx: MutationCtx, ver: Doc<"wsVersions">) {
+  const r = await ctx.db.query("releases").withIndex("by_document", (q) => q.eq("documentId", ver.documentId)).first();
+  if (!r) throw new ConvexError("Only a release can be signed in person.");
+  if (ver.signers.some((x) => x.key === OWNER_KEY)) throw new ConvexError("A release has no business signature. Take {{sign:heston}} off it, or send it from Contracts.");
+  if (ver.payment) throw new ConvexError("A release has no payment. Send it from Contracts instead.");
+  const clients = ver.signers.filter((x) => x.key !== OWNER_KEY);
+  if (clients.length !== 1) throw new ConvexError("A release has one signer.");
+  if (clients[0].email.trim().toLowerCase() !== r.email.trim().toLowerCase() || clients[0].name.trim() !== r.name.trim())
+    throw new ConvexError(`The document's signer isn't ${r.name} (${r.email}). Make the release again.`);
+  return r;
+}
 
 /**
  * "Send" for a release signed in person on the owner's phone (D193). The same as Send except that no link is emailed:
@@ -531,10 +550,9 @@ export async function sendInPersonCore(ctx: MutationCtx, versionId: Id<"wsVersio
   if (!ver) throw new ConvexError("That version doesn't exist.");
   const doc = (await ctx.db.get(ver.documentId))!;
   if (doc.status !== "approved" || doc.currentVersion !== ver.number || !ver.approvedAt) throw new ConvexError("Only the current, approved version can be signed.");
-  await applyOwner(ctx, versionId); // refuses if anything changed since approval
-  const clients = ver.signers.filter((x) => x.key !== OWNER_KEY);
-  if (clients.length !== 1) throw new ConvexError("A release has one signer.");
-  const c = clients[0];
+  await releaseOnly(ctx, ver);
+  await applyOwner(ctx, versionId); // refuses if anything changed since approval (a release has no owner signature)
+  const c = ver.signers.filter((x) => x.key !== OWNER_KEY)[0];
   const now = Date.now();
   const token = randomToken(18), session = randomToken(32);
   const where = how.place ? ` at ${how.place} (the shoot's place)` : "";
@@ -544,8 +562,10 @@ export async function sendInPersonCore(ctx: MutationCtx, versionId: Id<"wsVersio
     token, status: "sent", sentAt: now,
   });
   await appendEvent(ctx, doc._id, { kind: "sent", actor: OWNER_KEY, versionNumber: ver.number, email: c.email, detail: `Handed to ${c.name} to sign in person on ${how.device}${where}. No link was emailed.` });
-  await ctx.db.patch(signingId, { sessionHash: await sha256Hex(`${token}:${session}`), sessionExpiresAt: now + 30 * 60_000, verifiedAt: now });
-  await appendEvent(ctx, doc._id, { kind: "in_person", actor: OWNER_KEY, versionNumber: ver.number, email: c.email, detail: `Signing in person on ${how.device}${where}: ${how.by} checked who is signing in person (no email code). A signed copy goes to ${c.email}.` });
+  // 541ac10 review H2: no email code was sent, so the email isn't marked confirmed; the in-person check is kept apart
+  // and the certificate says so.
+  await ctx.db.patch(signingId, { sessionHash: await sha256Hex(`${token}:${session}`), sessionExpiresAt: now + 30 * 60_000, inPerson: { at: now, by: how.by, device: how.device, ...(how.place ? { place: how.place } : {}) } });
+  await appendEvent(ctx, doc._id, { kind: "in_person", actor: OWNER_KEY, versionNumber: ver.number, email: c.email, detail: `Signing in person on ${how.device}${where}: ${how.by} confirmed in person that ${c.name} is the one signing. Their email was not confirmed with a code; a signed copy goes to ${c.email}.` });
   await ctx.db.patch(doc._id, { status: "sent", sentAt: now, sentVersion: ver.number, expiresAt: now + 86_400_000, updatedAt: now });
   await closeRequests(ctx, doc._id, ["approve", "send"]);
   return { token, session };

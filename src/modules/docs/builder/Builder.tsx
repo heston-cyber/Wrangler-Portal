@@ -40,6 +40,12 @@ import { bakeShots } from "../../../../convex/lib/shotList";
 import { usePerms } from "../../../lib/teamAccess";
 import { CALL_BLOCKS, bakeWeather, blockCard, callSheetProblems, isCallAtom, shownWeather, weatherOf } from "../../../../convex/lib/callSheet";
 import { PeoplePicker, SendSheet, SendUpdate, type CallSheetInfo } from "../../production/callSheetParts";
+import { HomeTag, ShareCreativeDoc, StartBriefing } from "../../creative/parts";
+import { AttachDialog } from "../../projects/Homes";
+import { dropNotes } from "../../../../convex/lib/creativeTemplates";
+// 5l (D187–D191): creative docs too: never signed, no signature boxes; the home chip with Move to…, Share link (a
+// view-only PDF, team notes left out) and Start a briefing from this; Script rows and Team notes in Insert.
+export type CreativeInfo = NonNullable<FunctionReturnType<typeof api.creative.doc>>;
 
 // Phase 3b: proposals open here too (S5 · Phase 3b 716:4980 / 718:4495): no signature boxes, Send instead of
 // "Continue to signing", locked once sent, and "Start the contract?" once accepted (D75, D84).
@@ -49,7 +55,7 @@ export type ProposalInfo = NonNullable<FunctionReturnType<typeof api.proposals.g
 export type { BriefingInfo };
 // Phase 5b step 3: call sheets too (765:2056): no signature boxes, the call sheet's own blocks and block library,
 // "Send call sheet", and "Send an update" once it's sent (it stays editable; readers see the copy that was sent).
-type Mode = { kind: "build"; buildId: Id<"wsBuilds">; proposal?: ProposalInfo; briefing?: BriefingInfo; callSheet?: CallSheetInfo } | { kind: "template"; templateId: Id<"wsTemplates">; proposal?: boolean; briefing?: boolean; callSheet?: boolean; guide?: string };
+type Mode = { kind: "build"; buildId: Id<"wsBuilds">; proposal?: ProposalInfo; briefing?: BriefingInfo; callSheet?: CallSheetInfo; creative?: CreativeInfo } | { kind: "template"; templateId: Id<"wsTemplates">; proposal?: boolean; briefing?: boolean; callSheet?: boolean; guide?: string };
 const B_CHIP: Record<string, { tone: "neutral" | "accent" | "success"; text: string }> = { draft: { tone: "neutral", text: "Draft" }, sent: { tone: "accent", text: "Sent" }, read: { tone: "success", text: "Read" } };
 const P_OPEN = new Set(["draft", "waiting", "ready"]);
 const P_CHIP: Record<string, { tone: "neutral" | "accent" | "success" | "danger" | "warning"; text: string }> = {
@@ -83,7 +89,11 @@ const INSERT: Array<{ kind: InsertKind; icon: React.ReactNode; hint: string }> =
   { kind: "weather", icon: <CloudSun size={18} />, hint: "The forecast for the shoot's address, or your own line" },
   // Nov 16 (D181): call sheets, briefings and proposals (never a contract)
   { kind: "shotlist", icon: <Icon name="shot-list" size={18} />, hint: "A shoot day's setups and shots, live from the shot list" },
+  // 5l: only on a creative doc
+  { kind: "script", icon: <Icon name="video" size={18} />, hint: "Time · Picture · Sound rows (a two-column script)" },
+  { kind: "note", icon: <Icon name="note" size={18} />, hint: "A note for the team: hidden on the shared page" },
 ];
+const CREATIVE_ONLY = new Set<InsertKind>(["script", "note"]);
 const CALL_HIDES = new Set<InsertKind>(["parties", "items", "payment", "signatures"]);
 
 export default function Builder({ mode }: { mode: Mode }) {
@@ -94,7 +104,8 @@ export default function Builder({ mode }: { mode: Mode }) {
   const call = mode.kind === "build" ? mode.callSheet ?? null : null;
   const isCall = !!call || (mode.kind === "template" && !!mode.callSheet);
   const isGuide = mode.kind === "template" && !!mode.guide; // Phase 5d step 4: a Help guide, edited like any page
-  const side = isProp || isBrief || isCall || isGuide; // never signed: no parties or signature blocks, no clause library
+  const cr = mode.kind === "build" ? mode.creative ?? null : null;
+  const side = isProp || isBrief || isCall || isGuide || !!cr; // never signed: no parties or signature blocks, no clause library
   const locked = !!prop && !P_OPEN.has(prop.status); // D161 (Nov 6): a sent briefing stays editable ("Update the link")
   const briefSent = !!brief && brief.state !== "draft";
   const build = useQuery(api.builder.getBuild, mode.kind === "build" ? { buildId: mode.buildId } : "skip");
@@ -128,6 +139,7 @@ export default function Builder({ mode }: { mode: Mode }) {
   const [updatingBrief, setUpdatingBrief] = useState(false); // D161: Update the link
   const [contracting, setContracting] = useState(false);
   const [csDialog, setCsDialog] = useState<"send" | "update" | null>(null);
+  const [crDialog, setCrDialog] = useState<"share" | "move" | "briefing" | null>(null);
 
   const [doc, setDocRaw] = useState<BuildDoc | null>(null);
   const [meta, setMeta] = useState<Meta>({ name: "", description: "" });
@@ -362,6 +374,7 @@ export default function Builder({ mode }: { mode: Mode }) {
   if (mode.kind === "build" && !prop && build?.kind === "proposal") return <><TopBar><span className="secondary">Docs</span><Sep /><a {...linkProps("/proposals")}>Proposals</a></TopBar><div className="wp-page docs"><EmptyState icon="quote" title="This is a proposal." body="Proposals open from Proposals, where they're sent and answered." actions={<ButtonLink to="/proposals">All proposals</ButtonLink>} /></div></>;
   if (mode.kind === "build" && !brief && build?.kind === "briefing") return <><TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/vendors/briefings")}>Briefings</a></TopBar><div className="wp-page docs"><EmptyState icon="note" title="This is a briefing." body="Briefings open from Vendors › Briefings, where they're sent to a booked vendor." actions={<ButtonLink to="/vendors/briefings">All briefings</ButtonLink>} /></div></>;
   if (mode.kind === "build" && !call && build?.kind === "callsheet") return <><TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/production/call-sheets")}>Call sheets</a></TopBar><div className="wp-page docs"><EmptyState icon="document" title="This is a call sheet." body="Call sheets open from Production › Call sheets, where they're sent." actions={<ButtonLink to="/production/call-sheets">All call sheets</ButtonLink>} /></div></>;
+  if (mode.kind === "build" && !cr && build?.kind === "creative") return <><TopBar><a {...linkProps("/creative")}>Creative planning</a><Sep /><a {...linkProps("/creative/docs")}>Docs</a></TopBar><div className="wp-page docs"><EmptyState icon="document" title="This is a creative doc." body="Creative docs open from Creative planning › Docs." actions={<ButtonLink to="/creative/docs">All creative docs</ButtonLink>} /></div></>;
   if (mode.kind === "build" && build === null) return <><TopBar><span className="secondary">Docs</span><Sep /><a {...linkProps("/sign")}>Contracts</a></TopBar><div className="wp-page docs"><EmptyState icon="document" title="This document doesn't exist." actions={<ButtonLink to="/sign/docs">All docs</ButtonLink>} /></div></>;
 
   const st = doc.style;
@@ -392,7 +405,14 @@ export default function Builder({ mode }: { mode: Mode }) {
     const baked = wx ? { ...doc, page: bakeWeather(doc.page, wx) } : doc;
     // Nov 16 (D181): a printed page keeps each Shot list block's list as it stands now.
     const printed = shots ? { ...baked, page: bakeShots(baked.page, shots.lists, shots.defaultId) } : baked;
-    return renderPdf(printed, assets(), prop ? prop.number : brief ? undefined : build?.document?.label);
+    return renderPdf(printed, assets(), prop ? prop.number : brief || cr ? undefined : build?.document?.label);
+  };
+  // D191: the shared page leaves the team's notes out.
+  const crPdf = async () => {
+    await saveNow();
+    const { renderPdf } = await import("./pdf");
+    const blob = await renderPdf({ ...doc, page: dropNotes(doc.page) }, assets());
+    return uploadToStorage(await uploadUrl({}), new File([blob], `${doc.title}.pdf`, { type: "application/pdf" }));
   };
   const onPreview = async () => {
     setBusy("preview");
@@ -498,7 +518,11 @@ export default function Builder({ mode }: { mode: Mode }) {
         {prop && <span className="hide-sm"><ProposalChip status={prop.status} /></span>}
         {brief && <span className="hide-sm"><Chip tone={B_CHIP[brief.state].tone}>{B_CHIP[brief.state].text}</Chip></span>}
         {!isGuide && <Button variant="ghost" size="sm" className="hide-sm" loading={busy === "preview"} onClick={() => void onPreview()} iconEnd="external">{isCall ? "Preview" : "Preview PDF"}</Button>}
-        {call ? <>
+        {cr ? <>
+          <span className="hide-sm"><HomeTag home={cr.home} onMove={() => setCrDialog("move")} /></span>
+          {perms.production && <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setCrDialog("briefing")}>Start a briefing from this</Button>}
+          <Button variant="primary" size="sm" onClick={() => setCrDialog("share")}>{cr.share ? "Share link" : "Share link"}</Button>
+        </> : call ? <>
           <Button variant="ghost" size="sm" className="hide-sm" onClick={() => setAsTemplate(true)}>Save as template</Button>
           {call.status === "sent" && <ButtonLink variant="ghost" size="sm" className="hide-sm" to={`/production/call-sheets/${call._id}`} iconEnd={false}>Who opened it</ButtonLink>}
           <Button variant="primary" size="sm" onClick={onAskCallSheet}>{call.status === "sent" ? "Send an update" : "Send call sheet"}</Button>
@@ -521,7 +545,7 @@ export default function Builder({ mode }: { mode: Mode }) {
         </> : isGuide ? <ButtonLink variant="primary" size="sm" to={`/settings/help/${mode.kind === "template" ? mode.guide : ""}`} iconEnd={false}>Done</ButtonLink>
           : <Button variant="primary" size="sm" loading={busy === "use"} onClick={() => void onUseTemplate()}>{isProp ? "New proposal from this" : isBrief ? "New briefing from this" : isCall ? "New call sheet from this" : "New document from this"}</Button>}
       </>}>
-        {isGuide ? <><a {...linkProps("/settings")}>Settings</a><Sep /><a {...linkProps("/settings/help")}>Help</a><Sep /></> : isCall ? <><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/production/call-sheets")}>Call sheets</a><Sep />{mode.kind === "template" && <><a {...linkProps("/production/call-sheets?tab=templates")}>Templates</a><Sep /></>}</> : isProp ? <><span className="secondary">Docs</span><Sep /><a {...linkProps("/proposals")}>Proposals</a><Sep /></> : isBrief ? <><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/vendors/briefings")}>Briefings</a><Sep /></> : <><span className="secondary">Docs</span><Sep /><a {...linkProps("/sign")}>Contracts</a><Sep /></>}
+        {cr ? <><a {...linkProps("/creative")}>Creative planning</a><Sep /><a {...linkProps("/creative/docs")}>Docs</a><Sep /></> : isGuide ? <><a {...linkProps("/settings")}>Settings</a><Sep /><a {...linkProps("/settings/help")}>Help</a><Sep /></> : isCall ? <><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/production/call-sheets")}>Call sheets</a><Sep />{mode.kind === "template" && <><a {...linkProps("/production/call-sheets?tab=templates")}>Templates</a><Sep /></>}</> : isProp ? <><span className="secondary">Docs</span><Sep /><a {...linkProps("/proposals")}>Proposals</a><Sep /></> : isBrief ? <><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/production/pre-pro")}>Pre-pro</a><Sep /><a {...linkProps("/vendors/briefings")}>Briefings</a><Sep /></> : <><span className="secondary">Docs</span><Sep /><a {...linkProps("/sign")}>Contracts</a><Sep /></>}
         {mode.kind === "template" && !isBrief && !isCall && !isGuide ? <><a {...linkProps(isProp ? "/proposals/templates" : "/sign/templates")}>Templates</a><Sep /></> : null}
         <span className="here">{mode.kind === "template" ? meta.name || doc.title : doc.title}{prop ? ` · ${prop.number}` : build?.document ? ` · ${build.document.label}` : ""}</span>
       </TopBar>
@@ -578,7 +602,7 @@ export default function Builder({ mode }: { mode: Mode }) {
           {tab === "insert" && (
             <div className="wsb-pane">
               <span className="wsb-hint">{phone ? "Tap to add after the cursor, or press and hold to drag onto the page" : "Drag onto the page (or into a container), or click to add after the cursor"}</span>
-              {INSERT.filter((x) => (isCall ? !CALL_HIDES.has(x.kind) : !isCallAtom(x.kind)) && (!side || (x.kind !== "parties" && x.kind !== "signatures")) && (x.kind !== "shotlist" || ((isCall || isBrief || isProp) && !isGuide && canShots))).map((x) => <button key={x.kind} className="wsb-insert" draggable onDragStart={(e) => dragNodes(e, newNodes(x.kind))} onDragEnd={() => endInsertDrag(editor)} {...touch.item(() => newNodes(x.kind), INSERT_LABEL[x.kind])} onClick={() => { if (touch.justDropped()) return; if (editor) insertKind(editor, x.kind); if (phone) setSheet(false); }}>{x.icon}<span><b>{INSERT_LABEL[x.kind]}</b><span className="secondary">{x.hint}</span></span></button>)}
+              {INSERT.filter((x) => (CREATIVE_ONLY.has(x.kind) ? !!cr : true) && (isCall ? !CALL_HIDES.has(x.kind) : !isCallAtom(x.kind)) && (!side || (x.kind !== "parties" && x.kind !== "signatures")) && (x.kind !== "shotlist" || ((isCall || isBrief || isProp) && !isGuide && canShots))).map((x) => <button key={x.kind} className="wsb-insert" draggable onDragStart={(e) => dragNodes(e, newNodes(x.kind))} onDragEnd={() => endInsertDrag(editor)} {...touch.item(() => newNodes(x.kind), INSERT_LABEL[x.kind])} onClick={() => { if (touch.justDropped()) return; if (editor) insertKind(editor, x.kind); if (phone) setSheet(false); }}>{x.icon}<span><b>{INSERT_LABEL[x.kind]}</b><span className="secondary">{x.hint}</span></span></button>)}
               {prop && prop.status !== "draft" && prop.status !== "waiting" && prop.status !== "ready" && <ProposalPeople p={prop} show={show} />}
               {prop && <PitchDeck p={prop} show={show} />}
               {brief && !briefSent && <BriefingPanel b={brief} show={show} onProject={(label) => setDoc((d) => ({ ...d, fields: { ...d.fields, project: label } }))} />}
@@ -589,7 +613,7 @@ export default function Builder({ mode }: { mode: Mode }) {
           {tab === "format" && <FormatPanel editor={editor} accent={st.accent} onSaveClause={(sec) => void onSaveClause(sec)} />}
           {tab === "style" && <StylePanel style={st} onChange={(s) => setDoc((d) => ({ ...d, style: s }))} fonts={fontRows} files={files as Record<string, string | null>} show={show} />}
           {tab === "details" && (
-            <DetailsPane doc={doc} setDoc={setDoc} extraKeys={side ? [] : extraKeys} mode={mode.kind} proposal={isProp} briefing={isBrief} guide={isGuide} callSheet={call} meta={meta} setMeta={(m) => { setMeta(m); setDirty(true); }} total={t} problems={problems ?? (mode.kind === "build" ? (locked ? [] : isProp ? proposalProblems(doc) : isBrief ? briefingProblems(doc) : call ? callSheetProblems(doc) : buildProblems(doc)) : [])} show={show} />
+            <DetailsPane doc={doc} setDoc={setDoc} extraKeys={side ? [] : extraKeys} mode={mode.kind} proposal={isProp} briefing={isBrief} guide={isGuide} callSheet={call} meta={meta} setMeta={(m) => { setMeta(m); setDirty(true); }} total={t} problems={problems ?? (mode.kind === "build" ? (locked || cr ? [] : isProp ? proposalProblems(doc) : isBrief ? briefingProblems(doc) : call ? callSheetProblems(doc) : buildProblems(doc)) : [])} show={show} />
           )}
         </aside>
       </div>
@@ -642,6 +666,9 @@ export default function Builder({ mode }: { mode: Mode }) {
       {csDialog === "send" && call && <SendSheet cs={call} before={saveNow} onClose={() => setCsDialog(null)} show={show} onSent={() => navigate(`/production/call-sheets/${call._id}`)} />}
       {csDialog === "update" && call && <SendUpdate cs={call} before={saveNow} onClose={() => setCsDialog(null)} show={show} />}
       {updatingBrief && brief && <UpdateBriefing b={brief} makePdf={briefPdf} onClose={() => setUpdatingBrief(false)} show={show} />}
+      {crDialog === "share" && cr && <ShareCreativeDoc info={cr} makePdf={crPdf} onClose={() => setCrDialog(null)} show={show} />}
+      {crDialog === "move" && cr && <AttachDialog kind="creativeDoc" id={cr._id} name={doc.title} hasHome={!!cr.home} onClose={() => setCrDialog(null)} show={show} />}
+      {crDialog === "briefing" && cr && <StartBriefing docId={cr._id} onClose={() => setCrDialog(null)} show={show} />}
       {askBrief && brief && <ShareBriefing b={brief} initial={brief.sendTo} makePdf={briefPdf} onClose={() => setAskBrief(false)} show={show} />}
       {sending && prop && <SendProposal p={prop} doc={doc} onClose={() => setSending(false)} onSend={onSend} onPdf={async () => { const blob = await render(); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `${prop.number} ${doc.title}.pdf`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 30_000); }} />}
       {contracting && prop && <StartContract p={prop} doc={doc} onClose={() => setContracting(false)} onStart={onStartContract} />}

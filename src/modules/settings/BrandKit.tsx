@@ -18,8 +18,10 @@ const GOOGLE_FONTS = ["Inter", "Roboto", "Open Sans", "Montserrat", "Poppins", "
 const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
 const typeWord = (t: string, name: string) => (/pdf/.test(t) ? "PDF" : /^image\//.test(t) ? "Image" : /font|ttf|otf|woff/.test(t + name) ? "Font" : /presentation|keynote|pptx?$/.test(t + name) ? "Deck" : (name.split(".").pop() ?? "File").toUpperCase());
 
-export function BrandKitEditor({ clientId, show }: { clientId?: Id<"clients">; show: (m: string) => void }) {
-  const kit = useQuery(api.brandKit.get, clientId ? { clientId } : {});
+export function BrandKitEditor({ clientId, kitId, show }: { clientId?: Id<"clients">; kitId?: string; show: (m: string) => void }) {
+  // 5l round 3: a kit made as creative work (Creative planning › Brand kits) uses the same editor.
+  const who = kitId ? { kitId } : clientId ? { clientId } : {};
+  const kit = useQuery(api.brandKit.get, who);
   const save = useMutation(api.brandKit.save);
   const uploadUrl = useMutation(api.brandKit.uploadUrl);
   const addFile = useMutation(api.brandKit.addFile);
@@ -39,18 +41,18 @@ export function BrandKitEditor({ clientId, show }: { clientId?: Id<"clients">; s
       if (f.size > kit.limits.bytes) { show(`${f.name} is ${mb(f.size)}. The limit is 25 MB; link to big files (like videos) instead.`); continue; }
       setUploading(f.name);
       try {
-        const url = await uploadUrl(clientId ? { clientId } : {});
+        const url = await uploadUrl(who);
         const res = await fetch(url, { method: "POST", headers: { "Content-Type": f.type || "application/octet-stream" }, body: f });
         if (!res.ok) throw new Error("The upload didn't finish. Try again.");
         const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
-        const r = await addFile({ ...(clientId ? { clientId } : {}), storageId, name: f.name, ...(logo ? { logo: true } : {}) });
+        const r = await addFile({ ...who, storageId, name: f.name, ...(logo ? { logo: true } : {}) });
         show(r.error ?? (logo ? "Logo added." : `${f.name} added.`));
       } catch (e) { show(errText(e)); } finally { setUploading(null); }
     }
   };
   const onSave = async () => {
     setBusy(true);
-    try { await save({ ...(clientId ? { clientId } : {}), ...d }); show("Brand kit saved."); setD(null); } catch (e) { show(errText(e)); } finally { setBusy(false); }
+    try { await save({ ...who, ...d }); show("Brand kit saved."); setD(null); } catch (e) { show(errText(e)); } finally { setBusy(false); }
   };
   const addLink = () => { const u = newLink.trim(); if (!u) return; up({ links: [...d.links, { url: u }] }); setNewLink(""); };
   return (
@@ -67,7 +69,7 @@ export function BrandKitEditor({ clientId, show }: { clientId?: Id<"clients">; s
         ) : kit.logo.dark ? (
           <div className="bk-pad bk-row"><div className="bk-logo dark"><img src={kit.logo.dark} alt={`${kit.name} logo`} /></div><span className="sp" />
             <Button size="sm" onClick={() => logoInput.current?.click()}>Replace</Button>
-            {kit.logo.fileId && <Button size="sm" variant="ghost" onClick={() => void removeFile({ clientId: clientId!, fileId: kit.logo.fileId!, logo: true }).then(() => show("Logo removed."), (e) => show(errText(e)))}>Remove</Button>}</div>
+            {kit.logo.fileId && <Button size="sm" variant="ghost" onClick={() => void removeFile({ ...who, fileId: kit.logo.fileId!, logo: true }).then(() => show("Logo removed."), (e) => show(errText(e)))}>Remove</Button>}</div>
         ) : (
           <div className="bk-pad"><button type="button" className="bk-drop" onClick={() => logoInput.current?.click()}><Icon name="upload" size={14} />Drop a logo (SVG or PNG), or <b>browse</b></button></div>
         )}
@@ -96,7 +98,7 @@ export function BrandKitEditor({ clientId, show }: { clientId?: Id<"clients">; s
           <div className="rt-two">
             {(["heading", "body"] as const).map((k) => (
               <label key={k} className="wp-field"><span className="wp-field-label">{k === "heading" ? "Headings" : "Body"}</span>
-                <input className="input" list="bk-fonts" value={d.fonts[k] ?? ""} placeholder={kit.kind === "company" ? "Not set" : k === "heading" ? "Heading font" : "Body font"} onChange={(e) => up({ fonts: { ...d.fonts, [k]: e.target.value } })} /></label>
+                <input className="input" list="bk-fonts" value={d.fonts[k] ?? ""} placeholder={kit.kind !== "business" ? "Not set" : k === "heading" ? "Heading font" : "Body font"} onChange={(e) => up({ fonts: { ...d.fonts, [k]: e.target.value } })} /></label>
             ))}
           </div>
           <datalist id="bk-fonts">{[...GOOGLE_FONTS, ...kit.files.filter((f) => /font|ttf|otf|woff/i.test(f.type + f.name)).map((f) => f.name.replace(/\.[a-z0-9]+$/i, ""))].map((f) => <option key={f} value={f} />)}</datalist>
@@ -109,7 +111,7 @@ export function BrandKitEditor({ clientId, show }: { clientId?: Id<"clients">; s
           <div key={f.fileId} className="wp-rowwrap">{i > 0 && <Divider />}
             <ListRow className="ilead" lead={{ icon: "document" }} title={f.url ? <a href={f.url} target="_blank" rel="noreferrer">{f.name}</a> : f.name}
               meta={`${typeWord(f.type, f.name)} · ${mb(f.size)} · ${f.source ?? "added"} ${new Date(f.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
-              action={<Button size="sm" onClick={() => void removeFile({ ...(clientId ? { clientId } : {}), fileId: f.fileId }).then(() => show("Removed."), (e) => show(errText(e)))}>Remove</Button>} />
+              action={<Button size="sm" onClick={() => void removeFile({ ...who, fileId: f.fileId }).then(() => show("Removed."), (e) => show(errText(e)))}>Remove</Button>} />
           </div>
         ))}
         <div className="bk-pad">

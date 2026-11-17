@@ -127,6 +127,7 @@ const ATOM_DEFAULTS: Record<AtomType, Record<string, unknown>> = {
   spacer: { size: 18 },
   ...CALL_DEFAULTS, // Phase 5b step 3: the call sheet's blocks
   shotlist: { listId: null, crewTick: true, snap: null }, // Nov 16 (D181)
+  script: { rows: [] }, // 5l (D188): Time · Picture · Sound
 };
 export const Atoms = ATOMS.map((n) => atomNode(n, ATOM_DEFAULTS[n]));
 /** The page's nodes without React views, for tests and anything headless. */

@@ -18,7 +18,7 @@ const shortDate = (d: string) => { const [y, m, day] = d.split("-").map(Number);
 
 // ---------- the kinds (labels, icons, where each opens) ----------
 
-export type HomeKind = "shoot" | "shotList" | "quote" | "estimate" | "proposal" | "invoice" | "subscription" | "briefing" | "lead" | "brief" | "fileRequest";
+export type HomeKind = "shoot" | "shotList" | "quote" | "estimate" | "proposal" | "invoice" | "subscription" | "briefing" | "lead" | "brief" | "fileRequest" | "creativeDoc" | "canvas" | "kit";
 export const KIND: Record<HomeKind, { one: string; many: string; icon: IconName; open?: (id: string) => string }> = {
   shoot: { one: "shoot day", many: "Shoot days", icon: "clapper", open: (id) => `/production/shoots/${id}` },
   shotList: { one: "shot list", many: "Shot lists", icon: "shot-list", open: (id) => `/production/shot-lists/${id}` },
@@ -31,6 +31,9 @@ export const KIND: Record<HomeKind, { one: string; many: string; icon: IconName;
   lead: { one: "lead", many: "Leads", icon: "funnel", open: (id) => `/clients/deals/${id}` },
   brief: { one: "kickoff brief", many: "Kickoff briefs", icon: "questionnaire" },
   fileRequest: { one: "file request", many: "File requests", icon: "upload" },
+  creativeDoc: { one: "creative doc", many: "Creative docs", icon: "document", open: (id) => `/creative/docs/${id}` },
+  canvas: { one: "canvas", many: "Canvases and mood boards", icon: "creative", open: (id) => `/creative/canvas/${id}` },
+  kit: { one: "brand kit", many: "Brand kits", icon: "layers", open: (id) => `/creative/kits/${id}` },
 };
 const TYPE_ICON: Record<string, IconName> = { client: "building", project: "folder", shoot: "clapper", lead: "funnel" };
 

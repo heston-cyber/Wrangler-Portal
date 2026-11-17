@@ -24,7 +24,7 @@ export type Home = { type: HomeType; id: string } | null;
 // ---------- the kinds (what can live where, the doc's table) ----------
 
 type KindDef = {
-  table: "shoots" | "shotLists" | "quotes" | "estimates" | "proposals" | "invoices" | "subscriptions" | "briefings" | "deals" | "briefs" | "fileRequests";
+  table: "shoots" | "shotLists" | "quotes" | "estimates" | "proposals" | "invoices" | "subscriptions" | "briefings" | "deals" | "briefs" | "fileRequests" | "creativeDocs" | "canvases" | "brandKits";
   noun: string;
   perm: Perm;
   homes: HomeType[];
@@ -51,6 +51,10 @@ export const KINDS = {
   // they stay with that client, like money documents.
   brief: { table: "briefs", noun: "kickoff brief", perm: "projects", homes: ["client", "project"], sent: (d) => d.status !== "draft" },
   fileRequest: { table: "fileRequests", noun: "file request", perm: "projects", homes: ["client", "project"], sent: (d) => d.status !== "draft", fixed: (d) => (d.status === "cancelled" ? "That request was cancelled." : null) },
+  // 5l (Creative planning): made on their own or anywhere, attached later. Never sent, so they move freely.
+  creativeDoc: { table: "creativeDocs", noun: "creative doc", perm: "projects", homes: ["client", "project", "shoot", "lead"] },
+  canvas: { table: "canvases", noun: "canvas", perm: "projects", homes: ["client", "project", "shoot", "lead"] },
+  kit: { table: "brandKits", noun: "brand kit", perm: "projects", homes: ["client", "project", "lead"] },
 } as const satisfies Record<string, KindDef>;
 export type Kind = keyof typeof KINDS;
 const MONEY = ["quote", "estimate", "proposal", "invoice", "subscription"] as Kind[];
@@ -181,7 +185,7 @@ export const move = mutation({
         else await ctx.db.patch(r._id as Id<"quotes">, { clientId: to?.clientId ?? undefined } as never);
       }
     }
-    const name = String(d.title ?? d.number ?? (a.kind === "shoot" ? `${d.date} · ${d.location}` : def.noun));
+    const name = a.kind === "creativeDoc" ? ((await ctx.db.get(d.buildId as Id<"wsBuilds">))?.title ?? def.noun) : String(d.title ?? d.name ?? d.number ?? (a.kind === "shoot" ? `${d.date} · ${d.location}` : def.noun));
     await audit(ctx, { kind: "moved", text: to ? `Moved ${def.noun} "${name}" to ${to.name}` : `Took ${def.noun} "${name}" off its ${homeOf(a.kind as Kind, d)?.type ?? "home"} (on its own now)` });
     return null;
   },
@@ -232,7 +236,7 @@ async function projectContents(ctx: Ctx, p: Doc<"projects">) {
       if ((KINDS[k] as KindDef).sent?.(r)) sentStay.push({ kind: k, id: r._id, name: k === "brief" ? "Kickoff brief" : String(r.title ?? "File request") });
       else moving++;
     }
-  for (const t of ["shoots", "shotLists", "briefings", "vendorBookings", "videos", "callSheets"] as const)
+  for (const t of ["shoots", "shotLists", "briefings", "vendorBookings", "videos", "callSheets", "creativeDocs", "canvases", "brandKits"] as const)
     moving += (await ctx.db.query(t).withIndex("by_project" as never, ((q: { eq: (f: string, v: unknown) => unknown }) => q.eq("projectId", p._id)) as never).collect()).length;
   return { moving, sentStay, money };
 }
@@ -431,7 +435,7 @@ export const loose = query({
       const def = KINDS[k] as KindDef;
       try { await requireAll(ctx, def.perm); } catch { continue; }
       for (const r of (await ctx.db.query(def.table).collect()) as Array<Record<string, unknown> & { _id: string; _creationTime: number }>)
-        if (!homeOf(k, r) && r.status !== "cancelled") out.push({ kind: k, id: r._id, name: String(r.title ?? r.number ?? def.noun), at: Number(r.updatedAt ?? r._creationTime) });
+        if (!homeOf(k, r) && r.status !== "cancelled") out.push({ kind: k, id: r._id, name: k === "creativeDoc" ? ((await ctx.db.get(r.buildId as Id<"wsBuilds">))?.title ?? def.noun) : String(r.title ?? r.name ?? r.number ?? def.noun), at: Number(r.updatedAt ?? r._creationTime) });
     }
     return out.sort((x, y) => y.at - x.at);
   },

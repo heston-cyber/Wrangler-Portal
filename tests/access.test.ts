@@ -76,6 +76,12 @@ const OPEN: Record<string, string> = {
   // D147 (Nov 4): a briefing's no-login link (/b/<token>, email 58). Tested in briefingsShare.test.ts.
   "briefings.page": "a briefing link: answers only for a shared briefing's own long random token (a person's own, or the copied link); a turned-off link answers Withdrawn with the business and title only",
   "briefings.opened": "the same link: counts an open of that briefing only; a missing token, a draft or a turned-off link does nothing; rate-limited",
+  // 5l (D191, D183): Creative planning's view-only links, signed out. Tested in creative.test.ts.
+  "creative.sharedDoc": "a creative doc's link (/cd/<token>): answers only for a doc's own long random token while its link is on, with the title and the PDF made at Share (team notes left out)",
+  "creative.sharedKit": "a brand kit's link (/kit/<token>): answers only for a kit's own long random token while its link is on, with the kit as it is now",
+  "canvas.shared": "a board's link (/cv/<token>): answers only for a shared person's own long random token, or the board's view-only link while it's on",
+  "canvas.sharedSave": "the same link: only a person shared with Can edit may save; it can't add or reach files (only the board's own stay), and an older save is refused",
+  "canvas.opened": "the same link: records when a shared person opened it; nothing for a view-only link or a missing token",
   "signCopies.page": "D160: a copied person's view-only link: answers only for a copy row's own long random token; a cancelled, replaced or expired document answers without its file (tested in signCc.test.ts)",
   "signCopies.opened": "the same link: counts an open of that copy only; rate-limited",
   "briefings.markRead": "the same link: records \"I've read it\" for that briefing only (named only on a person's own link); a missing token is refused; rate-limited",
@@ -297,7 +303,11 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "gear.forShoot": PRODUCTION,
     // 5i–5k (Nov 17): releases need Shoots and Docs (tests/releases.test.ts); packing lists Production; places and the
     // Shoot page Shoots.
-    ...Object.fromEntries(["forShoot", "templates", "create", "prepare", "handOver", "get", "remove"].map((f) => [`releases.${f}`, DOCS])),
+    // 541ac10 review H1: making the document (approval) and handing it over stay the owner's, like Approve and Send.
+    ...Object.fromEntries(["forShoot", "templates", "create", "get", "remove"].map((f) => [`releases.${f}`, DOCS])),
+    // 5l (Nov 17): Creative planning is Projects' (starting a briefing from a doc also needs Production; the builder Docs).
+    ...Object.fromEntries(["overview", "docs", "newDoc", "doc", "share", "shareOn", "removeDoc", "startBriefing", "kits", "newKit", "kit", "renameKit", "shareKit", "removeKit"].map((f) => [`creative.${f}`, PROJECTS])),
+    ...Object.fromEntries(["list", "create", "get", "save", "rename", "duplicate", "remove", "uploadUrl", "addFile", "dropUnused", "shareChoices", "addPerson", "setRole", "removePerson", "setLink", "stopSharing"].map((f) => [`canvas.${f}`, PROJECTS])),
     "releases.markShot": SHOOTS,
     ...Object.fromEntries(["lists", "get", "gearChoices", "create", "rename", "duplicate", "remove", "addGear", "addLine", "editLine", "removeLine", "moveLine", "forShoot", "useOnShoot", "tick", "flag"].map((f) => [`packing.${f}`, PRODUCTION])),
     ...Object.fromEntries(["list", "get", "create", "update", "remove", "uploadUrl", "addPhoto", "removePhoto", "coverPhoto", "forShoot", "useForShoot", "unlink"].map((f) => [`places.${f}`, SHOOTS])),

@@ -62,6 +62,8 @@ import type * as shoots from "../shoots.js";
 import type * as shotLists from "../shotLists.js";
 import type * as releases from "../releases.js";
 import type * as places from "../places.js";
+import type * as creative from "../creative.js";
+import type * as canvas from "../canvas.js";
 import type * as shootPage from "../shootPage.js";
 import type * as packing from "../packing.js";
 import type * as siteWatch from "../siteWatch.js";
@@ -221,6 +223,8 @@ declare const fullApi: ApiFromModules<{
   shotLists: typeof shotLists;
   releases: typeof releases;
   places: typeof places;
+  creative: typeof creative;
+  canvas: typeof canvas;
   shootPage: typeof shootPage;
   packing: typeof packing;
   siteWatch: typeof siteWatch;

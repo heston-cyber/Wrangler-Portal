@@ -150,7 +150,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "gear.logMaintenance": { gearId: ids.gearId, date: "2030-02-01", what: "Serviced" }, "gear.exportCsv": {},
     // 5i–5k (Nov 17): releases, packing lists, places, the Shoot page
     "releases.forShoot": { shootId: ids.shootId }, "releases.templates": {}, "releases.create": { shootId: ids.shootId, templateId: ids.templateId, name: "N", email: "n@x.example", shotIds: [] },
-    "releases.prepare": { releaseId: ids.releaseId, storageId: ids.storageId }, "releases.handOver": { releaseId: ids.releaseId, device: "iPhone" }, "releases.get": { releaseId: ids.releaseId },
+    "releases.prepare": { releaseId: ids.releaseId, storageId: ids.storageId }, "releases.handOver": { releaseId: ids.releaseId, device: "iPhone", checked: true }, "releases.get": { releaseId: ids.releaseId },
     "releases.markShot": { shotId: ids.shotId, needed: true }, "releases.remove": { releaseId: ids.releaseId },
     "packing.lists": {}, "packing.get": { listId: ids.packListId }, "packing.gearChoices": { listId: ids.packListId }, "packing.create": { name: "Kit 2" }, "packing.rename": { listId: ids.packListId, name: "Kit" },
     "packing.duplicate": { listId: ids.packListId }, "packing.remove": { listId: "nope" }, "packing.addGear": { listId: ids.packListId, gearIds: [ids.gearId] }, "packing.addLine": { listId: ids.packListId, text: "Tape" },
@@ -160,6 +160,16 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "places.remove": { placeId: "nope" }, "places.uploadUrl": {}, "places.addPhoto": { placeId: ids.placeId, storageId: ids.storageId, name: "p.jpg" }, "places.removePhoto": { placeId: ids.placeId, fileId: ids.storageId },
     "places.coverPhoto": { placeId: ids.placeId, fileId: ids.storageId }, "places.forShoot": { shootId: ids.shootId }, "places.useForShoot": { placeId: ids.placeId, shootId: ids.shootId, asPlace: false }, "places.unlink": { placeId: ids.placeId, shootId: ids.shootId },
     "shootPage.get": { shootId: ids.shootId },
+    // 5l (Nov 17): Creative planning
+    "creative.overview": {}, "creative.docs": {}, "creative.newDoc": { kind: "blank" }, "creative.doc": { docId: ids.creativeDocId }, "creative.share": { docId: ids.creativeDocId, storageId: ids.storageId },
+    "creative.shareOn": { docId: ids.creativeDocId, on: false }, "creative.removeDoc": { docId: "nope" }, "creative.sharedDoc": { token: "nope-nope-nope-nope" }, "creative.startBriefing": { docId: ids.creativeDocId, starter: "shoot" },
+    "creative.kits": {}, "creative.newKit": { name: "K" }, "creative.kit": { kitId: ids.kitId }, "creative.renameKit": { kitId: ids.kitId, name: "Kit" }, "creative.shareKit": { kitId: ids.kitId, on: true }, "creative.removeKit": { kitId: "nope" },
+    "creative.sharedKit": { token: "matrixkittoken0123456789" },
+    "canvas.list": {}, "canvas.create": { name: "B", kind: "canvas" }, "canvas.get": { canvasId: ids.canvasId }, "canvas.save": { canvasId: ids.canvasId, items: [], rev: 99 }, "canvas.rename": { canvasId: ids.canvasId, name: "Board" },
+    "canvas.duplicate": { canvasId: ids.canvasId }, "canvas.remove": { canvasId: "nope" }, "canvas.uploadUrl": { canvasId: ids.canvasId }, "canvas.addFile": { canvasId: ids.canvasId, storageId: ids.storageId, name: "x.png" },
+    "canvas.dropUnused": { canvasId: ids.canvasId }, "canvas.shareChoices": { canvasId: ids.canvasId }, "canvas.addPerson": { canvasId: ids.canvasId, email: "crew@x.example", role: "view" },
+    "canvas.setRole": { personId: ids.canvasPersonId, role: "edit" }, "canvas.removePerson": { personId: ids.canvasPersonId }, "canvas.setLink": { canvasId: ids.canvasId, on: true }, "canvas.stopSharing": { canvasId: "nope" },
+    "canvas.shared": { token: "matrixcanvaslink01234567" }, "canvas.sharedSave": { token: "matrixcanvaslink01234567", items: [], rev: 0 }, "canvas.opened": { token: "nope-nope-nope-nope-nope" }, // a real person's link only stamps when they opened it (creative.test.ts)
     "gear.forShoot": { shootId: "nope" }, "gear.addToShoot": { shootId: ids.shootId, gearId: ids.gearId }, "gear.removeFromShoot": { shootId: ids.shootId, gearId: ids.gearId },
     "shoots.forProject": { projectId: "nope" }, "shoots.schedule": { projectId: ids.projectId, ...{ date: "2030-01-02", call: "07:00", location: "X", prepare: [], withOwner: true, bookingIds: [], calendar: false } }, "shoots.update": { shootId: ids.shootId, ...{ date: "2030-01-02", call: "07:00", location: "X", prepare: [], withOwner: true, bookingIds: [], calendar: false } }, "shoots.cancel": { shootId: ids.shootId },
     "shoots.forClientProject": { projectId: "nope" }, "shoots.page": { shootId: "nope" }, "shoots.confirm": { shootId: ids.shootId },
@@ -315,6 +325,12 @@ export async function setup() {
     const packListId = await ctx.db.insert("packLists", { name: "Kit", createdAt: 0, updatedAt: 0 });
     const packLineId = await ctx.db.insert("packLines", { listId: packListId, order: 1, gearId, text: "Camera", qty: 1 });
     const placeId = await ctx.db.insert("places", { name: "Lobby", address: "1 Main St", tags: [], photos: [], createdAt: 0, updatedAt: 0 });
+    // 5l (Nov 17): a creative doc (shared by link), a brand kit, a canvas shared with one person.
+    const creativeBuild = await ctx.db.insert("wsBuilds", { title: "Treatment", kind: "creative", blocks: { type: "doc", content: [] }, fields: {}, signers: [], style: {}, createdAt: 0, updatedAt: 0 } as never);
+    const creativeDocId = await ctx.db.insert("creativeDocs", { buildId: creativeBuild, kind: "treatment", projectId, createdAt: 0, updatedAt: 0 });
+    const kitId = await ctx.db.insert("brandKits", { name: "Kit", brandKit: { colors: [], fonts: {}, files: [], links: [], tone: [] }, projectId, share: { token: "matrixkittoken0123456789", on: true }, createdAt: 0, updatedAt: 0 });
+    const canvasId = await ctx.db.insert("canvases", { name: "Board", kind: "canvas", items: [], rev: 0, projectId, files: [], link: { token: "matrixcanvaslink01234567", on: true }, createdAt: 0, updatedAt: 0 });
+    const canvasPersonId = await ctx.db.insert("canvasPeople", { canvasId, email: "client@example.com", role: "edit", token: "matrixcanvasperson012345", createdAt: 0 });
     // Phase 5d step 1: booking calls: the settings and one booked call (its private link's token).
     await ctx.db.insert("callSettings", { lengthMin: 30, bufferMin: 10, aheadDays: 30, noticeHours: 4, hours: [0, 1, 2, 3, 4, 5, 6].map((d) => ({ on: d < 5, start: "09:00", end: "17:00" })), updatedAt: 0 });
     const callToken = "matrixcalltoken0123456789";
@@ -380,7 +396,7 @@ export async function setup() {
     // Phase 5e step 6: an export ready to download, and a finished deletion whose safety-net export the admins keep
     const dataExportId = await ctx.db.insert("dataExports", { businessId: teamBiz, status: "ready", requestedAt: 0, requestedBy: owner, fileId: storageId, bytes: 1, readyAt: 0, expiresAt: Date.now() + 86_400_000 });
     const deletionId = await ctx.db.insert("businessDeletions", { businessId: teamBiz, name: "Gone Films", ownerEmail: "gone@x.example", requestedBy: "Gone", requestedAt: 0, deleteAt: 0, status: "done", finalExportId: storageId, finalBytes: 1, purgeAt: Date.now() + 86_400_000 });
-    return { shotListId, shotSetupId, shotId, releaseId, packListId, packLineId, placeId, teamInviteId, bellItemId, dataExportId, deletionId, teamMemberId: producer.m, producerSub: producer.sub, editorSub: editor.sub, bookkeeperSub: bookkeeper.sub, threadId, callId, callToken, gearId, offerPersonId, calendarEventId, guestToken, guestInvitedSub: await sess(invitedGuest), guestSub: await sess(guestUser), callSheetId, testimonialId, vendorSub: await sess(vendorUser), briefId, fileRequestId, fileUploadId, shootId, vendorInvoiceId, businessId, briefingId, bookingId, vendorId, proposalId, quoteId, dealId, followUpId, estimateId, entryId, subscriptionId, planId, invoiceId, deliveryFileId, clientRecId, personId, inboxItemId, inboxNoteId, requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
+    return { shotListId, shotSetupId, shotId, releaseId, packListId, packLineId, placeId, creativeDocId, kitId, canvasId, canvasPersonId, teamInviteId, bellItemId, dataExportId, deletionId, teamMemberId: producer.m, producerSub: producer.sub, editorSub: editor.sub, bookkeeperSub: bookkeeper.sub, threadId, callId, callToken, gearId, offerPersonId, calendarEventId, guestToken, guestInvitedSub: await sess(invitedGuest), guestSub: await sess(guestUser), callSheetId, testimonialId, vendorSub: await sess(vendorUser), briefId, fileRequestId, fileUploadId, shootId, vendorInvoiceId, businessId, briefingId, bookingId, vendorId, proposalId, quoteId, dealId, followUpId, estimateId, entryId, subscriptionId, planId, invoiceId, deliveryFileId, clientRecId, personId, inboxItemId, inboxNoteId, requestId, buildId, templateId, clauseId, styleId, docId, wsVersionId, wsKeyId, projectId, videoId, versionId, noteId, fileId, inviteId, keyId, storageId, shareId, replyId, ownerSub: await sess(owner), strangerSub: await sess(stranger), clientSub: await sess(client) };
   });
   return { t, ids };
 }

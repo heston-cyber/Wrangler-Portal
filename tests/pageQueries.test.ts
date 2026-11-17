@@ -206,6 +206,18 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "places.list": { pages: ["owner"], args: () => ({}) },
   "places.get": { pages: ["owner"], args: () => "skip" },
   "places.forShoot": { pages: ["owner"], args: () => "skip" },
+  // 5l (Nov 17): Creative planning (Overview, Docs, Brand kits, Canvas and mood boards) and its no-account links
+  "creative.overview": { pages: ["owner"], args: () => ({}) },
+  "creative.docs": { pages: ["owner"], args: () => ({}) },
+  "creative.doc": { pages: ["owner"], args: () => "skip" },
+  "creative.kits": { pages: ["owner"], args: () => ({}) },
+  "creative.kit": { pages: ["owner"], args: () => "skip" },
+  "canvas.list": { pages: ["owner"], args: () => ({}) },
+  "canvas.get": { pages: ["owner"], args: () => "skip" },
+  "canvas.shareChoices": { pages: ["owner"], args: () => "skip" },
+  "creative.sharedDoc": { pages: ["share"], args: () => ({ token: "x".repeat(24) }) }, // /cd/<token>
+  "creative.sharedKit": { pages: ["share"], args: () => ({ token: "x".repeat(24) }) }, // /kit/<token>
+  "canvas.shared": { pages: ["share"], args: () => ({ token: "x".repeat(24) }) }, // /cv/<token>
   // Nov 16: How everything connects (Projects by client, Not attached, Attach / Move, a project's Move)
   "homes.projectsBoard": { pages: ["owner"], args: () => ({}) },
   "homes.loose": { pages: ["owner"], args: () => ({}) },

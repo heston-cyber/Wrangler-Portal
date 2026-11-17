@@ -38,9 +38,10 @@ export function SectionView({ node, updateAttributes }: NodeViewProps) {
   const ctx = useContext(BuilderCtx);
   const a = node.attrs as { look: string; initials: boolean };
   return (
-    <NodeViewWrapper as="section" className={`wsb-sec ${a.look === "card" ? "wsb-card" : "wsb-plain"}`} data-look={a.look}>
+    <NodeViewWrapper as="section" className={`wsb-sec ${a.look === "card" ? "wsb-card" : a.look === "note" ? "wsb-card wsb-teamnote" : "wsb-plain"}`} data-look={a.look}>
+      {a.look === "note" && <span className="wsb-notetag" contentEditable={false}>Team note · hidden on the shared page</span>}
       <NodeViewContent className="wsb-sec-body" />
-      {!ctx?.callSheet && <div className="wsb-secfoot" contentEditable={false}>
+      {!ctx?.callSheet && a.look !== "note" && <div className="wsb-secfoot" contentEditable={false}>
         <label className="wsb-check"><input type="checkbox" checked={!!a.initials} onChange={(e) => updateAttributes({ initials: e.target.checked })} />Client initials here</label>
         <button type="button" className="btn ghost sm" onClick={() => ctx?.onSaveClause(node.toJSON() as PNode)}><BookmarkPlus size={13} />Save to clause library</button>
       </div>}
@@ -147,8 +148,9 @@ function Atom({ node, updateAttributes, ctx }: NodeViewProps & { ctx: BuilderCtx
         </div>
       );
     }
-    case "schedule": case "crew": case "contacts": {
-      const cols: Array<[string, string, string]> = node.type.name === "schedule" ? [["time", "Time", "time"], ["what", "What happens", "text"], ["who", "Who", "text"], ["notes", "Notes", "text"]]
+    case "schedule": case "crew": case "contacts": case "script": {
+      const cols: Array<[string, string, string]> = node.type.name === "script" ? [["time", "Time", "text"], ["picture", "Picture", "text"], ["sound", "Sound", "text"]]
+        : node.type.name === "schedule" ? [["time", "Time", "time"], ["what", "What happens", "text"], ["who", "Who", "text"], ["notes", "Notes", "text"]]
         : node.type.name === "crew" ? [["name", "Name", "text"], ["role", "Role", "text"], ["call", "Call", "time"], ["phone", "Phone", "tel"]]
         : [["label", "Who", "text"], ["name", "Name", "text"], ["phone", "Phone", "tel"]];
       type Row = Record<string, string> & { id: string };

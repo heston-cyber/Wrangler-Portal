@@ -101,6 +101,17 @@ const ReleaseSigning = lazy(() => import("./modules/production/ShootPage").then(
 const PackingListsPage = lazy(() => import("./modules/production/Packing")); // 5j
 const PackingListEditor = lazy(() => import("./modules/production/Packing").then((m) => ({ default: m.PackingListEditor })));
 const LocationsPage = lazy(() => import("./modules/production/Places")); // 5k
+// 5l: Creative planning (Overview, Docs, Brand kits; Canvas and mood boards) and its no-account share pages.
+const CreativeOverview = lazy(() => import("./modules/creative/Creative").then((m) => ({ default: m.CreativeOverview })));
+const CreativeDocs = lazy(() => import("./modules/creative/Creative").then((m) => ({ default: m.CreativeDocs })));
+const CreativeDocPage = lazy(() => import("./modules/creative/Creative").then((m) => ({ default: m.CreativeDocPage })));
+const BrandKits = lazy(() => import("./modules/creative/Creative").then((m) => ({ default: m.BrandKits })));
+const KitPage = lazy(() => import("./modules/creative/Creative").then((m) => ({ default: m.KitPage })));
+const SharedCreativeDoc = lazy(() => import("./modules/creative/Creative").then((m) => ({ default: m.SharedCreativeDoc })));
+const SharedKit = lazy(() => import("./modules/creative/Creative").then((m) => ({ default: m.SharedKit })));
+const CanvasList = lazy(() => import("./modules/creative/Canvas").then((m) => ({ default: m.CanvasList })));
+const CanvasPage = lazy(() => import("./modules/creative/Canvas").then((m) => ({ default: m.CanvasPage })));
+const SharedCanvas = lazy(() => import("./modules/creative/Canvas").then((m) => ({ default: m.SharedCanvas })));
 const PlacePage = lazy(() => import("./modules/production/Places").then((m) => ({ default: m.PlacePage })));
 const NotAttached = lazy(() => import("./modules/projects/Homes").then((m) => ({ default: m.NotAttached })));
 const GearPage = lazy(() => import("./modules/production/Gear")); // Phase 5d step 3
@@ -186,6 +197,8 @@ export default function App() {
     const mk = /^\/m\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
     if (mk) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><LeadMessages token={mk[1]} /></Suspense></KitApp></Suspense>;
     if (brief) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}><BriefingLink token={brief[1]} /></Suspense></KitApp></Suspense>;
+    const cpub = /^\/(cd|kit|cv)\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path); // 5l: a creative doc, kit or board's link
+    if (cpub) return <Suspense fallback={<Loading />}><KitApp side={kit}><Suspense fallback={<Loading />}>{cpub[1] === "cd" ? <SharedCreativeDoc token={cpub[2]} /> : cpub[1] === "kit" ? <SharedKit token={cpub[2]} /> : <SharedCanvas token={cpub[2]} />}</Suspense></KitApp></Suspense>;
     const inv = /^\/i\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
     if (inv) {
       const page = (inShell: boolean) => <Suspense fallback={<Loading />}><ClientInvoice token={inv[1]} inShell={inShell} /></Suspense>;
@@ -231,6 +244,12 @@ export default function App() {
   // D147: a briefing link (email 58's "Read the briefing", or a copied link), no account needed; the same page signed in or out.
   const briefingLink = /^\/b\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
   if (briefingLink) return <Suspense fallback={<Loading />}><BriefingLink key={briefingLink[1]} token={briefingLink[1]} /></Suspense>;
+  // 5l (D191, D183): a creative doc's, brand kit's or board's view-only link (/cd, /kit, /cv), no account needed.
+  const creativeLink = /^\/(cd|kit|cv)\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
+  if (creativeLink) {
+    const [, k, tok] = creativeLink;
+    return <Suspense fallback={<Loading />}>{k === "cd" ? <SharedCreativeDoc key={tok} token={tok} /> : k === "kit" ? <SharedKit key={tok} token={tok} /> : <SharedCanvas key={tok} token={tok} />}</Suspense>;
+  }
   // An invoice link (Part B step 3, the "View and pay" button in email 08) works signed in or out too.
   const invoice = /^\/i\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
   if (invoice) {
@@ -332,7 +351,13 @@ function SignedIn() {
   else if (/^\/production\/shoots\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; const t = params.get("tab"); page = <Suspense fallback={<Loading />}><ShootPage key={id} shootId={id} tab={(["callsheet", "shotlist", "gear", "releases", "locations"].includes(t ?? "") ? t : "overview") as ShootTab} /></Suspense>; } // 5i (D203)
   else if (/^\/production\/gear\/packing\/?$/.test(path)) page = <Suspense fallback={<Loading />}><PackingListsPage /></Suspense>; // 5j
   else if (/^\/production\/gear\/packing\/[^/]+\/?$/.test(path)) { const id = path.split("/")[4]; page = <Suspense fallback={<Loading />}><PackingListEditor key={id} listId={id} /></Suspense>; }
-  else if (/^\/creative\/?$/.test(path)) page = <Suspense fallback={<Loading />}><LocationsPage /></Suspense>; // until Creative planning's Overview (5l)
+  else if (/^\/creative\/?$/.test(path)) page = <Suspense fallback={<Loading />}><CreativeOverview /></Suspense>; // 5l
+  else if (/^\/creative\/docs\/?$/.test(path)) page = <Suspense fallback={<Loading />}><CreativeDocs key={search} /></Suspense>;
+  else if (/^\/creative\/docs\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><CreativeDocPage key={id} docId={id} /></Suspense>; }
+  else if (/^\/creative\/kits\/?$/.test(path)) page = <Suspense fallback={<Loading />}><BrandKits key={search} /></Suspense>;
+  else if (/^\/creative\/kits\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><KitPage key={id} kitId={id} /></Suspense>; }
+  else if (/^\/creative\/canvas\/?$/.test(path)) page = <Suspense fallback={<Loading />}><CanvasList key={search} /></Suspense>;
+  else if (/^\/creative\/canvas\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><CanvasPage key={id} canvasId={id} /></Suspense>; }
   else if (/^\/creative\/locations\/?$/.test(path)) page = <Suspense fallback={<Loading />}><LocationsPage /></Suspense>; // 5k
   else if (/^\/creative\/locations\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><PlacePage key={id} placeId={id} /></Suspense>; }
   else if (/^\/production\/gear\/?$/.test(path)) page = <Suspense fallback={<Loading />}><GearPage /></Suspense>;

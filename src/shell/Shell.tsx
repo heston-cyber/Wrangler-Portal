@@ -95,7 +95,7 @@ export const SUB_ICON: Record<string, IconName> = {
   "/vendors": "users", "/vendors/payments": "wallet", "/proposals/new": "plus", "/sign/new": "plus", "/proposals": "register", "/sign/docs": "register",
   "/proposals/templates": "template", "/sign/templates": "template", "/proposals/questionnaire": "questionnaire", "/sign/signature": "sign",
   "/payments/invoices": "invoice", "/payments/quotes": "quote", "/payments/subscriptions": "repeat", "/payments/plans": "layers", "/payments/reports": "chart",
-  "/review": "register", "/projects/not-attached": "attach", "/creative": "overview", "/creative/locations": "map-pin", "/review/library": "video", "/production/post-pro": "overview", "/sign/overview": "overview", "/clients/overview": "overview",
+  "/review": "register", "/projects/not-attached": "attach", "/creative": "overview", "/creative/locations": "map-pin", "/creative/docs": "document", "/creative/canvas": "creative", "/creative/kits": "layers", "/review/library": "video", "/production/post-pro": "overview", "/sign/overview": "overview", "/clients/overview": "overview",
 };
 export const STAGE_ICON: Record<string, IconName> = { "Pre-pro": "clipboard", "Prin-pro": "camera", "Post-pro": "scissors", Delivery: "package",
   Proposals: "presentation", Contracts: "contract", Clients: "user", Vendors: "briefcase", Payments: "invoice" };
@@ -146,7 +146,10 @@ const NEW_POST: Sub[] = [
 ];
 const NEW_CREATIVE: Sub[] = [
   { to: "/creative", label: "Overview", match: (p) => p === "/creative" || p === "/creative/" },
+  { to: "/creative/docs", label: "Docs", match: (p) => starts(p, "/creative/docs") },
+  { to: "/creative/canvas", label: "Canvas and mood boards", match: (p) => starts(p, "/creative/canvas") },
   { to: "/creative/locations", label: "Locations", match: (p) => starts(p, "/creative/locations") },
+  { to: "/creative/kits", label: "Brand kits", match: (p) => starts(p, "/creative/kits") },
 ];
 const inCreative = (p: string) => starts(p, "/creative");
 const inPost = (p: string) => starts(p, "/review", "/v", "/production/delivery", "/production/post-pro", "/activity");

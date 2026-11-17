@@ -3,6 +3,7 @@
 // (D193): New release (1041-23004 …), Hand over (1042-23136), the signer's own steps (Sign's, unchanged: rule 9) and
 // Hand back (1042-23898).
 import { useEffect, useState } from "react";
+import { usePerms } from "../../lib/teamAccess";
 import { useConvex, useMutation, useQuery, useAction } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -172,6 +173,7 @@ function ReleasesTab({ shootId, show }: { shootId: string; show: (t: string) => 
   const remove = useMutation(api.releases.remove);
   const [making, setMaking] = useState<{ shotIds: string[] } | null>(null);
   const [marking, setMarking] = useState(false);
+  const { team } = usePerms();
   if (d === undefined) return <Card label="Loading"><SkeletonRows n={3} /></Card>;
   if (d === null) return null;
   const signed = d.releases.filter((r) => r.state === "signed").length;
@@ -189,7 +191,7 @@ function ReleasesTab({ shootId, show }: { shootId: string; show: (t: string) => 
               <span className="secondary">{r.kindName} release · {r.state === "signed" && r.signedAt ? `Signed in person · ${when(r.signedAt)}` : RELEASE_STATE[r.state]}{r.kind === "minor" ? ` · signed by ${r.name}` : ""} · {r.shotIds.length ? `covers ${r.shotIds.map((x) => `#${num.get(x) ?? "?"}`).join(", ")}` : "the whole shoot"}</span></span>
             {r.state === "signed" && r.documentId ? <a className="sp-link" {...linkProps(`/sign/d/${r.documentId}`)}>Open PDF</a>
               : r.state === "ready" || r.state === "draft" ? <>
-                  <ButtonLink size="sm" variant="primary" to={`/releases/${r._id}/sign`}>{r.state === "draft" ? "Finish and sign" : "Hand over"}</ButtonLink>
+                  {!team && <ButtonLink size="sm" variant="primary" to={`/releases/${r._id}/sign`}>{r.state === "draft" ? "Finish and sign" : "Hand over"}</ButtonLink>}
                   {r.state === "draft" && <button type="button" className="sp-link" onClick={() => void remove({ releaseId: r._id }).catch((e) => show(errLine(e)))}>Remove</button>}
                 </>
               : r.documentId ? <a className="sp-link" {...linkProps(`/sign/d/${r.documentId}`)}>Open</a> : null}
@@ -237,12 +239,15 @@ function NewRelease({ shootId, data, shotIds, onClose, show }: { shootId: string
   const [shots, setShots] = useState<string[]>(shotIds);
   const [busy, setBusy] = useState(false);
   const make = useMakeRelease();
+  const { team } = usePerms();
   useEffect(() => { if (!templates.length) void ensure({}).then(setTemplates, (e) => show(errLine(e))); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const go = async () => {
     if (!pick) return;
     setBusy(true);
     try {
       const r = await create({ shootId, templateId: pick._id, name: f.name, email: f.email, phone: f.phone || undefined, minorName: pick.kind === "minor" ? f.minor : undefined, shotIds: shots as Id<"shots">[] });
+      // 541ac10 review H1: the team fill it in; the owner makes it and hands it over.
+      if (team) { show(`Saved. ${f.name} signs when the owner hands it over.`); onClose(); return; }
       await make(r.releaseId, r.buildId);
       navigate(`/releases/${r.releaseId}/sign`);
     } catch (e) { show(errLine(e)); setBusy(false); }
@@ -280,7 +285,7 @@ function NewRelease({ shootId, data, shotIds, onClose, show }: { shootId: string
             })}
           </div>
         )}
-        <div className="dfoot"><button type="button" className="btn ghost" onClick={() => setPick(null)}>Back</button><Button variant="primary" type="submit" loading={busy} disabled={!f.name.trim() || !f.email.trim() || (minor && !f.minor.trim())}>Make and sign</Button></div>
+        <div className="dfoot"><button type="button" className="btn ghost" onClick={() => setPick(null)}>Back</button><Button variant="primary" type="submit" loading={busy} disabled={!f.name.trim() || !f.email.trim() || (minor && !f.minor.trim())}>{team ? "Save for the owner" : "Make and sign"}</Button></div>
       </form>
     </Modal>
   );
@@ -320,6 +325,15 @@ export function ReleaseSigning({ releaseId }: { releaseId: string }) {
   const [back, setBack] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [checked, setChecked] = useState(false);
+  // 541ac10 review M4: while the signer holds the phone, Back stays on the signing (it can't reach the owner's pages).
+  useEffect(() => {
+    if (!token || back) return;
+    const hold = () => window.history.pushState(null, "", window.location.href);
+    hold();
+    window.addEventListener("popstate", hold);
+    return () => window.removeEventListener("popstate", hold);
+  }, [token, back]);
   const shootUrl = r?.shootId ? `/production/shoots/${r.shootId}?tab=releases` : "/production/shoots";
   if (r === undefined) return <div className="rl-full"><p className="rl-wait">Opening…</p></div>;
   if (r === null) return <div className="rl-full"><div className="rl-card glass"><h1 className="headline">This release isn't here any more.</h1><Button onClick={() => navigate("/production/shoots")}>Back to shoots</Button></div></div>;
@@ -338,7 +352,7 @@ export function ReleaseSigning({ releaseId }: { releaseId: string }) {
     setBusy(true); setErr(null);
     try {
       if (r.state === "draft") await make(r._id, r.buildId);
-      const out = await handOver({ releaseId: r._id, device: deviceName() });
+      const out = await handOver({ releaseId: r._id, device: deviceName(), checked: true });
       setSession(out.token, out.session);
       setToken(out.token);
     } catch (e) { setErr(errLine(e)); }
@@ -351,7 +365,9 @@ export function ReleaseSigning({ releaseId }: { releaseId: string }) {
       <h1 className="headline">Hand the phone to {r.name}.</h1>
       <p className="secondary">They read the release and sign it here. A signed copy goes to {r.email}.</p>
       {err && <p className="rl-err" role="alert">{err}</p>}
-      <Button variant="primary" loading={busy} disabled={r.state === "signing"} onClick={() => void start()}>I'm {r.name} · Start</Button>
+      {/* Review H2: the owner's own check, recorded on the certificate in place of the email code. */}
+      <label className="rl-check"><input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} /> I've checked in person that this is {r.name}</label>
+      <Button variant="primary" loading={busy} disabled={r.state === "signing" || !checked} onClick={() => void start()}>I'm {r.name} · Start</Button>
       {r.state === "signing" && <p className="secondary">It's already out for signing. Cancel it from Contracts to start again.</p>}
       <button type="button" className="btn ghost" onClick={() => navigate(shootUrl)}>Cancel</button>
     </div></div>

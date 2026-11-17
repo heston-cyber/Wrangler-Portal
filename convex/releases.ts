@@ -10,7 +10,7 @@ import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireAll } from "./lib/access";
+import { requireAll, requireOwner } from "./lib/access";
 import { insertBuild, profile, toSigningCore } from "./builder";
 import { approveForRelease, sendInPersonCore } from "./sign";
 import { claimIn } from "./fileOwners";
@@ -50,7 +50,7 @@ async function ensureTemplates(ctx: MutationCtx) {
   for (const k of RELEASE_KINDS) {
     const t = releaseTemplate(k);
     const custom = [{ key: "location", label: "Location", value: "" }, ...(k === "minor" ? [{ key: "minor.name", label: "Minor's name", value: "" }] : [])];
-    await ctx.db.insert("wsTemplates", { name: t.name, description: t.description, kind: "release", blocks: t.page, fields: { project: "", custom }, style, createdAt: now, updatedAt: now });
+    await ctx.db.insert("wsTemplates", { name: t.name, description: t.description, kind: "release", releaseKind: k, blocks: t.page, fields: { project: "", custom }, style, createdAt: now, updatedAt: now });
   }
   return (await ctx.db.query("wsTemplates").collect()).filter((t) => t.kind === "release");
 }
@@ -75,7 +75,7 @@ export const forShoot = query({
     const signedShots = new Set(out.filter((r) => r.state === "signed").flatMap((r) => r.shotIds.map(String)));
     const shots = list ? await ctx.db.query("shots").withIndex("by_list", (q) => q.eq("listId", list._id)).collect() : [];
     const missing = shots.filter((x) => x.releaseNeeded && !signedShots.has(x._id)).map((x) => ({ _id: x._id, number: x.number, text: x.text }));
-    const templates = (await ctx.db.query("wsTemplates").collect()).filter((t) => t.kind === "release").map((t) => ({ _id: t._id, name: t.name, description: t.description ?? "", kind: kindOfTemplate(t.name) }));
+    const templates = (await ctx.db.query("wsTemplates").collect()).filter((t) => t.kind === "release").map((t) => ({ _id: t._id, name: t.name, description: t.description ?? "", kind: kindOfTemplate(t) }));
     return { releases: out, missing, shots: shots.map((x) => ({ _id: x._id, number: x.number, text: x.text, releaseNeeded: x.releaseNeeded ?? null, released: signedShots.has(x._id) })), templates, place: s.location };
   },
 });
@@ -85,7 +85,7 @@ export const templates = mutation({
   args: {},
   handler: async (ctx) => {
     await both(ctx);
-    return (await ensureTemplates(ctx)).map((t) => ({ _id: t._id, name: t.name, description: t.description ?? "", kind: kindOfTemplate(t.name) }));
+    return (await ensureTemplates(ctx)).map((t) => ({ _id: t._id, name: t.name, description: t.description ?? "", kind: kindOfTemplate(t) }));
   },
 });
 
@@ -98,7 +98,7 @@ export const create = mutation({
     if (s.status !== "scheduled") throw new ConvexError("That shoot was cancelled.");
     const t = await ctx.db.get(a.templateId);
     if (!t || t.kind !== "release") throw new ConvexError("Pick a release template.");
-    const kind = kindOfTemplate(t.name);
+    const kind = kindOfTemplate(t);
     const name = tidy(a.name, 120), email = tidy(a.email, 200).toLowerCase(), minorName = tidy(a.minorName, 120);
     if (!name) throw new ConvexError(kind === "minor" ? "Enter the parent or guardian's name." : "Enter who's signing.");
     if (!isEmail(email)) throw new ConvexError("Enter an email for their signed copy.");
@@ -121,17 +121,19 @@ export const create = mutation({
 
 export const releaseFor = internalQuery({
   args: { releaseId: v.id("releases") },
-  handler: async (ctx, { releaseId }) => await ctx.db.get(releaseId),
+  handler: async (ctx, { releaseId }) => { const r = await ctx.db.get(releaseId); return r ? { ...r, state: (await stateOf(ctx, r)).state } : null; },
 });
 export const linkDocument = internalMutation({
   args: { releaseId: v.id("releases"), documentId: v.id("wsDocuments") },
   handler: async (ctx, { releaseId, documentId }) => {
     const doc = await ctx.db.get(documentId);
-    if (!doc) throw new ConvexError("That document isn't here.");
+    const r = await ctx.db.get(releaseId);
+    if (!doc || !r) throw new ConvexError("That document isn't here.");
     const ver = await ctx.db.query("wsVersions").withIndex("by_document", (q) => q.eq("documentId", documentId).eq("number", doc.currentVersion)).unique();
     if (!ver) throw new ConvexError("That document has no version.");
-    if (doc.status === "draft") await approveForRelease(ctx, ver._id);
+    // The release's document is linked first, so Sign's in-person check can find the release it belongs to.
     await ctx.db.patch(releaseId, { documentId, updatedAt: Date.now() });
+    if (doc.status === "draft") await approveForRelease(ctx, ver._id);
     return null;
   },
 });
@@ -140,10 +142,12 @@ export const linkDocument = internalMutation({
 export const prepare = action({
   args: { releaseId: v.id("releases"), storageId: v.id("_storage") },
   handler: async (ctx, { releaseId, storageId }): Promise<{ documentId: Id<"wsDocuments"> }> => {
-    await ctx.runQuery(internal.users.assertAllowed, { perm: ["shoots"], ids: [releaseId] });
-    await ctx.runQuery(internal.users.assertAllowed, { perm: ["docs"], ids: [releaseId] });
+    // 541ac10 review H1: approving and handing over stay the owner's, as Approve and Send do everywhere in Sign.
+    await ctx.runQuery(internal.users.assertAllowed, { ids: [releaseId] });
     const r = await ctx.runQuery(internal.releases.releaseFor, { releaseId });
     if (!r) throw new ConvexError("That release isn't here any more.");
+    // Review L7: a release made once is handed over or cancelled; a cancelled or signed one isn't made again.
+    if (r.state !== "draft") throw new ConvexError(r.state === "cancelled" ? "This release was cancelled. Make a new one." : "This release is already made.");
     const claim = await claimIn(ctx, storageId, "contract-pdf");
     if (!claim.fresh) throw new ConvexError("Upload the PDF again.");
     const made = await toSigningCore(ctx, r.buildId, storageId, undefined, claim);
@@ -154,9 +158,9 @@ export const prepare = action({
 
 /** "I'm {name} · Start": the signing starts on this phone. Returns the signing link's token and a session for it. */
 export const handOver = mutation({
-  args: { releaseId: v.id("releases"), device: v.string() },
+  args: { releaseId: v.id("releases"), device: v.string(), checked: v.literal(true) },
   handler: async (ctx, a) => {
-    const me = await both(ctx);
+    const me = await requireOwner(ctx); // review H1: the owner's, like Send
     const r = await ctx.db.get(a.releaseId);
     if (!r) throw new ConvexError("That release isn't here any more.");
     const { doc, state } = await stateOf(ctx, r);
@@ -164,6 +168,7 @@ export const handOver = mutation({
     if (!doc || state !== "ready") throw new ConvexError(state === "signing" ? "It's already out for signing. Cancel it from Contracts to start again." : "It isn't ready to sign yet.");
     const ver = await ctx.db.query("wsVersions").withIndex("by_document", (q) => q.eq("documentId", doc._id).eq("number", doc.currentVersion)).unique();
     const s = r.shootId ? await ctx.db.get(r.shootId) : null;
+    if (!s || s.status !== "scheduled") throw new ConvexError("That shoot was cancelled.");
     const device = tidy(a.device, 40) || "a phone";
     const owner = (me.name ?? "").trim().split(" ")[0] || "The owner";
     const out = await sendInPersonCore(ctx, ver!._id, { device: `${owner}'s ${device}`, place: s?.location ?? null, by: me.name?.trim() || me.email });

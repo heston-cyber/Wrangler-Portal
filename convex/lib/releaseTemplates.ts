@@ -51,4 +51,5 @@ const PAGES: Record<ReleaseKind, { name: string; description: string; blocks: PN
 
 export const releaseTemplate = (k: ReleaseKind) => ({ ...PAGES[k], page: { type: "doc" as const, content: PAGES[k].blocks } });
 export const RELEASE_KINDS: ReleaseKind[] = ["talent", "location", "minor"];
-export const kindOfTemplate = (name: string): ReleaseKind => (/minor/i.test(name) ? "minor" : /location/i.test(name) ? "location" : "talent");
+/** A release template's kind: stored on the template (review L6); the name only for templates made before that. */
+export const kindOfTemplate = (t: { name: string; releaseKind?: ReleaseKind }): ReleaseKind => t.releaseKind ?? (/minor/i.test(t.name) ? "minor" : /location/i.test(t.name) ? "location" : "talent");
