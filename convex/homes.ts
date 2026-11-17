@@ -14,6 +14,8 @@ import { requireAll } from "./lib/access";
 import { audit } from "./lib/audit";
 import { label } from "./lib/bookingRows";
 import type { Perm } from "./lib/perms";
+import { queueCalendar } from "./calendar";
+import { linkClient } from "./lib/functions";
 
 type Ctx = QueryCtx | MutationCtx;
 export type HomeType = "client" | "project" | "shoot" | "lead";
@@ -26,7 +28,8 @@ type KindDef = {
   noun: string;
   perm: Perm;
   homes: HomeType[];
-  /** Already in a client's hands: it can file under another project of the same client, never leave that client. */
+  /** Addressed to someone or already sent (review H1): it can file under another project of the same client, never
+   *  leave that client (who it's billed or sent to belongs to that client). */
   sent?: (d: Record<string, unknown>) => boolean;
   /** A reason it can't move at all (e.g. a briefing tied to a booking). */
   fixed?: (d: Record<string, unknown>) => string | null;
@@ -36,11 +39,12 @@ export const KINDS = {
   // project keep it there.
   shoot: { table: "shoots", noun: "shoot", perm: "shoots", homes: ["project"], fixed: (d) => (Array.isArray(d.crew) && (d.crew as Array<{ bookingId?: string }>).some((c) => c.bookingId) ? "Crew booked on this project are on this shoot: take them off it first." : d.status !== "scheduled" ? "That shoot was cancelled." : null) },
   shotList: { table: "shotLists", noun: "shot list", perm: "shoots", homes: ["project", "shoot"] },
-  quote: { table: "quotes", noun: "quote", perm: "payments", homes: ["lead", "client", "project"], sent: (d) => d.status !== "draft" },
+  quote: { table: "quotes", noun: "quote", perm: "payments", homes: ["lead", "client", "project"], sent: (d) => d.status !== "draft" || !!d.contact },
   estimate: { table: "estimates", noun: "estimate", perm: "clients", homes: ["lead", "client", "project"] },
-  proposal: { table: "proposals", noun: "proposal", perm: "docs", homes: ["lead", "client", "project"], sent: (d) => !["draft", "waiting", "ready"].includes(String(d.status)) },
-  invoice: { table: "invoices", noun: "invoice", perm: "payments", homes: ["client", "project"], sent: (d) => d.status !== "draft" },
-  subscription: { table: "subscriptions", noun: "subscription", perm: "payments", homes: ["client", "project"], sent: (d) => d.status !== "starting" },
+  proposal: { table: "proposals", noun: "proposal", perm: "docs", homes: ["lead", "client", "project"], sent: (d) => !["draft", "waiting", "ready"].includes(String(d.status)) || !!d.contact },
+  // An invoice is billed to someone from the start (billTo), and a subscription has its customer from the start (L2).
+  invoice: { table: "invoices", noun: "invoice", perm: "payments", homes: ["client", "project"], sent: () => true },
+  subscription: { table: "subscriptions", noun: "subscription", perm: "payments", homes: ["client", "project"], sent: () => true },
   briefing: { table: "briefings", noun: "briefing", perm: "production", homes: ["project"], fixed: (d) => (d.bookingId ? "This briefing is for a booking: it stays with that booking's project." : null) },
   lead: { table: "deals", noun: "lead", perm: "clients", homes: ["client"] },
 } as const satisfies Record<string, KindDef>;
@@ -102,7 +106,7 @@ async function patchFor(ctx: MutationCtx, k: Kind, d: Record<string, unknown> & 
   if (why) throw new ConvexError(why);
   if (def.sent?.(d)) {
     const was = await clientNow(ctx, d);
-    if (was && (!to || String(to.clientId ?? "") !== was)) throw new ConvexError(`This ${def.noun} was already sent: it stays with the client it went to. File it under one of their projects, or under the client.`);
+    if (was && (!to || String(to.clientId ?? "") !== was)) throw new ConvexError(`This ${def.noun} is addressed to someone or already sent: it stays with the client it's for. File it under one of their projects, or under the client.`);
   }
   const patch: Record<string, unknown> = {};
   for (const t of def.homes) patch[FIELD[t]] = undefined;
@@ -112,8 +116,8 @@ async function patchFor(ctx: MutationCtx, k: Kind, d: Record<string, unknown> & 
       if (to.type === "shoot") {
         const other = (await ctx.db.query("shotLists").withIndex("by_shoot", (q) => q.eq("shootId", to.shoot!._id)).collect()).find((x) => x._id !== d._id);
         if (other) throw new ConvexError("That shoot day already has a shot list.");
-        patch.projectId = to.projectId; patch.shootId = to.shoot!._id;
-      } else patch.projectId = to.projectId;
+        patch.projectId = to.projectId ?? undefined; patch.shootId = to.shoot!._id;
+      } else patch.projectId = to.projectId ?? undefined;
     } else {
       patch[FIELD[to.type]] = to.type === "shoot" ? to.shoot!._id : to.id;
       // Money documents keep their client in step with their home (the code that sends them reads it).
@@ -123,6 +127,10 @@ async function patchFor(ctx: MutationCtx, k: Kind, d: Record<string, unknown> & 
   return patch;
 }
 
+/** The switch each kind of place needs (review M1): a caller only sees and uses places their switches cover. */
+const PLACE_PERM: Record<HomeType, Perm> = { client: "clients", lead: "clients", project: "projects", shoot: "shoots" };
+async function canPlace(ctx: Ctx, t: HomeType) { try { await requireAll(ctx, PLACE_PERM[t]); return true; } catch { return false; } }
+
 export const move = mutation({
   args: { kind: kindArg, id: v.string(), to: v.union(v.null(), v.object({ type: v.union(v.literal("client"), v.literal("project"), v.literal("shoot"), v.literal("lead")), id: v.string() })) },
   handler: async (ctx, a) => {
@@ -131,13 +139,28 @@ export const move = mutation({
     const id = ctx.db.normalizeId(def.table, a.id);
     const d = id ? (await ctx.db.get(id)) as (Record<string, unknown> & { _id: string }) | null : null;
     if (!d) throw new ConvexError(`This ${def.noun} isn't here any more.`);
+    if (a.to && !(await canPlace(ctx, a.to.type))) throw new ConvexError("Not allowed.");
     const to = a.to ? await resolve(ctx, a.to) : null;
+    if (a.kind === "shoot") await shootMayMove(ctx, d._id as Id<"shoots">);
     const patch = await patchFor(ctx, a.kind as Kind, d, to);
     await ctx.db.patch(d._id as never, patch as never);
     if (a.kind === "shoot") {
+      // A new client: the old client's confirmation goes, and the calendar event is brought up to date (review M4).
+      if (String(await clientNow(ctx, d)) !== String(to?.clientId ?? null)) await clientChanged(ctx, d._id as Id<"shoots">);
       // Its day-of things go with it: the call sheet and the shot list live on the shoot's project.
       for (const cs of await ctx.db.query("callSheets").withIndex("by_shoot", (q) => q.eq("shootId", d._id as Id<"shoots">)).collect()) await ctx.db.patch(cs._id, { projectId: to?.projectId ?? undefined });
       for (const l of await ctx.db.query("shotLists").withIndex("by_shoot", (q) => q.eq("shootId", d._id as Id<"shoots">)).collect()) await ctx.db.patch(l._id, { projectId: to?.projectId ?? undefined });
+    }
+    // A lead moved to another client takes its unaddressed quotes, proposals and estimates along; the rest stay with
+    // their client and leave the lead (review M7).
+    if (a.kind === "lead" && String(d.clientId ?? "") !== String(to?.clientId ?? "")) {
+      for (const k of ["quote", "proposal", "estimate"] as Kind[]) {
+        const def2 = KINDS[k] as KindDef;
+        for (const r of (await ctx.db.query(def2.table as "quotes").withIndex("by_deal", (q) => q.eq("dealId", d._id as Id<"deals">)).collect()) as Array<Record<string, unknown> & { _id: string }>) {
+          if (def2.sent?.(r)) await ctx.db.patch(r._id as Id<"quotes">, { dealId: undefined, clientId: (r.clientId as Id<"clients"> | undefined) ?? (d.clientId as Id<"clients"> | undefined) } as never);
+          else await ctx.db.patch(r._id as Id<"quotes">, { clientId: to?.clientId ?? undefined } as never);
+        }
+      }
     }
     const name = String(d.title ?? d.number ?? (a.kind === "shoot" ? `${d.date} · ${d.location}` : def.noun));
     await audit(ctx, { kind: "moved", text: to ? `Moved ${def.noun} "${name}" to ${to.name}` : `Took ${def.noun} "${name}" off its ${homeOf(a.kind as Kind, d)?.type ?? "home"} (on its own now)` });
@@ -145,23 +168,94 @@ export const move = mutation({
   },
 });
 
+/** Review L3: a shoot whose call sheet was sent stays on its project (its people and guests read it there). */
+async function shootMayMove(ctx: Ctx, shootId: Id<"shoots">) {
+  const cs = await ctx.db.query("callSheets").withIndex("by_shoot", (q) => q.eq("shootId", shootId)).first();
+  if (cs?.status === "sent") throw new ConvexError("Its call sheet was sent: the shoot stays on its project.");
+}
+/** Review M4: a shoot now with another client (or none) loses the old client's confirmation; its calendar event is
+ *  rewritten. Nobody new is emailed (rule 3): Ask to confirm stays the owner's own click. */
+async function clientChanged(ctx: MutationCtx, shootId: Id<"shoots">) {
+  const s = await ctx.db.get(shootId);
+  if (!s) return;
+  await ctx.db.patch(s._id, { confirmed: undefined, moved: undefined, calAt: Date.now() });
+  if (s.calendar || s.calendarEvent) await queueCalendar(ctx, s._id, "all");
+}
+
 // ---------- Move a project (D204: everything on it goes with it) ----------
+
+const MONEY = ["quote", "estimate", "proposal", "invoice", "subscription"] as Kind[];
 
 /** What moving a project takes along and what stays (the confirmation: "Move Launch and its 11 things to Northline?"). */
 async function projectContents(ctx: Ctx, p: Doc<"projects">) {
   const sentStay: Array<{ kind: Kind; id: string; name: string }> = [];
-  let moving = 0;
-  for (const k of ["quote", "estimate", "proposal", "invoice", "subscription"] as Kind[]) {
+  let moving = 0, money = 0;
+  for (const k of MONEY) {
     const t = KINDS[k].table as "quotes";
     const rows = (await ctx.db.query(t).collect()).filter((x) => (x as { projectId?: string }).projectId === p._id) as Array<Record<string, unknown> & { _id: string }>;
     for (const r of rows) {
-      if ((KINDS[k] as KindDef).sent?.(r)) sentStay.push({ kind: k, id: r._id, name: String(r.title ?? r.number ?? KINDS[k].noun) });
+      if (k !== "estimate") money++;
+      // Addressed or sent, with a client to stay with (review H3: one with no client anywhere goes with the project).
+      if ((KINDS[k] as KindDef).sent?.(r) && (r.clientId || p.clientId)) sentStay.push({ kind: k, id: r._id, name: String(r.title ?? r.number ?? KINDS[k].noun) });
       else moving++;
     }
   }
   for (const t of ["shoots", "shotLists", "briefings", "briefs", "fileRequests", "vendorBookings", "videos", "callSheets"] as const)
     moving += (await ctx.db.query(t).withIndex("by_project" as never, ((q: { eq: (f: string, v: unknown) => unknown }) => q.eq("projectId", p._id)) as never).collect()).length;
-  return { moving, sentStay };
+  return { moving, sentStay, money };
+}
+
+/** Review M2: a project carrying quotes, proposals, invoices or subscriptions also needs the Payments switch to move. */
+async function mayMoveProject(ctx: Ctx, p: Doc<"projects">) {
+  await requireAll(ctx, "projects");
+  if ((await projectContents(ctx, p)).money) await requireAll(ctx, "payments");
+}
+
+/**
+ * Moves project `p` to client `to` (or on its own), with everything on it (D204). The one way a project's client
+ * changes (review M3): Move, the project's name dialog, the register and Dropbox all come here. Callers check access.
+ */
+export async function moveProjectCore(ctx: MutationCtx, p: Doc<"projects">, to: Doc<"clients"> | null) {
+  if ((p.clientId ?? null) === (to?._id ?? null)) return { moved: 0, stayed: 0, sharesOff: 0 };
+  // Review M5: footage kept or paid for is the client's; it can't follow the project to someone else.
+  const fs = await ctx.db.query("footageStorage").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect();
+  if (p.clientId && fs.some((f) => f.status === "kept" || f.status === "paid"))
+    throw new ConvexError(`${p.client ?? "The client"} is keeping this project's footage: it stays with them.`);
+  const { sentStay } = await projectContents(ctx, p);
+  const stay = new Set(sentStay.map((x) => x.id));
+  for (const k of MONEY) {
+    const t = KINDS[k].table as "quotes";
+    for (const r of (await ctx.db.query(t).collect()).filter((x) => (x as { projectId?: string }).projectId === p._id)) {
+      // Addressed or sent: it leaves the project and stays with the client it's for (H1, H3).
+      if (stay.has(r._id)) await ctx.db.patch(r._id, { projectId: undefined, clientId: (r as { clientId?: Id<"clients"> }).clientId ?? p.clientId } as never);
+      // The rest keep their client in step with the project's new one.
+      else await ctx.db.patch(r._id, { clientId: to?._id } as never);
+    }
+  }
+  // Review H2: the name first (the writer relinks a project's client by name), then the exact client picked.
+  await ctx.db.patch(p._id, { client: to?.name });
+  await ctx.db.patch(p._id, { clientId: to?._id });
+  if (((await ctx.db.get(p._id))?.clientId ?? null) !== (to?._id ?? null)) throw new ConvexError("The project didn't take its new client. Nothing was moved.");
+  // Review M4: its shoot days lose the old client's confirmation; their calendar events are brought up to date.
+  for (const s of await ctx.db.query("shoots").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect())
+    if (s.status === "scheduled") await clientChanged(ctx, s._id);
+  // Unconfirmed footage storage offers go to the new client (or none).
+  for (const f of fs) if (f.status === "offered" || f.status === "declined") await ctx.db.patch(f._id, { clientId: to?._id });
+  // The old client's people lose it at once: a project share made for them is turned off (client shares follow the
+  // project's client by themselves). Review links shared for one cut stay as they are.
+  let sharesOff = 0;
+  for (const s of await ctx.db.query("shares").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect())
+    if (s.kind === "project" && !s.offAt) { await ctx.db.patch(s._id, { offAt: Date.now() }); sharesOff++; }
+  await audit(ctx, { kind: "moved", text: to ? `Moved project ${label(p)} to ${to.name}` : `Moved project ${label(p)} out of ${p.client ?? "its client"} (on its own now)` });
+  return { moved: 1, stayed: sentStay.length, sharesOff };
+}
+
+/** A client change made by typing a name (the name dialog, the register, Dropbox): the client by that name, made if new. */
+export async function moveProjectByName(ctx: MutationCtx, p: Doc<"projects">, name: string | undefined) {
+  const n = (name ?? "").trim();
+  if (n.toLowerCase() === (p.client ?? "").trim().toLowerCase()) return;
+  const id = n ? await linkClient(ctx.db, p.businessId, n) : undefined;
+  await moveProjectCore(ctx, p, id ? await ctx.db.get(id) : null);
 }
 
 export const projectMove = query({
@@ -172,7 +266,10 @@ export const projectMove = query({
     const p = id ? await ctx.db.get(id) : null;
     if (!p) return null;
     const c = await projectContents(ctx, p);
-    return { label: label(p), clientId: p.clientId ?? null, client: p.client ?? null, things: c.moving, staying: c.sentStay };
+    let payments = true;
+    try { await requireAll(ctx, "payments"); } catch { payments = false; }
+    // Without Payments the money documents aren't named, and the move needs someone who has it.
+    return { label: label(p), clientId: p.clientId ?? null, client: p.client ?? null, things: c.moving, staying: payments ? c.sentStay : [], needsPayments: !payments && c.money > 0 };
   },
 });
 
@@ -183,32 +280,18 @@ export const moveProject = mutation({
     const id = ctx.db.normalizeId("projects", a.projectId);
     const p = id ? await ctx.db.get(id) : null;
     if (!p) throw new ConvexError("This project doesn't exist any more.");
+    await mayMoveProject(ctx, p);
     let to: Doc<"clients"> | null = null;
     if (a.clientId) {
       const cid = ctx.db.normalizeId("clients", a.clientId);
       to = cid ? await ctx.db.get(cid) : null;
       if (!to) throw new ConvexError("That client isn't here any more.");
     }
-    if ((p.clientId ?? null) === (to?._id ?? null)) return { moved: 0, stayed: 0 };
-    const { sentStay } = await projectContents(ctx, p);
-    // Money documents already sent stay with the client they went to: they leave the project, keeping that client.
-    for (const s of sentStay) await ctx.db.patch(s.id as Id<"quotes">, { projectId: undefined } as never);
-    // The rest keep their client in step with the project's new one.
-    for (const k of ["quote", "estimate", "proposal", "invoice", "subscription"] as Kind[]) {
-      const t = KINDS[k].table as "quotes";
-      for (const r of (await ctx.db.query(t).collect()).filter((x) => (x as { projectId?: string }).projectId === p._id))
-        await ctx.db.patch(r._id, { clientId: to?._id } as never);
-    }
-    await ctx.db.patch(p._id, { clientId: to?._id, client: to?.name });
-    // The old client's people lose it at once: a project share made for them is turned off (client shares follow the
-    // project's client by themselves). Review links shared for one cut stay as they are.
-    let sharesOff = 0;
-    for (const s of await ctx.db.query("shares").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect())
-      if (s.kind === "project" && !s.offAt) { await ctx.db.patch(s._id, { offAt: Date.now() }); sharesOff++; }
-    await audit(ctx, { kind: "moved", text: to ? `Moved project ${label(p)} to ${to.name}` : `Moved project ${label(p)} out of ${p.client ?? "its client"} (on its own now)` });
-    return { moved: 1, stayed: sentStay.length, sharesOff };
+    return await moveProjectCore(ctx, p, to);
   },
 });
+
+export { mayMoveProject };
 
 // ---------- the picker, and "Not attached" ----------
 
@@ -219,11 +302,12 @@ export const places = query({
     const def = KINDS[kind as Kind] as KindDef;
     await requireAll(ctx, def.perm);
     const out: Array<{ type: HomeType; id: string; name: string; sub: string | null; taken?: boolean }> = [];
-    if (has(kind as Kind, "client")) for (const c of await ctx.db.query("clients").collect()) out.push({ type: "client", id: c._id, name: c.name, sub: null });
-    if (has(kind as Kind, "lead")) for (const d of await ctx.db.query("deals").collect()) out.push({ type: "lead", id: d._id, name: d.title, sub: "Lead" });
+    const ok = async (t: HomeType) => has(kind as Kind, t) && (await canPlace(ctx, t));
+    if (await ok("client")) for (const c of await ctx.db.query("clients").collect()) out.push({ type: "client", id: c._id, name: c.name, sub: null });
+    if (await ok("lead")) for (const d of await ctx.db.query("deals").collect()) out.push({ type: "lead", id: d._id, name: d.title, sub: "Lead" });
     const projects = await ctx.db.query("projects").collect();
-    if (has(kind as Kind, "project")) for (const p of projects) out.push({ type: "project", id: p._id, name: label(p), sub: p.client ?? "On its own" });
-    if (has(kind as Kind, "shoot")) {
+    if (await ok("project")) for (const p of projects) out.push({ type: "project", id: p._id, name: label(p), sub: p.client ?? "On its own" });
+    if (await ok("shoot")) {
       const taken = new Set((await ctx.db.query("shotLists").collect()).map((l) => String(l.shootId ?? "")));
       for (const s of await ctx.db.query("shoots").collect()) {
         if (s.status !== "scheduled") continue;

@@ -8,6 +8,17 @@ import type { Id } from "../convex/_generated/dataModel";
 import { world } from "./payHarness";
 import { homeOf } from "../convex/homes";
 import { coveredProjects } from "../convex/lib/shareAccess";
+import { PERMS, type Perm } from "../convex/lib/perms";
+
+type W = Awaited<ReturnType<typeof world>>;
+const member = async (w: W, email: string, role: "producer" | "editor" | "bookkeeper", on: Perm[]) => {
+  const sub = await w.t.run(async (ctx) => {
+    const u = await ctx.db.insert("users", { email, name: email.split("@")[0], role: "team", emailVerificationTime: 0 });
+    await ctx.db.insert("memberships", { businessId: w.A, email, userId: u, role: "team", teamRole: role, perms: Object.fromEntries(PERMS.map((p) => [p, on.includes(p)])), createdAt: 1 });
+    return `${u}|${await ctx.db.insert("authSessions", { userId: u, expirationTime: Date.now() + 3_600_000 })}`;
+  });
+  return w.t.withIdentity({ subject: sub });
+};
 
 const api = anyApi;
 beforeAll(() => {
@@ -149,5 +160,78 @@ describe("how everything connects", () => {
     await w.heston.mutation(api.shoots.update, { shootId: two, date: "2030-03-06", call: "09:00", location: "Lot B", parking: "", prepare: [], withOwner: true, bookingIds: [], calendar: false });
     await w.heston.mutation(api.shoots.cancel, { shootId: two });
     await expect(w.heston.mutation(api.homes.move, { kind: "shoot", id: two, to: { type: "project", id: w.p } })).rejects.toThrow(/cancelled/);
+  });
+
+  test("review fixes: same-name clients, addressed drafts, sent with no client, footage kept, name dialog (H1–H3, M3, M5)", async () => {
+    const w = await world();
+    const ids = await w.t.run(async (ctx) => {
+      // Two clients called "Northline": the move goes to the one picked, not the oldest by name (H2).
+      const old = await ctx.db.insert("clients", { businessId: w.A, name: "Northline", createdAt: 0 });
+      const picked = await ctx.db.insert("clients", { businessId: w.A, name: "Northline", createdAt: 5 });
+      // A draft invoice billed to Harbor (H1), a draft quote addressed to Maya (H1), and a sent quote with no clientId (H3).
+      const addressed = await ctx.db.insert("quotes", quote(w.A, { projectId: w.p, clientId: w.harbor, title: "Addressed", contact: { name: "Maya Brooks", email: "maya@harbor.example" } }));
+      const bare = await ctx.db.insert("quotes", quote(w.A, { projectId: w.p, title: "Sent, no client", status: "sent", sentAt: 1, number: "Q-0003", seq: 3 }));
+      const plain = await ctx.db.insert("quotes", quote(w.A, { projectId: w.p, title: "Plain draft", number: "Q-0004", seq: 4 }));
+      return { old, picked, addressed, bare, plain };
+    });
+    const inv = await w.heston.mutation(api.invoices.saveDraft, {
+      clientId: w.harbor, projectId: w.p, kind: "final", title: "Final invoice", billTo: { name: "Maya Brooks", email: "maya@harbor.example", company: "Harbor Coffee" },
+      lines: [{ id: "a", description: "Final payment", qty: 1, unitCents: 450000 }], dueDate: "2030-01-01", memo: "",
+    }) as Id<"invoices">;
+    await w.heston.mutation(api.homes.moveProject, { projectId: w.p, clientId: ids.picked });
+    const r = await w.t.run(async (ctx) => ({ p: (await ctx.db.get(w.p))!, inv: (await ctx.db.get(inv))!, addressed: (await ctx.db.get(ids.addressed))!, bare: (await ctx.db.get(ids.bare))!, plain: (await ctx.db.get(ids.plain))! }));
+    expect(r.p.clientId).toBe(ids.picked);
+    expect(r.inv).toMatchObject({ clientId: w.harbor }); expect(r.inv.projectId).toBeUndefined();
+    expect(r.addressed).toMatchObject({ clientId: w.harbor }); expect(r.addressed.projectId).toBeUndefined();
+    expect(r.bare).toMatchObject({ clientId: w.harbor }); expect(r.bare.projectId).toBeUndefined();
+    expect(r.plain).toMatchObject({ projectId: w.p, clientId: ids.picked });
+    // The name dialog moves it by the same rules (M3): a new name makes that client and carries the plain draft.
+    await w.heston.mutation(api.library.renameProject, { projectId: w.p, name: "Launch", client: "Riverbend" });
+    const p3 = await w.t.run(async (ctx) => (await ctx.db.get(w.p))!);
+    const river = await w.t.run(async (ctx) => (await ctx.db.query("clients").collect()).find((c) => c.name === "Riverbend")!);
+    expect(p3).toMatchObject({ client: "Riverbend", clientId: river._id });
+    expect(await w.t.run(async (ctx) => (await ctx.db.get(ids.plain))!.clientId)).toBe(river._id);
+    // Footage the client is keeping holds the project with them (M5).
+    await w.t.run((ctx) => ctx.db.insert("footageStorage", { businessId: w.A, projectId: w.p, clientId: river._id, priceCents: 1, offeredAt: 0, keepUntil: "2030-01-01", status: "kept", history: [], createdAt: 0, updatedAt: 0 } as never));
+    await expect(w.heston.mutation(api.homes.moveProject, { projectId: w.p, clientId: null })).rejects.toThrow(/keeping this project's footage/);
+    await expect(w.heston.mutation(api.library.renameProject, { projectId: w.p, name: "Launch", client: "" })).rejects.toThrow(/keeping this project's footage/);
+  });
+
+  test("review fixes: switches for places and project moves, leads, sent call sheets, confirmations (M1, M2, M4, M7, L1, L3)", async () => {
+    const w = await world();
+    const north = await w.t.run((ctx) => ctx.db.insert("clients", { businessId: w.A, name: "Northline", createdAt: 0 }));
+    // M1: a bookkeeper (Payments, no Clients or Projects) is offered no clients, leads or projects, and can't use them.
+    const keeper = await member(w, "kim@x.example", "bookkeeper", ["payments"]);
+    expect(await keeper.query(api.homes.places, { kind: "quote" })).toEqual([]);
+    const q = await w.t.run((ctx) => ctx.db.insert("quotes", quote(w.A, {})));
+    await expect(keeper.mutation(api.homes.move, { kind: "quote", id: q, to: { type: "project", id: w.p } })).rejects.toThrow(/Not allowed/);
+    // M2: a producer (Projects, no Payments) can't move a project carrying money documents, and isn't told what they are.
+    const producer = await member(w, "pat@x.example", "producer", ["projects", "shoots", "clients"]);
+    await w.t.run((ctx) => ctx.db.patch(q, { projectId: w.p, clientId: w.harbor, status: "sent", sentAt: 1 }));
+    expect(await producer.query(api.homes.projectMove, { projectId: w.p })).toMatchObject({ staying: [], needsPayments: true });
+    await expect(producer.mutation(api.homes.moveProject, { projectId: w.p, clientId: north })).rejects.toThrow();
+    await w.t.run((ctx) => ctx.db.delete(q));
+    // M4: moving the project drops Harbor's confirmation on its shoot day.
+    const { shootId } = await w.heston.mutation(api.shoots.schedule, { projectId: w.p, date: "2030-02-02", call: "07:00", location: "Studio", parking: "", prepare: [], withOwner: true, bookingIds: [], calendar: false });
+    await w.t.run((ctx) => ctx.db.patch(shootId, { confirmed: { name: "Maya Brooks", email: "maya@harbor.example", at: 1 } }));
+    await producer.mutation(api.homes.moveProject, { projectId: w.p, clientId: north });
+    expect(await w.t.run(async (ctx) => (await ctx.db.get(shootId))!.confirmed ?? null)).toBeNull();
+    // L1: a shot list goes onto a shoot that's on its own (no project) without a validator error.
+    const loose = (await w.heston.mutation(api.shoots.schedule, { date: "2030-03-03", call: "08:00", location: "Lot", parking: "", prepare: [], withOwner: true, bookingIds: [], calendar: false })).shootId;
+    const list = await w.heston.mutation(api.shotLists.create, { title: "Loose" }) as Id<"shotLists">;
+    await w.heston.mutation(api.homes.move, { kind: "shotList", id: list, to: { type: "shoot", id: loose } });
+    expect(await w.t.run(async (ctx) => (await ctx.db.get(list))!)).toMatchObject({ shootId: loose });
+    // L3: once its call sheet is sent, the shoot stays on its project.
+    const csId = await w.heston.mutation(api.callSheets.create, { shootId, how: "blank" });
+    await w.t.run((ctx) => ctx.db.patch(csId as Id<"callSheets">, { status: "sent" } as never));
+    await expect(w.heston.mutation(api.homes.move, { kind: "shoot", id: shootId, to: null })).rejects.toThrow(/call sheet was sent/);
+    // M7: a lead moved to another client takes its plain quote; an addressed one stays with Harbor and leaves the lead.
+    const dealId = await w.t.run((ctx) => ctx.db.insert("deals", { businessId: w.A, title: "Harbor summer", stage: "lead", source: "hand", clientId: w.harbor, history: [], createdAt: 0, updatedAt: 0 }));
+    const plain = await w.t.run((ctx) => ctx.db.insert("quotes", quote(w.A, { dealId, clientId: w.harbor, title: "Plain" })));
+    const sent = await w.t.run((ctx) => ctx.db.insert("quotes", quote(w.A, { dealId, clientId: w.harbor, title: "Sent", status: "sent", sentAt: 1, number: "Q-0009", seq: 9 })));
+    await w.heston.mutation(api.homes.move, { kind: "lead", id: dealId, to: { type: "client", id: north } });
+    const r = await w.t.run(async (ctx) => ({ plain: (await ctx.db.get(plain))!, sent: (await ctx.db.get(sent))! }));
+    expect(r.plain).toMatchObject({ dealId, clientId: north });
+    expect(r.sent).toMatchObject({ clientId: w.harbor }); expect(r.sent.dealId).toBeUndefined();
   });
 });

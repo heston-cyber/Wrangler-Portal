@@ -13,6 +13,7 @@ import { sha256Hex } from "./connector";
 import { SITE } from "./lib/site";
 import { forBusiness } from "./lib/functions";
 import { defaultBusiness } from "./lib/business";
+import { moveProjectByName } from "./homes";
 
 const clean = (s: string, max = 200) => s.trim().replace(/\s+/g, " ").slice(0, max);
 const site = () => SITE();
@@ -82,7 +83,7 @@ async function projectFor(ctx: MutationCtx, a: { projectId?: Id<"projects">; pro
   const client = a.client ? clean(a.client, 120) : undefined;
   const picked = pickProject(await ctx.db.query("projects").collect(), name, client);
   if (picked) {
-    if (picked.setClient && client) await ctx.db.patch(picked.project._id, { client });
+    if (picked.setClient && client) await moveProjectByName(ctx, picked.project, client);
     return picked.project._id;
   }
   const split = splitJob(name);
@@ -154,7 +155,9 @@ export async function numberVideo(ctx: MutationCtx, a: { videoId: Id<"videos">; 
     number = await takeNumber(ctx);
   }
   await ctx.db.patch(a.videoId, { number, shortTitle });
-  if (a.client?.trim()) await ctx.db.patch(vid.projectId, { client: clean(a.client, 120) });
+  // A client named here moves the project to that client, by the same rules as Move (review M3).
+  const proj = a.client?.trim() ? await ctx.db.get(vid.projectId) : null;
+  if (proj) await moveProjectByName(ctx, proj, clean(a.client!, 120));
   return { number: pad5(number), title: vid.title, next: nextFileName({ number, shortTitle }, await highestVersion(ctx, a.videoId)) };
 }
 

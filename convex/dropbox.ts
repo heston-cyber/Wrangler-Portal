@@ -15,6 +15,7 @@ import { directLink, folderPlace, pickProject, placeFor, projectFolderOf, splitJ
 import { highestVersion, insertVideo, parseRegisterName, shortTitleError, shortTitleFrom, videoByNumber } from "./lib/register";
 import { signUrl } from "./lib/media";
 import { NEW_VERSION_DELAY_MS } from "./emails";
+import { moveProjectByName } from "./homes";
 import { SITE, SITE_SLASH } from "./lib/site";
 import { businessFor, defaultBusiness } from "./lib/business";
 
@@ -412,14 +413,19 @@ export const recordFolders = internalMutation({
         const patch: Record<string, unknown> = {};
         if (byFolder.name !== split.name) patch.name = split.name;
         if (split.jobNumber && byFolder.jobNumber !== split.jobNumber) patch.jobNumber = split.jobNumber;
-        if (client && norm(byFolder.client ?? "") !== norm(client)) patch.client = client;
         if (Object.keys(patch).length) { await ctx.db.patch(byFolder._id, patch); changed++; }
+        // A new client folder moves the project to that client, by the same rules as Move (review M3).
+        if (client && norm(byFolder.client ?? "") !== norm(client)) {
+          // Footage the client is keeping holds it with them: the sync leaves that project where it is.
+          try { await moveProjectByName(ctx, byFolder, client); changed++; } catch (e) { if (!(e instanceof ConvexError)) throw e; }
+        }
         return;
       }
       const all = await ctx.db.query("projects").collect();
       const picked = pickProject(all.filter((p) => !p.dropboxFolder), folderName, client);
       if (picked) {
-        await ctx.db.patch(picked.project._id, { dropboxFolder: folder, ...(picked.setClient && client ? { client } : {}) });
+        await ctx.db.patch(picked.project._id, { dropboxFolder: folder });
+        if (picked.setClient && client) await moveProjectByName(ctx, picked.project, client);
         return;
       }
       for (const g of goneLeft) {
@@ -585,7 +591,7 @@ export const findOrCreateTarget = internalMutation({
     const projects = await ctx.db.query("projects").collect();
     const picked = pickProject(projects, a.project, a.client);
     let project = picked?.project;
-    if (picked?.setClient && a.client) await ctx.db.patch(picked.project._id, { client: a.client.trim() });
+    if (picked?.setClient && a.client) await moveProjectByName(ctx, picked.project, a.client.trim());
     if (!project) {
       const { jobNumber, name } = splitJob(a.project);
       const id = await ctx.db.insert("projects", { name, ...(jobNumber ? { jobNumber } : {}), ...(a.client ? { client: a.client.trim() } : {}), createdAt: now });
