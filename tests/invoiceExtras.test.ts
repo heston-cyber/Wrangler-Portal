@@ -130,6 +130,16 @@ describe("refunds and disputes", () => {
     expect(inv.refundedCents).toBe(50000);
     expect(inv.disputed).toMatchObject({ status: "needs_response", cents: 400000, reason: "fraudulent" });
     expect(inv.history.slice(-2).map((h: { kind: string; detail: string }) => `${h.kind}: ${h.detail}`)).toEqual(["refunded: $500.00 refunded in Stripe", "disputed: $4,000.00 disputed (fraudulent). Respond in Stripe."]);
+    // Phase 6 review: the same dispute's event again (a new event id) writes nothing; it closes; a late "created" for it
+    // doesn't open it again; a second charge's own dispute is recorded.
+    const lines = async () => (await w.heston.query(api.invoices.get, { invoiceId: id })).history.filter((h: { kind: string }) => /dispute/.test(h.kind)).map((h: { kind: string }) => h.kind);
+    expect(await post("evt_d1b", "charge.dispute.created", "acct_A", { id: "dp_1", payment_intent: "pi_1", amount: 400000, status: "needs_response", reason: "fraudulent" })).toBe(200);
+    expect(await lines()).toEqual(["disputed"]);
+    expect(await post("evt_d1c", "charge.dispute.closed", "acct_A", { id: "dp_1", payment_intent: "pi_1", amount: 400000, status: "won" })).toBe(200);
+    expect(await post("evt_d1d", "charge.dispute.created", "acct_A", { id: "dp_1", payment_intent: "pi_1", amount: 400000, status: "needs_response" })).toBe(200);
+    expect((await w.heston.query(api.invoices.get, { invoiceId: id })).disputed).toMatchObject({ status: "won" });
+    expect(await post("evt_d2", "charge.dispute.created", "acct_A", { id: "dp_2", payment_intent: "pi_1", amount: 1000, status: "won" })).toBe(200);
+    expect(await lines()).toEqual(["disputed", "dispute_closed", "disputed"]);
     // 5e review M4 (Nov 6): a later sync from Stripe (whose payments list has no refunds) keeps the refund, and a
     // second refund on the same payment raises the total; it never drops back.
     await refreshNow(w, token);

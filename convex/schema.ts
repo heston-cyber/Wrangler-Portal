@@ -1172,6 +1172,7 @@ export default defineSchema({
     // on the invoice (method shown as "Visa •••• 4242" or "Bank •••• 6789"; never full numbers).
     fromContract: v.optional(v.string()),                // "contract:<document>:v<n>": the deposit drafted when a contract was signed
     storageId: v.optional(v.id("footageStorage")),       // Phase 5: a year of raw footage storage (D33), first year or a renewal (D140)
+    deliveryId: v.optional(v.id("deliveries")),          // Nov 17 (Q6): another year of a project's Delivery, drafted when the client chose Keep it
     payToken: v.optional(v.string()),
     // Review fixes (Oct 30): a send in progress keeps what it has made in Stripe so far, so a failed send cleans up
     // and a retry neither duplicates nor gets stuck; syncedAt spaces out reads from Stripe.
@@ -1182,7 +1183,7 @@ export default defineSchema({
     reminders: v.optional(v.array(v.object({ at: v.number(), kind: v.union(v.literal("before"), v.literal("overdue")), auto: v.boolean() }))),
     payments: v.optional(v.array(v.object({ id: v.string(), at: v.number(), method: v.string(), cents: v.number(), status: v.union(v.literal("paid"), v.literal("processing"), v.literal("failed")), refundedCents: v.optional(v.number()) }))),
     refundedCents: v.optional(v.number()),
-    disputed: v.optional(v.object({ at: v.number(), status: v.string(), cents: v.optional(v.number()), reason: v.optional(v.string()) })),
+    disputed: v.optional(v.object({ at: v.number(), status: v.string(), cents: v.optional(v.number()), reason: v.optional(v.string()), id: v.optional(v.string()) })),
     stripe: v.optional(v.object({
       accountId: v.string(), invoiceId: v.string(), customerId: v.string(),
       number: v.optional(v.string()), hostedUrl: v.optional(v.string()), pdfUrl: v.optional(v.string()), livemode: v.boolean(),
@@ -1572,6 +1573,8 @@ export default defineSchema({
     termYears: v.optional(v.number()), priceCents: v.optional(v.number()), // this delivery's own (else Settings)
     renewal: v.optional(v.object({ status: v.union(v.literal("offered"), v.literal("kept"), v.literal("declined"), v.literal("free"), v.literal("ending"), v.literal("renewed")), at: v.number(), by: v.optional(v.string()) })),
     reminded: v.optional(v.array(v.number())),   // 30, 7: reminders sent for this keptUntil
+    renewalInvoiceId: v.optional(v.id("invoices")), // Q6: the drafted invoice another year waits on (paid: a year added)
+    renewalsPaid: v.optional(v.array(v.id("invoices"))), // review M1: renewal invoices already credited (each adds a year once)
     endedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -2113,6 +2116,29 @@ export default defineSchema({
     firstSeen: v.number(),
     lastSeen: v.number(),
   }).index("by_user", ["userId"]).index("by_session", ["sessionId"]),
+  // Q2 (Heston, Nov 17): handing a phone over for a release locks that sign-in (this browser's session) until the owner
+  // hands it back with Face ID or the phone's passcode (a passkey) or their 4-digit PIN. While locked, nothing of the
+  // business answers on that session, in any tab. 5 wrong PINs sign the session out.
+  sessionLocks: defineTable({
+    sessionId: v.id("authSessions"),
+    userId: v.id("users"),
+    releaseId: v.id("releases"),
+    tries: v.number(),
+    challenge: v.optional(v.object({ value: v.string(), at: v.number() })), // a passkey unlock waiting for its answer
+    signedOut: v.optional(v.boolean()), // review H1: five wrong PINs ended this session; kept so it never answers again
+    signedOutAt: v.optional(v.number()), // second review L1: the sweep counts from here
+    at: v.number(),
+  }).index("by_session", ["sessionId"]).index("by_user", ["userId"]),
+  // The owner's own ways to unlock (a login's, not a business's): a PIN (salted hash) and passkeys on their devices.
+  handBack: defineTable({
+    userId: v.id("users"),
+    pinSalt: v.optional(v.string()),
+    pinHash: v.optional(v.string()),
+    pinKey: v.optional(v.string()),      // second review L2: which server secret the hash was made with (a short tag)
+    passkeys: v.array(v.object({ id: v.string(), publicKey: v.string(), counter: v.number(), transports: v.optional(v.array(v.string())), device: v.string(), at: v.number() })),
+    challenge: v.optional(v.object({ value: v.string(), at: v.number() })), // adding a passkey, waiting for its answer
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
   // A change of sign-in email waiting for its 6-digit code (sent to the new address; 10 minutes; 5 tries).
   emailChanges: defineTable({
     userId: v.id("users"),

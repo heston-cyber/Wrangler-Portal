@@ -8,7 +8,7 @@
 //          certificate says who checked them in person
 import { convexTest } from "convex-test";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
-import { api } from "../convex/_generated/api";
+import { api, internal } from "../convex/_generated/api";
 import schema from "../convex/schema";
 import type { Id } from "../convex/_generated/dataModel";
 import { PDFDocument, StandardFonts } from "@cantoo/pdf-lib";
@@ -79,8 +79,18 @@ describe("releases on set", () => {
     await x.t.run((ctx) => ctx.db.patch(x.releaseId, { documentId: x.documentId }));
     await x.me.mutation(api.sign.approve, { versionId: x.versionId });
     expect((await x.me.query(api.releases.get, { releaseId: x.releaseId }))!.state).toBe("ready");
+    // Q2 (Nov 17): a hand-back PIN comes first.
+    await expect(x.me.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone", checked: true })).rejects.toThrow(/hand-back PIN/);
+    await expect(x.me.mutation(api.handBack.setPin, { pin: "12a4" })).rejects.toThrow(/4 digits/);
+    await x.me.mutation(api.handBack.setPin, { pin: "2580" });
+    expect(await x.me.query(api.handBack.mine, {})).toEqual({ pin: true, passkeys: [] });
     const h = await x.me.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone", checked: true });
-    await expect(x.me.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone", checked: true })).rejects.toThrow(/already out for signing/);
+    // Handed over: this sign-in answers nothing of the business (any page), only its release and the hand-back.
+    expect(await x.me.query(api.users.me, {})).toMatchObject({ allowed: false, locked: { releaseId: x.releaseId, signer: "Riley Quinn" } });
+    await expect(x.me.query(api.releases.forShoot, { shootId: x.ids.shootId })).rejects.toThrow(/Not allowed/);
+    await expect(x.me.query(api.handBack.mine, {})).rejects.toThrow(/Not allowed/);
+    await expect(x.me.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone", checked: true })).rejects.toThrow(/Not allowed/);
+    expect((await x.me.query(api.releases.get, { releaseId: x.releaseId }))!.state).toBe("signing");
     await x.flush();
     expect(x.mails.filter((m) => m.to === SIGNER)).toEqual([]); // no link was emailed
     // The signer's steps are Sign's own: the session the hand-over gave opens the document; Sign waits for consent.
@@ -90,6 +100,11 @@ describe("releases on set", () => {
     expect(await x.call("adopt", { token: h.token, session: h.session, name: "Riley Quinn", method: "typed", signature: PNG_B64, initials: PNG_B64 })).toMatchObject({ ok: true });
     expect(await x.call("sign", { token: h.token, session: h.session, agreed: true })).toMatchObject({ ok: true, complete: true });
     expect((await x.me.query(api.releases.get, { releaseId: x.releaseId }))!.state).toBe("signed");
+    // Hand back: a wrong PIN counts down; the right one unlocks; the business answers again.
+    expect(await x.me.mutation(api.handBack.unlockWithPin, { pin: "1111" })).toEqual({ ok: false, left: 4 });
+    expect(await x.me.mutation(api.handBack.unlockWithPin, { pin: "2580" })).toEqual({ ok: true });
+    expect((await x.me.query(api.users.me, {}))!.locked).toBeNull();
+    await expect(x.me.mutation(api.handBack.unlockWithPin, { pin: "2580" })).rejects.toThrow(/Not allowed/);
     const ev = (await x.me.query(api.sign.get, { documentId: x.documentId }))!.events;
     expect(ev.find((e) => e.kind === "in_person")?.detail).toMatch(/Signing in person on Alex's iPhone at Mercy Clinic, Springfield, MO \(the shoot's place\)/);
     expect(ev.find((e) => e.kind === "sent")?.detail).toMatch(/No link was emailed/);
@@ -100,6 +115,53 @@ describe("releases on set", () => {
     expect(sg.inPerson).toMatchObject({ by: "Alex Owner", device: "Alex's iPhone", place: "Mercy Clinic, Springfield, MO" });
     // The shot it covers no longer counts as missing.
     expect((await x.me.query(api.releases.forShoot, { shootId: x.ids.shootId }))!.missing).toEqual([]);
+  });
+
+  test("Q2 five wrong PINs sign the handed-over session out (only that one); a passkey can't be added while handed over", async () => {
+    const x = await setup();
+    await x.t.run((ctx) => ctx.db.patch(x.releaseId, { documentId: x.documentId }));
+    await x.me.mutation(api.sign.approve, { versionId: x.versionId });
+    await x.me.mutation(api.handBack.setPin, { pin: "2580" });
+    const other = await x.t.run(async (ctx) => { const u = (await ctx.db.query("users").first())!._id; return ctx.db.insert("authSessions", { userId: u, expirationTime: Date.now() + 3_600_000 }); });
+    await x.me.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone", checked: true });
+    await expect(x.me.action(api.passkeys.registerOptions, { origin: "https://app.wranglerportal.com" })).rejects.toThrow(/Not allowed/);
+    await expect(x.me.action(api.passkeys.unlockOptions, { origin: "https://evil.example" })).rejects.toThrow(/portal's own address/);
+    await expect(x.me.action(api.passkeys.unlockOptions, { origin: "https://app.wranglerportal.com" })).rejects.toThrow(/No passkey yet/);
+    for (const left of [4, 3, 2, 1]) expect(await x.me.mutation(api.handBack.unlockWithPin, { pin: "0000" })).toEqual({ ok: false, left });
+    expect(await x.me.mutation(api.handBack.unlockWithPin, { pin: "0000" })).toEqual({ ok: false, signedOut: true });
+    const s = x.ids.sub.split("|")[1] as Id<"authSessions">;
+    expect(await x.t.run((ctx) => ctx.db.get(s))).toBeNull();
+    expect(await x.t.run((ctx) => ctx.db.get(other))).not.toBeNull(); // their other devices stay signed in
+    // Review H1: the same sign-in (its token still valid) gets nothing back: not the business, not a new PIN, no unlock.
+    expect(await x.me.query(api.users.me, {})).toMatchObject({ allowed: false, locked: { signedOut: true } });
+    await expect(x.me.query(api.releases.forShoot, { shootId: x.ids.shootId })).rejects.toThrow(/Not allowed/);
+    await expect(x.me.mutation(api.handBack.setPin, { pin: "1111" })).rejects.toThrow(/Not allowed/);
+    await expect(x.me.mutation(api.handBack.unlockWithPin, { pin: "2580" })).rejects.toThrow(/Not allowed/);
+    await expect(x.me.query(api.handBack.mine, {})).rejects.toThrow(/Not allowed/);
+    // Their other sign-in still works as the owner.
+    const elsewhere = x.t.withIdentity({ subject: `${x.ids.sub.split("|")[0]}|${other}` });
+    expect(await elsewhere.query(api.handBack.mine, {})).toMatchObject({ pin: true });
+    // The mark is cleared once the token can't be used any more (the 6-hourly sweep).
+    expect(await x.t.run((ctx) => ctx.db.query("sessionLocks").collect())).toHaveLength(1);
+    await x.t.run(async (ctx) => { for (const l of await ctx.db.query("sessionLocks").collect()) await ctx.db.patch(l._id, { at: Date.now() - 4 * 3_600_000, signedOutAt: Date.now() - 4 * 3_600_000 }); });
+    expect(await x.t.mutation(internal.handBack.sweep, {})).toBe(1);
+  });
+
+  test("Q2 second review: a PIN saved under another server secret can't be checked (no try spent); Sign this phone out instead", async () => {
+    const x = await setup();
+    await x.t.run((ctx) => ctx.db.patch(x.releaseId, { documentId: x.documentId }));
+    await x.me.mutation(api.sign.approve, { versionId: x.versionId });
+    await x.me.mutation(api.handBack.setPin, { pin: "2580" });
+    await x.me.mutation(api.releases.handOver, { releaseId: x.releaseId, device: "iPhone", checked: true });
+    const was = process.env.HANDBACK_PEPPER;
+    process.env.HANDBACK_PEPPER = "a-new-secret";
+    try {
+      expect(await x.me.mutation(api.handBack.unlockWithPin, { pin: "2580" })).toEqual({ ok: false, reset: true });
+      expect((await x.t.run((ctx) => ctx.db.query("sessionLocks").collect()))[0].tries).toBe(0);
+    } finally { if (was === undefined) delete process.env.HANDBACK_PEPPER; else process.env.HANDBACK_PEPPER = was; }
+    await x.me.mutation(api.handBack.signOutHere, {});
+    expect(await x.me.query(api.users.me, {})).toMatchObject({ allowed: false, locked: { signedOut: true } });
+    await expect(x.me.query(api.releases.forShoot, { shootId: x.ids.shootId })).rejects.toThrow(/Not allowed/);
   });
 
   test("T-RL.2 a draft can be removed; shots must be on the day's list; someone without Docs is refused", async () => {

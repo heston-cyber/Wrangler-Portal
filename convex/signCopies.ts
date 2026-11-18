@@ -3,12 +3,14 @@
 // cancellation if it's cancelled, no reminders; contracts only for now; built in the existing styles without frames.
 // The signers' own email says who is copied. A copy link (/c/<token>) only reads: it never reaches the signing steps,
 // which take wsSignings tokens only (rule 9: signing is unchanged).
+import { fileLink } from "./lib/fileLinks";
 import { internalAction, internalMutation, internalQuery, mutation, query, focusBusiness } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { appendEvent } from "./lib/wsAudit";
+import { ownerSideLooking } from "./lib/access";
 import { docLabel, OWNER_KEY } from "./lib/wsLayout";
 import { randomToken } from "./lib/hash";
 import { bump } from "./lib/rate";
@@ -119,7 +121,7 @@ async function byToken(ctx: QueryCtx | MutationCtx, token: string) {
 }
 
 export const page = query({
-  args: { token: v.string() },
+  args: { token: v.string(), at: v.optional(v.number()) /* Phase 6 review M2: the page's link window, so fresh file links come each 10 minutes */ },
   handler: async (ctx, { token }) => {
     const c = await byToken(ctx, token);
     if (!c) return null;
@@ -135,7 +137,7 @@ export const page = query({
     const signings = (await ctx.db.query("wsSignings").withIndex("by_document", (q) => q.eq("documentId", doc._id).eq("versionNumber", c.versionNumber)).collect()).sort((a, b) => a.order - b.order);
     const ver = await ctx.db.query("wsVersions").withIndex("by_document", (q) => q.eq("documentId", doc._id)).collect().then((vs) => vs.find((x) => x.number === c.versionNumber));
     const signed = doc.status === "completed" && doc.final;
-    const fileUrl = signed ? await ctx.storage.getUrl(doc.final!.fileId) : ver ? await ctx.storage.getUrl(ver.fileId) : null;
+    const fileUrl = signed ? await fileLink(doc.final!.fileId, doc.final!.fileName) : ver ? await fileLink(ver.fileId, ver.fileName ?? `${docLabel(doc.number)}.pdf`) : null; // Phase 6 M1: a 10-20 minute link
     return {
       ...base, state: signed ? "signed" as const : "sent" as const, fileUrl, fileName: signed ? doc.final!.fileName : ver?.fileName ?? `${docLabel(doc.number)}.pdf`,
       completedAt: doc.completedAt ?? null, expiresAt: doc.expiresAt ?? null,
@@ -151,6 +153,7 @@ export const opened = mutation({
   handler: async (ctx, { token }) => {
     const c = await byToken(ctx, token);
     if (!c) return null;
+    if (await ownerSideLooking(ctx, c.email)) return null; // Phase 6 review: the owner's side checking it isn't the copied person
     focusBusiness(ctx, c.businessId);
     try { await bump(ctx as unknown as MutationCtx, "briefingLink", `copy:${token}`); } catch { return null; } // a page reloaded all hour stops counting
     const first = !c.openedAt;

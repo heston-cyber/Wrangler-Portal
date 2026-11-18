@@ -6,7 +6,7 @@
 import { describe, expect, test } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { CARDS, FLOAT, GLASS, rimStrips } from "../src/lib/glass";
+import { CARDS, FLOAT, GLASS, POPUPS, rimStrips } from "../src/lib/glass";
 
 const read = (f: string) => readFileSync(join(__dirname, "..", f), "utf8");
 const [styles, d1, portal, states, type, glassSrc] = ["src/styles.css", "src/d1.css", "src/portal.css", "src/states.css", "src/type.css", "src/lib/glass.ts"].map(read);
@@ -50,7 +50,9 @@ const SURFACES = [".wp-side", ".wp-tabbar", ".wp-layerchip", ".menu", ".dialog",
 
 describe("5f.1 (revised by D168, Nov 11) the glass surfaces, and no glass on glass", () => {
   test("the floating layer is the surfaces the frames make glass; the cards and tiles are glass too (D168)", () => {
-    expect(FLOATING).toEqual([...SURFACES.slice(0, 1), ".wp-shell:not(.overlay) .main > .topbar", ...SURFACES.slice(1)]);
+    // Nov 17 (Heston, 12:17): the pop-ups (menus, dialogs, the bell panel, the calendar pop-up) frost the real page instead
+    expect(FLOATING).toEqual([".wp-side", ".wp-shell:not(.overlay) .main > .topbar", ".wp-tabbar", ".wp-layerchip", ".toast", ".selbar"]);
+    expect(POPUPS.split(",").map((s) => s.trim())).toEqual([".menu", ".dialog", ".bell-panel", ".cal-pop"]);
     expect(CARDS).toBe(".glass, .pov-stat");
   });
 

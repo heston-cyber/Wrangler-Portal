@@ -140,7 +140,7 @@ function Page({ me, children, back, switcher }: { me: Me; children: React.ReactN
         <span className="gst-who gst-wide">{back && <a {...linkProps("/guest")} className="gst-backlink">All your call sheets</a>}<span>{me.name ?? me.email} · Guest</span><button type="button" className="wp-link" onClick={out}>Sign out</button></span>
         <span className="gst-avatar gst-narrow">
           <button type="button" aria-label={`${me.name ?? me.email} · Guest`} aria-expanded={menu} onClick={() => setMenu(!menu)}><Avatar name={me.name ?? me.email} size={32} /></button>
-          {menu && <span className="gst-menu glass" role="menu">
+          {menu && <span className="gst-menu pop-glass" role="menu">
             <span className="secondary">{me.name ?? me.email} · Guest</span>
             {back && <a {...linkProps("/guest")} role="menuitem">All your call sheets</a>}
             <button type="button" role="menuitem" className="wp-link" onClick={out}>Sign out</button>

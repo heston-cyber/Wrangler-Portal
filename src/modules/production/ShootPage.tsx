@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { usePerms } from "../../lib/teamAccess";
 import { useConvex, useMutation, useQuery, useAction } from "convex/react";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Button, ButtonLink, Card, DialogHeader, EmptyState, PageHeader, SkeletonRows, TextField } from "../../ui/wp";
@@ -319,35 +320,41 @@ const deviceName = () => {
 
 export function ReleaseSigning({ releaseId }: { releaseId: string }) {
   const r = useQuery(api.releases.get, { releaseId });
+  const me = useQuery(api.users.me);
+  const locked = !!me?.locked;
+  const setup = useQuery(api.handBack.mine, me && !locked && me.allowed ? {} : "skip"); // review L8: the owner's own
   const handOver = useMutation(api.releases.handOver);
   const make = useMakeRelease();
-  const [token, setToken] = useState<string | null>(null);
-  const [back, setBack] = useState(false);
+  // Review L9: the signer's place survives a reload while the phone is handed over (this tab only).
+  const tokenKey = `wp-release-token:${releaseId}`;
+  const [token, setTokenRaw] = useState<string | null>(() => { try { return sessionStorage.getItem(tokenKey); } catch { return null; } });
+  const setToken = (x: string | null) => { setTokenRaw(x); try { if (x) sessionStorage.setItem(tokenKey, x); else sessionStorage.removeItem(tokenKey); } catch { /* private mode */ } };
+  const [handing, setHanding] = useState(false); // Q2: the owner's unlock, over the signing
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [checked, setChecked] = useState(false);
   // 541ac10 review M4: while the signer holds the phone, Back stays on the signing (it can't reach the owner's pages).
   useEffect(() => {
-    if (!token || back) return;
+    if (!locked) return;
     const hold = () => window.history.pushState(null, "", window.location.href);
     hold();
     window.addEventListener("popstate", hold);
     return () => window.removeEventListener("popstate", hold);
-  }, [token, back]);
+  }, [locked]);
   const shootUrl = r?.shootId ? `/production/shoots/${r.shootId}?tab=releases` : "/production/shoots";
-  if (r === undefined) return <div className="rl-full"><p className="rl-wait">Opening…</p></div>;
-  if (r === null) return <div className="rl-full"><div className="rl-card glass"><h1 className="headline">This release isn't here any more.</h1><Button onClick={() => navigate("/production/shoots")}>Back to shoots</Button></div></div>;
-  // Hand back (1042-23898): only a plain button back to the shoot.
-  if (back) return <div className="rl-full"><div className="rl-card glass"><span className="wp-eyebrow">Release signed</span><h1 className="headline">Back to the shoot.</h1><Button variant="primary" onClick={() => navigate(shootUrl)}>Back to the shoot</Button></div></div>;
-  if (r.state === "signed") return (
+  if (r === undefined || me === undefined) return <div className="rl-full"><p className="rl-wait">Opening…</p></div>;
+  if (r === null) return <div className="rl-full"><div className="rl-card glass"><h1 className="headline">This release isn't here any more.</h1>{!locked && <Button onClick={() => navigate("/production/shoots")}>Back to shoots</Button>}{locked && <HandBack name={me?.name ?? null} onDone={() => navigate("/production/shoots")} />}</div></div>;
+  // Hand back (1042-23898; Q2, Nov 17): the owner unlocks with Face ID, the phone's passcode or their PIN.
+  if (locked && (handing || r.state === "signed" || !token)) return (
     <div className="rl-full"><div className="rl-card glass">
-      <span className="rl-ok"><Icon name="check-circle" size={28} /></span>
-      <h1 className="headline">Signed.</h1>
-      <p className="secondary">A copy is on its way to {r.email}.</p>
-      <Button variant="primary" onClick={() => setBack(true)}>Hand the phone back</Button>
+      {r.state === "signed" ? <><span className="rl-ok"><Icon name="check-circle" size={28} /></span><h1 className="headline">Signed.</h1><p className="secondary">A copy is on its way to {r.email}. Hand the phone back.</p></>
+        : <><span className="wp-eyebrow">Signing in person</span><h1 className="headline">{token ? "Hand back" : `Handed to ${r.name}`}</h1><p className="secondary">{token ? `${r.name} hasn't finished signing. Unlock to take the phone back.` : "This phone is with the signer. Unlock to take it back."}</p></>}
+      <HandBack name={me?.name ?? null} onDone={() => { setToken(null); navigate(shootUrl); }} />
+      {handing && token && <button type="button" className="btn ghost" onClick={() => setHanding(false)}>Back to signing</button>}
     </div></div>
   );
-  if (token) return <div className="rl-signer"><div className="rl-bar"><span className="wp-eyebrow">Signing in person</span></div><SignerApp token={token} /></div>;
+  if (token && locked) return <div className="rl-signer"><div className="rl-bar"><span className="wp-eyebrow">Signing in person</span><button type="button" className="rl-handback" onClick={() => setHanding(true)}>Hand back</button></div><SignerApp token={token} /></div>;
+  if (r.state === "signed") return <div className="rl-full"><div className="rl-card glass"><span className="rl-ok"><Icon name="check-circle" size={28} /></span><h1 className="headline">Signed.</h1><Button variant="primary" onClick={() => navigate(shootUrl)}>Back to the shoot</Button></div></div>;
   const start = async () => {
     setBusy(true); setErr(null);
     try {
@@ -363,13 +370,110 @@ export function ReleaseSigning({ releaseId }: { releaseId: string }) {
     <div className="rl-full"><div className="rl-card glass">
       <span className="wp-eyebrow">{r.kind === "minor" ? "Minor release" : r.kind === "location" ? "Location release" : "Talent release"}</span>
       <h1 className="headline">Hand the phone to {r.name}.</h1>
-      <p className="secondary">They read the release and sign it here. A signed copy goes to {r.email}.</p>
+      <p className="secondary">They read the release and sign it here. A signed copy goes to {r.email}. The phone stays locked until you unlock it.</p>
       {err && <p className="rl-err" role="alert">{err}</p>}
+      {setup && <UnlockSetup pin={setup.pin} passkeys={setup.passkeys.length} />}
       {/* Review H2: the owner's own check, recorded on the certificate in place of the email code. */}
       <label className="rl-check"><input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} /> I've checked in person that this is {r.name}</label>
-      <Button variant="primary" loading={busy} disabled={r.state === "signing" || !checked} onClick={() => void start()}>I'm {r.name} · Start</Button>
+      <Button variant="primary" loading={busy} disabled={r.state === "signing" || !checked || !setup?.pin} onClick={() => void start()}>I'm {r.name} · Start</Button>
       {r.state === "signing" && <p className="secondary">It's already out for signing. Cancel it from Contracts to start again.</p>}
       <button type="button" className="btn ghost" onClick={() => navigate(shootUrl)}>Cancel</button>
     </div></div>
+  );
+}
+
+const canPasskey = () => typeof window !== "undefined" && "PublicKeyCredential" in window;
+
+/** Q2: before the first hand-over, a 4-digit PIN (always) and Face ID or the phone's passcode (where the phone has it). */
+function UnlockSetup({ pin, passkeys }: { pin: boolean; passkeys: number }) {
+  const setPin = useMutation(api.handBack.setPin);
+  const regOptions = useAction(api.passkeys.registerOptions);
+  const register = useAction(api.passkeys.register);
+  const [a, setA] = useState(""), [b, setB] = useState("");
+  const [open, setOpen] = useState(!pin);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const addKey = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const { startRegistration } = await import("@simplewebauthn/browser");
+      const opts = await regOptions({ origin: location.origin });
+      const res = await startRegistration(opts);
+      await register({ origin: location.origin, response: res, device: deviceName() });
+      setMsg("Face ID or your passcode will hand it back.");
+    } catch (e) { setMsg((e as Error).name === "NotAllowedError" ? "Cancelled." : errLine(e)); }
+    finally { setBusy(false); }
+  };
+  if (!open) return (
+    <div className="rl-unlockset">
+      <span className="secondary wp-small">You'll hand it back with {passkeys ? "Face ID, your passcode or " : ""}your PIN.</span>
+      <span className="rl-links"><button type="button" className="btn ghost sm" onClick={() => setOpen(true)}>Change PIN</button>{canPasskey() && !passkeys && <button type="button" className="btn ghost sm" disabled={busy} onClick={() => void addKey()}>Use Face ID too</button>}</span>
+      {msg && <span className="wp-small secondary" role="status">{msg}</span>}
+    </div>
+  );
+  return (
+    <form className="rl-unlockset" onSubmit={(e) => { e.preventDefault(); if (a !== b) { setMsg("The two PINs don't match."); return; } setBusy(true); void setPin({ pin: a }).then(() => { setOpen(false); setMsg("PIN saved."); setA(""); setB(""); }, (er) => setMsg(errLine(er))).finally(() => setBusy(false)); }}>
+      <b>{pin ? "Change your hand-back PIN" : "Choose a hand-back PIN"}</b>
+      <span className="secondary wp-small">4 digits, so only you can take the phone back after they sign.</span>
+      <span className="rl-pins">
+        <input className="input" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} autoComplete="off" type="password" value={a} onChange={(e) => setA(e.target.value.replace(/\D/g, ""))} placeholder="PIN" aria-label="PIN" />
+        <input className="input" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} autoComplete="off" type="password" value={b} onChange={(e) => setB(e.target.value.replace(/\D/g, ""))} placeholder="Again" aria-label="PIN again" />
+      </span>
+      {msg && <span className="wp-small rl-err" role="alert">{msg}</span>}
+      <Button type="submit" loading={busy} disabled={a.length !== 4 || b.length !== 4}>Save PIN</Button>
+      {canPasskey() && <button type="button" className="btn ghost sm" disabled={busy || !pin} onClick={() => void addKey()}>Use Face ID too</button>}
+    </form>
+  );
+}
+
+/** Q2: the owner takes the phone back: Face ID or the passcode (a passkey), or the PIN (5 tries, then signed out). */
+function HandBack({ name, onDone }: { name: string | null; onDone: () => void }) {
+  const { signOut } = useAuthActions();
+  const unlockPin = useMutation(api.handBack.unlockWithPin);
+  const options = useAction(api.passkeys.unlockOptions);
+  const unlock = useAction(api.passkeys.unlock);
+  const [pin, setPin] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const withKey = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const { startAuthentication } = await import("@simplewebauthn/browser");
+      const opts = await options({ origin: location.origin });
+      const res = await startAuthentication(opts);
+      const out = await unlock({ origin: location.origin, response: res });
+      if (out.ok) onDone(); else setMsg("That didn't unlock it. Use your PIN.");
+    } catch (e) { setMsg((e as Error).name === "NotAllowedError" ? "Cancelled. Use your PIN." : errLine(e)); }
+    finally { setBusy(false); }
+  };
+  const signOutHere = useMutation(api.handBack.signOutHere);
+  // Signed out (too many PINs, or by choice): the browser signs out too, and the signer's place is forgotten.
+  const leave = async () => {
+    try { for (const k of Object.keys(sessionStorage)) if (k.startsWith("wp-release-token:")) sessionStorage.removeItem(k); } catch { /* private mode */ }
+    await signOut(); location.assign("/");
+  };
+  const withPin = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const out = await unlockPin({ pin });
+      if (out.ok) { onDone(); return; }
+      setPin("");
+      if ("signedOut" in out) { setMsg("Too many wrong PINs: this phone is signed out."); await leave(); return; }
+      if ("reset" in out) { setMsg("Your PIN can't be checked on this phone any more. Use Face ID, or sign this phone out and sign in again."); return; }
+      setMsg(`That isn't the PIN. ${out.left} ${out.left === 1 ? "try" : "tries"} left.`);
+    } catch (e) { setMsg(errLine(e)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="rl-unlock">
+      <span className="wp-small secondary">{name ? `${name.split(" ")[0]}, unlock` : "Unlock"} to take the phone back.</span>
+      {canPasskey() && <Button variant="primary" loading={busy} onClick={() => void withKey()}>Face ID or passcode</Button>}
+      <form className="rl-pinrow" onSubmit={(e) => { e.preventDefault(); if (pin.length === 4) void withPin(); }}>
+        <input className="input" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} autoComplete="off" type="password" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} placeholder="PIN" aria-label="Your PIN" />
+        <Button type="submit" disabled={pin.length !== 4 || busy}>Unlock</Button>
+      </form>
+      {msg && <p className="rl-err" role="alert">{msg}</p>}
+      <button type="button" className="btn ghost sm" disabled={busy} onClick={() => { setBusy(true); void signOutHere({}).then(leave, (e) => { setMsg(errLine(e)); setBusy(false); }); }}>Sign this phone out instead</button>
+    </div>
   );
 }

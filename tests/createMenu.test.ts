@@ -67,7 +67,7 @@ describe("D174 Create menu", () => {
     expect(hold).toMatch(/<Modal [^>]*slideOut>/);
     expect(kit).toContain("data-closing");
     expect(kit).toMatch(/Escape[^\n]*dismiss\(\)/);
-    expect(kit).toMatch(/e\.target === e\.currentTarget\) dismiss\(\)/);
+    expect(kit).toMatch(/e\.target === e\.currentTarget\) \{ swallowNextClick\(\); dismiss\(\); \}/); // Nov 17: the tap that closes it opens nothing
     expect(css).toContain("@keyframes wp-sheet-down");
     for (const k of ["wp-sheet-up", "wp-sheet-down", "wp-sheet-scrim", "wp-sheet-scrim-out"]) {
       const body = css.slice(css.indexOf(`@keyframes ${k}`), css.indexOf("\n", css.indexOf(`@keyframes ${k}`)));

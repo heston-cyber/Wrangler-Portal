@@ -403,7 +403,7 @@ export function TodoLists() {
           <div className="wk-two">
             <div className="wp-tablecard glass">{lists.map((l) => <ListRow key={l._id} lead={{ icon: "check-circle" }} title={l.name} meta={`${l.items.filter((i) => !i.done).length} to do · ${l.items.filter((i) => i.done).length} done`} trailing={<HomeTag home={l.home} />} selected={open?._id === l._id} onClick={() => setOpenId(l._id)} />)}</div>
             {open && <Card label={open.name} head={<div className="cr-head"><b>{open.name}</b><span className="sp" /><HomeTag home={open.home} /><button className="icon-btn sm" aria-label="List options" onClick={() => setMenu(!menu)}><Icon name="more" size={16} /></button></div>}>
-              {menu && <div className="wk-menu glass" role="menu">
+              {menu && <div className="wk-menu pop-glass" role="menu">
                 <button role="menuitem" onClick={() => { setMenu(false); setRenaming(open.name); }}>Rename</button>
                 <button role="menuitem" onClick={() => { setMenu(false); setMoving(true); }}>Move to…</button>
                 <button role="menuitem" onClick={() => { setMenu(false); void dup({ listId: open._id }).then((id) => setOpenId(id)); }}>Duplicate</button>

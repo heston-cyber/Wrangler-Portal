@@ -7,6 +7,7 @@
 // vendor record there is still on the list. Owners and clients are refused here, and vendors are refused everywhere
 // else (requireMe, requireSignedIn).
 import { focusBusiness, internalAction, internalQuery, mutation, query } from "./lib/functions";
+import { sessionBlocked } from "./lib/sessionLock";
 import { claimUpload, deleteFile } from "./lib/fileOwners";
 import { internal } from "./_generated/api";
 import { randomToken } from "./lib/hash";
@@ -35,6 +36,7 @@ type Ctx = QueryCtx | MutationCtx;
 async function myBusinesses(ctx: Ctx) {
   const userId = await getAuthUserId(ctx);
   if (!userId) throw new ConvexError("Sign in first.");
+  if (await sessionBlocked(ctx)) throw new ConvexError("Not allowed."); // second review B: a session ended on the server
   const user = await ctx.db.get(userId);
   const email = (user?.email ?? "").toLowerCase();
   if (!user || !email) throw new ConvexError("Not allowed.");

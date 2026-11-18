@@ -18299,6 +18299,22 @@
    "termYears": 2,
    "priceCents": 15000,
    "offerRenewal": true
+  },
+  "releases.get": {
+   "_id": "rel1",
+   "kind": "talent",
+   "name": "Riley Quinn",
+   "email": "riley@example.com",
+   "minorName": null,
+   "state": "ready",
+   "shootId": "kitshoot1",
+   "buildId": "kitbuild1",
+   "documentId": "kitdoc1",
+   "label": "WS-00031"
+  },
+  "handBack.mine": {
+   "pin": false,
+   "passkeys": []
   }
  },
  "client": {

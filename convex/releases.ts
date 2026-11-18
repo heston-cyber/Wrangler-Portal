@@ -19,6 +19,8 @@ import { docLabel } from "./lib/wsLayout";
 import { emptyFields, pageOf, type Fields, type Style } from "./lib/wsBuilder";
 import { RELEASE_KINDS, kindOfTemplate, releaseTemplate, type ReleaseKind } from "./lib/releaseTemplates";
 import { defaultStyle } from "./builder";
+import { lockForRelease } from "./handBack";
+import { lockOf } from "./lib/sessionLock";
 
 type Ctx = QueryCtx | MutationCtx;
 // Releases need both switches: Shoots (the shoot day) and Docs (a release is a contract). requireAll with a list
@@ -172,6 +174,9 @@ export const handOver = mutation({
     const device = tidy(a.device, 40) || "a phone";
     const owner = (me.name ?? "").trim().split(" ")[0] || "The owner";
     const out = await sendInPersonCore(ctx, ver!._id, { device: `${owner}'s ${device}`, place: s?.location ?? null, by: me.name?.trim() || me.email });
+    // Q2 (Nov 17): this sign-in locks until the owner hands it back (PIN or passkey). With no PIN set, the hand-over is
+    // refused and nothing above it is kept (the mutation rolls back).
+    await lockForRelease(ctx, me.userId, r._id);
     await ctx.db.patch(r._id, { updatedAt: Date.now() });
     return { ...out, signer: r.name };
   },
@@ -181,7 +186,9 @@ export const handOver = mutation({
 export const get = query({
   args: { releaseId: v.string() },
   handler: async (ctx, { releaseId }) => {
-    await both(ctx);
+    // Q2: a handed-over phone still shows its own release (Signed, Hand back), nothing else.
+    const lock = await lockOf(ctx);
+    if (!lock || String(lock.releaseId) !== releaseId) await both(ctx);
     const id = ctx.db.normalizeId("releases", releaseId);
     const r = id ? await ctx.db.get(id) : null;
     if (!r) return null;

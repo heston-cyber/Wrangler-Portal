@@ -6,7 +6,6 @@ import { callback as dropboxCallback, webhookNotify, webhookVerify } from "./dro
 import { feed as registerFeed } from "./register";
 import { stop as emailStop } from "./emails";
 import { og } from "./og";
-import { ip as wsS0Ip } from "./wsS0";
 import { respond as quoteRespond } from "./quotes";
 import { respond as proposalRespond } from "./proposals";
 import { api as wsApi, preflight as wsPreflight } from "./signing";
@@ -18,7 +17,7 @@ import { connectWebhook } from "./payments";
 import { webflow as webflowLeads } from "./leads";
 import { agentHttp as siteWatchAgent } from "./siteWatch";
 import { pdfRoute as briefingPdf } from "./briefings";
-import { route as fileTicket } from "./fileTickets";
+import { route as fileTicket, linkRoute as fileLinkRoute } from "./fileTickets";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);
@@ -59,8 +58,6 @@ http.route({ path: "/ws-verify", method: "POST", handler: wsVerify });
 http.route({ path: "/ws-verify", method: "OPTIONS", handler: wsPreflight });
 http.route({ path: "/ws-dropbox/callback", method: "GET", handler: wsDropboxCallback });
 
-// Wrangler Sign Phase S0 (Oct 26, temporary): which IP headers reach the backend.
-http.route({ path: "/ws-s0/ip", method: "GET", handler: wsS0Ip });
 
 // Phase 2 Part B: Stripe Connect events (account changes now; invoices and payments next).
 http.route({ path: "/stripe/connect", method: "POST", handler: connectWebhook });
@@ -80,6 +77,7 @@ http.route({ path: "/upload/chunk", method: "OPTIONS", handler: uploadChunkPrefl
 // D147 (Nov 4): a shared briefing's PDF by its link (/b/<token> shows it); off when the link is turned off.
 http.route({ pathPrefix: "/b-pdf/", method: "GET", handler: briefingPdf });
 http.route({ pathPrefix: "/f/", method: "GET", handler: fileTicket }); // second 5e review: W-9s, through a 10-minute ticket
+http.route({ pathPrefix: "/fl/", method: "GET", handler: fileLinkRoute }); // Phase 6 sweep M1: shared files, through a signed 10-20 minute link
 http.route({ path: "/email/stop", method: "GET", handler: emailStop });
 http.route({ path: "/email/stop", method: "POST", handler: emailStop });
 // Phase 5c (Nov 3): the site-watch agent's door (key-locked; Site watch's own list only).

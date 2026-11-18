@@ -211,7 +211,7 @@ export function VendorInvoicePage({ invoiceId }: { invoiceId: string }) {
         </div>
       </div>
       {dialog === "paid" && <MarkPaid invoiceId={x._id} number={x.number} vendor={x.vendor.name} totalCents={x.totalCents} payMethod={x.vendor.payMethod?.method ?? null} onClose={() => setDialog(null)} onDone={() => show(`Marked paid. ${first} gets an email.`)} />}
-      {dialog === "pay" && po && <PayDialog invoiceId={x._id} number={x.number} vendor={x.vendor.name} totalCents={x.totalCents} last4={po.vendor.last4} bankName={po.vendor.bankName} test={po.mode === "test"} onClose={() => setDialog(null)} onDone={(r) => show(r.state === "unknown" ? "Sent, but Stripe's answer didn't arrive. The portal is checking with Stripe." : r.state === "paid" ? "Stripe sent it. It's marked paid." : r.state === "failed" ? "Stripe couldn't send it. See the note above." : `Sent to Stripe.${r.expectedArrival ? ` Expected in ${first}'s bank ${dateShort(r.expectedArrival)}.` : ""}`)} />}
+      {dialog === "pay" && po && <PayDialog invoiceId={x._id} number={x.number} vendor={x.vendor.name} totalCents={x.totalCents} last4={po.vendor.last4} bankName={po.vendor.bankName} methodId={po.vendor.methodId} test={po.mode === "test"} onClose={() => setDialog(null)} onDone={(r) => show(r.state === "unknown" ? "Sent, but Stripe's answer didn't arrive. The portal is checking with Stripe." : r.state === "paid" ? "Stripe sent it. It's marked paid." : r.state === "failed" ? "Stripe couldn't send it. See the note above." : `Sent to Stripe.${r.expectedArrival ? ` Expected in ${first}'s bank ${dateShort(r.expectedArrival)}.` : ""}`)} />}
       {dialog === "decline" && <DeclineInvoice invoiceId={x._id} number={x.number} vendor={x.vendor.name} onClose={() => setDialog(null)} onDone={() => show("Declined.")} />}
       {toast}
     </>
@@ -247,12 +247,17 @@ function PayActions({ invoiceId, vendorId, first, totalCents, po, onPay, onMark,
   </>;
 }
 
-function PayDialog({ invoiceId, number, vendor, totalCents, last4, bankName, test, onClose, onDone }: { invoiceId: Id<"vendorInvoices">; number: string; vendor: string; totalCents: number; last4: string | null; bankName: string | null; test: boolean; onClose: () => void; onDone: (r: { state: string; expectedArrival: string | null }) => void }) {
+function PayDialog({ invoiceId, number, vendor, totalCents, last4: last4Now, bankName: bankNow, methodId: methodNow, test, onClose, onDone }: { invoiceId: Id<"vendorInvoices">; number: string; vendor: string; totalCents: number; last4: string | null; bankName: string | null; methodId: string | null; test: boolean; onClose: () => void; onDone: (r: { state: string; expectedArrival: string | null }) => void }) {
   const pay = useAction(api.vendorPayouts.pay);
   const balanceOf = useAction(api.vendorPayouts.balance);
+  const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
+  // Phase 6 review: the bank shown when the dialog opened is the one Pay sends to; a bank changed meanwhile is refused
+  // and shown, and the next press pays the bank now shown.
+  const [{ last4, bankName, methodId }, setSeen] = useState(() => ({ last4: last4Now, bankName: bankNow, methodId: methodNow }));
+  // After "bank changed", the dialog shows (and the next press sends) the bank Stripe has now.
+  useEffect(() => { if (err && /bank changed/.test(err)) setSeen({ last4: last4Now, bankName: bankNow, methodId: methodNow }); }, [err, last4Now, bankNow, methodNow]);
   const first = firstOf(vendor);
   const [bal, setBal] = useState<number | null | string>(null);
-  const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
   useEffect(() => { let live = true; balanceOf({}).then((r) => live && setBal(r && "availableCents" in r ? r.availableCents : r ? r.error : "Couldn't check"), (e) => live && setBal(errText(e))); return () => { live = false; }; }, [balanceOf]);
   const short = typeof bal === "number" && bal < totalCents;
   return (
@@ -270,7 +275,7 @@ function PayDialog({ invoiceId, number, vendor, totalCents, last4, bankName, tes
         {err && <p className="error" role="alert">{err}</p>}
         <div className="dfoot">
           <button className="btn ghost" type="button" onClick={onClose}>Cancel</button>
-          <Button variant="primary" loading={busy} disabled={bal === null || short} onClick={async () => { setBusy(true); setErr(null); try { const r = await pay({ invoiceId, ...(last4 ? { last4 } : {}) }); onClose(); onDone(r); } catch (e) { setErr(errText(e)); setBusy(false); } }}>Pay {money(totalCents)}</Button>
+          <Button variant="primary" loading={busy} disabled={bal === null || short} onClick={async () => { setBusy(true); setErr(null); try { const r = await pay({ invoiceId, ...(last4 ? { last4 } : {}), ...(methodId ? { payoutMethodId: methodId } : {}) }); onClose(); onDone(r); } catch (e) { setErr(errText(e)); setBusy(false); } }}>Pay {money(totalCents)}</Button>
         </div>
       </div>
     </Modal>

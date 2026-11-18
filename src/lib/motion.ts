@@ -1,8 +1,8 @@
 // D175 (Heston, Nov 12: "animate the changing of the tabs and menus on desktop version to quickly slide").
 // Everything here moves transform only: an opacity change on a panel (or on a parent of glass) makes the browser blur
 // nothing until it ends, which is what made the page behind the phone sheet blur late (D174).
-/** Desktop and motion allowed: the slides run only here; phones and "reduce motion" keep the current behaviour. */
-export const DESK_MOTION = "(min-width: 821px) and (prefers-reduced-motion: no-preference)";
+/** Motion allowed: the slides run on desktop and, since Nov 17 (Heston: "make animation site wide"), on phones; "reduce motion" keeps the plain look. */
+export const DESK_MOTION = "(prefers-reduced-motion: no-preference)";
 export const deskMotion = () => typeof matchMedia === "function" && matchMedia(DESK_MOTION).matches;
 
 /** Which way a slide goes: "f" from the right (going on / down the menu), "b" from the left. */

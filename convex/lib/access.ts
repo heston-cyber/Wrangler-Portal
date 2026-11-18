@@ -11,6 +11,7 @@ import { allowedEmails } from "./owners";
 import { businessFor } from "./business";
 import { sideOf } from "./roles";
 import { assignedOnly, cleanPerms, isTeamRole, type Perm, type Perms, type TeamRole } from "./perms";
+import { sessionBlocked } from "./sessionLock";
 
 export type Me = { userId: Id<"users">; name: string; email: string; team?: TeamInfo };
 // Phase 5e (Nov 5): a team member works in one business with their role's switches (lib/perms.ts).
@@ -34,6 +35,9 @@ export async function viewerOf(ctx: QueryCtx | MutationCtx): Promise<Viewer> {
   // Phase 5b step 4 (D127): a call-sheet guest's login is never an owner, client or vendor, whatever memberships or
   // allow-list entries its email has (or gets later): it only passes the guest functions' own check (lib/guests.ts).
   if (user.role === "guest") return { kind: "nobody" };
+  // Q2 (Nov 17): a phone handed over for a release answers nothing of anyone's until it's handed back (handBack.ts);
+  // review H1: nor does a sign-in whose session was ended on the server.
+  if (await sessionBlocked(ctx)) return { kind: "nobody" };
   const name = (user.name as string | undefined) || fallbackName(email);
   // Owner (Phase 0.5d step 3): an active owner membership in a business, or, for Wrangler, the ALLOWED_EMAILS list
   // (kept as the bootstrap and backup). Owner memberships are only ever made by internal code.
@@ -149,4 +153,15 @@ export async function requireAll(ctx: QueryCtx | MutationCtx, perm: Perm | reado
   const me = await requireMe(ctx, perm);
   if (me.team && assignedOnly(me.team.role)) throw new ConvexError("Not allowed.");
   return me;
+}
+
+/** Phase 6 review (L7): the owner's side (the owner or a team member) looking at a page meant for `reader`, rather than
+ *  the reader themself (a team member can be a briefing's named recipient). Views and reads aren't recorded then. */
+export async function ownerSideLooking(ctx: QueryCtx | MutationCtx, reader?: string | null): Promise<boolean> {
+  const s = (ctx as unknown as { scope?: { isOwner: boolean; isTeam?: boolean } | null }).scope;
+  if (!s?.isOwner && !s?.isTeam) return false;
+  if (!reader) return true;
+  const uid = await getAuthUserId(ctx);
+  const u = uid ? await ctx.db.get(uid) : null;
+  return (u?.email ?? "").toLowerCase() !== reader.trim().toLowerCase();
 }

@@ -16,6 +16,7 @@ import { businessInScope, defaultBusiness } from "./lib/business";
 import { EMPTY_RATES, WRANGLER_RATES, estimate, primaryKind, ratesProblems, type EstimateInput, type Rates } from "./lib/estimate";
 import { applyArgs } from "./wsMcp";
 import { accessOf } from "./clients";
+import { ownerSide } from "./inbox";
 import type { Fields } from "./lib/wsBuilder";
 
 export const STAGES = ["lead", "quoted", "contract_sent", "signed", "in_production", "delivered", "paid"] as const;
@@ -237,7 +238,8 @@ export const company = query({
 export const contact = query({
   args: { personId: v.string() },
   handler: async (ctx, { personId }) => {
-    await ownerBiz(ctx);
+    const { me } = await ownerBiz(ctx);
+    const money = !me.team || me.team.perms.payments; // Phase 6 (Heston, Nov 17): invoices and payments follow Payments
     const id = ctx.db.normalizeId("clientPeople", personId);
     const p = id ? await ctx.db.get(id) : null;
     if (!p) return null;
@@ -245,7 +247,7 @@ export const contact = query({
     const m = await moneyFor(ctx, await ctx.db.query("invoices").withIndex("by_client", (q) => q.eq("clientId", p.clientId)).collect());
     const followUps = (await ctx.db.query("followUps").withIndex("by_client", (q) => q.eq("clientId", p.clientId)).collect()).filter((f) => !f.doneAt && (!f.email || f.email === p.email));
     const deals = (await ctx.db.query("deals").withIndex("by_client", (q) => q.eq("clientId", p.clientId)).collect()).filter((d) => !d.closedAt && (!d.contactEmail || d.contactEmail === p.email)).map((d) => ({ _id: d._id, title: d.title, stageName: STAGE_NAME[d.stage] }));
-    const items = (await ctx.db.query("inboxItems").collect()).filter((i) => i.email === p.email).sort((a, b) => b.createdAt - a.createdAt).slice(0, 8).map((i) => ({ title: i.title, at: i.createdAt, read: !!i.readAt }));
+    const items = (await ctx.db.query("inboxItems").collect()).filter((i) => i.email === p.email).sort((a, b) => b.createdAt - a.createdAt).slice(0, 8).map((i) => ({ title: ownerSide({ kind: i.kind, title: i.title, text: "", link: null, linkLabel: null }, money).title, at: i.createdAt, read: !!i.readAt }));
     return { _id: p._id, name: p.name ?? p.email, email: p.email, role: p.role, access: await accessOf(ctx, p.email), company: c ? { _id: c._id, name: c.name } : null, ...m, followUps, deals, activity: items };
   },
 });

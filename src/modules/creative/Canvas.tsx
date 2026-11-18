@@ -5,18 +5,26 @@
 // cursors). iPad: Pencil draws, fingers move the board (D185); a phone gets Select, Text, Photo and the Tools sheet with
 // the rest greyed "On iPad and desktop". Popovers move in 140 ms with no fade. Shared people use the same board on their
 // own link (/cv/<token>): Can view reads it, Can edit changes it (no uploads).
+import { useLinkWindow } from "../../lib/linkWindow";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import rough from "roughjs";
+import { hapticHold } from "../../lib/haptic";
 import { useMutation, useQuery } from "convex/react";
 import {
   MousePointer2, Hand, Pencil, Eraser, Type, Square, Circle, ArrowRight, Minus as LineIcon, ImagePlus, Box, Lock, LockOpen, Undo2, Redo2, Minus, Plus, Menu, CircleQuestionMark,
   StickyNote, Table2, Frame, Link2, Upload, ChevronLeft, ChevronRight, Download, MoreHorizontal, ArrowDownToLine, ArrowDown, ArrowUp, ArrowUpToLine,
+  Palette, PaintBucket, Layers, Scissors, Copy, ClipboardPaste, CopyPlus, Trash2, Maximize, Search, FileText, ExternalLink, Check,
 } from "lucide-react";
+import type { Editor } from "@tiptap/react";
+import { DocCard, DocLive, type DocView } from "./CanvasDoc";
+import { FormatPanel, QuickMenu } from "../docs/builder/FormatPanel";
+import { BuilderCtx } from "../docs/builder/editor/nodes";
+import { fieldValues, sectionClause, type BuildDoc, type PNode } from "../../../convex/lib/wsBuilder";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps, navigate } from "../../lib/router";
-import { Modal, useConfirm, useToast } from "../../ui/kit";
+import { ContextMenu, MenuItem, MenuLabel, MenuSep, MenuSub, Modal, swallowNextClick, useConfirm, useToast } from "../../ui/kit";
 import { Button, DialogHeader, EmptyState, PageHeader, PillTabs, SkeletonRows, TextField } from "../../ui/wp";
 import { Icon } from "../../ui/Icon";
 import { errLine } from "../../ui/hold";
@@ -38,16 +46,17 @@ const mb = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024)
 // ---------- the list (1076-35492) ----------
 
 export function CanvasList() {
-  const list = useQuery(api.canvas.list);
+  const at = useLinkWindow();
+  const list = useQuery(api.canvas.list, { at });
   const [f, setF] = useState<"all" | "canvas" | "mood" | "shared" | "loose">("all");
-  const [open, setOpen] = useState<null | "canvas" | "mood">(() => (new URLSearchParams(location.search).has("new") ? "canvas" : null));
+  const [open, setOpen] = useState<null | "canvas" | "mood">(() => (new URLSearchParams(location.search).get("new") === "mood" ? "mood" : new URLSearchParams(location.search).has("new") ? "canvas" : null));
   const [toast, show] = useToast();
   const all = list ?? [];
   const rows = all.filter((c) => f === "all" || (f === "shared" ? c.shared > 0 : f === "loose" ? !c.home : c.kind === f));
   const n = (k: string) => all.filter((c) => (k === "shared" ? c.shared > 0 : k === "loose" ? !c.home : c.kind === k)).length;
   return (
     <>
-      <TopBar><a {...linkProps("/creative")}>Creative planning</a><Sep /><span className="here">Canvas and mood boards</span></TopBar>
+      <TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/creative")}>Creative planning</a><Sep /><span className="here">Canvas and mood boards</span></TopBar>
       <div className="wp-page">
         <PageHeader eyebrow="Creative planning" title="Canvas and mood boards" sub="Boards for ideas, references and plans. Only your business sees them until you share one." actions={<Button variant="primary" icon="plus" onClick={() => setOpen("canvas")}>New canvas</Button>} />
         {list !== undefined && all.length > 0 && <PillTabs label="Filter" value={f} onChange={setF} items={[{ key: "all", label: "All", count: all.length }, { key: "canvas", label: "Canvases", count: n("canvas") }, { key: "mood", label: "Mood boards", count: n("mood") }, { key: "shared", label: "Shared", count: n("shared") }, { key: "loose", label: "Not attached", count: n("loose") }]} />}
@@ -119,7 +128,8 @@ function NewCanvas({ kind, onClose, show }: { kind: "canvas" | "mood"; onClose: 
 // ---------- the board page (owner and team) ----------
 
 export function CanvasPage({ canvasId }: { canvasId: string }) {
-  const c = useQuery(api.canvas.get, { canvasId });
+  const at = useLinkWindow();
+  const c = useQuery(api.canvas.get, { canvasId, at });
   const save = useMutation(api.canvas.save);
   const rename = useMutation(api.canvas.rename);
   const remove = useMutation(api.canvas.remove);
@@ -131,8 +141,8 @@ export function CanvasPage({ canvasId }: { canvasId: string }) {
   const [ask, confirmNode] = useConfirm();
   const [dialog, setDialog] = useState<null | "share" | "move" | "rename">(null);
   const [nameDraft, setNameDraft] = useState("");
-  if (c === undefined) return <><TopBar><a {...linkProps("/creative")}>Creative planning</a><Sep /><a {...linkProps("/creative/canvas")}>Canvas and mood boards</a></TopBar><div className="wp-page"><SkeletonRows n={4} /></div></>;
-  if (c === null) return <><TopBar><a {...linkProps("/creative")}>Creative planning</a><Sep /><a {...linkProps("/creative/canvas")}>Canvas and mood boards</a></TopBar><div className="wp-page"><EmptyState icon="creative" title="This board isn't here." actions={<Button onClick={() => navigate("/creative/canvas")}>All boards</Button>} /></div></>;
+  if (c === undefined) return <><TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/creative")}>Creative planning</a><Sep /><a {...linkProps("/creative/canvas")}>Canvas and mood boards</a></TopBar><div className="wp-page"><SkeletonRows n={4} /></div></>;
+  if (c === null) return <><TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/creative")}>Creative planning</a><Sep /><a {...linkProps("/creative/canvas")}>Canvas and mood boards</a></TopBar><div className="wp-page"><EmptyState icon="creative" title="This board isn't here." actions={<Button onClick={() => navigate("/creative/canvas")}>All boards</Button>} /></div></>;
   const upload = async (file: File, onProgress: (p: number) => void) => {
     const url = await uploadUrl({ canvasId });
     const storageId = await new Promise<Id<"_storage">>((resolve, reject) => {
@@ -147,7 +157,7 @@ export function CanvasPage({ canvasId }: { canvasId: string }) {
   };
   return (
     <>
-      <Board key={c._id} title={c.name} items={c.items as CanvasItem[]} rev={c.rev} files={c.files} canEdit uploads={{ upload, bytes: c.limits.bytes }}
+      <Board key={c._id} title={c.name} items={c.items as CanvasItem[]} rev={c.rev} files={c.files} docs={c.docs as Record<string, DocView>} docTools={{ home: c.home ? { type: c.home.type as "client" | "project" | "shoot" | "lead", id: c.home.id } : null }} canEdit uploads={{ upload, bytes: c.limits.bytes }}
         onSave={async (items, rev) => { const r = await save({ canvasId, items, rev }); if (r.ok && items.length < (c.items as CanvasItem[]).length) void dropUnused({ canvasId }); return r as SaveResult; }}
         top={(state) => (
           <TopBar right={<>
@@ -223,12 +233,13 @@ function ShareCanvas({ c, onClose, show }: { c: NonNullable<ReturnType<typeof us
     </Modal>
   );
 }
-const useCanvasGet = (canvasId: string) => useQuery(api.canvas.get, { canvasId });
+const useCanvasGet = (canvasId: string) => useQuery(api.canvas.get, { canvasId, at: useLinkWindow() });
 
 // ---------- the shared board (/cv/<token>) ----------
 
 export function SharedCanvas({ token }: { token: string }) {
-  const c = useQuery(api.canvas.shared, { token });
+  const at = useLinkWindow();
+  const c = useQuery(api.canvas.shared, { token, at });
   const save = useMutation(api.canvas.sharedSave);
   const opened = useMutation(api.canvas.opened);
   const [toast, show] = useToast();
@@ -237,7 +248,7 @@ export function SharedCanvas({ token }: { token: string }) {
   if (c === null) return <div className="cr-public"><EmptyState icon="creative" title="This link isn't working." body="Sharing may have stopped. Ask whoever sent it." /></div>;
   return (
     <div className="cv-shared">
-      <Board title={c.name} items={c.items as CanvasItem[]} rev={c.rev} files={c.files} canEdit={c.role === "edit"} show={show}
+      <Board title={c.name} items={c.items as CanvasItem[]} rev={c.rev} files={c.files} docs={c.docs as Record<string, DocView>} canEdit={c.role === "edit"} show={show}
         onSave={async (items, rev) => (await save({ token, items, rev })) as SaveResult}
         top={(state) => <div className="cv-pubbar glass"><span className="wp-eyebrow">{c.from ?? ""}{c.from ? " · " : ""}{c.kind === "mood" ? "Mood board" : "Canvas"}</span><b>{c.name}</b><span className="sp" />{state}<span className="pill sm">{c.role === "edit" ? "Can edit" : "View only"}</span></div>} />
       {toast}
@@ -250,7 +261,7 @@ export function SharedCanvas({ token }: { token: string }) {
 type Uploads = { upload: (f: File, onProgress: (p: number) => void) => Promise<{ error: string | null; fileId?: string; url?: string | null; type?: string; size?: number }>; bytes: number };
 type BoardMenuItem = { label: string; onClick: () => void; danger?: boolean };
 
-type Tool = "select" | "pan" | "box" | "ellipse" | "arrow" | "line" | "pen" | "text" | "image" | "eraser" | "note" | "table" | "frame" | "link" | "import";
+type Tool = "select" | "pan" | "box" | "ellipse" | "arrow" | "line" | "pen" | "text" | "image" | "eraser" | "note" | "table" | "frame" | "link" | "import" | "doc";
 const MAIN: Array<{ k: Tool; label: string; icon: React.ReactNode; n?: string; key?: string; phone?: boolean }> = [
   { k: "pan", label: "Hand", icon: <Hand size={18} />, key: "h", phone: true },
   { k: "select", label: "Select", icon: <MousePointer2 size={18} />, n: "1", key: "v", phone: true },
@@ -268,11 +279,13 @@ const MORE: Array<{ k: Tool; label: string; icon: React.ReactNode; key?: string 
   { k: "table", label: "Table", icon: <Table2 size={18} /> },
   { k: "frame", label: "Frame", icon: <Frame size={18} />, key: "f" },
   { k: "link", label: "Link", icon: <Link2 size={18} /> },
+  { k: "doc", label: "Doc", icon: <FileText size={18} /> }, // Nov 17 (Heston): a creative doc on the board
   { k: "import", label: "Import", icon: <Upload size={18} /> },
 ];
 const HINT: Partial<Record<Tool, string>> = {
   select: "To move canvas, hold Scroll wheel or Space while dragging, or use the hand tool",
   pan: "Drag to move the canvas",
+  doc: "Click where the doc should go. Double-click a doc to edit it",
   box: "Click and drag to draw a rectangle. Hold Shift for a square",
   ellipse: "Click and drag to draw a circle. Hold Shift for a perfect circle",
   arrow: "Click and drag to draw an arrow. Hold Shift to snap the angle",
@@ -283,8 +296,12 @@ const HINT: Partial<Record<Tool, string>> = {
   note: "Click to place a note", table: "Click to place a table", frame: "Click and drag to draw a frame",
 };
 // Excalidraw-like dark palette (Heston's screenshot): stroke and background swatches, then a custom colour.
+/** Copied items, kept while the tab is open (pasting into another board of this tab works too). */
+let boardClip: CanvasItem[] = [];
 const STROKES = ["#D3D3D3", "#FF8383", "#3A994C", "#56A2E8", "#B76100"];
 const FILLS: Array<string | null> = [null, "#5B2C2C", "#043B0C", "#154163", "#362600"];
+const STROKE_NAME: Record<string, string> = { "#D3D3D3": "Light grey", "#FF8383": "Red", "#3A994C": "Green", "#56A2E8": "Blue", "#B76100": "Orange" };
+const FILL_NAME: Record<string, string> = { "#5B2C2C": "Dark red", "#043B0C": "Dark green", "#154163": "Dark blue", "#362600": "Dark brown" };
 const NOTE_COLORS = ["#FFF4B8", "#FFD6E0", "#CFF5D7", "#D6E9FF", "#EADCFF"];
 const WIDTHS = [1, 2, 4];
 const TEXT_PX: Record<string, number> = { S: 16, M: 22, L: 34, XL: 56 };
@@ -295,8 +312,9 @@ const SHAPES = new Set(["box", "ellipse"]);
 const LINES = new Set(["arrow", "line"]);
 type Style = { color: string; fill: string | null; stroke: number; dash: "solid" | "dashed" | "dotted"; rough: 0 | 1 | 2; round: boolean; opacity: number; size: "S" | "M" | "L" | "XL"; note: string; rows: number; cols: number };
 
-function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdit, uploads, onSave, top, show, menu }: {
+function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdit, uploads, onSave, top, show, menu, docs = {}, docTools }: {
   title: string; items: CanvasItem[]; rev: number; files: Record<string, string | null>; canEdit: boolean; uploads?: Uploads;
+  docs?: Record<string, DocView>; docTools?: { home: { type: "client" | "project" | "shoot" | "lead"; id: string } | null };
   onSave: (items: CanvasItem[], rev: number) => Promise<SaveResult>; top: (state: React.ReactNode) => React.ReactNode; show: (t: string) => void; menu?: BoardMenuItem[];
 }) {
   const [items, setItemsRaw] = useState<CanvasItem[]>(initial);
@@ -313,12 +331,22 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
   const [pan, setPan] = useState({ x: 40, y: 40 });
   const [editing, setEditing] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
-  const [pop, setPop] = useState<null | "more" | "menu" | "tools" | "help">(null);
+  const [pop, setPop] = useState<null | "more" | "menu" | "tools" | "style" | "help">(null);
   const [st, setSt] = useState<Style>({ color: STROKES[0], fill: null, stroke: 2, dash: "solid", rough: 1, round: true, opacity: 100, size: "M", note: NOTE_COLORS[0], rows: 3, cols: 3 });
   const [drawing, setDrawing] = useState<{ points: number[] } | null>(null);
   const [ghost, setGhost] = useState<CanvasItem | null>(null); // the shape or line being drawn
   const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const [linkAsk, setLinkAsk] = useState<{ x: number; y: number } | null>(null);
+  // Nov 17: docs on the board. The doc being edited hands its editor up, for the Format panel and the builder's menu.
+  const [docAsk, setDocAsk] = useState<{ x: number; y: number } | null>(null);
+  const [docEd, setDocEd] = useState<{ editor: Editor; doc: BuildDoc } | null>(null);
+  const [docMenu, setDocMenu] = useState<{ x: number; y: number } | null>(null);
+  const onDocEditor = useCallback((editor: Editor | null, doc: BuildDoc | null) => setDocEd(editor && doc ? { editor, doc } : null), []);
+  const saveClause = useMutation(api.builder.saveClause);
+  const saveDocClause = async (sec: PNode) => {
+    const c = sectionClause(sec);
+    try { await saveClause({ title: c.title, body: c.body, initials: c.initials }); show(`"${c.title}" saved to the clause library`); } catch (e) { show(errLine(e)); }
+  };
   const [importing, setImporting] = useState(false);
   const [files, setFiles] = useState(fileUrls);
   const [space, setSpace] = useState(false);
@@ -326,7 +354,14 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
   const fileInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
   const phone = typeof window !== "undefined" && window.matchMedia("(max-width: 600px)").matches;
-  useEffect(() => setFiles((f) => ({ ...f, ...fileUrls })), [fileUrls]);
+  // Phase 6 review L1: file links last 10-20 minutes and the page asks for fresh ones each window; a picture already on
+  // the board keeps the link it loaded with (no re-download), and only a failed load or a download takes the newest.
+  const latest = useRef(fileUrls);
+  useEffect(() => {
+    latest.current = { ...latest.current, ...fileUrls };
+    setFiles((f) => { const n = { ...f }; for (const [k, u] of Object.entries(fileUrls)) if (!n[k]) n[k] = u; return n; });
+  }, [fileUrls]);
+  const freshUrl = useCallback((id: string) => latest.current[id] ?? null, []);
   const setTool = (t: Tool) => { setToolRaw(t); setPop(null); setCtxMenu(null); if (t !== "select") { setSel([]); setEditing(null); } };
 
   // Someone else saved: take the newer board when nothing here is waiting to save (D184: no live cursors).
@@ -392,6 +427,18 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
     return () => window.removeEventListener("resize", size);
   }, []);
   useEffect(() => { fit(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Phone (Heston, Nov 17): typing opens the keyboard over the bottom half, so the thing being typed in moves up near
+  // the top of the board, and the bars at the bottom step aside until Done.
+  useEffect(() => {
+    if (!phone || !editing) return;
+    const it = itemsRef.current.find((i) => i.id === editing); const r = viewRef.current?.getBoundingClientRect(); if (!it || !r) return;
+    const z = Math.max(zoom, 0.8); // big enough to read what you type
+    const sx = pan.x + it.x * z, sy = pan.y + it.y * z;
+    const nx = z !== zoom || sx < 8 || sx + Math.min(it.w * z, r.width - 16) > r.width - 8 ? pan.x - sx + 16 : pan.x;
+    const ny = z !== zoom || sy < 60 || sy > r.height * 0.3 ? pan.y - sy + 64 : pan.y;
+    if (z !== zoom) setZoom(z);
+    if (nx !== pan.x || ny !== pan.y) setPan({ x: nx, y: ny });
+  }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Wheel: ctrl/⌘ (and trackpad pinch) zooms; otherwise it moves the board.
   useEffect(() => {
@@ -410,21 +457,28 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
   useEffect(() => {
     const typing = (e: KeyboardEvent) => !!(e.target as HTMLElement).closest("input, textarea, select, [contenteditable=true]");
     const down = (e: KeyboardEvent) => {
+      // Esc in a doc being edited: closes its menu, then finishes editing.
+      if (e.key === "Escape" && (e.target as HTMLElement).closest?.(".cv-docedit")) { if (docMenu) setDocMenu(null); else { setEditing(null); setSel([]); } return; }
       if (typing(e)) return;
       const mod = e.metaKey || e.ctrlKey;
       if (e.key === " ") { e.preventDefault(); if (!space) setSpace(true); return; }
       if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
       if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); redo(); return; }
       if (mod && e.key.toLowerCase() === "d") { e.preventDefault(); dup(); return; }
+      if (mod && sel.length && canEdit && (e.key === "]" || e.key === "}")) { e.preventDefault(); layer(e.shiftKey ? "front" : "forward"); return; }
+      if (mod && sel.length && canEdit && (e.key === "[" || e.key === "{")) { e.preventDefault(); layer(e.shiftKey ? "back" : "backward"); return; }
+      if (mod && e.key.toLowerCase() === "c" && sel.length) { e.preventDefault(); copySel(); return; }
+      if (mod && e.key.toLowerCase() === "x" && sel.length && canEdit) { e.preventDefault(); cutSel(); return; }
+      if (mod && e.key.toLowerCase() === "v" && canEdit && boardClip.length) { e.preventDefault(); pasteClip(); return; }
       if (mod && e.key.toLowerCase() === "a") { e.preventDefault(); setToolRaw("select"); setSel(itemsRef.current.map((i) => i.id)); return; }
       if ((e.key === "Delete" || e.key === "Backspace") && sel.length) { e.preventDefault(); del(); return; }
-      if (e.key === "Escape") { setSel([]); setEditing(null); setCtxMenu(null); setPop(null); setToolRaw(canEdit ? "select" : "pan"); return; }
+      if (e.key === "Escape") { setSel([]); setEditing(null); setCtxMenu(null); setDocMenu(null); setPop(null); setToolRaw(canEdit ? "select" : "pan"); return; }
       if (e.shiftKey && e.key === "!") { fit(); return; }
       if (mod || e.altKey) return;
       if (e.key.toLowerCase() === "q" && canEdit) { setKeep((k) => !k); return; }
       if (e.key === "?") { setPop("help"); return; }
       const t = [...MAIN, ...MORE].find((x) => ("n" in x && x.n === e.key) || x.key === e.key.toLowerCase());
-      if (!t || (!canEdit && t.k !== "select" && t.k !== "pan")) return;
+      if (!t || (!canEdit && t.k !== "select" && t.k !== "pan") || (t.k === "doc" && !docTools)) return;
       if (t.k === "image" || t.k === "import") { if (!uploads) return; if (t.k === "image") imageInput.current?.click(); else setImporting(true); return; }
       setTool(t.k);
     };
@@ -452,6 +506,16 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
     setItems((all) => all.map((x) => ({ ...x, z: z.get(x.id) ?? x.z }))); setCtxMenu(null);
   };
   const lock = () => { const on = !selected.every((i) => i.locked); setItems((xs) => xs.map((x) => (sel.includes(x.id) ? { ...x, locked: on || undefined } : x))); setCtxMenu(null); };
+  // Nov 17 (Heston: the right-click menu as the doc builder's): cut, copy and paste between boards in this tab.
+  const copySel = () => { const xs = itemsRef.current.filter((i) => sel.includes(i.id)); if (xs.length) boardClip = xs.map((i) => ({ ...i })); setCtxMenu(null); };
+  const cutSel = () => { copySel(); del(); };
+  const pasteClip = () => {
+    if (!boardClip.length) return;
+    const z = topZ();
+    const copies = boardClip.map((i, k) => ({ ...i, id: uid(), x: i.x + 24, y: i.y + 24, z: z + k + 1, locked: undefined, ...(i.fileId && !files[i.fileId] ? { fileId: undefined } : {}) }));
+    boardClip = copies.map((c) => ({ ...c }));
+    setItems((xs) => [...xs, ...copies]); setSel(copies.map((c) => c.id)); setToolRaw("select"); setCtxMenu(null);
+  };
 
   /** A style change: it applies to what's selected and becomes the default for the next thing drawn. */
   const restyle = (p: Partial<Style>) => {
@@ -499,10 +563,13 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
 
   const onDown = (e: React.PointerEvent) => {
     if (e.button === 2) return;
-    if ((e.target as HTMLElement).closest(".cv-ui")) return;
+    if ((e.target as HTMLElement).closest(".cv-ui, .cv-docedit")) return; // a doc being edited takes its own clicks
+    if (docMenu) { setDocMenu(null); return; }
+    // A click anywhere but the doc being edited finishes editing it.
+    if (editing && itemsRef.current.find((i) => i.id === editing)?.type === "doc" && ((e.target as HTMLElement).closest("[data-id]") as HTMLElement | null)?.dataset.id !== editing) setEditing(null);
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    setCtxMenu(null); setPop(null);
+    if (ctxMenu || pop) { setCtxMenu(null); setPop(null); swallowNextClick(); return; } // Heston (10:47): a tap outside an open menu only closes it
     if (pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()];
       gesture.current = { kind: "pinch", d: Math.hypot(a.x - b.x, a.y - b.y), z: zoom, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
@@ -513,7 +580,7 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
     const hit = hitEl ? itemsRef.current.find((i) => i.id === hitEl.dataset.id) ?? null : null;
     const handle = (e.target as HTMLElement).closest("[data-handle]") as HTMLElement | null;
     // iPad (D185): Pencil draws, fingers move the board. Space or the wheel button moves it too.
-    const fingerOnPen = e.pointerType === "touch" && (tool === "pen" || tool === "eraser");
+    const fingerOnPen = e.pointerType === "touch" && !phone && (tool === "pen" || tool === "eraser"); // iPad: the Pencil draws, fingers move the board. A phone has no Pencil: a finger draws (two fingers move and zoom)
     if (tool === "pan" || space || e.button === 1 || fingerOnPen || !canEdit) { if (!canEdit && hit) setSel([hit.id]); gesture.current = { kind: "pan", sx: e.clientX, sy: e.clientY, px: pan.x, py: pan.y }; return; }
     if (tool === "pen") { gesture.current = { kind: "draw" }; setDrawing({ points: [p.x, p.y] }); return; }
     if (tool === "eraser") { gesture.current = { kind: "erase" }; erase(hit); return; }
@@ -522,6 +589,7 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
     if (tool === "table") { add({ type: "table", x: p.x, y: p.y, w: st.cols * 140, h: st.rows * 40, rows: Array.from({ length: st.rows }, () => Array.from({ length: st.cols }, () => "")) }); return; }
     if (tool === "box" || tool === "ellipse" || tool === "frame" || tool === "arrow" || tool === "line") { gesture.current = { kind: "make", type: tool, x0: p.x, y0: p.y }; return; }
     if (tool === "link") { setLinkAsk(p); done(); return; }
+    if (tool === "doc") { if (docTools) setDocAsk(p); done(); return; }
     // Select
     if (handle && selected.length === 1) {
       const it = selected[0];
@@ -535,7 +603,7 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
       setSel(next);
       const start = new Map(itemsRef.current.filter((i) => next.includes(i.id) && !i.locked).map((i) => [i.id, { x: i.x, y: i.y }]));
       gesture.current = { kind: "move", sx: e.clientX, sy: e.clientY, start, moved: false };
-      if (e.pointerType === "touch") { const cx = e.clientX, cy = e.clientY; holdTimer.current = window.setTimeout(() => { setCtxMenu({ x: cx, y: cy }); gesture.current = null; }, 500); }
+      if (e.pointerType === "touch") { const cx = e.clientX, cy = e.clientY; holdTimer.current = window.setTimeout(() => { hapticHold(); setCtxMenu({ x: cx, y: cy }); gesture.current = null; }, 500); }
       return;
     }
     if (e.pointerType === "touch") { gesture.current = { kind: "pan", sx: e.clientX, sy: e.clientY, px: pan.x, py: pan.y }; setSel([]); setEditing(null); return; }
@@ -669,7 +737,11 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
   const selBox = selected.length ? selected.reduce((a, i) => ({ x0: Math.min(a.x0, i.x), y0: Math.min(a.y0, i.y), x1: Math.max(a.x1, i.x + i.w), y1: Math.max(a.y1, i.y + i.h) }), { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity }) : null;
   // The style panel: while drawing with a styled tool, or with something selected.
   const panelFor = selected.length ? selected : ["box", "ellipse", "arrow", "line", "pen", "text", "note"].includes(tool) ? [{ type: tool } as CanvasItem] : [];
-  const showPanel = canEdit && !phone && (panelFor.length > 0 || tool === "table");
+  const editingDoc = !!docEd && !!one && one.type === "doc" && editing === one.id;
+  const stylable = canEdit && !editingDoc && (panelFor.length > 0 || tool === "table");
+  const showPanel = stylable && !phone;
+  const SHEET_TOOLS = [...MAIN.filter((t) => !t.phone), ...MORE].filter((t) => (uploads || t.k !== "import") && (docTools || t.k !== "doc"));
+  const sheetTool = SHEET_TOOLS.find((t) => t.k === tool);
   // The grid: 20 board pixels, with every fifth line a little stronger; wider when zoomed far out.
   const step = 20 * zoom < 8 ? 100 : 20;
   const minor = step * zoom, major = step * 5 * zoom;
@@ -685,11 +757,13 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
       {top(state)}
       <div className="cv-stage">
       <div ref={viewRef} className={`cv-view tool-${space ? "pan" : tool}`} style={gridStyle} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
-        onContextMenu={(e) => { const el = (e.target as HTMLElement).closest("[data-id]") as HTMLElement | null; if (!el || !canEdit) return; e.preventDefault(); if (!sel.includes(el.dataset.id!)) setSel([el.dataset.id!]); setToolRaw("select"); setCtxMenu({ x: e.clientX, y: e.clientY }); }}
+        onContextMenu={(e) => { if (!canEdit || (e.target as HTMLElement).closest(".cv-docedit")) return; e.preventDefault(); const el = (e.target as HTMLElement).closest("[data-id]") as HTMLElement | null; if (el && !sel.includes(el.dataset.id!)) setSel([el.dataset.id!]); if (!el) setSel([]); setToolRaw("select"); setCtxMenu({ x: e.clientX, y: e.clientY }); }}
         onDragOver={(e) => { if (canEdit && uploads) e.preventDefault(); }} onDrop={onDrop}
-        onDoubleClick={(e) => { const el = (e.target as HTMLElement).closest("[data-id]") as HTMLElement | null; const it = el && itemsRef.current.find((i) => i.id === el.dataset.id); if (it && canEdit && !it.locked && ["note", "text", "box", "ellipse", "frame", "table", "link"].includes(it.type)) { setEditing(it.id); setSel([it.id]); } }}>
-        <div className="cv-board" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, width: BOARD.w, height: BOARD.h }}>
-          {sorted.map((it) => <ItemView key={it.id} it={it} url={it.fileId ? files[it.fileId] ?? null : null} editing={editing === it.id} canEdit={canEdit} onPatch={(p) => patch(it.id, p)} onDone={() => setEditing(null)} />)}
+        onDoubleClick={(e) => { const el = (document.elementFromPoint(e.clientX, e.clientY) ?? (e.target as HTMLElement)).closest("[data-id]") as HTMLElement | null; /* the board holds the pointer while pressed, so the event's own target is the board */ const it = el && itemsRef.current.find((i) => i.id === el.dataset.id); if (it && canEdit && !it.locked && (["note", "text", "box", "ellipse", "frame", "table", "link"].includes(it.type) || (it.type === "doc" && docTools && !phone && !!docs[it.docId ?? ""]?.buildId))) { setEditing(it.id); setSel([it.id]); } }}>
+        <div className="cv-board" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, width: BOARD.w, height: BOARD.h, ["--cvz" as string]: zoom }}>
+          {sorted.map((it) => it.type === "doc"
+            ? <DocItem key={it.id} it={it} view={docs[it.docId ?? ""]} editing={editing === it.id && !!docTools && !phone} onEditor={onDocEditor} onMenu={setDocMenu} onError={show} />
+            : <ItemView key={it.id} it={it} url={it.fileId ? files[it.fileId] ?? null : null} freshUrl={freshUrl} editing={editing === it.id} canEdit={canEdit} onPatch={(p) => patch(it.id, p)} onDone={() => setEditing(null)} />)}
           {ghost && <ItemView it={ghost} url={null} editing={false} canEdit={false} onPatch={() => {}} onDone={() => {}} />}
           {drawing && <svg className="cv-ink" style={{ left: 0, top: 0, opacity: st.opacity / 100 }} width={BOARD.w} height={BOARD.h}><path d={smooth(drawing.points)} fill="none" stroke={st.color} strokeWidth={Math.max(2, st.stroke * 2)} strokeLinecap="round" strokeLinejoin="round" /></svg>}
           {marquee && <div className="cv-marquee" style={{ left: Math.min(marquee.x0, marquee.x1), top: Math.min(marquee.y0, marquee.y1), width: Math.abs(marquee.x1 - marquee.x0), height: Math.abs(marquee.y1 - marquee.y0), borderWidth: 1 / zoom }} />}
@@ -720,40 +794,87 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
             <button key={t.k} className={`cv-tbtn${tool === t.k ? " on" : ""}`} aria-pressed={tool === t.k} aria-label={t.label} title={`${t.label}${t.n ? ` (${t.n})` : t.key ? ` (${t.key.toUpperCase()})` : ""}`} onClick={() => pick(t.k)}>{t.icon}{t.n && <i>{t.n}</i>}</button>
           ))}
           {canEdit && <><span className="cv-sep" /><span className="cv-morewrap">
-            <button className={`cv-tbtn${MORE.some((m) => m.k === tool) || pop === "more" ? " on" : ""}`} aria-label="More tools" title="More tools: Note, Table, Frame, Link, Import" onClick={() => setPop(pop === "more" ? null : "more")}><Box size={18} /></button>
-            {pop === "more" && <div className="cv-pop cv-dd right" role="menu">{MORE.filter((m) => uploads || m.k !== "import").map((m) => <button key={m.k} role="menuitem" onClick={() => pick(m.k)}>{m.icon}{m.label}{m.key && <kbd>{m.key.toUpperCase()}</kbd>}</button>)}</div>}
+            <button className={`cv-tbtn${MORE.some((m) => m.k === tool) || pop === "more" ? " on" : ""}`} aria-label="More tools" title="More tools: Note, Table, Frame, Link, Doc, Import" onClick={() => setPop(pop === "more" ? null : "more")}><Box size={18} /></button>
+            {pop === "more" && <div className="cv-pop cv-dd right" role="menu">{MORE.filter((m) => (uploads || m.k !== "import") && (docTools || m.k !== "doc")).map((m) => <button key={m.k} role="menuitem" onClick={() => pick(m.k)}>{m.icon}{m.label}{m.key && <kbd>{m.key.toUpperCase()}</kbd>}</button>)}</div>}
           </span></>}
         </nav>
         {hint && <p className="cv-hintline">{hint}</p>}
       </div>}
 
       {/* The style panel, on the left */}
+      {editingDoc && docEd && <div className="cv-ui cv-panel cv-docpanel" aria-label="Format" onPointerDown={(e) => e.stopPropagation()}>
+        <div className="cv-docpanel-h"><FileText size={15} /><b>{docs[one!.docId ?? ""]?.title ?? "Doc"}</b><button className="cv-tbtn" aria-label="Done editing" title="Done (Esc)" onClick={() => setEditing(null)}><Check size={16} /></button></div>
+        <BuilderCtx.Provider value={docCtx(docEd.doc)}><FormatPanel editor={docEd.editor} accent={docEd.doc.style.accent} onSaveClause={(s) => void saveDocClause(s)} /></BuilderCtx.Provider>
+      </div>}
+      {editingDoc && docEd && docMenu && <div className="cv-ui"><BuilderCtx.Provider value={docCtx(docEd.doc)}><QuickMenu editor={docEd.editor} at={docMenu} accent={docEd.doc.style.accent} onClose={() => { setDocMenu(null); if (!docEd.editor.isDestroyed) docEd.editor.view.focus(); }} onMore={() => setDocMenu(null)} onSaveClause={(s) => void saveDocClause(s)} /></BuilderCtx.Provider></div>}
       {showPanel && <StylePanel items={panelFor} st={st} onStyle={restyle} onLayer={selected.length ? layer : undefined} table={tool === "table" ? { rows: st.rows, cols: st.cols, set: (rows, cols) => setSt((s) => ({ ...s, rows, cols })) } : undefined} />}
 
-      {phone && <nav className="cv-ui cv-phonebar" aria-label="Tools">
-        {MAIN.filter((t) => t.phone && (canEdit || t.k === "select" || t.k === "pan")).filter((t) => uploads || t.k !== "image").map((t) => <button key={t.k} className={tool === t.k ? "on" : ""} onClick={() => pick(t.k)}>{t.icon}<span>{t.k === "image" ? "Photo" : t.label}</span></button>)}
-        {canEdit && <button className={pop === "tools" ? "on" : ""} onClick={() => setPop(pop === "tools" ? null : "tools")}><MoreHorizontal size={18} /><span>Tools</span></button>}
+      {phone && editing && <button className="cv-ui cv-done" onPointerDown={(e) => e.preventDefault()} onClick={() => { (document.activeElement as HTMLElement | null)?.blur(); setEditing(null); }}>Done</button>}
+      {phone && !editing && <nav className="cv-ui cv-phonebar" aria-label="Tools">
+        {MAIN.filter((t) => t.phone && (canEdit || t.k === "select" || t.k === "pan")).filter((t) => uploads || t.k !== "image").map((t) => <button key={t.k} className={tool === t.k ? "on" : ""} onClick={() => { setPop(null); pick(t.k); }}>{t.icon}<span>{t.k === "image" ? "Photo" : t.label}</span></button>)}
+        {canEdit && <button className={pop === "tools" || sheetTool ? "on" : ""} onClick={() => setPop(pop === "tools" ? null : "tools")}>{sheetTool ? sheetTool.icon : <MoreHorizontal size={18} />}<span>{sheetTool ? sheetTool.label : "Tools"}</span></button>}
+        {stylable && <button className={pop === "style" ? "on" : ""} onClick={() => setPop(pop === "style" ? null : "style")}><Palette size={18} /><span>Style</span></button>}
       </nav>}
-      {pop === "tools" && phone && <div className="cv-ui cv-sheet" role="dialog" aria-label="Tools">
-        <span className="wp-field-label">On iPad and desktop</span>
-        <div className="cv-sheetgrid off">{[...MAIN.filter((t) => !t.phone), ...MORE].map((t) => <button key={t.k} disabled>{t.icon}<span>{t.label}</span></button>)}</div>
+      {pop === "tools" && phone && canEdit && <div className="cv-ui cv-sheet" role="dialog" aria-label="Tools">
+        <span className="wp-field-label">Tools</span>
+        <div className="cv-sheetgrid">{SHEET_TOOLS.map((t) => <button key={t.k} className={tool === t.k ? "on" : ""} onClick={() => { setPop(null); pick(t.k); }}>{t.icon}<span>{t.label}</span></button>)}</div>
+      </div>}
+      {pop === "style" && phone && stylable && <div className="cv-ui cv-sheet cv-stylesheet" role="dialog" aria-label="Style" onPointerDown={(e) => e.stopPropagation()}>
+        <StylePanel items={panelFor} st={st} onStyle={restyle} onLayer={selected.length ? layer : undefined} table={tool === "table" ? { rows: st.rows, cols: st.cols, set: (rows, cols) => setSt((s) => ({ ...s, rows, cols })) } : undefined} />
       </div>}
 
       {one && canEdit && one.type === "table" && editing === one.id && <TableBar it={one} onPatch={(p) => patch(one.id, p)} />}
-      {ctxMenu && canEdit && selected.length > 0 && (
-        <div className="cv-ui cv-pop cv-dd cv-ctx" style={{ left: Math.min(ctxMenu.x, window.innerWidth - 230), top: Math.min(ctxMenu.y, window.innerHeight - 300) }} role="menu">
-          <button role="menuitem" onClick={dup}>Duplicate<kbd>⌘D</kbd></button>
-          <button role="menuitem" onClick={lock}>{selected.every((i) => i.locked) ? "Unlock" : "Lock"}</button>
-          <button role="menuitem" onClick={() => layer("front")}>Bring to front</button>
-          <button role="menuitem" onClick={() => layer("back")}>Send to back</button>
-          {one?.fileId && files[one.fileId] && <a role="menuitem" href={files[one.fileId]!} target="_blank" rel="noreferrer" onClick={() => setCtxMenu(null)}>Download</a>}
-          <hr />
-          <button role="menuitem" className="danger" onClick={del}>Delete<kbd>⌫</kbd></button>
-        </div>
-      )}
+      {ctxMenu && canEdit && (() => {
+        // Nov 17 (Heston, 18:15): the doc builder's right-click menu: a count, styles in submenus, clipboard, layers, delete.
+        const n = selected.length;
+        const shapes = selected.some((x) => SHAPES.has(x.type));
+        const strokes = selected.some((x) => SHAPES.has(x.type) || LINES.has(x.type) || x.type === "pen");
+        const color = (one?.color ?? st.color).toUpperCase();
+        return (
+          <ContextMenu at={ctxMenu} onClose={() => setCtxMenu(null)} label="Canvas">
+            {n > 0 ? <>
+              <MenuLabel>{n} item{n === 1 ? "" : "s"}</MenuLabel>
+              {strokes && <MenuSub icon={<Palette size={15} />} label="Stroke">
+                {STROKES.map((c) => <MenuItem key={c} icon={<span className="wsb-dot" style={{ background: c }} />} checked={color === c} onSelect={() => restyle({ color: c })}>{STROKE_NAME[c]}</MenuItem>)}
+              </MenuSub>}
+              {shapes && <MenuSub icon={<PaintBucket size={15} />} label="Background">
+                {FILLS.map((c) => <MenuItem key={c ?? "none"} icon={<span className="wsb-dot" style={{ background: c ?? "transparent" }} />} checked={(one?.fill ?? null) === c} onSelect={() => restyle({ fill: c })}>{c ? FILL_NAME[c] : "None"}</MenuItem>)}
+              </MenuSub>}
+              {strokes && <MenuSub icon={<LineIcon size={15} />} label="Stroke style">
+                {(["solid", "dashed", "dotted"] as const).map((d) => <MenuItem key={d} checked={(one?.dash ?? "solid") === d} onSelect={() => restyle({ dash: d })}>{d[0].toUpperCase() + d.slice(1)}</MenuItem>)}
+              </MenuSub>}
+              <MenuSub icon={<Layers size={15} />} label="Arrange">
+                <MenuItem icon={<ArrowUpToLine size={15} />} kbd="⇧⌘]" onSelect={() => layer("front")}>Bring to front</MenuItem>
+                <MenuItem icon={<ArrowUp size={15} />} kbd="⌘]" onSelect={() => layer("forward")}>Bring forward</MenuItem>
+                <MenuItem icon={<ArrowDown size={15} />} kbd="⌘[" onSelect={() => layer("backward")}>Send backward</MenuItem>
+                <MenuItem icon={<ArrowDownToLine size={15} />} kbd="⇧⌘[" onSelect={() => layer("back")}>Send to back</MenuItem>
+              </MenuSub>
+              <MenuItem icon={selected.every((i) => i.locked) ? <LockOpen size={15} /> : <Lock size={15} />} onSelect={lock}>{selected.every((i) => i.locked) ? "Unlock" : "Lock"}</MenuItem>
+              <MenuSep />
+              <MenuItem icon={<Scissors size={15} />} kbd="⌘X" onSelect={cutSel}>Cut</MenuItem>
+              <MenuItem icon={<Copy size={15} />} kbd="⌘C" onSelect={copySel}>Copy</MenuItem>
+              <MenuItem icon={<ClipboardPaste size={15} />} kbd="⌘V" disabled={!boardClip.length} onSelect={pasteClip}>Paste</MenuItem>
+              <MenuItem icon={<CopyPlus size={15} />} kbd="⌘D" onSelect={dup}>Duplicate</MenuItem>
+              {one?.type === "doc" && docTools && docs[one.docId ?? ""]?.buildId && <>
+                {!phone && <MenuItem icon={<FileText size={15} />} onSelect={() => { setEditing(one.id); setCtxMenu(null); }}>Edit here</MenuItem>}
+                <MenuItem icon={<ExternalLink size={15} />} onSelect={() => { navigate(`/creative/docs/${one.docId}`); setCtxMenu(null); }}>Open in the builder</MenuItem>
+              </>}
+              {one?.fileId && files[one.fileId] && <MenuItem icon={<Download size={15} />} onSelect={() => { window.open(freshUrl(one.fileId!) ?? files[one.fileId!]!, "_blank", "noreferrer"); setCtxMenu(null); }}>Download</MenuItem>}
+              <MenuSep />
+              <MenuItem icon={<Trash2 size={15} />} danger kbd="⌫" onSelect={del}>Delete {n === 1 ? "item" : "items"}</MenuItem>
+            </> : <>
+              <MenuItem icon={<ClipboardPaste size={15} />} kbd="⌘V" disabled={!boardClip.length} onSelect={pasteClip}>Paste</MenuItem>
+              <MenuItem icon={<MousePointer2 size={15} />} kbd="⌘A" onSelect={() => { setSel(itemsRef.current.map((i) => i.id)); setCtxMenu(null); }}>Select all</MenuItem>
+              <MenuSep />
+              <MenuItem icon={<Maximize size={15} />} kbd="⇧1" onSelect={() => { fit(); setCtxMenu(null); }}>Zoom to fit</MenuItem>
+              <MenuItem icon={<Search size={15} />} onSelect={() => { zoomTo(1); setCtxMenu(null); }}>Zoom to 100%</MenuItem>
+            </>}
+          </ContextMenu>
+        );
+      })()}
 
       {/* Bottom left: zoom, then undo and redo */}
-      <div className="cv-ui cv-bl">
+      {!(phone && (editing || pop === "tools" || pop === "style")) && <div className="cv-ui cv-bl">
         <div className="cv-group">
           <button className="cv-tbtn" aria-label="Zoom out" onClick={() => zoomTo(zoom / 1.25)}><Minus size={16} /></button>
           <button className="cv-pct" onClick={() => zoomTo(1)} title="Reset to 100%">{Math.round(zoom * 100)}%</button>
@@ -763,12 +884,13 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
           <button className="cv-tbtn" aria-label="Undo" title="Undo (⌘Z)" disabled={!hist.current.past.length} onClick={undo}><Undo2 size={17} /></button>
           <button className="cv-tbtn" aria-label="Redo" title="Redo (⇧⌘Z)" disabled={!hist.current.future.length} onClick={redo}><Redo2 size={17} /></button>
         </div>}
-      </div>
+      </div>}
       {!phone && <button className="cv-ui cv-tbtn cv-help" aria-label="Keyboard shortcuts" onClick={() => setPop("help")}><CircleQuestionMark size={18} /></button>}
       </div>
 
       <input ref={fileInput} type="file" hidden multiple onChange={(e) => { if (e.target.files) void uploadMany(e.target.files); e.target.value = ""; }} />
       <input ref={imageInput} type="file" accept="image/*" hidden multiple onChange={(e) => { if (e.target.files) void uploadMany(e.target.files); e.target.value = ""; }} />
+      {docAsk && docTools && <DocPicker home={docTools.home} onClose={() => setDocAsk(null)} onPick={(docId) => { add({ type: "doc", docId, x: docAsk.x - 280, y: docAsk.y - 60, w: 560, h: 724 } as CanvasItem); setDocAsk(null); }} onError={show} />}
       {linkAsk && <LinkDialog onClose={() => setLinkAsk(null)} onAdd={(u) => { addLink(u, linkAsk); setLinkAsk(null); }} />}
       {importing && uploads && <ImportDialog onClose={() => setImporting(false)} onFiles={(fl, row) => uploadMany(fl, undefined, row)} onLink={(u) => { addLink(u); setImporting(false); }} />}
       {pop === "help" && <Shortcuts onClose={() => setPop(null)} />}
@@ -848,7 +970,7 @@ function StylePanel({ items, st, onStyle, onLayer, table }: {
 function Shortcuts({ onClose }: { onClose: () => void }) {
   const rows: Array<[string, string]> = [
     ["Hand (move the canvas)", "H, or hold Space"], ["Select", "V or 1"], ["Rectangle", "R or 2"], ["Circle", "O or 3"], ["Arrow", "A or 4"], ["Line", "L or 5"], ["Draw", "P or 6"], ["Text", "T or 7"], ["Image", "8"], ["Eraser", "E or 9"],
-    ["Note", "N"], ["Frame", "F"], ["Keep the tool picked", "Q"], ["Zoom", "⌘ or Ctrl + scroll"], ["Zoom to fit", "⇧1"], ["Undo / redo", "⌘Z / ⇧⌘Z"], ["Duplicate", "⌘D"], ["Select all", "⌘A"], ["Delete", "Delete"], ["Perfect square or circle, snap angles", "Hold Shift"],
+    ["Note", "N"], ["Frame", "F"], ["Keep the tool picked", "Q"], ["Zoom", "⌘ or Ctrl + scroll"], ["Zoom to fit", "⇧1"], ["Undo / redo", "⌘Z / ⇧⌘Z"], ["Cut / copy / paste", "⌘X / ⌘C / ⌘V"], ["Duplicate", "⌘D"], ["Bring forward / to front", "⌘] / ⇧⌘]"], ["Send backward / to back", "⌘[ / ⇧⌘["], ["Select all", "⌘A"], ["Delete", "Delete"], ["Perfect square or circle, snap angles", "Hold Shift"],
   ];
   return (
     <Modal onClose={onClose} label="Keyboard shortcuts" width={520}>
@@ -892,7 +1014,7 @@ function shapePaths(it: CanvasItem): Array<{ d: string; stroke: string; fill: st
   return drawables.flatMap((dr) => gen.toPaths(dr).map((p) => ({ d: p.d, stroke: p.stroke, fill: p.fill ?? "none", sw: p.strokeWidth })));
 }
 
-const ItemView = memo(function ItemView({ it, url, editing, canEdit, onPatch, onDone }: { it: CanvasItem; url: string | null; editing: boolean; canEdit: boolean; onPatch: (p: Partial<CanvasItem>) => void; onDone: () => void }) {
+const ItemView = memo(function ItemView({ it, url, freshUrl, editing, canEdit, onPatch, onDone }: { it: CanvasItem; url: string | null; freshUrl?: (id: string) => string | null; editing: boolean; canEdit: boolean; onPatch: (p: Partial<CanvasItem>) => void; onDone: () => void }) {
   const base: React.CSSProperties = { left: it.x, top: it.y, width: it.w, height: it.h, zIndex: it.z, ...(it.opacity !== undefined && it.opacity < 100 ? { opacity: it.opacity / 100 } : {}) };
   const textEdit = (cls: string, style?: React.CSSProperties) => editing && canEdit
     ? <textarea className={`cv-edit ${cls}`} style={style} autoFocus defaultValue={it.text ?? ""} onPointerDown={(e) => e.stopPropagation()} onBlur={(e) => { if (e.target.value !== (it.text ?? "")) onPatch({ text: e.target.value }); onDone(); }} onKeyDown={(e) => { if (e.key === "Escape") (e.target as HTMLTextAreaElement).blur(); }} />
@@ -917,7 +1039,7 @@ const ItemView = memo(function ItemView({ it, url, editing, canEdit, onPatch, on
     case "text": return <div data-id={it.id} className="cv-item cv-text" style={{ ...base, color: it.color ?? "#D3D3D3", fontSize: TEXT_PX[it.size ?? "M"], fontWeight: it.weight === "bold" ? 700 : 400 }}>{textEdit("cv-texttxt")}</div>;
     case "frame": return <div data-id={it.id} className="cv-item cv-frame" style={base}><div className="cv-frametitle">{textEdit("cv-frametxt")}</div></div>;
     case "pen": return <svg data-id={it.id} className="cv-item cv-pen" style={base} width={it.w} height={it.h}><path d={smooth(it.points ?? [])} fill="none" stroke={it.color ?? "#D3D3D3"} strokeWidth={it.stroke ?? 3} strokeLinecap="round" strokeLinejoin="round" /><polyline className="hit" points={pairs(it.points ?? [])} fill="none" stroke="transparent" strokeWidth={Math.max(16, (it.stroke ?? 3) + 12)} /></svg>;
-    case "image": return <div data-id={it.id} className="cv-item cv-image" style={base}>{url ? <img src={url} alt={it.name ?? ""} draggable={false} /> : <span className="cv-ph">Photo</span>}</div>;
+    case "image": return <div data-id={it.id} className="cv-item cv-image" style={base}>{url ? <img src={url} alt={it.name ?? ""} draggable={false} onError={(e) => { const f = it.fileId && freshUrl ? freshUrl(it.fileId) : null; if (f && e.currentTarget.src !== f) e.currentTarget.src = f; }} /> : <span className="cv-ph">Photo</span>}</div>;
     case "pdf": return <div data-id={it.id} className="cv-item cv-pdf" style={base}><PdfView url={url} page={it.page ?? 1} width={it.w} onPage={(p) => onPatch({ page: p })} name={it.name ?? "PDF"} /></div>;
     case "file": return <div data-id={it.id} className="cv-item cv-file" style={base}><Icon name="document" size={28} /><span className="t"><b>{it.name}</b><span className="secondary">{(it.name?.split(".").pop() ?? "File").toUpperCase()} · {mb(it.bytes ?? 0)}</span></span>{url && <a className="btn sm" href={url} target="_blank" rel="noreferrer" onPointerDown={(e) => e.stopPropagation()}><Download size={14} /> Download</a>}</div>;
     case "link": return <div data-id={it.id} className="cv-item cv-link" style={base}><span className="fav"><Icon name="globe" size={22} /></span><span className="t">{editing && canEdit ? textEdit("cv-linktitle") : <b>{it.text || it.site}</b>}<a className="secondary" href={it.url} target="_blank" rel="noreferrer noopener" onPointerDown={(e) => e.stopPropagation()}>{it.site}</a></span></div>;
@@ -963,6 +1085,58 @@ function TableBar({ it, onPatch }: { it: CanvasItem; onPatch: (p: Partial<Canvas
       <button onClick={() => { const { c } = at(); set(rows.map((x) => [...x.slice(0, c + 1), "", ...x.slice(c + 1)])); }}>Column right</button>
       <button disabled={rows[0].length < 2} onClick={() => { const { c } = at(); set(rows.map((x) => x.filter((_, i) => i !== c))); }}>Delete column</button>
     </div>
+  );
+}
+
+// ---------- docs on the board (Nov 17) ----------
+
+/** What the builder's Format panel and menu read: the doc being edited. */
+const docCtx = (doc: BuildDoc) => ({ doc, values: fieldValues(doc.fields, doc.page), px: (pt: number) => pt, onDetails: () => {}, onSaveClause: () => {} });
+
+/** A doc on the board: its page to read, or, while it's being edited, the builder's editor. */
+const DocItem = memo(function DocItem({ it, view, editing, onEditor, onMenu, onError }: {
+  it: CanvasItem; view: DocView | undefined; editing: boolean; onEditor: (e: Editor | null, d: BuildDoc | null) => void; onMenu: (at: { x: number; y: number }) => void; onError: (m: string) => void;
+}) {
+  const base: React.CSSProperties = { left: it.x, top: it.y, width: it.w, height: it.h, zIndex: it.z, ...(it.opacity !== undefined && it.opacity < 100 ? { opacity: it.opacity / 100 } : {}) };
+  return (
+    <div data-id={it.id} className={`cv-item cv-doc${editing ? " on" : ""}`} style={base}>
+      <div className="cv-doctag"><FileText size={13} />{view ? <><b>{view.title}</b><span>{view.kindName}</span></> : <b>Doc</b>}</div>
+      <div className={`cv-docbody${editing ? " cv-scroll" : ""}`}>
+        {!view ? <div className="cv-docgone">This doc isn't here any more.</div>
+          : editing && view.buildId ? <DocLive buildId={view.buildId} width={it.w} onEditor={onEditor} onMenu={onMenu} onError={onError} />
+          : <DocCard view={view} width={it.w} />}
+      </div>
+    </div>
+  );
+});
+
+/** Add a doc: a new one of a kind (homed with the board), or one already made. */
+function DocPicker({ home, onClose, onPick, onError }: { home: { type: "client" | "project" | "shoot" | "lead"; id: string } | null; onClose: () => void; onPick: (docId: string) => void; onError: (m: string) => void }) {
+  const rows = useQuery(api.creative.docs, {});
+  const make = useMutation(api.creative.newDoc);
+  const [busy, setBusy] = useState(false);
+  const [q, setQ] = useState("");
+  const KINDS = [["treatment", "Treatment"], ["script", "Two-column script"], ["interview", "Interview questions"], ["brief", "Creative brief"], ["blank", "Blank"]] as const;
+  const create = async (kind: (typeof KINDS)[number][0]) => {
+    setBusy(true);
+    try { const r = await make({ kind, home }); onPick(r.docId); } catch (e) { onError(errLine(e)); setBusy(false); }
+  };
+  const shown = (rows ?? []).filter((d) => !q.trim() || d.title.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 30);
+  return (
+    <Modal onClose={onClose} label="Add a doc" width={520}>
+      <div className="crm-dialog cv-docpick">
+        <DialogHeader eyebrow="Doc" title="Add a doc to the board" body="It's the doc itself, not a copy: edits here show in Creative planning › Docs too." onClose={onClose} />
+        <div className="cv-dp-label">New</div>
+        <div className="cv-dp-kinds">{KINDS.map(([k, n]) => <button key={k} type="button" className="cv-dp-kind" disabled={busy} onClick={() => void create(k)}><FileText size={16} />{n}</button>)}</div>
+        <div className="cv-dp-label">Or one you've made</div>
+        <TextField label="Search docs" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by title" />
+        <div className="cv-dp-list">
+          {rows === undefined ? <SkeletonRows n={3} /> : shown.length === 0 ? <p className="secondary">{rows.length ? "No docs match." : "No creative docs yet."}</p>
+            : shown.map((d) => <button key={d._id} type="button" className="cv-dp-row" disabled={busy} onClick={() => onPick(d._id)}><b>{d.title}</b><span className="secondary">{d.kindName}{d.home ? ` · ${d.home.name}` : ""}</span></button>)}
+        </div>
+        <div className="dfoot"><button type="button" className="btn ghost" onClick={onClose}>Cancel</button></div>
+      </div>
+    </Modal>
   );
 }
 

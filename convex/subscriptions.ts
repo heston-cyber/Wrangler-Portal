@@ -11,6 +11,7 @@
 // "subscription"), so receipts (email 11, D66) and the invoice page work as for any invoice. The subscription's own
 // state is read back from Stripe after each of its events (never trusting an old payload).
 import { viewerOf, requireAll } from "./lib/access";
+import { sessionBlocked } from "./lib/sessionLock";
 import { action } from "./_generated/server";
 import { internalAction, internalMutation, internalQuery, query, focusBusiness } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
@@ -324,6 +325,7 @@ export const page = query({
 
 async function signedInEmail(ctx: QueryCtx | MutationCtx) {
   const userId = await getAuthUserId(ctx);
+  if (userId && (await sessionBlocked(ctx))) return null; // second review B
   const u = userId ? await ctx.db.get(userId) : null;
   if (u?.role === "guest") return null; // Phase 5b step 4: a call-sheet guest sees no billing (D127)
   return u?.email ? String(u.email).toLowerCase() : null;

@@ -6,7 +6,8 @@
 //   1. The export holds every record the business owns, plus links to the files the portal keeps and Dropbox paths.
 //      Left out: connector keys, Stripe / Dropbox / Google tokens, passwords and sign-in data, and the secret part of
 //      every link (share, pay, signing, quote, proposal, briefing and call links), so the zip opens nothing by itself.
-//      W-9s: the link to the file (the portal never stores the tax ID number written out).
+//      W-9s: not in the export (Phase 6 sweep H1, Heston Nov 17: "go with your suggestions"): a zip that's forwarded or
+//      left in Downloads mustn't open tax forms. vendors.csv says when each was uploaded; open them from the vendor page.
 //   2. On day 60: everyone is signed out (their memberships go), then the records and the files the portal itself keeps
 //      are deleted, and the business's videos are removed from Bunny (playback copies; the originals are in Dropbox).
 //      Dropbox is never touched. Stripe stays the business's own; the portal's connection goes with the business.
@@ -49,7 +50,7 @@ export const SECRET_FIELDS = new Set(["token", "linkToken", "payToken", "passcod
 export const SECRET_PATHS: Record<string, string[]> = { calls: ["code"], emailPrefs: ["key"], fileUploads: ["sessionId"], wsDocuments: ["invoice.url"],
   // Second 5e review (W-9 check, Nov 10): a vendor's Stripe recipient and bank method, and a payout's request and
   // receipt link, stay out of the export (the vendor page shows only that direct deposit is set up).
-  vendors: ["payout.recipientId", "payout.payoutMethodId"],
+  vendors: ["payout.recipientId", "payout.payoutMethodId", "w9.fileId"], // Phase 6 review: a W-9's file id isn't in the export
   vendorInvoices: ["payout.receiptUrl", "payout.request.recipient", "payout.request.payoutMethod", "payout.request.financialAccount", "payout.request.key"] };
 /** Deleted last: what other records point at (the business's own records go first, then these). */
 const LAST = ["wsDocuments", "projects", "clients", "vendors"];
@@ -299,6 +300,9 @@ export const facts = internalQuery({
 
 type Ctx = { runQuery: (ref: any, args: any) => Promise<any> };
 
+/** Phase 6 sweep H1: a vendor's W-9 (the only tax form the portal keeps) never gets a link in the export. */
+export const isW9 = (table: string, field: string) => table === "vendors" && /^w9(\.|$)/.test(field);
+
 /** The zip: README, a JSON file of records per kind, CSVs of the main lists, and files.csv with links. */
 async function makeZip(ctx: Ctx, name: string, progress?: () => Promise<unknown>) {
   const files: Record<string, Uint8Array> = {};
@@ -314,7 +318,7 @@ async function makeZip(ctx: Ctx, name: string, progress?: () => Promise<unknown>
     let cursor: string | null = null;
     for (;;) {
       const r: { docs: unknown[]; files: typeof links; secrets: string[]; cursor: string; done: boolean } = await ctx.runQuery(internal.yourData.exportPage, { table, cursor });
-      rows.push(...r.docs); links.push(...r.files);
+      rows.push(...r.docs); links.push(...r.files.filter((f) => !isW9(f.table, f.field))); // Phase 6 H1: no W-9 links
       for (const x of r.secrets) secrets.add(x);
       if (r.done) break;
       cursor = r.cursor;
@@ -350,12 +354,14 @@ async function makeZip(ctx: Ctx, name: string, progress?: () => Promise<unknown>
   put("clients.csv", csv([["Client", "Email", "Created"], ...(all.clients ?? []).map((c) => [c.name, c.email ?? "", c.createdAt ? new Date(c.createdAt as number).toISOString().slice(0, 10) : ""])]))
   put("projects.csv", csv([["Job number", "Project", "Client", "Stage"], ...(all.projects ?? []).map((p) => [p.jobNumber ?? "", p.name, nameOf("clients", p.clientId), p.stage ?? ""])]))
   put("invoices.csv", csv([["Number", "Title", "Client", "Status", "Due", "Total (USD)", "Paid (USD)", "Refunded (USD)"], ...(all.invoices ?? []).map((i) => [i.number ?? "", i.title, nameOf("clients", i.clientId), i.status, i.dueDate, money(i.totalCents), money(i.amountPaidCents), money(i.refundedCents ?? 0)])]))
-  put("vendors.csv", csv([["Vendor", "Email", "Roles", "W-9 on file"], ...(all.vendors ?? []).map((x) => [x.name, x.email, Array.isArray(x.roles) ? x.roles.join("; ") : "", x.w9 ? "Yes" : "No"])]))
+  const w9On = (x: Record<string, unknown>) => { const w = x.w9 as { uploadedAt?: number } | undefined; return w ? `Yes, uploaded ${typeof w.uploadedAt === "number" ? new Date(w.uploadedAt).toISOString().slice(0, 10) : ""} (open it from the vendor's page)` : "No"; };
+  put("vendors.csv", csv([["Vendor", "Email", "Roles", "W-9 on file"], ...(all.vendors ?? []).map((x) => [x.name, x.email, Array.isArray(x.roles) ? x.roles.join("; ") : "", w9On(x)])]))
   const made = new Date().toISOString();
   put("README.txt", [
     `${name}: everything in Wrangler Portal`, `Made ${made}`, "",
     "records/  every record, one JSON file per kind (ids link records to each other)",
-    "files.csv  links to the files the portal keeps (signed PDFs, uploads, W-9s), and Dropbox paths of originals",
+    "files.csv  links to the files the portal keeps (signed PDFs, uploads), and Dropbox paths of originals",
+    "W-9s are not in this export (they're tax forms): vendors.csv says which vendors have one; open it from the vendor's page.",
     "clients.csv, projects.csv, invoices.csv, vendors.csv  the main lists, for a spreadsheet", "",
     "Not included: connector keys, Stripe, Dropbox and Google tokens, passwords and sign-in data, and the secret part of",
     "every link (shares, invoices, signing, quotes, proposals, briefings, calls). Your files themselves stay in Dropbox.", "",
@@ -521,7 +527,7 @@ export const deleteStep = internalMutation({
         if (row.businessId !== biz) continue; // the row rules already keep other businesses out; never a legacy row
         // Option B (Heston, Nov 6): the files the portal keeps stay 30 days with the safety-net export, then go with it.
         // 5e review (Nov 6): only files this business owns; a row pointing at another business's file never deletes it.
-        for (const f of filesOf(table, row)) if (await ownsFile(ctx, f.id, biz)) await ctx.db.insert("deletionFiles", { deletionId, fileId: f.id, purgeAt: d.purgeAt ?? now + KEEP_FINAL_DAYS * DAY });
+        for (const f of filesOf(table, row)) if (await ownsFile(ctx, f.id, biz, { w9: true })) await ctx.db.insert("deletionFiles", { deletionId, fileId: f.id, purgeAt: d.purgeAt ?? now + KEEP_FINAL_DAYS * DAY });
         if (table === "versions") {
           const ver = row as unknown as Doc<"versions">;
           if (ver.bunnyGuid) guids.add(ver.bunnyGuid);
@@ -547,7 +553,7 @@ export const deleteStep = internalMutation({
         if (await stillBelongs(ctx as unknown as MutationCtx, u)) continue;
         await endSessions(ctx as unknown as MutationCtx, u);
         for (const a of await ctx.db.query("authAccounts").withIndex("userIdAndProvider", (q) => q.eq("userId", u)).collect()) await ctx.db.delete(a._id);
-        for (const t of ["sessionDevices", "emailChanges", "alertPrefs", "pushSubs"] as const) for (const row of await ctx.db.query(t).withIndex("by_user", (q) => q.eq("userId", u)).collect()) await ctx.db.delete(row._id);
+        for (const t of ["sessionDevices", "emailChanges", "alertPrefs", "pushSubs", "handBack", "sessionLocks"] as const) for (const row of await ctx.db.query(t).withIndex("by_user", (q) => q.eq("userId", u)).collect()) await ctx.db.delete(row._id);
         for (const row of await ctx.db.query("userPrefs").withIndex("by_user_key", (q) => q.eq("userId", u)).collect()) await ctx.db.delete(row._id);
         await ctx.db.delete(u);
       }
@@ -560,7 +566,7 @@ export const deleteStep = internalMutation({
       }
       const b = await ctx.db.get(d.businessId);
       if (b) {
-        for (const f of filesOf("businesses", b)) if (await ownsFile(ctx, f.id, d.businessId)) await ctx.db.insert("deletionFiles", { deletionId, fileId: f.id, purgeAt: d.purgeAt ?? now + KEEP_FINAL_DAYS * DAY }); // its logos
+        for (const f of filesOf("businesses", b)) if (await ownsFile(ctx, f.id, d.businessId, { w9: true })) await ctx.db.insert("deletionFiles", { deletionId, fileId: f.id, purgeAt: d.purgeAt ?? now + KEEP_FINAL_DAYS * DAY }); // its logos
         await ctx.db.delete(d.businessId);
       }
       await ctx.db.patch(deletionId, { status: "done", step: "done", doneAt: now, heartbeat: now, users: [], emails: [] });

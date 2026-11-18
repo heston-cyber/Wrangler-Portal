@@ -20,7 +20,8 @@ describe("D170 hold menus", () => {
   it("h.3 the touch hold waits 480 ms and gives up if the finger moves", () => {
     expect(hold).toContain("const HOLD_MS = 480");
     expect(hold).toContain("const SLOP = 8");
-    expect(css).toMatch(/\[data-hold\] \{ -webkit-touch-callout: none/);
+    expect(css).toMatch(/\[data-hold\], \[data-hold\] a, \[data-hold\] img, \.wp-tabbar a \{ -webkit-touch-callout: none/);
+    expect(css).toMatch(/@media \(hover: none\) \{ a, img \{ -webkit-touch-callout: none/); // Nov 17: no browser link menu anywhere on a phone
   });
   it("h.4 every delete in a hold menu asks first (or opens its own dialog)", () => {
     for (const f of ["src/modules/vendors/Briefings.tsx", "src/modules/production/CallSheets.tsx", "src/modules/proposals/Proposals.tsx", "src/modules/payments/Quotes.tsx", "src/modules/vendors/Vendors.tsx"]) {

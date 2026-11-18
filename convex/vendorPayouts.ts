@@ -39,7 +39,7 @@ async function ownerBiz(ctx: Ctx) {
 }
 const vendorView = (x: Doc<"vendors">) => {
   const p = x.payout && x.payout.mode === payoutsMode() ? x.payout : null;
-  return p ? { state: p.ready ? "ready" : "started", last4: p.last4 ?? null, bankName: p.bankName ?? null } as const : { state: "none", last4: null, bankName: null } as const;
+  return p ? { state: p.ready ? "ready" : "started", last4: p.last4 ?? null, bankName: p.bankName ?? null, methodId: p.payoutMethodId ?? null } as const : { state: "none", last4: null, bankName: null, methodId: null } as const;
 };
 
 // ---------- the owner's view ----------
@@ -82,7 +82,7 @@ export const forInvoice = query({
     const vendor = await ctx.db.get(x.vendorId);
     return {
       on: await enabledFor(ctx, biz), mode: payoutsMode(),
-      vendor: vendor ? vendorView(vendor) : { state: "none" as const, last4: null, bankName: null },
+      vendor: vendor ? vendorView(vendor) : { state: "none" as const, last4: null, bankName: null, methodId: null },
       payout: x.payout ? { status: x.payout.status, expectedArrival: x.payout.expectedArrival ?? null, receiptUrl: x.payout.receiptUrl ?? null, reason: x.payout.reason ?? null, startedAt: x.payout.startedAt, stale: x.payout.status === "unknown" && Date.now() - x.payout.startedAt > 23 * 3_600_000 } : null,
     };
   },
@@ -115,8 +115,8 @@ type RunCtx = { runMutation: (f: any, a: any) => Promise<any> };
 
 /** Pay the invoice total to the vendor's bank. `last4` is the bank the owner saw in the dialog. */
 export const pay = action({
-  args: { invoiceId: v.id("vendorInvoices"), last4: v.optional(v.string()) },
-  handler: async (ctx, { invoiceId, last4 }): Promise<Ran> => {
+  args: { invoiceId: v.id("vendorInvoices"), last4: v.optional(v.string()), payoutMethodId: v.optional(v.string()) },
+  handler: async (ctx, { invoiceId, last4, payoutMethodId }): Promise<Ran> => {
     const c = await ctx.runMutation(internal.vendorPayouts.claim, { invoiceId });
     let req: Req;
     try {
@@ -126,7 +126,12 @@ export const pay = action({
         await ctx.runMutation(internal.vendorPayouts.saveRecipient, { vendorId: c.vendorId, ready: false, needsInfo: st.needsInfo, payoutMethodId: st.payoutMethodId ?? undefined, last4: st.last4 ?? undefined, bankName: st.bankName ?? undefined });
         throw new ConvexError(`${c.first}'s direct deposit isn't ready at Stripe. Ask them to finish it in their portal's Settings.`);
       }
-      if (last4 !== undefined && st.last4 !== last4) {
+      // Phase 6 sweep M3 (and its review): the bank must be the very payout method the owner saw when the dialog opened
+      // (or, with none sent, the one last saved), and its last four digits too; with no bank seen yet, or a bank changed
+      // at Stripe since, the bank Stripe has now is shown and the owner presses again.
+      const method = payoutMethodId ?? c.savedMethod;
+      const four = last4 ?? c.savedLast4;
+      if (!method || st.payoutMethodId !== method || st.last4 !== four) {
         await ctx.runMutation(internal.vendorPayouts.saveRecipient, { vendorId: c.vendorId, ready: true, payoutMethodId: st.payoutMethodId, last4: st.last4 ?? undefined, bankName: st.bankName ?? undefined });
         throw new ConvexError(`${c.first}'s bank changed to ${st.bankName ? `${st.bankName} ` : ""}••••${st.last4 ?? "?"}. Check it, then press Pay again.`);
       }
@@ -197,9 +202,8 @@ export const claim = internalMutation({
     const now = Date.now();
     const key = `wp-vinv-${invoiceId}-${attempt}`;
     await ctx.db.patch(invoiceId, { payout: { status: "starting", attempt, mode: payoutsMode() ?? "test", startedAt: now, by: me.name ?? me.email }, updatedAt: now });
-    // 5e review (Heston, Nov 6, answer d): whoever presses Pay (a Bookkeeper may), it's in Settings › Activity.
-    await audit(ctx, { kind: "paid", text: `started a direct deposit of ${usd(x.totalCents)} to ${vendor.name} (${x.number})`, where: "Vendors › Payments", link: `/vendors/payments/${invoiceId}` });
-    return { vendorId: vendor._id, recipientId: vendor.payout.recipientId, cents: x.totalCents, number: x.number, attempt, key, first: vendor.name.split(" ")[0] };
+    // (Activity records the start once the request is saved: saveRequest. A press refused before then isn't a payment.)
+    return { vendorId: vendor._id, recipientId: vendor.payout.recipientId, savedLast4: vendor.payout.last4 ?? null, savedMethod: vendor.payout.payoutMethodId ?? null, cents: x.totalCents, number: x.number, attempt, key, first: vendor.name.split(" ")[0] };
   },
 });
 const isAttempt = (x: Doc<"vendorInvoices"> | null, attempt: number) => !!x?.payout && x.payout.attempt === attempt;
@@ -210,6 +214,9 @@ export const saveRequest = internalMutation({
     const x = await ctx.db.get(invoiceId);
     if (!isAttempt(x, attempt) || x!.payout!.status !== "starting") throw new ConvexError("This payment changed while it was starting. Reload the page.");
     await ctx.db.patch(invoiceId, { payout: { ...x!.payout!, request }, updatedAt: Date.now() });
+    // 5e review (Heston, Nov 6, answer d): whoever presses Pay (a Bookkeeper may), it's in Settings › Activity.
+    const vendor = await ctx.db.get(x!.vendorId);
+    await audit(ctx, { kind: "paid", text: `started a direct deposit of ${usd(x!.totalCents)} to ${vendor?.name ?? "a vendor"} (${x!.number})`, where: "Vendors › Payments", link: `/vendors/payments/${invoiceId}` });
   },
 });
 export const refuse = internalMutation({
@@ -386,7 +393,8 @@ export const mine = query({
   args: { businessId: v.id("businesses") },
   handler: async (ctx, { businessId }) => {
     const { biz, vendor } = await asVendor(ctx, businessId);
-    return { on: await enabledFor(ctx, biz), ...vendorView(vendor) };
+    const { methodId: _m, ...view } = vendorView(vendor); // the vendor's own page doesn't need Stripe's id
+    return { on: await enabledFor(ctx, biz), ...view };
   },
 });
 
@@ -400,7 +408,8 @@ export const setupLink = action({
       let recipientId = v0.recipientId;
       if (!recipientId) {
         const acct = await payoutsCall("POST", "core/accounts", {
-          idem: `wp-vendor-${v0.vendorId}-${payoutsMode()}`,
+          // Phase 6 sweep M3: a new vendor email starts a new recipient (the old one's bank isn't carried over)
+          idem: `wp-vendor-${v0.vendorId}-${v0.email}-${payoutsMode()}`,
           body: {
             contact_email: v0.email, display_name: v0.name.slice(0, 100),
             identity: { country: "us", entity_type: as ?? "individual" },

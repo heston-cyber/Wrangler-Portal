@@ -150,7 +150,7 @@ describe("D160 · CC on contracts", () => {
     const token = await tokenOf(x);
     const p = await x.t.query(api.signCopies.page, { token });
     expect(p).toMatchObject({ state: "sent", title: "Service Agreement", label: "WS-00001", signers: [{ name: "Jordan Sample", signedAt: null }] });
-    expect((p as { fileUrl: string }).fileUrl).toMatch(/^http/);
+    expect((p as { fileUrl: string }).fileUrl).toMatch(/\/fl\/[A-Za-z0-9_]+\/\d+\/[A-Za-z0-9_-]{32}\//); // Phase 6 M1: a signed 10-20 minute link
     await x.t.mutation(api.signCopies.opened, { token });
     expect((await x.get()).copies[0].openedAt).not.toBeNull();
     for (const op of ["open", "code", "verify", "consent", "sign"]) {

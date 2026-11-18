@@ -6,6 +6,9 @@
 //   T-CR.3 canvas: a mood board starts with its frames; saves carry their revision (an older one is refused); a save
 //          can't point at another board's files; uploads refuse programs and big files; sharing per person (Can view
 //          can't save, Can edit can) and by a view-only link; Stop sharing ends every link
+//   T-CR.4 docs on the board (Nov 17): a doc item is the creative doc itself, read live; another business's doc is
+//          dropped; someone with Can edit can move a doc already there but can't add one; a shared board's doc has no
+//          builder id, no team notes and no field values
 import { describe, expect, test } from "vitest";
 import { anyApi } from "convex/server";
 import type { Id } from "../convex/_generated/dataModel";
@@ -154,13 +157,53 @@ describe("creative planning", () => {
     const onProject = await w.heston.mutation(api.canvas.create, { name: "Launch board", kind: "canvas", home: { type: "project", id: w.p } });
     const maya = await w.heston.mutation(api.canvas.addPerson, { canvasId: onProject, email: "maya@harbor.example", role: "edit" });
     const lk = await w.heston.mutation(api.canvas.setLink, { canvasId: onProject, on: true });
+    // Heston (Nov 17, Q5): crew keep their board links; anyone else (and a vendor who is also the old client's) loses it.
+    await w.t.run((ctx) => ctx.db.insert("vendors", { businessId: w.A, name: "Ana Cruz", email: "Ana@Crew.example", roles: ["Shooter"], rates: [], createdAt: 0, updatedAt: 0 } as never));
+    await w.t.run((ctx) => ctx.db.insert("vendors", { businessId: w.A, name: "Maya (also crew)", email: "maya@harbor.example", roles: [], rates: [], createdAt: 0, updatedAt: 0 } as never));
+    const ana = await w.heston.mutation(api.canvas.addPerson, { canvasId: onProject, email: "ana@crew.example", role: "edit" });
+    const stranger = await w.heston.mutation(api.canvas.addPerson, { canvasId: onProject, email: "someone@else.example", role: "view" });
     const northline = await w.t.run((ctx) => ctx.db.insert("clients", { businessId: w.A, name: "Northline", createdAt: 0 }));
     await w.heston.mutation(api.homes.moveProject, { projectId: w.p, clientId: northline });
     expect(await w.t.query(api.canvas.shared, { token: maya.token })).toBeNull();
     expect(await w.t.query(api.canvas.shared, { token: lk.token })).toBeNull();
+    expect(await w.t.query(api.canvas.shared, { token: stranger.token })).toBeNull();
+    expect(await w.t.query(api.canvas.shared, { token: ana.token })).toMatchObject({ name: "Launch board", role: "edit" });
     // Another business's owner sees and changes nothing.
     expect(await w.boss.query(api.canvas.list, {})).toEqual([]);
     expect(await w.boss.query(api.canvas.get, { canvasId: id })).toBeNull();
     await expect(w.boss.mutation(api.canvas.save, { canvasId: id, items: [], rev: 99 })).rejects.toThrow();
+  });
+  test("T-CR.4 docs on the board: live, this business's only, shared read-only", async () => {
+    const w = await world();
+    const id = await w.heston.mutation(api.canvas.create, { name: "Board with docs", kind: "canvas" });
+    const mine = await w.heston.mutation(api.creative.newDoc, { kind: "treatment", title: "Launch treatment", home: { type: "project", id: w.p } });
+    const other = await w.heston.mutation(api.creative.newDoc, { kind: "brief", title: "Second doc" });
+    const theirs = await w.boss.mutation(api.creative.newDoc, { kind: "script", title: "Their script" });
+    // A team note inside the treatment, to check a shared board leaves it out.
+    await w.t.run(async (ctx) => {
+      const b = (await ctx.db.get(mine.buildId as Id<"wsBuilds">))!;
+      const page = b.blocks as { type: string; content: unknown[] };
+      await ctx.db.patch(b._id, { blocks: { ...page, content: [...page.content, { type: "section", attrs: { look: "note" }, content: [{ type: "paragraph", content: [{ type: "text", text: "Team only: budget is tight" }] }] }] } });
+    });
+    const doc = (docId: string, x = 0) => ({ id: `d-${docId.slice(-4)}-${x}`, type: "doc", docId, x, y: 0, w: 560, h: 724, z: 1 });
+    await w.heston.mutation(api.canvas.save, { canvasId: id, items: [doc(mine.docId), doc(theirs.docId), { id: "junk", type: "doc", x: 0, y: 0, w: 10, h: 10, z: 3 }], rev: 0 });
+    const g = await w.heston.query(api.canvas.get, { canvasId: id });
+    expect(g.items.map((i: { docId?: string }) => i.docId)).toEqual([mine.docId]); // another business's doc, and one with no doc, are dropped
+    expect(g.docs[mine.docId]).toMatchObject({ title: "Launch treatment", kindName: "Treatment", buildId: mine.buildId });
+    expect(JSON.stringify(g.docs[mine.docId].page)).toContain("Team only");
+    // Live: an edit to the doc shows on the board.
+    await w.t.run(async (ctx) => { await ctx.db.patch(mine.buildId as Id<"wsBuilds">, { title: "Launch treatment v2", updatedAt: Date.now() + 1000 }); });
+    expect((await w.heston.query(api.canvas.get, { canvasId: id })).docs[mine.docId].title).toBe("Launch treatment v2");
+    // Shared: Can edit moves the doc that's there, can't add another; the doc has no builder id, notes or field values.
+    const ed = await w.heston.mutation(api.canvas.addPerson, { canvasId: id, email: "crew@crew.example", role: "edit" });
+    const s = await w.t.query(api.canvas.shared, { token: ed.token });
+    expect(s.docs[mine.docId].buildId).toBeNull();
+    expect(JSON.stringify(s.docs[mine.docId].page)).not.toContain("Team only");
+    expect(s.docs[mine.docId].fields).toMatchObject({ client: { name: "", email: "" }, project: "", custom: [] });
+    await w.t.mutation(api.canvas.sharedSave, { token: ed.token, items: [{ ...doc(mine.docId), x: 300 }, doc(other.docId, 1)], rev: s.rev });
+    const after = await w.heston.query(api.canvas.get, { canvasId: id });
+    expect(after.items.map((i: { docId?: string; x: number }) => [i.docId, i.x])).toEqual([[mine.docId, 300]]);
+    // The other business sees nothing of the board or its docs.
+    expect(await w.boss.query(api.canvas.get, { canvasId: id })).toBeNull();
   });
 });

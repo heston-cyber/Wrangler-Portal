@@ -1,6 +1,7 @@
 // Wrangler Portal Phase 1 (Oct 29): the client's Documents. Everything sent to their email through Sign, in three
 // tabs: to sign, signed (with the signed copy), cancelled. The portal only lists and links: "Sign" opens today's
 // signing page with the same emailed code, consent and steps (rule 9). Nothing here signs anything.
+import { fileLink } from "./lib/fileLinks";
 import { v, ConvexError } from "convex/values";
 import { query } from "./lib/functions";
 import { requireSignedIn } from "./lib/access";
@@ -48,6 +49,6 @@ export const signedCopy = query({
     if (!d || d.status !== "completed" || !d.final) throw new ConvexError("Not allowed.");
     const mine = (await ctx.db.query("wsSignings").withIndex("by_document", (q) => q.eq("documentId", documentId)).collect()).some((s) => s.email === me.email && s.versionNumber === d.sentVersion);
     if (!mine && me.kind !== "owner") throw new ConvexError("Not allowed.");
-    return { url: await ctx.storage.getUrl(d.final.fileId), fileName: d.final.fileName };
+    return { url: await fileLink(d.final.fileId, d.final.fileName), fileName: d.final.fileName }; // Phase 6 M1
   },
 });

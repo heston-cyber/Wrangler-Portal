@@ -35,7 +35,7 @@ const Crumbs = ({ children }: { children?: React.ReactNode }) => (
 
 export default function ShotListsPage() {
   const all = useQuery(api.shotLists.all, {});
-  const [making, setMaking] = useState(false);
+  const [making, setMaking] = useState(() => new URLSearchParams(location.search).has("new")); // Nov 17: Production › Create
   // One row per project (its lists are its shoot days), in the order of its most recent change.
   const rows = useMemo(() => {
     const by = new Map<string, NonNullable<typeof all>>();

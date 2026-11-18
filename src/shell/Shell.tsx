@@ -8,16 +8,19 @@ import { Light } from "./Light";
 import { Children, createContext, Fragment, isValidElement, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { deskMotion, nextSlide, pulse, slideDir } from "../lib/motion";
 import { useQuery } from "convex/react";
+import { createPortal } from "react-dom";
 import { useSignOutAsk } from "./SignOut";
 import { sideWord, useSideSwitch } from "./SideSwitch";
 import { DEFAULT_TOOLS, TOOL_GROUPS, groupOf, toolsOf, type ToolKey, type Tools } from "../../convex/lib/tools";
 import { api } from "../../convex/_generated/api";
-import { linkProps, navigate, useLocation } from "../lib/router";
+import { cameBackByBrowser, linkProps, navigate, useLocation } from "../lib/router";
 import { useUploads } from "../lib/uploads";
 import { canOpen, usePerms } from "../lib/teamAccess";
 import { useBrand, type Brand } from "../lib/brand";
-import { Menu, MenuItem, MenuSep, Modal, Thumb } from "../ui/kit";
+import { Menu, MenuItem, MenuSep, Modal, Thumb, swallowNextClick } from "../ui/kit";
 import { Icon, type IconName } from "../ui/Icon";
+import { PIPELINE } from "./pipeline";
+import { hapticHold } from "../lib/haptic";
 import { Avatar, Badge, IconButton } from "../ui/wp";
 import { projectLabel } from "../lib/format";
 import wpLogo from "../assets/d1/wp-logo.png";
@@ -84,7 +87,7 @@ const OWNER_PRODUCTION: Sub[] = [
 // Heston (Nov 4, 21:01): each stage folds with an arrow, and its name opens the stage's own overview. Delivery is only
 // its "Coming soon" page for now, so it has no pages under it.
 // D151: the same for Docs (Proposals · Contracts) and People (Clients · Vendors): each name opens that tool's overview.
-export const STAGE_TO: Record<string, string> = { "Pre-pro": "/production/pre-pro", "Prin-pro": "/production/prin-pro", "Post-pro": "/production/post-pro", Delivery: "/production/delivery",
+export const STAGE_TO: Record<string, string> = { "Creative planning": "/creative", "Pre-pro": "/production/pre-pro", "Prin-pro": "/production/prin-pro", "Post-pro": "/production/post-pro", Delivery: "/delivery",
   Proposals: "/proposals/overview", Contracts: "/sign/overview", Clients: "/clients/overview", Vendors: "/vendors/overview", Payments: "/payments" };
 // D176 (Nov 15): every submenu item gets an icon, one per kind of thing (the same kind has the same icon wherever it appears).
 export const SUB_ICON: Record<string, IconName> = {
@@ -97,7 +100,7 @@ export const SUB_ICON: Record<string, IconName> = {
   "/payments/invoices": "invoice", "/payments/quotes": "quote", "/payments/subscriptions": "repeat", "/payments/plans": "layers", "/payments/reports": "chart",
   "/review": "register", "/projects/not-attached": "attach", "/creative": "overview", "/creative/locations": "map-pin", "/creative/docs": "document", "/creative/canvas": "creative", "/creative/kits": "layers", "/work": "user", "/work/all": "work", "/work/lists": "check-circle", "/work/templates": "template", "/delivery": "package", "/review/library": "video", "/production/post-pro": "overview", "/sign/overview": "overview", "/clients/overview": "overview",
 };
-export const STAGE_ICON: Record<string, IconName> = { "Pre-pro": "clipboard", "Prin-pro": "camera", "Post-pro": "scissors", Delivery: "package",
+export const STAGE_ICON: Record<string, IconName> = { "Creative planning": "creative", "Pre-pro": "clipboard", "Prin-pro": "camera", "Post-pro": "scissors", Delivery: "package",
   Proposals: "presentation", Contracts: "contract", Clients: "user", Vendors: "briefcase", Payments: "invoice" };
 export const subIcon = (to: string): IconName => SUB_ICON[to] ?? "folder"; // a shared project is a folder
 const groupsOf = (layer: Sub[]) => [...new Set(layer.map((s) => s.group).filter((g): g is string => !!g))];
@@ -135,32 +138,28 @@ const NEW_WORK: Sub[] = [
   { to: "/work/templates", label: "Templates", match: (p) => starts(p, "/work/templates") },
 ];
 const inWork = (p: string) => starts(p, "/work");
+// Nov 17 (Heston, approved 09:00): Production is the hub of the pipeline, in five stages: Creative planning, Pre-pro,
+// Prin-pro, Post-pro and Delivery. Each stage's name opens its overview and folds with its arrow (Nov 11). Every address
+// stays as it was.
 const NEW_PRODUCTION: Sub[] = [
   { to: "/production", label: "Overview", match: (p) => p === "/production" || p === "/production/" },
-  { to: "/production/shoots", label: "Shoots", match: (p) => starts(p, "/production/shoots") },
-  { to: "/production/call-sheets", label: "Call sheets", match: (p) => starts(p, "/production/call-sheets") },
-  { to: "/production/shot-lists", label: "Shot lists", match: (p) => starts(p, "/production/shot-lists") },
-  { to: "/production/gear", label: "Gear", match: (p) => starts(p, "/production/gear") },
-  { to: "/vendors", label: "Crew", match: (p) => starts(p, "/vendors") && !starts(p, "/vendors/overview", "/vendors/bookings", "/vendors/briefings", "/vendors/payments") },
-  { to: "/vendors/bookings", label: "Bookings", match: (p) => starts(p, "/vendors/bookings") },
-  { to: "/vendors/briefings", label: "Briefings", match: (p) => starts(p, "/vendors/briefings") },
+  { group: "Creative planning", to: "/creative/docs", label: "Docs", match: (p) => starts(p, "/creative/docs") },
+  { group: "Creative planning", to: "/creative/canvas", label: "Canvas and mood boards", match: (p) => starts(p, "/creative/canvas") },
+  { group: "Creative planning", to: "/creative/locations", label: "Locations", match: (p) => starts(p, "/creative/locations") },
+  { group: "Creative planning", to: "/creative/kits", label: "Brand kits", match: (p) => starts(p, "/creative/kits") },
+  { group: "Pre-pro", to: "/production/shot-lists", label: "Shot lists", match: (p) => starts(p, "/production/shot-lists") },
+  { group: "Pre-pro", to: "/production/call-sheets", label: "Call sheets", match: (p) => starts(p, "/production/call-sheets") },
+  { group: "Pre-pro", to: "/vendors", label: "Crew", match: (p) => starts(p, "/vendors") && !starts(p, "/vendors/overview", "/vendors/bookings", "/vendors/briefings", "/vendors/payments") },
+  { group: "Pre-pro", to: "/vendors/bookings", label: "Bookings", match: (p) => starts(p, "/vendors/bookings") },
+  { group: "Pre-pro", to: "/vendors/briefings", label: "Briefings", match: (p) => starts(p, "/vendors/briefings") },
+  { group: "Prin-pro", to: "/production/shoots", label: "Shoots", match: (p) => starts(p, "/production/shoots") },
+  { group: "Prin-pro", to: "/production/gear", label: "Gear", match: (p) => starts(p, "/production/gear") },
+  { group: "Post-pro", to: "/review/overview", label: "Review", match: (p) => starts(p, "/review", "/v") && !starts(p, "/review/library") },
+  { group: "Post-pro", to: "/review/library", label: "All cuts", match: (p) => starts(p, "/review/library") },
+  { group: "Post-pro", to: "/activity", label: "Activity", match: (p) => starts(p, "/activity") },
+  { group: "Delivery", to: "/delivery", label: "Delivery", match: (p) => starts(p, "/delivery", "/production/delivery"), only: true },
 ];
-const inNewProduction = (p: string) => (starts(p, "/production", "/vendors") && !starts(p, "/production/calendar", "/production/delivery", "/production/post-pro", "/vendors/payments"));
-const NEW_POST: Sub[] = [
-  { to: "/review/overview", label: "Review", match: (p) => starts(p, "/review", "/v") && !starts(p, "/review/library") },
-  { to: "/review/library", label: "All cuts", match: (p) => starts(p, "/review/library") },
-  { to: "/delivery", label: "Delivery", match: (p) => starts(p, "/delivery", "/production/delivery") },
-  { to: "/activity", label: "Activity", match: (p) => starts(p, "/activity") },
-];
-const NEW_CREATIVE: Sub[] = [
-  { to: "/creative", label: "Overview", match: (p) => p === "/creative" || p === "/creative/" },
-  { to: "/creative/docs", label: "Docs", match: (p) => starts(p, "/creative/docs") },
-  { to: "/creative/canvas", label: "Canvas and mood boards", match: (p) => starts(p, "/creative/canvas") },
-  { to: "/creative/locations", label: "Locations", match: (p) => starts(p, "/creative/locations") },
-  { to: "/creative/kits", label: "Brand kits", match: (p) => starts(p, "/creative/kits") },
-];
-const inCreative = (p: string) => starts(p, "/creative");
-const inPost = (p: string) => starts(p, "/review", "/v", "/delivery", "/production/delivery", "/production/post-pro", "/activity");
+const inNewProduction = (p: string) => (starts(p, "/production", "/vendors", "/creative", "/review", "/v", "/delivery", "/activity") && !starts(p, "/production/calendar", "/vendors/payments", "/vendors/overview"));
 const NEW_CLIENTS: Sub[] = [{ to: "/clients/overview", label: "Overview", match: (p) => starts(p, "/clients/overview") }, ...OWNER_CLIENTS];
 const moneyLayer = (payments: boolean): Sub[] => [
   ...OWNER_PROPOSALS.map((x) => ({ ...x, group: "Proposals" })),
@@ -180,9 +179,7 @@ export function ownerItems(payments = false, saved: Tools = DEFAULT_TOOLS, msgs 
     work: { to: "/work", label: "Work", icon: "work", match: () => false, tab: inWork, layer: NEW_WORK, layerHas: inWork, group: g("work") },
     calendar: { to: "/production/calendar", label: "Calendar", icon: "calendar", match: (p) => starts(p, "/production/calendar"), group: g("calendar") },
     projects: { to: "/projects", label: "Projects", icon: "folder", match: () => false, tab: inNewProjects, layer: NEW_PROJECTS, layerHas: inNewProjects, group: g("projects") },
-    creative: { to: "/creative", label: "Creative planning", icon: "creative", match: () => false, tab: inCreative, layer: NEW_CREATIVE, layerHas: inCreative, group: g("creative") },
     production: { to: "/production", label: "Production", icon: "camera", match: () => false, tab: inNewProduction, layer: NEW_PRODUCTION, layerHas: inNewProduction, group: g("production") },
-    post: { to: "/review/overview", label: "Post", icon: "scissors", match: () => false, tab: inPost, layer: NEW_POST, layerHas: inPost, group: g("post") },
     clients: { to: "/clients/overview", label: "Clients", icon: "building", match: () => false, tab: inClients, layer: NEW_CLIENTS, layerHas: inClients, group: g("clients") },
     money: { to: payments ? "/payments" : "/proposals/overview", label: "Sales and money", icon: "wallet", match: () => false, tab: inMoney, layer: moneyLayer(payments), layerHas: inMoney, group: g("money") },
   };
@@ -334,9 +331,16 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
     const typing = (el: Element | null) => !!el && (el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement || (el instanceof HTMLInputElement && !/^(checkbox|radio|button|submit|range|file|color|image|reset)$/.test(el.type)) || (el as HTMLElement).isContentEditable);
     const sync = () => root.classList.toggle("kb", matchMedia("(max-width: 820px)").matches && typing(document.activeElement));
     const onOut = () => window.setTimeout(sync, 60);
+    // Nov 17 (Heston): a text box removed while it had the keyboard (the canvas's, when the board is tapped) never says
+    // so on iPhone Safari, which left the tab bar hidden. Check again when the visible area changes size (the keyboard
+    // closing) and on the next tap, while it's hidden.
+    const vv = window.visualViewport;
+    const onTap = () => { if (root.classList.contains("kb")) window.setTimeout(sync, 60); };
     document.addEventListener("focusin", sync);
     document.addEventListener("focusout", onOut);
-    return () => { document.removeEventListener("focusin", sync); document.removeEventListener("focusout", onOut); root.classList.remove("kb"); };
+    vv?.addEventListener("resize", onOut);
+    document.addEventListener("pointerup", onTap, true);
+    return () => { document.removeEventListener("focusin", sync); document.removeEventListener("focusout", onOut); vv?.removeEventListener("resize", onOut); document.removeEventListener("pointerup", onTap, true); root.classList.remove("kb"); };
   }, []);
   // D172 (Heston, Nov 11): on a phone the same sidebar slides in from a menu button, instead of rows of chips.
   const [phoneMenu, setPhoneMenu] = useState(false);
@@ -382,7 +386,7 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
     const prev = lastPath.current; if (prev === path) return;
     lastPath.current = path;
     const el = mainEl.current;
-    if (!el || !deskMotion()) return;
+    if (!el || !deskMotion() || cameBackByBrowser()) return;
     const dir = slideDir([...nav.main, ...nav.tabs], prev, path);
     if (dir) pulse(el, "data-slide", nextSlide(el.getAttribute("data-slide") ?? undefined, dir));
   }, [path]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -508,13 +512,14 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
                 ))}
                 {it.layer.some((s) => s.group) && groupsOf(it.layer).map((g) => {
                   const kids = stageItems(it.layer!, g);
+                  const only = it.layer!.find((s) => s.group === g && s.only); // a stage that is one page (Delivery)
                   const key = `${it.to}#${g}`;
                   const on = open[key] ?? inStage(it.layer!, g, path);
                   return (
                     <Fragment key={g}>
                       <div className="wp-stagewrap">
-                        <a className={`wp-sub wp-stage${kids.length ? "" : " soon"}`} aria-current={starts(path, STAGE_TO[g]) ? "page" : undefined} {...linkProps(STAGE_TO[g])} title={`${g} overview`}>
-                          <Icon name={STAGE_ICON[g] ?? "folder"} size={18} /><span>{g}</span>{!kids.length && <span className="wp-soon">Soon</span>}
+                        <a className={`wp-sub wp-stage${kids.length || only ? "" : " soon"}`} aria-current={starts(path, STAGE_TO[g]) || (only?.match(path) ?? false) ? "page" : undefined} {...linkProps(STAGE_TO[g])} title={only ? g : `${g} overview`}>
+                          <Icon name={STAGE_ICON[g] ?? "folder"} size={18} /><span>{g}</span>{!kids.length && !only && <span className="wp-soon">Soon</span>}
                         </a>
                         {kids.length > 0 && (
                           <button type="button" className="layer-toggle stage-toggle" aria-expanded={on} aria-label={`${on ? "Close" : "Open"} ${g}`} onClick={() => setOpen((o) => ({ ...o, [key]: !on }))}>
@@ -643,7 +648,7 @@ function TabBar({ items }: { items: Item[] }) {
   const { path } = useLocation();
   return (
     <nav className="wp-tabbar" aria-label="Sections">
-      {items.map((it) => (
+      {items.map((it) => it.to === "/production" && it.layer ? <ProductionTab key={it.to} it={it} path={path} /> : (
         <a key={it.to} className="wp-tab" aria-current={(it.tab ?? it.match)(path) ? "page" : undefined} {...linkProps(it.to)}>
           <Icon name={it.icon} size={24} />
           {it.label}
@@ -651,6 +656,83 @@ function TabBar({ items }: { items: Item[] }) {
         </a>
       ))}
     </nav>
+  );
+}
+
+/**
+ * Nov 17 (Heston, approved 09:00): hold the Production tab and a glass panel rises from it with the five stages
+ * (Creative planning, Pre-pro, Prin-pro, Post-pro, Delivery). Slide onto a stage and let go to open it, or let go and tap
+ * one; a tap outside closes it. A plain tap still opens Production. Only the stages this login's menu has.
+ */
+function ProductionTab({ it, path }: { it: Item; path: string }) {
+  const groups = groupsOf(it.layer ?? []);
+  const stages = PIPELINE.filter((s) => groups.some((g) => STAGE_TO[g] === s.to));
+  const [open, setOpen] = useState(false);
+  const [hot, setHot] = useState<string | null>(null);
+  const t = useRef({ timer: 0, x: 0, y: 0, held: false });
+  const tab = useRef<HTMLAnchorElement>(null);
+  const [ox, setOx] = useState(0);
+  const under = (x: number, y: number) => (document.elementFromPoint(x, y)?.closest("[data-stage]") as HTMLElement | null)?.dataset.stage ?? null;
+
+  useEffect(() => () => window.clearTimeout(t.current.timer), []);
+  useEffect(() => { setOpen(false); }, [path]);
+  // While the finger that opened it is still down: sliding lights a stage, letting go on one opens it (window-wide, so
+  // it works whatever element the finger is over).
+  const [dragging, setDragging] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [open]);
+  useEffect(() => {
+    if (!open || !dragging) return;
+    const move = (e: PointerEvent) => setHot(under(e.clientX, e.clientY)); // Heston (10:01): the tap is for the hold itself
+    const up = (e: PointerEvent) => { setDragging(false); const to = under(e.clientX, e.clientY); if (to) { setOpen(false); navigate(to); } };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", up); };
+  }, [open, dragging]); // eslint-disable-line react-hooks/exhaustive-deps
+  const cancel = () => { window.clearTimeout(t.current.timer); t.current.timer = 0; tab.current?.classList.remove("holding"); };
+  const show = () => {
+    const r = tab.current?.getBoundingClientRect();
+    if (r) setOx(r.left + r.width / 2);
+    t.current.held = true; setHot(null); setOpen(true); setDragging(true);
+    hapticHold(); // Nov 17 (Heston, 09:33): Android now; iPhone as the finger lifts
+    tab.current?.classList.remove("holding");
+  };
+  const w = Math.min(280, (typeof window !== "undefined" ? window.innerWidth : 390) - 32);
+  const left = Math.max(16, Math.min(ox - w / 2, (typeof window !== "undefined" ? window.innerWidth : 390) - 16 - w));
+  return (
+    <>
+      <a ref={tab} className="wp-tab has-hold" aria-current={(it.tab ?? it.match)(path) ? "page" : undefined} aria-haspopup="menu" aria-expanded={open} draggable={false} {...linkProps(it.to)}
+        onPointerDown={(e) => {
+          if (e.pointerType === "mouse" && e.button !== 0) return;
+          cancel(); t.current.held = false; t.current.x = e.clientX; t.current.y = e.clientY;
+          tab.current?.classList.add("holding");
+          t.current.timer = window.setTimeout(() => { t.current.timer = 0; show(); }, 380);
+        }}
+        onPointerMove={(e) => { if (t.current.timer && Math.hypot(e.clientX - t.current.x, e.clientY - t.current.y) > 10) cancel(); }}
+        onPointerUp={cancel}
+        onPointerCancel={cancel}
+        onContextMenu={(e) => { e.preventDefault(); if (!open) show(); }}
+        onClickCapture={(e) => { if (t.current.held) { e.preventDefault(); e.stopPropagation(); t.current.held = false; } }}>
+        <Icon name={it.icon} size={24} />
+        {it.label}
+        {it.badge ? <Badge n={it.badge} /> : null}
+      </a>
+      {open && createPortal(<>
+        <div className="wp-stagescrim" onPointerDown={() => { swallowNextClick(); setOpen(false); }} aria-hidden />
+        <div className="wp-stagepanel" role="menu" aria-label="Production stages" style={{ left, width: w, ["--ox" as string]: `${ox - left}px` }}>
+          {stages.map((s) => (
+            <a key={s.to} role="menuitem" data-stage={s.to} className={`wp-stagerow${hot === s.to ? " hot" : ""}`} aria-current={starts(path, s.to) ? "page" : undefined} {...linkProps(s.to)} onClick={() => setOpen(false)}>
+              <Icon name={s.icon} size={20} /><span>{s.short}</span>
+            </a>
+          ))}
+        </div>
+      </>, document.body)}
+    </>
   );
 }
 

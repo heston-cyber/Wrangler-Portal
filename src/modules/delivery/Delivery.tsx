@@ -27,7 +27,7 @@ export function DeliveryList() {
   const [toast, show] = useToast();
   const [by, setBy] = useState<"client" | "project" | "shoot">("client");
   const [f, setF] = useState<"all" | "draft" | "ending">("all");
-  const [picking, setPicking] = useState(false);
+  const [picking, setPicking] = useState(() => new URLSearchParams(location.search).has("new")); // Nov 17: Production › Create
   const rows = (d?.deliveries ?? []).filter((x) => f === "all" || (f === "draft" ? x.state === "draft" || x.changed : x.endingSoon));
   const groups = useMemo(() => {
     const m = new Map<string, { name: string; rows: typeof rows; sub?: string }>();
@@ -42,7 +42,7 @@ export function DeliveryList() {
   const without = (board?.projects ?? []).filter((p) => !(d?.deliveries ?? []).some((x) => x.projectId === p._id));
   return (
     <>
-      <TopBar><a {...linkProps("/review/overview")}>Post</a><Sep /><span className="here">Delivery</span></TopBar>
+      <TopBar><a {...linkProps("/production")}>Production</a><Sep /><span className="here">Delivery</span></TopBar>
       <div className="wp-page">
         <PageHeader eyebrow="Post" title="Delivery" sub="Final files kept for your clients, separate from Review. Videos and photo albums, published when you’re ready." actions={<Button variant="primary" icon="plus" onClick={() => setPicking(true)}>New delivery</Button>} />
         <div className="wk-bar">
@@ -103,7 +103,7 @@ export function DeliveryPage({ projectId }: { projectId: string }) {
       <span className={`ws-save hide-sm ${d.changed ? "" : "saved"}`}>{d.state === "draft" ? "Draft" : d.state === "ended" ? "Ended" : d.changed ? "Unpublished changes" : "Published"}</span>
       <Button size="sm" variant="ghost" className="hide-sm" onClick={() => setDialog({ k: "preview" })}>Preview as client</Button>
       <Button size="sm" variant="primary" disabled={d.state !== "draft" && !d.changed} onClick={() => setDialog({ k: "publish" })}>{d.state === "draft" ? "Publish" : "Publish changes"}</Button>
-    </> : undefined}><a {...linkProps("/review/overview")}>Post</a><Sep /><a {...linkProps("/delivery")}>Delivery</a><Sep /><span className="here">{g.project.label}</span></TopBar>
+    </> : undefined}><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/delivery")}>Delivery</a><Sep /><span className="here">{g.project.label}</span></TopBar>
   );
   if (!d) return <>{top}<div className="wp-page"><PageHeader eyebrow="Delivery" title={g.project.label} /><div className="wp-tablecard glass"><EmptyState icon="package" title="No delivery yet." body="A long-term home for this project's final videos and photo albums, separate from Review." actions={<Button variant="primary" onClick={() => void ensure({ projectId }).catch((e) => show(errLine(e)))}>Make the delivery</Button>} /></div></div>{toast}</>;
   const left = d.keptUntil ? Math.round((Date.parse(`${d.keptUntil}T12:00:00Z`) - Date.now()) / 86_400_000) : null;
@@ -146,7 +146,7 @@ export function DeliveryPage({ projectId }: { projectId: string }) {
                       {a.coverId === x._id && <span className="dl-cover">Cover</span>}
                       {!x.published && <span className="dl-new">New</span>}
                       <button className="dl-more" aria-label="Photo options" onClick={() => setMenu(menu === x._id ? null : x._id)}><Icon name="more" size={14} /></button>
-                      {menu === x._id && <div className="cv-menu glass dl-menu" role="menu" onMouseLeave={() => setMenu(null)}>
+                      {menu === x._id && <div className="cv-menu pop-glass dl-menu" role="menu" onMouseLeave={() => setMenu(null)}>
                         <button role="menuitem" onClick={() => { setMenu(null); void editItem({ itemId: a._id, coverId: x._id }); }}>Make it the cover</button>
                         <DownloadItem assetId={x._id} label="Download original" />
                         <button role="menuitem" className="danger" onClick={() => { setMenu(null); void removeAsset({ assetId: x._id }); }}>Remove from album</button>
@@ -164,7 +164,7 @@ export function DeliveryPage({ projectId }: { projectId: string }) {
                 <b className="dl-big">{d.keptUntil ? longDay(d.keptUntil) : `${d.termYears} year${d.termYears === 1 ? "" : "s"} from publishing`}</b>
                 <p className="secondary wp-small">{d.termYears} year{d.termYears === 1 ? "" : "s"} included, then {usd(d.priceCents)} a year to keep it. You set the term and price in Settings.</p>
                 {left !== null && left <= 30 && d.state !== "ended" && <Button size="sm" onClick={() => setDialog({ k: "renew" })}>Renewal…</Button>}
-                {d.renewal && <p className="wp-small">{d.renewal.status === "kept" ? `${d.renewal.by ?? "The client"} chose Keep it. Send them the invoice, then mark it renewed.` : d.renewal.status === "declined" ? `${d.renewal.by ?? "The client"} said No thanks.` : d.renewal.status === "offered" ? "Renewal offered in their Delivery." : d.renewal.status === "free" ? "Kept another year, free." : d.renewal.status === "ending" ? "Letting it end." : "Renewed."}</p>}
+                {d.renewal && <p className="wp-small">{d.renewal.status === "kept" ? (d.renewalInvoiceId ? <>{d.renewal.by ?? "The client"} chose Keep it. Their invoice is drafted: <a {...linkProps(`/payments/invoices/${d.renewalInvoiceId}`)}>open it and send it</a>. Paid, it adds the year.</> : `${d.renewal.by ?? "The client"} chose Keep it. Send them the invoice, then mark it renewed.`) : d.renewal.status === "declined" ? `${d.renewal.by ?? "The client"} said No thanks.` : d.renewal.status === "offered" ? "Renewal offered in their Delivery." : d.renewal.status === "free" ? "Kept another year, free." : d.renewal.status === "ending" ? "Letting it end." : "Renewed."}</p>}
               </div>
             </Card>
             <Card label="Who sees it" head={<SectionHead label="Who sees it" count={d.people.length} />}>
@@ -253,10 +253,10 @@ function Renewal({ d, onClose, show }: { d: NonNullable<Data["delivery"]>; onClo
       <div className="crm-dialog hm-pick">
         <DialogHeader eyebrow="Renewal" title={d.keptUntil ? `Ends ${longDay(d.keptUntil)}` : "Renewal"} body={d.keptUntil ? `On ${longDay(d.keptUntil)} the files leave Delivery. The client is reminded 7 days before to download them.` : undefined} onClose={onClose} />
         <div className="hm-list">
-          <button className="hm-row" onClick={() => go("offer")}><Icon name="invoice" size={18} /><span className="t"><b>Offer a renewal</b><span className="secondary">A Keep it button in their Delivery, {usd(d.priceCents)} a year. If they choose it, you send the invoice.</span></span></button>
+          <button className="hm-row" onClick={() => go("offer")}><Icon name="invoice" size={18} /><span className="t"><b>Offer a renewal</b><span className="secondary">A Keep it button in their Delivery, {usd(d.priceCents)} a year. If they choose it, their invoice is drafted for you to send.</span></span></button>
           <button className="hm-row" onClick={() => go("free")}><Icon name="star" size={18} /><span className="t"><b>Keep it another year, free</b></span></button>
           <button className="hm-row" onClick={() => go("end")}><Icon name="clock" size={18} /><span className="t"><b>Let it end</b><span className="secondary">Nothing is deleted from Dropbox.</span></span></button>
-          {d.renewal?.status === "kept" && <button className="hm-row" onClick={() => void renewed({ deliveryId: d._id }).then(() => { show("Renewed for a year."); onClose(); }, (e) => show(errLine(e)))}><Icon name="check-circle" size={18} /><span className="t"><b>Mark it renewed</b><span className="secondary">After you've sent their invoice: another year.</span></span></button>}
+          {d.renewal?.status === "kept" && <button className="hm-row" onClick={() => void renewed({ deliveryId: d._id }).then(() => { show("Renewed for a year."); onClose(); }, (e) => show(errLine(e)))}><Icon name="check-circle" size={18} /><span className="t"><b>Mark it renewed</b><span className="secondary">Paid another way, or no invoice: another year now. A paid invoice adds it by itself.</span></span></button>}
         </div>
       </div>
     </Modal>

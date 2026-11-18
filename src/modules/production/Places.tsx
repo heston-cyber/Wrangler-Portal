@@ -22,7 +22,7 @@ const mapsUrl = (q: string) => `https://maps.apple.com/?q=${encodeURIComponent(q
 const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
 
 const Crumbs = ({ here }: { here?: string }) => (
-  <TopBar><a {...linkProps("/creative")}>Creative planning</a><Sep />{here ? <><a {...linkProps("/creative/locations")}>Locations</a><Sep /><span className="here">{here}</span></> : <span className="here">Locations</span>}</TopBar>
+  <TopBar><a {...linkProps("/production")}>Production</a><Sep /><a {...linkProps("/creative")}>Creative planning</a><Sep />{here ? <><a {...linkProps("/creative/locations")}>Locations</a><Sep /><span className="here">{here}</span></> : <span className="here">Locations</span>}</TopBar>
 );
 
 // ---------- Add / edit a place ----------
@@ -108,7 +108,7 @@ export default function LocationsPage() {
   const [view, setView] = useState<View>("archive");
   const [q, setQ] = useState("");
   const [tag, setTag] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState(() => new URLSearchParams(location.search).has("new")); // Nov 17: Production › Create › Location
   const [toast, show] = useToast();
   const tags = useMemo(() => [...new Set((places ?? []).flatMap((p) => p.tags))].sort(), [places]);
   const shown = (places ?? []).filter((p) => (!tag || p.tags.includes(tag)) && (!q.trim() || `${p.name} ${p.address} ${p.tags.join(" ")}`.toLowerCase().includes(q.trim().toLowerCase())));

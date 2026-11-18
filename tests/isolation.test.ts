@@ -149,6 +149,52 @@ describe("two businesses", () => {
     expect(Object.keys(before).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))).toEqual([]);
   });
 
+  // CLAUDE.md rule 5's open item (Phase 6, Nov 17): vendor logins in the matrix's isolation pass. Vee (a vendor of A, the
+  // matrix's vendor caller) and a vendor of B call every public function with the records of V (another vendor of A:
+  // V's booking, briefing and invoice) and A's client and money records. Nothing of V or of A's clients comes back to
+  // Vee; nothing of A comes back to B's vendor; nothing of A changes, beyond Vee's own vendor row and settings.
+  test("Phase 6: a vendor gets nothing of another vendor or of the clients, and a vendor of B nothing of A; nothing changes", async () => {
+    const { t, ids, a, b } = await twoBusinesses();
+    vi.stubGlobal("fetch", async () => new Response("{}", { status: 500 }));
+    const bvSub = await t.run(async (ctx) => {
+      const u = await ctx.db.insert("users", { email: "bv@otherfilms.example", name: "B Vendor", role: "vendor" });
+      await ctx.db.insert("memberships", { businessId: b, email: "bv@otherfilms.example", userId: u, role: "vendor", createdAt: 1 });
+      await ctx.db.insert("vendors", { businessId: b, name: "B Vendor", email: "bv@otherfilms.example", roles: [], rates: [], createdAt: 1, updatedAt: 1, joinedAt: 1 } as never);
+      return `${u}|${await ctx.db.insert("authSessions", { userId: u, expirationTime: Date.now() + 3_600_000 })}`;
+    });
+    // Review (Nov 17): V carries the details a leak would show without an id (name, email, pay note, address, bank).
+    await t.run(async (ctx) => { await ctx.db.patch(ids.vendorId, { name: "Vincent Vendore", payMethod: { method: "zelle", note: "Zelle to vincent-secret" }, address: "77 Hidden Lane", payout: { recipientId: "acct_vsecret", mode: "test", ready: true, payoutMethodId: "pm_vsecret", last4: "9876", bankName: "Secret Bank", checkedAt: 0 } } as never); });
+    const vDetails = ["Vincent Vendore", "v@x.example", "vincent-secret", "77 Hidden Lane", "acct_vsecret", "pm_vsecret", "Secret Bank"];
+    const mineVee = (r: Record<string, unknown>) => r.email === "vee@x.example";
+    const rowsOf = async () => { const s = await snapshot(t, a, true); const m = new Map<string, string>(); for (const [table, rows] of Object.entries(s)) for (const r of rows as Array<Record<string, unknown>>) if (!mineVee(r)) m.set(`${table}:${String(r._id)}`, JSON.stringify(r)); return m; };
+    const before = await rowsOf();
+    const table = argsFor(ids);
+    const theirs = ["vendorId", "bookingId", "briefingId", "vendorInvoiceId", "clientRecId", "personId", "invoiceId", "quoteId", "proposalId", "subscriptionId", "dealId", "estimateId", "entryId", "inboxItemId", "inboxNoteId", "threadId", "deliveryId", "releaseId", "testimonialId", "callId"];
+    const vIds = [...theirs.map((k) => String((ids as Record<string, unknown>)[k])).filter((x) => x && x !== "undefined"), ...vDetails];
+    const aIds = Object.entries(ids).filter(([k]) => !/Sub$/.test(k) && k !== "storageId").map(([, v]) => String(v));
+    const leaks: string[] = [];
+    const answered: Record<string, string[]> = {};
+    for (const [who, sub, watch] of [["Vee (A's vendor)", ids.vendorSub, vIds], ["B's vendor", bvSub, aIds]] as const) {
+      const as = t.withIdentity({ subject: sub });
+      answered[who] = [];
+      for (const f of publicFunctions()) {
+        if (STEP4.has(f.key)) continue;
+        let out: unknown;
+        try { out = await call(as, f.ref, table[f.key], ""); } catch { continue; }
+        if (f.key.startsWith("vendorPortal.")) answered[who].push(f.key);
+        const json = JSON.stringify(out ?? null);
+        const hit = watch.find((id) => json.includes(id));
+        if (hit) leaks.push(`${who}: ${f.key} returned ${hit}`);
+      }
+    }
+    expect(leaks).toEqual([]);
+    expect(answered["Vee (A's vendor)"]).toEqual(expect.arrayContaining(["vendorPortal.home", "vendorPortal.bookings", "vendorPortal.invoices"])); // a working vendor, not refused outright
+    const after = await rowsOf();
+    const changed = [...before.keys()].filter((k) => before.get(k) !== after.get(k));
+    expect(changed).toEqual([]);
+    expect(await aFile(t, ids.storageId)).toEqual({ alive: true, owner: a });
+  });
+
   test("each owner sees only their own projects; B's records are stamped with B", async () => {
     const { t, ids, b, bSub } = await twoBusinesses();
     const heston = t.withIdentity({ subject: ids.ownerSub });

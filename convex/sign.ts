@@ -4,6 +4,7 @@
 // signers, then approves. Approval locks that version: its file hash, boxes, signers, signing order and invoice are
 // covered by one lock hash. Any change after that is a new version; earlier versions are kept as they were.
 // Sending, signing and completion are Phases S2–S3.
+import { fileLink } from "./lib/fileLinks";
 import { action, type ActionCtx } from "./_generated/server";
 import { audit } from "./lib/audit";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./lib/functions";
@@ -89,7 +90,7 @@ export const list = query({
 });
 
 export const get = query({
-  args: { documentId: v.id("wsDocuments"), versionNumber: v.optional(v.number()) },
+  args: { documentId: v.id("wsDocuments"), versionNumber: v.optional(v.number()), at: v.optional(v.number()) /* Phase 6 review M2: the page's link window */ },
   handler: async (ctx, a) => {
     const me = await requireAll(ctx, "docs");
     const d = await getCore(ctx, a.documentId, a.versionNumber);
@@ -116,9 +117,9 @@ async function getCore(ctx: QueryCtx, documentId: Id<"wsDocuments">, versionNumb
     return {
       doc: { ...doc, final: doc.final ? { ...doc.final, fileId: undefined } : undefined, label: docLabel(doc.number) }, // no raw file ids (review fix, Nov 6)
       copies: await copiesFor(ctx, documentId, shown.number), // D160
-      // S3: the signed copy (a link that works for an hour or so; the page asks again when it re-renders).
-      finalUrl: doc.final ? await ctx.storage.getUrl(doc.final.fileId) : null,
-      version: { ...shown, fileUrl: await ctx.storage.getUrl(shown.fileId), isCurrent: shown.number === doc.currentVersion, editable: shown.number === doc.currentVersion && !shown.approvedAt && doc.status === "draft" },
+      // S3: the signed copy (a link that lasts 10-20 minutes; the page passes its link window, so it asks again each 10 minutes).
+      finalUrl: doc.final ? await fileLink(doc.final.fileId, doc.final.fileName) : null, // Phase 6 M1
+      version: { ...shown, fileUrl: await fileLink(shown.fileId, shown.fileName ?? "document.pdf"), isCurrent: shown.number === doc.currentVersion, editable: shown.number === doc.currentVersion && !shown.approvedAt && doc.status === "draft" },
       versions: versions.sort((a, b) => b.number - a.number).map((x) => ({ number: x.number, fileName: x.fileName, fileSha256: x.fileSha256, approvedAt: x.approvedAt ?? null, lockHash: x.lockHash ?? null, ownerSignedAt: x.ownerSignedAt ?? null, createdAt: x.createdAt })),
       events: events.map((e) => ({ seq: e.seq, at: e.at, kind: e.kind, actor: e.actor, versionNumber: e.versionNumber ?? null, detail: e.detail ?? null, email: e.email ?? null, ip: e.ip ?? null, userAgent: e.userAgent ?? null })),
       chain: await verifyChain(events),

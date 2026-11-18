@@ -14,6 +14,7 @@
 // An email that already has its own login (an owner, a client or vendor account, a live membership in any business, or
 // any account that isn't a guest's) can't get a guest login: it keeps its own, and gets no guest powers.
 import type { Doc, Id } from "../_generated/dataModel";
+import { sessionBlocked } from "./sessionLock";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
@@ -85,6 +86,7 @@ export async function sheetBusiness(ctx: QueryCtx | MutationCtx, cs: Doc<"callSh
 export async function requireGuest(ctx: QueryCtx | MutationCtx): Promise<{ userId: Id<"users">; email: string; name: string | null }> {
   const userId = await getAuthUserId(ctx);
   if (!userId) throw new ConvexError("Sign in first.");
+  if (await sessionBlocked(ctx)) throw new ConvexError("Not allowed."); // second review B: a session ended on the server
   const user = await ctx.db.get(userId);
   const email = (user?.email ?? "").toLowerCase();
   if (!user || user.role !== "guest" || !email || (await hasOwnLogin(ctx.db, email))) throw new ConvexError("Not allowed.");

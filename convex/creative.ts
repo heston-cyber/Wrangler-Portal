@@ -3,6 +3,7 @@
 // attached later (D204: homes.move). A doc or kit is shared by a view-only link (D191): a doc's link shows the PDF made
 // at Share (Update the link makes a new one; team notes stay out), a kit's link shows the kit as it is now. Owner and
 // team with Projects.
+import { fileLink } from "./lib/fileLinks";
 import { focusBusiness, mutation, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -160,7 +161,7 @@ export const removeDoc = mutation({
 
 /** The view-only page of a shared creative doc (no account): its title and the PDF, while the link is on. */
 export const sharedDoc = query({
-  args: { token: v.string() },
+  args: { token: v.string(), at: v.optional(v.number()) /* Phase 6 review M2: the page's link window, so fresh file links come each 10 minutes */ },
   handler: async (ctx, { token }) => {
     if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) return null;
     const d = await ctx.db.query("creativeDocs").withIndex("by_share", (q) => q.eq("share.token", token)).first();
@@ -168,7 +169,7 @@ export const sharedDoc = query({
     focusBusiness(ctx, d.businessId);
     const b = await ctx.db.get(d.buildId);
     const biz = d.businessId ? await ctx.db.get(d.businessId) : null;
-    return { title: b?.title ?? "Creative doc", kind: CREATIVE_NAME[d.kind], from: biz?.name ?? null, pdf: await ctx.storage.getUrl(d.share.fileId), at: d.share.at };
+    return { title: b?.title ?? "Creative doc", kind: CREATIVE_NAME[d.kind], from: biz?.name ?? null, pdf: await fileLink(d.share.fileId, `${b?.title ?? "Creative doc"}.pdf`), at: d.share.at }; // Phase 6 M1
   },
 });
 
@@ -291,7 +292,7 @@ export const removeKit = mutation({
 
 /** A shared kit's view-only page (no account): the kit as it is now, while the link is on. */
 export const sharedKit = query({
-  args: { token: v.string() },
+  args: { token: v.string(), at: v.optional(v.number()) /* Phase 6 review M2: the page's link window, so fresh file links come each 10 minutes */ },
   handler: async (ctx, { token }) => {
     if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) return null;
     const k = await ctx.db.query("brandKits").withIndex("by_share", (q) => q.eq("share.token", token)).first();
@@ -300,8 +301,8 @@ export const sharedKit = query({
     const d = kitData(k);
     const biz = k.businessId ? await ctx.db.get(k.businessId) : null;
     return {
-      name: k.name, from: biz?.name ?? null, logo: d.logoFileId ? await ctx.storage.getUrl(d.logoFileId) : null, colors: d.colors, fonts: d.fonts, links: d.links, tone: d.tone,
-      files: await Promise.all(d.files.map(async (f) => ({ name: f.name, size: f.size, url: await ctx.storage.getUrl(f.fileId) }))),
+      name: k.name, from: biz?.name ?? null, logo: await fileLink(d.logoFileId, "logo"), colors: d.colors, fonts: d.fonts, links: d.links, tone: d.tone, // Phase 6 M1
+      files: await Promise.all(d.files.map(async (f) => ({ name: f.name, size: f.size, url: await fileLink(f.fileId, f.name) }))),
     };
   },
 });

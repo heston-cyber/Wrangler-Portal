@@ -232,6 +232,9 @@ export const leadPage = query({
  *  before; attaching claims it for this caller. 25 MB at most each, 10 at most. A refused file is left alone: it may
  *  not be the caller's, so it's never deleted here. */
 const FRESH_UPLOAD = 30 * 60_000;
+// Phase 6 review: any XML flavour (application/*+xml, XSL) renders and can run script too
+const ACTIVE_TYPE = /^(text\/html|application\/xhtml|image\/svg|text\/xml|application\/xml|text\/javascript|application\/(x-)?javascript|application\/ecmascript|text\/xsl|[a-z]+\/[^;]*\+xml)/i;
+const ACTIVE_NAME = /\.(html?|xhtml|svgz?|xml|xsl|xslt|js|mjs)$/i;
 async function checkFiles(ctx: MutationCtx, files: Array<{ storageId: Id<"_storage">; name: string }>, by: string, businessId: Id<"businesses"> | null) {
   const no = (msg: string) => ({ error: msg, files: [] as Doc<"messages">["files"] });
   if (files.length > MAX_FILES) return no(`Up to ${MAX_FILES} files a message.`);
@@ -244,6 +247,8 @@ async function checkFiles(ctx: MutationCtx, files: Array<{ storageId: Id<"_stora
     if (await ctx.db.query("msgUploads").withIndex("by_storage", (q) => q.eq("storageId", f.storageId)).first()) return no("A file didn't upload. Attach it again.");
     if (await isClaimed(ctx, f.storageId)) return no("A file didn't upload. Attach it again."); // 5e review (Nov 6): across businesses
     if (meta.size > MAX_FILE_BYTES) return no(`${f.name.slice(0, 80)} is over 25 MB. Share a link to big files instead.`);
+    // Phase 6 sweep L6: no web pages, scripts or SVGs (they'd run when opened from the file's link)
+    if (ACTIVE_TYPE.test(meta.contentType ?? "") || ACTIVE_NAME.test(f.name.trim())) return no(`${f.name.slice(0, 80)} can't be attached: web pages, scripts and SVG files aren't allowed. Zip it, or share a link.`);
     out.push({ storageId: f.storageId, name: (f.name.trim() || "File").slice(0, 140), size: meta.size, type: (meta.contentType ?? "").slice(0, 100) });
   }
   for (const f of out) { await claimUpload(ctx, f.storageId, businessId, "message"); await ctx.db.insert("msgUploads", { storageId: f.storageId, by, at: now }); }

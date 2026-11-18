@@ -84,14 +84,17 @@ export const forClient = query({
   args: { clientId: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, a) => {
     const limit = a.limit;
-    await requireAll(ctx, "clients");
+    const me = await requireAll(ctx, "clients");
+    // Phase 6 sweep M2: pay links, amounts and signing links are the client's. A team member without Payments sees that a
+    // money item went out, not its amount or link; nobody on the owner side gets a signer's own signing link.
+    const money = !me.team || me.team.perms.payments;
     const clientId = ctx.db.normalizeId("clients", a.clientId);
     if (!clientId || !(await ctx.db.get(clientId))) return [];
     const rows = await ctx.db.query("inboxItems").withIndex("by_client", (q) => q.eq("clientId", clientId)).order("desc").take(1000);
     const events = new Map<string, { item: ReturnType<typeof itemView>; people: Array<{ email: string; readAt: number | null; emailed: boolean }> }>();
     for (const r of rows) {
       const k = eventKey(r.key);
-      const e = events.get(k) ?? { item: itemView(r), people: [] };
+      const e = events.get(k) ?? { item: ownerSide(itemView(r), money), people: [] };
       e.people.push({ email: r.email, readAt: r.readAt ?? null, emailed: !!r.emailedAt });
       events.set(k, e);
     }
@@ -100,6 +103,17 @@ export const forClient = query({
     }));
   },
 });
+
+const MONEY_TITLE: Record<string, string> = { invoice: "Invoice", payment: "Payment", subscription: "Subscription" };
+/** Phase 6 review: a dollar amount in any other item (the raw-footage offer's "$100/year") is hidden too. */
+const hideAmounts = (s: string) => s.replace(/\$\s?[\d,]+(?:\.\d{1,2})?/g, "$•••");
+/** Phase 6 sweep M2: an Inbox item as the owner's side sees it in "Their Inbox". */
+export function ownerSide<T extends { kind: string; title: string; text: string; link: string | null; linkLabel: string | null }>(i: T, money: boolean): T {
+  if (MONEY_TITLE[i.kind] && !money) return { ...i, title: MONEY_TITLE[i.kind], text: "Details need the Payments switch.", link: null, linkLabel: null };
+  const j = money ? i : { ...i, title: hideAmounts(i.title), text: hideAmounts(i.text) };
+  if (i.kind === "to_sign") return { ...j, link: null, linkLabel: null };
+  return j;
+}
 
 /** Who a note to this client would reach: their people with portal access. */
 async function noteAudience(ctx: QueryCtx | MutationCtx, client: Doc<"clients">) {
@@ -149,7 +163,8 @@ export const notes = query({
 export const sent = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, { limit }) => {
-    await requireAll(ctx, "clients");
+    const me = await requireAll(ctx, "clients");
+    const money = !me.team || me.team.perms.payments; // Phase 6 review: as Their Inbox (ownerSide)
     const max = Math.min(Math.max(limit ?? 100, 1), 300);
     type Row = {
       key: string; type: "draft" | "note" | "auto"; kind: string; title: string; subject: string | null; to: string; at: number;
@@ -202,8 +217,9 @@ export const sent = query({
         const u = p?.name ? null : await ctx.db.query("users").withIndex("email", (q) => q.eq("email", r.email)).unique();
         to = people.length > 1 ? `${people.length} people` : p?.name ?? (u?.name as string | undefined) ?? r.email;
       }
+      const seen = ownerSide({ kind: r.kind, title: r.title.replace(/ at \d\d:\d\d:\d\d[:;]\d\d$/, ""), text: r.text, link: null, linkLabel: null }, money);
       out.push({
-        key: k, type: "auto", kind: r.kind, title: r.title.replace(/ at \d\d:\d\d:\d\d[:;]\d\d$/, ""), subject: r.text.split(" · ")[0] || null, to,
+        key: k, type: "auto", kind: r.kind, title: seen.title, subject: seen.text.split(" · ")[0] || null, to,
         at: Math.min(...people.map((x) => x.createdAt)), sentTo: people.length, readBy: people.filter((x) => x.readAt).length, emailed: people.some((x) => x.emailedAt), draftedBy: null, open,
       });
     }

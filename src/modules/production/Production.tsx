@@ -3,7 +3,9 @@
 // sheets card, each shoot's sheet chip and button, "Needs a call sheet". Step 5: the Google Calendar card's Last synced
 // and Sync now, and Production › Calendar (Calendar.tsx).
 import { useEffect, useState } from "react";
-import { usePerms } from "../../lib/teamAccess";
+import { PIPELINE } from "../../shell/pipeline";
+import { CreateMenu, PRODUCTION_CREATE } from "../home/CreateMenu";
+import { canOpen, usePerms } from "../../lib/teamAccess";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -130,6 +132,32 @@ export function NewShoot({ onClose }: { onClose: () => void }) {
   );
 }
 
+/** Nov 17 (Heston): Production is the hub: one card per stage, in order, each opening its overview. */
+function StageCards({ o }: { o: { tiles: { week: number; edits: number }; callSheets: { notSent: number } } | null }) {
+  const { perms, team, role } = usePerms();
+  const rows = PIPELINE.filter((s) => canOpen(s.to, perms, team, role));
+  const line: Record<string, string> = {
+    "/creative": "Docs, boards, locations, brand kits",
+    "/production/pre-pro": o ? (o.callSheets.notSent ? `${o.callSheets.notSent} ${plural(o.callSheets.notSent, "call sheet")} not sent` : "Shot lists, call sheets, crew") : "Shot lists, call sheets, crew",
+    "/production/prin-pro": o ? (o.tiles.week ? `${o.tiles.week} ${plural(o.tiles.week, "shoot")} this week` : "No shoots this week") : "Shoots and gear",
+    "/production/post-pro": o ? (o.tiles.edits ? `${o.tiles.edits} ${plural(o.tiles.edits, "live edit")}` : "No live edits") : "Review and cuts",
+    "/delivery": "Final files for clients",
+  };
+  if (rows.length < 2) return null;
+  return (
+    <nav className="prod-stages" aria-label="Stages">
+      {rows.map((s, i) => (
+        <a key={s.to} className="prod-stage glass" {...linkProps(s.to)}>
+          <span className="n">{i + 1}</span>
+          <Icon name={s.icon} size={22} />
+          <b>{s.name}</b>
+          <span className="secondary wp-small">{line[s.to]}</span>
+        </a>
+      ))}
+    </nav>
+  );
+}
+
 export default function ProductionOverview() {
   const o = useQuery(api.production.overview, {});
   const [adding, setAdding] = useState(false);
@@ -138,7 +166,8 @@ export default function ProductionOverview() {
     <>
       <TopBar><span className="secondary">Production</span><Sep /><span className="here">Overview</span></TopBar>
       <div className="wp-page pov prod">
-        <PageHeader title="Production." sub="Live shoots and edits, at a glance." actions={<ButtonLink variant="primary" to="/production/call-sheets/new" iconEnd={false}>New call sheet</ButtonLink>} />
+        <PageHeader title="Production." sub="The whole pipeline: creative planning, pre-pro, the shoot, post and delivery." actions={<CreateMenu items={PRODUCTION_CREATE} />} />
+        <StageCards o={o ?? null} />
         {o === undefined ? <>
           <div className="pov-stats prod-tiles">{[0, 1, 2, 3].map((i) => <div key={i} className="pov-stat prod-tile"><SkeletonRows n={1} /></div>)}</div>
           <Card label="Loading"><SkeletonRows n={4} /></Card>
@@ -240,10 +269,10 @@ export function ProductionDelivery() {
 // Heston (Nov 4, 21:01): each stage of Production has its own overview, opened from the stage's name in the menu.
 // Built from the pages' own data (no new reads): what's waiting in the stage, and a link to each of its pages.
 type StageKey = "pre-pro" | "prin-pro" | "post-pro";
-const STAGE_NAME: Record<StageKey, string> = { "pre-pro": "Pre-pro", "prin-pro": "Prin-pro", "post-pro": "Post-pro" };
+const STAGE_NAME: Record<StageKey, string> = { "pre-pro": "Pre-production", "prin-pro": "Principal production", "post-pro": "Post-production" }; // page titles in full (Nov 17); the menu keeps the short names
 const STAGE_SUB: Record<StageKey, string> = {
-  "pre-pro": "Planning: projects, the crew you book, their briefings and call sheets.",
-  "prin-pro": "Shooting: the shoots, the calendar and the gear.",
+  "pre-pro": "Planning: shot lists, call sheets, the crew you book and their briefings.",
+  "prin-pro": "Shooting: the shoots, their releases and packing lists, and the gear.",
   "post-pro": "Editing: cuts out for review, notes to look at and who's watching.",
 };
 const shortDate = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" });

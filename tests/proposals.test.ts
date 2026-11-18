@@ -136,7 +136,8 @@ describe("proposals", () => {
     const vt = await tokenOf(w, v);
     await w.heston.mutation(api.proposals.withdraw, { proposalId: v });
     expect(await (await post(w, { token: vt, action: "accept", name: "Maya Brooks" })).json()).toMatchObject({ error: expect.stringMatching(/withdrawn/) });
-    expect((await w.t.query(api.proposals.page, { token: vt })).status).toBe("void");
+    // Phase 6 (Heston, Nov 17): withdrawn shows its banner only: no PDF link, no price
+    expect(await w.t.query(api.proposals.page, { token: vt })).toMatchObject({ status: "void", pdfUrl: null, totalCents: 0, depositCents: 0 });
   });
 
   test("T3b.5 clients and other businesses see none of it", async () => {

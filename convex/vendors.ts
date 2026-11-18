@@ -166,7 +166,9 @@ export const update = mutation({
     // Review fix (step 6): a new email is a new login. The old address loses this business, and the new one needs a
     // fresh invite before it sees any of their bookings, invoices or W-9.
     if (d.email !== x.email) await endAccess(ctx, x);
-    await ctx.db.patch(vendorId, { ...d, ...(d.email !== x.email ? { invitedAt: undefined, joinedAt: undefined } : {}), updatedAt: Date.now() });
+    // Phase 6 sweep M3: a new email is a new person for payouts too: the Stripe recipient (and its bank) is dropped, so the
+    // new address sets up direct deposit from the start.
+    await ctx.db.patch(vendorId, { ...d, ...(d.email !== x.email ? { invitedAt: undefined, joinedAt: undefined, payout: undefined } : {}), updatedAt: Date.now() });
     return null;
   },
 });
