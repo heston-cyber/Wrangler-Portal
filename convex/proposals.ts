@@ -463,6 +463,13 @@ export const startContract = action({
 
 // ---------- the client's page: /p/<token> (no account, D73) ----------
 
+/** Nov 18 (Heston: "Yes", 09:42): an expiry stops every link except the one someone accepted on: their own emailed link
+ *  (or a proposal's one link from before D149) keeps showing what they accepted. A copied link, which anyone can hold,
+ *  stops with the rest. */
+const acceptedHere = (f: NonNullable<Awaited<ReturnType<typeof resolve>>>) =>
+  f.doc.status === "accepted" && ((f.via === "email" && f.r?.response?.kind === "accepted") || f.via === "legacy");
+const expiredFor = (f: NonNullable<Awaited<ReturnType<typeof resolve>>>) => linkExpired(f.doc) && !acceptedHere(f);
+
 export const page = query({
   args: { token: v.string(), at: v.optional(v.number()) /* Phase 6 review M2: the page's link window, so fresh file links come each 10 minutes */ },
   handler: async (ctx, { token }) => {
@@ -474,13 +481,13 @@ export const page = query({
     const build = await ctx.db.get(p.buildId);
     const business = { name: b?.name ?? "", logoUrl: b?.logoFileId ? await ctx.storage.getUrl(b.logoFileId) : null, email: b?.replyTo ?? null };
     // Nov 18: an expired link shows only that it expired, with the business (no price, PDF, people or answer).
-    if (linkExpired(p)) return { expired: true as const, number: p.number, title: build?.title ?? "Proposal", business };
+    if (expiredFor(f)) return { expired: true as const, number: p.number, title: build?.title ?? "Proposal", business };
     return {
       expired: false as const,
       number: p.number, title: build?.title ?? "Proposal", status: p.status as "sent" | "accepted" | "declined" | "void", for: forWho(f), via: f.via === "link" ? "link" as const : "email" as const,
       // Phase 6 (Heston, Nov 17): a withdrawn proposal shows its banner only, so its price and PDF aren't sent either
       totalCents: p.status === "void" ? 0 : p.totalCents ?? 0, depositCents: p.status === "void" ? 0 : p.depositCents ?? 0, depositPct: p.status === "void" ? 0 : p.depositPct ?? 0, sentAt: p.sentAt ?? p.createdAt, fromName: p.fromName ?? null,
-      pdfUrl: p.status === "void" ? null : await fileLink(p.pdfId, `${p.number} ${build?.title ?? "Proposal"}.pdf`, Date.now(), p.linkExpiresAt), answer: stateFor(f), // Phase 6 M1: a 10-20 minute link (review L3, Nov 18: never past the link's expiry); a withdrawn one shows only its banner
+      pdfUrl: p.status === "void" ? null : await fileLink(p.pdfId, `${p.number} ${build?.title ?? "Proposal"}.pdf`, Date.now(), acceptedHere(f) ? undefined : p.linkExpiresAt), answer: stateFor(f), // Phase 6 M1: a 10-20 minute link (review L3, Nov 18: never past the link's expiry); a withdrawn one shows only its banner
       business,
     };
   },
@@ -490,7 +497,7 @@ export const markViewed = mutation({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
     const f = await resolve(ctx, "proposal", token);
-    if (!f || f.doc.status !== "sent" || linkExpired(f.doc)) return null;
+    if (!f || f.doc.status !== "sent" || expiredFor(f)) return null;
     focusBusiness(ctx, f.doc.businessId);
     await noteOpen(ctx, f);
     return null;
@@ -503,7 +510,7 @@ export const respondInternal = internalMutation({
   handler: async (ctx, a) => {
     const f = await resolve(ctx, "proposal", a.token);
     if (!f) return { error: "This proposal isn't here." };
-    if (linkExpired(f.doc)) return { error: EXPIRED }; // Nov 18
+    if (expiredFor(f)) return { error: EXPIRED }; // Nov 18 (the accepter's own link answers "already accepted" instead)
     focusBusiness(ctx, f.doc.businessId);
     const r = await answer(ctx, "proposal", f, a, f.doc.status === "void" ? "This proposal was withdrawn." : null);
     if ("error" in r) return r;

@@ -372,6 +372,24 @@ describe("Nov 18 · a proposal's links expire", () => {
     expect(g.history.filter((h: { kind: string }) => h.kind === "expiry_changed")).toHaveLength(2);
   });
 
+  test("E6 (Heston, Nov 18): the link someone accepted on keeps showing what they accepted after the expiry; the others stop", async () => {
+    vi.useFakeTimers({ now: T0 });
+    const w = await world();
+    fakeStripe();
+    const mails: Sent[] = [];
+    stub(mails);
+    await w.heston.mutation(api.builder.ensureStarter, {});
+    const { id, link } = await sent(w, { expiresInDays: 1 });
+    await w.heston.action(api.proposals.send, { proposalId: id, to: "kim@lee.example" });
+    const sam = tokenTo(mails, "sam@patel.example", "p"), kim = tokenTo(mails, "kim@lee.example", "p");
+    expect((await ppost(w, { token: sam, action: "accept", name: "Sam Patel" })).status).toBe(200);
+    vi.setSystemTime(T0 + 2 * DAY);
+    expect(await w.t.query(api.proposals.page, { token: sam })).toMatchObject({ expired: false, status: "accepted", answer: { kind: "accepted_by_you" }, totalCents: 500_000 });
+    for (const tok of [kim, link]) expect((await w.t.query(api.proposals.page, { token: tok })).expired).toBe(true);
+    const res = await ppost(w, { token: sam, action: "accept", name: "Sam Patel" });
+    expect((await res.json()).error).toMatch(/already accepted/);
+  });
+
   test("E5: unticked, a proposal's links never expire; a draft's expiry can't be set; only 1, 2, 3, 7 or 30 days are taken at send", async () => {
     vi.useFakeTimers({ now: T0 });
     const w = await world();
