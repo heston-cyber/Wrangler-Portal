@@ -331,7 +331,7 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
   const [pan, setPan] = useState({ x: 40, y: 40 });
   const [editing, setEditing] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
-  const [pop, setPop] = useState<null | "more" | "menu" | "tools" | "help">(null);
+  const [pop, setPop] = useState<null | "more" | "menu" | "tools" | "style" | "help">(null);
   const [st, setSt] = useState<Style>({ color: STROKES[0], fill: null, stroke: 2, dash: "solid", rough: 1, round: true, opacity: 100, size: "M", note: NOTE_COLORS[0], rows: 3, cols: 3 });
   const [drawing, setDrawing] = useState<{ points: number[] } | null>(null);
   const [ghost, setGhost] = useState<CanvasItem | null>(null); // the shape or line being drawn
@@ -580,7 +580,7 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
     const hit = hitEl ? itemsRef.current.find((i) => i.id === hitEl.dataset.id) ?? null : null;
     const handle = (e.target as HTMLElement).closest("[data-handle]") as HTMLElement | null;
     // iPad (D185): Pencil draws, fingers move the board. Space or the wheel button moves it too.
-    const fingerOnPen = e.pointerType === "touch" && (tool === "pen" || tool === "eraser");
+    const fingerOnPen = e.pointerType === "touch" && !phone && (tool === "pen" || tool === "eraser"); // iPad: the Pencil draws, fingers move the board. A phone has no Pencil: a finger draws (two fingers move and zoom)
     if (tool === "pan" || space || e.button === 1 || fingerOnPen || !canEdit) { if (!canEdit && hit) setSel([hit.id]); gesture.current = { kind: "pan", sx: e.clientX, sy: e.clientY, px: pan.x, py: pan.y }; return; }
     if (tool === "pen") { gesture.current = { kind: "draw" }; setDrawing({ points: [p.x, p.y] }); return; }
     if (tool === "eraser") { gesture.current = { kind: "erase" }; erase(hit); return; }
@@ -738,7 +738,10 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
   // The style panel: while drawing with a styled tool, or with something selected.
   const panelFor = selected.length ? selected : ["box", "ellipse", "arrow", "line", "pen", "text", "note"].includes(tool) ? [{ type: tool } as CanvasItem] : [];
   const editingDoc = !!docEd && !!one && one.type === "doc" && editing === one.id;
-  const showPanel = canEdit && !phone && !editingDoc && (panelFor.length > 0 || tool === "table");
+  const stylable = canEdit && !editingDoc && (panelFor.length > 0 || tool === "table");
+  const showPanel = stylable && !phone;
+  const SHEET_TOOLS = [...MAIN.filter((t) => !t.phone), ...MORE].filter((t) => (uploads || t.k !== "import") && (docTools || t.k !== "doc"));
+  const sheetTool = SHEET_TOOLS.find((t) => t.k === tool);
   // The grid: 20 board pixels, with every fifth line a little stronger; wider when zoomed far out.
   const step = 20 * zoom < 8 ? 100 : 20;
   const minor = step * zoom, major = step * 5 * zoom;
@@ -757,7 +760,7 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
         onContextMenu={(e) => { if (!canEdit || (e.target as HTMLElement).closest(".cv-docedit")) return; e.preventDefault(); const el = (e.target as HTMLElement).closest("[data-id]") as HTMLElement | null; if (el && !sel.includes(el.dataset.id!)) setSel([el.dataset.id!]); if (!el) setSel([]); setToolRaw("select"); setCtxMenu({ x: e.clientX, y: e.clientY }); }}
         onDragOver={(e) => { if (canEdit && uploads) e.preventDefault(); }} onDrop={onDrop}
         onDoubleClick={(e) => { const el = (document.elementFromPoint(e.clientX, e.clientY) ?? (e.target as HTMLElement)).closest("[data-id]") as HTMLElement | null; /* the board holds the pointer while pressed, so the event's own target is the board */ const it = el && itemsRef.current.find((i) => i.id === el.dataset.id); if (it && canEdit && !it.locked && (["note", "text", "box", "ellipse", "frame", "table", "link"].includes(it.type) || (it.type === "doc" && docTools && !phone && !!docs[it.docId ?? ""]?.buildId))) { setEditing(it.id); setSel([it.id]); } }}>
-        <div className="cv-board" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, width: BOARD.w, height: BOARD.h }}>
+        <div className="cv-board" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, width: BOARD.w, height: BOARD.h, ["--cvz" as string]: zoom }}>
           {sorted.map((it) => it.type === "doc"
             ? <DocItem key={it.id} it={it} view={docs[it.docId ?? ""]} editing={editing === it.id && !!docTools && !phone} onEditor={onDocEditor} onMenu={setDocMenu} onError={show} />
             : <ItemView key={it.id} it={it} url={it.fileId ? files[it.fileId] ?? null : null} freshUrl={freshUrl} editing={editing === it.id} canEdit={canEdit} onPatch={(p) => patch(it.id, p)} onDone={() => setEditing(null)} />)}
@@ -808,12 +811,16 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
 
       {phone && editing && <button className="cv-ui cv-done" onPointerDown={(e) => e.preventDefault()} onClick={() => { (document.activeElement as HTMLElement | null)?.blur(); setEditing(null); }}>Done</button>}
       {phone && !editing && <nav className="cv-ui cv-phonebar" aria-label="Tools">
-        {MAIN.filter((t) => t.phone && (canEdit || t.k === "select" || t.k === "pan")).filter((t) => uploads || t.k !== "image").map((t) => <button key={t.k} className={tool === t.k ? "on" : ""} onClick={() => pick(t.k)}>{t.icon}<span>{t.k === "image" ? "Photo" : t.label}</span></button>)}
-        {canEdit && <button className={pop === "tools" ? "on" : ""} onClick={() => setPop(pop === "tools" ? null : "tools")}><MoreHorizontal size={18} /><span>Tools</span></button>}
+        {MAIN.filter((t) => t.phone && (canEdit || t.k === "select" || t.k === "pan")).filter((t) => uploads || t.k !== "image").map((t) => <button key={t.k} className={tool === t.k ? "on" : ""} onClick={() => { setPop(null); pick(t.k); }}>{t.icon}<span>{t.k === "image" ? "Photo" : t.label}</span></button>)}
+        {canEdit && <button className={pop === "tools" || sheetTool ? "on" : ""} onClick={() => setPop(pop === "tools" ? null : "tools")}>{sheetTool ? sheetTool.icon : <MoreHorizontal size={18} />}<span>{sheetTool ? sheetTool.label : "Tools"}</span></button>}
+        {stylable && <button className={pop === "style" ? "on" : ""} onClick={() => setPop(pop === "style" ? null : "style")}><Palette size={18} /><span>Style</span></button>}
       </nav>}
-      {pop === "tools" && phone && <div className="cv-ui cv-sheet" role="dialog" aria-label="Tools">
-        <span className="wp-field-label">On iPad and desktop</span>
-        <div className="cv-sheetgrid off">{[...MAIN.filter((t) => !t.phone), ...MORE].map((t) => <button key={t.k} disabled>{t.icon}<span>{t.label}</span></button>)}</div>
+      {pop === "tools" && phone && canEdit && <div className="cv-ui cv-sheet" role="dialog" aria-label="Tools">
+        <span className="wp-field-label">Tools</span>
+        <div className="cv-sheetgrid">{SHEET_TOOLS.map((t) => <button key={t.k} className={tool === t.k ? "on" : ""} onClick={() => { setPop(null); pick(t.k); }}>{t.icon}<span>{t.label}</span></button>)}</div>
+      </div>}
+      {pop === "style" && phone && stylable && <div className="cv-ui cv-sheet cv-stylesheet" role="dialog" aria-label="Style" onPointerDown={(e) => e.stopPropagation()}>
+        <StylePanel items={panelFor} st={st} onStyle={restyle} onLayer={selected.length ? layer : undefined} table={tool === "table" ? { rows: st.rows, cols: st.cols, set: (rows, cols) => setSt((s) => ({ ...s, rows, cols })) } : undefined} />
       </div>}
 
       {one && canEdit && one.type === "table" && editing === one.id && <TableBar it={one} onPatch={(p) => patch(one.id, p)} />}
@@ -867,7 +874,7 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
       })()}
 
       {/* Bottom left: zoom, then undo and redo */}
-      {!(phone && editing) && <div className="cv-ui cv-bl">
+      {!(phone && (editing || pop === "tools" || pop === "style")) && <div className="cv-ui cv-bl">
         <div className="cv-group">
           <button className="cv-tbtn" aria-label="Zoom out" onClick={() => zoomTo(zoom / 1.25)}><Minus size={16} /></button>
           <button className="cv-pct" onClick={() => zoomTo(1)} title="Reset to 100%">{Math.round(zoom * 100)}%</button>

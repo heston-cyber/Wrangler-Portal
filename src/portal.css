@@ -4356,3 +4356,16 @@ textarea.cv-boxtxt { pointer-events: auto; display: block; padding-top: calc(50%
 .cv-dp-list { display: grid; gap: 4px; max-height: 260px; overflow-y: auto; }
 .cv-dp-row { display: grid; gap: 2px; text-align: left; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--text-primary); font: 400 14px/1.3 var(--font-body); cursor: pointer; }
 .cv-dp-row b { font-weight: 500; }
+
+/* Nov 17 (Heston, phone): every tool is on a phone. The Tools and Style sheets sit right above the tool bar and scroll
+   if they're taller than the room; zoom and undo step aside while one is open; handles get a finger-sized hit area. */
+@media (max-width: 600px) {
+  .cv-phonebar button { width: 58px; min-width: 0; padding: 0 2px; }
+  .cv-phonebar button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cv-sheet { max-height: calc(100dvh - 330px); overflow-y: auto; overscroll-behavior: contain; }
+  .cv-sheetgrid { grid-template-columns: repeat(4, 1fr); }
+  .cv-stylesheet .cv-panel { position: static; width: auto; max-height: none; overflow: visible; padding: 0; background: transparent; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+@media (pointer: coarse) {
+  .cv-handle::after { content: ""; position: absolute; inset: calc(-22px / var(--cvz, 1)); }
+}
