@@ -211,11 +211,18 @@ export const ownersAll = internalAction({
 // so the preview holds none (a restore from live carried them over). It refuses to run anywhere that isn't the deployment named in
 // `deployment`: the dev workflow (convex-dev.yml) passes its own dev key's name, and live's address never matches it. It isn't in
 // the live "Convex run" list. Output is a count only.
+//
+// Nov 18 (Heston approved the read-back, 17:31): a second lock. Naming the deployment is something anyone running it can do,
+// so it also needs the setting W9_STRIP_OK on that deployment, holding the same name. Heston sets it on the development
+// deployment only (Convex dashboard › Settings › Environment variables); live never has it, so it can't run there.
 export const stripW9s = internalMutation({
   args: { deployment: v.string() },
   handler: async (ctx, { deployment }) => {
     const url = process.env.CONVEX_CLOUD_URL ?? "";
-    if (!/^[a-z0-9-]{3,}$/.test(deployment) || new URL(url || "https://none.invalid").hostname.split(".")[0] !== deployment) throw new Error("Refused: this isn't the deployment named.");
+    let here = "";
+    try { here = new URL(url).hostname.split(".")[0]; } catch { /* no address: refused below */ }
+    if (!/^[a-z0-9-]{3,}$/.test(deployment) || !here || here !== deployment) throw new Error("Refused: this isn't the deployment named.");
+    if ((process.env.W9_STRIP_OK ?? "").trim() !== here) throw new Error("Refused: W9_STRIP_OK isn't set to this deployment's name here.");
     let cleared = 0;
     for (const x of await ctx.db.query("vendors").collect()) {
       if (!x.w9) continue;
