@@ -248,7 +248,10 @@ export const codeMail = internalAction({
   handler: async (ctx, { userId, to, at }): Promise<void> => {
     const code = sixDigits();
     const send: boolean = await ctx.runMutation(internal.security.setCode, { userId, to, at, codeHash: await codeHash(userId, code) });
-    if (!send) return; // replaced, cancelled or run out before this job ran
+    // Replaced, cancelled or run out before this job stored its code: nothing is sent. (A replace or cancel that lands
+    // between the line above and the send still lets this email go, but its code is already dead: the row it matched
+    // is gone or has a newer request, so it answers "wrong" or "expired".)
+    if (!send) return;
     const brand = await ctx.runQuery(internal.security.brand, {});
     await deliverOnce(ctx, `email-change-code:${userId}:${at}`, "code", to, newEmailCodeMail(brand, { code, minutes: CODE_MIN }), brand.replyTo, null);
   },

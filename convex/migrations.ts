@@ -232,6 +232,18 @@ export const stripW9s = internalMutation({
       await ctx.db.patch(x._id, { w9: undefined });
       cleared++;
     }
-    return { cleared };
+    // Security review (Nov 18, L1): W-9 files no vendor points at any more: one queued by a business's deletion (its 30
+    // days), or an earlier upload recorded as a W-9. Their file and its records go too. (An upload never claimed by
+    // setW9 has no record saying it's a W-9, so it can't be told apart here.)
+    const deletion = await ctx.db.query("deletionFiles").collect();
+    let files = 0;
+    for (const o of await ctx.db.query("fileOwners").collect()) {
+      if (o.purpose !== "w9") continue;
+      try { await ctx.storage.delete(o.storageId); } catch { /* already gone */ }
+      for (const d of deletion) if (d.fileId === o.storageId) await ctx.db.delete(d._id);
+      await ctx.db.delete(o._id);
+      files++;
+    }
+    return { cleared, files };
   },
 });

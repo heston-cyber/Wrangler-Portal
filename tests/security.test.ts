@@ -169,7 +169,7 @@ describe("Phase 5e · Security", () => {
     // A cancel before the job runs: no email at all.
     mails.length = 0;
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    await w.maya.action(api.security.startEmailChange, { newEmail: "third@harbor.example", current: PW }).catch(() => null);
+    expect(await w.maya.action(api.security.startEmailChange, { newEmail: "third@harbor.example", current: PW })).toMatchObject({ ok: true });
     await w.maya.mutation(api.security.cancelEmailChange, {});
     await settle(w);
     expect(mails.filter((m) => m.to === "third@harbor.example")).toEqual([]);
