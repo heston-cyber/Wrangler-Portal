@@ -1,6 +1,7 @@
 // Share (client side C2, Oct 23): the Share button on a client, a project or a video. Makes a link that lets
 // someone outside see it (anyone with the link, or invited emails who sign in), with View or Comment access
 // and the settings from the plan. Settings › Shares lists every share (SharesSettings, below).
+import { ExpiryPick, expiryOf } from "../../ui/LinkExpiry";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { Check, Copy, Link2, Mail, Pencil, Plus, Power, Trash2, UserPlus, X } from "lucide-react";
@@ -19,9 +20,6 @@ export async function copyLink(text: string, show: (m: string) => void) {
 }
 
 const KINDS = { client: "client", project: "project", video: "video" } as const;
-const dateInput = (t: number | null) => (t ? new Date(t - new Date(t).getTimezoneOffset() * 60_000).toISOString().slice(0, 10) : "");
-// A date picked in the box means "through the end of that day", local time.
-const endOfDay = (s: string) => { if (!s) return null; const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d, 23, 59, 59, 999).getTime(); };
 
 function Toggle({ on, onChange, label, hint }: { on: boolean; onChange: (v: boolean) => void; label: string; hint?: string }) {
   return (
@@ -52,7 +50,7 @@ export function ShareDialog({ target, label, onClose, show }: { target: ShareTar
   const [allVersions, setAllVersions] = useState(true);
   const [downloads, setDownloads] = useState(false);
   const [emailNew, setEmailNew] = useState(true);
-  const [expires, setExpires] = useState("");
+  const [exp, setExp] = useState("never"); // Nov 18 (Heston): Never, 1 day, 2 days, 3 days, 1 week or 30 days
   const [passcode, setPasscode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +64,7 @@ export function ShareDialog({ target, label, onClose, show }: { target: ShareTar
     if (who === "invited" && !list.length) { setError("Add at least one email, or choose Anyone with the link."); return; }
     setBusy(true); setError(null);
     try {
-      const r = await create({ target, access, who, allVersions, downloads, emailNewVersions: emailNew, expiresAt: endOfDay(expires) ?? undefined, passcode: who === "link" && passcode.trim() ? passcode.trim() : undefined, emails: who === "invited" ? list : undefined });
+      const r = await create({ target, access, who, allVersions, downloads, emailNewVersions: emailNew, expiresAt: expiryOf(exp) ?? undefined, passcode: who === "link" && passcode.trim() ? passcode.trim() : undefined, emails: who === "invited" ? list : undefined });
       setMade({ url: r.url, who, added: r.added });
       if (who === "link") void copyLink(r.url, show);
     } catch (ex) { setError(err(ex)); }
@@ -118,11 +116,7 @@ export function ShareDialog({ target, label, onClose, show }: { target: ShareTar
               {access === "comment" ? <Toggle on={allVersions} onChange={setAllVersions} label="Show all versions" hint="off shows only the latest" /> : <span className="caption" style={{ margin: 0 }}>View only: just the player, latest version only. No notes, versions or transcript.</span>}
               <Toggle on={downloads} onChange={setDownloads} label="Allow downloads" hint="the full-resolution file" />
               <Toggle on={emailNew} onChange={setEmailNew} label="Email them when a new version lands" hint={who === "link" ? "invited shares only" : undefined} />
-              <label className="expires">
-                <span>Expires</span>
-                <input className="input sm" type="date" value={expires} onChange={(e) => setExpires(e.target.value)} min={dateInput(Date.now() + 86_400_000)} aria-label="Expires on" />
-                <span className="secondary">{expires ? <>at the end of that day · <button type="button" className="linkbtn" onClick={() => setExpires("")}>never</button></> : "· never"}</span>
-              </label>
+              <ExpiryPick value={exp} onChange={setExp} />
             </div>
             {error && <p className="error" role="alert">{error}</p>}
             <div className="dfoot">
@@ -190,7 +184,7 @@ export function EditShare({ s, onClose, show }: { s: PublicShare; onClose: () =>
   const [allVersions, setAllVersions] = useState(s.allVersions);
   const [downloads, setDownloads] = useState(s.downloads);
   const [emailNew, setEmailNew] = useState(s.emailNewVersions);
-  const [expires, setExpires] = useState(dateInput(s.expiresAt));
+  const [exp, setExp] = useState(s.expiresAt ? "keep" : "never"); // Nov 18: keep its date, Never, or a choice from now
   const [passcode, setPasscode] = useState<string | null>(null); // null = unchanged
   const [newEmail, setNewEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -198,7 +192,7 @@ export function EditShare({ s, onClose, show }: { s: PublicShare; onClose: () =>
   const save = async (e: React.FormEvent) => {
     e.preventDefault(); setBusy(true); setError(null);
     try {
-      await update({ shareId: s._id, access, allVersions, downloads, emailNewVersions: emailNew, expiresAt: endOfDay(expires), ...(passcode !== null ? { passcode: passcode.trim() || null } : {}) });
+      await update({ shareId: s._id, access, allVersions, downloads, emailNewVersions: emailNew, ...(exp === "keep" ? {} : { expiresAt: expiryOf(exp) }) /* review L5: keeping it sends nothing */, ...(passcode !== null ? { passcode: passcode.trim() || null } : {}) });
       show("Share saved"); onClose();
     } catch (ex) { setError(err(ex)); setBusy(false); }
   };
@@ -253,11 +247,7 @@ export function EditShare({ s, onClose, show }: { s: PublicShare; onClose: () =>
           {access === "comment" ? <Toggle on={allVersions} onChange={setAllVersions} label="Show all versions" hint="off shows only the latest" /> : <span className="caption" style={{ margin: 0 }}>View only: just the player, latest version only. No notes, versions or transcript.</span>}
           <Toggle on={downloads} onChange={setDownloads} label="Allow downloads" hint="the full-resolution file" />
           <Toggle on={emailNew} onChange={setEmailNew} label="Email them when a new version lands" hint={s.who === "link" ? "invited shares only" : undefined} />
-          <label className="expires">
-            <span>Expires</span>
-            <input className="input sm" type="date" value={expires} onChange={(e) => setExpires(e.target.value)} aria-label="Expires on" />
-            <span className="secondary">{expires ? <>at the end of that day · <button type="button" className="linkbtn" onClick={() => setExpires("")}>never</button></> : "· never"}</span>
-          </label>
+          <ExpiryPick value={exp} onChange={setExp} keepAt={s.expiresAt ?? null} />
         </div>
         {error && <p className="error" role="alert">{error}</p>}
         <div className="dfoot"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary" type="submit" disabled={busy}>{busy ? "Saving…" : "Save"}</button></div>

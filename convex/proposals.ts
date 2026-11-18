@@ -31,6 +31,7 @@ import { proposalProblems, proposalStarterPage, sectionCount, withoutPrices } fr
 import { WRANGLER_QUESTIONNAIRE, answerList, bound, cleanQuestionnaire, linesTotal, outlineFromAnswers, type Answers, type ClientAnswer, type FileAnswer, type PLine, type Questionnaire } from "./lib/questionnaire";
 import { EMPTY_KIT, MAX_FILE_BYTES, MAX_FILES, linkLabel, type Kit } from "./brandKit";
 import { pageToMarkdown } from "./lib/wsPageMd";
+import { EXPIRED, expiryDays, expiryFrom, linkExpired } from "./lib/linkExpiry";
 import { addPeople, adoptLegacy, answer, forWho, newCopiedLink, noteOpen, parseTo, peopleOf, resolve, rowsOf, stateFor, stopPerson } from "./lib/offers";
 
 const TOKEN = /^[A-Za-z0-9_-]{16,64}$/;
@@ -102,7 +103,7 @@ export const get = query({
       _id: p._id, buildId: p.buildId, number: p.number, status: p.status, drafted: p.drafted ?? null, who: whoOf(p, build), money: seesValue(me) ? money(p, build) : { ...money(p, build), totalCents: null, depositCents: null }, // M5
       link: await (async () => { const rows = await rowsOf(ctx, "proposal", p._id); const own = rows.find((r) => r.email === p.contact?.email) ?? rows[0]; return own ? proposalLink(own.token) : p.token && p.status !== "draft" ? proposalLink(p.token) : null; })(),
       people: await peopleOf(ctx, "proposal", p), linkUrl: p.linkToken ? proposalLink(p.linkToken) : null, // D149: Opened and accepted
-      sentAt: p.sentAt ?? null, viewedAt: p.viewedAt ?? null, message: p.message ?? null,
+      sentAt: p.sentAt ?? null, viewedAt: p.viewedAt ?? null, message: p.message ?? null, linkExpiresAt: p.linkExpiresAt ?? null, // Nov 18
       response: p.response ? { kind: p.response.kind, name: p.response.name, email: p.response.email ?? null, company: p.response.company ?? null, at: p.response.at, reason: p.response.reason ?? null } : null, asked: p.asked ?? {}, voidedAt: p.voidedAt ?? null,
       deal: deal ? { _id: deal._id, stage: deal.stage, title: deal.title, quiet: !!deal.quiet } : null, client: client ? { _id: client._id, name: client.name } : null,
       contract: contract ? { _id: contract._id, title: contract.title } : null, history: p.history,
@@ -235,14 +236,18 @@ export const newTemplate = mutation({
  *  frozen the first time. With no To, the client in Details. A proposal sent before D149 resends on its one link. */
 export const markSent = internalMutation({
   args: { proposalId: v.id("proposals"), storageId: v.optional(v.id("_storage")), message: v.optional(v.string()), move: v.optional(v.boolean()), resend: v.boolean(),
-    to: v.optional(v.string()), name: v.optional(v.string()), copyLink: v.optional(v.boolean()) },
+    to: v.optional(v.string()), name: v.optional(v.string()), copyLink: v.optional(v.boolean()), expiresInDays: v.optional(expiryDays) },
   handler: async (ctx, a): Promise<{ error?: string; at?: number; legacy?: string | null; sends?: Array<{ rowId: Id<"offerRecipients">; email: string; name: string | null; token: string }>; link?: string | null }> => {
     const { me } = await ownerBiz(ctx);
     let p = await ctx.db.get(a.proposalId);
     const build = p ? await ctx.db.get(p.buildId) : null;
     if (!p || !build) throw new ConvexError("That proposal isn't here.");
-    await audit(ctx, { kind: "sent", text: `${a.resend ? "sent again" : "sent"} proposal ${p.number ?? ""}`.trim(), where: "Docs › Proposals", link: `/proposals/${p._id}` });
     const now = Date.now();
+    // Nov 18: sending more people a link that has already expired would hand them a dead link (review L2: refused before
+    // Activity records a send). Once it's out, the expiry changes on its page, not here.
+    if (p.status === "sent" && linkExpired(p, now)) return { error: "The links have expired. Change when they expire first, then send." };
+    if (p.status === "sent" && a.expiresInDays !== undefined) return { error: "It's already been sent. Change when the links expire on its page." };
+    await audit(ctx, { kind: "sent", text: `${a.resend ? "sent again" : "sent"} proposal ${p.number ?? ""}`.trim(), where: "Docs › Proposals", link: `/proposals/${p._id}` });
     if (a.resend && p.token && a.to === undefined && !a.copyLink) {
       if (p.status !== "sent") throw new ConvexError("Only an open proposal can be sent again.");
       await ctx.db.patch(p._id, { updatedAt: now, history: [...p.history, { kind: "resent", at: now, by: by(me), detail: p.contact?.email }].slice(-60) });
@@ -284,10 +289,12 @@ export const markSent = internalMutation({
       status: "sent", pdfId: a.storageId, contact, fromName: d.fields.business.contact?.trim().slice(0, 120) || undefined,
       totalCents: cents(t.total), depositCents: cents(t.deposit), depositPct: t.depositPct, lineCount: itemRows(d.page).length,
       message: a.message?.trim().slice(0, 2000) || undefined, sentAt: now, updatedAt: now, ...(dealId ? { dealId } : {}), ...(linkToken ? { linkToken } : {}),
+      ...(a.expiresInDays !== undefined ? { linkExpiresAt: expiryFrom(a.expiresInDays, now) } : {}), // Nov 18: "Make this link expire"
       asked: { ...(p.asked ?? {}), move: a.move ? "yes" : "no" },
       history: [...p.history, { kind: "sent", at: now, by: by(me), detail: sends.length ? sends.map((x) => x.email).join(", ").slice(0, 400) : "anyone with the link" }, ...(a.move && dealId ? [{ kind: "moved", at: now, by: by(me), detail: "Quoted" }] : [])].slice(-60),
     });
     await ctx.db.patch(build._id, { renderedAt: now });
+    if (a.expiresInDays !== undefined) await ctx.scheduler.runAt(expiryFrom(a.expiresInDays, now), internal.proposals.expiryTick, { proposalId: p._id, at: expiryFrom(a.expiresInDays, now) });
     return { at: now, legacy: null, sends, link: linkToken ? proposalLink(linkToken) : null };
   },
 });
@@ -305,9 +312,9 @@ export const mailData = internalQuery({
 
 export const send = action({
   args: { proposalId: v.id("proposals"), storageId: v.optional(v.id("_storage")), message: v.optional(v.string()), move: v.optional(v.boolean()), resend: v.optional(v.boolean()),
-    to: v.optional(v.string()), name: v.optional(v.string()), copyLink: v.optional(v.boolean()) },
+    to: v.optional(v.string()), name: v.optional(v.string()), copyLink: v.optional(v.boolean()), expiresInDays: v.optional(expiryDays) },
   handler: async (ctx, a): Promise<{ held: boolean; sent: number; failed: string[]; link: string | null }> => {
-    const m = await ctx.runMutation(internal.proposals.markSent, { proposalId: a.proposalId, storageId: a.storageId, message: a.message, move: a.move, resend: !!a.resend, to: a.to, name: a.name, copyLink: a.copyLink });
+    const m = await ctx.runMutation(internal.proposals.markSent, { proposalId: a.proposalId, storageId: a.storageId, message: a.message, move: a.move, resend: !!a.resend, to: a.to, name: a.name, copyLink: a.copyLink, expiresInDays: a.expiresInDays });
     if (m.error !== undefined || !m.at) throw new ConvexError(m.error ?? "That didn't send. Try again.");
     const d = (await ctx.runQuery(internal.proposals.mailData, { proposalId: a.proposalId }))!;
     const mail = (name: string | null, link: string) => proposalMail(d.brand, { name: name ?? "", number: d.p.number, title: d.title, totalCents: d.p.totalCents ?? 0, sentAt: d.p.sentAt ?? Date.now(), message: d.p.message ?? null, link });
@@ -343,7 +350,35 @@ export const newLink = mutation({
     const { me } = await ownerBiz(ctx);
     const p = await ctx.db.get(proposalId);
     if (!p) throw new ConvexError("That proposal isn't here.");
+    if (linkExpired(p)) throw new ConvexError("The links have expired. Change when they expire first, then make a new link."); // review L1
     return proposalLink(await newCopiedLink(ctx, p, by(me)));
+  },
+});
+
+/** Nov 18: change when every link to a sent proposal stops working: 1, 2, 3, 7 or 30 days from now, or never (null). */
+export const setLinkExpiry = mutation({
+  args: { proposalId: v.id("proposals"), days: v.union(expiryDays, v.null()) },
+  handler: async (ctx, a) => {
+    const { me } = await ownerBiz(ctx);
+    const p = await ctx.db.get(a.proposalId);
+    if (!p) throw new ConvexError("That proposal isn't here.");
+    if (OPEN.has(p.status)) throw new ConvexError("It hasn't been sent yet. Choose this when you send it.");
+    const now = Date.now();
+    const linkExpiresAt = a.days === null ? undefined : expiryFrom(a.days, now);
+    await ctx.db.patch(p._id, { linkExpiresAt, updatedAt: now, history: [...p.history, { kind: "expiry_changed", at: now, by: by(me), detail: linkExpiresAt ? new Date(linkExpiresAt).toISOString() : "never" }].slice(-60) });
+    if (linkExpiresAt) await ctx.scheduler.runAt(linkExpiresAt, internal.proposals.expiryTick, { proposalId: p._id, at: linkExpiresAt });
+    return { linkExpiresAt: linkExpiresAt ?? null };
+  },
+});
+
+/** Review L3: at the expiry time, touch the proposal so pages already open re-run and show "expired". Nothing else
+ *  changes; a tick whose time was since changed does nothing. */
+export const expiryTick = internalMutation({
+  args: { proposalId: v.id("proposals"), at: v.number() },
+  handler: async (ctx, { proposalId, at }) => {
+    const p = await ctx.db.get(proposalId);
+    if (p && p.linkExpiresAt === at) await ctx.db.patch(p._id, { linkExpiresAt: at });
+    return null;
   },
 });
 
@@ -428,6 +463,13 @@ export const startContract = action({
 
 // ---------- the client's page: /p/<token> (no account, D73) ----------
 
+/** Nov 18 (Heston: "Yes", 09:42): an expiry stops every link except the one someone accepted on: their own emailed link
+ *  (or a proposal's one link from before D149) keeps showing what they accepted. A copied link, which anyone can hold,
+ *  stops with the rest. */
+const acceptedHere = (f: NonNullable<Awaited<ReturnType<typeof resolve>>>) =>
+  f.doc.status === "accepted" && ((f.via === "email" && f.r?.response?.kind === "accepted") || f.via === "legacy");
+const expiredFor = (f: NonNullable<Awaited<ReturnType<typeof resolve>>>) => linkExpired(f.doc) && !acceptedHere(f);
+
 export const page = query({
   args: { token: v.string(), at: v.optional(v.number()) /* Phase 6 review M2: the page's link window, so fresh file links come each 10 minutes */ },
   handler: async (ctx, { token }) => {
@@ -437,12 +479,16 @@ export const page = query({
     focusBusiness(ctx, p.businessId);
     const b = p.businessId ? await ctx.db.get(p.businessId) : null;
     const build = await ctx.db.get(p.buildId);
+    const business = { name: b?.name ?? "", logoUrl: b?.logoFileId ? await ctx.storage.getUrl(b.logoFileId) : null, email: b?.replyTo ?? null };
+    // Nov 18: an expired link shows only that it expired, with the business (no price, PDF, people or answer).
+    if (expiredFor(f)) return { expired: true as const, number: p.number, title: build?.title ?? "Proposal", business };
     return {
+      expired: false as const,
       number: p.number, title: build?.title ?? "Proposal", status: p.status as "sent" | "accepted" | "declined" | "void", for: forWho(f), via: f.via === "link" ? "link" as const : "email" as const,
       // Phase 6 (Heston, Nov 17): a withdrawn proposal shows its banner only, so its price and PDF aren't sent either
       totalCents: p.status === "void" ? 0 : p.totalCents ?? 0, depositCents: p.status === "void" ? 0 : p.depositCents ?? 0, depositPct: p.status === "void" ? 0 : p.depositPct ?? 0, sentAt: p.sentAt ?? p.createdAt, fromName: p.fromName ?? null,
-      pdfUrl: p.status === "void" ? null : await fileLink(p.pdfId, `${p.number} ${build?.title ?? "Proposal"}.pdf`), answer: stateFor(f), // Phase 6 M1: a 10-20 minute link; a withdrawn one shows only its banner
-      business: { name: b?.name ?? "", logoUrl: b?.logoFileId ? await ctx.storage.getUrl(b.logoFileId) : null, email: b?.replyTo ?? null },
+      pdfUrl: p.status === "void" ? null : await fileLink(p.pdfId, `${p.number} ${build?.title ?? "Proposal"}.pdf`, Date.now(), acceptedHere(f) ? undefined : p.linkExpiresAt), answer: stateFor(f), // Phase 6 M1: a 10-20 minute link (review L3, Nov 18: never past the link's expiry); a withdrawn one shows only its banner
+      business,
     };
   },
 });
@@ -451,7 +497,7 @@ export const markViewed = mutation({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
     const f = await resolve(ctx, "proposal", token);
-    if (!f || f.doc.status !== "sent") return null;
+    if (!f || f.doc.status !== "sent" || expiredFor(f)) return null;
     focusBusiness(ctx, f.doc.businessId);
     await noteOpen(ctx, f);
     return null;
@@ -464,6 +510,7 @@ export const respondInternal = internalMutation({
   handler: async (ctx, a) => {
     const f = await resolve(ctx, "proposal", a.token);
     if (!f) return { error: "This proposal isn't here." };
+    if (expiredFor(f)) return { error: EXPIRED }; // Nov 18 (the accepter's own link answers "already accepted" instead)
     focusBusiness(ctx, f.doc.businessId);
     const r = await answer(ctx, "proposal", f, a, f.doc.status === "void" ? "This proposal was withdrawn." : null);
     if ("error" in r) return r;

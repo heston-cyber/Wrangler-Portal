@@ -57,6 +57,13 @@ export default function ClientProposal({ token }: { token: string }) {
   if (p === undefined) return <Frame inShell={false} bar={null}><Card label="Loading"><SkeletonRows n={5} /></Card></Frame>;
   if (p === null) return <Frame inShell={false} bar={null}><EmptyState icon="lock" title="This link doesn't work any more." body="It may have been mistyped or replaced by a newer version. Open the link in the email again, or reply to that email to ask for it." /></Frame>;
   const biz = p.business.name || "the business";
+  // Nov 18 (Heston): the owner set the link to expire. Only the business and the proposal's name show.
+  if (p.expired) return (
+    <Frame inShell={false} bar={null} brand={{ name: p.business.name, logoUrl: p.business.logoUrl }}>
+      <div className="q-public-top"><span className="wp-small">Proposal from {biz}</span></div>
+      <EmptyState icon="lock" title="This link has expired." body={`The link to proposal ${p.number}, “${p.title.replace(/\.$/, "")}”, has expired. Ask ${biz} for a new one${p.business.email ? ` at ${p.business.email}` : ""}.`} />
+    </Frame>
+  );
   const s = p.status;
   const chip = s === "sent" ? <StatusChip tone="accent">Open</StatusChip> : s === "accepted" ? <StatusChip tone="success">Accepted</StatusChip> : s === "declined" ? <StatusChip tone="danger">Declined</StatusChip> : <StatusChip tone="neutral">Withdrawn</StatusChip>;
   const forName = p.for.anyone ? "Anyone with the link" : p.for.name; // D149: this viewer only

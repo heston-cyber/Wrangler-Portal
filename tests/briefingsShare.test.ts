@@ -132,7 +132,7 @@ describe("D147 briefings sent freely", () => {
     await w.heston.mutation(api.briefings.setLinkOff, { briefingId: id, off: true });
     for (const tok of [priya, link]) {
       const pg = await w.t.query(api.briefings.page, { token: tok });
-      expect(pg).toEqual({ withdrawn: true, business: expect.objectContaining({ name: "Wrangler Productions" }), title: "Shoot brief · 26127 Launch" });
+      expect(pg).toEqual({ withdrawn: true, expired: false, business: expect.objectContaining({ name: "Wrangler Productions" }), title: "Shoot brief · 26127 Launch" });
       await expect(w.t.mutation(api.briefings.markRead, { token: tok })).rejects.toThrow(/withdrawn/);
       await w.t.mutation(api.briefings.opened, { token: tok });
       expect((await w.t.fetch(`/b-pdf/${tok}`)).status).toBe(404);
@@ -240,5 +240,64 @@ describe("D147 briefings sent freely", () => {
     await w.heston.action(api.briefings.share, { briefingId: id, to: [{ email: "priya@rao.example" }] });
     expect(mails.length).toBe(before);
     expect((await w.t.fetch("/b-pdf/%E0%A4%A")).status).toBe(404);
+  });
+});
+
+// Nov 18 (Heston, approved 09:06): "Make this link expire" on a briefing: 1, 2, 3, 7 or 30 days, changeable afterward.
+describe("Nov 18 · a briefing's links expire", () => {
+  const DAY = 86_400_000, T0 = Date.UTC(2030, 0, 6, 15);
+  async function sharedFor(w: W, mails: Sent[], extra: Record<string, unknown>) {
+    const id = await w.heston.mutation(api.briefings.create, { projectId: w.p }) as Id<"briefings">;
+    const b = await w.heston.query(api.briefings.get, { briefingId: id });
+    const build = await w.heston.query(api.builder.getBuild, { buildId: b.buildId });
+    const fields = { ...build.fields, custom: build.fields.custom.map((c: { key: string; label: string; value: string }) => (c.key === "dates" ? { ...c, value: "Jan 8, 2030" } : c)) };
+    await w.heston.mutation(api.builder.saveBuild, { buildId: b.buildId, title: build.title, blocks: build.blocks, fields, signers: [], style: build.style });
+    const r = await w.heston.action(api.briefings.share, { briefingId: id, storageId: await pdf(w), to: [{ email: "priya@rao.example", name: "Priya Rao" }], copyLink: true, ...extra });
+    return { id, priya: tokenIn(mails.find((m) => m.to === "priya@rao.example")!), link: (r.link as string).split("/b/")[1] };
+  }
+
+  test("B1–B4: a ticked expiry stops every link and the PDF at its time; no opens or reads count; no new shares or update emails; the owner can change it or make it never", async () => {
+    vi.useFakeTimers({ now: T0 });
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const { id, priya, link } = await sharedFor(w, mails, { expiresInDays: 1 });
+    expect((await w.heston.query(api.briefings.get, { briefingId: id })).link.expiresAt).toBe(T0 + DAY);
+    expect((await w.t.fetch(`/b-pdf/${priya}`)).status).toBe(200);
+    vi.setSystemTime(T0 + DAY);
+    for (const tok of [priya, link]) {
+      expect(await w.t.query(api.briefings.page, { token: tok })).toEqual({ withdrawn: true, expired: true, business: expect.objectContaining({ name: "Wrangler Productions" }), title: expect.any(String) }); // B1
+      await w.t.mutation(api.briefings.opened, { token: tok });
+      await expect(w.t.mutation(api.briefings.markRead, { token: tok })).rejects.toThrow(/expired/);
+      expect((await w.t.fetch(`/b-pdf/${tok}`)).status).toBe(404); // B2: no PDF either
+    }
+    const g = await w.heston.query(api.briefings.get, { briefingId: id });
+    expect(g.link.opens).toBe(0);
+    expect(g.who[0]).toMatchObject({ opens: 0, openedAt: null });
+    // B3: no new person gets a dead link, and an update emails nobody while the links are expired.
+    await expect(w.heston.action(api.briefings.share, { briefingId: id, to: [{ email: "ana@studiofour.com" }] })).rejects.toThrow(/expired/);
+    const before = mails.length;
+    expect(await w.heston.action(api.briefings.update, { briefingId: id, storageId: await pdf(w), notify: true })).toMatchObject({ emailed: 0 });
+    expect(mails.length).toBe(before);
+    // B4: only the owner changes it.
+    for (const who of [w.boss, w.maya, w.t]) await expect(who.mutation(api.briefings.setLinkExpiry, { briefingId: id, days: 3 })).rejects.toThrow();
+    expect(await w.heston.mutation(api.briefings.setLinkExpiry, { briefingId: id, days: 3 })).toEqual({ linkExpiresAt: T0 + 4 * DAY });
+    expect(await w.t.query(api.briefings.page, { token: priya })).toMatchObject({ withdrawn: false, expired: false });
+    await w.heston.mutation(api.briefings.setLinkExpiry, { briefingId: id, days: null });
+    vi.setSystemTime(T0 + 400 * DAY);
+    expect((await w.t.fetch(`/b-pdf/${link}`)).status).toBe(200);
+  });
+
+  test("B5: unticked, a briefing's links never expire; a draft's expiry can't be set", async () => {
+    vi.useFakeTimers({ now: T0 });
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const { id, link } = await sharedFor(w, mails, {});
+    expect((await w.heston.query(api.briefings.get, { briefingId: id })).link.expiresAt).toBeNull();
+    vi.setSystemTime(T0 + 365 * DAY);
+    expect(await w.t.query(api.briefings.page, { token: link })).toMatchObject({ withdrawn: false });
+    const draft = await w.heston.mutation(api.briefings.create, {}) as Id<"briefings">;
+    await expect(w.heston.mutation(api.briefings.setLinkExpiry, { briefingId: draft, days: 7 })).rejects.toThrow(/hasn't been shared/);
   });
 });

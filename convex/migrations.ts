@@ -206,3 +206,25 @@ export const ownersAll = internalAction({
     return { recorded, already, missing, conflicts: conflicts.length };
   },
 });
+
+// Nov 18 (Heston: "Delete the data, it's fine. There's no real W9s yet."): clears every vendor's W-9 on the DEVELOPMENT copy only,
+// so the preview holds none (a restore from live carried them over). It refuses to run anywhere that isn't the deployment named in
+// `deployment`: the dev workflow (convex-dev.yml) passes its own dev key's name, and live's address never matches it. It isn't in
+// the live "Convex run" list. Output is a count only.
+export const stripW9s = internalMutation({
+  args: { deployment: v.string() },
+  handler: async (ctx, { deployment }) => {
+    const url = process.env.CONVEX_CLOUD_URL ?? "";
+    if (!/^[a-z0-9-]{3,}$/.test(deployment) || new URL(url || "https://none.invalid").hostname.split(".")[0] !== deployment) throw new Error("Refused: this isn't the deployment named.");
+    let cleared = 0;
+    for (const x of await ctx.db.query("vendors").collect()) {
+      if (!x.w9) continue;
+      try { await ctx.storage.delete(x.w9.fileId); } catch { /* already gone */ }
+      const owner = await ctx.db.query("fileOwners").withIndex("by_storage", (q) => q.eq("storageId", x.w9!.fileId)).collect();
+      for (const o of owner) await ctx.db.delete(o._id);
+      await ctx.db.patch(x._id, { w9: undefined });
+      cleared++;
+    }
+    return { cleared };
+  },
+});

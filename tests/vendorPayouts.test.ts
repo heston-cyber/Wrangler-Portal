@@ -354,3 +354,28 @@ describe("pay in portal", () => {
     expect(await w.heston.query(api.vendorPayments.get, { invoiceId: inv })).toMatchObject({ status: "paid" });
   });
 });
+
+describe("a vendor's email is changed", () => {
+  const change = async (w: W, v: Id<"vendors">, email: string) => {
+    const x = await w.t.run(async (ctx) => ctx.db.get(v));
+    const { _id, _creationTime, businessId, createdAt, updatedAt, payout, invitedAt, joinedAt, ...details } = x as Record<string, unknown>;
+    void _id; void _creationTime; void businessId; void createdAt; void updatedAt; void payout; void invitedAt; void joinedAt;
+    await w.heston.mutation(api.vendors.update, { vendorId: v, ...details, email });
+  };
+  test("the old address gets a safety notice (new address only in part); nobody is told when there was no login or bank", async () => {
+    const w = await world();
+    const s = fake();
+    const a = await w.heston.mutation(api.vendors.add, { name: "Jordan Ellis", email: JORDAN, roles: ["Shooter"], rates: [], invite: false }) as Id<"vendors">;
+    await change(w, a, "jordan.new@ellisfilms.com"); // never joined, no bank: nothing to tell
+    await settle(w);
+    expect(s.mails.filter((m) => m.subject.includes("vendor list was changed"))).toHaveLength(0);
+    await w.t.run(async (ctx) => { await ctx.db.patch(a, { joinedAt: Date.now() }); });
+    await change(w, a, "jordan.third@ellisfilms.com"); // had a login: the address it had is told
+    await settle(w);
+    const m = s.mails.find((x) => x.subject === "Your email on the Wrangler Productions vendor list was changed")!;
+    expect(m.to).toBe("jordan.new@ellisfilms.com");
+    expect(m.text).toContain("j…d@ellisfilms.com"); // the new address, in part
+    expect(m.text).not.toContain("jordan.third@");
+    expect(m.text).toContain("direct deposit details were cleared");
+  });
+});

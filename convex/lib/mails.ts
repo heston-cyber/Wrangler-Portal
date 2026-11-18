@@ -598,6 +598,17 @@ export function vendorPayoutReturnedMail(b: MailBrand, d: { name: string; number
   ], vendorFoot(b), `${d.number} · ${usd(d.cents)}`);
 }
 
+/** Nov 18 (Heston: "You write the copy and go with your suggestion"): to the vendor's OLD address when the owner changes the email
+ *  on their vendor record and they had a login or direct deposit. A safety notice: it names the new address only in part. */
+export function vendorEmailChangedMail(b: MailBrand, d: { name: string; newEmailMasked: string }): Mail {
+  return mk(b, "updates", `Your email on the ${b.name} vendor list was changed`, [
+    hi(d.name),
+    { t: "p", text: `${b.name} changed the email on your vendor record to ${d.newEmailMasked}.` },
+    { t: "p", text: "Because of that, this address can no longer open your bookings, briefings or invoices, and your direct deposit details were cleared. When the new address is invited, sign in there and set up direct deposit again in Settings." },
+    { t: "p", text: `If this wasn't expected, reply to this email to let ${b.name} know.` },
+  ], signoff(b));
+}
+
 // ---------- Phase 4 (frames 742:2564, 742:2590): 29 · Shoot scheduled, 30 · Shoot moved; and the owner's note when a
 // client confirms (no frame: the owner-alert layout of 26). ----------
 export const clock = (hhmm: string) => { const [h, m] = hhmm.split(":").map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };

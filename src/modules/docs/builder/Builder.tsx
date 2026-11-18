@@ -1,6 +1,7 @@
 // The doc builder (B2, Oct 27; one Craft-style editor since E1), laid out like Craft: the outline on the left, the
 // page in the middle (every line is a block you edit where it sits), and a panel on the right with Insert · Format ·
 // Style · Details. It edits either a build (a document on its way to signing) or a template. Everything saves as you go.
+import { ExpiryRow, ExpiryTick, type ExpiryDays } from "../../../ui/LinkExpiry";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
@@ -448,7 +449,7 @@ export default function Builder({ mode }: { mode: Mode }) {
     setProblems(null); setSending(true);
   };
   // D149: Send (To, one link each), Copy link or Download PDF. A draft is saved and its PDF frozen the first time.
-  const onSend = async (o: { to?: string; name?: string; message?: string; move?: boolean; copyLink?: boolean }) => {
+  const onSend = async (o: { to?: string; name?: string; message?: string; move?: boolean; copyLink?: boolean; expiresInDays?: ExpiryDays | null }) => {
     if (!prop) return null;
     let storageId: Id<"_storage"> | undefined;
     if (prop.status !== "sent") {
@@ -460,7 +461,7 @@ export default function Builder({ mode }: { mode: Mode }) {
       storageId = await uploadToStorage(await uploadUrl({}), new File([blob], `${prop.number} ${doc.title}.pdf`, { type: "application/pdf" }));
     }
     const r = await sendProposal({ proposalId: prop._id, ...(storageId ? { storageId } : {}), ...(o.to !== undefined ? { to: o.to } : {}), ...(o.name?.trim() ? { name: o.name } : {}),
-      ...(o.message?.trim() ? { message: o.message.trim() } : {}), ...(o.move ? { move: true } : {}), ...(o.copyLink ? { copyLink: true } : {}) });
+      ...(o.message?.trim() ? { message: o.message.trim() } : {}), ...(o.move ? { move: true } : {}), ...(o.copyLink ? { copyLink: true } : {}), ...(o.expiresInDays && prop.status !== "sent" ? { expiresInDays: o.expiresInDays } : {}) });
     setSending(false);
     show(o.copyLink ? "Link copied. Anyone with it can open and accept the proposal." : r.failed.length ? `Not sent to ${r.failed.join(", ")}.` : r.held ? "Saved as sent, but the email was held (email sending is limited on this site)." : r.sent ? `Sent to ${r.sent === 1 ? (o.to ?? "").trim() : `${r.sent} people`}.` : "They were emailed in the last 10 minutes, so not again yet.");
     return r.link;
@@ -853,9 +854,10 @@ function ProposalBanner({ p, busy, onContract, onLater, onWithdraw, onCopy, onDi
   return null;
 }
 
-function SendProposal({ p, doc, onClose, onSend, onPdf }: { p: ProposalInfo; doc: BuildDoc; onClose: () => void; onSend: (o: { to?: string; name?: string; message?: string; move?: boolean; copyLink?: boolean }) => Promise<string | null>; onPdf: () => Promise<void> }) {
+function SendProposal({ p, doc, onClose, onSend, onPdf }: { p: ProposalInfo; doc: BuildDoc; onClose: () => void; onSend: (o: { to?: string; name?: string; message?: string; move?: boolean; copyLink?: boolean; expiresInDays?: ExpiryDays | null }) => Promise<string | null>; onPdf: () => Promise<void> }) {
   const c = doc.fields.client;
   const [message, setMessage] = useState("");
+  const [days, setDays] = useState<ExpiryDays | null>(null); // Nov 18: unticked, the links never expire
   const [move, setMove] = useState(false); // D84: unticked; nothing moves on its own
   const company = c.company.trim() || c.name.trim();
   const again = p.status === "sent";
@@ -865,8 +867,9 @@ function SendProposal({ p, doc, onClose, onSend, onPdf }: { p: ProposalInfo; doc
       extra={<>
         {!again && <TextArea label="Message (optional)" rows={3} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="e.g. Here's our plan. Happy to talk it through." />}
         {client && company && <Checkbox checked={move} onChange={setMove} label={`Also move ${company} to Quoted in your pipeline`} hint="Only if you tick this. Nothing moves on its own." />}
+        {!again && <ExpiryTick value={days} onChange={setDays} />}
       </>}
-      onSend={async (to, name) => { await onSend({ to, name, message, move }); }} onCopyLink={() => onSend({ copyLink: true })} onPdf={onPdf} onClose={onClose} />
+      onSend={async (to, name) => { await onSend({ to, name, message, move, expiresInDays: days }); }} onCopyLink={() => onSend({ copyLink: true, expiresInDays: days })} onPdf={onPdf} onClose={onClose} />
   );
 }
 
@@ -943,8 +946,10 @@ function PitchDeck({ p, show }: { p: ProposalInfo; show: (m: string) => void }) 
 function ProposalPeople({ p, show }: { p: ProposalInfo; show: (m: string) => void }) {
   const stop = useMutation(api.proposals.stopLink);
   const newLink = useMutation(api.proposals.newLink);
+  const setExpiry = useMutation(api.proposals.setLinkExpiry);
   return (
     <>
+      <ExpiryRow expiresAt={p.linkExpiresAt} onSet={(days) => setExpiry({ proposalId: p._id, days })} show={show} />
       {p.status === "accepted" && p.deal?.quiet && p.response && <p className="caption pr-quiet">{p.response.name}{p.response.company ? `, for ${p.response.company},` : ""} is not a client, so a quiet lead record was made. Nothing else moves unless you say so. Start the contract fills in their name{p.response.company ? " and company" : ""}; you check it before anything is sent.</p>}
       <OfferPeopleCard who={p.people} open={p.status === "sent"} show={show} onStop={(personId) => stop({ proposalId: p._id, personId: personId as Id<"offerRecipients"> })} onNewLink={() => newLink({ proposalId: p._id })} />
     </>

@@ -7,7 +7,8 @@ import { internalAction, internalQuery, mutation, query } from "./lib/functions"
 import { internal } from "./_generated/api";
 import { syncVendorMemberships } from "./lib/business";
 import { mailBrandOf } from "./lib/mail";
-import { vendorInviteMail } from "./lib/mails";
+import { vendorEmailChangedMail, vendorInviteMail } from "./lib/mails";
+import { maskEmail } from "./lib/wsSigning";
 import { deliverOnce } from "./invoiceReminders";
 import { v, ConvexError } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -169,6 +170,8 @@ export const update = mutation({
     // Phase 6 sweep M3: a new email is a new person for payouts too: the Stripe recipient (and its bank) is dropped, so the
     // new address sets up direct deposit from the start.
     await ctx.db.patch(vendorId, { ...d, ...(d.email !== x.email ? { invitedAt: undefined, joinedAt: undefined, payout: undefined } : {}), updatedAt: Date.now() });
+    // Nov 18: the old address is told (a safety notice) when someone there had a login or direct deposit.
+    if (d.email !== x.email && (x.joinedAt || x.payout)) await ctx.scheduler.runAfter(0, internal.vendors.mailEmailChanged, { vendorId, oldEmail: x.email, newEmail: d.email, at: Date.now() });
     return null;
   },
 });
@@ -250,6 +253,24 @@ export const inviteData = internalQuery({
     if (!x || x.archivedAt || !x.invitedAt) return null;
     const user = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", x.email)).unique();
     return { name: x.name, email: x.email, hasAccount: !!user, brand: await mailBrandOf(ctx, x.businessId ?? null) };
+  },
+});
+
+export const emailChangeData = internalQuery({
+  args: { vendorId: v.id("vendors") },
+  handler: async (ctx, { vendorId }) => {
+    const x = await ctx.db.get(vendorId);
+    if (!x || x.archivedAt) return null;
+    return { name: x.name, brand: await mailBrandOf(ctx, x.businessId ?? null) };
+  },
+});
+
+export const mailEmailChanged = internalAction({
+  args: { vendorId: v.id("vendors"), oldEmail: v.string(), newEmail: v.string(), at: v.number() },
+  handler: async (ctx, { vendorId, oldEmail, newEmail, at }) => {
+    const d = await ctx.runQuery(internal.vendors.emailChangeData, { vendorId });
+    if (!d) return;
+    await deliverOnce(ctx, `vendor-email-changed:${vendorId}:${at}`, "vendor_email_changed", oldEmail, vendorEmailChangedMail(d.brand, { name: d.name, newEmailMasked: maskEmail(newEmail) }), d.brand.replyTo);
   },
 });
 

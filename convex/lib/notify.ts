@@ -49,6 +49,7 @@ export const NOTICES: Notice[] = [
   { key: "invoice_updates", side: "vendor", group: "Invoices", label: "Your invoice is approved, declined or paid", kinds: ["vendor_invoice_approved", "vendor_invoice_declined", "vendor_invoice_paid", "vendor_payout_returned"] },
   { key: "vendor_payout_setup", side: "vendor", group: "Your account", label: "A business asks you to set up direct deposit", kinds: ["vendor_payout_setup"], always: true },
   { key: "vendor_invite", side: "vendor", group: "Your account", label: "Invites from a business", kinds: ["vendor_invite"], always: true },
+  { key: "vendor_email_changed", side: "vendor", group: "Your account", label: "Your email on a business's list is changed", kinds: ["vendor_email_changed"], always: true },
   { key: "vendor_codes", side: "vendor", group: "Your account", label: "Sign-in codes and password resets", kinds: ["code", "reset"], always: true },
 
   // ---------- to a client ----------

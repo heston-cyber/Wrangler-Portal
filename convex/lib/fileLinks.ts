@@ -20,9 +20,11 @@ const site = () => (process.env.CONVEX_SITE_URL ?? "").replace(/\/$/, "");
 
 /** A link to a stored file, good until the end of the next 10-minute window (so a query's answer stays the same for a
  *  while and pages don't re-render every second). `null` when there's no file or no server secret. */
-export async function fileLink(fileId: Id<"_storage"> | string | null | undefined, name = "file", now = Date.now()): Promise<string | null> {
+export async function fileLink(fileId: Id<"_storage"> | string | null | undefined, name = "file", now = Date.now(), notAfter?: number): Promise<string | null> {
   if (!fileId || !secret()) return null;
-  const exp = Math.floor(now / LINK_WINDOW_MS) * LINK_WINDOW_MS + 2 * LINK_WINDOW_MS;
+  // Nov 18 review L3: a link to a file behind an expiring link ends when that link does.
+  const exp = Math.min(Math.floor(now / LINK_WINDOW_MS) * LINK_WINDOW_MS + 2 * LINK_WINDOW_MS, notAfter ?? Infinity);
+  if (exp <= now) return null;
   const n = cleanName(name);
   const sig = await sign(`${site()}|${fileId}|${exp}|${n}`);
   return `${site()}/fl/${fileId}/${exp}/${sig}/${encodeURIComponent(n)}`;

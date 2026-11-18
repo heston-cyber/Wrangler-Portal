@@ -442,8 +442,12 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
   const uploads = useUploads().filter((u) => u.status === "starting" || u.status === "uploading");
   const [signOut, signOutDialog] = useSignOutAsk();
   const sideSwitch = useSideSwitch();
-  // A layer opens by itself on its own pages; the chevron opens or closes it anywhere.
-  const [open, setOpen] = useState<Record<string, boolean>>({});
+  // A layer opens by itself on its own pages; the chevron opens or closes it anywhere. Nov 18 (Heston): one menu open at a time:
+  // opening a layer closes the others, opening a stage (Proposals, Contracts, Payments) closes the other stages of its layer, and
+  // moving to another page starts again from the page's own layer.
+  const [openState, setOpenState] = useState<{ at: string; v: Record<string, boolean> }>({ at: path, v: {} });
+  const open = openState.at === path ? openState.v : {};
+  const setOpen = (fn: (o: Record<string, boolean>) => Record<string, boolean>) => setOpenState({ at: path, v: fn(open) });
   const isOpen = (it: Item) => open[it.to] ?? !!it.layerHas?.(path);
   const settingsOn = starts(path, "/settings");
   const touchX = useRef<number | null>(null); // a swipe left closes the drawer
@@ -500,7 +504,12 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
               </a>
               {it.layer && (
                 <button type="button" className="layer-toggle" aria-expanded={isOpen(it)} aria-label={`${isOpen(it) ? "Close" : "Open"} the ${it.label} layer`}
-                  onClick={() => setOpen((o) => ({ ...o, [it.to]: !isOpen(it) }))}>
+                  onClick={() => setOpen((o) => {
+                    if (isOpen(it)) return { ...o, [it.to]: false };
+                    const n: Record<string, boolean> = {};
+                    for (const x of items) if (x.layer) n[x.to] = x.to === it.to;
+                    return n;
+                  })}>
                   <Icon name={isOpen(it) ? "chevron-down" : "chevron-right"} size={16} />
                 </button>
               )}
@@ -522,7 +531,12 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
                           <Icon name={STAGE_ICON[g] ?? "folder"} size={18} /><span>{g}</span>{!kids.length && !only && <span className="wp-soon">Soon</span>}
                         </a>
                         {kids.length > 0 && (
-                          <button type="button" className="layer-toggle stage-toggle" aria-expanded={on} aria-label={`${on ? "Close" : "Open"} ${g}`} onClick={() => setOpen((o) => ({ ...o, [key]: !on }))}>
+                          <button type="button" className="layer-toggle stage-toggle" aria-expanded={on} aria-label={`${on ? "Close" : "Open"} ${g}`} onClick={() => setOpen((o) => {
+                            if (on) return { ...o, [key]: false };
+                            const n = { ...o };
+                            for (const h of groupsOf(it.layer!)) n[`${it.to}#${h}`] = h === g;
+                            return n;
+                          })}>
                             <Icon name={on ? "chevron-down" : "chevron-right"} size={14} />
                           </button>
                         )}
