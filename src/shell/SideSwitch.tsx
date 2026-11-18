@@ -43,7 +43,7 @@ export function SideFromLink() {
     const want = new URLSearchParams(search).get("side");
     if (done.current || !me || me.allowed || (want !== "vendor" && want !== "client")) return;
     done.current = true;
-    const clean = () => { const u = new URL(window.location.href); u.searchParams.delete("side"); u.searchParams.delete("invited"); window.history.replaceState(null, "", u.toString()); };
+    const clean = () => { const u = new URL(window.location.href); u.searchParams.delete("side"); u.searchParams.delete("invited"); u.searchParams.delete("have"); window.history.replaceState(null, "", u.toString()); };
     if (me.role === want || !(me.sides ?? []).includes(want)) { clean(); return; }
     void sw({ side: want }).then(clean, clean);
   }, [me, search, sw]);

@@ -1,5 +1,6 @@
 // The client's Home (P1 / Client / Home): what's waiting on them (new cuts to review, documents to sign) and the
 // newest of their Inbox.
+import { GettingStarted } from "../onboard/ClientOnboard";
 import { TopBar } from "../../shell/Shell";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -35,6 +36,7 @@ export default function ClientHome() {
       <TopBar className="deskonly"><span className="here">Home</span></TopBar>
       <div className="wp-page notop ch">
         <PageHeader title={waiting === undefined ? " " : headline(n)} sub={waiting === undefined ? " " : n ? "Everything else is up to date." : "New cuts and documents will show up here."} />
+        <GettingStarted /> {/* Phase 7 step 3: Getting started and the tour (748:384, 748:169) */}
         <Card label="Waiting for you" head={<SectionHead label="Waiting for you" count={n || undefined} />}>
           {waiting === undefined ? <SkeletonRows n={2} />
             : n === 0 ? <ListRow className="ilead quiet" lead={{ icon: "check-circle" }} title="Nothing waiting on you right now." />

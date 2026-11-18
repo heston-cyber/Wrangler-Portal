@@ -27,6 +27,8 @@ import { HelpScreen } from "../help/Help";
 import { VendorCallSheetPage } from "../production/CallSheetRead";
 import { VendorTasksCard } from "../work/portalTasks";
 import { InvoiceEditor, VendorInvoice, VendorInvoices, VendorReview, VendorSettings, HomeInvoices } from "./VendorWork";
+import VendorOnboard, { VendorGettingStarted } from "../onboard/VendorOnboard";
+import { OnboardFrame } from "../onboard/ClientOnboard";
 const KEY = "wr.vendorBiz";
 const read = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
 const write = (v: string) => { try { localStorage.setItem(KEY, v); } catch { /* private window */ } };
@@ -48,6 +50,13 @@ export default function VendorApp({ me }: { me: { name: string | null; email: st
   const current = list.find((b) => b.businessId === biz) ?? null;
   useBrand(current);
   const setBiz = (b: Id<"businesses">) => { setPicked(b); write(b); };
+  // Phase 7 (email 37): the invite's ?biz= opens the vendor side on that business, once, if this login works for it.
+  useEffect(() => {
+    const want = new URLSearchParams(location.search).get("biz");
+    if (!want || !list.length) return;
+    if (list.some((b) => b.businessId === want)) setBiz(want as Id<"businesses">);
+    const u = new URL(window.location.href); u.searchParams.delete("biz"); window.history.replaceState(null, "", u.toString());
+  }, [list.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const { path } = useLocation();
   const counts = useQuery(api.vendorPortal.counts, biz ? { businessId: biz } : "skip");
   const reviews = useQuery(api.vendorPortal.reviews, biz ? { businessId: biz } : "skip");
@@ -67,6 +76,8 @@ export default function VendorApp({ me }: { me: { name: string | null; email: st
   const ctx = useMemo(() => ({ biz, setBiz, list }), [biz, list]); // eslint-disable-line react-hooks/exhaustive-deps
   if (mine === undefined) return <Loading />;
   if (!list.length) return <EmptyFrame />;
+  // Phase 7 step 5: onboarding stands on its own, like setup (no menu or tabs), in this business's look.
+  if (/^\/welcome\/?$/.test(path)) { const n = new URLSearchParams(location.search).get("step"); return <Ctx.Provider value={ctx}><OnboardFrame brand={current}><VendorOnboard key={`${biz}:${location.search}`} start={n !== null && /^\d$/.test(n) ? Number(n) : null} /></OnboardFrame></Ctx.Provider>; }
   return (
     <Ctx.Provider value={ctx}>
       <ShellFrame me={me} side="vendor" overlay={false} light logo={current?.logoUrl ?? wpLogo} bizName={current?.name ?? "WranglerPortal"} shared={[]} unread={0} recent={[]} search={false}
@@ -147,6 +158,7 @@ function VendorHome() {
           actions={h.upcoming.length ? <><ButtonLink to="/vendor/invoices/new">Log hours</ButtonLink><ButtonLink variant="primary" to="/vendor/invoices/new">Send an invoice</ButtonLink></> : undefined} />
         <div className="wp-homecols">
           <div className="col">
+            <VendorGettingStarted />
             <VendorTasksCard businessId={biz ?? null} from={h.business} />
             {h.offered.map((x) => (
               <Card key={x._id} label="New booking" head={<SectionHead label="New booking" count={h.offered.length > 1 ? undefined : 1} />}>

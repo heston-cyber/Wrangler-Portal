@@ -581,6 +581,7 @@ function Sidebar({ me, side, items, logo, bizName, subtitle, recent, drawer, onC
       )}>
         <div className="mlabel" style={{ textTransform: "none", letterSpacing: 0, fontFamily: "var(--font-body)", fontSize: 12 }}>{me.email}</div>
         <MenuItem icon={<Icon name="settings" size={18} />} onSelect={() => navigate("/settings")}>Settings</MenuItem>
+        {side === "owner" && <PlatformItem />}
         {sideSwitch.other && <MenuItem icon={<Icon name="users" size={18} />} onSelect={() => void sideSwitch.go()}>Switch to the {sideWord(sideSwitch.other)}</MenuItem>}
         <MenuSep />
         <MenuItem icon={<Icon name="sign-out" size={18} />} onSelect={signOut}>Sign out</MenuItem>
@@ -763,6 +764,7 @@ export function MorePage({ me, side }: { me: Me; side: Side }) {
       ...(subs?.length ? [{ to: "/payments/subscriptions", icon: "activity" as IconName, title: "Subscriptions", sub: "Your plans" }] : [])];
   // The owner's: the tools on their menu that don't fit the tab bar (Settings › Tools sets which and in what order).
   const tools = useQuery(api.users.me, side === "owner" ? {} : "skip")?.tools as Tools | undefined;
+  const admin = useQuery(api.platform.me, side === "owner" ? {} : "skip")?.admin ?? false; // Phase 7: Heston only
   const TOOL_SUB: Record<string, string> = { "/messages": "Conversations with clients and leads", "/": "Today, clients and activity", "/clients/overview": "Pipeline, companies, follow-ups", "/review": "Projects and activity", "/review/overview": "Projects and activity", "/sign/overview": "Documents and templates",
     "/proposals/overview": "Written pitches, templates", "/payments": "Overview, invoices and subscriptions", "/vendors/overview": "Shooters, editors and crew you hire", "/sent": "Notes and items you sent",
     "/production/calendar": "Shoots, edits and calls", "/projects": "Every project, under its client or on its own", "/production": "Shoots, call sheets, shot lists, gear, crew" };
@@ -773,6 +775,7 @@ export function MorePage({ me, side }: { me: Me; side: Side }) {
       ...rest.map((it) => ({ to: it.to, icon: it.icon, title: it.label, sub: TOOL_SUB[it.to] })),
       { to: "/settings", icon: "settings", title: "Settings", sub: "Business, Register, Dropbox, connectors…" },
       { to: "/settings/account", icon: "user", title: "Account", sub: `${me.name ?? ""}${me.name ? " · " : ""}${me.email}` },
+      ...(admin ? [{ to: "/admin", icon: "building" as IconName, title: "Platform admin", sub: "Businesses on WranglerPortal · only you" }] : []),
       { icon: "sign-out", title: "Sign out", onClick: signOut },
     ]
     : [
@@ -917,4 +920,11 @@ function SearchPalette({ onClose }: { onClose: () => void }) {
       </div>
     </Modal>
   );
+}
+
+/** Phase 7 (D110): the platform admin page, in Heston's account menu only. */
+function PlatformItem() {
+  const admin = useQuery(api.platform.me, {})?.admin;
+  if (!admin) return null;
+  return <MenuItem icon={<Icon name="building" size={18} />} onSelect={() => navigate("/admin")}>Platform admin</MenuItem>;
 }

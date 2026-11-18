@@ -4383,3 +4383,77 @@ textarea.cv-boxtxt { pointer-events: auto; display: block; padding-top: calc(50%
 .lx-pick { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: var(--fs-caption); }
 .bf-actions .lx-row { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--border-faint); }
 .bf-actions .lx-row button, .bf-actions .lx-row .btn { width: auto; }
+
+/* Phase 7 · the platform admin page (751:1808) */
+.pa-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 22px; }
+.pa-brand { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-title, inherit); font-size: 18px; }
+.pa-stats { margin: 18px 0; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pa-list { padding: 6px 0; }
+.pa-meta { display: grid; gap: 4px; }
+.pa-acts { display: inline-flex; gap: 14px; }
+@media (max-width: 720px) { .pa-kind { display: none; } }
+@media (max-width: 720px) { .pa-stats { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .pa-list .meta { white-space: normal; overflow: visible; text-overflow: clip; } }
+
+/* Phase 7 step 2 · onboarding pages (750:916–750:2099) and the Home checklist (751:1096) */
+.ob { max-width: 640px; margin: 0 auto; display: grid; gap: 10px; }
+.ob-brand { font-family: var(--font-title, inherit); font-size: 18px; }
+.ob-prog { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-top: 6px; }
+.ob-prog i { height: 3px; border-radius: 2px; background: rgba(var(--paper), .14); }
+.ob-prog i.on { background: var(--accent); }
+.ob h1 { margin: 6px 0 0; }
+.ob-card { display: grid; gap: 14px; padding: 18px; border-radius: 18px; margin-top: 8px; }
+.ob-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ob-foot { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.ob-foot .sp { flex: 1; }
+.ob-drop { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 52px; width: 100%; border: 1px dashed rgba(var(--paper), .28); border-radius: 12px; background: transparent; color: var(--text-secondary); }
+.ob-drop b { color: var(--accent); font-weight: 500; }
+.ob-drop.light { background: rgba(255, 255, 255, .9); color: #4a4a4a; }
+.ob-drop img { max-height: 40px; max-width: 80%; }
+.ob-tools { gap: 4px; }
+.ob-tool { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; }
+.ob-tool > span { display: grid; gap: 2px; }
+.ob-check { padding: 16px 6px 10px; display: grid; gap: 0; margin-bottom: 18px; }
+.ob-check .ob-checkhead { padding: 0 12px; }
+.ob-checkhead { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.ob-checkhead .sp { flex: 1; }
+.ob-checkrow { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
+.ob-checkrow > span { display: grid; gap: 2px; flex: 1; }
+.ob-checkrow > svg, .ob-checkrow > .icon { color: var(--accent); flex: none; }
+@media (max-width: 720px) { .ob-two { grid-template-columns: 1fr; } }
+.ob-tool > :last-child { flex: none; }
+
+/* Phase 7 step 3 · client onboarding (747:333–748:384) and the tour */
+.ob-client { padding-top: 24px; width: min(560px, 100%); }
+.ob-colors { display: flex; flex-wrap: wrap; gap: 8px; }
+.ob-color { display: inline-flex; align-items: center; gap: 6px; }
+.ob-color .sw { width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(var(--paper), .2); }
+.ob-color .input { width: 100px; }
+.ob-pref { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ob-add { display: flex; gap: 8px; }
+.ob-add .input { flex: 1; }
+.tour { position: fixed; z-index: 1001; width: min(320px, calc(100vw - 32px)); padding: 14px 16px; border-radius: 16px; display: grid; gap: 8px;
+  background: #0e0a0c; border: 1px solid rgba(var(--paper), .18); box-shadow: 0 18px 50px rgba(0, 0, 0, .7); }
+.tour p { margin: 0; }
+.tour-acts { display: flex; align-items: center; gap: 8px; }
+.tour-acts .sp { flex: 1; }
+.tour-ring { position: fixed; z-index: 1000; pointer-events: none; border: 2px solid var(--accent); border-radius: 14px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, .45); transition: top .2s, left .2s, width .2s, height .2s; }
+
+/* Phase 7 step 4 · vendor onboarding (749:676–749:1319) */
+.ob-file { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid rgba(var(--paper), .14); border-radius: 12px; }
+.ob-file > svg, .ob-file > .icon { color: var(--accent); flex: none; }
+.ob-file > span { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.ob-file > span b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ob-ext { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-size: 13px; text-decoration: none; width: fit-content; }
+.ob-ext:hover { text-decoration: underline; }
+.ob-banner { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1px solid rgba(var(--paper), .16); border-radius: 12px; background: rgba(var(--paper), .04); }
+.ob-banner > svg, .ob-banner > .icon { color: var(--accent); flex: none; margin-top: 2px; }
+.ob-banner > span { display: grid; gap: 2px; }
+.ob-banner b { font-weight: 500; }
+@media (max-width: 720px) { .ob-file { flex-wrap: wrap; } }
+.ob-uperr { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); border-radius: 12px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.ob-uperr > svg, .ob-uperr > .icon { color: var(--accent); flex: none; }
+.ob-uperr > span { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.ob-uperr b { font-weight: 500; overflow-wrap: anywhere; }
+.ob-uperr > .btn { flex: none; }

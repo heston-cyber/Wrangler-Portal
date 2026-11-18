@@ -86,6 +86,9 @@ const OPEN: Record<string, string> = {
   "signCopies.page": "D160: a copied person's view-only link: answers only for a copy row's own long random token; a cancelled, replaced or expired document answers without its file (tested in signCc.test.ts)",
   "signCopies.opened": "the same link: counts an open of that copy only; rate-limited",
   "briefings.markRead": "the same link: records \"I've read it\" for that briefing only (named only on a person's own link); a missing token is refused; rate-limited",
+  "clientOnboard.state": "Phase 7 step 3: a client's own onboarding progress (their own person row and company); null for anyone else, tested in clientOnboard.test.ts",
+  "setup.state": "Phase 7 step 2: the owner's own business's setup progress; null for anyone else (and for Wrangler), tested in setup.test.ts",
+  "platform.me": "Phase 7: only whether the caller is the platform admin (ALLOWED_EMAILS, Heston); nothing else, tested in platform.test.ts",
   "siteWatch.summary": "Phase 5c: open and urgent counts for the portal's admins (ALLOWED_EMAILS); null for anyone else, tested in siteWatch.test.ts",
   // Phase 5b step 4 (D127): a call-sheet guest's link (/guest/<token>, email 41), signed out.
   "guests.intro": "a guest's link: answers only for that pass's own long random token, with the sheet's title, day, the guest's first name and a masked email; tested in callSheetGuests.test.ts",
@@ -126,6 +129,8 @@ const SIGNED_IN = new Set(["help.list", "help.guide", "messages.mine", "messages
   "delivery.forClient", "delivery.assetUrl", "delivery.clientAnswer", "delivery.makeLink", "delivery.setLink",
   // Phase 5e step 2: their own password, email and devices (security.test.ts)
   "security.state", "security.changePassword", "security.startEmailChange", "security.confirmEmailChange", "security.cancelEmailChange", "security.seenDevice", "security.signOutDevice"]);
+// Phase 7 step 3: a client's own onboarding answers only a client who is a person of a company (their own row and company);
+// the matrix's client is invited by a share, not a person of one, so these refuse it too (tested in clientOnboard.test.ts).
 // D133 (Phase 5): functions a vendor login may call: their own side of the portal (each checks the vendor's own records,
 // tested in vendorPortal.test.ts and vendorPayouts.test.ts), their own identity, and nothing of the owner's or a client's.
 const VENDOR = new Set(["help.list", "help.guide", "users.switchSide",
@@ -139,6 +144,8 @@ const VENDOR = new Set(["help.list", "help.guide", "users.switchSide",
   "vendorPortal.tickShot",
   // 5m (D199): tasks given to them on purpose (For a vendor), with Done (work.test.ts)
   "work.forVendor", "work.vendorDone",
+  // Phase 7 step 4: their own onboarding for a business they work for (vendorOnboard.test.ts)
+  "vendorOnboard.state", "vendorOnboard.step", "vendorOnboard.tour", "vendorOnboard.profile", "vendorOnboard.payMethod",
   // Phase 5e step 2: their own password, email and devices (security.test.ts)
   "security.state", "security.changePassword", "security.startEmailChange", "security.confirmEmailChange", "security.cancelEmailChange", "security.seenDevice", "security.signOutDevice"]);
 
@@ -268,6 +275,7 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "clients.updatePerson": CLIENTS,
     "clients.removePerson": CLIENTS,
     "clients.invitePerson": CLIENTS,
+    "clientOnboard.requests": CLIENTS, "clientOnboard.decide": CLIENTS, // Phase 7 step 3 (D112)
     "clients.page": CLIENTS,
     "clients.setSettings": CLIENTS,
     "clients.directory": CLIENTS,

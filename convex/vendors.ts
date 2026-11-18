@@ -2,6 +2,8 @@
 // 730:1153 the vendor page, 732:2909 Add vendor). A business's subcontractors with their roles, rates (shown beside the
 // business's own Pricing subcontractor costs), details, gear, W-9 status and notes. Bookings, briefings, the vendor
 // portal and payments build on this in the next steps. Owner only.
+import { INVITE_MS } from "./lib/invites";
+import { inviteCap } from "./lib/rate";
 import { allowedEmails } from "./lib/owners";
 import { internalAction, internalQuery, mutation, query } from "./lib/functions";
 import { internal } from "./_generated/api";
@@ -122,7 +124,8 @@ export const get = query({
     void _payout;
     return {
       ...rest, portal: status(x),
-      w9: w9 ? { name: w9.name, uploadedAt: w9.uploadedAt, canOpen: pay } : null, // opened through w9Link (second 5e review)
+      // Phase 7 security review (L2): the file's name (which a vendor types) only for Vendor payments; others see "W-9".
+      w9: w9 ? { name: pay ? w9.name : "W-9", uploadedAt: w9.uploadedAt, canOpen: pay } : null, // opened through w9Link (second 5e review)
       payMethod: pay ? payMethod : undefined,
       rates: value ? theirRates : [], ratesHidden: !value,
       costs: value ? x.roles.map((role) => ({ role, cost: pricingCost(rates, role) })) : [],
@@ -169,7 +172,9 @@ export const update = mutation({
     if (d.email !== x.email) await endAccess(ctx, x);
     // Phase 6 sweep M3: a new email is a new person for payouts too: the Stripe recipient (and its bank) is dropped, so the
     // new address sets up direct deposit from the start.
-    await ctx.db.patch(vendorId, { ...d, ...(d.email !== x.email ? { invitedAt: undefined, joinedAt: undefined, payout: undefined } : {}), updatedAt: Date.now() });
+    // Phase 7 security review (L5): the previous person's payment note and onboarding go too, so the new address starts
+    // fresh and isn't shown them (their W-9 stays on file for the business: Heston to decide).
+    await ctx.db.patch(vendorId, { ...d, ...(d.email !== x.email ? { invitedAt: undefined, joinedAt: undefined, payout: undefined, payMethod: undefined, onboard: undefined } : {}), updatedAt: Date.now() });
     // Nov 18: the old address is told (a safety notice) when someone there had a login or direct deposit.
     if (d.email !== x.email && (x.joinedAt || x.payout)) await ctx.scheduler.runAfter(0, internal.vendors.mailEmailChanged, { vendorId, oldEmail: x.email, newEmail: d.email, at: Date.now() });
     return null;
@@ -227,10 +232,11 @@ async function endAccess(ctx: MutationCtx, x: Doc<"vendors">) {
 async function inviteNow(ctx: MutationCtx, vendorId: Id<"vendors">) {
   const x = (await ctx.db.get(vendorId))!;
   const now = Date.now();
-  await ctx.db.patch(vendorId, { invitedAt: now, updatedAt: now });
+  await ctx.db.patch(vendorId, { invitedAt: now, ...(x.joinedAt ? {} : { inviteExpiresAt: now + INVITE_MS }), updatedAt: now }); // Phase 7 (D134): 14 days
   const user = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", x.email)).unique();
   // An existing login (a vendor elsewhere, or a client: one login can be both) gets this business on its vendor side.
   if (user && user.role !== "owner") await syncVendorMemberships(ctx, x.email, user._id);
+  await inviteCap(ctx, x.businessId ?? "default", x.email); // Phase 7 reviews (M4)
   await ctx.scheduler.runAfter(0, internal.vendors.mailInvite, { vendorId, at: now });
 }
 
@@ -252,7 +258,11 @@ export const inviteData = internalQuery({
     const x = await ctx.db.get(vendorId);
     if (!x || x.archivedAt || !x.invitedAt) return null;
     const user = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", x.email)).unique();
-    return { name: x.name, email: x.email, hasAccount: !!user, brand: await mailBrandOf(ctx, x.businessId ?? null) };
+    // Phase 7 (email 37): the roles, and the date the link stops working (D134; none once they've joined).
+    const until = !x.joinedAt && x.inviteExpiresAt ? new Date(x.inviteExpiresAt).toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric" }) : null;
+    // D94: already a vendor of another business here (their login and profile are done; only this business's W-9 and payment method).
+    const vendorElsewhere = (await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", x.email)).collect()).some((m) => m.role === "vendor" && !m.revokedAt && m.businessId !== x.businessId);
+    return { name: x.name, email: x.email, hasAccount: !!user, vendorElsewhere, roles: x.roles, businessId: x.businessId ?? null, until, brand: await mailBrandOf(ctx, x.businessId ?? null) };
   },
 });
 
@@ -279,6 +289,6 @@ export const mailInvite = internalAction({
   handler: async (ctx, { vendorId, at }) => {
     const d = await ctx.runQuery(internal.vendors.inviteData, { vendorId });
     if (!d) return;
-    await deliverOnce(ctx, `vendor-invite:${vendorId}:${at}`, "vendor_invite", d.email, vendorInviteMail(d.brand, { name: d.name, email: d.email, hasAccount: d.hasAccount }), d.brand.replyTo);
+    await deliverOnce(ctx, `vendor-invite:${vendorId}:${at}`, "vendor_invite", d.email, vendorInviteMail(d.brand, { name: d.name, email: d.email, hasAccount: d.hasAccount, vendorElsewhere: d.vendorElsewhere, roles: d.roles, businessId: d.businessId, until: d.until }), d.brand.replyTo);
   },
 });

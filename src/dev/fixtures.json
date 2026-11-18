@@ -18315,6 +18315,66 @@
   "handBack.mine": {
    "pin": false,
    "passkeys": []
+  },
+  "platform.me": {
+   "admin": true
+  },
+  "platform.overview": {
+   "rows": [
+    {
+     "_id": "b1",
+     "kind": "business",
+     "name": "Wrangler Productions",
+     "owner": "Heston Hill",
+     "email": "owner@wrangler.example",
+     "since": 1791568318960,
+     "yours": true,
+     "status": "active",
+     "clients": 11,
+     "vendors": 5,
+     "team": 1,
+     "lastActive": 1795024318960,
+     "expiresAt": null
+    },
+    {
+     "_id": "b2",
+     "kind": "business",
+     "name": "Juniper & Ash Studio",
+     "owner": "Nora Ash",
+     "email": "nora@juniperash.example",
+     "since": 1794765118960,
+     "yours": false,
+     "status": "setting_up",
+     "clients": 1,
+     "vendors": 0,
+     "team": 0,
+     "lastActive": 1794937918960,
+     "expiresAt": null
+    },
+    {
+     "_id": "i1",
+     "kind": "invite",
+     "name": "Northline Creative",
+     "owner": "sam@northline.example",
+     "email": "sam@northline.example",
+     "since": 1794851518960,
+     "yours": false,
+     "status": "invited",
+     "clients": 0,
+     "vendors": 0,
+     "team": 0,
+     "lastActive": null,
+     "expiresAt": 1796061118960
+    }
+   ],
+   "totals": {
+    "businesses": 2,
+    "active": 1,
+    "settingUp": 1,
+    "invited": 1,
+    "clients": 12,
+    "vendors": 5
+   }
   }
  },
  "client": {

@@ -10,6 +10,8 @@ const first = (name: string | null | undefined) => (name ?? "").trim().split(/\s
 const hi = (name: string | null | undefined): Block => ({ t: "p", text: first(name) ? `Hi ${first(name)},` : "Hi," });
 const hello = (name: string | null | undefined): Block => ({ t: "p", text: first(name) ? `Hi ${first(name)},` : "Hello," }); // D149 (Q98)
 /** "Heston at Wrangler Productions" (or just the business when no owner name is set). */
+/** "Juniper & Ash’s", "Wrangler Productions’" (email 37). */
+const poss = (name: string) => (/s$/i.test(name.trim()) ? `${name.trim()}’` : `${name.trim()}’s`);
 const byline = (b: MailBrand, full = false) => (b.ownerName ? `${full ? b.ownerName : first(b.ownerName)} at ${b.name}` : b.name);
 const SIGN_HOST = "sign.wranglerportal.com";
 const mk = (b: MailBrand, address: "review" | "contracts" | "updates", subject: string, blocks: Block[], footer: Block[], preheader?: string): Mail =>
@@ -46,7 +48,7 @@ export function shareInviteMail(b: MailBrand, d: { kind: string; label: string; 
 }
 /** 03b Portal invite (drawn Oct 29): "Invite to the portal" / "Resend invite" from the client page. */
 export function portalInviteMail(b: MailBrand, d: { name: string | null; email: string; hasAccount: boolean }): Mail {
-  const link = `${SITE()}/?invited=${encodeURIComponent(d.email).replace(/%40/g, "@")}&side=client`; // a client-and-vendor login lands on the client side
+  const link = `${SITE()}/?invited=${encodeURIComponent(d.email).replace(/%40/g, "@")}&side=client${d.hasAccount ? "&have=1" : ""}`; // a client-and-vendor login lands on the client side; have=1: opens on Sign in (Phase 7)
   const who = byline(b);
   return mk(b, "review", `${who} invited you to WranglerPortal`, [
     hi(d.name),
@@ -448,17 +450,28 @@ export function briefingLinkMail(b: MailBrand, d: { name: string | null; kind: s
 }
 
 // ---------- the vendor portal invite (Phase 3c step 4; the portal invite's layout, 03b) ----------
-export function vendorInviteMail(b: MailBrand, d: { name: string; email: string; hasAccount: boolean }): Mail {
-  const link = `${SITE()}/?invited=${encodeURIComponent(d.email).replace(/%40/g, "@")}&side=vendor`; // lands on the vendor side
-  const who = byline(b);
-  return mk(b, "updates", `${who} invited you to WranglerPortal`, [
+/** 37 · Vendor invite (Phase 7, 753:2091, redrawn Nov 3 with the password). The link opens the vendor side on this
+ *  business (`biz`), where their onboarding starts: the full one, or (D94) only this business's W-9 and payment method
+ *  for someone who already has a login. */
+export function vendorInviteMail(b: MailBrand, d: { name: string; email: string; hasAccount: boolean; vendorElsewhere: boolean; roles: string[]; businessId: string | null; until: string | null }): Mail {
+  const link = `${SITE()}/?invited=${encodeURIComponent(d.email).replace(/%40/g, "@")}&side=vendor${d.businessId ? `&biz=${encodeURIComponent(d.businessId)}` : ""}${d.hasAccount ? "&have=1" : ""}`; // lands on the vendor side; have=1: opens on Sign in
+  return mk(b, "updates", `${byline(b)} invited you to WranglerPortal`, [
     hi(d.name),
-    { t: "p", text: `${who} invited you to WranglerPortal, where you’ll get bookings, read briefs and send invoices to ${b.name}.` },
-    { t: "p", text: "Open it here:", tone: "muted" },
-    { t: "button", label: d.hasAccount ? "Sign in to WranglerPortal" : "Open WranglerPortal", href: link }, { t: "link", href: link, full: true },
-    { t: "p", text: d.hasAccount ? `Sign in with your WranglerPortal account (${d.email}). ${b.name}’s work shows up beside the other businesses you work for, kept separate.` : "The first time, you’ll create your account: a password, then a six-digit code we send you. After that, just sign in.", tone: "muted" },
-    { t: "p", text: "Reply to this email if anything doesn't work.", tone: "muted" },
-  ], b.isDefault ? [{ t: "small", text: "— WranglerPortal" }] : [{ t: "small", text: "Powered by WranglerPortal" }]);
+    { t: "p", text: `${b.name} added you as a vendor.` },
+    { t: "sums", rows: [
+      ...(d.roles.length ? [{ label: "Roles", value: d.roles.join(", "), big: true }] : []),
+      ...(b.ownerName ? [{ label: "From", value: b.ownerName }] : []),
+      { label: "Portal", value: "WranglerPortal" },
+    ] },
+    { t: "p", text: "You’ll accept bookings, read briefs and send invoices there." },
+    { t: "p", text: d.vendorElsewhere
+      ? `You already have a WranglerPortal login (${d.email}). Sign in, then add ${poss(b.name)} own W-9 and how you like to be paid. Your profile is already done, and ${poss(b.name)} work stays separate from the other businesses you work for.`
+      : d.hasAccount
+        ? `Set up takes about 5 minutes. Sign in with your WranglerPortal login (${d.email}); your vendor side is added to it.`
+        : "Set up takes about 5 minutes. You’ll create a password, then confirm your email with a code." },
+    ...(d.until ? [{ t: "p", text: `The link works until ${d.until}.`, tone: "muted" } as Block] : []),
+    { t: "button", label: d.hasAccount ? "Sign in to WranglerPortal" : "Set up my vendor portal", href: link }, { t: "link", href: link, full: true },
+  ], signoff(b), d.vendorElsewhere ? `Add ${poss(b.name)} W-9 and how you like to be paid.` : "Set up takes about 5 minutes.");
 }
 
 // ---------- to the owner when a vendor accepts a booking (Heston, Nov 2; the alert layout, like 22) ----------
@@ -918,6 +931,30 @@ export function callCodeMail(b: MailBrand, d: { code: string; minutes: number; w
     { t: "p", text: `It works for ${d.minutes} minutes. Your time is held until then.` },
     { t: "small", text: "If you didn't try to book a call, ignore this email. Nothing is booked without the code." },
   ], [{ t: "small", text: `${b.name} · sent through WranglerPortal` }], `It works for ${d.minutes} minutes.`);
+}
+
+// ---------- 39: a client asks to add someone (Phase 7, frame 753:2144), to the owner ----------
+export function clientAddRequestMail(b: MailBrand, d: { by: string; name: string | null; email: string; company: string; link: string }): Mail {
+  const who = d.name || d.email;
+  return mk(b, "updates", `${d.by} wants to add ${who}`, [
+    { t: "p", text: `${d.company} · ${d.name ? `${d.name} · ` : ""}${d.email}` },
+    { t: "p", text: `They'll see everything ${first(d.by) || d.by} sees for ${d.company}. Approve to send their invite; nothing reaches them until you do.` },
+    { t: "button", label: "Approve or decline", href: d.link }, { t: "link", href: d.link },
+  ], [{ t: "small", text: "Sent to you when a client adds someone · WranglerPortal" }], `${d.by} wants to add ${who} to ${d.company}.`);
+}
+
+// ---------- 38: a business invite (Phase 7, frame 753:2117), from WranglerPortal ----------
+export function businessInviteMail(b: MailBrand, d: { business: string; note: string | null; link: string; until: string }): Mail {
+  return mk(b, "review", `Heston Hill invited ${d.business} to WranglerPortal`, [
+    { t: "p", text: "Hello," },
+    { t: "p", text: `Heston Hill invited ${d.business} to WranglerPortal.` },
+    ...(d.note ? [{ t: "p" as const, text: d.note }] : []),
+    { t: "sums", rows: [{ label: "Price", value: "Free in beta" }, { label: "Setup", value: "About 15 minutes" }, { label: "Includes", value: "Review · Docs · Payments · Proposals" }] },
+    { t: "p", text: "Free while WranglerPortal is in beta. Before paid plans start, you choose a plan or export your data.", tone: "muted" },
+    { t: "p", text: "A client portal and back office in your own look." },
+    { t: "p", text: `The first time, you'll create your account: a password, then a six-digit code we send once to confirm your email. The link works until ${d.until}.` },
+    { t: "button", label: "Set up my business", href: d.link }, { t: "link", href: d.link },
+  ], [{ t: "small", text: "— Heston Hill, WranglerPortal" }, { t: "small", text: `WranglerPortal, run by Hill Creative LLC${b.privacyUrl ? ` · Privacy policy: ${b.privacyUrl}` : ""}` }], `Free while WranglerPortal is in beta. The link works until ${d.until}.`);
 }
 
 // ---------- 46: team invite (Phase 5e, frame 816:12391) ----------

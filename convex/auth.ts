@@ -1,4 +1,5 @@
 import { sidesOf } from "./lib/roles";
+import { acceptBusinessInvite, inviteFor } from "./lib/invites";
 import { convexAuth } from "@convex-dev/auth/server";
 import { Password } from "@convex-dev/auth/providers/Password";
 import { Email } from "@convex-dev/auth/providers/Email";
@@ -6,13 +7,13 @@ import { ConvexCredentials } from "@convex-dev/auth/providers/ConvexCredentials"
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { ConvexError } from "convex/values";
-import { brandFrom } from "./lib/mail";
+import { brandFrom, platformBrand } from "./lib/mail";
 import { resetMail, signInCodeMail } from "./lib/mails";
 import { SUPPORT, sendEmail, sixDigits } from "./lib/email";
-import type { MutationCtx } from "./_generated/server";
+import type { ActionCtx, MutationCtx } from "./_generated/server";
 import { SITE_HOST } from "./lib/site";
 import { allowedEmails } from "./lib/owners";
-import { ensureDefaultBusiness, ensureMembership, liveTeamInvite, syncClientMemberships, syncTeamMembership, syncVendorMemberships } from "./lib/business";
+import { ensureDefaultBusiness, ensureMembership, syncClientMemberships, syncTeamMembership, syncVendorMemberships } from "./lib/business";
 
 // Owners: the emails in ALLOWED_EMAILS (comma-separated Convex env var). Everyone else needs an invite (C1, Oct 23).
 /** Names a client may not use: the owners' names and email local parts ("heston"), lower-case. Security review, Oct 23. */
@@ -30,9 +31,12 @@ function codeByEmail(id: string, kind: "verify" | "reset") {
     // Sent through Resend ourselves; Auth.js's own sender isn't used.
     apiKey: "unused",
     async generateVerificationToken() { return sixDigits(); },
-    async sendVerificationRequest({ identifier: email, token }) {
-      // Sign-in happens before we know whose client this is, so these come from the portal's default business.
-      const b = brandFrom({ name: "Wrangler Productions", legalName: "Hill Creative LLC", ownerName: "Heston Hill" }, { ownerEmail: "heston@wranglerproductions.com", logoUrl: null, isDefault: true });
+    async sendVerificationRequest({ identifier: email, token }, ctx?: unknown) {
+      // Sign-in happens before we know which business it's for. Wrangler's own people get the portal's default business
+      // (as before); anyone else gets WranglerPortal's name (Phase 7, decision 4).
+      const who = await (ctx as ActionCtx | undefined)?.runQuery(internal.platform.codeBrand, { email }).catch(() => "platform" as const) ?? "platform"; // reviews (L7): unknown → the neutral name
+      const b = who === "platform" ? platformBrand(null)
+        : brandFrom({ name: "Wrangler Productions", legalName: "Hill Creative LLC", ownerName: "Heston Hill" }, { ownerEmail: "heston@wranglerproductions.com", logoUrl: null, isDefault: true });
       const m = kind === "verify" ? signInCodeMail(b, { code: token, minutes: CODE_MINUTES }) : resetMail(b, { code: token, minutes: CODE_MINUTES });
       await sendEmail({ from: m.from, to: email, tag: kind === "verify" ? "code" : "reset", replyTo: SUPPORT(), subject: m.subject, text: m.text, html: m.html }); // D151: replies reach the portal's support
     },
@@ -79,6 +83,8 @@ async function endSessions(ctx: MutationCtx, userId: Id<"users">) {
 // D146 (Phase 5e step 2): wrong passwords and wrong codes are limited per account: 5 tries, then one more every 12 minutes
 // (the library's own limit refills at 5 an hour); a right one clears it. The page shows "Too many tries" (security.signInLocked).
 export const SIGN_IN_TRIES = 5;
+/** Phase 7 (D134): the sign-up page shows "Invite expired" for this. */
+export const EXPIRED_INVITE = "This invite has expired. Ask whoever invited you to send it again.";
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [WranglerPassword, GuestCode],
   signIn: { maxFailedAttempsPerHour: SIGN_IN_TRIES },
@@ -107,11 +113,9 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         const cur = await ctx.db.get(uid);
         if (cur?.role === "guest") {
           if (!verified) return uid;
-          const owner = allowedEmails().includes(email);
-          const invite = owner ? null : (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()).find((i) => !i.revokedAt) ?? null;
-          const vendor = owner || invite ? null : (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", email)).collect()).find((x) => !x.archivedAt && x.invitedAt) ?? null;
-          const team = owner || invite || vendor ? null : await liveTeamInvite(ctx, email);
-          if (!owner && !invite && !vendor && !team) throw new ConvexError("This email hasn't been invited to WranglerPortal.");
+          const check = await inviteFor(ctx, email); // Phase 7 (D134): invites last 14 days; business invites too
+          if (!check.kind) throw new ConvexError(check.expired ? EXPIRED_INVITE : "This email hasn't been invited to WranglerPortal.");
+          const owner = check.kind === "owner" || check.kind === "business", invite = check.kind === "client" ? check.invite : null, vendor = check.kind === "vendor" ? check.vendor : null;
           await endSessions(ctx, uid);
           const accounts = await ctx.db.query("authAccounts").withIndex("userIdAndProvider", (q) => q.eq("userId", uid)).collect();
           await ctx.db.delete(uid); // first, so there's never a second row for this email
@@ -122,7 +126,8 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
           for (const i of await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()) if (i.userId === uid) await ctx.db.patch(i._id, { userId: fresh });
           uid = fresh;
           if (invite && !invite.acceptedAt) await ctx.db.patch(invite._id, { acceptedAt: Date.now(), userId: uid });
-          if (owner) await ensureMembership(ctx, (await ensureDefaultBusiness(ctx)).businessId, email, "owner", uid);
+          if (check.kind === "owner") await ensureMembership(ctx, (await ensureDefaultBusiness(ctx)).businessId, email, "owner", uid);
+          if (check.kind === "business") await acceptBusinessInvite(ctx, email, uid);
         }
         const patch: Record<string, unknown> = { lastSignInAt: Date.now() };
         if (verified) patch.emailVerificationTime = Date.now();
@@ -132,8 +137,10 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
           const u = await ctx.db.get(uid);
           // Phase 5e: a team login joins its business once its email is proved (the code at sign-up), never before.
           if (u?.role === "team") { if (verified || u.emailVerificationTime) await syncTeamMembership(ctx, email, uid); return uid; }
+          // Phase 7: an invited business's owner gets the business once the email is confirmed (made only once).
+          if (u?.role === "owner") { if (verified || u.emailVerificationTime) await acceptBusinessInvite(ctx, email, uid); return uid; }
           // Nov 2: one login can be a client and a vendor; both kinds of membership stay in step.
-          if (u?.role !== "owner") {
+          { // (an owner returned above)
             await syncVendorMemberships(ctx, email, uid); await syncClientMemberships(ctx, email, uid);
             // On a side with nothing left (every business took them off it) but work on the other: land on the other.
             const sides = await sidesOf(ctx, email);
@@ -142,26 +149,26 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         }
         return uid;
       }
-      const owner = allowedEmails().includes(email);
-      const invite = owner ? null : (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()).find((i) => !i.revokedAt) ?? null;
-      // Phase 3c step 4: a vendor a business has invited to the vendor portal (and not taken off its list). Nov 2: the
-      // login can be both; it starts on the client side when there's a client invite too, and can switch.
-      const vendor = owner ? null : (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", email)).collect()).find((x) => !x.archivedAt && x.invitedAt) ?? null;
-      // Phase 5e: a team member a business has invited (Settings › Team, email 46), within the invite's 14 days.
-      const team = owner || invite || vendor ? null : await liveTeamInvite(ctx, email);
-      if (!owner && !invite && !vendor && !team) throw new ConvexError("This email hasn't been invited to WranglerPortal.");
+      // Phase 7 (D134): invites last 14 days; a business invite (Heston's) makes its owner. A vendor a business invited
+      // to the vendor portal (Phase 3c step 4) and a team invite (Phase 5e) work as before; one login can be a client and
+      // a vendor (Nov 2) and starts on the client side when there's a client invite too.
+      const check = await inviteFor(ctx, email);
+      if (!check.kind) throw new ConvexError(check.expired ? EXPIRED_INVITE : "This email hasn't been invited to WranglerPortal.");
+      const owner = check.kind === "owner", bizOwner = check.kind === "business";
+      const invite = check.kind === "client" ? check.invite : null, vendor = check.kind === "vendor" ? check.vendor : null, team = check.kind === "team" ? check.invite : null;
       // Phase 5b step 4: a call-sheet guest who was invited since keeps one row per email: the password joins their guest
       // login, which becomes the full account once the email is proved (above), never before.
       const guestRow = (await ctx.db.query("users").withIndex("email", (q) => q.eq("email", email)).collect()).find((u) => u.role === "guest");
       if (guestRow) return guestRow._id;
       const userId = await ctx.db.insert("users", {
-        email, role: owner ? "owner" : invite ? "client" : vendor ? "vendor" : "team",
+        email, role: owner || bizOwner ? "owner" : invite ? "client" : vendor ? "vendor" : "team",
         name: (typeof args.profile.name === "string" && args.profile.name && !(!owner && ownerNames().has(args.profile.name.trim().toLowerCase())) ? args.profile.name : undefined) || invite?.name || vendor?.name || team?.name || undefined,
         emailVerificationTime: verified ? Date.now() : undefined, lastSignInAt: Date.now(),
       });
       if (invite) await ctx.db.patch(invite._id, { acceptedAt: Date.now(), userId });
       // Step 6: an owner (ALLOWED_EMAILS) belongs to the default business; a client to each business that invited them.
       if (owner) await ensureMembership(ctx, (await ensureDefaultBusiness(ctx)).businessId, email, "owner", userId);
+      else if (bizOwner) { if (verified) await acceptBusinessInvite(ctx, email, userId); }
       else if (team) { if (verified) await syncTeamMembership(ctx, email, userId); }
       else { if (vendor) await syncVendorMemberships(ctx, email, userId); if (invite) await syncClientMemberships(ctx, email, userId); }
       return userId;

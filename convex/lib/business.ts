@@ -6,6 +6,7 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { allowedEmails } from "./owners";
 import { rolePerms } from "./perms";
+import { clientLive, vendorLive } from "./inviteLive";
 
 export const DEFAULT_SLUG = "wrangler";
 const DEFAULT = { slug: DEFAULT_SLUG, name: "Wrangler Productions", legalName: "Wrangler Productions, a DBA of Hill Creative LLC" };
@@ -91,7 +92,8 @@ export function businessInScope(ctx: unknown): Id<"businesses"> | null {
  */
 export async function syncClientMemberships(ctx: MutationCtx, email: string, userId: Id<"users">): Promise<number> {
   const e = email.trim().toLowerCase();
-  const invites = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", e)).collect()).filter((i) => !i.revokedAt);
+  // Phase 7 reviews (M1): only invites that still work (D134's 14 days, unless accepted) add a business.
+  const invites = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", e)).collect()).filter((i) => clientLive(i));
   let made = 0;
   for (const i of invites) {
     const biz = i.businessId ?? (await ensureDefaultBusiness(ctx)).businessId;
@@ -107,7 +109,8 @@ export async function syncClientMemberships(ctx: MutationCtx, email: string, use
  */
 export async function syncVendorMemberships(ctx: MutationCtx, email: string, userId?: Id<"users">): Promise<number> {
   const e = email.trim().toLowerCase();
-  const rows = (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", e)).collect()).filter((x) => !x.archivedAt && x.invitedAt);
+  // Phase 7 reviews (M1): only portal invites that still work (D134's 14 days, unless they joined) add a business.
+  const rows = (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", e)).collect()).filter((x) => vendorLive(x));
   let made = 0;
   for (const x of rows) {
     const biz = x.businessId ?? (await ensureDefaultBusiness(ctx)).businessId;

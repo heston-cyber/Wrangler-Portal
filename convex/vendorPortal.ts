@@ -7,6 +7,7 @@
 // vendor record there is still on the list. Owners and clients are refused here, and vendors are refused everywhere
 // else (requireMe, requireSignedIn).
 import { linkExpired } from "./lib/linkExpiry";
+import { bump } from "./lib/rate";
 import { fileLink } from "./lib/fileLinks";
 import { focusBusiness, internalAction, internalQuery, mutation, query } from "./lib/functions";
 import { sessionBlocked } from "./lib/sessionLock";
@@ -23,7 +24,7 @@ import { queueCalendar } from "./calendar";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { PAY_METHODS, looksLikeAccount, bookingState, daysIn, expectedCents, todayCentral, type BookingState } from "./lib/bookings";
+import { PAY_METHODS, accountIn, looksLikeAccount, bookingState, daysIn, expectedCents, todayCentral, type BookingState } from "./lib/bookings";
 import { label, paidAmount, paidDay } from "./lib/bookingRows";
 import { prefRow, setSwitch, viewFor } from "./lib/notifyPrefs";
 import { sideOf } from "./lib/roles";
@@ -47,6 +48,10 @@ async function myBusinesses(ctx: Ctx) {
   const ms = all.filter((m) => m.role === "vendor" && !m.revokedAt).sort((a, b) => a.createdAt - b.createdAt);
   return { user, email, ids: [...new Set(ms.map((m) => m.businessId))] };
 }
+
+/** Phase 7 step 4: the businesses this vendor login works for, oldest first (their first business is where they made
+ *  their login and profile; D94). Refuses anyone who isn't a vendor login, like every call here. */
+export async function vendorBusinessIds(ctx: Ctx) { return (await myBusinesses(ctx)).ids; }
 
 /** Acts for one of the vendor's businesses: focuses the call on it and returns their vendor record there. */
 export async function asVendor(ctx: Ctx, businessId?: Id<"businesses"> | null) {
@@ -586,6 +591,9 @@ export const saveDetails = mutation({
     // D101: the method and a note only. A long run of digits looks like an account or routing number: refused.
     if (looksLikeAccount(note)) throw new ConvexError("Leave out account and routing numbers. Say how you like to be paid; the business asks for the rest.");
     if (a.payMethod && !PAY_METHODS.includes(a.payMethod)) throw new ConvexError("Pick how you get paid.");
+    // Phase 7 reviews (M3): the same check over their other text (the mailing address and phone are left alone).
+    const bad = accountIn({ Name: a.name, "Business name": a.businessName, Portfolio: a.portfolio });
+    if (bad) throw new ConvexError(`${bad}: leave out account, routing and tax ID numbers. The business asks for those directly.`);
     await ctx.db.patch(vendor._id, {
       name: clip(a.name, 120), businessName: clip(a.businessName, 120) || undefined, phone: clip(a.phone, 40) || undefined, address: clip(a.address, 300) || undefined,
       portfolio: clip(a.portfolio, 300) || undefined, ...(a.payMethod ? { payMethod: { method: a.payMethod, ...(note ? { note } : {}) } } : {}), updatedAt: Date.now(),
@@ -596,7 +604,7 @@ export const saveDetails = mutation({
 
 export const w9UploadUrl = mutation({
   args: { businessId: v.id("businesses") },
-  handler: async (ctx, { businessId }) => { await asVendor(ctx, businessId); return ctx.storage.generateUploadUrl(); },
+  handler: async (ctx, { businessId }) => { const { vendor } = await asVendor(ctx, businessId); await bump(ctx, "w9Upload", vendor._id); return ctx.storage.generateUploadUrl(); }, // Phase 7 security review (L6)
 });
 
 /** D100: one W-9 per business; replacing it drops the old file. */
@@ -610,7 +618,10 @@ export const setW9 = mutation({
     // 5e review (Nov 6): the file must be a fresh upload nobody has claimed; it becomes this business's file (the vendor
     // uploaded it for them). Any other stored file (a contract, another business's upload) is refused.
     if (!(await claimUpload(ctx, a.storageId, a.businessId, "w9")).fresh) throw new ConvexError("The W-9 didn't upload. Try again.");
-    const pdf = file.contentType ? file.contentType === "application/pdf" : /\.pdf$/i.test(a.name.trim());
+    // Phase 7 security review (M2): the name must end in .pdf ("W-9.pdf.exe" is refused), and the type the browser sent
+    // must be a PDF or unknown (some browsers send none, which arrives as octet-stream). The download link (/f/) also
+    // checks the file's own first bytes, since the type is whatever the uploader said.
+    const pdf = /\.pdf$/i.test(a.name.trim()) && (!file.contentType || file.contentType === "application/pdf" || file.contentType === "application/octet-stream");
     if (!pdf || file.size > 10 * 1024 * 1024) {
       // Second 5e review: a refused upload (a photo of a W-9, say) is deleted rather than left in storage. Returned, not
       // thrown, so the delete isn't rolled back.

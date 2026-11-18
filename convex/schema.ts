@@ -36,6 +36,7 @@ export default defineSchema({
     revokedAt: v.optional(v.number()),
     acceptedAt: v.optional(v.number()),
     userId: v.optional(v.id("users")),
+    expiresAt: v.optional(v.number()), // Phase 7 (D134, Nov 18): an invite works 14 days, unless accepted; Resend gives 14 more. Older invites have none.
   }).index("by_email", ["email"]),
 
   // Shares (client side C2, Oct 23): a link that lets someone outside see a client, a project or one video.
@@ -424,6 +425,7 @@ export default defineSchema({
     watermarkOff: v.optional(v.boolean()),   // Phase 2 (D24): review copies are watermarked unless switched off here
     subFailRule: v.optional(v.union(v.literal("past_due"), v.literal("cancel"))), // Phase 2b (D64): overrides the business's choice
     brandKit: v.optional(v.any()),           // Phase 3b (D71): the company's brand kit (convex/brandKit.ts)
+    billing: v.optional(v.object({ name: v.optional(v.string()), email: v.optional(v.string()), address: v.optional(v.string()) })), // Phase 7 step 3: from their onboarding (Your company)
   }).index("by_name", ["name"]).index("by_dropbox_folder", ["dropboxFolder"]),
 
   // Playback problems the browser reported (Oct 21), so they can be diagnosed on devices Claude can't reach.
@@ -718,9 +720,28 @@ export default defineSchema({
   // Wrangler Portal, Phase 0.5d step 1 (Oct 28): more than one business. Wrangler Productions is business #1
   // (slug "wrangler"). A membership ties a person (by email; their account once they have one) to a business with a
   // role. Step 1 only adds these; nothing reads a business yet except the access helpers, which pass it along.
+  // Phase 7 step 1 (D106, D110, D134; Nov 18): Heston invites a business from the platform admin page. The person who
+  // accepts (signs up with this email within 14 days) becomes the owner of a new business with this name. Platform-level
+  // (no businessId): only the platform admin reads it.
+  businessInvites: defineTable({
+    email: v.string(),                 // lower-case: the owner's
+    business: v.string(),              // the business's name, as Heston typed it
+    note: v.optional(v.string()),      // the note in the email
+    createdAt: v.number(),
+    sentAt: v.number(),
+    expiresAt: v.number(),
+    revokedAt: v.optional(v.number()),
+    acceptedAt: v.optional(v.number()),
+    businessId: v.optional(v.id("businesses")), // made when accepted
+  }).index("by_email", ["email"]),
   businesses: defineTable({
     slug: v.string(),               // short, unique, lower-case ("wrangler")
     name: v.string(),               // "Wrangler Productions"
+    invitedFrom: v.optional(v.id("businessInvites")), // Phase 7: a business made from Heston's invite (beta)
+    setupDoneAt: v.optional(v.number()),               // Phase 7 step 2: when its setup was finished (or skipped through)
+    // Phase 7 step 2 (D109): where its owner is in setup, and when each part was done. Wrangler never has it (D114).
+    setup: v.optional(v.object({ step: v.number(), business: v.optional(v.number()), email: v.optional(v.number()), pricing: v.optional(v.number()),
+      connections: v.optional(v.number()), client: v.optional(v.number()), hidden: v.optional(v.boolean()) })),
     legalName: v.optional(v.string()), // "Wrangler Productions, a DBA of Hill Creative LLC"
     createdAt: v.number(),
     // Phase 1 (Oct 29): Business settings. The portal, its emails and the signing pages wear these.
@@ -945,6 +966,7 @@ export default defineSchema({
     gear: v.optional(v.array(v.string())),
     notes: v.optional(v.string()),
     invitedAt: v.optional(v.number()),                   // invited to the vendor portal
+    inviteExpiresAt: v.optional(v.number()),             // Phase 7 (D134): the invite works 14 days, unless they joined; older invites have none
     joinedAt: v.optional(v.number()),                    // signed in to it
     w9: v.optional(v.object({ fileId: v.id("_storage"), name: v.string(), uploadedAt: v.number() })),
     payMethod: v.optional(v.object({ method: v.string(), note: v.optional(v.string()) })),
@@ -954,6 +976,9 @@ export default defineSchema({
     payout: v.optional(v.object({ recipientId: v.string(), mode: v.string(), ready: v.boolean(), needsInfo: v.optional(v.boolean()),
       payoutMethodId: v.optional(v.string()), last4: v.optional(v.string()), bankName: v.optional(v.string()), checkedAt: v.number() })),
     address: v.optional(v.string()),                    // step 4: mailing address, for 1099s
+    // Phase 7 step 4 (D108, D111, D94): their onboarding for this business: where they are, and when the profile and the
+    // tour were done (the W-9 and how they're paid count as done when they're on file).
+    onboard: v.optional(v.object({ step: v.number(), profile: v.optional(v.number()), tour: v.optional(v.number()), tourSkipped: v.optional(v.boolean()) })),
     archivedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1245,7 +1270,23 @@ export default defineSchema({
     role: v.union(v.literal("signer"), v.literal("contact")), // "Signs documents" / "Contact"
     createdAt: v.number(),
     removedAt: v.optional(v.number()),
+    // Phase 7 step 3 (D107, D111, D114): their own onboarding: About you, and where they are.
+    title: v.optional(v.string()), phone: v.optional(v.string()),
+    onboard: v.optional(v.object({ step: v.number(), about: v.optional(v.number()), company: v.optional(v.number()), prefs: v.optional(v.number()), tour: v.optional(v.number()), tourSkipped: v.optional(v.boolean()) })),
   }).index("by_client", ["clientId"]).index("by_email", ["email"]),
+  // Phase 7 step 3 (D112): someone a client asks to add from their company. Nothing reaches them until the owner approves
+  // (email 39 tells the owner); approving adds them to the company and sends their portal invite.
+  colleagueRequests: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    clientId: v.id("clients"),
+    email: v.string(),                 // lower-case
+    name: v.optional(v.string()),
+    by: v.string(),                    // the client who asked (their email)
+    byName: v.optional(v.string()),
+    at: v.number(),
+    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("declined")),
+    decidedAt: v.optional(v.number()),
+  }).index("by_client", ["clientId"]),
 
   // Phase 1 (Oct 29): the Inbox. One row per person per event, so each person's read status is their own.
   // Every module posts through lib/inbox.ts; `key` makes each event post once per person, however often it runs.

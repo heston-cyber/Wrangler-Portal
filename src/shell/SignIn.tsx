@@ -28,10 +28,11 @@ export function CenterCard({ children, wide }: { children: React.ReactNode; wide
 }
 export const CardLogo = () => <span className="wp-logo"><span className="rec" aria-hidden /><img src={wpLogo} alt="Wrangler Productions" /></span>;
 
-export default function SignIn({ invitedEmail, note: lead }: { invitedEmail?: string | null; note?: React.ReactNode }) {
+export default function SignIn({ invitedEmail, note: lead, owner, vendor, have }: { invitedEmail?: string | null; note?: React.ReactNode; owner?: boolean; vendor?: boolean; have?: boolean }) {
   const { signIn } = useAuthActions();
   const convex = useConvex();
-  const [flow, setFlow] = useState<Flow>(invitedEmail ? "signUp" : "signIn");
+  // Phase 7 (753:1808's case): an invite to an email that already has a login (have=1 in its link) opens on Sign in.
+  const [flow, setFlow] = useState<Flow>(invitedEmail && !have ? "signUp" : "signIn");
   const [email, setEmail] = useState(invitedEmail ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -40,7 +41,9 @@ export default function SignIn({ invitedEmail, note: lead }: { invitedEmail?: st
   const pw = useRef(""); // kept only to resend a code; never stored
 
   const [locked, setLocked] = useState<number | null>(null); // Phase 5e step 2: Too many tries (minutes to wait)
+  const [expired, setExpired] = useState(false); // Phase 7 (D134, frame 753:1687): the invite ran out
   const explain = (msg: string, f: Flow) => {
+    if (/invite has expired/i.test(msg)) { setExpired(true); return "This invite has expired."; }
     if (/invited/i.test(msg)) return "This email hasn't been invited to Wrangler Review. Ask the person who shared with you to invite it.";
     if (/valid email/i.test(msg)) return "Enter a valid email.";
     if (/10 characters/.test(msg)) return "Use at least 10 characters for the password.";
@@ -61,6 +64,7 @@ export default function SignIn({ invitedEmail, note: lead }: { invitedEmail?: st
     try {
       if (flow === "signUp") {
         const can = await convex.query(api.clients.canSignUp, { email: mail });
+        if (!can.ok && can.reason === "expired") { setExpired(true); return; }
         if (!can.ok) { setError(can.reason === "invalid" ? "Enter a valid email." : "This email hasn't been invited to Wrangler Review. Ask the person who shared with you to invite it."); return; }
       }
       if (flow === "signIn" || flow === "signUp") {
@@ -109,6 +113,18 @@ export default function SignIn({ invitedEmail, note: lead }: { invitedEmail?: st
       </div>
     </Curtain>
   );
+  // Phase 7 (D134, frame 753:1687). The frame names the business and the day it ran out; the page doesn't, since anyone can
+  // type an email here and that would tell them who invited it.
+  if (expired) return (
+    <Curtain legal="WranglerPortal">
+      <div className="wsx-card glass team-join">
+        <span className="wp-eyebrow">Invite</span>
+        <h1 className="headline">This invite has expired.</h1>
+        <p className="caption">Invites last 14 days. Ask whoever invited you to send a new one; it only takes them a click.</p>
+        <div className="team-acts"><Button onClick={() => { setExpired(false); go("signIn"); }}>Already set up? Sign in</Button></div>
+      </div>
+    </Curtain>
+  );
   const askEmail = flow === "signIn" || flow === "signUp" || flow === "reset";
   const invited = flow === "signUp" && !!invitedEmail;
   return (
@@ -116,8 +132,27 @@ export default function SignIn({ invitedEmail, note: lead }: { invitedEmail?: st
       <form onSubmit={onSubmit} className="wp-form">
         <CardLogo />
         {lead && <p className="wp-cardnote">{lead}</p>}
-        <h1 className="wp-h3">{TITLES[flow]}</h1>
-        {flow === "signUp" && invitedEmail && <p className="wp-body">You've been invited. Set a password for this email to see what's been shared with you.</p>}
+        <h1 className="wp-h3">{flow === "signUp" && invitedEmail && vendor && !owner ? "Welcome." : TITLES[flow]}</h1>
+        {flow === "signUp" && invitedEmail && !owner && !vendor && <p className="wp-body">You've been invited. Set a password for this email to see what's been shared with you.</p>}
+        {/* Phase 7 (vendor Welcome, 749:540): step 1 of 5. Like the business Welcome, the page doesn't name the business or the person. */}
+        {flow === "signUp" && invitedEmail && vendor && !owner && <>
+          <span className="ob-prog" style={{ gridTemplateColumns: "repeat(5, 1fr)" }} aria-label="Step 1 of 5"><i className="on" /><i /><i /><i /><i /></span>
+          <span className="wp-small secondary">Step 1 of 5 · Sign in</span>
+          <span className="wp-eyebrow">You've been added as a vendor</span>
+          <p className="wp-body">Accept bookings, read briefs and send invoices here. Set a password for your email; we'll email a code once to confirm it.</p>
+        </>}
+        {/* Phase 7 (business Welcome, 750:916): step 1 of 6. The frame names the business; the page doesn't (anyone can open the link). */}
+        {flow === "signUp" && invitedEmail && owner && <>
+          <span className="ob-prog" aria-label="Step 1 of 6"><i className="on" /><i /><i /><i /><i /><i /></span>
+          <span className="wp-small secondary">Step 1 of 6 · Sign in</span>
+          <span className="wp-eyebrow">Heston Hill invited you</span>
+          <p className="wp-body">Set up your business on WranglerPortal: a portal for your clients (review, sign, pay) and a back office for you. Setup takes about 15 minutes; you can finish later.</p>
+          <p className="wp-small secondary">You'll create a password. We email a 6-digit code once, to confirm your email. Free while WranglerPortal is in beta. Before paid plans start, you choose a plan or export your data.</p>
+        </>}
+        {flow === "signIn" && invitedEmail && have && <>
+          <span className="wp-eyebrow">You already have a login</span>
+          <p className="wp-body">This email already has a WranglerPortal login. Sign in with your password, and the business that invited you is added to it.</p>
+        </>}
         {flow === "code" && <p className="wp-body">Enter the 6-digit code we emailed to {email}.</p>}
         {flow === "reset" && <p className="wp-body">We'll email you a code.</p>}
         {note && <p className="wp-small" role="status">{note}</p>}
@@ -131,7 +166,7 @@ export default function SignIn({ invitedEmail, note: lead }: { invitedEmail?: st
             </div>
           </div>
         )}
-        {flow === "signUp" && (
+        {flow === "signUp" && !(vendor && invitedEmail) && (
           <div className="wp-field">
             <label className="wp-field-label" htmlFor="name">Your name (shown on your notes)</label>
             <input className="input" id="name" name="name" type="text" autoComplete="name" maxLength={60} />

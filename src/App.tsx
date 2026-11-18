@@ -40,6 +40,9 @@ import type { Id } from "../convex/_generated/dataModel";
 
 // Payments (Phase 2 Part B): its own chunk.
 const InvoicesPage = lazy(() => import("./modules/payments/InvoicesPage"));
+const PlatformAdmin = lazy(() => import("./modules/platform/Admin"));
+const Setup = lazy(() => import("./modules/setup/Setup"));
+const ClientWelcome = lazy(() => import("./modules/onboard/ClientOnboard").then((m) => ({ default: m.ClientWelcome })));
 const InvoiceEditor = lazy(() => import("./modules/payments/InvoiceEditor"));
 const InvoiceDetail = lazy(() => import("./modules/payments/InvoiceDetail"));
 const PaymentsOverview = lazy(() => import("./modules/payments/PaymentsOverview"));
@@ -276,7 +279,7 @@ export default function App() {
   const guestLink = /^\/guest(?:\/([A-Za-z0-9_-]{16,64}))?\/?$/.exec(path);
   if (guestLink) return <Suspense fallback={<Loading />}><GuestApp key={guestLink[1] ?? "home"} token={guestLink[1] ?? null} /></Suspense>;
   if (isLoading) return <Loading />;
-  if (!isAuthenticated) return <SignIn invitedEmail={new URLSearchParams(location.search).get("invited")} />;
+  if (!isAuthenticated) return <SignIn invitedEmail={new URLSearchParams(location.search).get("invited")} owner={new URLSearchParams(location.search).get("side") === "owner"} vendor={new URLSearchParams(location.search).get("side") === "vendor"} have={new URLSearchParams(location.search).get("have") === "1"} />;
   return <SignedIn />;
 }
 
@@ -454,6 +457,10 @@ function SignedIn() {
   }
   // 5i (D193): signing a release in person is full screen: the signer sees nothing of the portal (no menu, no tabs).
   const releaseSign = /^\/releases\/([^/]+)\/sign\/?$/.exec(path);
+  // Phase 7 (D110): the platform admin page stands on its own (frame 751:1808); it answers only for Heston.
+  // Phase 7 step 2 (D109): a new business's setup (steps 2–6) stands on its own like Welcome.
+  if (/^\/setup\/?$/.test(path) && !team) return <Suspense fallback={<Loading />}><Setup start={Number(params.get("step")) || null} /></Suspense>;
+  if (/^\/admin\/?$/.test(path) && !team) return <Suspense fallback={<Loading />}><PlatformAdmin me={me} /></Suspense>;
   if (releaseSign && !team) return <Suspense fallback={<Loading />}><ReleaseSigning key={releaseSign[1]} releaseId={releaseSign[1]} /></Suspense>;
   // Work surfaces get no background light, so nothing competes with the video or the document.
   const workSurface = Boolean(video) || /^\/sign\/(b|d)\//.test(path) || /^\/sign\/templates\/[^/]+/.test(path) || /^\/production\/call-sheets\/([^/]+\/edit|templates\/[^/]+)/.test(path) || /^\/settings\/help\/edit\//.test(path);
@@ -466,6 +473,12 @@ function SignedIn() {
 
 type MeRow = NonNullable<ReturnType<typeof useQuery<typeof api.users.me>>>;
 function ClientShell({ me, overlay = false, children }: { me: MeRow; overlay?: boolean; children?: React.ReactNode }) {
+  const { path, search } = useLocation();
+  // Phase 7 step 5: onboarding stands on its own, like setup (no menu or tabs).
+  if (!children && /^\/welcome\/?$/.test(path)) return <Suspense fallback={<Loading />}><ClientWelcome start={Number(new URLSearchParams(search).get("step")) || null} /></Suspense>;
+  return <ClientShellIn me={me} overlay={overlay}>{children}</ClientShellIn>;
+}
+function ClientShellIn({ me, overlay, children }: { me: MeRow; overlay: boolean; children?: React.ReactNode }) {
   const mine = useQuery(api.shares.mine, {});
   const client = (mine ?? []).find((s) => s.client)?.client ?? null;
   return <Shell me={me} side="client" overlay={overlay} subtitle={client}>{children ?? <ClientRoutes me={me} />}</Shell>;
