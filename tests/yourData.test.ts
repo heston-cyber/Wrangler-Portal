@@ -103,6 +103,7 @@ describe("Phase 5e · Your data", () => {
     expect(files["files.csv"]).not.toMatch(/w9/);
     expect(files["vendors.csv"]).toContain("Jordan Ellis,jordan@x.example,Shooter,\"Yes, uploaded 1970-01-01 (open it from the vendor's page)\"");
     expect(files["README.txt"]).toContain("W-9s are not in this export");
+    expect(Object.values(files).join("\n")).not.toContain(String(w9)); // review: not even the W-9's file id
     expect(mails.filter((m) => m.to === "heston@wranglerproductions.com").map((m) => m.subject)).toEqual(["Your Wrangler Productions export is ready"]);
     const rows = await w.t.run(async (ctx) => (await ctx.db.query("auditLog").collect()).map((r) => r.text));
     expect(rows).toContain("asked for an export of everything");

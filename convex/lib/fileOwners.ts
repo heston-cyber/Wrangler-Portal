@@ -43,10 +43,13 @@ export async function isClaimed(ctx: R, id: Id<"_storage">) {
   return !!(await rowOf(ctx, id));
 }
 
-/** Does this business own the file? (Files the portal stored before Nov 6 were recorded by the backfill.) */
-export async function ownsFile(ctx: R, id: Id<"_storage">, businessId: Id<"businesses"> | null) {
+/** Does this business own the file? (Files the portal stored before Nov 6 were recorded by the backfill.) Phase 6
+ *  review: a W-9 counts only where it's asked for by name (deleting a business's files); everywhere else that hands out
+ *  a link (a style's image, the export, a backdrop) a tax form is never "this business's file". */
+export async function ownsFile(ctx: R, id: Id<"_storage">, businessId: Id<"businesses"> | null, opts?: { w9: true }) {
   if (!businessId) return false;
-  return (await rowOf(ctx, id))?.businessId === businessId;
+  const row = await rowOf(ctx, id);
+  return row?.businessId === businessId && (row.purpose !== "w9" || !!opts?.w9);
 }
 
 /** A file the server stored for a business. */

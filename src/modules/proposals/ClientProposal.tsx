@@ -2,6 +2,7 @@
 // proposal is shown as the PDF that was sent (drawn page by page with pdf.js, like the signing page), with the
 // Investment and the deposit beside it. Accept with your typed name, or Decline (D86); the portal records the name,
 // time, IP and device through its own endpoint, the same way quotes and signing do. The line under the name is D83's.
+import { useLinkWindow } from "../../lib/linkWindow";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -48,7 +49,8 @@ function PdfPage({ pdf, index, width }: { pdf: PdfDoc; index: number; width: num
 }
 
 export default function ClientProposal({ token }: { token: string }) {
-  const p = useQuery(api.proposals.page, { token });
+  const at = useLinkWindow();
+  const p = useQuery(api.proposals.page, { token, at });
   const viewed = useMutation(api.proposals.markViewed);
   const once = useRef(false);
   useEffect(() => { if (p && !once.current) { once.current = true; void viewed({ token }).catch(() => undefined); } }, [p, token, viewed]);

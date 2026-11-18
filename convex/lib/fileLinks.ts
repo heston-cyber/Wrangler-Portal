@@ -13,7 +13,10 @@ async function sign(payload: string) {
   const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(`wp-file-link:${secret()}`), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   return b64url(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(payload))).slice(0, 32);
 }
-const cleanName = (name: string) => name.replace(/[^\w .()-]+/g, "_").slice(0, 120) || "file";
+// Review L4: a name of only dots would be eaten by the browser's path tidying
+const cleanName = (name: string) => { const n = name.replace(/[^\w .()-]+/g, "_").slice(0, 120); return /^\.*$/.test(n) ? "file" : n; };
+// Review L3: a link is good only on the deployment that made it
+const site = () => (process.env.CONVEX_SITE_URL ?? "").replace(/\/$/, "");
 
 /** A link to a stored file, good until the end of the next 10-minute window (so a query's answer stays the same for a
  *  while and pages don't re-render every second). `null` when there's no file or no server secret. */
@@ -21,20 +24,20 @@ export async function fileLink(fileId: Id<"_storage"> | string | null | undefine
   if (!fileId || !secret()) return null;
   const exp = Math.floor(now / LINK_WINDOW_MS) * LINK_WINDOW_MS + 2 * LINK_WINDOW_MS;
   const n = cleanName(name);
-  const sig = await sign(`${fileId}|${exp}|${n}`);
-  return `${(process.env.CONVEX_SITE_URL ?? "").replace(/\/$/, "")}/fl/${fileId}/${exp}/${sig}/${encodeURIComponent(n)}`;
+  const sig = await sign(`${site()}|${fileId}|${exp}|${n}`);
+  return `${site()}/fl/${fileId}/${exp}/${sig}/${encodeURIComponent(n)}`;
 }
 
 /** Checks a /fl/ path: the file id when the link is genuine and in date. */
-export async function checkFileLink(path: string, now = Date.now()): Promise<{ fileId: string; name: string } | null> {
+export async function checkFileLink(path: string, now = Date.now()): Promise<{ fileId: string; name: string; exp: number } | null> {
   const m = /^\/fl\/([A-Za-z0-9_]{10,64})\/(\d{10,15})\/([A-Za-z0-9_-]{32})\/([^/]{1,400})$/.exec(path);
   if (!m || !secret()) return null;
   const [, fileId, exp, sig] = m;
   let name = "";
   try { name = decodeURIComponent(m[4]); } catch { return null; }
   if (Number(exp) < now || Number(exp) > now + 3 * LINK_WINDOW_MS) return null;
-  const want = await sign(`${fileId}|${exp}|${name}`);
+  const want = await sign(`${site()}|${fileId}|${exp}|${name}`);
   let diff = want.length ^ sig.length;
   for (let i = 0; i < want.length; i++) diff |= want.charCodeAt(i) ^ (sig.charCodeAt(i) || 0);
-  return diff === 0 ? { fileId, name } : null;
+  return diff === 0 ? { fileId, name, exp: Number(exp) } : null;
 }

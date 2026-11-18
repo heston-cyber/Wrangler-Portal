@@ -429,7 +429,7 @@ export const startContract = action({
 // ---------- the client's page: /p/<token> (no account, D73) ----------
 
 export const page = query({
-  args: { token: v.string() },
+  args: { token: v.string(), at: v.optional(v.number()) /* Phase 6 review M2: the page's link window, so fresh file links come each 10 minutes */ },
   handler: async (ctx, { token }) => {
     const f = await resolve(ctx, "proposal", token);
     if (!f) return null;

@@ -46,7 +46,7 @@ async function preview(ctx: Ctx, c: Doc<"canvases">) {
 }
 
 export const list = query({
-  args: {},
+  args: { at: v.optional(v.number()) /* Phase 6 review M2: the page's link window */ },
   handler: async (ctx) => {
     await requireAll(ctx, "projects");
     const out = [];
@@ -79,7 +79,7 @@ export const create = mutation({
 
 /** The board, for the owner and team. */
 export const get = query({
-  args: { canvasId: v.string() },
+  args: { canvasId: v.string(), at: v.optional(v.number()) /* Phase 6 review M2: the page's link window */ },
   handler: async (ctx, { canvasId }) => {
     await requireAll(ctx, "projects");
     const id = ctx.db.normalizeId("canvases", canvasId);
@@ -283,7 +283,7 @@ async function byToken(ctx: Ctx, token: string): Promise<{ c: Doc<"canvases">; r
 }
 
 export const shared = query({
-  args: { token: v.string() },
+  args: { token: v.string(), at: v.optional(v.number()) /* Phase 6 review M2: the page's link window, so fresh file links come each 10 minutes */ },
   handler: async (ctx, { token }) => {
     const f = await byToken(ctx, token);
     if (!f) return null;

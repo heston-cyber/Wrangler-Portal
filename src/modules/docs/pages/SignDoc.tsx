@@ -1,6 +1,7 @@
 // One Wrangler Sign document (Phase S1, Oct 27): the pages with their boxes, the signers, approve and versions.
 // Markers in the PDF ({{sign:client}}, {{initials:client}}, {{date:heston}}, …) place boxes automatically; any box
 // can be added, moved, resized, reassigned or deleted by hand. Drafts save as you go. Approving locks the version.
+import { useLinkWindow } from "../../../lib/linkWindow";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
@@ -21,7 +22,7 @@ const day = (t: number) => { const tz = "America/Chicago"; const y = (x: number)
 import { ClaudeRequests } from "./ClaudeRequests";
 
 type Data = NonNullable<ReturnType<typeof useGetDoc>>;
-const useGetDoc = (documentId: Id<"wsDocuments">, versionNumber: number | null) => useQuery(api.sign.get, { documentId, ...(versionNumber ? { versionNumber } : {}) });
+const useGetDoc = (documentId: Id<"wsDocuments">, versionNumber: number | null) => useQuery(api.sign.get, { documentId, ...(versionNumber ? { versionNumber } : {}), at: useLinkWindow() });
 
 type Layout = { title: string; signers: LayoutSigner[]; boxes: LayoutBox[]; signingOrder: "any" | "sequence"; payment: Payment | null };
 

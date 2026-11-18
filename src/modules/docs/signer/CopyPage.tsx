@@ -1,6 +1,7 @@
 // D160 (Heston, Nov 6; built without frames, in the briefing and proposal pages' style): the view-only page for someone
 // copied on a contract, /c/<token> on the sign host (/x/c/<token> on the portal). They read the document as sent, see
 // who signs and who has, and get the signed copy once everyone has signed. Nothing to sign here.
+import { useLinkWindow } from "../../../lib/linkWindow";
 import { useEffect, useRef } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
@@ -12,7 +13,8 @@ import { PdfPages } from "../../proposals/ClientProposal";
 const longMs = (ms: number) => new Date(ms).toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", year: "numeric" });
 
 export default function CopyPage({ token }: { token: string }) {
-  const p = useQuery(api.signCopies.page, { token });
+  const at = useLinkWindow();
+  const p = useQuery(api.signCopies.page, { token, at });
   const opened = useMutation(api.signCopies.opened);
   const once = useRef(false);
   useEffect(() => { if (p && (p.state === "sent" || p.state === "signed") && !once.current) { once.current = true; void opened({ token }).catch(() => undefined); } }, [p, token, opened]);

@@ -50,7 +50,7 @@ export const SECRET_FIELDS = new Set(["token", "linkToken", "payToken", "passcod
 export const SECRET_PATHS: Record<string, string[]> = { calls: ["code"], emailPrefs: ["key"], fileUploads: ["sessionId"], wsDocuments: ["invoice.url"],
   // Second 5e review (W-9 check, Nov 10): a vendor's Stripe recipient and bank method, and a payout's request and
   // receipt link, stay out of the export (the vendor page shows only that direct deposit is set up).
-  vendors: ["payout.recipientId", "payout.payoutMethodId"],
+  vendors: ["payout.recipientId", "payout.payoutMethodId", "w9.fileId"], // Phase 6 review: a W-9's file id isn't in the export
   vendorInvoices: ["payout.receiptUrl", "payout.request.recipient", "payout.request.payoutMethod", "payout.request.financialAccount", "payout.request.key"] };
 /** Deleted last: what other records point at (the business's own records go first, then these). */
 const LAST = ["wsDocuments", "projects", "clients", "vendors"];
@@ -527,7 +527,7 @@ export const deleteStep = internalMutation({
         if (row.businessId !== biz) continue; // the row rules already keep other businesses out; never a legacy row
         // Option B (Heston, Nov 6): the files the portal keeps stay 30 days with the safety-net export, then go with it.
         // 5e review (Nov 6): only files this business owns; a row pointing at another business's file never deletes it.
-        for (const f of filesOf(table, row)) if (await ownsFile(ctx, f.id, biz)) await ctx.db.insert("deletionFiles", { deletionId, fileId: f.id, purgeAt: d.purgeAt ?? now + KEEP_FINAL_DAYS * DAY });
+        for (const f of filesOf(table, row)) if (await ownsFile(ctx, f.id, biz, { w9: true })) await ctx.db.insert("deletionFiles", { deletionId, fileId: f.id, purgeAt: d.purgeAt ?? now + KEEP_FINAL_DAYS * DAY });
         if (table === "versions") {
           const ver = row as unknown as Doc<"versions">;
           if (ver.bunnyGuid) guids.add(ver.bunnyGuid);
@@ -566,7 +566,7 @@ export const deleteStep = internalMutation({
       }
       const b = await ctx.db.get(d.businessId);
       if (b) {
-        for (const f of filesOf("businesses", b)) if (await ownsFile(ctx, f.id, d.businessId)) await ctx.db.insert("deletionFiles", { deletionId, fileId: f.id, purgeAt: d.purgeAt ?? now + KEEP_FINAL_DAYS * DAY }); // its logos
+        for (const f of filesOf("businesses", b)) if (await ownsFile(ctx, f.id, d.businessId, { w9: true })) await ctx.db.insert("deletionFiles", { deletionId, fileId: f.id, purgeAt: d.purgeAt ?? now + KEEP_FINAL_DAYS * DAY }); // its logos
         await ctx.db.delete(d.businessId);
       }
       await ctx.db.patch(deletionId, { status: "done", step: "done", doneAt: now, heartbeat: now, users: [], emails: [] });

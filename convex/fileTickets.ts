@@ -43,14 +43,35 @@ export const route = httpAction(async (ctx, req) => {
 const INLINE = /^(application\/pdf|image\/(png|jpeg|gif|webp|avif)|video\/(mp4|quicktime|webm)|audio\/(mpeg|mp4|wav))$/i;
 /** Phase 6 sweep M1: /fl/<file>/<expiry>/<signature>/<name>, a signed link made by lib/fileLinks.ts. Pictures, PDFs and
  *  media open in place; anything else downloads (never runs on this address). */
+// Convex answers an HTTP action with at most 20 MB; a bigger file (canvas and brand-kit files go to 25 MB) is handed to
+// the storage address for this one opening (review M3; its window was checked above, so a turned-off share stays off).
+const BIG = 19 * 1024 * 1024;
 export const linkRoute = httpAction(async (ctx, req) => {
-  const headers: Record<string, string> = { "Cache-Control": "private, max-age=600", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "Access-Control-Allow-Origin": "*" };
+  const headers: Record<string, string> = { "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "Access-Control-Allow-Origin": "*" };
   let path = "";
   try { path = new URL(req.url).pathname; } catch { path = ""; }
   const ok = await checkFileLink(path);
-  const blob = ok ? await ctx.storage.get(ok.fileId as Id<"_storage">) : null;
-  if (!ok || !blob) return new Response("This link has expired. Open the file again from the page you found it on.", { status: 404, headers: { ...headers, "Cache-Control": "no-store", "Content-Type": "text/plain" } });
-  const type = blob.type || "application/octet-stream";
+  const meta = ok ? await ctx.runQuery(internal.fileTickets.fileMeta, { fileId: ok.fileId }) : null;
+  const gone = () => new Response("This link has expired. Open the file again from the page you found it on.", { status: 404, headers: { ...headers, "Cache-Control": "no-store", "Content-Type": "text/plain" } });
+  if (!ok || !meta) return gone();
+  // Review L2: a browser keeps it only until the link runs out
+  const cache = { "Cache-Control": `private, max-age=${Math.max(0, Math.floor((ok.exp - Date.now()) / 1000))}` };
+  if (meta.size > BIG) { const url = await ctx.storage.getUrl(ok.fileId as Id<"_storage">); return url ? new Response(null, { status: 302, headers: { ...headers, "Cache-Control": "no-store", Location: url } }) : gone(); }
+  const blob = await ctx.storage.get(ok.fileId as Id<"_storage">);
+  if (!blob) return gone();
+  const type = (meta.contentType || blob.type || "application/octet-stream").toLowerCase();
+  const name = `filename="${ok.name.replace(/"/g, "")}"`;
+  // Review M3: an SVG logo shows in place, but sandboxed so any script in it never runs.
+  if (type === "image/svg+xml") return new Response(blob, { status: 200, headers: { ...headers, ...cache, "Content-Type": type, "Content-Disposition": `inline; ${name}`, "Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'" } });
   const inline = INLINE.test(type);
-  return new Response(blob, { status: 200, headers: { ...headers, "Content-Type": inline ? type : "application/octet-stream", "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${ok.name.replace(/"/g, "")}"` } });
+  return new Response(blob, { status: 200, headers: { ...headers, ...cache, "Content-Type": inline ? type : "application/octet-stream", "Content-Disposition": `${inline ? "inline" : "attachment"}; ${name}` } });
+});
+
+export const fileMeta = internalQuery({
+  args: { fileId: v.string() },
+  handler: async (ctx, { fileId }) => {
+    const id = ctx.db.system.normalizeId("_storage", fileId);
+    const m = id ? await ctx.db.system.get(id) : null;
+    return m ? { size: m.size, contentType: m.contentType ?? null } : null;
+  },
 });

@@ -121,7 +121,7 @@ async function byToken(ctx: QueryCtx | MutationCtx, token: string) {
 }
 
 export const page = query({
-  args: { token: v.string() },
+  args: { token: v.string(), at: v.optional(v.number()) /* Phase 6 review M2: the page's link window, so fresh file links come each 10 minutes */ },
   handler: async (ctx, { token }) => {
     const c = await byToken(ctx, token);
     if (!c) return null;

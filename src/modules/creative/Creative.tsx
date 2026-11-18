@@ -2,6 +2,7 @@
 // (treatments, two-column scripts, interview questions, creative briefs: builder pages that are never signed) and
 // Brand kits (kits as creative work: any number, on their own or attached to a client, lead or project). Each thing
 // has a home chip (dashed "Not attached") with Move to… (homes.move), and a view-only Share link (D191).
+import { useLinkWindow } from "../../lib/linkWindow";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -271,7 +272,8 @@ export function KitPage({ kitId }: { kitId: string }) {
 // ---------- the no-account pages (/cd/<token>, /kit/<token>) ----------
 
 export function SharedCreativeDoc({ token }: { token: string }) {
-  const d = useQuery(api.creative.sharedDoc, { token });
+  const at = useLinkWindow();
+  const d = useQuery(api.creative.sharedDoc, { token, at });
   if (d === undefined) return <div className="cr-public"><SkeletonRows n={3} /></div>;
   if (d === null) return <div className="cr-public"><EmptyState icon="document" title="This link isn't working." body="It may have been turned off. Ask whoever sent it." /></div>;
   return (
@@ -284,7 +286,8 @@ export function SharedCreativeDoc({ token }: { token: string }) {
 }
 
 export function SharedKit({ token }: { token: string }) {
-  const k = useQuery(api.creative.sharedKit, { token });
+  const at = useLinkWindow();
+  const k = useQuery(api.creative.sharedKit, { token, at });
   const [toast, show] = useToast();
   if (k === undefined) return <div className="cr-public"><SkeletonRows n={3} /></div>;
   if (k === null) return <div className="cr-public"><EmptyState icon="layers" title="This link isn't working." body="It may have been turned off. Ask whoever sent it." /></div>;

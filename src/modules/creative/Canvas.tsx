@@ -5,6 +5,7 @@
 // cursors). iPad: Pencil draws, fingers move the board (D185); a phone gets Select, Text, Photo and the Tools sheet with
 // the rest greyed "On iPad and desktop". Popovers move in 140 ms with no fade. Shared people use the same board on their
 // own link (/cv/<token>): Can view reads it, Can edit changes it (no uploads).
+import { useLinkWindow } from "../../lib/linkWindow";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import rough from "roughjs";
 import { hapticHold } from "../../lib/haptic";
@@ -39,7 +40,8 @@ const mb = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024)
 // ---------- the list (1076-35492) ----------
 
 export function CanvasList() {
-  const list = useQuery(api.canvas.list);
+  const at = useLinkWindow();
+  const list = useQuery(api.canvas.list, { at });
   const [f, setF] = useState<"all" | "canvas" | "mood" | "shared" | "loose">("all");
   const [open, setOpen] = useState<null | "canvas" | "mood">(() => (new URLSearchParams(location.search).get("new") === "mood" ? "mood" : new URLSearchParams(location.search).has("new") ? "canvas" : null));
   const [toast, show] = useToast();
@@ -120,7 +122,8 @@ function NewCanvas({ kind, onClose, show }: { kind: "canvas" | "mood"; onClose: 
 // ---------- the board page (owner and team) ----------
 
 export function CanvasPage({ canvasId }: { canvasId: string }) {
-  const c = useQuery(api.canvas.get, { canvasId });
+  const at = useLinkWindow();
+  const c = useQuery(api.canvas.get, { canvasId, at });
   const save = useMutation(api.canvas.save);
   const rename = useMutation(api.canvas.rename);
   const remove = useMutation(api.canvas.remove);
@@ -224,12 +227,13 @@ function ShareCanvas({ c, onClose, show }: { c: NonNullable<ReturnType<typeof us
     </Modal>
   );
 }
-const useCanvasGet = (canvasId: string) => useQuery(api.canvas.get, { canvasId });
+const useCanvasGet = (canvasId: string) => useQuery(api.canvas.get, { canvasId, at: useLinkWindow() });
 
 // ---------- the shared board (/cv/<token>) ----------
 
 export function SharedCanvas({ token }: { token: string }) {
-  const c = useQuery(api.canvas.shared, { token });
+  const at = useLinkWindow();
+  const c = useQuery(api.canvas.shared, { token, at });
   const save = useMutation(api.canvas.sharedSave);
   const opened = useMutation(api.canvas.opened);
   const [toast, show] = useToast();
@@ -327,7 +331,14 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
   const fileInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
   const phone = typeof window !== "undefined" && window.matchMedia("(max-width: 600px)").matches;
-  useEffect(() => setFiles((f) => ({ ...f, ...fileUrls })), [fileUrls]);
+  // Phase 6 review L1: file links last 10-20 minutes and the page asks for fresh ones each window; a picture already on
+  // the board keeps the link it loaded with (no re-download), and only a failed load or a download takes the newest.
+  const latest = useRef(fileUrls);
+  useEffect(() => {
+    latest.current = { ...latest.current, ...fileUrls };
+    setFiles((f) => { const n = { ...f }; for (const [k, u] of Object.entries(fileUrls)) if (!n[k]) n[k] = u; return n; });
+  }, [fileUrls]);
+  const freshUrl = useCallback((id: string) => latest.current[id] ?? null, []);
   const setTool = (t: Tool) => { setToolRaw(t); setPop(null); setCtxMenu(null); if (t !== "select") { setSel([]); setEditing(null); } };
 
   // Someone else saved: take the newer board when nothing here is waiting to save (D184: no live cursors).
@@ -702,7 +713,7 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
         onDragOver={(e) => { if (canEdit && uploads) e.preventDefault(); }} onDrop={onDrop}
         onDoubleClick={(e) => { const el = (e.target as HTMLElement).closest("[data-id]") as HTMLElement | null; const it = el && itemsRef.current.find((i) => i.id === el.dataset.id); if (it && canEdit && !it.locked && ["note", "text", "box", "ellipse", "frame", "table", "link"].includes(it.type)) { setEditing(it.id); setSel([it.id]); } }}>
         <div className="cv-board" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, width: BOARD.w, height: BOARD.h }}>
-          {sorted.map((it) => <ItemView key={it.id} it={it} url={it.fileId ? files[it.fileId] ?? null : null} editing={editing === it.id} canEdit={canEdit} onPatch={(p) => patch(it.id, p)} onDone={() => setEditing(null)} />)}
+          {sorted.map((it) => <ItemView key={it.id} it={it} url={it.fileId ? files[it.fileId] ?? null : null} freshUrl={freshUrl} editing={editing === it.id} canEdit={canEdit} onPatch={(p) => patch(it.id, p)} onDone={() => setEditing(null)} />)}
           {ghost && <ItemView it={ghost} url={null} editing={false} canEdit={false} onPatch={() => {}} onDone={() => {}} />}
           {drawing && <svg className="cv-ink" style={{ left: 0, top: 0, opacity: st.opacity / 100 }} width={BOARD.w} height={BOARD.h}><path d={smooth(drawing.points)} fill="none" stroke={st.color} strokeWidth={Math.max(2, st.stroke * 2)} strokeLinecap="round" strokeLinejoin="round" /></svg>}
           {marquee && <div className="cv-marquee" style={{ left: Math.min(marquee.x0, marquee.x1), top: Math.min(marquee.y0, marquee.y1), width: Math.abs(marquee.x1 - marquee.x0), height: Math.abs(marquee.y1 - marquee.y0), borderWidth: 1 / zoom }} />}
@@ -760,7 +771,7 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
           <button role="menuitem" onClick={lock}>{selected.every((i) => i.locked) ? "Unlock" : "Lock"}</button>
           <button role="menuitem" onClick={() => layer("front")}>Bring to front</button>
           <button role="menuitem" onClick={() => layer("back")}>Send to back</button>
-          {one?.fileId && files[one.fileId] && <a role="menuitem" href={files[one.fileId]!} target="_blank" rel="noreferrer" onClick={() => setCtxMenu(null)}>Download</a>}
+          {one?.fileId && files[one.fileId] && <a role="menuitem" href={freshUrl(one.fileId) ?? files[one.fileId]!} target="_blank" rel="noreferrer" onClick={() => setCtxMenu(null)}>Download</a>}
           <hr />
           <button role="menuitem" className="danger" onClick={del}>Delete<kbd>⌫</kbd></button>
         </div>
@@ -906,7 +917,7 @@ function shapePaths(it: CanvasItem): Array<{ d: string; stroke: string; fill: st
   return drawables.flatMap((dr) => gen.toPaths(dr).map((p) => ({ d: p.d, stroke: p.stroke, fill: p.fill ?? "none", sw: p.strokeWidth })));
 }
 
-const ItemView = memo(function ItemView({ it, url, editing, canEdit, onPatch, onDone }: { it: CanvasItem; url: string | null; editing: boolean; canEdit: boolean; onPatch: (p: Partial<CanvasItem>) => void; onDone: () => void }) {
+const ItemView = memo(function ItemView({ it, url, freshUrl, editing, canEdit, onPatch, onDone }: { it: CanvasItem; url: string | null; freshUrl?: (id: string) => string | null; editing: boolean; canEdit: boolean; onPatch: (p: Partial<CanvasItem>) => void; onDone: () => void }) {
   const base: React.CSSProperties = { left: it.x, top: it.y, width: it.w, height: it.h, zIndex: it.z, ...(it.opacity !== undefined && it.opacity < 100 ? { opacity: it.opacity / 100 } : {}) };
   const textEdit = (cls: string, style?: React.CSSProperties) => editing && canEdit
     ? <textarea className={`cv-edit ${cls}`} style={style} autoFocus defaultValue={it.text ?? ""} onPointerDown={(e) => e.stopPropagation()} onBlur={(e) => { if (e.target.value !== (it.text ?? "")) onPatch({ text: e.target.value }); onDone(); }} onKeyDown={(e) => { if (e.key === "Escape") (e.target as HTMLTextAreaElement).blur(); }} />
@@ -931,7 +942,7 @@ const ItemView = memo(function ItemView({ it, url, editing, canEdit, onPatch, on
     case "text": return <div data-id={it.id} className="cv-item cv-text" style={{ ...base, color: it.color ?? "#D3D3D3", fontSize: TEXT_PX[it.size ?? "M"], fontWeight: it.weight === "bold" ? 700 : 400 }}>{textEdit("cv-texttxt")}</div>;
     case "frame": return <div data-id={it.id} className="cv-item cv-frame" style={base}><div className="cv-frametitle">{textEdit("cv-frametxt")}</div></div>;
     case "pen": return <svg data-id={it.id} className="cv-item cv-pen" style={base} width={it.w} height={it.h}><path d={smooth(it.points ?? [])} fill="none" stroke={it.color ?? "#D3D3D3"} strokeWidth={it.stroke ?? 3} strokeLinecap="round" strokeLinejoin="round" /><polyline className="hit" points={pairs(it.points ?? [])} fill="none" stroke="transparent" strokeWidth={Math.max(16, (it.stroke ?? 3) + 12)} /></svg>;
-    case "image": return <div data-id={it.id} className="cv-item cv-image" style={base}>{url ? <img src={url} alt={it.name ?? ""} draggable={false} /> : <span className="cv-ph">Photo</span>}</div>;
+    case "image": return <div data-id={it.id} className="cv-item cv-image" style={base}>{url ? <img src={url} alt={it.name ?? ""} draggable={false} onError={(e) => { const f = it.fileId && freshUrl ? freshUrl(it.fileId) : null; if (f && e.currentTarget.src !== f) e.currentTarget.src = f; }} /> : <span className="cv-ph">Photo</span>}</div>;
     case "pdf": return <div data-id={it.id} className="cv-item cv-pdf" style={base}><PdfView url={url} page={it.page ?? 1} width={it.w} onPage={(p) => onPatch({ page: p })} name={it.name ?? "PDF"} /></div>;
     case "file": return <div data-id={it.id} className="cv-item cv-file" style={base}><Icon name="document" size={28} /><span className="t"><b>{it.name}</b><span className="secondary">{(it.name?.split(".").pop() ?? "File").toUpperCase()} · {mb(it.bytes ?? 0)}</span></span>{url && <a className="btn sm" href={url} target="_blank" rel="noreferrer" onPointerDown={(e) => e.stopPropagation()}><Download size={14} /> Download</a>}</div>;
     case "link": return <div data-id={it.id} className="cv-item cv-link" style={base}><span className="fav"><Icon name="globe" size={22} /></span><span className="t">{editing && canEdit ? textEdit("cv-linktitle") : <b>{it.text || it.site}</b>}<a className="secondary" href={it.url} target="_blank" rel="noreferrer noopener" onPointerDown={(e) => e.stopPropagation()}>{it.site}</a></span></div>;
