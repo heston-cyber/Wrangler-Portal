@@ -27,3 +27,12 @@ GitHub › Actions › **Weekly backup to Bunny** › Run workflow. Choose `dev`
 4. **Live: only on Heston's OK, and after a fresh Convex dashboard backup.** Run the same command with `--prod`.
    - `--replace-all` **replaces every table's data.** That's what a restore is.
    - Files in `_storage` are uploaded too.
+
+## After restoring a live copy onto dev: clear the W-9s (required)
+A live backup holds vendors' real W-9s (tax forms with names, addresses and tax ID numbers). Restored onto dev, they would show on the preview, which is less protected than live. So, every time a live copy goes onto dev, before anyone opens the preview:
+1. **Once only:** in the Convex dashboard, open the **development** deployment › Settings › Environment variables and add `W9_STRIP_OK` with that deployment's own name as the value (the first part of its address, `<name>.convex.cloud`). Never add it to live.
+2. GitHub › Actions › **Convex dev (practice runs)** › Run workflow, `fn` = `migrations:stripW9s` (the workflow fills in the deployment's name). It prints how many W-9s it cleared.
+3. The script refuses to run unless both the name it's given and `W9_STRIP_OK` match the deployment it's on, so it can't clear live's W-9s.
+
+## How long a deleted W-9 stays in a backup
+Deleting a W-9 (a vendor replaces it, a business removes a vendor's form, or a business deletes its data) removes it from live at once. Copies already taken stay in the encrypted backups until they're pruned: **up to 12 weeks** (the 12 newest weekly copies are kept), and up to **7 days** in Convex's own dashboard backups. Only Heston's passphrase opens the weekly copies. If someone asks for their W-9 to be gone sooner, delete the weekly copies that hold it from the Bunny storage zone by hand.
