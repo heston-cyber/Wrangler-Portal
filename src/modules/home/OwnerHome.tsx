@@ -1,5 +1,6 @@
 // The back-office Home (P1 / Owner / Home, page "S5 · Phase 1"): what needs you today, your clients, and recent
 // activity across Review, Docs and the Inbox.
+import { SetupChecklist } from "../setup/Setup";
 import { CallNeedRow } from "../calls/Calls";
 import { money } from "../payments/common";
 import { Suspense, lazy, useState } from "react";
@@ -325,6 +326,7 @@ export default function OwnerHome() {
     <TopBar><span className="here">Dashboard</span></TopBar>
     <div className="wp-page wp-home pov">
       <PageHeader title="Dashboard." sub="What needs you today." actions={<><ButtonLink variant="secondary" to="/settings/tools" iconEnd={false}>Customize</ButtonLink><CreateMenu /></>} />
+      <SetupChecklist /> {/* Phase 7: a new business only; null for Wrangler and for a team member (setup.state) */}
       {watch && watch.open > 0 && <SiteWatchRow w={watch} />}
       <div className="pov-stats ov-tiles">
         <Tile label="Today" n={dash ? dash.tiles.today : "–"} sub={dash?.tiles.todayFirst ? `${dash.tiles.today === 1 ? "shoot" : "shoots"} · ${dash.tiles.todayFirst.client ?? dash.tiles.todayFirst.project}` : "no shoots"}

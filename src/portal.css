@@ -4394,3 +4394,31 @@ textarea.cv-boxtxt { pointer-events: auto; display: block; padding-top: calc(50%
 @media (max-width: 720px) { .pa-kind { display: none; } }
 @media (max-width: 720px) { .pa-stats { grid-template-columns: 1fr; } }
 @media (max-width: 720px) { .pa-list .meta { white-space: normal; overflow: visible; text-overflow: clip; } }
+
+/* Phase 7 step 2 · onboarding pages (750:916–750:2099) and the Home checklist (751:1096) */
+.ob { max-width: 640px; margin: 0 auto; display: grid; gap: 10px; }
+.ob-brand { font-family: var(--font-title, inherit); font-size: 18px; }
+.ob-prog { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-top: 6px; }
+.ob-prog i { height: 3px; border-radius: 2px; background: rgba(var(--paper), .14); }
+.ob-prog i.on { background: var(--accent); }
+.ob h1 { margin: 6px 0 0; }
+.ob-card { display: grid; gap: 14px; padding: 18px; border-radius: 18px; margin-top: 8px; }
+.ob-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ob-foot { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.ob-foot .sp { flex: 1; }
+.ob-drop { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 52px; width: 100%; border: 1px dashed rgba(var(--paper), .28); border-radius: 12px; background: transparent; color: var(--text-secondary); }
+.ob-drop b { color: var(--accent); font-weight: 500; }
+.ob-drop.light { background: rgba(255, 255, 255, .9); color: #4a4a4a; }
+.ob-drop img { max-height: 40px; max-width: 80%; }
+.ob-tools { gap: 4px; }
+.ob-tool { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; }
+.ob-tool > span { display: grid; gap: 2px; }
+.ob-check { padding: 16px 6px 10px; display: grid; gap: 0; margin-bottom: 18px; }
+.ob-check .ob-checkhead { padding: 0 12px; }
+.ob-checkhead { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.ob-checkhead .sp { flex: 1; }
+.ob-checkrow { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
+.ob-checkrow > span { display: grid; gap: 2px; flex: 1; }
+.ob-checkrow > svg, .ob-checkrow > .icon { color: var(--accent); flex: none; }
+@media (max-width: 720px) { .ob-two { grid-template-columns: 1fr; } }
+.ob-tool > :last-child { flex: none; }

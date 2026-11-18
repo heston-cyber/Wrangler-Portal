@@ -738,6 +738,9 @@ export default defineSchema({
     name: v.string(),               // "Wrangler Productions"
     invitedFrom: v.optional(v.id("businessInvites")), // Phase 7: a business made from Heston's invite (beta)
     setupDoneAt: v.optional(v.number()),               // Phase 7 step 2: when its setup was finished (or skipped through)
+    // Phase 7 step 2 (D109): where its owner is in setup, and when each part was done. Wrangler never has it (D114).
+    setup: v.optional(v.object({ step: v.number(), business: v.optional(v.number()), email: v.optional(v.number()), pricing: v.optional(v.number()),
+      connections: v.optional(v.number()), client: v.optional(v.number()), hidden: v.optional(v.boolean()) })),
     legalName: v.optional(v.string()), // "Wrangler Productions, a DBA of Hill Creative LLC"
     createdAt: v.number(),
     // Phase 1 (Oct 29): Business settings. The portal, its emails and the signing pages wear these.

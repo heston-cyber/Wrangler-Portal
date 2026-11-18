@@ -41,6 +41,7 @@ import type { Id } from "../convex/_generated/dataModel";
 // Payments (Phase 2 Part B): its own chunk.
 const InvoicesPage = lazy(() => import("./modules/payments/InvoicesPage"));
 const PlatformAdmin = lazy(() => import("./modules/platform/Admin"));
+const Setup = lazy(() => import("./modules/setup/Setup"));
 const InvoiceEditor = lazy(() => import("./modules/payments/InvoiceEditor"));
 const InvoiceDetail = lazy(() => import("./modules/payments/InvoiceDetail"));
 const PaymentsOverview = lazy(() => import("./modules/payments/PaymentsOverview"));
@@ -277,7 +278,7 @@ export default function App() {
   const guestLink = /^\/guest(?:\/([A-Za-z0-9_-]{16,64}))?\/?$/.exec(path);
   if (guestLink) return <Suspense fallback={<Loading />}><GuestApp key={guestLink[1] ?? "home"} token={guestLink[1] ?? null} /></Suspense>;
   if (isLoading) return <Loading />;
-  if (!isAuthenticated) return <SignIn invitedEmail={new URLSearchParams(location.search).get("invited")} />;
+  if (!isAuthenticated) return <SignIn invitedEmail={new URLSearchParams(location.search).get("invited")} owner={new URLSearchParams(location.search).get("side") === "owner"} />;
   return <SignedIn />;
 }
 
@@ -456,6 +457,8 @@ function SignedIn() {
   // 5i (D193): signing a release in person is full screen: the signer sees nothing of the portal (no menu, no tabs).
   const releaseSign = /^\/releases\/([^/]+)\/sign\/?$/.exec(path);
   // Phase 7 (D110): the platform admin page stands on its own (frame 751:1808); it answers only for Heston.
+  // Phase 7 step 2 (D109): a new business's setup (steps 2–6) stands on its own like Welcome.
+  if (/^\/setup\/?$/.test(path) && !team) return <Suspense fallback={<Loading />}><Setup start={Number(params.get("step")) || null} /></Suspense>;
   if (/^\/admin\/?$/.test(path) && !team) return <Suspense fallback={<Loading />}><PlatformAdmin me={me} /></Suspense>;
   if (releaseSign && !team) return <Suspense fallback={<Loading />}><ReleaseSigning key={releaseSign[1]} releaseId={releaseSign[1]} /></Suspense>;
   // Work surfaces get no background light, so nothing competes with the video or the document.
