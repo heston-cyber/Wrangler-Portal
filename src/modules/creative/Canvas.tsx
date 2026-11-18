@@ -13,8 +13,13 @@ import { useMutation, useQuery } from "convex/react";
 import {
   MousePointer2, Hand, Pencil, Eraser, Type, Square, Circle, ArrowRight, Minus as LineIcon, ImagePlus, Box, Lock, LockOpen, Undo2, Redo2, Minus, Plus, Menu, CircleQuestionMark,
   StickyNote, Table2, Frame, Link2, Upload, ChevronLeft, ChevronRight, Download, MoreHorizontal, ArrowDownToLine, ArrowDown, ArrowUp, ArrowUpToLine,
-  Palette, PaintBucket, Layers, Scissors, Copy, ClipboardPaste, CopyPlus, Trash2, Maximize, Search,
+  Palette, PaintBucket, Layers, Scissors, Copy, ClipboardPaste, CopyPlus, Trash2, Maximize, Search, FileText, ExternalLink, Check,
 } from "lucide-react";
+import type { Editor } from "@tiptap/react";
+import { DocCard, DocLive, type DocView } from "./CanvasDoc";
+import { FormatPanel, QuickMenu } from "../docs/builder/FormatPanel";
+import { BuilderCtx } from "../docs/builder/editor/nodes";
+import { fieldValues, sectionClause, type BuildDoc, type PNode } from "../../../convex/lib/wsBuilder";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Sep, TopBar } from "../../shell/Shell";
@@ -152,7 +157,7 @@ export function CanvasPage({ canvasId }: { canvasId: string }) {
   };
   return (
     <>
-      <Board key={c._id} title={c.name} items={c.items as CanvasItem[]} rev={c.rev} files={c.files} canEdit uploads={{ upload, bytes: c.limits.bytes }}
+      <Board key={c._id} title={c.name} items={c.items as CanvasItem[]} rev={c.rev} files={c.files} docs={c.docs as Record<string, DocView>} docTools={{ home: c.home ? { type: c.home.type as "client" | "project" | "shoot" | "lead", id: c.home.id } : null }} canEdit uploads={{ upload, bytes: c.limits.bytes }}
         onSave={async (items, rev) => { const r = await save({ canvasId, items, rev }); if (r.ok && items.length < (c.items as CanvasItem[]).length) void dropUnused({ canvasId }); return r as SaveResult; }}
         top={(state) => (
           <TopBar right={<>
@@ -243,7 +248,7 @@ export function SharedCanvas({ token }: { token: string }) {
   if (c === null) return <div className="cr-public"><EmptyState icon="creative" title="This link isn't working." body="Sharing may have stopped. Ask whoever sent it." /></div>;
   return (
     <div className="cv-shared">
-      <Board title={c.name} items={c.items as CanvasItem[]} rev={c.rev} files={c.files} canEdit={c.role === "edit"} show={show}
+      <Board title={c.name} items={c.items as CanvasItem[]} rev={c.rev} files={c.files} docs={c.docs as Record<string, DocView>} canEdit={c.role === "edit"} show={show}
         onSave={async (items, rev) => (await save({ token, items, rev })) as SaveResult}
         top={(state) => <div className="cv-pubbar glass"><span className="wp-eyebrow">{c.from ?? ""}{c.from ? " · " : ""}{c.kind === "mood" ? "Mood board" : "Canvas"}</span><b>{c.name}</b><span className="sp" />{state}<span className="pill sm">{c.role === "edit" ? "Can edit" : "View only"}</span></div>} />
       {toast}
@@ -256,7 +261,7 @@ export function SharedCanvas({ token }: { token: string }) {
 type Uploads = { upload: (f: File, onProgress: (p: number) => void) => Promise<{ error: string | null; fileId?: string; url?: string | null; type?: string; size?: number }>; bytes: number };
 type BoardMenuItem = { label: string; onClick: () => void; danger?: boolean };
 
-type Tool = "select" | "pan" | "box" | "ellipse" | "arrow" | "line" | "pen" | "text" | "image" | "eraser" | "note" | "table" | "frame" | "link" | "import";
+type Tool = "select" | "pan" | "box" | "ellipse" | "arrow" | "line" | "pen" | "text" | "image" | "eraser" | "note" | "table" | "frame" | "link" | "import" | "doc";
 const MAIN: Array<{ k: Tool; label: string; icon: React.ReactNode; n?: string; key?: string; phone?: boolean }> = [
   { k: "pan", label: "Hand", icon: <Hand size={18} />, key: "h", phone: true },
   { k: "select", label: "Select", icon: <MousePointer2 size={18} />, n: "1", key: "v", phone: true },
@@ -274,11 +279,13 @@ const MORE: Array<{ k: Tool; label: string; icon: React.ReactNode; key?: string 
   { k: "table", label: "Table", icon: <Table2 size={18} /> },
   { k: "frame", label: "Frame", icon: <Frame size={18} />, key: "f" },
   { k: "link", label: "Link", icon: <Link2 size={18} /> },
+  { k: "doc", label: "Doc", icon: <FileText size={18} /> }, // Nov 17 (Heston): a creative doc on the board
   { k: "import", label: "Import", icon: <Upload size={18} /> },
 ];
 const HINT: Partial<Record<Tool, string>> = {
   select: "To move canvas, hold Scroll wheel or Space while dragging, or use the hand tool",
   pan: "Drag to move the canvas",
+  doc: "Click where the doc should go. Double-click a doc to edit it",
   box: "Click and drag to draw a rectangle. Hold Shift for a square",
   ellipse: "Click and drag to draw a circle. Hold Shift for a perfect circle",
   arrow: "Click and drag to draw an arrow. Hold Shift to snap the angle",
@@ -305,8 +312,9 @@ const SHAPES = new Set(["box", "ellipse"]);
 const LINES = new Set(["arrow", "line"]);
 type Style = { color: string; fill: string | null; stroke: number; dash: "solid" | "dashed" | "dotted"; rough: 0 | 1 | 2; round: boolean; opacity: number; size: "S" | "M" | "L" | "XL"; note: string; rows: number; cols: number };
 
-function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdit, uploads, onSave, top, show, menu }: {
+function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdit, uploads, onSave, top, show, menu, docs = {}, docTools }: {
   title: string; items: CanvasItem[]; rev: number; files: Record<string, string | null>; canEdit: boolean; uploads?: Uploads;
+  docs?: Record<string, DocView>; docTools?: { home: { type: "client" | "project" | "shoot" | "lead"; id: string } | null };
   onSave: (items: CanvasItem[], rev: number) => Promise<SaveResult>; top: (state: React.ReactNode) => React.ReactNode; show: (t: string) => void; menu?: BoardMenuItem[];
 }) {
   const [items, setItemsRaw] = useState<CanvasItem[]>(initial);
@@ -329,6 +337,16 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
   const [ghost, setGhost] = useState<CanvasItem | null>(null); // the shape or line being drawn
   const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const [linkAsk, setLinkAsk] = useState<{ x: number; y: number } | null>(null);
+  // Nov 17: docs on the board. The doc being edited hands its editor up, for the Format panel and the builder's menu.
+  const [docAsk, setDocAsk] = useState<{ x: number; y: number } | null>(null);
+  const [docEd, setDocEd] = useState<{ editor: Editor; doc: BuildDoc } | null>(null);
+  const [docMenu, setDocMenu] = useState<{ x: number; y: number } | null>(null);
+  const onDocEditor = useCallback((editor: Editor | null, doc: BuildDoc | null) => setDocEd(editor && doc ? { editor, doc } : null), []);
+  const saveClause = useMutation(api.builder.saveClause);
+  const saveDocClause = async (sec: PNode) => {
+    const c = sectionClause(sec);
+    try { await saveClause({ title: c.title, body: c.body, initials: c.initials }); show(`"${c.title}" saved to the clause library`); } catch (e) { show(errLine(e)); }
+  };
   const [importing, setImporting] = useState(false);
   const [files, setFiles] = useState(fileUrls);
   const [space, setSpace] = useState(false);
@@ -439,6 +457,8 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
   useEffect(() => {
     const typing = (e: KeyboardEvent) => !!(e.target as HTMLElement).closest("input, textarea, select, [contenteditable=true]");
     const down = (e: KeyboardEvent) => {
+      // Esc in a doc being edited: closes its menu, then finishes editing.
+      if (e.key === "Escape" && (e.target as HTMLElement).closest?.(".cv-docedit")) { if (docMenu) setDocMenu(null); else { setEditing(null); setSel([]); } return; }
       if (typing(e)) return;
       const mod = e.metaKey || e.ctrlKey;
       if (e.key === " ") { e.preventDefault(); if (!space) setSpace(true); return; }
@@ -452,13 +472,13 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
       if (mod && e.key.toLowerCase() === "v" && canEdit && boardClip.length) { e.preventDefault(); pasteClip(); return; }
       if (mod && e.key.toLowerCase() === "a") { e.preventDefault(); setToolRaw("select"); setSel(itemsRef.current.map((i) => i.id)); return; }
       if ((e.key === "Delete" || e.key === "Backspace") && sel.length) { e.preventDefault(); del(); return; }
-      if (e.key === "Escape") { setSel([]); setEditing(null); setCtxMenu(null); setPop(null); setToolRaw(canEdit ? "select" : "pan"); return; }
+      if (e.key === "Escape") { setSel([]); setEditing(null); setCtxMenu(null); setDocMenu(null); setPop(null); setToolRaw(canEdit ? "select" : "pan"); return; }
       if (e.shiftKey && e.key === "!") { fit(); return; }
       if (mod || e.altKey) return;
       if (e.key.toLowerCase() === "q" && canEdit) { setKeep((k) => !k); return; }
       if (e.key === "?") { setPop("help"); return; }
       const t = [...MAIN, ...MORE].find((x) => ("n" in x && x.n === e.key) || x.key === e.key.toLowerCase());
-      if (!t || (!canEdit && t.k !== "select" && t.k !== "pan")) return;
+      if (!t || (!canEdit && t.k !== "select" && t.k !== "pan") || (t.k === "doc" && !docTools)) return;
       if (t.k === "image" || t.k === "import") { if (!uploads) return; if (t.k === "image") imageInput.current?.click(); else setImporting(true); return; }
       setTool(t.k);
     };
@@ -543,7 +563,10 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
 
   const onDown = (e: React.PointerEvent) => {
     if (e.button === 2) return;
-    if ((e.target as HTMLElement).closest(".cv-ui")) return;
+    if ((e.target as HTMLElement).closest(".cv-ui, .cv-docedit")) return; // a doc being edited takes its own clicks
+    if (docMenu) { setDocMenu(null); return; }
+    // A click anywhere but the doc being edited finishes editing it.
+    if (editing && itemsRef.current.find((i) => i.id === editing)?.type === "doc" && ((e.target as HTMLElement).closest("[data-id]") as HTMLElement | null)?.dataset.id !== editing) setEditing(null);
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (ctxMenu || pop) { setCtxMenu(null); setPop(null); swallowNextClick(); return; } // Heston (10:47): a tap outside an open menu only closes it
@@ -566,6 +589,7 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
     if (tool === "table") { add({ type: "table", x: p.x, y: p.y, w: st.cols * 140, h: st.rows * 40, rows: Array.from({ length: st.rows }, () => Array.from({ length: st.cols }, () => "")) }); return; }
     if (tool === "box" || tool === "ellipse" || tool === "frame" || tool === "arrow" || tool === "line") { gesture.current = { kind: "make", type: tool, x0: p.x, y0: p.y }; return; }
     if (tool === "link") { setLinkAsk(p); done(); return; }
+    if (tool === "doc") { if (docTools) setDocAsk(p); done(); return; }
     // Select
     if (handle && selected.length === 1) {
       const it = selected[0];
@@ -713,7 +737,8 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
   const selBox = selected.length ? selected.reduce((a, i) => ({ x0: Math.min(a.x0, i.x), y0: Math.min(a.y0, i.y), x1: Math.max(a.x1, i.x + i.w), y1: Math.max(a.y1, i.y + i.h) }), { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity }) : null;
   // The style panel: while drawing with a styled tool, or with something selected.
   const panelFor = selected.length ? selected : ["box", "ellipse", "arrow", "line", "pen", "text", "note"].includes(tool) ? [{ type: tool } as CanvasItem] : [];
-  const showPanel = canEdit && !phone && (panelFor.length > 0 || tool === "table");
+  const editingDoc = !!docEd && !!one && one.type === "doc" && editing === one.id;
+  const showPanel = canEdit && !phone && !editingDoc && (panelFor.length > 0 || tool === "table");
   // The grid: 20 board pixels, with every fifth line a little stronger; wider when zoomed far out.
   const step = 20 * zoom < 8 ? 100 : 20;
   const minor = step * zoom, major = step * 5 * zoom;
@@ -729,11 +754,13 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
       {top(state)}
       <div className="cv-stage">
       <div ref={viewRef} className={`cv-view tool-${space ? "pan" : tool}`} style={gridStyle} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
-        onContextMenu={(e) => { if (!canEdit) return; e.preventDefault(); const el = (e.target as HTMLElement).closest("[data-id]") as HTMLElement | null; if (el && !sel.includes(el.dataset.id!)) setSel([el.dataset.id!]); if (!el) setSel([]); setToolRaw("select"); setCtxMenu({ x: e.clientX, y: e.clientY }); }}
+        onContextMenu={(e) => { if (!canEdit || (e.target as HTMLElement).closest(".cv-docedit")) return; e.preventDefault(); const el = (e.target as HTMLElement).closest("[data-id]") as HTMLElement | null; if (el && !sel.includes(el.dataset.id!)) setSel([el.dataset.id!]); if (!el) setSel([]); setToolRaw("select"); setCtxMenu({ x: e.clientX, y: e.clientY }); }}
         onDragOver={(e) => { if (canEdit && uploads) e.preventDefault(); }} onDrop={onDrop}
-        onDoubleClick={(e) => { const el = (e.target as HTMLElement).closest("[data-id]") as HTMLElement | null; const it = el && itemsRef.current.find((i) => i.id === el.dataset.id); if (it && canEdit && !it.locked && ["note", "text", "box", "ellipse", "frame", "table", "link"].includes(it.type)) { setEditing(it.id); setSel([it.id]); } }}>
+        onDoubleClick={(e) => { const el = (document.elementFromPoint(e.clientX, e.clientY) ?? (e.target as HTMLElement)).closest("[data-id]") as HTMLElement | null; /* the board holds the pointer while pressed, so the event's own target is the board */ const it = el && itemsRef.current.find((i) => i.id === el.dataset.id); if (it && canEdit && !it.locked && (["note", "text", "box", "ellipse", "frame", "table", "link"].includes(it.type) || (it.type === "doc" && docTools && !phone && !!docs[it.docId ?? ""]?.buildId))) { setEditing(it.id); setSel([it.id]); } }}>
         <div className="cv-board" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, width: BOARD.w, height: BOARD.h }}>
-          {sorted.map((it) => <ItemView key={it.id} it={it} url={it.fileId ? files[it.fileId] ?? null : null} freshUrl={freshUrl} editing={editing === it.id} canEdit={canEdit} onPatch={(p) => patch(it.id, p)} onDone={() => setEditing(null)} />)}
+          {sorted.map((it) => it.type === "doc"
+            ? <DocItem key={it.id} it={it} view={docs[it.docId ?? ""]} editing={editing === it.id && !!docTools && !phone} onEditor={onDocEditor} onMenu={setDocMenu} onError={show} />
+            : <ItemView key={it.id} it={it} url={it.fileId ? files[it.fileId] ?? null : null} freshUrl={freshUrl} editing={editing === it.id} canEdit={canEdit} onPatch={(p) => patch(it.id, p)} onDone={() => setEditing(null)} />)}
           {ghost && <ItemView it={ghost} url={null} editing={false} canEdit={false} onPatch={() => {}} onDone={() => {}} />}
           {drawing && <svg className="cv-ink" style={{ left: 0, top: 0, opacity: st.opacity / 100 }} width={BOARD.w} height={BOARD.h}><path d={smooth(drawing.points)} fill="none" stroke={st.color} strokeWidth={Math.max(2, st.stroke * 2)} strokeLinecap="round" strokeLinejoin="round" /></svg>}
           {marquee && <div className="cv-marquee" style={{ left: Math.min(marquee.x0, marquee.x1), top: Math.min(marquee.y0, marquee.y1), width: Math.abs(marquee.x1 - marquee.x0), height: Math.abs(marquee.y1 - marquee.y0), borderWidth: 1 / zoom }} />}
@@ -764,14 +791,19 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
             <button key={t.k} className={`cv-tbtn${tool === t.k ? " on" : ""}`} aria-pressed={tool === t.k} aria-label={t.label} title={`${t.label}${t.n ? ` (${t.n})` : t.key ? ` (${t.key.toUpperCase()})` : ""}`} onClick={() => pick(t.k)}>{t.icon}{t.n && <i>{t.n}</i>}</button>
           ))}
           {canEdit && <><span className="cv-sep" /><span className="cv-morewrap">
-            <button className={`cv-tbtn${MORE.some((m) => m.k === tool) || pop === "more" ? " on" : ""}`} aria-label="More tools" title="More tools: Note, Table, Frame, Link, Import" onClick={() => setPop(pop === "more" ? null : "more")}><Box size={18} /></button>
-            {pop === "more" && <div className="cv-pop cv-dd right" role="menu">{MORE.filter((m) => uploads || m.k !== "import").map((m) => <button key={m.k} role="menuitem" onClick={() => pick(m.k)}>{m.icon}{m.label}{m.key && <kbd>{m.key.toUpperCase()}</kbd>}</button>)}</div>}
+            <button className={`cv-tbtn${MORE.some((m) => m.k === tool) || pop === "more" ? " on" : ""}`} aria-label="More tools" title="More tools: Note, Table, Frame, Link, Doc, Import" onClick={() => setPop(pop === "more" ? null : "more")}><Box size={18} /></button>
+            {pop === "more" && <div className="cv-pop cv-dd right" role="menu">{MORE.filter((m) => (uploads || m.k !== "import") && (docTools || m.k !== "doc")).map((m) => <button key={m.k} role="menuitem" onClick={() => pick(m.k)}>{m.icon}{m.label}{m.key && <kbd>{m.key.toUpperCase()}</kbd>}</button>)}</div>}
           </span></>}
         </nav>
         {hint && <p className="cv-hintline">{hint}</p>}
       </div>}
 
       {/* The style panel, on the left */}
+      {editingDoc && docEd && <div className="cv-ui cv-panel cv-docpanel" aria-label="Format" onPointerDown={(e) => e.stopPropagation()}>
+        <div className="cv-docpanel-h"><FileText size={15} /><b>{docs[one!.docId ?? ""]?.title ?? "Doc"}</b><button className="cv-tbtn" aria-label="Done editing" title="Done (Esc)" onClick={() => setEditing(null)}><Check size={16} /></button></div>
+        <BuilderCtx.Provider value={docCtx(docEd.doc)}><FormatPanel editor={docEd.editor} accent={docEd.doc.style.accent} onSaveClause={(s) => void saveDocClause(s)} /></BuilderCtx.Provider>
+      </div>}
+      {editingDoc && docEd && docMenu && <div className="cv-ui"><BuilderCtx.Provider value={docCtx(docEd.doc)}><QuickMenu editor={docEd.editor} at={docMenu} accent={docEd.doc.style.accent} onClose={() => { setDocMenu(null); if (!docEd.editor.isDestroyed) docEd.editor.view.focus(); }} onMore={() => setDocMenu(null)} onSaveClause={(s) => void saveDocClause(s)} /></BuilderCtx.Provider></div>}
       {showPanel && <StylePanel items={panelFor} st={st} onStyle={restyle} onLayer={selected.length ? layer : undefined} table={tool === "table" ? { rows: st.rows, cols: st.cols, set: (rows, cols) => setSt((s) => ({ ...s, rows, cols })) } : undefined} />}
 
       {phone && editing && <button className="cv-ui cv-done" onPointerDown={(e) => e.preventDefault()} onClick={() => { (document.activeElement as HTMLElement | null)?.blur(); setEditing(null); }}>Done</button>}
@@ -816,6 +848,10 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
               <MenuItem icon={<Copy size={15} />} kbd="⌘C" onSelect={copySel}>Copy</MenuItem>
               <MenuItem icon={<ClipboardPaste size={15} />} kbd="⌘V" disabled={!boardClip.length} onSelect={pasteClip}>Paste</MenuItem>
               <MenuItem icon={<CopyPlus size={15} />} kbd="⌘D" onSelect={dup}>Duplicate</MenuItem>
+              {one?.type === "doc" && docTools && docs[one.docId ?? ""]?.buildId && <>
+                {!phone && <MenuItem icon={<FileText size={15} />} onSelect={() => { setEditing(one.id); setCtxMenu(null); }}>Edit here</MenuItem>}
+                <MenuItem icon={<ExternalLink size={15} />} onSelect={() => { navigate(`/creative/docs/${one.docId}`); setCtxMenu(null); }}>Open in the builder</MenuItem>
+              </>}
               {one?.fileId && files[one.fileId] && <MenuItem icon={<Download size={15} />} onSelect={() => { window.open(freshUrl(one.fileId!) ?? files[one.fileId!]!, "_blank", "noreferrer"); setCtxMenu(null); }}>Download</MenuItem>}
               <MenuSep />
               <MenuItem icon={<Trash2 size={15} />} danger kbd="⌫" onSelect={del}>Delete {n === 1 ? "item" : "items"}</MenuItem>
@@ -847,6 +883,7 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
 
       <input ref={fileInput} type="file" hidden multiple onChange={(e) => { if (e.target.files) void uploadMany(e.target.files); e.target.value = ""; }} />
       <input ref={imageInput} type="file" accept="image/*" hidden multiple onChange={(e) => { if (e.target.files) void uploadMany(e.target.files); e.target.value = ""; }} />
+      {docAsk && docTools && <DocPicker home={docTools.home} onClose={() => setDocAsk(null)} onPick={(docId) => { add({ type: "doc", docId, x: docAsk.x - 280, y: docAsk.y - 60, w: 560, h: 724 } as CanvasItem); setDocAsk(null); }} onError={show} />}
       {linkAsk && <LinkDialog onClose={() => setLinkAsk(null)} onAdd={(u) => { addLink(u, linkAsk); setLinkAsk(null); }} />}
       {importing && uploads && <ImportDialog onClose={() => setImporting(false)} onFiles={(fl, row) => uploadMany(fl, undefined, row)} onLink={(u) => { addLink(u); setImporting(false); }} />}
       {pop === "help" && <Shortcuts onClose={() => setPop(null)} />}
@@ -1041,6 +1078,58 @@ function TableBar({ it, onPatch }: { it: CanvasItem; onPatch: (p: Partial<Canvas
       <button onClick={() => { const { c } = at(); set(rows.map((x) => [...x.slice(0, c + 1), "", ...x.slice(c + 1)])); }}>Column right</button>
       <button disabled={rows[0].length < 2} onClick={() => { const { c } = at(); set(rows.map((x) => x.filter((_, i) => i !== c))); }}>Delete column</button>
     </div>
+  );
+}
+
+// ---------- docs on the board (Nov 17) ----------
+
+/** What the builder's Format panel and menu read: the doc being edited. */
+const docCtx = (doc: BuildDoc) => ({ doc, values: fieldValues(doc.fields, doc.page), px: (pt: number) => pt, onDetails: () => {}, onSaveClause: () => {} });
+
+/** A doc on the board: its page to read, or, while it's being edited, the builder's editor. */
+const DocItem = memo(function DocItem({ it, view, editing, onEditor, onMenu, onError }: {
+  it: CanvasItem; view: DocView | undefined; editing: boolean; onEditor: (e: Editor | null, d: BuildDoc | null) => void; onMenu: (at: { x: number; y: number }) => void; onError: (m: string) => void;
+}) {
+  const base: React.CSSProperties = { left: it.x, top: it.y, width: it.w, height: it.h, zIndex: it.z, ...(it.opacity !== undefined && it.opacity < 100 ? { opacity: it.opacity / 100 } : {}) };
+  return (
+    <div data-id={it.id} className={`cv-item cv-doc${editing ? " on" : ""}`} style={base}>
+      <div className="cv-doctag"><FileText size={13} />{view ? <><b>{view.title}</b><span>{view.kindName}</span></> : <b>Doc</b>}</div>
+      <div className={`cv-docbody${editing ? " cv-scroll" : ""}`}>
+        {!view ? <div className="cv-docgone">This doc isn't here any more.</div>
+          : editing && view.buildId ? <DocLive buildId={view.buildId} width={it.w} onEditor={onEditor} onMenu={onMenu} onError={onError} />
+          : <DocCard view={view} width={it.w} />}
+      </div>
+    </div>
+  );
+});
+
+/** Add a doc: a new one of a kind (homed with the board), or one already made. */
+function DocPicker({ home, onClose, onPick, onError }: { home: { type: "client" | "project" | "shoot" | "lead"; id: string } | null; onClose: () => void; onPick: (docId: string) => void; onError: (m: string) => void }) {
+  const rows = useQuery(api.creative.docs, {});
+  const make = useMutation(api.creative.newDoc);
+  const [busy, setBusy] = useState(false);
+  const [q, setQ] = useState("");
+  const KINDS = [["treatment", "Treatment"], ["script", "Two-column script"], ["interview", "Interview questions"], ["brief", "Creative brief"], ["blank", "Blank"]] as const;
+  const create = async (kind: (typeof KINDS)[number][0]) => {
+    setBusy(true);
+    try { const r = await make({ kind, home }); onPick(r.docId); } catch (e) { onError(errLine(e)); setBusy(false); }
+  };
+  const shown = (rows ?? []).filter((d) => !q.trim() || d.title.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 30);
+  return (
+    <Modal onClose={onClose} label="Add a doc" width={520}>
+      <div className="crm-dialog cv-docpick">
+        <DialogHeader eyebrow="Doc" title="Add a doc to the board" body="It's the doc itself, not a copy: edits here show in Creative planning › Docs too." onClose={onClose} />
+        <div className="cv-dp-label">New</div>
+        <div className="cv-dp-kinds">{KINDS.map(([k, n]) => <button key={k} type="button" className="cv-dp-kind" disabled={busy} onClick={() => void create(k)}><FileText size={16} />{n}</button>)}</div>
+        <div className="cv-dp-label">Or one you've made</div>
+        <TextField label="Search docs" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by title" />
+        <div className="cv-dp-list">
+          {rows === undefined ? <SkeletonRows n={3} /> : shown.length === 0 ? <p className="secondary">{rows.length ? "No docs match." : "No creative docs yet."}</p>
+            : shown.map((d) => <button key={d._id} type="button" className="cv-dp-row" disabled={busy} onClick={() => onPick(d._id)}><b>{d.title}</b><span className="secondary">{d.kindName}{d.home ? ` · ${d.home.name}` : ""}</span></button>)}
+        </div>
+        <div className="dfoot"><button type="button" className="btn ghost" onClick={onClose}>Cancel</button></div>
+      </div>
+    </Modal>
   );
 }
 

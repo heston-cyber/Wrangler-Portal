@@ -16,6 +16,7 @@ import { randomToken } from "./lib/hash";
 import { homeChip } from "./creative";
 import { CANVAS_LIMITS, cleanItems, moodBoard, refusedFile, type CanvasItem } from "./lib/canvas";
 import { placeOf, peopleAt } from "./lib/placed";
+import { CREATIVE_NAME, dropNotes, type CreativeKind } from "./lib/creativeTemplates";
 
 type Ctx = QueryCtx | MutationCtx;
 const homeArg = v.optional(v.union(v.null(), v.object({ type: v.union(v.literal("client"), v.literal("project"), v.literal("shoot"), v.literal("lead")), id: v.string() })));
@@ -28,6 +29,27 @@ async function boardOf(ctx: Ctx, canvasId: string) {
   const c = id ? await ctx.db.get(id) : null;
   if (!c) throw new ConvexError("That board isn't here any more.");
   return c;
+}
+/** Nov 17 (Heston): the creative docs on a board, as their pages read now. Someone the board is shared with gets them to
+ *  read only (no build id to save to), without the team's notes (D191's rule for shared creative docs). */
+/** A shared board's doc: the business's own details and the date stay; the client's details, the project and custom
+ *  values are left out (they're for the team). */
+function sharedFields(f: unknown) {
+  const x = (f ?? {}) as { business?: unknown; date?: unknown };
+  return { business: x.business ?? null, client: { name: "", company: "", email: "", phone: "", address: "" }, project: "", date: typeof x.date === "string" ? x.date : "", custom: [] };
+}
+async function docsOf(ctx: Ctx, c: Doc<"canvases">, shared: boolean) {
+  const out: Record<string, { title: string; kindName: string; buildId: Id<"wsBuilds"> | null; page: unknown; style: unknown; fields: unknown; at: number }> = {};
+  for (const it of itemsOf(c)) {
+    if (it.type !== "doc" || !it.docId || out[it.docId]) continue;
+    const id = ctx.db.normalizeId("creativeDocs", it.docId);
+    const d = id ? await ctx.db.get(id) : null;
+    if (!d || (d.businessId ?? null) !== (c.businessId ?? null)) continue;
+    const b = await ctx.db.get(d.buildId);
+    if (!b) continue;
+    out[it.docId] = { title: b.title, kindName: CREATIVE_NAME[d.kind as CreativeKind] ?? "Creative doc", buildId: shared ? null : d.buildId, page: shared ? dropNotes(b.blocks as never) : b.blocks, style: b.style, fields: shared ? sharedFields(b.fields) : b.fields, at: b.updatedAt };
+  }
+  return out;
 }
 const itemsOf = (c: Doc<"canvases">) => (Array.isArray(c.items) ? (c.items as CanvasItem[]) : []);
 async function urls(ctx: Ctx, c: Doc<"canvases">, onlyUsed = false) {
@@ -87,7 +109,7 @@ export const get = query({
     if (!c) return null;
     const people = await ctx.db.query("canvasPeople").withIndex("by_canvas", (q) => q.eq("canvasId", c._id)).collect();
     return {
-      _id: c._id, name: c.name, kind: c.kind, items: itemsOf(c), rev: c.rev, files: await urls(ctx, c), home: await homeChip(ctx, c), editedBy: c.editedBy ?? null, at: c.updatedAt,
+      _id: c._id, name: c.name, kind: c.kind, items: itemsOf(c), rev: c.rev, files: await urls(ctx, c), docs: await docsOf(ctx, c, false), home: await homeChip(ctx, c), editedBy: c.editedBy ?? null, at: c.updatedAt,
       people: people.map((p) => ({ _id: p._id, email: p.email, name: p.name ?? null, role: p.role, token: p.token, openedAt: p.openedAt ?? null })),
       link: c.link ?? null, limits: CANVAS_LIMITS,
     };
@@ -95,9 +117,18 @@ export const get = query({
 });
 
 /** Live save (D184): refused when someone saved since this copy was read; the newer board comes back to merge onto. */
-async function saveItems(ctx: MutationCtx, c: Doc<"canvases">, items: unknown, rev: number, by: string) {
+async function saveItems(ctx: MutationCtx, c: Doc<"canvases">, items: unknown, rev: number, by: string, team = true) {
   if (rev !== c.rev) return { ok: false as const, rev: c.rev, items: itemsOf(c) };
-  const clean = cleanItems(items, new Set(c.files.map(String)));
+  const all = cleanItems(items, new Set(c.files.map(String)));
+  // Nov 17: a doc on the board is one of this business's creative docs (another business's, or a made-up id, is dropped)
+  // Someone the board is shared with can move a doc that's already on it, but not bring another one onto it.
+  const had = new Set(itemsOf(c).filter((i) => i.type === "doc").map((i) => i.docId));
+  const clean: CanvasItem[] = [];
+  for (const it of all) {
+    if (it.type === "doc" && !team && !had.has(it.docId)) continue;
+    if (it.type === "doc") { const id = ctx.db.normalizeId("creativeDocs", it.docId ?? ""); const d = id ? await ctx.db.get(id) : null; if (!d || (d.businessId ?? null) !== (c.businessId ?? null)) continue; }
+    clean.push(it);
+  }
   await ctx.db.patch(c._id, { items: clean, rev: c.rev + 1, editedBy: by, updatedAt: Date.now() });
   return { ok: true as const, rev: c.rev + 1 };
 }
@@ -289,7 +320,7 @@ export const shared = query({
     if (!f) return null;
     focusBusiness(ctx, f.c.businessId);
     const biz = f.c.businessId ? await ctx.db.get(f.c.businessId) : null;
-    return { name: f.c.name, kind: f.c.kind, from: biz?.name ?? null, role: f.role, items: itemsOf(f.c), rev: f.c.rev, files: await urls(ctx, f.c, true), at: f.c.updatedAt };
+    return { name: f.c.name, kind: f.c.kind, from: biz?.name ?? null, role: f.role, items: itemsOf(f.c), rev: f.c.rev, files: await urls(ctx, f.c, true), docs: await docsOf(ctx, f.c, true), at: f.c.updatedAt };
   },
 });
 
@@ -300,7 +331,7 @@ export const sharedSave = mutation({
     const f = await byToken(ctx, a.token);
     if (!f || f.role !== "edit") throw new ConvexError("This link can't change the board.");
     focusBusiness(ctx, f.c.businessId);
-    return await saveItems(ctx, f.c, a.items, a.rev, f.person?.name ?? f.person?.email ?? "Someone");
+    return await saveItems(ctx, f.c, a.items, a.rev, f.person?.name ?? f.person?.email ?? "Someone", false);
   },
 });
 

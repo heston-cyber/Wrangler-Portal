@@ -31,8 +31,14 @@ function localStills<T>(v: T): T {
 function mockClient(side: Side) {
   const data = localStills((fixtures as unknown as Record<string, Record<string, unknown>>)[DATA[side]]);
   // A sample made for particular arguments is stored as "module.fn#<first argument>" (e.g. one per document).
+  // A screenshot script can adjust a sample before the page reads it: window.__kitPatch(key, value) returns the value to use.
+  const patch = (window as unknown as { __kitPatch?: (k: string, v: unknown) => unknown }).__kitPatch;
   const answer = (name: string, args?: Record<string, unknown>) => {
     const key = name.replace(":", ".").replace(/\//g, ".");
+    if (patch) return patch(key, rawAnswer(key, args));
+    return rawAnswer(key, args);
+  };
+  const rawAnswer = (key: string, args?: Record<string, unknown>) => {
     const first = args && Object.values(args)[0];
     if (typeof first === "string" && `${key}#${first}` in data) return data[`${key}#${first}`];
     if (key in data) return data[key];
