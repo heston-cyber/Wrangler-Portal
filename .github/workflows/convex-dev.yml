@@ -47,9 +47,11 @@ jobs:
           export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7C/|}"
           export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7c/|}"
           case "$CONVEX_DEPLOY_KEY" in dev:*) echo "key: development";; "") echo "CONVEX_DEV_DEPLOY_KEY is not set"; exit 1;; *) echo "Refused: CONVEX_DEV_DEPLOY_KEY is not a development key"; exit 1;; esac
-          if [ -n "$FN" ] && ! [[ "$FN" =~ ^[A-Za-z0-9_]+:([A-Za-z0-9_]*[sS]elf[tT]est)$ || "$FN" == "business:bootstrap" || "$FN" == "migrations:tagAll" || "$FN" == "migrations:linkClients" || "$FN" == "migrations:ownersAll" || "$FN" == "guests:backfillPasses" ]]; then
+          if [ -n "$FN" ] && ! [[ "$FN" =~ ^[A-Za-z0-9_]+:([A-Za-z0-9_]*[sS]elf[tT]est)$ || "$FN" == "business:bootstrap" || "$FN" == "migrations:tagAll" || "$FN" == "migrations:linkClients" || "$FN" == "migrations:ownersAll" || "$FN" == "guests:backfillPasses" || "$FN" == "migrations:stripW9s" ]]; then
             echo "Not allowed: $FN"; exit 1
           fi
+          # Nov 18: migrations:stripW9s clears the W-9s on the dev copy; it is told this deployment's own name and refuses anywhere else.
+          if [ "$FN" = "migrations:stripW9s" ]; then DEPLOYMENT="${CONVEX_DEPLOY_KEY#dev:}"; DEPLOYMENT="${DEPLOYMENT%%|*}"; DEPLOYMENT="${DEPLOYMENT%%:*}"; ARGS="{\"deployment\":\"$DEPLOYMENT\"}"; fi
           if ! printf '%s' "$ARGS" | jq -e 'type == "object"' > /dev/null; then echo "args must be a JSON object"; exit 1; fi
           npx convex deploy -y || npx convex dev --once --typecheck disable
           echo "Settings on dev (names only):"; npx convex env list 2>/dev/null | cut -d= -f1 | sort | tr '\n' ' '; echo

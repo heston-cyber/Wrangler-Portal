@@ -470,7 +470,7 @@ a.wp-row:hover, button.wp-row:hover, .wp-row.hover { background: var(--surface-b
 .wp-nav[aria-current="page"] { background: var(--surface-block-hover); color: var(--text-primary); }
 .wp-navwrap { position: relative; flex: 0 0 auto; display: flex; flex-direction: column; }
 .wp-navwrap.has-layer > .wp-nav { padding-right: 40px; }
-.wp-navwrap > .layer-toggle { position: absolute; right: 4px; top: 6px; display: grid; place-items: center; width: 28px; height: 28px; border: 0; background: none; border-radius: 8px; padding: 0; color: var(--accent); }
+.wp-navwrap > .layer-toggle { position: absolute; z-index: 2; right: 4px; top: 6px; display: grid; place-items: center; width: 28px; height: 28px; border: 0; background: none; border-radius: 8px; padding: 0; color: var(--accent); }
 .wp-navwrap > .layer-toggle:hover { background: var(--surface-block-hover); }
 .wp-navwrap > .layer-toggle:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 0; }
 .wp-sub {
@@ -2990,7 +2990,7 @@ button.inv-pdf { border: 0; background: none; cursor: pointer; font: inherit; fo
 /* D150: Production's stages (Pre-pro · Prin-pro · Post-pro · Delivery) */
 .wp-stagewrap { position: relative; display: flex; align-items: center; }
 .wp-stagewrap .wp-stage { flex: 1; min-width: 0; font-weight: 600; }
-.wp-stagewrap .stage-toggle { position: absolute; right: 4px; display: grid; place-items: center; width: 28px; height: 28px; border: 0; background: none; border-radius: 8px; padding: 0; color: var(--accent); cursor: pointer; }
+.wp-stagewrap .stage-toggle { position: absolute; z-index: 2; right: 4px; display: grid; place-items: center; width: 28px; height: 28px; border: 0; background: none; border-radius: 8px; padding: 0; color: var(--accent); cursor: pointer; }
 .wp-stagewrap .stage-toggle:hover { background: var(--surface-block-hover); }
 .wp-stagewrap .stage-toggle:focus-visible { outline: 2px solid var(--accent-ring); }
 .wp-stagewrap .wp-stage, .wp-stagewrap .wp-stage[aria-current="page"] { color: var(--text-secondary); } /* D176 (Heston, Nov 15): no red text in the menu (was red from Nov 4) */

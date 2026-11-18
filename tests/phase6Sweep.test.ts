@@ -119,3 +119,26 @@ describe("Phase 6 sweep fixes", () => {
     expect(readFileSync("index.html", "utf8")).toContain('<meta name="referrer" content="strict-origin" />');
   });
 });
+
+describe("Nov 18: the W-9 clear for the dev copy", () => {
+  test("S6.6 it refuses unless the deployment's own name is given, then clears every vendor's W-9 and its file record", async () => {
+    const w = await world();
+    const internalApi = (await import("../convex/_generated/api")).internal;
+    const fileId = await w.t.run(async (ctx) => ctx.storage.store(new Blob(["w9"])));
+    const v = await w.t.run(async (ctx) => {
+      const id = await ctx.db.insert("vendors", { businessId: w.A, name: "Jordan Ellis", email: "jordan@ellis.example", roles: ["Shooter"], rates: [], createdAt: 0, updatedAt: 0, w9: { fileId, name: "w9.pdf", uploadedAt: 1 } } as never);
+      await ctx.db.insert("fileOwners", { storageId: fileId, businessId: w.A, purpose: "w9", at: 1 });
+      return id;
+    });
+    const prev = process.env.CONVEX_CLOUD_URL;
+    process.env.CONVEX_CLOUD_URL = "https://happy-dev-123.convex.cloud";
+    await expect(w.t.mutation(internalApi.migrations.stripW9s, { deployment: "live-site-999" })).rejects.toThrow(/Refused/);
+    await expect(w.t.mutation(internalApi.migrations.stripW9s, { deployment: "" })).rejects.toThrow(/Refused/);
+    expect((await w.t.run(async (ctx) => ctx.db.get(v as Id<"vendors">)))!.w9).toBeTruthy(); // nothing changed
+    expect(await w.t.mutation(internalApi.migrations.stripW9s, { deployment: "happy-dev-123" })).toEqual({ cleared: 1 });
+    expect((await w.t.run(async (ctx) => ctx.db.get(v as Id<"vendors">)))!.w9).toBeUndefined();
+    expect(await w.t.run(async (ctx) => ctx.db.query("fileOwners").collect())).toHaveLength(0);
+    expect(await w.t.run(async (ctx) => ctx.storage.getUrl(fileId))).toBeNull();
+    if (prev === undefined) delete process.env.CONVEX_CLOUD_URL; else process.env.CONVEX_CLOUD_URL = prev;
+  });
+});
