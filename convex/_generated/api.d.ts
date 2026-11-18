@@ -68,6 +68,7 @@ import type * as work from "../work.js";
 import type * as delivery from "../delivery.js";
 import type * as handBack from "../handBack.js";
 import type * as passkeys from "../passkeys.js";
+import type * as platform from "../platform.js";
 import type * as shootPage from "../shootPage.js";
 import type * as packing from "../packing.js";
 import type * as siteWatch from "../siteWatch.js";
@@ -233,6 +234,7 @@ declare const fullApi: ApiFromModules<{
   delivery: typeof delivery;
   handBack: typeof handBack;
   passkeys: typeof passkeys;
+  platform: typeof platform;
   shootPage: typeof shootPage;
   packing: typeof packing;
   siteWatch: typeof siteWatch;

@@ -1,5 +1,6 @@
 // Client accounts (client side C1, Oct 23). Owner only: invite an email, see and revoke invites. An invited email
 // can then make an account on the sign-in page; everyone else is refused by auth.ts. Shares (C2) call invite too.
+import { INVITE_MS, inviteFor } from "./lib/invites";
 import { type MutationCtx } from "./_generated/server";
 import { audit } from "./lib/audit";
 import { mutation, query } from "./lib/functions";
@@ -27,10 +28,11 @@ export async function ensureInvite(ctx: MutationCtx, rawEmail: string, rawName?:
   const name = rawName?.trim().replace(/\s+/g, " ").slice(0, 60) || undefined;
   const existing = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()).find((i) => !i.revokedAt);
   if (existing) {
-    if (name && name !== existing.name) await ctx.db.patch(existing._id, { name });
+    // Phase 7 (D134): an invite not yet accepted works 14 days from when it's sent again (Resend, a new share).
+    await ctx.db.patch(existing._id, { ...(name && name !== existing.name ? { name } : {}), ...(existing.acceptedAt ? {} : { expiresAt: Date.now() + INVITE_MS }) });
     return { inviteId: existing._id, email, name: existing.name ?? name, already: true };
   }
-  const inviteId = await ctx.db.insert("invites", { email, name, createdAt: Date.now() });
+  const inviteId = await ctx.db.insert("invites", { email, name, createdAt: Date.now(), expiresAt: Date.now() + INVITE_MS });
   // Step 6: someone who already has an account (a client of another business) becomes a client of this one too.
   const biz = businessInScope(ctx);
   const user = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", email)).unique();
@@ -89,9 +91,12 @@ export const canSignUp = query({
   handler: async (ctx, { email }) => {
     const e = cleanEmail(email);
     if (!valid(e)) return { ok: false, reason: "invalid" as const };
-    if (allowedEmails().includes(e)) return { ok: true, reason: "owner" as const };
-    const inv = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", e)).collect()).find((i) => !i.revokedAt);
-    return inv ? { ok: true, reason: "invited" as const } : { ok: false, reason: "notInvited" as const };
+    // Phase 7 (D134): the same check the sign-up makes (client, vendor, team and business invites, 14 days each), so a
+    // vendor or an invited business owner isn't told they weren't invited, and a lapsed invite says so.
+    const c = await inviteFor(ctx, e);
+    if (c.kind === "owner") return { ok: true, reason: "owner" as const };
+    if (c.kind) return { ok: true, reason: "invited" as const };
+    return { ok: false, reason: c.expired ? "expired" as const : "notInvited" as const };
   },
 });
 

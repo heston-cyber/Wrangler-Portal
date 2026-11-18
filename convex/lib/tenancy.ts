@@ -22,6 +22,7 @@ export const BUSINESS_TABLES = [
 ] as readonly string[];
 
 export const GLOBAL_TABLES = [
+  "businessInvites", // Phase 7 (Nov 18): the platform's own invites
   "users", "businesses", "memberships", "guestPasses", "rateLimits", "fileTickets", "oauthStates", "emailLog", "stripeEvents", "userPrefs", "playerLogs", "phase0Runs", "r1Results", "siteWatchFindings", "siteWatchRuns", "siteWatchSettings",
   "sessionDevices", "emailChanges", // Phase 5e step 2: a login's own, not a business's
   "sessionLocks", "handBack", // Q2 (Nov 17): handing a phone over for a release, and the owner's ways to unlock it

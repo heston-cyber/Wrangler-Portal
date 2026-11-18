@@ -40,7 +40,9 @@ export default function SignIn({ invitedEmail, note: lead }: { invitedEmail?: st
   const pw = useRef(""); // kept only to resend a code; never stored
 
   const [locked, setLocked] = useState<number | null>(null); // Phase 5e step 2: Too many tries (minutes to wait)
+  const [expired, setExpired] = useState(false); // Phase 7 (D134, frame 753:1687): the invite ran out
   const explain = (msg: string, f: Flow) => {
+    if (/invite has expired/i.test(msg)) { setExpired(true); return "This invite has expired."; }
     if (/invited/i.test(msg)) return "This email hasn't been invited to Wrangler Review. Ask the person who shared with you to invite it.";
     if (/valid email/i.test(msg)) return "Enter a valid email.";
     if (/10 characters/.test(msg)) return "Use at least 10 characters for the password.";
@@ -61,6 +63,7 @@ export default function SignIn({ invitedEmail, note: lead }: { invitedEmail?: st
     try {
       if (flow === "signUp") {
         const can = await convex.query(api.clients.canSignUp, { email: mail });
+        if (!can.ok && can.reason === "expired") { setExpired(true); return; }
         if (!can.ok) { setError(can.reason === "invalid" ? "Enter a valid email." : "This email hasn't been invited to Wrangler Review. Ask the person who shared with you to invite it."); return; }
       }
       if (flow === "signIn" || flow === "signUp") {
@@ -106,6 +109,18 @@ export default function SignIn({ invitedEmail, note: lead }: { invitedEmail?: st
         <h1 className="headline">Too many tries</h1>
         <p className="caption">That was 5 wrong tries. Wait {locked > 15 ? `${locked} minutes` : "15 minutes"} and try again, or reset your password now.</p>
         <div className="team-acts"><Button onClick={() => { setLocked(null); go("reset"); }}>Reset your password</Button><button type="button" className="linkbtn wp-small secondary" onClick={() => { setLocked(null); go("signIn"); }}>Back to sign in</button></div>
+      </div>
+    </Curtain>
+  );
+  // Phase 7 (D134, frame 753:1687). The frame names the business and the day it ran out; the page doesn't, since anyone can
+  // type an email here and that would tell them who invited it.
+  if (expired) return (
+    <Curtain legal="WranglerPortal">
+      <div className="wsx-card glass team-join">
+        <span className="wp-eyebrow">Invite</span>
+        <h1 className="headline">This invite has expired.</h1>
+        <p className="caption">Invites last 14 days. Ask whoever invited you to send a new one; it only takes them a click.</p>
+        <div className="team-acts"><Button onClick={() => { setExpired(false); go("signIn"); }}>Already set up? Sign in</Button></div>
       </div>
     </Curtain>
   );

@@ -440,7 +440,7 @@ describe.skipIf(!process.env.KIT_FIXTURES)("kit fixtures", () => {
       ["siteWatch.summary", {}], ["siteWatch.report", {}],
       ...sw.ids.map((id): [string, Record<string, unknown>] => ["siteWatch.finding#" + id, { id }]),
       ...sw.runs.map((id): [string, Record<string, unknown>] => ["siteWatch.run#" + id, { id }]),
-      ["users.me", {}], ["business.brand", {}], ["business.settings", {}], ["payments.settings", {}], ["library.overview", {}], ["activity.feed", { limit: 100 }], ["activity.recent", {}], ["home.needs", {}],
+      ["users.me", {}], ["platform.me", {}], ["platform.overview", {}], ["business.brand", {}], ["business.settings", {}], ["payments.settings", {}], ["library.overview", {}], ["activity.feed", { limit: 100 }], ["activity.recent", {}], ["home.needs", {}],
       ["sign.list", {}], ["builder.listBuilds", {}], ["builder.listTemplates", {}], ["builder.listClauses", {}], ["sign.ownerSignature", {}],
       ["clients.listInvites", {}], ["clients.directory", {}], ["clients.page", { clientId: w.harbor }], ["clients.people", { clientId: w.harbor }],
       ["inbox.notes", {}], ["inbox.sent", {}], ["inbox.forClient", { clientId: w.harbor }], ["inbox.noteRecipients#" + w.harbor, { clientId: w.harbor }],

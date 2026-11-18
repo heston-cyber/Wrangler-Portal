@@ -2,6 +2,7 @@
 // 730:1153 the vendor page, 732:2909 Add vendor). A business's subcontractors with their roles, rates (shown beside the
 // business's own Pricing subcontractor costs), details, gear, W-9 status and notes. Bookings, briefings, the vendor
 // portal and payments build on this in the next steps. Owner only.
+import { INVITE_MS } from "./lib/invites";
 import { allowedEmails } from "./lib/owners";
 import { internalAction, internalQuery, mutation, query } from "./lib/functions";
 import { internal } from "./_generated/api";
@@ -227,7 +228,7 @@ async function endAccess(ctx: MutationCtx, x: Doc<"vendors">) {
 async function inviteNow(ctx: MutationCtx, vendorId: Id<"vendors">) {
   const x = (await ctx.db.get(vendorId))!;
   const now = Date.now();
-  await ctx.db.patch(vendorId, { invitedAt: now, updatedAt: now });
+  await ctx.db.patch(vendorId, { invitedAt: now, ...(x.joinedAt ? {} : { inviteExpiresAt: now + INVITE_MS }), updatedAt: now }); // Phase 7 (D134): 14 days
   const user = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", x.email)).unique();
   // An existing login (a vendor elsewhere, or a client: one login can be both) gets this business on its vendor side.
   if (user && user.role !== "owner") await syncVendorMemberships(ctx, x.email, user._id);

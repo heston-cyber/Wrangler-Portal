@@ -920,6 +920,20 @@ export function callCodeMail(b: MailBrand, d: { code: string; minutes: number; w
   ], [{ t: "small", text: `${b.name} · sent through WranglerPortal` }], `It works for ${d.minutes} minutes.`);
 }
 
+// ---------- 38: a business invite (Phase 7, frame 753:2117), from WranglerPortal ----------
+export function businessInviteMail(b: MailBrand, d: { business: string; note: string | null; link: string; until: string }): Mail {
+  return mk(b, "review", `Heston Hill invited ${d.business} to WranglerPortal`, [
+    { t: "p", text: "Hello," },
+    { t: "p", text: `Heston Hill invited ${d.business} to WranglerPortal.` },
+    ...(d.note ? [{ t: "p" as const, text: d.note }] : []),
+    { t: "sums", rows: [{ label: "Price", value: "Free in beta" }, { label: "Setup", value: "About 15 minutes" }, { label: "Includes", value: "Review · Docs · Payments · Proposals" }] },
+    { t: "p", text: "Free while WranglerPortal is in beta. Before paid plans start, you choose a plan or export your data.", tone: "muted" },
+    { t: "p", text: "A client portal and back office in your own look." },
+    { t: "p", text: `The first time, you'll create your account: a password, then a six-digit code we send once to confirm your email. The link works until ${d.until}.` },
+    { t: "button", label: "Set up my business", href: d.link }, { t: "link", href: d.link },
+  ], [{ t: "small", text: "— Heston Hill, WranglerPortal" }, { t: "small", text: `WranglerPortal, run by Hill Creative LLC${b.privacyUrl ? ` · Privacy policy: ${b.privacyUrl}` : ""}` }], `Free while WranglerPortal is in beta. The link works until ${d.until}.`);
+}
+
 // ---------- 46: team invite (Phase 5e, frame 816:12391) ----------
 export function teamInviteMail(b: MailBrand, d: { invitedBy: string; role: string; until: string; link: string }): Mail {
   return mk(b, "review", `${d.invitedBy} invited you to join ${b.name} on the portal`, [

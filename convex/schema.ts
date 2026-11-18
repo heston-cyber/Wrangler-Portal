@@ -36,6 +36,7 @@ export default defineSchema({
     revokedAt: v.optional(v.number()),
     acceptedAt: v.optional(v.number()),
     userId: v.optional(v.id("users")),
+    expiresAt: v.optional(v.number()), // Phase 7 (D134, Nov 18): an invite works 14 days, unless accepted; Resend gives 14 more. Older invites have none.
   }).index("by_email", ["email"]),
 
   // Shares (client side C2, Oct 23): a link that lets someone outside see a client, a project or one video.
@@ -718,9 +719,25 @@ export default defineSchema({
   // Wrangler Portal, Phase 0.5d step 1 (Oct 28): more than one business. Wrangler Productions is business #1
   // (slug "wrangler"). A membership ties a person (by email; their account once they have one) to a business with a
   // role. Step 1 only adds these; nothing reads a business yet except the access helpers, which pass it along.
+  // Phase 7 step 1 (D106, D110, D134; Nov 18): Heston invites a business from the platform admin page. The person who
+  // accepts (signs up with this email within 14 days) becomes the owner of a new business with this name. Platform-level
+  // (no businessId): only the platform admin reads it.
+  businessInvites: defineTable({
+    email: v.string(),                 // lower-case: the owner's
+    business: v.string(),              // the business's name, as Heston typed it
+    note: v.optional(v.string()),      // the note in the email
+    createdAt: v.number(),
+    sentAt: v.number(),
+    expiresAt: v.number(),
+    revokedAt: v.optional(v.number()),
+    acceptedAt: v.optional(v.number()),
+    businessId: v.optional(v.id("businesses")), // made when accepted
+  }).index("by_email", ["email"]),
   businesses: defineTable({
     slug: v.string(),               // short, unique, lower-case ("wrangler")
     name: v.string(),               // "Wrangler Productions"
+    invitedFrom: v.optional(v.id("businessInvites")), // Phase 7: a business made from Heston's invite (beta)
+    setupDoneAt: v.optional(v.number()),               // Phase 7 step 2: when its setup was finished (or skipped through)
     legalName: v.optional(v.string()), // "Wrangler Productions, a DBA of Hill Creative LLC"
     createdAt: v.number(),
     // Phase 1 (Oct 29): Business settings. The portal, its emails and the signing pages wear these.
@@ -945,6 +962,7 @@ export default defineSchema({
     gear: v.optional(v.array(v.string())),
     notes: v.optional(v.string()),
     invitedAt: v.optional(v.number()),                   // invited to the vendor portal
+    inviteExpiresAt: v.optional(v.number()),             // Phase 7 (D134): the invite works 14 days, unless they joined; older invites have none
     joinedAt: v.optional(v.number()),                    // signed in to it
     w9: v.optional(v.object({ fileId: v.id("_storage"), name: v.string(), uploadedAt: v.number() })),
     payMethod: v.optional(v.object({ method: v.string(), note: v.optional(v.string()) })),

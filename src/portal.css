@@ -4383,3 +4383,14 @@ textarea.cv-boxtxt { pointer-events: auto; display: block; padding-top: calc(50%
 .lx-pick { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: var(--fs-caption); }
 .bf-actions .lx-row { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--border-faint); }
 .bf-actions .lx-row button, .bf-actions .lx-row .btn { width: auto; }
+
+/* Phase 7 · the platform admin page (751:1808) */
+.pa-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 22px; }
+.pa-brand { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-title, inherit); font-size: 18px; }
+.pa-stats { margin: 18px 0; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pa-list { padding: 6px 0; }
+.pa-meta { display: grid; gap: 4px; }
+.pa-acts { display: inline-flex; gap: 14px; }
+@media (max-width: 720px) { .pa-kind { display: none; } }
+@media (max-width: 720px) { .pa-stats { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .pa-list .meta { white-space: normal; overflow: visible; text-overflow: clip; } }

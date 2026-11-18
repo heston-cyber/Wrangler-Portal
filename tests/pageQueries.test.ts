@@ -146,6 +146,8 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "overviews.docs": { pages: ["owner"], args: () => ({}) }, // Docs › Overview
   "overviews.proposals": { pages: ["owner"], args: () => ({}) }, // Proposals › Overview
   "overviews.vendors": { pages: ["owner"], args: () => ({}) }, // Vendors › Overview
+  "platform.me": { pages: ["owner"], args: () => ({}) }, // Phase 7: the account menu's Platform admin row (false for anyone else)
+  "platform.overview": { pages: [], args: () => ({}) }, // Phase 7: the platform admin page, Heston only (tested in platform.test.ts)
   "siteWatch.summary": { pages: ["owner"], args: () => ({}) }, // Dashboard row and the Settings menu: null for anyone who isn't an admin
   "siteWatch.report": { pages: ["owner"], args: () => "skip" }, "siteWatch.run": { pages: ["owner"], args: () => "skip" }, "siteWatch.finding": { pages: ["owner"], args: () => "skip" }, // Settings › Site watch (admins only; the page asks only after summary says so)
   "home.dashboard": { pages: ["owner"], args: () => ({ tzOffsetMin: 300 }) }, // Dashboard: Today, Coming up, Live edits, Money

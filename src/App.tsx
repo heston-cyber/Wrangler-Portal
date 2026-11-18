@@ -40,6 +40,7 @@ import type { Id } from "../convex/_generated/dataModel";
 
 // Payments (Phase 2 Part B): its own chunk.
 const InvoicesPage = lazy(() => import("./modules/payments/InvoicesPage"));
+const PlatformAdmin = lazy(() => import("./modules/platform/Admin"));
 const InvoiceEditor = lazy(() => import("./modules/payments/InvoiceEditor"));
 const InvoiceDetail = lazy(() => import("./modules/payments/InvoiceDetail"));
 const PaymentsOverview = lazy(() => import("./modules/payments/PaymentsOverview"));
@@ -454,6 +455,8 @@ function SignedIn() {
   }
   // 5i (D193): signing a release in person is full screen: the signer sees nothing of the portal (no menu, no tabs).
   const releaseSign = /^\/releases\/([^/]+)\/sign\/?$/.exec(path);
+  // Phase 7 (D110): the platform admin page stands on its own (frame 751:1808); it answers only for Heston.
+  if (/^\/admin\/?$/.test(path) && !team) return <Suspense fallback={<Loading />}><PlatformAdmin me={me} /></Suspense>;
   if (releaseSign && !team) return <Suspense fallback={<Loading />}><ReleaseSigning key={releaseSign[1]} releaseId={releaseSign[1]} /></Suspense>;
   // Work surfaces get no background light, so nothing competes with the video or the document.
   const workSurface = Boolean(video) || /^\/sign\/(b|d)\//.test(path) || /^\/sign\/templates\/[^/]+/.test(path) || /^\/production\/call-sheets\/([^/]+\/edit|templates\/[^/]+)/.test(path) || /^\/settings\/help\/edit\//.test(path);

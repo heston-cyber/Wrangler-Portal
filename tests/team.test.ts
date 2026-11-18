@@ -164,7 +164,7 @@ describe("Phase 5e · team members", () => {
     // 14 days on: expired, and sign-up is refused.
     await w.t.run(async (ctx) => { await ctx.db.patch(r.inviteId, { expiresAt: Date.now() - 1 }); });
     expect(await w.t.query(api.team.joinPage, { token: second })).toMatchObject({ state: "expired" });
-    await expect(w.t.action(api.auth.signIn, { provider: "password", params: { flow: "signUp", email: RILEY, password: PW } })).rejects.toThrow(/hasn't been invited/);
+    await expect(w.t.action(api.auth.signIn, { provider: "password", params: { flow: "signUp", email: RILEY, password: PW } })).rejects.toThrow(/invite has expired/); // Phase 7 (D134): says so
     expect((await w.heston.query(api.team.page, {})).invites).toMatchObject([{ email: RILEY, expired: true }]);
     // Resend opens it again for 14 days; cancel closes it.
     await w.heston.mutation(api.team.resendInvite, { inviteId: r.inviteId });

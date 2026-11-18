@@ -213,6 +213,8 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "testimonials.projectsFor": { clientId: ids.clientRecId }, "testimonials.ask": { noteId: "nope" }, "testimonials.send": { noteId: ids.inboxNoteId, working: "x", film: "", permission: false },
     "production.overview": {}, "production.shoots": {}, "production.projectsForShoot": {},
     "overviews.clients": {}, "overviews.review": {}, "overviews.docs": {}, "overviews.proposals": {}, "overviews.vendors": {}, "home.dashboard": {}, // Phase 5b step 2
+    "platform.me": {}, "platform.overview": {}, "platform.invite": { business: "Northline Creative", email: "sam@northline.example" }, // Phase 7 (Nov 18)
+    "platform.resend": { inviteId: "nope" }, "platform.revoke": { inviteId: "nope" },
     "siteWatch.report": {}, "siteWatch.run": { id: "nope" }, "siteWatch.summary": {}, "siteWatch.markDone": { id: "nope" },
     "siteWatch.finding": { id: "nope" }, "siteWatch.setPaused": { paused: true }, // Phase 5c screens (Nov 4)
     "testimonials.list": {}, "testimonials.markRead": { testimonialId: ids.testimonialId }, "testimonials.saveAgain": { testimonialId: ids.testimonialId },

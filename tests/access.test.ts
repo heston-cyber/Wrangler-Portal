@@ -86,6 +86,7 @@ const OPEN: Record<string, string> = {
   "signCopies.page": "D160: a copied person's view-only link: answers only for a copy row's own long random token; a cancelled, replaced or expired document answers without its file (tested in signCc.test.ts)",
   "signCopies.opened": "the same link: counts an open of that copy only; rate-limited",
   "briefings.markRead": "the same link: records \"I've read it\" for that briefing only (named only on a person's own link); a missing token is refused; rate-limited",
+  "platform.me": "Phase 7: only whether the caller is the platform admin (ALLOWED_EMAILS, Heston); nothing else, tested in platform.test.ts",
   "siteWatch.summary": "Phase 5c: open and urgent counts for the portal's admins (ALLOWED_EMAILS); null for anyone else, tested in siteWatch.test.ts",
   // Phase 5b step 4 (D127): a call-sheet guest's link (/guest/<token>, email 41), signed out.
   "guests.intro": "a guest's link: answers only for that pass's own long random token, with the sheet's title, day, the guest's first name and a masked email; tested in callSheetGuests.test.ts",

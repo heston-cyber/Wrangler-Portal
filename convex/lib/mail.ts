@@ -2,6 +2,7 @@
 // One renderer: a dark 600 px card with the business's logo and accent, built from blocks, plus a plain-text twin made
 // from the same blocks (mail filters trust text + HTML more than HTML alone). Inline styles and tables only, so it
 // survives Gmail, Outlook and Apple Mail.
+import { SUPPORT } from "./email";
 import type { QueryCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import { businessContact, defaultBusiness } from "./business";
@@ -167,6 +168,12 @@ export function clientFooter(brand: MailBrand, unsubscribe?: { what: string; hre
 }
 
 /** The brand for one business, read inside a query or mutation. */
+/** Phase 7 (email 38): the platform's own emails (a business invite), from WranglerPortal, not from any business. */
+export function platformBrand(privacyUrl: string | null = null): MailBrand {
+  return { name: "WranglerPortal", fromName: "WranglerPortal", footerName: "WranglerPortal, run by Hill Creative LLC", replyTo: SUPPORT(), accent: "#FF0000", onAccent: "#F4F1E9",
+    logoUrl: `${SITE()}/brand/wp-logo-email.png`, isDefault: true, ownerName: "Heston Hill", privacyUrl };
+}
+
 export async function mailBrandOf(ctx: QueryCtx, businessId: Id<"businesses"> | null | undefined): Promise<MailBrand> {
   const c = await businessContact(ctx, businessId ?? null);
   const b = c.businessId ? await ctx.db.get(c.businessId) : await defaultBusiness(ctx);
