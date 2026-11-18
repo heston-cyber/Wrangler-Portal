@@ -47,6 +47,14 @@ export function suggestRate(r: Pick<Rates, "costs" | "kinds" | "fullDayHours"> |
   return null;
 }
 
+/** The role the booking form opens on for a vendor: the one already picked if they still list it, else the first role they
+ *  have a rate for (so a rate they set in onboarding pre-fills the booking, Q1, Nov 18), else their first role. */
+export function openRole(roles: string[], vendorRates: Array<{ role: string; cents: number }>, current: string): string {
+  if (roles.includes(current)) return current;
+  const priced = roles.find((x) => vendorRates.some((y) => y.cents > 0 && y.role.trim().toLowerCase() === x.trim().toLowerCase()));
+  return priced ?? roles[0] ?? "";
+}
+
 /** "Apr 16 – 18, 2027", "Nov 30 – Dec 2, 2026", "Nov 20, 2026". */
 export function dateRange(start: string, end: string): string {
   const d = (iso: string, o: Intl.DateTimeFormatOptions) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", ...o });

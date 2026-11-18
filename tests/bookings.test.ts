@@ -6,7 +6,7 @@ import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { anyApi } from "convex/server";
 import type { Id } from "../convex/_generated/dataModel";
 import { world } from "./payHarness";
-import { bookingState, daysIn, expectedCents, suggestRate } from "../convex/lib/bookings";
+import { bookingState, daysIn, expectedCents, openRole, suggestRate } from "../convex/lib/bookings";
 import { WRANGLER_RATES } from "../convex/lib/estimate";
 import { dateRange } from "../convex/lib/mails";
 
@@ -48,6 +48,14 @@ describe("bookings: the pure parts", () => {
     // No Pricing cost for the role: the vendor's own rate.
     expect(suggestRate(WRANGLER_RATES, [{ role: "Drone pilot", unit: "day", cents: 80_000 }], "Drone pilot", "hour")).toMatchObject({ cents: 10_000, source: "vendor" });
     expect(suggestRate(WRANGLER_RATES, [], "Drone pilot", "day")).toBeNull();
+    // Q1 (Nov 18): the booking opens on a role the vendor has a rate for, so a rate set in onboarding pre-fills it.
+    const riley = [{ role: "Colourist", unit: "hour" as const, cents: 7_500 }];
+    expect(openRole(["Editor", "Colourist"], riley, "")).toBe("Colourist");
+    expect(openRole(["Editor", "Colourist"], riley, "Editor")).toBe("Editor"); // a role already picked stays
+    expect(openRole(["Editor", "Sound"], riley, "")).toBe("Editor"); // no rated role listed: the first role
+    expect(openRole(["Editor", "colourist"], [{ role: " Colourist ", cents: 0 }], "")).toBe("Editor"); // a $0 rate is no rate
+    expect(openRole([], riley, "")).toBe("");
+    expect(suggestRate(WRANGLER_RATES, riley, openRole(["Editor", "Colourist"], riley, ""), "hour")).toMatchObject({ cents: 7_500, source: "vendor" });
     expect(dateRange("2027-04-16", "2027-04-18")).toBe("Apr 16 – 18, 2027");
     expect(dateRange("2026-11-30", "2026-12-02")).toBe("Nov 30 – Dec 2, 2026");
     expect(dateRange("2026-11-20", "2026-11-20")).toBe("Nov 20, 2026");
