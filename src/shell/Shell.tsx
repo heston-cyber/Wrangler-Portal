@@ -331,9 +331,16 @@ export function ShellFrame({ me, side, overlay, light, subtitle, logo, bizName, 
     const typing = (el: Element | null) => !!el && (el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement || (el instanceof HTMLInputElement && !/^(checkbox|radio|button|submit|range|file|color|image|reset)$/.test(el.type)) || (el as HTMLElement).isContentEditable);
     const sync = () => root.classList.toggle("kb", matchMedia("(max-width: 820px)").matches && typing(document.activeElement));
     const onOut = () => window.setTimeout(sync, 60);
+    // Nov 17 (Heston): a text box removed while it had the keyboard (the canvas's, when the board is tapped) never says
+    // so on iPhone Safari, which left the tab bar hidden. Check again when the visible area changes size (the keyboard
+    // closing) and on the next tap, while it's hidden.
+    const vv = window.visualViewport;
+    const onTap = () => { if (root.classList.contains("kb")) window.setTimeout(sync, 60); };
     document.addEventListener("focusin", sync);
     document.addEventListener("focusout", onOut);
-    return () => { document.removeEventListener("focusin", sync); document.removeEventListener("focusout", onOut); root.classList.remove("kb"); };
+    vv?.addEventListener("resize", onOut);
+    document.addEventListener("pointerup", onTap, true);
+    return () => { document.removeEventListener("focusin", sync); document.removeEventListener("focusout", onOut); vv?.removeEventListener("resize", onOut); document.removeEventListener("pointerup", onTap, true); root.classList.remove("kb"); };
   }, []);
   // D172 (Heston, Nov 11): on a phone the same sidebar slides in from a menu button, instead of rows of chips.
   const [phoneMenu, setPhoneMenu] = useState(false);
