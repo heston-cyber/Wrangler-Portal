@@ -118,6 +118,9 @@ export const profile = mutation({
         // change is in the owner's Activity. Bookings keep the rate agreed on them.
         const done = !!x.onboard?.profile && !!x.w9 && !!x.payMethod && (!!x.onboard?.tour || !!x.onboard?.tourSkipped);
         if (kind !== "full" || done) throw new ConvexError("Your rate is set with the business. Ask them to change it.");
+        // Q1 (Heston, Nov 18: "Go with your suggestions"): the rate pre-fills the next booking, which looks a rate up by
+        // role name. It stays under the business's own role label (or the vendor's first role when there was none); the
+        // booking form opens on a role that has a rate (Bookings.tsx).
         rates = [{ role: cur?.role ?? roles[0] ?? "Rate", unit, cents }, ...x.rates.slice(1)];
         rateNote = `${cur ? `$${(cur.cents / 100).toFixed(2)} / ${cur.unit}` : "no rate"} to $${(cents / 100).toFixed(2)} / ${unit}`;
       }

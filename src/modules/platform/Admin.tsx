@@ -64,6 +64,9 @@ function InviteBusiness({ onClose, show }: { onClose: () => void; show: (m: stri
   const invite = useMutation(api.platform.invite);
   const [business, setBusiness] = useState(""), [email, setEmail] = useState(""), [note, setNote] = useState("");
   const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
+  // Q4: another business may already have invited this email as a client, vendor or team member. Counts only.
+  const typed = email.trim().toLowerCase();
+  const other = useQuery(api.platform.otherInvites, /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(typed) ? { email: typed } : "skip");
   const go = async () => {
     setBusy(true); setErr(null);
     try { await invite({ business, email, ...(note.trim() ? { note } : {}) }); show(`Invite sent to ${email.trim().toLowerCase()}. It works for 14 days.`); onClose(); }
@@ -77,6 +80,8 @@ function InviteBusiness({ onClose, show }: { onClose: () => void; show: (m: stri
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="close" size={18} /></button></div>
         <TextField label="Business name" value={business} onChange={(e) => setBusiness(e.target.value)} maxLength={80} autoFocus required />
         <TextField label="Owner's email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        {other?.inUse && <p className="wp-small secondary" role="status">That email is already in use on WranglerPortal, so it can’t own a new business. Use another address.</p>}
+        {other && !other.inUse && other.open && <p className="wp-small" role="status">This email already has an open invite to WranglerPortal from a business. Your invite wins: they’ll become the owner of this new business, and the other invite stays unused until it runs out.</p>}
         <TextArea label="Note in the email (optional)" rows={3} value={note} onChange={(e) => setNote(e.target.value)} maxLength={600} placeholder="e.g. Here's the portal I told you about." />
         <p className="wp-small secondary">The email says: “Free while WranglerPortal is in beta. Before paid plans start, you choose a plan or export your data.” The link works for 14 days.</p>
         {err && <p className="error" role="alert">{err}</p>}

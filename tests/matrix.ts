@@ -221,7 +221,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "vendorOnboard.state": { businessId: ids.businessId }, "vendorOnboard.step": { businessId: ids.businessId, at: 1 }, "vendorOnboard.tour": { businessId: ids.businessId, skipped: true },
     "vendorOnboard.profile": { businessId: ids.businessId, name: "Vee", roles: [] }, "vendorOnboard.payMethod": { businessId: ids.businessId, method: "ACH" },
     "setup.state": {}, "setup.step": { at: 1 }, "setup.saveRates": { hourly: 150 }, "setup.firstClient": { company: "Fern & Field", name: "Priya Shah", email: "priya@fernandfield.example" }, "setup.hide": { hidden: true },
-    "platform.resend": { inviteId: "nope" }, "platform.revoke": { inviteId: "nope" },
+    "platform.resend": { inviteId: "nope" }, "platform.revoke": { inviteId: "nope" }, "platform.otherInvites": { email: "sam@northline.example" }, // Q4 (Nov 18): admin only
     "siteWatch.report": {}, "siteWatch.run": { id: "nope" }, "siteWatch.summary": {}, "siteWatch.markDone": { id: "nope" },
     "siteWatch.finding": { id: "nope" }, "siteWatch.setPaused": { paused: true }, // Phase 5c screens (Nov 4)
     "testimonials.list": {}, "testimonials.markRead": { testimonialId: ids.testimonialId }, "testimonials.saveAgain": { testimonialId: ids.testimonialId },
@@ -289,7 +289,11 @@ export function publicFunctions(): Array<{ key: string; ref: any }> {
     const mod = file.slice(0, -3);
     if (mod === "auth") continue; // Convex Auth's own signIn/signOut, exercised in the sign-up tests
     const src = readFileSync(join(dir, file), "utf8");
-    for (const m of src.matchAll(/^export const (\w+) = (query|mutation|action)\(/gm)) out.push({ key: `${mod}.${m[1]}`, ref: (anyApi as any)[mod][m[1]] });
+    // Phase 7b reviews (M2, Nov 18): a function made with an aliased wrapper (`import { query as rawQuery }`: platform.otherInvites,
+    // clients.canSignUp) was never found, so the tests never called it. Every alias of query/mutation/action counts too.
+    const wrappers = ["query", "mutation", "action", ...[...src.matchAll(/\b(?:query|mutation|action) as (\w+)/g)].map((a) => a[1]), ...[...src.matchAll(/\b(raw(?:Query|Mutation|Action))\b/g)].map((a) => a[1])];
+    const made = new RegExp(`^export const (\\w+) = (${[...new Set(wrappers)].join("|")})\\(`, "gm");
+    for (const m of src.matchAll(made)) out.push({ key: `${mod}.${m[1]}`, ref: (anyApi as any)[mod][m[1]] });
   }
   return out;
 }

@@ -12,7 +12,7 @@ import { linkProps, navigate } from "../../lib/router";
 import { errText } from "../docs/pages/common";
 import { MoneyInput, dateShort, money } from "../payments/common";
 import { NewBriefing } from "./NewBriefing";
-import { dateRange, daysIn, expectedCents, isDate, shortRange, suggestRate, type BookingState, type Unit } from "../../../convex/lib/bookings";
+import { dateRange, daysIn, expectedCents, isDate, openRole, shortRange, suggestRate, type BookingState, type Unit } from "../../../convex/lib/bookings";
 
 type Row = NonNullable<ReturnType<typeof useQuery<typeof api.bookings.list>>>[number];
 
@@ -50,9 +50,9 @@ export function BookDialog({ onClose, projectId, vendorId }: { onClose: () => vo
   // Picking a vendor picks their first role (and the unit they charge it in, when they've said).
   useEffect(() => {
     if (!vendor) return;
-    const r = vendor.roles.includes(role) ? role : vendor.roles[0] ?? "";
+    const r = openRole(vendor.roles, vendor.rates, role);
     setRole(r);
-    const own = vendor.rates.find((x) => x.role === r);
+    const own = vendor.rates.find((x) => x.role.trim().toLowerCase() === r.trim().toLowerCase()); // the same matching as the suggestion
     if (own) setUnit(own.unit);
   }, [vid, f === undefined]); // eslint-disable-line react-hooks/exhaustive-deps
   const sug = useMemo(() => (f && vendor && role ? suggestRate(f.rates, vendor.rates, role, unit) : null), [f, vendor, role, unit]);

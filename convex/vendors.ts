@@ -206,7 +206,8 @@ export const archive = mutation({
     if (archived && !x.archivedAt) await endAccess(ctx, x);
     if (!archived && x.archivedAt && x.invitedAt) {
       const user = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", x.email)).first();
-      await syncVendorMemberships(ctx, x.email, user && user.role !== "owner" ? user._id : undefined);
+      // Phase 7b reviews (M1): an owner gets nothing back (before, with no user id it still made a membership by email).
+      if (!user || user.role !== "owner") await syncVendorMemberships(ctx, x.email, user?._id);
     }
     return null;
   },

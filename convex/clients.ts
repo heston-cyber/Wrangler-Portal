@@ -37,7 +37,10 @@ export async function ensureInvite(ctx: MutationCtx, rawEmail: string, rawName?:
   // Step 6: someone who already has an account (a client of another business) becomes a client of this one too.
   const biz = businessInScope(ctx);
   const user = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", email)).unique();
-  if (biz && user) await ensureMembership(ctx, biz, email, "client", user._id);
+  // Phase 7b reviews (M1): not an owner (including one whose business invite is still waiting for its code): their business
+  // invite wins (Q4, Nov 18). A call-sheet guest still gets it, as Phase 5b designed: from then on the guest login gets
+  // nothing; if a business invite is accepted instead, acceptBusinessInvite switches it off.
+  if (biz && user && user.role !== "owner") await ensureMembership(ctx, biz, email, "client", user._id);
   return { inviteId, email, name, already: false };
 }
 
