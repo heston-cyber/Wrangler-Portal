@@ -6,7 +6,6 @@ import { anyApi } from "convex/server";
 import type { Id } from "../convex/_generated/dataModel";
 import { world } from "./payHarness";
 import { inviteFor } from "../convex/lib/invites";
-import { ensureMembership } from "../convex/lib/business";
 
 const api = anyApi;
 beforeAll(async () => {
@@ -210,10 +209,10 @@ describe("Phase 7 step 1 · invites and the platform admin page", () => {
     await settle(w);
     const vendorId = await w.heston.mutation(api.vendors.add, { name: "Sam Ortiz", email: SAM, roles: ["Editor"], rates: [], invite: true }) as Id<"vendors">;
     await w.heston.mutation(api.clients.invite, { email: SAM, name: "Sam Ortiz" });
-    expect(await roles(w, SAM)).toEqual([]); // a guest login gets nothing from another business's invite
-    // (an older invite may already have put them there: the sign-up must still clear them)
-    await w.t.run(async (ctx) => { await ensureMembership(ctx, w.A, SAM, "client", guest); await ensureMembership(ctx, w.A, SAM, "vendor", guest); await ctx.db.patch(vendorId, { joinedAt: Date.now() }); });
+    // A guest login still gets the other business's memberships (Phase 5b: it then gets no guest powers) ...
     expect(await roles(w, SAM)).toEqual(["client", "vendor"]);
+    expect(guest).toBeTruthy();
+    // ... and the business invite wins at sign-up: they are switched off.
     await signUp(w, mails, SAM, "Sam Ortiz");
     expect(await roles(w, SAM)).toEqual(["owner"]);
     expect((await w.t.run((ctx) => ctx.db.get(vendorId)))!.joinedAt).toBeUndefined();

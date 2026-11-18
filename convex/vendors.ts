@@ -206,9 +206,8 @@ export const archive = mutation({
     if (archived && !x.archivedAt) await endAccess(ctx, x);
     if (!archived && x.archivedAt && x.invitedAt) {
       const user = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", x.email)).first();
-      // Phase 7b reviews (M1): a login that isn't a client or vendor (an owner, a team member, a guest) gets nothing back;
-      // with no login yet, the membership waits for their sign-up as before.
-      if (!user || user.role === "client" || user.role === "vendor") await syncVendorMemberships(ctx, x.email, user?._id);
+      // Phase 7b reviews (M1): an owner gets nothing back (before, with no user id it still made a membership by email).
+      if (!user || user.role !== "owner") await syncVendorMemberships(ctx, x.email, user?._id);
     }
     return null;
   },
@@ -237,7 +236,7 @@ async function inviteNow(ctx: MutationCtx, vendorId: Id<"vendors">) {
   await ctx.db.patch(vendorId, { invitedAt: now, ...(x.joinedAt ? {} : { inviteExpiresAt: now + INVITE_MS }), updatedAt: now }); // Phase 7 (D134): 14 days
   const user = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", x.email)).unique();
   // An existing login (a vendor elsewhere, or a client: one login can be both) gets this business on its vendor side.
-  if (user && (user.role === "client" || user.role === "vendor")) await syncVendorMemberships(ctx, x.email, user._id); // Phase 7b reviews (M1): not an owner, team member or guest
+  if (user && user.role !== "owner") await syncVendorMemberships(ctx, x.email, user._id);
   await inviteCap(ctx, x.businessId ?? "default", x.email); // Phase 7 reviews (M4)
   await ctx.scheduler.runAfter(0, internal.vendors.mailInvite, { vendorId, at: now });
 }
