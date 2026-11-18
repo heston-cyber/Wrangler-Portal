@@ -19,6 +19,7 @@ export const BUSINESS_TABLES = [
   "auditLog", // Phase 5e step 3
   "bellItems", // Phase 5e step 4
   "dataExports", // Phase 5e step 6
+  "colleagueRequests", // Phase 7 step 3 (D112)
 ] as readonly string[];
 
 export const GLOBAL_TABLES = [

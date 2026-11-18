@@ -42,6 +42,7 @@ import type { Id } from "../convex/_generated/dataModel";
 const InvoicesPage = lazy(() => import("./modules/payments/InvoicesPage"));
 const PlatformAdmin = lazy(() => import("./modules/platform/Admin"));
 const Setup = lazy(() => import("./modules/setup/Setup"));
+const ClientOnboard = lazy(() => import("./modules/onboard/ClientOnboard"));
 const InvoiceEditor = lazy(() => import("./modules/payments/InvoiceEditor"));
 const InvoiceDetail = lazy(() => import("./modules/payments/InvoiceDetail"));
 const PaymentsOverview = lazy(() => import("./modules/payments/PaymentsOverview"));
@@ -493,6 +494,7 @@ function ClientRoutes({ me }: { me: { name: string | null; email: string } }) {
   const { path, search } = useLocation();
   const params = new URLSearchParams(search);
   if (/^\/more\/?$/.test(path)) return <MorePage me={me as never} side="client" />;
+  if (/^\/welcome\/?$/.test(path)) return <Suspense fallback={<Loading />}><ClientOnboard start={Number(params.get("step")) || null} /></Suspense>; // Phase 7 step 3
   if (/^\/messages\/?$/.test(path)) return <Suspense fallback={<Loading />}><ClientMessages /></Suspense>; // Phase 5d step 2
   if (/^\/inbox\/?$/.test(path)) return <ClientInbox itemId={params.get("item")} />;
   if (/^\/(docs|documents)\/?$/.test(path)) { const t = params.get("tab"); return <ClientDocuments tab={(t === "signed" || t === "cancelled" ? t : "to_sign") as DocTab} />; }

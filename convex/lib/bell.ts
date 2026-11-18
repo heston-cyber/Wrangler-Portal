@@ -39,7 +39,7 @@ export const EMAIL_TO_BELL: Record<string, BellKind> = {
   "owner-paid": "payments", "subscription-failed-owner": "payments", "footage_kept": "payments", "footage_renewal": "payments", "footage_ended": "payments",
   "vendor_invoice": "vendors", "vendor_payout_posted": "vendors", "vendor_payout_failed": "vendors", "booking_accepted": "vendors", "booking_declined": "vendors", "vendor_w9": "vendors", "briefing_read": "vendors",
   "alert": "notes", "testimonial": "notes", "brief_answered": "notes",
-  "message_owner": "messages", "call_booked_owner": "messages", "call_cancelled_owner": "messages", "call_moved_owner": "messages", "shoot_confirmed": "messages",
+  "message_owner": "messages", "client_add_request": "messages", "call_booked_owner": "messages", "call_cancelled_owner": "messages", "call_moved_owner": "messages", "shoot_confirmed": "messages",
   "files_uploaded": "uploads",
   "site_watch_urgent": "sitewatch",
 };

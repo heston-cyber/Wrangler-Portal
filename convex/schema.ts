@@ -425,6 +425,7 @@ export default defineSchema({
     watermarkOff: v.optional(v.boolean()),   // Phase 2 (D24): review copies are watermarked unless switched off here
     subFailRule: v.optional(v.union(v.literal("past_due"), v.literal("cancel"))), // Phase 2b (D64): overrides the business's choice
     brandKit: v.optional(v.any()),           // Phase 3b (D71): the company's brand kit (convex/brandKit.ts)
+    billing: v.optional(v.object({ name: v.optional(v.string()), email: v.optional(v.string()), address: v.optional(v.string()) })), // Phase 7 step 3: from their onboarding (Your company)
   }).index("by_name", ["name"]).index("by_dropbox_folder", ["dropboxFolder"]),
 
   // Playback problems the browser reported (Oct 21), so they can be diagnosed on devices Claude can't reach.
@@ -1266,7 +1267,23 @@ export default defineSchema({
     role: v.union(v.literal("signer"), v.literal("contact")), // "Signs documents" / "Contact"
     createdAt: v.number(),
     removedAt: v.optional(v.number()),
+    // Phase 7 step 3 (D107, D111, D114): their own onboarding: About you, and where they are.
+    title: v.optional(v.string()), phone: v.optional(v.string()),
+    onboard: v.optional(v.object({ step: v.number(), about: v.optional(v.number()), company: v.optional(v.number()), prefs: v.optional(v.number()), tour: v.optional(v.number()), tourSkipped: v.optional(v.boolean()) })),
   }).index("by_client", ["clientId"]).index("by_email", ["email"]),
+  // Phase 7 step 3 (D112): someone a client asks to add from their company. Nothing reaches them until the owner approves
+  // (email 39 tells the owner); approving adds them to the company and sends their portal invite.
+  colleagueRequests: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    clientId: v.id("clients"),
+    email: v.string(),                 // lower-case
+    name: v.optional(v.string()),
+    by: v.string(),                    // the client who asked (their email)
+    byName: v.optional(v.string()),
+    at: v.number(),
+    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("declined")),
+    decidedAt: v.optional(v.number()),
+  }).index("by_client", ["clientId"]),
 
   // Phase 1 (Oct 29): the Inbox. One row per person per event, so each person's read status is their own.
   // Every module posts through lib/inbox.ts; `key` makes each event post once per person, however often it runs.

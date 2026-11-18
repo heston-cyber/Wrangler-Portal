@@ -70,6 +70,7 @@ import type * as handBack from "../handBack.js";
 import type * as passkeys from "../passkeys.js";
 import type * as platform from "../platform.js";
 import type * as setup from "../setup.js";
+import type * as clientOnboard from "../clientOnboard.js";
 import type * as shootPage from "../shootPage.js";
 import type * as packing from "../packing.js";
 import type * as siteWatch from "../siteWatch.js";
@@ -237,6 +238,7 @@ declare const fullApi: ApiFromModules<{
   passkeys: typeof passkeys;
   platform: typeof platform;
   setup: typeof setup;
+  clientOnboard: typeof clientOnboard;
   shootPage: typeof shootPage;
   packing: typeof packing;
   siteWatch: typeof siteWatch;

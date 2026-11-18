@@ -920,6 +920,16 @@ export function callCodeMail(b: MailBrand, d: { code: string; minutes: number; w
   ], [{ t: "small", text: `${b.name} · sent through WranglerPortal` }], `It works for ${d.minutes} minutes.`);
 }
 
+// ---------- 39: a client asks to add someone (Phase 7, frame 753:2144), to the owner ----------
+export function clientAddRequestMail(b: MailBrand, d: { by: string; name: string | null; email: string; company: string; link: string }): Mail {
+  const who = d.name || d.email;
+  return mk(b, "updates", `${d.by} wants to add ${who}`, [
+    { t: "p", text: `${d.company} · ${d.name ? `${d.name} · ` : ""}${d.email}` },
+    { t: "p", text: `They'll see everything ${first(d.by) || d.by} sees for ${d.company}. Approve to send their invite; nothing reaches them until you do.` },
+    { t: "button", label: "Approve or decline", href: d.link }, { t: "link", href: d.link },
+  ], [{ t: "small", text: "Sent to you when a client adds someone · WranglerPortal" }], `${d.by} wants to add ${who} to ${d.company}.`);
+}
+
 // ---------- 38: a business invite (Phase 7, frame 753:2117), from WranglerPortal ----------
 export function businessInviteMail(b: MailBrand, d: { business: string; note: string | null; link: string; until: string }): Mail {
   return mk(b, "review", `Heston Hill invited ${d.business} to WranglerPortal`, [

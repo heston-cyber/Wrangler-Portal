@@ -214,6 +214,9 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "production.overview": {}, "production.shoots": {}, "production.projectsForShoot": {},
     "overviews.clients": {}, "overviews.review": {}, "overviews.docs": {}, "overviews.proposals": {}, "overviews.vendors": {}, "home.dashboard": {}, // Phase 5b step 2
     "platform.me": {}, "platform.overview": {}, "platform.invite": { business: "Northline Creative", email: "sam@northline.example" }, // Phase 7 (Nov 18)
+    "clientOnboard.state": {}, "clientOnboard.step": { at: 1 }, "clientOnboard.tour": { skipped: true }, "clientOnboard.about": { name: "Pat Client" }, "clientOnboard.company": { billingName: "Pat Client" },
+    "clientOnboard.logoUploadUrl": {}, "clientOnboard.setLogo": { storageId: ids.storageId }, "clientOnboard.askColleague": { email: "colleague@company.example" },
+    "clientOnboard.requests": { clientId: ids.clientRecId }, "clientOnboard.decide": { requestId: "nope", approve: false },
     "setup.state": {}, "setup.step": { at: 1 }, "setup.saveRates": { hourly: 150 }, "setup.firstClient": { company: "Fern & Field", name: "Priya Shah", email: "priya@fernandfield.example" }, "setup.hide": { hidden: true },
     "platform.resend": { inviteId: "nope" }, "platform.revoke": { inviteId: "nope" },
     "siteWatch.report": {}, "siteWatch.run": { id: "nope" }, "siteWatch.summary": {}, "siteWatch.markDone": { id: "nope" },

@@ -1,6 +1,7 @@
 // The client page (P1 / Owner / Client page): tabs Overview · Projects · Shared · Documents · Their Inbox. Their Inbox
 // shows exactly what one of their people sees. Phase 3 (P3 / Owner / Company, 262:32550) makes it the company page:
 // Add follow-up and New estimate in the header, billed · paid · outstanding, and Deals and Follow-ups on Overview.
+import { errLine } from "../../ui/hold";
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -92,12 +93,29 @@ function AddPerson({ clientId, client, onClose, show }: { clientId: Id<"clients"
     </Modal>
   );
 }
+/** Phase 7 step 3 (D112, email 39): people this company's clients asked to add, waiting for the owner. */
+function Requests({ clientId, show }: { clientId: Id<"clients">; show: (m: string) => void }) {
+  const list = useQuery(api.clientOnboard.requests, { clientId });
+  const decide = useMutation(api.clientOnboard.decide);
+  if (!list?.length) return null;
+  return (
+    <Card className="cp-people" label="Asked to add" head={<SectionHead label="Asked to add" count={list.length} />}>
+      {list.map((r) => <ListRow key={r._id} lead={{ avatar: r.name ?? r.email }} title={r.name ? `${r.name} · ${r.email}` : r.email} meta={`${r.by} asked · they'll see what ${r.by.split(" ")[0]} sees`}
+        action={<span className="pa-acts">
+          <Button size="sm" variant="primary" onClick={() => void decide({ requestId: r._id, approve: true }).then(() => show(`Approved. ${r.name ?? r.email} gets their portal invite.`), (e) => show(errLine(e)))}>Approve</Button>
+          <Button size="sm" variant="ghost" onClick={() => void decide({ requestId: r._id, approve: false }).then(() => show("Declined. Nothing was sent."), (e) => show(errLine(e)))}>Decline</Button></span>} />)}
+    </Card>
+  );
+}
 function PeopleCard({ page, show, onAdd }: { page: Page; show: (m: string) => void; onAdd: () => void }) {
   return (
+    <>
+    <Requests clientId={page.client._id} show={show} />
     <Card className="cp-people" label="People" head={<SectionHead label="People" count={page.people.length} action={<Button size="sm" variant="ghost" icon="plus" onClick={onAdd}>Add a person</Button>} />}>
       {page.people.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "users" }} title="No one yet. Add the people who sign documents or get updates." />
         : rows(page.people, (p) => <PersonRow p={p} show={show} />, (p) => p._id)}
     </Card>
+    </>
   );
 }
 

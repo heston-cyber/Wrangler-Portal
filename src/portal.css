@@ -4422,3 +4422,20 @@ textarea.cv-boxtxt { pointer-events: auto; display: block; padding-top: calc(50%
 .ob-checkrow > svg, .ob-checkrow > .icon { color: var(--accent); flex: none; }
 @media (max-width: 720px) { .ob-two { grid-template-columns: 1fr; } }
 .ob-tool > :last-child { flex: none; }
+
+/* Phase 7 step 3 · client onboarding (747:333–748:384) and the tour */
+.ob-client { padding-top: 24px; width: min(560px, 100%); }
+.ob-colors { display: flex; flex-wrap: wrap; gap: 8px; }
+.ob-color { display: inline-flex; align-items: center; gap: 6px; }
+.ob-color .sw { width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(var(--paper), .2); }
+.ob-color .input { width: 100px; }
+.ob-pref { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ob-add { display: flex; gap: 8px; }
+.ob-add .input { flex: 1; }
+.tour { position: fixed; z-index: 1001; width: min(320px, calc(100vw - 32px)); padding: 14px 16px; border-radius: 16px; display: grid; gap: 8px;
+  background: #0e0a0c; border: 1px solid rgba(var(--paper), .18); box-shadow: 0 18px 50px rgba(0, 0, 0, .7); }
+.tour p { margin: 0; }
+.tour-acts { display: flex; align-items: center; gap: 8px; }
+.tour-acts .sp { flex: 1; }
+.tour-ring { position: fixed; z-index: 1000; pointer-events: none; border: 2px solid var(--accent); border-radius: 14px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, .45); transition: top .2s, left .2s, width .2s, height .2s; }
