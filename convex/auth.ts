@@ -7,10 +7,10 @@ import { ConvexCredentials } from "@convex-dev/auth/providers/ConvexCredentials"
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { ConvexError } from "convex/values";
-import { brandFrom } from "./lib/mail";
+import { brandFrom, platformBrand } from "./lib/mail";
 import { resetMail, signInCodeMail } from "./lib/mails";
 import { SUPPORT, sendEmail, sixDigits } from "./lib/email";
-import type { MutationCtx } from "./_generated/server";
+import type { ActionCtx, MutationCtx } from "./_generated/server";
 import { SITE_HOST } from "./lib/site";
 import { allowedEmails } from "./lib/owners";
 import { ensureDefaultBusiness, ensureMembership, syncClientMemberships, syncTeamMembership, syncVendorMemberships } from "./lib/business";
@@ -31,9 +31,12 @@ function codeByEmail(id: string, kind: "verify" | "reset") {
     // Sent through Resend ourselves; Auth.js's own sender isn't used.
     apiKey: "unused",
     async generateVerificationToken() { return sixDigits(); },
-    async sendVerificationRequest({ identifier: email, token }) {
-      // Sign-in happens before we know whose client this is, so these come from the portal's default business.
-      const b = brandFrom({ name: "Wrangler Productions", legalName: "Hill Creative LLC", ownerName: "Heston Hill" }, { ownerEmail: "heston@wranglerproductions.com", logoUrl: null, isDefault: true });
+    async sendVerificationRequest({ identifier: email, token }, ctx?: unknown) {
+      // Sign-in happens before we know which business it's for. Wrangler's own people get the portal's default business
+      // (as before); anyone else gets WranglerPortal's name (Phase 7, decision 4).
+      const who = await (ctx as ActionCtx | undefined)?.runQuery(internal.platform.codeBrand, { email }).catch(() => "wrangler" as const) ?? "wrangler";
+      const b = who === "platform" ? platformBrand(null)
+        : brandFrom({ name: "Wrangler Productions", legalName: "Hill Creative LLC", ownerName: "Heston Hill" }, { ownerEmail: "heston@wranglerproductions.com", logoUrl: null, isDefault: true });
       const m = kind === "verify" ? signInCodeMail(b, { code: token, minutes: CODE_MINUTES }) : resetMail(b, { code: token, minutes: CODE_MINUTES });
       await sendEmail({ from: m.from, to: email, tag: kind === "verify" ? "code" : "reset", replyTo: SUPPORT(), subject: m.subject, text: m.text, html: m.html }); // D151: replies reach the portal's support
     },

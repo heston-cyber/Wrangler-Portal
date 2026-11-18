@@ -13,7 +13,7 @@ import { navigate, linkProps } from "../../lib/router";
 import { MoneyInput } from "../payments/common";
 import { uploadToStorage } from "../docs/pages/common";
 import { Ctx } from "../vendor/ctx";
-import { Tour, type Stop } from "./ClientOnboard";
+import { Tour, UploadError, type Stop } from "./ClientOnboard";
 
 type St = NonNullable<ReturnType<typeof useQuery<typeof api.vendorOnboard.state>>>;
 type Page = "profile" | "w9" | "pay";
@@ -32,8 +32,8 @@ export default function VendorOnboard({ start }: { start: number | null }) {
   const [at, setAt] = useState<number | null>(start);
   const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
   useEffect(() => { if (st && at === null) setAt(st.step); }, [st, at]);
-  if (!biz || st === undefined || at === null) return <div className="wp-page"><p className="wp-small secondary">Loading…</p></div>;
-  if (st.kind === "existing") return <div className="wp-page"><p className="wp-body">Nothing to set up here. <a {...linkProps("/")}>Home</a></p></div>;
+  if (!biz || st === undefined || at === null) return <div className="ob ob-client"><p className="wp-small secondary">Loading…</p></div>;
+  if (st.kind === "existing") return <div className="ob ob-client"><p className="wp-body">Nothing to set up here. <a {...linkProps("/")}>Home</a></p></div>;
   const pages = PAGES[st.kind];
   const i = Math.max(0, Math.min(pages.length - 1, at));
   const page = pages[i];
@@ -56,13 +56,13 @@ export default function VendorOnboard({ start }: { start: number | null }) {
   );
   const others = list.filter((b) => b.businessId !== biz).map((b) => b.name);
   return (
-    <div className="wp-page"><div className="ob ob-client">
+    <div className="ob ob-client">
       <span className="ob-prog" style={{ gridTemplateColumns: `repeat(${total}, 1fr)` }} aria-label={`Step ${n} of ${total}`}>{Array.from({ length: total }, (_, k) => <i key={k} className={k < n ? "on" : ""} />)}</span>
       <span className="wp-small secondary">Step {n} of {total} · {LABEL[page]}</span>
       {page === "profile" && <Profile key={biz} st={st} foot={foot} go={go} />}
       {page === "w9" && <W9 key={biz} st={st} foot={foot} go={go} others={others} />}
       {page === "pay" && <Pay key={biz} st={st} foot={foot} go={go} />}
-    </div></div>
+    </div>
   );
 }
 
@@ -114,16 +114,17 @@ function W9({ st, foot, go, others }: Part & { others: string[] }) {
   const uploadUrl = useMutation(api.vendorPortal.w9UploadUrl);
   const setW9 = useMutation(api.vendorPortal.setW9);
   const input = useRef<HTMLInputElement>(null);
-  const [up, setUp] = useState(false), [msg, setMsg] = useState<{ text: string; bad?: boolean } | null>(null);
+  const [up, setUp] = useState(false), [msg, setMsg] = useState<{ text: string; bad?: boolean; file?: string } | null>(null);
+  const RULE = "Upload a PDF up to 10 MB. A phone scan saved as PDF works.";
   const pick = async (f: File | undefined) => {
     if (!f) return;
-    if (!(f.type === "application/pdf" || /\.pdf$/i.test(f.name))) { setMsg({ text: "Upload the W-9 as a PDF.", bad: true }); return; }
-    if (f.size > W9_MAX) { setMsg({ text: `That file is ${(f.size / 1024 / 1024).toFixed(1)} MB. The W-9 can be up to 10 MB.`, bad: true }); return; }
+    // 753:1951: the wrong kind of file, or over the limit (setW9 checks both again).
+    if (!(f.type === "application/pdf" || /\.pdf$/i.test(f.name)) || f.size > W9_MAX) { setMsg({ text: RULE, bad: true, file: f.name }); return; }
     setUp(true); setMsg(null);
     try {
       const id = await uploadToStorage(await uploadUrl({ businessId: st.businessId }), f);
       const r = await setW9({ businessId: st.businessId, storageId: id as Id<"_storage">, name: f.name });
-      setMsg(r && "error" in r ? { text: r.error ?? "The W-9 didn't upload. Try again.", bad: true } : { text: "W-9 uploaded." });
+      setMsg(r && "error" in r ? { text: RULE, bad: true, file: f.name } : { text: "W-9 uploaded." });
     } catch (e) { setMsg({ text: errLine(e), bad: true }); } finally { setUp(false); if (input.current) input.current.value = ""; }
   };
   const short = st.kind === "short";
@@ -134,7 +135,8 @@ function W9({ st, foot, go, others }: Part & { others: string[] }) {
         : <button type="button" className="ob-drop" disabled={up} onClick={() => input.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void pick(e.dataTransfer.files[0]); }}>
           <Icon name="upload" size={16} />{up ? "Uploading…" : <>Drop your W-9{short ? ` for ${st.business}` : ""} (PDF), or <b>browse</b></>}</button>}
       <input ref={input} type="file" hidden accept="application/pdf,.pdf" onChange={(e) => void pick(e.target.files?.[0])} />
-      {msg && <span className={`wp-small ${msg.bad ? "error" : "secondary"}`} role={msg.bad ? "alert" : "status"}>{msg.text}</span>}
+      {msg && (msg.file ? <UploadError file={msg.file} text={msg.text} onRetry={() => input.current?.click()} />
+        : <span className={`wp-small ${msg.bad ? "error" : "secondary"}`} role={msg.bad ? "alert" : "status"}>{msg.text}</span>)}
     </>
   );
   return (

@@ -122,7 +122,7 @@ describe("Phase 7 step 4 · a new vendor's onboarding", () => {
     const m = mails.find((x) => x.to === RILEY)!;
     expect(m.text).toContain("You already have a WranglerPortal login");
     expect(m.text).toContain("Sign in to WranglerPortal");
-    expect(m.text).toContain(`&biz=${B}`);
+    expect(m.text).toContain(`&biz=${B}&have=1`); // step 5: an email with a login opens on Sign in
     const sb = await riley.query(api.vendorOnboard.state, { businessId: B });
     expect(sb).toMatchObject({ kind: "short", signedInAs: "Riley Chen", done: { profile: true, w9: false, pay: false, tour: true } });
     // Nothing of Wrangler's copy shows on the other business's: not the W-9, the payment note, or the profile.

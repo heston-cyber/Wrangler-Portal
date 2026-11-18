@@ -28,6 +28,7 @@ import { VendorCallSheetPage } from "../production/CallSheetRead";
 import { VendorTasksCard } from "../work/portalTasks";
 import { InvoiceEditor, VendorInvoice, VendorInvoices, VendorReview, VendorSettings, HomeInvoices } from "./VendorWork";
 import VendorOnboard, { VendorGettingStarted } from "../onboard/VendorOnboard";
+import { OnboardFrame } from "../onboard/ClientOnboard";
 const KEY = "wr.vendorBiz";
 const read = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
 const write = (v: string) => { try { localStorage.setItem(KEY, v); } catch { /* private window */ } };
@@ -75,6 +76,8 @@ export default function VendorApp({ me }: { me: { name: string | null; email: st
   const ctx = useMemo(() => ({ biz, setBiz, list }), [biz, list]); // eslint-disable-line react-hooks/exhaustive-deps
   if (mine === undefined) return <Loading />;
   if (!list.length) return <EmptyFrame />;
+  // Phase 7 step 5: onboarding stands on its own, like setup (no menu or tabs), in this business's look.
+  if (/^\/welcome\/?$/.test(path)) { const n = new URLSearchParams(location.search).get("step"); return <Ctx.Provider value={ctx}><OnboardFrame brand={current}><VendorOnboard key={`${biz}:${location.search}`} start={n !== null && /^\d$/.test(n) ? Number(n) : null} /></OnboardFrame></Ctx.Provider>; }
   return (
     <Ctx.Provider value={ctx}>
       <ShellFrame me={me} side="vendor" overlay={false} light logo={current?.logoUrl ?? wpLogo} bizName={current?.name ?? "WranglerPortal"} shared={[]} unread={0} recent={[]} search={false}
@@ -100,7 +103,6 @@ function Routes({ path, me }: { path: string; me: { name: string | null; email: 
   if (inv) return <VendorInvoice key={inv[1]} invoiceId={inv[1]} />;
   if (/^\/vendor\/invoices\/?$/.test(path)) return <VendorInvoices />;
   if (/^\/vendor\/review\/?$/.test(path)) return <VendorReview />;
-  if (/^\/welcome\/?$/.test(path)) { const n = new URLSearchParams(location.search).get("step"); return <VendorOnboard key={`${biz}:${location.search}`} start={n !== null && /^\d$/.test(n) ? Number(n) : null} />; } // Phase 7 step 4
   const help = /^\/vendor\/help(?:\/([a-z0-9-]+))?\/?$/.exec(path);
   if (help) return <HelpScreen key={help[1] ?? ""} base="/vendor/help" slug={help[1]} biz={biz} />;
   if (/^\/more\/?$/.test(path)) return <VendorMore me={me} />;

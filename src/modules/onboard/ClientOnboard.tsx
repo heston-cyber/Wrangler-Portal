@@ -9,7 +9,11 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { api } from "../../../convex/_generated/api";
 import { Button, Card, ListRow, SectionHead, StatusChip, TextField, Toggle } from "../../ui/wp";
 import { errLine } from "../../ui/hold";
+import { Icon } from "../../ui/Icon";
 import { navigate, linkProps } from "../../lib/router";
+import { Frame } from "../payments/ClientInvoice";
+import { useBrand, type Brand } from "../../lib/brand";
+import wpLogo from "../../assets/d1/wp-logo.png";
 
 type St = NonNullable<ReturnType<typeof useQuery<typeof api.clientOnboard.state>>>;
 type Step = 2 | 3 | 4;
@@ -24,8 +28,8 @@ export default function ClientOnboard({ start }: { start: number | null }) {
   const placed = useRef(false);
   useEffect(() => { if (st && !placed.current && !start) { placed.current = true; setStep(Math.min(4, Math.max(2, st.step + 2)) as Step); } }, [st, start]);
   const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
-  if (st === null) return <div className="wp-page"><p className="wp-body">Nothing to set up here. <a {...linkProps("/")}>Home</a></p></div>;
-  if (!st) return <div className="wp-page"><p className="wp-small secondary">Loading…</p></div>;
+  if (st === null) return <div className="ob ob-client"><p className="wp-body">Nothing to set up here. <a {...linkProps("/")}>Home</a></p></div>;
+  if (!st) return <div className="ob ob-client"><p className="wp-small secondary">Loading…</p></div>;
   const later = async () => { await mark({ at: step - 2 }).catch(() => undefined); navigate("/"); };
   const go = async (save: () => Promise<unknown>, done: "about" | "company" | "prefs") => {
     setBusy(true); setErr(null);
@@ -39,13 +43,13 @@ export default function ClientOnboard({ start }: { start: number | null }) {
         <Button type="submit" variant="primary" loading={busy} disabled={disabled}>{next}</Button></div></>
   );
   return (
-    <div className="wp-page"><div className="ob ob-client">
+    <div className="ob ob-client">
       <span className="ob-prog" style={{ gridTemplateColumns: "repeat(5, 1fr)" }} aria-label={`Step ${step} of 5`}>{[1, 2, 3, 4, 5].map((n) => <i key={n} className={n <= step ? "on" : ""} />)}</span>
       <span className="wp-small secondary">Step {step} of 5 · {LABEL[step]}</span>
       {step === 2 && <About st={st} foot={foot} onSave={(f) => go(f, "about")} />}
       {step === 3 && <Company st={st} foot={foot} onSave={(f) => go(f, "company")} />}
       {step === 4 && <Prefs st={st} foot={foot} onSave={(f) => go(f, "prefs")} />}
-    </div></div>
+    </div>
   );
 }
 
@@ -74,10 +78,11 @@ function Company({ st, foot, onSave }: Part) {
   const setLogo = useMutation(api.clientOnboard.setLogo);
   const [f, setF] = useState(st.billing);
   const [colors, setColors] = useState<string[]>(() => [...st.brand.colors, "", ""].slice(0, Math.max(3, st.brand.colors.length + 1)));
-  const [msg, setMsg] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null), [badFile, setBadFile] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const pick = async (file: File) => {
-    if (!/^image\/(png|jpeg|svg\+xml|webp)$/.test(file.type) || file.size > 5 * 1024 * 1024) { setMsg("Use a PNG, SVG, JPG or WebP under 5 MB."); return; }
+    setBadFile(null);
+    if (!/^image\/(png|jpeg|svg\+xml|webp)$/.test(file.type) || file.size > 5 * 1024 * 1024) { setMsg(null); setBadFile(file.name); return; } // 753:1951
     try { const r = await fetch(await uploadUrl({}), { method: "POST", headers: { "Content-Type": file.type }, body: file }); const { storageId } = (await r.json()) as { storageId: Id<"_storage"> }; await setLogo({ storageId }); setMsg("Logo added."); }
     catch (e) { setMsg(errLine(e)); }
   };
@@ -95,6 +100,7 @@ function Company({ st, foot, onSave }: Part) {
         <button type="button" className="ob-drop" onClick={() => input.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const x = e.dataTransfer.files[0]; if (x) void pick(x); }}>
           {st.brand.logoUrl ? <img src={st.brand.logoUrl} alt="" /> : <>Drop your logo (SVG or PNG), or <b>browse</b></>}</button>
         <input ref={input} type="file" hidden accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={(e) => { const x = e.target.files?.[0]; e.target.value = ""; if (x) void pick(x); }} />
+        {badFile && <UploadError file={badFile} text="Use a PNG, SVG, JPG or WebP up to 5 MB." onRetry={() => input.current?.click()} />}
         {msg && <span className="wp-small secondary" role="status">{msg}</span>}
         <div className="ob-colors">{colors.map((c, i) => (
           <label key={i} className="ob-color"><span className="sw" style={{ background: HEX.test(c) ? c : "transparent" }} />
@@ -233,3 +239,28 @@ const target = (href: string, label?: string) => {
 };
 // In the client's menu at all (on a phone some of it sits under More).
 const visible = (href: string) => Array.from(document.querySelectorAll<HTMLAnchorElement>("a[href]")).some((el) => { try { return new URL(el.href).pathname === href; } catch { return false; } });
+
+/** 753:1951: a file that can't be used (wrong kind, or over the limit), with Try again. */
+export function UploadError({ file, text, onRetry }: { file: string; text: string; onRetry: () => void }) {
+  return (
+    <div className="ob-uperr" role="alert"><Icon name="alert" size={16} />
+      <span><b>{file.length > 60 ? `${file.slice(0, 57)}…` : file} can't be used</b><span className="wp-small secondary">{text}</span></span>
+      <Button size="sm" onClick={onRetry}>Try again</Button></div>
+  );
+}
+
+/** Phase 7 step 5: the onboarding steps stand on their own like setup (frames 747:333–747:681, 749:676–749:1319 and the
+ *  phone frames 752:1481–752:2288): the business's logo on top, no menu, in the business's colours. The caller applies
+ *  the look (useBrand) when its own shell doesn't. */
+export function OnboardFrame({ brand, children }: { brand: Brand | null; children: React.ReactNode }) {
+  // Another business without a logo shows its name (as setup does); Wrangler's own look keeps the WP logo.
+  const custom = !!brand?.accent && brand.accent.trim().toLowerCase() !== "#ff0000";
+  return <Frame inShell={false} bar={null} brand={{ name: brand?.name ?? "WranglerPortal", logoUrl: brand?.logoUrl ?? (custom ? null : wpLogo) }}>{children}</Frame>;
+}
+/** The client's /welcome, outside their portal's shell. */
+export function ClientWelcome({ start }: { start: number | null }) {
+  const brands = useQuery(api.business.brand);
+  const brand = brands?.[0] ?? null;
+  useBrand(brand);
+  return <OnboardFrame brand={brand}><ClientOnboard start={start} /></OnboardFrame>;
+}

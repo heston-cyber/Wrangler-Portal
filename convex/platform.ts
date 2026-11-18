@@ -163,3 +163,23 @@ export const mailInvite = internalAction({
     await deliverOnce(ctx, `business-invite:${inviteId}:${at}`, "business_invite", d.i.email, businessInviteMail(platformBrand(d.privacyUrl), { business: d.i.business, note: d.i.note ?? null, link, until }), SUPPORT(), null);
   },
 });
+
+/** Phase 7 (decision 4 of the read-back): whose name a sign-in or reset code email carries. Wrangler's own people (its
+ *  owner, its clients, vendors and team, and anyone invited by it) get Wrangler Productions' as before; everyone else
+ *  (another business's owner, clients, vendors or team) gets WranglerPortal's, since the code comes before we know
+ *  which business they're signing in to. Reads only whether an address belongs to Wrangler; returns one word. */
+export const codeBrand = internalQuery({
+  args: { email: v.string() },
+  handler: async (ctx, { email: raw }) => {
+    const email = raw.trim().toLowerCase();
+    if (allowedEmails().includes(email)) return "wrangler" as const;
+    const D = (await defaultBusiness(ctx))?._id ?? null;
+    if (!D) return "wrangler" as const; // no businesses yet: nothing to tell apart
+    const ours = (b: Id<"businesses"> | undefined) => (b ?? D) === D;
+    if ((await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", email)).collect()).some((m) => !m.revokedAt && m.businessId === D)) return "wrangler" as const;
+    if ((await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()).some((i) => !i.revokedAt && ours(i.businessId))) return "wrangler" as const;
+    if ((await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", email)).collect()).some((x) => !x.archivedAt && ours(x.businessId))) return "wrangler" as const;
+    if ((await ctx.db.query("teamInvites").withIndex("by_email", (q) => q.eq("email", email)).collect()).some((i) => !i.revokedAt && ours(i.businessId))) return "wrangler" as const;
+    return "platform" as const;
+  },
+});

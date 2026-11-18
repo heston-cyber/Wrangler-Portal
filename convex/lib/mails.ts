@@ -48,7 +48,7 @@ export function shareInviteMail(b: MailBrand, d: { kind: string; label: string; 
 }
 /** 03b Portal invite (drawn Oct 29): "Invite to the portal" / "Resend invite" from the client page. */
 export function portalInviteMail(b: MailBrand, d: { name: string | null; email: string; hasAccount: boolean }): Mail {
-  const link = `${SITE()}/?invited=${encodeURIComponent(d.email).replace(/%40/g, "@")}&side=client`; // a client-and-vendor login lands on the client side
+  const link = `${SITE()}/?invited=${encodeURIComponent(d.email).replace(/%40/g, "@")}&side=client${d.hasAccount ? "&have=1" : ""}`; // a client-and-vendor login lands on the client side; have=1: opens on Sign in (Phase 7)
   const who = byline(b);
   return mk(b, "review", `${who} invited you to WranglerPortal`, [
     hi(d.name),
@@ -454,7 +454,7 @@ export function briefingLinkMail(b: MailBrand, d: { name: string | null; kind: s
  *  business (`biz`), where their onboarding starts: the full one, or (D94) only this business's W-9 and payment method
  *  for someone who already has a login. */
 export function vendorInviteMail(b: MailBrand, d: { name: string; email: string; hasAccount: boolean; vendorElsewhere: boolean; roles: string[]; businessId: string | null; until: string | null }): Mail {
-  const link = `${SITE()}/?invited=${encodeURIComponent(d.email).replace(/%40/g, "@")}&side=vendor${d.businessId ? `&biz=${encodeURIComponent(d.businessId)}` : ""}`; // lands on the vendor side
+  const link = `${SITE()}/?invited=${encodeURIComponent(d.email).replace(/%40/g, "@")}&side=vendor${d.businessId ? `&biz=${encodeURIComponent(d.businessId)}` : ""}${d.hasAccount ? "&have=1" : ""}`; // lands on the vendor side; have=1: opens on Sign in
   return mk(b, "updates", `${byline(b)} invited you to WranglerPortal`, [
     hi(d.name),
     { t: "p", text: `${b.name} added you as a vendor.` },

@@ -42,7 +42,7 @@ import type { Id } from "../convex/_generated/dataModel";
 const InvoicesPage = lazy(() => import("./modules/payments/InvoicesPage"));
 const PlatformAdmin = lazy(() => import("./modules/platform/Admin"));
 const Setup = lazy(() => import("./modules/setup/Setup"));
-const ClientOnboard = lazy(() => import("./modules/onboard/ClientOnboard"));
+const ClientWelcome = lazy(() => import("./modules/onboard/ClientOnboard").then((m) => ({ default: m.ClientWelcome })));
 const InvoiceEditor = lazy(() => import("./modules/payments/InvoiceEditor"));
 const InvoiceDetail = lazy(() => import("./modules/payments/InvoiceDetail"));
 const PaymentsOverview = lazy(() => import("./modules/payments/PaymentsOverview"));
@@ -279,7 +279,7 @@ export default function App() {
   const guestLink = /^\/guest(?:\/([A-Za-z0-9_-]{16,64}))?\/?$/.exec(path);
   if (guestLink) return <Suspense fallback={<Loading />}><GuestApp key={guestLink[1] ?? "home"} token={guestLink[1] ?? null} /></Suspense>;
   if (isLoading) return <Loading />;
-  if (!isAuthenticated) return <SignIn invitedEmail={new URLSearchParams(location.search).get("invited")} owner={new URLSearchParams(location.search).get("side") === "owner"} vendor={new URLSearchParams(location.search).get("side") === "vendor"} />;
+  if (!isAuthenticated) return <SignIn invitedEmail={new URLSearchParams(location.search).get("invited")} owner={new URLSearchParams(location.search).get("side") === "owner"} vendor={new URLSearchParams(location.search).get("side") === "vendor"} have={new URLSearchParams(location.search).get("have") === "1"} />;
   return <SignedIn />;
 }
 
@@ -473,6 +473,12 @@ function SignedIn() {
 
 type MeRow = NonNullable<ReturnType<typeof useQuery<typeof api.users.me>>>;
 function ClientShell({ me, overlay = false, children }: { me: MeRow; overlay?: boolean; children?: React.ReactNode }) {
+  const { path, search } = useLocation();
+  // Phase 7 step 5: onboarding stands on its own, like setup (no menu or tabs).
+  if (!children && /^\/welcome\/?$/.test(path)) return <Suspense fallback={<Loading />}><ClientWelcome start={Number(new URLSearchParams(search).get("step")) || null} /></Suspense>;
+  return <ClientShellIn me={me} overlay={overlay}>{children}</ClientShellIn>;
+}
+function ClientShellIn({ me, overlay, children }: { me: MeRow; overlay: boolean; children?: React.ReactNode }) {
   const mine = useQuery(api.shares.mine, {});
   const client = (mine ?? []).find((s) => s.client)?.client ?? null;
   return <Shell me={me} side="client" overlay={overlay} subtitle={client}>{children ?? <ClientRoutes me={me} />}</Shell>;
@@ -494,7 +500,6 @@ function ClientRoutes({ me }: { me: { name: string | null; email: string } }) {
   const { path, search } = useLocation();
   const params = new URLSearchParams(search);
   if (/^\/more\/?$/.test(path)) return <MorePage me={me as never} side="client" />;
-  if (/^\/welcome\/?$/.test(path)) return <Suspense fallback={<Loading />}><ClientOnboard start={Number(params.get("step")) || null} /></Suspense>; // Phase 7 step 3
   if (/^\/messages\/?$/.test(path)) return <Suspense fallback={<Loading />}><ClientMessages /></Suspense>; // Phase 5d step 2
   if (/^\/inbox\/?$/.test(path)) return <ClientInbox itemId={params.get("item")} />;
   if (/^\/(docs|documents)\/?$/.test(path)) { const t = params.get("tab"); return <ClientDocuments tab={(t === "signed" || t === "cancelled" ? t : "to_sign") as DocTab} />; }

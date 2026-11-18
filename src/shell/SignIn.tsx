@@ -28,10 +28,11 @@ export function CenterCard({ children, wide }: { children: React.ReactNode; wide
 }
 export const CardLogo = () => <span className="wp-logo"><span className="rec" aria-hidden /><img src={wpLogo} alt="Wrangler Productions" /></span>;
 
-export default function SignIn({ invitedEmail, note: lead, owner, vendor }: { invitedEmail?: string | null; note?: React.ReactNode; owner?: boolean; vendor?: boolean }) {
+export default function SignIn({ invitedEmail, note: lead, owner, vendor, have }: { invitedEmail?: string | null; note?: React.ReactNode; owner?: boolean; vendor?: boolean; have?: boolean }) {
   const { signIn } = useAuthActions();
   const convex = useConvex();
-  const [flow, setFlow] = useState<Flow>(invitedEmail ? "signUp" : "signIn");
+  // Phase 7 (753:1808's case): an invite to an email that already has a login (have=1 in its link) opens on Sign in.
+  const [flow, setFlow] = useState<Flow>(invitedEmail && !have ? "signUp" : "signIn");
   const [email, setEmail] = useState(invitedEmail ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -147,6 +148,10 @@ export default function SignIn({ invitedEmail, note: lead, owner, vendor }: { in
           <span className="wp-eyebrow">Heston Hill invited you</span>
           <p className="wp-body">Set up your business on WranglerPortal: a portal for your clients (review, sign, pay) and a back office for you. Setup takes about 15 minutes; you can finish later.</p>
           <p className="wp-small secondary">You'll create a password. We email a 6-digit code once, to confirm your email. Free while WranglerPortal is in beta. Before paid plans start, you choose a plan or export your data.</p>
+        </>}
+        {flow === "signIn" && invitedEmail && have && <>
+          <span className="wp-eyebrow">You already have a login</span>
+          <p className="wp-body">This email already has a WranglerPortal login. Sign in with your password, and the business that invited you is added to it.</p>
         </>}
         {flow === "code" && <p className="wp-body">Enter the 6-digit code we emailed to {email}.</p>}
         {flow === "reset" && <p className="wp-body">We'll email you a code.</p>}
