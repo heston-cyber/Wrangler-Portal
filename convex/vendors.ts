@@ -253,7 +253,11 @@ export const inviteData = internalQuery({
     const x = await ctx.db.get(vendorId);
     if (!x || x.archivedAt || !x.invitedAt) return null;
     const user = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", x.email)).unique();
-    return { name: x.name, email: x.email, hasAccount: !!user, brand: await mailBrandOf(ctx, x.businessId ?? null) };
+    // Phase 7 (email 37): the roles, and the date the link stops working (D134; none once they've joined).
+    const until = !x.joinedAt && x.inviteExpiresAt ? new Date(x.inviteExpiresAt).toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric" }) : null;
+    // D94: already a vendor of another business here (their login and profile are done; only this business's W-9 and payment method).
+    const vendorElsewhere = (await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", x.email)).collect()).some((m) => m.role === "vendor" && !m.revokedAt && m.businessId !== x.businessId);
+    return { name: x.name, email: x.email, hasAccount: !!user, vendorElsewhere, roles: x.roles, businessId: x.businessId ?? null, until, brand: await mailBrandOf(ctx, x.businessId ?? null) };
   },
 });
 
@@ -280,6 +284,6 @@ export const mailInvite = internalAction({
   handler: async (ctx, { vendorId, at }) => {
     const d = await ctx.runQuery(internal.vendors.inviteData, { vendorId });
     if (!d) return;
-    await deliverOnce(ctx, `vendor-invite:${vendorId}:${at}`, "vendor_invite", d.email, vendorInviteMail(d.brand, { name: d.name, email: d.email, hasAccount: d.hasAccount }), d.brand.replyTo);
+    await deliverOnce(ctx, `vendor-invite:${vendorId}:${at}`, "vendor_invite", d.email, vendorInviteMail(d.brand, { name: d.name, email: d.email, hasAccount: d.hasAccount, vendorElsewhere: d.vendorElsewhere, roles: d.roles, businessId: d.businessId, until: d.until }), d.brand.replyTo);
   },
 });

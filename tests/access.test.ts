@@ -144,6 +144,8 @@ const VENDOR = new Set(["help.list", "help.guide", "users.switchSide",
   "vendorPortal.tickShot",
   // 5m (D199): tasks given to them on purpose (For a vendor), with Done (work.test.ts)
   "work.forVendor", "work.vendorDone",
+  // Phase 7 step 4: their own onboarding for a business they work for (vendorOnboard.test.ts)
+  "vendorOnboard.state", "vendorOnboard.step", "vendorOnboard.tour", "vendorOnboard.profile", "vendorOnboard.payMethod",
   // Phase 5e step 2: their own password, email and devices (security.test.ts)
   "security.state", "security.changePassword", "security.startEmailChange", "security.confirmEmailChange", "security.cancelEmailChange", "security.seenDevice", "security.signOutDevice"]);
 

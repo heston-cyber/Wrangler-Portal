@@ -148,6 +148,7 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "overviews.vendors": { pages: ["owner"], args: () => ({}) }, // Vendors › Overview
   "clientOnboard.state": { pages: ["clientHome"], args: () => ({}) }, // Phase 7 step 3: Getting started, /welcome and the tour (null for anyone but a client person)
   "clientOnboard.requests": { pages: [], args: () => ({}) }, // Phase 7 step 3: the company page's Asked to add card (clientOnboard.test.ts)
+  "vendorOnboard.state": { pages: ["owner"], args: () => "skip" }, // Phase 7 step 4: the vendor side (vendors only; tests/vendorOnboard.test.ts fires it)
   "setup.state": { pages: ["owner"], args: () => ({}) }, // Phase 7 step 2: the Dashboard's setup checklist and /setup (null for Wrangler)
   "platform.me": { pages: ["owner"], args: () => ({}) }, // Phase 7: the account menu's Platform admin row (false for anyone else)
   "platform.overview": { pages: [], args: () => ({}) }, // Phase 7: the platform admin page, Heston only (tested in platform.test.ts)

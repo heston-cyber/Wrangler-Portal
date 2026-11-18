@@ -4439,3 +4439,16 @@ textarea.cv-boxtxt { pointer-events: auto; display: block; padding-top: calc(50%
 .tour-acts .sp { flex: 1; }
 .tour-ring { position: fixed; z-index: 1000; pointer-events: none; border: 2px solid var(--accent); border-radius: 14px;
   box-shadow: 0 0 0 9999px rgba(0, 0, 0, .45); transition: top .2s, left .2s, width .2s, height .2s; }
+
+/* Phase 7 step 4 · vendor onboarding (749:676–749:1319) */
+.ob-file { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid rgba(var(--paper), .14); border-radius: 12px; }
+.ob-file > svg, .ob-file > .icon { color: var(--accent); flex: none; }
+.ob-file > span { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.ob-file > span b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ob-ext { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-size: 13px; text-decoration: none; width: fit-content; }
+.ob-ext:hover { text-decoration: underline; }
+.ob-banner { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1px solid rgba(var(--paper), .16); border-radius: 12px; background: rgba(var(--paper), .04); }
+.ob-banner > svg, .ob-banner > .icon { color: var(--accent); flex: none; margin-top: 2px; }
+.ob-banner > span { display: grid; gap: 2px; }
+.ob-banner b { font-weight: 500; }
+@media (max-width: 720px) { .ob-file { flex-wrap: wrap; } }

@@ -10,6 +10,8 @@ const first = (name: string | null | undefined) => (name ?? "").trim().split(/\s
 const hi = (name: string | null | undefined): Block => ({ t: "p", text: first(name) ? `Hi ${first(name)},` : "Hi," });
 const hello = (name: string | null | undefined): Block => ({ t: "p", text: first(name) ? `Hi ${first(name)},` : "Hello," }); // D149 (Q98)
 /** "Heston at Wrangler Productions" (or just the business when no owner name is set). */
+/** "Juniper & Ash’s", "Wrangler Productions’" (email 37). */
+const poss = (name: string) => (/s$/i.test(name.trim()) ? `${name.trim()}’` : `${name.trim()}’s`);
 const byline = (b: MailBrand, full = false) => (b.ownerName ? `${full ? b.ownerName : first(b.ownerName)} at ${b.name}` : b.name);
 const SIGN_HOST = "sign.wranglerportal.com";
 const mk = (b: MailBrand, address: "review" | "contracts" | "updates", subject: string, blocks: Block[], footer: Block[], preheader?: string): Mail =>
@@ -448,17 +450,28 @@ export function briefingLinkMail(b: MailBrand, d: { name: string | null; kind: s
 }
 
 // ---------- the vendor portal invite (Phase 3c step 4; the portal invite's layout, 03b) ----------
-export function vendorInviteMail(b: MailBrand, d: { name: string; email: string; hasAccount: boolean }): Mail {
-  const link = `${SITE()}/?invited=${encodeURIComponent(d.email).replace(/%40/g, "@")}&side=vendor`; // lands on the vendor side
-  const who = byline(b);
-  return mk(b, "updates", `${who} invited you to WranglerPortal`, [
+/** 37 · Vendor invite (Phase 7, 753:2091, redrawn Nov 3 with the password). The link opens the vendor side on this
+ *  business (`biz`), where their onboarding starts: the full one, or (D94) only this business's W-9 and payment method
+ *  for someone who already has a login. */
+export function vendorInviteMail(b: MailBrand, d: { name: string; email: string; hasAccount: boolean; vendorElsewhere: boolean; roles: string[]; businessId: string | null; until: string | null }): Mail {
+  const link = `${SITE()}/?invited=${encodeURIComponent(d.email).replace(/%40/g, "@")}&side=vendor${d.businessId ? `&biz=${encodeURIComponent(d.businessId)}` : ""}`; // lands on the vendor side
+  return mk(b, "updates", `${byline(b)} invited you to WranglerPortal`, [
     hi(d.name),
-    { t: "p", text: `${who} invited you to WranglerPortal, where you’ll get bookings, read briefs and send invoices to ${b.name}.` },
-    { t: "p", text: "Open it here:", tone: "muted" },
-    { t: "button", label: d.hasAccount ? "Sign in to WranglerPortal" : "Open WranglerPortal", href: link }, { t: "link", href: link, full: true },
-    { t: "p", text: d.hasAccount ? `Sign in with your WranglerPortal account (${d.email}). ${b.name}’s work shows up beside the other businesses you work for, kept separate.` : "The first time, you’ll create your account: a password, then a six-digit code we send you. After that, just sign in.", tone: "muted" },
-    { t: "p", text: "Reply to this email if anything doesn't work.", tone: "muted" },
-  ], b.isDefault ? [{ t: "small", text: "— WranglerPortal" }] : [{ t: "small", text: "Powered by WranglerPortal" }]);
+    { t: "p", text: `${b.name} added you as a vendor.` },
+    { t: "sums", rows: [
+      ...(d.roles.length ? [{ label: "Roles", value: d.roles.join(", "), big: true }] : []),
+      ...(b.ownerName ? [{ label: "From", value: b.ownerName }] : []),
+      { label: "Portal", value: "WranglerPortal" },
+    ] },
+    { t: "p", text: "You’ll accept bookings, read briefs and send invoices there." },
+    { t: "p", text: d.vendorElsewhere
+      ? `You already have a WranglerPortal login (${d.email}). Sign in, then add ${poss(b.name)} own W-9 and how you like to be paid. Your profile is already done, and ${poss(b.name)} work stays separate from the other businesses you work for.`
+      : d.hasAccount
+        ? `Set up takes about 5 minutes. Sign in with your WranglerPortal login (${d.email}); your vendor side is added to it.`
+        : "Set up takes about 5 minutes. You’ll create a password, then confirm your email with a code." },
+    ...(d.until ? [{ t: "p", text: `The link works until ${d.until}.`, tone: "muted" } as Block] : []),
+    { t: "button", label: d.hasAccount ? "Sign in to WranglerPortal" : "Set up my vendor portal", href: link }, { t: "link", href: link, full: true },
+  ], signoff(b), d.vendorElsewhere ? `Add ${poss(b.name)} W-9 and how you like to be paid.` : "Set up takes about 5 minutes.");
 }
 
 // ---------- to the owner when a vendor accepts a booking (Heston, Nov 2; the alert layout, like 22) ----------

@@ -48,6 +48,10 @@ async function myBusinesses(ctx: Ctx) {
   return { user, email, ids: [...new Set(ms.map((m) => m.businessId))] };
 }
 
+/** Phase 7 step 4: the businesses this vendor login works for, oldest first (their first business is where they made
+ *  their login and profile; D94). Refuses anyone who isn't a vendor login, like every call here. */
+export async function vendorBusinessIds(ctx: Ctx) { return (await myBusinesses(ctx)).ids; }
+
 /** Acts for one of the vendor's businesses: focuses the call on it and returns their vendor record there. */
 export async function asVendor(ctx: Ctx, businessId?: Id<"businesses"> | null) {
   const me = await vendorIn(ctx, businessId);

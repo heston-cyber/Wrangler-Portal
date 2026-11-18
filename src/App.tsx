@@ -279,7 +279,7 @@ export default function App() {
   const guestLink = /^\/guest(?:\/([A-Za-z0-9_-]{16,64}))?\/?$/.exec(path);
   if (guestLink) return <Suspense fallback={<Loading />}><GuestApp key={guestLink[1] ?? "home"} token={guestLink[1] ?? null} /></Suspense>;
   if (isLoading) return <Loading />;
-  if (!isAuthenticated) return <SignIn invitedEmail={new URLSearchParams(location.search).get("invited")} owner={new URLSearchParams(location.search).get("side") === "owner"} />;
+  if (!isAuthenticated) return <SignIn invitedEmail={new URLSearchParams(location.search).get("invited")} owner={new URLSearchParams(location.search).get("side") === "owner"} vendor={new URLSearchParams(location.search).get("side") === "vendor"} />;
   return <SignedIn />;
 }
 

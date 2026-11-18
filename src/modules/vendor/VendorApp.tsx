@@ -27,6 +27,7 @@ import { HelpScreen } from "../help/Help";
 import { VendorCallSheetPage } from "../production/CallSheetRead";
 import { VendorTasksCard } from "../work/portalTasks";
 import { InvoiceEditor, VendorInvoice, VendorInvoices, VendorReview, VendorSettings, HomeInvoices } from "./VendorWork";
+import VendorOnboard, { VendorGettingStarted } from "../onboard/VendorOnboard";
 const KEY = "wr.vendorBiz";
 const read = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
 const write = (v: string) => { try { localStorage.setItem(KEY, v); } catch { /* private window */ } };
@@ -48,6 +49,13 @@ export default function VendorApp({ me }: { me: { name: string | null; email: st
   const current = list.find((b) => b.businessId === biz) ?? null;
   useBrand(current);
   const setBiz = (b: Id<"businesses">) => { setPicked(b); write(b); };
+  // Phase 7 (email 37): the invite's ?biz= opens the vendor side on that business, once, if this login works for it.
+  useEffect(() => {
+    const want = new URLSearchParams(location.search).get("biz");
+    if (!want || !list.length) return;
+    if (list.some((b) => b.businessId === want)) setBiz(want as Id<"businesses">);
+    const u = new URL(window.location.href); u.searchParams.delete("biz"); window.history.replaceState(null, "", u.toString());
+  }, [list.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const { path } = useLocation();
   const counts = useQuery(api.vendorPortal.counts, biz ? { businessId: biz } : "skip");
   const reviews = useQuery(api.vendorPortal.reviews, biz ? { businessId: biz } : "skip");
@@ -92,6 +100,7 @@ function Routes({ path, me }: { path: string; me: { name: string | null; email: 
   if (inv) return <VendorInvoice key={inv[1]} invoiceId={inv[1]} />;
   if (/^\/vendor\/invoices\/?$/.test(path)) return <VendorInvoices />;
   if (/^\/vendor\/review\/?$/.test(path)) return <VendorReview />;
+  if (/^\/welcome\/?$/.test(path)) { const n = new URLSearchParams(location.search).get("step"); return <VendorOnboard key={`${biz}:${location.search}`} start={n !== null && /^\d$/.test(n) ? Number(n) : null} />; } // Phase 7 step 4
   const help = /^\/vendor\/help(?:\/([a-z0-9-]+))?\/?$/.exec(path);
   if (help) return <HelpScreen key={help[1] ?? ""} base="/vendor/help" slug={help[1]} biz={biz} />;
   if (/^\/more\/?$/.test(path)) return <VendorMore me={me} />;
@@ -147,6 +156,7 @@ function VendorHome() {
           actions={h.upcoming.length ? <><ButtonLink to="/vendor/invoices/new">Log hours</ButtonLink><ButtonLink variant="primary" to="/vendor/invoices/new">Send an invoice</ButtonLink></> : undefined} />
         <div className="wp-homecols">
           <div className="col">
+            <VendorGettingStarted />
             <VendorTasksCard businessId={biz ?? null} from={h.business} />
             {h.offered.map((x) => (
               <Card key={x._id} label="New booking" head={<SectionHead label="New booking" count={h.offered.length > 1 ? undefined : 1} />}>

@@ -976,6 +976,9 @@ export default defineSchema({
     payout: v.optional(v.object({ recipientId: v.string(), mode: v.string(), ready: v.boolean(), needsInfo: v.optional(v.boolean()),
       payoutMethodId: v.optional(v.string()), last4: v.optional(v.string()), bankName: v.optional(v.string()), checkedAt: v.number() })),
     address: v.optional(v.string()),                    // step 4: mailing address, for 1099s
+    // Phase 7 step 4 (D108, D111, D94): their onboarding for this business: where they are, and when the profile and the
+    // tour were done (the W-9 and how they're paid count as done when they're on file).
+    onboard: v.optional(v.object({ step: v.number(), profile: v.optional(v.number()), tour: v.optional(v.number()), tourSkipped: v.optional(v.boolean()) })),
     archivedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),

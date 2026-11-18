@@ -40,7 +40,7 @@ describe("one login, client and vendor", () => {
     // The invite tells her to sign in with the login she has, and lands on the vendor side.
     const invite = mails.find((m) => m.to === MAYA)!;
     expect(invite.text).toContain(`?invited=${MAYA}&side=vendor`);
-    expect(invite.text).toContain("Sign in with your WranglerPortal account");
+    expect(invite.text).toContain(`Sign in with your WranglerPortal login (${MAYA}); your vendor side is added to it.`); // Phase 7 email 37
     // Her existing login got Wrangler on its vendor side straight away.
     expect(await w.maya.query(api.users.me, {})).toMatchObject({ role: "client", sides: ["client", "vendor"] });
     const bookingId = await w.heston.mutation(api.bookings.create, { vendorId, projectId: w.p, role: "Shooter", start: "2030-11-06", end: "2030-11-06", cents: 50_000, unit: "day" }) as Id<"vendorBookings">;

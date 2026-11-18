@@ -33,6 +33,7 @@ import type * as notifications from "../notifications.js";
 import type * as vendorPayments from "../vendorPayments.js";
 import type * as vendorPayouts from "../vendorPayouts.js";
 import type * as vendorPortal from "../vendorPortal.js";
+import type * as vendorOnboard from "../vendorOnboard.js";
 import type * as leads from "../leads.js";
 import type * as plans from "../plans.js";
 import type * as subscriptionClock from "../subscriptionClock.js";
@@ -201,6 +202,7 @@ declare const fullApi: ApiFromModules<{
   vendorPayments: typeof vendorPayments;
   vendorPayouts: typeof vendorPayouts;
   vendorPortal: typeof vendorPortal;
+  vendorOnboard: typeof vendorOnboard;
   leads: typeof leads;
   plans: typeof plans;
   subscriptionClock: typeof subscriptionClock;

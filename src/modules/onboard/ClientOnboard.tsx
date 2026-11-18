@@ -40,7 +40,7 @@ export default function ClientOnboard({ start }: { start: number | null }) {
   );
   return (
     <div className="wp-page"><div className="ob ob-client">
-      <span className="ob-prog" aria-label={`Step ${step} of 5`}>{[1, 2, 3, 4, 5].map((n) => <i key={n} className={n <= step ? "on" : ""} />)}</span>
+      <span className="ob-prog" style={{ gridTemplateColumns: "repeat(5, 1fr)" }} aria-label={`Step ${step} of 5`}>{[1, 2, 3, 4, 5].map((n) => <i key={n} className={n <= step ? "on" : ""} />)}</span>
       <span className="wp-small secondary">Step {step} of 5 · {LABEL[step]}</span>
       {step === 2 && <About st={st} foot={foot} onSave={(f) => go(f, "about")} />}
       {step === 3 && <Company st={st} foot={foot} onSave={(f) => go(f, "company")} />}
@@ -149,7 +149,7 @@ export function GettingStarted() {
     if (st && st.existing && !st.done.tour && !st.tourSkipped) setTouring(true);
   }, [st]);
   if (!st) return null;
-  const tour = touring ? <Tour onEnd={(skipped) => { setTouring(false); void tourDone({ skipped }); }} /> : null;
+  const tour = touring ? <Tour stops={STOPS} onEnd={(skipped) => { setTouring(false); void tourDone({ skipped }); }} /> : null;
   if (st.existing) return tour;
   const rows = [
     { t: "Sign in", done: true, sub: "Done" },
@@ -172,7 +172,8 @@ export function GettingStarted() {
 }
 
 // ---------- the tour (748:169): a coachmark on each part of the portal the business uses ----------
-const STOPS: Array<{ href: string; title: string; text: string }> = [
+export type Stop = { href: string; title: string; text: string };
+const STOPS: Stop[] = [
   { href: "/inbox", title: "Inbox", text: "Notes and updates from the team land here. You get an email too, as you chose." },
   { href: "/messages", title: "Messages", text: "Talk with the team about your project; everyone on it sees the thread." },
   { href: "/review", title: "Review", text: "Watch cuts and leave notes on the exact frame. Each version is a round." },
@@ -180,9 +181,10 @@ const STOPS: Array<{ href: string; title: string; text: string }> = [
   { href: "/docs", title: "Docs", text: "Contracts and documents to sign, and copies of what you've signed." },
   { href: "/payments/invoices", title: "Payments", text: "Invoices to pay and receipts, in one place." },
 ];
-function Tour({ onEnd }: { onEnd: (skipped: boolean) => void }) {
-  const [stops, setStops] = useState<typeof STOPS | null>(null);
-  useEffect(() => { const t = setTimeout(() => setStops(STOPS.filter((x) => visible(x.href))), 300); return () => clearTimeout(t); }, []); // after the menu has drawn
+/** Coachmarks on the menu links that are there (748:169 for clients, 749:1187 for vendors: "1 of 3 · Bookings"). */
+export function Tour({ stops: all, onEnd, count }: { stops: Stop[]; onEnd: (skipped: boolean) => void; count?: boolean }) {
+  const [stops, setStops] = useState<Stop[] | null>(null);
+  useEffect(() => { const t = setTimeout(() => setStops(all.filter((x) => visible(x.href))), 300); return () => clearTimeout(t); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- after the menu has drawn
   const [i, setI] = useState(0);
   const [box, setBox] = useState<DOMRect | null>(null);
   const s = stops?.[i];
@@ -208,7 +210,7 @@ function Tour({ onEnd }: { onEnd: (skipped: boolean) => void }) {
     <>
       {box && <div className="tour-ring" aria-hidden style={{ top: box.top - 4, left: box.left - 4, width: box.width + 8, height: box.height + 8 }} />}
       <div className="tour" role="dialog" aria-label={`Tour, ${i + 1} of ${stops.length}: ${s.title}`} style={style}>
-        <span className="wp-eyebrow">Tip {i + 1} · {s.title}</span>
+        <span className="wp-eyebrow">{count ? `${i + 1} of ${stops.length}` : `Tip ${i + 1}`} · {s.title}</span>
         <p className="wp-small">{s.text}{!target(s.href) && target("/more", "more") ? " You'll find it under More." : ""}</p>
         <div className="tour-acts"><button type="button" className="linkbtn wp-small" onClick={() => onEnd(true)}>Skip tour</button><span className="sp" />
           <Button size="sm" variant="primary" onClick={() => (i + 1 < stops.length ? setI(i + 1) : onEnd(false))}>{i + 1 < stops.length ? "Next" : "Done"}</Button></div>

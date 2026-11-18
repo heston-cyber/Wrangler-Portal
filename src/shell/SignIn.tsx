@@ -28,7 +28,7 @@ export function CenterCard({ children, wide }: { children: React.ReactNode; wide
 }
 export const CardLogo = () => <span className="wp-logo"><span className="rec" aria-hidden /><img src={wpLogo} alt="Wrangler Productions" /></span>;
 
-export default function SignIn({ invitedEmail, note: lead, owner }: { invitedEmail?: string | null; note?: React.ReactNode; owner?: boolean }) {
+export default function SignIn({ invitedEmail, note: lead, owner, vendor }: { invitedEmail?: string | null; note?: React.ReactNode; owner?: boolean; vendor?: boolean }) {
   const { signIn } = useAuthActions();
   const convex = useConvex();
   const [flow, setFlow] = useState<Flow>(invitedEmail ? "signUp" : "signIn");
@@ -131,8 +131,15 @@ export default function SignIn({ invitedEmail, note: lead, owner }: { invitedEma
       <form onSubmit={onSubmit} className="wp-form">
         <CardLogo />
         {lead && <p className="wp-cardnote">{lead}</p>}
-        <h1 className="wp-h3">{TITLES[flow]}</h1>
-        {flow === "signUp" && invitedEmail && !owner && <p className="wp-body">You've been invited. Set a password for this email to see what's been shared with you.</p>}
+        <h1 className="wp-h3">{flow === "signUp" && invitedEmail && vendor && !owner ? "Welcome." : TITLES[flow]}</h1>
+        {flow === "signUp" && invitedEmail && !owner && !vendor && <p className="wp-body">You've been invited. Set a password for this email to see what's been shared with you.</p>}
+        {/* Phase 7 (vendor Welcome, 749:540): step 1 of 5. Like the business Welcome, the page doesn't name the business or the person. */}
+        {flow === "signUp" && invitedEmail && vendor && !owner && <>
+          <span className="ob-prog" style={{ gridTemplateColumns: "repeat(5, 1fr)" }} aria-label="Step 1 of 5"><i className="on" /><i /><i /><i /><i /></span>
+          <span className="wp-small secondary">Step 1 of 5 · Sign in</span>
+          <span className="wp-eyebrow">You've been added as a vendor</span>
+          <p className="wp-body">Accept bookings, read briefs and send invoices here. Set a password for your email; we'll email a code once to confirm it.</p>
+        </>}
         {/* Phase 7 (business Welcome, 750:916): step 1 of 6. The frame names the business; the page doesn't (anyone can open the link). */}
         {flow === "signUp" && invitedEmail && owner && <>
           <span className="ob-prog" aria-label="Step 1 of 6"><i className="on" /><i /><i /><i /><i /><i /></span>
@@ -154,7 +161,7 @@ export default function SignIn({ invitedEmail, note: lead, owner }: { invitedEma
             </div>
           </div>
         )}
-        {flow === "signUp" && (
+        {flow === "signUp" && !(vendor && invitedEmail) && (
           <div className="wp-field">
             <label className="wp-field-label" htmlFor="name">Your name (shown on your notes)</label>
             <input className="input" id="name" name="name" type="text" autoComplete="name" maxLength={60} />
