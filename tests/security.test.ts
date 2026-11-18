@@ -124,6 +124,13 @@ describe("Phase 5e · Security", () => {
     await settle(w);
     const codeMail = mails.find((m) => m.to === "maya.new@harbor.example")!;
     expect(codeMail.subject).toMatch(/is your code to confirm your new email/);
+    // Nov 18: the code is in the email only. Not in any job's arguments (the job history), and the database keeps its hash.
+    const jobs = await w.t.run(async (ctx) => JSON.stringify(await ctx.db.system.query("_scheduled_functions").collect()));
+    expect(jobs).toContain("security:codeMail");
+    expect(jobs).not.toContain(codeIn(codeMail));
+    const stored = await w.t.run(async (ctx) => (await ctx.db.query("emailChanges").collect())[0]);
+    expect(stored.codeHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(JSON.stringify(stored)).not.toContain(codeIn(codeMail));
     expect((await w.maya.query(api.security.state, {})).pending).toMatchObject({ newEmail: "maya.new@harbor.example" });
     expect(await w.maya.mutation(api.security.confirmEmailChange, { code: "000000" })).toEqual({ error: "wrong" });
     expect(await w.maya.mutation(api.security.confirmEmailChange, { code: codeIn(codeMail) })).toEqual({ ok: true, email: "maya.new@harbor.example" });
@@ -140,6 +147,32 @@ describe("Phase 5e · Security", () => {
     expect(mails.find((m) => m.to === "maya@harbor.example" && m.subject === "The email you sign in with was changed")?.text).toContain("maya.new@harbor.example");
     // She's still Harbor Coffee's client, under the new address.
     expect(await w.maya.query(api.users.me, {})).toMatchObject({ email: "maya.new@harbor.example", role: "client" });
+  }, 30_000);
+
+  test("S3b (Nov 18) a code is made only by its own email job: a newer request or a cancel before it runs sends nothing old, and no code matches until it's made", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const secret = await new Scrypt().hash(PW);
+    await w.t.run(async (ctx) => { const u = (await ctx.db.query("users").withIndex("email", (q) => q.eq("email", "maya@harbor.example")).unique())!; await ctx.db.insert("authAccounts", { userId: u._id, provider: "password", providerAccountId: "maya@harbor.example", secret } as never); });
+    // Jobs wait (timers held) until settle, so both requests are made before either email job runs.
+    vi.useFakeTimers({ now: Date.now(), toFake: ["Date", "setTimeout", "clearTimeout"] });
+    await w.maya.action(api.security.startEmailChange, { newEmail: "first@harbor.example", current: PW });
+    // Before the job runs there is no code: nothing matches, not even the placeholder.
+    expect(await w.maya.mutation(api.security.confirmEmailChange, { code: "pending" })).toEqual({ error: "wrong" });
+    vi.setSystemTime(Date.now() + 1_000);
+    await w.maya.action(api.security.startEmailChange, { newEmail: "second@harbor.example", current: PW }); // replaces the first
+    await settle(w);
+    expect(mails.filter((m) => m.to === "first@harbor.example")).toEqual([]); // the first job saw it was replaced
+    const second = mails.find((m) => m.to === "second@harbor.example")!;
+    expect(await w.maya.mutation(api.security.confirmEmailChange, { code: codeIn(second) })).toEqual({ ok: true, email: "second@harbor.example" });
+    // A cancel before the job runs: no email at all.
+    mails.length = 0;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await w.maya.action(api.security.startEmailChange, { newEmail: "third@harbor.example", current: PW }).catch(() => null);
+    await w.maya.mutation(api.security.cancelEmailChange, {});
+    await settle(w);
+    expect(mails.filter((m) => m.to === "third@harbor.example")).toEqual([]);
   }, 30_000);
 
   test("S4 five wrong codes cancel the change; an expired code does nothing", async () => {

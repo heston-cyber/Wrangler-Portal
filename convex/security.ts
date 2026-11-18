@@ -29,6 +29,8 @@ const CODE_TRIES = 5;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const when = (ms: number) => new Date(ms).toLocaleString("en-US", { timeZone: TZ, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 const codeHash = (userId: string, code: string) => sha256Hex(`email-change:${userId}:${code}`);
+/** A change whose email job hasn't made its code yet. No hash (64 hex characters) ever equals it. */
+const NO_CODE = "pending";
 
 /** The signed-in person (owner, team member, client or vendor). A call-sheet guest or a removed team member is refused. */
 async function whoAmI(ctx: Ctx) {
@@ -145,12 +147,26 @@ export const startEmailChangeCore = internalMutation({
     if (await emailTaken(ctx, e)) throw new ConvexError("That email already has a portal login. Use another one.");
     await bumpDay(ctx, "emailChange", me.userId);
     const now = Date.now();
-    const code = sixDigits();
     const row = await ctx.db.query("emailChanges").withIndex("by_user", (q) => q.eq("userId", me.userId)).unique();
-    const fields = { newEmail: e, codeHash: await codeHash(me.userId, code), tries: 0, sentAt: now, until: now + CODE_MIN * 60_000 };
+    // Nov 18 (Heston approved the read-back, 17:31): the code is no longer made here. A scheduled job's arguments stay in
+    // Convex's job history, so the plain code sat there while it worked. The email job makes it (codeMail), stores only its
+    // hash (setCode) and sends it. Until then the change has no code at all, so nothing can match it.
+    const fields = { newEmail: e, codeHash: NO_CODE, tries: 0, sentAt: now, until: now + CODE_MIN * 60_000 };
     if (row) await ctx.db.patch(row._id, fields); else await ctx.db.insert("emailChanges", { userId: me.userId, ...fields });
-    await ctx.scheduler.runAfter(0, internal.security.codeMail, { userId: me.userId, to: e, code, at: now });
+    await ctx.scheduler.runAfter(0, internal.security.codeMail, { userId: me.userId, to: e, at: now });
     return { ok: true as const, until: fields.until };
+  },
+});
+
+/** The email job's step: this change's code hash, only while it's still the change that job was made for (a newer request
+ *  or a cancel wins). Returns whether to send. */
+export const setCode = internalMutation({
+  args: { userId: v.id("users"), to: v.string(), at: v.number(), codeHash: v.string() },
+  handler: async (ctx, { userId, to, at, codeHash: hash }) => {
+    const row = await ctx.db.query("emailChanges").withIndex("by_user", (q) => q.eq("userId", userId)).unique();
+    if (!row || row.sentAt !== at || row.newEmail !== to || row.codeHash !== NO_CODE || row.until <= Date.now()) return false;
+    await ctx.db.patch(row._id, { codeHash: hash });
+    return true;
   },
 });
 
@@ -225,9 +241,14 @@ export const moveContacts = internalMutation({
   },
 });
 
+/** Email 47's code to the new address. The code is made here and lives only in this run and the email (Nov 18): the job's
+ *  arguments, the job history and the database never hold it, only its hash. */
 export const codeMail = internalAction({
-  args: { userId: v.id("users"), to: v.string(), code: v.string(), at: v.number() },
-  handler: async (ctx, { userId, to, code, at }): Promise<void> => {
+  args: { userId: v.id("users"), to: v.string(), at: v.number() },
+  handler: async (ctx, { userId, to, at }): Promise<void> => {
+    const code = sixDigits();
+    const send: boolean = await ctx.runMutation(internal.security.setCode, { userId, to, at, codeHash: await codeHash(userId, code) });
+    if (!send) return; // replaced, cancelled or run out before this job ran
     const brand = await ctx.runQuery(internal.security.brand, {});
     await deliverOnce(ctx, `email-change-code:${userId}:${at}`, "code", to, newEmailCodeMail(brand, { code, minutes: CODE_MIN }), brand.replyTo, null);
   },
