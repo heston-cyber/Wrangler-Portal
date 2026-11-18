@@ -242,10 +242,12 @@ export const markSent = internalMutation({
     let p = await ctx.db.get(a.proposalId);
     const build = p ? await ctx.db.get(p.buildId) : null;
     if (!p || !build) throw new ConvexError("That proposal isn't here.");
-    await audit(ctx, { kind: "sent", text: `${a.resend ? "sent again" : "sent"} proposal ${p.number ?? ""}`.trim(), where: "Docs › Proposals", link: `/proposals/${p._id}` });
     const now = Date.now();
-    // Nov 18: sending more people a link that has already expired would hand them a dead link.
+    // Nov 18: sending more people a link that has already expired would hand them a dead link (review L2: refused before
+    // Activity records a send). Once it's out, the expiry changes on its page, not here.
     if (p.status === "sent" && linkExpired(p, now)) return { error: "The links have expired. Change when they expire first, then send." };
+    if (p.status === "sent" && a.expiresInDays !== undefined) return { error: "It's already been sent. Change when the links expire on its page." };
+    await audit(ctx, { kind: "sent", text: `${a.resend ? "sent again" : "sent"} proposal ${p.number ?? ""}`.trim(), where: "Docs › Proposals", link: `/proposals/${p._id}` });
     if (a.resend && p.token && a.to === undefined && !a.copyLink) {
       if (p.status !== "sent") throw new ConvexError("Only an open proposal can be sent again.");
       await ctx.db.patch(p._id, { updatedAt: now, history: [...p.history, { kind: "resent", at: now, by: by(me), detail: p.contact?.email }].slice(-60) });
@@ -292,6 +294,7 @@ export const markSent = internalMutation({
       history: [...p.history, { kind: "sent", at: now, by: by(me), detail: sends.length ? sends.map((x) => x.email).join(", ").slice(0, 400) : "anyone with the link" }, ...(a.move && dealId ? [{ kind: "moved", at: now, by: by(me), detail: "Quoted" }] : [])].slice(-60),
     });
     await ctx.db.patch(build._id, { renderedAt: now });
+    if (a.expiresInDays !== undefined) await ctx.scheduler.runAt(expiryFrom(a.expiresInDays, now), internal.proposals.expiryTick, { proposalId: p._id, at: expiryFrom(a.expiresInDays, now) });
     return { at: now, legacy: null, sends, link: linkToken ? proposalLink(linkToken) : null };
   },
 });
@@ -347,6 +350,7 @@ export const newLink = mutation({
     const { me } = await ownerBiz(ctx);
     const p = await ctx.db.get(proposalId);
     if (!p) throw new ConvexError("That proposal isn't here.");
+    if (linkExpired(p)) throw new ConvexError("The links have expired. Change when they expire first, then make a new link."); // review L1
     return proposalLink(await newCopiedLink(ctx, p, by(me)));
   },
 });
@@ -362,7 +366,19 @@ export const setLinkExpiry = mutation({
     const now = Date.now();
     const linkExpiresAt = a.days === null ? undefined : expiryFrom(a.days, now);
     await ctx.db.patch(p._id, { linkExpiresAt, updatedAt: now, history: [...p.history, { kind: "expiry_changed", at: now, by: by(me), detail: linkExpiresAt ? new Date(linkExpiresAt).toISOString() : "never" }].slice(-60) });
+    if (linkExpiresAt) await ctx.scheduler.runAt(linkExpiresAt, internal.proposals.expiryTick, { proposalId: p._id, at: linkExpiresAt });
     return { linkExpiresAt: linkExpiresAt ?? null };
+  },
+});
+
+/** Review L3: at the expiry time, touch the proposal so pages already open re-run and show "expired". Nothing else
+ *  changes; a tick whose time was since changed does nothing. */
+export const expiryTick = internalMutation({
+  args: { proposalId: v.id("proposals"), at: v.number() },
+  handler: async (ctx, { proposalId, at }) => {
+    const p = await ctx.db.get(proposalId);
+    if (p && p.linkExpiresAt === at) await ctx.db.patch(p._id, { linkExpiresAt: at });
+    return null;
   },
 });
 
@@ -464,7 +480,7 @@ export const page = query({
       number: p.number, title: build?.title ?? "Proposal", status: p.status as "sent" | "accepted" | "declined" | "void", for: forWho(f), via: f.via === "link" ? "link" as const : "email" as const,
       // Phase 6 (Heston, Nov 17): a withdrawn proposal shows its banner only, so its price and PDF aren't sent either
       totalCents: p.status === "void" ? 0 : p.totalCents ?? 0, depositCents: p.status === "void" ? 0 : p.depositCents ?? 0, depositPct: p.status === "void" ? 0 : p.depositPct ?? 0, sentAt: p.sentAt ?? p.createdAt, fromName: p.fromName ?? null,
-      pdfUrl: p.status === "void" ? null : await fileLink(p.pdfId, `${p.number} ${build?.title ?? "Proposal"}.pdf`), answer: stateFor(f), // Phase 6 M1: a 10-20 minute link; a withdrawn one shows only its banner
+      pdfUrl: p.status === "void" ? null : await fileLink(p.pdfId, `${p.number} ${build?.title ?? "Proposal"}.pdf`, Date.now(), p.linkExpiresAt), answer: stateFor(f), // Phase 6 M1: a 10-20 minute link (review L3, Nov 18: never past the link's expiry); a withdrawn one shows only its banner
       business,
     };
   },

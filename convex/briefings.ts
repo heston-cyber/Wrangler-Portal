@@ -312,7 +312,18 @@ export const setLinkExpiry = mutation({
     const now = Date.now();
     const linkExpiresAt = a.days === null ? undefined : expiryFrom(a.days, now);
     await ctx.db.patch(x._id, { linkExpiresAt, updatedAt: now, history: [...x.history, { kind: "expiry_changed", at: now, by: by(me), detail: linkExpiresAt ? new Date(linkExpiresAt).toISOString() : "never" }].slice(-60) });
+    if (linkExpiresAt) await ctx.scheduler.runAt(linkExpiresAt, internal.briefings.expiryTick, { briefingId: x._id, at: linkExpiresAt });
     return { linkExpiresAt: linkExpiresAt ?? null };
+  },
+});
+
+/** Review L3: at the expiry time, touch the briefing so pages already open re-run and show "expired". */
+export const expiryTick = internalMutation({
+  args: { briefingId: v.id("briefings"), at: v.number() },
+  handler: async (ctx, { briefingId, at }) => {
+    const x = await ctx.db.get(briefingId);
+    if (x && x.linkExpiresAt === at) await ctx.db.patch(x._id, { linkExpiresAt: at });
+    return null;
   },
 });
 
@@ -330,6 +341,7 @@ export const shareStart = internalMutation({
     if (!to.length && !a.copyLink) return { error: "Add who it goes to (Send to)." };
     if (x.linkOff) return { error: "The link is turned off. Turn it back on first, so the new links work." };
     if (x.status === "sent" && linkExpired(x)) return { error: "The links have expired. Change when they expire first, then share." }; // Nov 18
+    if (x.status === "sent" && a.expiresInDays !== undefined) return { error: "It's already been shared. Change when the links expire on its page." };
     await audit(ctx, { kind: "sent", text: `shared the briefing ${build.title ?? ""}${to.length ? ` with ${to.length} ${to.length === 1 ? "person" : "people"}` : " by link"}`.replace("  ", " "), where: "Vendors › Briefings", link: `/vendors/briefings/${x._id}` });
     const now = Date.now();
     // As proposals (review fix): a file that isn't a fresh PDF upload is never touched; one this caller just uploaded
@@ -373,6 +385,7 @@ export const shareStart = internalMutation({
       link = linkOf(token);
     }
     await ctx.db.patch(x._id, { ...patch, sendTo: undefined, history: hist.slice(-60) });
+    if (patch.linkExpiresAt) await ctx.scheduler.runAt(patch.linkExpiresAt, internal.briefings.expiryTick, { briefingId: x._id, at: patch.linkExpiresAt }); // review L3
     return { at: now, sends, ...(link ? { link } : {}) };
   },
 });

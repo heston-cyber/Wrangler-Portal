@@ -11,6 +11,7 @@ import { fakeStripe, world } from "./payHarness";
 import { newId, pageOf, type Page } from "../convex/lib/wsBuilder";
 
 const api = anyApi;
+const internal = anyApi;
 beforeAll(() => {
   process.env.ALLOWED_EMAILS = "heston@wranglerproductions.com";
   process.env.SITE_URL = "https://app.wranglerportal.com";
@@ -347,12 +348,22 @@ describe("Nov 18 · a proposal's links expire", () => {
     let g = await w.heston.query(api.proposals.get, { proposalId: id });
     expect(g).toMatchObject({ status: "sent", viewedAt: null, response: null });
     // E3: sending more people a dead link is refused until the expiry changes.
+    const audits = await w.t.run((ctx) => ctx.db.query("auditLog").collect());
     await expect(w.heston.action(api.proposals.send, { proposalId: id, to: "kim@lee.example" })).rejects.toThrow(/expired/);
+    expect(await w.t.run((ctx) => ctx.db.query("auditLog").collect())).toHaveLength(audits.length); // review L2: no "sent" in Activity
+    await expect(w.heston.mutation(api.proposals.newLink, { proposalId: id })).rejects.toThrow(/expired/); // review L1: no dead new link
     // E4: another business's owner, a client and a stranger can't change it; the owner can (7 days from now, then never).
     for (const who of [w.boss, w.maya, w.t]) await expect(who.mutation(api.proposals.setLinkExpiry, { proposalId: id, days: 7 })).rejects.toThrow();
     await expect(w.heston.mutation(api.proposals.setLinkExpiry, { proposalId: id, days: 5 })).rejects.toThrow(); // only 1, 2, 3, 7, 30
     expect(await w.heston.mutation(api.proposals.setLinkExpiry, { proposalId: id, days: 7 })).toEqual({ linkExpiresAt: T0 + 9 * DAY });
     expect(await w.t.query(api.proposals.page, { token: sam })).toMatchObject({ expired: false, status: "sent" });
+    // An expiry can't ride along on a later send; it changes on the proposal's page.
+    await expect(w.heston.action(api.proposals.send, { proposalId: id, to: "kim@lee.example", expiresInDays: 30 })).rejects.toThrow(/already been sent/);
+    // Review L3: the tick at the expiry time touches it (so open pages re-run); one whose time was since changed does nothing.
+    const before = await w.t.run((ctx) => ctx.db.get(id));
+    await w.t.mutation(internal.proposals.expiryTick, { proposalId: id, at: T0 + 2 * DAY });
+    expect((await w.t.run((ctx) => ctx.db.get(id)))!.linkExpiresAt).toBe(before!.linkExpiresAt);
+    expect(await w.t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect()).then((x) => x.filter((f) => f.name.includes("expiryTick")).length)).toBe(2);
     await w.heston.mutation(api.proposals.setLinkExpiry, { proposalId: id, days: null });
     vi.setSystemTime(T0 + 400 * DAY);
     expect((await w.t.query(api.proposals.page, { token: link })).expired).toBe(false);

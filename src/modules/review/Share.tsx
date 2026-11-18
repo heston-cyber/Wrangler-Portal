@@ -192,7 +192,7 @@ export function EditShare({ s, onClose, show }: { s: PublicShare; onClose: () =>
   const save = async (e: React.FormEvent) => {
     e.preventDefault(); setBusy(true); setError(null);
     try {
-      await update({ shareId: s._id, access, allVersions, downloads, emailNewVersions: emailNew, expiresAt: expiryOf(exp, s.expiresAt ?? null), ...(passcode !== null ? { passcode: passcode.trim() || null } : {}) });
+      await update({ shareId: s._id, access, allVersions, downloads, emailNewVersions: emailNew, ...(exp === "keep" ? {} : { expiresAt: expiryOf(exp) }) /* review L5: keeping it sends nothing */, ...(passcode !== null ? { passcode: passcode.trim() || null } : {}) });
       show("Share saved"); onClose();
     } catch (ex) { setError(err(ex)); setBusy(false); }
   };

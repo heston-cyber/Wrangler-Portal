@@ -239,12 +239,13 @@ export function UpdateBriefing({ b, makePdf, onClose, show }: { b: BriefingInfo;
   const [notify, setNotify] = useState(false);
   const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
   const n = b.emailable;
+  const expired = b.link.expiresAt !== null && b.link.expiresAt !== undefined && b.link.expiresAt <= Date.now(); // review L4
   const go = async () => {
     setBusy(true); setErr(null);
     try {
       const blob = await makePdf();
       const storageId = await uploadToStorage(await uploadUrl({}), new File([blob], `${b.title}.pdf`, { type: "application/pdf" }));
-      const r = await update({ briefingId: b._id, storageId, notify: notify && n > 0 });
+      const r = await update({ briefingId: b._id, storageId, notify: notify && n > 0 && !expired });
       show(r.emailed ? `Updated. ${plural(r.emailed, "person was", "people were")} emailed.` : r.held ? "Updated. The emails were held (email sending is limited on this site)." : "Updated. Every link shows the new version.");
       onClose();
     } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
@@ -252,8 +253,8 @@ export function UpdateBriefing({ b, makePdf, onClose, show }: { b: BriefingInfo;
   return (
     <Modal onClose={onClose} label="Update the link" width={520}>
       <div className="crm-dialog bf-share">
-        <DialogHeader eyebrow={`Update · ${b.kindName}`} title="Update the link?" body={`Everyone's link${b.link.copied ? ", the copied link" : ""} and the vendor portal show this version from now on. The PDF they had before is replaced.${b.link.off ? " The link is turned off, so nobody can open it until you turn it back on." : ""}`} onClose={onClose} />
-        {n > 0 && !b.link.off && <Checkbox checked={notify} onChange={setNotify} label={`Email the ${plural(n, "person", "people")} it was sent to that it changed`} hint="Off: nobody is emailed; they see the new version next time they open it." />}
+        <DialogHeader eyebrow={`Update · ${b.kindName}`} title="Update the link?" body={`Everyone's link${b.link.copied ? ", the copied link" : ""} and the vendor portal show this version from now on. The PDF they had before is replaced.${b.link.off ? " The link is turned off, so nobody can open it until you turn it back on." : expired ? " The links have expired, so nobody can open them until you change when they expire." : ""}`} onClose={onClose} />
+        {n > 0 && !b.link.off && !expired && <Checkbox checked={notify} onChange={setNotify} label={`Email the ${plural(n, "person", "people")} it was sent to that it changed`} hint="Off: nobody is emailed; they see the new version next time they open it." />}
         <p className="wp-small secondary">Anyone who marked it read stays marked read.</p>
         {err && <p className="error" role="alert">{err}</p>}
         <div className="dfoot">

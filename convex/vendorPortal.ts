@@ -6,6 +6,8 @@
 // Who may call: a signed-in vendor login (users.role "vendor") with a live vendor membership in the business, whose
 // vendor record there is still on the list. Owners and clients are refused here, and vendors are refused everywhere
 // else (requireMe, requireSignedIn).
+import { linkExpired } from "./lib/linkExpiry";
+import { fileLink } from "./lib/fileLinks";
 import { focusBusiness, internalAction, internalQuery, mutation, query } from "./lib/functions";
 import { sessionBlocked } from "./lib/sessionLock";
 import { claimUpload, deleteFile } from "./lib/fileOwners";
@@ -260,7 +262,11 @@ export const briefing = query({
     // Review M1: emailed to them since D147, the PDF comes through their own link (/b-pdf/<token>), so turning the link
     // off stops it; a briefing sent before D147 (no link of its own) keeps its file address.
     const site = (process.env.CONVEX_SITE_URL ?? "").replace(/\/$/, "");
-    const pdfUrl = r.r && site ? `${site}/b-pdf/${r.r.token}` : r.x.pdfId ? await ctx.storage.getUrl(r.x.pdfId) : null;
+    // Nov 18 review M1: the portal isn't a link, so an expired emailed link doesn't take the PDF away from the signed-in
+    // vendor it was sent to; they get a 10-20 minute file link instead (turning the link off still stops it: sentToMe).
+    const pdfUrl = r.r && site && !linkExpired(r.x) ? `${site}/b-pdf/${r.r.token}`
+      : r.r ? await fileLink(r.x.pdfId, `${(r.x.shown?.title ?? "Briefing").replace(/[^\w .·-]+/g, "").trim().slice(0, 80) || "Briefing"}.pdf`)
+      : r.x.pdfId ? await ctx.storage.getUrl(r.x.pdfId) : null;
     return { businessId: r.me.biz, ...(await ownerOf(ctx, r.me.biz)), ...(await briefRow(ctx, r.x)), pdfUrl };
   },
 });
