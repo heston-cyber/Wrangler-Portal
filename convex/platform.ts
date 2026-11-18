@@ -84,21 +84,22 @@ export const overview = query({
   },
 });
 
-/** Q4 (Heston, Nov 18): before a business invite goes out, is another business already inviting this email as a client,
- *  vendor or team member? A count only (D110: this page never shows another business's people), asked by the Invite a
- *  business dialog. Your business invite wins at sign-up and the other invite stays unaccepted until it runs out.
- *  Plain access, because the other businesses' invites aren't the admin's focus business's; admin only. */
+/** Q4 (Heston, Nov 18): before a business invite goes out, does this email already have an open invite from a business
+ *  (not yet accepted or joined) as a client, vendor or team member? Yes or no only (D110: this page never shows another
+ *  business's people), asked by the Invite a business dialog. Your business invite wins at sign-up and the other invite
+ *  stays unaccepted until it runs out. `inUse` is the same check Send invite makes: an email that already has a login
+ *  can't be invited as a business at all. Plain access, because those invites aren't the admin's focus business's; admin only. */
 export const otherInvites = rawQuery({
   args: { email: v.string() },
   handler: async (ctx, a) => {
     await platformAdmin(ctx);
     const email = a.email.trim().toLowerCase();
-    if (!EMAIL.test(email) || email.length > 254) return { others: 0 };
+    if (email.length > 254 || !EMAIL.test(email)) return { open: false, inUse: false };
     const now = Date.now();
-    const clients = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()).filter((i) => !i.revokedAt && clientLive(i, now)).length;
-    const vendors = (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", email)).collect()).filter((x) => !x.archivedAt && x.invitedAt && vendorLive(x, now)).length;
-    const team = (await ctx.db.query("teamInvites").withIndex("by_email", (q) => q.eq("email", email)).collect()).filter((i) => !i.revokedAt && !i.acceptedAt && i.expiresAt > now).length;
-    return { others: clients + vendors + team };
+    const clients = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()).some((i) => !i.revokedAt && !i.acceptedAt && clientLive(i, now));
+    const vendors = (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", email)).collect()).some((x) => !x.archivedAt && !x.joinedAt && x.invitedAt && vendorLive(x, now));
+    const team = (await ctx.db.query("teamInvites").withIndex("by_email", (q) => q.eq("email", email)).collect()).some((i) => !i.revokedAt && !i.acceptedAt && i.expiresAt > now);
+    return { open: clients || vendors || team, inUse: await emailInUse(ctx, email) };
   },
 });
 

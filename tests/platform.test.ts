@@ -6,6 +6,7 @@ import { anyApi } from "convex/server";
 import type { Id } from "../convex/_generated/dataModel";
 import { world } from "./payHarness";
 import { inviteFor } from "../convex/lib/invites";
+import { ensureMembership } from "../convex/lib/business";
 
 const api = anyApi;
 beforeAll(async () => {
@@ -140,10 +141,11 @@ describe("Phase 7 step 1 · invites and the platform admin page", () => {
     await w.heston.mutation(api.clients.invite, { email: SAM, name: "Sam Ortiz" });
     await w.heston.mutation(api.vendors.add, { name: "Sam Ortiz", email: SAM, roles: ["Editor"], rates: [], invite: true });
     expect((await w.t.run((ctx) => inviteFor(ctx, SAM))).kind).toBe("client");
-    // The admin page warns, with a count and nothing else; nobody else can ask.
-    expect(await w.heston.query(api.platform.otherInvites, { email: SAM })).toEqual({ others: 2 });
-    expect(await w.heston.query(api.platform.otherInvites, { email: "free@else.example" })).toEqual({ others: 0 });
-    expect(await w.heston.query(api.platform.otherInvites, { email: "not an email" })).toEqual({ others: 0 });
+    // The admin page warns, yes or no and nothing else; nobody else can ask.
+    expect(await w.heston.query(api.platform.otherInvites, { email: SAM })).toEqual({ open: true, inUse: false });
+    expect(await w.heston.query(api.platform.otherInvites, { email: "free@else.example" })).toEqual({ open: false, inUse: false });
+    expect(await w.heston.query(api.platform.otherInvites, { email: "not an email" })).toEqual({ open: false, inUse: false });
+    expect(await w.heston.query(api.platform.otherInvites, { email: "maya@harbor.example" })).toMatchObject({ inUse: true }); // a client's login: Send invite would refuse
     for (const who of [w.boss, w.maya, w.t]) await expect(who.query(api.platform.otherInvites, { email: SAM })).rejects.toThrow();
     // Your business invite goes out, and now it wins.
     await w.heston.mutation(api.platform.invite, { business: "Northline Creative", email: SAM });
@@ -165,7 +167,56 @@ describe("Phase 7 step 1 · invites and the platform admin page", () => {
     expect(after.memberships.map((m) => m.role)).toEqual(["owner"]);
     // Once used, the business invite is spent and doesn't come back; nothing more is added at a later sign-in.
     expect((await w.t.run((ctx) => inviteFor(ctx, SAM))).kind).toBe("client");
-    expect(await w.heston.query(api.platform.otherInvites, { email: SAM })).toEqual({ others: 2 });
+    expect(await w.heston.query(api.platform.otherInvites, { email: SAM })).toEqual({ open: true, inUse: true });
+  });
+
+  // Reviews (Phase 7b, M1): no path may leave the new owner holding client or vendor memberships of another business.
+  const roles = (w: W, email: string) => w.t.run(async (ctx) => (await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", email)).collect()).filter((m) => !m.revokedAt).map((m) => m.role).sort());
+
+  test("Q4 reviews R1: a client invite that arrives while the owner's code is still pending makes no membership", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    await w.heston.mutation(api.platform.invite, { business: "Northline Creative", email: SAM });
+    await settle(w);
+    await w.t.action(api.auth.signIn, { provider: "password", params: { flow: "signUp", email: SAM, password: PW, name: "Sam Ortiz" } }); // no code entered yet
+    await w.heston.mutation(api.clients.invite, { email: SAM, name: "Sam Ortiz" });
+    expect(await roles(w, SAM)).toEqual([]);
+    const code = codeIn(mails.filter((m) => m.to === SAM).pop()!);
+    await w.t.action(api.auth.signIn, { provider: "password", params: { flow: "email-verification", email: SAM, code } });
+    expect(await roles(w, SAM)).toEqual(["owner"]);
+  });
+
+  test("Q4 reviews R2: archiving and restoring a vendor row never gives an owner a vendor membership", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const vendorId = await w.heston.mutation(api.vendors.add, { name: "Sam Ortiz", email: SAM, roles: ["Editor"], rates: [], invite: true }) as Id<"vendors">;
+    await w.heston.mutation(api.platform.invite, { business: "Northline Creative", email: SAM });
+    await settle(w);
+    await signUp(w, mails, SAM, "Sam Ortiz");
+    await w.heston.mutation(api.vendors.archive, { vendorId, archived: true });
+    await w.heston.mutation(api.vendors.archive, { vendorId, archived: false });
+    await w.heston.mutation(api.vendors.invite, { vendorId }); // and the invite sent again
+    expect(await roles(w, SAM)).toEqual(["owner"]);
+  });
+
+  test("Q4 reviews R3: memberships a call-sheet guest login already carries are switched off when the business invite is accepted", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const guest = await w.t.run((ctx) => ctx.db.insert("users", { email: SAM, name: "Sam", role: "guest" }));
+    await w.heston.mutation(api.platform.invite, { business: "Northline Creative", email: SAM });
+    await settle(w);
+    const vendorId = await w.heston.mutation(api.vendors.add, { name: "Sam Ortiz", email: SAM, roles: ["Editor"], rates: [], invite: true }) as Id<"vendors">;
+    await w.heston.mutation(api.clients.invite, { email: SAM, name: "Sam Ortiz" });
+    expect(await roles(w, SAM)).toEqual([]); // a guest login gets nothing from another business's invite
+    // (an older invite may already have put them there: the sign-up must still clear them)
+    await w.t.run(async (ctx) => { await ensureMembership(ctx, w.A, SAM, "client", guest); await ensureMembership(ctx, w.A, SAM, "vendor", guest); await ctx.db.patch(vendorId, { joinedAt: Date.now() }); });
+    expect(await roles(w, SAM)).toEqual(["client", "vendor"]);
+    await signUp(w, mails, SAM, "Sam Ortiz");
+    expect(await roles(w, SAM)).toEqual(["owner"]);
+    expect((await w.t.run((ctx) => ctx.db.get(vendorId)))!.joinedAt).toBeUndefined();
   });
 
   test("Q4 an expired business invite never beats a live client invite", async () => {
@@ -179,7 +230,7 @@ describe("Phase 7 step 1 · invites and the platform admin page", () => {
     expect((await w.t.run((ctx) => inviteFor(ctx, "leo@parkstudio.example"))).kind).toBe("business"); // still live: wins
     vi.setSystemTime(t0 + 15 * DAY);
     expect((await w.t.run((ctx) => inviteFor(ctx, "leo@parkstudio.example"))).kind).toBe("client"); // the business invite ran out
-    expect(await w.heston.query(api.platform.otherInvites, { email: "leo@parkstudio.example" })).toEqual({ others: 1 });
+    expect(await w.heston.query(api.platform.otherInvites, { email: "leo@parkstudio.example" })).toEqual({ open: true, inUse: false });
     vi.useRealTimers();
   });
 });

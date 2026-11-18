@@ -53,6 +53,12 @@ export async function acceptBusinessInvite(ctx: MutationCtx, rawEmail: string, u
   // An email that already owns a business (or works in one) never gets a second one this way.
   const ms = (await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", email)).collect()).filter((m) => !m.revokedAt);
   if (ms.some((m) => m.role === "owner" || m.role === "team")) return null;
+  // Phase 7b reviews (M1), following Q4 (Heston, Nov 18: your business invite wins and the other stays unaccepted): any
+  // client or vendor membership another business's invite already made on this login (a call-sheet guest login can carry
+  // them in) is switched off, and a vendor row it marked joined is put back to waiting. The other business can invite again
+  // once they've set up; nothing of theirs is reachable meanwhile.
+  for (const m of ms) if (m.role === "client" || m.role === "vendor") await ctx.db.patch(m._id, { revokedAt: now });
+  for (const x of await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", email)).collect()) if (x.joinedAt) await ctx.db.patch(x._id, { joinedAt: undefined });
   const inv = check.invite;
   const name = inv.business.trim().replace(/\s+/g, " ").slice(0, 80) || "My business";
   const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) || "business";

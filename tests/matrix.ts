@@ -289,7 +289,11 @@ export function publicFunctions(): Array<{ key: string; ref: any }> {
     const mod = file.slice(0, -3);
     if (mod === "auth") continue; // Convex Auth's own signIn/signOut, exercised in the sign-up tests
     const src = readFileSync(join(dir, file), "utf8");
-    for (const m of src.matchAll(/^export const (\w+) = (query|mutation|action)\(/gm)) out.push({ key: `${mod}.${m[1]}`, ref: (anyApi as any)[mod][m[1]] });
+    // Phase 7b reviews (M2, Nov 18): a function made with an aliased wrapper (`import { query as rawQuery }`: platform.otherInvites,
+    // clients.canSignUp) was never found, so the tests never called it. Every alias of query/mutation/action counts too.
+    const wrappers = ["query", "mutation", "action", ...[...src.matchAll(/\b(?:query|mutation|action) as (\w+)/g)].map((a) => a[1]), ...[...src.matchAll(/\b(raw(?:Query|Mutation|Action))\b/g)].map((a) => a[1])];
+    const made = new RegExp(`^export const (\\w+) = (${[...new Set(wrappers)].join("|")})\\(`, "gm");
+    for (const m of src.matchAll(made)) out.push({ key: `${mod}.${m[1]}`, ref: (anyApi as any)[mod][m[1]] });
   }
   return out;
 }

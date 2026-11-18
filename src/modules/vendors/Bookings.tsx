@@ -52,7 +52,7 @@ export function BookDialog({ onClose, projectId, vendorId }: { onClose: () => vo
     if (!vendor) return;
     const r = openRole(vendor.roles, vendor.rates, role);
     setRole(r);
-    const own = vendor.rates.find((x) => x.role === r);
+    const own = vendor.rates.find((x) => x.role.trim().toLowerCase() === r.trim().toLowerCase()); // the same matching as the suggestion
     if (own) setUnit(own.unit);
   }, [vid, f === undefined]); // eslint-disable-line react-hooks/exhaustive-deps
   const sug = useMemo(() => (f && vendor && role ? suggestRate(f.rates, vendor.rates, role, unit) : null), [f, vendor, role, unit]);
