@@ -1,7 +1,7 @@
 // Client accounts (client side C1, Oct 23). Owner only: invite an email, see and revoke invites. An invited email
 // can then make an account on the sign-in page; everyone else is refused by auth.ts. Shares (C2) call invite too.
 import { INVITE_MS, inviteFor } from "./lib/invites";
-import { type MutationCtx } from "./_generated/server";
+import { type MutationCtx, query as rawQuery } from "./_generated/server";
 import { audit } from "./lib/audit";
 import { mutation, query } from "./lib/functions";
 import { clampRounds } from "./lib/rounds";
@@ -11,6 +11,7 @@ import { requireMe, requireSignedIn, requireAll } from "./lib/access";
 import { allowedEmails } from "./auth";
 import { prefsByEmail } from "./emails";
 import { businessInScope, ensureMembership } from "./lib/business";
+import { inviteCap } from "./lib/rate";
 import type { Doc, Id } from "./_generated/dataModel";
 import { signedThumbUrl, signStillUrl } from "./lib/media";
 import { docLabel } from "./lib/wsLayout";
@@ -86,7 +87,9 @@ export const listInvites = query({
 
 // May this email make an account? Asked by the sign-up page before it tries, so the reason is plain when it can't
 // (the auth error itself is redacted in production). Says only invited / not invited, nothing else.
-export const canSignUp = query({
+// Phase 7 reviews (L2): plain access, as inviteFor expects. The row-level guard pinned a signed-out caller to the first
+// business it read, so a live invite from a second business could be missed and an expired one shown instead.
+export const canSignUp = rawQuery({
   args: { email: v.string() },
   handler: async (ctx, { email }) => {
     const e = cleanEmail(email);
@@ -190,6 +193,7 @@ export const invitePerson = mutation({
     const r = await ensureInvite(ctx, p.email, p.name);
     await audit(ctx, { kind: "sent", text: `sent a portal invite to ${p.name ?? p.email}`, where: "Clients", link: `/clients/${p.clientId}` });
     // Phase 1 step 5: the invite email (one per press; a second press within a minute doesn't send another).
+    await inviteCap(ctx, businessInScope(ctx) ?? "default", r.email); // Phase 7 reviews (M4)
     await ctx.scheduler.runAfter(0, internal.emails.portalInvite, { email: r.email, sendKey: String(Math.floor(Date.now() / 60_000)) });
     return { already: r.already, emailed: true };
   },

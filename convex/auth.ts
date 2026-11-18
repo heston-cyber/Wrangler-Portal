@@ -34,7 +34,7 @@ function codeByEmail(id: string, kind: "verify" | "reset") {
     async sendVerificationRequest({ identifier: email, token }, ctx?: unknown) {
       // Sign-in happens before we know which business it's for. Wrangler's own people get the portal's default business
       // (as before); anyone else gets WranglerPortal's name (Phase 7, decision 4).
-      const who = await (ctx as ActionCtx | undefined)?.runQuery(internal.platform.codeBrand, { email }).catch(() => "wrangler" as const) ?? "wrangler";
+      const who = await (ctx as ActionCtx | undefined)?.runQuery(internal.platform.codeBrand, { email }).catch(() => "platform" as const) ?? "platform"; // reviews (L7): unknown → the neutral name
       const b = who === "platform" ? platformBrand(null)
         : brandFrom({ name: "Wrangler Productions", legalName: "Hill Creative LLC", ownerName: "Heston Hill" }, { ownerEmail: "heston@wranglerproductions.com", logoUrl: null, isDefault: true });
       const m = kind === "verify" ? signInCodeMail(b, { code: token, minutes: CODE_MINUTES }) : resetMail(b, { code: token, minutes: CODE_MINUTES });

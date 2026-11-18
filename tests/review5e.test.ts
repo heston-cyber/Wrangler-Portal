@@ -43,7 +43,7 @@ async function world() {
 
 async function vendorWithW9(w: Awaited<ReturnType<typeof world>>) {
   return w.t.run(async (ctx) => {
-    const file = await ctx.storage.store(new Blob(["%PDF w9"]));
+    const file = await ctx.storage.store(new Blob(["%PDF-1.4 w9"]));
     return ctx.db.insert("vendors", {
       businessId: w.A, name: "Jordan Ellis", email: "jordan@x.example", roles: ["Shooter"], rates: [{ role: "Shooter", unit: "day", cents: 80000 }],
       w9: { fileId: file, name: "w9.pdf", uploadedAt: 1 }, payMethod: { method: "Zelle", note: "jordan@bank" },
@@ -58,7 +58,7 @@ test("H2 a Producer without Vendor payments sees that a W-9 is on file, never th
   const vendorId = await vendorWithW9(w);
   const producer = await w.member("pro@x.example", "producer", ["production", "value"]);
   const x = await producer.query(api.vendors.get, { vendorId });
-  expect(x.w9).toMatchObject({ name: "w9.pdf", canOpen: false });
+  expect(x.w9).toMatchObject({ name: "W-9", canOpen: false }); // Phase 7 security review (L2): the file name needs Vendor payments too
   await expect(producer.mutation(api.vendors.w9Link, { vendorId })).rejects.toThrow(/Not allowed/);
   expect(x.payMethod).toBeUndefined();
   expect(x.totals).toBeNull();
@@ -80,7 +80,7 @@ test("H2 a Producer without Vendor payments sees that a W-9 is on file, never th
   const res = await w.t.fetch(`/f/${token}`, { method: "GET" });
   expect(res.status).toBe(200);
   expect(res.headers.get("cache-control")).toContain("no-store");
-  expect(await res.text()).toBe("%PDF w9");
+  expect(await res.text()).toBe("%PDF-1.4 w9");
   const real = Date.now;
   Date.now = () => real() + 11 * 60_000;
   try { expect((await w.t.fetch(`/f/${token}`, { method: "GET" })).status).toBe(404); } finally { Date.now = real; }
@@ -185,7 +185,10 @@ test("M5 a Producer with the worth switch off: no proposal or quote totals, no c
   const doc = await producer.query(api.sign.get, { documentId: ids.docId });
   expect(doc.paymentHidden).toBe(true);
   expect(doc.version.payment).toBeUndefined();
-  expect(JSON.stringify(doc)).not.toContain("500000");
+  // Phase 7 review (M5): the amount as a value, not the text "500000" (a signed link's expiry time can contain it).
+  const nums: unknown[] = [];
+  JSON.stringify(doc, (_k, val) => { if (typeof val === "number" || (typeof val === "string" && /^\d+$/.test(val))) nums.push(Number(val)); return val; });
+  expect(nums).not.toContain(500000);
   const booking = await producer.query(api.bookings.get, { bookingId: ids.bookingId });
   expect(booking).toMatchObject({ rate: null, expectedCents: null, suggestedCents: null });
   for (const b of await producer.query(api.bookings.list, {})) expect(b.rate).toBeNull();

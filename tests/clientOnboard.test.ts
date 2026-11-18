@@ -67,6 +67,7 @@ describe("Phase 7 step 3 · a new client's onboarding", () => {
     let st = await priya.query(api.clientOnboard.state, {});
     expect(st).toMatchObject({ existing: false, step: 0, company: "Harbor Coffee", done: { about: false, company: false, prefs: false, tour: false } });
     await expect(priya.mutation(api.clientOnboard.about, { name: "Priya Shah", phone: "call me" })).rejects.toThrow(/phone/);
+    await expect(priya.mutation(api.clientOnboard.about, { name: "Heston Hill" })).rejects.toThrow(/That name is taken/); // reviews (M3)
     await priya.mutation(api.clientOnboard.about, { name: "Priya Shah", title: "Marketing Lead", phone: "(405) 555-0101" });
     await priya.mutation(api.clientOnboard.step, { at: 1 }); // Finish later on Your company
     st = await priya.query(api.clientOnboard.state, {});

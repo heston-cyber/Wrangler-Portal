@@ -6,6 +6,7 @@ import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { allowedEmails } from "./owners";
 import { ensureMembership } from "./business";
+import { clientLive, vendorLive } from "./inviteLive";
 
 export const INVITE_DAYS = 14;
 export const INVITE_MS = INVITE_DAYS * 86_400_000;
@@ -18,8 +19,6 @@ type Live =
   | { kind: "business"; invite: Doc<"businessInvites"> };
 export type InviteCheck = Live | { kind: null; expired: boolean };
 
-const clientLive = (i: Doc<"invites">, now: number) => !i.revokedAt && (!!i.acceptedAt || i.expiresAt === undefined || i.expiresAt > now);
-const vendorLive = (x: Doc<"vendors">, now: number) => !x.archivedAt && !!x.invitedAt && (!!x.joinedAt || x.inviteExpiresAt === undefined || x.inviteExpiresAt > now);
 
 /** What this email was invited as, in the order the sign-up has always used (owner, client, vendor, team), then a
  *  business invite. With none that works, whether one existed and ran out (for "This invite has expired"). Reads with

@@ -3,6 +3,7 @@
 // business's own Pricing subcontractor costs), details, gear, W-9 status and notes. Bookings, briefings, the vendor
 // portal and payments build on this in the next steps. Owner only.
 import { INVITE_MS } from "./lib/invites";
+import { inviteCap } from "./lib/rate";
 import { allowedEmails } from "./lib/owners";
 import { internalAction, internalQuery, mutation, query } from "./lib/functions";
 import { internal } from "./_generated/api";
@@ -123,7 +124,8 @@ export const get = query({
     void _payout;
     return {
       ...rest, portal: status(x),
-      w9: w9 ? { name: w9.name, uploadedAt: w9.uploadedAt, canOpen: pay } : null, // opened through w9Link (second 5e review)
+      // Phase 7 security review (L2): the file's name (which a vendor types) only for Vendor payments; others see "W-9".
+      w9: w9 ? { name: pay ? w9.name : "W-9", uploadedAt: w9.uploadedAt, canOpen: pay } : null, // opened through w9Link (second 5e review)
       payMethod: pay ? payMethod : undefined,
       rates: value ? theirRates : [], ratesHidden: !value,
       costs: value ? x.roles.map((role) => ({ role, cost: pricingCost(rates, role) })) : [],
@@ -170,7 +172,9 @@ export const update = mutation({
     if (d.email !== x.email) await endAccess(ctx, x);
     // Phase 6 sweep M3: a new email is a new person for payouts too: the Stripe recipient (and its bank) is dropped, so the
     // new address sets up direct deposit from the start.
-    await ctx.db.patch(vendorId, { ...d, ...(d.email !== x.email ? { invitedAt: undefined, joinedAt: undefined, payout: undefined } : {}), updatedAt: Date.now() });
+    // Phase 7 security review (L5): the previous person's payment note and onboarding go too, so the new address starts
+    // fresh and isn't shown them (their W-9 stays on file for the business: Heston to decide).
+    await ctx.db.patch(vendorId, { ...d, ...(d.email !== x.email ? { invitedAt: undefined, joinedAt: undefined, payout: undefined, payMethod: undefined, onboard: undefined } : {}), updatedAt: Date.now() });
     // Nov 18: the old address is told (a safety notice) when someone there had a login or direct deposit.
     if (d.email !== x.email && (x.joinedAt || x.payout)) await ctx.scheduler.runAfter(0, internal.vendors.mailEmailChanged, { vendorId, oldEmail: x.email, newEmail: d.email, at: Date.now() });
     return null;
@@ -232,6 +236,7 @@ async function inviteNow(ctx: MutationCtx, vendorId: Id<"vendors">) {
   const user = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", x.email)).unique();
   // An existing login (a vendor elsewhere, or a client: one login can be both) gets this business on its vendor side.
   if (user && user.role !== "owner") await syncVendorMemberships(ctx, x.email, user._id);
+  await inviteCap(ctx, x.businessId ?? "default", x.email); // Phase 7 reviews (M4)
   await ctx.scheduler.runAfter(0, internal.vendors.mailInvite, { vendorId, at: now });
 }
 

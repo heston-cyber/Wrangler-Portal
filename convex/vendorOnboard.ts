@@ -18,7 +18,9 @@ import { mutation, query } from "./lib/functions";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { asVendor, vendorBusinessIds } from "./vendorPortal";
-import { PAY_METHODS, looksLikeAccount } from "./lib/bookings";
+import { PAY_METHODS, accountIn, looksLikeAccount } from "./lib/bookings";
+import { ownerNames } from "./auth";
+import { audit } from "./lib/audit";
 
 type Ctx = QueryCtx | MutationCtx;
 type Kind = "full" | "short" | "existing";
@@ -95,16 +97,30 @@ export const profile = mutation({
   },
   handler: async (ctx, a) => {
     const { user, vendor: x, kind } = await me(ctx, a.businessId);
-    const name = plain(a.name, 120);
+    if (kind !== "full") throw new ConvexError("Your details for this business are in Settings."); // reviews: no Profile step in the short or tour-only flows
+    const name = plain(a.name, 60);
     if (name.length < 2) throw new ConvexError("Add your name.");
+    // Reviews (Phase 7, M3): the same guard as users.setName: nobody else may take the owner's name.
+    if (ownerNames().has(name.toLowerCase())) throw new ConvexError("That name is taken.");
     const roles = [...new Set(a.roles.map((r) => plain(r, 40)).filter(Boolean))].slice(0, 12);
+    // Reviews (Phase 7, M3): no account, routing, card or tax ID numbers in any of their text (D101's check).
+    const bad = accountIn({ Name: name, "Business name": a.businessName, Roles: roles.join(", "), "Based in": a.basedIn, Gear: a.gear, Portfolio: a.portfolio });
+    if (bad) throw new ConvexError(`${bad}: leave out account, routing and tax ID numbers. The business asks for those directly.`);
     let rates = x.rates;
+    let rateNote: string | null = null;
     if (a.rateCents !== undefined) {
       const cents = Math.round(a.rateCents), unit = a.rateUnit ?? x.rates[0]?.unit ?? "hour";
       if (!Number.isFinite(cents) || cents < 0 || cents > 10_000_000) throw new ConvexError("Check your rate.");
       const cur = x.rates[0];
-      // A changed rate becomes their rate for each of their roles; bookings keep the rate agreed on them.
-      if (!cur || cur.cents !== cents || cur.unit !== unit) rates = (roles.length ? roles : ["Rate"]).map((role) => ({ role, unit, cents }));
+      if (!cur || cur.cents !== cents || cur.unit !== unit) {
+        // Reviews (Phase 7, M2): "Your rate" is part of a new vendor's own onboarding only (Heston, Nov 18: they may set
+        // it there); afterwards the business sets rates. It changes the one rate the form shows, never the others, and the
+        // change is in the owner's Activity. Bookings keep the rate agreed on them.
+        const done = !!x.onboard?.profile && !!x.w9 && !!x.payMethod && (!!x.onboard?.tour || !!x.onboard?.tourSkipped);
+        if (kind !== "full" || done) throw new ConvexError("Your rate is set with the business. Ask them to change it.");
+        rates = [{ role: cur?.role ?? roles[0] ?? "Rate", unit, cents }, ...x.rates.slice(1)];
+        rateNote = `${cur ? `$${(cur.cents / 100).toFixed(2)} / ${cur.unit}` : "no rate"} to $${(cents / 100).toFixed(2)} / ${unit}`;
+      }
     }
     const gear = a.gear === undefined ? x.gear : [...new Set(a.gear.split(/[,\n]/).map((g) => plain(g, 40)).filter(Boolean))].slice(0, 30);
     await ctx.db.patch(x._id, {
@@ -112,6 +128,7 @@ export const profile = mutation({
       gear: gear && gear.length ? gear : undefined, portfolio: plain(a.portfolio, 300) || undefined, updatedAt: Date.now(),
     });
     if (kind === "full") await ctx.db.patch(user._id, { name }); // their login's name (the switcher, "signed in as")
+    if (rateNote) await audit(ctx, { kind: "settings", text: `${name} set their ${rates[0].role} rate in onboarding: ${rateNote}`, where: "Vendors", link: `/vendors/${x._id}` });
     await mark(ctx, (await ctx.db.get(x._id))!, kind, 1, { profile: true });
     return null;
   },

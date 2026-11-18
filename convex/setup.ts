@@ -4,6 +4,7 @@
 // it's all done or hidden. Wrangler (the default business) never sees any of it (D114). The owner only: a team member
 // doesn't set up the business.
 import { v, ConvexError } from "convex/values";
+import { inviteCap } from "./lib/rate";
 import { mutation, query } from "./lib/functions";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
@@ -115,6 +116,7 @@ export const firstClient = mutation({
     if (same) { if (same.removedAt) await ctx.db.patch(same._id, { removedAt: undefined }); }
     else await ctx.db.insert("clientPeople", { clientId, email: r.email, role: "signer", createdAt: Date.now(), ...(name ? { name } : {}) });
     await audit(ctx, { kind: "sent", text: `sent a portal invite to ${name || r.email}`, where: "Setup", link: `/clients/${clientId}` });
+    await inviteCap(ctx, b._id, r.email); // Phase 7 reviews (M4)
     await ctx.scheduler.runAfter(0, internal.emails.portalInvite, { email: r.email, sendKey: String(Math.floor(Date.now() / 60_000)) });
     await mark(ctx, b, "client", 5);
     return { clientId };

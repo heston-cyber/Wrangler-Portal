@@ -64,10 +64,24 @@ export function shortRange(start: string, end: string, thisYear = String(new Dat
 /** Why a vendor declines (732:3285). */
 export const DECLINE_REASONS = ["Booked that day", "Rate doesn't work", "Too far", "Other"] as const;
 /** How a vendor gets paid (D101: the method and a note only, never bank numbers). */
-/** D101 (review fix, step 6): text that looks like a bank account or routing number (a run of 8 or more digits, spaces
- *  and dashes allowed). A US phone number (405-555-1234, (405) 555 1234) is fine, so "Zelle to 405-555-1234" passes. */
+/** D101 (review fix, step 6; tightened by the Phase 7 reviews): text that looks like a bank account, routing, card or
+ *  tax ID number. Full-width digits count as digits. Eight or more digits joined by spaces, dashes, underscores or
+ *  bullets are refused; nine or more are refused when commas, dots or slashes join them too (so dates like 11/06/2026
+ *  still pass). One phone number on its own (405-555-1234, (405) 555 1234) is fine, so "Zelle to 405-555-1234" passes,
+ *  but a phone-shaped number beside other digits counts. A guard rail, not a guarantee. */
+const PHONE = /(\+?1[\s.-]?)?\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b/g;
 export function looksLikeAccount(text: string): boolean {
-  const t = text.replace(/(\+?1[\s.-]?)?\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b/g, " ");
-  return /\d(?:[\s-]?\d){7,}/.test(t);
+  let t = text.normalize("NFKC");
+  const phones = t.match(PHONE) ?? [];
+  if (phones.length === 1 && (t.replace(PHONE, " ").match(/\d/g) ?? []).length < 3) t = t.replace(PHONE, " ");
+  return /\d(?:[\s\-_\u00b7\u2022]{0,3}\d){7,}/.test(t) || /\d(?:[\s\-_,.\/\u00b7\u2022]{0,3}\d){8,}/.test(t);
+}
+/** The same check over a vendor's own free-text fields (portfolio links are read without their address part). */
+export function accountIn(fields: Record<string, string | undefined | null>): string | null {
+  for (const [label, raw] of Object.entries(fields)) {
+    const t = (raw ?? "").replace(/\b(?:https?:\/\/)?[\w-]+(?:\.[\w-]+)+\/\S*/gi, " ");
+    if (looksLikeAccount(t)) return label;
+  }
+  return null;
 }
 export const PAY_METHODS = ["ACH", "Zelle", "Check", "Other"];

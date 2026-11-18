@@ -85,9 +85,12 @@ export const overview = query({
 /** Is this email free to own a new business? Not an owner here, not already a login of any kind, not a team member. */
 async function emailInUse(ctx: QueryCtx | MutationCtx, email: string) {
   if (allowedEmails().includes(email)) return true;
+  const ms = (await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", email)).collect()).filter((m) => !m.revokedAt);
+  if (ms.length) return true;
+  // Phase 7 reviews (L3): a login made from a business invite that ran out or was cancelled before the code was entered
+  // (an owner with no business) can be invited again; any other login is in use.
   const u = (await ctx.db.query("users").withIndex("email", (q) => q.eq("email", email)).collect()).find((x) => x.role !== "guest");
-  if (u) return true;
-  return (await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", email)).collect()).some((m) => !m.revokedAt);
+  return !!u && u.role !== "owner";
 }
 
 /** Invite a business (854:10912): Business name, Owner's email, a note. Nothing is sent until this is pressed. */

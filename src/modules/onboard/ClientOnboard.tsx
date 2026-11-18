@@ -82,7 +82,7 @@ function Company({ st, foot, onSave }: Part) {
   const input = useRef<HTMLInputElement>(null);
   const pick = async (file: File) => {
     setBadFile(null);
-    if (!/^image\/(png|jpeg|svg\+xml|webp)$/.test(file.type) || file.size > 5 * 1024 * 1024) { setMsg(null); setBadFile(file.name); return; } // 753:1951
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type) || file.size > 5 * 1024 * 1024) { setMsg(null); setBadFile(file.name); return; } // 753:1951
     try { const r = await fetch(await uploadUrl({}), { method: "POST", headers: { "Content-Type": file.type }, body: file }); const { storageId } = (await r.json()) as { storageId: Id<"_storage"> }; await setLogo({ storageId }); setMsg("Logo added."); }
     catch (e) { setMsg(errLine(e)); }
   };
@@ -98,9 +98,9 @@ function Company({ st, foot, onSave }: Part) {
         <TextField label="Billing address" value={f.address} onChange={(e) => setF({ ...f, address: e.target.value })} placeholder="Street, city, state ZIP" maxLength={200} />
         <span className="wp-eyebrow">Your brand</span>
         <button type="button" className="ob-drop" onClick={() => input.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const x = e.dataTransfer.files[0]; if (x) void pick(x); }}>
-          {st.brand.logoUrl ? <img src={st.brand.logoUrl} alt="" /> : <>Drop your logo (SVG or PNG), or <b>browse</b></>}</button>
-        <input ref={input} type="file" hidden accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={(e) => { const x = e.target.files?.[0]; e.target.value = ""; if (x) void pick(x); }} />
-        {badFile && <UploadError file={badFile} text="Use a PNG, SVG, JPG or WebP up to 5 MB." onRetry={() => input.current?.click()} />}
+          {st.brand.logoUrl ? <img src={st.brand.logoUrl} alt="" /> : <>Drop your logo (PNG or JPG), or <b>browse</b></>}</button>
+        <input ref={input} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={(e) => { const x = e.target.files?.[0]; e.target.value = ""; if (x) void pick(x); }} />
+        {badFile && <UploadError file={badFile} text="Use a PNG, JPG or WebP up to 5 MB." onRetry={() => input.current?.click()} />}
         {msg && <span className="wp-small secondary" role="status">{msg}</span>}
         <div className="ob-colors">{colors.map((c, i) => (
           <label key={i} className="ob-color"><span className="sw" style={{ background: HEX.test(c) ? c : "transparent" }} />

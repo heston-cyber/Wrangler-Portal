@@ -98,12 +98,75 @@ describe("Phase 7 step 4 · a new vendor's onboarding", () => {
     expect(st).toMatchObject({ done: { profile: true, w9: true, pay: true, tour: false }, tourSkipped: true, w9: { name: "W-9 Riley.pdf" }, pay: { method: "ACH", note: "Same account as my last invoice." } });
     await riley.mutation(api.vendorOnboard.tour, { businessId: w.A, skipped: false });
     expect((await riley.query(api.vendorOnboard.state, { businessId: w.A })).done.tour).toBe(true);
-    // A new rate is their rate for each role; a booking keeps the rate agreed on it.
+    // Reviews (M2): once onboarding is done, the rate is the business's to change.
+    await expect(riley.mutation(api.vendorOnboard.profile, { businessId: w.A, name: "Riley Chen", roles: ["Editor"], rateCents: 9_900, rateUnit: "hour" })).rejects.toThrow(/Ask them to change it/);
+  });
+
+  test("reviews: Your rate changes only the rate shown, only during onboarding, with an Activity line; bookings keep theirs", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const { vendorId, riley } = await newVendor(w, mails);
+    await w.t.run((ctx) => ctx.db.patch(vendorId, { rates: [{ role: "Editor", unit: "hour", cents: 7_500 }, { role: "Shooter", unit: "day", cents: 80_000 }] }));
     const k = await w.heston.mutation(api.bookings.create, { vendorId, projectId: w.p, role: "Editor", start: "2030-11-06", end: "2030-11-06", cents: 7_500, unit: "hour", hours: 8 }) as Id<"vendorBookings">;
-    await riley.mutation(api.vendorOnboard.profile, { businessId: w.A, name: "Riley Chen", roles: ["Editor", "Colourist"], rateCents: 9_000, rateUnit: "hour" });
-    expect((await w.t.run((ctx) => ctx.db.get(vendorId)))!.rates).toEqual([{ role: "Editor", unit: "hour", cents: 9_000 }, { role: "Colourist", unit: "hour", cents: 9_000 }]);
-    expect((await w.t.run((ctx) => ctx.db.get(k)))!.rate).toEqual({ cents: 7_500, unit: "hour" });
     await expect(riley.mutation(api.vendorOnboard.profile, { businessId: w.A, name: "Riley Chen", roles: [], rateCents: -5 })).rejects.toThrow(/Check your rate/);
+    await riley.mutation(api.vendorOnboard.profile, { businessId: w.A, name: "Riley Chen", roles: ["Lead Editor"], rateCents: 9_000, rateUnit: "hour" });
+    expect((await w.t.run((ctx) => ctx.db.get(vendorId)))!.rates).toEqual([{ role: "Editor", unit: "hour", cents: 9_000 }, { role: "Shooter", unit: "day", cents: 80_000 }]);
+    expect((await w.t.run((ctx) => ctx.db.get(k)))!.rate).toEqual({ cents: 7_500, unit: "hour" });
+    const log = await w.t.run((ctx) => ctx.db.query("auditLog").collect());
+    expect(log.map((r) => r.text)).toContain("Riley Chen set their Editor rate in onboarding: $75.00 / hour to $90.00 / hour");
+    // Nobody else may take the owner's name; account numbers stay out of every field (D101).
+    await expect(riley.mutation(api.vendorOnboard.profile, { businessId: w.A, name: "Heston Hill", roles: [] })).rejects.toThrow(/That name is taken/);
+    await expect(riley.mutation(api.vendorOnboard.profile, { businessId: w.A, name: "Riley Chen", roles: [], portfolio: "Routing 021000021 SSN 123-45-6789" })).rejects.toThrow(/Portfolio: leave out account/);
+    await expect(riley.mutation(api.vendorPortal.saveDetails, { businessId: w.A, name: "Riley Chen", businessName: "acct 1234/5678/9012" })).rejects.toThrow(/Business name: leave out account/);
+    await expect(riley.mutation(api.vendorOnboard.payMethod, { businessId: w.A, method: "ACH", note: "ACH routing 021.000.021 account 123-456-7890" })).rejects.toThrow(/account and routing/);
+  });
+
+  test("reviews: a W-9 must be named .pdf, a browser that sends no type still works, and the download link serves only a real PDF", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const { vendorId, riley } = await newVendor(w, mails);
+    expect(await riley.mutation(api.vendorPortal.setW9, { businessId: w.A, storageId: await pdf(w), name: "W-9 Riley.pdf.exe" })).toEqual({ error: "Upload the W-9 as a PDF, up to 10 MB." });
+    const fake = await w.t.run((ctx) => ctx.storage.store(new Blob(["MZ not a pdf"], { type: "application/octet-stream" })));
+    expect(await riley.mutation(api.vendorPortal.setW9, { businessId: w.A, storageId: fake, name: "W-9.pdf" })).toEqual({ ok: true });
+    const link = await w.heston.mutation(api.vendors.w9Link, { vendorId }) as string;
+    const res = await w.t.fetch(`/f/${link.split("/f/")[1]}`, { method: "GET" });
+    expect(res.status).toBe(415);
+    await riley.mutation(api.vendorPortal.setW9, { businessId: w.A, storageId: await pdf(w), name: "W-9.pdf" });
+    const ok = await w.t.fetch(`/f/${(await w.heston.mutation(api.vendors.w9Link, { vendorId }) as string).split("/f/")[1]}`, { method: "GET" });
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get("Content-Disposition")).toBe('attachment; filename="W-9.pdf"');
+  });
+
+  test("reviews: an expired invite doesn't come back when another business invites the same person; a new address starts fresh", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    await w.heston.mutation(api.vendors.add, { name: "Eve", email: "eve@x.example", roles: ["Editor"], rates: [], invite: true });
+    await w.t.run(async (ctx) => { const x = (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", "eve@x.example")).collect())[0]; await ctx.db.patch(x._id, { inviteExpiresAt: Date.now() - 1 }); });
+    expect(await w.t.query(api.clients.canSignUp, { email: "eve@x.example" })).toMatchObject({ ok: false, reason: "expired" });
+    await w.boss.mutation(api.vendors.add, { name: "Eve", email: "eve@x.example", roles: ["Editor"], rates: [], invite: true });
+    expect(await w.t.query(api.clients.canSignUp, { email: "eve@x.example" })).toMatchObject({ ok: true }); // the live one counts
+    await settle(w);
+    await w.t.action(api.auth.signIn, { provider: "password", params: { flow: "signUp", email: "eve@x.example", password: "longenoughpassword" } });
+    const ms = await w.t.run((ctx) => ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", "eve@x.example")).collect());
+    expect(ms.map((m) => m.businessId)).not.toContain(w.A);
+    // An owner who changes a vendor's email: the next person doesn't see the last one's payment note or onboarding.
+    const { vendorId, riley } = await newVendor(w, mails);
+    await riley.mutation(api.vendorOnboard.payMethod, { businessId: w.A, method: "Zelle", note: "Zelle to my phone" });
+    await w.heston.mutation(api.vendors.update, { vendorId, name: "Riley Chen", email: "riley.new@chencuts.example", roles: ["Editor"], rates: [] });
+    const moved = (await w.t.run((ctx) => ctx.db.get(vendorId)))!;
+    expect([moved.payMethod, moved.onboard]).toEqual([undefined, undefined]);
+  });
+
+  test("reviews: a business sends at most 3 invites a day to one address", async () => {
+    const w = await world();
+    stub([]);
+    const id = await w.heston.mutation(api.vendors.add, { name: "Sam", email: "sam@x.example", roles: [], rates: [], invite: true }) as Id<"vendors">;
+    await w.heston.mutation(api.vendors.invite, { vendorId: id });
+    await w.heston.mutation(api.vendors.invite, { vendorId: id });
+    await expect(w.heston.mutation(api.vendors.invite, { vendorId: id })).rejects.toThrow(/a lot for one day/);
   });
 
   test("T7.3 one login and profile; the W-9 and payment method once per business, each kept to its business (D94)", async () => {

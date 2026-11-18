@@ -18,7 +18,9 @@ export async function ticketFor(ctx: MutationCtx, fileId: Id<"_storage">, busine
   const now = Date.now();
   for (const old of await ctx.db.query("fileTickets").withIndex("by_expiry", (q) => q.lt("expiresAt", now)).take(50)) await ctx.db.delete(old._id);
   const token = randomToken(24);
-  await ctx.db.insert("fileTickets", { token, fileId, businessId, name: name.replace(/[^\w .()-]+/g, "_").slice(0, 120) || "file.pdf", expiresAt: now + TICKET_MS });
+  // Phase 7 security review (M2): tickets serve PDFs (W-9s) only, so the name always ends in .pdf, whatever it was.
+  const base = name.replace(/[^\w .()-]+/g, "_").replace(/(\.[A-Za-z0-9]{1,8})+\s*$/, "").trim().slice(0, 112) || "file";
+  await ctx.db.insert("fileTickets", { token, fileId, businessId, name: `${base}.pdf`, expiresAt: now + TICKET_MS });
   return `${(process.env.CONVEX_SITE_URL ?? "").replace(/\/$/, "")}/f/${token}`;
 }
 
@@ -37,6 +39,8 @@ export const route = httpAction(async (ctx, req) => {
   const t = TOKEN.test(token) ? await ctx.runQuery(internal.fileTickets.byToken, { token }) : null;
   const blob = t ? await ctx.storage.get(t.fileId) : null;
   if (!t || !blob) return new Response("This link has expired. Open the file again from the portal.", { status: 404, headers: { ...headers, "Content-Type": "text/plain" } });
+  // Phase 7 security review (M2): only a real PDF goes out (its first bytes), whatever type it was uploaded as.
+  if ((await blob.slice(0, 5).text()) !== "%PDF-") return new Response("This file isn't a PDF, so it can't be opened here. Ask the vendor to upload their W-9 again as a PDF.", { status: 415, headers: { ...headers, "Content-Type": "text/plain" } });
   return new Response(blob, { status: 200, headers: { ...headers, "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${t.name.replace(/"/g, "")}"` } });
 });
 

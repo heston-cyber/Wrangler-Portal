@@ -119,7 +119,7 @@ function W9({ st, foot, go, others }: Part & { others: string[] }) {
   const pick = async (f: File | undefined) => {
     if (!f) return;
     // 753:1951: the wrong kind of file, or over the limit (setW9 checks both again).
-    if (!(f.type === "application/pdf" || /\.pdf$/i.test(f.name)) || f.size > W9_MAX) { setMsg({ text: RULE, bad: true, file: f.name }); return; }
+    if (!/\.pdf$/i.test(f.name) || f.size > W9_MAX) { setMsg({ text: RULE, bad: true, file: f.name }); return; }
     setUp(true); setMsg(null);
     try {
       const id = await uploadToStorage(await uploadUrl({ businessId: st.businessId }), f);

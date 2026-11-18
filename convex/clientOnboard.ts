@@ -5,7 +5,7 @@
 // no end date) see only the tour (D114). People a client asks to add wait for the owner (D112): nothing reaches them until
 // the owner approves, which adds them to the company and sends their invite.
 import { v, ConvexError } from "convex/values";
-import { internalAction, internalQuery, mutation, query } from "./lib/functions";
+import { focusBusiness, internalAction, internalQuery, mutation, query } from "./lib/functions";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
@@ -17,9 +17,10 @@ import { mailBrandOf } from "./lib/mail";
 import { clientAddRequestMail } from "./lib/mails";
 import { deliverOnce } from "./invoiceReminders";
 import { SITE } from "./lib/site";
-import { bump } from "./lib/rate";
+import { bump, inviteCap } from "./lib/rate";
 import { audit } from "./lib/audit";
 import { EMPTY_KIT, type Kit } from "./brandKit";
+import { ownerNames } from "./auth";
 
 const EMAIL = /^[^\s@<>,;"']+@[^\s@<>,;"']+\.[^\s@<>,;"']{2,}$/;
 const plain = (s: string | undefined, max: number) => (s ?? "").replace(/[\u0000-\u001f\u007f<>{}]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
@@ -33,7 +34,8 @@ async function mine(ctx: QueryCtx | MutationCtx) {
   const rows = (await ctx.db.query("clientPeople").withIndex("by_email", (q) => q.eq("email", v.email.toLowerCase())).collect()).filter((p) => !p.removedAt);
   for (const p of rows) {
     const c = await ctx.db.get(p.clientId);
-    if (c && (!v.businessId || (c.businessId ?? null) === v.businessId)) return { v, p, c };
+    // Phase 7 reviews (L5): act for that company's business, so a client of two businesses can save (and ask) here too.
+    if (c && (!v.businessId || (c.businessId ?? null) === v.businessId)) { focusBusiness(ctx, c.businessId ?? null); return { v, p, c }; }
   }
   return null;
 }
@@ -103,6 +105,8 @@ export const about = mutation({
     const { v, p } = await mustMine(ctx);
     const name = plain(a.name, 60);
     if (name.length < 2) throw new ConvexError("Type your name.");
+    // Reviews (Phase 7, M3): the same guard as users.setName: nobody else may take the owner's name.
+    if (ownerNames().has(name.toLowerCase())) throw new ConvexError("That name is taken.");
     const phone = plain(a.phone, 30);
     if (phone && !/^[0-9+().\-\s]{7,30}$/.test(phone)) throw new ConvexError("That doesn't look like a phone number.");
     await ctx.db.patch(v.userId, { name });
@@ -132,14 +136,15 @@ export const company = mutation({
   },
 });
 
-/** Their logo for the company's kit (SVG or PNG, up to 5 MB). */
-export const logoUploadUrl = mutation({ args: {}, handler: async (ctx) => { await mustMine(ctx); await bump(ctx, "msgUpload", "onboard-logo"); return ctx.storage.generateUploadUrl(); } });
+/** Their logo for the company's kit (PNG, JPG or WebP, up to 5 MB). Phase 7 reviews: no SVG from outside parties (as
+ *  canvases), and the upload limit is counted per person (L7). */
+export const logoUploadUrl = mutation({ args: {}, handler: async (ctx) => { const { v } = await mustMine(ctx); await bump(ctx, "msgUpload", `onboard-logo:${v.userId}`); return ctx.storage.generateUploadUrl(); } });
 export const setLogo = mutation({
   args: { storageId: v.id("_storage") },
   handler: async (ctx, { storageId }) => {
     const { c, v } = await mustMine(ctx);
     const f = await ctx.db.system.get(storageId);
-    if (!f || Date.now() - f._creationTime > 30 * 60_000 || !/^image\/(png|svg\+xml|jpeg|webp)$/.test(f.contentType ?? "") || f.size > 5 * 1024 * 1024) throw new ConvexError("Use a PNG, SVG, JPG or WebP under 5 MB.");
+    if (!f || Date.now() - f._creationTime > 30 * 60_000 || !/^image\/(png|jpeg|webp)$/.test(f.contentType ?? "") || f.size > 5 * 1024 * 1024) throw new ConvexError("Use a PNG, JPG or WebP under 5 MB.");
     if (!(await claimUpload(ctx, storageId, c.businessId ?? null, "client-logo", v.userId)).fresh) throw new ConvexError("That upload didn't work. Try again.");
     const kit = (c.brandKit as Kit | undefined) ?? EMPTY_KIT;
     await ctx.db.patch(c._id, { brandKit: { ...kit, logoFileId: storageId } });
@@ -223,6 +228,7 @@ export const decide = mutation({
     else await ctx.db.insert("clientPeople", { clientId: c._id, email: inv.email, role: "contact", createdAt: now, ...(r.name ? { name: r.name } : {}) });
     await ctx.db.patch(r._id, { status: "approved", decidedAt: now });
     await audit(ctx, { kind: "sent", text: `approved ${r.name ?? r.email} for ${c.name} (asked by ${r.byName ?? r.by}) and sent their portal invite`, where: "Clients", link: `/clients/${c._id}` });
+    await inviteCap(ctx, r.businessId ?? "default", inv.email); // Phase 7 reviews (M4)
     await ctx.scheduler.runAfter(0, internal.emails.portalInvite, { email: inv.email, sendKey: `colleague-${r._id}` });
     return null;
   },
