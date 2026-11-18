@@ -3938,6 +3938,9 @@ a.sl-day:hover .t { color: var(--text-accent); }
 .rl-unlockset .rl-links { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 .rl-unlockset .rl-links .btn, .rl-unlockset > .btn.sm { width: auto; justify-self: center; }
 .rl-pins, .rl-pinrow { display: flex; gap: 8px; }
+/* Settings › Security › Hand-back PIN (Nov 18) */
+.hb-set { display: grid; gap: 10px; padding: 0 16px 16px; }
+.hb-set > p { margin: 0; }
 .rl-pins .input, .rl-pinrow .input { flex: 1; min-width: 0; text-align: center; font-size: 22px; letter-spacing: .4em; }
 .rl-pinrow .btn { width: auto; }
 .rl-pins .input::placeholder, .rl-pinrow .input::placeholder { letter-spacing: normal; font-size: 16px; }

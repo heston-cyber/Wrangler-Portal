@@ -39,6 +39,7 @@ import { BellSettings } from "../bell/Bell";
 import { usePerms } from "../../lib/teamAccess";
 import { SecuritySection } from "../security/Security";
 import { ActivityLog } from "../security/ActivityLog";
+import { HandBackCard } from "../production/HandBackSetup";
 
 // The connector lives on the Convex site host: <deployment>.convex.site/mcp
 const CONVEX = (import.meta.env.VITE_CONVEX_URL as string | undefined) || "https://handsome-hummingbird-11.convex.cloud";
@@ -117,7 +118,7 @@ export default function Settings({ me }: { me: { name: string | null; email: str
       {key === "business" && <BusinessSection show={show} />}
       {key === "team" && <TeamSection path={path} show={show} />}
       {key === "activity" && <ActivityLog />}
-      {key === "security" && <SecuritySection show={show} head={<SetHead title="Security." sub="Your email is your username. Sign in with your email and a password." />} />}
+      {key === "security" && <><SecuritySection show={show} head={<SetHead title="Security." sub="Your email is your username. Sign in with your email and a password." />} /><HandBackCard /></>}
       {key === "payments" && <PaymentsSettings show={show} />}
       {key === "rates" && <RatesSection show={show} />}
       {key === "brand" && <><SetHead title="Your brand, for decks." sub="Claude uses this when it makes a pitch deck in your brand. Each client can have their own kit on their company page." /><BrandKitEditor show={show} /></>}
