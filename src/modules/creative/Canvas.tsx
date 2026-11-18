@@ -13,12 +13,13 @@ import { useMutation, useQuery } from "convex/react";
 import {
   MousePointer2, Hand, Pencil, Eraser, Type, Square, Circle, ArrowRight, Minus as LineIcon, ImagePlus, Box, Lock, LockOpen, Undo2, Redo2, Minus, Plus, Menu, CircleQuestionMark,
   StickyNote, Table2, Frame, Link2, Upload, ChevronLeft, ChevronRight, Download, MoreHorizontal, ArrowDownToLine, ArrowDown, ArrowUp, ArrowUpToLine,
+  Palette, PaintBucket, Layers, Scissors, Copy, ClipboardPaste, CopyPlus, Trash2, Maximize, Search,
 } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps, navigate } from "../../lib/router";
-import { Modal, swallowNextClick, useConfirm, useToast } from "../../ui/kit";
+import { ContextMenu, MenuItem, MenuLabel, MenuSep, MenuSub, Modal, swallowNextClick, useConfirm, useToast } from "../../ui/kit";
 import { Button, DialogHeader, EmptyState, PageHeader, PillTabs, SkeletonRows, TextField } from "../../ui/wp";
 import { Icon } from "../../ui/Icon";
 import { errLine } from "../../ui/hold";
@@ -288,8 +289,12 @@ const HINT: Partial<Record<Tool, string>> = {
   note: "Click to place a note", table: "Click to place a table", frame: "Click and drag to draw a frame",
 };
 // Excalidraw-like dark palette (Heston's screenshot): stroke and background swatches, then a custom colour.
+/** Copied items, kept while the tab is open (pasting into another board of this tab works too). */
+let boardClip: CanvasItem[] = [];
 const STROKES = ["#D3D3D3", "#FF8383", "#3A994C", "#56A2E8", "#B76100"];
 const FILLS: Array<string | null> = [null, "#5B2C2C", "#043B0C", "#154163", "#362600"];
+const STROKE_NAME: Record<string, string> = { "#D3D3D3": "Light grey", "#FF8383": "Red", "#3A994C": "Green", "#56A2E8": "Blue", "#B76100": "Orange" };
+const FILL_NAME: Record<string, string> = { "#5B2C2C": "Dark red", "#043B0C": "Dark green", "#154163": "Dark blue", "#362600": "Dark brown" };
 const NOTE_COLORS = ["#FFF4B8", "#FFD6E0", "#CFF5D7", "#D6E9FF", "#EADCFF"];
 const WIDTHS = [1, 2, 4];
 const TEXT_PX: Record<string, number> = { S: 16, M: 22, L: 34, XL: 56 };
@@ -440,6 +445,11 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
       if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
       if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); redo(); return; }
       if (mod && e.key.toLowerCase() === "d") { e.preventDefault(); dup(); return; }
+      if (mod && sel.length && canEdit && (e.key === "]" || e.key === "}")) { e.preventDefault(); layer(e.shiftKey ? "front" : "forward"); return; }
+      if (mod && sel.length && canEdit && (e.key === "[" || e.key === "{")) { e.preventDefault(); layer(e.shiftKey ? "back" : "backward"); return; }
+      if (mod && e.key.toLowerCase() === "c" && sel.length) { e.preventDefault(); copySel(); return; }
+      if (mod && e.key.toLowerCase() === "x" && sel.length && canEdit) { e.preventDefault(); cutSel(); return; }
+      if (mod && e.key.toLowerCase() === "v" && canEdit && boardClip.length) { e.preventDefault(); pasteClip(); return; }
       if (mod && e.key.toLowerCase() === "a") { e.preventDefault(); setToolRaw("select"); setSel(itemsRef.current.map((i) => i.id)); return; }
       if ((e.key === "Delete" || e.key === "Backspace") && sel.length) { e.preventDefault(); del(); return; }
       if (e.key === "Escape") { setSel([]); setEditing(null); setCtxMenu(null); setPop(null); setToolRaw(canEdit ? "select" : "pan"); return; }
@@ -476,6 +486,16 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
     setItems((all) => all.map((x) => ({ ...x, z: z.get(x.id) ?? x.z }))); setCtxMenu(null);
   };
   const lock = () => { const on = !selected.every((i) => i.locked); setItems((xs) => xs.map((x) => (sel.includes(x.id) ? { ...x, locked: on || undefined } : x))); setCtxMenu(null); };
+  // Nov 17 (Heston: the right-click menu as the doc builder's): cut, copy and paste between boards in this tab.
+  const copySel = () => { const xs = itemsRef.current.filter((i) => sel.includes(i.id)); if (xs.length) boardClip = xs.map((i) => ({ ...i })); setCtxMenu(null); };
+  const cutSel = () => { copySel(); del(); };
+  const pasteClip = () => {
+    if (!boardClip.length) return;
+    const z = topZ();
+    const copies = boardClip.map((i, k) => ({ ...i, id: uid(), x: i.x + 24, y: i.y + 24, z: z + k + 1, locked: undefined, ...(i.fileId && !files[i.fileId] ? { fileId: undefined } : {}) }));
+    boardClip = copies.map((c) => ({ ...c }));
+    setItems((xs) => [...xs, ...copies]); setSel(copies.map((c) => c.id)); setToolRaw("select"); setCtxMenu(null);
+  };
 
   /** A style change: it applies to what's selected and becomes the default for the next thing drawn. */
   const restyle = (p: Partial<Style>) => {
@@ -709,7 +729,7 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
       {top(state)}
       <div className="cv-stage">
       <div ref={viewRef} className={`cv-view tool-${space ? "pan" : tool}`} style={gridStyle} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
-        onContextMenu={(e) => { const el = (e.target as HTMLElement).closest("[data-id]") as HTMLElement | null; if (!el || !canEdit) return; e.preventDefault(); if (!sel.includes(el.dataset.id!)) setSel([el.dataset.id!]); setToolRaw("select"); setCtxMenu({ x: e.clientX, y: e.clientY }); }}
+        onContextMenu={(e) => { if (!canEdit) return; e.preventDefault(); const el = (e.target as HTMLElement).closest("[data-id]") as HTMLElement | null; if (el && !sel.includes(el.dataset.id!)) setSel([el.dataset.id!]); if (!el) setSel([]); setToolRaw("select"); setCtxMenu({ x: e.clientX, y: e.clientY }); }}
         onDragOver={(e) => { if (canEdit && uploads) e.preventDefault(); }} onDrop={onDrop}
         onDoubleClick={(e) => { const el = (e.target as HTMLElement).closest("[data-id]") as HTMLElement | null; const it = el && itemsRef.current.find((i) => i.id === el.dataset.id); if (it && canEdit && !it.locked && ["note", "text", "box", "ellipse", "frame", "table", "link"].includes(it.type)) { setEditing(it.id); setSel([it.id]); } }}>
         <div className="cv-board" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, width: BOARD.w, height: BOARD.h }}>
@@ -765,17 +785,50 @@ function Board({ title, items: initial, rev: initialRev, files: fileUrls, canEdi
       </div>}
 
       {one && canEdit && one.type === "table" && editing === one.id && <TableBar it={one} onPatch={(p) => patch(one.id, p)} />}
-      {ctxMenu && canEdit && selected.length > 0 && (
-        <div className="cv-ui cv-pop cv-dd cv-ctx" style={{ left: Math.min(ctxMenu.x, window.innerWidth - 230), top: Math.min(ctxMenu.y, window.innerHeight - 300) }} role="menu">
-          <button role="menuitem" onClick={dup}>Duplicate<kbd>⌘D</kbd></button>
-          <button role="menuitem" onClick={lock}>{selected.every((i) => i.locked) ? "Unlock" : "Lock"}</button>
-          <button role="menuitem" onClick={() => layer("front")}>Bring to front</button>
-          <button role="menuitem" onClick={() => layer("back")}>Send to back</button>
-          {one?.fileId && files[one.fileId] && <a role="menuitem" href={freshUrl(one.fileId) ?? files[one.fileId]!} target="_blank" rel="noreferrer" onClick={() => setCtxMenu(null)}>Download</a>}
-          <hr />
-          <button role="menuitem" className="danger" onClick={del}>Delete<kbd>⌫</kbd></button>
-        </div>
-      )}
+      {ctxMenu && canEdit && (() => {
+        // Nov 17 (Heston, 18:15): the doc builder's right-click menu: a count, styles in submenus, clipboard, layers, delete.
+        const n = selected.length;
+        const shapes = selected.some((x) => SHAPES.has(x.type));
+        const strokes = selected.some((x) => SHAPES.has(x.type) || LINES.has(x.type) || x.type === "pen");
+        const color = (one?.color ?? st.color).toUpperCase();
+        return (
+          <ContextMenu at={ctxMenu} onClose={() => setCtxMenu(null)} label="Canvas">
+            {n > 0 ? <>
+              <MenuLabel>{n} item{n === 1 ? "" : "s"}</MenuLabel>
+              {strokes && <MenuSub icon={<Palette size={15} />} label="Stroke">
+                {STROKES.map((c) => <MenuItem key={c} icon={<span className="wsb-dot" style={{ background: c }} />} checked={color === c} onSelect={() => restyle({ color: c })}>{STROKE_NAME[c]}</MenuItem>)}
+              </MenuSub>}
+              {shapes && <MenuSub icon={<PaintBucket size={15} />} label="Background">
+                {FILLS.map((c) => <MenuItem key={c ?? "none"} icon={<span className="wsb-dot" style={{ background: c ?? "transparent" }} />} checked={(one?.fill ?? null) === c} onSelect={() => restyle({ fill: c })}>{c ? FILL_NAME[c] : "None"}</MenuItem>)}
+              </MenuSub>}
+              {strokes && <MenuSub icon={<LineIcon size={15} />} label="Stroke style">
+                {(["solid", "dashed", "dotted"] as const).map((d) => <MenuItem key={d} checked={(one?.dash ?? "solid") === d} onSelect={() => restyle({ dash: d })}>{d[0].toUpperCase() + d.slice(1)}</MenuItem>)}
+              </MenuSub>}
+              <MenuSub icon={<Layers size={15} />} label="Arrange">
+                <MenuItem icon={<ArrowUpToLine size={15} />} kbd="⇧⌘]" onSelect={() => layer("front")}>Bring to front</MenuItem>
+                <MenuItem icon={<ArrowUp size={15} />} kbd="⌘]" onSelect={() => layer("forward")}>Bring forward</MenuItem>
+                <MenuItem icon={<ArrowDown size={15} />} kbd="⌘[" onSelect={() => layer("backward")}>Send backward</MenuItem>
+                <MenuItem icon={<ArrowDownToLine size={15} />} kbd="⇧⌘[" onSelect={() => layer("back")}>Send to back</MenuItem>
+              </MenuSub>
+              <MenuItem icon={selected.every((i) => i.locked) ? <LockOpen size={15} /> : <Lock size={15} />} onSelect={lock}>{selected.every((i) => i.locked) ? "Unlock" : "Lock"}</MenuItem>
+              <MenuSep />
+              <MenuItem icon={<Scissors size={15} />} kbd="⌘X" onSelect={cutSel}>Cut</MenuItem>
+              <MenuItem icon={<Copy size={15} />} kbd="⌘C" onSelect={copySel}>Copy</MenuItem>
+              <MenuItem icon={<ClipboardPaste size={15} />} kbd="⌘V" disabled={!boardClip.length} onSelect={pasteClip}>Paste</MenuItem>
+              <MenuItem icon={<CopyPlus size={15} />} kbd="⌘D" onSelect={dup}>Duplicate</MenuItem>
+              {one?.fileId && files[one.fileId] && <MenuItem icon={<Download size={15} />} onSelect={() => { window.open(freshUrl(one.fileId!) ?? files[one.fileId!]!, "_blank", "noreferrer"); setCtxMenu(null); }}>Download</MenuItem>}
+              <MenuSep />
+              <MenuItem icon={<Trash2 size={15} />} danger kbd="⌫" onSelect={del}>Delete {n === 1 ? "item" : "items"}</MenuItem>
+            </> : <>
+              <MenuItem icon={<ClipboardPaste size={15} />} kbd="⌘V" disabled={!boardClip.length} onSelect={pasteClip}>Paste</MenuItem>
+              <MenuItem icon={<MousePointer2 size={15} />} kbd="⌘A" onSelect={() => { setSel(itemsRef.current.map((i) => i.id)); setCtxMenu(null); }}>Select all</MenuItem>
+              <MenuSep />
+              <MenuItem icon={<Maximize size={15} />} kbd="⇧1" onSelect={() => { fit(); setCtxMenu(null); }}>Zoom to fit</MenuItem>
+              <MenuItem icon={<Search size={15} />} onSelect={() => { zoomTo(1); setCtxMenu(null); }}>Zoom to 100%</MenuItem>
+            </>}
+          </ContextMenu>
+        );
+      })()}
 
       {/* Bottom left: zoom, then undo and redo */}
       {!(phone && editing) && <div className="cv-ui cv-bl">
@@ -873,7 +926,7 @@ function StylePanel({ items, st, onStyle, onLayer, table }: {
 function Shortcuts({ onClose }: { onClose: () => void }) {
   const rows: Array<[string, string]> = [
     ["Hand (move the canvas)", "H, or hold Space"], ["Select", "V or 1"], ["Rectangle", "R or 2"], ["Circle", "O or 3"], ["Arrow", "A or 4"], ["Line", "L or 5"], ["Draw", "P or 6"], ["Text", "T or 7"], ["Image", "8"], ["Eraser", "E or 9"],
-    ["Note", "N"], ["Frame", "F"], ["Keep the tool picked", "Q"], ["Zoom", "⌘ or Ctrl + scroll"], ["Zoom to fit", "⇧1"], ["Undo / redo", "⌘Z / ⇧⌘Z"], ["Duplicate", "⌘D"], ["Select all", "⌘A"], ["Delete", "Delete"], ["Perfect square or circle, snap angles", "Hold Shift"],
+    ["Note", "N"], ["Frame", "F"], ["Keep the tool picked", "Q"], ["Zoom", "⌘ or Ctrl + scroll"], ["Zoom to fit", "⇧1"], ["Undo / redo", "⌘Z / ⇧⌘Z"], ["Cut / copy / paste", "⌘X / ⌘C / ⌘V"], ["Duplicate", "⌘D"], ["Bring forward / to front", "⌘] / ⇧⌘]"], ["Send backward / to back", "⌘[ / ⇧⌘["], ["Select all", "⌘A"], ["Delete", "Delete"], ["Perfect square or circle, snap angles", "Hold Shift"],
   ];
   return (
     <Modal onClose={onClose} label="Keyboard shortcuts" width={520}>
