@@ -33,6 +33,7 @@ import { deliverOnce } from "./invoiceReminders";
 import { SITE } from "./lib/site";
 import { randomToken } from "./lib/hash";
 import { bump } from "./lib/rate";
+import { EXPIRED, expiryDays, expiryFrom, linkExpired } from "./lib/linkExpiry";
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
 const MAX_TO = 25;
@@ -199,7 +200,7 @@ export const get = query({
       project: p ? { _id: p._id, label: label(p) } : null,
       sendTo: (x.sendTo ?? []).map((t) => ({ ...t, label: t.vendorId ? byId.get(String(t.vendorId))?.name ?? t.name ?? t.email : t.name || t.email, booked: !!t.vendorId && booked.has(String(t.vendorId)) })),
       vendors, projects, who: await peopleOf(ctx, x),
-      link: { copied: !!x.linkToken, url: x.linkToken ? linkOf(x.linkToken) : null, off: !!x.linkOff, opens: x.linkOpens ?? 0, reads: x.linkReads ?? 0 },
+      link: { copied: !!x.linkToken, url: x.linkToken ? linkOf(x.linkToken) : null, off: !!x.linkOff, opens: x.linkOpens ?? 0, reads: x.linkReads ?? 0, expiresAt: x.linkExpiresAt ?? null },
       pdfUrl: x.pdfId ? await ctx.storage.getUrl(x.pdfId) : null, history: x.history,
       // D161: the live copy and whether the briefing changed after it
       editedAt: x.editedAt ?? null, changed: x.status === "sent" && !!build && (x.shown?.buildAt !== undefined ? build.updatedAt !== x.shown.buildAt : build.updatedAt > (x.sentAt ?? 0) + 1000),
@@ -300,11 +301,26 @@ export const setLinkOff = mutation({
   },
 });
 
+/** Nov 18: change when every link to a shared briefing stops working: 1, 2, 3, 7 or 30 days from now, or never (null). */
+export const setLinkExpiry = mutation({
+  args: { briefingId: v.id("briefings"), days: v.union(expiryDays, v.null()) },
+  handler: async (ctx, a) => {
+    const { me } = await ownerBiz(ctx);
+    const x = await ctx.db.get(a.briefingId);
+    if (!x) throw new ConvexError("That briefing isn't here.");
+    if (x.status !== "sent") throw new ConvexError("It hasn't been shared yet. Choose this when you share it.");
+    const now = Date.now();
+    const linkExpiresAt = a.days === null ? undefined : expiryFrom(a.days, now);
+    await ctx.db.patch(x._id, { linkExpiresAt, updatedAt: now, history: [...x.history, { kind: "expiry_changed", at: now, by: by(me), detail: linkExpiresAt ? new Date(linkExpiresAt).toISOString() : "never" }].slice(-60) });
+    return { linkExpiresAt: linkExpiresAt ?? null };
+  },
+});
+
 // ---------- Share (863:16118): Send (email 58), Copy link ----------
 
 /** Freezes the PDF the first time, adds each person (their own link; someone already on it keeps theirs), and makes the copied link when asked. */
 export const shareStart = internalMutation({
-  args: { briefingId: v.id("briefings"), storageId: v.optional(v.id("_storage")), to: v.array(toArg), copyLink: v.boolean() },
+  args: { briefingId: v.id("briefings"), storageId: v.optional(v.id("_storage")), to: v.array(toArg), copyLink: v.boolean(), expiresInDays: v.optional(expiryDays) },
   handler: async (ctx, a): Promise<{ error?: string; at?: number; sends?: Array<{ recipientId: Id<"briefingRecipients">; email: string; name: string | null; token: string }>; link?: string }> => {
     const { me } = await ownerBiz(ctx);
     const x = await ctx.db.get(a.briefingId);
@@ -313,6 +329,7 @@ export const shareStart = internalMutation({
     const to = await cleanTo(ctx, a.to);
     if (!to.length && !a.copyLink) return { error: "Add who it goes to (Send to)." };
     if (x.linkOff) return { error: "The link is turned off. Turn it back on first, so the new links work." };
+    if (x.status === "sent" && linkExpired(x)) return { error: "The links have expired. Change when they expire first, then share." }; // Nov 18
     await audit(ctx, { kind: "sent", text: `shared the briefing ${build.title ?? ""}${to.length ? ` with ${to.length} ${to.length === 1 ? "person" : "people"}` : " by link"}`.replace("  ", " "), where: "Vendors › Briefings", link: `/vendors/briefings/${x._id}` });
     const now = Date.now();
     // As proposals (review fix): a file that isn't a fresh PDF upload is never touched; one this caller just uploaded
@@ -333,7 +350,7 @@ export const shareStart = internalMutation({
       mayDrop = true;
       const problems = briefingProblems(docOf(build));
       if (problems.length) return refuse(problems[0]);
-      patch = { ...patch, status: "sent", pdfId: a.storageId, sentAt: now, shown: shownOf(build) };
+      patch = { ...patch, status: "sent", pdfId: a.storageId, sentAt: now, shown: shownOf(build), ...(a.expiresInDays !== undefined ? { linkExpiresAt: expiryFrom(a.expiresInDays, now) } : {}) }; // Nov 18
       await ctx.db.patch(build._id, { renderedAt: now });
     }
     const sends: Array<{ recipientId: Id<"briefingRecipients">; email: string; name: string | null; token: string }> = [];
@@ -381,9 +398,9 @@ export const note = internalMutation({
 
 /** Share: Send (email 58 to each person, their own link) and/or Copy link. Nothing goes out until this is called. */
 export const share = action({
-  args: { briefingId: v.id("briefings"), storageId: v.optional(v.id("_storage")), to: v.array(toArg), note: v.optional(v.string()), copyLink: v.optional(v.boolean()) },
+  args: { briefingId: v.id("briefings"), storageId: v.optional(v.id("_storage")), to: v.array(toArg), note: v.optional(v.string()), copyLink: v.optional(v.boolean()), expiresInDays: v.optional(expiryDays) },
   handler: async (ctx, a): Promise<{ sent: number; held: number; off: number; failed: string[]; link: string | null }> => {
-    const s = await ctx.runMutation(internal.briefings.shareStart, { briefingId: a.briefingId, storageId: a.storageId, to: a.to, copyLink: !!a.copyLink });
+    const s = await ctx.runMutation(internal.briefings.shareStart, { briefingId: a.briefingId, storageId: a.storageId, to: a.to, copyLink: !!a.copyLink, expiresInDays: a.expiresInDays });
     if (s.error !== undefined || !s.at) throw new ConvexError(s.error ?? "That didn't share. Try again.");
     const out = { sent: 0, held: 0, off: 0, failed: [] as string[], link: s.link ?? null };
     if (!s.sends?.length) return out;
@@ -428,7 +445,7 @@ export const updateStart = internalMutation({
     if (problems.length) { await deleteFile(ctx, a.storageId, x.businessId ?? null); return { error: problems[0] }; }
     const now = Date.now();
     const old = x.pdfId;
-    const people = a.notify && !x.linkOff ? await recipientsOf(ctx, x._id) : [];
+    const people = a.notify && !x.linkOff && !linkExpired(x, now) ? await recipientsOf(ctx, x._id) : []; // Nov 18: no email pointing at an expired link
     await ctx.db.patch(x._id, { pdfId: a.storageId, editedAt: now, updatedAt: now, shown: shownOf(build),
       history: [...x.history, { kind: "edited", at: now, by: by(me), ...(people.length ? { detail: `emailed ${people.length} ${people.length === 1 ? "person" : "people"}` } : {}) }].slice(-60) });
     await ctx.db.patch(build._id, { renderedAt: now });
@@ -489,9 +506,10 @@ export const page = query({
       logoUrl: b.logoFileId ? await ctx.storage.getUrl(b.logoFileId) : null,
     } : { name: "", owner: null, email: null, accent: null, background: null, logoUrl: null };
     const title = f.x.shown?.title ?? build?.title ?? "Briefing"; // D161: the live copy's, not unsaved edits
-    if (f.x.linkOff) return { withdrawn: true as const, business, title };
+    if (f.x.linkOff) return { withdrawn: true as const, expired: false, business, title };
+    if (linkExpired(f.x)) return { withdrawn: true as const, expired: true, business, title }; // Nov 18: business and title only
     return {
-      withdrawn: false as const, business, title, kind: kindName(f.x), project: p ? label(p) : null,
+      withdrawn: false as const, expired: false, business, title, kind: kindName(f.x), project: p ? label(p) : null,
       dates: f.x.shown ? f.x.shown.dates ?? null : fieldOf(build, "dates"), sentAt: f.x.sentAt ?? null, updatedAt: f.x.editedAt ?? null, named: !!f.r, name: f.r?.name ?? null, readAt: f.r?.readAt ?? null,
     };
   },
@@ -502,7 +520,7 @@ export const opened = mutation({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
     const f = await byToken(ctx, token);
-    if (!f || f.x.linkOff || (await ownerSideLooking(ctx, f.r?.email))) return null; // Phase 6 sweep L7
+    if (!f || f.x.linkOff || linkExpired(f.x) || (await ownerSideLooking(ctx, f.r?.email))) return null; // Phase 6 sweep L7; Nov 18 expiry
     focusBusiness(ctx, f.x.businessId);
     try { await bump(ctx, "briefingLink", `open:${token}`); } catch { return null; } // a page reloaded all hour stops counting
     const now = Date.now();
@@ -521,6 +539,7 @@ export const markRead = mutation({
     const f = await byToken(ctx, token);
     if (!f) throw new ConvexError("This briefing isn't here.");
     if (f.x.linkOff) throw new ConvexError("This briefing was withdrawn.");
+    if (linkExpired(f.x)) throw new ConvexError(EXPIRED); // Nov 18
     if (await ownerSideLooking(ctx, f.r?.email)) return null; // the owner's side checking the page isn't the person reading it
     focusBusiness(ctx, f.x.businessId);
     await bump(ctx, "briefingLink", `read:${token}`);
@@ -543,7 +562,7 @@ export const pdfFor = internalQuery({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
     const f = await byToken(ctx, token);
-    if (!f || f.x.linkOff || !f.x.pdfId) return null;
+    if (!f || f.x.linkOff || linkExpired(f.x) || !f.x.pdfId) return null; // Nov 18: an expired link gets no PDF
     const build = await ctx.db.get(f.x.buildId);
     return { pdfId: f.x.pdfId, name: `${(build?.title ?? "Briefing").replace(/[^\w .·-]+/g, "").trim().slice(0, 80) || "Briefing"}.pdf` };
   },

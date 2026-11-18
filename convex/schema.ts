@@ -901,6 +901,7 @@ export default defineSchema({
     deck: v.optional(v.object({ kit: v.union(v.literal("business"), v.literal("client")), note: v.optional(v.string()), askedAt: v.optional(v.number()) })), // D72
     token: v.optional(v.string()),                // the one link of a proposal sent before D149
     linkToken: v.optional(v.string()),            // D149: Copy link (anyone with it)
+    linkExpiresAt: v.optional(v.number()),        // Nov 18 (Heston): every link to it (emailed and copied) stops working after this
     linkOpens: v.optional(v.number()),
     sentAt: v.optional(v.number()),
     viewedAt: v.optional(v.number()),
@@ -978,6 +979,7 @@ export default defineSchema({
     sendTo: v.optional(v.array(v.object({ vendorId: v.optional(v.id("vendors")), email: v.string(), name: v.optional(v.string()) }))), // the draft's Send to
     linkToken: v.optional(v.string()),                  // Copy link: anyone with it can read; opens counted, not named
     linkOff: v.optional(v.boolean()),                   // Q91 (a)(b): off stops every link, emailed ones too; can be turned back on
+    linkExpiresAt: v.optional(v.number()),              // Nov 18 (Heston): every link stops working after this (the vendor portal is unaffected)
     linkOpens: v.optional(v.number()),
     linkReads: v.optional(v.number()),                  // "I've read it" pressed on the copied link (no name)
     // D161 (Heston, Nov 6): a sent briefing can be edited; "Update the link" puts the new PDF behind every link.

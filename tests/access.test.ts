@@ -74,7 +74,7 @@ const OPEN: Record<string, string> = {
   "calls.resendCode": "the same link: a new code to the email given; three an hour, shared with the lead's pick limit",
   "calls.release": "the same link: lets go of that pick while it waits for its code; rate-limited",
   // D147 (Nov 4): a briefing's no-login link (/b/<token>, email 58). Tested in briefingsShare.test.ts.
-  "briefings.page": "a briefing link: answers only for a shared briefing's own long random token (a person's own, or the copied link); a turned-off link answers Withdrawn with the business and title only",
+  "briefings.page": "a briefing link: answers only for a shared briefing's own long random token (a person's own, or the copied link); a turned-off or expired link answers Withdrawn with the business and title only",
   "briefings.opened": "the same link: counts an open of that briefing only; a missing token, a draft or a turned-off link does nothing; rate-limited",
   // 5l (D191, D183): Creative planning's view-only links, signed out. Tested in creative.test.ts.
   "delivery.shared": "a client's Delivery link (/dl/<token>): answers only for that link's own long random token while it's on and the delivery is published, with only what was shared (published files)",
@@ -184,6 +184,7 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "briefings.deleteDraft": PRODUCTION,
     "briefings.copy": PRODUCTION,
     "briefings.setLinkOff": PRODUCTION,
+    "briefings.setLinkExpiry": PRODUCTION, // Nov 18
     "briefings.share": PRODUCTION,
     "briefings.update": PRODUCTION, // D161: update a sent briefing's link
     "briefs.settings": PROJECTS,
@@ -392,6 +393,7 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "proposals.stopLink": DOCS,
     "proposals.newLink": DOCS,
     "proposals.withdraw": DOCS,
+    "proposals.setLinkExpiry": DOCS, // Nov 18
     "proposals.later": DOCS,
     "proposals.startContract": DOCS,
     "proposals.questionnaire": DOCS,

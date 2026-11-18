@@ -4372,3 +4372,14 @@ textarea.cv-boxtxt { pointer-events: auto; display: block; padding-top: calc(50%
 @media (pointer: coarse) {
   .cv-handle::after { content: ""; position: absolute; inset: calc(-22px / var(--cvz, 1)); }
 }
+
+/* Nov 18 · link expiry (src/ui/LinkExpiry.tsx): the tick before sending, the row once sent, and Review's choice */
+.lx-tick { display: grid; gap: 10px; }
+.lx-seg .wp-seg { flex-wrap: wrap; width: auto; }
+.lx-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.lx-row.expired > .wp-small { color: var(--text-danger); }
+.lx-edit { display: grid; gap: 8px; width: 100%; }
+.lx-btns { display: flex; gap: 8px; }
+.lx-pick { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: var(--fs-caption); }
+.bf-actions .lx-row { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--border-faint); }
+.bf-actions .lx-row button, .bf-actions .lx-row .btn { width: auto; }

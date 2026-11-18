@@ -1,7 +1,8 @@
 // D147 · the no-login briefing page, /b/<token> (S5 · Phase 3c 863:17436 open, 863:17592 marked read, 863:17684 phone,
 // 863:17805 withdrawn). Read-only, in the business's look, like the quote and proposal pages. The brief is the PDF that
 // was shared (drawn page by page); "I've read it" beside it; Download PDF top right (not on Withdrawn). A person's own
-// link records their name; a copied link counts opens only. Withdrawn = the owner turned the link off (Q91 a).
+// link records their name; a copied link counts opens only. Withdrawn = the owner turned the link off (Q91 a), or (Nov 18)
+// the link expired.
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -28,7 +29,8 @@ export default function BriefingLink({ token }: { token: string }) {
   if (p.withdrawn) return (
     <Frame inShell={false} bar={null} brand={brand}>
       <div className="q-public-top"><span className="wp-small">Briefing from {biz}</span></div>
-      <EmptyState icon="lock" title="This briefing was withdrawn." body={`${biz} turned off the link to “${p.title}”. If you still need it, ask them for a new one.`} />
+      {p.expired ? <EmptyState icon="lock" title="This link has expired." body={`The link to “${p.title}” has expired. If you still need it, ask ${biz} for a new one.`} />
+        : <EmptyState icon="lock" title="This briefing was withdrawn." body={`${biz} turned off the link to “${p.title}”. If you still need it, ask them for a new one.`} />}
     </Frame>
   );
   const sender = p.business.owner?.split(" ")[0] || biz;

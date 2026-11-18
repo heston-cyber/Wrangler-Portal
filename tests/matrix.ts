@@ -98,7 +98,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "quotes.later": { quoteId: ids.quoteId, what: "seen" }, "quotes.draftFrom": { quoteId: ids.quoteId, contract: true },
     "quotes.page": { token: "x".repeat(24) }, "quotes.markViewed": { token: "x".repeat(24) },
     "quotes.stopLink": { quoteId: ids.quoteId, personId: ids.offerPersonId }, "quotes.newLink": { quoteId: ids.quoteId }, // D149
-    "proposals.stopLink": { proposalId: ids.proposalId, personId: ids.offerPersonId }, "proposals.newLink": { proposalId: ids.proposalId },
+    "proposals.stopLink": { proposalId: ids.proposalId, personId: ids.offerPersonId }, "proposals.newLink": { proposalId: ids.proposalId }, "proposals.setLinkExpiry": { proposalId: ids.proposalId, days: 7 },
     "proposals.list": {}, "proposals.get": { proposalId: "nope" }, "proposals.create": {}, "proposals.copy": { proposalId: ids.proposalId }, "proposals.deleteDraft": { proposalId: ids.proposalId },
     "proposals.templates": {}, "proposals.newTemplate": {}, "proposals.send": { proposalId: ids.proposalId }, "proposals.withdraw": { proposalId: ids.proposalId },
     "proposals.later": { proposalId: ids.proposalId, what: "seen" }, "proposals.startContract": { proposalId: ids.proposalId },
@@ -114,7 +114,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "briefings.templates": {}, "briefings.list": {}, "briefings.forVendor": { vendorId: "nope" }, "briefings.get": { briefingId: "nope" }, "briefings.create": { bookingId: ids.bookingId },
     "briefings.deleteDraft": { briefingId: ids.briefingId }, "briefings.copy": { briefingId: ids.briefingId },
     // D147 (Nov 4): briefings sent freely: Send to, Share (email 58 and Copy link), the link switch, and the no-login page
-    "briefings.setDetails": { briefingId: ids.briefingId, projectId: null, sendTo: [{ email: "pat@example.com" }] }, "briefings.setLinkOff": { briefingId: ids.briefingId, off: true },
+    "briefings.setDetails": { briefingId: ids.briefingId, projectId: null, sendTo: [{ email: "pat@example.com" }] }, "briefings.setLinkOff": { briefingId: ids.briefingId, off: true }, "briefings.setLinkExpiry": { briefingId: ids.briefingId, days: 7 },
     "briefings.share": { briefingId: ids.briefingId, to: [{ email: "pat@example.com" }], copyLink: true },
     "briefings.update": { briefingId: ids.briefingId, storageId: ids.storageId, notify: false },
     "briefings.page": { token: "nope-nope-nope-nope" }, "briefings.opened": { token: "nope-nope-nope-nope" }, "briefings.markRead": { token: "nope-nope-nope-nope" }, "signCopies.page": { token: "nope-nope-nope-nope" }, "signCopies.opened": { token: "nope-nope-nope-nope" },

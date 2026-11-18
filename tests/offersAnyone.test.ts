@@ -305,3 +305,73 @@ describe("D149 quotes and proposals to anyone", () => {
     await expect(w.heston.mutation(api.quotes.newLink, { quoteId: id })).rejects.toThrow(/while it's open/);
   });
 });
+
+// Nov 18 (Heston, approved 09:06): "Make this link expire" on a proposal: 1, 2, 3, 7 or 30 days, changeable afterward.
+describe("Nov 18 · a proposal's links expire", () => {
+  const DAY = 86_400_000, T0 = Date.UTC(2030, 0, 6, 15);
+  async function sent(w: W, extra: Record<string, unknown>) {
+    await w.heston.mutation(api.builder.ensureStarter, {});
+    const id = await w.heston.mutation(api.proposals.create, {}) as Id<"proposals">;
+    const p = await w.heston.query(api.proposals.get, { proposalId: id });
+    const b = await w.heston.query(api.builder.getBuild, { buildId: p.buildId });
+    const page = pageOf(b.blocks) as Page;
+    const priced = { ...page, content: page.content.map((n) => (n.type === "items" ? { ...n, attrs: { ...n.attrs, rows: [{ id: newId(), description: "Shooting", qty: 1, rate: 5000 }] } } : n)) };
+    await w.heston.mutation(api.builder.saveBuild, { buildId: p.buildId, title: "Brand film", blocks: priced, fields: { ...b.fields, project: "Brand film", client: { ...b.fields.client, company: "you" } }, signers: [], style: b.style });
+    const pdfId = await w.t.run((ctx) => ctx.storage.store(new Blob(["%PDF-1.4 p"], { type: "application/pdf" })));
+    const r = await w.heston.action(api.proposals.send, { proposalId: id, storageId: pdfId, to: "sam@patel.example", copyLink: true, ...extra });
+    return { id, link: (r.link as string).split("/p/")[1] };
+  }
+
+  test("E1–E4: a ticked expiry stops every link at its time (no price, PDF or answer), refuses Accept and new sends; the owner can change it or make it never", async () => {
+    vi.useFakeTimers({ now: T0 });
+    const w = await world();
+    fakeStripe();
+    const mails: Sent[] = [];
+    stub(mails);
+    const { id, link } = await sent(w, { expiresInDays: 2 });
+    const sam = tokenTo(mails, "sam@patel.example", "p");
+    expect((await w.heston.query(api.proposals.get, { proposalId: id })).linkExpiresAt).toBe(T0 + 2 * DAY);
+    expect(await w.t.query(api.proposals.page, { token: sam })).toMatchObject({ expired: false, status: "sent", totalCents: 500_000 });
+    vi.setSystemTime(T0 + 2 * DAY - 1);
+    expect((await w.t.query(api.proposals.page, { token: link })).expired).toBe(false); // still open the moment before
+    vi.setSystemTime(T0 + 2 * DAY);
+    for (const tok of [sam, link]) {
+      const pg = await w.t.query(api.proposals.page, { token: tok });
+      expect(Object.keys(pg).sort()).toEqual(["business", "expired", "number", "title"]); // E1: nothing else comes back
+      expect(pg).toMatchObject({ expired: true, title: "Brand film", business: { name: "Wrangler Productions" } });
+      await w.t.mutation(api.proposals.markViewed, { token: tok });
+      const res = await ppost(w, { token: tok, action: "accept", name: "Sam Patel", email: "sam@patel.example" });
+      expect(res.status).toBe(409); // E2
+      expect((await res.json()).error).toBe("This link has expired. Ask for a new one.");
+    }
+    let g = await w.heston.query(api.proposals.get, { proposalId: id });
+    expect(g).toMatchObject({ status: "sent", viewedAt: null, response: null });
+    // E3: sending more people a dead link is refused until the expiry changes.
+    await expect(w.heston.action(api.proposals.send, { proposalId: id, to: "kim@lee.example" })).rejects.toThrow(/expired/);
+    // E4: another business's owner, a client and a stranger can't change it; the owner can (7 days from now, then never).
+    for (const who of [w.boss, w.maya, w.t]) await expect(who.mutation(api.proposals.setLinkExpiry, { proposalId: id, days: 7 })).rejects.toThrow();
+    await expect(w.heston.mutation(api.proposals.setLinkExpiry, { proposalId: id, days: 5 })).rejects.toThrow(); // only 1, 2, 3, 7, 30
+    expect(await w.heston.mutation(api.proposals.setLinkExpiry, { proposalId: id, days: 7 })).toEqual({ linkExpiresAt: T0 + 9 * DAY });
+    expect(await w.t.query(api.proposals.page, { token: sam })).toMatchObject({ expired: false, status: "sent" });
+    await w.heston.mutation(api.proposals.setLinkExpiry, { proposalId: id, days: null });
+    vi.setSystemTime(T0 + 400 * DAY);
+    expect((await w.t.query(api.proposals.page, { token: link })).expired).toBe(false);
+    g = await w.heston.query(api.proposals.get, { proposalId: id });
+    expect(g.linkExpiresAt).toBeNull();
+    expect(g.history.filter((h: { kind: string }) => h.kind === "expiry_changed")).toHaveLength(2);
+  });
+
+  test("E5: unticked, a proposal's links never expire; a draft's expiry can't be set; only 1, 2, 3, 7 or 30 days are taken at send", async () => {
+    vi.useFakeTimers({ now: T0 });
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const { id, link } = await sent(w, {});
+    expect((await w.heston.query(api.proposals.get, { proposalId: id })).linkExpiresAt).toBeNull();
+    vi.setSystemTime(T0 + 365 * DAY);
+    expect((await w.t.query(api.proposals.page, { token: link })).expired).toBe(false);
+    const draft = await w.heston.mutation(api.proposals.create, {}) as Id<"proposals">;
+    await expect(w.heston.mutation(api.proposals.setLinkExpiry, { proposalId: draft, days: 7 })).rejects.toThrow(/hasn't been sent/);
+    await expect(sent(w, { expiresInDays: 14 })).rejects.toThrow();
+  });
+});

@@ -15,6 +15,7 @@ import { errText, uploadToStorage } from "../docs/pages/common";
 import { PdfPages } from "../proposals/ClientProposal";
 import { Banner } from "../payments/ClientInvoice";
 import { dateShort } from "../payments/common";
+import { ExpiryRow, ExpiryTick, type ExpiryDays } from "../../ui/LinkExpiry";
 
 export type BriefingInfo = NonNullable<FunctionReturnType<typeof api.briefings.get>>;
 export type To = { vendorId?: Id<"vendors">; email: string; name?: string; label: string; booked?: boolean };
@@ -99,9 +100,11 @@ export function ShareBriefing({ b, initial, makePdf, onClose, onShared, show }: 
   const uploadUrl = useMutation(api.builder.uploadUrl);
   const [to, setTo] = useState<To[]>(initial);
   const [words, setWords] = useState("");
+  const [days, setDays] = useState<ExpiryDays | null>(null); // Nov 18: unticked, the links never expire
   const [busy, setBusy] = useState<null | "send" | "link" | "pdf">(null);
   const [err, setErr] = useState<string | null>(null);
   const draft = b.state === "draft";
+  const expiry = draft && days ? { expiresInDays: days } : {}; // chosen at the first share; Change on the briefing's page after
   const frozen = async () => {
     if (!draft || !makePdf) return undefined;
     const blob = await makePdf();
@@ -112,7 +115,7 @@ export function ShareBriefing({ b, initial, makePdf, onClose, onShared, show }: 
     if (!to.length) { setErr("Add who it goes to."); return; }
     setBusy("send"); setErr(null);
     try {
-      const r = await share({ briefingId: b._id, storageId: await frozen(), to: to.map(plain), ...(words.trim() ? { note: words.trim() } : {}) });
+      const r = await share({ briefingId: b._id, storageId: await frozen(), to: to.map(plain), ...(words.trim() ? { note: words.trim() } : {}), ...expiry });
       const parts = [r.sent ? `Sent to ${plural(r.sent, "person", "people")}` : null, r.held ? `${r.held} held (email sending is limited on this site)` : null,
         r.off ? `${r.off} switched briefing emails off (it's in their vendor portal)` : null, r.failed.length ? `didn't send to ${r.failed.join(", ")}` : null].filter(Boolean);
       show(parts.join(". ") || "Shared.");
@@ -122,7 +125,7 @@ export function ShareBriefing({ b, initial, makePdf, onClose, onShared, show }: 
   const onLink = async () => {
     setBusy("link"); setErr(null);
     try {
-      const r = await share({ briefingId: b._id, storageId: await frozen(), to: [], copyLink: true });
+      const r = await share({ briefingId: b._id, storageId: await frozen(), to: [], copyLink: true, ...expiry });
       show(r.link && (await copyText(r.link)) ? "Link copied. Anyone with it can open the briefing; opens are counted, not named." : `The link: ${r.link}`);
       onShared?.(); onClose();
     } catch (e) { setErr(errText(e)); } finally { setBusy(null); }
@@ -143,6 +146,7 @@ export function ShareBriefing({ b, initial, makePdf, onClose, onShared, show }: 
         <DialogHeader eyebrow={`Share · ${b.kindName}`} title="Share the briefing" body="Send emails each person a link to read it, with no login. Nothing goes out until you press Send. You can also copy the link or download a PDF and send it yourself." onClose={onClose} />
         <div className="wp-field"><span className="wp-field-label">Send to</span><SendToPicker b={b} value={to} onChange={setTo} disabled={!!busy} /></div>
         <TextArea label="A few words (optional)" rows={3} value={words} onChange={(e) => setWords(e.target.value)} placeholder="e.g. Call is 7:00 AM. Questions? Reply to the email." />
+        {draft && <ExpiryTick value={days} onChange={setDays} disabled={!!busy} />}
         <div className="bf-or"><span className="wp-label">Or share it yourself</span>
           <div className="bf-orrow"><span><b>Copy link</b><span className="secondary">No email goes out. Anyone with the link can open it. Opens are counted, not named.</span></span>
             <Button size="sm" loading={busy === "link"} disabled={!!busy && busy !== "link"} onClick={() => void onLink()}>{b.link.copied ? "Copy the link" : "Copy link"}</Button></div>
@@ -167,6 +171,7 @@ export function BriefingPage({ b, show, toast }: { b: BriefingInfo; show: (m: st
   const setLinkOff = useMutation(api.briefings.setLinkOff);
   const share = useAction(api.briefings.share);
   const copyBriefing = useMutation(api.briefings.copy);
+  const setExpiry = useMutation(api.briefings.setLinkExpiry);
   const [sharing, setSharing] = useState(false);
   const [busy, setBusy] = useState<null | "link" | "off" | "copy">(null);
   const opened = b.who.filter((p) => p.openedAt).length, read = b.who.filter((p) => p.readAt).length;
@@ -207,6 +212,7 @@ export function BriefingPage({ b, show, toast }: { b: BriefingInfo; show: (m: st
               {b.pdfUrl && <a className="btn" href={b.pdfUrl} target="_blank" rel="noopener noreferrer" download>Download PDF</a>}
               <Button variant="ghost" loading={busy === "off"} onClick={() => void run("off")}>{b.link.off ? "Turn link back on" : "Turn off link"}</Button>
               <Button variant="ghost" loading={busy === "copy"} onClick={() => void run("copy")}>Make a copy to change it</Button>
+              <ExpiryRow expiresAt={b.link.expiresAt} onSet={(days) => setExpiry({ briefingId: b._id, days })} show={show} />
             </section>
             <section className="wp-card glass bf-who" aria-label="Who has it">
               <span className="wp-eyebrow">Who has it</span>
