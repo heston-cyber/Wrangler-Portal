@@ -20,12 +20,17 @@ type Live =
 export type InviteCheck = Live | { kind: null; expired: boolean };
 
 
-/** What this email was invited as, in the order the sign-up has always used (owner, client, vendor, team), then a
- *  business invite. With none that works, whether one existed and ran out (for "This invite has expired"). Reads with
- *  plain access: the sign-up runs before anyone has a business. */
+/** What this email was invited as: owner first, then Heston's business invite (Q4, Heston, Nov 18: "Go with your
+ *  suggestions": when the same email also has a client, vendor or team invite from another business, the business invite
+ *  wins and the other stays unaccepted until it runs out), then the order the sign-up has always used (client, vendor,
+ *  team). An expired business invite never beats a live one. With none that works, whether one existed and ran out (for
+ *  "This invite has expired"). Reads with plain access: the sign-up runs before anyone has a business. */
 export async function inviteFor(ctx: QueryCtx | MutationCtx, rawEmail: string, now = Date.now()): Promise<InviteCheck> {
   const email = rawEmail.trim().toLowerCase();
   if (allowedEmails().includes(email)) return { kind: "owner" };
+  const biz = (await ctx.db.query("businessInvites").withIndex("by_email", (q) => q.eq("email", email)).collect()).filter((i) => !i.revokedAt);
+  const b = biz.filter((i) => !i.acceptedAt && i.expiresAt > now).sort((x, y) => x.createdAt - y.createdAt)[0];
+  if (b) return { kind: "business", invite: b };
   const clients = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()).filter((i) => !i.revokedAt);
   const c = clients.find((i) => clientLive(i, now));
   if (c) return { kind: "client", invite: c };
@@ -35,9 +40,6 @@ export async function inviteFor(ctx: QueryCtx | MutationCtx, rawEmail: string, n
   const teams = (await ctx.db.query("teamInvites").withIndex("by_email", (q) => q.eq("email", email)).collect()).filter((i) => !i.revokedAt && !i.acceptedAt);
   const t = teams.filter((i) => i.expiresAt > now).sort((a, b) => a.createdAt - b.createdAt)[0];
   if (t) return { kind: "team", invite: t };
-  const biz = (await ctx.db.query("businessInvites").withIndex("by_email", (q) => q.eq("email", email)).collect()).filter((i) => !i.revokedAt);
-  const b = biz.filter((i) => !i.acceptedAt && i.expiresAt > now).sort((x, y) => x.createdAt - y.createdAt)[0];
-  if (b) return { kind: "business", invite: b };
   return { kind: null, expired: clients.length + vendors.length + teams.length + biz.filter((i) => !i.acceptedAt).length > 0 };
 }
 

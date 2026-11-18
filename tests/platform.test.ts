@@ -5,6 +5,7 @@ import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { anyApi } from "convex/server";
 import type { Id } from "../convex/_generated/dataModel";
 import { world } from "./payHarness";
+import { inviteFor } from "../convex/lib/invites";
 
 const api = anyApi;
 beforeAll(async () => {
@@ -128,6 +129,57 @@ describe("Phase 7 step 1 · invites and the platform admin page", () => {
     expect(await w.t.query(api.clients.canSignUp, { email: "leo@parkstudio.example" })).toEqual({ ok: false, reason: "notInvited" });
     await w.heston.mutation(api.vendors.invite, { vendorId }); // the vendor's invite, sent again
     expect(await w.t.query(api.clients.canSignUp, { email: "lee@park.example" })).toEqual({ ok: true, reason: "invited" });
+    vi.useRealTimers();
+  });
+
+  test("Q4 (Nov 18) your business invite wins over another business's client or vendor invite; the other stays unaccepted; only you see the warning", async () => {
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    // Another business invited this email as a client and as a vendor first.
+    await w.heston.mutation(api.clients.invite, { email: SAM, name: "Sam Ortiz" });
+    await w.heston.mutation(api.vendors.add, { name: "Sam Ortiz", email: SAM, roles: ["Editor"], rates: [], invite: true });
+    expect((await w.t.run((ctx) => inviteFor(ctx, SAM))).kind).toBe("client");
+    // The admin page warns, with a count and nothing else; nobody else can ask.
+    expect(await w.heston.query(api.platform.otherInvites, { email: SAM })).toEqual({ others: 2 });
+    expect(await w.heston.query(api.platform.otherInvites, { email: "free@else.example" })).toEqual({ others: 0 });
+    expect(await w.heston.query(api.platform.otherInvites, { email: "not an email" })).toEqual({ others: 0 });
+    for (const who of [w.boss, w.maya, w.t]) await expect(who.query(api.platform.otherInvites, { email: SAM })).rejects.toThrow();
+    // Your business invite goes out, and now it wins.
+    await w.heston.mutation(api.platform.invite, { business: "Northline Creative", email: SAM });
+    await settle(w);
+    expect((await w.t.run((ctx) => inviteFor(ctx, SAM))).kind).toBe("business");
+    expect(await w.t.query(api.clients.canSignUp, { email: SAM })).toEqual({ ok: true, reason: "invited" });
+    const sam = await signUp(w, mails, SAM, "Sam Ortiz");
+    // They own a new business; the other invites were not accepted and made no memberships.
+    expect((await sam.query(api.business.settings, {})).name).toBe("Northline Creative");
+    const after = await w.t.run(async (ctx) => ({
+      user: (await ctx.db.query("users").withIndex("email", (q) => q.eq("email", SAM)).unique())!,
+      invites: await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", SAM)).collect(),
+      vendors: await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", SAM)).collect(),
+      memberships: (await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", SAM)).collect()).filter((m) => !m.revokedAt),
+    }));
+    expect(after.user.role).toBe("owner");
+    expect(after.invites.every((i) => !i.acceptedAt)).toBe(true);
+    expect(after.vendors.every((x) => !x.joinedAt)).toBe(true);
+    expect(after.memberships.map((m) => m.role)).toEqual(["owner"]);
+    // Once used, the business invite is spent and doesn't come back; nothing more is added at a later sign-in.
+    expect((await w.t.run((ctx) => inviteFor(ctx, SAM))).kind).toBe("client");
+    expect(await w.heston.query(api.platform.otherInvites, { email: SAM })).toEqual({ others: 2 });
+  });
+
+  test("Q4 an expired business invite never beats a live client invite", async () => {
+    const w = await world();
+    stub([]);
+    const t0 = Date.now();
+    vi.useFakeTimers({ now: t0, toFake: ["Date"] });
+    await w.heston.mutation(api.platform.invite, { business: "Park Studio", email: "leo@parkstudio.example" });
+    vi.setSystemTime(t0 + 13 * DAY);
+    await w.heston.mutation(api.clients.invite, { email: "leo@parkstudio.example", name: "Leo Park" });
+    expect((await w.t.run((ctx) => inviteFor(ctx, "leo@parkstudio.example"))).kind).toBe("business"); // still live: wins
+    vi.setSystemTime(t0 + 15 * DAY);
+    expect((await w.t.run((ctx) => inviteFor(ctx, "leo@parkstudio.example"))).kind).toBe("client"); // the business invite ran out
+    expect(await w.heston.query(api.platform.otherInvites, { email: "leo@parkstudio.example" })).toEqual({ others: 1 });
     vi.useRealTimers();
   });
 });

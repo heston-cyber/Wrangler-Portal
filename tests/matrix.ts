@@ -221,7 +221,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "vendorOnboard.state": { businessId: ids.businessId }, "vendorOnboard.step": { businessId: ids.businessId, at: 1 }, "vendorOnboard.tour": { businessId: ids.businessId, skipped: true },
     "vendorOnboard.profile": { businessId: ids.businessId, name: "Vee", roles: [] }, "vendorOnboard.payMethod": { businessId: ids.businessId, method: "ACH" },
     "setup.state": {}, "setup.step": { at: 1 }, "setup.saveRates": { hourly: 150 }, "setup.firstClient": { company: "Fern & Field", name: "Priya Shah", email: "priya@fernandfield.example" }, "setup.hide": { hidden: true },
-    "platform.resend": { inviteId: "nope" }, "platform.revoke": { inviteId: "nope" },
+    "platform.resend": { inviteId: "nope" }, "platform.revoke": { inviteId: "nope" }, "platform.otherInvites": { email: "sam@northline.example" }, // Q4 (Nov 18): admin only
     "siteWatch.report": {}, "siteWatch.run": { id: "nope" }, "siteWatch.summary": {}, "siteWatch.markDone": { id: "nope" },
     "siteWatch.finding": { id: "nope" }, "siteWatch.setPaused": { paused: true }, // Phase 5c screens (Nov 4)
     "testimonials.list": {}, "testimonials.markRead": { testimonialId: ids.testimonialId }, "testimonials.saveAgain": { testimonialId: ids.testimonialId },

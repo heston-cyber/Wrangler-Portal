@@ -152,6 +152,7 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "setup.state": { pages: ["owner"], args: () => ({}) }, // Phase 7 step 2: the Dashboard's setup checklist and /setup (null for Wrangler)
   "platform.me": { pages: ["owner"], args: () => ({}) }, // Phase 7: the account menu's Platform admin row (false for anyone else)
   "platform.overview": { pages: [], args: () => ({}) }, // Phase 7: the platform admin page, Heston only (tested in platform.test.ts)
+  "platform.otherInvites": { pages: [], args: () => "skip" }, // Q4: the Invite a business dialog, Heston only (tested in platform.test.ts)
   "siteWatch.summary": { pages: ["owner"], args: () => ({}) }, // Dashboard row and the Settings menu: null for anyone who isn't an admin
   "siteWatch.report": { pages: ["owner"], args: () => "skip" }, "siteWatch.run": { pages: ["owner"], args: () => "skip" }, "siteWatch.finding": { pages: ["owner"], args: () => "skip" }, // Settings › Site watch (admins only; the page asks only after summary says so)
   "home.dashboard": { pages: ["owner"], args: () => ({ tzOffsetMin: 300 }) }, // Dashboard: Today, Coming up, Live edits, Money

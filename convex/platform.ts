@@ -6,6 +6,8 @@
 // Public sign-up stays off (D106): there is no other way to make a business.
 import { v, ConvexError } from "convex/values";
 import { internalAction, internalQuery, mutation, query } from "./lib/functions";
+import { query as rawQuery } from "./_generated/server";
+import { clientLive, vendorLive } from "./lib/inviteLive";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
@@ -79,6 +81,24 @@ export const overview = query({
       totals: { businesses: biz.length, active: biz.filter((r) => r.status === "active").length, settingUp: biz.filter((r) => r.status === "setting_up").length,
         invited: rows.filter((r) => r.status === "invited").length, clients: biz.reduce((n, r) => n + r.clients, 0), vendors: biz.reduce((n, r) => n + r.vendors, 0) },
     };
+  },
+});
+
+/** Q4 (Heston, Nov 18): before a business invite goes out, is another business already inviting this email as a client,
+ *  vendor or team member? A count only (D110: this page never shows another business's people), asked by the Invite a
+ *  business dialog. Your business invite wins at sign-up and the other invite stays unaccepted until it runs out.
+ *  Plain access, because the other businesses' invites aren't the admin's focus business's; admin only. */
+export const otherInvites = rawQuery({
+  args: { email: v.string() },
+  handler: async (ctx, a) => {
+    await platformAdmin(ctx);
+    const email = a.email.trim().toLowerCase();
+    if (!EMAIL.test(email) || email.length > 254) return { others: 0 };
+    const now = Date.now();
+    const clients = (await ctx.db.query("invites").withIndex("by_email", (q) => q.eq("email", email)).collect()).filter((i) => !i.revokedAt && clientLive(i, now)).length;
+    const vendors = (await ctx.db.query("vendors").withIndex("by_email", (q) => q.eq("email", email)).collect()).filter((x) => !x.archivedAt && x.invitedAt && vendorLive(x, now)).length;
+    const team = (await ctx.db.query("teamInvites").withIndex("by_email", (q) => q.eq("email", email)).collect()).filter((i) => !i.revokedAt && !i.acceptedAt && i.expiresAt > now).length;
+    return { others: clients + vendors + team };
   },
 });
 
