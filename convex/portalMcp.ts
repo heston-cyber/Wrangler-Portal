@@ -20,7 +20,7 @@ import { sha256Hex } from "./lib/hash";
 import { fail, ok, servePost, serveOther, type Json, type McpConfig, type Tool, type ToolResult } from "./lib/mcpServer";
 import { KEY_PREFIX } from "./portalKeys";
 import { INSTRUCTIONS as REVIEW_INSTRUCTIONS, TOOLS as REVIEW_TOOLS, callTool as reviewCall } from "./mcp";
-import { INSTRUCTIONS as SIGN_INSTRUCTIONS, TOOLS as SIGN_TOOLS, callTool as signCall, findDoc, getDoc, isFail } from "./wsMcp";
+import { INSTRUCTIONS as SIGN_INSTRUCTIONS, TOOLS as SIGN_TOOLS, callTool as signCall } from "./wsMcp";
 
 const SERVER_INFO = { name: "wrangler-portal", title: "Wrangler Portal", version: "1.0.0" };
 
@@ -48,18 +48,11 @@ const GUIDE = {
     "Proposals: read a proposal's answers and write its draft",
   ],
   coming: "Projects, production (shoots, call sheets, shot lists, gear), creative planning, tasks, calendar, messages, delivery, invoices, quotes, subscriptions, vendors, reports and settings are added to this same connector next.",
-  sends_need_heston: ["send_client_note", "send_reminder", "approve_document", "send_document", "void_document"],
+  sends_need_heston: ["send_client_note", "send_reminder", "set_version_description", "approve_document", "send_document", "void_document"],
+  not_here: "Moving a project to another client, and fetching a PDF from a link, are done by Heston on the site (pass PDFs as pdf_base64).",
   how_confirm_works: "Ask Heston in chat. Call the tool with his words in heston_ok. Give him confirm_at. It happens only when he presses Confirm on the site. Check with request_status.",
   never: ["moving money (paying, refunding, charging)", "signing for Heston", "showing W-9s, tax IDs, bank details, keys or passwords", "sending or deleting without Heston's Confirm"],
 };
-
-// Sign's "Send a reminder" emailed the signer straight away; on this connector it's a request Heston confirms (D209).
-const SIGN_PORTAL_TOOLS: Tool[] = SIGN_TOOLS.map((t) => t.name !== "send_reminder" ? t : {
-  ...t,
-  description: "Asks to email a signer whose turn it is a reminder with their link. It goes when Heston confirms on the site (confirm_at). ONLY after Heston says so in this chat; pass his words as heston_ok.",
-  inputSchema: { type: "object", properties: { ...((t.inputSchema as { properties: Json }).properties), heston_ok: hestonOk }, required: ["document", "signer", "heston_ok"], additionalProperties: false },
-  annotations: write(),
-});
 
 const OWN_TOOLS: Tool[] = [
   { name: "guide", title: "What this connector can do", description: "What the Wrangler Portal connector can do now, what needs Heston's confirmation, and what it never does.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true, openWorldHint: false } },
@@ -67,15 +60,17 @@ const OWN_TOOLS: Tool[] = [
   { name: "request_status", title: "Has Heston confirmed it?", description: "The state of a request made by a sending or deleting tool: waiting, done, cancelled, failed or expired (requests last 24 hours).", inputSchema: { type: "object", properties: { request_id: { type: "string" } }, required: ["request_id"], additionalProperties: false }, annotations: { readOnlyHint: true, openWorldHint: false } },
 ];
 
-export const TOOLS: Tool[] = [...REVIEW_TOOLS, ...SIGN_PORTAL_TOOLS, ...OWN_TOOLS];
+export const TOOLS: Tool[] = [...REVIEW_TOOLS, ...SIGN_TOOLS, ...OWN_TOOLS];
 const REVIEW_NAMES = new Set(REVIEW_TOOLS.map((t) => t.name));
 const SIGN_NAMES = new Set(SIGN_TOOLS.map((t) => t.name));
 { // Two tools with one name would be a silent clash: refuse to load.
   const seen = new Set<string>();
   for (const t of TOOLS) { if (seen.has(t.name)) throw new Error(`Two connector tools are called ${t.name}`); seen.add(t.name); }
 }
-/** Reads change nothing and aren't logged. Everything else is a change (logged) or a request. */
-const isRead = (name: string) => TOOLS.find((t) => t.name === name)?.annotations?.readOnlyHint === true || /^(find|get|list|preview|verify|guide|request_status)/.test(name);
+/** Reads change nothing and aren't logged: only a tool that declares itself read-only (review L5: never by its name). */
+const isRead = (name: string) => TOOLS.find((t) => t.name === name)?.annotations?.readOnlyHint === true;
+/** Tools that only ask Heston (logged by the request itself, or by Sign's own trail, as an ask, never as done). */
+const ASKS = new Set(["send_client_note", "send_reminder", "set_version_description", "approve_document", "send_document", "void_document"]);
 
 const str = (x: unknown) => (typeof x === "string" && x.trim() ? x.trim() : undefined);
 const errText = (e: unknown) => ((e as Error)?.message || String(e)).replace(/^.*ConvexError: /, "").replace(/^Uncaught Error: /, "").split("\n")[0].slice(0, 400);
@@ -97,19 +92,11 @@ export async function callTool(ctx: ActionCtx, name: string, args: Json): Promis
       if (!id) return fail("Pass note_id.");
       return afterRequest(await ctx.runMutation(internal.confirm.request, { kind: "note.send", targetId: id, said }) as Json);
     }
-    if (name === "send_reminder") {
-      const said = asked(args);
-      if (!said) return fail(ASK);
-      const f = await findDoc(ctx, args.document);
-      if (isFail(f)) return f;
-      const d = await getDoc(ctx, f.id);
-      if (!d) return fail("That document doesn't exist.");
-      const who = (str(args.signer) ?? "").toLowerCase();
-      const x = d.signings.find((y) => y.key === who || y.email === who || y.name.toLowerCase() === who) ?? d.signings.find((y) => y.name.toLowerCase().includes(who));
-      if (!x) return fail(`No signer "${args.signer}" on ${d.doc.label}.`, { signers: d.signings.map((y) => ({ key: y.key, name: y.name, status: y.status })) });
-      return afterRequest(await ctx.runMutation(internal.confirm.request, { kind: "sign.remind", targetId: `${f.id}:${x.key}`, said }) as Json);
+    let r = REVIEW_NAMES.has(name) ? await reviewCall(ctx, name, args) : SIGN_NAMES.has(name) ? await signCall(ctx, name, args) : fail(`Unknown tool: ${name}`);
+    if (!r.isError && name === "draft_client_note" && r.structuredContent) {
+      // Review L6: on this connector the note goes through a request, not Heston's Sent list.
+      r = ok({ ...r.structuredContent, next: "It's a draft. To send it, ask Heston in this chat, then call send_client_note with his words; it goes when he presses Confirm on the site." });
     }
-    const r = REVIEW_NAMES.has(name) ? await reviewCall(ctx, name, args) : SIGN_NAMES.has(name) ? await signCall(ctx, name, args) : fail(`Unknown tool: ${name}`);
     if (!r.isError && !isRead(name)) await logChange(ctx, name, args);
     return r;
   } catch (e) {
@@ -117,12 +104,15 @@ export async function callTool(ctx: ActionCtx, name: string, args: Json): Promis
   }
 }
 
-/** Every change Claude makes is a line in the site's Activity (kind "Claude"). */
+/** Every change Claude makes is a line in the site's Activity (kind "Claude"). An ask says it's an ask. */
 async function logChange(ctx: ActionCtx, name: string, args: Json) {
+  if (name === "send_client_note" || name === "send_reminder" || name === "set_version_description") return; // confirm.request logs these
   const t = TOOLS.find((x) => x.name === name);
-  const about = str(args.title) ?? str(args.video) ?? str(args.document) ?? str(args.draft) ?? str(args.proposal) ?? str(args.client) ?? str(args.project) ?? "";
+  const ids = Array.isArray(args.note_ids) ? `${(args.note_ids as unknown[]).length} note${(args.note_ids as unknown[]).length === 1 ? "" : "s"}` : str(args.note_id) ? "a note" : "";
+  const about = str(args.title) ?? str(args.video) ?? str(args.document) ?? str(args.draft) ?? str(args.proposal) ?? str(args.client) ?? str(args.project) ?? ids;
+  const what = ASKS.has(name) ? `asked Heston to confirm: ${t?.title ?? name}` : t?.title ?? name;
   try {
-    await ctx.runMutation(internal.auditLog.log, { kind: "claude", text: `${t?.title ?? name}${about ? `: ${about.slice(0, 80)}` : ""}`, where: "Claude connector", by: { name: "Claude", role: "Connector" } });
+    await ctx.runMutation(internal.auditLog.log, { kind: "claude", text: `${what}${about ? `: ${about.slice(0, 80)}` : ""}${name === "mark_notes" && str(args.status) ? ` (${args.status})` : ""}`, where: "Claude connector", by: { name: "Claude", role: "Connector" } });
   } catch { /* the change itself stands; a missing Activity line never undoes it */ }
 }
 

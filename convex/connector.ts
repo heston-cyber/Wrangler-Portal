@@ -421,6 +421,18 @@ export const describeVersion = internalMutation({
   },
 });
 
+/** Phase 8a review (M3): the version a description is for, for the connector's confirm request. */
+export const versionFor = internalQuery({
+  args: { videoId: v.optional(v.string()), video: v.optional(v.string()), version: v.optional(v.number()) },
+  handler: async (ctx, a) => {
+    const found = await findVideo(ctx, a.videoId, a.video);
+    if ("error" in found) return found;
+    const picked = await pickVersion(ctx, found.video._id, a.version);
+    if ("error" in picked) return { error: picked.error };
+    return { versionId: picked.ver._id };
+  },
+});
+
 export const addToRegisterFor = internalMutation({
   args: { videoId: v.optional(v.string()), video: v.optional(v.string()), number: v.optional(v.number()), shortTitle: v.string(), client: v.optional(v.string()) },
   handler: async (ctx, a) => {

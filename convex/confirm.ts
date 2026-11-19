@@ -5,55 +5,46 @@
 // session. So text inside an email, note or document claiming "Heston said yes" can never send anything on its own.
 // Money never moves this way either (D209: Claude prepares, Heston pays on the site).
 //
-// Each kind of request is a line in KINDS: what its Confirm page says, and what Confirm does. A kind's `run` uses the
-// same code as the site's own button (the note's Send, and so on), so a confirmed request behaves exactly the same.
+// Security review (H1): the Confirm page shows exactly what will go out, read live from the record (the full text,
+// the link, who it reaches, whether it emails), and the request is bound to that content: a hash is kept when Claude
+// asks, and Confirm refuses if anything changed since (Claude, or anyone, editing the draft after the ask).
+//
+// Each kind of request is a line in KINDS: `preview` (what goes out, live) and `run` (does it with the same code as
+// the site's own button).
 import { v, ConvexError } from "convex/values";
 import { internalMutation, mutation, query } from "./lib/functions";
-import type { MutationCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireOwner, viewerOf } from "./lib/access";
 import { audit } from "./lib/audit";
 import { SITE } from "./lib/site";
-import { sendNoteCore } from "./inbox";
+import { sha256Hex } from "./lib/hash";
+import { noteAudience, sendNoteCore } from "./inbox";
 import { resendCore, sentDoc } from "./sign";
 import { docLabel } from "./lib/wsLayout";
 
 const HOURS = 24;
 export const CONFIRM_MS = HOURS * 3_600_000;
-const clip = (s: string, n: number) => s.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, n);
+const MAX_WAITING = 20; // review L2: Claude can't pile up requests
+// Review L7: control, bidi and zero-width characters out of anything shown on the Confirm page.
+export const clip = (s: string, n: number) => s.replace(/[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩﻿]/g, " ").replace(/\s+/g, " ").trim().slice(0, n);
 
+type Ctx = QueryCtx | MutationCtx;
+type Line = { label: string; value: string };
+type Preview = { title: string; lines: Line[]; open?: string };
 type Kind = {
-  /** What the Confirm page says, made fresh from the record (never from Claude's own words). Throws when it can't be done. */
-  describe: (ctx: MutationCtx, targetId: string) => Promise<string>;
-  /** Does it. The owner has just pressed Confirm. */
-  run: (ctx: MutationCtx, targetId: string) => Promise<Record<string, unknown>>;
+  /** What will go out, read live from the record. Throws when it can't be done (gone, already sent, not their turn). */
+  preview: (ctx: Ctx, targetId: string, payload: string | undefined) => Promise<Preview>;
+  /** Does it. The owner has just pressed Confirm, and the preview still matches what was asked. */
+  run: (ctx: MutationCtx, targetId: string, payload: string | undefined) => Promise<Record<string, unknown>>;
 };
 
-const note = async (ctx: MutationCtx, id: string) => {
+const note = async (ctx: Ctx, id: string) => {
   const nid = ctx.db.normalizeId("inboxNotes", id);
   const n = nid ? await ctx.db.get(nid) : null; // another business's note is invisible here
   if (!n) throw new ConvexError("That note isn't here.");
   if (n.status !== "draft") throw new ConvexError(n.status === "sent" ? "That note was already sent." : "That note was discarded.");
   return n;
-};
-
-export const KINDS: Record<string, Kind> = {
-  "note.send": {
-    describe: async (ctx, id) => {
-      const n = await note(ctx, id);
-      const c = await ctx.db.get(n.clientId);
-      return `Send the note “${clip(n.title, 120)}” to ${c?.name ?? "the client"}`;
-    },
-    run: async (ctx, id) => { const n = await note(ctx, id); return await sendNoteCore(ctx, n._id); },
-  },
-  // Wrangler Sign's "Send a reminder" (the signing steps themselves are unchanged; this is the reminder email only).
-  "sign.remind": {
-    describe: async (ctx, id) => {
-      const { doc, x } = await signer(ctx, id);
-      return `Email ${x.name} (${x.email}) a reminder to sign ${docLabel(doc.number)}, “${clip(doc.title, 100)}”`;
-    },
-    run: async (ctx, id) => { const { doc, x } = await signer(ctx, id); await resendCore(ctx, doc._id, x.signerKey, "heston"); return { reminded: x.name }; },
-  },
 };
 
 /** "<documentId>:<signerKey>": a signer whose turn it is on a document that's out for signature. */
@@ -67,27 +58,97 @@ async function signer(ctx: MutationCtx, id: string) {
   return { doc, x };
 }
 
-const view = (r: { _id: Id<"pendingActions">; kind: string; summary: string; said: string; status: string; requestedAt: number; expiresAt: number; doneAt?: number; error?: string }, now = Date.now()) => ({
-  _id: r._id, kind: r.kind, summary: r.summary, said: r.said, requestedAt: r.requestedAt, expiresAt: r.expiresAt, doneAt: r.doneAt ?? null, error: r.error ?? null,
-  status: r.status === "waiting" && r.expiresAt <= now ? "expired" : r.status,
-});
+export const KINDS: Record<string, Kind> = {
+  "note.send": {
+    preview: async (ctx, id) => {
+      const n = await note(ctx, id);
+      const c = await ctx.db.get(n.clientId);
+      if (!c) throw new ConvexError("That client isn't here.");
+      const reach = (await noteAudience(ctx, c)).filter((p) => p.access && (!n.to || n.to.includes(p.email)));
+      return {
+        title: `Send the note “${clip(n.title, 120)}” to ${clip(c.name, 80)}`,
+        open: `/sent/new?note=${n._id}`,
+        lines: [
+          { label: "Title", value: clip(n.title, 200) },
+          { label: "Text", value: n.text.slice(0, 4000) },
+          ...(n.link ? [{ label: "Link", value: clip(n.link, 500) }] : []),
+          { label: "Reaches", value: reach.length ? reach.map((p) => `${clip(p.name ?? "", 60)} <${p.email}>`.trim()).join(", ") : "No one with portal access yet (it can't be sent)" },
+          { label: "Email", value: n.emailThem === false ? "Inbox only, no email" : "Inbox and an email to each of them" },
+        ],
+      };
+    },
+    run: async (ctx, id) => { const n = await note(ctx, id); return await sendNoteCore(ctx, n._id); },
+  },
+  // Wrangler Sign's "Send a reminder" (the signing steps themselves are unchanged; this is the reminder email only).
+  "sign.remind": {
+    preview: async (ctx, id) => {
+      const { doc, x } = await signer(ctx as MutationCtx, id);
+      return {
+        title: `Email ${clip(x.name, 80)} a reminder to sign ${docLabel(doc.number)}`,
+        open: `/sign/d/${doc._id}`,
+        lines: [
+          { label: "To", value: `${clip(x.name, 80)} <${x.email}>` },
+          { label: "Document", value: `${docLabel(doc.number)}, “${clip(doc.title, 120)}”` },
+          { label: "Email", value: "Their signing link again" },
+        ],
+      };
+    },
+    run: async (ctx, id) => { const { doc, x } = await signer(ctx, id); await resendCore(ctx, doc._id, x.signerKey, "heston"); return { reminded: x.name }; },
+  },
+  // Review (M3): a version's description shows on share links and in "new cut ready" emails, so it waits too.
+  "version.describe": {
+    preview: async (ctx, id, payload) => {
+      const vid = ctx.db.normalizeId("versions", id);
+      const ver = vid ? await ctx.db.get(vid) : null;
+      const video = ver ? await ctx.db.get(ver.videoId) : null;
+      if (!ver || !video) throw new ConvexError("That version isn't here.");
+      return {
+        title: `Change what v${ver.number} of “${clip(video.title, 100)}” says changed`,
+        open: `/v/${video._id}`,
+        lines: [
+          { label: "Now", value: ver.description ? ver.description.slice(0, 2000) : "(nothing)" },
+          { label: "New", value: (payload ?? "").trim().slice(0, 2000) || "(nothing)" },
+          { label: "Shows", value: "On share links to this video, and in the next “new cut” emails" },
+        ],
+      };
+    },
+    run: async (ctx, id, payload) => {
+      const vid = ctx.db.normalizeId("versions", id);
+      const ver = vid ? await ctx.db.get(vid) : null;
+      if (!ver) throw new ConvexError("That version isn't here.");
+      const text = (payload ?? "").trim().slice(0, 2000);
+      await ctx.db.patch(ver._id, { description: text || undefined });
+      return { version: ver.number, description: text || null };
+    },
+  },
+};
+
+const hashOf = (p: Preview) => sha256Hex(JSON.stringify([p.title, p.lines]));
+
+const status = (r: { status: string; expiresAt: number }, now = Date.now()) => r.status === "waiting" && r.expiresAt <= now ? "expired" : r.status;
 
 /** The connector: make a request (nothing happens yet). The same kind and record already waiting is renewed. */
 export const request = internalMutation({
-  args: { kind: v.string(), targetId: v.string(), said: v.string() },
+  args: { kind: v.string(), targetId: v.string(), said: v.string(), payload: v.optional(v.string()) },
   handler: async (ctx, a) => {
     const k = KINDS[a.kind];
     if (!k) throw new ConvexError("That can't be asked for.");
     const said = clip(a.said, 500);
     if (said.length < 3) throw new ConvexError("Ask Heston first, and pass his words in `said`.");
-    const summary = await k.describe(ctx, a.targetId);
+    const payload = a.payload === undefined ? undefined : a.payload.slice(0, 4000);
+    const p = await k.preview(ctx, a.targetId, payload);
+    const hash = await hashOf(p);
     const now = Date.now();
-    const same = (await ctx.db.query("pendingActions").withIndex("by_status", (q) => q.eq("status", "waiting")).collect())
-      .find((r) => r.kind === a.kind && r.targetId === a.targetId);
+    const waiting = (await ctx.db.query("pendingActions").withIndex("by_status", (q) => q.eq("status", "waiting")).collect()).filter((r) => r.expiresAt > now);
+    const same = waiting.find((r) => r.kind === a.kind && r.targetId === a.targetId);
     let id: Id<"pendingActions">;
-    if (same) { id = same._id; await ctx.db.patch(id, { summary, said, requestedAt: now, expiresAt: now + CONFIRM_MS }); }
-    else id = await ctx.db.insert("pendingActions", { kind: a.kind, targetId: a.targetId, summary, said, status: "waiting", requestedAt: now, expiresAt: now + CONFIRM_MS });
-    return { request_id: id, summary, confirm_at: `${SITE()}/confirm/${id}`, expires_in_hours: HOURS };
+    if (same) { id = same._id; await ctx.db.patch(id, { summary: p.title, said, payload, hash, requestedAt: now, expiresAt: now + CONFIRM_MS }); }
+    else {
+      if (waiting.length >= MAX_WAITING) throw new ConvexError(`Heston already has ${MAX_WAITING} requests waiting. Ask him to go through them first (they're on his Dashboard).`);
+      id = await ctx.db.insert("pendingActions", { kind: a.kind, targetId: a.targetId, summary: p.title, said, payload, hash, status: "waiting", requestedAt: now, expiresAt: now + CONFIRM_MS });
+    }
+    await audit(ctx, { kind: "claude", text: `asked Heston to confirm: ${p.title}`, where: "Claude connector", link: `/confirm/${id}`, by: { name: "Claude", role: "Connector" } });
+    return { request_id: id, summary: p.title, what_goes_out: p.lines, confirm_at: `${SITE()}/confirm/${id}`, expires_in_hours: HOURS };
   },
 });
 
@@ -98,18 +159,27 @@ export const statusOf = internalMutation({
     const id = ctx.db.normalizeId("pendingActions", a.requestId);
     const r = id ? await ctx.db.get(id) : null;
     if (!r) throw new ConvexError("That request isn't here.");
-    return view(r);
+    return { request_id: r._id, summary: r.summary, status: status(r), requested_at: new Date(r.requestedAt).toISOString(), ...(r.error ? { error: r.error } : {}) };
   },
 });
 
-/** The Confirm page. The owner only. */
+/** The Confirm page: the request, and what goes out read live now (with whether it still matches the ask). Owner only. */
 export const get = query({
   args: { id: v.string() },
   handler: async (ctx, a) => {
     await requireOwner(ctx);
     const id = ctx.db.normalizeId("pendingActions", a.id);
     const r = id ? await ctx.db.get(id) : null;
-    return r ? view(r) : null;
+    if (!r) return null;
+    const base = { _id: r._id, kind: r.kind, summary: r.summary, said: r.said, requestedAt: r.requestedAt, expiresAt: r.expiresAt, doneAt: r.doneAt ?? null, status: status(r) };
+    if (base.status !== "waiting") return { ...base, preview: null, changed: false, problem: null };
+    const k = KINDS[r.kind];
+    try {
+      const p = await k.preview(ctx, r.targetId, r.payload);
+      return { ...base, preview: p, changed: (await hashOf(p)) !== r.hash, problem: null };
+    } catch (e) {
+      return { ...base, preview: null, changed: false, problem: ((e as Error).message || "It can't be done now.").replace(/^.*ConvexError: /, "").split("\n")[0] };
+    }
   },
 });
 
@@ -120,11 +190,12 @@ export const waiting = query({
     if ((await viewerOf(ctx)).kind !== "owner") return [];
     const now = Date.now();
     return (await ctx.db.query("pendingActions").withIndex("by_status", (q) => q.eq("status", "waiting")).order("desc").take(50))
-      .filter((r) => r.expiresAt > now).map((r) => view(r, now));
+      .filter((r) => r.expiresAt > now).map((r) => ({ _id: r._id, summary: r.summary, requestedAt: r.requestedAt }));
   },
 });
 
-/** Confirm: the owner, signed in on the site. Runs it the same way the site's own button does. */
+/** Confirm: the owner, signed in on the site. Runs it the same way the site's own button does, only if what goes out
+ *  is still exactly what was asked. */
 export const confirm = mutation({
   args: { id: v.string() },
   handler: async (ctx, a) => {
@@ -136,7 +207,9 @@ export const confirm = mutation({
     if (r.expiresAt <= Date.now()) throw new ConvexError("That request ran out. Ask Claude again.");
     const k = KINDS[r.kind];
     if (!k) throw new ConvexError("That can't be done here.");
-    const result = await k.run(ctx, r.targetId); // throws (and changes nothing) when it can't be done
+    const p = await k.preview(ctx, r.targetId, r.payload); // throws when it can't be done any more
+    if ((await hashOf(p)) !== r.hash) throw new ConvexError("It changed since Claude asked. Check it, then ask Claude again (or do it yourself).");
+    const result = await k.run(ctx, r.targetId, r.payload); // throws (and changes nothing) when it can't be done
     await ctx.db.patch(r._id, { status: "done", doneAt: Date.now() });
     await audit(ctx, { kind: r.kind.endsWith(".delete") ? "deleted" : "sent", text: `confirmed Claude's request: ${r.summary}`, where: "Claude connector", link: `/confirm/${r._id}` });
     return { ok: true, ...result };
@@ -150,7 +223,10 @@ export const cancel = mutation({
     const id = ctx.db.normalizeId("pendingActions", a.id);
     const r = id ? await ctx.db.get(id) : null;
     if (!r) throw new ConvexError("That request isn't here.");
-    if (r.status === "waiting") await ctx.db.patch(r._id, { status: "cancelled", doneAt: Date.now() });
+    if (r.status === "waiting") {
+      await ctx.db.patch(r._id, { status: "cancelled", doneAt: Date.now() });
+      await audit(ctx, { kind: "claude", text: `said no to Claude's request: ${r.summary}`, where: "Claude connector", link: `/confirm/${r._id}` });
+    }
     return null;
   },
 });

@@ -86,7 +86,7 @@ export const TOOLS: Tool[] = [
       short_title: { type: "string", description: "The title part of its file names: letters, digits and hyphens, e.g. LCArizona. Made from the title when left out." },
       project: { type: "string", minLength: 1, description: "Project name, e.g. \"26122 Spirit Days\" or \"Spirit Days\"." },
       job_number: { type: "string", description: "Job number for a new project, e.g. 26127." },
-      client: { type: "string", description: "Client for a new project, e.g. \"All 4 One\"." },
+      client: { type: "string", description: "Client for a NEW project, e.g. \"All 4 One\". An existing project isn't moved to a client here (Heston does that on the site)." },
     }, required: ["title", "project"], additionalProperties: false },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   },
@@ -97,7 +97,6 @@ export const TOOLS: Tool[] = [
       video_id: videoArgs.video_id, video: videoArgs.video,
       number: { type: "integer", minimum: 1, maximum: 99999, description: "A specific free number, e.g. 1 for 00001." },
       short_title: { type: "string", minLength: 1, description: "The title part of its file names: letters, digits and hyphens, e.g. LCArizona." },
-      client: { type: "string", description: "File the video's project under this client." },
     }, required: ["short_title"], additionalProperties: false },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   },
@@ -109,8 +108,8 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "set_version_description", title: "Describe a version",
-    description: "Sets what changed in a version (shown on the site under the version), e.g. \"Step 3: VO and music; tightened the open\". The latest version unless you pass version. Replaces the old description.",
-    inputSchema: { type: "object", properties: { video_id: videoArgs.video_id, video: videoArgs.video, version: videoArgs.version, description: { type: "string", description: "What changed, in a sentence or two." } }, required: ["description"], additionalProperties: false },
+    description: "Asks to set what changed in a version, e.g. \"Step 3: VO and music; tightened the open\" (the latest version unless you pass version). It shows on share links and in \"new cut\" emails, so it changes when Heston confirms on the site (confirm_at). ONLY after Heston says so in this chat; pass his words as heston_ok.",
+    inputSchema: { type: "object", properties: { video_id: videoArgs.video_id, video: videoArgs.video, version: videoArgs.version, description: { type: "string", description: "What changed, in a sentence or two." }, heston_ok: { type: "string", minLength: 3, description: "What Heston said in this chat telling you to do this, in his words." } }, required: ["description", "heston_ok"], additionalProperties: false },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   {
@@ -266,14 +265,15 @@ export async function callTool(ctx: ActionCtx, name: string, args: Json): Promis
       const title = str(args.title), project = str(args.project);
       if (!title || !project) return fail("Pass title and project.");
       const r = await ctx.runMutation(internal.register.newVideoInternal, {
-        title, projectName: project, shortTitle: str(args.short_title), jobNumber: str(args.job_number), client: str(args.client),
+        title, projectName: project, shortTitle: str(args.short_title), jobNumber: str(args.job_number), client: str(args.client), noMove: true,
       });
       return ok({ video_id: r.videoId, number: r.numberText, title, short_title: r.shortTitle, project: r.project, client: r.client, first_file_name: r.fileName + ".mp4", timeline_name: r.fileName, link: r.link });
     }
     if (name === "add_to_register") {
       const st = str(args.short_title);
       if (!st) return fail("Pass short_title.");
-      const res = await ctx.runMutation(internal.connector.addToRegisterFor, { videoId: str(args.video_id), video: str(args.video), number: int(args.number), shortTitle: st, client: str(args.client) });
+      // Phase 8a review (H2): no client here: filing a project under a client moves it, and that's Heston's to do.
+      const res = await ctx.runMutation(internal.connector.addToRegisterFor, { videoId: str(args.video_id), video: str(args.video), number: int(args.number), shortTitle: st });
       if ("error" in res) return fail(res.error as string, "candidates" in res && res.candidates ? { candidates: res.candidates } : undefined);
       return ok(res as Json);
     }
@@ -284,11 +284,15 @@ export async function callTool(ctx: ActionCtx, name: string, args: Json): Promis
       return ok(res as Json);
     }
     if (name === "set_version_description") {
+      // Phase 8a review (M3): the description shows on share links and in "new cut" emails, so it waits for Heston.
       const d = typeof args.description === "string" ? args.description : undefined;
       if (d === undefined) return fail("Pass description.");
-      const res = await ctx.runMutation(internal.connector.describeVersion, { videoId: str(args.video_id), video: str(args.video), version: int(args.version), description: d });
-      if ("error" in res) return fail(res.error as string, "candidates" in res && res.candidates ? { candidates: res.candidates } : undefined);
-      return ok(res as Json);
+      const said = str(args.heston_ok);
+      if (!said || said.length < 3) return fail("Ask Heston first. Pass what he said in this chat telling you to do it, as heston_ok.");
+      const found = await ctx.runQuery(internal.connector.versionFor, { videoId: str(args.video_id), video: str(args.video), version: int(args.version) });
+      if ("error" in found) return fail(found.error as string, "candidates" in found && found.candidates ? { candidates: found.candidates } : undefined);
+      const r = await ctx.runMutation(internal.confirm.request, { kind: "version.describe", targetId: found.versionId, said, payload: d });
+      return ok({ ...r, status: "waiting for Heston", next: "Give Heston the confirm_at link. It changes only when he presses Confirm on the site." } as Json);
     }
     if (name === "list_follow_ups") return ok(await ctx.runQuery(internal.crm.followUpsAs, { days: typeof args.days === "number" ? args.days : undefined }) as Json);
     if (name === "draft_follow_up") {

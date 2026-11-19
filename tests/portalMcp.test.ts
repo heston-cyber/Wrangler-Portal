@@ -100,7 +100,7 @@ describe("Phase 8a · the one connector", () => {
     // Sign's reminder emailed straight away on the old connector; here it's a request and needs Heston's words.
     const remind = list.j.result.tools.find((t: { name: string }) => t.name === "send_reminder");
     expect(remind.inputSchema.required).toContain("heston_ok");
-    expect((await x.a("send_reminder", { document: "WS-00001", signer: "client" })).text).toMatch(/Ask Heston first/);
+    expect((await x.a("send_reminder", { document: "WS-00001", signer: "client" })).error).toBe(true);
     expect(await x.w.t.run((ctx) => ctx.db.query("pendingActions").collect())).toEqual([]);
   });
 
@@ -133,7 +133,15 @@ describe("Phase 8a · the one connector", () => {
     await x.settle();
     expect(x.mails).toEqual([]);
     expect(await x.w.t.run((ctx) => ctx.db.query("inboxItems").collect())).toEqual([]);
-    expect((await x.a("request_status", { request_id: r.data.request_id })).data).toMatchObject({ status: "waiting", said: "yes, send it to Harbor" });
+    expect((await x.a("request_status", { request_id: r.data.request_id })).data).toMatchObject({ status: "waiting" });
+    // Review H1: the Confirm page shows exactly what goes out, read live: the whole text, who it reaches, the email.
+    const page = await x.w.heston.query(api.confirm.get, { id: r.data.request_id });
+    expect(page.changed).toBe(false);
+    expect(page.said).toBe("yes, send it to Harbor");
+    const line = (l: string) => page.preview.lines.find((y: { label: string }) => y.label === l)?.value;
+    expect(line("Text")).toBe("Have a look when you can.");
+    expect(line("Reaches")).toContain("maya@harbor.example");
+    expect(line("Email")).toMatch(/email/);
     // The Dashboard shows it to the owner only.
     expect((await x.w.heston.query(api.confirm.waiting, {})).map((q: { summary: string }) => q.summary)).toEqual(["Send the note “Cut 2 is up” to Harbor Coffee"]);
     expect(await x.w.boss.query(api.confirm.waiting, {})).toEqual([]);
@@ -167,11 +175,54 @@ describe("Phase 8a · the one connector", () => {
     await x.w.t.run(async (ctx) => { for (const p of await ctx.db.query("pendingActions").collect()) await ctx.db.patch(p._id, { expiresAt: Date.now() - 1 }); });
     await expect(x.w.heston.mutation(api.confirm.confirm, { id: r1.data.request_id })).rejects.toThrow(/ran out/);
     expect((await x.a("request_status", { request_id: r1.data.request_id })).data.status).toBe("expired");
-    const r3 = await ask(); // asked again (Heston's new words): the same request, renewed for 24 hours
-    expect(r3.data.request_id).toBe(r1.data.request_id);
-    expect((await x.a("request_status", { request_id: r3.data.request_id })).data.status).toBe("waiting");
+    const r3 = await ask(); // asked again after it ran out: a new request
+    expect(r3.data.request_id).not.toBe(r1.data.request_id);
     await x.w.heston.mutation(api.confirm.cancel, { id: r3.data.request_id });
     await expect(x.w.heston.mutation(api.confirm.confirm, { id: r3.data.request_id })).rejects.toThrow(/cancelled/);
     expect((await x.w.t.run((ctx) => ctx.db.get(d.data.noteId as Id<"inboxNotes">)))!.status).toBe("draft");
+  });
+
+  test("review H1: a draft changed after Claude asked can't be confirmed as asked", async () => {
+    const x = await setup();
+    const d = await x.a("draft_client_note", { client: "Harbor Coffee", title: "Cut 2 is up", text: "Have a look.", said: "Heston: draft" });
+    expect(d.data.next).toMatch(/send_client_note/); // review L6: this connector's way to send it
+    const r = await x.a("send_client_note", { note_id: d.data.noteId, heston_ok: "send it" });
+    // Someone (Claude, or a team member) changes the body and adds a link after the ask.
+    await x.w.t.run((ctx) => ctx.db.patch(d.data.noteId as Id<"inboxNotes">, { text: "Our bank details changed, pay here", link: "https://evil.example/pay" }));
+    const page = await x.w.heston.query(api.confirm.get, { id: r.data.request_id });
+    expect(page.changed).toBe(true);
+    expect(page.preview.lines.find((l: { label: string }) => l.label === "Link").value).toBe("https://evil.example/pay");
+    await expect(x.w.heston.mutation(api.confirm.confirm, { id: r.data.request_id })).rejects.toThrow(/changed since Claude asked/);
+    expect((await x.w.t.run((ctx) => ctx.db.get(d.data.noteId as Id<"inboxNotes">)))!.status).toBe("draft");
+    await x.settle();
+    expect(x.mails).toEqual([]);
+  });
+
+  test("review M3, H2, M2: a version's description waits for Confirm; no project moves to a client; no PDF fetched from a link", async () => {
+    const x = await setup();
+    // M3: the description is a request; it changes only on Confirm.
+    expect((await x.a("set_version_description", { video: "Harbor launch cut", description: "Tightened the open" })).error).toBe(true); // no heston_ok
+    const ver = await x.w.t.run(async (ctx) => {
+      const vid = (await ctx.db.query("videos").collect())[0];
+      return ctx.db.insert("versions", { businessId: x.w.A, videoId: vid._id, number: 1, status: "ready", bunnyGuid: "g", fileName: "a.mp4", startTimecode: "01:00:00:00", createdAt: 0 } as never);
+    });
+    const r = await x.a("set_version_description", { video: "Harbor launch cut", description: "Tightened the open", heston_ok: "yes, add that" });
+    expect(r.error, r.text).toBe(false);
+    expect((await x.w.t.run((ctx) => ctx.db.get(ver)))!.description).toBeUndefined();
+    await x.w.heston.mutation(api.confirm.confirm, { id: r.data.request_id });
+    expect((await x.w.t.run((ctx) => ctx.db.get(ver)))!.description).toBe("Tightened the open");
+    // H2: registering under a client never moves an existing project; a new project can still be made under one.
+    const before = await x.w.t.run(async (ctx) => (await ctx.db.query("projects").collect()).map((p) => [p.name, p.clientId ?? null]));
+    const moved = await x.a("register_video", { title: "Teaser", project: "Launch film", client: "Northline" });
+    expect(moved.error).toBe(true);
+    expect(moved.text).toMatch(/moves it; Heston does that on the site/);
+    const older = await x.a("add_to_register", { video: "Harbor launch cut", short_title: "HarborLaunch", client: "Northline" } as Record<string, unknown>);
+    expect(older.error, older.text).toBe(false); // numbered; the client argument is ignored here
+    expect(await x.w.t.run(async (ctx) => (await ctx.db.query("projects").collect()).map((p) => [p.name, p.clientId ?? null]))).toEqual(before);
+    expect((await x.a("register_video", { title: "Promo", project: "Brand new show", client: "Northline" })).error).toBe(false);
+    // M2: the server never fetches a link Claude names.
+    const f = await x.a("create_document", { title: "X", file_name: "x.pdf", pdf_url: "https://evil.example/collect?d=secret" });
+    expect(f.error).toBe(true);
+    expect(x.w.t).toBeTruthy();
   });
 });

@@ -116,7 +116,7 @@ export function ownerSide<T extends { kind: string; title: string; text: string;
 }
 
 /** Who a note to this client would reach: their people with portal access. */
-async function noteAudience(ctx: QueryCtx | MutationCtx, client: Doc<"clients">) {
+export async function noteAudience(ctx: QueryCtx | MutationCtx, client: Doc<"clients">) {
   const biz = await businessOf(ctx, client);
   const people = (await ctx.db.query("clientPeople").withIndex("by_client", (q) => q.eq("clientId", client._id)).collect()).filter((p) => !p.removedAt);
   const out: Array<{ email: string; name: string | null; access: boolean }> = [];

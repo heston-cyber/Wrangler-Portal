@@ -72,7 +72,7 @@ export const nextName = query({
 });
 
 // Finds a project by name (or "26122 Spirit Days" / job number), or makes it.
-async function projectFor(ctx: MutationCtx, a: { projectId?: Id<"projects">; projectName?: string; jobNumber?: string; client?: string }, team: boolean) {
+async function projectFor(ctx: MutationCtx, a: { projectId?: Id<"projects">; projectName?: string; jobNumber?: string; client?: string; noMove?: boolean }, team: boolean) {
   if (a.projectId) {
     const p = await ctx.db.get(a.projectId);
     if (!p) throw new ConvexError("That project no longer exists.");
@@ -84,6 +84,9 @@ async function projectFor(ctx: MutationCtx, a: { projectId?: Id<"projects">; pro
   const picked = pickProject(await ctx.db.query("projects").collect(), name, client);
   if (picked) {
     if (picked.setClient && client) {
+      // Phase 8a review (H2): through the connector, filing an existing project under a client is a move (its people see
+      // its cuts and messages, the old shares stop): never done directly there. A new project can still be made under one.
+      if (a.noMove) throw new ConvexError(`"${picked.project.name}" already exists without that client. Filing it under ${client} moves it; Heston does that on the site. Register the video without client.`);
       // Re-review M-c: filing an existing project under a client takes the same switches as Move.
       if (team) await mayMoveProject(ctx, picked.project);
       await moveProjectByName(ctx, picked.project, client);
@@ -95,7 +98,7 @@ async function projectFor(ctx: MutationCtx, a: { projectId?: Id<"projects">; pro
   return await ctx.db.insert("projects", { name: split.name, ...(jobNumber ? { jobNumber } : {}), ...(client ? { client } : {}), createdAt: Date.now() });
 }
 
-async function register(ctx: MutationCtx, a: { title: string; shortTitle?: string; projectId?: Id<"projects">; projectName?: string; jobNumber?: string; client?: string }, team = false) {
+async function register(ctx: MutationCtx, a: { title: string; shortTitle?: string; projectId?: Id<"projects">; projectName?: string; jobNumber?: string; client?: string; noMove?: boolean }, team = false) {
   const title = clean(a.title, 160);
   if (!title) throw new ConvexError("Give the video a title.");
   const shortTitle = (a.shortTitle ?? "").trim() || shortTitleFrom(title);
@@ -110,6 +113,7 @@ async function register(ctx: MutationCtx, a: { title: string; shortTitle?: strin
 const regArgs = {
   title: v.string(), shortTitle: v.optional(v.string()), projectId: v.optional(v.id("projects")),
   projectName: v.optional(v.string()), jobNumber: v.optional(v.string()), client: v.optional(v.string()),
+  noMove: v.optional(v.boolean()), // the connector: never move an existing project to a client (Phase 8a review H2)
 };
 
 // "New video": the next number, the short title and the first file name to render.

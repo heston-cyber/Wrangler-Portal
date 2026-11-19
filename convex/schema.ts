@@ -338,7 +338,9 @@ export default defineSchema({
     kind: v.string(),            // e.g. "note.send"; the registry in convex/confirm.ts says what each does
     targetId: v.string(),        // the record it acts on
     summary: v.string(),         // what the Confirm page says, e.g. "Send the note “Cut 2 is up” to Harbor Coffee"
-    said: v.string(),            // what Heston said in chat, in his words
+    said: v.string(),            // what Claude says Heston told it in chat
+    payload: v.optional(v.string()), // the text a kind sets (a version's description); shown in full on the Confirm page
+    hash: v.optional(v.string()),    // review H1: what will go out, as it stood when asked; Confirm refuses if it changed
     status: v.union(v.literal("waiting"), v.literal("done"), v.literal("cancelled"), v.literal("failed")),
     requestedAt: v.number(),
     expiresAt: v.number(),
@@ -710,6 +712,7 @@ export default defineSchema({
     cc: v.optional(v.array(v.object({ email: v.string(), name: v.optional(v.string()) }))), // D160: who to copy when it's sent
     reason: v.optional(v.string()),
     said: v.string(),                      // what Claude said Heston told it in chat
+    layoutHash: v.optional(v.string()),    // Phase 8a review H3: approve only: the layout Claude asked about (Confirm refuses a changed one)
     status: v.union(v.literal("pending"), v.literal("done"), v.literal("declined"), v.literal("expired"), v.literal("replaced"), v.literal("failed"), v.literal("overtaken")),  // overtaken: Heston did it himself with the page's own buttons
     error: v.optional(v.string()),
     createdAt: v.number(),

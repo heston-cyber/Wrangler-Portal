@@ -33,13 +33,22 @@ export function ConfirmPage({ id }: { id: string }) {
           : r === null ? <EmptyState icon="alert" title="This request isn't here" body="It may belong to another business, or the link is wrong." />
           : (
             <Card label="The request">
-              <div className="prow"><span className="pl"><b>{r.summary}</b></span><span className="pr"><StatusChip tone={STATUS[r.status]?.tone ?? "neutral"}>{STATUS[r.status]?.label ?? r.status}</StatusChip></span></div>
-              <div className="prow"><span className="pl secondary">You said in chat</span><span className="pr">“{r.said}”</span></div>
+              <div className="prow"><span className="pl"><b>{r.preview?.title ?? r.summary}</b></span><span className="pr"><StatusChip tone={STATUS[r.status]?.tone ?? "neutral"}>{STATUS[r.status]?.label ?? r.status}</StatusChip></span></div>
+              {r.preview && <>
+                <p className="caption secondary" style={{ margin: "4px 0 0" }}>Exactly what goes out:</p>
+                {r.preview.lines.map((l) => (
+                  <div className="prow" key={l.label}><span className="pl secondary">{l.label}</span><span className="pr" style={{ whiteSpace: "pre-wrap", textAlign: "left", maxWidth: "70%" }}>{l.value}</span></div>
+                ))}
+                {r.preview.open && <div className="prow"><span className="pl secondary">Check it on the site</span><span className="pr"><a {...linkProps(r.preview.open)}>Open it</a></span></div>}
+              </>}
+              {r.changed && <p className="error" role="alert">This changed since Claude asked. Check it, then ask Claude again or do it yourself. It can't be confirmed as it is.</p>}
+              {r.problem && <p className="error" role="alert">{r.problem}</p>}
+              <div className="prow"><span className="pl secondary">Claude says you told it</span><span className="pr">“{r.said}”</span></div>
               <div className="prow"><span className="pl secondary">Asked</span><span className="pr">{ago(r.requestedAt)}{r.status === "waiting" ? ` · works for ${Math.max(1, Math.round((r.expiresAt - Date.now()) / 3_600_000))} more hours` : ""}</span></div>
               {r.status === "waiting" && (
                 <div className="dfoot">
                   <Button disabled={busy} onClick={() => void go(() => cancel({ id }))}>Don't do it</Button>
-                  <Button variant="primary" loading={busy} onClick={() => void go(() => confirm({ id }), () => setDoneNow(true))}>Confirm</Button>
+                  <Button variant="primary" loading={busy} disabled={r.changed || !!r.problem || !r.preview} onClick={() => void go(() => confirm({ id }), () => setDoneNow(true))}>Confirm</Button>
                 </div>
               )}
               {doneNow && <p className="caption" role="status">Done. Tell Claude in your chat, or it can check for itself.</p>}
