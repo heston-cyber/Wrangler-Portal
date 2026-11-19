@@ -130,7 +130,11 @@ describe("Phase 8d · the rest of the site", () => {
     // R1: the first estimate for a lead whose company matches a client would make the lead one of its people: it asks.
     const dealId = await x.w.t.run((ctx) => ctx.db.insert("deals", { businessId: x.w.A, title: "Website lead", stage: "lead", source: "website", lead: { name: "Sam", email: "sam@elsewhere.example", company: "Harbor Coffee", fields: [], at: 0 }, history: [], createdAt: 0, updatedAt: 0 } as never));
     const est = await x.a("site_change", { action: "crm.saveEstimate", args: { dealId, title: "Estimate", scope: "One day", input: { unit: "days", amount: 1 } } });
-    expect(est.text).toMatch(/files the lead sam@elsewhere\.example under Harbor Coffee/);
+    // D56 (Nov 19): the page says what will really happen: a new, differently named company, not the client's.
+    expect(est.text).toMatch(/makes a new company, Harbor Coffee \(website lead\), for the lead sam@elsewhere\.example/);
+    // An email already on the client: the page names that client.
+    const own = await x.w.t.run((ctx) => ctx.db.insert("deals", { businessId: x.w.A, title: "Website lead", stage: "lead", source: "website", lead: { name: "Maya", email: "maya@harbor.example", company: "Harbor Coffee Co.", fields: [], at: 0 }, history: [], createdAt: 0, updatedAt: 0 } as never));
+    expect((await x.a("site_change", { action: "crm.saveEstimate", args: { dealId: own, title: "Estimate", scope: "One day", input: { unit: "days", amount: 1 } } })).text).toMatch(/files the lead maya@harbor\.example under Harbor Coffee \(maya@harbor\.example is already one of Harbor Coffee's people\)/);
     expect((await x.w.t.run((ctx) => ctx.db.query("clientPeople").collect())).map((r) => r.email)).not.toContain("sam@elsewhere.example");
     // R4: the watermark is on every client's cuts: it asks.
     expect((await x.a("site_change", { action: "business.updateSettings", args: { watermark: { corner: "br", size: "small", opacity: 0.05, mark: "text", text: "Pay deposit" } } })).text).toMatch(/needs Heston|go on every client/);

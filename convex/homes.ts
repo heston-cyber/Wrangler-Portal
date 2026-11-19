@@ -345,8 +345,7 @@ export async function moveProjectCore(ctx: MutationCtx, p: Doc<"projects">, to: 
   // Sent briefs and requests leave the project for its old client (or for no home, when it had none).
   for (const x of sentStay) if (x.kind === "brief" || x.kind === "fileRequest") await ctx.db.patch(x.id as Id<"briefs">, { projectId: undefined, clientId: p.clientId } as never);
   // Review H2: the name first (the writer relinks a project's client by name), then the exact client picked.
-  await ctx.db.patch(p._id, { client: to?.name });
-  await ctx.db.patch(p._id, { clientId: to?._id });
+  await ctx.db.patch(p._id, { client: to?.name, clientId: to?._id }); // D56 review: by id together, so a same-named company is never picked by name
   if (((await ctx.db.get(p._id))?.clientId ?? null) !== (to?._id ?? null)) throw new ConvexError("The project didn't take its new client. Nothing was moved.");
   // Review M4: its shoot days lose the old client's confirmation; their calendar events are brought up to date.
   for (const s of await ctx.db.query("shoots").withIndex("by_project", (q) => q.eq("projectId", p._id)).collect())

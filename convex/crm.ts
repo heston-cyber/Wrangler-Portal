@@ -324,6 +324,32 @@ export const getEstimate = query({
   },
 });
 
+/** D56 (Heston, Nov 19): which company a website lead's first estimate files them under.
+ *  - Their email is already one of a company's (not removed) people: that company. If it's on more than one, the one
+ *    whose name they typed; if none of those matches, a new company (never a guess).
+ *  - Otherwise a new company. It never shares a name with an existing one: several parts of the site pick a company by
+ *    name, so a same-named company would let a stranger who typed a client's name reach that client. A clash gets
+ *    "(website lead)" on the end; Heston renames it, or adds the person to the real company himself.
+ *  The connector's Confirm page (lib/siteActions leadFiling) reads the same answer. */
+export async function leadTarget(ctx: QueryCtx | MutationCtx, lead: { email: string; company?: string | null; name: string }):
+  Promise<{ clientId: Id<"clients"> | null; newName: string | null; name: string; why: string }> {
+  const email = lead.email.trim().toLowerCase();
+  const typed = (lead.company || lead.name || "Website lead").trim().replace(/\s+/g, " ").slice(0, 100) || "Website lead";
+  const key = (x: string) => x.trim().replace(/\s+/g, " ").toLowerCase();
+  const clients = await ctx.db.query("clients").collect();
+  const onCompanies = [...new Set((await ctx.db.query("clientPeople").collect())
+    .filter((x) => !x.removedAt && x.email.trim().toLowerCase() === email).map((x) => x.clientId as Id<"clients">))]
+    .map((id) => clients.find((c) => c._id === id)).filter((c): c is Doc<"clients"> => !!c);
+  if (onCompanies.length === 1) return { clientId: onCompanies[0]._id, newName: null, name: onCompanies[0].name, why: `${email} is already one of ${onCompanies[0].name}'s people` };
+  const typedMatch = onCompanies.find((c) => key(c.name) === key(typed));
+  if (typedMatch) return { clientId: typedMatch._id, newName: null, name: typedMatch.name, why: `${email} is one of ${typedMatch.name}'s people, the company they named` };
+  const taken = new Set(clients.map((c) => key(c.name)));
+  let name = typed;
+  for (let n = 1; taken.has(key(name)); n++) name = `${typed} (website lead${n > 1 ? ` ${n}` : ""})`;
+  const why = onCompanies.length > 1 ? `${email} is on more than one company and none is the one they named, so a new company` : name === typed ? "a new company" : `a new company (a client called ${typed} already exists, and their email isn't one of its people)`;
+  return { clientId: null, newName: name, name, why };
+}
+
 /** Save estimate: the 12 lines from the business's rates; the card moves to Quoted (D60: forward only). A website
  *  lead's company and contact are made now, at its first estimate (D56). */
 export const saveEstimate = mutation({
@@ -352,14 +378,10 @@ export const saveEstimate = mutation({
       if (!d) throw new ConvexError("That card isn't here.");
       clientId = clientId ?? d.clientId ?? null;
       if (!clientId && d.lead) {
-        // D56: the website lead's company and contact, made at the first estimate. Review (Oct 31): a client the
-        // person already belongs to (by their email) is reused. D56 fix (Heston, Nov 19, "onward with your
-        // suggestions"): never by the company's name alone. A stranger who typed a client's name into the website
-        // form would otherwise become one of that client's people and see its invoices, projects and Inbox. A name
-        // match without the email makes a new, separate company; Heston adds the person to the real one himself.
-        const email = d.lead.email.toLowerCase();
-        const byEmail = (await ctx.db.query("clientPeople").collect()).find((x) => !x.removedAt && x.email.toLowerCase() === email);
-        clientId = byEmail?.clientId ?? await ctx.db.insert("clients", { name: (d.lead.company || d.lead.name).slice(0, 120), createdAt: now });
+        // D56: the website lead's company and contact, made at the first estimate (leadTarget says where, and why).
+        const email = d.lead.email.trim().toLowerCase();
+        const t = await leadTarget(ctx, d.lead);
+        clientId = t.clientId ?? await ctx.db.insert("clients", { name: t.newName!, createdAt: now });
         const there = (await ctx.db.query("clientPeople").withIndex("by_client", (q) => q.eq("clientId", clientId!)).collect()).some((x) => !x.removedAt && x.email.toLowerCase() === email);
         if (!there) await ctx.db.insert("clientPeople", { clientId, email, name: d.lead.name, role: "signer", createdAt: now });
         await ctx.db.patch(dealId, { clientId, contactEmail: email });
