@@ -64,10 +64,11 @@ export function ConfirmPage({ id }: { id: string }) {
               )}
               {doneNow && <p className="caption" role="status">Done. Tell Claude in your chat, or it can check for itself.</p>}
               {link && <div className="prow"><span className="pl secondary">The link to copy</span><span className="pr"><input readOnly value={link} onFocus={(e) => e.currentTarget.select()} aria-label="The link to copy" /></span></div>}
-              {!doneNow && r.status === "running" && <>
+              {!doneNow && r.status === "running" && !r.claimed && <>
                 <p className="caption" role="status">You confirmed it. If this page closed before it said Done, send it now (within 2 minutes of confirming), or check it on the site.</p>
                 <div className="dfoot"><Button variant="primary" loading={busy} onClick={() => void go(async () => { const out = await runConfirmed({ id }); if (out.link) setLink(out.link); if (!out.done) throw new Error(out.error ?? "It didn't go through."); }, () => setDoneNow(true))}>Send it now</Button></div>
               </>}
+              {!doneNow && r.status === "running" && r.claimed && <p className="caption" role="status">It's going out now.</p>}
               {r.status === "unknown" && <p className="caption" role="status">You confirmed it, but this page never heard back. Check on the site that it went out.</p>}
               {err && <p className="error" role="alert">{err}</p>}
             </Card>

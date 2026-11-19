@@ -11,6 +11,7 @@ import { anyApi } from "convex/server";
 import { world, due } from "./payHarness";
 import { ACTIONS } from "../convex/lib/siteActions";
 import type { Id } from "../convex/_generated/dataModel";
+import { scrub } from "../convex/lib/siteGuard";
 
 const api = anyApi;
 beforeAll(() => {
@@ -80,7 +81,8 @@ describe("Phase 8c · money through the connector", () => {
     await x.w.heston.mutation(api.confirm.confirm, { id: r3.data.request_id, hash: (await x.w.heston.query(api.confirm.get, { id: r3.data.request_id })).hash });
     await x.w.t.run(async (ctx) => { await ctx.db.patch(r3.data.request_id as never, { doneAt: Date.now() - 3 * 60_000 } as never); });
     await expect(x.w.heston.action(api.confirm.runConfirmed, { id: r3.data.request_id })).rejects.toThrow(/too long since you confirmed/);
-    expect((await x.a("request_status", { request_id: r3.data.request_id })).data.status).toBe("expired");
+    expect((await x.a("request_status", { request_id: r3.data.request_id })).data).toMatchObject({ status: "failed", error: expect.stringMatching(/too long/) });
+    expect((await x.w.t.run((ctx) => ctx.db.query("auditLog").collect())).map((l) => l.text)).toEqual(expect.arrayContaining([expect.stringMatching(/didn't start, so nothing was sent/)]));
     // Changed after Confirm (Heston's own edit on the site): it doesn't start.
     const r4 = await x.a("site_ask", { action: "invoices.send", args: { invoiceId }, heston_ok: "yes, send it now" });
     await x.w.heston.mutation(api.confirm.confirm, { id: r4.data.request_id, hash: (await x.w.heston.query(api.confirm.get, { id: r4.data.request_id })).hash });
@@ -157,6 +159,15 @@ describe("Phase 8c · money through the connector", () => {
     expect(JSON.stringify((await x.a("site_read", { action: "invoices.get", args: { invoiceId } })).data)).not.toMatch(/invoice\.stripe\.com|pay\.stripe\.com/);
     // A follow-up deleted through a change: an ask.
     expect((await x.a("site_change", { action: "crm.doneFollowUp", args: { followUpId: "x", remove: true } })).text).toMatch(/args|deletes the follow-up/);
+  });
+
+  test("T8c.6 SSN fields by their words; a quote's own client link stays on the site", async () => {
+    expect(scrub({ ssn: "1", vendorSSN: "2", vendor_SSN: "3", socialSecurityNumber: "4", ssnLast4: "5", businessName: "Harbor" }))
+      .toEqual({ ssn: "(on file)", vendorSSN: "(on file)", vendor_SSN: "(on file)", socialSecurityNumber: "(on file)", ssnLast4: "(on file)", businessName: "Harbor" });
+    const x = await setup();
+    const quoteId = await x.w.heston.mutation(api.quotes.save, { title: "Menu board refresh", who: { clientId: x.w.harbor, name: "Maya Brooks", email: "maya@harbor.example" }, lines: [{ id: "a", description: "Shooting · 1 day", qty: 1, unitCents: 160_000 }], deposit: { kind: "percent", value: 50 } }) as Id<"quotes">;
+    await x.w.t.run(async (ctx) => { await ctx.db.patch(quoteId, { token: "maya-secret-token-123456" } as never); });
+    expect(JSON.stringify((await x.a("site_read", { action: "quotes.get", args: { quoteId } })).data)).not.toContain("maya-secret-token");
   });
 
   test("T8c.5 each page-run action's name is the very function in the list", async () => {

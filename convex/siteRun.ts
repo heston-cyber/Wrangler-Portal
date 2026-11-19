@@ -33,8 +33,9 @@ async function allMine(ctx: QueryCtx | MutationCtx, biz: Id<"businesses">, x: un
 /** 8c review M1 / re-review N1, N2, L-a, L-b: while a send Heston confirmed is going out (confirmed and not yet
  *  started, or started and not yet reported back), nothing of THIS business's that it uses can be changed through the
  *  connector, so what goes out is what he saw. Only this business's requests and records are compared, by id. */
+const MAX_IDS = 200;
 async function ownIds(ctx: QueryCtx | MutationCtx, biz: Id<"businesses">, x: unknown, out = new Set<string>(), depth = 0): Promise<Set<string>> {
-  if (depth > 5 || out.size > 200) return out;
+  if (depth > 5 || out.size > MAX_IDS) return out;
   if (typeof x === "string") {
     const dflt = (await defaultBusiness(ctx))?._id ?? null;
     for (const t of BUSINESS_TABLES) {
@@ -52,11 +53,12 @@ async function locked(ctx: QueryCtx | MutationCtx, biz: Id<"businesses">, a: unk
   const mine = await ownIds(ctx, biz, a);
   if (!mine.size) return false;
   const now = Date.now(), dflt = (await defaultBusiness(ctx))?._id ?? null;
-  const rows = await ctx.db.query("pendingActions").withIndex("by_status", (q) => q.eq("status", "running").gt("requestedAt", now - 2 * 86_400_000)).take(100);
+  // Second re-review L2: newest first, and only this business's, so no pile of old rows hides a send going out now.
+  const rows = (await ctx.db.query("pendingActions").withIndex("by_status", (q) => q.eq("status", "running").gt("requestedAt", now - 2 * 86_400_000)).order("desc").take(500))
+    .filter((r) => (r.businessId ?? dflt) === biz && (r.claimedAt ? r.claimedAt > now - 60 * 60_000 : (r.doneAt ?? 0) > now - 2 * 60_000));
+  // L3: a change naming more records than can be compared waits while anything is going out.
+  if (rows.length && mine.size > MAX_IDS) return true;
   for (const r of rows) {
-    if ((r.businessId ?? dflt) !== biz) continue;
-    const live = r.claimedAt ? r.claimedAt > now - 60 * 60_000 : (r.doneAt ?? 0) > now - 2 * 60_000;
-    if (!live) continue;
     let used: unknown = null;
     try { used = (JSON.parse(r.payload ?? "{}") as { args?: unknown }).args; } catch { /* not a site request */ }
     for (const id of await ownIds(ctx, biz, used)) if (mine.has(id)) return true;

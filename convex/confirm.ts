@@ -295,7 +295,7 @@ export const get = query({
     const id = ctx.db.normalizeId("pendingActions", a.id);
     const r = id ? await ctx.db.get(id) : null;
     if (!r) return null;
-    const base = { _id: r._id, kind: r.kind, summary: r.summary, said: r.said, requestedAt: r.requestedAt, expiresAt: r.expiresAt, doneAt: r.doneAt ?? null, status: status(r) };
+    const base = { claimed: !!r.claimedAt, _id: r._id, kind: r.kind, summary: r.summary, said: r.said, requestedAt: r.requestedAt, expiresAt: r.expiresAt, doneAt: r.doneAt ?? null, status: status(r) };
     if (base.status !== "waiting") return { ...base, preview: null, hash: null, changed: false, problem: null };
     const k = KINDS[r.kind];
     if (!k) return { ...base, preview: null, hash: null, changed: false, problem: "This can't be done here." };
@@ -348,7 +348,8 @@ export const confirm = mutation({
     const onPage = "runOnPage" in result; // re-review N2: the page now calls runConfirmed, which claims it within 2 minutes
     await ctx.db.patch(r._id, onPage ? { status: "running", doneAt: Date.now() } : { status: "done", doneAt: Date.now() }); // running: doneAt is when it was confirmed
     const siteMode = r.kind === "site" ? ACTIONS[siteAction(r.targetId)]?.mode : undefined;
-    await audit(ctx, { kind: siteMode === "delete" || r.kind.endsWith(".delete") ? "deleted" : siteMode === "ask" || r.kind.endsWith(".send") || r.kind.endsWith(".remind") ? "sent" : "claude", text: `confirmed Claude's request: ${r.summary}${onPage ? " (run from the Confirm page)" : ""}`, where: "Claude connector", link: `/confirm/${r._id}` });
+    // Second re-review L4: a Stripe send isn't "sent" until it starts and goes (claim / settle say how it went).
+    await audit(ctx, { kind: onPage ? "claude" : siteMode === "delete" || r.kind.endsWith(".delete") ? "deleted" : siteMode === "ask" || r.kind.endsWith(".send") || r.kind.endsWith(".remind") ? "sent" : "claude", text: `confirmed Claude's request: ${r.summary}${onPage ? " (starting from the Confirm page)" : ""}`, where: "Claude connector", link: `/confirm/${r._id}` });
     return { ok: true, ...result };
   },
 });
@@ -364,23 +365,38 @@ export const claim = internalMutation({
     const r = id ? await ctx.db.get(id) : null;
     if (!r || r.kind !== "site") throw new ConvexError("That request isn't here.");
     if (r.status !== "running" || r.claimedAt) throw new ConvexError(r.status === "running" ? "That's already going out." : "That isn't waiting to go out.");
+    const { act, action: name, args } = siteParts(r.targetId, r.payload);
+    if (!act.onPage) throw new ConvexError("That can't be run here.");
     if ((r.doneAt ?? 0) < Date.now() - CLAIM_MS) throw new ConvexError("It's been too long since you confirmed it, so nothing was sent. Ask Claude again.");
     const live = await hashOf(await KINDS.site.preview(ctx, r.targetId, r.payload));
     if (live !== r.hash) throw new ConvexError("It changed since you confirmed it, so nothing was sent. Ask Claude again.");
-    await ctx.db.patch(r._id, { claimedAt: Date.now() });
-    const { action: name, args } = siteParts(r.targetId, r.payload);
-    return { action: name, args };
+    // Second re-review L5: a one-time ticket says how it went, even if the session ends while it's sending.
+    const ticket = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+    await ctx.db.patch(r._id, { claimedAt: Date.now(), ticket: await sha256Hex(ticket) });
+    return { action: name, args, ticket };
   },
 });
-export const settle = internalMutation({
-  args: { id: v.string(), ok: v.boolean(), error: v.optional(v.string()) },
+/** A start that was refused (too late, changed, gone): nothing went, and Activity says so. */
+export const noStart = internalMutation({
+  args: { id: v.string(), why: v.string() },
   handler: async (ctx, a) => {
     await requireOwner(ctx);
     const id = ctx.db.normalizeId("pendingActions", a.id);
     const r = id ? await ctx.db.get(id) : null;
-    if (!r || r.status !== "running" || !r.claimedAt) return null;
-    await ctx.db.patch(r._id, { status: a.ok ? "done" : "failed", doneAt: Date.now(), ...(a.ok ? {} : { error: clip(a.error ?? "It didn't go through.", 300) }) });
-    if (!a.ok) await audit(ctx, { kind: "claude", text: `Claude's confirmed request didn't go through: ${r.summary}`, where: "Claude connector", link: `/confirm/${r._id}` });
+    if (!r || r.status !== "running" || r.claimedAt) return null;
+    await ctx.db.patch(r._id, { status: "failed", doneAt: Date.now(), error: clip(a.why, 300) });
+    await audit(ctx, { kind: "claude", text: `Claude's confirmed request didn't start, so nothing was sent: ${r.summary}`, where: "Claude connector", link: `/confirm/${r._id}` });
+    return null;
+  },
+});
+export const settle = internalMutation({
+  args: { id: v.string(), ticket: v.string(), ok: v.boolean(), error: v.optional(v.string()) },
+  handler: async (ctx, a) => {
+    const id = ctx.db.normalizeId("pendingActions", a.id);
+    const r = id ? await ctx.db.get(id) : null;
+    if (!r || r.status !== "running" || !r.claimedAt || !r.ticket || r.ticket !== (await sha256Hex(a.ticket))) return null;
+    await ctx.db.patch(r._id, { status: a.ok ? "done" : "failed", doneAt: Date.now(), ticket: undefined, ...(a.ok ? {} : { error: clip(a.error ?? "It didn't go through.", 300) }) });
+    await audit(ctx, { kind: a.ok ? "sent" : "claude", text: a.ok ? `sent Claude's confirmed request: ${r.summary}` : `Claude's confirmed request didn't go through: ${r.summary}`, where: "Claude connector", link: `/confirm/${r._id}`, by: { name: "Heston (confirmed)", role: "Owner" } });
     return null;
   },
 });
@@ -389,19 +405,21 @@ export const settle = internalMutation({
 export const runConfirmed = action({
   args: { id: v.string() },
   handler: async (ctx, a): Promise<{ done: boolean; error?: string; link?: string | null }> => {
-    const c = await ctx.runMutation(internal.confirm.claim, { id: a.id });
-    const act = ACTIONS[c.action];
-    if (!act?.onPage) throw new ConvexError("That can't be run here.");
-    try {
-      const out = await act.fn._handler(ctx, c.args) as { failed?: string[]; held?: boolean; link?: string | null } | null;
-      const missed = out?.failed?.length ? `It didn't reach ${out.failed.join(", ")}.` : out?.held ? "The email was held (the preview doesn't send)." : null;
-      await ctx.runMutation(internal.confirm.settle, { id: a.id, ok: !missed, ...(missed ? { error: missed } : {}) });
-      return { done: !missed, ...(missed ? { error: missed } : {}), link: out?.link ?? null };
-    } catch (e) {
-      const msg = ((e as Error).message || "It didn't go through.").replace(/^.*ConvexError: /, "").split("\n")[0];
-      await ctx.runMutation(internal.confirm.settle, { id: a.id, ok: false, error: msg });
+    const msg = (e: unknown) => ((e as Error).message || "It didn't go through.").replace(/^.*ConvexError: /, "").split("\n")[0];
+    let c: { action: string; args: Record<string, unknown>; ticket: string };
+    try { c = await ctx.runMutation(internal.confirm.claim, { id: a.id }); } catch (e) {
+      await ctx.runMutation(internal.confirm.noStart, { id: a.id, why: msg(e) }).catch(() => null);
       throw e;
     }
+    const act = ACTIONS[c.action]!;
+    let out: { failed?: string[]; held?: boolean; link?: string | null } | null;
+    try { out = await act.fn._handler(ctx, c.args) as typeof out; } catch (e) {
+      await ctx.runMutation(internal.confirm.settle, { id: a.id, ticket: c.ticket, ok: false, error: msg(e) }).catch(() => null);
+      throw e;
+    }
+    const missed = out?.failed?.length ? `It didn't reach ${out.failed.join(", ")}.` : out?.held ? "The email was held (the preview doesn't send)." : null;
+    await ctx.runMutation(internal.confirm.settle, { id: a.id, ticket: c.ticket, ok: !missed, ...(missed ? { error: missed } : {}) }).catch(() => null);
+    return { done: !missed, ...(missed ? { error: missed } : {}), link: out?.link ?? null };
   },
 });
 

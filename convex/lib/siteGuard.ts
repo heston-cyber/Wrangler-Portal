@@ -294,8 +294,10 @@ export function toSchema(v: VJson): Record<string, unknown> {
 // pages' own links (url, link) still come through, for an email Heston sends himself.
 const SECRET_KEY = /token|passcode|privatekey|guestkey|hash$|paymethod|address1099|w9address|taxaddress|w-?9|taxid|tax_id|^tin$|^ein$|bank|routing|iban|swift|accountnumber|account_number|last4|password|secret|apikey|api_key|codehash|keyhash|pinhash|^hash$|refreshtoken|accesstoken|stripeaccount|payout/i;
 
-/** Re-review L-g: an SSN field by its word boundary (ssn, vendor_ssn, vendorSsn, ssnLast4), never "businessName". */
-const SSN = /(^|_)ssn($|_|[A-Z0-9])|^SSN|[a-z]Ssn($|[A-Z_0-9])/;
+/** Re-review L-g / second re-review L6: an SSN field by its words (ssn, vendor_ssn, vendorSsn, vendorSSN,
+ *  socialSecurityNumber), never "businessName". */
+const words = (k: string) => k.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2").split(/[\s_\-0-9]+/).map((w) => w.toLowerCase()).filter(Boolean);
+const isSsn = (k: string) => { const w = words(k); return w.includes("ssn") || (w.includes("social") && w.includes("security")); };
 
 export function scrub(x: unknown, hide: string[] = [], depth = 0): unknown {
   if (depth > 30) return "(too deep)";
@@ -303,7 +305,7 @@ export function scrub(x: unknown, hide: string[] = [], depth = 0): unknown {
   if (x && typeof x === "object") {
     const out: Record<string, unknown> = {};
     for (const [k, y] of Object.entries(x as Record<string, unknown>)) {
-      if (SECRET_KEY.test(k) || SSN.test(k) || hide.includes(k)) out[k] = y === null || y === undefined || y === false || y === "" ? "(none)" : "(on file)";
+      if (SECRET_KEY.test(k) || isSsn(k) || hide.includes(k)) out[k] = y === null || y === undefined || y === false || y === "" ? "(none)" : "(on file)";
       else out[k] = scrub(y, hide, depth + 1);
     }
     return out;

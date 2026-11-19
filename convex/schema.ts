@@ -343,6 +343,7 @@ export default defineSchema({
     hash: v.optional(v.string()),    // review H1: what will go out, as it stood when asked; Confirm refuses if it changed
     status: v.union(v.literal("waiting"), v.literal("done"), v.literal("cancelled"), v.literal("failed"), v.literal("replaced"), v.literal("running")), // replaced: Claude asked again with different content; running (8c): confirmed, going out from Heston's Confirm page
     claimedAt: v.optional(v.number()), // 8c: a confirmed Stripe send started (runConfirmed), within 2 minutes of Confirm
+    ticket: v.optional(v.string()),    // 8c: the hash of the one-time ticket that records how that start went
     requestedAt: v.number(),
     expiresAt: v.number(),
     doneAt: v.optional(v.number()),
