@@ -217,4 +217,30 @@ describe("two businesses", () => {
     const asB = await t.withIdentity({ subject: bSub }).query(api.shares.open, { token: "tok" });
     expect(JSON.stringify(asB)).not.toContain('"title":"V"');
   });
+
+  // Phase 8b (CLAUDE.md rule 5): B's Claude connector key runs every site action with A's record ids, the way B's
+  // owner's own pages would: nothing of A comes back, and nothing of A changes (asks are tried and undone, and the
+  // request they make is B's).
+  test("Phase 8b: B's connector key gets nothing of A from any site action, and changes nothing of A", async () => {
+    const { t, ids, a, bSub } = await twoBusinesses();
+    vi.stubGlobal("fetch", async () => new Response("{}", { status: 500 }));
+    const { ACTIONS } = await import("../convex/lib/siteActions");
+    const key = (await t.withIdentity({ subject: bSub }).action(api.portalKeys.createKey, {})).key as string;
+    const before = await snapshot(t, a, true);
+    const table = argsFor(ids);
+    const aIds = Object.entries(ids).filter(([k]) => !/Sub$/.test(k) && k !== "storageId").map(([, v]) => String(v));
+    const leaks: string[] = [];
+    for (const [name, e] of Object.entries(ACTIONS)) {
+      const tool = e.mode === "read" ? "site_read" : e.mode === "change" ? "site_change" : "site_ask";
+      const args = { action: name, args: table[name] ?? {}, ...(tool === "site_ask" ? { heston_ok: "yes, go ahead" } : {}) };
+      const r = await t.fetch("/portal-mcp", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: tool, arguments: args } }) });
+      const json = await r.text();
+      const hit = aIds.find((id) => json.includes(id) && !JSON.stringify(args).includes(id)); // A's ids it was handed don't count
+      if (hit) leaks.push(`${name} returned A's ${hit}`);
+    }
+    expect(leaks).toEqual([]);
+    const after = await snapshot(t, a, true);
+    expect(Object.keys(before).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))).toEqual([]);
+    expect(await aFile(t, ids.storageId)).toEqual({ alive: true, owner: a });
+  });
 });

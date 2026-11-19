@@ -89,6 +89,7 @@ const OPEN: Record<string, string> = {
   "clientOnboard.state": "Phase 7 step 3: a client's own onboarding progress (their own person row and company); null for anyone else, tested in clientOnboard.test.ts",
   "setup.state": "Phase 7 step 2: the owner's own business's setup progress; null for anyone else (and for Wrangler), tested in setup.test.ts",
   "platform.me": "Phase 7: only whether the caller is the platform admin (ALLOWED_EMAILS, Heston); nothing else, tested in platform.test.ts",
+  "confirm.waiting": "Phase 8a: the owner's waiting connector requests; an empty list for anyone else (the Dashboard asks for everyone), tested in portalMcp.test.ts",
   "siteWatch.summary": "Phase 5c: open and urgent counts for the portal's admins (ALLOWED_EMAILS); null for anyone else, tested in siteWatch.test.ts",
   // Phase 5b step 4 (D127): a call-sheet guest's link (/guest/<token>, email 41), signed out.
   "guests.intro": "a guest's link: answers only for that pass's own long random token, with the sheet's title, day, the guest's first name and a masked email; tested in callSheetGuests.test.ts",
@@ -194,6 +195,8 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "briefings.setLinkExpiry": PRODUCTION, // Nov 18
     "briefings.share": PRODUCTION,
     "briefings.update": PRODUCTION, // D161: update a sent briefing's link
+    "pageText.get": PROJECTS, // 8d: a creative doc's text (a briefing's needs Docs, as in the builder)
+    "pageText.write": PROJECTS,
     "briefs.settings": PROJECTS,
     "briefs.saveSettings": PROJECTS,
     "briefs.resetSettings": PROJECTS,

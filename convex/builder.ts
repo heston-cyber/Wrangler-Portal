@@ -625,6 +625,15 @@ export const createBuildFor = internalMutation({
     return insertBuild(ctx, { title: a.title, page: a.page ? pageOf(a.page) : pageOf(t?.blocks), fields, signers: a.signers as ExtraSigner[] | undefined, style: t ? (t.style as Style) : undefined, templateId: t?._id });
   },
 });
+/** Phase 8d: a creative doc's or briefing's page written from markdown (pageText.ts), with the builder's own checks. */
+export async function writeBuildPage(ctx: MutationCtx, buildId: Id<"wsBuilds">, title: string | undefined, page: Page | undefined) {
+  const b = await ctx.db.get(buildId);
+  if (!b) throw new ConvexError("That document doesn't exist.");
+  await assertEditable(ctx, b);
+  tooBig(page);
+  await ctx.db.patch(buildId, { ...(title !== undefined ? { title: clean(title) || "Untitled document" } : {}), ...(page !== undefined ? { blocks: pageOf(page) } : {}), updatedAt: Date.now() });
+}
+
 export const patchBuild = internalMutation({
   args: { buildId: v.id("wsBuilds"), title: v.optional(v.string()), page: v.optional(v.any()), fields: v.optional(v.any()), signers: v.optional(v.any()) },
   handler: async (ctx, a) => {
@@ -656,9 +665,12 @@ export const findBuild = internalQuery({
     if (!r) return { ok: false, error: "Pass the draft: its draft_id or words from its title." };
     const id = ctx.db.normalizeId("wsBuilds", r);
     const got = id ? await ctx.db.get(id) : null;
+    // Phase 8b review L4: a release's page is signed in person on the shoot day; the connectors never change or send it.
+    const releaseBuilds = new Set((await ctx.db.query("releases").collect()).map((x) => x.buildId as string));
+    if (got && releaseBuilds.has(got._id)) return { ok: false, error: "That's a release: it's signed in person on the shoot day, and isn't changed through Claude." };
     if (got && !isSide(got)) return { ok: true, buildId: got._id };
     const words = r.toLowerCase().split(/\s+/);
-    const rows = (await ctx.db.query("wsBuilds").withIndex("by_updated").order("desc").take(300)).filter((b) => !isSide(b) && words.every((w) => b.title.toLowerCase().includes(w)));
+    const rows = (await ctx.db.query("wsBuilds").withIndex("by_updated").order("desc").take(300)).filter((b) => !isSide(b) && !releaseBuilds.has(b._id) && words.every((w) => b.title.toLowerCase().includes(w)));
     if (rows.length === 1) return { ok: true, buildId: rows[0]._id };
     if (!rows.length) return { ok: false, error: `No draft matches "${r}". list_drafts shows them.` };
     return { ok: false, error: `${rows.length} drafts match "${r}"; pass a draft_id.`, candidates: rows.slice(0, 10).map((b) => ({ draft_id: b._id, title: b.title })) };
@@ -669,8 +681,9 @@ export const listBuildsInternal = internalQuery({
   handler: async (ctx, { query: q }) => {
     const words = (q ?? "").toLowerCase().split(/\s+/).filter(Boolean);
     const rows = await ctx.db.query("wsBuilds").withIndex("by_updated").order("desc").take(300);
+    const releaseBuilds = new Set((await ctx.db.query("releases").collect()).map((x) => x.buildId as string)); // 8b re-review L7
     const out = [];
-    for (const b of rows.filter((x) => !isSide(x) && words.every((w) => x.title.toLowerCase().includes(w))).slice(0, 50)) {
+    for (const b of rows.filter((x) => !isSide(x) && !releaseBuilds.has(x._id) && words.every((w) => x.title.toLowerCase().includes(w))).slice(0, 50)) {
       const doc = b.documentId ? await ctx.db.get(b.documentId) : null;
       out.push({ draft_id: b._id, title: b.title, client: (b.fields as Fields)?.client?.name || null, updated: new Date(b.updatedAt).toISOString(), document: doc ? `${docLabel(doc.number)} (${doc.status})` : null });
     }

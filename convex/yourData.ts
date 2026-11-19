@@ -42,7 +42,7 @@ const PAGE = 300;
 const BATCH = 100; // rows per step of the day-60 run (each step is its own short transaction)
 
 /** Kept out of the export: keys and tokens, and records that are only the portal's own machinery. */
-export const OMIT_TABLES = new Set(["connectorKeys", "sheetKeys", "wsConnectorKeys", "dropbox", "wsDropbox", "counters", "waveforms", "dataExports"]);
+export const OMIT_TABLES = new Set(["connectorKeys", "portalKeys", "sheetKeys", "wsConnectorKeys", "dropbox", "wsDropbox", "counters", "waveforms", "dataExports"]);
 /** Fields never written into the export, wherever they appear: the secret part of links, sign-in codes and tokens, and
  *  Stripe's own pay-page and PDF links (anyone holding one can open the invoice). */
 export const SECRET_FIELDS = new Set(["token", "linkToken", "payToken", "passcodeHash", "codeHash", "sessionHash", "tokenHash", "refreshToken", "accessToken", "accessExpiresAt", "syncToken", "codeSends", "codeAttempts", "codeExpiresAt", "failures", "failTotal", "hostedUrl", "pdfUrl"]);

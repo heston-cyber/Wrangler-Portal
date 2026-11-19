@@ -28,6 +28,8 @@ for (const pair of pairs) {
   const value = pair.slice(i + 1).trim();
   if (!/^[A-Z][A-Z0-9_]*$/.test(name)) throw new Error(`Bad setting name: ${name}`);
   if (/(KEY|SECRET|PASSWORD|TOKEN|WEBHOOK)/.test(name)) throw new Error(`${name} looks secret: set it in the Convex dashboard instead.`);
+  // Nov 18 (security review L2): the W-9 clean-up's lock is set by hand on dev only, never by a workflow.
+  if (name === "W9_STRIP_OK") throw new Error("W9_STRIP_OK is set by hand on the development deployment only (docs/BACKUPS.md).");
   convex("env", "set", "--", name, value);
   console.log(`Set ${name}=${value}`);
 }

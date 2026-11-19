@@ -320,6 +320,38 @@ export default defineSchema({
     .index("by_user_video", ["userId", "videoId"]),
 
   // Keys for the Claude connector. Only a SHA-256 hash is stored; the key itself is shown once.
+  // Phase 8a (Nov 18, D207): the one Wrangler Portal connector's keys (wp_…), made by the business owner only.
+  portalKeys: defineTable({
+    businessId: v.optional(v.id("businesses")), // always set (stamped from the owner who made it)
+    hash: v.string(),
+    prefix: v.string(),
+    label: v.string(),
+    createdAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+    expiresAt: v.optional(v.number()),   // 8d: when it stops working on its own (none: until revoked)
+    madeBy: v.optional(v.id("users")),   // 8d (8b review L8): the owner who made it; it stops if they stop being the owner
+  }).index("by_hash", ["hash"]),
+
+  // Phase 8a (D208–D209): something Claude asked to send or delete through the connector. It does nothing until the
+  // owner, signed in on the site, presses Confirm on its page (/confirm/<id>). Heston's words in chat are kept with it.
+  pendingActions: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    kind: v.string(),            // e.g. "note.send"; the registry in convex/confirm.ts says what each does
+    targetId: v.string(),        // the record it acts on
+    summary: v.string(),         // what the Confirm page says, e.g. "Send the note “Cut 2 is up” to Harbor Coffee"
+    said: v.string(),            // what Claude says Heston told it in chat
+    payload: v.optional(v.string()), // the text a kind sets (a version's description); shown in full on the Confirm page
+    hash: v.optional(v.string()),    // review H1: what will go out, as it stood when asked; Confirm refuses if it changed
+    status: v.union(v.literal("waiting"), v.literal("done"), v.literal("cancelled"), v.literal("failed"), v.literal("replaced"), v.literal("running")), // replaced: Claude asked again with different content; running (8c): confirmed, going out from Heston's Confirm page
+    claimedAt: v.optional(v.number()), // 8c: a confirmed Stripe send started (runConfirmed), within 2 minutes of Confirm
+    ticket: v.optional(v.string()),    // 8c: the hash of the one-time ticket that records how that start went
+    requestedAt: v.number(),
+    expiresAt: v.number(),
+    doneAt: v.optional(v.number()),
+    error: v.optional(v.string()),
+  }).index("by_status", ["status", "requestedAt"]),
+
   connectorKeys: defineTable({
     businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     hash: v.string(),
@@ -328,6 +360,8 @@ export default defineSchema({
     createdAt: v.number(),
     lastUsedAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()),
+    expiresAt: v.optional(v.number()),   // 8d: when it stops working on its own (none: until revoked)
+    madeBy: v.optional(v.id("users")),   // 8d (8b review L8): the owner who made it; it stops if they stop being the owner
   }).index("by_hash", ["hash"]),
 
   // The connected Dropbox account (one row). Tokens never leave the backend.
@@ -552,6 +586,8 @@ export default defineSchema({
     createdAt: v.number(),
     lastUsedAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()),
+    expiresAt: v.optional(v.number()),   // 8d: when it stops working on its own (none: until revoked)
+    madeBy: v.optional(v.id("users")),   // 8d (8b review L8): the owner who made it; it stops if they stop being the owner
   }).index("by_hash", ["hash"]),
   // S3: the archive's own Dropbox app ("Wrangler Sign", App folder), separate from Wrangler Review's.
   wsDropbox: defineTable({
@@ -684,6 +720,7 @@ export default defineSchema({
     cc: v.optional(v.array(v.object({ email: v.string(), name: v.optional(v.string()) }))), // D160: who to copy when it's sent
     reason: v.optional(v.string()),
     said: v.string(),                      // what Claude said Heston told it in chat
+    layoutHash: v.optional(v.string()),    // Phase 8a review H3: approve only: the layout Claude asked about (Confirm refuses a changed one)
     status: v.union(v.literal("pending"), v.literal("done"), v.literal("declined"), v.literal("expired"), v.literal("replaced"), v.literal("failed"), v.literal("overtaken")),  // overtaken: Heston did it himself with the page's own buttons
     error: v.optional(v.string()),
     createdAt: v.number(),
@@ -2139,7 +2176,7 @@ export default defineSchema({
   auditLog: defineTable({
     businessId: v.optional(v.id("businesses")),
     at: v.number(),
-    kind: v.union(v.literal("sent"), v.literal("signed"), v.literal("paid"), v.literal("deleted"), v.literal("settings"), v.literal("signin"), v.literal("team"), v.literal("export"), v.literal("moved")),
+    kind: v.union(v.literal("sent"), v.literal("signed"), v.literal("paid"), v.literal("deleted"), v.literal("settings"), v.literal("signin"), v.literal("team"), v.literal("export"), v.literal("moved"), v.literal("claude")),
     who: v.string(),            // "Heston Hill", "Maya Brooks", "Stripe"
     role: v.string(),           // "Owner", "Producer", "Client", "System"
     userId: v.optional(v.id("users")),

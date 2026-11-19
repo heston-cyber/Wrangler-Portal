@@ -59,6 +59,9 @@ jobs:
           # Some copy paths turn the key's "|" into "%7C". A real key never contains "%7C", so undo it.
           export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7C/|}"
           export CONVEX_DEPLOY_KEY="${CONVEX_DEPLOY_KEY//%7c/|}"
+          # Nov 18 (security review L2): W9_STRIP_OK lets the W-9 clean-up run; it belongs on dev only. Never ship with it on live.
+          before="$(npx convex env list 2>/dev/null | cut -d= -f1 | tr '\n' ' ')"
+          case " $before " in *" W9_STRIP_OK "*) echo "::error::W9_STRIP_OK is set on live. Remove it in the Convex dashboard (live › Settings › Environment variables), then run Deploy again."; exit 1;; esac
           npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name VITE_CONVEX_URL
           # Names only (the repo is public). Live must never carry the preview's email lock.
           names="$(npx convex env list 2>/dev/null | cut -d= -f1 | sort | tr '\n' ' ')"

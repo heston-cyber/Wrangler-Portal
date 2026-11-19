@@ -20,6 +20,7 @@ import { clock, shootDay } from "../projects/Shoots";
 import { FollowUpRow } from "../crm/common";
 import { DEFAULT_TOOLS, type Tools, type WidgetKey } from "../../../convex/lib/tools";
 import { OutstandingCard, RevenueYearCard } from "../payments/ReportsWidgets";
+import { ClaudeWaiting } from "../connector/Confirm";
 
 // Phase 2b: monthly recurring and any past-due subscription (loaded with the Payments code).
 const Recurring = lazy(() => import("../payments/PaymentsOverview").then((m) => ({ default: m.Recurring })));
@@ -326,6 +327,7 @@ export default function OwnerHome() {
     <TopBar><span className="here">Dashboard</span></TopBar>
     <div className="wp-page wp-home pov">
       <PageHeader title="Dashboard." sub="What needs you today." actions={<><ButtonLink variant="secondary" to="/settings/tools" iconEnd={false}>Customize</ButtonLink><CreateMenu /></>} />
+      <ClaudeWaiting /> {/* Phase 8a: connector requests waiting for the owner's Confirm; nothing when there are none */}
       <SetupChecklist /> {/* Phase 7: a new business only; null for Wrangler and for a team member (setup.state) */}
       {watch && watch.open > 0 && <SiteWatchRow w={watch} />}
       <div className="pov-stats ov-tiles">

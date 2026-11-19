@@ -262,6 +262,11 @@ export const approve = mutation({
 });
 
 
+/** Phase 8a review (H3): the same lock text Approve hashes, for "is this still what Claude asked about?". */
+async function layoutHashOf(doc: Doc<"wsDocuments">, ver: Doc<"wsVersions">) {
+  return sha256Hex(lockText({ documentNumber: doc.number, versionNumber: ver.number, title: doc.title, fileSha256: ver.fileSha256, pages: ver.pages, signers: ver.signers, boxes: ver.boxes as LayoutBox[], signingOrder: ver.signingOrder, payment: ver.payment ?? null }));
+}
+
 async function approveCore(ctx: MutationCtx, versionId: Id<"wsVersions">, actor: string) {
   {
     const { ver, doc } = await loadEditable(ctx, versionId);
@@ -572,7 +577,7 @@ export async function sendInPersonCore(ctx: MutationCtx, versionId: Id<"wsVersio
   return { token, session };
 }
 
-async function sentDoc(ctx: MutationCtx, documentId: Id<"wsDocuments">) {
+export async function sentDoc(ctx: MutationCtx, documentId: Id<"wsDocuments">) {
   const doc = await ctx.db.get(documentId);
   if (!doc) throw new ConvexError("That document doesn't exist.");
   if (doc.status !== "sent") throw new ConvexError("Only a document that's out for signature can do that.");
@@ -616,7 +621,7 @@ export const resendAs = internalMutation({
   handler: async (ctx, a) => resendCore(ctx, a.documentId, a.signerKey, a.actor),
 });
 
-async function resendCore(ctx: MutationCtx, documentId: Id<"wsDocuments">, signerKey: string, actor: string) {
+export async function resendCore(ctx: MutationCtx, documentId: Id<"wsDocuments">, signerKey: string, actor: string) {
   {
     const { doc, signings } = await sentDoc(ctx, documentId);
     const x = signings.find((y) => y.signerKey === signerKey);
@@ -751,7 +756,10 @@ export const requestAs = internalMutation({
       if (r.what === a.what) await ctx.db.patch(r._id, { status: "replaced", decidedAt: now });
     }
     const said = cleanLine(a.said, 200);
-    const requestId = await ctx.db.insert("wsRequests", { documentId: doc._id, what: a.what, versionNumber: doc.currentVersion, expiresInDays: a.expiresInDays, ...(cc.length ? { cc } : {}), reason: a.reason?.trim().slice(0, 300) || undefined, said, status: "pending", createdAt: now });
+    // Phase 8a review (H3): an approve request is for the layout as it stands now. Changing the signers, boxes, amount,
+    // order or file afterwards leaves it unconfirmable (the version number alone didn't change on a layout edit).
+    const layoutHash = a.what === "approve" ? await layoutHashOf(doc, cur) : undefined;
+    const requestId = await ctx.db.insert("wsRequests", { documentId: doc._id, what: a.what, versionNumber: doc.currentVersion, ...(layoutHash ? { layoutHash } : {}), expiresInDays: a.expiresInDays, ...(cc.length ? { cc } : {}), reason: a.reason?.trim().slice(0, 300) || undefined, said, status: "pending", createdAt: now });
     await appendEvent(ctx, doc._id, { kind: "claude_requested", actor: "claude", versionNumber: doc.currentVersion, detail: `Claude asked to ${WHAT_LABEL[a.what]} version ${doc.currentVersion}${cc.length ? `, copying ${cc.map((c) => c.email).join(", ")}` : ""} through the connector, saying Heston told it: "${said}". Waiting for Heston to confirm on the site.` });
     return { requestId, expiresAt: now + REQUEST_TTL };
   },
@@ -824,6 +832,10 @@ export const decideRequest = mutation({
     }
     if (!stillFits(r.what, doc.status)) { await ctx.db.patch(r._id, { status: "overtaken", decidedAt: now }); throw new ConvexError(`Nothing to confirm: the document is already ${doc.status}.`); }
     if (doc.currentVersion !== r.versionNumber) throw new ConvexError(`The document has moved on to version ${doc.currentVersion} since Claude asked. Decline this and check it again.`);
+    if (r.what === "approve" && !r.layoutHash) throw new ConvexError("This request was made before requests were tied to the document's layout. Decline it and ask Claude again.");
+    if (r.what === "approve" && r.layoutHash !== (await layoutHashOf(doc, await currentVersion(ctx, doc)))) {
+      throw new ConvexError("The document changed since Claude asked (signers, boxes, amount or file). Decline this, check it, and approve it yourself or ask Claude again.");
+    }
     await appendEvent(ctx, doc._id, { kind: "claude_request_confirmed", actor: OWNER_KEY, versionNumber: doc.currentVersion, detail: `Heston confirmed on the site, signed in: ${WHAT_LABEL[r.what]} (asked by Claude).` });
     const ver = await currentVersion(ctx, doc);
     if (r.what === "approve") await approveCore(ctx, ver._id, OWNER_KEY);

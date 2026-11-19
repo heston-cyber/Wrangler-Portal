@@ -211,11 +211,18 @@ export const ownersAll = internalAction({
 // so the preview holds none (a restore from live carried them over). It refuses to run anywhere that isn't the deployment named in
 // `deployment`: the dev workflow (convex-dev.yml) passes its own dev key's name, and live's address never matches it. It isn't in
 // the live "Convex run" list. Output is a count only.
+//
+// Nov 18 (Heston approved the read-back, 17:31): a second lock. Naming the deployment is something anyone running it can do,
+// so it also needs the setting W9_STRIP_OK on that deployment, holding the same name. Heston sets it on the development
+// deployment only (Convex dashboard › Settings › Environment variables); live never has it, so it can't run there.
 export const stripW9s = internalMutation({
   args: { deployment: v.string() },
   handler: async (ctx, { deployment }) => {
     const url = process.env.CONVEX_CLOUD_URL ?? "";
-    if (!/^[a-z0-9-]{3,}$/.test(deployment) || new URL(url || "https://none.invalid").hostname.split(".")[0] !== deployment) throw new Error("Refused: this isn't the deployment named.");
+    let here = "";
+    try { here = new URL(url).hostname.split(".")[0]; } catch { /* no address: refused below */ }
+    if (!/^[a-z0-9-]{3,}$/.test(deployment) || !here || here !== deployment) throw new Error("Refused: this isn't the deployment named.");
+    if ((process.env.W9_STRIP_OK ?? "").trim() !== here) throw new Error("Refused: W9_STRIP_OK isn't set to this deployment's name here.");
     let cleared = 0;
     for (const x of await ctx.db.query("vendors").collect()) {
       if (!x.w9) continue;
@@ -225,6 +232,18 @@ export const stripW9s = internalMutation({
       await ctx.db.patch(x._id, { w9: undefined });
       cleared++;
     }
-    return { cleared };
+    // Security review (Nov 18, L1): W-9 files no vendor points at any more: one queued by a business's deletion (its 30
+    // days), or an earlier upload recorded as a W-9. Their file and its records go too. (An upload never claimed by
+    // setW9 has no record saying it's a W-9, so it can't be told apart here.)
+    const deletion = await ctx.db.query("deletionFiles").collect();
+    let files = 0;
+    for (const o of await ctx.db.query("fileOwners").collect()) {
+      if (o.purpose !== "w9") continue;
+      try { await ctx.storage.delete(o.storageId); } catch { /* already gone */ }
+      for (const d of deletion) if (d.fileId === o.storageId) await ctx.db.delete(d._id);
+      await ctx.db.delete(o._id);
+      files++;
+    }
+    return { cleared, files };
   },
 });

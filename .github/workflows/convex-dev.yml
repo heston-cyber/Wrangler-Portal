@@ -51,6 +51,7 @@ jobs:
             echo "Not allowed: $FN"; exit 1
           fi
           # Nov 18: migrations:stripW9s clears the W-9s on the dev copy; it is told this deployment's own name and refuses anywhere else.
+          # It also needs the setting W9_STRIP_OK on dev holding that same name (Heston sets it once in the Convex dashboard).
           if [ "$FN" = "migrations:stripW9s" ]; then DEPLOYMENT="${CONVEX_DEPLOY_KEY#dev:}"; DEPLOYMENT="${DEPLOYMENT%%|*}"; DEPLOYMENT="${DEPLOYMENT%%:*}"; ARGS="{\"deployment\":\"$DEPLOYMENT\"}"; fi
           if ! printf '%s' "$ARGS" | jq -e 'type == "object"' > /dev/null; then echo "args must be a JSON object"; exit 1; fi
           npx convex deploy -y || npx convex dev --once --typecheck disable

@@ -121,7 +121,7 @@ describe("Phase 6 sweep fixes", () => {
 });
 
 describe("Nov 18: the W-9 clear for the dev copy", () => {
-  test("S6.6 it refuses unless the deployment's own name is given, then clears every vendor's W-9 and its file record", async () => {
+  test("S6.6 it refuses unless the deployment's own name is given and W9_STRIP_OK names it too, then clears every vendor's W-9 and its file record", async () => {
     const w = await world();
     const internalApi = (await import("../convex/_generated/api")).internal;
     const fileId = await w.t.run(async (ctx) => ctx.storage.store(new Blob(["w9"])));
@@ -130,15 +130,43 @@ describe("Nov 18: the W-9 clear for the dev copy", () => {
       await ctx.db.insert("fileOwners", { storageId: fileId, businessId: w.A, purpose: "w9", at: 1 });
       return id;
     });
-    const prev = process.env.CONVEX_CLOUD_URL;
+    const prev = process.env.CONVEX_CLOUD_URL, prevOk = process.env.W9_STRIP_OK;
     process.env.CONVEX_CLOUD_URL = "https://happy-dev-123.convex.cloud";
+    delete process.env.W9_STRIP_OK;
     await expect(w.t.mutation(internalApi.migrations.stripW9s, { deployment: "live-site-999" })).rejects.toThrow(/Refused/);
     await expect(w.t.mutation(internalApi.migrations.stripW9s, { deployment: "" })).rejects.toThrow(/Refused/);
+    // Nov 18 (second lock): naming this deployment isn't enough without the setting, or with the setting naming another one.
+    await expect(w.t.mutation(internalApi.migrations.stripW9s, { deployment: "happy-dev-123" })).rejects.toThrow(/W9_STRIP_OK/);
+    process.env.W9_STRIP_OK = "live-site-999";
+    await expect(w.t.mutation(internalApi.migrations.stripW9s, { deployment: "happy-dev-123" })).rejects.toThrow(/W9_STRIP_OK/);
+    // Live (no setting there): naming live is refused even when the caller names it correctly.
+    process.env.CONVEX_CLOUD_URL = "https://live-site-999.convex.cloud";
+    delete process.env.W9_STRIP_OK;
+    await expect(w.t.mutation(internalApi.migrations.stripW9s, { deployment: "live-site-999" })).rejects.toThrow(/W9_STRIP_OK/);
+    process.env.CONVEX_CLOUD_URL = "";
+    process.env.W9_STRIP_OK = "";
+    await expect(w.t.mutation(internalApi.migrations.stripW9s, { deployment: "happy-dev-123" })).rejects.toThrow(/Refused/);
     expect((await w.t.run(async (ctx) => ctx.db.get(v as Id<"vendors">)))!.w9).toBeTruthy(); // nothing changed
-    expect(await w.t.mutation(internalApi.migrations.stripW9s, { deployment: "happy-dev-123" })).toEqual({ cleared: 1 });
+    process.env.CONVEX_CLOUD_URL = "https://happy-dev-123.convex.cloud";
+    process.env.W9_STRIP_OK = "happy-dev-123";
+    // Review L1: a W-9 no vendor points at (queued by a business deletion) goes too; other files are left alone.
+    const loose = await w.t.run(async (ctx) => {
+      const f = await ctx.storage.store(new Blob(["old w9"]));
+      await ctx.db.insert("fileOwners", { storageId: f, businessId: w.A, purpose: "w9", at: 1 });
+      const del = await ctx.db.insert("businessDeletions", { businessId: w.A, name: "Wrangler", ownerEmail: "owner@business.example", requestedBy: "owner@business.example", requestedAt: 1, deleteAt: 2, status: "running" });
+      await ctx.db.insert("deletionFiles", { deletionId: del, fileId: f, purgeAt: Date.now() + 86_400_000 });
+      const other = await ctx.storage.store(new Blob(["logo"]));
+      await ctx.db.insert("fileOwners", { storageId: other, businessId: w.A, purpose: "logo", at: 1 });
+      return { f, other };
+    });
+    expect(await w.t.mutation(internalApi.migrations.stripW9s, { deployment: "happy-dev-123" })).toEqual({ cleared: 1, files: 1 });
+    expect(await w.t.run(async (ctx) => ctx.storage.getUrl(loose.f))).toBeNull();
+    expect(await w.t.run(async (ctx) => ctx.db.query("deletionFiles").collect())).toHaveLength(0);
+    expect(await w.t.run(async (ctx) => ctx.storage.getUrl(loose.other))).not.toBeNull();
     expect((await w.t.run(async (ctx) => ctx.db.get(v as Id<"vendors">)))!.w9).toBeUndefined();
-    expect(await w.t.run(async (ctx) => ctx.db.query("fileOwners").collect())).toHaveLength(0);
+    expect((await w.t.run(async (ctx) => ctx.db.query("fileOwners").collect())).map((o) => o.purpose)).toEqual(["logo"]);
     expect(await w.t.run(async (ctx) => ctx.storage.getUrl(fileId))).toBeNull();
     if (prev === undefined) delete process.env.CONVEX_CLOUD_URL; else process.env.CONVEX_CLOUD_URL = prev;
+    if (prevOk === undefined) delete process.env.W9_STRIP_OK; else process.env.W9_STRIP_OK = prevOk;
   });
 });

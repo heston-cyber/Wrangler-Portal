@@ -1,5 +1,6 @@
 import { useDeviceCheckIn } from "./modules/security/Security";
 import { NotificationsPage } from "./modules/bell/Bell";
+import { ConfirmPage } from "./modules/connector/Confirm";
 import { registerWorker } from "./lib/push";
 import { NotAllowedBoundary } from "./ErrorBoundary";
 import { canOpen, type Perms } from "./lib/teamAccess";
@@ -442,6 +443,7 @@ function SignedIn() {
   else if (/^\/settings\/brief\/questions\/?$/.test(path)) page = <Suspense fallback={<Loading />}><QuestionnaireEditor kind="kickoff" /></Suspense>;
   else if (/^\/settings\/brief\/preview\/?$/.test(path)) page = <ClientBriefPage key="preview" preview />;
   else if (path.startsWith("/settings")) page = <Settings me={me} />;
+  else if (/^\/confirm\/[^/]+\/?$/.test(path)) { const id = path.split("/")[2]; page = <ConfirmPage key={id} id={id} />; } // Phase 8a: a connector request
   else if (/^\/notifications\/?$/.test(path)) page = <NotificationsPage />; // Phase 5e step 4: the bell's See all
   else if (/^\/more\/?$/.test(path)) page = <MorePage me={me} side="owner" />;
   else if (/^\/review\/?$/.test(path)) page = <Home />; // Review's main page

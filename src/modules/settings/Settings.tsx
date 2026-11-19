@@ -17,6 +17,7 @@ import { HelpSection } from "../help/Help";
 import { CallSettings } from "../calls/Calls";
 import { SectionMenu, sectionOf, SettingsFrame, SetHead, type SectionKey } from "./Frame";
 import { SignConnectorPanel } from "../docs/pages/SignConnector";
+import { PortalConnectorPanel } from "./PortalConnector";
 import Register from "../review/Register";
 import wpLogo from "../../assets/d1/wp-logo.png";
 import lightElbow from "../../assets/portal/light-elbow.jpg";
@@ -131,7 +132,9 @@ export default function Settings({ me }: { me: { name: string | null; email: str
       {key === "notifications" && <OwnerNotifications show={show} />}
       {key === "dropbox" && <DropboxSettings show={show} />}
       {key === "connectors" && <>
-        <SetHead title="Claude reads your notes and sets up your contracts." sub="Two connectors, each with its own keys." />
+        <SetHead title="Run your portal from Claude." sub="One connector for everything. The two older ones keep working until you switch." />
+        <PortalConnectorPanel show={show} />
+        <div className="wp-setsub"><span className="eyebrow">Older connectors</span><p>Wrangler Review and Wrangler Sign, each with its own keys. They go away once you've switched to Wrangler Portal.</p></div>
         <Connector show={show} />
         <SignConnectorPanel show={show} />
       </>}
