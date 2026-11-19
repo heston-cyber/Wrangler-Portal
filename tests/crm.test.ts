@@ -145,9 +145,28 @@ describe("D56 a lead's company at its first estimate", () => {
     expect(p!.clientId).toBeUndefined();
   });
 
+  test("T-D56.7 the Dropbox folder sync: a same-named pair stalls nothing; a new folder project takes its client folder's client by id", async () => {
+    const w = await world();
+    const twins = await w.t.run(async (ctx) => [
+      await ctx.db.insert("clients", { businessId: w.A, name: "Twin Co", createdAt: 1 }),
+      await ctx.db.insert("clients", { businessId: w.A, name: "Twin Co", createdAt: 2 }),
+    ]);
+    const f = (path: string) => ({ pathLower: path.toLowerCase(), pathDisplay: path });
+    await w.t.mutation(internal.dropbox.recordFolders, { folders: [f("/Clients/Twin Co"), f("/Clients/Twin Co/Spring Job"), f("/Clients/Harbor Coffee"), f("/Clients/Harbor Coffee/Launch Two")], gone: [] });
+    const r = await w.t.run(async (ctx) => ({
+      twins: await Promise.all(twins.map((id) => ctx.db.get(id))),
+      spring: (await ctx.db.query("projects").collect()).find((p) => p.name === "Spring Job"),
+      launch: (await ctx.db.query("projects").collect()).find((p) => p.name === "Launch Two"),
+    }));
+    expect(r.twins.map((c) => c!.dropboxFolder)).toEqual([undefined, undefined]); // the folder joins neither twin
+    expect(r.spring).toBeDefined();
+    expect(r.spring!.clientId).toBeUndefined(); // no client rather than the wrong one
+    expect(r.launch!.clientId).toBe(w.harbor); // by the client folder's own client
+  });
+
   test("T-D56.6 lookalike names (zero-width characters, Cyrillic letters) count as a clash", async () => {
     const w = await world();
-    for (const [i, typed] of ["Harbor\u200B Coffee", "H\u0430rbor Coffee", "Harbor Co\u200Dffee"].entries()) {
+    for (const [i, typed] of ["Harbor\u200B Coffee", "H\u0430rbor Coffee", "Harbor Co\u200Dffee", "Harbor Coffee\u034F", "Harbor Coffee\uFE0F"].entries()) {
       const dealId = await leadDeal(w, `Lookalike ${i}`, `look${i}@elsewhere.example`, typed);
       await estimate(w, dealId);
       const c = await companyOf(w, dealId);

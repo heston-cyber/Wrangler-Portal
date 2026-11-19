@@ -317,8 +317,11 @@ const leadFiling = async (ctx: QueryCtx, a: Args) => {
   let deal = await get(ctx, "deals", a.dealId ?? est?.dealId);
   if (!deal && typeof (a.projectId ?? est?.projectId) === "string") deal = ((await ctx.db.query("deals").withIndex("by_project", (q) => q.eq("projectId", (a.projectId ?? est?.projectId) as never)).collect()) as Array<Record<string, any>>).find((x) => !x.closedAt) ?? null;
   if (!deal?.lead || deal.clientId || est?.clientId) return null;
-  // D56 re-review N1: this check runs on the unguarded database, so the deal's own business is named explicitly.
-  const t = await crm.leadTarget(ctx as never, deal.lead as { email: string; company?: string; name: string }, (deal.businessId ?? (await defaultBusiness(ctx as never))?._id ?? null) as never);
+  // D56 re-review N1: this check runs on the unguarded database, so the deal's own business is named explicitly
+  // (R3-L3: with none known, it says nothing rather than look across businesses).
+  const biz = deal.businessId ?? (await defaultBusiness(ctx as never))?._id ?? null;
+  if (!biz) return null;
+  const t = await crm.leadTarget(ctx as never, deal.lead as { email: string; company?: string; name: string }, biz as never);
   return t.clientId
     ? `Saving this estimate files the lead ${String(deal.lead.email ?? "")} under ${t.name} (${t.why}); as one of its people, once they can sign in they see its invoices.`
     : `Saving this estimate makes a new company, ${t.name}, for the lead ${String(deal.lead.email ?? "")}, with them as its signer${t.why === "a new company" ? "" : ` (${t.why.replace(/^a new company \((.*)\)$/, "$1").replace(/, so a new company$/, "")})`}.`;

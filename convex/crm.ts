@@ -337,9 +337,9 @@ const LOOKALIKE: Record<string, string> = Object.fromEntries([..."аеорсух
 export async function leadTarget(ctx: QueryCtx | MutationCtx, lead: { email: string; company?: string | null; name: string }, businessId?: Id<"businesses"> | null):
   Promise<{ clientId: Id<"clients"> | null; newName: string | null; name: string; why: string }> {
   const email = lead.email.trim().toLowerCase();
-  const typed = (lead.company || lead.name || "Website lead").normalize("NFKC").replace(/\p{Cf}/gu, "").trim().replace(/\s+/g, " ").slice(0, 100) || "Website lead";
+  const typed = (lead.company || lead.name || "Website lead").normalize("NFKC").replace(/\p{Default_Ignorable_Code_Point}/gu, "").trim().replace(/\s+/g, " ").slice(0, 100) || "Website lead";
   // D56 re-review N2: lookalikes (zero-width and other format characters, compatibility forms) compare as the same name.
-  const key = (x: string) => [...x.normalize("NFKC").replace(/\p{Cf}/gu, "").trim().replace(/\s+/g, " ").toLowerCase()].map((ch) => LOOKALIKE[ch] ?? ch).join("");
+  const key = (x: string) => [...x.normalize("NFKC").replace(/\p{Default_Ignorable_Code_Point}/gu, "").trim().replace(/\s+/g, " ").toLowerCase()].map((ch) => LOOKALIKE[ch] ?? ch).join("");
   // D56 re-review N1: when the caller's database isn't already walled to one business (the connector's Confirm check
   // runs unguarded), only that business's companies and people count. Records with no business are the default one's.
   const def = businessId ? (await defaultBusiness(ctx))?._id ?? null : null;
