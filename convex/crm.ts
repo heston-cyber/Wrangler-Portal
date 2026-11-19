@@ -352,13 +352,14 @@ export const saveEstimate = mutation({
       if (!d) throw new ConvexError("That card isn't here.");
       clientId = clientId ?? d.clientId ?? null;
       if (!clientId && d.lead) {
-        // D56: the website lead's company and contact, made at the first estimate. Review (Oct 31): an existing
-        // client is reused (the person's email, then the company's name), so nothing is doubled.
+        // D56: the website lead's company and contact, made at the first estimate. Review (Oct 31): a client the
+        // person already belongs to (by their email) is reused. D56 fix (Heston, Nov 19, "onward with your
+        // suggestions"): never by the company's name alone. A stranger who typed a client's name into the website
+        // form would otherwise become one of that client's people and see its invoices, projects and Inbox. A name
+        // match without the email makes a new, separate company; Heston adds the person to the real one himself.
         const email = d.lead.email.toLowerCase();
         const byEmail = (await ctx.db.query("clientPeople").collect()).find((x) => !x.removedAt && x.email.toLowerCase() === email);
-        const wanted = (d.lead.company || d.lead.name).trim().toLowerCase();
-        const byName = (await ctx.db.query("clients").collect()).find((x) => x.name.trim().toLowerCase() === wanted);
-        clientId = byEmail?.clientId ?? byName?._id ?? await ctx.db.insert("clients", { name: (d.lead.company || d.lead.name).slice(0, 120), createdAt: now });
+        clientId = byEmail?.clientId ?? await ctx.db.insert("clients", { name: (d.lead.company || d.lead.name).slice(0, 120), createdAt: now });
         const there = (await ctx.db.query("clientPeople").withIndex("by_client", (q) => q.eq("clientId", clientId!)).collect()).some((x) => !x.removedAt && x.email.toLowerCase() === email);
         if (!there) await ctx.db.insert("clientPeople", { clientId, email, name: d.lead.name, role: "signer", createdAt: now });
         await ctx.db.patch(dealId, { clientId, contactEmail: email });

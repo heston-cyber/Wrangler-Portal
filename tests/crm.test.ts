@@ -47,6 +47,47 @@ describe("T3.1 leads from the website", () => {
   });
 });
 
+// D56 fix (Heston, Nov 19, 14:40: "onward with your suggestions"): a website lead is filed under an existing company
+// only when their email is already one of its people, never by the company's name alone.
+describe("D56 a lead's company at its first estimate", () => {
+  const lead = async (w: Awaited<ReturnType<typeof world>>, name: string, email: string, company: string) => {
+    const body = JSON.stringify({ triggerType: "form_submission", payload: { data: { Name: name, Email: email, Company: company } } });
+    await w.t.fetch("/leads/webflow", { method: "POST", body, headers: await sign(body) });
+    const deals = (await w.heston.query(api.crm.board, {})).deals as Array<{ _id: Id<"deals">; title: string }>;
+    return deals.find((x) => x.title.includes(company) || x.title.includes(name))?._id ?? deals[0]._id;
+  };
+  const peopleOf = (w: Awaited<ReturnType<typeof world>>, clientId: Id<"clients">) =>
+    w.t.run(async (ctx) => (await ctx.db.query("clientPeople").withIndex("by_client", (q) => q.eq("clientId", clientId)).collect()).filter((p) => !p.removedAt).map((p) => p.email).sort());
+
+  test("T-D56.1 the same company name with a new email makes a new, separate company; the existing one is untouched", async () => {
+    const w = await world();
+    const before = await peopleOf(w, w.harbor);
+    const dealId = await lead(w, "Sly Stranger", "sly@elsewhere.example", "Harbor Coffee");
+    await w.heston.mutation(api.crm.saveEstimate, { dealId, title: "Brand film", scope: "", input: { unit: "days", amount: 1 } });
+    const d = await w.heston.query(api.crm.deal, { dealId });
+    expect(d.company._id).not.toBe(w.harbor);
+    expect(d.company.name).toBe("Harbor Coffee");
+    expect(await peopleOf(w, d.company._id)).toEqual(["sly@elsewhere.example"]);
+    // Harbor Coffee's people are exactly as they were, so the lead never sees its invoices, projects or Inbox.
+    expect(await peopleOf(w, w.harbor)).toEqual(before);
+    expect(before).not.toContain("sly@elsewhere.example");
+    const companies = await w.t.run(async (ctx) => (await ctx.db.query("clients").collect()).filter((c) => c.name === "Harbor Coffee").length);
+    expect(companies).toBe(2);
+  });
+
+  test("T-D56.2 a lead whose email is already one of a company's people goes on that company", async () => {
+    const w = await world();
+    const before = await peopleOf(w, w.harbor);
+    const dealId = await lead(w, "Maya Brooks", "Maya@Harbor.example", "Harbor Coffee Co.");
+    await w.heston.mutation(api.crm.saveEstimate, { dealId, title: "Spring promo", scope: "", input: { unit: "days", amount: 1 } });
+    const d = await w.heston.query(api.crm.deal, { dealId });
+    expect(d.company._id).toBe(w.harbor);
+    expect(await peopleOf(w, w.harbor)).toEqual(before); // nobody added twice
+    const companies = await w.t.run(async (ctx) => (await ctx.db.query("clients").collect()).length);
+    expect(companies).toBe(1);
+  });
+});
+
 describe("T3.2 a card moves on events (forward only, D60)", () => {
   test("estimate (D56 makes the company and contact) → contract sent → signed → in production → delivered → paid; a hand move stays until a later event", async () => {
     const w = await world();
