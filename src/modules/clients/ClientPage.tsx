@@ -54,6 +54,36 @@ function PersonRow({ p, show }: { p: Person; show: (m: string) => void }) {
       )} />
   );
 }
+/** Nov 19 (Heston, "take care of them"): rename the company, e.g. to take off a website lead's "(website lead)" tag. */
+function RenameClient({ clientId, current, onClose, show }: { clientId: Id<"clients">; current: string; onClose: () => void; show: (m: string) => void }) {
+  const rename = useMutation(api.library.renameClient);
+  const [name, setName] = useState(current.replace(/ \(website lead( \d+)?\)$/, ""));
+  const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null);
+  return (
+    <Modal onClose={onClose} label="Rename the client" width={520}>
+      <form style={{ display: "grid", gap: 18 }} onSubmit={async (e) => {
+        e.preventDefault(); setBusy(true); setError(null);
+        try { const n = await rename({ clientId, name }); show(`Renamed to ${n}.`); onClose(); }
+        catch (err) { setError(errText(err)); setBusy(false); }
+      }}>
+        <div className="dhead">
+          <div style={{ display: "grid", gap: 6 }}>
+            <span className="eyebrow">{current}</span>
+            <h2 className="headline">Rename the client.</h2>
+          </div>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="close" size={18} /></button>
+        </div>
+        <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Company name" autoFocus />
+        <p className="wp-small secondary">Its projects and shares follow. A name another client already has isn't taken.</p>
+        {error && <p className="error" role="alert">{error}</p>}
+        <div className="dfoot">
+          <button className="btn ghost" type="button" onClick={onClose}>Cancel</button>
+          <Button variant="primary" type="submit" loading={busy} disabled={name.trim().length < 2}>Rename</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
 function AddPerson({ clientId, client, onClose, show }: { clientId: Id<"clients">; client: string; onClose: () => void; show: (m: string) => void }) {
   const add = useMutation(api.clients.addPerson);
   const invite = useMutation(api.clients.invitePerson);
@@ -348,6 +378,7 @@ export default function ClientPage({ clientId, tab: tabParam }: { clientId: Id<"
   const [toast, show] = useToast();
   const [sharing, setSharing] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [renaming, setRenaming] = useState(false);
   const tab = tabParam;
   const setTab = (k: ClientTab) => navigate(`/clients/${clientId}${k === "overview" ? "" : `?tab=${k}`}`);
   if (page === undefined) return <><TopBar><span className="secondary">People</span><Sep /><a {...linkProps("/clients")}>Clients</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
@@ -357,6 +388,7 @@ export default function ClientPage({ clientId, tab: tabParam }: { clientId: Id<"
   const name = page.client.name;
   const actions = (
     <>
+      <Button onClick={() => setRenaming(true)}>Rename</Button>
       <Button onClick={() => setFollowing(true)}>Add follow-up</Button>
       <ButtonLink to={`/payments/quotes/new?client=${clientId}`}>Quick quote</ButtonLink>
       <ButtonLink to={`/proposals/new?client=${clientId}`}>New proposal</ButtonLink>
@@ -374,6 +406,7 @@ export default function ClientPage({ clientId, tab: tabParam }: { clientId: Id<"
             <h1 className="wp-h2" title={name}>{name}</h1>
             <div className="tags pc-only"><span className="wp-tag">{plural(page.people.length, "person", "people")}</span><span className="wp-tag">{plural(page.projects.length, "project", "projects")}</span></div>
             <span className="ph-only cp-sub">{plural(page.people.length, "person", "people")} · {plural(page.projects.length, "project", "projects")}</span>
+            {/ \(website lead( \d+)?\)$/.test(name) && <span className="wp-small secondary">Made from a website lead. Rename it once you know who they are.</span>}
           </div>
           <div className="acts">{actions}</div>
         </header>
@@ -410,6 +443,7 @@ export default function ClientPage({ clientId, tab: tabParam }: { clientId: Id<"
       </div>
       {sharing && <ShareDialog target={{ kind: "client", client: name }} label={name} onClose={() => setSharing(false)} show={show} />}
       {adding && <AddPerson clientId={clientId} client={name} onClose={() => setAdding(false)} show={show} />}
+      {renaming && <RenameClient clientId={clientId} current={name} onClose={() => setRenaming(false)} show={show} />}
       {following && <AddFollowUp onClose={() => setFollowing(false)} show={show} eyebrow={name} clientId={clientId} />}
       {toast}
     </>

@@ -15,6 +15,7 @@ import { requireMe, requireAll, seesValue } from "./lib/access";
 import { businessInScope, defaultBusiness } from "./lib/business";
 import { EMPTY_RATES, WRANGLER_RATES, estimate, primaryKind, ratesProblems, type EstimateInput, type Rates } from "./lib/estimate";
 import { applyArgs } from "./wsMcp";
+import { nameKey } from "./lib/names";
 import { accessOf } from "./clients";
 import { ownerSide } from "./inbox";
 import type { Fields } from "./lib/wsBuilder";
@@ -324,9 +325,6 @@ export const getEstimate = query({
   },
 });
 
-/** D56 re-review N2: Cyrillic and Greek letters that look like Latin ones, so "Hаrbor" (Cyrillic а) is still "harbor". */
-const LOOKALIKE: Record<string, string> = Object.fromEntries([..."аеорсухіјѕԁӏкмнвтгɡοαερτυνικχ"].map((c, i) => [c, "aeopcyxijsdlkmhbtrgoaeptuvikx"[i]]));
-
 /** D56 (Heston, Nov 19): which company a website lead's first estimate files them under.
  *  - Their email is already one of a company's (not removed) people: that company. If it's on more than one, the one
  *    whose name they typed; if none of those matches, a new company (never a guess).
@@ -339,7 +337,7 @@ export async function leadTarget(ctx: QueryCtx | MutationCtx, lead: { email: str
   const email = lead.email.trim().toLowerCase();
   const typed = (lead.company || lead.name || "Website lead").normalize("NFKC").replace(/\p{Default_Ignorable_Code_Point}/gu, "").trim().replace(/\s+/g, " ").slice(0, 100) || "Website lead";
   // D56 re-review N2: lookalikes (zero-width and other format characters, compatibility forms) compare as the same name.
-  const key = (x: string) => [...x.normalize("NFKC").replace(/\p{Default_Ignorable_Code_Point}/gu, "").trim().replace(/\s+/g, " ").toLowerCase()].map((ch) => LOOKALIKE[ch] ?? ch).join("");
+  const key = nameKey;
   // D56 re-review N1: when the caller's database isn't already walled to one business (the connector's Confirm check
   // runs unguarded), only that business's companies and people count. Records with no business are the default one's.
   const def = businessId ? (await defaultBusiness(ctx))?._id ?? null : null;
@@ -352,9 +350,12 @@ export async function leadTarget(ctx: QueryCtx | MutationCtx, lead: { email: str
   const typedMatch = onCompanies.find((c) => key(c.name) === key(typed));
   if (typedMatch) return { clientId: typedMatch._id, newName: null, name: typedMatch.name, why: `${email} is one of ${typedMatch.name}'s people, the company they named` };
   const taken = new Set(clients.map((c) => key(c.name)));
-  let name = typed;
-  for (let n = 1; taken.has(key(name)); n++) name = `${typed} (website lead${n > 1 ? ` ${n}` : ""})`;
-  const why = onCompanies.length > 1 ? `${email} is on more than one company and none is the one they named, so a new company` : name === typed ? "a new company" : `a new company (a client called ${typed} already exists, and their email isn't one of its people)`;
+  // Nov 19 (Heston, "take care of them"): every company made from a website lead is tagged until Heston renames it
+  // (Clients › the company › Rename), so a stranger who's first to use a client's name never holds the plain name.
+  let name = `${typed} (website lead)`;
+  for (let n = 2; taken.has(key(name)); n++) name = `${typed} (website lead ${n})`;
+  const clash = taken.has(key(typed));
+  const why = onCompanies.length > 1 ? `${email} is on more than one company and none is the one they named, so a new company` : !clash ? "a new company" : `a new company (a client called ${typed} already exists, and their email isn't one of its people)`;
   return { clientId: null, newName: name, name, why };
 }
 

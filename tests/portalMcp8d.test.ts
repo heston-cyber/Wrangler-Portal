@@ -143,8 +143,8 @@ describe("Phase 8d · the rest of the site", () => {
     await x.w.t.run((ctx) => ctx.db.patch(B, { estimateRates: WRANGLER_RATES } as never)); // B prices its own work
     const theirs = await x.w.t.run((ctx) => ctx.db.insert("deals", { businessId: B, title: "Their lead", stage: "lead", source: "website", lead: { name: "Maya", email: "maya@harbor.example", company: "Harbor Coffee", fields: [], at: 0 }, history: [], createdAt: 0, updatedAt: 0 } as never));
     const seen = (await x.as(keyB)("site_change", { action: "crm.saveEstimate", args: { dealId: theirs, title: "Estimate", scope: "One day", input: { unit: "days", amount: 1 } } })).text;
-    expect(seen).toMatch(/makes a new company, Harbor Coffee, for the lead maya@harbor\.example/);
-    expect(seen).not.toMatch(/already one of|already exists|website lead/);
+    expect(seen).toMatch(/makes a new company, Harbor Coffee \(website lead\), for the lead maya@harbor\.example, with them as its signer\./);
+    expect(seen).not.toMatch(/already one of|already exists/);
     expect((await x.w.t.run((ctx) => ctx.db.query("clientPeople").collect())).map((r) => r.email)).not.toContain("sam@elsewhere.example");
     // R4: the watermark is on every client's cuts: it asks.
     expect((await x.a("site_change", { action: "business.updateSettings", args: { watermark: { corner: "br", size: "small", opacity: 0.05, mark: "text", text: "Pay deposit" } } })).text).toMatch(/needs Heston|go on every client/);
