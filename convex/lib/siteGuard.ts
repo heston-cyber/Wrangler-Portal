@@ -85,9 +85,14 @@ const PEOPLE_TABLES = ["vendors", "vendorBookings", "clientPeople", "users", "me
 async function shootInvitees(ctx: MutationCtx, shootId: string): Promise<string[]> {
   const sid = ctx.db.normalizeId("shoots", shootId);
   const s = sid ? await ctx.db.get(sid) : null;
-  const c = await ctx.db.query("calendars").first();
-  const p = s?.projectId ? await ctx.db.get(s.projectId) : null;
-  if (!s || !c?.calendarId || s.status !== "scheduled" || !s.calendar || !p) return [];
+  if (!s) return [];
+  // Re-review Med-3: this business's own calendar connection, never the first in the deployment.
+  const biz = s.businessId ?? (await defaultBusiness(ctx))?._id ?? null;
+  const dflt = (await defaultBusiness(ctx))?._id ?? null;
+  const c = (await ctx.db.query("calendars").collect()).find((x) => (x.businessId ?? dflt) === biz);
+  const p = s.projectId ? await ctx.db.get(s.projectId) : null;
+  // Re-review L6: a shoot coming off the calendar (cancelled, unticked) emails its guests a cancellation too.
+  if (!c?.calendarId || !p || (!s.calendar && !s.calendarEvent)) return [];
   const out = new Set<string>();
   if (c.inviteVendors) for (const m of s.crew) if (m.vendorId) { const vd = await ctx.db.get(m.vendorId); if (vd?.email) out.add(vd.email.toLowerCase()); }
   if (c.inviteClient && !s.clientHold) for (const x of await portalPeople(ctx, p)) out.add(x.email.toLowerCase());
@@ -284,7 +289,7 @@ export function toSchema(v: VJson): Record<string, unknown> {
 /** W-9s, tax ID numbers, bank details, passwords, keys and secret hashes never leave: only whether one is on file. */
 // Review L2: link tokens (a person's own canvas link, a doc's share token) and how a vendor is paid stay out too; the
 // pages' own links (url, link) still come through, for an email Heston sends himself.
-const SECRET_KEY = /^token$|tokens$|paymethod|address1099|w9address|taxaddress|w-?9|taxid|tax_id|^tin$|ssn|^ein$|bank|routing|iban|swift|accountnumber|account_number|last4|password|secret|apikey|api_key|codehash|keyhash|pinhash|^hash$|refreshtoken|accesstoken|stripeaccount|payout/i;
+const SECRET_KEY = /token|passcode|privatekey|guestkey|hash$|paymethod|address1099|w9address|taxaddress|w-?9|taxid|tax_id|^tin$|ssn|^ein$|bank|routing|iban|swift|accountnumber|account_number|last4|password|secret|apikey|api_key|codehash|keyhash|pinhash|^hash$|refreshtoken|accesstoken|stripeaccount|payout/i;
 
 export function scrub(x: unknown, hide: string[] = [], depth = 0): unknown {
   if (depth > 30) return "(too deep)";

@@ -181,7 +181,7 @@ async function siteCall(ctx: ActionCtx, name: string, args: Json): Promise<ToolR
     why = typeof d.why === "string" ? d.why : null;
   }
   if (!outbound) return fail("It couldn't be tried. Nothing was asked.");
-  if (outbound.some((o) => o.to.includes("(and more)"))) return fail("It would reach too many people to list on one page. Heston does this on the site.");
+  if (outbound.some((o) => o.to.includes("(and more)") || o.to.length > 2000)) return fail("It would reach too many people to list on one page. Heston does this on the site.");
   if (e.mode === "change" && !outbound.length && !why) return fail(`${action} sends nothing and deletes nothing: use site_change.`);
   const target = `${action}|${(await sha256Hex(JSON.stringify(a))).slice(0, 16)}`;
   return afterRequest(await ctx.runMutation(internal.confirm.request, { kind: "site", targetId: target, said, payload: JSON.stringify({ args: a, outbound }) }) as Json);

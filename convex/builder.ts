@@ -672,8 +672,9 @@ export const listBuildsInternal = internalQuery({
   handler: async (ctx, { query: q }) => {
     const words = (q ?? "").toLowerCase().split(/\s+/).filter(Boolean);
     const rows = await ctx.db.query("wsBuilds").withIndex("by_updated").order("desc").take(300);
+    const releaseBuilds = new Set((await ctx.db.query("releases").collect()).map((x) => x.buildId as string)); // 8b re-review L7
     const out = [];
-    for (const b of rows.filter((x) => !isSide(x) && words.every((w) => x.title.toLowerCase().includes(w))).slice(0, 50)) {
+    for (const b of rows.filter((x) => !isSide(x) && !releaseBuilds.has(x._id) && words.every((w) => x.title.toLowerCase().includes(w))).slice(0, 50)) {
       const doc = b.documentId ? await ctx.db.get(b.documentId) : null;
       out.push({ draft_id: b._id, title: b.title, client: (b.fields as Fields)?.client?.name || null, updated: new Date(b.updatedAt).toISOString(), document: doc ? `${docLabel(doc.number)} (${doc.status})` : null });
     }

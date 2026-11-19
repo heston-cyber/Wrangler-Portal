@@ -9,6 +9,29 @@ import { ACTIONS, argsOf, type Entry } from "./lib/siteActions";
 import { argsProblem, asUser, ownerUserOf, recording, scrub, summarize, type Outbound } from "./lib/siteGuard";
 import { viewerOf } from "./lib/access";
 import { scopeFor } from "./lib/functions";
+import { BUSINESS_TABLES } from "./lib/tenancy";
+import { defaultBusiness } from "./lib/business";
+
+/** Re-review Med-1: the state-aware checks read records before the site function's own scoping, so they run only when
+ *  every record the arguments name is this business's (otherwise the site function itself refuses, as for any id). */
+async function allMine(ctx: QueryCtx | MutationCtx, biz: Id<"businesses">, x: unknown, depth = 0): Promise<boolean> {
+  if (depth > 5) return true;
+  if (typeof x === "string") {
+    const dflt = (await defaultBusiness(ctx))?._id ?? null;
+    for (const t of BUSINESS_TABLES) {
+      const id = ctx.db.normalizeId(t as never, x);
+      if (!id) continue;
+      const d = (await ctx.db.get(id)) as { businessId?: Id<"businesses"> } | null;
+      return !d || (d.businessId ?? dflt) === biz;
+    }
+    return true;
+  }
+  if (Array.isArray(x)) { for (const y of x) if (!(await allMine(ctx, biz, y, depth + 1))) return false; return true; }
+  if (x && typeof x === "object") { for (const y of Object.values(x)) if (!(await allMine(ctx, biz, y, depth + 1))) return false; }
+  return true;
+}
+const outsideOf = async (ctx: QueryCtx | MutationCtx, biz: Id<"businesses">, act: Entry, a: Record<string, unknown>) =>
+  act.askWhen?.(a) ?? (act.outside && (await allMine(ctx, biz, a)) ? await act.outside(ctx as QueryCtx, a) : null);
 
 const runArgs = { asBusiness: v.optional(v.id("businesses")), action: v.string(), args: v.any() };
 
@@ -49,7 +72,7 @@ export const change = rawInternalMutation({
   args: runArgs,
   handler: async (ctx, x) => {
     const { act, a, as } = await prepare(ctx, x.asBusiness, x.action, x.args, (e) => (e.mode !== "change" || !e.fn.isMutation ? (e.mode === "read" ? `${x.action} only reads: use site_read.` : `${x.action} needs Heston: ask him, then site_ask.`) : null));
-    const why = act.askWhen?.(a) ?? (act.outside ? await act.outside(as, a) : null);
+    const why = await outsideOf(as, x.asBusiness!, act, a);
     if (why) throw new ConvexError(`${why} Ask Heston, then site_ask.`);
     const seen: Outbound[] = [];
     const result = await act.fn._handler(recording(as as MutationCtx, seen), a);
@@ -65,7 +88,7 @@ export const tryOut = rawInternalMutation({
   handler: async (ctx, x) => {
     const { act, a, as } = await prepare(ctx, x.asBusiness, x.action, x.args, (e) => (e.mode === "read" || !e.fn.isMutation ? `${x.action} only reads: use site_read.` : null));
     const seen: Outbound[] = [];
-    const why = act.askWhen?.(a) ?? (act.outside ? await act.outside(as, a) : null);
+    const why = await outsideOf(as, x.asBusiness!, act, a);
     await act.fn._handler(recording(as as MutationCtx, seen), a);
     throw new ConvexError({ tried: true, outbound: summarize(seen), ...(why ? { why } : {}) });
   },

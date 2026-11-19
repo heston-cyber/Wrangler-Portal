@@ -29,6 +29,7 @@ import * as creative from "../creative";
 import * as canvas from "../canvas";
 import * as delivery from "../delivery";
 import type { QueryCtx } from "../_generated/server";
+import { ConvexError } from "convex/values";
 
 export type Mode = "read" | "change" | "ask" | "delete";
 export type Area = "projects" | "production" | "crew" | "work" | "creative" | "delivery";
@@ -60,10 +61,41 @@ const get = async (ctx: QueryCtx, table: string, id: unknown) => {
 const sharedBoard = async (ctx: QueryCtx, a: Args) => {
   const c = await get(ctx, "canvases", a.canvasId);
   if (!c) return null;
-  const people = (await ctx.db.query("canvasPeople").collect()).filter((x) => x.canvasId === c._id);
-  return people.length || c.link?.on ? "This board is shared: what's saved on it shows to the people it's shared with at once." : null;
+  const people = await ctx.db.query("canvasPeople").withIndex("by_canvas", (q) => q.eq("canvasId", c._id as never)).first();
+  return people || c.link?.on ? "This board is shared: what's saved on it shows to the people it's shared with at once." : null;
 };
 /** Review M4 (built as the build suggests, Heston to confirm): a task the client or a vendor sees is a message to them. */
+/** A creative doc's name as Heston knows it: its build's title and kind. */
+export const docName = async (ctx: QueryCtx, docId: unknown) => {
+  const d = await get(ctx, "creativeDocs", docId);
+  const b = d?.buildId ? await get(ctx, "wsBuilds", d.buildId) : null;
+  return d ? `the ${String(d.kind ?? "creative")} doc “${String(b?.title ?? "Creative doc")}”` : "a doc that isn't here";
+};
+const tooMany = (n: number) => { if (n > 200) throw new ConvexError("That's too much to show on one page. Heston does this on the site."); };
+/** Re-review High-1: what a save changes on a board, item by item (docs named), so nothing goes up unseen. */
+const boardChanges = async (ctx: QueryCtx, a: Args) => {
+  const c = await get(ctx, "canvases", a.canvasId);
+  const before = new Map<string, Record<string, unknown>>((Array.isArray(c?.items) ? c!.items : []).map((i: Record<string, unknown>) => [String(i.id), i]));
+  const after = (Array.isArray(a.items) ? a.items : []) as Array<Record<string, unknown>>;
+  const what = async (i: Record<string, unknown>) => {
+    const bits = [String(i.type ?? "item")];
+    if (i.type === "doc") bits.push(await docName(ctx, i.docId));
+    if (typeof i.text === "string" && i.text.trim()) bits.push(`“${i.text.trim().slice(0, 300)}”`);
+    if (typeof i.url === "string") bits.push(i.url.slice(0, 300));
+    return bits.join(": ");
+  };
+  const key = (i: Record<string, unknown>) => JSON.stringify([i.type, i.text ?? null, i.url ?? null, i.docId ?? null, i.fileId ?? null]);
+  const lines: string[] = [];
+  for (const i of after) {
+    const was = before.get(String(i.id));
+    if (!was) lines.push(`Adds ${await what(i)}`);
+    else if (key(was) !== key(i)) lines.push(`Changes ${await what(i)}`);
+  }
+  const kept = new Set(after.map((i) => String(i.id)));
+  for (const [id, i] of before) if (!kept.has(id)) lines.push(`Removes ${await what(i)}`);
+  tooMany(lines.length);
+  return [{ label: "On the board", value: lines.join("\n") || "Only moves and restyles what's there" }];
+};
 const theirTask = async (ctx: QueryCtx, a: Args) => {
   const t = await get(ctx, "tasks", a.taskId);
   return t && (t.audience === "client" || t.audience === "vendor" || t.vendorId) ? "This task shows in the client's or a vendor's portal, so changing it reaches them." : null;
@@ -106,8 +138,9 @@ export const ACTIONS: Record<string, Entry> = {
     shows: async (ctx, a) => {
       const p = await get(ctx, "projects", a.projectId);
       if (!p) return [];
-      const files = (await ctx.db.query("deliveryFiles").collect()).filter((f) => f.projectId === p._id);
-      return [{ label: "Final files", value: files.length ? files.map((f) => String(f.name ?? "a file")).join("\n").slice(0, 3000) : "None yet" }];
+      const files = await ctx.db.query("deliveryFiles").withIndex("by_project", (q) => q.eq("projectId", p._id as never)).collect();
+      tooMany(files.length);
+      return [{ label: "Final files", value: files.length ? files.map((f) => `${f.name}${f.dropboxPath ? ` (${f.dropboxPath})` : ""}`).join("\n") : "None yet" }];
     },
   }),
   "projects.removeDeliveryFile": del("projects", projects.removeDeliveryFile, "Take a file off a project's delivery"),
@@ -209,7 +242,8 @@ export const ACTIONS: Record<string, Entry> = {
   "places.create": c("production", places.create, "Add a location"),
   "places.update": c("production", places.update, "Edit a location"),
   "places.coverPhoto": c("production", places.coverPhoto, "Pick a location's cover photo"),
-  "places.useForShoot": c("production", places.useForShoot, "Use a location for a shoot"),
+  // Re-review Med-2: as the shoot's place it moves the shoot: the client is asked to confirm again, the call sheet and calendar change.
+  "places.useForShoot": c("production", places.useForShoot, "Use a location for a shoot (as the shoot's place it's an ask)", { askWhen: (a) => (a.asPlace === true ? "Making it the shoot's place moves the shoot: the client is asked to confirm again, and the call sheet and calendar change." : null) }),
   "places.unlink": c("production", places.unlink, "Take a location off a shoot"),
   "places.removePhoto": del("production", places.removePhoto, "Delete a location's photo"),
   "places.remove": del("production", places.remove, "Delete a location"),
@@ -261,7 +295,8 @@ export const ACTIONS: Record<string, Entry> = {
     shows: async (ctx, a) => {
       const t = await get(ctx, "taskTemplates", a.templateId);
       const items = Array.isArray(t?.items) ? (t!.items as Array<{ title?: string; audience?: string }>) : [];
-      return [{ label: "Tasks", value: items.length ? items.map((x) => `${x.title ?? "A task"}${x.audience && x.audience !== "team" ? ` (for the ${x.audience})` : ""}`).join("\n").slice(0, 3000) : "None" }];
+      tooMany(items.length);
+      return [{ label: "Tasks", value: items.length ? items.map((x) => `${x.title ?? "A task"}${x.audience && x.audience !== "team" ? ` (for the ${x.audience})` : ""}`).join("\n") : "None" }];
     },
   }),
   "work.remove": del("work", work.remove, "Delete a task"),
@@ -286,7 +321,7 @@ export const ACTIONS: Record<string, Entry> = {
   "canvas.get": r("creative", canvas.get, "One canvas with everything on it"),
   "canvas.shareChoices": r("creative", canvas.shareChoices, "Who a canvas can be shared with"),
   "canvas.create": c("creative", canvas.create, "Make a canvas or mood board"),
-  "canvas.save": c("creative", canvas.save, "Save a canvas's board (a shared board is an ask)", { outside: sharedBoard }),
+  "canvas.save": c("creative", canvas.save, "Save a canvas's board (a shared board is an ask)", { outside: sharedBoard, shows: boardChanges }),
   "canvas.rename": c("creative", canvas.rename, "Rename a canvas"),
   "canvas.duplicate": c("creative", canvas.duplicate, "Duplicate a canvas"),
   "canvas.setRole": c("creative", canvas.setRole, "Change what a person a canvas is shared with can do (letting them edit is an ask)", { askWhen: (a) => (a.role === "edit" ? "Letting someone outside the business edit the board." : null) }),
@@ -308,9 +343,10 @@ export const ACTIONS: Record<string, Entry> = {
     shows: async (ctx, a) => {
       const d = await get(ctx, "deliveries", a.deliveryId);
       if (!d) return [];
-      const items = (await ctx.db.query("deliveryItems").collect()).filter((x) => x.deliveryId === d._id);
-      const assets = (await ctx.db.query("deliveryAssets").collect()).filter((x) => items.some((i) => i._id === x.itemId));
-      return [{ label: "What's in it", value: items.map((i) => `${String(i.title ?? "A folder")} (${assets.filter((x) => x.itemId === i._id).length} files)`).join("\n").slice(0, 3000) || "Nothing yet" }];
+      const items = await ctx.db.query("deliveryItems").withIndex("by_delivery", (q) => q.eq("deliveryId", d._id as never)).collect();
+      const assets = await ctx.db.query("deliveryAssets").withIndex("by_delivery", (q) => q.eq("deliveryId", d._id as never)).collect();
+      tooMany(items.length + assets.length);
+      return [{ label: "What's in it", value: items.map((i) => `${String(i.title ?? "A folder")}${i.published ? "" : " (new)"}: ${assets.filter((x) => x.itemId === i._id).map((x) => String((x as Record<string, unknown>).name ?? (x as Record<string, unknown>).title ?? "a file")).join(", ") || "no files"}`).join("\n") || "Nothing yet" }];
     },
   }),
   "delivery.removeItem": del("delivery", delivery.removeItem, "Delete a folder or album from a delivery", "It leaves the delivery. Files in Dropbox stay."),

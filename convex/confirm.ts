@@ -88,12 +88,20 @@ function siteParts(target: string, payload: string | undefined) {
 }
 
 const TABLE_NAMES: Record<string, string> = { callSheets: "a call sheet", shoots: "a shoot", tasks: "a task", vendorBookings: "a booking", canvases: "a canvas", deliveries: "a delivery", shotSetups: "a setup", shots: "a shot", packLines: "a packing line" };
-const labelOf = (d: Record<string, unknown> | null, table: string) => {
+/** Re-review High-1/Med-4: a creative doc, briefing, call sheet or release is named by its page's title. */
+const labelOf = async (ctx: Ctx, d: Record<string, unknown> | null, table: string) => {
   if (!d) return "(not found)";
+  if (typeof d.buildId === "string" && ["creativeDocs", "briefings", "callSheets", "releases"].includes(table)) {
+    const bid = ctx.db.normalizeId("wsBuilds", d.buildId);
+    const b = bid ? await ctx.db.get(bid) : null;
+    if (b?.title) return clip(`${b.title}${table === "creativeDocs" ? ` (${String(d.kind ?? "creative")} doc)` : ""}`, 120);
+  }
   const t = [d.name, d.title, d.heading, d.label, d.description, d.date && `${TABLE_NAMES[table] ?? "the one"} on ${d.date}`].find((x) => typeof x === "string" && x.trim());
   return clip(String(t ?? TABLE_NAMES[table] ?? "(untitled)"), 120);
 };
-const shown = (x: unknown) => (typeof x === "string" ? body(x, 1500) : clip(JSON.stringify(x), 1500));
+/** Never cut silently (re-review High-1): a long value says how much more there is. The whole of it is bound by the hash. */
+const cut = (t: string, n: number) => (t.length > n ? `${t.slice(0, n)}… (and ${t.length - n} more characters; open it to see all)` : t);
+const shown = (x: unknown) => (typeof x === "string" ? cut(body(x, 100_000), 1500) : cut(clip(JSON.stringify(x), 100_000), 1500));
 
 async function sitePreview(ctx: Ctx, target: string, payload: string | undefined): Promise<Preview> {
   const { act, action, args, outbound } = siteParts(target, payload);
@@ -117,7 +125,7 @@ async function sitePreview(ctx: Ctx, target: string, payload: string | undefined
     const nid = ctx.db.normalizeId(table as never, id);
     const d = nid ? ((await ctx.db.get(nid)) as Record<string, unknown> | null) : null; // another business's is invisible
     if (!d) throw new ConvexError("Something it acts on isn't here any more.");
-    names.set(id, labelOf(d, table));
+    names.set(id, await labelOf(ctx, d, table));
     recs[id] = Object.fromEntries(Object.entries(d).filter(([k]) => !VOLATILE.test(k)));
   }
   const named = (t: string) => { let out = t; for (const [id, n] of names) out = out.split(id).join(n); return out; };
@@ -126,23 +134,23 @@ async function sitePreview(ctx: Ctx, target: string, payload: string | undefined
   // Review M6: why it needs Heston (a link turned on, a shared board, a client's task), and what else it shows.
   const why = act.askWhen?.(args) ?? (act.outside ? await act.outside(ctx as QueryCtx, args) : null);
   const more = act.shows ? await act.shows(ctx as QueryCtx, args) : [];
-  const PAGES: Record<string, (id: string) => string> = { callSheets: (id) => `/production/call-sheets/${id}`, projects: (id) => `/projects/${id}`, shotLists: (id) => `/production/shot-lists/${id}`, canvases: (id) => `/creative/canvas/${id}`, creativeDocs: (id) => `/creative/docs/${id}` };
+  const PAGES: Record<string, (id: string) => string> = { callSheets: (id) => `/production/call-sheets/${id}`, projects: (id) => `/projects/${id}`, shotLists: (id) => `/production/shot-lists/${id}`, canvases: (id) => `/creative/canvas/${id}`, creativeDocs: (id) => `/creative/docs/${id}`, briefings: (id) => `/vendors/briefings/${id}` };
   const page = ids.find((x) => PAGES[x.table]);
   return {
     title: `${act.does}${first ? `: ${first}` : ""}`,
     ...(page ? { open: PAGES[page.table](page.id) } : {}),
     lines: [
       { label: "Does", value: act.does },
-      ...(details.length ? [{ label: "Details", value: body(details.join("\n"), 4000) }] : []),
+      ...(details.length ? [{ label: "Details", value: cut(details.join("\n"), 6000) }] : []),
       ...(act.mode === "delete" ? [{ label: "Deletes", value: ids.length ? ids.map((x) => names.get(x.id)!).join(", ") : "What's named above" }] : []),
       ...(why ? [{ label: "Why it asks", value: why }] : []),
       ...(act.note ? [{ label: "Also", value: act.note }] : []),
       ...more.map((l) => ({ label: clip(l.label, 60), value: body(l.value, 3000) })),
       ...(outbound.length
-        ? outbound.map((o) => ({ label: "Sends", value: clip(`${o.what}${o.to.length ? ` to ${o.to.join(", ")}` : ""}`, 20000) }))
+        ? outbound.map((o) => ({ label: "Sends", value: clip(`${o.what}${o.to.length ? ` to ${o.to.slice(0, 300).join(", ")}${o.to.length > 300 ? ` and ${o.to.length - 300} more` : ""}` : ""}`, 40_000) }))
         : [{ label: "Sends", value: "No email or message" }]),
     ],
-    bind: JSON.stringify(recs),
+    bind: JSON.stringify({ recs, args }), // everything it acts on and with, even what the page shortens
   };
 }
 

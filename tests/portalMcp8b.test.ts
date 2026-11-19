@@ -256,9 +256,16 @@ describe("Phase 8b · the site through the connector", () => {
     const vendorId = await x.w.heston.mutation(api.vendors.add, { name: "Jordan Ellis", email: "jordan@ellisfilms.com", roles: ["Shooter"], rates: [], invite: false }) as string;
     await x.w.heston.mutation(api.vendors.archive, { vendorId, archived: true });
     expect((await x.a("site_change", { action: "vendors.archive", args: { vendorId, archived: false } })).text).toMatch(/gives them their portal back/);
-    expect((await x.a("site_change", { action: "callSheets.toggle", args: { callSheetId: "x", personId: "p", on: true } })).text).toMatch(/back on a call sheet|args/);
-    expect((await x.a("site_change", { action: "canvas.setRole", args: { personId: "x", role: "edit" } })).text).toMatch(/edit the board|args/);
-    expect((await x.a("site_change", { action: "briefings.setLinkExpiry", args: { briefingId: "x", days: null } })).text).toMatch(/needs Heston|args/);
+    const real = await x.w.t.run(async (ctx) => {
+      const sh = await ctx.db.insert("shoots", { businessId: x.w.A, projectId: x.w.p, date: "2030-01-03", call: "08:00", location: "Here", prepare: [], crew: [], status: "scheduled", history: [], createdAt: 0, updatedAt: 0 } as never);
+      const cs = await ctx.db.insert("callSheets", { businessId: x.w.A, shootId: sh, projectId: x.w.p, how: "blank", status: "draft", updates: 0, recipients: [], history: [], createdAt: 0, updatedAt: 0 } as never);
+      const person = await ctx.db.insert("canvasPeople", { businessId: x.w.A, canvasId: canvasId as Id<"canvases">, email: "pal@x.example", role: "view", token: "pal-token-1234567890", createdAt: 0 });
+      return { cs, person, sh };
+    });
+    expect((await x.a("site_change", { action: "callSheets.toggle", args: { callSheetId: real.cs, id: "crew:1", on: true } })).text).toMatch(/back on a call sheet/);
+    expect((await x.a("site_change", { action: "canvas.setRole", args: { personId: real.person, role: "edit" } })).text).toMatch(/edit the board/);
+    expect((await x.a("site_change", { action: "briefings.setLinkExpiry", args: { briefingId: "x", days: null } })).text).toMatch(/needs Heston/);
+    expect((await x.a("site_change", { action: "places.useForShoot", args: { placeId: "x", shootId: real.sh, asPlace: true } })).text).toMatch(/moves the shoot/);
     await x.w.t.run(async (ctx) => { await ctx.db.patch(x.w.p, { stage: "delivery" }); });
     expect((await x.a("site_change", { action: "projects.setStage", args: { projectId: x.w.p, stage: "polish", post: false } })).text).toMatch(/opens it again/);
     // M4: a task the client sees: editing it asks.
@@ -272,5 +279,25 @@ describe("Phase 8b · the site through the connector", () => {
     await x.w.t.run(async (ctx) => { await ctx.db.insert("releases", { businessId: x.w.A, kind: "talent", name: "Riley", email: "riley@x.example", shotIds: [], buildId, createdAt: 0, updatedAt: 0 } as never); });
     expect((await x.a("get_draft", { draft: buildId })).text).toMatch(/signed in person/);
     expect((await x.a("update_draft", { draft: buildId, title: "Changed" })).text).toMatch(/signed in person/);
+  });
+
+  test("T8b.10 re-review: a shared board's Confirm page lists what goes on it, docs by name; another business learns nothing from the checks", async () => {
+    const x = await setup();
+    const canvasId = await x.w.heston.mutation(api.canvas.create, { name: "Moodboard", kind: "canvas" }) as string;
+    await x.w.heston.mutation(api.canvas.setLink, { canvasId, on: true });
+    const { docId } = await x.w.heston.mutation(api.creative.newDoc, { kind: "treatment", title: "Other client's secret treatment" }) as { docId: string };
+    const items = [{ id: "n1", type: "note", x: 0, y: 0, w: 100, h: 100, z: 1, text: "Call me" }, { id: "d1", type: "doc", docId, x: 200, y: 0, w: 560, h: 724, z: 2 }];
+    const r = await x.a("site_ask", { action: "canvas.save", args: { canvasId, items, rev: 0 }, heston_ok: "save the board" });
+    expect(r.error).toBe(false);
+    const on = r.data.what_goes_out.find((l: { label: string }) => l.label === "On the board");
+    expect(on.value).toMatch(/Adds note: “Call me”/);
+    expect(on.value).toMatch(/Adds doc: the treatment doc “Other client's secret treatment”/);
+    expect(r.data.what_goes_out).toEqual(expect.arrayContaining([{ label: "Why it asks", value: expect.stringMatching(/shared/) }]));
+    // Another business's key: A's shared board answers as any board it can't see.
+    const theirs = await x.b("site_change", { action: "canvas.save", args: { canvasId, items: [], rev: 0 } });
+    expect(theirs.error).toBe(true);
+    expect(theirs.text).not.toMatch(/shared/);
+    const taskId = await x.w.heston.mutation(api.work.create, { title: "Client task", audience: "client", home: { type: "project", id: x.w.p } }) as string;
+    expect((await x.b("site_change", { action: "work.done", args: { taskId, done: true } })).text).not.toMatch(/client's/);
   });
 });
