@@ -79,7 +79,7 @@ describe("Phase 8a · the one connector", () => {
     expect((await x.w.t.run((ctx) => ctx.db.query("auditLog").collect())).map((r) => r.text)).toEqual(expect.arrayContaining([expect.stringMatching(/made a Claude connector key/), expect.stringMatching(/revoked a Claude connector key/)]));
   });
 
-  test("T8.1 Review's and Sign's tools are all here; the old keys don't open it, and its key doesn't open the old two", async () => {
+  test("T8.1 Review's and Sign's tools are all here; an old key doesn't open it, and the old two addresses are gone", async () => {
     const x = await setup();
     const list = await x.rpc({ jsonrpc: "2.0", id: 1, method: "tools/list" }, x.keyA);
     const names: string[] = list.j.result.tools.map((t: { name: string }) => t.name);
@@ -90,10 +90,9 @@ describe("Phase 8a · the one connector", () => {
     expect(init.j.result.serverInfo.name).toBe("wrangler-portal");
     expect(init.j.result.instructions).toMatch(/ask Heston in this chat first/);
     expect((await x.rpc({ jsonrpc: "2.0", id: 1, method: "tools/list" }, null)).status).toBe(401);
-    const wr = (await x.w.heston.action(api.connector.createKey, {})).key as string;
-    expect((await x.rpc({ jsonrpc: "2.0", id: 1, method: "tools/list" }, wr)).status).toBe(401); // a Review key
-    expect((await x.rpc({ jsonrpc: "2.0", id: 1, method: "tools/list" }, x.keyA, "/mcp")).status).toBe(401); // its key on Review's
-    expect((await x.rpc({ jsonrpc: "2.0", id: 1, method: "tools/list" }, x.keyA, "/ws-mcp")).status).toBe(401); // and on Sign's
+    expect((await x.rpc({ jsonrpc: "2.0", id: 1, method: "tools/list" }, "wr_" + "r".repeat(43))).status).toBe(401); // an old Review key
+    // Phase 8f: the old Review and Sign addresses are gone (tests/connector.test.ts T8f.1).
+    for (const old of ["/mcp", "/ws-mcp"]) expect((await x.w.t.fetch(old, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${x.keyA}` }, body: "{}" })).status).toBe(404);
     // The key on the end of the address works too (Heston's Claude has no Request headers).
     expect((await x.rpc({ jsonrpc: "2.0", id: 1, method: "tools/list" }, null, `/portal-mcp/${x.keyA}`)).status).toBe(200);
     const g = await x.a("guide");

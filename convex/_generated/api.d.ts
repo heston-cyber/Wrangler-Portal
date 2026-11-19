@@ -152,7 +152,6 @@ import type * as lib_mcpServer from "../lib/mcpServer.js";
 import type * as lib_wsMarkers from "../lib/wsMarkers.js";
 import type * as wsArchive from "../wsArchive.js";
 import type * as lib_wsFinal from "../lib/wsFinal.js";
-import type * as wsS0 from "../wsS0.js";
 import type * as lib_wsAudit from "../lib/wsAudit.js";
 import type * as lib_wsLayout from "../lib/wsLayout.js";
 import type * as lib_wsPdf from "../lib/wsPdf.js";
@@ -344,7 +343,6 @@ declare const fullApi: ApiFromModules<{
   "lib/wsMarkers": typeof lib_wsMarkers;
   wsArchive: typeof wsArchive;
   "lib/wsFinal": typeof lib_wsFinal;
-  wsS0: typeof wsS0;
   "lib/wsAudit": typeof lib_wsAudit;
   "lib/wsLayout": typeof lib_wsLayout;
   "lib/wsPdf": typeof lib_wsPdf;

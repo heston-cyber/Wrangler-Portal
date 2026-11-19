@@ -2784,7 +2784,6 @@
     "who": "invited"
    }
   ],
-  "connector.listKeys": [],
   "register.sheetKey": null,
   "dropbox.status": {
    "configured": false,
@@ -2798,7 +2797,6 @@
    "transcripts": false
   },
   "dropbox.flagged": [],
-  "wsConnector.listKeys": [],
   "shares.list": [
    {
     "_id": "00000000000000000000010082shares",
@@ -21157,7 +21155,6 @@
   "clients.directory": [],
   "inbox.notes": [],
   "inbox.sent": [],
-  "connector.listKeys": [],
   "register.sheetKey": null,
   "dropbox.status": {
    "configured": false,
@@ -21171,7 +21168,6 @@
    "transcripts": false
   },
   "dropbox.flagged": [],
-  "wsConnector.listKeys": [],
   "shares.list": [],
   "sign.pendingRequests": [],
   "builder.getProfile": {

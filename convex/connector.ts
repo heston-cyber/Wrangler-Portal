@@ -1,86 +1,20 @@
-// The Claude connector's data side: connector keys, and the reads/writes its tools use.
-// Keys are stored only as SHA-256 hashes; the full key is shown once, on the Settings page.
-import { action } from "./_generated/server";
-import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
+// The reads and writes Wrangler Review's Claude tools use (served by the Wrangler Portal connector since Phase 8f).
+import { internalMutation, internalQuery } from "./lib/functions";
 import type { QueryCtx } from "./_generated/server";
-import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
-import { requireMe } from "./lib/access";
 import type { Doc, Id } from "./_generated/dataModel";
 import { frameTc, fpsValue, type Fps } from "./lib/frames";
 import { markersEdl } from "./lib/edl";
 import { nextFileName, pad5, videoByNumber } from "./lib/register";
 import { numberVideo } from "./register";
 
-import { base64url, sha256Hex } from "./lib/hash";
+import { sha256Hex } from "./lib/hash";
 import { signStillUrl } from "./lib/media";
 import { SITE } from "./lib/site";
-import { defaultBusiness } from "./lib/business";
 export { sha256Hex };
 
-// ---------- keys ----------
-
-// Made in an action so the key comes from real randomness. Returned once; only its hash is kept.
-export const createKey = action({
-  args: { label: v.optional(v.string()) },
-  handler: async (ctx, a): Promise<{ key: string; prefix: string }> => {
-    await ctx.runQuery(internal.users.assertAllowed, {});
-    const bytes = new Uint8Array(32);
-    crypto.getRandomValues(bytes);
-    const key = "wr_" + base64url(bytes);
-    const prefix = key.slice(0, 10);
-    await ctx.runMutation(internal.connector.insertKey, { hash: await sha256Hex(key), prefix, label: (a.label ?? "").trim().slice(0, 60) || "Claude" });
-    return { key, prefix };
-  },
-});
-
-export const insertKey = internalMutation({
-  args: { hash: v.string(), prefix: v.string(), label: v.string() },
-  handler: async (ctx, a) => {
-    await ctx.db.insert("connectorKeys", { hash: a.hash, prefix: a.prefix, label: a.label, createdAt: Date.now() });
-  },
-});
-
-export const listKeys = query({
-  args: {},
-  handler: async (ctx) => {
-    await requireMe(ctx);
-    const keys = await ctx.db.query("connectorKeys").collect();
-    return keys.filter((k) => !k.revokedAt).sort((a, b) => b.createdAt - a.createdAt)
-      .map((k) => ({ _id: k._id, prefix: k.prefix, label: k.label, createdAt: k.createdAt, lastUsedAt: k.lastUsedAt ?? null }));
-  },
-});
-
-export const revokeKey = mutation({
-  args: { keyId: v.id("connectorKeys") },
-  handler: async (ctx, { keyId }) => {
-    await requireMe(ctx);
-    await ctx.db.patch(keyId, { revokedAt: Date.now() });
-  },
-});
-
-// Every connector request: is this key live? Notes when it was last used (at most once a minute).
-export const checkKey = internalMutation({
-  args: { hash: v.string() },
-  handler: async (ctx, { hash }) => {
-    const row = await ctx.db.query("connectorKeys").withIndex("by_hash", (q) => q.eq("hash", hash)).unique();
-    if (!row || row.revokedAt) return false as const;
-    const now = Date.now();
-    if (!row.lastUsedAt || now - row.lastUsedAt > 60_000) await ctx.db.patch(row._id, { lastUsedAt: now });
-    // Phase 0.5d step 4: the key's business (records made before tagging count as the default business's).
-    return { businessId: row.businessId ?? (await defaultBusiness(ctx))?._id ?? null };
-  },
-});
-
-// For the live self-test only: a short-lived key that the test removes when it's done.
-export const insertTestKey = internalMutation({
-  args: { hash: v.string() },
-  handler: async (ctx, { hash }) => ctx.db.insert("connectorKeys", { hash, prefix: "wr_selftest", label: "Self-test (temporary)", createdAt: Date.now() }),
-});
-export const deleteKey = internalMutation({
-  args: { keyId: v.id("connectorKeys") },
-  handler: async (ctx, { keyId }) => { await ctx.db.delete(keyId); },
-});
+// Phase 8f (Nov 19): the old connector's keys (connectorKeys) can't be made, listed or used any more: its address is
+// gone. The rows stay in the table (only hashes, unusable).
 
 // ---------- shared helpers for the tools ----------
 

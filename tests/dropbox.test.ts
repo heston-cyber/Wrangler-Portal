@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { api, internal } from "../convex/_generated/api";
 import schema from "../convex/schema";
+import { portalKeyFor } from "./portalKeyHelper";
 import { directLink, pickProject, placeFor, projectMatches, splitJob } from "../convex/lib/dropboxPath";
 import { buildTranscript, secondsToFrame, toFrameWords, toSegments } from "../convex/lib/transcript";
 import { dropboxSignatureOk } from "../convex/dropbox";
@@ -330,6 +331,7 @@ describe("webhook", () => {
 describe("get_transcript", () => {
   test("returns lines in a range with frames and timecodes, and words when asked", async () => {
     const { t, me } = await setup();
+    const key = await portalKeyFor(t, me); // Phase 8f: the one connector's key; the owner's business first
     const projectId = await me.mutation(api.library.createProject, { name: "Spirit Days", jobNumber: "26122" });
     const videoId = await me.mutation(api.library.createVideo, { projectId, title: "Spirit Intro" });
     const { versionId } = await t.mutation(internal.library.insertVersion, { videoId, bunnyGuid: "g", fileName: "x.mp4" });
@@ -345,9 +347,8 @@ describe("get_transcript", () => {
       const storageId = await ctx.storage.store(new Blob([JSON.stringify(file)], { type: "application/json" }));
       await ctx.db.insert("transcripts", { versionId, status: "done", storageId, attempts: 1, updatedAt: Date.now(), wordCount: 5, segmentCount: 2 });
     });
-    const { key } = await me.action(api.connector.createKey, {});
     const call = async (args: Record<string, unknown>) => {
-      const r = await t.fetch("/mcp", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_transcript", arguments: args } }) });
+      const r = await t.fetch("/portal-mcp", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_transcript", arguments: args } }) });
       return (await r.json()).result;
     };
     const all = await call({ video: "spirit intro" });
@@ -399,6 +400,7 @@ describe("deleting a version", () => {
 describe("voice notes", () => {
   test("a voice note keeps its recording, words and pointing stills; deleting it removes the recording", async () => {
     const { t, me } = await setup();
+    const key = await portalKeyFor(t, me); // Phase 8f: the one connector's key; the owner's business first
     const projectId = await me.mutation(api.library.createProject, { name: "P" });
     const videoId = await me.mutation(api.library.createVideo, { projectId, title: "V" });
     const { versionId } = await t.mutation(internal.library.insertVersion, { videoId, bunnyGuid: "g", fileName: "a.mp4" });
@@ -420,8 +422,7 @@ describe("voice notes", () => {
     await t.mutation(internal.notes.registerVoice, { storageId: s2, asBusiness });
     await me.mutation(api.notes.create, { versionId, kind: "frame", inFrame: 10, text: "", voice: { ...voice, storageId: s2, pointers: [] } });
     // The connector sees the transcript and the pointing word with its timecode and still.
-    const { key } = await me.action(api.connector.createKey, {});
-    const r = await t.fetch("/mcp", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_notes", arguments: { video: "V" } } }) });
+    const r = await t.fetch("/portal-mcp", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_notes", arguments: { video: "V" } } }) });
     const notes = (await r.json()).result.structuredContent.notes;
     const vn = notes.find((x: { note_id: string }) => x.note_id === noteId);
     expect(vn.voice).toMatchObject({ seconds: 4.2, played_while_talking: true, said: "Make this brighter.", pointing_words: [{ word: "this", frame: 401, timecode: "01:00:16:17", has_still: true }] });

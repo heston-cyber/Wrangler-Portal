@@ -1,18 +1,13 @@
-// The Claude connector: an MCP server on Streamable HTTP at <convex site>/mcp.
-// Dual-era: serves 2026-07-28 clients statelessly (per-request _meta, server/discover) and older clients
-// that open with `initialize` (2025-03-26 … 2025-11-25). Every request must carry a connector key
-// (Authorization: Bearer wr_… or X-API-Key: wr_…, or as a last resort in the address: /mcp/wr_…). Replies always answer as plain JSON, never SSE.
-import { httpAction } from "./_generated/server";
-import { internalAction } from "./lib/functions";
+// Wrangler Review's Claude tools. They were their own connector at <convex site>/mcp until Phase 8f (Heston, Nov 19:
+// "There should only be one main one for everything"); now they're served only by the one Wrangler Portal connector
+// (portalMcp.ts), which imports TOOLS, INSTRUCTIONS and callTool from here.
 import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { sha256Hex } from "./connector";
 import { frameTc, isValidTc, nominal, tcToFrames } from "./lib/frames";
 import type { TranscriptFile } from "./lib/transcript";
-import { fail, ok, servePost, serveOther, text, type Content, type Json, type McpConfig, type Tool, type ToolResult } from "./lib/mcpServer";
+import { fail, ok, text, type Content, type Json, type Tool, type ToolResult } from "./lib/mcpServer";
 import { SITE_SLASH } from "./lib/site";
 
-const SERVER_INFO = { name: "wrangler-review", title: "Wrangler Review", version: "1.0.0" };
 
 export const INSTRUCTIONS = `Wrangler Review is Heston's video review site (Wrangler Productions). Notes are pinned to exact frames of a rendered version: frame 0 is the render's first frame; out_frame is inclusive. Timecodes use the version's start timecode (usually 01:00:00:00).
 Typical flow when Heston says he left notes or revisions: find_videos (if you don't have the video) → get_notes (open notes on the latest version) → get_note_images for notes with drawings or when you need to see the frame → do the work → reply_to_note to say what you changed → mark_notes done.
@@ -326,97 +321,3 @@ export async function callTool(ctx: ActionCtx, name: string, args: Json): Promis
     return fail(((e as Error).message || "Something went wrong.").replace(/^.*ConvexError: /, "").split("\n")[0]);
   }
 }
-
-
-
-const CONFIG: McpConfig = {
-  serverInfo: SERVER_INFO, instructions: INSTRUCTIONS, tools: TOOLS, callTool,
-  authorized: async (ctx, key) => await ctx.runMutation(internal.connector.checkKey, { hash: await sha256Hex(key) }),
-  keyPrefix: "wr_", pathPrefix: "/mcp",
-  unauthorized: "Unauthorized: this connector needs its key (Authorization: Bearer wr_…). Create one on the review site under Settings → Claude connector.",
-};
-export const mcpPost = httpAction(async (ctx, req) => servePost(ctx, req, CONFIG));
-export const mcpOther = httpAction(async () => serveOther());
-
-// ---------- live self-test (run from CI with `convex run mcp:selfTest`) ----------
-// Makes a temporary key, calls this deployment's /mcp the way Claude would, then deletes the key.
-// The CI logs are public, so it returns only pass/fail, status codes and counts: no key, no titles, no note text.
-export const selfTest = internalAction({
-  args: {},
-  handler: async (ctx) => {
-    const base = (process.env.CONVEX_SITE_URL || "").replace(/\/$/, "");
-    if (!base) return { ok: false, error: "CONVEX_SITE_URL is not set" };
-    const bytes = new Uint8Array(32);
-    crypto.getRandomValues(bytes);
-    const key = "wr_" + bytesToBase64(bytes).replace(/[+/=]/g, "x");
-    const keyId = await ctx.runMutation(internal.connector.insertTestKey, { hash: await sha256Hex(key) });
-    const checks: Array<{ check: string; pass: boolean; detail: string }> = [];
-    const meta = { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientInfo": { name: "selftest", version: "1" }, "io.modelcontextprotocol/clientCapabilities": {} };
-    const post = async (body: unknown, headers: Record<string, string> = {}, auth: string | null = `Bearer ${key}`) => {
-      const res = await fetch(`${base}/mcp`, { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...(auth ? { authorization: auth } : {}), ...headers }, body: JSON.stringify(body) });
-      const txt = await res.text();
-      let j: any = null;
-      try { j = txt ? JSON.parse(txt) : null; } catch { /* not json */ }
-      return { status: res.status, j };
-    };
-    const add = (check: string, pass: boolean, detail: string) => checks.push({ check, pass, detail });
-    try {
-      let r = await post({ jsonrpc: "2.0", id: 1, method: "tools/list", params: { _meta: meta } }, {}, null);
-      add("no key is refused", r.status === 401, `HTTP ${r.status}`);
-      r = await post({ jsonrpc: "2.0", id: 1, method: "tools/list", params: { _meta: meta } }, {}, "Bearer wr_wrongwrongwrongwrongwrongwrong");
-      add("wrong key is refused", r.status === 401, `HTTP ${r.status}`);
-      r = await post({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "selftest", version: "1" } } });
-      add("legacy initialize", r.status === 200 && r.j?.result?.protocolVersion === "2025-06-18" && !!r.j?.result?.capabilities?.tools, `HTTP ${r.status} · version ${r.j?.result?.protocolVersion}`);
-      const pk = await fetch(`${base}/mcp/${key}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }) });
-      const pj: any = await pk.json().catch(() => null);
-      add("key in the address works", pk.status === 200 && pj?.result?.tools?.length === TOOLS.length, `HTTP ${pk.status}`);
-      const pw = await fetch(`${base}/mcp/wr_wrongwrongwrongwrongwrongwrong`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }) });
-      add("wrong key in the address refused", pw.status === 401, `HTTP ${pw.status}`);
-      r = await post({ jsonrpc: "2.0", method: "notifications/initialized" });
-      add("notification accepted", r.status === 202, `HTTP ${r.status}`);
-      r = await post({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }, { "mcp-protocol-version": "2025-06-18" });
-      add("legacy tools/list", r.status === 200 && r.j?.result?.tools?.length === TOOLS.length, `HTTP ${r.status} · ${r.j?.result?.tools?.length} tools`);
-      r = await post({ jsonrpc: "2.0", id: 3, method: "server/discover", params: { _meta: meta } }, { "mcp-protocol-version": "2026-07-28", "mcp-method": "server/discover" });
-      add("modern server/discover", r.status === 200 && r.j?.result?.resultType === "complete" && (r.j?.result?.supportedVersions ?? []).includes("2026-07-28"), `HTTP ${r.status}`);
-      r = await post({ jsonrpc: "2.0", id: 4, method: "tools/list", params: { _meta: meta } }, { "mcp-protocol-version": "2026-07-28", "mcp-method": "tools/list" });
-      add("modern tools/list", r.status === 200 && r.j?.result?.tools?.length === TOOLS.length && typeof r.j?.result?.ttlMs === "number", `HTTP ${r.status} · ${r.j?.result?.tools?.length} tools`);
-      r = await post({ jsonrpc: "2.0", id: 5, method: "tools/list", params: { _meta: { ...meta, "io.modelcontextprotocol/protocolVersion": "2099-01-01" } } });
-      add("unknown version refused", r.status === 400 && r.j?.error?.code === -32022, `HTTP ${r.status} · code ${r.j?.error?.code}`);
-      r = await post({ jsonrpc: "2.0", id: 6, method: "tools/list", params: { _meta: meta } }, { "mcp-protocol-version": "2026-07-28", "mcp-method": "tools/call" });
-      add("header mismatch refused", r.status === 400 && r.j?.error?.code === -32020, `HTTP ${r.status} · code ${r.j?.error?.code}`);
-      const call = (name: string, args: Json, id: number) => post({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args, _meta: meta } }, { "mcp-protocol-version": "2026-07-28", "mcp-method": "tools/call", "mcp-name": name });
-      r = await call("find_videos", {}, 7);
-      const vids = (r.j?.result?.structuredContent?.items ?? []) as Array<{ video_id?: string; versions?: Array<{ status?: string }> }>;
-      add("find_videos", r.status === 200 && !r.j?.result?.isError, `HTTP ${r.status} · ${vids.filter((x) => x.video_id).length} videos`);
-      // The newest video with a ready render (a newly registered video has none yet, and get_notes rightly says so).
-      const first = vids.find((x) => x.video_id && (x.versions ?? []).some((v) => v.status === "ready"));
-      if (first) {
-        r = await call("get_notes", { video_id: first.video_id, status: "all" }, 8);
-        const sc = r.j?.result?.structuredContent;
-        add("get_notes", r.status === 200 && !r.j?.result?.isError && Array.isArray(sc?.notes), `HTTP ${r.status} · ${sc?.notes?.length} notes · fps ${sc?.version?.frame_rate} · ${sc?.version?.frame_count} frames`);
-        r = await call("get_resolve_markers", { video_id: first.video_id, status: "all" }, 9);
-        const mk = r.j?.result?.structuredContent;
-        add("get_resolve_markers", r.status === 200 && !r.j?.result?.isError && Array.isArray(mk?.markers) && typeof mk?.edl === "string", `HTTP ${r.status} · ${mk?.markers?.length} markers`);
-        const withImage = (sc?.notes ?? []).find((n: { has_images?: boolean }) => n.has_images);
-        if (withImage) {
-          r = await call("get_note_images", { note_ids: [withImage.note_id] }, 10);
-          const imgs = (r.j?.result?.content ?? []).filter((c: { type: string }) => c.type === "image").length;
-          add("get_note_images", r.status === 200 && imgs > 0, `HTTP ${r.status} · ${imgs} image(s)`);
-        }
-      }
-      r = await call("reply_to_note", { note_id: "not-a-note", text: "test" }, 11);
-      add("bad note id is a tool error", r.status === 200 && r.j?.result?.isError === true, `HTTP ${r.status}`);
-      r = await post({ jsonrpc: "2.0", id: 12, method: "resources/list", params: { _meta: meta } });
-      add("unknown method", r.status === 404 && r.j?.error?.code === -32601, `HTTP ${r.status}`);
-      const g = await fetch(`${base}/mcp`, { method: "GET", headers: { authorization: `Bearer ${key}` } });
-      add("GET not allowed", g.status === 405, `HTTP ${g.status}`);
-      const o = await fetch(`${base}/mcp`, { method: "POST", headers: { "content-type": "application/json", origin: "https://evil.example", authorization: `Bearer ${key}` }, body: "{}" });
-      add("foreign origin refused", o.status === 403, `HTTP ${o.status}`);
-    } catch (e) {
-      add("ran without crashing", false, (e as Error).message);
-    } finally {
-      await ctx.runMutation(internal.connector.deleteKey, { keyId });
-    }
-    return { ok: checks.every((c) => c.pass), passed: checks.filter((c) => c.pass).length, total: checks.length, checks };
-  },
-});

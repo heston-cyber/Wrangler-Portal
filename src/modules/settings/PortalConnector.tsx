@@ -1,17 +1,17 @@
 // Phase 8a (Heston, Nov 18, D207): Settings › Claude connectors, the one Wrangler Portal connector. The owner only makes
-// its keys. Same layout as the Review and Sign panels (frame 99-891); the old two stay below as "Older connectors"
-// until Heston has switched over (8e).
+// its keys. Same layout as the old Review and Sign panels (frame 99-891), which went in Phase 8f (Nov 19): this is the
+// only connector.
 import { useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { Copy, KeyRound, Plus, X } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import { Modal } from "../../ui/kit";
 import { ago } from "../../lib/format";
-import { copy, KeyLine, MCP_URL } from "./Settings";
+import { copy, KeyLine, PORTAL_MCP_URL as CONNECTOR_URL } from "./Settings";
 
 
 export function PortalConnectorPanel({ show }: { show: (m: string) => void }) {
-  const PORTAL_MCP_URL = MCP_URL.replace(/\/mcp$/, "/portal-mcp"); // read at render: Settings.tsx imports this file too
+  const PORTAL_MCP_URL = CONNECTOR_URL; // read at render: Settings.tsx imports this file too
   const keys = useQuery(api.portalKeys.listKeys, {});
   const createKey = useAction(api.portalKeys.createKey);
   const revokeKey = useMutation(api.portalKeys.revokeKey);

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useSignOutAsk } from "../../shell/SignOut";
-import { Copy, KeyRound, Plus, Sheet, X } from "lucide-react";
+import { Copy, Sheet, X } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { TopBar } from "../../shell/Shell";
@@ -16,7 +16,6 @@ import { useLocation } from "../../lib/router";
 import { HelpSection } from "../help/Help";
 import { CallSettings } from "../calls/Calls";
 import { SectionMenu, sectionOf, SettingsFrame, SetHead, type SectionKey } from "./Frame";
-import { SignConnectorPanel } from "../docs/pages/SignConnector";
 import { PortalConnectorPanel } from "./PortalConnector";
 import Register from "../review/Register";
 import wpLogo from "../../assets/d1/wp-logo.png";
@@ -42,9 +41,10 @@ import { SecuritySection } from "../security/Security";
 import { ActivityLog } from "../security/ActivityLog";
 import { HandBackCard } from "../production/HandBackSetup";
 
-// The connector lives on the Convex site host: <deployment>.convex.site/mcp
+// The one Claude connector lives on the Convex site host: <deployment>.convex.site/portal-mcp (Phase 8f: the old /mcp
+// and /ws-mcp are gone).
 const CONVEX = (import.meta.env.VITE_CONVEX_URL as string | undefined) || "https://handsome-hummingbird-11.convex.cloud";
-export const MCP_URL = CONVEX.replace(/\.convex\.cloud\/?$/, ".convex.site") + "/mcp";
+export const PORTAL_MCP_URL = CONVEX.replace(/\.convex\.cloud\/?$/, ".convex.site") + "/portal-mcp";
 const FEED_URL = CONVEX.replace(/\.convex\.cloud\/?$/, ".convex.site") + "/register-feed";
 
 // The Apps Script that keeps the Google Sheet copy of the register up to date (pulls every 10 minutes).
@@ -132,11 +132,8 @@ export default function Settings({ me }: { me: { name: string | null; email: str
       {key === "notifications" && <OwnerNotifications show={show} />}
       {key === "dropbox" && <DropboxSettings show={show} />}
       {key === "connectors" && <>
-        <SetHead title="Run your portal from Claude." sub="One connector for everything. The two older ones keep working until you switch." />
+        <SetHead title="Run your portal from Claude." sub="One connector for everything." />
         <PortalConnectorPanel show={show} />
-        <div className="wp-setsub"><span className="eyebrow">Older connectors</span><p>Wrangler Review and Wrangler Sign, each with its own keys. They go away once you've switched to Wrangler Portal.</p></div>
-        <Connector show={show} />
-        <SignConnectorPanel show={show} />
       </>}
       {key === "sheet" && <SheetCopy show={show} />}
       {key === "clients" && <ClientsSettings show={show} />}
@@ -358,102 +355,6 @@ function ColourField({ label, value, fallback, onChange }: { label: string; valu
         <input className="hex" value={value} placeholder={fallback} maxLength={7} onChange={(e) => onChange(e.target.value.trim())} aria-label={label} aria-invalid={value !== "" && !ok ? true : undefined} />
       </span>
     </label>
-  );
-}
-
-function Connector({ show }: { show: (m: string) => void }) {
-  const keys = useQuery(api.connector.listKeys, {});
-  const createKey = useAction(api.connector.createKey);
-  const revokeKey = useMutation(api.connector.revokeKey);
-  const [made, setMade] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [revoking, setRevoking] = useState<{ _id: Id<"connectorKeys">; prefix: string; label: string } | null>(null);
-
-  const make = async () => {
-    setBusy(true);
-    try { setMade((await createKey({ label: "Claude" })).key); }
-    catch (e) { show((e as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]); }
-    finally { setBusy(false); }
-  };
-
-  return (
-    <>
-      <div className="wp-setsub" id="claude">
-        <span className="eyebrow">Wrangler Review</span>
-        <p>Claude reads your notes. Connect once, then tell Claude you left notes, in any chat on your desktop or phone.</p>
-      </div>
-
-      <div className="panel">
-        <div className="prow">
-          <span className="pl">Connector address</span>
-          <span className="pr">
-            <code className="mono addr">{MCP_URL}</code>
-            <button className="icon-btn" onClick={() => void copy(MCP_URL, show, "Address copied")} aria-label="Copy the connector address" title="Copy"><Copy size={15} /></button>
-          </span>
-        </div>
-        <div className="prow">
-          <span className="pl">Keys <span className="secondary" style={{ display: "block", fontSize: 12.5 }}>Claude sends a key with every request. Revoke one and it stops working right away.</span></span>
-          <span className="pr"><button className="btn primary sm" disabled={busy} onClick={() => void make()}><Plus size={15} />{busy ? "Making…" : "Create key"}</button></span>
-        </div>
-        {keys === undefined ? null : keys.length === 0 ? (
-          <div className="prow"><span className="pl secondary">No keys yet.</span></div>
-        ) : keys.map((k) => (
-          <div className="prow keyrow" key={k._id}>
-            <KeyRound size={16} />
-            <span className="pl">
-              <b>{k.label}</b> <code className="mono">{k.prefix}…</code>
-              <span className="secondary" style={{ display: "block", fontSize: 12.5 }}>
-                Made {ago(k.createdAt)} · {k.lastUsedAt ? <>last used {ago(k.lastUsedAt)}</> : "not used yet"}
-              </span>
-            </span>
-            <span className="pr"><button className="btn sm" onClick={() => setRevoking(k)}>Revoke</button></span>
-          </div>
-        ))}
-      </div>
-
-      <div className="panel setup">
-        <div className="prow"><span className="pl"><b>Set up in Claude</b> <span className="secondary" style={{ display: "block", fontSize: 12.5 }}>Once, on claude.ai or the desktop app. Your phone picks it up from your account.</span></span></div>
-        <ol className="steps">
-          <li>Make a key above and copy it. It's shown once.</li>
-          <li>In Claude, open <b>Customize › Connectors</b>, then <b>Add custom connector</b>.</li>
-          <li>Name it <b>Wrangler Review</b> and paste the connector address.</li>
-          <li>For sign-in, pick <b>No sign-in</b>. Under <b>Request headers</b>, choose <code className="mono">authorization</code> and paste <code className="mono">Bearer</code>, a space, then your key.</li>
-          <li>No <b>Request headers</b> section? Use the address with the key on the end instead. The key window gives you that one too.</li>
-          <li>In a chat, turn it on from <b>+ › Connectors</b>, then try: “I left notes on the Spirit intro.”</li>
-        </ol>
-      </div>
-
-      {made && (
-        <Modal onClose={() => setMade(null)} label="Your connector key" width={560}>
-          <div style={{ display: "grid", gap: 18 }}>
-            <div className="dhead">
-              <h2 className="headline">Your key. <span className="rest">Copy it now. It won't be shown again.</span></h2>
-              <button className="icon-btn" onClick={() => setMade(null)} aria-label="Close"><X size={18} /></button>
-            </div>
-            <KeyLine label="Request header value (for authorization)" value={`Bearer ${made}`} onCopy={(v) => void copy(v, show, "Header value copied")} />
-            <KeyLine label="Key only" value={made} onCopy={(v) => void copy(v, show, "Key copied")} />
-            <KeyLine label="No Request headers in Claude? Use this address" value={`${MCP_URL}/${made}`} onCopy={(v) => void copy(v, show, "Address copied")} />
-            <p className="caption secondary" style={{ margin: 0 }}>Keep it out of chats, email and screenshots. Anyone with it can read and reply to notes on this site.</p>
-            <div className="dfoot"><button className="btn primary" onClick={() => setMade(null)}>Done</button></div>
-          </div>
-        </Modal>
-      )}
-
-      {revoking && (
-        <Modal onClose={() => setRevoking(null)} label="Revoke key" width={460}>
-          <div style={{ display: "grid", gap: 18 }}>
-            <div className="dhead">
-              <h2 className="headline">Revoke {revoking.prefix}…? <span className="rest">Claude stops reaching the site with this key right away. You can make a new one any time.</span></h2>
-              <button className="icon-btn" onClick={() => setRevoking(null)} aria-label="Close"><X size={18} /></button>
-            </div>
-            <div className="dfoot">
-              <button className="btn" onClick={() => setRevoking(null)}>Cancel</button>
-              <button className="btn primary" onClick={async () => { await revokeKey({ keyId: revoking._id }); setRevoking(null); show("Key revoked"); }}>Revoke</button>
-            </div>
-          </div>
-        </Modal>
-      )}
-    </>
   );
 }
 

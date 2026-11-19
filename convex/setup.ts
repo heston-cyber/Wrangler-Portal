@@ -45,7 +45,8 @@ export const state = query({
     const connections = {
       stripe: b.stripe?.status === "connected",
       dropbox: !!(await ctx.db.query("dropbox").first()),
-      claude: (await ctx.db.query("connectorKeys").collect()).some((k) => !k.revokedAt),
+      // 8f review M1: the one connector's live keys (the old Review keys can't be made or used any more).
+      claude: (await ctx.db.query("portalKeys").collect()).some((k) => !k.revokedAt && !!k.madeBy && (!k.expiresAt || k.expiresAt > Date.now())),
       calendar: !!(await ctx.db.query("calendars").first()),
     };
     const done = { business: !!s.business, email: !!s.email, pricing: !!s.pricing, connections: !!s.connections, client: !!s.client };

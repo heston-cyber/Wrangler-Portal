@@ -2,7 +2,7 @@
 // Brand kit · 713:3366 Pricing · 714:3765 Timeline · 714:4592 Resources · 714:5274 Special items · 715:3862 Review),
 // the "Waiting for Claude" page (715:4525), and the business's own questionnaire editor (718:5483, D70). Answers save
 // as they're typed. Pricing suggests lines from Settings › Pricing; typing a different number overrides one (D76).
-// At the end the owner picks "Draft with Claude" (through the Sign connector, D89) or "Fill in myself".
+// At the end the owner picks "Draft with Claude" (through the Wrangler Portal connector, D89; the Sign connector until Phase 8f) or "Fill in myself".
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -453,7 +453,7 @@ export function ProposalWaiting({ p }: { p: ProposalInfo }) {
           {askedAt && Date.now() - askedAt > 10 * 60_000 && (
             <div className="wp-notice warn glass"><Icon name="clock" size={20} /><span className="txt"><b>Still waiting for Claude (since {timeWord(askedAt)})</b><span className="wp-small"> Check the connector is on in your Claude app, then say the line again. Or fill it in yourself.</span></span></div>
           )}
-          <p className="wp-small secondary">Claude needs the Wrangler Sign connector (Settings › Claude connectors).</p>
+          <p className="wp-small secondary">Claude needs the Wrangler Portal connector (Settings › Claude connectors).</p>
         </section>
         <section className="qz-card glass" aria-label="Your answers">
           <div className="qz-rhead"><span className="wp-eyebrow">Your answers</span><ButtonLink variant="ghost" size="sm" to={`/proposals/${p._id}/questions`}>Edit answers</ButtonLink></div>

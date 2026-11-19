@@ -297,7 +297,6 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "clients.listInvites": { pages: ["owner"], args: () => "skip" },
   "dropbox.status": { pages: ["owner"], args: () => "skip" },
   "dropbox.flagged": { pages: ["owner"], args: () => "skip" },
-  "connector.listKeys": { pages: ["owner"], args: () => "skip" },
   "register.sheetKey": { pages: ["owner"], args: () => "skip" },
   "shares.list": { pages: ["owner"], args: () => "skip" },
   "shares.activity": { pages: ["owner"], args: () => "skip" },
@@ -305,7 +304,6 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   // Wrangler Sign (S1): the Contracts pages only render for the owner; the signing page (S2) uses plain HTTP requests, not queries.
   "sign.list": { pages: ["owner"], args: () => "skip" },
   "wsArchive.status": { pages: ["owner"], args: () => "skip" },
-  "wsConnector.listKeys": { pages: ["owner"], args: () => "skip" },
   "portalKeys.listKeys": { pages: ["owner"], args: () => "skip" }, // Phase 8a: Settings › Claude connectors (owner only)
   "confirm.get": { pages: ["owner"], args: () => "skip" }, // Phase 8a: /confirm/<id> (owner only; tested in portalMcp.test.ts)
   "confirm.waiting": { pages: ["owner"], args: () => ({}) }, // Phase 8a: the Dashboard's waiting card ([] for a team member)

@@ -1,28 +1,24 @@
-// Wrangler Sign's Claude connector (Phase S4, Oct 27): an MCP server at <convex site>/ws-mcp, with its own keys (ws_…).
+// Wrangler Sign's Claude tools (Phase S4, Oct 27). Their own connector at <convex site>/ws-mcp was removed in Phase 8f (Nov 19);
+// they're served only by the one Wrangler Portal connector (portalMcp.ts).
 // Claude can put a finished contract PDF into Wrangler Sign, place and check its boxes, preview it, and read status,
 // the audit trail and signed copies. Approving, sending and cancelling each need Heston's OK in chat; the tool takes
 // his words and writes them into the audit trail, and the backend refuses anything out of order (sending an
 // unapproved version, editing an approved one, and so on).
-import { httpAction } from "./_generated/server";
-import { internalAction } from "./lib/functions";
 import { v } from "convex/values";
 import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { sha256Hex } from "./lib/hash";
-import { fail, ok, servePost, serveOther, text, type Content, type Json, type McpConfig, type Tool, type ToolResult } from "./lib/mcpServer";
+import { fail, ok, text, type Content, type Json, type Tool, type ToolResult } from "./lib/mcpServer";
 import { DEFAULT_SIZE, applyScan } from "./lib/wsMarkers";
 import { KINDS, OWNER_KEY, type Kind, type LayoutBox, type LayoutSigner, type Payment } from "./lib/wsLayout";
 import { b64 } from "./lib/wsFinal";
 import { sha256Bytes } from "./lib/wsPdf";
 import { SITE } from "./lib/email";
-import { KEY_PREFIX } from "./wsConnector";
 import { PAGE_MARKDOWN_GUIDE, pageFromMarkdown, pageToMarkdown } from "./lib/wsPageMd";
 import { buildProblems, nodesOf, totals, type BuildDoc, type ExtraSigner, type Fields, type ItemRow, type Page, type PNode, newId } from "./lib/wsBuilder";
 import { importPdfCore, toSigningCore } from "./builder";
 import { recordIn } from "./fileOwners";
 
-const SERVER_INFO = { name: "wrangler-sign", title: "Wrangler Sign", version: "1.0.0" };
 const ACTOR = "claude";
 const MAX_PDF = 25 * 1024 * 1024;
 
@@ -511,66 +507,3 @@ export async function callTool(ctx: ActionCtx, name: string, args: Json): Promis
     return fail(errText(e));
   }
 }
-
-const CONFIG: McpConfig = {
-  serverInfo: SERVER_INFO, instructions: INSTRUCTIONS, tools: TOOLS, callTool,
-  authorized: async (ctx, key) => await ctx.runMutation(internal.wsConnector.checkKey, { hash: await sha256Hex(key) }),
-  keyPrefix: KEY_PREFIX, pathPrefix: "/ws-mcp",
-  unauthorized: "Unauthorized: the Wrangler Sign connector needs its key (Authorization: Bearer ws_…). Make one on the review site under Contracts → Claude connector.",
-};
-export const post = httpAction(async (ctx, req) => servePost(ctx, req, CONFIG));
-export const other = httpAction(async () => serveOther());
-
-// ---------- live self-test (convex run wsMcp:selfTest) ----------
-// A temporary key, the protocol and the read tools against this deployment, then the key is deleted. Public CI logs:
-// statuses and counts only.
-export const selfTest = internalAction({
-  args: {},
-  handler: async (ctx) => {
-    const base = (process.env.CONVEX_SITE_URL || "").replace(/\/$/, "");
-    const bytes = new Uint8Array(32); crypto.getRandomValues(bytes);
-    const key = KEY_PREFIX + b64(bytes).replace(/[+/=]/g, "x");
-    const keyId = await ctx.runMutation(internal.wsConnector.insertTestKey, { hash: await sha256Hex(key) });
-    const checks: Array<{ check: string; pass: boolean; detail: string }> = [];
-    const add = (check: string, pass: boolean, detail: string) => checks.push({ check, pass, detail });
-    const post = async (body: unknown, auth: string | null = `Bearer ${key}`, path = "/ws-mcp") => {
-      const r = await fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json", ...(auth ? { authorization: auth } : {}) }, body: JSON.stringify(body) });
-      return { status: r.status, j: (await r.json().catch(() => null)) as any };
-    };
-    try {
-      add("no key refused", (await post({ jsonrpc: "2.0", id: 1, method: "tools/list" }, null)).status === 401, "");
-      add("a Wrangler Review key refused", (await post({ jsonrpc: "2.0", id: 1, method: "tools/list" }, "Bearer wr_notthisconnectorsfakekey000")).status === 401, "");
-      let r = await post({ jsonrpc: "2.0", id: 2, method: "tools/list" });
-      add("tools/list", r.status === 200 && r.j?.result?.tools?.length === TOOLS.length, `${r.j?.result?.tools?.length} tools`);
-      r = await post({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "list_documents", arguments: {} } });
-      add("list_documents", r.status === 200 && !r.j?.result?.isError, `${(r.j?.result?.structuredContent?.items ?? []).length} documents`);
-      r = await post({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "send_document", arguments: { document: "WS-99999", heston_ok: "x" } } });
-      add("unknown document is a tool error", r.j?.result?.isError === true, "");
-      r = await post({ jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "verify_pdf", arguments: { sha256: "0".repeat(64) } } });
-      add("verify_pdf", r.j?.result?.structuredContent?.match === false, "");
-      const k = await fetch(`${base}/ws-mcp/${key}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 6, method: "tools/list" }) });
-      add("key in the address", k.status === 200, `HTTP ${k.status}`);
-      // Markers found on the backend (pdf.js in Node), on a throwaway PDF that's deleted straight after.
-      const { PDFDocument, StandardFonts } = await import("@cantoo/pdf-lib");
-      const pd = await PDFDocument.create(); const font = await pd.embedFont(StandardFonts.Helvetica);
-      pd.addPage([612, 792]).drawText("CLIENT: {{sign:client}}  Date: {{date:client}}", { x: 72, y: 300, size: 11, font });
-      const sid = await ctx.storage.store(new Blob([new Uint8Array(await pd.save())], { type: "application/pdf" }));
-      try {
-        const scan = await ctx.runAction(internal.wsNode.findMarkers, { storageId: sid });
-        add("markers found on the backend", scan.markers.length === 2 && scan.textPages === 1, `${scan.markers.length} markers · ${scan.method}`);
-      } finally { await ctx.storage.delete(sid); }
-      // B4: page markdown → a throwaway draft → its PDF rendered on the backend (react-pdf in Node), then removed.
-      const buildId = await ctx.runMutation(internal.builder.createBuildFor, { title: "Self-test (deleted)", page: pageFromMarkdown("# Self-test\n:::section initials\n### Clause\nText.\n:::\n[[signatures heston client]]") });
-      try {
-        const pdfId = await ctx.runAction(internal.wsRender.renderBuild, { buildId });
-        const blob = await ctx.storage.get(pdfId);
-        const head = blob ? new TextDecoder().decode(new Uint8Array(await blob.slice(0, 5).arrayBuffer())) : "";
-        const scan = await ctx.runAction(internal.wsNode.findMarkers, { storageId: pdfId });
-        add("draft rendered on the backend", head === "%PDF-" && scan.markers.length >= 5, `${blob?.size ?? 0} bytes · ${scan.markers.length} markers`);
-        await ctx.storage.delete(pdfId);
-      } finally { await ctx.runMutation(internal.builder.dropBuildInternal, { buildId }); }
-    } catch (e) { add("ran", false, (e as Error).message.slice(0, 200)); }
-    finally { await ctx.runMutation(internal.wsConnector.deleteKey, { keyId }); }
-    return { ok: checks.every((c) => c.pass), passed: checks.filter((c) => c.pass).length, total: checks.length, checks };
-  },
-});
