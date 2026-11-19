@@ -59,10 +59,13 @@ export const fromWebsite = internalMutation({
     const recent = all.find((x) => x.lead?.email === email && (x.lead?.message ?? "") === message && now - x.createdAt < 10 * 60_000);
     if (recent) return recent._id;
     const biz = await defaultBusiness(ctx);
+    // Nov 19 (Heston): nothing checks the email a website form sends. If it's already one of a client's people, the lead
+    // is marked Unconfirmed, so its phone number and message aren't taken as that client's.
+    const unconfirmed = (await ctx.db.query("clientPeople").collect()).some((p) => !p.removedAt && (!biz || (p.businessId ?? biz._id) === biz._id) && p.email.trim().toLowerCase() === email);
     const known = new Set(["name", "fullname", "yourname", "email", "emailaddress", "company", "business", "companyname", "organization", "phone", "phonenumber", "message", "details", "project"]);
     return await ctx.db.insert("deals", {
       ...(biz ? { businessId: biz._id } : {}), title: (company || name).slice(0, 160), stage: "lead", source: "website", contactEmail: email,
-      lead: { name: name.slice(0, 120), email, ...(company ? { company: company.slice(0, 120) } : {}), ...(pick(d, "phone", "phonenumber") ? { phone: pick(d, "phone", "phonenumber").slice(0, 40) } : {}),
+      lead: { name: name.slice(0, 120), email, ...(unconfirmed ? { unconfirmed: true } : {}), ...(company ? { company: company.slice(0, 120) } : {}), ...(pick(d, "phone", "phonenumber") ? { phone: pick(d, "phone", "phonenumber").slice(0, 40) } : {}),
         ...(pick(d, "message", "details", "project") ? { message: pick(d, "message", "details", "project").slice(0, 3000) } : {}),
         fields: Object.entries(d).filter(([k]) => !known.has(k.toLowerCase().replace(/[^a-z]/g, ""))).slice(0, 30).map(([k, val]) => ({ label: k.slice(0, 80), value: String(val ?? "").slice(0, 1000) })), at: now },
       history: [{ kind: "website", at: now, ...(submissionId ? { detail: submissionId } : {}) }], createdAt: now, updatedAt: now,

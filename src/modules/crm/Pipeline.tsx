@@ -25,6 +25,7 @@ function Card({ d, onDragStart, dragging }: { d: Deal; onDragStart: (id: Id<"dea
       onDragStart={(e) => { e.dataTransfer.setData("text/plain", d._id); e.dataTransfer.effectAllowed = "move"; onDragStart(d._id); }}
       onDragEnd={() => onDragStart(null)}>
       {d.website && <span className="wp-tag crm-web">From the website</span>}
+      {d.unconfirmed && <span className="wp-tag crm-web" title="The website form doesn't check emails: this one belongs to a client's person, but anyone could have typed it.">Unconfirmed</span>}
       <span className="co">{d.company ?? d.title}</span>
       <span className="sub">{d.project ?? (d.company ? d.title : d.website ? "Website form" : "")}</span>
       <span className="foot">

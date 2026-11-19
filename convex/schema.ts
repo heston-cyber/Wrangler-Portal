@@ -852,6 +852,7 @@ export default defineSchema({
     source: v.union(v.literal("website"), v.literal("hand"), v.literal("estimate"), v.literal("accepted"), v.literal("call")), // accepted: D149's quiet lead; call: booked a call (5d)
     quiet: v.optional(v.boolean()),               // D149: someone who isn't a client accepted; kept off the Pipeline board until "Move to Quoted?"
     lead: v.optional(v.object({ name: v.string(), email: v.string(), company: v.optional(v.string()), phone: v.optional(v.string()), message: v.optional(v.string()),
+      unconfirmed: v.optional(v.boolean()), // Nov 19: the website form's email was already a client person's when it came in (nothing checks it)
       fields: v.array(v.object({ label: v.string(), value: v.string() })), at: v.number() })),
     closedAt: v.optional(v.number()),            // "Not a lead", or taken off the board
     history: v.array(v.object({ kind: v.string(), at: v.number(), by: v.optional(v.string()), detail: v.optional(v.string()) })),

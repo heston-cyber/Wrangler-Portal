@@ -176,6 +176,31 @@ describe("D56 a lead's company at its first estimate", () => {
   });
 });
 
+// Nov 19 (Heston, "take care of them"): the website form's email isn't checked, so a lead using a client person's
+// email is marked Unconfirmed, and its phone and message never become the client's.
+describe("Unconfirmed website leads", () => {
+  test("a lead with a client person's email is Unconfirmed on the board and the deal; a new email isn't; nothing is copied onto the client", async () => {
+    const w = await world();
+    const post = async (data: Record<string, string>) => {
+      const body = JSON.stringify({ triggerType: "form_submission", payload: { data } });
+      await w.t.fetch("/leads/webflow", { method: "POST", body, headers: await sign(body) });
+    };
+    await post({ Name: "Maya Brooks", Email: "Maya@Harbor.example", Company: "Harbor Coffee", Phone: "555-0199", Message: "New number, call me about the deposit" });
+    await post({ Name: "New Person", Email: "new@person.example", Company: "Fresh Co" });
+    const board = (await w.heston.query(api.crm.board, {})).deals as Array<{ _id: Id<"deals">; company: string; unconfirmed: boolean }>;
+    const maya = board.find((d) => d.company === "Harbor Coffee")!, fresh = board.find((d) => d.company === "Fresh Co")!;
+    expect([maya.unconfirmed, fresh.unconfirmed]).toEqual([true, false]);
+    expect((await w.heston.query(api.crm.deal, { dealId: maya._id })).unconfirmed).toBe(true);
+    // Filed under Harbor Coffee by the email (D56), the client's person keeps their own details.
+    await w.heston.mutation(api.crm.saveEstimate, { dealId: maya._id, title: "Promo", scope: "", input: { unit: "days", amount: 1 } });
+    const person = await w.t.run(async (ctx) => (await ctx.db.query("clientPeople").collect()).find((p) => p.email === "maya@harbor.example")!);
+    expect(JSON.stringify(person)).not.toMatch(/555-0199|deposit/);
+    // A brand-new lead stays confirmed even after it becomes its own company's person.
+    await w.heston.mutation(api.crm.saveEstimate, { dealId: fresh._id, title: "Intro", scope: "", input: { unit: "days", amount: 1 } });
+    expect((await w.heston.query(api.crm.deal, { dealId: fresh._id })).unconfirmed).toBe(false);
+  });
+});
+
 describe("T3.2 a card moves on events (forward only, D60)", () => {
   test("estimate (D56 makes the company and contact) → contract sent → signed → in production → delivered → paid; a hand move stays until a later event", async () => {
     const w = await world();

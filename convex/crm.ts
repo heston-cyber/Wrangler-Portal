@@ -116,13 +116,13 @@ export const board = query({
     const deals = (await ctx.db.query("deals").collect()).filter((d) => !d.closedAt && !d.quiet); // D149: quiet leads stay off the board
     const fus = (await ctx.db.query("followUps").collect()).filter((f) => !f.doneAt && !f.draft);
     const names = new Map<string, string>();
-    const out: Array<{ _id: Id<"deals">; title: string; stage: Stage; company: string | null; project: string | null; valueCents: number | null; website: boolean; followUp: string | null; updatedAt: number }> = [];
+    const out: Array<{ _id: Id<"deals">; title: string; stage: Stage; company: string | null; project: string | null; valueCents: number | null; website: boolean; unconfirmed: boolean; followUp: string | null; updatedAt: number }> = [];
     for (const d of deals.sort((a, b) => b.updatedAt - a.updatedAt)) {
       if (d.clientId && !names.has(d.clientId)) names.set(d.clientId, (await ctx.db.get(d.clientId))?.name ?? "");
       const next = fus.filter((f) => f.dealId === d._id).sort((a, b) => a.due.localeCompare(b.due))[0];
       const p = d.projectId ? await ctx.db.get(d.projectId) : null;
       out.push({ _id: d._id, title: d.title, stage: d.stage, company: d.clientId ? names.get(d.clientId) ?? null : d.lead?.company ?? d.lead?.name ?? null,
-        project: p ? label(p) : null, valueCents: d.valueCents ?? null, website: d.source === "website", followUp: next?.due ?? null, updatedAt: d.updatedAt });
+        project: p ? label(p) : null, valueCents: d.valueCents ?? null, website: d.source === "website", unconfirmed: !!d.lead?.unconfirmed, followUp: next?.due ?? null, updatedAt: d.updatedAt });
     }
     return { deals: out, stages: STAGES.map((s) => ({ key: s, name: STAGE_NAME[s], n: out.filter((d) => d.stage === s).length, cents: out.filter((d) => d.stage === s).reduce((t, d) => t + (d.valueCents ?? 0), 0) })) };
   },
@@ -193,7 +193,7 @@ export const deal = query({
     const estimates = (await ctx.db.query("estimates").withIndex("by_deal", (q) => q.eq("dealId", d._id)).collect()).map((e) => ({ _id: e._id, title: e.title, priceCents: (e.result as { priceCents: number }).priceCents, updatedAt: e.updatedAt }));
     const followUps = (await ctx.db.query("followUps").withIndex("by_deal", (q) => q.eq("dealId", d._id)).collect()).filter((f) => !f.doneAt);
     const projects = (await ctx.db.query("projects").collect()).filter((x) => !d.clientId || x.clientId === d.clientId).sort((a, b) => b.createdAt - a.createdAt).slice(0, 50).map((x) => ({ _id: x._id, label: label(x) }));
-    return { ...d, projects, stageName: STAGE_NAME[d.stage], company: client ? { _id: client._id, name: client.name } : null, project: project ? { _id: project._id, label: label(project) } : null, estimates, followUps };
+    return { ...d, projects, stageName: STAGE_NAME[d.stage], company: client ? { _id: client._id, name: client.name } : null, project: project ? { _id: project._id, label: label(project) } : null, estimates, followUps, unconfirmed: !!d.lead?.unconfirmed };
   },
 });
 
