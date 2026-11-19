@@ -174,6 +174,9 @@ describe("D149 quotes and proposals to anyone", () => {
     const r = await w.heston.action(api.proposals.send, { proposalId: id, storageId: pdfId, copyLink: true });
     const link = (r.link as string).split("/p/")[1];
     expect((await ppost(w, { token: link, action: "accept", name: "Sly Stranger", email: "sly@elsewhere.example", company: "Okie Roasters" })).status).toBe(200);
+    // Review N3: the owner's notice says it came through the copied link and that the client has no contact yet.
+    await settle(w);
+    expect(mails.filter((m) => /accepted/i.test(m.subject + m.text) && !m.to.endsWith("@elsewhere.example")).map((m) => m.subject + m.text).join(" ")).toContain("on the copied link; the client has no contact yet");
     // Okie Roasters has no people yet: the contract waits for one rather than going to whoever accepted.
     await expect(w.heston.action(api.proposals.startContract, { proposalId: id })).rejects.toThrow(/Add a person to Okie Roasters first/);
     await w.t.run((ctx) => ctx.db.insert("clientPeople", { businessId: w.A, clientId: okie, email: "dana@okie.example", name: "Dana Fox", role: "signer", createdAt: 2 }));

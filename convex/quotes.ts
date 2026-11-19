@@ -340,7 +340,7 @@ export const draftTarget = internalQuery({
     if (q.status !== "accepted") throw new ConvexError("Drafts come from an accepted quote.");
     const project = q.projectId ? await ctx.db.get(q.projectId) : null;
     // Review M1 (Nov 19): a client's quote is signed and billed by the client's own person, looked up now.
-    const clientSigner = q.clientId && !q.contact ? await signerOf(ctx, q.clientId) : null;
+    const clientSigner = q.clientId && !q.contact ? await signerOf(ctx, q.clientId, q.businessId ?? null) : null;
     return { q, totals: quoteTotals(q), project: project ? (project.jobNumber ? `${project.jobNumber} ${project.name}` : project.name) : q.title, clientSigner };
   },
 });
@@ -353,7 +353,7 @@ export const makeInvoice = internalMutation({
     const q = await ctx.db.get(quoteId);
     if (!q) throw new ConvexError("That quote isn't here.");
     if (q.made?.invoiceId && (await ctx.db.get(q.made.invoiceId))) return q.made.invoiceId;
-    const billed = q.contact ?? (q.clientId ? await signerOf(ctx, q.clientId) : null); // review A3: a client's person, looked up now
+    const billed = q.contact ?? (q.clientId ? await signerOf(ctx, q.clientId, q.businessId ?? null) : null); // review A3: a client's person, looked up now
     if (!billed?.email) throw new ConvexError(q.clientId ? "This client has no one to bill. Add a person on the client's page first." : "Who accepted isn't known, so the invoice has no one to bill.");
     const t = quoteTotals(q);
     const now = Date.now();

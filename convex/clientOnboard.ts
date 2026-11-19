@@ -4,6 +4,7 @@
 // later; the Getting started card on their Home shows what's left. Clients who were here before Phase 7 (their invite has
 // no end date) see only the tour (D114). People a client asks to add wait for the owner (D112): nothing reaches them until
 // the owner approves, which adds them to the company and sends their invite.
+import { shownName } from "./lib/names";
 import { v, ConvexError } from "convex/values";
 import { focusBusiness, internalAction, internalQuery, mutation, query } from "./lib/functions";
 import { internal } from "./_generated/api";
@@ -62,7 +63,7 @@ export const state = query({
     const b = c.businessId ? await ctx.db.get(c.businessId) : null;
     const asked = (await ctx.db.query("colleagueRequests").withIndex("by_client", (q) => q.eq("clientId", c._id)).collect()).filter((r) => r.by === v.email.toLowerCase());
     return {
-      business: b?.name ?? "", company: c.name, first: (v.name || "").split(" ")[0] || null, existing: await wasHere(ctx, v.email.toLowerCase()),
+      business: b?.name ?? "", company: shownName(c.name), first: (v.name || "").split(" ")[0] || null, existing: await wasHere(ctx, v.email.toLowerCase()),
       step: o.step, done: { about: !!o.about, company: !!o.company, prefs: !!o.prefs, tour: !!o.tour }, tourSkipped: !!o.tourSkipped,
       about: { name: v.name ?? "", title: p.title ?? "", phone: p.phone ?? "" },
       billing: { name: c.billing?.name ?? "", email: c.billing?.email ?? "", address: c.billing?.address ?? "" },

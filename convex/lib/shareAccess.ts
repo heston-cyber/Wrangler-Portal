@@ -1,5 +1,6 @@
 // What a share covers and who may open it (client side C2, Oct 23). Used by convex/shares.ts now, and by the
 // client's pages, note visibility and signed links in C3. One place decides, so the rules can't drift apart.
+import { shownName } from "./names";
 import { ConvexError } from "convex/values";
 import type { QueryCtx, MutationCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -31,7 +32,7 @@ const projectLabel = (p: { name: string; jobNumber?: string }) => (p.jobNumber ?
 
 /** What a share covers, in words: "Harbor Coffee", "26201 Harbor Coffee Launch", "Brand Film · 26201 Harbor Coffee Launch". */
 export async function labelOf(ctx: QueryCtx | MutationCtx, s: Share): Promise<{ label: string; sub: string | null; gone: boolean }> {
-  if (s.kind === "client") return { label: s.client ?? "", sub: null, gone: false };
+  if (s.kind === "client") return { label: shownName(s.client ?? ""), sub: null, gone: false };
   if (s.kind === "project") {
     const p = s.projectId ? await ctx.db.get(s.projectId) : null;
     return p ? { label: projectLabel(p), sub: p.client ?? null, gone: false } : { label: "A deleted project", sub: null, gone: true };

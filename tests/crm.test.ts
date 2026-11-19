@@ -164,6 +164,20 @@ describe("D56 a lead's company at its first estimate", () => {
     expect(r.launch!.clientId).toBe(w.harbor); // by the client folder's own client
   });
 
+  test("T-D56.8 a Dropbox folder named on a Mac (decomposed accents) joins the existing client instead of making a twin", async () => {
+    const w = await world();
+    const cafe = await w.heston.mutation(api.library.createClient, { name: "Café Rouge" }); // typed in the browser (NFC)
+    const nfd = "Café Rouge"; // the Mac's file name for the same word (NFD)
+    const f = (path: string) => ({ pathLower: path.toLowerCase(), pathDisplay: path });
+    await w.t.mutation(internal.dropbox.recordFolders, { folders: [f(`/Clients/${nfd}`), f(`/Clients/${nfd}/Menu Film`)], gone: [] });
+    const r = await w.t.run(async (ctx) => ({ clients: (await ctx.db.query("clients").collect()).filter((c) => c.name.normalize("NFC") === "Café Rouge"), menu: (await ctx.db.query("projects").collect()).find((p) => p.name === "Menu Film") }));
+    expect(r.clients).toHaveLength(1);
+    expect(cafe).toBe("Café Rouge");
+    expect(r.menu!.clientId).toBe(r.clients[0]._id);
+    // Linking a project by the typed name still works (no twin to refuse).
+    await w.heston.mutation(api.library.createProject, { name: "Spring film", client: "Café Rouge" });
+  });
+
   test("T-D56.6 lookalike names (zero-width characters, Cyrillic letters) count as a clash", async () => {
     const w = await world();
     for (const [i, typed] of ["Harbor\u200B Coffee", "H\u0430rbor Coffee", "Harbor Co\u200Dffee", "Harbor Coffee\u034F", "Harbor Coffee\uFE0F"].entries()) {

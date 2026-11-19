@@ -32,7 +32,7 @@ import { WRANGLER_QUESTIONNAIRE, answerList, bound, cleanQuestionnaire, linesTot
 import { EMPTY_KIT, MAX_FILE_BYTES, MAX_FILES, linkLabel, type Kit } from "./brandKit";
 import { pageToMarkdown } from "./lib/wsPageMd";
 import { EXPIRED, expiryDays, expiryFrom, linkExpired } from "./lib/linkExpiry";
-import { shownName } from "./lib/names";
+import { nameKey, shownName } from "./lib/names";
 import { addPeople, adoptLegacy, answer, forWho, newCopiedLink, noteOpen, parseTo, peopleOf, resolve, rowsOf, signerOf, stateFor, stopPerson } from "./lib/offers";
 
 const TOKEN = /^[A-Za-z0-9_-]{16,64}$/;
@@ -429,7 +429,7 @@ export const contractTarget = internalQuery({
     const existing = p.made?.buildId ? await ctx.db.get(p.made.buildId) : null;
     const d = docOf(build);
     // Review M1 (Nov 19): a client's proposal is signed by the client's own person, never by whoever accepted its copied link.
-    const clientSigner = p.clientId && !p.contact ? await signerOf(ctx, p.clientId) : null;
+    const clientSigner = p.clientId && !p.contact ? await signerOf(ctx, p.clientId, p.businessId ?? null) : null;
     const clientName = p.clientId ? (await ctx.db.get(p.clientId))?.name ?? null : null;
     return { p, existing: existing?._id ?? null, project: d.fields.project || d.title, rows: itemRows(d.page), depositPct: p.depositPct ?? totals(d.page).depositPct, clientSigner, clientName };
   },
@@ -700,6 +700,8 @@ async function resolveClient(ctx: MutationCtx, me: { name?: string | null; email
   const now = Date.now();
   if (c.saveAs === "company") {
     if (!out.company) throw new ConvexError("Add the company name (step 1).");
+    // Review N1: never a second company with a name another one has (several parts of the site pick a company by name).
+    if ((await ctx.db.query("clients").collect()).some((x) => nameKey(x.name) === nameKey(out.company!))) throw new ConvexError(`There's already a client called ${out.company}. Pick them from Clients instead.`);
     const clientId = await ctx.db.insert("clients", { name: out.company, createdAt: now });
     await ctx.db.insert("clientPeople", { clientId, email, name: out.name, role: "signer", createdAt: now });
     return { ...out, clientId };

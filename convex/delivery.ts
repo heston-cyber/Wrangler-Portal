@@ -6,6 +6,7 @@
 // Payments › Delivery, changeable per delivery) sets Kept until; reminders go to the client's Inbox 30 and 7 days before
 // the end; a renewal is offered like the raw-footage offer (Keep it drafts next year's invoice, Q6, which the owner
 // sends; paid, it adds the year: nothing is charged automatically). The client can share a view-only link (one token per link, off any time).
+import { shownName } from "./lib/names";
 import { action } from "./_generated/server";
 import { internalMutation, internalQuery, mutation, query, focusBusiness } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
@@ -460,7 +461,7 @@ async function draftRenewal(ctx: MutationCtx, d: Doc<"deliveries">, p: Doc<"proj
   return await ctx.db.insert("invoices", {
     ...(d.businessId ? { businessId: d.businessId } : {}), projectId: p._id, ...(p.clientId ? { clientId: p.clientId } : {}), deliveryId: d._id,
     kind: "other", title: `Delivery, another year · ${label(p)}`.slice(0, 120),
-    billTo: { name: who.name, email: who.email.toLowerCase(), ...(client?.name ? { company: client.name } : {}) },
+    billTo: { name: who.name, email: who.email.toLowerCase(), ...(client?.name ? { company: shownName(client.name) } : {}) },
     lines: [{ id: "delivery", description: `Delivery: final files kept another year (until ${longDay(until)}) · ${label(p)}`.slice(0, 300), qty: 1, unitCents: priceCents }],
     dueDate: d.keptUntil! > soonest ? d.keptUntil! : soonest, status: "draft",
     totalCents: priceCents, amountPaidCents: 0, amountRemainingCents: priceCents,

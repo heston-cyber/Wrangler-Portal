@@ -7,6 +7,7 @@ import { forBusiness, internalAction, internalMutation, internalQuery, mutation,
 import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
+import { nameKey } from "./lib/names";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireMe, requireOwner } from "./lib/access";
 import { bunnyCall, bunnyEnv } from "./bunny";
@@ -372,7 +373,7 @@ export const recordFolders = internalMutation({
     const now = Date.now();
     const goneLeft = new Set(gone.map((g) => g.toLowerCase()));
     const sameLevel = (a: string, b: string) => a.split("/").length === b.split("/").length && a.slice(0, a.lastIndexOf("/")) === b.slice(0, b.lastIndexOf("/"));
-    const norm = (x: string) => x.trim().toLowerCase();
+    const norm = nameKey; // review N1 (Nov 19): the same name rule as everywhere else (Mac folder names are NFD)
 
     const ensureClient = async (name: string, folder: string) => {
       const byFolder = await ctx.db.query("clients").withIndex("by_dropbox_folder", (q) => q.eq("dropboxFolder", folder)).first();
@@ -618,7 +619,7 @@ export const findOrCreateTarget = internalMutation({
     }
     if (!project) {
       const { jobNumber, name } = splitJob(a.project);
-      const twin = a.client ? (await ctx.db.query("clients").collect()).filter((c) => c.name.trim().toLowerCase() === a.client!.trim().toLowerCase()).length > 1 : false;
+      const twin = a.client ? (await ctx.db.query("clients").collect()).filter((c) => nameKey(c.name) === nameKey(a.client!)).length > 1 : false;
       const id = await ctx.db.insert("projects", { name, ...(jobNumber ? { jobNumber } : {}), ...(a.client && !twin ? { client: a.client.trim() } : {}), createdAt: now });
       project = (await ctx.db.get(id))!;
     }

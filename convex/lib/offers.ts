@@ -15,6 +15,7 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { randomToken } from "./hash";
 import { bump } from "./rate";
 import { shownName } from "./names";
+import { defaultBusiness } from "./business";
 
 export type Kind = "quote" | "proposal";
 type Offer = Doc<"quotes"> | Doc<"proposals">;
@@ -151,7 +152,7 @@ export async function signerOf(ctx: QueryCtx | MutationCtx, clientId: unknown, b
   const c = await ctx.db.get(clientId as never) as { _id: string; name?: string; businessId?: Id<"businesses"> } | null;
   if (!c) return null;
   // Review L1: the link pages run unguarded, so the client must be the offer's own business's (no business = the default).
-  const def = (await ctx.db.query("businesses").withIndex("by_slug", (q) => q.eq("slug", "wrangler")).unique())?._id ?? null;
+  const def = (await defaultBusiness(ctx as never))?._id ?? null;
   if (businessId !== undefined && (c.businessId ?? def) !== (businessId ?? def)) return null;
   const people = (await ctx.db.query("clientPeople").withIndex("by_client", (q) => q.eq("clientId", c._id as never)).collect()).filter((p) => !p.removedAt && (businessId === undefined || (p.businessId ?? def) === (businessId ?? def)));
   const p = people.find((x) => x.role === "signer") ?? people[0];
@@ -211,9 +212,10 @@ export async function answer(ctx: MutationCtx, kind: Kind, f: Found, a: Answer, 
   }
   // M3: the owner hears about copied-link declines at most once an hour per link.
   const key = `${thing}-${a.kind}:${d._id}:${f.r?._id ?? (f.via === "link" ? `link:${d.linkToken}:${Math.floor(now / 3_600_000)}` : "legacy")}`;
-  // Review L2 (Nov 19): a client's offer accepted on its copied link by someone who isn't the client's contact says so.
-  const outsider = a.kind === "accepted" && f.via === "link" && !!d.clientId && !!d.contact?.email && (email || "") !== d.contact.email.toLowerCase()
-    ? ` (on the copied link, not ${d.contact.name || d.contact.email})` : "";
+  // Review L2/N3 (Nov 19): a client's offer accepted on its copied link by someone who isn't the client's contact says so.
+  const keptContact = a.kind === "accepted" && f.via === "link" && d.clientId ? ((await ctx.db.get(d._id)) as { contact?: { name?: string; email?: string } } | null)?.contact ?? null : null;
+  const outsider = a.kind === "accepted" && f.via === "link" && !!d.clientId && (email || "") !== (keptContact?.email ?? "").toLowerCase()
+    ? (keptContact?.email ? ` (on the copied link, not ${keptContact.name || keptContact.email})` : " (on the copied link; the client has no contact yet)") : "";
   return { ok: true, status: a.kind === "accepted" ? "accepted" : (await ctx.db.get(d._id))!.status, tell: { key, kind: a.kind, who: response.name + outsider, company: company ?? (f.via === "legacy" ? d.contact?.company ?? null : null), reason: response.reason ?? null, at: now } };
 }
 
