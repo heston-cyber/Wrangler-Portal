@@ -832,7 +832,8 @@ export const decideRequest = mutation({
     }
     if (!stillFits(r.what, doc.status)) { await ctx.db.patch(r._id, { status: "overtaken", decidedAt: now }); throw new ConvexError(`Nothing to confirm: the document is already ${doc.status}.`); }
     if (doc.currentVersion !== r.versionNumber) throw new ConvexError(`The document has moved on to version ${doc.currentVersion} since Claude asked. Decline this and check it again.`);
-    if (r.what === "approve" && r.layoutHash && r.layoutHash !== (await layoutHashOf(doc, await currentVersion(ctx, doc)))) {
+    if (r.what === "approve" && !r.layoutHash) throw new ConvexError("This request was made before requests were tied to the document's layout. Decline it and ask Claude again.");
+    if (r.what === "approve" && r.layoutHash !== (await layoutHashOf(doc, await currentVersion(ctx, doc)))) {
       throw new ConvexError("The document changed since Claude asked (signers, boxes, amount or file). Decline this, check it, and approve it yourself or ask Claude again.");
     }
     await appendEvent(ctx, doc._id, { kind: "claude_request_confirmed", actor: OWNER_KEY, versionNumber: doc.currentVersion, detail: `Heston confirmed on the site, signed in: ${WHAT_LABEL[r.what]} (asked by Claude).` });

@@ -225,49 +225,7 @@ async function pdfBytes(args: Json): Promise<Uint8Array> {
   throw new Error("Pass the PDF as pdf_base64.");
 }
 
-// Security review (Oct 27): pdf_url is fetched carefully: https only on every hop (redirects are followed by hand,
-// at most 5), never to this machine or a private network by address, and the download stops at 25 MB.
-export function publicHttps(u: string): URL {
-  let x: URL;
-  try { x = new URL(u); } catch { throw new Error("pdf_url isn't a valid link."); }
-  if (x.protocol !== "https:") throw new Error("pdf_url must be an https link.");
-  const h = x.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(h);
-  const privateV4 = v4 && ((+v4[1] === 10) || (+v4[1] === 127) || (+v4[1] === 0) || (+v4[1] === 169 && +v4[2] === 254) || (+v4[1] === 172 && +v4[2] >= 16 && +v4[2] <= 31) || (+v4[1] === 192 && +v4[2] === 168) || (+v4[1] === 100 && +v4[2] >= 64 && +v4[2] <= 127) || +v4[1] >= 224);
-  const privateV6 = h.includes(":") && (h === "::1" || h === "::" || /^f[cd]/.test(h) || /^fe[89ab]/.test(h) || /^::ffff:/.test(h));
-  if (privateV4 || privateV6 || h === "localhost" || h.endsWith(".localhost") || h.endsWith(".internal") || h.endsWith(".local") || !h.includes(".")) throw new Error("pdf_url must be a public web address.");
-  return x;
-}
-async function fetchPdf(url: string): Promise<Uint8Array> {
-  let at = publicHttps(url);
-  for (let hop = 0; hop <= 5; hop++) {
-    const r = await fetch(at, { redirect: "manual" });
-    if (r.status >= 300 && r.status < 400) {
-      const loc = r.headers.get("location");
-      if (!loc) throw new Error(`Fetching pdf_url answered ${r.status} with nowhere to go.`);
-      at = publicHttps(new URL(loc, at).toString());
-      continue;
-    }
-    if (!r.ok) throw new Error(`Fetching pdf_url answered ${r.status}.`);
-    if (Number(r.headers.get("content-length") ?? 0) > MAX_PDF) throw new Error("That PDF is over 25 MB.");
-    if (!r.body) return new Uint8Array(await r.arrayBuffer());
-    const parts: Uint8Array[] = [];
-    let n = 0;
-    const reader = r.body.getReader();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      n += value.length;
-      if (n > MAX_PDF) { await reader.cancel().catch(() => null); throw new Error("That PDF is over 25 MB."); }
-      parts.push(value);
-    }
-    const out = new Uint8Array(n);
-    let o = 0;
-    for (const p of parts) { out.set(p, o); o += p.length; }
-    return out;
-  }
-  throw new Error("pdf_url redirected too many times.");
-}
+// Phase 8a review (M2): pdf_url is no longer fetched (the server fetching an address Claude names could carry text out).
 
 async function pdfResource(ctx: ActionCtx, url: string, name: string): Promise<Content | null> {
   const r = await fetch(url);

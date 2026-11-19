@@ -18,7 +18,7 @@ export const INSTRUCTIONS = `Wrangler Review is Heston's video review site (Wran
 Typical flow when Heston says he left notes or revisions: find_videos (if you don't have the video) → get_notes (open notes on the latest version) → get_note_images for notes with drawings or when you need to see the frame → do the work → reply_to_note to say what you changed → mark_notes done.
 get_transcript gives what's said in the cut, pinned to frames; use it to find a line by its words or to read around a note.
 To put notes into DaVinci Resolve as markers, use get_resolve_markers and follow its placement rules: confirm the timeline's frame rate, start timecode and length match the render before placing anything; if they don't, stop and tell Heston.
-The register: every video made since Oct 22, 2026 has a five-digit number (never reused). Files and Resolve timelines are named NNNNN_ShortTitle_vN (e.g. 00001_LCArizona_v4). register_video adds a new video and gives its number and first file name; add_to_register numbers an older video; next_render_name gives the name for a video's next render; set_version_description records what changed in a version. find_videos also finds a video by its number. A render saved anywhere inside Dropbox › Apps/Wrangler Review with its register name becomes that version of that video (the Wrangler Review presets play as rendered; other files are converted first); any other name is flagged on the site's Register page, never guessed.`;
+The register: every video made since Oct 22, 2026 has a five-digit number (never reused). Files and Resolve timelines are named NNNNN_ShortTitle_vN (e.g. 00001_LCArizona_v4). register_video adds a new video and gives its number and first file name; add_to_register numbers an older video; next_render_name gives the name for a video's next render; set_version_description asks Heston to confirm what changed in a version (it shows on share links). find_videos also finds a video by its number. A render saved anywhere inside Dropbox › Apps/Wrangler Review with its register name becomes that version of that video (the Wrangler Review presets play as rendered; other files are converted first); any other name is flagged on the site's Register page, never guessed.`;
 
 
 const videoArgs = {
@@ -92,7 +92,7 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "add_to_register", title: "Add an older video to the register",
-    description: "Gives a video made before numbering started a register number and short title, so its renders get register names. Leave out number to give it the next one; pass number only when Heston asks for a specific one (it must be free). Optionally files its project under a client.",
+    description: "Gives a video made before numbering started a register number and short title, so its renders get register names. Leave out number to give it the next one; pass number only when Heston asks for a specific one (it must be free). (Filing its project under a client is done by Heston on the site.)",
     inputSchema: { type: "object", properties: {
       video_id: videoArgs.video_id, video: videoArgs.video,
       number: { type: "integer", minimum: 1, maximum: 99999, description: "A specific free number, e.g. 1 for 00001." },

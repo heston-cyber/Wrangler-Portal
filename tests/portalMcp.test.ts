@@ -23,6 +23,12 @@ afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 type W = Awaited<ReturnType<typeof world>>;
 type Sent = { to: string; subject: string };
 
+/** Heston presses Confirm on the page: with the content hash the page shows. */
+async function confirmAs(x: { w: W }, id: string) {
+  const g = await x.w.heston.query(api.confirm.get, { id });
+  return x.w.heston.mutation(api.confirm.confirm, { id, hash: (g?.hash as string | null) ?? "none" });
+}
+
 async function setup() {
   const w = await world();
   const mails: Sent[] = [];
@@ -148,11 +154,13 @@ describe("Phase 8a · the one connector", () => {
     expect(await x.w.maya.query(api.confirm.waiting, {})).toEqual([]);
     // Nobody but the owner presses Confirm: not B's owner, not the client, not someone signed out.
     expect(await x.w.boss.query(api.confirm.get, { id: r.data.request_id })).toBeNull();
-    await expect(x.w.boss.mutation(api.confirm.confirm, { id: r.data.request_id })).rejects.toThrow(/isn't here/);
-    await expect(x.w.maya.mutation(api.confirm.confirm, { id: r.data.request_id })).rejects.toThrow();
-    await expect(x.w.t.mutation(api.confirm.confirm, { id: r.data.request_id })).rejects.toThrow();
+    const shown = page.hash as string; // what Heston's page shows
+    await expect(x.w.boss.mutation(api.confirm.confirm, { id: r.data.request_id, hash: shown })).rejects.toThrow(/isn't here/);
+    await expect(x.w.maya.mutation(api.confirm.confirm, { id: r.data.request_id, hash: shown })).rejects.toThrow();
+    await expect(x.w.t.mutation(api.confirm.confirm, { id: r.data.request_id, hash: shown })).rejects.toThrow();
+    await expect(x.w.heston.mutation(api.confirm.confirm, { id: r.data.request_id, hash: "stale" })).rejects.toThrow(/while you were looking/); // re-review M-1
     // Heston confirms: it goes exactly as the site's Send does.
-    const sent = await x.w.heston.mutation(api.confirm.confirm, { id: r.data.request_id });
+    const sent = await confirmAs(x, r.data.request_id);
     expect(sent).toMatchObject({ ok: true });
     expect(sent.sent).toBeGreaterThan(0);
     await x.settle();
@@ -160,7 +168,7 @@ describe("Phase 8a · the one connector", () => {
     expect(await x.w.t.run((ctx) => ctx.db.query("inboxItems").collect())).toHaveLength(sent.sent);
     expect((await x.w.t.run((ctx) => ctx.db.get(noteId)))!.status).toBe("sent");
     expect((await x.a("request_status", { request_id: r.data.request_id })).data.status).toBe("done");
-    await expect(x.w.heston.mutation(api.confirm.confirm, { id: r.data.request_id })).rejects.toThrow(/already done/);
+    await expect(confirmAs(x, r.data.request_id)).rejects.toThrow(/already done/);
     // Activity: Claude's change, and Heston's Confirm.
     const log = (await x.w.t.run((ctx) => ctx.db.query("auditLog").collect())).map((l) => `${l.kind}|${l.who}|${l.text}`);
     expect(log).toEqual(expect.arrayContaining([expect.stringMatching(/^claude\|Claude\|Draft a note/), expect.stringMatching(/^sent\|Heston\|confirmed Claude's request: Send the note/)]));
@@ -173,12 +181,12 @@ describe("Phase 8a · the one connector", () => {
     const r1 = await ask(), r2 = await ask();
     expect(r2.data.request_id).toBe(r1.data.request_id);
     await x.w.t.run(async (ctx) => { for (const p of await ctx.db.query("pendingActions").collect()) await ctx.db.patch(p._id, { expiresAt: Date.now() - 1 }); });
-    await expect(x.w.heston.mutation(api.confirm.confirm, { id: r1.data.request_id })).rejects.toThrow(/ran out/);
+    await expect(confirmAs(x, r1.data.request_id)).rejects.toThrow(/ran out/);
     expect((await x.a("request_status", { request_id: r1.data.request_id })).data.status).toBe("expired");
     const r3 = await ask(); // asked again after it ran out: a new request
     expect(r3.data.request_id).not.toBe(r1.data.request_id);
     await x.w.heston.mutation(api.confirm.cancel, { id: r3.data.request_id });
-    await expect(x.w.heston.mutation(api.confirm.confirm, { id: r3.data.request_id })).rejects.toThrow(/cancelled/);
+    await expect(confirmAs(x, r3.data.request_id)).rejects.toThrow(/cancelled/);
     expect((await x.w.t.run((ctx) => ctx.db.get(d.data.noteId as Id<"inboxNotes">)))!.status).toBe("draft");
   });
 
@@ -192,10 +200,32 @@ describe("Phase 8a · the one connector", () => {
     const page = await x.w.heston.query(api.confirm.get, { id: r.data.request_id });
     expect(page.changed).toBe(true);
     expect(page.preview.lines.find((l: { label: string }) => l.label === "Link").value).toBe("https://evil.example/pay");
-    await expect(x.w.heston.mutation(api.confirm.confirm, { id: r.data.request_id })).rejects.toThrow(/changed since Claude asked/);
+    await expect(confirmAs(x, r.data.request_id)).rejects.toThrow(/changed since Claude asked/);
     expect((await x.w.t.run((ctx) => ctx.db.get(d.data.noteId as Id<"inboxNotes">)))!.status).toBe("draft");
     await x.settle();
     expect(x.mails).toEqual([]);
+  });
+
+  test("re-review: asking again with different content is a new request (the old link stops); only Claude's drafts; every note field shows", async () => {
+    const x = await setup();
+    await x.w.t.run(async (ctx) => { for (const v of await ctx.db.query("videos").collect()) await ctx.db.insert("versions", { businessId: x.w.A, videoId: v._id, number: 1, status: "ready", bunnyGuid: "g", fileName: "a.mp4", startTimecode: "01:00:00:00", createdAt: 0 } as never); });
+    const r1 = await x.a("set_version_description", { video: "Harbor launch cut", description: "Tightened the open", heston_ok: "yes" });
+    const r2 = await x.a("set_version_description", { video: "Harbor launch cut", description: "Call 555-0100 to pay the recovery fee", heston_ok: "yes" });
+    expect(r2.data.request_id).not.toBe(r1.data.request_id);
+    expect((await x.a("request_status", { request_id: r1.data.request_id })).data.status).toBe("replaced");
+    await expect(confirmAs(x, r1.data.request_id)).rejects.toThrow(/cancelled/);
+    const r3 = await x.a("set_version_description", { video: "Harbor launch cut", description: "Call 555-0100 to pay the recovery fee", heston_ok: "yes" });
+    expect(r3.data.request_id).toBe(r2.data.request_id); // the same content again: the same request
+    // L-6: a note Heston wrote himself can't be sent through the connector.
+    const own = await x.w.t.run((ctx) => ctx.db.insert("inboxNotes", { businessId: x.w.A, clientId: x.w.harbor, title: "Mine", text: "x", status: "draft", draftedBy: "owner", createdAt: 0, updatedAt: 0 } as never));
+    expect((await x.a("send_client_note", { note_id: own, heston_ok: "send it" })).text).toMatch(/wasn't drafted by Claude/);
+    // L-1: the button label and a testimonial ask show (and so are bound).
+    const d = await x.a("draft_client_note", { client: "Harbor Coffee", title: "Hi", text: "x", said: "Heston: draft" });
+    const r = await x.a("send_client_note", { note_id: d.data.noteId, heston_ok: "send it" });
+    await x.w.t.run((ctx) => ctx.db.patch(d.data.noteId as Id<"inboxNotes">, { linkLabel: "Pay your invoice now" }));
+    const page = await x.w.heston.query(api.confirm.get, { id: r.data.request_id });
+    expect(page.changed).toBe(true);
+    expect(page.preview.lines.find((l: { label: string }) => l.label === "Button says").value).toBe("Pay your invoice now");
   });
 
   test("review M3, H2, M2: a version's description waits for Confirm; no project moves to a client; no PDF fetched from a link", async () => {
@@ -209,7 +239,7 @@ describe("Phase 8a · the one connector", () => {
     const r = await x.a("set_version_description", { video: "Harbor launch cut", description: "Tightened the open", heston_ok: "yes, add that" });
     expect(r.error, r.text).toBe(false);
     expect((await x.w.t.run((ctx) => ctx.db.get(ver)))!.description).toBeUndefined();
-    await x.w.heston.mutation(api.confirm.confirm, { id: r.data.request_id });
+    await confirmAs(x, r.data.request_id);
     expect((await x.w.t.run((ctx) => ctx.db.get(ver)))!.description).toBe("Tightened the open");
     // H2: registering under a client never moves an existing project; a new project can still be made under one.
     const before = await x.w.t.run(async (ctx) => (await ctx.db.query("projects").collect()).map((p) => [p.name, p.clientId ?? null]));

@@ -27,7 +27,11 @@ const HOURS = 24;
 export const CONFIRM_MS = HOURS * 3_600_000;
 const MAX_WAITING = 20; // review L2: Claude can't pile up requests
 // Review L7: control, bidi and zero-width characters out of anything shown on the Confirm page.
-export const clip = (s: string, n: number) => s.replace(/[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩﻿]/g, " ").replace(/\s+/g, " ").trim().slice(0, n);
+// Review L7 / re-review L-4: control, bidi and zero-width characters out of anything shown on the Confirm page (written
+// as \u escapes so no editor can change them). `clip` makes one line; `body` keeps line breaks for multi-line text.
+const INVISIBLE = /[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g;
+export const clip = (s: string, n: number) => s.replace(INVISIBLE, "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, n);
+const body = (s: string, n: number) => s.replace(INVISIBLE, "").replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, " ").slice(0, n);
 
 type Ctx = QueryCtx | MutationCtx;
 type Line = { label: string; value: string };
@@ -44,6 +48,7 @@ const note = async (ctx: Ctx, id: string) => {
   const n = nid ? await ctx.db.get(nid) : null; // another business's note is invisible here
   if (!n) throw new ConvexError("That note isn't here.");
   if (n.status !== "draft") throw new ConvexError(n.status === "sent" ? "That note was already sent." : "That note was discarded.");
+  if (n.draftedBy !== "claude") throw new ConvexError("That note wasn't drafted by Claude. Heston sends his own drafts on the site."); // re-review L-6
   return n;
 };
 
@@ -70,8 +75,12 @@ export const KINDS: Record<string, Kind> = {
         open: `/sent/new?note=${n._id}`,
         lines: [
           { label: "Title", value: clip(n.title, 200) },
-          { label: "Text", value: n.text.slice(0, 4000) },
-          ...(n.link ? [{ label: "Link", value: clip(n.link, 500) }] : []),
+          { label: "Text", value: body(n.text, 4000) },
+          // Re-review L-1: everything that changes what they get is shown, and so bound by the hash.
+          ...(n.testimonialProjectId ? [{ label: "Asks for a testimonial", value: `About ${clip((await ctx.db.get(n.testimonialProjectId))?.name ?? "a project", 120)}, with the link to the testimonial form` }] : []),
+          ...(n.link && !n.testimonialProjectId ? [{ label: "Link", value: clip(n.link, 500) }] : []),
+          ...(n.linkLabel ? [{ label: "Button says", value: clip(n.linkLabel, 120) }] : []),
+          ...(n.to ? [{ label: "Only to", value: n.to.join(", ") }] : []),
           { label: "Reaches", value: reach.length ? reach.map((p) => `${clip(p.name ?? "", 60)} <${p.email}>`.trim()).join(", ") : "No one with portal access yet (it can't be sent)" },
           { label: "Email", value: n.emailThem === false ? "Inbox only, no email" : "Inbox and an email to each of them" },
         ],
@@ -106,8 +115,8 @@ export const KINDS: Record<string, Kind> = {
         title: `Change what v${ver.number} of “${clip(video.title, 100)}” says changed`,
         open: `/v/${video._id}`,
         lines: [
-          { label: "Now", value: ver.description ? ver.description.slice(0, 2000) : "(nothing)" },
-          { label: "New", value: (payload ?? "").trim().slice(0, 2000) || "(nothing)" },
+          { label: "Now", value: ver.description ? body(ver.description, 2000) : "(nothing)" },
+          { label: "New", value: body((payload ?? "").trim().slice(0, 2000), 2000) || "(nothing)" },
           { label: "Shows", value: "On share links to this video, and in the next “new cut” emails" },
         ],
       };
@@ -142,8 +151,10 @@ export const request = internalMutation({
     const waiting = (await ctx.db.query("pendingActions").withIndex("by_status", (q) => q.eq("status", "waiting")).collect()).filter((r) => r.expiresAt > now);
     const same = waiting.find((r) => r.kind === a.kind && r.targetId === a.targetId);
     let id: Id<"pendingActions">;
-    if (same) { id = same._id; await ctx.db.patch(id, { summary: p.title, said, payload, hash, requestedAt: now, expiresAt: now + CONFIRM_MS }); }
+    if (same && same.hash === hash) { id = same._id; await ctx.db.patch(id, { said, requestedAt: now, expiresAt: now + CONFIRM_MS }); }
     else {
+      // Re-review M-1: different content is a new request with its own link; the old one stops working.
+      if (same) await ctx.db.patch(same._id, { status: "replaced", doneAt: now });
       if (waiting.length >= MAX_WAITING) throw new ConvexError(`Heston already has ${MAX_WAITING} requests waiting. Ask him to go through them first (they're on his Dashboard).`);
       id = await ctx.db.insert("pendingActions", { kind: a.kind, targetId: a.targetId, summary: p.title, said, payload, hash, status: "waiting", requestedAt: now, expiresAt: now + CONFIRM_MS });
     }
@@ -172,13 +183,15 @@ export const get = query({
     const r = id ? await ctx.db.get(id) : null;
     if (!r) return null;
     const base = { _id: r._id, kind: r.kind, summary: r.summary, said: r.said, requestedAt: r.requestedAt, expiresAt: r.expiresAt, doneAt: r.doneAt ?? null, status: status(r) };
-    if (base.status !== "waiting") return { ...base, preview: null, changed: false, problem: null };
+    if (base.status !== "waiting") return { ...base, preview: null, hash: null, changed: false, problem: null };
     const k = KINDS[r.kind];
+    if (!k) return { ...base, preview: null, hash: null, changed: false, problem: "This can't be done here." };
     try {
       const p = await k.preview(ctx, r.targetId, r.payload);
-      return { ...base, preview: p, changed: (await hashOf(p)) !== r.hash, problem: null };
+      const h = await hashOf(p);
+      return { ...base, preview: p, hash: h, changed: h !== r.hash, problem: null };
     } catch (e) {
-      return { ...base, preview: null, changed: false, problem: ((e as Error).message || "It can't be done now.").replace(/^.*ConvexError: /, "").split("\n")[0] };
+      return { ...base, preview: null, hash: null, changed: false, problem: ((e as Error).message || "It can't be done now.").replace(/^.*ConvexError: /, "").split("\n")[0] };
     }
   },
 });
@@ -197,7 +210,8 @@ export const waiting = query({
 /** Confirm: the owner, signed in on the site. Runs it the same way the site's own button does, only if what goes out
  *  is still exactly what was asked. */
 export const confirm = mutation({
-  args: { id: v.string() },
+  // `hash`: the content the page showed (re-review M-1): a click that lands as the page changes confirms nothing.
+  args: { id: v.string(), hash: v.string() },
   handler: async (ctx, a) => {
     await requireOwner(ctx);
     const id = ctx.db.normalizeId("pendingActions", a.id);
@@ -208,10 +222,12 @@ export const confirm = mutation({
     const k = KINDS[r.kind];
     if (!k) throw new ConvexError("That can't be done here.");
     const p = await k.preview(ctx, r.targetId, r.payload); // throws when it can't be done any more
-    if ((await hashOf(p)) !== r.hash) throw new ConvexError("It changed since Claude asked. Check it, then ask Claude again (or do it yourself).");
+    const live = await hashOf(p);
+    if (live !== r.hash) throw new ConvexError("It changed since Claude asked. Check it, then ask Claude again (or do it yourself).");
+    if (a.hash !== live) throw new ConvexError("It changed while you were looking. Check it again, then confirm.");
     const result = await k.run(ctx, r.targetId, r.payload); // throws (and changes nothing) when it can't be done
     await ctx.db.patch(r._id, { status: "done", doneAt: Date.now() });
-    await audit(ctx, { kind: r.kind.endsWith(".delete") ? "deleted" : "sent", text: `confirmed Claude's request: ${r.summary}`, where: "Claude connector", link: `/confirm/${r._id}` });
+    await audit(ctx, { kind: r.kind.endsWith(".delete") ? "deleted" : r.kind.endsWith(".send") || r.kind.endsWith(".remind") ? "sent" : "claude", text: `confirmed Claude's request: ${r.summary}`, where: "Claude connector", link: `/confirm/${r._id}` });
     return { ok: true, ...result };
   },
 });

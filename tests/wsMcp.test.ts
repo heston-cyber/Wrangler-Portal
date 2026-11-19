@@ -125,6 +125,11 @@ describe("T-S4.2 approve, send and cancel only when Heston confirms on the site"
     await expect(x.me.mutation(api.sign.decideRequest, { requestId: stale._id, confirm: true })).rejects.toThrow(/changed since Claude asked/);
     expect(await status()).toBe("draft");
     await x.call("update_document", { document: "WS-00001", signers: [{ name: "Dillon Ripley", email: "dillon@example.com" }] });
+    // Re-review L-2: a request made before requests carried the layout (no hash) can't be confirmed either.
+    await x.call("approve_document", { document: "WS-00001", heston_ok: "approve" });
+    const [old] = await pending();
+    await x.t.run((ctx) => ctx.db.patch(old._id, { layoutHash: undefined }));
+    await expect(x.me.mutation(api.sign.decideRequest, { requestId: old._id, confirm: true })).rejects.toThrow(/before requests were tied/);
     await x.call("approve_document", { document: "WS-00001", heston_ok: "Looks good, approve it" }); // asked again, as it stands now
     const [req] = await pending();
     expect(req).toMatchObject({ what: "approve", said: "Looks good, approve it" });
@@ -156,7 +161,7 @@ describe("T-S4.2 approve, send and cancel only when Heston confirms on the site"
     expect(ev.find((e: any) => e.kind === "send_settings")).toMatchObject({ actor: "heston" });
     // get_document shows what happened to each request.
     const g = await x.call("get_document", { document: "WS-00001" });
-    expect(g.data.requests.map((r: any) => `${r.what}:${r.status}`)).toEqual(["send:done", "send:declined", "approve:done", "approve:replaced"]);
+    expect(g.data.requests.map((r: any) => `${r.what}:${r.status}`)).toEqual(["send:done", "send:declined", "approve:done", "approve:replaced", "approve:replaced"]);
     // Out of order is refused at the request.
     expect((await x.call("approve_document", { document: "WS-00001", heston_ok: "again" })).error).toBe(true);
     // Cancel: a request too.

@@ -12,7 +12,7 @@ import { ago } from "../../lib/format";
 
 const STATUS: Record<string, { label: string; tone: "warning" | "success" | "neutral" | "danger" }> = {
   waiting: { label: "Waiting for you", tone: "warning" }, done: { label: "Done", tone: "success" },
-  cancelled: { label: "Cancelled", tone: "neutral" }, failed: { label: "Didn't go", tone: "danger" }, expired: { label: "Ran out", tone: "neutral" },
+  cancelled: { label: "Cancelled", tone: "neutral" }, replaced: { label: "Replaced by a newer ask", tone: "neutral" }, failed: { label: "Didn't go", tone: "danger" }, expired: { label: "Ran out", tone: "neutral" },
 };
 
 export function ConfirmPage({ id }: { id: string }) {
@@ -48,7 +48,7 @@ export function ConfirmPage({ id }: { id: string }) {
               {r.status === "waiting" && (
                 <div className="dfoot">
                   <Button disabled={busy} onClick={() => void go(() => cancel({ id }))}>Don't do it</Button>
-                  <Button variant="primary" loading={busy} disabled={r.changed || !!r.problem || !r.preview} onClick={() => void go(() => confirm({ id }), () => setDoneNow(true))}>Confirm</Button>
+                  <Button variant="primary" loading={busy} disabled={r.changed || !!r.problem || !r.preview} onClick={() => void go(() => confirm({ id, hash: r.hash ?? "" }), () => setDoneNow(true))}>Confirm</Button>
                 </div>
               )}
               {doneNow && <p className="caption" role="status">Done. Tell Claude in your chat, or it can check for itself.</p>}
