@@ -13,7 +13,8 @@
 // the site's own button).
 import { v, ConvexError } from "convex/values";
 import { internalMutation, mutation, query } from "./lib/functions";
-import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { action, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireOwner, viewerOf } from "./lib/access";
 import { audit } from "./lib/audit";
@@ -149,7 +150,7 @@ async function sitePreview(ctx: Ctx, target: string, payload: string | undefined
       ...more.map((l) => { if (l.value.length > 20_000) throw new ConvexError("That's too much to show on one page. Heston does this on the site."); return { label: clip(l.label, 60), value: body(l.value, 20_000) }; }),
       ...(outbound.length
         ? outbound.map((o) => ({ label: "Sends", value: clip(`${o.what}${o.to.length ? ` to ${o.to.slice(0, 300).join(", ")}${o.to.length > 300 ? ` and ${o.to.length - 300} more` : ""}` : ""}`, 40_000) }))
-        : act.onPage ? [] : [{ label: "Sends", value: "No email or message" }]), // 8c: an on-page ask says what it sends itself
+        : act.onPage || more.some((l) => l.label === "Sends") ? [] : [{ label: "Sends", value: "No email or message" }]), // an ask that says what it sends itself
     ],
     bind: JSON.stringify({ recs, args }), // everything it acts on and with, even what the page shortens
   };
@@ -161,7 +162,7 @@ export const KINDS: Record<string, Kind> = {
     run: async (ctx, target, payload) => {
       const { act, action, args, outbound } = siteParts(target, payload);
       // Phase 8c: a Stripe action can't run inside Confirm; the page runs it next, signed in as Heston (`runOnPage`).
-      if (act.onPage) return { runOnPage: { fn: action.replace(".", ":"), args } };
+      if (act.onPage) return { runOnPage: true };
       const seen: Outbound[] = [];
       const result = await act.fn._handler(recording(ctx, seen), args);
       if (!sameReach(seen, outbound)) throw new ConvexError("It would now send to different people than when Claude asked. Nothing was done: ask Claude again.");
@@ -238,9 +239,14 @@ export const KINDS: Record<string, Kind> = {
 
 const hashOf = (p: Preview) => sha256Hex(JSON.stringify(p.bind === undefined ? [p.title, p.lines] : [p.title, p.lines, p.bind]));
 
-// 8c review L2: confirmed and handed to the page, but never reported back: after 15 minutes it's "unknown" (check the site).
-const status = (r: { status: string; expiresAt: number; doneAt?: number }, now = Date.now()) =>
-  r.status === "waiting" && r.expiresAt <= now ? "expired" : r.status === "running" && (r.doneAt ?? 0) < now - 15 * 60_000 ? "unknown" : r.status;
+// 8c review L2 / re-review N2: confirmed and handed to the page. It must start within 2 minutes (claim) or it ran out
+// and nothing went; started but never reported back after 15 minutes, it's "unknown" (check the site).
+export const CLAIM_MS = 2 * 60_000;
+export const REPORT_MS = 15 * 60_000;
+const status = (r: { status: string; expiresAt: number; doneAt?: number; claimedAt?: number }, now = Date.now()) =>
+  r.status === "waiting" && r.expiresAt <= now ? "expired"
+  : r.status === "running" && !r.claimedAt && (r.doneAt ?? 0) < now - CLAIM_MS ? "expired"
+  : r.status === "running" && r.claimedAt && r.claimedAt < now - REPORT_MS ? "unknown" : r.status;
 
 /** The connector: make a request (nothing happens yet). The same kind and record already waiting is renewed. */
 export const request = internalMutation({
@@ -311,8 +317,12 @@ export const waiting = query({
   handler: async (ctx) => {
     if ((await viewerOf(ctx)).kind !== "owner") return [];
     const now = Date.now();
-    return (await ctx.db.query("pendingActions").withIndex("by_status", (q) => q.eq("status", "waiting")).order("desc").take(50))
-      .filter((r) => r.expiresAt > now).map((r) => ({ _id: r._id, summary: r.summary, requestedAt: r.requestedAt }));
+    const asks = (await ctx.db.query("pendingActions").withIndex("by_status", (q) => q.eq("status", "waiting")).order("desc").take(50))
+      .filter((r) => r.expiresAt > now).map((r) => ({ _id: r._id, summary: r.summary, requestedAt: r.requestedAt, check: false }));
+    // Re-review L-f: a confirmed send that never reported back: Heston checks it went out.
+    const unknown = (await ctx.db.query("pendingActions").withIndex("by_status", (q) => q.eq("status", "running").gt("requestedAt", now - 2 * CONFIRM_MS)).take(50))
+      .filter((r) => status(r, now) === "unknown").map((r) => ({ _id: r._id, summary: r.summary, requestedAt: r.requestedAt, check: true }));
+    return [...unknown, ...asks];
   },
 });
 
@@ -335,7 +345,7 @@ export const confirm = mutation({
     if (live !== r.hash) throw new ConvexError("It changed since Claude asked. Check it, then ask Claude again (or do it yourself).");
     if (a.hash !== live) throw new ConvexError("It changed while you were looking. Check it again, then confirm.");
     const result = await k.run(ctx, r.targetId, r.payload); // throws (and changes nothing) when it can't be done
-    const onPage = "runOnPage" in result;
+    const onPage = "runOnPage" in result; // re-review N2: the page now calls runConfirmed, which claims it within 2 minutes
     await ctx.db.patch(r._id, onPage ? { status: "running", doneAt: Date.now() } : { status: "done", doneAt: Date.now() }); // running: doneAt is when it was confirmed
     const siteMode = r.kind === "site" ? ACTIONS[siteAction(r.targetId)]?.mode : undefined;
     await audit(ctx, { kind: siteMode === "delete" || r.kind.endsWith(".delete") ? "deleted" : siteMode === "ask" || r.kind.endsWith(".send") || r.kind.endsWith(".remind") ? "sent" : "claude", text: `confirmed Claude's request: ${r.summary}${onPage ? " (run from the Confirm page)" : ""}`, where: "Claude connector", link: `/confirm/${r._id}` });
@@ -343,18 +353,55 @@ export const confirm = mutation({
   },
 });
 
-/** Phase 8c: the Confirm page ran the Stripe action it was given (signed in as Heston); how it went. Owner only, and
- *  only for a request it confirmed. */
-export const finished = mutation({
+/** Phase 8c (re-review N2): a confirmed Stripe send starts here, on the server, signed in as the owner who confirmed it:
+ *  only within 2 minutes of Confirm, only once, and only if what goes out is still exactly what Heston saw. A page
+ *  that wakes up late, or a replayed call, gets nothing. */
+export const claim = internalMutation({
+  args: { id: v.string() },
+  handler: async (ctx, a) => {
+    await requireOwner(ctx);
+    const id = ctx.db.normalizeId("pendingActions", a.id);
+    const r = id ? await ctx.db.get(id) : null;
+    if (!r || r.kind !== "site") throw new ConvexError("That request isn't here.");
+    if (r.status !== "running" || r.claimedAt) throw new ConvexError(r.status === "running" ? "That's already going out." : "That isn't waiting to go out.");
+    if ((r.doneAt ?? 0) < Date.now() - CLAIM_MS) throw new ConvexError("It's been too long since you confirmed it, so nothing was sent. Ask Claude again.");
+    const live = await hashOf(await KINDS.site.preview(ctx, r.targetId, r.payload));
+    if (live !== r.hash) throw new ConvexError("It changed since you confirmed it, so nothing was sent. Ask Claude again.");
+    await ctx.db.patch(r._id, { claimedAt: Date.now() });
+    const { action: name, args } = siteParts(r.targetId, r.payload);
+    return { action: name, args };
+  },
+});
+export const settle = internalMutation({
   args: { id: v.string(), ok: v.boolean(), error: v.optional(v.string()) },
   handler: async (ctx, a) => {
     await requireOwner(ctx);
     const id = ctx.db.normalizeId("pendingActions", a.id);
     const r = id ? await ctx.db.get(id) : null;
-    if (!r || r.status !== "running") return null;
+    if (!r || r.status !== "running" || !r.claimedAt) return null;
     await ctx.db.patch(r._id, { status: a.ok ? "done" : "failed", doneAt: Date.now(), ...(a.ok ? {} : { error: clip(a.error ?? "It didn't go through.", 300) }) });
     if (!a.ok) await audit(ctx, { kind: "claude", text: `Claude's confirmed request didn't go through: ${r.summary}`, where: "Claude connector", link: `/confirm/${r._id}` });
     return null;
+  },
+});
+/** The Confirm page calls this right after Confirm: it runs the site's own Stripe action (sending an invoice or a
+ *  quote), as Heston, exactly as its button on the site would, and records how it went. */
+export const runConfirmed = action({
+  args: { id: v.string() },
+  handler: async (ctx, a): Promise<{ done: boolean; error?: string; link?: string | null }> => {
+    const c = await ctx.runMutation(internal.confirm.claim, { id: a.id });
+    const act = ACTIONS[c.action];
+    if (!act?.onPage) throw new ConvexError("That can't be run here.");
+    try {
+      const out = await act.fn._handler(ctx, c.args) as { failed?: string[]; held?: boolean; link?: string | null } | null;
+      const missed = out?.failed?.length ? `It didn't reach ${out.failed.join(", ")}.` : out?.held ? "The email was held (the preview doesn't send)." : null;
+      await ctx.runMutation(internal.confirm.settle, { id: a.id, ok: !missed, ...(missed ? { error: missed } : {}) });
+      return { done: !missed, ...(missed ? { error: missed } : {}), link: out?.link ?? null };
+    } catch (e) {
+      const msg = ((e as Error).message || "It didn't go through.").replace(/^.*ConvexError: /, "").split("\n")[0];
+      await ctx.runMutation(internal.confirm.settle, { id: a.id, ok: false, error: msg });
+      throw e;
+    }
   },
 });
 

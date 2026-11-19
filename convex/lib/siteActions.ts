@@ -41,6 +41,7 @@ import * as crm from "../crm";
 import * as reports from "../reports";
 import * as footage from "../footage";
 import { parseTo } from "./offers";
+import { quoteTotals } from "../quotes";
 import type { QueryCtx } from "../_generated/server";
 import { ConvexError } from "convex/values";
 
@@ -158,19 +159,25 @@ const quoteLines = async (ctx: QueryCtx, a: Args) => {
   const list = legacy ? (q.contact?.email ? [{ email: String(q.contact.email), name: String(q.contact.name ?? "") }] : [])
     : a.to !== undefined ? parseTo(String(a.to), typeof a.name === "string" ? a.name : undefined)
     : a.copyLink !== true && q.contact?.email ? [{ email: String(q.contact.email), name: String(q.contact.name ?? "") }] : [];
-  const people = list.map((x) => `${x.name ? `${x.name} ` : ""}<${x.email}>`);
+  if (!list.length && a.copyLink !== true) throw new ConvexError("Add who it goes to (or copy its link): it can't be sent to no one.");
+  // Re-review L-e: the name a person already on the quote has is the one the email greets.
+  const rows = await ctx.db.query("offerRecipients").withIndex("by_quote", (qq) => qq.eq("quoteId", q._id as never)).collect();
+  const people = list.map((x) => { const old = rows.find((r) => String(r.email).toLowerCase() === x.email.toLowerCase()); const n = old?.name ?? x.name; return `${n ? `${n} ` : ""}<${x.email}>`; });
   const sends = [
     ...(people.length ? [`Quote email with their own link to ${people.join(", ")}`] : []),
     ...(a.copyLink === true ? ["a link for Heston to copy and send himself"] : []),
   ];
+  const t = Array.isArray(q.lines) && q.deposit ? quoteTotals({ lines: q.lines, discountCents: q.discountCents, taxPercent: q.taxPercent, deposit: q.deposit }) : null;
   return [
     { label: "Quote", value: `${String(q.number ?? "")} · ${String(q.title ?? "")}` },
     { label: "Lines", value: linesOf(q.lines) || "None" },
-    { label: "Total", value: usd(q.totalCents) },
-    ...(q.deposit ? [{ label: "Deposit", value: typeof q.deposit === "object" ? JSON.stringify(q.deposit) : String(q.deposit) }] : []),
+    ...(t?.discount ? [{ label: "Discount", value: usd(t.discount) }] : []),
+    ...(t?.tax ? [{ label: "Tax", value: `${q.taxPercent}%: ${usd(t.tax)}` }] : []),
+    { label: "Total", value: usd(t?.total ?? q.totalCents) },
+    ...(t && q.deposit ? [{ label: "Deposit to book", value: `${q.deposit.kind === "percent" ? `${q.deposit.value}%: ` : ""}${usd(t.deposit)}` }] : []),
     ...(q.validUntil ? [{ label: "Valid until", value: String(q.validUntil) }] : []),
     ...(q.terms ? [{ label: "Terms (in the email and on the page)", value: String(q.terms) }] : []),
-    { label: "Sends", value: sends.length ? sends.join("; and ") : "No one to send it to yet (it can't be sent)" },
+    { label: "Sends", value: sends.join("; and ") },
   ];
 };
 /** A vendor invoice, with whose and how much (8c review M7). */
@@ -449,11 +456,15 @@ export const ACTIONS: Record<string, Entry> = {
     onPage: true, shows: async (ctx, a) => [...(await invoiceLines(ctx, a.invoiceId)), { label: "Sends", value: "No email" }],
   }),
   "invoiceReminders.setReminders": ask("money", invoiceReminders.setReminders, "Set the automatic invoice reminders", "", {
-    shows: async (_ctx, a) => [{ label: "Sends", value: a.on === true ? `From now on, on their own: a reminder email to each client with an open invoice ${String(a.beforeDays)} days before it's due, then every ${String(a.everyDays)} days once it's ${String(a.afterDays)} days overdue, up to ${String(a.stopAfter)} times` : "No more automatic reminders" }],
+    // Re-review L-d: the numbers as the site will keep them.
+    shows: async (_ctx, a) => {
+      const n = (x: unknown, lo: number, hi: number) => Math.min(hi, Math.max(lo, Math.round(Number(x) || 0)));
+      return [{ label: "Sends", value: a.on === true ? `From now on, on their own: a reminder email to each client with an open invoice ${n(a.beforeDays, 0, 30)} days before it's due, then every ${n(a.everyDays, 1, 60)} days once it's ${n(a.afterDays, 0, 30)} days overdue, up to ${n(a.stopAfter, 1, 12)} times` : "No more automatic reminders" }];
+    },
   }),
   "invoiceReminders.sendReminder": ask("money", invoiceReminders.sendReminder, "Email a reminder about an invoice", "The client gets a reminder with the pay link.", { shows: async (ctx, a) => invoiceLines(ctx, a.invoiceId) }),
   "quotes.list": r("money", quotes.list, "Quotes"),
-  "quotes.get": { ...r("money", quotes.get, "One quote, who it went to, opens and answers (its links stay on the site)"), hide: ["link", "ip", "userAgent"] },
+  "quotes.get": { ...r("money", quotes.get, "One quote, who it went to, opens and answers (its links stay on the site)"), hide: ["linkUrl", "ip", "userAgent"] },
   "quotes.options": r("money", quotes.options, "Who and what a new quote can be for"),
   "quotes.save": c("money", quotes.save, "Make or change a draft quote (nothing is sent)"),
   "quotes.answerMove": c("money", quotes.answerMove, "Answer “Move the company to Quoted?”"),
@@ -484,7 +495,7 @@ export const ACTIONS: Record<string, Entry> = {
   "footage.forProject": r("money", footage.forProject, "A project's raw footage storage"),
   "footage.recordDrive": c("money", footage.recordDrive, "Record that the client is sending a hard drive"),
   "footage.stop": ask("money", footage.stop, "Stop a project's raw footage storage", "A paid storage plan ends: no renewal is drafted, and it leaves the client's page."),
-  "footage.markDone": c("money", footage.markDone, "Mark the raw footage deleted or moved"),
+  "footage.markDone": ask("money", footage.markDone, "Mark the raw footage deleted or moved", "Once it's marked, a late storage payment can only be refunded, not kept."),
   "footage.reinstate": ask("money", footage.reinstate, "A storage invoice paid late: keep the payment and the footage for a year", "The client's card says it's kept until the new date."),
   "footage.dismissLatePaid": ask("money", footage.dismissLatePaid, "A storage invoice paid late: mark it to refund (Heston refunds on the site)", "Closing it takes away the reminder that a refund is owed."),
   "delivery.setTerm": ask("money", delivery.setTerm, "Change how long a delivery is kept and its renewal price", "A later date can open an ended delivery again; a date within 30 days can show the client the renewal offer; an earlier one ends it sooner; the price is what the client sees."),
@@ -515,7 +526,7 @@ export const ACTIONS: Record<string, Entry> = {
   "crm.logEntry": ask("sales", crm.logEntry, "Log hours or a cost in a project's ledger", "It counts in the project's profit at once."),
   "crm.entryAction": ask("sales", crm.entryAction, "Confirm or remove a draft ledger entry", "A draft entry counts only once Heston confirms it."),
   "proposals.list": r("sales", proposals.list, "Proposals"),
-  "proposals.get": { ...r("sales", proposals.get, "One proposal, who it went to, opens and answers (its links stay on the site)"), hide: ["link", "ip", "userAgent"] },
+  "proposals.get": { ...r("sales", proposals.get, "One proposal, who it went to, opens and answers (its links stay on the site)"), hide: ["linkUrl", "ip", "userAgent"] },
   "proposals.templates": r("sales", proposals.templates, "Proposal templates"),
   "proposals.questionnaire": r("sales", proposals.questionnaire, "The proposal questionnaire"),
   "proposals.forCompany": r("sales", proposals.forCompany, "A company's proposals and quotes"),

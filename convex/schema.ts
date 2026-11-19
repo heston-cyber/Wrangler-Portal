@@ -341,7 +341,8 @@ export default defineSchema({
     said: v.string(),            // what Claude says Heston told it in chat
     payload: v.optional(v.string()), // the text a kind sets (a version's description); shown in full on the Confirm page
     hash: v.optional(v.string()),    // review H1: what will go out, as it stood when asked; Confirm refuses if it changed
-    status: v.union(v.literal("waiting"), v.literal("done"), v.literal("cancelled"), v.literal("failed"), v.literal("replaced"), v.literal("running")), // replaced: Claude asked again with different content; running (8c): confirmed, running from Heston's Confirm page
+    status: v.union(v.literal("waiting"), v.literal("done"), v.literal("cancelled"), v.literal("failed"), v.literal("replaced"), v.literal("running")), // replaced: Claude asked again with different content; running (8c): confirmed, going out from Heston's Confirm page
+    claimedAt: v.optional(v.number()), // 8c: a confirmed Stripe send started (runConfirmed), within 2 minutes of Confirm
     requestedAt: v.number(),
     expiresAt: v.number(),
     doneAt: v.optional(v.number()),

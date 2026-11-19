@@ -223,7 +223,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "setup.state": {}, "setup.step": { at: 1 }, "setup.saveRates": { hourly: 150 }, "setup.firstClient": { company: "Fern & Field", name: "Priya Shah", email: "priya@fernandfield.example" }, "setup.hide": { hidden: true },
     // Phase 8a (Nov 18): the one connector's keys and the Confirm page (owner only; waiting answers [] to anyone else)
     "portalKeys.createKey": {}, "portalKeys.listKeys": {}, "portalKeys.revokeKey": { keyId: ids.portalKeyId },
-    "confirm.get": { id: ids.pendingId }, "confirm.waiting": {}, "confirm.confirm": { id: ids.pendingId, hash: "h" }, "confirm.cancel": { id: ids.pendingId }, "confirm.finished": { id: ids.pendingId, ok: false },
+    "confirm.get": { id: ids.pendingId }, "confirm.waiting": {}, "confirm.confirm": { id: ids.pendingId, hash: "h" }, "confirm.cancel": { id: ids.pendingId }, "confirm.runConfirmed": { id: ids.pendingId },
     "platform.resend": { inviteId: "nope" }, "platform.revoke": { inviteId: "nope" }, "platform.otherInvites": { email: "sam@northline.example" }, // Q4 (Nov 18): admin only
     "siteWatch.report": {}, "siteWatch.run": { id: "nope" }, "siteWatch.summary": {}, "siteWatch.markDone": { id: "nope" },
     "siteWatch.finding": { id: "nope" }, "siteWatch.setPaused": { paused: true }, // Phase 5c screens (Nov 4)

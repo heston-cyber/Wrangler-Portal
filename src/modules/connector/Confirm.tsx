@@ -2,8 +2,7 @@
 // first; nothing has happened yet. It happens only when the owner presses Confirm here, signed in. Built in the
 // existing look (no frame yet; noted for the design chat in the Design Direction).
 import { useState } from "react";
-import { useConvex, useMutation, useQuery } from "convex/react";
-import { makeFunctionReference } from "convex/server";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Button, Card, EmptyState, ListRow, PageHeader, SkeletonRows, StatusChip } from "../../ui/wp";
 import { linkProps } from "../../lib/router";
@@ -21,26 +20,17 @@ export function ConfirmPage({ id }: { id: string }) {
   const r = useQuery(api.confirm.get, { id });
   const confirm = useMutation(api.confirm.confirm);
   const cancel = useMutation(api.confirm.cancel);
-  const finished = useMutation(api.confirm.finished);
-  const convex = useConvex();
-  /** Phase 8c: something that talks to Stripe (sending an invoice, a quote) runs here, signed in as you, exactly as its
-   *  own button on the site does, once Confirm has checked it. */
-  const confirmAndRun = async () => {
-    const res = await confirm({ id, hash: r?.hash ?? "" }) as { runOnPage?: { fn: string; args: Record<string, unknown> } };
-    if (!res.runOnPage) return;
-    try {
-      const out = await convex.action(makeFunctionReference<"action">(res.runOnPage.fn), res.runOnPage.args) as { failed?: string[]; held?: boolean; link?: string | null } | null;
-      // 8c review L2: an email that didn't go, or was held, is reported as not done; a copied link is shown here.
-      if (out?.link) setLink(out.link);
-      const missed = out?.failed?.length ? `It didn't reach ${out.failed.join(", ")}.` : out?.held ? "The email was held (the preview doesn't send)." : null;
-      await finished(missed ? { id, ok: false, error: missed } : { id, ok: true });
-      if (missed) throw new Error(missed);
-    } catch (e) {
-      await finished({ id, ok: false, error: errText(e) });
-      throw e;
-    }
-  };
   const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null), [doneNow, setDoneNow] = useState(false), [link, setLink] = useState<string | null>(null);
+  const runConfirmed = useAction(api.confirm.runConfirmed);
+  /** Phase 8c: something that talks to Stripe (sending an invoice, a quote) starts on the server right after Confirm,
+   *  signed in as you, exactly as its own button on the site does, and only within 2 minutes. */
+  const confirmAndRun = async () => {
+    const res = await confirm({ id, hash: r?.hash ?? "" }) as { runOnPage?: boolean };
+    if (!res.runOnPage) return;
+    const out = await runConfirmed({ id });
+    if (out.link) setLink(out.link);
+    if (!out.done) throw new Error(out.error ?? "It didn't go through.");
+  };
   const go = async (f: () => Promise<unknown>, after?: () => void) => {
     setBusy(true); setErr(null);
     try { await f(); after?.(); } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
@@ -74,7 +64,11 @@ export function ConfirmPage({ id }: { id: string }) {
               )}
               {doneNow && <p className="caption" role="status">Done. Tell Claude in your chat, or it can check for itself.</p>}
               {link && <div className="prow"><span className="pl secondary">The link to copy</span><span className="pr"><input readOnly value={link} onFocus={(e) => e.currentTarget.select()} aria-label="The link to copy" /></span></div>}
-              {!doneNow && r.status === "running" && <p className="caption" role="status">You confirmed it, and it was going out from this page. If the page closed first, check it on the site.</p>}
+              {!doneNow && r.status === "running" && <>
+                <p className="caption" role="status">You confirmed it. If this page closed before it said Done, send it now (within 2 minutes of confirming), or check it on the site.</p>
+                <div className="dfoot"><Button variant="primary" loading={busy} onClick={() => void go(async () => { const out = await runConfirmed({ id }); if (out.link) setLink(out.link); if (!out.done) throw new Error(out.error ?? "It didn't go through."); }, () => setDoneNow(true))}>Send it now</Button></div>
+              </>}
+              {r.status === "unknown" && <p className="caption" role="status">You confirmed it, but this page never heard back. Check on the site that it went out.</p>}
               {err && <p className="error" role="alert">{err}</p>}
             </Card>
           )}
@@ -91,7 +85,7 @@ export function ClaudeWaiting() {
     <Card label="Claude is waiting for your OK">
       {rows.map((r) => (
         <a key={r._id} {...linkProps(`/confirm/${r._id}`)} className="plain">
-          <ListRow lead={{ icon: "globe" }} title={r.summary} meta={`Asked ${ago(r.requestedAt)}`} chip={<StatusChip tone="warning">Confirm</StatusChip>} chevron />
+          <ListRow lead={{ icon: "globe" }} title={r.summary} meta={r.check ? "You confirmed it. Check that it went out." : `Asked ${ago(r.requestedAt)}`} chip={<StatusChip tone="warning">{r.check ? "Check it" : "Confirm"}</StatusChip>} chevron />
         </a>
       ))}
     </Card>

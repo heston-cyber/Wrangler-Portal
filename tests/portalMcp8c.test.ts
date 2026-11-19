@@ -26,12 +26,13 @@ async function setup() {
   const calls: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => { calls.push(typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url); return new Response("{}", { status: 500 }); }));
   const key = (await w.heston.action(api.portalKeys.createKey, {})).key as string;
-  const a = async (name: string, args: Record<string, unknown> = {}) => {
-    const r = await w.t.fetch("/portal-mcp", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }) });
+  const keyB = (await w.boss.action(api.portalKeys.createKey, {})).key as string;
+  const as = (k: string) => async (name: string, args: Record<string, unknown> = {}) => {
+    const r = await w.t.fetch("/portal-mcp", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${k}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }) });
     const j = await r.json();
     return { error: j.result.isError === true, text: j.result.content[0].text as string, data: j.result.structuredContent as Record<string, any> };
   };
-  return { w, a, calls };
+  return { w, a: as(key), b: as(keyB), calls };
 }
 const draft = (w: Awaited<ReturnType<typeof world>>) => ({ clientId: w.harbor, projectId: w.p, kind: "final", title: "Final invoice", billTo: { name: "Maya Brooks", email: "maya@harbor.example", company: "Harbor Coffee" },
   lines: [{ id: "a", description: "Final payment", qty: 1, unitCents: 450000 }], dueDate: due, memo: "Thank you, Maya." });
@@ -64,13 +65,28 @@ describe("Phase 8c · money through the connector", () => {
     const g2 = await x.w.heston.query(api.confirm.get, { id: r2.data.request_id });
     await expect(x.w.boss.mutation(api.confirm.confirm, { id: r2.data.request_id, hash: g2.hash })).rejects.toThrow();
     const res = await x.w.heston.mutation(api.confirm.confirm, { id: r2.data.request_id, hash: g2.hash });
-    expect(res.runOnPage).toEqual({ fn: "invoices:send", args: { invoiceId } });
+    expect(res.runOnPage).toBe(true);
     expect((await x.a("request_status", { request_id: r2.data.request_id })).data.status).toBe("running");
     await expect(x.w.heston.mutation(api.confirm.confirm, { id: r2.data.request_id, hash: g2.hash })).rejects.toThrow(/already been confirmed/);
-    await x.w.maya.mutation(api.confirm.finished, { id: r2.data.request_id, ok: true }).catch(() => null); // not the owner: nothing
-    expect((await x.a("request_status", { request_id: r2.data.request_id })).data.status).toBe("running");
-    await x.w.heston.mutation(api.confirm.finished, { id: r2.data.request_id, ok: false, error: "Stripe said no" });
-    expect((await x.a("request_status", { request_id: r2.data.request_id })).data).toMatchObject({ status: "failed", error: "Stripe said no" });
+    // Only the owner who confirmed starts it; Stripe (stubbed to fail here) refuses, so it's recorded as not done.
+    await expect(x.w.boss.action(api.confirm.runConfirmed, { id: r2.data.request_id })).rejects.toThrow();
+    await expect(x.w.maya.action(api.confirm.runConfirmed, { id: r2.data.request_id })).rejects.toThrow();
+    await expect(x.w.heston.action(api.confirm.runConfirmed, { id: r2.data.request_id })).rejects.toThrow();
+    expect((await x.a("request_status", { request_id: r2.data.request_id })).data.status).toBe("failed");
+    await expect(x.w.heston.action(api.confirm.runConfirmed, { id: r2.data.request_id })).rejects.toThrow(/isn't waiting to go out/); // never twice
+    const reached = x.calls.length;
+    // Started late (a page that woke up after 2 minutes): nothing goes, and it ran out.
+    const r3 = await x.a("site_ask", { action: "invoices.send", args: { invoiceId }, heston_ok: "yes, send it" });
+    await x.w.heston.mutation(api.confirm.confirm, { id: r3.data.request_id, hash: (await x.w.heston.query(api.confirm.get, { id: r3.data.request_id })).hash });
+    await x.w.t.run(async (ctx) => { await ctx.db.patch(r3.data.request_id as never, { doneAt: Date.now() - 3 * 60_000 } as never); });
+    await expect(x.w.heston.action(api.confirm.runConfirmed, { id: r3.data.request_id })).rejects.toThrow(/too long since you confirmed/);
+    expect((await x.a("request_status", { request_id: r3.data.request_id })).data.status).toBe("expired");
+    // Changed after Confirm (Heston's own edit on the site): it doesn't start.
+    const r4 = await x.a("site_ask", { action: "invoices.send", args: { invoiceId }, heston_ok: "yes, send it now" });
+    await x.w.heston.mutation(api.confirm.confirm, { id: r4.data.request_id, hash: (await x.w.heston.query(api.confirm.get, { id: r4.data.request_id })).hash });
+    await x.w.heston.mutation(api.invoices.saveDraft, { invoiceId, ...draft(x.w), memo: "Changed after Confirm" });
+    await expect(x.w.heston.action(api.confirm.runConfirmed, { id: r4.data.request_id })).rejects.toThrow(/changed since you confirmed/);
+    expect(x.calls.length).toBe(reached); // the refused starts reached nothing outside
   });
 
   test("T8c.2 never through it: paying, charging, refunding, subscriptions, Stripe keys", async () => {
@@ -87,12 +103,12 @@ describe("Phase 8c · money through the connector", () => {
 
   test("T8c.3 recording a vendor payment, approving their invoice and an invoice reminder all ask; the page names who and how much", async () => {
     const x = await setup();
-    for (const action of ["vendorPayments.markPaid", "vendorPayments.approve", "vendorPayments.decline", "invoiceReminders.sendReminder", "invoiceReminders.setReminders", "quotes.voidQuote", "vendorPayouts.askSetup", "footage.reinstate", "footage.dismissLatePaid", "footage.stop", "delivery.setTerm", "delivery.renewed", "crm.logEntry"]) {
+    for (const action of ["vendorPayments.markPaid", "vendorPayments.approve", "vendorPayments.decline", "invoiceReminders.sendReminder", "invoiceReminders.setReminders", "quotes.voidQuote", "vendorPayouts.askSetup", "footage.reinstate", "footage.dismissLatePaid", "footage.stop", "delivery.setTerm", "delivery.renewed", "crm.logEntry", "footage.markDone"]) {
       expect(ACTIONS[action].mode, action).toBe("ask");
     }
     // The money-area changes Claude makes directly: exactly these (none moves money, charges, refunds or reaches anyone).
     expect(Object.entries(ACTIONS).filter(([, e]) => e.area === "money" && e.mode === "change").map(([k]) => k).sort())
-      .toEqual(["footage.markDone", "footage.recordDrive", "invoices.draftFinal", "invoices.saveDraft", "quotes.answerMove", "quotes.later", "quotes.save", "quotes.stopLink"]);
+      .toEqual(["footage.recordDrive", "invoices.draftFinal", "invoices.saveDraft", "quotes.answerMove", "quotes.later", "quotes.save", "quotes.stopLink"]);
     const vendorId = await x.w.heston.mutation(api.vendors.add, { name: "Jordan Ellis", email: "jordan@ellisfilms.com", roles: ["Shooter"], rates: [], invite: false }) as Id<"vendors">;
     const bookingId = await x.w.heston.mutation(api.bookings.create, { vendorId, projectId: x.w.p, role: "Shooter", start: "2030-01-01", end: "2030-01-01", cents: 100_000, unit: "day" }) as Id<"vendorBookings">;
     const invoiceId = await x.w.t.run(async (ctx) => {
@@ -118,23 +134,24 @@ describe("Phase 8c · money through the connector", () => {
     const sends = r.data.what_goes_out.find((l: { label: string }) => l.label === "Sends").value;
     expect(sends).toMatch(/Quote email with their own link to .*evil@attacker\.example.*and a link for Heston to copy/);
     expect(r.data.what_goes_out).toEqual(expect.arrayContaining([{ label: "Terms (in the email and on the page)", value: "Pay at https://evil.example" }]));
-    // Confirmed: while it goes out from the page, Claude can't change the quote it sends.
+    // Confirmed: until it has gone out, Claude can't change the quote it sends.
     const g = await x.w.heston.query(api.confirm.get, { id: r.data.request_id });
-    expect((await x.w.heston.mutation(api.confirm.confirm, { id: r.data.request_id, hash: g.hash })).runOnPage).toEqual({ fn: "quotes:send", args: { quoteId, copyLink: true, to: "evil@attacker.example" } });
-    const edit = await x.a("site_change", { action: "quotes.save", args: { quoteId, title: "Changed", who: { name: "X", email: "x@evil.example" }, lines: [{ id: "a", description: "x", qty: 1, unitCents: 1 }], deposit: { kind: "percent", value: 50 } } });
-    expect(edit.text).toMatch(/just confirmed/);
-    // Reported back: done. Never reported: after 15 minutes it's "unknown", and the lock lifts.
-    await x.w.heston.mutation(api.confirm.finished, { id: r.data.request_id, ok: true });
-    expect((await x.a("request_status", { request_id: r.data.request_id })).data.status).toBe("done");
+    expect((await x.w.heston.mutation(api.confirm.confirm, { id: r.data.request_id, hash: g.hash })).runOnPage).toBe(true);
+    const edit = () => x.a("site_change", { action: "quotes.save", args: { quoteId, title: "Changed", who: { name: "X", email: "x@evil.example" }, lines: [{ id: "a", description: "x", qty: 1, unitCents: 1 }], deposit: { kind: "percent", value: 50 } } });
+    expect((await edit()).text).toMatch(/just confirmed uses this/);
+    // Another business's Claude learns nothing from the lock (its own records only).
+    expect((await x.b("site_change", { action: "quotes.save", args: { quoteId, title: "Theirs", lines: [], deposit: { kind: "percent", value: 50 } } })).text).not.toMatch(/confirmed/);
+    // Started, then never heard back: "unknown" on the Dashboard after 15 minutes; still locked for the hour.
+    await x.w.t.run(async (ctx) => { await ctx.db.patch(r.data.request_id as never, { claimedAt: Date.now() - 16 * 60_000 } as never); });
+    expect((await x.a("request_status", { request_id: r.data.request_id })).data.status).toBe("unknown");
+    expect((await x.w.heston.query(api.confirm.waiting, {})).find((w: { _id: string }) => w._id === r.data.request_id)).toMatchObject({ check: true });
+    expect((await edit()).text).toMatch(/just confirmed uses this/);
+    await x.w.t.run(async (ctx) => { await ctx.db.patch(r.data.request_id as never, { claimedAt: Date.now() - 61 * 60_000 } as never); });
+    expect((await edit()).error).toBe(false);
     // An invoice's page says what kind it is, and what paying a final one opens.
     const invoiceId = (await x.a("site_change", { action: "invoices.saveDraft", args: draft(x.w) })).data.result as string;
     const ir = await x.a("site_ask", { action: "invoices.send", args: { invoiceId }, heston_ok: "send it" });
     expect(ir.data.what_goes_out).toEqual(expect.arrayContaining([{ label: "Kind", value: "final invoice for the project Launch" }, { label: "When paid", value: expect.stringMatching(/opens Launch's final files/) }]));
-    const g2 = await x.w.heston.query(api.confirm.get, { id: ir.data.request_id });
-    await x.w.heston.mutation(api.confirm.confirm, { id: ir.data.request_id, hash: g2.hash });
-    await x.w.t.run(async (ctx) => { await ctx.db.patch(ir.data.request_id as Id<"pendingActions">, { doneAt: Date.now() - 16 * 60_000 }); });
-    expect((await x.a("request_status", { request_id: ir.data.request_id })).data.status).toBe("unknown");
-    expect((await x.a("site_change", { action: "invoices.saveDraft", args: { invoiceId, ...draft(x.w) } })).error).toBe(false);
     // Pay links stay on the site.
     await x.w.t.run(async (ctx) => { await ctx.db.patch(invoiceId as Id<"invoices">, { stripe: { accountId: "acct_A", invoiceId: "in_1", customerId: "cus_1", hostedUrl: "https://invoice.stripe.com/i/secret", pdfUrl: "https://pay.stripe.com/pdf", livemode: false } } as never); });
     expect(JSON.stringify((await x.a("site_read", { action: "invoices.get", args: { invoiceId } })).data)).not.toMatch(/invoice\.stripe\.com|pay\.stripe\.com/);
