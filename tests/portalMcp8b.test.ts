@@ -8,6 +8,8 @@
 //   T8b.6 deletes are always asks
 //   T8b.7 what never comes through: moving a project to another client, W-9s and bank details, bad arguments
 //   T8b.8 with its own key, every action runs as the owner: none is refused for want of access
+//   T8b.9 the 8b review's fixes: every address counted, shared boards, reopened access and clients' tasks ask first,
+//         the Confirm page says why and never gets the records themselves, releases stay out of Sign's draft tools
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { anyApi } from "convex/server";
 import type { Id } from "../convex/_generated/dataModel";
@@ -15,6 +17,7 @@ import { world } from "./payHarness";
 import { ACTIONS, argsOf } from "../convex/lib/siteActions";
 import { todayCentral } from "../convex/lib/bookings";
 import { argsFor, setup as matrixSetup } from "./matrix";
+import { peopleIn, scrub } from "../convex/lib/siteGuard";
 
 const api = anyApi;
 beforeAll(() => {
@@ -222,5 +225,52 @@ describe("Phase 8b · the site through the connector", () => {
     }
     expect(refused).toEqual([]);
     expect(worked).toBeGreaterThan(Object.keys(ACTIONS).length * 0.75);
+  });
+
+  test("T8b.9 review fixes: every address is counted; what reopens or widens access asks; Confirm says why; releases stay out", async () => {
+    // H1: any address field counts, whatever its shape; a long list says there are more.
+    expect([...peopleIn({ recipients: [{ email: "x&y@evil.example", name: "X" }, { email: "talent@ok.example" }], to: "odd@host" })].sort())
+      .toEqual(["X <x&y@evil.example>", "odd@host", "talent@ok.example"]);
+    expect(peopleIn({ guests: Array.from({ length: 2100 }, (_, i) => `p${i}@x.example`) }).has("(and more)")).toBe(true);
+    // L2: link tokens, how a vendor is paid and secrets stay out; hidden fields too.
+    expect(scrub({ token: "abc", link: "https://app.wranglerportal.com/x", payMethod: { method: "Zelle" }, address: "1 Main", nested: { tokens: ["a"] } }, ["address"]))
+      .toEqual({ token: "(on file)", link: "https://app.wranglerportal.com/x", payMethod: "(on file)", address: "(on file)", nested: { tokens: "(on file)" } });
+
+    const x = await setup();
+    // H2: adding a final file is an ask.
+    expect((await x.a("site_change", { action: "projects.addDeliveryFile", args: { projectId: x.w.p, path: "/Other/payroll.pdf", name: "payroll.pdf" } })).text).toMatch(/needs Heston/);
+    // H3: a board shared by its link: saving it is an ask, and the Confirm page says why.
+    const canvasId = await x.w.heston.mutation(api.canvas.create, { name: "Moodboard", kind: "canvas" }) as string;
+    await x.w.heston.mutation(api.canvas.setLink, { canvasId, on: true });
+    const save = await x.a("site_change", { action: "canvas.save", args: { canvasId, items: [], rev: 0 } });
+    expect(save.text).toMatch(/This board is shared.*site_ask/);
+    // M6: a link turned on asks, and the page says why it asks.
+    await x.w.heston.mutation(api.canvas.setLink, { canvasId, on: false });
+    const on = await x.a("site_ask", { action: "canvas.setLink", args: { canvasId, on: true }, heston_ok: "turn the link on" });
+    expect(on.error).toBe(false);
+    expect(on.data.what_goes_out).toEqual(expect.arrayContaining([{ label: "Why it asks", value: expect.stringMatching(/anyone with it/) }, { label: "Details", value: expect.stringMatching(/canvasId: Moodboard/) }]));
+    const page = await x.w.heston.query(api.confirm.get, { id: on.data.request_id });
+    expect(page.preview.bind).toBeUndefined(); // L6: the records themselves never go to the page
+    expect(page.preview.open).toBe(`/creative/canvas/${canvasId}`);
+    // M1–M3: restoring a vendor, re-ticking someone, letting an outsider edit, reopening a delivered project: all asks.
+    const vendorId = await x.w.heston.mutation(api.vendors.add, { name: "Jordan Ellis", email: "jordan@ellisfilms.com", roles: ["Shooter"], rates: [], invite: false }) as string;
+    await x.w.heston.mutation(api.vendors.archive, { vendorId, archived: true });
+    expect((await x.a("site_change", { action: "vendors.archive", args: { vendorId, archived: false } })).text).toMatch(/gives them their portal back/);
+    expect((await x.a("site_change", { action: "callSheets.toggle", args: { callSheetId: "x", personId: "p", on: true } })).text).toMatch(/back on a call sheet|args/);
+    expect((await x.a("site_change", { action: "canvas.setRole", args: { personId: "x", role: "edit" } })).text).toMatch(/edit the board|args/);
+    expect((await x.a("site_change", { action: "briefings.setLinkExpiry", args: { briefingId: "x", days: null } })).text).toMatch(/needs Heston|args/);
+    await x.w.t.run(async (ctx) => { await ctx.db.patch(x.w.p, { stage: "delivery" }); });
+    expect((await x.a("site_change", { action: "projects.setStage", args: { projectId: x.w.p, stage: "polish", post: false } })).text).toMatch(/opens it again/);
+    // M4: a task the client sees: editing it asks.
+    const taskId = await x.w.heston.mutation(api.work.create, { title: "Send logo files", audience: "client", home: { type: "project", id: x.w.p } }) as string;
+    expect((await x.a("site_change", { action: "work.update", args: { taskId, title: "Pay at evil.example" } })).text).toMatch(/shows in the client's/);
+    expect((await x.w.t.run((ctx) => ctx.db.get(taskId as Id<"tasks">)))!.title).toBe("Send logo files");
+    // L1: built-in names are not fields.
+    expect((await x.a("site_change", { action: "shotLists.create", args: { projectId: x.w.p, constructor: 1 } })).text).toMatch(/constructor isn't one of/);
+    // L4: a release's page can't be read or changed through Sign's draft tools.
+    const buildId = await x.w.heston.mutation(api.builder.createBuild, { blank: true }) as Id<"wsBuilds">;
+    await x.w.t.run(async (ctx) => { await ctx.db.insert("releases", { businessId: x.w.A, kind: "talent", name: "Riley", email: "riley@x.example", shotIds: [], buildId, createdAt: 0, updatedAt: 0 } as never); });
+    expect((await x.a("get_draft", { draft: buildId })).text).toMatch(/signed in person/);
+    expect((await x.a("update_draft", { draft: buildId, title: "Changed" })).text).toMatch(/signed in person/);
   });
 });

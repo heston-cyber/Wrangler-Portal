@@ -656,9 +656,12 @@ export const findBuild = internalQuery({
     if (!r) return { ok: false, error: "Pass the draft: its draft_id or words from its title." };
     const id = ctx.db.normalizeId("wsBuilds", r);
     const got = id ? await ctx.db.get(id) : null;
+    // Phase 8b review L4: a release's page is signed in person on the shoot day; the connectors never change or send it.
+    const releaseBuilds = new Set((await ctx.db.query("releases").collect()).map((x) => x.buildId as string));
+    if (got && releaseBuilds.has(got._id)) return { ok: false, error: "That's a release: it's signed in person on the shoot day, and isn't changed through Claude." };
     if (got && !isSide(got)) return { ok: true, buildId: got._id };
     const words = r.toLowerCase().split(/\s+/);
-    const rows = (await ctx.db.query("wsBuilds").withIndex("by_updated").order("desc").take(300)).filter((b) => !isSide(b) && words.every((w) => b.title.toLowerCase().includes(w)));
+    const rows = (await ctx.db.query("wsBuilds").withIndex("by_updated").order("desc").take(300)).filter((b) => !isSide(b) && !releaseBuilds.has(b._id) && words.every((w) => b.title.toLowerCase().includes(w)));
     if (rows.length === 1) return { ok: true, buildId: rows[0]._id };
     if (!rows.length) return { ok: false, error: `No draft matches "${r}". list_drafts shows them.` };
     return { ok: false, error: `${rows.length} drafts match "${r}"; pass a draft_id.`, candidates: rows.slice(0, 10).map((b) => ({ draft_id: b._id, title: b.title })) };

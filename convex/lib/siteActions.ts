@@ -28,6 +28,7 @@ import * as work from "../work";
 import * as creative from "../creative";
 import * as canvas from "../canvas";
 import * as delivery from "../delivery";
+import type { QueryCtx } from "../_generated/server";
 
 export type Mode = "read" | "change" | "ask" | "delete";
 export type Area = "projects" | "production" | "crew" | "work" | "creative" | "delivery";
@@ -38,10 +39,34 @@ export type Entry = {
   mode: Mode; area: Area; does: string; fn: SiteFn;
   /** For a change: when these arguments make it reach someone, it's an ask (the reason, shown to Claude). */
   askWhen?: (a: Args) => string | null;
+  /** For a change: when the record as it is now makes it reach someone (a shared board, a client's task), it's an ask. */
+  outside?: (ctx: QueryCtx, a: Args) => Promise<string | null>;
+  /** Fields of the answer that never leave (beyond the W-9, tax, bank and secret ones every answer drops). */
+  hide?: string[];
   /** Never through the connector with these arguments (the reason). */
   refuse?: (a: Args) => string | null;
   /** Shown on the Confirm page: what this does beyond what's listed as sent. */
   note?: string;
+  /** More lines for the Confirm page, read live (which files a delivery releases, which tasks a template makes). */
+  shows?: (ctx: QueryCtx, a: Args) => Promise<Array<{ label: string; value: string }>>;
+};
+
+const get = async (ctx: QueryCtx, table: string, id: unknown) => {
+  if (typeof id !== "string") return null;
+  const nid = ctx.db.normalizeId(table as never, id);
+  return nid ? ((await ctx.db.get(nid)) as Record<string, any> | null) : null;
+};
+/** Review H3: a board with people on it or its view link on is seen outside the business. */
+const sharedBoard = async (ctx: QueryCtx, a: Args) => {
+  const c = await get(ctx, "canvases", a.canvasId);
+  if (!c) return null;
+  const people = (await ctx.db.query("canvasPeople").collect()).filter((x) => x.canvasId === c._id);
+  return people.length || c.link?.on ? "This board is shared: what's saved on it shows to the people it's shared with at once." : null;
+};
+/** Review M4 (built as the build suggests, Heston to confirm): a task the client or a vendor sees is a message to them. */
+const theirTask = async (ctx: QueryCtx, a: Args) => {
+  const t = await get(ctx, "tasks", a.taskId);
+  return t && (t.audience === "client" || t.audience === "vendor" || t.vendorId) ? "This task shows in the client's or a vendor's portal, so changing it reaches them." : null;
 };
 
 const fn = (x: unknown) => x as SiteFn;
@@ -69,12 +94,22 @@ export const ACTIONS: Record<string, Entry> = {
   "library.renameProject": c("projects", library.renameProject, "Rename a project or change its job number", {
     refuse: (a) => (a.client !== undefined ? MOVE_CLIENT : null),
   }),
-  "projects.setStage": c("projects", projects.setStage, "Move a project to a stage (post: false; posting it to the client's Inbox is an ask)"),
+  "projects.setStage": c("projects", projects.setStage, "Move a project to a stage (posting it to the client's Inbox is an ask)", {
+    // Review M3: a project out of Delivery is open again, so its call-sheet guests can sign in again.
+    outside: async (ctx, a) => ((await get(ctx, "projects", a.projectId))?.stage === "delivery" && a.stage !== "delivery" ? "Moving a project out of Delivery opens it again: its call-sheet guests can sign in again." : null),
+  }),
   "projects.setNextStep": c("projects", projects.setNextStep, "Set a project's next step"),
   "projects.setKeyDates": c("projects", projects.setKeyDates, "Set a project's key dates"),
   "projects.setRounds": c("projects", projects.setRounds, "Set how many revision rounds a project includes"),
-  "projects.addDeliveryFile": c("projects", projects.addDeliveryFile, "Add a final file to a project's delivery (still locked)"),
-  "projects.setDelivery": ask("projects", projects.setDelivery, "Unlock (or lock) a project's final files for the client", "Unlocking lets the client's people download the final files."),
+  "projects.addDeliveryFile": ask("projects", projects.addDeliveryFile, "Add a final file to a project's delivery", "If the project's final files are unlocked, the client's people can download it at once."),
+  "projects.setDelivery": ask("projects", projects.setDelivery, "Unlock (or lock) a project's final files for the client", "Unlocking lets the client's people download the final files.", {
+    shows: async (ctx, a) => {
+      const p = await get(ctx, "projects", a.projectId);
+      if (!p) return [];
+      const files = (await ctx.db.query("deliveryFiles").collect()).filter((f) => f.projectId === p._id);
+      return [{ label: "Final files", value: files.length ? files.map((f) => String(f.name ?? "a file")).join("\n").slice(0, 3000) : "None yet" }];
+    },
+  }),
   "projects.removeDeliveryFile": del("projects", projects.removeDeliveryFile, "Take a file off a project's delivery"),
   "library.deleteProject": del("projects", library.deleteProject, "Delete a project with its videos and every version from Review", "Its videos and versions leave Review for good. Files in Dropbox stay."),
 
@@ -95,14 +130,28 @@ export const ACTIONS: Record<string, Entry> = {
   "callSheets.create": c("production", callSheets.create, "Start a call sheet for a shoot day"),
   "callSheets.saveAnswers": c("production", callSheets.saveAnswers, "Save a call sheet's answers"),
   "callSheets.make": c("production", callSheets.make, "Build the call sheet's page from its answers"),
-  "callSheets.toggle": c("production", callSheets.toggle, "Turn a person on or off a call sheet's list (nothing is sent)"),
+  "callSheets.toggle": c("production", callSheets.toggle, "Turn a person on or off a call sheet's list", { askWhen: (a) => (a.on === true ? "Turning someone back on a call sheet can give them its page again." : null) }),
   "callSheets.addGuest": c("production", callSheets.addGuest, "Add a guest (talent) to a call sheet (nothing is sent until the sheet is)"),
   "callSheets.removeGuest": c("production", callSheets.removeGuest, "Take a guest off a call sheet"),
   "callSheets.endGuest": c("production", callSheets.endGuest, "End a guest's access to a call sheet"),
   "callSheets.restoreGuest": c("production", callSheets.restoreGuest, "Give a guest their access back"),
   "callSheets.refreshWeather": c("production", callSheets.refreshWeather, "Refresh a call sheet's forecast"),
-  "callSheets.send": ask("production", callSheets.send, "Send a call sheet", "The people ticked get the call sheet."),
-  "callSheets.sendUpdate": ask("production", callSheets.sendUpdate, "Send a call sheet update", "Everyone it went to gets the update."),
+  "callSheets.send": ask("production", callSheets.send, "Send a call sheet", "The people ticked get the call sheet.", {
+    // Review M5: what goes out is the sheet as built now; its last change is shown, so an edit after the ask is caught.
+    shows: async (ctx, a) => {
+      const cs = await get(ctx, "callSheets", a.callSheetId);
+      const b = cs?.buildId ? await get(ctx, "wsBuilds", cs.buildId) : null;
+      return b ? [{ label: "The call sheet", value: `${String(b.title ?? "Call sheet")}, last changed ${new Date(Number(b.updatedAt ?? 0)).toISOString()} (open it to read it)` }] : [];
+    },
+  }),
+  "callSheets.sendUpdate": ask("production", callSheets.sendUpdate, "Send a call sheet update", "Everyone it went to gets the update.", {
+    // Review M5: what goes out is the sheet as built now; its last change is shown, so an edit after the ask is caught.
+    shows: async (ctx, a) => {
+      const cs = await get(ctx, "callSheets", a.callSheetId);
+      const b = cs?.buildId ? await get(ctx, "wsBuilds", cs.buildId) : null;
+      return b ? [{ label: "The call sheet", value: `${String(b.title ?? "Call sheet")}, last changed ${new Date(Number(b.updatedAt ?? 0)).toISOString()} (open it to read it)` }] : [];
+    },
+  }),
   "callSheets.remind": ask("production", callSheets.remind, "Remind people to open a call sheet", "Those who haven't opened it are reminded."),
   "callSheets.deleteDraft": del("production", callSheets.deleteDraft, "Delete a call sheet that hasn't been sent"),
   "shotLists.all": r("production", shotLists.all, "Every shot list"),
@@ -166,11 +215,11 @@ export const ACTIONS: Record<string, Entry> = {
   "places.remove": del("production", places.remove, "Delete a location"),
 
   // ---- crew (vendors, bookings, briefings) ----
-  "vendors.list": r("crew", vendors.list, "Saved vendors (crew)"),
-  "vendors.get": r("crew", vendors.get, "One vendor: roles, rates, gear, bookings (whether a W-9 is on file, never the W-9)"),
-  "vendors.add": c("crew", vendors.add, "Add a vendor (invite: false; inviting them is an ask)", { askWhen: (a) => (a.invite === true ? "Inviting a vendor emails them." : null) }),
+  "vendors.list": { ...r("crew", vendors.list, "Saved vendors (crew)"), hide: ["address"] },
+  "vendors.get": { ...r("crew", vendors.get, "One vendor: roles, rates, gear, bookings (whether a W-9 is on file; never the W-9, the 1099 address or how they're paid)"), hide: ["address"] },
+  "vendors.add": c("crew", vendors.add, "Add a vendor (inviting them is an ask)", { askWhen: (a) => (a.invite === true ? "Inviting a vendor emails them." : null) }),
   "vendors.update": c("crew", vendors.update, "Edit a vendor's details"),
-  "vendors.archive": c("crew", vendors.archive, "Archive or restore a vendor"),
+  "vendors.archive": c("crew", vendors.archive, "Archive or restore a vendor", { askWhen: (a) => (a.archived === false ? "Restoring a vendor gives them their portal back." : null) }),
   "vendors.invite": ask("crew", vendors.invite, "Invite a vendor to their portal", "The vendor gets an invite to their portal."),
   "bookings.form": r("crew", bookings.form, "What a new booking can use: vendors, roles, rates, projects"),
   "bookings.list": r("crew", bookings.list, "Every booking"),
@@ -182,12 +231,13 @@ export const ACTIONS: Record<string, Entry> = {
   "briefings.templates": r("crew", briefings.templates, "Briefing templates"),
   "briefings.list": r("crew", briefings.list, "Every briefing"),
   "briefings.forVendor": r("crew", briefings.forVendor, "A vendor's briefings"),
-  "briefings.get": r("crew", briefings.get, "One briefing: who it went to, opens, read (its text: get_draft with its buildId)"),
-  "briefings.create": c("crew", briefings.create, "Start a briefing (write it with update_draft on its buildId)"),
+  "briefings.get": r("crew", briefings.get, "One briefing: who it went to, opens, read"),
+  "briefings.create": c("crew", briefings.create, "Start a briefing (its text is written on the site for now)"),
   "briefings.setDetails": c("crew", briefings.setDetails, "Set a briefing's project or details"),
   "briefings.copy": c("crew", briefings.copy, "Copy a briefing"),
-  "briefings.setLinkOff": c("crew", briefings.setLinkOff, "Turn a briefing's links off (turning them back on is an ask)", { askWhen: (a) => (a.off === false ? "Turning the links back on lets everyone who has one read it again." : null) }),
-  "briefings.setLinkExpiry": c("crew", briefings.setLinkExpiry, "Change when a briefing's links stop working"),
+  "briefings.setLinkOff": c("crew", briefings.setLinkOff, "Turn a briefing's links off or on (on is an ask)", { askWhen: (a) => (a.off === false ? "Turning the links back on lets everyone who has one read it again." : null) }),
+  // Review M2: a later (or no) expiry can open links that had stopped working.
+  "briefings.setLinkExpiry": ask("crew", briefings.setLinkExpiry, "Change when a briefing's links stop working", "A later date, or none, lets everyone who has a link read it again."),
   "briefings.deleteDraft": del("crew", briefings.deleteDraft, "Delete a briefing that hasn't been sent"),
 
   // ---- work (tasks) ----
@@ -199,15 +249,21 @@ export const ACTIONS: Record<string, Entry> = {
   "work.lists": r("work", work.lists, "To-do lists"),
   "work.templates": r("work", work.templates, "Task templates"),
   "work.create": c("work", work.create, "Make a task (one for the client or a vendor is an ask)", { askWhen: reaches }),
-  "work.update": c("work", work.update, "Edit a task (giving it to the client or a vendor is an ask)", { askWhen: reaches }),
-  "work.done": c("work", work.done, "Mark a task done or not"),
-  "work.place": c("work", work.place, "Move a task on the board"),
+  "work.update": c("work", work.update, "Edit a task (one the client or a vendor sees is an ask)", { askWhen: reaches, outside: theirTask }),
+  "work.done": c("work", work.done, "Mark a task done or not", { outside: theirTask }),
+  "work.place": c("work", work.place, "Move a task on the board", { outside: theirTask }),
   "work.createList": c("work", work.createList, "Make a to-do list"),
   "work.saveList": c("work", work.saveList, "Save a to-do list"),
   "work.duplicateList": c("work", work.duplicateList, "Duplicate a to-do list"),
   "work.itemToTask": c("work", work.itemToTask, "Turn a to-do item into a task"),
   "work.saveTemplate": c("work", work.saveTemplate, "Save a task template"),
-  "work.useTemplate": ask("work", work.useTemplate, "Make a project's tasks from a template", "A template's tasks for the client or a vendor show in their portal."),
+  "work.useTemplate": ask("work", work.useTemplate, "Make a project's tasks from a template", "A template's tasks for the client or a vendor show in their portal.", {
+    shows: async (ctx, a) => {
+      const t = await get(ctx, "taskTemplates", a.templateId);
+      const items = Array.isArray(t?.items) ? (t!.items as Array<{ title?: string; audience?: string }>) : [];
+      return [{ label: "Tasks", value: items.length ? items.map((x) => `${x.title ?? "A task"}${x.audience && x.audience !== "team" ? ` (for the ${x.audience})` : ""}`).join("\n").slice(0, 3000) : "None" }];
+    },
+  }),
   "work.remove": del("work", work.remove, "Delete a task"),
   "work.removeList": del("work", work.removeList, "Delete a to-do list"),
   "work.removeTemplate": del("work", work.removeTemplate, "Delete a task template"),
@@ -215,29 +271,29 @@ export const ACTIONS: Record<string, Entry> = {
   // ---- creative planning ----
   "creative.overview": r("creative", creative.overview, "Creative planning overview: recent work and where it's attached"),
   "creative.docs": r("creative", creative.docs, "Creative docs (treatments, scripts, interview questions, briefs)"),
-  "creative.doc": r("creative", creative.doc, "One creative doc (its text: get_draft with its buildId)"),
+  "creative.doc": r("creative", creative.doc, "One creative doc (its text is read and written on the site for now)"),
   "creative.kits": r("creative", creative.kits, "Brand kits"),
   "creative.kit": r("creative", creative.kit, "One brand kit"),
-  "creative.newDoc": c("creative", creative.newDoc, "Make a creative doc (write it with update_draft on its buildId)"),
+  "creative.newDoc": c("creative", creative.newDoc, "Make a creative doc (its text is written on the site for now)"),
   "creative.startBriefing": c("creative", creative.startBriefing, "Start a briefing from a creative doc"),
   "creative.newKit": c("creative", creative.newKit, "Make a brand kit"),
   "creative.renameKit": c("creative", creative.renameKit, "Rename a brand kit"),
-  "creative.shareOn": c("creative", creative.shareOn, "Turn a creative doc's view link off (turning it on is an ask)", { askWhen: (a) => (a.on === true ? "Turning the link on lets anyone with it read the doc." : null) }),
-  "creative.shareKit": c("creative", creative.shareKit, "Turn a brand kit's view link off (turning it on is an ask)", { askWhen: (a) => (a.on === true ? "Turning the link on lets anyone with it see the kit." : null) }),
+  "creative.shareOn": c("creative", creative.shareOn, "Turn a creative doc's view link off or on (on is an ask)", { askWhen: (a) => (a.on === true ? "Turning the link on lets anyone with it read the doc." : null) }),
+  "creative.shareKit": c("creative", creative.shareKit, "Turn a brand kit's view link off or on (on is an ask)", { askWhen: (a) => (a.on === true ? "Turning the link on lets anyone with it see the kit." : null) }),
   "creative.removeDoc": del("creative", creative.removeDoc, "Delete a creative doc"),
   "creative.removeKit": del("creative", creative.removeKit, "Delete a brand kit"),
   "canvas.list": r("creative", canvas.list, "Canvases and mood boards"),
   "canvas.get": r("creative", canvas.get, "One canvas with everything on it"),
   "canvas.shareChoices": r("creative", canvas.shareChoices, "Who a canvas can be shared with"),
   "canvas.create": c("creative", canvas.create, "Make a canvas or mood board"),
-  "canvas.save": c("creative", canvas.save, "Save a canvas's board"),
+  "canvas.save": c("creative", canvas.save, "Save a canvas's board (a shared board is an ask)", { outside: sharedBoard }),
   "canvas.rename": c("creative", canvas.rename, "Rename a canvas"),
   "canvas.duplicate": c("creative", canvas.duplicate, "Duplicate a canvas"),
-  "canvas.setRole": c("creative", canvas.setRole, "Change what a person a canvas is shared with can do"),
+  "canvas.setRole": c("creative", canvas.setRole, "Change what a person a canvas is shared with can do (letting them edit is an ask)", { askWhen: (a) => (a.role === "edit" ? "Letting someone outside the business edit the board." : null) }),
   "canvas.removePerson": c("creative", canvas.removePerson, "Stop sharing a canvas with a person"),
   "canvas.stopSharing": c("creative", canvas.stopSharing, "Stop sharing a canvas with everyone"),
   "canvas.addPerson": ask("creative", canvas.addPerson, "Share a canvas with a person", "They get their own link to the canvas (Heston copies it to them)."),
-  "canvas.setLink": c("creative", canvas.setLink, "Turn a canvas's view link off (turning it on is an ask)", { askWhen: (a) => (a.on === true ? "Turning the link on lets anyone with it see the canvas." : null) }),
+  "canvas.setLink": c("creative", canvas.setLink, "Turn a canvas's view link off or on (on is an ask)", { askWhen: (a) => (a.on === true ? "Turning the link on lets anyone with it see the canvas." : null) }),
   "canvas.remove": del("creative", canvas.remove, "Delete a canvas"),
 
   // ---- delivery ----
@@ -248,9 +304,15 @@ export const ACTIONS: Record<string, Entry> = {
   "delivery.editItem": c("delivery", delivery.editItem, "Edit a folder or album"),
   "delivery.addFiles": c("delivery", delivery.addFiles, "Add files to a folder or album (not published yet)"),
   "delivery.editAsset": c("delivery", delivery.editAsset, "Edit a delivered file's details"),
-  "delivery.publish": ask("delivery", delivery.publish, "Publish a delivery's changes", "The project's people see the new delivery; with tell: true they're emailed too."),
-  "delivery.makeLink": ask("delivery", delivery.makeLink, "Make a share link to a delivery", "Anyone with the link can open it."),
-  "delivery.setLink": c("delivery", delivery.setLink, "Turn a delivery link off or change its downloads (turning it on is an ask)", { askWhen: (a) => (a.on === true ? "Turning the link on lets anyone with it open the delivery." : null) }),
+  "delivery.publish": ask("delivery", delivery.publish, "Publish a delivery's changes", "The project's people see the new delivery; with tell: true they're emailed too.", {
+    shows: async (ctx, a) => {
+      const d = await get(ctx, "deliveries", a.deliveryId);
+      if (!d) return [];
+      const items = (await ctx.db.query("deliveryItems").collect()).filter((x) => x.deliveryId === d._id);
+      const assets = (await ctx.db.query("deliveryAssets").collect()).filter((x) => items.some((i) => i._id === x.itemId));
+      return [{ label: "What's in it", value: items.map((i) => `${String(i.title ?? "A folder")} (${assets.filter((x) => x.itemId === i._id).length} files)`).join("\n").slice(0, 3000) || "Nothing yet" }];
+    },
+  }),
   "delivery.removeItem": del("delivery", delivery.removeItem, "Delete a folder or album from a delivery", "It leaves the delivery. Files in Dropbox stay."),
   "delivery.removeAsset": del("delivery", delivery.removeAsset, "Delete a file from a delivery", "It leaves the delivery. The file in Dropbox stays."),
 };
@@ -260,8 +322,8 @@ export const AREAS: Record<Area, string> = {
   production: "Production: shoots, call sheets, shot lists, releases (prepared; signed in person), gear, packing lists, locations",
   crew: "Crew: vendors, bookings, briefings",
   work: "Work: tasks, to-do lists, templates",
-  creative: "Creative planning: creative docs, canvases and mood boards, brand kits",
-  delivery: "Delivery: folders, albums, files, publishing, links",
+  creative: "Creative planning: creative docs (their text on the site for now), canvases and mood boards, brand kits",
+  delivery: "Delivery: folders, albums, files, publishing",
 };
 
 const argsJson = new Map<string, unknown>();

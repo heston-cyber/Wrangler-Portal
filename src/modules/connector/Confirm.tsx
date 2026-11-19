@@ -36,8 +36,8 @@ export function ConfirmPage({ id }: { id: string }) {
               <div className="prow"><span className="pl"><b>{r.preview?.title ?? r.summary}</b></span><span className="pr"><StatusChip tone={STATUS[r.status]?.tone ?? "neutral"}>{STATUS[r.status]?.label ?? r.status}</StatusChip></span></div>
               {r.preview && <>
                 <p className="caption secondary" style={{ margin: "4px 0 0" }}>Exactly what goes out:</p>
-                {r.preview.lines.map((l) => (
-                  <div className="prow" key={l.label}><span className="pl secondary">{l.label}</span><span className="pr" style={{ whiteSpace: "pre-wrap", textAlign: "left", maxWidth: "70%" }}>{l.value}</span></div>
+                {r.preview.lines.map((l, i) => (
+                  <div className="prow" key={`${i}:${l.label}`}><span className="pl secondary">{l.label}</span><span className="pr" style={{ whiteSpace: "pre-wrap", textAlign: "left", maxWidth: "70%" }}>{l.value}</span></div>
                 ))}
                 {r.preview.open && <div className="prow"><span className="pl secondary">Check it on the site</span><span className="pr"><a {...linkProps(r.preview.open)}>Open it</a></span></div>}
               </>}

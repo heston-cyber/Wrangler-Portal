@@ -10,6 +10,7 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import { allowedEmails } from "./owners";
 import { defaultBusiness } from "./business";
+import { portalPeople } from "../projects";
 
 // ---------------- what a run sends ----------------
 
@@ -38,18 +39,29 @@ const REACHING_TABLES: Record<string, string> = {
 
 const EMAIL = /^[A-Za-z0-9._%+'-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
 
-/** The people a job's arguments or a row name: "Name <email>" where both are there, else the email. */
-export function peopleIn(x: unknown, out = new Set<string>(), depth = 0): Set<string> {
-  if (depth > 6 || out.size >= 60 || x === null || x === undefined) return out;
-  if (typeof x === "string") { if (EMAIL.test(x.trim())) out.add(x.trim().toLowerCase()); return out; }
-  if (Array.isArray(x)) { for (const y of x) peopleIn(y, out, depth + 1); return out; }
+/** The most people one line lists; past it the line says how many more, so it still can't be confirmed unseen. */
+const MAX_PEOPLE = 2000;
+const ADDRESS_KEYS = /^(email|emails|to|cc|bcc|guests|recipients|attendees|address)$/i;
+
+/** The people a job's arguments or a row name: "Name <email>" where both are there, else the address. Review H1:
+ *  every value under an address field counts, whatever its shape (the site accepts looser addresses than a strict
+ *  pattern would), and loose text that looks like an address counts too. */
+export function peopleIn(x: unknown, out = new Set<string>(), depth = 0, underAddress = false): Set<string> {
+  if (depth > 8 || x === null || x === undefined) return out;
+  const add = (v: string) => { if (out.size < MAX_PEOPLE) out.add(v); else out.add("(and more)"); };
+  if (typeof x === "string") {
+    const t = x.trim();
+    if (t && (underAddress ? t.includes("@") : /^[^\s@:]+@[^\s@:]+\.[^\s@:]+$/.test(t))) add(t.toLowerCase());
+    return out;
+  }
+  if (Array.isArray(x)) { for (const y of x) peopleIn(y, out, depth + 1, underAddress); return out; }
   if (typeof x === "object") {
     const o = x as Record<string, unknown>;
-    if (typeof o.email === "string" && EMAIL.test(o.email.trim())) {
+    if (typeof o.email === "string" && o.email.trim()) {
       const e = o.email.trim().toLowerCase();
-      out.add(typeof o.name === "string" && o.name.trim() ? `${o.name.trim().slice(0, 60)} <${e}>` : e);
+      add(typeof o.name === "string" && o.name.trim() ? `${o.name.trim().slice(0, 60)} <${e}>` : e);
     }
-    for (const [k, y] of Object.entries(o)) if (k !== "email") peopleIn(y, out, depth + 1);
+    for (const [k, y] of Object.entries(o)) if (k !== "email") peopleIn(y, out, depth + 1, ADDRESS_KEYS.test(k));
   }
   return out;
 }
@@ -69,6 +81,19 @@ export const sameReach = (a: Outbound[], b: Outbound[]) => JSON.stringify(summar
 /** Records a job names only by id that hold the people it goes to (a booking's vendor, a vendor, a client's person). */
 const PEOPLE_TABLES = ["vendors", "vendorBookings", "clientPeople", "users", "memberships", "invites", "teamInvites", "canvasPeople", "guestPasses"] as const;
 
+/** Who a shoot's Google event invites (as calendar.eventFor works it out). */
+async function shootInvitees(ctx: MutationCtx, shootId: string): Promise<string[]> {
+  const sid = ctx.db.normalizeId("shoots", shootId);
+  const s = sid ? await ctx.db.get(sid) : null;
+  const c = await ctx.db.query("calendars").first();
+  const p = s?.projectId ? await ctx.db.get(s.projectId) : null;
+  if (!s || !c?.calendarId || s.status !== "scheduled" || !s.calendar || !p) return [];
+  const out = new Set<string>();
+  if (c.inviteVendors) for (const m of s.crew) if (m.vendorId) { const vd = await ctx.db.get(m.vendorId); if (vd?.email) out.add(vd.email.toLowerCase()); }
+  if (c.inviteClient && !s.clientHold) for (const x of await portalPeople(ctx, p)) out.add(x.email.toLowerCase());
+  return [...out];
+}
+
 export function recording<C extends MutationCtx>(ctx: C, seen: Outbound[]): C {
   const note = (what: string, payload: unknown) => seen.push({ what, to: [...peopleIn(payload)] });
   const idsIn = (x: unknown, out: string[] = [], depth = 0): string[] => {
@@ -82,6 +107,14 @@ export function recording<C extends MutationCtx>(ctx: C, seen: Outbound[]): C {
     let name = "";
     try { name = getFunctionName(f as never); } catch { name = "a job"; }
     if (QUIET_JOBS.has(name)) return;
+    // Review M5: a shoot's calendar sync with invites works out its guests later; work them out now, as it will.
+    if (name === "calendar:syncShoot") {
+      const sa = a as { shootId?: string; sendUpdates?: string };
+      if (sa?.sendUpdates !== "all" || !sa.shootId) return;
+      const to = await shootInvitees(ctx, sa.shootId);
+      if (to.length) seen.push({ what: "Calendar invite from Google", to });
+      return;
+    }
     const people = peopleIn(a);
     for (const id of idsIn(a)) for (const t of PEOPLE_TABLES) {
       if (!ctx.db.normalizeId(t, id)) continue;
@@ -149,7 +182,9 @@ export async function ownerUserOf(ctx: QueryCtx | MutationCtx, biz: Id<"business
 /** A context signed in as that login, marked as Claude's (Activity lines say "Claude"). No session: nothing per-device. */
 export function asUser<C extends QueryCtx | MutationCtx>(ctx: C, userId: Id<"users">): C {
   const identity = { subject: userId as string, issuer: "wrangler-portal-connector", tokenIdentifier: `wrangler-portal-connector|${userId}` };
-  return { ...ctx, auth: { ...ctx.auth, getUserIdentity: async () => identity }, viaClaude: true } as C;
+  // Review L7: a nested run would lose this sign-in and the guard, so none is allowed.
+  const no = async () => { throw new ConvexError("That can't be done through the connector."); };
+  return { ...ctx, auth: { ...ctx.auth, getUserIdentity: async () => identity }, viaClaude: true, runQuery: no, runMutation: no, runAction: no } as C;
 }
 
 // ---------------- arguments, checked as Convex would ----------------
@@ -179,7 +214,7 @@ export function argsProblem(v: VJson, x: unknown, at = "args", isId?: (table: st
     case "object": {
       if (!x || typeof x !== "object" || Array.isArray(x)) return bad("an object");
       const fields = v.value as Record<string, { fieldType: VJson; optional: boolean }>;
-      for (const k of Object.keys(x)) if (!(k in fields)) return `${at}.${k} isn't one of: ${Object.keys(fields).join(", ") || "(none)"}`;
+      for (const k of Object.keys(x)) if (!Object.prototype.hasOwnProperty.call(fields, k)) return `${at}.${k} isn't one of: ${Object.keys(fields).join(", ") || "(none)"}`;
       for (const [k, f] of Object.entries(fields)) {
         const y = (x as Record<string, unknown>)[k];
         if (y === undefined) { if (!f.optional) return `${at}.${k} is needed`; continue; }
@@ -191,6 +226,8 @@ export function argsProblem(v: VJson, x: unknown, at = "args", isId?: (table: st
     case "record": {
       if (!x || typeof x !== "object" || Array.isArray(x)) return bad("an object");
       for (const [k, y] of Object.entries(x)) {
+        const kp = v.keys ? argsProblem(v.keys, k, `${at} key ${k}`, isId) : null;
+        if (kp) return kp;
         const p = argsProblem(v.values!.fieldType, y, `${at}.${k}`, isId);
         if (p) return p;
       }
@@ -245,16 +282,18 @@ export function toSchema(v: VJson): Record<string, unknown> {
 // ---------------- what leaves through the connector ----------------
 
 /** W-9s, tax ID numbers, bank details, passwords, keys and secret hashes never leave: only whether one is on file. */
-const SECRET_KEY = /w-?9|taxid|tax_id|^tin$|ssn|^ein$|bank|routing|iban|swift|accountnumber|account_number|last4|password|secret|apikey|api_key|codehash|keyhash|pinhash|^hash$|refreshtoken|accesstoken|stripeaccount|payout/i;
+// Review L2: link tokens (a person's own canvas link, a doc's share token) and how a vendor is paid stay out too; the
+// pages' own links (url, link) still come through, for an email Heston sends himself.
+const SECRET_KEY = /^token$|tokens$|paymethod|address1099|w9address|taxaddress|w-?9|taxid|tax_id|^tin$|ssn|^ein$|bank|routing|iban|swift|accountnumber|account_number|last4|password|secret|apikey|api_key|codehash|keyhash|pinhash|^hash$|refreshtoken|accesstoken|stripeaccount|payout/i;
 
-export function scrub(x: unknown, depth = 0): unknown {
+export function scrub(x: unknown, hide: string[] = [], depth = 0): unknown {
   if (depth > 30) return "(too deep)";
-  if (Array.isArray(x)) return x.map((y) => scrub(y, depth + 1));
+  if (Array.isArray(x)) return x.map((y) => scrub(y, hide, depth + 1));
   if (x && typeof x === "object") {
     const out: Record<string, unknown> = {};
     for (const [k, y] of Object.entries(x as Record<string, unknown>)) {
-      if (SECRET_KEY.test(k)) out[k] = y === null || y === undefined || y === false || y === "" ? "(none)" : "(on file)";
-      else out[k] = scrub(y, depth + 1);
+      if (SECRET_KEY.test(k) || hide.includes(k)) out[k] = y === null || y === undefined || y === false || y === "" ? "(none)" : "(on file)";
+      else out[k] = scrub(y, hide, depth + 1);
     }
     return out;
   }

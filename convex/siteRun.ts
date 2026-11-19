@@ -37,7 +37,7 @@ export const read = rawInternalQuery({
   args: runArgs,
   handler: async (ctx, x) => {
     const { act, a, as } = await prepare(ctx, x.asBusiness, x.action, x.args, (e) => (e.mode !== "read" || !e.fn.isQuery ? `${x.action} changes things: use site_change or site_ask.` : null));
-    return scrub(await act.fn._handler(as, a));
+    return scrub(await act.fn._handler(as, a), act.hide);
   },
 });
 
@@ -49,12 +49,12 @@ export const change = rawInternalMutation({
   args: runArgs,
   handler: async (ctx, x) => {
     const { act, a, as } = await prepare(ctx, x.asBusiness, x.action, x.args, (e) => (e.mode !== "change" || !e.fn.isMutation ? (e.mode === "read" ? `${x.action} only reads: use site_read.` : `${x.action} needs Heston: ask him, then site_ask.`) : null));
-    const why = act.askWhen?.(a);
+    const why = act.askWhen?.(a) ?? (act.outside ? await act.outside(as, a) : null);
     if (why) throw new ConvexError(`${why} Ask Heston, then site_ask.`);
     const seen: Outbound[] = [];
     const result = await act.fn._handler(recording(as as MutationCtx, seen), a);
     if (seen.length) throw new ConvexError({ blocked: true, outbound: summarize(seen) });
-    return scrub(result ?? null);
+    return scrub(result ?? null, act.hide);
   },
 });
 
@@ -65,7 +65,8 @@ export const tryOut = rawInternalMutation({
   handler: async (ctx, x) => {
     const { act, a, as } = await prepare(ctx, x.asBusiness, x.action, x.args, (e) => (e.mode === "read" || !e.fn.isMutation ? `${x.action} only reads: use site_read.` : null));
     const seen: Outbound[] = [];
+    const why = act.askWhen?.(a) ?? (act.outside ? await act.outside(as, a) : null);
     await act.fn._handler(recording(as as MutationCtx, seen), a);
-    throw new ConvexError({ tried: true, outbound: summarize(seen) });
+    throw new ConvexError({ tried: true, outbound: summarize(seen), ...(why ? { why } : {}) });
   },
 });

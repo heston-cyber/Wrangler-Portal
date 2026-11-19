@@ -87,10 +87,11 @@ function siteParts(target: string, payload: string | undefined) {
   return { act, action, args: p.args, outbound: summarize(p.outbound) };
 }
 
-const labelOf = (d: Record<string, unknown> | null) => {
+const TABLE_NAMES: Record<string, string> = { callSheets: "a call sheet", shoots: "a shoot", tasks: "a task", vendorBookings: "a booking", canvases: "a canvas", deliveries: "a delivery", shotSetups: "a setup", shots: "a shot", packLines: "a packing line" };
+const labelOf = (d: Record<string, unknown> | null, table: string) => {
   if (!d) return "(not found)";
-  const t = [d.name, d.title, d.label, d.number && `No. ${d.number}`, d.date].find((x) => typeof x === "string" && x.trim());
-  return clip(String(t ?? "(untitled)"), 120);
+  const t = [d.name, d.title, d.heading, d.label, d.description, d.date && `${TABLE_NAMES[table] ?? "the one"} on ${d.date}`].find((x) => typeof x === "string" && x.trim());
+  return clip(String(t ?? TABLE_NAMES[table] ?? "(untitled)"), 120);
 };
 const shown = (x: unknown) => (typeof x === "string" ? body(x, 1500) : clip(JSON.stringify(x), 1500));
 
@@ -116,21 +117,29 @@ async function sitePreview(ctx: Ctx, target: string, payload: string | undefined
     const nid = ctx.db.normalizeId(table as never, id);
     const d = nid ? ((await ctx.db.get(nid)) as Record<string, unknown> | null) : null; // another business's is invisible
     if (!d) throw new ConvexError("Something it acts on isn't here any more.");
-    names.set(id, labelOf(d));
+    names.set(id, labelOf(d, table));
     recs[id] = Object.fromEntries(Object.entries(d).filter(([k]) => !VOLATILE.test(k)));
   }
   const named = (t: string) => { let out = t; for (const [id, n] of names) out = out.split(id).join(n); return out; };
   const details = Object.entries(args).filter(([, x]) => x !== undefined).map(([k, x]) => `${k}: ${named(shown(x))}`);
   const first = ids[0] ? names.get(ids[0].id) : undefined;
+  // Review M6: why it needs Heston (a link turned on, a shared board, a client's task), and what else it shows.
+  const why = act.askWhen?.(args) ?? (act.outside ? await act.outside(ctx as QueryCtx, args) : null);
+  const more = act.shows ? await act.shows(ctx as QueryCtx, args) : [];
+  const PAGES: Record<string, (id: string) => string> = { callSheets: (id) => `/production/call-sheets/${id}`, projects: (id) => `/projects/${id}`, shotLists: (id) => `/production/shot-lists/${id}`, canvases: (id) => `/creative/canvas/${id}`, creativeDocs: (id) => `/creative/docs/${id}` };
+  const page = ids.find((x) => PAGES[x.table]);
   return {
     title: `${act.does}${first ? `: ${first}` : ""}`,
+    ...(page ? { open: PAGES[page.table](page.id) } : {}),
     lines: [
       { label: "Does", value: act.does },
       ...(details.length ? [{ label: "Details", value: body(details.join("\n"), 4000) }] : []),
       ...(act.mode === "delete" ? [{ label: "Deletes", value: ids.length ? ids.map((x) => names.get(x.id)!).join(", ") : "What's named above" }] : []),
+      ...(why ? [{ label: "Why it asks", value: why }] : []),
       ...(act.note ? [{ label: "Also", value: act.note }] : []),
+      ...more.map((l) => ({ label: clip(l.label, 60), value: body(l.value, 3000) })),
       ...(outbound.length
-        ? outbound.map((o) => ({ label: "Sends", value: `${o.what}${o.to.length ? ` to ${o.to.join(", ")}` : ""}` }))
+        ? outbound.map((o) => ({ label: "Sends", value: clip(`${o.what}${o.to.length ? ` to ${o.to.join(", ")}` : ""}`, 20000) }))
         : [{ label: "Sends", value: "No email or message" }]),
     ],
     bind: JSON.stringify(recs),
@@ -274,7 +283,9 @@ export const get = query({
     try {
       const p = await k.preview(ctx, r.targetId, r.payload);
       const h = await hashOf(p);
-      return { ...base, preview: p, hash: h, changed: h !== r.hash, problem: null };
+      const { bind: _bind, ...shownPreview } = p; // review L6: only its hash, never the records themselves, goes to the page
+      void _bind;
+      return { ...base, preview: shownPreview, hash: h, changed: h !== r.hash, problem: null };
     } catch (e) {
       return { ...base, preview: null, hash: null, changed: false, problem: ((e as Error).message || "It can't be done now.").replace(/^.*ConvexError: /, "").split("\n")[0] };
     }

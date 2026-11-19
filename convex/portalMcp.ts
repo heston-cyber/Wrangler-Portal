@@ -51,12 +51,11 @@ const GUIDE = {
     "Contracts (Sign): documents, drafts from templates, importing PDFs, previews, the audit trail and signed copies; approving, sending, reminding and cancelling are requests Heston confirms",
     "Proposals: read a proposal's answers and write its draft",
     ...Object.values(AREAS),
-    "Creative docs and briefings are written as page markdown: get_draft and update_draft with their buildId",
   ],
   how_the_site_tools_work: "site_actions (optionally by area) lists every action with its arguments. read → site_read. change → site_change (done at once; shows in Activity as Claude's). ask or delete → ask Heston in chat, then site_ask with his words: the Confirm page shows what it does and exactly who it would reach.",
   coming: "Calendar, messages, clients and leads, invoices, quotes, subscriptions, vendor payments, reports and settings are added to this same connector next.",
   sends_need_heston: ["send_client_note", "send_reminder", "set_version_description", "approve_document", "send_document", "void_document", "site_ask"],
-  not_here: "Moving a project or a shoot to another client, fetching a PDF from a link, signing a release (it's signed in person), uploading photos or files, and sending a briefing (for now) are done by Heston on the site (pass PDFs as pdf_base64).",
+  not_here: "Moving a project or a shoot to another client, fetching a PDF from a link, signing a release (it's signed in person), uploading photos or files, and sending a briefing and writing the text of a creative doc or briefing (for now) are done by Heston on the site (pass PDFs as pdf_base64).",
   how_confirm_works: "Ask Heston in chat. Call the tool with his words in heston_ok. Give him confirm_at. It happens only when he presses Confirm on the site. Check with request_status.",
   never: ["moving money (paying, refunding, charging)", "signing for Heston", "showing W-9s, tax IDs, bank details, keys or passwords", "sending or deleting without Heston's Confirm"],
 };
@@ -174,14 +173,16 @@ async function siteCall(ctx: ActionCtx, name: string, args: Json): Promise<ToolR
   const said = asked(args);
   if (!said) return fail(ASK);
   if (e.mode === "read") return fail(`${action} only reads: use site_read.`);
-  let outbound: Outbound[] | null = null;
+  let outbound: Outbound[] | null = null, why: string | null = null;
   try { await ctx.runMutation(internal.siteRun.tryOut, run); } catch (err) {
     const d = dataOf(err);
     if (!d?.tried) throw err; // it can't be done: the site's own reason
     outbound = d.outbound as Outbound[];
+    why = typeof d.why === "string" ? d.why : null;
   }
   if (!outbound) return fail("It couldn't be tried. Nothing was asked.");
-  if (e.mode === "change" && !outbound.length && !e.askWhen?.(a as Json)) return fail(`${action} sends nothing and deletes nothing: use site_change.`);
+  if (outbound.some((o) => o.to.includes("(and more)"))) return fail("It would reach too many people to list on one page. Heston does this on the site.");
+  if (e.mode === "change" && !outbound.length && !why) return fail(`${action} sends nothing and deletes nothing: use site_change.`);
   const target = `${action}|${(await sha256Hex(JSON.stringify(a))).slice(0, 16)}`;
   return afterRequest(await ctx.runMutation(internal.confirm.request, { kind: "site", targetId: target, said, payload: JSON.stringify({ args: a, outbound }) }) as Json);
 }
