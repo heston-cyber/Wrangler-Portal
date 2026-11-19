@@ -176,6 +176,10 @@ describe("D56 a lead's company at its first estimate", () => {
     expect(r.menu!.clientId).toBe(r.clients[0]._id);
     // Linking a project by the typed name still works (no twin to refuse).
     await w.heston.mutation(api.library.createProject, { name: "Spring film", client: "Café Rouge" });
+    // Review R2: a second, similarly spelled folder doesn't take the client over from its own folder.
+    await w.t.mutation(internal.dropbox.recordFolders, { folders: [f(`/Clients/${nfd}`), f("/Clients/Café  Rouge")], gone: [] });
+    const still = await w.t.run((ctx) => ctx.db.get(r.clients[0]._id));
+    expect(still!.dropboxFolder).toBe(`/clients/${nfd}`.toLowerCase());
   });
 
   test("T-D56.6 lookalike names (zero-width characters, Cyrillic letters) count as a clash", async () => {

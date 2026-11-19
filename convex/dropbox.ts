@@ -386,6 +386,8 @@ export const recordFolders = internalMutation({
       // D56 re-review N3/L-a: two clients with this name: the folder joins neither, and the sync carries on.
       if (byNames.length > 1) return name;
       const byName = byNames[0];
+      // Review R2 (Nov 19): a client already following another folder isn't taken over by a second, similarly named one.
+      if (byName?.dropboxFolder && byName.dropboxFolder !== folder) return name;
       if (byName) { await ctx.db.patch(byName._id, { dropboxFolder: folder, fromProjects: undefined }); return byName.name; }
       // The old folder of a renamed client went away in the same batch.
       for (const g of goneLeft) {
