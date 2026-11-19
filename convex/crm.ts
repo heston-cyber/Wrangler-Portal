@@ -324,6 +324,9 @@ export const getEstimate = query({
   },
 });
 
+/** D56 re-review N2: Cyrillic and Greek letters that look like Latin ones, so "Hаrbor" (Cyrillic а) is still "harbor". */
+const LOOKALIKE: Record<string, string> = Object.fromEntries([..."аеорсухіјѕԁӏкмнвтгɡοαερτυνικχ"].map((c, i) => [c, "aeopcyxijsdlkmhbtrgoaeptuvikx"[i]]));
+
 /** D56 (Heston, Nov 19): which company a website lead's first estimate files them under.
  *  - Their email is already one of a company's (not removed) people: that company. If it's on more than one, the one
  *    whose name they typed; if none of those matches, a new company (never a guess).
@@ -331,13 +334,18 @@ export const getEstimate = query({
  *    name, so a same-named company would let a stranger who typed a client's name reach that client. A clash gets
  *    "(website lead)" on the end; Heston renames it, or adds the person to the real company himself.
  *  The connector's Confirm page (lib/siteActions leadFiling) reads the same answer. */
-export async function leadTarget(ctx: QueryCtx | MutationCtx, lead: { email: string; company?: string | null; name: string }):
+export async function leadTarget(ctx: QueryCtx | MutationCtx, lead: { email: string; company?: string | null; name: string }, businessId?: Id<"businesses"> | null):
   Promise<{ clientId: Id<"clients"> | null; newName: string | null; name: string; why: string }> {
   const email = lead.email.trim().toLowerCase();
-  const typed = (lead.company || lead.name || "Website lead").trim().replace(/\s+/g, " ").slice(0, 100) || "Website lead";
-  const key = (x: string) => x.trim().replace(/\s+/g, " ").toLowerCase();
-  const clients = await ctx.db.query("clients").collect();
-  const onCompanies = [...new Set((await ctx.db.query("clientPeople").collect())
+  const typed = (lead.company || lead.name || "Website lead").normalize("NFKC").replace(/\p{Cf}/gu, "").trim().replace(/\s+/g, " ").slice(0, 100) || "Website lead";
+  // D56 re-review N2: lookalikes (zero-width and other format characters, compatibility forms) compare as the same name.
+  const key = (x: string) => [...x.normalize("NFKC").replace(/\p{Cf}/gu, "").trim().replace(/\s+/g, " ").toLowerCase()].map((ch) => LOOKALIKE[ch] ?? ch).join("");
+  // D56 re-review N1: when the caller's database isn't already walled to one business (the connector's Confirm check
+  // runs unguarded), only that business's companies and people count. Records with no business are the default one's.
+  const def = businessId ? (await defaultBusiness(ctx))?._id ?? null : null;
+  const mine = <T extends { businessId?: Id<"businesses"> }>(rows: T[]) => businessId ? rows.filter((r) => (r.businessId ?? def) === businessId) : rows;
+  const clients = mine(await ctx.db.query("clients").collect());
+  const onCompanies = [...new Set(mine(await ctx.db.query("clientPeople").collect())
     .filter((x) => !x.removedAt && x.email.trim().toLowerCase() === email).map((x) => x.clientId as Id<"clients">))]
     .map((id) => clients.find((c) => c._id === id)).filter((c): c is Doc<"clients"> => !!c);
   if (onCompanies.length === 1) return { clientId: onCompanies[0]._id, newName: null, name: onCompanies[0].name, why: `${email} is already one of ${onCompanies[0].name}'s people` };
@@ -729,7 +737,8 @@ export const draftFollowUpAs = internalMutation({
   args: { who: v.string(), about: v.string(), due: v.string(), company: v.optional(v.string()), note: v.optional(v.string()) },
   handler: async (ctx, a) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(a.due)) throw new ConvexError("due must be yyyy-mm-dd.");
-    const c = a.company ? (await ctx.db.query("clients").collect()).find((x) => x.name.toLowerCase() === a.company!.trim().toLowerCase()) : null;
+    const named = a.company ? (await ctx.db.query("clients").collect()).filter((x) => x.name.trim().toLowerCase() === a.company!.trim().toLowerCase()) : [];
+    const c = named.length === 1 ? named[0] : null; // D56 re-review L-a: a name two clients share links neither
     const id = await ctx.db.insert("followUps", { who: a.who.slice(0, 120), about: a.about.slice(0, 300), due: a.due, ...(c ? { clientId: c._id } : {}), ...(a.note ? { note: a.note.slice(0, 1000) } : {}), draft: true, createdBy: "Claude", createdAt: Date.now() });
     return { followUpId: id, company: c?.name ?? null };
   },

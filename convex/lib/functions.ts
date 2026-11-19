@@ -137,8 +137,9 @@ export function stampingDb(db: MutationCtx["db"], businessId: () => Promise<Id<"
     const name = typeof doc.client === "string" ? doc.client : "";
     // D56 review: a company picked by id (moving a project to the one Heston chose) wins over looking it up by name,
     // as long as it really has that name; two same-named companies are never resolved by name alone.
-    const picked = explicit ? ((await db.get(explicit)) as { name?: string } | null) : null;
-    if (picked && name.trim() && (picked.name ?? "").trim().toLowerCase() === name.trim().toLowerCase()) return { ...doc, clientId: explicit };
+    const picked = explicit ? ((await db.get(explicit)) as { name?: string; businessId?: Id<"businesses"> } | null) : null;
+    const sameBiz = !picked?.businessId || !biz || picked.businessId === biz; // D56 re-review L-c: never another business's
+    if (picked && sameBiz && name.trim() && (picked.name ?? "").trim().toLowerCase() === name.trim().toLowerCase()) return { ...doc, clientId: explicit };
     return { ...doc, clientId: name.trim() ? await linkClient(db, biz, name) : undefined };
   };
   const insert = (async (table: string, doc: Record<string, unknown>) => {

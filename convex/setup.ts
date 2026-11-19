@@ -109,7 +109,9 @@ export const firstClient = mutation({
     if (isDefault) throw new ConvexError("Invite clients from Clients › Companies.");
     const company = a.company.replace(/\s+/g, " ").trim().slice(0, 80), name = a.name.replace(/\s+/g, " ").trim().slice(0, 60);
     if (company.length < 2) throw new ConvexError("Type the company's name.");
-    const existing = (await ctx.db.query("clients").collect()).find((c) => c.name.toLowerCase() === company.toLowerCase());
+    const named = (await ctx.db.query("clients").collect()).filter((c) => c.name.trim().toLowerCase() === company.toLowerCase());
+    if (named.length > 1) throw new ConvexError(`Two clients are called ${company}. Invite them from that client's page in Clients.`); // D56 re-review L-a
+    const existing = named[0];
     const clientId = existing?._id ?? await ctx.db.insert("clients", { name: company, createdAt: Date.now() });
     const r = await ensureInvite(ctx, a.email, name || undefined); // checks the address
     const people = await ctx.db.query("clientPeople").withIndex("by_client", (q) => q.eq("clientId", clientId)).collect();

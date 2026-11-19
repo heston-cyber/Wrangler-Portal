@@ -7,6 +7,7 @@ import { fakeStripe, sent, world } from "./payHarness";
 import { webflowSignatureOk, looksLikeSpam } from "../convex/leads";
 
 const api = anyApi;
+const internal = anyApi;
 const SECRET = "wf_secret";
 beforeAll(() => {
   process.env.ALLOWED_EMAILS = "heston@wranglerproductions.com";
@@ -137,6 +138,22 @@ describe("D56 a lead's company at its first estimate", () => {
     });
     const { linkClient } = await import("../convex/lib/functions");
     await expect(w.t.run((ctx) => linkClient(ctx.db, w.A, "Twin Co"))).rejects.toThrow(/Two clients are called Twin Co/);
+    // The Dropbox sync carries on: a render for "Twin Co" makes its project with no client, not the wrong one (N3).
+    const target = await w.t.mutation(internal.dropbox.findOrCreateTarget, { client: "Twin Co", project: "Spring Promo", video: "Teaser" });
+    const p = await w.t.run((ctx) => ctx.db.get(target.projectId));
+    expect(p).toMatchObject({ name: "Spring Promo" });
+    expect(p!.clientId).toBeUndefined();
+  });
+
+  test("T-D56.6 lookalike names (zero-width characters, Cyrillic letters) count as a clash", async () => {
+    const w = await world();
+    for (const [i, typed] of ["Harbor\u200B Coffee", "H\u0430rbor Coffee", "Harbor Co\u200Dffee"].entries()) {
+      const dealId = await leadDeal(w, `Lookalike ${i}`, `look${i}@elsewhere.example`, typed);
+      await estimate(w, dealId);
+      const c = await companyOf(w, dealId);
+      expect(c._id).not.toBe(w.harbor);
+      expect(c.name).toMatch(/\(website lead( \d)?\)$/);
+    }
   });
 });
 
