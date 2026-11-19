@@ -12,7 +12,9 @@ export type AuditEvent = { kind: AuditKind; text: string; where?: string; link?:
 
 export async function audit(ctx: MutationCtx, e: AuditEvent) {
   let who = e.by?.name, role = e.by?.role, userId: Id<"users"> | undefined, device: string | undefined;
-  if (!e.by) {
+  // Phase 8b: the connector runs site functions as the owner; what they record is Claude's doing.
+  if (!e.by && (ctx as unknown as { viaClaude?: boolean }).viaClaude) { who = "Claude"; role = "Connector"; }
+  else if (!e.by) {
     const v = await viewerOf(ctx);
     if (v.kind === "owner") { who = v.name; role = "Owner"; userId = v.userId; }
     else if (v.kind === "team") { who = v.name; role = ROLE_NAMES[v.team.role]; userId = v.userId; }

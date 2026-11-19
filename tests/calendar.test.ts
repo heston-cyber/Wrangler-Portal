@@ -68,6 +68,7 @@ describe("calendar", () => {
     expect(await w.heston.action(api.calendar.calendars, {})).toEqual([{ id: "primary@x", name: "Heston", primary: true }, { id: "heston-cal@group", name: "Heston Calendar", primary: false }]);
     await w.heston.mutation(api.calendar.save, { calendarId: "heston-cal@group", calendarName: "Heston Calendar", inviteVendors: true, inviteClient: false });
     expect((await w.heston.query(api.shoots.forProject, { projectId: w.p })).calendar).toBe("Heston Calendar");
+    await settle(w); // the resync the pick starts finishes first (it raced the shoot's own sync when module loading was slow)
 
     const vendor = await w.heston.mutation(api.vendors.add, { name: "Jordan Ellis", email: "jordan@ellisfilms.com", roles: ["Shooter"], rates: [], invite: false }) as Id<"vendors">;
     const booking = await w.heston.mutation(api.bookings.create, { vendorId: vendor, projectId: w.p, role: "Shooter", start: day(4), end: day(4), cents: 100_000, unit: "day" }) as Id<"vendorBookings">;

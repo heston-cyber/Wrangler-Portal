@@ -22,6 +22,9 @@ import { sha256Hex } from "./lib/hash";
 import { noteAudience, sendNoteCore } from "./inbox";
 import { resendCore, sentDoc } from "./sign";
 import { docLabel } from "./lib/wsLayout";
+import { ACTIONS, argsOf } from "./lib/siteActions";
+import { BUSINESS_TABLES } from "./lib/tenancy";
+import { argsProblem, idPaths, recording, sameReach, summarize, type Outbound } from "./lib/siteGuard";
 
 const HOURS = 24;
 export const CONFIRM_MS = HOURS * 3_600_000;
@@ -35,7 +38,8 @@ const body = (s: string, n: number) => s.replace(INVISIBLE, "").replace(/[\u0000
 
 type Ctx = QueryCtx | MutationCtx;
 type Line = { label: string; value: string };
-type Preview = { title: string; lines: Line[]; open?: string };
+/** bind: what the request is tied to besides what's shown (the records it acts on), so Confirm refuses if they changed. */
+type Preview = { title: string; lines: Line[]; open?: string; bind?: string };
 type Kind = {
   /** What will go out, read live from the record. Throws when it can't be done (gone, already sent, not their turn). */
   preview: (ctx: Ctx, targetId: string, payload: string | undefined) => Promise<Preview>;
@@ -63,7 +67,87 @@ async function signer(ctx: MutationCtx, id: string) {
   return { doc, x };
 }
 
+// ---------- Phase 8b: any site action that sends or deletes (lib/siteActions.ts) ----------
+// The request holds the action, its arguments and what it would send (siteRun.tryOut ran it once as the owner and
+// undid it). The page shows all three, with the names of the records it acts on; Confirm runs it as Heston, watching
+// what it sends, and undoes it if it would now reach anyone different.
+type SitePayload = { args: Record<string, unknown>; outbound: Outbound[] };
+const VOLATILE = /opened|views|seen|readat|lastused|lastopened/i;
+
+/** "<action>|<a short hash of its arguments>": two asks of one action for different things are two requests. */
+export const siteAction = (target: string) => target.split("|")[0] ?? "";
+
+function siteParts(target: string, payload: string | undefined) {
+  const action = siteAction(target);
+  const act = Object.prototype.hasOwnProperty.call(ACTIONS, action) ? ACTIONS[action] : undefined;
+  if (!act || act.mode === "read") throw new ConvexError("That can't be asked for.");
+  let p: SitePayload;
+  try { p = JSON.parse(payload ?? "") as SitePayload; } catch { throw new ConvexError("That request is damaged. Ask Claude again."); }
+  if (!p || typeof p.args !== "object" || !Array.isArray(p.outbound)) throw new ConvexError("That request is damaged. Ask Claude again.");
+  return { act, action, args: p.args, outbound: summarize(p.outbound) };
+}
+
+const labelOf = (d: Record<string, unknown> | null) => {
+  if (!d) return "(not found)";
+  const t = [d.name, d.title, d.label, d.number && `No. ${d.number}`, d.date].find((x) => typeof x === "string" && x.trim());
+  return clip(String(t ?? "(untitled)"), 120);
+};
+const shown = (x: unknown) => (typeof x === "string" ? body(x, 1500) : clip(JSON.stringify(x), 1500));
+
+async function sitePreview(ctx: Ctx, target: string, payload: string | undefined): Promise<Preview> {
+  const { act, action, args, outbound } = siteParts(target, payload);
+  const v = argsOf(action);
+  const problem = argsProblem(v, args, "args", (table, id) => !!(table.startsWith("_") ? ctx.db.system.normalizeId(table as never, id) : ctx.db.normalizeId(table as never, id)));
+  if (problem) throw new ConvexError(`${problem}. Ask Claude again.`);
+  // Ids the validator names, and any other text argument that is an id of this business's records (many site
+  // functions take ids as plain text).
+  const ids = idPaths(v, args);
+  const textIds = (x: unknown, depth = 0): void => {
+    if (depth > 4 || ids.length > 40) return;
+    if (typeof x === "string") { if (!ids.some((i) => i.id === x)) for (const t of BUSINESS_TABLES) if (ctx.db.normalizeId(t as never, x)) { ids.push({ table: t, id: x }); break; } return; }
+    if (Array.isArray(x)) x.forEach((y) => textIds(y, depth + 1));
+    else if (x && typeof x === "object") Object.values(x).forEach((y) => textIds(y, depth + 1));
+  };
+  textIds(args);
+  const recs: Record<string, unknown> = {};
+  const names = new Map<string, string>();
+  for (const { table, id } of ids) {
+    if (table.startsWith("_")) { names.set(id, "a file"); continue; } // a stored file: shown, not bound (it can't change)
+    const nid = ctx.db.normalizeId(table as never, id);
+    const d = nid ? ((await ctx.db.get(nid)) as Record<string, unknown> | null) : null; // another business's is invisible
+    if (!d) throw new ConvexError("Something it acts on isn't here any more.");
+    names.set(id, labelOf(d));
+    recs[id] = Object.fromEntries(Object.entries(d).filter(([k]) => !VOLATILE.test(k)));
+  }
+  const named = (t: string) => { let out = t; for (const [id, n] of names) out = out.split(id).join(n); return out; };
+  const details = Object.entries(args).filter(([, x]) => x !== undefined).map(([k, x]) => `${k}: ${named(shown(x))}`);
+  const first = ids[0] ? names.get(ids[0].id) : undefined;
+  return {
+    title: `${act.does}${first ? `: ${first}` : ""}`,
+    lines: [
+      { label: "Does", value: act.does },
+      ...(details.length ? [{ label: "Details", value: body(details.join("\n"), 4000) }] : []),
+      ...(act.mode === "delete" ? [{ label: "Deletes", value: ids.length ? ids.map((x) => names.get(x.id)!).join(", ") : "What's named above" }] : []),
+      ...(act.note ? [{ label: "Also", value: act.note }] : []),
+      ...(outbound.length
+        ? outbound.map((o) => ({ label: "Sends", value: `${o.what}${o.to.length ? ` to ${o.to.join(", ")}` : ""}` }))
+        : [{ label: "Sends", value: "No email or message" }]),
+    ],
+    bind: JSON.stringify(recs),
+  };
+}
+
 export const KINDS: Record<string, Kind> = {
+  site: {
+    preview: sitePreview,
+    run: async (ctx, target, payload) => {
+      const { act, action, args, outbound } = siteParts(target, payload);
+      const seen: Outbound[] = [];
+      const result = await act.fn._handler(recording(ctx, seen), args);
+      if (!sameReach(seen, outbound)) throw new ConvexError("It would now send to different people than when Claude asked. Nothing was done: ask Claude again.");
+      return { done: action, ...(result && typeof result === "object" && !Array.isArray(result) ? { result: JSON.parse(JSON.stringify(result, (_k, x) => (typeof x === "bigint" ? Number(x) : x))) } : {}) };
+    },
+  },
   "note.send": {
     preview: async (ctx, id) => {
       const n = await note(ctx, id);
@@ -132,7 +216,7 @@ export const KINDS: Record<string, Kind> = {
   },
 };
 
-const hashOf = (p: Preview) => sha256Hex(JSON.stringify([p.title, p.lines]));
+const hashOf = (p: Preview) => sha256Hex(JSON.stringify(p.bind === undefined ? [p.title, p.lines] : [p.title, p.lines, p.bind]));
 
 const status = (r: { status: string; expiresAt: number }, now = Date.now()) => r.status === "waiting" && r.expiresAt <= now ? "expired" : r.status;
 
@@ -144,7 +228,8 @@ export const request = internalMutation({
     if (!k) throw new ConvexError("That can't be asked for.");
     const said = clip(a.said, 500);
     if (said.length < 3) throw new ConvexError("Ask Heston first, and pass his words in `said`.");
-    const payload = a.payload === undefined ? undefined : a.payload.slice(0, 4000);
+    if (a.payload !== undefined && a.payload.length > (a.kind === "site" ? 200_000 : 4000)) throw new ConvexError("That's too much to ask for in one go.");
+    const payload = a.payload;
     const p = await k.preview(ctx, a.targetId, payload);
     const hash = await hashOf(p);
     const now = Date.now();
@@ -227,7 +312,8 @@ export const confirm = mutation({
     if (a.hash !== live) throw new ConvexError("It changed while you were looking. Check it again, then confirm.");
     const result = await k.run(ctx, r.targetId, r.payload); // throws (and changes nothing) when it can't be done
     await ctx.db.patch(r._id, { status: "done", doneAt: Date.now() });
-    await audit(ctx, { kind: r.kind.endsWith(".delete") ? "deleted" : r.kind.endsWith(".send") || r.kind.endsWith(".remind") ? "sent" : "claude", text: `confirmed Claude's request: ${r.summary}`, where: "Claude connector", link: `/confirm/${r._id}` });
+    const siteMode = r.kind === "site" ? ACTIONS[siteAction(r.targetId)]?.mode : undefined;
+    await audit(ctx, { kind: siteMode === "delete" || r.kind.endsWith(".delete") ? "deleted" : siteMode === "ask" || r.kind.endsWith(".send") || r.kind.endsWith(".remind") ? "sent" : "claude", text: `confirmed Claude's request: ${r.summary}`, where: "Claude connector", link: `/confirm/${r._id}` });
     return { ok: true, ...result };
   },
 });

@@ -83,6 +83,7 @@ import type * as lib_email from "../lib/email.js";
 import type * as connector from "../connector.js";
 import type * as confirm from "../confirm.js";
 import type * as portalMcp from "../portalMcp.js";
+import type * as siteRun from "../siteRun.js";
 import type * as portalKeys from "../portalKeys.js";
 import type * as crons from "../crons.js";
 import type * as dropbox from "../dropbox.js";
@@ -255,6 +256,7 @@ declare const fullApi: ApiFromModules<{
   connector: typeof connector;
   confirm: typeof confirm;
   portalMcp: typeof portalMcp;
+  siteRun: typeof siteRun;
   portalKeys: typeof portalKeys;
   crons: typeof crons;
   dropbox: typeof dropbox;
