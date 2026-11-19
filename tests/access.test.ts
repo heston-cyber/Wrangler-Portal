@@ -195,6 +195,8 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "briefings.setLinkExpiry": PRODUCTION, // Nov 18
     "briefings.share": PRODUCTION,
     "briefings.update": PRODUCTION, // D161: update a sent briefing's link
+    "pageText.get": PROJECTS, // 8d: a creative doc's text (a briefing's needs Docs, as in the builder)
+    "pageText.write": PROJECTS,
     "briefs.settings": PROJECTS,
     "briefs.saveSettings": PROJECTS,
     "briefs.resetSettings": PROJECTS,

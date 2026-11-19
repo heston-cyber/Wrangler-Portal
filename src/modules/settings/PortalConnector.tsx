@@ -16,11 +16,13 @@ export function PortalConnectorPanel({ show }: { show: (m: string) => void }) {
   const createKey = useAction(api.portalKeys.createKey);
   const revokeKey = useMutation(api.portalKeys.revokeKey);
   const [made, setMade] = useState<string | null>(null);
+  // 8d: how long a new key works (Heston to confirm the start: 90 days).
+  const [days, setDays] = useState<30 | 90 | 365 | null>(90);
   const [busy, setBusy] = useState(false);
   const [revoking, setRevoking] = useState<{ _id: string; prefix: string; label: string } | null>(null);
   const make = async () => {
     setBusy(true);
-    try { setMade((await createKey({ label: "Claude" })).key); }
+    try { setMade((await createKey({ label: "Claude", days })).key); }
     catch (e) { show((e as Error).message.replace(/^.*ConvexError: /, "").split("\n")[0]); }
     finally { setBusy(false); }
   };
@@ -40,7 +42,12 @@ export function PortalConnectorPanel({ show }: { show: (m: string) => void }) {
         </div>
         <div className="prow">
           <span className="pl">Keys <span className="secondary" style={{ display: "block", fontSize: 12.5 }}>Only you can make one. Claude sends it with every request; revoke one and it stops working right away.</span></span>
-          <span className="pr"><button className="btn primary sm" disabled={busy} onClick={() => void make()}><Plus size={15} />{busy ? "Making…" : "Create key"}</button></span>
+          <span className="pr">
+            <select className="input sm" value={days ?? "never"} onChange={(e) => setDays(e.target.value === "never" ? null : (Number(e.target.value) as 30 | 90 | 365))} aria-label="How long the new key works">
+              <option value="30">Works 30 days</option><option value="90">Works 90 days</option><option value="365">Works a year</option><option value="never">Works until revoked</option>
+            </select>
+            <button className="btn primary sm" disabled={busy} onClick={() => void make()}><Plus size={15} />{busy ? "Making…" : "Create key"}</button>
+          </span>
         </div>
         {keys === undefined ? null : keys.length === 0 ? (
           <div className="prow"><span className="pl secondary">No keys yet.</span></div>
@@ -49,7 +56,7 @@ export function PortalConnectorPanel({ show }: { show: (m: string) => void }) {
             <KeyRound size={16} />
             <span className="pl">
               <b>{k.label}</b> <code className="mono">{k.prefix}…</code>
-              <span className="secondary" style={{ display: "block", fontSize: 12.5 }}>Made {ago(k.createdAt)} · {k.lastUsedAt ? <>last used {ago(k.lastUsedAt)}</> : "not used yet"}</span>
+              <span className="secondary" style={{ display: "block", fontSize: 12.5 }}>Made {ago(k.createdAt)} · {k.lastUsedAt ? <>last used {ago(k.lastUsedAt)}</> : "not used yet"} · {k.expired ? "ran out: make a new one" : k.expiresAt ? `works until ${new Date(k.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : "works until revoked"}</span>
             </span>
             <span className="pr"><button className="btn sm" onClick={() => setRevoking(k)}>Revoke</button></span>
           </div>

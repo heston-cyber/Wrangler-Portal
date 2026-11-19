@@ -93,7 +93,7 @@ describe("Phase 8c · money through the connector", () => {
 
   test("T8c.2 never through it: paying, charging, refunding, subscriptions, Stripe keys", async () => {
     const x = await setup();
-    for (const name of ["vendorPayouts.pay", "vendorPayouts.balance", "vendorPayouts.nothingWentOut", "subscriptions.start", "subscriptions.changePlan", "subscriptions.pause", "subscriptions.resume", "subscriptions.cancel", "plans.save", "payments.connect", "payments.disconnect", "invoicePay.start", "crm.makeContract", "quotes.draftFrom", "proposals.send"]) {
+    for (const name of ["vendorPayouts.pay", "vendorPayouts.balance", "vendorPayouts.nothingWentOut", "subscriptions.start", "subscriptions.changePlan", "subscriptions.pause", "subscriptions.resume", "subscriptions.cancel", "plans.save", "payments.connect", "payments.disconnect", "invoicePay.start", "crm.makeContract", "quotes.draftFrom", "security.changePassword", "yourData.requestExport", "yourData.scheduleDeletion", "portalKeys.createKey", "calendar.disconnect"]) {
       expect(ACTIONS[name], name).toBeUndefined();
       expect((await x.a("site_change", { action: name, args: {} })).text).toMatch(/no action called/);
     }

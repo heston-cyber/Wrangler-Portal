@@ -166,6 +166,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "shootPage.get": { shootId: ids.shootId },
     // 5l (Nov 17): Creative planning
     "creative.overview": {}, "creative.docs": {}, "creative.newDoc": { kind: "blank" }, "creative.doc": { docId: ids.creativeDocId }, "creative.share": { docId: ids.creativeDocId, storageId: ids.storageId },
+    "pageText.get": { creativeDocId: ids.creativeDocId }, "pageText.write": { creativeDocId: ids.creativeDocId, markdown: "# Treatment\nA short film." },
     "creative.shareOn": { docId: ids.creativeDocId, on: false }, "creative.removeDoc": { docId: "nope" }, "creative.sharedDoc": { token: "nope-nope-nope-nope" }, "creative.startBriefing": { docId: ids.creativeDocId, starter: "shoot" },
     "creative.kits": {}, "creative.newKit": { name: "K" }, "creative.kit": { kitId: ids.kitId }, "creative.renameKit": { kitId: ids.kitId, name: "Kit" }, "creative.shareKit": { kitId: ids.kitId, on: true }, "creative.removeKit": { kitId: "nope" },
     "creative.sharedKit": { token: "matrixkittoken0123456789" },

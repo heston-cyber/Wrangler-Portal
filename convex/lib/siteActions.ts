@@ -40,13 +40,34 @@ import * as vendorPayouts from "../vendorPayouts";
 import * as crm from "../crm";
 import * as reports from "../reports";
 import * as footage from "../footage";
+import * as business from "../business";
+import * as brandKit from "../brandKit";
+import * as calendarMod from "../calendar";
+import * as clients from "../clients";
+import * as messages from "../messages";
+import * as calls from "../calls";
+import * as testimonials from "../testimonials";
+import * as briefs from "../briefs";
+import * as fileRequests from "../fileRequests";
+import * as shares from "../shares";
+import * as notifications from "../notifications";
+import * as bell from "../bell";
+import * as prefs from "../prefs";
+import * as team from "../team";
+import * as help from "../help";
+import * as siteWatch from "../siteWatch";
+import * as home from "../home";
+import * as overviews from "../overviews";
+import * as activity from "../activity";
+import * as auditLog from "../auditLog";
+import * as pageText from "../pageText";
 import { parseTo } from "./offers";
 import { quoteTotals } from "../quotes";
 import type { QueryCtx } from "../_generated/server";
 import { ConvexError } from "convex/values";
 
 export type Mode = "read" | "change" | "ask" | "delete";
-export type Area = "projects" | "production" | "crew" | "work" | "creative" | "delivery" | "money" | "sales";
+export type Area = "projects" | "production" | "crew" | "work" | "creative" | "delivery" | "money" | "sales" | "clients" | "settings" | "home";
 /** A registered Convex function, as the runtime keeps it. */
 export type SiteFn = { _handler: (ctx: unknown, args: unknown) => Promise<unknown>; exportArgs: () => string; isQuery?: boolean; isMutation?: boolean; isAction?: boolean };
 type Args = Record<string, unknown>;
@@ -194,6 +215,43 @@ const vendorInvoiceLines = async (ctx: QueryCtx, a: Args, tell: string) => {
     { label: "Sends", value: `${tell} to ${String(vd?.name ?? "the vendor")} <${String(vd?.email ?? "")}>` },
   ];
 };
+
+// ---------- Phase 8d: sending a proposal or briefing again (the first send makes its PDF in Heston's browser) ----------
+const noFile = (a: Args) => (a.storageId !== undefined ? "A file can't be handed in here." : null);
+const proposalSend = async (ctx: QueryCtx, a: Args) => {
+  const p = await get(ctx, "proposals", a.proposalId);
+  if (!p) return [];
+  if (p.status !== "sent") throw new ConvexError("The first send makes the proposal's PDF in your browser: send it from the proposal's page on the site.");
+  const b = p.buildId ? await get(ctx, "wsBuilds", p.buildId) : null;
+  const client = b?.fields?.client ?? {};
+  const legacy = a.resend === true && !!p.token && a.to === undefined && a.copyLink !== true;
+  const list = legacy ? (p.contact?.email ? [{ email: String(p.contact.email), name: String(p.contact.name ?? "") }] : [])
+    : a.to !== undefined ? parseTo(String(a.to), typeof a.name === "string" ? a.name : undefined)
+    : a.copyLink === true ? [] : client.email ? [{ email: String(client.email).trim().toLowerCase(), name: String(client.name ?? "") }] : [];
+  if (!list.length && a.copyLink !== true) throw new ConvexError("Add who it goes to (or copy its link): it can't be sent to no one.");
+  const sends = [...(list.length ? [`Proposal email with their own link to ${list.map((x) => `${x.name ? `${x.name} ` : ""}<${x.email}>`).join(", ")}`] : []), ...(a.copyLink === true ? ["a link for Heston to copy and send himself"] : [])];
+  return [
+    { label: "Proposal", value: `${String(p.number ?? "")} · ${String(b?.title ?? p.title ?? "")} (the copy already sent)` },
+    ...(typeof a.message === "string" && a.message.trim() ? [{ label: "Message", value: a.message.trim() }] : []),
+    { label: "Sends", value: sends.join("; and ") },
+  ];
+};
+const briefingSend = async (ctx: QueryCtx, a: Args) => {
+  const br = await get(ctx, "briefings", a.briefingId);
+  if (!br) return [];
+  if (br.status === "draft" || !br.pdfId) throw new ConvexError("The first share makes the briefing's PDF in your browser: share it from the briefing's page on the site.");
+  const b = br.buildId ? await get(ctx, "wsBuilds", br.buildId) : null;
+  const to = Array.isArray(a.to) ? (a.to as Array<{ email?: string; name?: string; vendorId?: string }>) : [];
+  const people: string[] = [];
+  for (const t of to) { const vd = t.vendorId ? await get(ctx, "vendors", t.vendorId) : null; people.push(`${t.name ?? vd?.name ?? ""} <${String(vd?.email ?? t.email ?? "").toLowerCase()}>`.trim()); }
+  if (!people.length && a.copyLink !== true) throw new ConvexError("Add who it goes to (or copy its link).");
+  return [
+    { label: "Briefing", value: `${String(b?.title ?? "Briefing")} (the copy already shared)` },
+    ...(typeof a.note === "string" && a.note.trim() ? [{ label: "Note", value: a.note.trim() }] : []),
+    { label: "Sends", value: [...(people.length ? [`Briefing email with their own link to ${people.join(", ")}`] : []), ...(a.copyLink === true ? ["a link for Heston to copy"] : [])].join("; and ") },
+  ];
+};
+
 export const ACTIONS: Record<string, Entry> = {
   // ---- projects ----
   "library.projectNames": r("projects", library.projectNames, "Every project's name and client (for picking one)"),
@@ -349,7 +407,7 @@ export const ACTIONS: Record<string, Entry> = {
   "briefings.list": r("crew", briefings.list, "Every briefing"),
   "briefings.forVendor": r("crew", briefings.forVendor, "A vendor's briefings"),
   "briefings.get": r("crew", briefings.get, "One briefing: who it went to, opens, read"),
-  "briefings.create": c("crew", briefings.create, "Start a briefing (its text is written on the site for now)"),
+  "briefings.create": c("crew", briefings.create, "Start a briefing (then write its text with pageText.write)"),
   "briefings.setDetails": c("crew", briefings.setDetails, "Set a briefing's project or details"),
   "briefings.copy": c("crew", briefings.copy, "Copy a briefing"),
   "briefings.setLinkOff": c("crew", briefings.setLinkOff, "Turn a briefing's links off or on (on is an ask)", { askWhen: (a) => (a.off === false ? "Turning the links back on lets everyone who has one read it again." : null) }),
@@ -389,10 +447,10 @@ export const ACTIONS: Record<string, Entry> = {
   // ---- creative planning ----
   "creative.overview": r("creative", creative.overview, "Creative planning overview: recent work and where it's attached"),
   "creative.docs": r("creative", creative.docs, "Creative docs (treatments, scripts, interview questions, briefs)"),
-  "creative.doc": r("creative", creative.doc, "One creative doc (its text is read and written on the site for now)"),
+  "creative.doc": r("creative", creative.doc, "One creative doc (its text: pageText.get)"),
   "creative.kits": r("creative", creative.kits, "Brand kits"),
   "creative.kit": r("creative", creative.kit, "One brand kit"),
-  "creative.newDoc": c("creative", creative.newDoc, "Make a creative doc (its text is written on the site for now)"),
+  "creative.newDoc": c("creative", creative.newDoc, "Make a creative doc (then write its text with pageText.write)"),
   "creative.startBriefing": c("creative", creative.startBriefing, "Start a briefing from a creative doc"),
   "creative.newKit": c("creative", creative.newKit, "Make a brand kit"),
   "creative.renameKit": c("creative", creative.renameKit, "Rename a brand kit"),
@@ -550,6 +608,128 @@ export const ACTIONS: Record<string, Entry> = {
   "proposals.withdraw": ask("sales", proposals.withdraw, "Withdraw a proposal", "Its page says it was withdrawn."),
   "proposals.resetQuestionnaire": del("sales", proposals.resetQuestionnaire, "Put the questionnaire back to Wrangler's set"),
   "proposals.deleteDraft": del("sales", proposals.deleteDraft, "Delete a draft proposal"),
+
+  // ---- Phase 8d: clients and their people, messages, booking calls, review links, kickoff briefs, file requests ----
+  "clients.page": r("clients", clients.page, "One client: their people, projects, invites and settings"),
+  "clients.people": r("clients", clients.people, "A client's people"),
+  "clients.listInvites": r("clients", clients.listInvites, "Portal invites"),
+  "clients.directory": r("clients", clients.directory, "Every client and their people"),
+  "clients.addPerson": c("clients", clients.addPerson, "Add a person to a client (inviting them is an ask)"),
+  "clients.updatePerson": c("clients", clients.updatePerson, "Change a client person's name or role"),
+  "clients.revokeInvite": c("clients", clients.revokeInvite, "Take back a portal invite"),
+  "clients.setSettings": c("clients", clients.setSettings, "A client's revision rounds or watermark (turning the watermark off is an ask)", { askWhen: (a) => (a.watermarkOff === true ? "Turning the watermark off shows the client's people their cuts without it." : null) }),
+  "clients.invitePerson": ask("clients", clients.invitePerson, "Invite a client's person to the portal", "They get an invite to the portal."),
+  "clients.invite": ask("clients", clients.invite, "Invite someone to the portal", "They get an invite to the portal."),
+  "clients.removePerson": del("clients", clients.removePerson, "Take a person off a client (they lose the portal)"),
+  "messages.threads": r("clients", messages.threads, "Message threads"),
+  "messages.thread": r("clients", messages.thread, "One thread's messages"),
+  "messages.unread": r("clients", messages.unread, "Unread messages"),
+  "messages.startOptions": r("clients", messages.startOptions, "Projects and leads a thread can be started for"),
+  "messages.start": c("clients", messages.start, "Open a project's or lead's thread (nothing is sent)"),
+  "messages.read": c("clients", messages.read, "Mark a thread read"),
+  "messages.send": ask("clients", messages.send, "Send a message", "It goes to everyone on the thread."),
+  "messages.setLeadLink": c("clients", messages.setLeadLink, "Turn a lead's message link off or on (on is an ask)", { askWhen: (a) => (a.off === false ? "Turning the link back on lets whoever has it read and write the thread again." : null) }),
+  "calls.settings": r("clients", calls.settings, "Booking call settings"),
+  "calls.forDeal": r("clients", calls.forDeal, "A lead's booked calls"),
+  "calls.saveSettings": c("clients", calls.saveSettings, "Change the booking call settings"),
+  "calls.setPaused": c("clients", calls.setPaused, "Pause or open the booking page"),
+  "calls.done": c("clients", calls.done, "Mark a booked call done"),
+  "testimonials.list": r("clients", testimonials.list, "Testimonials"),
+  "testimonials.markRead": c("clients", testimonials.markRead, "Mark a testimonial read"),
+  "testimonials.saveAgain": c("clients", testimonials.saveAgain, "Save a testimonial to the vault again"),
+  "shares.list": r("clients", shares.list, "Review links"),
+  "shares.forTarget": r("clients", shares.forTarget, "The review links for a client, project or video"),
+  "shares.activity": r("clients", shares.activity, "Who opened and watched a review link"),
+  "shares.create": ask("clients", shares.create, "Make a review link", "Whoever it's for (or anyone with the link) can open the cuts."),
+  "shares.update": ask("clients", shares.update, "Change a review link's access", "Who can comment or download, and which versions they see, changes at once."),
+  "shares.setOff": c("clients", shares.setOff, "Turn a review link off or on (on is an ask)", { askWhen: (a) => (a.off === false ? "Turning the link back on opens the cuts again to everyone it had." : null) }),
+  "shares.addMember": ask("clients", shares.addMember, "Add someone to a review link", "They get an email with the link."),
+  "shares.resendInvite": ask("clients", shares.resendInvite, "Send a review link's email again", "They get the email again."),
+  "shares.removeMember": c("clients", shares.removeMember, "Take someone off a review link"),
+  "shares.remove": del("clients", shares.remove, "Delete a review link (it stops working)"),
+  "briefs.settings": r("clients", briefs.settings, "The kickoff brief's questions"),
+  "briefs.forProject": r("clients", briefs.forProject, "A project's kickoff brief"),
+  "briefs.forEstimate": r("clients", briefs.forEstimate, "A kickoff brief's answers for an estimate"),
+  "briefs.create": c("clients", briefs.create, "Start a kickoff brief (nothing is sent)"),
+  "briefs.saveSettings": c("clients", briefs.saveSettings, "Change the kickoff brief's questions"),
+  "briefs.send": ask("clients", briefs.send, "Send a project's kickoff brief", "The client gets the kickoff brief to fill in."),
+  "briefs.sendDraft": ask("clients", briefs.sendDraft, "Send a kickoff brief draft", "The client gets the kickoff brief to fill in."),
+  "briefs.remind": ask("clients", briefs.remind, "Remind the client about their kickoff brief", "The client gets a reminder."),
+  "briefs.resetSettings": del("clients", briefs.resetSettings, "Put the kickoff brief's questions back to Wrangler's set"),
+  "fileRequests.forProject": r("clients", fileRequests.forProject, "A project's file requests"),
+  "fileRequests.create": c("clients", fileRequests.create, "Make a file request (sending it is an ask)"),
+  "fileRequests.setStatus": c("clients", fileRequests.setStatus, "Close or reopen a file request"),
+  "fileRequests.sendDraft": ask("clients", fileRequests.sendDraft, "Send a file request", "The client gets the upload link."),
+  "proposals.send": ask("sales", proposals.send, "Send a proposal again, or to more people", "Each person gets their own link to read and accept it.", { onPage: true, refuse: noFile, shows: proposalSend }),
+  "briefings.share": ask("crew", briefings.share, "Share a briefing with more people", "Each person gets their own link to read it.", { onPage: true, refuse: noFile, shows: briefingSend }),
+  "pageText.get": r("creative", pageText.get, "A creative doc's or briefing's text, as page markdown"),
+  "pageText.write": c("creative", pageText.write, "Write a creative doc's or briefing's text (page markdown; nothing is sent: shared copies change only when Heston shares again)"),
+
+  // ---- settings ----
+  "business.settings": r("settings", business.settings, "Business settings: name, legal name, email name, reply-to, look"),
+  "business.brand": r("settings", business.brand, "The business's look"),
+  "business.updateSettings": c("settings", business.updateSettings, "Change business settings"),
+  "brandKit.get": r("settings", brandKit.get, "The business's brand kit"),
+  "brandKit.save": c("settings", brandKit.save, "Change the brand kit"),
+  "brandKit.addFile": c("settings", brandKit.addFile, "Add a file to the brand kit (one site_upload made)"),
+  "brandKit.removeFile": del("settings", brandKit.removeFile, "Take a file out of the brand kit"),
+  "crm.saveRates": c("settings", crm.saveRates, "Change the pricing model (rates, discounts, formula)"),
+  "delivery.settings": r("settings", delivery.settings, "Delivery's term and price"),
+  "delivery.saveSettings": c("settings", delivery.saveSettings, "Change Delivery's term and price for new deliveries"),
+  "footage.saveSettings": c("settings", footage.saveSettings, "Change the raw footage offer and its price"),
+  "subscriptions.setFailRule": ask("settings", subscriptions.setFailRule, "Choose what happens when a subscription payment fails for good", "Cancelling ends a client's subscription without asking you each time."),
+  "subscriptions.setClientFailRule": ask("settings", subscriptions.setClientFailRule, "Choose what happens for one client when their subscription payment fails", "Cancelling ends their subscription without asking you each time."),
+  "notifications.owner": r("settings", notifications.owner, "Which emails Heston gets"),
+  "notifications.setOwner": c("settings", notifications.setOwner, "Turn one of Heston's emails on or off"),
+  "prefs.mine": r("settings", prefs.mine, "The menu order, Dashboard cards and other choices"),
+  "prefs.set": c("settings", prefs.set, "Change the menu order, Dashboard cards or another choice"),
+  "calendar.settings": r("settings", calendarMod.settings, "The Google Calendar connection"),
+  "calendar.save": c("settings", calendarMod.save, "Pick the calendar and who gets invites (inviting more is an ask)", { askWhen: (a) => (a.inviteVendors === true || a.inviteClient === true ? "With invites on, Google emails the crew or the client's people for every shoot." : null) }),
+  "team.page": r("settings", team.page, "The team: members, invites, roles"),
+  "team.member": r("settings", team.member, "One team member"),
+  "team.projectPeople": r("settings", team.projectPeople, "Who's on a project"),
+  "team.cancelInvite": c("settings", team.cancelInvite, "Cancel a team invite"),
+  "team.invite": ask("settings", team.invite, "Invite a team member", "They get an invite and the access their role gives."),
+  "team.resendInvite": ask("settings", team.resendInvite, "Send a team invite again", "They get the invite again."),
+  "team.remove": ask("settings", team.remove, "Take a team member off the business", "They lose access at once."),
+  "team.setRole": ask("settings", team.setRole, "Change a team member's role", "What they can see and do changes at once."),
+  "team.setPerm": ask("settings", team.setPerm, "Turn one of a team member's switches on or off", "What they can see and do changes at once."),
+  "team.resetToRole": ask("settings", team.resetToRole, "Put a team member back to their role's switches", "What they can see and do changes at once."),
+  "team.setRolePerm": ask("settings", team.setRolePerm, "Change what a role can do", "Everyone with that role changes at once."),
+  "team.resetRoles": ask("settings", team.resetRoles, "Put every role back to its starting switches", "Everyone's access changes at once."),
+  "team.assign": ask("settings", team.assign, "Put team members on a project", "They can open the project."),
+  "help.list": r("settings", help.list, "Help guides"),
+  "help.guide": r("settings", help.guide, "One help guide"),
+  "help.edit": c("settings", help.edit, "Start editing a help guide"),
+  "help.reset": del("settings", help.reset, "Put a help guide back to Wrangler's"),
+  "siteWatch.report": r("settings", siteWatch.report, "Site watch: what it found"),
+  "siteWatch.finding": r("settings", siteWatch.finding, "One Site watch finding"),
+  "siteWatch.summary": r("settings", siteWatch.summary, "Site watch in a line"),
+  "siteWatch.markDone": c("settings", siteWatch.markDone, "Mark a Site watch finding done"),
+  "siteWatch.setPaused": c("settings", siteWatch.setPaused, "Pause or resume Site watch's checks"),
+
+  // ---- home ----
+  "home.dashboard": r("home", home.dashboard, "The Dashboard"),
+  "home.needs": r("home", home.needs, "Needs you today"),
+  "overviews.clients": r("home", overviews.clients, "The Clients overview"),
+  "overviews.review": r("home", overviews.review, "The Review overview"),
+  "overviews.docs": r("home", overviews.docs, "The Docs overview"),
+  "overviews.proposals": r("home", overviews.proposals, "The Proposals overview"),
+  "overviews.vendors": r("home", overviews.vendors, "The Vendors overview"),
+  "activity.feed": r("home", activity.feed, "Recent activity (who watched, read, signed)"),
+  "activity.recent": r("home", activity.recent, "The latest activity"),
+  "auditLog.list": r("home", auditLog.list, "The Activity log (Settings): who changed what"),
+  "bell.feed": r("home", bell.feed, "Heston's notifications"),
+  "bell.unread": r("home", bell.unread, "How many notifications are unread"),
+  "bell.prefs": r("home", bell.prefs, "Which notifications Heston gets"),
+  "bell.markRead": c("home", bell.markRead, "Mark a notification read"),
+  "bell.markAllRead": c("home", bell.markAllRead, "Mark every notification read"),
+  "bell.setPref": c("home", bell.setPref, "Turn a kind of notification on or off"),
+
+  // ---- photos and files (from site_upload) ----
+  "gear.setPhoto": c("production", gear.setPhoto, "Set a gear item's photo (one site_upload made)"),
+  "places.addPhoto": c("production", places.addPhoto, "Add a photo to a location (one site_upload made)"),
+  "canvas.addFile": c("creative", canvas.addFile, "Put a file on a canvas (one site_upload made; a shared board is an ask)", { outside: sharedBoard }),
 };
 
 export const AREAS: Record<Area, string> = {
@@ -557,10 +737,13 @@ export const AREAS: Record<Area, string> = {
   production: "Production: shoots, call sheets, shot lists, releases (prepared; signed in person), gear, packing lists, locations",
   crew: "Crew: vendors, bookings, briefings",
   work: "Work: tasks, to-do lists, templates",
-  creative: "Creative planning: creative docs (their text on the site for now), canvases and mood boards, brand kits",
+  creative: "Creative planning: creative docs and their text (pageText), canvases and mood boards, brand kits",
   delivery: "Delivery: folders, albums, files, publishing",
   money: "Money: invoices (drafts; sending and voiding ask), quotes, plans and subscriptions (read), vendor invoices, reports, raw footage storage. Claude never pays, charges or refunds: Heston does on the site",
-  sales: "Sales: the pipeline, follow-ups, estimates, the job ledger, proposals (sending one is on the site for now)",
+  sales: "Sales: the pipeline, follow-ups, estimates, the job ledger, proposals (a first send is on the site; sending again or to more people asks)",
+  clients: "Clients: their people and portal invites, messages, booking calls, testimonials, review links, kickoff briefs, file requests",
+  settings: "Settings: the business, brand kit, pricing, Delivery and storage offers, notifications, menu and Dashboard, calendar, team and roles, help guides, Site watch (never sign-in, passwords, connector keys, exports or deleting the business)",
+  home: "Home: the Dashboard, Needs you, overviews, activity, the Activity log, notifications",
 };
 
 const argsJson = new Map<string, unknown>();

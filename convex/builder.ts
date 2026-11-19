@@ -625,6 +625,15 @@ export const createBuildFor = internalMutation({
     return insertBuild(ctx, { title: a.title, page: a.page ? pageOf(a.page) : pageOf(t?.blocks), fields, signers: a.signers as ExtraSigner[] | undefined, style: t ? (t.style as Style) : undefined, templateId: t?._id });
   },
 });
+/** Phase 8d: a creative doc's or briefing's page written from markdown (pageText.ts), with the builder's own checks. */
+export async function writeBuildPage(ctx: MutationCtx, buildId: Id<"wsBuilds">, title: string | undefined, page: Page | undefined) {
+  const b = await ctx.db.get(buildId);
+  if (!b) throw new ConvexError("That document doesn't exist.");
+  await assertEditable(ctx, b);
+  tooBig(page);
+  await ctx.db.patch(buildId, { ...(title !== undefined ? { title: clean(title) || "Untitled document" } : {}), ...(page !== undefined ? { blocks: pageOf(page) } : {}), updatedAt: Date.now() });
+}
+
 export const patchBuild = internalMutation({
   args: { buildId: v.id("wsBuilds"), title: v.optional(v.string()), page: v.optional(v.any()), fields: v.optional(v.any()), signers: v.optional(v.any()) },
   handler: async (ctx, a) => {

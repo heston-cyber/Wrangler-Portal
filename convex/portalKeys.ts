@@ -6,6 +6,7 @@ import { internalMutation, internalQuery, mutation, query } from "./lib/function
 import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
 import { requireOwner } from "./lib/access";
+import { allowedEmails } from "./lib/owners";
 import { base64url, sha256Hex } from "./lib/hash";
 import { audit } from "./lib/audit";
 
@@ -14,25 +15,29 @@ export const KEY_PREFIX = "wp_";
 /** The owner only (not a team member, client or vendor). */
 export const ownerCheck = internalQuery({ args: {}, handler: async (ctx) => { await requireOwner(ctx); return null; } });
 
+/** 8d: how long a key works: 30 or 90 days, a year, or until revoked (null). */
+const daysArg = v.optional(v.union(v.literal(30), v.literal(90), v.literal(365), v.null()));
+
 export const createKey = action({
-  args: { label: v.optional(v.string()) },
+  args: { label: v.optional(v.string()), days: daysArg },
   handler: async (ctx, a): Promise<{ key: string; prefix: string }> => {
     await ctx.runQuery(internal.portalKeys.ownerCheck, {});
     const bytes = new Uint8Array(32);
     crypto.getRandomValues(bytes);
     const key = KEY_PREFIX + base64url(bytes);
     const prefix = key.slice(0, 10);
-    await ctx.runMutation(internal.portalKeys.insertKey, { hash: await sha256Hex(key), prefix, label: (a.label ?? "").trim().slice(0, 60) || "Claude" });
+    await ctx.runMutation(internal.portalKeys.insertKey, { hash: await sha256Hex(key), prefix, label: (a.label ?? "").trim().slice(0, 60) || "Claude", days: a.days ?? null });
     return { key, prefix };
   },
 });
 
 export const insertKey = internalMutation({
-  args: { hash: v.string(), prefix: v.string(), label: v.string() },
+  args: { hash: v.string(), prefix: v.string(), label: v.string(), days: v.union(v.literal(30), v.literal(90), v.literal(365), v.null()) },
   handler: async (ctx, a) => {
-    await requireOwner(ctx); // the same caller as createKey: the row is stamped with the owner's business
-    await ctx.db.insert("portalKeys", { hash: a.hash, prefix: a.prefix, label: a.label, createdAt: Date.now() });
-    await audit(ctx, { kind: "settings", text: `made a Claude connector key (${a.prefix}…)`, where: "Settings › Claude connectors" });
+    const me = await requireOwner(ctx); // the same caller as createKey: the row is stamped with the owner's business
+    const now = Date.now();
+    await ctx.db.insert("portalKeys", { hash: a.hash, prefix: a.prefix, label: a.label, createdAt: now, madeBy: me.userId, ...(a.days ? { expiresAt: now + a.days * 86_400_000 } : {}) });
+    await audit(ctx, { kind: "settings", text: `made a Claude connector key (${a.prefix}…)${a.days ? `, working ${a.days === 365 ? "a year" : `${a.days} days`}` : ", working until revoked"}`, where: "Settings › Claude connectors" });
   },
 });
 
@@ -42,7 +47,7 @@ export const listKeys = query({
     await requireOwner(ctx);
     const keys = await ctx.db.query("portalKeys").collect();
     return keys.filter((k) => !k.revokedAt).sort((a, b) => b.createdAt - a.createdAt)
-      .map((k) => ({ _id: k._id, prefix: k.prefix, label: k.label, createdAt: k.createdAt, lastUsedAt: k.lastUsedAt ?? null }));
+      .map((k) => ({ _id: k._id, prefix: k.prefix, label: k.label, createdAt: k.createdAt, lastUsedAt: k.lastUsedAt ?? null, expiresAt: k.expiresAt ?? null, expired: !!k.expiresAt && k.expiresAt <= Date.now() }));
   },
 });
 
@@ -67,9 +72,18 @@ export const checkKey = internalMutation({
   handler: async (ctx, { hash }) => {
     const row = await ctx.db.query("portalKeys").withIndex("by_hash", (q) => q.eq("hash", hash)).unique();
     if (!row || row.revokedAt || !row.businessId) return false as const;
+    const now = Date.now();
+    if (row.expiresAt && row.expiresAt <= now) return false as const; // 8d: it ran out
     const biz = await ctx.db.get(row.businessId);
     if (!biz) return false as const; // a business that's gone
-    const now = Date.now();
+    // 8b review L8: the owner who made it must still own this business (a key made before this rule has no maker).
+    if (row.madeBy) {
+      const u = await ctx.db.get(row.madeBy);
+      const email = u?.email?.toLowerCase();
+      const owns = !!email && ((await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", email)).collect())
+        .some((m) => m.businessId === row.businessId && m.role === "owner" && !m.revokedAt) || allowedEmails().includes(email));
+      if (!owns) return false as const;
+    }
     if (!row.lastUsedAt || now - row.lastUsedAt > 60_000) await ctx.db.patch(row._id, { lastUsedAt: now });
     return { businessId: row.businessId };
   },

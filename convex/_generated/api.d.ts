@@ -74,6 +74,7 @@ import type * as setup from "../setup.js";
 import type * as clientOnboard from "../clientOnboard.js";
 import type * as shootPage from "../shootPage.js";
 import type * as packing from "../packing.js";
+import type * as pageText from "../pageText.js";
 import type * as siteWatch from "../siteWatch.js";
 import type * as emails from "../emails.js";
 import type * as lib_shareAccess from "../lib/shareAccess.js";
@@ -247,6 +248,7 @@ declare const fullApi: ApiFromModules<{
   clientOnboard: typeof clientOnboard;
   shootPage: typeof shootPage;
   packing: typeof packing;
+  pageText: typeof pageText;
   siteWatch: typeof siteWatch;
   emails: typeof emails;
   "lib/shareAccess": typeof lib_shareAccess;

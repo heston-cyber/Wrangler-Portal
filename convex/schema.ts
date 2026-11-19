@@ -329,6 +329,8 @@ export default defineSchema({
     createdAt: v.number(),
     lastUsedAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()),
+    expiresAt: v.optional(v.number()),   // 8d: when it stops working on its own (none: until revoked)
+    madeBy: v.optional(v.id("users")),   // 8d (8b review L8): the owner who made it; it stops if they stop being the owner
   }).index("by_hash", ["hash"]),
 
   // Phase 8a (D208–D209): something Claude asked to send or delete through the connector. It does nothing until the
@@ -358,6 +360,8 @@ export default defineSchema({
     createdAt: v.number(),
     lastUsedAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()),
+    expiresAt: v.optional(v.number()),   // 8d: when it stops working on its own (none: until revoked)
+    madeBy: v.optional(v.id("users")),   // 8d (8b review L8): the owner who made it; it stops if they stop being the owner
   }).index("by_hash", ["hash"]),
 
   // The connected Dropbox account (one row). Tokens never leave the backend.
@@ -582,6 +586,8 @@ export default defineSchema({
     createdAt: v.number(),
     lastUsedAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()),
+    expiresAt: v.optional(v.number()),   // 8d: when it stops working on its own (none: until revoked)
+    madeBy: v.optional(v.id("users")),   // 8d (8b review L8): the owner who made it; it stops if they stop being the owner
   }).index("by_hash", ["hash"]),
   // S3: the archive's own Dropbox app ("Wrangler Sign", App folder), separate from Wrangler Review's.
   wsDropbox: defineTable({
