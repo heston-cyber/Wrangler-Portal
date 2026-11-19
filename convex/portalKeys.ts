@@ -98,7 +98,7 @@ export const checkKey = internalMutation({
 // For the live self-test and the tests only: a short-lived key for a named business.
 export const insertTestKey = internalMutation({
   args: { hash: v.string(), businessId: v.id("businesses") },
-  handler: async (ctx, a) => ctx.db.insert("portalKeys", { businessId: a.businessId, hash: a.hash, prefix: "wp_selftest", label: "Self-test (temporary)", createdAt: Date.now() }),
+  handler: async (ctx, a) => ctx.db.insert("portalKeys", { businessId: a.businessId, hash: a.hash, prefix: "wp_selftest", label: "Self-test (temporary)", createdAt: Date.now(), expiresAt: Date.now() + 15 * 60_000 }), // 8f review L5: runs out even if the test never cleans up
 });
 export const deleteKey = internalMutation({
   args: { keyId: v.id("portalKeys") },

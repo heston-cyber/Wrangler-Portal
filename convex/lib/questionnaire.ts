@@ -1,7 +1,7 @@
 // Phase 3b · the proposal questionnaire (S5 · Phase 3b 711:2231 → 715:3862; the editor 718:5483). Each business edits
 // its own set, starting from Wrangler's (D70). Steps hold questions of ten answer types; a few questions are built in
 // (the client picker, the pricing parts, colours, milestones, add-ons) and keep their type. Client and Pricing can't be
-// removed: a proposal needs both. The answers become the proposal two ways: Claude drafts it through the Sign connector
+// removed: a proposal needs both. The answers become the proposal two ways: Claude drafts it through the Wrangler Portal connector
 // (D89), or "Fill in myself" places them into a plain outline (outlineFromAnswers).
 import { atom, bulletList, line, newId, section, type Page, type PNode } from "./wsBuilder";
 

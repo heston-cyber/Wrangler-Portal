@@ -4,6 +4,10 @@ import { convexTest } from "convex-test";
 import { beforeAll, describe, expect, test } from "vitest";
 import { api, internal } from "../convex/_generated/api";
 import schema from "../convex/schema";
+import * as oldReview from "../convex/connector";
+import * as oldSign from "../convex/wsConnector";
+import * as oldReviewServer from "../convex/mcp";
+import * as oldSignServer from "../convex/wsMcp";
 
 const modules = import.meta.glob("../convex/**/*.ts");
 beforeAll(() => { process.env.ALLOWED_EMAILS = "heston@wranglerproductions.com"; });
@@ -71,10 +75,12 @@ describe("connector keys", () => {
     expect((await rpc(t, list, { key: wr })).status).toBe(401);
     expect((await rpc(t, list, { key: ws })).status).toBe(401);
     // Nothing on the site makes, lists or revokes the old keys any more.
-    const gone = api as unknown as Record<string, Record<string, never>>;
-    for (const mod of ["connector", "wsConnector"]) {
-      await expect(t.query(gone[mod].listKeys, {}), mod).rejects.toThrow();
-      await expect(t.action(gone[mod].createKey, {}), mod).rejects.toThrow();
+    // 8f review L1: checked on the modules themselves, not by a call that a sign-in check would refuse anyway.
+    for (const [name, mod] of [["connector", oldReview], ["wsConnector", oldSign]] as const) {
+      for (const fn of ["createKey", "listKeys", "revokeKey", "checkKey", "insertKey", "insertTestKey"]) expect((mod as Record<string, unknown>)[fn], `${name}.${fn}`).toBeUndefined();
+    }
+    for (const [name, mod] of [["mcp", oldReviewServer], ["wsMcp", oldSignServer]] as const) {
+      for (const fn of ["mcpPost", "mcpOther", "post", "other", "selfTest"]) expect((mod as Record<string, unknown>)[fn], `${name}.${fn}`).toBeUndefined();
     }
   });
 
@@ -87,8 +93,8 @@ describe("connector keys", () => {
     expect(JSON.stringify(keys)).not.toContain(key);
     const stored = await t.run((ctx) => ctx.db.query("portalKeys").collect());
     expect(JSON.stringify(stored)).not.toContain(key);
-    await expect(other.action(api.portalKeys.createKey, {})).rejects.toThrow();
-    await expect(other.query(api.portalKeys.listKeys, {})).rejects.toThrow();
+    await expect(other.action(api.portalKeys.createKey, {})).rejects.toThrow(/Not allowed/);
+    await expect(other.query(api.portalKeys.listKeys, {})).rejects.toThrow(/Not allowed/);
   });
 
   test("no key, a wrong key and a revoked key are all refused", async () => {
@@ -98,11 +104,13 @@ describe("connector keys", () => {
     expect((await rpc(t, list, { key: "wp_" + "x".repeat(43) })).status).toBe(401);
     expect((await rpc(t, list, { key })).status).toBe(200);
     expect((await rpc(t, list, { path: `/portal-mcp/${key}` })).status).toBe(200);
+    expect((await rpc(t, list, { headers: { "x-api-key": key } })).status).toBe(200); // 8f review L2: the X-API-Key route
     const [k] = await me.query(api.portalKeys.listKeys, {});
     expect(k.lastUsedAt).not.toBeNull();
     await me.mutation(api.portalKeys.revokeKey, { keyId: k._id });
     expect((await rpc(t, list, { key })).status).toBe(401);
     expect((await rpc(t, list, { path: `/portal-mcp/${key}` })).status).toBe(401);
+    expect((await rpc(t, list, { headers: { "x-api-key": key } })).status).toBe(401);
     expect(await me.query(api.portalKeys.listKeys, {})).toHaveLength(0);
   });
 

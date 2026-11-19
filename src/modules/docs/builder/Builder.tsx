@@ -898,7 +898,7 @@ function StartContract({ p, doc, onClose, onStart }: { p: ProposalInfo; doc: Bui
 }
 
 /** The Insert panel's Pitch deck part (716:4980) and its dialog (717:4428, D72): Claude makes a Claude Slides deck on
- *  the owner's own computer through the Sign connector, in the business's brand kit or the client's. */
+ *  the owner's own computer through the Wrangler Portal connector, in the business's brand kit or the client's. */
 function PitchDeck({ p, show }: { p: ProposalInfo; show: (m: string) => void }) {
   const setDeck = useMutation(api.proposals.setDeck);
   const [open, setOpen] = useState(false);

@@ -212,7 +212,7 @@ let flagged: any[] = [
   { _id: "d3", path: "/loose render.mp4", reason: "Not a register name. Name it like 00002_Title_v1 (Register › New video gives the name), then save it again.", at: now - 2 * hr },
   { _id: "d5", path: "/Northline/00009_FallTeaser_v1.mp4", reason: "There's no video 00009 in the register. Add it with Register › New video, then save the render again with the name it gives.", at: now - 6 * min },
 ];
-let keys: any[] = [{ _id: "k1", prefix: "wr_Q2xhdWR", label: "Claude", createdAt: Date.now() - 86_400_000 * 2, lastUsedAt: Date.now() - 3_600_000 }];
+let keys: any[] = [{ _id: "k1", prefix: "wp_Q2xhdWR", label: "Claude", createdAt: Date.now() - 86_400_000 * 2, lastUsedAt: Date.now() - 3_600_000, expiresAt: Date.now() + 86_400_000 * 88, expired: false }]; // 8f: the one connector's keys
 
 // ---------- Wrangler Sign (S1) ----------
 // One draft with no boxes yet (the page finds the markers in mock/sign-sample.pdf) and one approved document.
@@ -297,7 +297,7 @@ export const store = {
         return notes.filter((n) => n.versionId === args.versionId).filter((n) => !sh || n.visibility === "shared").map((n) => ({ ...(n.voice ? { ...n, voiceUrl: null } : n), visibility: n.visibility ?? "private", mine: sh ? n.authorName?.includes("(guest)") || n.authorName === "Maya Chen" : true }));
       }
       case "activity:feed": return feed().slice(0, args.limit ?? 60);
-      case "connector:listKeys": return keys;
+      case "portalKeys:listKeys": return keys;
       case "register:list": return registerList();
       case "prefs:mine": return { ...prefs };
       case "register:sheetKey": return sheet;
@@ -391,7 +391,7 @@ export const store = {
       return { inviteId: "x", already: false };
     }
     if (name === "clients:revokeInvite") { invites = invites.map((i) => (i._id === args.inviteId ? { ...i, revokedAt: Date.now() } : i)); bump(); return; }
-    if (name === "connector:revokeKey") { keys = keys.filter((k) => k._id !== args.keyId); bump(); return; }
+    if (name === "portalKeys:revokeKey") { keys = keys.filter((k) => k._id !== args.keyId); bump(); return; }
     if (name === "library:createClient") {
       const n = String(args.name).trim();
       if (madeClients.concat(projects.map((p) => p.client ?? "")).some((c) => c.toLowerCase() === n.toLowerCase())) throw new Error(`There's already a client called ${n}.`);
@@ -419,9 +419,9 @@ export const store = {
       ] };
     }
     if (name === "register:makeSheetKey") { sheet = { prefix: "wrs_demo0", createdAt: Date.now(), lastUsedAt: null }; bump(); return { key: "wrs_demo0000000000000000000000000000" }; }
-    if (name === "connector:createKey") {
-      const key = "wr_" + "MockKeyForScreenshotsOnly0123456789abcdefgh";
-      keys = [{ _id: "k" + Date.now(), prefix: key.slice(0, 10), label: "Claude", createdAt: Date.now(), lastUsedAt: null }, ...keys]; bump();
+    if (name === "portalKeys:createKey") {
+      const key = "wp_" + "MockKeyForScreenshotsOnly0123456789abcdefgh";
+      keys = [{ _id: "k" + Date.now(), prefix: key.slice(0, 10), label: "Claude", createdAt: Date.now(), lastUsedAt: null, expiresAt: args.days ? Date.now() + args.days * 86_400_000 : null, expired: false }, ...keys]; bump();
       return { key, prefix: key.slice(0, 10) };
     }
     return null;

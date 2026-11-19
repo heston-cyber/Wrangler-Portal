@@ -1,5 +1,5 @@
 // Phase 3b (D71): brand kits. One for the business (Settings › Brand kit, 708:1235) and one per company (the company
-// page's Brand kit tab, 718:7694; the proposal questionnaire fills it). Claude reads them through the Sign connector
+// page's Brand kit tab, 718:7694; the proposal questionnaire fills it). Claude reads them through the Wrangler Portal connector
 // to make pitch decks (D72, D89). A kit holds a logo (companies; the business uses its Settings › Business logos),
 // colours, heading and body fonts, reference files, links and tone words. Uploads: 25 MB a file, 20 files (D90).
 // Owner only; clients never see a kit.

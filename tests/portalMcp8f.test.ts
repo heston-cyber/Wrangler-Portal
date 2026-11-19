@@ -27,10 +27,10 @@ describe("Phase 8f · one connector", () => {
     const rpc = async (body: unknown) => (await (await w.t.fetch("/portal-mcp", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` }, body: JSON.stringify(body) })).json()) as any;
     const names = (await rpc({ jsonrpc: "2.0", id: 1, method: "tools/list" })).result.tools.map((t: { name: string }) => t.name);
     for (const t of [...REVIEW_TOOLS, ...SIGN_TOOLS]) expect(names, t.name).toContain(t.name);
-    for (const [name, args] of [["find_videos", {}], ["list_documents", {}], ["list_templates", {}], ["next_render_name", { video: "Launch" }]] as const) {
+    for (const [name, args] of [["find_videos", {}], ["list_documents", {}], ["list_templates", {}], ["list_drafts", {}], ["get_client_inbox", { client: "Harbor Coffee" }]] as const) {
       const r = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name, arguments: args } });
       expect(r.result, name).toBeDefined();
-      expect(r.result.content[0].text, name).not.toMatch(/Unknown tool|Unauthorized/);
+      expect(r.result.isError, `${name}: ${r.result.content[0].text}`).not.toBe(true); // 8f review L7: they really answer
     }
   });
 

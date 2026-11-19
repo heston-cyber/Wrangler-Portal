@@ -801,7 +801,7 @@ export const setDeck = mutation({
   },
 });
 
-// ---------- the Sign connector's proposal tools (D89): Claude reads the answers, writes the draft, makes the deck ----------
+// ---------- the proposal tools (D89; on the Wrangler Portal connector since Phase 8f): Claude reads the answers, writes the draft, makes the deck ----------
 
 export const connectorFind = internalQuery({
   args: { ref: v.string() },

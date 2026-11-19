@@ -1,4 +1,5 @@
-// The MCP protocol side, shared by the two Claude connectors (Wrangler Review at /mcp, Wrangler Sign at /ws-mcp).
+// The MCP protocol side of the one Wrangler Portal connector (/portal-mcp). Until Phase 8f (Nov 19) it also served the
+// old Wrangler Review (/mcp) and Wrangler Sign (/ws-mcp) connectors.
 // Streamable HTTP, plain JSON replies, no sessions. Dual-era: 2026-07-28 clients statelessly (per-request _meta,
 // server/discover) and older clients that open with `initialize` (2025-03-26 … 2025-11-25). Moved here from mcp.ts
 // unchanged when Wrangler Sign got its own connector (S4, Oct 27).
@@ -29,9 +30,9 @@ export type McpConfig = {
   callTool: (ctx: ActionCtx, name: string, args: Json) => Promise<ToolResult>;
   /** Is this request's key live? (The key comes from Authorization: Bearer, X-API-Key, or the address.) */
   // A live key: false, or the business it belongs to (Phase 0.5d step 4: the connector then acts only for it).
-  authorized: (ctx: ActionCtx, key: string) => Promise<false | { businessId: Id<"businesses"> | null }>;
-  keyPrefix: string;          // "wr_" or "ws_"
-  pathPrefix: string;         // "/mcp" or "/ws-mcp": the key can also ride in the address as <pathPrefix>/<key>
+  authorized: (ctx: ActionCtx, key: string) => Promise<false | { businessId: Id<"businesses"> | null }>; // null is refused (8f review L3)
+  keyPrefix: string;          // "wp_"
+  pathPrefix: string;         // "/portal-mcp": the key can also ride in the address as <pathPrefix>/<key>
   unauthorized: string;       // what a request without a working key is told
 };
 
@@ -120,7 +121,7 @@ export async function servePost(ctx: ActionCtx, req: Request, cfg: McpConfig): P
   const origin = req.headers.get("origin");
   if (origin && !ALLOWED_ORIGINS.some((r) => r.test(origin))) return rpcError(null, -32000, "Origin not allowed", undefined, 403);
   const who = await authorized(ctx, req, cfg);
-  if (!who) {
+  if (!who || !who.businessId) { // 8f review L3: a key with no business never runs unscoped
     return new Response(JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32001, message: cfg.unauthorized } }), {
       status: 401, headers: { "content-type": "application/json" },
     });

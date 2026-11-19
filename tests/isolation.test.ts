@@ -243,4 +243,61 @@ describe("two businesses", () => {
     expect(Object.keys(before).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))).toEqual([]);
     expect(await aFile(t, ids.storageId)).toEqual({ alive: true, owner: a });
   });
+
+  // Phase 8f (review M2, CLAUDE.md rule 5): the Review and Sign tools are reachable only through the one connector now.
+  // B's key calls every one of them with A's record ids and names: nothing of A comes back, and nothing of A changes.
+  test("Phase 8f: B's connector key gets nothing of A from any Review or Sign tool, and changes nothing of A", async () => {
+    const { t, ids, a, bSub } = await twoBusinesses();
+    vi.stubGlobal("fetch", async () => new Response("{}", { status: 500 }));
+    const { TOOLS: REVIEW_TOOLS } = await import("../convex/mcp");
+    const { TOOLS: SIGN_TOOLS } = await import("../convex/wsMcp");
+    // A's document finished, so get_signed_pdf, verify_pdf and import_pdf have something real to find.
+    await t.run(async (ctx) => { await ctx.db.patch(ids.docId as never, { status: "completed", sentVersion: 1, completedAt: 1, final: { fileId: ids.storageId, fileName: "A-signed.pdf", sha256: "a".repeat(64), bytes: 1, at: 1 } } as never); });
+    const key = (await t.withIdentity({ subject: bSub }).action(api.portalKeys.createKey, {})).key as string;
+    const before = await snapshot(t, a, true);
+    const I = ids as unknown as Record<string, string>;
+    const ok = "Heston said: yes, go ahead";
+    const calls: Array<[string, Record<string, unknown>]> = [
+      ["find_videos", {}], ["find_videos", { query: "V" }],
+      ["get_notes", { video_id: I.videoId, status: "all" }], ["get_notes", { video: "V", status: "all" }],
+      ["get_note_images", { note_ids: [I.noteId] }], ["get_resolve_markers", { video_id: I.videoId, status: "all" }],
+      ["get_transcript", { video_id: I.videoId }], ["reply_to_note", { note_id: I.noteId, text: "x" }],
+      ["mark_notes", { note_ids: [I.noteId], status: "done" }], ["register_video", { title: "X", project: "P" }],
+      ["add_to_register", { video_id: I.videoId, short_title: "X" }], ["next_render_name", { video_id: I.videoId }],
+      ["set_version_description", { video_id: I.videoId, description: "x", heston_ok: ok }],
+      ["get_client_inbox", { client: "Harbor" }], ["list_follow_ups", {}], ["draft_follow_up", { who: "A", about: "B", due: "2030-01-01", company: "Harbor" }],
+      ["draft_ledger_entry", { project: "P", kind: "hours", hours: 1, date: "2030-01-01" }],
+      ["draft_client_note", { client: "Harbor", title: "t", text: "x", said: ok }],
+      ["list_documents", { status: "all" }], ["get_document", { document: I.docId }], ["get_document", { document: "WS-00001" }], ["get_document", { document: "D" }],
+      ["create_document", { title: "B's own", pdf_base64: "JVBERi0=", signers: [{ name: "Q", email: "q@b.example" }] }],
+      ["update_document", { document: I.docId, title: "x" }], ["preview_document", { document: I.docId }],
+      ["approve_document", { document: I.docId, heston_ok: ok }], ["send_document", { document: I.docId, heston_ok: ok }], ["void_document", { document: I.docId, heston_ok: ok }],
+      ["send_reminder", { document: I.docId, signer: "client", heston_ok: ok }], ["get_audit_trail", { document: I.docId }], ["get_signed_pdf", { document: I.docId }],
+      ["list_templates", {}], ["get_template", { template: I.templateId }], ["list_drafts", {}], ["create_draft", { template: I.templateId }],
+      ["get_draft", { draft: I.buildId }], ["update_draft", { draft: I.buildId, title: "x" }], ["import_pdf", { document: I.docId }],
+      ["draft_to_signing", { draft: I.buildId }], ["save_draft_as_template", { draft: I.buildId, name: "x" }],
+      ["list_proposals", {}], ["get_proposal", { proposal: I.proposalId }], ["get_proposal", { proposal: "X-P-0001" }],
+      ["write_proposal_draft", { proposal: I.proposalId, markdown: "# x" }], ["verify_pdf", { sha256: "a".repeat(64) }],
+      ["send_client_note", { note_id: I.inboxNoteId, heston_ok: ok }], ["request_status", { request_id: I.pendingId }],
+    ];
+    // Every Review and Sign tool is in the sweep, so a new one can't slip past it.
+    const covered = new Set(calls.map(([n]) => n));
+    expect([...REVIEW_TOOLS, ...SIGN_TOOLS].map((x) => x.name).filter((n) => !covered.has(n))).toEqual([]);
+    const aIds = Object.entries(ids).filter(([k]) => !/Sub$/.test(k) && k !== "storageId").map(([, v]) => String(v));
+    const leaks: string[] = [];
+    for (const [name, args] of calls) {
+      const r = await t.fetch("/portal-mcp", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }) });
+      const txt = await r.text();
+      if (r.status !== 200 || !/"result"/.test(txt)) leaks.push(`${name} never got through (HTTP ${r.status}): the sweep would prove nothing`);
+      const hit = aIds.find((id) => txt.includes(id) && !JSON.stringify(args).includes(id));
+      if (hit) leaks.push(`${name} returned A's ${hit}`);
+      for (const word of ["A-signed.pdf", "\"title\":\"D\"", "Harbor", "a.mp4", "X-P-0001"]) {
+        if (txt.includes(word) && !JSON.stringify(args).includes(word.replace(/"/g, ""))) leaks.push(`${name} mentions ${word}`);
+      }
+    }
+    expect(leaks).toEqual([]);
+    const after = await snapshot(t, a, true);
+    expect(Object.keys(before).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))).toEqual([]);
+    expect(await aFile(t, ids.storageId)).toEqual({ alive: true, owner: a });
+  });
 });

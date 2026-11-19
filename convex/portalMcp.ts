@@ -12,9 +12,10 @@
 // - Money never moves through the connector (prepared only; Heston pays on the site). Signing stays Heston's own.
 // - W-9s, tax ID numbers, bank details, keys and passwords never leave through it: only whether one is on file.
 import { httpAction } from "./_generated/server";
-import { internalAction, internalQuery } from "./lib/functions";
+import { forBusiness, internalAction, internalQuery } from "./lib/functions";
 import { defaultBusiness } from "./lib/business";
 import type { ActionCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { sha256Hex } from "./lib/hash";
 import { fail, ok, servePost, serveOther, type Json, type McpConfig, type Tool, type ToolResult } from "./lib/mcpServer";
@@ -302,24 +303,29 @@ export const selfTest = internalAction({
         const r = await fetch(`${base}${old}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });
         check(`old address ${old} is gone`, r.status === 404, `HTTP ${r.status}`);
       }
-      // Sign's backend work (markers found with pdf.js; a draft rendered with react-pdf), on throwaway files deleted after.
+      // Sign's backend work (markers found with pdf.js; a draft rendered with react-pdf), on throwaway files deleted after,
+      // as the default business (8f review L4: never unscoped).
+      const bctx = forBusiness(ctx, biz);
       const { PDFDocument, StandardFonts } = await import("@cantoo/pdf-lib");
       const pd = await PDFDocument.create(); const font = await pd.embedFont(StandardFonts.Helvetica);
       pd.addPage([612, 792]).drawText("CLIENT: {{sign:client}}  Date: {{date:client}}", { x: 72, y: 300, size: 11, font });
-      const sid = await ctx.storage.store(new Blob([new Uint8Array(await pd.save())], { type: "application/pdf" }));
+      const sid = await bctx.storage.store(new Blob([new Uint8Array(await pd.save())], { type: "application/pdf" }));
       try {
-        const scan = await ctx.runAction(internal.wsNode.findMarkers, { storageId: sid });
+        const scan = await bctx.runAction(internal.wsNode.findMarkers, { storageId: sid });
         check("markers found on the backend", scan.markers.length === 2 && scan.textPages === 1, `${scan.markers.length} markers`);
-      } finally { await ctx.storage.delete(sid); }
-      const buildId = await ctx.runMutation(internal.builder.createBuildFor, { title: "Self-test (deleted)", page: pageFromMarkdown("# Self-test\n:::section initials\n### Clause\nText.\n:::\n[[signatures heston client]]") });
+      } finally { await bctx.storage.delete(sid); }
+      const buildId = await bctx.runMutation(internal.builder.createBuildFor, { title: "Self-test (deleted)", page: pageFromMarkdown("# Self-test\n:::section initials\n### Clause\nText.\n:::\n[[signatures heston client]]") });
+      let pdfId: Id<"_storage"> | null = null;
       try {
-        const pdfId = await ctx.runAction(internal.wsRender.renderBuild, { buildId });
-        const blob = await ctx.storage.get(pdfId);
+        pdfId = await bctx.runAction(internal.wsRender.renderBuild, { buildId });
+        const blob = await bctx.storage.get(pdfId);
         const head = blob ? new TextDecoder().decode(new Uint8Array(await blob.slice(0, 5).arrayBuffer())) : "";
-        const scan = await ctx.runAction(internal.wsNode.findMarkers, { storageId: pdfId });
+        const scan = await bctx.runAction(internal.wsNode.findMarkers, { storageId: pdfId });
         check("draft rendered on the backend", head === "%PDF-" && scan.markers.length >= 5, `${scan.markers.length} markers`);
-        await ctx.storage.delete(pdfId);
-      } finally { await ctx.runMutation(internal.builder.dropBuildInternal, { buildId }); }
+      } finally {
+        if (pdfId) await bctx.storage.delete(pdfId).catch(() => undefined);
+        await bctx.runMutation(internal.builder.dropBuildInternal, { buildId });
+      }
     } catch (e) {
       check("ran without crashing", false, ((e as Error).message || "").slice(0, 200));
     } finally {
