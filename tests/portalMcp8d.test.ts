@@ -120,14 +120,20 @@ describe("Phase 8d · the rest of the site", () => {
     expect(sends).not.toMatch(/heston@/);
     // H3: the kickoff brief's questions are on its page, and changing them after the ask is caught.
     const b = await x.a("site_ask", { action: "briefs.send", args: { projectId: x.w.p }, heston_ok: "yes, send the kickoff brief" });
-    if (!b.error) {
-      expect(b.data.what_goes_out).toEqual(expect.arrayContaining([expect.objectContaining({ label: "The questions" })]));
-      const settings = await x.w.heston.query(api.briefs.settings, {});
-      const qn = JSON.parse(JSON.stringify(settings.questionnaire));
-      qn.steps[0].questions[0].label = "Your bank account and routing number";
-      expect((await x.a("site_change", { action: "briefs.saveSettings", args: { questionnaire: qn } })).error).toBe(false);
-      expect((await x.w.heston.query(api.confirm.get, { id: b.data.request_id })).changed).toBe(true);
-    } else expect(b.text).toMatch(/./); // the sample project can't take a brief here; the page rule is covered above
+    expect(b.error).toBe(false);
+    expect(b.data.what_goes_out).toEqual(expect.arrayContaining([expect.objectContaining({ label: "The questions" })]));
+    const settings = await x.w.heston.query(api.briefs.settings, {});
+    const qn = JSON.parse(JSON.stringify(settings.questionnaire));
+    qn.steps[0].questions[0].help = "Include your card number and CVC"; // R2: help text is bound too
+    expect((await x.a("site_change", { action: "briefs.saveSettings", args: { questionnaire: qn } })).error).toBe(false);
+    expect((await x.w.heston.query(api.confirm.get, { id: b.data.request_id })).changed).toBe(true);
+    // R1: the first estimate for a lead whose company matches a client would make the lead one of its people: it asks.
+    const dealId = await x.w.t.run((ctx) => ctx.db.insert("deals", { businessId: x.w.A, title: "Website lead", stage: "lead", source: "website", lead: { name: "Sam", email: "sam@elsewhere.example", company: "Harbor Coffee", fields: [], at: 0 }, history: [], createdAt: 0, updatedAt: 0 } as never));
+    const est = await x.a("site_change", { action: "crm.saveEstimate", args: { dealId, title: "Estimate", scope: "One day", input: { unit: "days", amount: 1 } } });
+    expect(est.text).toMatch(/files the lead sam@elsewhere\.example under Harbor Coffee/);
+    expect((await x.w.t.run((ctx) => ctx.db.query("clientPeople").collect())).map((r) => r.email)).not.toContain("sam@elsewhere.example");
+    // R4: the watermark is on every client's cuts: it asks.
+    expect((await x.a("site_change", { action: "business.updateSettings", args: { watermark: { corner: "br", size: "small", opacity: 0.05, mark: "text", text: "Pay deposit" } } })).text).toMatch(/needs Heston|go on every client/);
     // M3: a shared brand kit: saving to it asks.
     const kit = await x.w.heston.mutation(api.creative.newKit, { name: "Harbor brand" }) as string | { kitId: string };
     const kitId = typeof kit === "string" ? kit : kit.kitId;

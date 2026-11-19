@@ -56,7 +56,7 @@ export function PortalConnectorPanel({ show }: { show: (m: string) => void }) {
             <KeyRound size={16} />
             <span className="pl">
               <b>{k.label}</b> <code className="mono">{k.prefix}…</code>
-              <span className="secondary" style={{ display: "block", fontSize: 12.5 }}>Made {ago(k.createdAt)} · {k.lastUsedAt ? <>last used {ago(k.lastUsedAt)}</> : "not used yet"} · {k.expired ? "ran out: make a new one" : k.expiresAt ? `works until ${new Date(k.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : "works until revoked"}</span>
+              <span className="secondary" style={{ display: "block", fontSize: 12.5 }}>Made {ago(k.createdAt)} · {k.lastUsedAt ? <>last used {ago(k.lastUsedAt)}</> : "not used yet"} · {k.expired ? (k.expiresAt ? "ran out: make a new one" : "made before Nov 19, no longer works: make a new one") : k.expiresAt ? `works until ${new Date(k.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : "works until revoked"}</span>
             </span>
             <span className="pr"><button className="btn sm" onClick={() => setRevoking(k)}>Revoke</button></span>
           </div>

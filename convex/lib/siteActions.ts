@@ -237,7 +237,9 @@ const proposalSend = async (ctx: QueryCtx, a: Args) => {
     : a.copyLink === true ? [] : client.email ? [{ email: String(client.email).trim().toLowerCase(), name: String(client.name ?? "") }] : [];
   if (!list.length && a.copyLink !== true) throw new ConvexError("Add who it goes to (or copy its link): it can't be sent to no one.");
   const rows = await ctx.db.query("offerRecipients").withIndex("by_proposal", (q) => q.eq("proposalId", p._id as never)).collect();
-  const named = list.map((x) => { const old = rows.find((r) => String(r.email).toLowerCase() === x.email.toLowerCase()); const n = old?.name ?? x.name; return `${n ? `${n} ` : ""}<${x.email}>${old?.stoppedAt ? " (their stopped link works again)" : ""}`; });
+  const now = Date.now();
+  const named = list.map((x) => { const old = rows.find((r) => String(r.email).toLowerCase() === x.email.toLowerCase()); const n = old?.name ?? x.name;
+    return `${n ? `${n} ` : ""}<${x.email}>${old?.stoppedAt ? " (their link was stopped: they get a new one)" : old && now - Number(old.sentAt ?? 0) < 10 * 60_000 ? " (emailed in the last 10 minutes: skipped)" : ""}`; });
   const sends = [...(named.length ? [`Proposal email with their own link to ${named.join(", ")}`] : []), ...(a.copyLink === true ? ["a link for Heston to copy and send himself"] : [])];
   return [
     { label: "Proposal", value: `${String(p.number ?? "")} · ${String(b?.title ?? p.title ?? "")} (the copy already sent)` },
@@ -273,7 +275,11 @@ const briefQuestions = async (ctx: QueryCtx) => {
   const b = biz ? await get(ctx, "businesses", biz) : null;
   if (!b) throw new ConvexError("This business's kickoff brief isn't here.");
   const qn = ((b as Record<string, any> | null)?.kickoff as Questionnaire | undefined) ?? KICKOFF_BRIEF;
-  const lines = qn.steps.flatMap((st) => [`${st.title}:`, ...st.questions.map((q) => `  ${q.label}${q.required ? " (required)" : ""}`)]);
+  // 8d re-review R2: the whole brief as the client gets it (titles, headings, notes, help and choices), so all of it is bound.
+  const lines = qn.steps.flatMap((st) => [
+    `${st.title}${st.heading ? ` · ${st.heading}` : ""}${st.sub ? ` · ${st.sub}` : ""}`,
+    ...st.questions.map((q) => `  ${q.label} [${q.type}${q.required ? ", required" : ""}]${q.help ? ` · ${q.help}` : ""}${q.placeholder ? ` · e.g. ${q.placeholder}` : ""}${q.options?.length ? ` · ${q.options.join(" / ")}` : ""}`),
+  ]);
   tooMany(lines.length);
   return [{ label: "The questions", value: lines.join("\n") }];
 };
@@ -299,7 +305,18 @@ const sharedTitle = async (ctx: QueryCtx, a: Args) => {
   const br = typeof a.briefingId === "string" ? await get(ctx, "briefings", a.briefingId) : null;
   return d?.share?.on || (br && br.status !== "draft") ? "It's shared: a new title shows to the people who have it at once." : null;
 };
-const LOOK = new Set(["accent", "background", "watermark"]);
+// 8d re-review R4: only colours are the look; the watermark's text and strength are on every client's cuts.
+const LOOK = new Set(["accent", "background"]);
+/** 8d re-review R1: an estimate for a lead with no company yet files the lead under a company (an existing one with
+ *  the same name included), and the lead's email becomes one of its people, who then see its invoices. */
+const leadFiling = async (ctx: QueryCtx, a: Args) => {
+  if (a.clientId) return null;
+  const est = typeof a.estimateId === "string" ? await get(ctx, "estimates", a.estimateId) : null;
+  let deal = await get(ctx, "deals", a.dealId ?? est?.dealId);
+  if (!deal && typeof (a.projectId ?? est?.projectId) === "string") deal = ((await ctx.db.query("deals").withIndex("by_project", (q) => q.eq("projectId", (a.projectId ?? est?.projectId) as never)).collect()) as Array<Record<string, any>>).find((x) => !x.closedAt) ?? null;
+  if (!deal?.lead || deal.clientId || est?.clientId) return null;
+  return `Saving this estimate files the lead ${String(deal.lead.email ?? "")} under ${String(deal.lead.company || deal.lead.name || "a company")} (an existing company with that name included); as one of its people, once they can sign in they see its invoices.`;
+};
 
 export const ACTIONS: Record<string, Entry> = {
   // ---- projects ----
@@ -502,7 +519,7 @@ export const ACTIONS: Record<string, Entry> = {
   "creative.newDoc": c("creative", creative.newDoc, "Make a creative doc (then write its text with pageText.write)"),
   "creative.startBriefing": c("creative", creative.startBriefing, "Start a briefing from a creative doc"),
   "creative.newKit": c("creative", creative.newKit, "Make a brand kit"),
-  "creative.renameKit": c("creative", creative.renameKit, "Rename a brand kit"),
+  "creative.renameKit": c("creative", creative.renameKit, "Rename a brand kit (a shared one is an ask)", { outside: sharedKit }),
   "creative.shareOn": c("creative", creative.shareOn, "Turn a creative doc's view link off or on (on is an ask)", { askWhen: (a) => (a.on === true ? "Turning the link on lets anyone with it read the doc." : null) }),
   "creative.shareKit": c("creative", creative.shareKit, "Turn a brand kit's view link off or on (on is an ask)", { askWhen: (a) => (a.on === true ? "Turning the link on lets anyone with it see the kit." : null) }),
   "creative.removeDoc": del("creative", creative.removeDoc, "Delete a creative doc"),
@@ -512,7 +529,7 @@ export const ACTIONS: Record<string, Entry> = {
   "canvas.shareChoices": r("creative", canvas.shareChoices, "Who a canvas can be shared with"),
   "canvas.create": c("creative", canvas.create, "Make a canvas or mood board"),
   "canvas.save": c("creative", canvas.save, "Save a canvas's board (a shared board is an ask)", { outside: sharedBoard, shows: boardChanges }),
-  "canvas.rename": c("creative", canvas.rename, "Rename a canvas"),
+  "canvas.rename": c("creative", canvas.rename, "Rename a canvas (a shared one is an ask)", { outside: sharedBoard }),
   "canvas.duplicate": c("creative", canvas.duplicate, "Duplicate a canvas"),
   "canvas.setRole": c("creative", canvas.setRole, "Change what a person a canvas is shared with can do (letting them edit is an ask)", { askWhen: (a) => (a.role === "edit" ? "Letting someone outside the business edit the board." : null) }),
   "canvas.removePerson": c("creative", canvas.removePerson, "Stop sharing a canvas with a person"),
@@ -628,7 +645,7 @@ export const ACTIONS: Record<string, Entry> = {
   "crm.doneFollowUp": c("sales", crm.doneFollowUp, "Mark a follow-up done (removing one, or confirming Claude's draft, is an ask)", {
     askWhen: (a) => (a.remove === true ? "It deletes the follow-up." : a.confirm === true ? "A follow-up Claude drafted counts once Heston confirms it." : null),
   }),
-  "crm.saveEstimate": c("sales", crm.saveEstimate, "Save an estimate"),
+  "crm.saveEstimate": c("sales", crm.saveEstimate, "Save an estimate (the first one for a lead with no company is an ask)", { outside: leadFiling }),
   // 8c review L3 (D67): a ledger entry from Claude counts only once Heston confirms it.
   "crm.logEntry": ask("sales", crm.logEntry, "Log hours or a cost in a project's ledger", "It counts in the project's profit at once."),
   "crm.entryAction": ask("sales", crm.entryAction, "Confirm or remove a draft ledger entry", "A draft entry counts only once Heston confirms it."),

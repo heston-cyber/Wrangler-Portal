@@ -48,7 +48,9 @@ export const listKeys = query({
     await requireOwner(ctx);
     const keys = await ctx.db.query("portalKeys").collect();
     return keys.filter((k) => !k.revokedAt).sort((a, b) => b.createdAt - a.createdAt)
-      .map((k) => ({ _id: k._id, prefix: k.prefix, label: k.label, createdAt: k.createdAt, lastUsedAt: k.lastUsedAt ?? null, expiresAt: k.expiresAt ?? null, expired: !!k.expiresAt && k.expiresAt <= Date.now() }));
+      .map((k) => ({ _id: k._id, prefix: k.prefix, label: k.label, createdAt: k.createdAt, lastUsedAt: k.lastUsedAt ?? null, expiresAt: k.expiresAt ?? null,
+        // 8d re-review R6: a key made before Nov 19 has no maker and no longer works.
+        expired: (!!k.expiresAt && k.expiresAt <= Date.now()) || (!k.madeBy && !k.prefix.startsWith("wp_selftest")) }));
   },
 });
 
