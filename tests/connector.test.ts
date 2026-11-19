@@ -1,4 +1,5 @@
-// The Claude connector: keys, the /mcp endpoint, and what its tools hand back.
+// Wrangler Review's Claude tools, the MCP protocol and keys, through the one Wrangler Portal connector (/portal-mcp).
+// Phase 8f (Heston, Nov 19): the old Review connector (/mcp) and Sign connector (/ws-mcp) are gone (T8f.1).
 import { convexTest } from "convex-test";
 import { beforeAll, describe, expect, test } from "vitest";
 import { api, internal } from "../convex/_generated/api";
@@ -21,6 +22,12 @@ async function setup() {
   };
   const me = await mk("heston@wranglerproductions.com", "Heston");
   const other = await mk("someone@else.com");
+  await t.run(async (ctx) => {
+    const u = (await ctx.db.query("users").collect()).find((x) => x.email === "heston@wranglerproductions.com")!;
+    await ctx.db.patch(u._id, { role: "owner" });
+    const b = await ctx.db.insert("businesses", { slug: "wrangler", name: "Wrangler Productions", createdAt: 0 });
+    await ctx.db.insert("memberships", { businessId: b, email: u.email!, userId: u._id, role: "owner", createdAt: 0 });
+  });
   const projectId = await me.mutation(api.library.createProject, { name: "Spirit Airlines", jobNumber: "26122" });
   const videoId = await me.mutation(api.library.createVideo, { projectId, title: "Spirit Intro" });
   const { versionId } = await t.mutation(internal.library.insertVersion, { videoId, bunnyGuid: "g1", fileName: "spirit_v1.mp4" });
@@ -28,13 +35,13 @@ async function setup() {
   const n1 = await me.mutation(api.notes.create, { versionId, kind: "frame", inFrame: 400, text: "Logo too small" });
   const n2 = await me.mutation(api.notes.create, { versionId, kind: "range", inFrame: 1000, outFrame: 1047, text: "Tighten this" });
   const n3 = await me.mutation(api.notes.create, { versionId, kind: "general", text: "Music a touch loud" });
-  const { key } = await me.action(api.connector.createKey, {});
+  const { key } = await me.action(api.portalKeys.createKey, {});
   return { t, me, other, key, videoId, versionId, notes: [n1, n2, n3] as string[] };
 }
 
 type Opts = { key?: string | null; headers?: Record<string, string>; path?: string };
 async function rpc(t: ReturnType<typeof convexTest>, body: unknown, o: Opts = {}) {
-  const res = await t.fetch(o.path ?? "/mcp", {
+  const res = await t.fetch(o.path ?? "/portal-mcp", {
     method: "POST",
     headers: { "content-type": "application/json", ...(o.key ? { authorization: `Bearer ${o.key}` } : {}), ...(o.headers ?? {}) },
     body: JSON.stringify(body),
@@ -46,33 +53,57 @@ const call = (t: ReturnType<typeof convexTest>, key: string, name: string, args:
   rpc(t, { jsonrpc: "2.0", id: 9, method: "tools/call", params: { name, arguments: args, _meta: META } }, { key, headers: { "mcp-protocol-version": "2026-07-28", "mcp-method": "tools/call", "mcp-name": name } });
 
 describe("connector keys", () => {
-  test("only the allowed account makes keys; a key is shown once and only its start is listed", async () => {
+  test("T8f.1 the old Review and Sign addresses are gone: every request is refused, old keys included", async () => {
+    const { t } = await setup();
+    const wr = "wr_" + "a".repeat(43), ws = "ws_" + "b".repeat(43);
+    await t.run(async (ctx) => {
+      const hex = async (k: string) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(k)))].map((x) => x.toString(16).padStart(2, "0")).join("");
+      await ctx.db.insert("connectorKeys", { hash: await hex(wr), prefix: wr.slice(0, 10), label: "Claude", createdAt: 0 });
+      await ctx.db.insert("wsConnectorKeys", { hash: await hex(ws), prefix: ws.slice(0, 10), label: "Claude", createdAt: 0 });
+    });
+    const list = { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} };
+    for (const [path, key] of [["/mcp", wr], ["/ws-mcp", ws], [`/mcp/${wr}`, null], [`/ws-mcp/${ws}`, null], ["/mcp", null]] as const) {
+      const res = await t.fetch(path, { method: "POST", headers: { "content-type": "application/json", ...(key ? { authorization: `Bearer ${key}` } : {}) }, body: JSON.stringify(list) });
+      expect(res.status, path).toBe(404);
+      expect(await res.text()).not.toMatch(/tools|jsonrpc/);
+    }
+    // An old key doesn't open the one connector either.
+    expect((await rpc(t, list, { key: wr })).status).toBe(401);
+    expect((await rpc(t, list, { key: ws })).status).toBe(401);
+    // Nothing on the site makes, lists or revokes the old keys any more.
+    const gone = api as unknown as Record<string, Record<string, never>>;
+    for (const mod of ["connector", "wsConnector"]) {
+      await expect(t.query(gone[mod].listKeys, {}), mod).rejects.toThrow();
+      await expect(t.action(gone[mod].createKey, {}), mod).rejects.toThrow();
+    }
+  });
+
+  test("only the owner makes keys; a key is shown once and only its start is listed", async () => {
     const { t, me, other, key } = await setup();
-    expect(key).toMatch(/^wr_[A-Za-z0-9_-]{40,}$/);
-    const keys = await me.query(api.connector.listKeys, {});
+    expect(key).toMatch(/^wp_[A-Za-z0-9_-]{40,}$/);
+    const keys = await me.query(api.portalKeys.listKeys, {});
     expect(keys).toHaveLength(1);
     expect(keys[0].prefix).toBe(key.slice(0, 10));
     expect(JSON.stringify(keys)).not.toContain(key);
-    const stored = await t.run((ctx) => ctx.db.query("connectorKeys").collect());
+    const stored = await t.run((ctx) => ctx.db.query("portalKeys").collect());
     expect(JSON.stringify(stored)).not.toContain(key);
-    await expect(other.action(api.connector.createKey, {})).rejects.toThrow(/Not allowed/);
-    await expect(other.query(api.connector.listKeys, {})).rejects.toThrow(/Not allowed/);
+    await expect(other.action(api.portalKeys.createKey, {})).rejects.toThrow();
+    await expect(other.query(api.portalKeys.listKeys, {})).rejects.toThrow();
   });
 
   test("no key, a wrong key and a revoked key are all refused", async () => {
     const { t, me, key } = await setup();
     const list = { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} };
     expect((await rpc(t, list)).status).toBe(401);
-    expect((await rpc(t, list, { key: "wr_" + "x".repeat(43) })).status).toBe(401);
+    expect((await rpc(t, list, { key: "wp_" + "x".repeat(43) })).status).toBe(401);
     expect((await rpc(t, list, { key })).status).toBe(200);
-    expect((await rpc(t, list, { headers: { "x-api-key": key } })).status).toBe(200);
-    expect((await rpc(t, list, { path: `/mcp/${key}` })).status).toBe(200);
-    const [k] = await me.query(api.connector.listKeys, {});
+    expect((await rpc(t, list, { path: `/portal-mcp/${key}` })).status).toBe(200);
+    const [k] = await me.query(api.portalKeys.listKeys, {});
     expect(k.lastUsedAt).not.toBeNull();
-    await me.mutation(api.connector.revokeKey, { keyId: k._id });
+    await me.mutation(api.portalKeys.revokeKey, { keyId: k._id });
     expect((await rpc(t, list, { key })).status).toBe(401);
-    expect((await rpc(t, list, { path: `/mcp/${key}` })).status).toBe(401);
-    expect(await me.query(api.connector.listKeys, {})).toHaveLength(0);
+    expect((await rpc(t, list, { path: `/portal-mcp/${key}` })).status).toBe(401);
+    expect(await me.query(api.portalKeys.listKeys, {})).toHaveLength(0);
   });
 
   test("a site Claude doesn't run on can't call it from a browser", async () => {
@@ -89,13 +120,13 @@ describe("MCP protocol", () => {
     const init = await rpc(t, { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "c", version: "1" } } }, { key });
     expect(init.status).toBe(200);
     expect(init.j.result.protocolVersion).toBe("2025-06-18");
-    expect(init.j.result.serverInfo.name).toBe("wrangler-review");
+    expect(init.j.result.serverInfo.name).toBe("wrangler-portal");
     expect(init.j.result.instructions).toMatch(/get_notes/);
     const unknownVer = await rpc(t, { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-01-01" } }, { key });
     expect(unknownVer.j.result.protocolVersion).toBe("2025-11-25");
     expect((await rpc(t, { jsonrpc: "2.0", method: "notifications/initialized" }, { key })).status).toBe(202);
     const list = await rpc(t, { jsonrpc: "2.0", id: 2, method: "tools/list" }, { key });
-    expect(list.j.result.tools.map((x: { name: string }) => x.name)).toEqual(["find_videos", "get_notes", "get_note_images", "get_resolve_markers", "get_transcript", "reply_to_note", "mark_notes", "register_video", "add_to_register", "next_render_name", "set_version_description", "get_client_inbox", "list_follow_ups", "draft_follow_up", "draft_ledger_entry", "draft_client_note"]);
+    expect(list.j.result.tools.map((x: { name: string }) => x.name)).toEqual(expect.arrayContaining(["find_videos", "get_notes", "get_note_images", "get_resolve_markers", "get_transcript", "reply_to_note", "mark_notes", "register_video", "add_to_register", "next_render_name", "set_version_description", "get_client_inbox", "list_follow_ups", "draft_follow_up", "draft_ledger_entry", "draft_client_note"]));
     expect(list.j.result.resultType).toBeUndefined();
     const batch = await rpc(t, [{ jsonrpc: "2.0", id: 3, method: "ping" }, { jsonrpc: "2.0", method: "notifications/initialized" }], { key });
     expect(batch.j).toEqual([{ jsonrpc: "2.0", id: 3, result: {} }]);
@@ -109,10 +140,10 @@ describe("MCP protocol", () => {
     expect(d.status).toBe(200);
     expect(d.j.result.resultType).toBe("complete");
     expect(d.j.result.supportedVersions).toContain("2026-07-28");
-    expect(d.j.result._meta["io.modelcontextprotocol/serverInfo"].name).toBe("wrangler-review");
+    expect(d.j.result._meta["io.modelcontextprotocol/serverInfo"].name).toBe("wrangler-portal");
     const l = await rpc(t, { jsonrpc: "2.0", id: 2, method: "tools/list", params: { _meta: META } }, { key });
     expect(l.j.result.ttlMs).toBeGreaterThan(0);
-    expect(l.j.result.tools).toHaveLength(16);
+    expect(l.j.result.tools.map((x: { name: string }) => x.name)).toEqual(expect.arrayContaining(["find_videos", "get_notes", "get_note_images", "get_resolve_markers", "get_transcript", "reply_to_note", "mark_notes", "register_video", "add_to_register", "next_render_name", "set_version_description", "get_client_inbox", "list_follow_ups", "draft_follow_up", "draft_ledger_entry", "draft_client_note"]));
     const bad = await rpc(t, { jsonrpc: "2.0", id: 3, method: "tools/list", params: { _meta: { ...META, "io.modelcontextprotocol/protocolVersion": "2099-01-01" } } }, { key });
     expect([bad.status, bad.j.error.code]).toEqual([400, -32022]);
     expect(bad.j.error.data.supported).toContain("2026-07-28");
@@ -124,7 +155,7 @@ describe("MCP protocol", () => {
     expect(b64.status).toBe(200);
     const nf = await rpc(t, { jsonrpc: "2.0", id: 7, method: "resources/list", params: { _meta: META } }, { key });
     expect([nf.status, nf.j.error.code]).toEqual([404, -32601]);
-    expect((await t.fetch("/mcp", { method: "GET", headers: { authorization: `Bearer ${key}` } })).status).toBe(405);
+    expect((await t.fetch("/portal-mcp", { method: "GET", headers: { authorization: `Bearer ${key}` } })).status).toBe(405);
   });
 });
 

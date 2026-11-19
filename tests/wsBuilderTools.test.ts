@@ -11,6 +11,7 @@ import { convexTest } from "convex-test";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { api, internal } from "../convex/_generated/api";
 import schema from "../convex/schema";
+import { portalKeyFor } from "./portalKeyHelper";
 import { PDFDocument, StandardFonts } from "@cantoo/pdf-lib";
 import { pageFromMarkdown, pageToMarkdown } from "../convex/lib/wsPageMd";
 import { pdfLinesToPage } from "../convex/lib/wsPdfImport";
@@ -68,11 +69,11 @@ async function setup() {
   });
   const me = t.withIdentity({ subject: sub });
   const store = (b: Uint8Array) => t.run((ctx) => ctx.storage.store(new Blob([b], { type: "image/png" })));
+  const key = await portalKeyFor(t, me); // Phase 8f: the owner's business first, so the signature and templates are its own
   await me.action(api.sign.adoptSignature, { name: "Heston Hill", title: "Founder", method: "typed", signatureStorageId: await store(PNG), initialsStorageId: await store(PNG) });
   await me.mutation(api.builder.ensureStarter, {});
-  const { key } = await me.action(api.wsConnector.createKey, {});
   const call = async (name: string, args: Record<string, unknown> = {}) => {
-    const r = await t.fetch("/ws-mcp", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }) });
+    const r = await t.fetch("/portal-mcp", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }) });
     const j = JSON.parse(await r.text());
     return { error: j.result.isError === true, text: j.result.content[0].text as string, data: j.result.structuredContent as Record<string, any> };
   };

@@ -22,7 +22,14 @@ const http = httpRouter();
 auth.addHttpRoutes(http);
 
 // Phase 8f (Heston, Nov 19): the old Review (/mcp) and Sign (/ws-mcp) connectors are gone; Claude connects only
-// through the one Wrangler Portal connector at /portal-mcp (below).
+// through the one Wrangler Portal connector at /portal-mcp.
+
+// Phase 8a: the one Wrangler Portal connector, with the business owner's keys (wp_…).
+for (const method of ["POST", "GET", "DELETE"] as const) {
+  const handler = method === "POST" ? portalMcpPost : portalMcpOther;
+  http.route({ path: "/portal-mcp", method, handler });
+  http.route({ pathPrefix: "/portal-mcp/", method, handler });
+}
 
 // Dropbox: the Connect Dropbox return address, and the webhook (GET = one-time check, POST = "something changed").
 http.route({ path: "/dropbox/callback", method: "GET", handler: dropboxCallback });

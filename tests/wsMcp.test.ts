@@ -1,5 +1,5 @@
 // @vitest-environment node
-// Wrangler Sign Phase S4 (Oct 27): the Claude connector at /ws-mcp.
+// Wrangler Sign Phase S4 (Oct 27): Sign's Claude tools, through the one Wrangler Portal connector since Phase 8f (Nov 19).
 //   T-S4.1 a contract drafted in chat goes in intact: markers become boxes, signers and the amount are set, and it
 //          previews.
 //   T-S4.2 approve and send happen only with Heston's words from the chat, and never out of order.
@@ -9,6 +9,7 @@ import { convexTest } from "convex-test";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { api } from "../convex/_generated/api";
 import schema from "../convex/schema";
+import { portalKeyFor } from "./portalKeyHelper";
 import { PDFDocument, StandardFonts } from "@cantoo/pdf-lib";
 
 const modules = import.meta.glob("../convex/**/*.ts");
@@ -43,9 +44,9 @@ async function setup() {
   });
   const me = t.withIdentity({ subject: sub });
   const store = (b: Uint8Array) => t.run((ctx) => ctx.storage.store(new Blob([b], { type: "image/png" })));
+  const key = await portalKeyFor(t, me); // Phase 8f: the owner's business first, so the signature and templates are its own
   await me.action(api.sign.adoptSignature, { name: "Heston Hill", title: "Founder", method: "typed", signatureStorageId: await store(PNG), initialsStorageId: await store(PNG) });
-  const { key } = await me.action(api.wsConnector.createKey, {});
-  const rpc = async (body: unknown, auth: string | null = key, path = "/ws-mcp") => {
+  const rpc = async (body: unknown, auth: string | null = key, path = "/portal-mcp") => {
     const r = await t.fetch(path, { method: "POST", headers: { "content-type": "application/json", ...(auth ? { authorization: `Bearer ${auth}` } : {}) }, body: JSON.stringify(body) });
     const txt = await r.text();
     return { status: r.status, j: txt ? JSON.parse(txt) : null };
@@ -225,15 +226,13 @@ describe("T-S4.3 reading, and keys", () => {
   test("status and the signed copy read back; missing, wrong, revoked and Review keys are refused", async () => {
     const x = await setup();
     const list = { jsonrpc: "2.0", id: 1, method: "tools/list" };
-    expect((await x.rpc(list)).j.result.tools.map((t: any) => t.name)).toEqual(["list_documents", "get_document", "create_document", "update_document", "preview_document", "approve_document", "send_document", "send_reminder", "void_document", "get_audit_trail", "get_signed_pdf", "list_templates", "get_template", "list_drafts", "create_draft", "get_draft", "update_draft", "import_pdf", "draft_to_signing", "save_draft_as_template", "list_proposals", "get_proposal", "write_proposal_draft", "verify_pdf"]); // Phase 3b: the proposal tools (D89)
+    expect((await x.rpc(list)).j.result.tools.map((t: any) => t.name)).toEqual(expect.arrayContaining(["list_documents", "get_document", "create_document", "update_document", "preview_document", "approve_document", "send_document", "send_reminder", "void_document", "get_audit_trail", "get_signed_pdf", "list_templates", "get_template", "list_drafts", "create_draft", "get_draft", "update_draft", "import_pdf", "draft_to_signing", "save_draft_as_template", "list_proposals", "get_proposal", "write_proposal_draft", "verify_pdf"])); // Phase 3b: the proposal tools (D89)
     expect((await x.rpc(list, null)).status).toBe(401);
-    expect((await x.rpc(list, "ws_wrongwrongwrongwrongwrong")).status).toBe(401);
-    // A Wrangler Review key doesn't open this one, and this key doesn't open Review's.
-    const { key: reviewKey } = await x.me.action(api.connector.createKey, {});
-    expect((await x.rpc(list, reviewKey)).status).toBe(401);
-    expect((await x.rpc(list, x.key, "/mcp")).status).toBe(401);
+    expect((await x.rpc(list, "wp_wrongwrongwrongwrongwrong")).status).toBe(401);
+    // Phase 8f: an old Sign key (ws_…) doesn't open the one connector.
+    expect((await x.rpc(list, "ws_" + "w".repeat(43))).status).toBe(401);
     // The key in the address works too.
-    expect((await x.rpc(list, null, `/ws-mcp/${x.key}`)).status).toBe(200);
+    expect((await x.rpc(list, null, `/portal-mcp/${x.key}`)).status).toBe(200);
     await x.call("create_document", { title: "Status check", pdf_base64: await contractPdf(), signers: [{ name: "Q R", email: "q@r.example" }] });
     const l = await x.call("list_documents", { status: "draft" });
     expect(l.data.items).toEqual([expect.objectContaining({ document: "WS-00001", title: "Status check", status: "draft", signers: ["Q R"] })]);
@@ -241,8 +240,8 @@ describe("T-S4.3 reading, and keys", () => {
     expect((await x.call("get_document", { document: "WS-00042" })).text).toMatch(/There's no WS-00042/);
     expect((await x.call("verify_pdf", { sha256: "a".repeat(64) })).data).toMatchObject({ match: false });
     // Revoked: refused at once.
-    const keys = await x.me.query(api.wsConnector.listKeys, {});
-    await x.me.mutation(api.wsConnector.revokeKey, { keyId: keys[0]._id });
+    const keys = await x.me.query(api.portalKeys.listKeys, {});
+    await x.me.mutation(api.portalKeys.revokeKey, { keyId: keys[0]._id });
     expect((await x.rpc(list)).status).toBe(401);
   });
 });

@@ -28,7 +28,7 @@ async function setup() {
 }
 
 const findVideos = async (t: ReturnType<typeof convexTest>, key: string) => {
-  const res = await t.fetch("/mcp", {
+  const res = await t.fetch("/portal-mcp", {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${key}`, "mcp-protocol-version": "2026-07-28", "mcp-method": "tools/call", "mcp-name": "find_videos" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "find_videos", arguments: {}, _meta: META } }),
@@ -43,25 +43,25 @@ describe("per business", () => {
     await heston.mutation(api.library.createVideo, { projectId: pa, title: "Spirit Intro" });
     const pb = await boss.mutation(api.library.createProject, { name: "Other Project" });
     await boss.mutation(api.library.createVideo, { projectId: pb, title: "Other Cut" });
-    const { key: ka } = await heston.action(api.connector.createKey, {});
-    const { key: kb } = await boss.action(api.connector.createKey, {});
+    const { key: ka } = await heston.action(api.portalKeys.createKey, {});
+    const { key: kb } = await boss.action(api.portalKeys.createKey, {});
     const seenA = await findVideos(t, ka), seenB = await findVideos(t, kb);
     expect(seenA).toContain("Spirit Intro"); expect(seenA).not.toContain("Other Cut");
     expect(seenB).toContain("Other Cut"); expect(seenB).not.toContain("Spirit Intro");
     // Each owner lists only their own keys.
-    expect(await heston.query(api.connector.listKeys, {})).toHaveLength(1);
-    expect(await boss.query(api.connector.listKeys, {})).toHaveLength(1);
+    expect(await heston.query(api.portalKeys.listKeys, {})).toHaveLength(1);
+    expect(await boss.query(api.portalKeys.listKeys, {})).toHaveLength(1);
   });
 
-  test("Wrangler Sign's connector key lists only that business's documents", async () => {
+  test("the connector key lists only that business's Sign documents", async () => {
     const { t, a, b, heston, boss } = await setup();
     await t.run(async (ctx) => {
       await ctx.db.insert("wsDocuments", { businessId: a, number: 1, title: "Wrangler Contract", status: "draft", currentVersion: 1, createdAt: 0, updatedAt: 0 });
       await ctx.db.insert("wsDocuments", { businessId: b, number: 1, title: "Other Contract", status: "draft", currentVersion: 1, createdAt: 0, updatedAt: 0 });
     });
-    const { key: ka } = await heston.action(api.wsConnector.createKey, {});
-    const { key: kb } = await boss.action(api.wsConnector.createKey, {});
-    const list = async (key: string) => JSON.stringify(await (await t.fetch("/ws-mcp", {
+    const { key: ka } = await heston.action(api.portalKeys.createKey, {});
+    const { key: kb } = await boss.action(api.portalKeys.createKey, {});
+    const list = async (key: string) => JSON.stringify(await (await t.fetch("/portal-mcp", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${key}`, "mcp-protocol-version": "2026-07-28", "mcp-method": "tools/call", "mcp-name": "list_documents" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "list_documents", arguments: {}, _meta: META } }),

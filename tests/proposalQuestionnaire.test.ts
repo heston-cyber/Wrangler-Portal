@@ -32,9 +32,9 @@ const answers = (client: Record<string, unknown>) => ({
   ],
 });
 async function mcp(w: W) {
-  const { key } = await w.heston.action(api.wsConnector.createKey, {});
+  const { key } = await w.heston.action(api.portalKeys.createKey, {});
   return async (name: string, args: Record<string, unknown> = {}) => {
-    const r = await w.t.fetch("/ws-mcp", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }) });
+    const r = await w.t.fetch("/portal-mcp", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }) });
     const j = await r.json();
     return { error: j.result.isError === true, text: j.result.content[0].text as string, data: j.result.structuredContent as Record<string, any> };
   };
@@ -123,8 +123,8 @@ describe("proposal questionnaire", () => {
     await expect(w.boss.mutation(api.proposals.saveAnswers, { proposalId: id, answers: {} })).rejects.toThrow();
     await expect(w.boss.mutation(api.proposals.finish, { proposalId: id, how: "self" })).rejects.toThrow();
     await expect(w.maya.query(api.proposals.questionnaire, {})).rejects.toThrow();
-    const { key } = await w.boss.action(api.wsConnector.createKey, {});
-    const r = await w.t.fetch("/ws-mcp", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_proposal", arguments: { proposal: "WRNGLR-P-0001" } } }) });
+    const { key } = await w.boss.action(api.portalKeys.createKey, {});
+    const r = await w.t.fetch("/portal-mcp", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_proposal", arguments: { proposal: "WRNGLR-P-0001" } } }) });
     expect((await r.json()).result.isError).toBe(true);
   });
 
