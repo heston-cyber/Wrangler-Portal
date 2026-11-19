@@ -24,6 +24,7 @@ import { INSTRUCTIONS as SIGN_INSTRUCTIONS, TOOLS as SIGN_TOOLS, callTool as sig
 import { ConvexError } from "convex/values";
 import { ACTIONS, AREAS, argsOf, type Area } from "./lib/siteActions";
 import { toSchema, type Outbound } from "./lib/siteGuard";
+import { pageFromMarkdown } from "./lib/wsPageMd";
 
 const SERVER_INFO = { name: "wrangler-portal", title: "Wrangler Portal", version: "1.0.0" };
 
@@ -54,7 +55,7 @@ const GUIDE = {
   ],
   how_the_site_tools_work: "site_actions (optionally by area) lists every action with its arguments. read → site_read. change → site_change (done at once; shows in Activity as Claude's). ask or delete → ask Heston in chat, then site_ask with his words: the Confirm page shows what it does and exactly who it would reach.",
   photos_and_files: "site_upload stores a photo or PDF (up to 10 MB) and gives a storageId; pass it to gear.setPhoto, places.addPhoto, canvas.addFile or brandKit.addFile. Nothing is shown anywhere until one of those uses it.",
-  coming: "This connector replaces the older Review and Sign connectors once Heston switches over.",
+  one_connector: "This is the only Wrangler Portal connector (since Nov 19). The older Wrangler Review and Wrangler Sign connectors are gone; if they're still listed in Claude, Heston removes them there.",
   sends_need_heston: ["send_client_note", "send_reminder", "set_version_description", "approve_document", "send_document", "void_document", "site_ask"],
   not_here: "Moving a project or a shoot to another client, fetching a PDF from a link, signing a release (it's signed in person), the first send of a proposal or briefing (its PDF is made in Heston's browser), paying, charging and refunding, sign-in, passwords, connector keys, data exports and deleting the business are done by Heston on the site (pass PDFs as pdf_base64).",
   how_confirm_works: "Ask Heston in chat. Call the tool with his words in heston_ok. Give him confirm_at. It happens only when he presses Confirm on the site. Check with request_status.",
@@ -273,6 +274,54 @@ export const selfTest = internalAction({
       check("a send through site_change is refused", ((sc.json?.result as Json | undefined)?.isError) === true);
       const sn = await call({ jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "send_client_note", arguments: { note_id: "x" } } });
       check("a send without Heston's words is refused", ((sn.json?.result as Json | undefined)?.isError) === true);
+      // Phase 8f: what the old Review and Sign self-tests checked, now through this connector (and their addresses gone).
+      const pk = await fetch(`${base}/portal-mcp/${key}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 10, method: "tools/list" }) });
+      check("key in the address", pk.status === 200, `HTTP ${pk.status}`);
+      const meta = { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientInfo": { name: "selftest", version: "1" }, "io.modelcontextprotocol/clientCapabilities": {} };
+      const modern = async (body: Json, method: string, name?: string) => {
+        const res = await fetch(`${base}/portal-mcp`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${key}`, "mcp-protocol-version": "2026-07-28", "mcp-method": method, ...(name ? { "mcp-name": name } : {}) }, body: JSON.stringify(body) });
+        return { status: res.status, json: (await res.json().catch(() => null)) as Json | null };
+      };
+      const d = await modern({ jsonrpc: "2.0", id: 11, method: "server/discover", params: { _meta: meta } }, "server/discover");
+      check("modern server/discover", d.status === 200 && ((d.json?.result as Json | undefined)?.supportedVersions as string[] | undefined ?? []).includes("2026-07-28"), `HTTP ${d.status}`);
+      const uv = await call({ jsonrpc: "2.0", id: 12, method: "tools/list", params: { _meta: { ...meta, "io.modelcontextprotocol/protocolVersion": "2099-01-01" } } });
+      check("unknown version refused", uv.status === 400, `HTTP ${uv.status}`);
+      const tool = (name: string, args: Json, id: number) => modern({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args, _meta: meta } }, "tools/call", name);
+      const vids = ((((fv.json?.result as Json | undefined)?.structuredContent as Json | undefined)?.items) ?? []) as Array<{ video_id?: string; versions?: Array<{ status?: string }> }>;
+      const ready = vids.find((x) => x.video_id && (x.versions ?? []).some((ver) => ver.status === "ready"));
+      if (ready) {
+        const gn = await tool("get_notes", { video_id: ready.video_id!, status: "all" }, 13);
+        check("get_notes", gn.status === 200 && !(gn.json?.result as Json | undefined)?.isError);
+        const gm = await tool("get_resolve_markers", { video_id: ready.video_id!, status: "all" }, 14);
+        const mk = (gm.json?.result as Json | undefined)?.structuredContent as Json | undefined;
+        check("get_resolve_markers", gm.status === 200 && Array.isArray(mk?.markers) && typeof mk?.edl === "string");
+      }
+      const vp = await tool("verify_pdf", { sha256: "0".repeat(64) }, 15);
+      check("verify_pdf", (((vp.json?.result as Json | undefined)?.structuredContent as Json | undefined)?.match) === false);
+      for (const old of ["/mcp", "/ws-mcp"]) {
+        const r = await fetch(`${base}${old}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });
+        check(`old address ${old} is gone`, r.status === 404, `HTTP ${r.status}`);
+      }
+      // Sign's backend work (markers found with pdf.js; a draft rendered with react-pdf), on throwaway files deleted after.
+      const { PDFDocument, StandardFonts } = await import("@cantoo/pdf-lib");
+      const pd = await PDFDocument.create(); const font = await pd.embedFont(StandardFonts.Helvetica);
+      pd.addPage([612, 792]).drawText("CLIENT: {{sign:client}}  Date: {{date:client}}", { x: 72, y: 300, size: 11, font });
+      const sid = await ctx.storage.store(new Blob([new Uint8Array(await pd.save())], { type: "application/pdf" }));
+      try {
+        const scan = await ctx.runAction(internal.wsNode.findMarkers, { storageId: sid });
+        check("markers found on the backend", scan.markers.length === 2 && scan.textPages === 1, `${scan.markers.length} markers`);
+      } finally { await ctx.storage.delete(sid); }
+      const buildId = await ctx.runMutation(internal.builder.createBuildFor, { title: "Self-test (deleted)", page: pageFromMarkdown("# Self-test\n:::section initials\n### Clause\nText.\n:::\n[[signatures heston client]]") });
+      try {
+        const pdfId = await ctx.runAction(internal.wsRender.renderBuild, { buildId });
+        const blob = await ctx.storage.get(pdfId);
+        const head = blob ? new TextDecoder().decode(new Uint8Array(await blob.slice(0, 5).arrayBuffer())) : "";
+        const scan = await ctx.runAction(internal.wsNode.findMarkers, { storageId: pdfId });
+        check("draft rendered on the backend", head === "%PDF-" && scan.markers.length >= 5, `${scan.markers.length} markers`);
+        await ctx.storage.delete(pdfId);
+      } finally { await ctx.runMutation(internal.builder.dropBuildInternal, { buildId }); }
+    } catch (e) {
+      check("ran without crashing", false, ((e as Error).message || "").slice(0, 200));
     } finally {
       await ctx.runMutation(internal.portalKeys.deleteKey, { keyId });
     }

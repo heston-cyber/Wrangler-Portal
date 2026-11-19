@@ -1,74 +1,15 @@
-// Wrangler Sign's Claude connector, data side (Phase S4, Oct 27): its keys (separate from Wrangler Review's, so one
-// can be revoked without the other) and the lookups its tools use. Keys are stored only as SHA-256 hashes; the full
-// key is shown once, on the Contracts page.
+// The lookups Wrangler Sign's Claude tools use (Phase S4, Oct 27; served by the Wrangler Portal connector since Phase 8f).
 import { fileLink } from "./lib/fileLinks";
-import { action } from "./_generated/server";
-import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
+import { internalQuery } from "./lib/functions";
 import type { QueryCtx } from "./_generated/server";
-import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireMe } from "./lib/access";
-import { base64url, sha256Hex } from "./lib/hash";
 import { docLabel, OWNER_KEY } from "./lib/wsLayout";
 import { eventsOf, verifyChain } from "./lib/wsAudit";
 import { deviceName } from "./lib/wsFinal";
-import { defaultBusiness } from "./lib/business";
 
-export const KEY_PREFIX = "ws_";
-
-// ---------- keys ----------
-
-export const createKey = action({
-  args: { label: v.optional(v.string()) },
-  handler: async (ctx, a): Promise<{ key: string; prefix: string }> => {
-    await ctx.runQuery(internal.users.assertAllowed, {});
-    const bytes = new Uint8Array(32);
-    crypto.getRandomValues(bytes);
-    const key = KEY_PREFIX + base64url(bytes);
-    const prefix = key.slice(0, 10);
-    await ctx.runMutation(internal.wsConnector.insertKey, { hash: await sha256Hex(key), prefix, label: (a.label ?? "").trim().slice(0, 60) || "Claude" });
-    return { key, prefix };
-  },
-});
-
-export const insertKey = internalMutation({
-  args: { hash: v.string(), prefix: v.string(), label: v.string() },
-  handler: async (ctx, a) => { await ctx.db.insert("wsConnectorKeys", { ...a, createdAt: Date.now() }); },
-});
-
-export const listKeys = query({
-  args: {},
-  handler: async (ctx) => {
-    await requireMe(ctx);
-    return (await ctx.db.query("wsConnectorKeys").collect()).filter((k) => !k.revokedAt).sort((a, b) => b.createdAt - a.createdAt)
-      .map((k) => ({ _id: k._id, prefix: k.prefix, label: k.label, createdAt: k.createdAt, lastUsedAt: k.lastUsedAt ?? null }));
-  },
-});
-
-export const revokeKey = mutation({
-  args: { keyId: v.id("wsConnectorKeys") },
-  handler: async (ctx, { keyId }) => { await requireMe(ctx); await ctx.db.patch(keyId, { revokedAt: Date.now() }); },
-});
-
-export const checkKey = internalMutation({
-  args: { hash: v.string() },
-  handler: async (ctx, { hash }) => {
-    const row = await ctx.db.query("wsConnectorKeys").withIndex("by_hash", (q) => q.eq("hash", hash)).unique();
-    if (!row || row.revokedAt) return false as const;
-    const now = Date.now();
-    if (!row.lastUsedAt || now - row.lastUsedAt > 60_000) await ctx.db.patch(row._id, { lastUsedAt: now });
-    // Phase 0.5d step 4: the key's business (records made before tagging count as the default business's).
-    return { businessId: row.businessId ?? (await defaultBusiness(ctx))?._id ?? null };
-  },
-});
-
-// For the live self-test only.
-export const insertTestKey = internalMutation({
-  args: { hash: v.string() },
-  handler: async (ctx, { hash }) => ctx.db.insert("wsConnectorKeys", { hash, prefix: "ws_selftest", label: "Self-test (temporary)", createdAt: Date.now() }),
-});
-export const deleteKey = internalMutation({ args: { keyId: v.id("wsConnectorKeys") }, handler: async (ctx, { keyId }) => { await ctx.db.delete(keyId); } });
+// Phase 8f (Nov 19): the old Sign connector's keys (wsConnectorKeys) can't be made, listed or used any more: its address
+// is gone. The rows stay in the table (only hashes, unusable).
 
 // ---------- finding a document ----------
 

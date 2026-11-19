@@ -1,7 +1,5 @@
 import { httpRouter } from "convex/server";
 import { auth } from "./auth";
-import { mcpOther, mcpPost } from "./mcp";
-import { post as wsMcpPost, other as wsMcpOther } from "./wsMcp";
 import { post as portalMcpPost, other as portalMcpOther } from "./portalMcp";
 import { callback as dropboxCallback, webhookNotify, webhookVerify } from "./dropbox";
 import { feed as registerFeed } from "./register";
@@ -23,28 +21,8 @@ import { route as fileTicket, linkRoute as fileLinkRoute } from "./fileTickets";
 const http = httpRouter();
 auth.addHttpRoutes(http);
 
-// The Claude connector (MCP over Streamable HTTP).
-http.route({ path: "/mcp", method: "POST", handler: mcpPost });
-http.route({ path: "/mcp", method: "GET", handler: mcpOther });
-http.route({ path: "/mcp", method: "DELETE", handler: mcpOther });
-// Same thing with the key in the address, for Claude accounts without the "Request headers" setting.
-http.route({ pathPrefix: "/mcp/", method: "POST", handler: mcpPost });
-http.route({ pathPrefix: "/mcp/", method: "GET", handler: mcpOther });
-http.route({ pathPrefix: "/mcp/", method: "DELETE", handler: mcpOther });
-
-// Wrangler Sign's own connector (S4), with its own keys (ws_…).
-for (const method of ["POST", "GET", "DELETE"] as const) {
-  const handler = method === "POST" ? wsMcpPost : wsMcpOther;
-  http.route({ path: "/ws-mcp", method, handler });
-  http.route({ pathPrefix: "/ws-mcp/", method, handler });
-}
-
-// Phase 8a: the one Wrangler Portal connector, with the business owner's keys (wp_…).
-for (const method of ["POST", "GET", "DELETE"] as const) {
-  const handler = method === "POST" ? portalMcpPost : portalMcpOther;
-  http.route({ path: "/portal-mcp", method, handler });
-  http.route({ pathPrefix: "/portal-mcp/", method, handler });
-}
+// Phase 8f (Heston, Nov 19): the old Review (/mcp) and Sign (/ws-mcp) connectors are gone; Claude connects only
+// through the one Wrangler Portal connector at /portal-mcp (below).
 
 // Dropbox: the Connect Dropbox return address, and the webhook (GET = one-time check, POST = "something changed").
 http.route({ path: "/dropbox/callback", method: "GET", handler: dropboxCallback });
