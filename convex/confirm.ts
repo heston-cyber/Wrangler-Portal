@@ -145,7 +145,8 @@ async function sitePreview(ctx: Ctx, target: string, payload: string | undefined
       ...(act.mode === "delete" ? [{ label: "Deletes", value: ids.length ? ids.map((x) => names.get(x.id)!).join(", ") : "What's named above" }] : []),
       ...(why ? [{ label: "Why it asks", value: why }] : []),
       ...(act.note ? [{ label: "Also", value: act.note }] : []),
-      ...more.map((l) => ({ label: clip(l.label, 60), value: body(l.value, 3000) })),
+      // 8c review M3: never cut silently; past this much it isn't asked at all (Heston does it on the site).
+      ...more.map((l) => { if (l.value.length > 20_000) throw new ConvexError("That's too much to show on one page. Heston does this on the site."); return { label: clip(l.label, 60), value: body(l.value, 20_000) }; }),
       ...(outbound.length
         ? outbound.map((o) => ({ label: "Sends", value: clip(`${o.what}${o.to.length ? ` to ${o.to.slice(0, 300).join(", ")}${o.to.length > 300 ? ` and ${o.to.length - 300} more` : ""}` : ""}`, 40_000) }))
         : act.onPage ? [] : [{ label: "Sends", value: "No email or message" }]), // 8c: an on-page ask says what it sends itself
@@ -237,7 +238,9 @@ export const KINDS: Record<string, Kind> = {
 
 const hashOf = (p: Preview) => sha256Hex(JSON.stringify(p.bind === undefined ? [p.title, p.lines] : [p.title, p.lines, p.bind]));
 
-const status = (r: { status: string; expiresAt: number }, now = Date.now()) => r.status === "waiting" && r.expiresAt <= now ? "expired" : r.status;
+// 8c review L2: confirmed and handed to the page, but never reported back: after 15 minutes it's "unknown" (check the site).
+const status = (r: { status: string; expiresAt: number; doneAt?: number }, now = Date.now()) =>
+  r.status === "waiting" && r.expiresAt <= now ? "expired" : r.status === "running" && (r.doneAt ?? 0) < now - 15 * 60_000 ? "unknown" : r.status;
 
 /** The connector: make a request (nothing happens yet). The same kind and record already waiting is renewed. */
 export const request = internalMutation({
@@ -333,7 +336,7 @@ export const confirm = mutation({
     if (a.hash !== live) throw new ConvexError("It changed while you were looking. Check it again, then confirm.");
     const result = await k.run(ctx, r.targetId, r.payload); // throws (and changes nothing) when it can't be done
     const onPage = "runOnPage" in result;
-    await ctx.db.patch(r._id, onPage ? { status: "running" } : { status: "done", doneAt: Date.now() });
+    await ctx.db.patch(r._id, onPage ? { status: "running", doneAt: Date.now() } : { status: "done", doneAt: Date.now() }); // running: doneAt is when it was confirmed
     const siteMode = r.kind === "site" ? ACTIONS[siteAction(r.targetId)]?.mode : undefined;
     await audit(ctx, { kind: siteMode === "delete" || r.kind.endsWith(".delete") ? "deleted" : siteMode === "ask" || r.kind.endsWith(".send") || r.kind.endsWith(".remind") ? "sent" : "claude", text: `confirmed Claude's request: ${r.summary}${onPage ? " (run from the Confirm page)" : ""}`, where: "Claude connector", link: `/confirm/${r._id}` });
     return { ok: true, ...result };

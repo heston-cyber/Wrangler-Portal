@@ -40,6 +40,7 @@ import * as vendorPayouts from "../vendorPayouts";
 import * as crm from "../crm";
 import * as reports from "../reports";
 import * as footage from "../footage";
+import { parseTo } from "./offers";
 import type { QueryCtx } from "../_generated/server";
 import { ConvexError } from "convex/values";
 
@@ -131,12 +132,15 @@ const MOVE_CLIENT = "Moving a project to another client is done by Heston on the
 // ---------- Phase 8c: money ----------
 const usd = (cents: unknown) => `$${(Number(cents ?? 0) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const linesOf = (ls: unknown) => (Array.isArray(ls) ? ls : []).map((l: Record<string, unknown>) => `${String(l.description ?? "")} · ${String(l.qty ?? 1)} × ${usd(l.unitCents)}`).join("\n");
-/** What an invoice says, as the client will get it. */
+/** What an invoice says, as the client will get it (8c review M2: its kind and project too, and what paying it does). */
 const invoiceLines = async (ctx: QueryCtx, id: unknown) => {
   const i = await get(ctx, "invoices", id);
   if (!i) return [];
+  const p = i.projectId ? await get(ctx, "projects", i.projectId) : null;
   return [
     { label: "Invoice", value: `${String(i.number ?? "Draft")} · ${String(i.title ?? "")}` },
+    { label: "Kind", value: `${String(i.kind ?? "other")} invoice${p ? ` for the project ${String(p.name ?? "")}` : ""}` },
+    ...(i.kind === "final" && p ? [{ label: "When paid", value: `Paid in full, it opens ${String(p.name ?? "the project")}'s final files to the client.` }] : []),
     { label: "Bill to", value: `${String(i.billTo?.name ?? "")}${i.billTo?.company ? ` (${i.billTo.company})` : ""} <${String(i.billTo?.email ?? "")}>` },
     { label: "Lines", value: linesOf(i.lines) || "None" },
     ...(i.discountCents ? [{ label: "Discount", value: usd(i.discountCents) }] : []),
@@ -146,20 +150,43 @@ const invoiceLines = async (ctx: QueryCtx, id: unknown) => {
     ...(i.memo ? [{ label: "Memo", value: String(i.memo) }] : []),
   ];
 };
+/** Who a quote's Send reaches, by the very rule quotes.markSent uses (8c review H1, M4), and what the email carries. */
 const quoteLines = async (ctx: QueryCtx, a: Args) => {
   const q = await get(ctx, "quotes", a.quoteId);
   if (!q) return [];
-  const sent = a.resend ? (await ctx.db.query("offerRecipients").collect()).filter((x) => (x as Record<string, unknown>).quoteId === q._id).map((x) => `${String((x as Record<string, unknown>).name ?? "")} <${String((x as Record<string, unknown>).email ?? "")}>`) : [];
-  const to = typeof a.to === "string" && a.to.trim() ? [`${typeof a.name === "string" ? a.name : ""} <${a.to.trim().toLowerCase()}>`] : sent.length ? sent : q.contact?.email ? [`${q.contact.name} <${q.contact.email}>`] : [];
+  const legacy = a.resend === true && !!q.token && a.to === undefined && a.copyLink !== true;
+  const list = legacy ? (q.contact?.email ? [{ email: String(q.contact.email), name: String(q.contact.name ?? "") }] : [])
+    : a.to !== undefined ? parseTo(String(a.to), typeof a.name === "string" ? a.name : undefined)
+    : a.copyLink !== true && q.contact?.email ? [{ email: String(q.contact.email), name: String(q.contact.name ?? "") }] : [];
+  const people = list.map((x) => `${x.name ? `${x.name} ` : ""}<${x.email}>`);
+  const sends = [
+    ...(people.length ? [`Quote email with their own link to ${people.join(", ")}`] : []),
+    ...(a.copyLink === true ? ["a link for Heston to copy and send himself"] : []),
+  ];
   return [
     { label: "Quote", value: `${String(q.number ?? "")} · ${String(q.title ?? "")}` },
     { label: "Lines", value: linesOf(q.lines) || "None" },
     { label: "Total", value: usd(q.totalCents) },
+    ...(q.deposit ? [{ label: "Deposit", value: typeof q.deposit === "object" ? JSON.stringify(q.deposit) : String(q.deposit) }] : []),
     ...(q.validUntil ? [{ label: "Valid until", value: String(q.validUntil) }] : []),
-    { label: "Sends", value: a.copyLink === true ? "No email: a link for Heston to copy and send himself" : to.length ? `Quote email with its link to ${to.join(", ")}` : "No one to send it to yet (it can't be sent)" },
+    ...(q.terms ? [{ label: "Terms (in the email and on the page)", value: String(q.terms) }] : []),
+    { label: "Sends", value: sends.length ? sends.join("; and ") : "No one to send it to yet (it can't be sent)" },
   ];
 };
-
+/** A vendor invoice, with whose and how much (8c review M7). */
+const vendorInvoiceLines = async (ctx: QueryCtx, a: Args, tell: string) => {
+  const vi = await get(ctx, "vendorInvoices", a.invoiceId);
+  if (!vi) return [];
+  const vd = vi.vendorId ? await get(ctx, "vendors", vi.vendorId) : null;
+  const p = vi.projectId ? await get(ctx, "projects", vi.projectId) : null;
+  return [
+    { label: "Vendor", value: `${String(vd?.name ?? "A vendor")} <${String(vd?.email ?? "")}>` },
+    { label: "Their invoice", value: `${String(vi.number ?? vi.title ?? "")}${p ? ` for ${String(p.name ?? "")}` : ""}` },
+    { label: "Total", value: usd(vi.totalCents ?? vi.cents) },
+    ...(typeof a.paidOn === "string" ? [{ label: "Paid on", value: `${a.paidOn} by ${String(a.method ?? "")}${a.reference ? ` (${String(a.reference)})` : ""}` }] : []),
+    { label: "Sends", value: `${tell} to ${String(vd?.name ?? "the vendor")} <${String(vd?.email ?? "")}>` },
+  ];
+};
 export const ACTIONS: Record<string, Entry> = {
   // ---- projects ----
   "library.projectNames": r("projects", library.projectNames, "Every project's name and client (for picking one)"),
@@ -405,7 +432,7 @@ export const ACTIONS: Record<string, Entry> = {
   "invoices.list": r("money", invoices.list, "Invoices"),
   "invoices.overview": r("money", invoices.overview, "The Payments overview: outstanding, paid, needs you"),
   "invoices.forProject": r("money", invoices.forProject, "A project's invoices"),
-  "invoices.get": r("money", invoices.get, "One invoice with its history and payments"),
+  "invoices.get": { ...r("money", invoices.get, "One invoice with its history and payments (its pay links stay on the site)"), hide: ["hostedUrl", "pdfUrl", "link", "url"] },
   "invoices.options": r("money", invoices.options, "Who and what a new invoice can be for"),
   "invoices.finalOptions": r("money", invoices.finalOptions, "What a project's final invoice would hold"),
   "invoices.saveDraft": c("money", invoices.saveDraft, "Make or change a draft invoice (nothing is sent)"),
@@ -421,10 +448,12 @@ export const ACTIONS: Record<string, Entry> = {
   "invoices.voidInvoice": ask("money", invoices.voidInvoice, "Void an invoice", "It's voided in Stripe: it can't be paid any more. Money already paid isn't refunded (Heston refunds on the site).", {
     onPage: true, shows: async (ctx, a) => [...(await invoiceLines(ctx, a.invoiceId)), { label: "Sends", value: "No email" }],
   }),
-  "invoiceReminders.setReminders": ask("money", invoiceReminders.setReminders, "Set the automatic invoice reminders", "With them on, reminder emails go to clients on their own, before and after each due date."),
+  "invoiceReminders.setReminders": ask("money", invoiceReminders.setReminders, "Set the automatic invoice reminders", "", {
+    shows: async (_ctx, a) => [{ label: "Sends", value: a.on === true ? `From now on, on their own: a reminder email to each client with an open invoice ${String(a.beforeDays)} days before it's due, then every ${String(a.everyDays)} days once it's ${String(a.afterDays)} days overdue, up to ${String(a.stopAfter)} times` : "No more automatic reminders" }],
+  }),
   "invoiceReminders.sendReminder": ask("money", invoiceReminders.sendReminder, "Email a reminder about an invoice", "The client gets a reminder with the pay link.", { shows: async (ctx, a) => invoiceLines(ctx, a.invoiceId) }),
   "quotes.list": r("money", quotes.list, "Quotes"),
-  "quotes.get": r("money", quotes.get, "One quote, who it went to, opens and answers"),
+  "quotes.get": { ...r("money", quotes.get, "One quote, who it went to, opens and answers (its links stay on the site)"), hide: ["link", "ip", "userAgent"] },
   "quotes.options": r("money", quotes.options, "Who and what a new quote can be for"),
   "quotes.save": c("money", quotes.save, "Make or change a draft quote (nothing is sent)"),
   "quotes.answerMove": c("money", quotes.answerMove, "Answer “Move the company to Quoted?”"),
@@ -437,15 +466,15 @@ export const ACTIONS: Record<string, Entry> = {
   "plans.list": r("money", plans.list, "Subscription plans"),
   "plans.get": r("money", plans.get, "One plan"),
   "subscriptions.list": r("money", subscriptions.list, "Subscriptions (starting, changing, pausing and cancelling them are Heston's own buttons on the site)"),
-  "subscriptions.get": r("money", subscriptions.get, "One subscription"),
+  "subscriptions.get": { ...r("money", subscriptions.get, "One subscription (its link stays on the site)"), hide: ["link", "url", "hostedUrl"] },
   "subscriptions.failRules": r("money", subscriptions.failRules, "What happens when a subscription payment fails"),
   "payments.settings": r("money", payments.settings, "Whether Stripe is connected and ready (never its keys)"),
   "vendorPayments.list": r("money", vendorPayments.list, "Vendor invoices"),
-  "vendorPayments.get": r("money", vendorPayments.get, "One vendor invoice"),
-  "vendorPayments.totals1099": r("money", vendorPayments.totals1099, "Each vendor's total paid this year, and whether a W-9 is on file (never the W-9)"),
-  "vendorPayments.approve": ask("money", vendorPayments.approve, "Approve a vendor's invoice", "It goes in the project's Ledger as a cost, and the vendor is told."),
-  "vendorPayments.decline": ask("money", vendorPayments.decline, "Decline a vendor's invoice", "The vendor is told."),
-  "vendorPayments.markPaid": ask("money", vendorPayments.markPaid, "Record that a vendor was paid (another way: no money moves here)", "It's recorded as paid, and the vendor is told."),
+  "vendorPayments.get": { ...r("money", vendorPayments.get, "One vendor invoice"), hide: ["address"] },
+  "vendorPayments.totals1099": { ...r("money", vendorPayments.totals1099, "Each vendor's total paid this year, and whether a W-9 is on file (never the W-9 or the 1099 address)"), hide: ["address"] },
+  "vendorPayments.approve": ask("money", vendorPayments.approve, "Approve a vendor's invoice", "It goes in the project's Ledger as a cost.", { shows: (ctx, a) => vendorInvoiceLines(ctx, a, "Email saying it was approved") }),
+  "vendorPayments.decline": ask("money", vendorPayments.decline, "Decline a vendor's invoice", "", { shows: (ctx, a) => vendorInvoiceLines(ctx, a, "Email saying it was declined") }),
+  "vendorPayments.markPaid": ask("money", vendorPayments.markPaid, "Record that a vendor was paid (another way: no money moves here)", "It's recorded as paid and counts toward their 1099 total.", { shows: (ctx, a) => vendorInvoiceLines(ctx, a, "Email saying it was paid") }),
   "vendorPayouts.status": r("money", vendorPayouts.status, "Whether Pay in portal is set up (paying is Heston's own button)"),
   "vendorPayouts.forInvoice": r("money", vendorPayouts.forInvoice, "Whether a vendor invoice can be paid in the portal"),
   "vendorPayouts.askSetup": ask("money", vendorPayouts.askSetup, "Ask a vendor to set up direct deposit", "The vendor gets an email asking them to add their bank on Stripe's form."),
@@ -454,13 +483,13 @@ export const ACTIONS: Record<string, Entry> = {
   "footage.settings": r("money", footage.settings, "Raw footage storage: the offer and its price"),
   "footage.forProject": r("money", footage.forProject, "A project's raw footage storage"),
   "footage.recordDrive": c("money", footage.recordDrive, "Record that the client is sending a hard drive"),
-  "footage.stop": c("money", footage.stop, "Stop a project's raw footage storage"),
+  "footage.stop": ask("money", footage.stop, "Stop a project's raw footage storage", "A paid storage plan ends: no renewal is drafted, and it leaves the client's page."),
   "footage.markDone": c("money", footage.markDone, "Mark the raw footage deleted or moved"),
-  "footage.reinstate": c("money", footage.reinstate, "A storage invoice paid late: keep it for a year"),
-  "footage.dismissLatePaid": c("money", footage.dismissLatePaid, "A storage invoice paid late: mark it to refund (Heston refunds on the site)"),
-  "delivery.setTerm": c("money", delivery.setTerm, "Change how long a delivery is kept and its renewal price"),
+  "footage.reinstate": ask("money", footage.reinstate, "A storage invoice paid late: keep the payment and the footage for a year", "The client's card says it's kept until the new date."),
+  "footage.dismissLatePaid": ask("money", footage.dismissLatePaid, "A storage invoice paid late: mark it to refund (Heston refunds on the site)", "Closing it takes away the reminder that a refund is owed."),
+  "delivery.setTerm": ask("money", delivery.setTerm, "Change how long a delivery is kept and its renewal price", "A later date can open an ended delivery again; a date within 30 days can show the client the renewal offer; an earlier one ends it sooner; the price is what the client sees."),
   "delivery.renewal": ask("money", delivery.renewal, "Choose what happens when a delivery's year ends", "Offering a renewal tells the client, with Renew and pay in their portal."),
-  "delivery.renewed": c("money", delivery.renewed, "Mark a delivery renewed"),
+  "delivery.renewed": ask("money", delivery.renewed, "Mark a delivery renewed", "It's kept another year (and opens again if it had ended), whether or not it was paid."),
 
   // ---- sales (pipeline, follow-ups, estimates, ledger, proposals) ----
   "crm.board": r("sales", crm.board, "The pipeline"),
@@ -478,12 +507,15 @@ export const ACTIONS: Record<string, Entry> = {
   "crm.linkProject": c("sales", crm.linkProject, "Link a deal to its project"),
   "crm.closeDeal": c("sales", crm.closeDeal, "Close a deal (won or lost)"),
   "crm.addFollowUp": c("sales", crm.addFollowUp, "Add a follow-up"),
-  "crm.doneFollowUp": c("sales", crm.doneFollowUp, "Mark a follow-up done"),
+  "crm.doneFollowUp": c("sales", crm.doneFollowUp, "Mark a follow-up done (removing one, or confirming Claude's draft, is an ask)", {
+    askWhen: (a) => (a.remove === true ? "It deletes the follow-up." : a.confirm === true ? "A follow-up Claude drafted counts once Heston confirms it." : null),
+  }),
   "crm.saveEstimate": c("sales", crm.saveEstimate, "Save an estimate"),
-  "crm.logEntry": c("sales", crm.logEntry, "Log hours or a cost in a project's ledger"),
+  // 8c review L3 (D67): a ledger entry from Claude counts only once Heston confirms it.
+  "crm.logEntry": ask("sales", crm.logEntry, "Log hours or a cost in a project's ledger", "It counts in the project's profit at once."),
   "crm.entryAction": ask("sales", crm.entryAction, "Confirm or remove a draft ledger entry", "A draft entry counts only once Heston confirms it."),
   "proposals.list": r("sales", proposals.list, "Proposals"),
-  "proposals.get": r("sales", proposals.get, "One proposal, who it went to, opens and answers"),
+  "proposals.get": { ...r("sales", proposals.get, "One proposal, who it went to, opens and answers (its links stay on the site)"), hide: ["link", "ip", "userAgent"] },
   "proposals.templates": r("sales", proposals.templates, "Proposal templates"),
   "proposals.questionnaire": r("sales", proposals.questionnaire, "The proposal questionnaire"),
   "proposals.forCompany": r("sales", proposals.forCompany, "A company's proposals and quotes"),
@@ -492,7 +524,10 @@ export const ACTIONS: Record<string, Entry> = {
   "proposals.newTemplate": c("sales", proposals.newTemplate, "Make a proposal template"),
   "proposals.startQuestionnaire": c("sales", proposals.startQuestionnaire, "Start a proposal from the questionnaire"),
   "proposals.saveAnswers": c("sales", proposals.saveAnswers, "Save a proposal's questionnaire answers"),
-  "proposals.finish": c("sales", proposals.finish, "Finish the questionnaire (Draft with Claude)"),
+  "proposals.finish": c("sales", proposals.finish, "Finish the questionnaire (Draft with Claude)", {
+    // 8c review L4: never take over a proposal Heston is writing himself.
+    outside: async (ctx, a) => { const p = await get(ctx, "proposals", a.proposalId); return p && p.status === "draft" && !p.filling ? "Heston is writing this proposal himself: handing it to Claude replaces what he's written." : null; },
+  }),
   "proposals.fillInstead": c("sales", proposals.fillInstead, "Fill the proposal in by hand instead"),
   "proposals.dismissDrafted": c("sales", proposals.dismissDrafted, "Clear the “Drafted by Claude” banner"),
   "proposals.setDeck": c("sales", proposals.setDeck, "Pick the brand kit for the pitch deck"),

@@ -30,6 +30,24 @@ async function allMine(ctx: QueryCtx | MutationCtx, biz: Id<"businesses">, x: un
   if (x && typeof x === "object") { for (const y of Object.values(x)) if (!(await allMine(ctx, biz, y, depth + 1))) return false; }
   return true;
 }
+/** 8c review M1: what Heston has just confirmed is going out from his Confirm page (a Stripe send); until it has, or
+ *  for 15 minutes, nothing it uses can be changed through the connector, so what goes out is what he saw. */
+export const RUNNING_MS = 15 * 60_000;
+async function lockedBy(ctx: QueryCtx | MutationCtx, a: unknown): Promise<string | null> {
+  const ids = new Set<string>();
+  const walk = (x: unknown, d = 0) => { if (d > 5) return; if (typeof x === "string") ids.add(x); else if (Array.isArray(x)) x.forEach((y) => walk(y, d + 1)); else if (x && typeof x === "object") Object.values(x).forEach((y) => walk(y, d + 1)); };
+  walk(a);
+  if (!ids.size) return null;
+  const now = Date.now();
+  for (const r of await ctx.db.query("pendingActions").withIndex("by_status", (q) => q.eq("status", "running")).collect()) {
+    if ((r.doneAt ?? r.requestedAt) < now - RUNNING_MS) continue;
+    let used: unknown = null;
+    try { used = (JSON.parse(r.payload ?? "{}") as { args?: unknown }).args; } catch { /* not a site request */ }
+    const theirs = JSON.stringify(used ?? null);
+    for (const id of ids) if (id.length >= 20 && theirs.includes(`"${id}"`)) return r.summary;
+  }
+  return null;
+}
 const outsideOf = async (ctx: QueryCtx | MutationCtx, biz: Id<"businesses">, act: Entry, a: Record<string, unknown>) =>
   act.askWhen?.(a) ?? (act.outside && (await allMine(ctx, biz, a)) ? await act.outside(ctx as QueryCtx, a) : null);
 
@@ -72,6 +90,8 @@ export const change = rawInternalMutation({
   args: runArgs,
   handler: async (ctx, x) => {
     const { act, a, as } = await prepare(ctx, x.asBusiness, x.action, x.args, (e) => (e.mode !== "change" || !e.fn.isMutation ? (e.mode === "read" ? `${x.action} only reads: use site_read.` : `${x.action} needs Heston: ask him, then site_ask.`) : null));
+    const busy = (await allMine(ctx, x.asBusiness!, a)) ? await lockedBy(ctx, a) : null; // never an answer about another business
+    if (busy) throw new ConvexError(`Heston has just confirmed “${busy}”, which uses this. Try again in a minute, once it has gone out.`);
     const why = await outsideOf(as, x.asBusiness!, act, a);
     if (why) throw new ConvexError(`${why} Ask Heston, then site_ask.`);
     const seen: Outbound[] = [];
@@ -88,6 +108,8 @@ export const tryOut = rawInternalMutation({
   handler: async (ctx, x) => {
     const { act, a, as } = await prepare(ctx, x.asBusiness, x.action, x.args, (e) => (e.mode === "read" ? `${x.action} only reads: use site_read.` : e.onPage || !e.fn.isMutation ? `${x.action} runs from Heston's Confirm page.` : null));
     const seen: Outbound[] = [];
+    const busy = (await allMine(ctx, x.asBusiness!, a)) ? await lockedBy(ctx, a) : null; // never an answer about another business
+    if (busy) throw new ConvexError(`Heston has just confirmed “${busy}”, which uses this. Try again in a minute, once it has gone out.`);
     const why = await outsideOf(as, x.asBusiness!, act, a);
     await act.fn._handler(recording(as as MutationCtx, seen), a);
     throw new ConvexError({ tried: true, outbound: summarize(seen), ...(why ? { why } : {}) });

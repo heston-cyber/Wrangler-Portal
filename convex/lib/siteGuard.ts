@@ -28,6 +28,9 @@ const JOB_NAMES: Record<string, string> = {
   "vendors:mailInvite": "Vendor portal invite email", "vendors:mailEmailChanged": "Email to the vendor about their address",
   "briefings:mail": "Briefing email", "emails:portalInvite": "Portal invite email", "shares:sendInviteEmail": "Review link email",
   "emails:newVersion": "New cut email", "emails:replyToNote": "Reply email",
+  "vendorPayments:mailApproved": "Email to the vendor: invoice approved", "vendorPayments:mailDeclined": "Email to the vendor: invoice declined",
+  "vendorPayments:mailPaid": "Email to the vendor: invoice paid", "vendorPayouts:mailSetup": "Email asking the vendor to set up direct deposit",
+  "invoiceReminders:sendReminderEmail": "Invoice reminder email", "footage:mailOffer": "Raw footage offer email",
 };
 
 /** Tables whose new rows reach someone: their Inbox, an invite, a link with access. */
@@ -79,7 +82,7 @@ export const sameReach = (a: Outbound[], b: Outbound[]) => JSON.stringify(summar
  * the caller decides afterwards (undo by throwing, or compare with what was asked).
  */
 /** Records a job names only by id that hold the people it goes to (a booking's vendor, a vendor, a client's person). */
-const PEOPLE_TABLES = ["vendors", "vendorBookings", "clientPeople", "users", "memberships", "invites", "teamInvites", "canvasPeople", "guestPasses"] as const;
+const PEOPLE_TABLES = ["vendors", "vendorBookings", "vendorInvoices", "invoices", "clientPeople", "users", "memberships", "invites", "teamInvites", "canvasPeople", "guestPasses"] as const;
 
 /** Who a shoot's Google event invites (as calendar.eventFor works it out). */
 async function shootInvitees(ctx: MutationCtx, shootId: string): Promise<string[]> {
@@ -289,7 +292,7 @@ export function toSchema(v: VJson): Record<string, unknown> {
 /** W-9s, tax ID numbers, bank details, passwords, keys and secret hashes never leave: only whether one is on file. */
 // Review L2: link tokens (a person's own canvas link, a doc's share token) and how a vendor is paid stay out too; the
 // pages' own links (url, link) still come through, for an email Heston sends himself.
-const SECRET_KEY = /token|passcode|privatekey|guestkey|hash$|paymethod|address1099|w9address|taxaddress|w-?9|taxid|tax_id|^tin$|ssn|^ein$|bank|routing|iban|swift|accountnumber|account_number|last4|password|secret|apikey|api_key|codehash|keyhash|pinhash|^hash$|refreshtoken|accesstoken|stripeaccount|payout/i;
+const SECRET_KEY = /token|passcode|privatekey|guestkey|hash$|paymethod|address1099|w9address|taxaddress|w-?9|taxid|tax_id|^tin$|(^|_)ssn$|^ein$|bank|routing|iban|swift|accountnumber|account_number|last4|password|secret|apikey|api_key|codehash|keyhash|pinhash|^hash$|refreshtoken|accesstoken|stripeaccount|payout/i;
 
 export function scrub(x: unknown, hide: string[] = [], depth = 0): unknown {
   if (depth > 30) return "(too deep)";

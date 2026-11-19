@@ -3,11 +3,14 @@
 //   T8c.1 a draft invoice is made directly and nothing is sent; sending is an ask whose Confirm page shows the invoice
 //         as the client will get it; Confirm hands the Stripe send to the page, signed in as Heston, and records how it went
 //   T8c.2 never through it: paying, charging, refunding, starting or changing a subscription, Stripe keys
-//   T8c.3 recording a vendor payment, approving their invoice, a reminder: asks
+//   T8c.3 recording a vendor payment, approving their invoice, a reminder: asks, and the page names who and how much
+//   T8c.4 the 8c review's fixes: a quote's Send shows exactly who it reaches; nothing a confirmed send uses can change
+//         while it goes out; an invoice says its kind; money decisions ask; links and the 1099 address stay out
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { anyApi } from "convex/server";
 import { world, due } from "./payHarness";
 import { ACTIONS } from "../convex/lib/siteActions";
+import type { Id } from "../convex/_generated/dataModel";
 
 const api = anyApi;
 beforeAll(() => {
@@ -82,10 +85,69 @@ describe("Phase 8c · money through the connector", () => {
     expect(JSON.stringify(s.data)).not.toMatch(/sk_|rk_|whsec_/);
   });
 
-  test("T8c.3 recording a vendor payment, approving their invoice and an invoice reminder all ask", async () => {
+  test("T8c.3 recording a vendor payment, approving their invoice and an invoice reminder all ask; the page names who and how much", async () => {
     const x = await setup();
-    for (const action of ["vendorPayments.markPaid", "vendorPayments.approve", "vendorPayments.decline", "invoiceReminders.sendReminder", "invoiceReminders.setReminders", "quotes.voidQuote", "vendorPayouts.askSetup"]) {
-      expect((await x.a("site_change", { action, args: {} })).text, action).toMatch(/needs Heston/);
+    for (const action of ["vendorPayments.markPaid", "vendorPayments.approve", "vendorPayments.decline", "invoiceReminders.sendReminder", "invoiceReminders.setReminders", "quotes.voidQuote", "vendorPayouts.askSetup", "footage.reinstate", "footage.dismissLatePaid", "footage.stop", "delivery.setTerm", "delivery.renewed", "crm.logEntry"]) {
+      expect(ACTIONS[action].mode, action).toBe("ask");
+    }
+    // The money-area changes Claude makes directly: exactly these (none moves money, charges, refunds or reaches anyone).
+    expect(Object.entries(ACTIONS).filter(([, e]) => e.area === "money" && e.mode === "change").map(([k]) => k).sort())
+      .toEqual(["footage.markDone", "footage.recordDrive", "invoices.draftFinal", "invoices.saveDraft", "quotes.answerMove", "quotes.later", "quotes.save", "quotes.stopLink"]);
+    const vendorId = await x.w.heston.mutation(api.vendors.add, { name: "Jordan Ellis", email: "jordan@ellisfilms.com", roles: ["Shooter"], rates: [], invite: false }) as Id<"vendors">;
+    const bookingId = await x.w.heston.mutation(api.bookings.create, { vendorId, projectId: x.w.p, role: "Shooter", start: "2030-01-01", end: "2030-01-01", cents: 100_000, unit: "day" }) as Id<"vendorBookings">;
+    const invoiceId = await x.w.t.run(async (ctx) => {
+      await ctx.db.patch(vendorId, { address: "12 Secret Ln, Tulsa OK" } as never);
+      return await ctx.db.insert("vendorInvoices", { businessId: x.w.A, vendorId, bookingId, projectId: x.w.p, number: "JE-007", mode: "lines", hours: [], lines: [{ description: "Shoot day", cents: 120_000 }], rate: { cents: 100_000, unit: "day" }, totalCents: 120_000, status: "approved", createdAt: 0, updatedAt: 0 } as never);
+    });
+    const r = await x.a("site_ask", { action: "vendorPayments.markPaid", args: { invoiceId, paidOn: "2026-01-05", method: "ACH" }, heston_ok: "yes, I paid Jordan" });
+    expect(r.error).toBe(false);
+    expect(r.data.what_goes_out).toEqual(expect.arrayContaining([
+      { label: "Vendor", value: "Jordan Ellis <jordan@ellisfilms.com>" }, { label: "Total", value: "$1,200.00" }, { label: "Paid on", value: "2026-01-05 by ACH" },
+      expect.objectContaining({ label: "Sends", value: expect.stringMatching(/jordan@ellisfilms\.com/) }),
+    ]));
+    const v = await x.a("site_read", { action: "vendorPayments.get", args: { invoiceId } });
+    expect(JSON.stringify(v.data)).not.toContain("Secret Ln");
+  });
+
+  test("T8c.4 a quote's Send shows who it reaches; what a confirmed send uses is locked while it goes out; an invoice says its kind", async () => {
+    const x = await setup();
+    const quoteId = await x.w.heston.mutation(api.quotes.save, { title: "Menu board refresh", who: { clientId: x.w.harbor, name: "Maya Brooks", email: "maya@harbor.example" }, lines: [{ id: "a", description: "Shooting · 1 day", qty: 1, unitCents: 160_000 }], deposit: { kind: "percent", value: 50 }, terms: "Pay at https://evil.example" }) as Id<"quotes">;
+    // copyLink with an address: the address is emailed too, and the page says so.
+    const r = await x.a("site_ask", { action: "quotes.send", args: { quoteId, copyLink: true, to: "evil@attacker.example" }, heston_ok: "send the quote" });
+    expect(r.error).toBe(false);
+    const sends = r.data.what_goes_out.find((l: { label: string }) => l.label === "Sends").value;
+    expect(sends).toMatch(/Quote email with their own link to .*evil@attacker\.example.*and a link for Heston to copy/);
+    expect(r.data.what_goes_out).toEqual(expect.arrayContaining([{ label: "Terms (in the email and on the page)", value: "Pay at https://evil.example" }]));
+    // Confirmed: while it goes out from the page, Claude can't change the quote it sends.
+    const g = await x.w.heston.query(api.confirm.get, { id: r.data.request_id });
+    expect((await x.w.heston.mutation(api.confirm.confirm, { id: r.data.request_id, hash: g.hash })).runOnPage).toEqual({ fn: "quotes:send", args: { quoteId, copyLink: true, to: "evil@attacker.example" } });
+    const edit = await x.a("site_change", { action: "quotes.save", args: { quoteId, title: "Changed", who: { name: "X", email: "x@evil.example" }, lines: [{ id: "a", description: "x", qty: 1, unitCents: 1 }], deposit: { kind: "percent", value: 50 } } });
+    expect(edit.text).toMatch(/just confirmed/);
+    // Reported back: done. Never reported: after 15 minutes it's "unknown", and the lock lifts.
+    await x.w.heston.mutation(api.confirm.finished, { id: r.data.request_id, ok: true });
+    expect((await x.a("request_status", { request_id: r.data.request_id })).data.status).toBe("done");
+    // An invoice's page says what kind it is, and what paying a final one opens.
+    const invoiceId = (await x.a("site_change", { action: "invoices.saveDraft", args: draft(x.w) })).data.result as string;
+    const ir = await x.a("site_ask", { action: "invoices.send", args: { invoiceId }, heston_ok: "send it" });
+    expect(ir.data.what_goes_out).toEqual(expect.arrayContaining([{ label: "Kind", value: "final invoice for the project Launch" }, { label: "When paid", value: expect.stringMatching(/opens Launch's final files/) }]));
+    const g2 = await x.w.heston.query(api.confirm.get, { id: ir.data.request_id });
+    await x.w.heston.mutation(api.confirm.confirm, { id: ir.data.request_id, hash: g2.hash });
+    await x.w.t.run(async (ctx) => { await ctx.db.patch(ir.data.request_id as Id<"pendingActions">, { doneAt: Date.now() - 16 * 60_000 }); });
+    expect((await x.a("request_status", { request_id: ir.data.request_id })).data.status).toBe("unknown");
+    expect((await x.a("site_change", { action: "invoices.saveDraft", args: { invoiceId, ...draft(x.w) } })).error).toBe(false);
+    // Pay links stay on the site.
+    await x.w.t.run(async (ctx) => { await ctx.db.patch(invoiceId as Id<"invoices">, { stripe: { accountId: "acct_A", invoiceId: "in_1", customerId: "cus_1", hostedUrl: "https://invoice.stripe.com/i/secret", pdfUrl: "https://pay.stripe.com/pdf", livemode: false } } as never); });
+    expect(JSON.stringify((await x.a("site_read", { action: "invoices.get", args: { invoiceId } })).data)).not.toMatch(/invoice\.stripe\.com|pay\.stripe\.com/);
+    // A follow-up deleted through a change: an ask.
+    expect((await x.a("site_change", { action: "crm.doneFollowUp", args: { followUpId: "x", remove: true } })).text).toMatch(/args|deletes the follow-up/);
+  });
+
+  test("T8c.5 each page-run action's name is the very function in the list", async () => {
+    for (const [name, e] of Object.entries(ACTIONS)) {
+      if (!e.onPage) continue;
+      const [mod, fn] = name.split(".");
+      const m = await import(`../convex/${mod}.ts`);
+      expect(m[fn], name).toBe(e.fn);
     }
   });
 });
