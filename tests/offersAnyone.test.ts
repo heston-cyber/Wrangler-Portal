@@ -131,6 +131,27 @@ describe("D149 quotes and proposals to anyone", () => {
     expect(mails.filter((m) => m.to === "heston@wranglerproductions.com" && /declined/i.test(m.subject)).length).toBe(4); // a, link, c, d
   });
 
+  // Nov 19 (Heston, "take care of them"): anyone can hold a copied link, so accepting one for a client's quote never
+  // makes them the client's contact; the invoice and contract go to the client's own person.
+  test("a client's quote accepted on its copied link keeps the client's contact; the invoice bills them, not whoever accepted", async () => {
+    vi.useFakeTimers();
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const id = await quote(w, { clientId: w.harbor, name: "Maya Brooks", email: "maya@harbor.example", company: "Harbor Coffee" });
+    const r = await w.heston.action(api.quotes.send, { quoteId: id, copyLink: true });
+    const link = (r.link as string).split("/q/")[1];
+    expect((await qpost(w, { token: link, action: "accept", name: "Sly Stranger", email: "sly@elsewhere.example", company: "Harbor Coffee" })).status).toBe(200);
+    const q = await w.heston.query(api.quotes.get, { quoteId: id });
+    expect(q).toMatchObject({ status: "accepted", contact: { name: "Maya Brooks", email: "maya@harbor.example" }, response: { name: "Sly Stranger", via: "link" } });
+    process.env.STRIPE_PLATFORM_KEY = "sk_test_platform";
+    fakeStripe();
+    const made = await w.heston.action(api.quotes.draftFrom, { quoteId: id, contract: false, invoice: "deposit" });
+    const inv = await w.t.run((ctx) => ctx.db.get(made.invoiceId as Id<"invoices">));
+    expect(inv!.billTo).toMatchObject({ name: "Maya Brooks", email: "maya@harbor.example" });
+    expect(JSON.stringify(inv)).not.toContain("sly@elsewhere.example");
+  });
+
   test("stop one person's link; a new copied link retires the old one", async () => {
     const w = await world();
     const mails: Sent[] = [];

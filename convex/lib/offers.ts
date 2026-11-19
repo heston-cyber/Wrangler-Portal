@@ -145,6 +145,15 @@ export async function noteOpen(ctx: MutationCtx, f: Found) {
 
 type Answer = { kind: "accepted" | "declined"; name: string; email?: string; company?: string; reason?: string; ip?: string; userAgent?: string };
 
+/** The client's signer (else their first person), as a contact: the person a client-addressed offer bills and signs. */
+async function signerOf(ctx: MutationCtx, clientId: unknown): Promise<{ name: string; email: string; company?: string } | null> {
+  const c = await ctx.db.get(clientId as never) as { _id: string; name?: string } | null;
+  if (!c) return null;
+  const people = (await ctx.db.query("clientPeople").withIndex("by_client", (q) => q.eq("clientId", c._id as never)).collect()).filter((p) => !p.removedAt);
+  const p = people.find((x) => x.role === "signer") ?? people[0];
+  return p ? { name: p.name ?? p.email, email: p.email, ...(c.name ? { company: c.name } : {}) } : null;
+}
+
 /** Accept or decline through a link. The caller checks the doc is open (not expired or withdrawn). Returns who to tell
  *  the owner about, or an error for the page. */
 export async function answer(ctx: MutationCtx, kind: Kind, f: Found, a: Answer, closed: string | null): Promise<{ error: string } | { ok: true; status: string; tell: { key: string; kind: "accepted" | "declined"; who: string; company: string | null; reason: string | null; at: number } }> {
@@ -170,15 +179,23 @@ export async function answer(ctx: MutationCtx, kind: Kind, f: Found, a: Answer, 
   if (f.r) await ctx.db.patch(f.r._id, { response, ...(f.r.openedAt ? {} : { openedAt: now }) });
   if (a.kind === "accepted") {
     // Q100: whoever accepted is the other party now; someone who isn't a client becomes a quiet lead (Nov 4).
-    const contact = { name: response.name, email: email || d.contact?.email || "", ...(company ? { company } : d.contact?.company && f.via !== "link" ? { company: d.contact.company } : {}) };
+    // Nov 19 (Heston, "take care of them"): not on the copied link of a quote or proposal already addressed to a
+    // client: anyone can hold that link, so the person it was addressed to (or the client's signer) stays the contact,
+    // who is billed and signs. Who accepted is still recorded (response) and shown to Heston.
+    const addressed = f.via === "link" && !!d.clientId; // a quote with no client: whoever accepts is its contact, as before
+    const kept = addressed ? (d.contact?.email ? d.contact : await signerOf(ctx, d.clientId)) : null;
+    const contact = addressed
+      ? kept
+      : { name: response.name, email: email || d.contact?.email || "", ...(company ? { company } : d.contact?.company && f.via !== "link" ? { company: d.contact.company } : {}) };
     let dealId = d.dealId;
     if (!d.clientId && !d.dealId) {
+      const lc = contact ?? { name: response.name, email: email || "" }; // (always set here: no client means a contact or none at all)
       // H1 (review): stamp the quote's own business. The link pages run with no identity, where an unstamped insert
       // would land in the default business.
-      dealId = await ctx.db.insert("deals", { ...(d.businessId ? { businessId: d.businessId } : {}), title: (d as { title?: string }).title?.slice(0, 160) || `Accepted ${thing}`, ...(contact.email ? { contactEmail: contact.email } : {}), stage: "lead", source: "accepted", quiet: true,
-        lead: { name: contact.name, email: contact.email, ...(company ? { company } : {}), fields: [], at: now }, history: [{ kind: "created", at: now, detail: `accepted ${thing} ${d.number}` }], createdAt: now, updatedAt: now });
+      dealId = await ctx.db.insert("deals", { ...(d.businessId ? { businessId: d.businessId } : {}), title: (d as { title?: string }).title?.slice(0, 160) || `Accepted ${thing}`, ...(lc.email ? { contactEmail: lc.email } : {}), stage: "lead", source: "accepted", quiet: true,
+        lead: { name: lc.name, email: lc.email, ...(company ? { company } : {}), fields: [], at: now }, history: [{ kind: "created", at: now, detail: `accepted ${thing} ${d.number}` }], createdAt: now, updatedAt: now });
     }
-    await ctx.db.patch(d._id, { status: "accepted", response, contact, ...(dealId ? { dealId } : {}), updatedAt: now, history: hist("accepted", `${response.name}${company ? `, for ${company}` : ""}`) } as never);
+    await ctx.db.patch(d._id, { status: "accepted", response, ...(contact ? { contact } : {}), ...(dealId ? { dealId } : {}), updatedAt: now, history: hist("accepted", `${response.name}${company ? `, for ${company}` : ""}${addressed ? " (copied link)" : ""}`) } as never);
   } else {
     // Declined: closes only once every person it was emailed to has declined (a copied link never closes it).
     const rows = (await rowsOf(ctx, kind, d._id)).filter((r) => !r.stoppedAt).map((r) => (f.r && r._id === f.r._id ? { ...r, response } : r));

@@ -350,7 +350,7 @@ export const makeInvoice = internalMutation({
     const q = await ctx.db.get(quoteId);
     if (!q) throw new ConvexError("That quote isn't here.");
     if (q.made?.invoiceId && (await ctx.db.get(q.made.invoiceId))) return q.made.invoiceId;
-    if (!q.contact?.email) throw new ConvexError("Who accepted isn't known, so the invoice has no one to bill.");
+    if (!q.contact?.email) throw new ConvexError(q.clientId ? "This client has no contact to bill. Add a person on the client's page first." : "Who accepted isn't known, so the invoice has no one to bill.");
     const t = quoteTotals(q);
     const now = Date.now();
     const due = plusDays(todayIso(), Math.max(0, Number(process.env.WS_INVOICE_DUE_DAYS ?? 3) || 0));
@@ -398,7 +398,9 @@ export const draftFrom = action({
     if (!a.contract && !a.invoice) throw new ConvexError("Pick a contract, an invoice, or both.");
     const t = await ctx.runQuery(internal.quotes.draftTarget, { quoteId: a.quoteId });
     let buildId: Id<"wsBuilds"> | null = t.q.made?.buildId ?? null;
-    const c = t.q.contact ?? { name: t.q.response?.name ?? "", email: t.q.response?.email ?? "", company: t.q.response?.company }; // Q100: whoever accepted
+    // Q100: whoever accepted. Nov 19: a quote addressed to a client bills and is signed by that client's contact, never
+    // by whoever accepted on its copied link.
+    const c = t.q.contact ?? (t.q.clientId ? { name: "", email: "", company: undefined } : { name: t.q.response?.name ?? "", email: t.q.response?.email ?? "", company: t.q.response?.company });
     if (a.contract && !buildId) {
       buildId = await newAgreementDraft(ctx, c.company || c.name);
       const lines = [
