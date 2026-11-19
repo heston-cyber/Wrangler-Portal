@@ -236,6 +236,12 @@ export const selfTest = internalAction({
       check("find_videos (Review)", fv.status === 200 && !(fv.json?.result as Json | undefined)?.isError);
       const ld = await call({ jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "list_documents", arguments: {} } });
       check("list_documents (Sign)", ld.status === 200 && !(ld.json?.result as Json | undefined)?.isError);
+      const sa = await call({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "site_actions", arguments: {} } });
+      check("site_actions", sa.status === 200 && !(sa.json?.result as Json | undefined)?.isError);
+      const po = await call({ jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "site_read", arguments: { action: "production.overview", args: {} } } });
+      check("site_read production.overview (as the owner)", po.status === 200 && !(po.json?.result as Json | undefined)?.isError);
+      const sc = await call({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "site_change", arguments: { action: "shoots.schedule", args: {} } } });
+      check("a send through site_change is refused", ((sc.json?.result as Json | undefined)?.isError) === true);
       const sn = await call({ jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "send_client_note", arguments: { note_id: "x" } } });
       check("a send without Heston's words is refused", ((sn.json?.result as Json | undefined)?.isError) === true);
     } finally {
