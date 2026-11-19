@@ -113,7 +113,13 @@ export async function callTool(ctx: ActionCtx, name: string, args: Json): Promis
       if (!b64 || b64.length > Math.ceil((10 * 1024 * 1024 * 4) / 3) + 4) return fail("Pass the file as base64, up to 10 MB.");
       let bytes: Uint8Array<ArrayBuffer>;
       try { bytes = Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0)); } catch { return fail("That isn't base64."); }
-      const looks = type === "application/pdf" ? bytes[0] === 0x25 && bytes[1] === 0x50 : type === "image/png" ? bytes[0] === 0x89 && bytes[1] === 0x50 : type === "image/jpeg" ? bytes[0] === 0xff && bytes[1] === 0xd8 : type === "image/gif" ? bytes[0] === 0x47 : bytes[8] === 0x57 && bytes[9] === 0x45;
+      // 8d review L4: the whole signature of each kind.
+      const head = (n: number) => String.fromCharCode(...bytes.slice(0, n));
+      const looks = type === "application/pdf" ? head(5) === "%PDF-"
+        : type === "image/png" ? [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((b, i) => bytes[i] === b)
+        : type === "image/jpeg" ? bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+        : type === "image/gif" ? head(6) === "GIF87a" || head(6) === "GIF89a"
+        : head(4) === "RIFF" && String.fromCharCode(...bytes.slice(8, 12)) === "WEBP";
       if (!looks) return fail(`That file isn't a ${type.split("/")[1].toUpperCase()}.`);
       const storageId = await ctx.storage.store(new Blob([bytes], { type }));
       await logChange(ctx, name, { title: str(args.name) ?? "a file" });

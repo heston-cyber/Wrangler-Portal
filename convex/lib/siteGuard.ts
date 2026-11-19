@@ -19,7 +19,8 @@ export type Outbound = { what: string; to: string[] };
 /** Jobs that reach no one outside the business: the owner's own calendar copy (its invites are checked on the row),
  *  looking up a place's map position, a forecast, a link's own expiry clock, the owner's own bell. */
 const QUIET_JOBS = new Set(["calendarSync:push", "calendarSync:pushDates", "calendarSync:purge", "calendarSync:pull", "places:locate", "callSheets:weatherOne", "briefings:expiryTick", "bell:post",
-  "stills:cleanup"]); // a deleted video's stills and stream files: tidying, sends nothing
+  "stills:cleanup", // a deleted video's stills and stream files: tidying, sends nothing
+  "testimonials:saveToDropbox"]); // a copy for Heston's own vault
 
 const JOB_NAMES: Record<string, string> = {
   "callSheets:mail": "Call sheet email",
@@ -30,7 +31,7 @@ const JOB_NAMES: Record<string, string> = {
   "emails:newVersion": "New cut email", "emails:replyToNote": "Reply email",
   "vendorPayments:mailApproved": "Email to the vendor: invoice approved", "vendorPayments:mailDeclined": "Email to the vendor: invoice declined",
   "vendorPayments:mailPaid": "Email to the vendor: invoice paid", "vendorPayouts:mailSetup": "Email asking the vendor to set up direct deposit",
-  "invoiceReminders:sendReminderEmail": "Invoice reminder email", "footage:mailOffer": "Raw footage offer email",
+  "invoiceReminders:sendReminderEmail": "Invoice reminder email", "messages:notify": "Email about the message", "calendar:resync": "Calendar invites or updates from Google for every shoot", "footage:mailOffer": "Raw footage offer email",
 };
 
 /** Tables whose new rows reach someone: their Inbox, an invite, a link with access. */
@@ -149,7 +150,8 @@ export function recording<C extends MutationCtx>(ctx: C, seen: Outbound[]): C {
     get(t, prop, r) {
       if (prop === "insert") return async (table: string, doc: Record<string, unknown>) => {
         // A call-sheet guest's pass is made when they're added and reaches them only once the sheet is sent to them.
-        if (REACHING_TABLES[table] && !(table === "guestPasses" && !doc.sentAt)) note(REACHING_TABLES[table], doc);
+        // A message row names its sender, not who it reaches (messages.send's own page lists them, 8d review M1).
+        if (REACHING_TABLES[table] && !(table === "guestPasses" && !doc.sentAt)) note(REACHING_TABLES[table], table === "messages" ? {} : doc);
         if (table === "calendarEvents") calendarInvite(doc);
         return t.insert(table as never, doc as never);
       };

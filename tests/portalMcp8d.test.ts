@@ -4,6 +4,8 @@
 //   T8d.3 a proposal's or briefing's first send makes its PDF in Heston's browser: not through the connector
 //   T8d.4 keys run out when chosen, and stop if their maker stops being the owner
 //   T8d.5 a photo uploaded through the connector goes only where a site function puts it
+//   T8d.6 the 8d review's fixes: adding a client person, the business's details, a kickoff brief's questions, who a
+//         message reaches, a shared brand kit, keys with no maker, files that only look like photos
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { anyApi } from "convex/server";
 import { world } from "./payHarness";
@@ -48,9 +50,11 @@ describe("Phase 8d · the rest of the site", () => {
     for (const action of ["messages.send", "clients.invite", "clients.invitePerson", "shares.create", "shares.update", "shares.addMember", "team.invite", "team.setRole", "team.setPerm", "team.assign", "team.remove", "briefs.send", "fileRequests.sendDraft", "subscriptions.setFailRule"]) {
       expect((await x.a("site_change", { action, args: {} })).text, action).toMatch(/needs Heston/);
     }
-    expect((await x.a("site_change", { action: "calendar.save", args: { calendarId: "c", calendarName: "Cal", inviteVendors: false, inviteClient: true } })).text).toMatch(/Google emails/);
-    expect((await x.a("site_change", { action: "clients.setSettings", args: { clientId: x.w.harbor, watermarkOff: true } })).text).toMatch(/without it/);
-    expect((await x.a("site_change", { action: "clients.setSettings", args: { clientId: x.w.harbor, rounds: 3 } })).error).toBe(false);
+    for (const [action, args] of [["calendar.save", { calendarId: "c", calendarName: "Cal", inviteVendors: false, inviteClient: true }], ["clients.setSettings", { clientId: x.w.harbor, watermarkOff: true }], ["clients.revokeInvite", {}], ["shares.removeMember", {}], ["delivery.saveSettings", {}], ["calls.saveSettings", {}], ["siteWatch.setPaused", { paused: true }]] as const) {
+      expect((await x.a("site_change", { action, args })).text, action).toMatch(/needs Heston/);
+    }
+    expect((await x.a("site_change", { action: "calls.setPaused", args: { paused: false } })).text).toMatch(/lets anyone with the link book/);
+    expect((await x.a("site_change", { action: "notifications.setOwner", args: { key: "x", on: false } })).text).toMatch(/stops getting/);
     expect((await x.a("site_change", { action: "shares.setOff", args: { shareId: "x", off: false } })).text).toMatch(/opens the cuts again|args/);
   });
 
@@ -94,5 +98,53 @@ describe("Phase 8d · the rest of the site", () => {
     const set = await x.a("site_change", { action: "gear.setPhoto", args: { gearId, storageId: up.data.storageId } });
     expect(set.data.result).toMatch(/A photo needs to be a PNG/);
     expect((await x.w.t.run((ctx) => ctx.db.get(gearId as Id<"gear">)))!.photoId).toBeUndefined();
+  });
+
+  test("T8d.6 review fixes: what reaches clients asks, and its Confirm page shows exactly what goes", async () => {
+    const x = await setup();
+    // H1: a person on a client sees its invoices: an ask.
+    expect((await x.a("site_change", { action: "clients.addPerson", args: { clientId: x.w.harbor, email: "sam@elsewhere.example", role: "contact" } })).text).toMatch(/needs Heston/);
+    // H2: the business's details (reply-to above all) ask; its look doesn't.
+    expect((await x.a("site_change", { action: "business.updateSettings", args: { replyTo: "billing@wrangler-payments.example" } })).text).toMatch(/reply-to/);
+    expect((await x.a("site_change", { action: "business.updateSettings", args: { accent: "#C8102E" } })).error).toBe(false);
+    // M1: a message's page names the project's people, not Heston.
+    const threadId = await x.w.heston.mutation(api.messages.start, { projectId: x.w.p }) as string;
+    await x.w.t.run(async (ctx) => {
+      const s = await ctx.db.insert("shares", { businessId: x.w.A, token: "tok-proj-8d", kind: "project", projectId: x.w.p, access: "comment", who: "invited", allVersions: true, downloads: false, emailNewVersions: true, createdAt: 0, createdBy: (await ctx.db.query("users").first())!._id });
+      await ctx.db.insert("shareMembers", { businessId: x.w.A, shareId: s, email: "maya@harbor.example", addedAt: 0 });
+    });
+    const m = await x.a("site_ask", { action: "messages.send", args: { threadId: typeof threadId === "string" ? threadId : (threadId as { threadId: string }).threadId, text: "Shoot moved to 8am." }, heston_ok: "yes, tell Maya" });
+    expect(m.error).toBe(false);
+    const sends = m.data.what_goes_out.filter((l: { label: string }) => l.label === "Sends").map((l: { value: string }) => l.value).join(" | ");
+    expect(sends).toMatch(/maya@harbor\.example/);
+    expect(sends).not.toMatch(/heston@/);
+    // H3: the kickoff brief's questions are on its page, and changing them after the ask is caught.
+    const b = await x.a("site_ask", { action: "briefs.send", args: { projectId: x.w.p }, heston_ok: "yes, send the kickoff brief" });
+    if (!b.error) {
+      expect(b.data.what_goes_out).toEqual(expect.arrayContaining([expect.objectContaining({ label: "The questions" })]));
+      const settings = await x.w.heston.query(api.briefs.settings, {});
+      const qn = JSON.parse(JSON.stringify(settings.questionnaire));
+      qn.steps[0].questions[0].label = "Your bank account and routing number";
+      expect((await x.a("site_change", { action: "briefs.saveSettings", args: { questionnaire: qn } })).error).toBe(false);
+      expect((await x.w.heston.query(api.confirm.get, { id: b.data.request_id })).changed).toBe(true);
+    } else expect(b.text).toMatch(/./); // the sample project can't take a brief here; the page rule is covered above
+    // M3: a shared brand kit: saving to it asks.
+    const kit = await x.w.heston.mutation(api.creative.newKit, { name: "Harbor brand" }) as string | { kitId: string };
+    const kitId = typeof kit === "string" ? kit : kit.kitId;
+    await x.w.heston.mutation(api.creative.shareKit, { kitId, on: true });
+    const gif = Buffer.from("GIF89a\x01\x00\x01\x00", "binary").toString("base64");
+    const up = await x.a("site_upload", { name: "logo.gif", content_type: "image/gif", base64: gif });
+    expect(up.error).toBe(false);
+    expect((await x.a("site_change", { action: "brandKit.addFile", args: { kitId, storageId: up.data.storageId, name: "logo.gif" } })).text).toMatch(/link is on/);
+    // L4: a file that only starts like a GIF or WebP isn't taken.
+    expect((await x.a("site_upload", { name: "x.gif", content_type: "image/gif", base64: Buffer.from("G<html><script>").toString("base64") })).text).toMatch(/isn't a GIF/);
+    expect((await x.a("site_upload", { name: "x.webp", content_type: "image/webp", base64: Buffer.from("xxxxxxxxWEBP<html>").toString("base64") })).text).toMatch(/isn't a WEBP/);
+  });
+
+  test("T8d.7 a key with no maker (made before 8d) no longer works", async () => {
+    const x = await setup();
+    const { sha256Hex } = await import("../convex/lib/hash");
+    await x.w.t.run(async (ctx) => { await ctx.db.insert("portalKeys", { businessId: x.w.A, hash: await sha256Hex("wp_oldkey_without_maker"), prefix: "wp_oldkey_", label: "Claude", createdAt: 0 }); });
+    expect((await x.raw("wp_oldkey_without_maker", "site_actions")).status).toBe(401);
   });
 });

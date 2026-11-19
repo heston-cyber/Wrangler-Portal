@@ -62,6 +62,11 @@ import * as activity from "../activity";
 import * as auditLog from "../auditLog";
 import * as pageText from "../pageText";
 import { parseTo } from "./offers";
+import { KICKOFF_BRIEF } from "./kickoff";
+import { briefingHeadings } from "./wsBriefing";
+import { pageOf } from "./wsBuilder";
+import { portalPeople } from "../projects";
+import type { Questionnaire } from "./questionnaire";
 import { quoteTotals } from "../quotes";
 import type { QueryCtx } from "../_generated/server";
 import { ConvexError } from "convex/values";
@@ -222,6 +227,8 @@ const proposalSend = async (ctx: QueryCtx, a: Args) => {
   const p = await get(ctx, "proposals", a.proposalId);
   if (!p) return [];
   if (p.status !== "sent") throw new ConvexError("The first send makes the proposal's PDF in your browser: send it from the proposal's page on the site.");
+  // 8d review M5: once it's out, the original message goes with it, and the links' expiry changes on its page.
+  if (a.message !== undefined || a.move !== undefined || a.expiresInDays !== undefined) throw new ConvexError("Sending it again uses its original message; leave out message, move and expiresInDays.");
   const b = p.buildId ? await get(ctx, "wsBuilds", p.buildId) : null;
   const client = b?.fields?.client ?? {};
   const legacy = a.resend === true && !!p.token && a.to === undefined && a.copyLink !== true;
@@ -229,10 +236,12 @@ const proposalSend = async (ctx: QueryCtx, a: Args) => {
     : a.to !== undefined ? parseTo(String(a.to), typeof a.name === "string" ? a.name : undefined)
     : a.copyLink === true ? [] : client.email ? [{ email: String(client.email).trim().toLowerCase(), name: String(client.name ?? "") }] : [];
   if (!list.length && a.copyLink !== true) throw new ConvexError("Add who it goes to (or copy its link): it can't be sent to no one.");
-  const sends = [...(list.length ? [`Proposal email with their own link to ${list.map((x) => `${x.name ? `${x.name} ` : ""}<${x.email}>`).join(", ")}`] : []), ...(a.copyLink === true ? ["a link for Heston to copy and send himself"] : [])];
+  const rows = await ctx.db.query("offerRecipients").withIndex("by_proposal", (q) => q.eq("proposalId", p._id as never)).collect();
+  const named = list.map((x) => { const old = rows.find((r) => String(r.email).toLowerCase() === x.email.toLowerCase()); const n = old?.name ?? x.name; return `${n ? `${n} ` : ""}<${x.email}>${old?.stoppedAt ? " (their stopped link works again)" : ""}`; });
+  const sends = [...(named.length ? [`Proposal email with their own link to ${named.join(", ")}`] : []), ...(a.copyLink === true ? ["a link for Heston to copy and send himself"] : [])];
   return [
     { label: "Proposal", value: `${String(p.number ?? "")} · ${String(b?.title ?? p.title ?? "")} (the copy already sent)` },
-    ...(typeof a.message === "string" && a.message.trim() ? [{ label: "Message", value: a.message.trim() }] : []),
+    ...(p.message ? [{ label: "Its message", value: String(p.message) }] : []),
     { label: "Sends", value: sends.join("; and ") },
   ];
 };
@@ -243,14 +252,54 @@ const briefingSend = async (ctx: QueryCtx, a: Args) => {
   const b = br.buildId ? await get(ctx, "wsBuilds", br.buildId) : null;
   const to = Array.isArray(a.to) ? (a.to as Array<{ email?: string; name?: string; vendorId?: string }>) : [];
   const people: string[] = [];
-  for (const t of to) { const vd = t.vendorId ? await get(ctx, "vendors", t.vendorId) : null; people.push(`${t.name ?? vd?.name ?? ""} <${String(vd?.email ?? t.email ?? "").toLowerCase()}>`.trim()); }
+  for (const t of to) { const vd = t.vendorId ? await get(ctx, "vendors", t.vendorId) : null; people.push(`${vd?.name ?? t.name ?? ""} <${String(vd?.email ?? t.email ?? "").toLowerCase()}>`.trim()); }
   if (!people.length && a.copyLink !== true) throw new ConvexError("Add who it goes to (or copy its link).");
+  // 8d review M5: the email lists the live page's headings; they're shown (and so bound) here.
+  const heads = b ? briefingHeadings(pageOf(b.blocks)).slice(0, 4) : [];
   return [
-    { label: "Briefing", value: `${String(b?.title ?? "Briefing")} (the copy already shared)` },
+    { label: "Briefing", value: `${String(br.shown?.title ?? b?.title ?? "Briefing")} (the copy already shared)` },
+    ...(heads.length ? [{ label: "The email lists", value: heads.join("\n") }] : []),
     ...(typeof a.note === "string" && a.note.trim() ? [{ label: "Note", value: a.note.trim() }] : []),
     { label: "Sends", value: [...(people.length ? [`Briefing email with their own link to ${people.join(", ")}`] : []), ...(a.copyLink === true ? ["a link for Heston to copy"] : [])].join("; and ") },
   ];
 };
+
+
+// ---------- 8d review ----------
+/** H3: the kickoff brief's questions as they'll be sent (shown, and so bound: a change after Heston's OK is caught). */
+const briefQuestions = async (ctx: QueryCtx) => {
+  // This business's own (the Confirm page's caller is its owner; businesses aren't scoped, so it's named here).
+  const biz = (ctx as unknown as { scope?: { owner?: string | null } }).scope?.owner;
+  const b = biz ? await get(ctx, "businesses", biz) : null;
+  if (!b) throw new ConvexError("This business's kickoff brief isn't here.");
+  const qn = ((b as Record<string, any> | null)?.kickoff as Questionnaire | undefined) ?? KICKOFF_BRIEF;
+  const lines = qn.steps.flatMap((st) => [`${st.title}:`, ...st.questions.map((q) => `  ${q.label}${q.required ? " (required)" : ""}`)]);
+  tooMany(lines.length);
+  return [{ label: "The questions", value: lines.join("\n") }];
+};
+/** M1: who a message reaches, as the site works it out: the project's portal people, or the lead. */
+const messageReach = async (ctx: QueryCtx, a: Args) => {
+  const t = await get(ctx, "msgThreads", a.threadId);
+  if (!t) return [];
+  let to: string[] = [];
+  if (t.projectId) { const p = await get(ctx, "projects", t.projectId); if (p) to = (await portalPeople(ctx as never, p as never)).map((x: { email: string; name?: string }) => `${x.name ? `${x.name} ` : ""}<${x.email}>`); }
+  else if (t.leadEmail) to = [`${t.leadName ? `${t.leadName} ` : ""}<${String(t.leadEmail).toLowerCase()}>`];
+  tooMany(to.length);
+  return [{ label: "Sends", value: to.length ? `The message, and an email about it, to ${to.join(", ")}` : "The message (no one to email yet)" }];
+};
+/** M3: a creative brand kit with its link on is seen outside the business at once. */
+const sharedKit = async (ctx: QueryCtx, a: Args) => {
+  const k = typeof a.kitId === "string" ? await get(ctx, "brandKits", a.kitId) : null;
+  return k?.share?.on ? "This brand kit's link is on: what's saved shows to anyone with it at once." : null;
+};
+/** L2: a new title on something already shared shows to outsiders at once. */
+const sharedTitle = async (ctx: QueryCtx, a: Args) => {
+  if (a.title === undefined) return null;
+  const d = typeof a.creativeDocId === "string" ? await get(ctx, "creativeDocs", a.creativeDocId) : null;
+  const br = typeof a.briefingId === "string" ? await get(ctx, "briefings", a.briefingId) : null;
+  return d?.share?.on || (br && br.status !== "draft") ? "It's shared: a new title shows to the people who have it at once." : null;
+};
+const LOOK = new Set(["accent", "background", "watermark"]);
 
 export const ACTIONS: Record<string, Entry> = {
   // ---- projects ----
@@ -614,77 +663,80 @@ export const ACTIONS: Record<string, Entry> = {
   "clients.people": r("clients", clients.people, "A client's people"),
   "clients.listInvites": r("clients", clients.listInvites, "Portal invites"),
   "clients.directory": r("clients", clients.directory, "Every client and their people"),
-  "clients.addPerson": c("clients", clients.addPerson, "Add a person to a client (inviting them is an ask)"),
+  // 8d review H1: a person on a client sees that client's invoices and more once they can sign in, so adding one asks.
+  "clients.addPerson": ask("clients", clients.addPerson, "Add a person to a client", "Once they can sign in, they see the client's invoices, subscriptions and project pages."),
   "clients.updatePerson": c("clients", clients.updatePerson, "Change a client person's name or role"),
-  "clients.revokeInvite": c("clients", clients.revokeInvite, "Take back a portal invite"),
-  "clients.setSettings": c("clients", clients.setSettings, "A client's revision rounds or watermark (turning the watermark off is an ask)", { askWhen: (a) => (a.watermarkOff === true ? "Turning the watermark off shows the client's people their cuts without it." : null) }),
+  "clients.revokeInvite": ask("clients", clients.revokeInvite, "Take back a portal invite", "They lose the portal at once."),
+  "clients.setSettings": ask("clients", clients.setSettings, "A client's revision rounds or watermark", "The client's people see the change on their cuts at once."),
   "clients.invitePerson": ask("clients", clients.invitePerson, "Invite a client's person to the portal", "They get an invite to the portal."),
   "clients.invite": ask("clients", clients.invite, "Invite someone to the portal", "They get an invite to the portal."),
-  "clients.removePerson": del("clients", clients.removePerson, "Take a person off a client (they lose the portal)"),
+  "clients.removePerson": del("clients", clients.removePerson, "Take a person off a client (their portal invite stays: take it back with clients.revokeInvite)"),
   "messages.threads": r("clients", messages.threads, "Message threads"),
   "messages.thread": r("clients", messages.thread, "One thread's messages"),
   "messages.unread": r("clients", messages.unread, "Unread messages"),
   "messages.startOptions": r("clients", messages.startOptions, "Projects and leads a thread can be started for"),
   "messages.start": c("clients", messages.start, "Open a project's or lead's thread (nothing is sent)"),
-  "messages.read": c("clients", messages.read, "Mark a thread read"),
-  "messages.send": ask("clients", messages.send, "Send a message", "It goes to everyone on the thread."),
+  "messages.send": ask("clients", messages.send, "Send a message", "It goes to everyone on the thread.", { shows: messageReach }),
   "messages.setLeadLink": c("clients", messages.setLeadLink, "Turn a lead's message link off or on (on is an ask)", { askWhen: (a) => (a.off === false ? "Turning the link back on lets whoever has it read and write the thread again." : null) }),
   "calls.settings": r("clients", calls.settings, "Booking call settings"),
   "calls.forDeal": r("clients", calls.forDeal, "A lead's booked calls"),
-  "calls.saveSettings": c("clients", calls.saveSettings, "Change the booking call settings"),
-  "calls.setPaused": c("clients", calls.setPaused, "Pause or open the booking page"),
+  "calls.saveSettings": ask("clients", calls.saveSettings, "Change the booking call settings", "The public booking page offers the new hours at once (the first save opens it)."),
+  "calls.setPaused": c("clients", calls.setPaused, "Pause or open the booking page (opening is an ask)", { askWhen: (a) => (a.paused === false ? "Opening the booking page lets anyone with the link book a call." : null) }),
   "calls.done": c("clients", calls.done, "Mark a booked call done"),
   "testimonials.list": r("clients", testimonials.list, "Testimonials"),
   "testimonials.markRead": c("clients", testimonials.markRead, "Mark a testimonial read"),
   "testimonials.saveAgain": c("clients", testimonials.saveAgain, "Save a testimonial to the vault again"),
-  "shares.list": r("clients", shares.list, "Review links"),
-  "shares.forTarget": r("clients", shares.forTarget, "The review links for a client, project or video"),
+  "shares.list": { ...r("clients", shares.list, "Review links (their addresses stay on the site)"), hide: ["url"] },
+  "shares.forTarget": { ...r("clients", shares.forTarget, "The review links for a client, project or video (their addresses stay on the site)"), hide: ["url"] },
   "shares.activity": r("clients", shares.activity, "Who opened and watched a review link"),
   "shares.create": ask("clients", shares.create, "Make a review link", "Whoever it's for (or anyone with the link) can open the cuts."),
   "shares.update": ask("clients", shares.update, "Change a review link's access", "Who can comment or download, and which versions they see, changes at once."),
   "shares.setOff": c("clients", shares.setOff, "Turn a review link off or on (on is an ask)", { askWhen: (a) => (a.off === false ? "Turning the link back on opens the cuts again to everyone it had." : null) }),
   "shares.addMember": ask("clients", shares.addMember, "Add someone to a review link", "They get an email with the link."),
   "shares.resendInvite": ask("clients", shares.resendInvite, "Send a review link's email again", "They get the email again."),
-  "shares.removeMember": c("clients", shares.removeMember, "Take someone off a review link"),
+  "shares.removeMember": ask("clients", shares.removeMember, "Take someone off a review link", "They lose the cuts at once."),
   "shares.remove": del("clients", shares.remove, "Delete a review link (it stops working)"),
   "briefs.settings": r("clients", briefs.settings, "The kickoff brief's questions"),
   "briefs.forProject": r("clients", briefs.forProject, "A project's kickoff brief"),
   "briefs.forEstimate": r("clients", briefs.forEstimate, "A kickoff brief's answers for an estimate"),
   "briefs.create": c("clients", briefs.create, "Start a kickoff brief (nothing is sent)"),
-  "briefs.saveSettings": c("clients", briefs.saveSettings, "Change the kickoff brief's questions"),
-  "briefs.send": ask("clients", briefs.send, "Send a project's kickoff brief", "The client gets the kickoff brief to fill in."),
-  "briefs.sendDraft": ask("clients", briefs.sendDraft, "Send a kickoff brief draft", "The client gets the kickoff brief to fill in."),
+  "briefs.saveSettings": c("clients", briefs.saveSettings, "Change the kickoff brief's questions (for briefs sent after)"),
+  "briefs.send": ask("clients", briefs.send, "Send a project's kickoff brief", "The client gets the kickoff brief to fill in.", { shows: briefQuestions }),
+  "briefs.sendDraft": ask("clients", briefs.sendDraft, "Send a kickoff brief draft", "The client gets the kickoff brief to fill in.", { shows: briefQuestions }),
   "briefs.remind": ask("clients", briefs.remind, "Remind the client about their kickoff brief", "The client gets a reminder."),
   "briefs.resetSettings": del("clients", briefs.resetSettings, "Put the kickoff brief's questions back to Wrangler's set"),
   "fileRequests.forProject": r("clients", fileRequests.forProject, "A project's file requests"),
-  "fileRequests.create": c("clients", fileRequests.create, "Make a file request (sending it is an ask)"),
-  "fileRequests.setStatus": c("clients", fileRequests.setStatus, "Close or reopen a file request"),
+  "fileRequests.create": c("clients", fileRequests.create, "Make a file request with no project yet (one for a project is an ask)", { askWhen: (a) => (typeof a.projectId === "string" && a.projectId ? "A file request for a project opens the upload page to its people, and its reminders email them." : null) }),
+  "fileRequests.setStatus": c("clients", fileRequests.setStatus, "Close a file request (reopening is an ask)", { askWhen: (a) => (a.status === "open" ? "Reopening a file request opens its upload page again and restarts its reminders." : null) }),
   "fileRequests.sendDraft": ask("clients", fileRequests.sendDraft, "Send a file request", "The client gets the upload link."),
   "proposals.send": ask("sales", proposals.send, "Send a proposal again, or to more people", "Each person gets their own link to read and accept it.", { onPage: true, refuse: noFile, shows: proposalSend }),
   "briefings.share": ask("crew", briefings.share, "Share a briefing with more people", "Each person gets their own link to read it.", { onPage: true, refuse: noFile, shows: briefingSend }),
   "pageText.get": r("creative", pageText.get, "A creative doc's or briefing's text, as page markdown"),
-  "pageText.write": c("creative", pageText.write, "Write a creative doc's or briefing's text (page markdown; nothing is sent: shared copies change only when Heston shares again)"),
+  "pageText.write": c("creative", pageText.write, "Write a creative doc's or briefing's text (page markdown; the shared copy changes only when Heston shares again; a new title on a shared one is an ask)", { outside: sharedTitle }),
 
   // ---- settings ----
   "business.settings": r("settings", business.settings, "Business settings: name, legal name, email name, reply-to, look"),
   "business.brand": r("settings", business.brand, "The business's look"),
-  "business.updateSettings": c("settings", business.updateSettings, "Change business settings"),
+  // 8d review H2: the business's details go on every client email and page (its reply-to above all): only its look is direct.
+  "business.updateSettings": c("settings", business.updateSettings, "Change the business's look (its details, emails and modules are an ask)", {
+    askWhen: (a) => (Object.keys(a).some((k) => a[k] !== undefined && !LOOK.has(k)) ? "The business's name, emails, reply-to, address, privacy link, modules and rounds go on every client email and page." : null),
+  }),
   "brandKit.get": r("settings", brandKit.get, "The business's brand kit"),
-  "brandKit.save": c("settings", brandKit.save, "Change the brand kit"),
-  "brandKit.addFile": c("settings", brandKit.addFile, "Add a file to the brand kit (one site_upload made)"),
+  "brandKit.save": c("settings", brandKit.save, "Change a brand kit (a shared one is an ask)", { outside: sharedKit }),
+  "brandKit.addFile": c("settings", brandKit.addFile, "Add a file to a brand kit (one site_upload made; a shared kit is an ask)", { outside: sharedKit }),
   "brandKit.removeFile": del("settings", brandKit.removeFile, "Take a file out of the brand kit"),
   "crm.saveRates": c("settings", crm.saveRates, "Change the pricing model (rates, discounts, formula)"),
   "delivery.settings": r("settings", delivery.settings, "Delivery's term and price"),
-  "delivery.saveSettings": c("settings", delivery.saveSettings, "Change Delivery's term and price for new deliveries"),
-  "footage.saveSettings": c("settings", footage.saveSettings, "Change the raw footage offer and its price"),
+  "delivery.saveSettings": ask("settings", delivery.saveSettings, "Change Delivery's term, price, renewal offer and reminders", "Clients see the price and renewal offer at once; reminders post to their Inbox on their own."),
+  "footage.saveSettings": ask("settings", footage.saveSettings, "Change the raw footage offer and its price", "The offer and price go to clients from then on."),
   "subscriptions.setFailRule": ask("settings", subscriptions.setFailRule, "Choose what happens when a subscription payment fails for good", "Cancelling ends a client's subscription without asking you each time."),
   "subscriptions.setClientFailRule": ask("settings", subscriptions.setClientFailRule, "Choose what happens for one client when their subscription payment fails", "Cancelling ends their subscription without asking you each time."),
   "notifications.owner": r("settings", notifications.owner, "Which emails Heston gets"),
-  "notifications.setOwner": c("settings", notifications.setOwner, "Turn one of Heston's emails on or off"),
+  "notifications.setOwner": c("settings", notifications.setOwner, "Turn one of Heston's emails on (turning one off is an ask)", { askWhen: (a) => (a.on === false ? "Heston stops getting that email." : null) }),
   "prefs.mine": r("settings", prefs.mine, "The menu order, Dashboard cards and other choices"),
   "prefs.set": c("settings", prefs.set, "Change the menu order, Dashboard cards or another choice"),
   "calendar.settings": r("settings", calendarMod.settings, "The Google Calendar connection"),
-  "calendar.save": c("settings", calendarMod.save, "Pick the calendar and who gets invites (inviting more is an ask)", { askWhen: (a) => (a.inviteVendors === true || a.inviteClient === true ? "With invites on, Google emails the crew or the client's people for every shoot." : null) }),
+  "calendar.save": ask("settings", calendarMod.save, "Pick the calendar and who gets invites", "Every shoot moves to that calendar; with invites on, Google emails the crew or the client's people for every shoot."),
   "team.page": r("settings", team.page, "The team: members, invites, roles"),
   "team.member": r("settings", team.member, "One team member"),
   "team.projectPeople": r("settings", team.projectPeople, "Who's on a project"),
@@ -705,8 +757,8 @@ export const ACTIONS: Record<string, Entry> = {
   "siteWatch.report": r("settings", siteWatch.report, "Site watch: what it found"),
   "siteWatch.finding": r("settings", siteWatch.finding, "One Site watch finding"),
   "siteWatch.summary": r("settings", siteWatch.summary, "Site watch in a line"),
-  "siteWatch.markDone": c("settings", siteWatch.markDone, "Mark a Site watch finding done"),
-  "siteWatch.setPaused": c("settings", siteWatch.setPaused, "Pause or resume Site watch's checks"),
+  "siteWatch.markDone": ask("settings", siteWatch.markDone, "Mark a Site watch finding done", "It leaves the report."),
+  "siteWatch.setPaused": ask("settings", siteWatch.setPaused, "Pause or resume Site watch's checks", "While paused, nothing is checked and no alert is sent."),
 
   // ---- home ----
   "home.dashboard": r("home", home.dashboard, "The Dashboard"),
@@ -721,10 +773,10 @@ export const ACTIONS: Record<string, Entry> = {
   "auditLog.list": r("home", auditLog.list, "The Activity log (Settings): who changed what"),
   "bell.feed": r("home", bell.feed, "Heston's notifications"),
   "bell.unread": r("home", bell.unread, "How many notifications are unread"),
-  "bell.prefs": r("home", bell.prefs, "Which notifications Heston gets"),
+  "bell.prefs": { ...r("home", bell.prefs, "Which notifications Heston gets"), hide: ["endpoint", "endpoints", "keys"] },
   "bell.markRead": c("home", bell.markRead, "Mark a notification read"),
   "bell.markAllRead": c("home", bell.markAllRead, "Mark every notification read"),
-  "bell.setPref": c("home", bell.setPref, "Turn a kind of notification on or off"),
+  "bell.setPref": c("home", bell.setPref, "Turn a kind of notification on (turning one off is an ask)", { askWhen: (a) => (a.bell === false || a.phone === false ? "Heston stops getting those notifications." : null) }),
 
   // ---- photos and files (from site_upload) ----
   "gear.setPhoto": c("production", gear.setPhoto, "Set a gear item's photo (one site_upload made)"),

@@ -7,6 +7,7 @@ import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
 import { requireOwner } from "./lib/access";
 import { allowedEmails } from "./lib/owners";
+import { defaultBusiness } from "./lib/business";
 import { base64url, sha256Hex } from "./lib/hash";
 import { audit } from "./lib/audit";
 
@@ -76,12 +77,15 @@ export const checkKey = internalMutation({
     if (row.expiresAt && row.expiresAt <= now) return false as const; // 8d: it ran out
     const biz = await ctx.db.get(row.businessId);
     if (!biz) return false as const; // a business that's gone
-    // 8b review L8: the owner who made it must still own this business (a key made before this rule has no maker).
-    if (row.madeBy) {
+    // 8b review L8 / 8d review L3: the owner who made it must still own this business. Every key has its maker since
+    // 8d (only the self-test's short-lived key has none).
+    if (!row.madeBy) { if (!row.prefix.startsWith("wp_selftest")) return false as const; }
+    else {
       const u = await ctx.db.get(row.madeBy);
       const email = u?.email?.toLowerCase();
+      const dflt = await defaultBusiness(ctx);
       const owns = !!email && ((await ctx.db.query("memberships").withIndex("by_email", (q) => q.eq("email", email)).collect())
-        .some((m) => m.businessId === row.businessId && m.role === "owner" && !m.revokedAt) || allowedEmails().includes(email));
+        .some((m) => m.businessId === row.businessId && m.role === "owner" && !m.revokedAt) || (allowedEmails().includes(email) && dflt?._id === row.businessId));
       if (!owns) return false as const;
     }
     if (!row.lastUsedAt || now - row.lastUsedAt > 60_000) await ctx.db.patch(row._id, { lastUsedAt: now });
