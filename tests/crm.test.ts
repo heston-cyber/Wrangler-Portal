@@ -184,6 +184,9 @@ describe("Renaming a client", () => {
     await w.heston.mutation(api.crm.saveEstimate, { dealId, title: "Brand film", scope: "", input: { unit: "days", amount: 1 } });
     const c = (await w.heston.query(api.crm.deal, { dealId })).company as { _id: Id<"clients">; name: string };
     expect(c.name).toBe("Okie Roasters (website lead)");
+    // Review L3: the tag is Heston's note: a contract from the estimate carries the plain name.
+    const estimateId = (await w.heston.query(api.crm.deal, { dealId })).estimates[0]._id;
+    expect((await w.heston.query(internal.crm.contractTarget, { estimateId })).company).toBe("Okie Roasters");
     const pid = await w.heston.mutation(api.library.createProject, { name: "Spring film", client: "Okie Roasters (website lead)" }) as Id<"projects">;
     expect(await w.heston.mutation(api.library.renameClient, { clientId: c._id, name: "  Okie   Roasters " })).toBe("Okie Roasters");
     const after = await w.t.run(async (ctx) => ({ client: (await ctx.db.get(c._id))!, project: (await ctx.db.get(pid))!, people: (await ctx.db.query("clientPeople").collect()).filter((p) => p.clientId === c._id).map((p) => p.email) }));

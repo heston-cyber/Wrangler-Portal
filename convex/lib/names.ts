@@ -10,3 +10,8 @@ export function nameKey(x: string): string {
 export function tidyName(x: string, max = 120): string {
   return x.normalize("NFKC").replace(/\p{Default_Ignorable_Code_Point}/gu, "").trim().replace(/\s+/g, " ").slice(0, max);
 }
+/** Review L3 (Nov 19): a lead-made company's "(website lead)" tag is Heston's note, never the client's name: it's left off
+ *  wherever the name is copied onto something the client sees (contracts, quotes, proposals). */
+export function shownName(x: string): string {
+  return x.replace(/ \(website lead(?: \d+)?\)$/, "");
+}

@@ -15,7 +15,7 @@ import { requireMe, requireAll, seesValue } from "./lib/access";
 import { businessInScope, defaultBusiness } from "./lib/business";
 import { EMPTY_RATES, WRANGLER_RATES, estimate, primaryKind, ratesProblems, type EstimateInput, type Rates } from "./lib/estimate";
 import { applyArgs } from "./wsMcp";
-import { nameKey } from "./lib/names";
+import { nameKey, shownName } from "./lib/names";
 import { accessOf } from "./clients";
 import { ownerSide } from "./inbox";
 import type { Fields } from "./lib/wsBuilder";
@@ -420,7 +420,7 @@ export const contractTarget = internalQuery({
     const d = e.dealId ? await ctx.db.get(e.dealId) : null;
     const signer = people.find((p) => d?.contactEmail && p.email === d.contactEmail) ?? people.find((p) => p.role === "signer") ?? people[0];
     const project = e.projectId ? await ctx.db.get(e.projectId) : null;
-    return { e, company: c?.name ?? "", signer: signer ? { name: signer.name ?? signer.email, email: signer.email } : null, project: project ? label(project) : e.title };
+    return { e, company: c ? shownName(c.name) : "", signer: signer ? { name: signer.name ?? signer.email, email: signer.email } : null, project: project ? label(project) : e.title };
   },
 });
 

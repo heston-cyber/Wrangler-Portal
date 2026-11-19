@@ -101,7 +101,7 @@ export const renameClient = mutation({
     if (c.dropboxFolder) throw new ConvexError("This client follows its Dropbox folder. Rename the folder in Dropbox (Clients), and the portal follows within a minute.");
     const name = tidyName(a.name);
     if (name.length < 2) throw new ConvexError("Give the client a name.");
-    if (name.toLowerCase() === "no client") throw new ConvexError("Pick another name.");
+    if (nameKey(name) === "no client") throw new ConvexError("Pick another name.");
     if (name === c.name) return name;
     const key = nameKey(name);
     const others = (await ctx.db.query("clients").collect()).filter((x) => x._id !== c._id && nameKey(x.name) === key);
@@ -122,10 +122,10 @@ export const createClient = mutation({
     await requireAll(ctx, "clients");
     const name = clean(a.name, 120);
     if (!name) throw new ConvexError("Give the client a name.");
-    const key = name.toLowerCase();
-    if (name.toLowerCase() === "no client") throw new ConvexError("Pick another name.");
-    const rows = (await ctx.db.query("clients").collect()).filter((c) => c.name.toLowerCase() === key);
-    const onProjects = (await ctx.db.query("projects").collect()).some((p) => (p.client ?? "").trim().toLowerCase() === key);
+    const key = nameKey(name); // review L4: lookalikes count as the same name
+    if (key === "no client") throw new ConvexError("Pick another name.");
+    const rows = (await ctx.db.query("clients").collect()).filter((c) => nameKey(c.name) === key);
+    const onProjects = (await ctx.db.query("projects").collect()).some((p) => nameKey(p.client ?? "") === key);
     if (rows.some((c) => !c.fromProjects) || onProjects) throw new ConvexError(`There's already a client called ${name}.`);
     // A record left from a project that's gone (step 5) becomes the client you're making.
     if (rows[0]) await ctx.db.patch(rows[0]._id, { name, fromProjects: undefined });

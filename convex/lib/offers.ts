@@ -14,6 +14,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { randomToken } from "./hash";
 import { bump } from "./rate";
+import { shownName } from "./names";
 
 export type Kind = "quote" | "proposal";
 type Offer = Doc<"quotes"> | Doc<"proposals">;
@@ -146,12 +147,15 @@ export async function noteOpen(ctx: MutationCtx, f: Found) {
 type Answer = { kind: "accepted" | "declined"; name: string; email?: string; company?: string; reason?: string; ip?: string; userAgent?: string };
 
 /** The client's signer (else their first person), as a contact: the person a client-addressed offer bills and signs. */
-async function signerOf(ctx: MutationCtx, clientId: unknown): Promise<{ name: string; email: string; company?: string } | null> {
-  const c = await ctx.db.get(clientId as never) as { _id: string; name?: string } | null;
+export async function signerOf(ctx: QueryCtx | MutationCtx, clientId: unknown, businessId?: Id<"businesses"> | null): Promise<{ name: string; email: string; company?: string } | null> {
+  const c = await ctx.db.get(clientId as never) as { _id: string; name?: string; businessId?: Id<"businesses"> } | null;
   if (!c) return null;
-  const people = (await ctx.db.query("clientPeople").withIndex("by_client", (q) => q.eq("clientId", c._id as never)).collect()).filter((p) => !p.removedAt);
+  // Review L1: the link pages run unguarded, so the client must be the offer's own business's (no business = the default).
+  const def = (await ctx.db.query("businesses").withIndex("by_slug", (q) => q.eq("slug", "wrangler")).unique())?._id ?? null;
+  if (businessId !== undefined && (c.businessId ?? def) !== (businessId ?? def)) return null;
+  const people = (await ctx.db.query("clientPeople").withIndex("by_client", (q) => q.eq("clientId", c._id as never)).collect()).filter((p) => !p.removedAt && (businessId === undefined || (p.businessId ?? def) === (businessId ?? def)));
   const p = people.find((x) => x.role === "signer") ?? people[0];
-  return p ? { name: p.name ?? p.email, email: p.email, ...(c.name ? { company: c.name } : {}) } : null;
+  return p ? { name: p.name ?? p.email, email: p.email, ...(c.name ? { company: shownName(c.name) } : {}) } : null;
 }
 
 /** Accept or decline through a link. The caller checks the doc is open (not expired or withdrawn). Returns who to tell
@@ -183,7 +187,7 @@ export async function answer(ctx: MutationCtx, kind: Kind, f: Found, a: Answer, 
     // client: anyone can hold that link, so the person it was addressed to (or the client's signer) stays the contact,
     // who is billed and signs. Who accepted is still recorded (response) and shown to Heston.
     const addressed = f.via === "link" && !!d.clientId; // a quote with no client: whoever accepts is its contact, as before
-    const kept = addressed ? (d.contact?.email ? d.contact : await signerOf(ctx, d.clientId)) : null;
+    const kept = addressed ? (d.contact?.email ? d.contact : await signerOf(ctx, d.clientId, (d as { businessId?: Id<"businesses"> }).businessId ?? null)) : null;
     const contact = addressed
       ? kept
       : { name: response.name, email: email || d.contact?.email || "", ...(company ? { company } : d.contact?.company && f.via !== "link" ? { company: d.contact.company } : {}) };
@@ -207,7 +211,10 @@ export async function answer(ctx: MutationCtx, kind: Kind, f: Found, a: Answer, 
   }
   // M3: the owner hears about copied-link declines at most once an hour per link.
   const key = `${thing}-${a.kind}:${d._id}:${f.r?._id ?? (f.via === "link" ? `link:${d.linkToken}:${Math.floor(now / 3_600_000)}` : "legacy")}`;
-  return { ok: true, status: a.kind === "accepted" ? "accepted" : (await ctx.db.get(d._id))!.status, tell: { key, kind: a.kind, who: response.name, company: company ?? (f.via === "legacy" ? d.contact?.company ?? null : null), reason: response.reason ?? null, at: now } };
+  // Review L2 (Nov 19): a client's offer accepted on its copied link by someone who isn't the client's contact says so.
+  const outsider = a.kind === "accepted" && f.via === "link" && !!d.clientId && !!d.contact?.email && (email || "") !== d.contact.email.toLowerCase()
+    ? ` (on the copied link, not ${d.contact.name || d.contact.email})` : "";
+  return { ok: true, status: a.kind === "accepted" ? "accepted" : (await ctx.db.get(d._id))!.status, tell: { key, kind: a.kind, who: response.name + outsider, company: company ?? (f.via === "legacy" ? d.contact?.company ?? null : null), reason: response.reason ?? null, at: now } };
 }
 
 /** For the owner's "Opened and accepted" card: everyone with a link, and the copied link. */

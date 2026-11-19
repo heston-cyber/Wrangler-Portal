@@ -22,7 +22,8 @@ import { deliverOnce } from "./invoiceReminders";
 import { callerIp } from "./lib/wsSigning";
 import { corsHeaders } from "./signing";
 import { fillAgreement, moveCardFor, newAgreementDraft } from "./crm";
-import { addPeople, adoptLegacy, answer, forWho, newCopiedLink, noteOpen, parseTo, peopleOf, resolve, rowsOf, stateFor, stopPerson } from "./lib/offers";
+import { shownName } from "./lib/names";
+import { addPeople, adoptLegacy, answer, forWho, newCopiedLink, noteOpen, parseTo, peopleOf, resolve, rowsOf, signerOf, stateFor, stopPerson } from "./lib/offers";
 
 const DAY = 86_400_000;
 export const quoteLink = (token: string) => `${SITE()}/q/${token}`;
@@ -118,7 +119,7 @@ export const options = query({
     return {
       next: `${invoicePrefix(b.name)}-Q-${String((b.quoteSeq ?? 0) + 1).padStart(4, "0")}`,
       who: [
-        ...clients.flatMap((c) => people.filter((p) => p.clientId === c._id).sort((x, y) => (x.role === "signer" ? -1 : 1) - (y.role === "signer" ? -1 : 1)).map((p) => ({ key: `p:${p._id}`, clientId: c._id, dealId: null, name: p.name ?? p.email, email: p.email, company: c.name }))),
+        ...clients.flatMap((c) => people.filter((p) => p.clientId === c._id).sort((x, y) => (x.role === "signer" ? -1 : 1) - (y.role === "signer" ? -1 : 1)).map((p) => ({ key: `p:${p._id}`, clientId: c._id, dealId: null, name: p.name ?? p.email, email: p.email, company: shownName(c.name) }))),
         ...leads.map((l) => ({ key: `d:${l.dealId}`, clientId: null, dealId: l.dealId, name: l.name, email: l.email, company: l.company, lead: true })),
       ],
     };
@@ -338,7 +339,9 @@ export const draftTarget = internalQuery({
     if (!q) throw new ConvexError("That quote isn't here.");
     if (q.status !== "accepted") throw new ConvexError("Drafts come from an accepted quote.");
     const project = q.projectId ? await ctx.db.get(q.projectId) : null;
-    return { q, totals: quoteTotals(q), project: project ? (project.jobNumber ? `${project.jobNumber} ${project.name}` : project.name) : q.title };
+    // Review M1 (Nov 19): a client's quote is signed and billed by the client's own person, looked up now.
+    const clientSigner = q.clientId && !q.contact ? await signerOf(ctx, q.clientId) : null;
+    return { q, totals: quoteTotals(q), project: project ? (project.jobNumber ? `${project.jobNumber} ${project.name}` : project.name) : q.title, clientSigner };
   },
 });
 
@@ -350,7 +353,8 @@ export const makeInvoice = internalMutation({
     const q = await ctx.db.get(quoteId);
     if (!q) throw new ConvexError("That quote isn't here.");
     if (q.made?.invoiceId && (await ctx.db.get(q.made.invoiceId))) return q.made.invoiceId;
-    if (!q.contact?.email) throw new ConvexError(q.clientId ? "This client has no contact to bill. Add a person on the client's page first." : "Who accepted isn't known, so the invoice has no one to bill.");
+    const billed = q.contact ?? (q.clientId ? await signerOf(ctx, q.clientId) : null); // review A3: a client's person, looked up now
+    if (!billed?.email) throw new ConvexError(q.clientId ? "This client has no one to bill. Add a person on the client's page first." : "Who accepted isn't known, so the invoice has no one to bill.");
     const t = quoteTotals(q);
     const now = Date.now();
     const due = plusDays(todayIso(), Math.max(0, Number(process.env.WS_INVOICE_DUE_DAYS ?? 3) || 0));
@@ -362,7 +366,7 @@ export const makeInvoice = internalMutation({
     const id = await ctx.db.insert("invoices", {
       ...(q.clientId ? { clientId: q.clientId } : {}), ...(q.projectId ? { projectId: q.projectId } : {}),
       kind: what === "deposit" ? "deposit" : "other", title: `${what === "deposit" ? "Deposit" : "Invoice"} · ${q.title}`.slice(0, 120),
-      billTo: { name: q.contact.name, email: q.contact.email, ...(q.contact.company ? { company: q.contact.company } : {}) }, lines,
+      billTo: { name: billed.name, email: billed.email, ...(billed.company ? { company: billed.company } : {}) }, lines,
       ...(what === "full" && t.discount ? { discountCents: t.discount } : {}), ...(what === "full" && q.taxPercent ? { taxPercent: q.taxPercent } : {}),
       dueDate: due, status: "draft", totalCents: total, amountPaidCents: 0, amountRemainingCents: total,
       history: [{ kind: "created", at: now, by: by(me), detail: `from quote ${q.number}` }], createdAt: now, updatedAt: now, createdBy: by(me),
@@ -400,7 +404,8 @@ export const draftFrom = action({
     let buildId: Id<"wsBuilds"> | null = t.q.made?.buildId ?? null;
     // Q100: whoever accepted. Nov 19: a quote addressed to a client bills and is signed by that client's contact, never
     // by whoever accepted on its copied link.
-    const c = t.q.contact ?? (t.q.clientId ? { name: "", email: "", company: undefined } : { name: t.q.response?.name ?? "", email: t.q.response?.email ?? "", company: t.q.response?.company });
+    if (a.contract && t.q.clientId && !t.q.contact && !t.clientSigner) throw new ConvexError("Add a person to the client first: they sign the contract.");
+    const c = t.q.contact ?? (t.q.clientId ? (t.clientSigner ?? { name: "", email: "", company: undefined }) : { name: t.q.response?.name ?? "", email: t.q.response?.email ?? "", company: t.q.response?.company });
     if (a.contract && !buildId) {
       buildId = await newAgreementDraft(ctx, c.company || c.name);
       const lines = [
