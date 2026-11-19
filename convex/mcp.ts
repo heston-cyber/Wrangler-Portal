@@ -14,7 +14,7 @@ import { SITE_SLASH } from "./lib/site";
 
 const SERVER_INFO = { name: "wrangler-review", title: "Wrangler Review", version: "1.0.0" };
 
-const INSTRUCTIONS = `Wrangler Review is Heston's video review site (Wrangler Productions). Notes are pinned to exact frames of a rendered version: frame 0 is the render's first frame; out_frame is inclusive. Timecodes use the version's start timecode (usually 01:00:00:00).
+export const INSTRUCTIONS = `Wrangler Review is Heston's video review site (Wrangler Productions). Notes are pinned to exact frames of a rendered version: frame 0 is the render's first frame; out_frame is inclusive. Timecodes use the version's start timecode (usually 01:00:00:00).
 Typical flow when Heston says he left notes or revisions: find_videos (if you don't have the video) → get_notes (open notes on the latest version) → get_note_images for notes with drawings or when you need to see the frame → do the work → reply_to_note to say what you changed → mark_notes done.
 get_transcript gives what's said in the cut, pinned to frames; use it to find a line by its words or to read around a note.
 To put notes into DaVinci Resolve as markers, use get_resolve_markers and follow its placement rules: confirm the timeline's frame rate, start timecode and length match the render before placing anything; if they don't, stop and tell Heston.
@@ -28,7 +28,7 @@ const videoArgs = {
   status: { type: "string", enum: ["open", "done", "all"], description: "Which notes: open (default), done, or all." },
 };
 
-const TOOLS: Tool[] = [
+export const TOOLS: Tool[] = [
   {
     name: "find_videos", title: "Find videos",
     description: "Lists projects and videos on Wrangler Review with their versions and open/total note counts, newest activity first. Pass query to filter by words from the title, project name, job number or client.",
@@ -180,7 +180,7 @@ async function fetchImage(url: string): Promise<Content | null> {
 const str = (x: unknown) => (typeof x === "string" && x.trim() ? x : undefined);
 const int = (x: unknown) => (typeof x === "number" && Number.isInteger(x) && x > 0 ? x : undefined);
 
-async function callTool(ctx: ActionCtx, name: string, args: Json): Promise<ToolResult> {
+export async function callTool(ctx: ActionCtx, name: string, args: Json): Promise<ToolResult> {
   try {
     if (name === "find_videos") {
       const rows = await ctx.runQuery(internal.connector.findVideos, { query: str(args.query) });

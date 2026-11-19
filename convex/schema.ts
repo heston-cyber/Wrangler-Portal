@@ -320,6 +320,32 @@ export default defineSchema({
     .index("by_user_video", ["userId", "videoId"]),
 
   // Keys for the Claude connector. Only a SHA-256 hash is stored; the key itself is shown once.
+  // Phase 8a (Nov 18, D207): the one Wrangler Portal connector's keys (wp_…), made by the business owner only.
+  portalKeys: defineTable({
+    businessId: v.optional(v.id("businesses")), // always set (stamped from the owner who made it)
+    hash: v.string(),
+    prefix: v.string(),
+    label: v.string(),
+    createdAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+  }).index("by_hash", ["hash"]),
+
+  // Phase 8a (D208–D209): something Claude asked to send or delete through the connector. It does nothing until the
+  // owner, signed in on the site, presses Confirm on its page (/confirm/<id>). Heston's words in chat are kept with it.
+  pendingActions: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    kind: v.string(),            // e.g. "note.send"; the registry in convex/confirm.ts says what each does
+    targetId: v.string(),        // the record it acts on
+    summary: v.string(),         // what the Confirm page says, e.g. "Send the note “Cut 2 is up” to Harbor Coffee"
+    said: v.string(),            // what Heston said in chat, in his words
+    status: v.union(v.literal("waiting"), v.literal("done"), v.literal("cancelled"), v.literal("failed")),
+    requestedAt: v.number(),
+    expiresAt: v.number(),
+    doneAt: v.optional(v.number()),
+    error: v.optional(v.string()),
+  }).index("by_status", ["status", "requestedAt"]),
+
   connectorKeys: defineTable({
     businessId: v.optional(v.id("businesses")), // Phase 0.5d step 2; required from step 3
     hash: v.string(),
@@ -2139,7 +2165,7 @@ export default defineSchema({
   auditLog: defineTable({
     businessId: v.optional(v.id("businesses")),
     at: v.number(),
-    kind: v.union(v.literal("sent"), v.literal("signed"), v.literal("paid"), v.literal("deleted"), v.literal("settings"), v.literal("signin"), v.literal("team"), v.literal("export"), v.literal("moved")),
+    kind: v.union(v.literal("sent"), v.literal("signed"), v.literal("paid"), v.literal("deleted"), v.literal("settings"), v.literal("signin"), v.literal("team"), v.literal("export"), v.literal("moved"), v.literal("claude")),
     who: v.string(),            // "Heston Hill", "Maya Brooks", "Stripe"
     role: v.string(),           // "Owner", "Producer", "Client", "System"
     userId: v.optional(v.id("users")),

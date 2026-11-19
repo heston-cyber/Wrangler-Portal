@@ -327,6 +327,14 @@ export const sendNote = mutation({
   args: { noteId: v.id("inboxNotes") },
   handler: async (ctx, { noteId }) => {
     await requireAll(ctx, "clients");
+    return sendNoteCore(ctx, noteId);
+  },
+});
+
+/** Sending a drafted note: the site's Send, and (Phase 8a) the owner's Confirm on a request Claude made. The caller has
+ *  already checked who may send. */
+export async function sendNoteCore(ctx: MutationCtx, noteId: Id<"inboxNotes">) {
+  {
     const n = await ctx.db.get(noteId);
     if (!n) throw new ConvexError("That note isn't here.");
     if (n.status !== "draft") throw new ConvexError(n.status === "sent" ? "This note was already sent." : "This note was discarded.");
@@ -346,8 +354,8 @@ export const sendNote = mutation({
     await ctx.db.patch(noteId, { status: "sent", sentAt: Date.now(), recipients: posted, updatedAt: Date.now(), ...(n.testimonialProjectId ? { link, linkLabel } : {}) });
     if (n.emailThem !== false && posted) await ctx.scheduler.runAfter(0, internal.emails.noteEmails, { noteId });
     return { sent: posted };
-  },
-});
+  }
+}
 
 export const discardNote = mutation({
   args: { noteId: v.id("inboxNotes") },

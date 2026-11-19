@@ -2,6 +2,7 @@ import { httpRouter } from "convex/server";
 import { auth } from "./auth";
 import { mcpOther, mcpPost } from "./mcp";
 import { post as wsMcpPost, other as wsMcpOther } from "./wsMcp";
+import { post as portalMcpPost, other as portalMcpOther } from "./portalMcp";
 import { callback as dropboxCallback, webhookNotify, webhookVerify } from "./dropbox";
 import { feed as registerFeed } from "./register";
 import { stop as emailStop } from "./emails";
@@ -36,6 +37,13 @@ for (const method of ["POST", "GET", "DELETE"] as const) {
   const handler = method === "POST" ? wsMcpPost : wsMcpOther;
   http.route({ path: "/ws-mcp", method, handler });
   http.route({ pathPrefix: "/ws-mcp/", method, handler });
+}
+
+// Phase 8a: the one Wrangler Portal connector, with the business owner's keys (wp_…).
+for (const method of ["POST", "GET", "DELETE"] as const) {
+  const handler = method === "POST" ? portalMcpPost : portalMcpOther;
+  http.route({ path: "/portal-mcp", method, handler });
+  http.route({ pathPrefix: "/portal-mcp/", method, handler });
 }
 
 // Dropbox: the Connect Dropbox return address, and the webhook (GET = one-time check, POST = "something changed").

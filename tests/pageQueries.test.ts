@@ -306,6 +306,9 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "sign.list": { pages: ["owner"], args: () => "skip" },
   "wsArchive.status": { pages: ["owner"], args: () => "skip" },
   "wsConnector.listKeys": { pages: ["owner"], args: () => "skip" },
+  "portalKeys.listKeys": { pages: ["owner"], args: () => "skip" }, // Phase 8a: Settings › Claude connectors (owner only)
+  "confirm.get": { pages: ["owner"], args: () => "skip" }, // Phase 8a: /confirm/<id> (owner only; tested in portalMcp.test.ts)
+  "confirm.waiting": { pages: ["owner"], args: () => ({}) }, // Phase 8a: the Dashboard's waiting card ([] for a team member)
   "sign.get": { pages: ["owner"], args: () => "skip" },
   "sign.ownerSignature": { pages: ["owner"], args: () => "skip" },
   "sign.requestsFor": { pages: ["owner"], args: () => "skip" },

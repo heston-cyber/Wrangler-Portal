@@ -572,7 +572,7 @@ export async function sendInPersonCore(ctx: MutationCtx, versionId: Id<"wsVersio
   return { token, session };
 }
 
-async function sentDoc(ctx: MutationCtx, documentId: Id<"wsDocuments">) {
+export async function sentDoc(ctx: MutationCtx, documentId: Id<"wsDocuments">) {
   const doc = await ctx.db.get(documentId);
   if (!doc) throw new ConvexError("That document doesn't exist.");
   if (doc.status !== "sent") throw new ConvexError("Only a document that's out for signature can do that.");
@@ -616,7 +616,7 @@ export const resendAs = internalMutation({
   handler: async (ctx, a) => resendCore(ctx, a.documentId, a.signerKey, a.actor),
 });
 
-async function resendCore(ctx: MutationCtx, documentId: Id<"wsDocuments">, signerKey: string, actor: string) {
+export async function resendCore(ctx: MutationCtx, documentId: Id<"wsDocuments">, signerKey: string, actor: string) {
   {
     const { doc, signings } = await sentDoc(ctx, documentId);
     const x = signings.find((y) => y.signerKey === signerKey);

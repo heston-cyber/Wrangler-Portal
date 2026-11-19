@@ -9,12 +9,13 @@ import { navigate } from "../../lib/router";
 import { SetHead } from "../settings/Frame";
 import type { IconName } from "../../ui/Icon";
 
-type Kind = "sent" | "signed" | "paid" | "deleted" | "settings" | "team" | "export" | "signin";
+type Kind = "sent" | "signed" | "paid" | "deleted" | "settings" | "team" | "export" | "signin" | "claude";
 const KINDS: Array<{ key: Kind; label: string; icon: IconName; tone: Tone }> = [
   { key: "sent", label: "Sent", icon: "send", tone: "neutral" }, { key: "signed", label: "Signed", icon: "edit", tone: "success" },
   { key: "paid", label: "Paid", icon: "invoice", tone: "success" }, { key: "deleted", label: "Deleted", icon: "close", tone: "danger" },
   { key: "settings", label: "Settings", icon: "settings", tone: "warning" }, { key: "team", label: "Team", icon: "users", tone: "neutral" },
   { key: "export", label: "Exports", icon: "download", tone: "neutral" }, { key: "signin", label: "Sign-ins", icon: "lock", tone: "accent" },
+  { key: "claude", label: "Claude", icon: "globe", tone: "neutral" }, // Phase 8a: changes Claude made through the connector
 ];
 const kindOf = (k: string) => KINDS.find((x) => x.key === k) ?? KINDS[0];
 const time = (ms: number) => new Date(ms).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });

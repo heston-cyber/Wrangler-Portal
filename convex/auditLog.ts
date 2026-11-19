@@ -8,7 +8,7 @@ import { requireOwner } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import { audit, type AuditKind } from "./lib/audit";
 
-const KINDS: AuditKind[] = ["sent", "signed", "paid", "deleted", "settings", "team", "export", "signin"];
+const KINDS: AuditKind[] = ["sent", "signed", "paid", "deleted", "settings", "team", "export", "signin", "claude"];
 const kindArg = v.union(...KINDS.map((k) => v.literal(k)));
 export const KEEP_DAYS = 365;
 

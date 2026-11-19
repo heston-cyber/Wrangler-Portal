@@ -1,0 +1,86 @@
+// Phase 8a (Heston, Nov 18, D207: "Business only can have Claude key"): the keys of the one Wrangler Portal connector
+// (<convex site>/portal-mcp). Only the business's owner makes, sees and revokes them; a team member can't. A key acts
+// for its own business only (lib/mcpServer.ts forBusiness). Stored only as a SHA-256 hash; the key is shown once.
+import { action } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./lib/functions";
+import { internal } from "./_generated/api";
+import { v, ConvexError } from "convex/values";
+import { requireOwner } from "./lib/access";
+import { base64url, sha256Hex } from "./lib/hash";
+import { audit } from "./lib/audit";
+
+export const KEY_PREFIX = "wp_";
+
+/** The owner only (not a team member, client or vendor). */
+export const ownerCheck = internalQuery({ args: {}, handler: async (ctx) => { await requireOwner(ctx); return null; } });
+
+export const createKey = action({
+  args: { label: v.optional(v.string()) },
+  handler: async (ctx, a): Promise<{ key: string; prefix: string }> => {
+    await ctx.runQuery(internal.portalKeys.ownerCheck, {});
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    const key = KEY_PREFIX + base64url(bytes);
+    const prefix = key.slice(0, 10);
+    await ctx.runMutation(internal.portalKeys.insertKey, { hash: await sha256Hex(key), prefix, label: (a.label ?? "").trim().slice(0, 60) || "Claude" });
+    return { key, prefix };
+  },
+});
+
+export const insertKey = internalMutation({
+  args: { hash: v.string(), prefix: v.string(), label: v.string() },
+  handler: async (ctx, a) => {
+    await requireOwner(ctx); // the same caller as createKey: the row is stamped with the owner's business
+    await ctx.db.insert("portalKeys", { hash: a.hash, prefix: a.prefix, label: a.label, createdAt: Date.now() });
+    await audit(ctx, { kind: "settings", text: `made a Claude connector key (${a.prefix}…)`, where: "Settings › Claude connectors" });
+  },
+});
+
+export const listKeys = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireOwner(ctx);
+    const keys = await ctx.db.query("portalKeys").collect();
+    return keys.filter((k) => !k.revokedAt).sort((a, b) => b.createdAt - a.createdAt)
+      .map((k) => ({ _id: k._id, prefix: k.prefix, label: k.label, createdAt: k.createdAt, lastUsedAt: k.lastUsedAt ?? null }));
+  },
+});
+
+export const revokeKey = mutation({
+  args: { keyId: v.string() },
+  handler: async (ctx, a) => {
+    await requireOwner(ctx);
+    const id = ctx.db.normalizeId("portalKeys", a.keyId);
+    const k = id ? await ctx.db.get(id) : null; // another business's key is invisible here
+    if (!k) throw new ConvexError("That key isn't here.");
+    if (!k.revokedAt) {
+      await ctx.db.patch(k._id, { revokedAt: Date.now() });
+      await audit(ctx, { kind: "settings", text: `revoked a Claude connector key (${k.prefix}…)`, where: "Settings › Claude connectors" });
+    }
+    return null;
+  },
+});
+
+/** Every connector request: is this key live, and for which business? Notes when it was last used (once a minute). */
+export const checkKey = internalMutation({
+  args: { hash: v.string() },
+  handler: async (ctx, { hash }) => {
+    const row = await ctx.db.query("portalKeys").withIndex("by_hash", (q) => q.eq("hash", hash)).unique();
+    if (!row || row.revokedAt || !row.businessId) return false as const;
+    const biz = await ctx.db.get(row.businessId);
+    if (!biz) return false as const; // a business that's gone
+    const now = Date.now();
+    if (!row.lastUsedAt || now - row.lastUsedAt > 60_000) await ctx.db.patch(row._id, { lastUsedAt: now });
+    return { businessId: row.businessId };
+  },
+});
+
+// For the live self-test and the tests only: a short-lived key for a named business.
+export const insertTestKey = internalMutation({
+  args: { hash: v.string(), businessId: v.id("businesses") },
+  handler: async (ctx, a) => ctx.db.insert("portalKeys", { businessId: a.businessId, hash: a.hash, prefix: "wp_selftest", label: "Self-test (temporary)", createdAt: Date.now() }),
+});
+export const deleteKey = internalMutation({
+  args: { keyId: v.id("portalKeys") },
+  handler: async (ctx, { keyId }) => { await ctx.db.delete(keyId); },
+});

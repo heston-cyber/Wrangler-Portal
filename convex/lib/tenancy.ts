@@ -4,7 +4,7 @@
 // OAuth state, the email send log (dedupe keys) and test/diagnostic logs.
 export const BUSINESS_TABLES = [
   "invites", "shares", "shareMembers", "shareActivity", "views", "emailPrefs", "projects", "videos", "counters",
-  "sheetKeys", "versions", "voiceUploads", "notes", "replies", "opens", "connectorKeys", "dropbox",
+  "sheetKeys", "versions", "voiceUploads", "notes", "replies", "opens", "connectorKeys", "portalKeys", "pendingActions", "dropbox",
   "dropFiles", "transcripts", "waveforms", "clients", "stillFiles",
   "wsDocuments", "wsBuilds", "wsTemplates", "wsClauses", "wsStyles", "wsProfile", "wsFonts", "wsConnectorKeys",
   "wsDropbox", "wsSignings", "wsVersions", "wsRequests", "wsOwnerSignatures", "wsCopies",
