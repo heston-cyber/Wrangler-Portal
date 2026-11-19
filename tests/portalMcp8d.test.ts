@@ -130,7 +130,21 @@ describe("Phase 8d · the rest of the site", () => {
     // R1: the first estimate for a lead whose company matches a client would make the lead one of its people: it asks.
     const dealId = await x.w.t.run((ctx) => ctx.db.insert("deals", { businessId: x.w.A, title: "Website lead", stage: "lead", source: "website", lead: { name: "Sam", email: "sam@elsewhere.example", company: "Harbor Coffee", fields: [], at: 0 }, history: [], createdAt: 0, updatedAt: 0 } as never));
     const est = await x.a("site_change", { action: "crm.saveEstimate", args: { dealId, title: "Estimate", scope: "One day", input: { unit: "days", amount: 1 } } });
-    expect(est.text).toMatch(/files the lead sam@elsewhere\.example under Harbor Coffee/);
+    // D56 (Nov 19): the page says what will really happen: a new, differently named company, not the client's.
+    expect(est.text).toMatch(/makes a new company, Harbor Coffee \(website lead\), for the lead sam@elsewhere\.example/);
+    // An email already on the client: the page names that client.
+    const own = await x.w.t.run((ctx) => ctx.db.insert("deals", { businessId: x.w.A, title: "Website lead", stage: "lead", source: "website", lead: { name: "Maya", email: "maya@harbor.example", company: "Harbor Coffee Co.", fields: [], at: 0 }, history: [], createdAt: 0, updatedAt: 0 } as never));
+    expect((await x.a("site_change", { action: "crm.saveEstimate", args: { dealId: own, title: "Estimate", scope: "One day", input: { unit: "days", amount: 1 } } })).text).toMatch(/files the lead maya@harbor\.example under Harbor Coffee \(maya@harbor\.example is already one of Harbor Coffee's people\)/);
+    // D56 re-review N1: another business's owner, with their own lead using Wrangler's client's name and person's
+    // email, learns nothing of Wrangler's clients from the page: in their business it's simply a new company.
+    const keyB = (await x.w.boss.action(api.portalKeys.createKey, {})).key as string;
+    const { WRANGLER_RATES } = await import("../convex/lib/estimate");
+    const B = await x.w.t.run(async (ctx) => (await ctx.db.query("businesses").collect()).find((b) => b.slug === "other")!._id);
+    await x.w.t.run((ctx) => ctx.db.patch(B, { estimateRates: WRANGLER_RATES } as never)); // B prices its own work
+    const theirs = await x.w.t.run((ctx) => ctx.db.insert("deals", { businessId: B, title: "Their lead", stage: "lead", source: "website", lead: { name: "Maya", email: "maya@harbor.example", company: "Harbor Coffee", fields: [], at: 0 }, history: [], createdAt: 0, updatedAt: 0 } as never));
+    const seen = (await x.as(keyB)("site_change", { action: "crm.saveEstimate", args: { dealId: theirs, title: "Estimate", scope: "One day", input: { unit: "days", amount: 1 } } })).text;
+    expect(seen).toMatch(/makes a new company, Harbor Coffee, for the lead maya@harbor\.example/);
+    expect(seen).not.toMatch(/already one of|already exists|website lead/);
     expect((await x.w.t.run((ctx) => ctx.db.query("clientPeople").collect())).map((r) => r.email)).not.toContain("sam@elsewhere.example");
     // R4: the watermark is on every client's cuts: it asks.
     expect((await x.a("site_change", { action: "business.updateSettings", args: { watermark: { corner: "br", size: "small", opacity: 0.05, mark: "text", text: "Pay deposit" } } })).text).toMatch(/needs Heston|go on every client/);

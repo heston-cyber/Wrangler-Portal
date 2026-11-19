@@ -381,7 +381,10 @@ export const recordFolders = internalMutation({
         return name;
       }
       const all = await ctx.db.query("clients").collect();
-      const byName = all.find((c) => norm(c.name) === norm(name));
+      const byNames = all.filter((c) => norm(c.name) === norm(name));
+      // D56 re-review N3/L-a: two clients with this name: the folder joins neither, and the sync carries on.
+      if (byNames.length > 1) return name;
+      const byName = byNames[0];
       if (byName) { await ctx.db.patch(byName._id, { dropboxFolder: folder, fromProjects: undefined }); return byName.name; }
       // The old folder of a renamed client went away in the same batch.
       for (const g of goneLeft) {
@@ -415,7 +418,16 @@ export const recordFolders = internalMutation({
     const tryMove = async (p: Doc<"projects">, client: string) => {
       try { await moveProjectByName(ctx, p, client); return true; } catch (e) { if (!(e instanceof ConvexError)) throw e; return false; }
     };
-    const ensureProject = async (folderName: string, client: string | undefined, folder: string) => {
+    // D56 re-review N3: a new project takes its client folder's own client by id; a name two clients share gives none
+    // (rather than the wrong one, or a failed sync that never moves on).
+    const clientFields = async (client: string | undefined, clientFolder: string | undefined) => {
+      if (!client) return {};
+      const byFolder = clientFolder ? await ctx.db.query("clients").withIndex("by_dropbox_folder", (q) => q.eq("dropboxFolder", clientFolder)).first() : null;
+      if (byFolder) return { client: byFolder.name, clientId: byFolder._id };
+      const same = (await ctx.db.query("clients").collect()).filter((c) => norm(c.name) === norm(client));
+      return same.length > 1 ? {} : { client };
+    };
+    const ensureProject = async (folderName: string, client: string | undefined, folder: string, clientFolder?: string) => {
       const byFolder = await ctx.db.query("projects").withIndex("by_dropbox_folder", (q) => q.eq("dropboxFolder", folder)).first();
       const split = splitJob(folderName);
       if (byFolder) {
@@ -451,7 +463,7 @@ export const recordFolders = internalMutation({
           return;
         }
       }
-      await ctx.db.insert("projects", { name: split.name, ...(split.jobNumber ? { jobNumber: split.jobNumber } : {}), ...(client ? { client } : {}), createdAt: now, dropboxFolder: folder });
+      await ctx.db.insert("projects", { name: split.name, ...(split.jobNumber ? { jobNumber: split.jobNumber } : {}), ...(await clientFields(client, clientFolder)), createdAt: now, dropboxFolder: folder });
       changed++;
     };
 
@@ -462,7 +474,7 @@ export const recordFolders = internalMutation({
       if (!place) continue;
       if (place.kind === "client") { await ensureClient(place.client, place.folder); continue; }
       const client = place.client && place.clientFolder ? await ensureClient(place.client, place.clientFolder) : undefined;
-      await ensureProject(place.project, client, place.folder);
+      await ensureProject(place.project, client, place.folder, place.clientFolder);
     }
     // Folders that went away without coming back under a new name: forget the link, keep everything else.
     for (const g of goneLeft) {
@@ -601,10 +613,13 @@ export const findOrCreateTarget = internalMutation({
     const projects = await ctx.db.query("projects").collect();
     const picked = pickProject(projects, a.project, a.client);
     let project = picked?.project;
-    if (picked?.setClient && a.client) await moveProjectByName(ctx, picked.project, a.client.trim());
+    if (picked?.setClient && a.client) {
+      try { await moveProjectByName(ctx, picked.project, a.client.trim()); } catch (e) { if (!(e instanceof ConvexError)) throw e; } // a name two clients share: no move
+    }
     if (!project) {
       const { jobNumber, name } = splitJob(a.project);
-      const id = await ctx.db.insert("projects", { name, ...(jobNumber ? { jobNumber } : {}), ...(a.client ? { client: a.client.trim() } : {}), createdAt: now });
+      const twin = a.client ? (await ctx.db.query("clients").collect()).filter((c) => c.name.trim().toLowerCase() === a.client!.trim().toLowerCase()).length > 1 : false;
+      const id = await ctx.db.insert("projects", { name, ...(jobNumber ? { jobNumber } : {}), ...(a.client && !twin ? { client: a.client.trim() } : {}), createdAt: now });
       project = (await ctx.db.get(id))!;
     }
     const videos = await ctx.db.query("videos").withIndex("by_project", (q) => q.eq("projectId", project!._id)).collect();

@@ -10,6 +10,7 @@
 // Records outside the scope are simply invisible (a lookup answers null, a list leaves them out), and changing one
 // is refused. Internal functions are trusted server code: they keep plain access and stamp the default business.
 // A record with no businessId (only in tests now: every live record is tagged) counts as the default business's.
+import { ConvexError } from "convex/values";
 import { customAction, customCtx, customMutation, customQuery } from "convex-helpers/server/customFunctions";
 import { v } from "convex/values";
 import { wrapDatabaseReader, wrapDatabaseWriter, type Rules } from "convex-helpers/server/rowLevelSecurity";
@@ -121,17 +122,24 @@ export async function linkClient(db: MutationCtx["db"], businessId: Id<"business
   if (!n) return undefined;
   const key = n.toLowerCase();
   const rows = (await db.query("clients").collect()).filter((c) => !businessId || c.businessId === undefined || c.businessId === businessId);
-  const found = rows.find((c) => c.name.trim().toLowerCase() === key);
-  if (found) return found._id;
+  const found = rows.filter((c) => c.name.trim().toLowerCase() === key);
+  // D56 review H1 (Nov 19): never take the first of two same-named clients; a share or project would reach the wrong one.
+  if (found.length > 1) throw new ConvexError(`Two clients are called ${n}. Rename one in Clients first, then try again.`);
+  if (found.length === 1) return found[0]._id;
   return await db.insert("clients", { name: n, createdAt: Date.now(), fromProjects: true, ...(businessId ? { businessId } : {}) });
 }
 
 /** Wraps a writer so new business records get a businessId, and projects and shares stay linked to their client. */
 export function stampingDb(db: MutationCtx["db"], businessId: () => Promise<Id<"businesses"> | null>): MutationCtx["db"] {
-  const withClient = async (table: string, doc: Record<string, unknown>, biz: Id<"businesses"> | null | undefined) => {
+  const withClient = async (table: string, doc: Record<string, unknown>, biz: Id<"businesses"> | null | undefined, explicit?: Id<"clients">) => {
     const names = table === "projects" || (table === "shares" && doc.kind === "client");
     if (!names || !("client" in doc)) return doc;
     const name = typeof doc.client === "string" ? doc.client : "";
+    // D56 review: a company picked by id (moving a project to the one Heston chose) wins over looking it up by name,
+    // as long as it really has that name; two same-named companies are never resolved by name alone.
+    const picked = explicit ? ((await db.get(explicit)) as { name?: string; businessId?: Id<"businesses"> } | null) : null;
+    const sameBiz = !picked?.businessId || !biz || picked.businessId === biz; // D56 re-review L-c: never another business's
+    if (picked && sameBiz && name.trim() && (picked.name ?? "").trim().toLowerCase() === name.trim().toLowerCase()) return { ...doc, clientId: explicit };
     return { ...doc, clientId: name.trim() ? await linkClient(db, biz, name) : undefined };
   };
   const insert = (async (table: string, doc: Record<string, unknown>) => {
@@ -140,7 +148,7 @@ export function stampingDb(db: MutationCtx["db"], businessId: () => Promise<Id<"
       const b = await businessId();
       if (b) d = { ...d, businessId: b };
     }
-    d = await withClient(table, d, d.businessId as Id<"businesses"> | undefined);
+    d = await withClient(table, d, d.businessId as Id<"businesses"> | undefined, typeof d.clientId === "string" ? d.clientId as Id<"clients"> : undefined);
     return db.insert(table as never, d as never);
   }) as MutationCtx["db"]["insert"];
   const patch = (async (a0: unknown, a1: unknown, a2?: unknown) => {
@@ -152,7 +160,7 @@ export function stampingDb(db: MutationCtx["db"], businessId: () => Promise<Id<"
       if (t === "projects" || t === "shares") {
         const cur = (await db.get(id as never)) as Record<string, unknown> | null;
         if (cur) {
-          const next = await withClient(t, { ...cur, ...v0 }, cur.businessId as Id<"businesses"> | undefined);
+          const next = await withClient(t, { ...cur, ...v0 }, cur.businessId as Id<"businesses"> | undefined, typeof v0.clientId === "string" ? v0.clientId as Id<"clients"> : undefined);
           const v1 = "clientId" in next ? { ...v0, clientId: next.clientId } : v0;
           return table ? db.patch(table as never, id as never, v1 as never) : db.patch(id as never, v1 as never);
         }

@@ -324,6 +324,40 @@ export const getEstimate = query({
   },
 });
 
+/** D56 re-review N2: Cyrillic and Greek letters that look like Latin ones, so "Hаrbor" (Cyrillic а) is still "harbor". */
+const LOOKALIKE: Record<string, string> = Object.fromEntries([..."аеорсухіјѕԁӏкмнвтгɡοαερτυνικχ"].map((c, i) => [c, "aeopcyxijsdlkmhbtrgoaeptuvikx"[i]]));
+
+/** D56 (Heston, Nov 19): which company a website lead's first estimate files them under.
+ *  - Their email is already one of a company's (not removed) people: that company. If it's on more than one, the one
+ *    whose name they typed; if none of those matches, a new company (never a guess).
+ *  - Otherwise a new company. It never shares a name with an existing one: several parts of the site pick a company by
+ *    name, so a same-named company would let a stranger who typed a client's name reach that client. A clash gets
+ *    "(website lead)" on the end; Heston renames it, or adds the person to the real company himself.
+ *  The connector's Confirm page (lib/siteActions leadFiling) reads the same answer. */
+export async function leadTarget(ctx: QueryCtx | MutationCtx, lead: { email: string; company?: string | null; name: string }, businessId?: Id<"businesses"> | null):
+  Promise<{ clientId: Id<"clients"> | null; newName: string | null; name: string; why: string }> {
+  const email = lead.email.trim().toLowerCase();
+  const typed = (lead.company || lead.name || "Website lead").normalize("NFKC").replace(/\p{Default_Ignorable_Code_Point}/gu, "").trim().replace(/\s+/g, " ").slice(0, 100) || "Website lead";
+  // D56 re-review N2: lookalikes (zero-width and other format characters, compatibility forms) compare as the same name.
+  const key = (x: string) => [...x.normalize("NFKC").replace(/\p{Default_Ignorable_Code_Point}/gu, "").trim().replace(/\s+/g, " ").toLowerCase()].map((ch) => LOOKALIKE[ch] ?? ch).join("");
+  // D56 re-review N1: when the caller's database isn't already walled to one business (the connector's Confirm check
+  // runs unguarded), only that business's companies and people count. Records with no business are the default one's.
+  const def = businessId ? (await defaultBusiness(ctx))?._id ?? null : null;
+  const mine = <T extends { businessId?: Id<"businesses"> }>(rows: T[]) => businessId ? rows.filter((r) => (r.businessId ?? def) === businessId) : rows;
+  const clients = mine(await ctx.db.query("clients").collect());
+  const onCompanies = [...new Set(mine(await ctx.db.query("clientPeople").collect())
+    .filter((x) => !x.removedAt && x.email.trim().toLowerCase() === email).map((x) => x.clientId as Id<"clients">))]
+    .map((id) => clients.find((c) => c._id === id)).filter((c): c is Doc<"clients"> => !!c);
+  if (onCompanies.length === 1) return { clientId: onCompanies[0]._id, newName: null, name: onCompanies[0].name, why: `${email} is already one of ${onCompanies[0].name}'s people` };
+  const typedMatch = onCompanies.find((c) => key(c.name) === key(typed));
+  if (typedMatch) return { clientId: typedMatch._id, newName: null, name: typedMatch.name, why: `${email} is one of ${typedMatch.name}'s people, the company they named` };
+  const taken = new Set(clients.map((c) => key(c.name)));
+  let name = typed;
+  for (let n = 1; taken.has(key(name)); n++) name = `${typed} (website lead${n > 1 ? ` ${n}` : ""})`;
+  const why = onCompanies.length > 1 ? `${email} is on more than one company and none is the one they named, so a new company` : name === typed ? "a new company" : `a new company (a client called ${typed} already exists, and their email isn't one of its people)`;
+  return { clientId: null, newName: name, name, why };
+}
+
 /** Save estimate: the 12 lines from the business's rates; the card moves to Quoted (D60: forward only). A website
  *  lead's company and contact are made now, at its first estimate (D56). */
 export const saveEstimate = mutation({
@@ -352,13 +386,10 @@ export const saveEstimate = mutation({
       if (!d) throw new ConvexError("That card isn't here.");
       clientId = clientId ?? d.clientId ?? null;
       if (!clientId && d.lead) {
-        // D56: the website lead's company and contact, made at the first estimate. Review (Oct 31): an existing
-        // client is reused (the person's email, then the company's name), so nothing is doubled.
-        const email = d.lead.email.toLowerCase();
-        const byEmail = (await ctx.db.query("clientPeople").collect()).find((x) => !x.removedAt && x.email.toLowerCase() === email);
-        const wanted = (d.lead.company || d.lead.name).trim().toLowerCase();
-        const byName = (await ctx.db.query("clients").collect()).find((x) => x.name.trim().toLowerCase() === wanted);
-        clientId = byEmail?.clientId ?? byName?._id ?? await ctx.db.insert("clients", { name: (d.lead.company || d.lead.name).slice(0, 120), createdAt: now });
+        // D56: the website lead's company and contact, made at the first estimate (leadTarget says where, and why).
+        const email = d.lead.email.trim().toLowerCase();
+        const t = await leadTarget(ctx, d.lead);
+        clientId = t.clientId ?? await ctx.db.insert("clients", { name: t.newName!, createdAt: now });
         const there = (await ctx.db.query("clientPeople").withIndex("by_client", (q) => q.eq("clientId", clientId!)).collect()).some((x) => !x.removedAt && x.email.toLowerCase() === email);
         if (!there) await ctx.db.insert("clientPeople", { clientId, email, name: d.lead.name, role: "signer", createdAt: now });
         await ctx.db.patch(dealId, { clientId, contactEmail: email });
@@ -706,7 +737,8 @@ export const draftFollowUpAs = internalMutation({
   args: { who: v.string(), about: v.string(), due: v.string(), company: v.optional(v.string()), note: v.optional(v.string()) },
   handler: async (ctx, a) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(a.due)) throw new ConvexError("due must be yyyy-mm-dd.");
-    const c = a.company ? (await ctx.db.query("clients").collect()).find((x) => x.name.toLowerCase() === a.company!.trim().toLowerCase()) : null;
+    const named = a.company ? (await ctx.db.query("clients").collect()).filter((x) => x.name.trim().toLowerCase() === a.company!.trim().toLowerCase()) : [];
+    const c = named.length === 1 ? named[0] : null; // D56 re-review L-a: a name two clients share links neither
     const id = await ctx.db.insert("followUps", { who: a.who.slice(0, 120), about: a.about.slice(0, 300), due: a.due, ...(c ? { clientId: c._id } : {}), ...(a.note ? { note: a.note.slice(0, 1000) } : {}), draft: true, createdBy: "Claude", createdAt: Date.now() });
     return { followUpId: id, company: c?.name ?? null };
   },

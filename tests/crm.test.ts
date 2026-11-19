@@ -3,17 +3,18 @@
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { anyApi } from "convex/server";
 import type { Id } from "../convex/_generated/dataModel";
-import { world } from "./payHarness";
+import { fakeStripe, sent, world } from "./payHarness";
 import { webflowSignatureOk, looksLikeSpam } from "../convex/leads";
 
 const api = anyApi;
+const internal = anyApi;
 const SECRET = "wf_secret";
 beforeAll(() => {
   process.env.ALLOWED_EMAILS = "heston@wranglerproductions.com";
   process.env.SITE_URL = "https://app.wranglerportal.com";
   process.env.WEBFLOW_WEBHOOK_SECRET = SECRET;
 });
-afterEach(() => { vi.useRealTimers(); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 async function sign(body: string, t = Date.now()) {
   const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
@@ -44,6 +45,134 @@ describe("T3.1 leads from the website", () => {
     delete process.env.WEBFLOW_WEBHOOK_SECRET;
     expect((await w.t.fetch("/leads/webflow", { method: "POST", body: "{}" })).status).toBe(404);
     process.env.WEBFLOW_WEBHOOK_SECRET = SECRET;
+  });
+});
+
+// D56 fix (Heston, Nov 19, 14:40 "onward with your suggestions"; 14:51 after the review: a clash gets a clearly
+// different name, and an email on several companies goes to the one they typed). A website lead is filed under an
+// existing company only when their email is already one of its people, never by the company's name alone, and no two
+// companies ever share a name (several parts of the site pick a company by name).
+describe("D56 a lead's company at its first estimate", () => {
+  type W = Awaited<ReturnType<typeof world>>;
+  const leadDeal = (w: W, name: string, email: string, company: string) =>
+    w.t.run((ctx) => ctx.db.insert("deals", { businessId: w.A, title: `${company} website lead`, stage: "lead", source: "website", lead: { name, email, company, fields: [], at: 0 }, history: [], createdAt: 0, updatedAt: 0 } as never)) as Promise<Id<"deals">>;
+  const estimate = (w: W, dealId: Id<"deals">) => w.heston.mutation(api.crm.saveEstimate, { dealId, title: "Brand film", scope: "", input: { unit: "days", amount: 1 } });
+  const peopleOf = (w: W, clientId: Id<"clients">) =>
+    w.t.run(async (ctx) => (await ctx.db.query("clientPeople").withIndex("by_client", (q) => q.eq("clientId", clientId)).collect()).filter((p) => !p.removedAt).map((p) => p.email).sort());
+  const companyOf = async (w: W, dealId: Id<"deals">) => (await w.heston.query(api.crm.deal, { dealId })).company as { _id: Id<"clients">; name: string };
+
+  test("T-D56.1 a client's name typed by someone else makes a new, differently named company; they reach nothing of the client", async () => {
+    const w = await world();
+    process.env.STRIPE_PLATFORM_KEY = "sk_test_platform";
+    fakeStripe();
+    await sent(w); // Harbor Coffee has a sent invoice
+    expect((await w.maya.query(api.invoicePay.mine, {})).length).toBeGreaterThan(0); // its own people do see it
+    const before = await peopleOf(w, w.harbor);
+    // Sam already has a portal login in this business (another client's person), so a wrong filing would show at once.
+    const dealId = await leadDeal(w, "Sam", "sam@elsewhere.example", "Harbor Coffee");
+    await estimate(w, dealId);
+    const c = await companyOf(w, dealId);
+    expect(c._id).not.toBe(w.harbor);
+    expect(c.name).toBe("Harbor Coffee (website lead)");
+    expect(await peopleOf(w, c._id)).toEqual(["sam@elsewhere.example"]);
+    expect(await peopleOf(w, w.harbor)).toEqual(before);
+    // What Sam can see: nothing of Harbor Coffee's.
+    expect(await w.sam.query(api.invoicePay.mine, {})).toEqual([]);
+    expect(JSON.stringify(await w.sam.query(api.projects.mine, {}))).not.toContain("Launch");
+    // Picking a company by name reaches the right one for each name (the review's Share scenario).
+    const { linkClient } = await import("../convex/lib/functions");
+    const ids = await w.t.run(async (ctx) => [await linkClient(ctx.db, w.A, "Harbor Coffee"), await linkClient(ctx.db, w.A, "Harbor Coffee (website lead)")]);
+    expect(ids).toEqual([w.harbor, c._id]);
+    // A second clash gets its own number.
+    const again = await leadDeal(w, "Pat", "pat@elsewhere.example", "  harbor   COFFEE ");
+    await estimate(w, again);
+    expect((await companyOf(w, again)).name).toBe("harbor COFFEE (website lead 2)");
+  });
+
+  test("T-D56.2 a lead whose email is already one of a company's people goes on that company (any case or spaces)", async () => {
+    const w = await world();
+    const before = await peopleOf(w, w.harbor);
+    const dealId = await leadDeal(w, "Maya Brooks", "  Maya@Harbor.EXAMPLE ", "Harbor Coffee Co.");
+    await estimate(w, dealId);
+    expect((await companyOf(w, dealId))._id).toBe(w.harbor);
+    expect(await peopleOf(w, w.harbor)).toEqual(before); // nobody added twice
+    expect(await w.t.run(async (ctx) => (await ctx.db.query("clients").collect()).length)).toBe(1);
+  });
+
+  test("T-D56.3 a person removed from a company isn't filed back under it", async () => {
+    const w = await world();
+    await w.t.run(async (ctx) => {
+      const jo = (await ctx.db.query("clientPeople").collect()).find((p) => p.email === "jo@harbor.example")!;
+      await ctx.db.patch(jo._id, { removedAt: 1 });
+    });
+    const dealId = await leadDeal(w, "Jo", "jo@harbor.example", "Harbor Coffee");
+    await estimate(w, dealId);
+    const c = await companyOf(w, dealId);
+    expect(c._id).not.toBe(w.harbor);
+    expect(c.name).toBe("Harbor Coffee (website lead)");
+    expect(await peopleOf(w, w.harbor)).not.toContain("jo@harbor.example");
+  });
+
+  test("T-D56.4 an email on more than one company goes to the one they typed; otherwise a new company", async () => {
+    const w = await world();
+    const roastery = await w.t.run(async (ctx) => {
+      const id = await ctx.db.insert("clients", { businessId: w.A, name: "Harbor Roastery", createdAt: 1 });
+      await ctx.db.insert("clientPeople", { businessId: w.A, clientId: id, email: "maya@harbor.example", name: "Maya Brooks", role: "signer", createdAt: 1 });
+      return id;
+    });
+    const typed = await leadDeal(w, "Maya Brooks", "maya@harbor.example", "harbor roastery");
+    await estimate(w, typed);
+    expect((await companyOf(w, typed))._id).toBe(roastery);
+    const neither = await leadDeal(w, "Maya Brooks", "maya@harbor.example", "Maya's Side Project");
+    await estimate(w, neither);
+    const c = await companyOf(w, neither);
+    expect([w.harbor, roastery]).not.toContain(c._id);
+    expect(c.name).toBe("Maya's Side Project");
+  });
+
+  test("T-D56.5 picking a company by name refuses when two share it", async () => {
+    const w = await world();
+    await w.t.run(async (ctx) => {
+      await ctx.db.insert("clients", { businessId: w.A, name: "Twin Co", createdAt: 1 });
+      await ctx.db.insert("clients", { businessId: w.A, name: "twin co", createdAt: 2 });
+    });
+    const { linkClient } = await import("../convex/lib/functions");
+    await expect(w.t.run((ctx) => linkClient(ctx.db, w.A, "Twin Co"))).rejects.toThrow(/Two clients are called Twin Co/);
+    // The Dropbox sync carries on: a render for "Twin Co" makes its project with no client, not the wrong one (N3).
+    const target = await w.t.mutation(internal.dropbox.findOrCreateTarget, { client: "Twin Co", project: "Spring Promo", video: "Teaser" });
+    const p = await w.t.run((ctx) => ctx.db.get(target.projectId));
+    expect(p).toMatchObject({ name: "Spring Promo" });
+    expect(p!.clientId).toBeUndefined();
+  });
+
+  test("T-D56.7 the Dropbox folder sync: a same-named pair stalls nothing; a new folder project takes its client folder's client by id", async () => {
+    const w = await world();
+    const twins = await w.t.run(async (ctx) => [
+      await ctx.db.insert("clients", { businessId: w.A, name: "Twin Co", createdAt: 1 }),
+      await ctx.db.insert("clients", { businessId: w.A, name: "Twin Co", createdAt: 2 }),
+    ]);
+    const f = (path: string) => ({ pathLower: path.toLowerCase(), pathDisplay: path });
+    await w.t.mutation(internal.dropbox.recordFolders, { folders: [f("/Clients/Twin Co"), f("/Clients/Twin Co/Spring Job"), f("/Clients/Harbor Coffee"), f("/Clients/Harbor Coffee/Launch Two")], gone: [] });
+    const r = await w.t.run(async (ctx) => ({
+      twins: await Promise.all(twins.map((id) => ctx.db.get(id))),
+      spring: (await ctx.db.query("projects").collect()).find((p) => p.name === "Spring Job"),
+      launch: (await ctx.db.query("projects").collect()).find((p) => p.name === "Launch Two"),
+    }));
+    expect(r.twins.map((c) => c!.dropboxFolder)).toEqual([undefined, undefined]); // the folder joins neither twin
+    expect(r.spring).toBeDefined();
+    expect(r.spring!.clientId).toBeUndefined(); // no client rather than the wrong one
+    expect(r.launch!.clientId).toBe(w.harbor); // by the client folder's own client
+  });
+
+  test("T-D56.6 lookalike names (zero-width characters, Cyrillic letters) count as a clash", async () => {
+    const w = await world();
+    for (const [i, typed] of ["Harbor\u200B Coffee", "H\u0430rbor Coffee", "Harbor Co\u200Dffee", "Harbor Coffee\u034F", "Harbor Coffee\uFE0F"].entries()) {
+      const dealId = await leadDeal(w, `Lookalike ${i}`, `look${i}@elsewhere.example`, typed);
+      await estimate(w, dealId);
+      const c = await companyOf(w, dealId);
+      expect(c._id).not.toBe(w.harbor);
+      expect(c.name).toMatch(/\(website lead( \d)?\)$/);
+    }
   });
 });
 

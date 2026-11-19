@@ -38,6 +38,7 @@ import * as payments from "../payments";
 import * as vendorPayments from "../vendorPayments";
 import * as vendorPayouts from "../vendorPayouts";
 import * as crm from "../crm";
+import { defaultBusiness } from "./business";
 import * as reports from "../reports";
 import * as footage from "../footage";
 import * as business from "../business";
@@ -307,15 +308,23 @@ const sharedTitle = async (ctx: QueryCtx, a: Args) => {
 };
 // 8d re-review R4: only colours are the look; the watermark's text and strength are on every client's cuts.
 const LOOK = new Set(["accent", "background"]);
-/** 8d re-review R1: an estimate for a lead with no company yet files the lead under a company (an existing one with
- *  the same name included), and the lead's email becomes one of its people, who then see its invoices. */
+/** 8d re-review R1: an estimate for a lead with no company yet files the lead under a company, and the lead's email
+ *  becomes one of its people, who then see its invoices. D56 (Nov 19): the page says which company, worked out exactly
+ *  as saving will (crm.leadTarget): an existing one only by the lead's email, otherwise a new, differently named one. */
 const leadFiling = async (ctx: QueryCtx, a: Args) => {
   if (a.clientId) return null;
   const est = typeof a.estimateId === "string" ? await get(ctx, "estimates", a.estimateId) : null;
   let deal = await get(ctx, "deals", a.dealId ?? est?.dealId);
   if (!deal && typeof (a.projectId ?? est?.projectId) === "string") deal = ((await ctx.db.query("deals").withIndex("by_project", (q) => q.eq("projectId", (a.projectId ?? est?.projectId) as never)).collect()) as Array<Record<string, any>>).find((x) => !x.closedAt) ?? null;
   if (!deal?.lead || deal.clientId || est?.clientId) return null;
-  return `Saving this estimate files the lead ${String(deal.lead.email ?? "")} under ${String(deal.lead.company || deal.lead.name || "a company")} (an existing company with that name included); as one of its people, once they can sign in they see its invoices.`;
+  // D56 re-review N1: this check runs on the unguarded database, so the deal's own business is named explicitly
+  // (R3-L3: with none known, it says nothing rather than look across businesses).
+  const biz = deal.businessId ?? (await defaultBusiness(ctx as never))?._id ?? null;
+  if (!biz) return null;
+  const t = await crm.leadTarget(ctx as never, deal.lead as { email: string; company?: string; name: string }, biz as never);
+  return t.clientId
+    ? `Saving this estimate files the lead ${String(deal.lead.email ?? "")} under ${t.name} (${t.why}); as one of its people, once they can sign in they see its invoices.`
+    : `Saving this estimate makes a new company, ${t.name}, for the lead ${String(deal.lead.email ?? "")}, with them as its signer${t.why === "a new company" ? "" : ` (${t.why.replace(/^a new company \((.*)\)$/, "$1").replace(/, so a new company$/, "")})`}.`;
 };
 
 export const ACTIONS: Record<string, Entry> = {
