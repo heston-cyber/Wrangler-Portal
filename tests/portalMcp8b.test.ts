@@ -67,7 +67,9 @@ describe("Phase 8b · the site through the connector", () => {
     for (const [name, e] of Object.entries(ACTIONS)) {
       expect(typeof e.fn?._handler, name).toBe("function");
       expect(argsOf(name).type, name).toBe("object");
-      expect(e.mode === "read" ? e.fn.isQuery : e.fn.isMutation, `${name} is a ${e.mode} but the site function isn't a ${e.mode === "read" ? "query" : "mutation"}`).toBe(true);
+      const want = e.mode === "read" ? "isQuery" : e.onPage ? "isAction" : "isMutation";
+      expect(e.fn[want], `${name} is a ${e.mode}${e.onPage ? " run from the Confirm page" : ""} but the site function isn't the right kind`).toBe(true);
+      if (e.onPage) expect(e.mode === "ask" && typeof e.shows === "function", `${name} runs on the page, so it's an ask that shows what it sends`).toBe(true);
     }
     const x = await setup();
     const list = await x.w.t.fetch("/portal-mcp", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${x.keyA}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });

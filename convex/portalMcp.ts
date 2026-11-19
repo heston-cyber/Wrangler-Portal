@@ -173,6 +173,12 @@ async function siteCall(ctx: ActionCtx, name: string, args: Json): Promise<ToolR
   const said = asked(args);
   if (!said) return fail(ASK);
   if (e.mode === "read") return fail(`${action} only reads: use site_read.`);
+  if (e.onPage) {
+    // Phase 8c: it talks to Stripe, so it isn't tried here; it runs from Heston's Confirm page, as his own button would.
+    await ctx.runQuery(internal.siteRun.checkOnPage, run);
+    const target = `${action}|${(await sha256Hex(JSON.stringify(a))).slice(0, 16)}`;
+    return afterRequest(await ctx.runMutation(internal.confirm.request, { kind: "site", targetId: target, said, payload: JSON.stringify({ args: a, outbound: [] }) }) as Json);
+  }
   let outbound: Outbound[] | null = null, why: string | null = null;
   try { await ctx.runMutation(internal.siteRun.tryOut, run); } catch (err) {
     const d = dataOf(err);

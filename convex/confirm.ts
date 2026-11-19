@@ -148,7 +148,7 @@ async function sitePreview(ctx: Ctx, target: string, payload: string | undefined
       ...more.map((l) => ({ label: clip(l.label, 60), value: body(l.value, 3000) })),
       ...(outbound.length
         ? outbound.map((o) => ({ label: "Sends", value: clip(`${o.what}${o.to.length ? ` to ${o.to.slice(0, 300).join(", ")}${o.to.length > 300 ? ` and ${o.to.length - 300} more` : ""}` : ""}`, 40_000) }))
-        : [{ label: "Sends", value: "No email or message" }]),
+        : act.onPage ? [] : [{ label: "Sends", value: "No email or message" }]), // 8c: an on-page ask says what it sends itself
     ],
     bind: JSON.stringify({ recs, args }), // everything it acts on and with, even what the page shortens
   };
@@ -159,6 +159,8 @@ export const KINDS: Record<string, Kind> = {
     preview: sitePreview,
     run: async (ctx, target, payload) => {
       const { act, action, args, outbound } = siteParts(target, payload);
+      // Phase 8c: a Stripe action can't run inside Confirm; the page runs it next, signed in as Heston (`runOnPage`).
+      if (act.onPage) return { runOnPage: { fn: action.replace(".", ":"), args } };
       const seen: Outbound[] = [];
       const result = await act.fn._handler(recording(ctx, seen), args);
       if (!sameReach(seen, outbound)) throw new ConvexError("It would now send to different people than when Claude asked. Nothing was done: ask Claude again.");
@@ -321,7 +323,7 @@ export const confirm = mutation({
     const id = ctx.db.normalizeId("pendingActions", a.id);
     const r = id ? await ctx.db.get(id) : null;
     if (!r) throw new ConvexError("That request isn't here.");
-    if (r.status !== "waiting") throw new ConvexError(r.status === "done" ? "That's already done." : "That request was cancelled.");
+    if (r.status !== "waiting") throw new ConvexError(r.status === "done" ? "That's already done." : r.status === "running" ? "That's already been confirmed." : "That request was cancelled.");
     if (r.expiresAt <= Date.now()) throw new ConvexError("That request ran out. Ask Claude again.");
     const k = KINDS[r.kind];
     if (!k) throw new ConvexError("That can't be done here.");
@@ -330,10 +332,26 @@ export const confirm = mutation({
     if (live !== r.hash) throw new ConvexError("It changed since Claude asked. Check it, then ask Claude again (or do it yourself).");
     if (a.hash !== live) throw new ConvexError("It changed while you were looking. Check it again, then confirm.");
     const result = await k.run(ctx, r.targetId, r.payload); // throws (and changes nothing) when it can't be done
-    await ctx.db.patch(r._id, { status: "done", doneAt: Date.now() });
+    const onPage = "runOnPage" in result;
+    await ctx.db.patch(r._id, onPage ? { status: "running" } : { status: "done", doneAt: Date.now() });
     const siteMode = r.kind === "site" ? ACTIONS[siteAction(r.targetId)]?.mode : undefined;
-    await audit(ctx, { kind: siteMode === "delete" || r.kind.endsWith(".delete") ? "deleted" : siteMode === "ask" || r.kind.endsWith(".send") || r.kind.endsWith(".remind") ? "sent" : "claude", text: `confirmed Claude's request: ${r.summary}`, where: "Claude connector", link: `/confirm/${r._id}` });
+    await audit(ctx, { kind: siteMode === "delete" || r.kind.endsWith(".delete") ? "deleted" : siteMode === "ask" || r.kind.endsWith(".send") || r.kind.endsWith(".remind") ? "sent" : "claude", text: `confirmed Claude's request: ${r.summary}${onPage ? " (run from the Confirm page)" : ""}`, where: "Claude connector", link: `/confirm/${r._id}` });
     return { ok: true, ...result };
+  },
+});
+
+/** Phase 8c: the Confirm page ran the Stripe action it was given (signed in as Heston); how it went. Owner only, and
+ *  only for a request it confirmed. */
+export const finished = mutation({
+  args: { id: v.string(), ok: v.boolean(), error: v.optional(v.string()) },
+  handler: async (ctx, a) => {
+    await requireOwner(ctx);
+    const id = ctx.db.normalizeId("pendingActions", a.id);
+    const r = id ? await ctx.db.get(id) : null;
+    if (!r || r.status !== "running") return null;
+    await ctx.db.patch(r._id, { status: a.ok ? "done" : "failed", doneAt: Date.now(), ...(a.ok ? {} : { error: clip(a.error ?? "It didn't go through.", 300) }) });
+    if (!a.ok) await audit(ctx, { kind: "claude", text: `Claude's confirmed request didn't go through: ${r.summary}`, where: "Claude connector", link: `/confirm/${r._id}` });
+    return null;
   },
 });
 

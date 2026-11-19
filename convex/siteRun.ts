@@ -86,10 +86,20 @@ export const change = rawInternalMutation({
 export const tryOut = rawInternalMutation({
   args: runArgs,
   handler: async (ctx, x) => {
-    const { act, a, as } = await prepare(ctx, x.asBusiness, x.action, x.args, (e) => (e.mode === "read" || !e.fn.isMutation ? `${x.action} only reads: use site_read.` : null));
+    const { act, a, as } = await prepare(ctx, x.asBusiness, x.action, x.args, (e) => (e.mode === "read" ? `${x.action} only reads: use site_read.` : e.onPage || !e.fn.isMutation ? `${x.action} runs from Heston's Confirm page.` : null));
     const seen: Outbound[] = [];
     const why = await outsideOf(as, x.asBusiness!, act, a);
     await act.fn._handler(recording(as as MutationCtx, seen), a);
     throw new ConvexError({ tried: true, outbound: summarize(seen), ...(why ? { why } : {}) });
+  },
+});
+
+/** Phase 8c: an ask that runs from Heston's Confirm page (it talks to Stripe): its arguments and the owner checked, as
+ *  for any other; nothing is tried. */
+export const checkOnPage = rawInternalQuery({
+  args: runArgs,
+  handler: async (ctx, x) => {
+    await prepare(ctx, x.asBusiness, x.action, x.args, (e) => (!e.onPage || !e.fn.isAction || !e.shows ? `${x.action} isn't run from the Confirm page.` : null));
+    return true;
   },
 });
