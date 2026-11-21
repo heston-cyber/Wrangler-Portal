@@ -256,4 +256,74 @@ describe("the EIN on subscription invoices", () => {
     // Nobody can run the tidy-up for a business without saying which.
     await expect(w.t.action(anyApi.taxId.tidyLater, { tries: 0 })).rejects.toThrow();
   });
+
+  test("S8 (final check #1-#5): a signed-in client of two businesses finishes a start; a subscription gone in Stripe stops holding the old tax ID; an adopted subscription's open invoice is tried with the new card; a lapsed start doesn't hold one either; a start decided before the EIN existed still gets it", async () => {
+    const w = await world();
+    const ids: Array<{ id: string; value: string }> = [];
+    stripe({}, ids);
+    await w.heston.action(api.taxId.set, { ein: "12-3456789" });
+    fakeStripe();
+    const planId = await w.heston.action(api.plans.save, { name: "Monthly retainer", amountCents: 250000, interval: "month", intervalCount: 1 });
+    const newRow = async () => {
+      fakeStripe();
+      const id = await w.heston.action(api.subscriptions.start, { clientId: w.harbor, planId, billTo: { name: "Maya Brooks", email: "maya@harbor.example" }, startDate: new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10), firstInvoice: "start", postInbox: false });
+      return { id, token: (await w.heston.query(api.subscriptions.get, { subscriptionId: id })).link.split("/sub/")[1] as string };
+    };
+    // #1: Maya, signed in, is also a client of another business.
+    await w.t.run(async (ctx) => {
+      const B = (await ctx.db.query("businesses").collect()).find((b) => b.slug === "other")!._id;
+      const maya = (await ctx.db.query("users").collect()).find((u) => u.email === "maya@harbor.example")!._id;
+      await ctx.db.insert("memberships", { businessId: B, email: "maya@harbor.example", userId: maya, role: "client", createdAt: 5 });
+    });
+    const a = await newRow();
+    stripe({ sub: { portal: a.id, status: "trialing" } }, ids);
+    expect(await w.maya.action(api.subscriptions.setupDone, { token: a.token, setupIntentId: "seti_1" })).toEqual({ ok: true, message: null });
+    expect((await row(w, a.id))!.accountTaxId).toBe("txi_1");
+    // #4: an adopted subscription waiting on its first payment: the open invoice is paid with the card just saved.
+    const b2 = await newRow();
+    let s = stripe({ sub: { portal: b2.id, status: "incomplete", id: "sub_9" }, subInvoice: {} }, ids, { existing: { id: "sub_9", object: "subscription", status: "incomplete", metadata: { portal_subscription: b2.id }, items: { data: [] } } });
+    await w.t.action(api.subscriptions.setupDone, { token: b2.token, setupIntentId: "seti_2" });
+    expect(s.calls.some((c) => /^invoices\/[^/]+\/pay$/.test(c.path) && c.form.payment_method === "pm_1")).toBe(true);
+    // #2: a subscription gone in Stripe (404) is done with: the old tax ID goes on the first save.
+    await w.t.run(async (ctx) => { await ctx.db.patch(b2.id as never, { status: "canceled" } as never); }); // (only a's matters below)
+    vi.stubGlobal("fetch", vi.fn()); // reset
+    s = stripe({}, ids);
+    const inner = globalThis.fetch;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => String(url).includes("/v1/subscriptions/sub_1") ? new Response(JSON.stringify({ error: { message: "No such subscription" } }), { status: 404 }) : inner(url, init)));
+    expect(await w.heston.action(api.taxId.set, { ein: "98-7654321" })).toEqual({ value: "98-7654321", inStripe: true });
+    expect(ids.map((x) => x.value)).toEqual(["98-7654321"]);
+    expect((await row(w, a.id))!.accountTaxId).toBeUndefined();
+    // #3: a start that failed a month ago (its decision lapsed) doesn't hold the old tax ID.
+    const c = await newRow();
+    stripe({ sub: { portal: c.id } }, ids, { subCreate: "busy" });
+    await expect(w.t.action(api.subscriptions.setupDone, { token: c.token, setupIntentId: "seti_3" })).rejects.toThrow();
+    await w.t.run(async (ctx) => { await ctx.db.patch(c.id as never, { startDecidedAt: Date.now() - 30 * 86_400_000 } as never); });
+    stripe({}, ids);
+    expect(await w.heston.action(api.taxId.set, { ein: "55-5555555" })).toEqual({ value: "55-5555555", inStripe: true });
+    expect(ids.map((x) => x.value)).toEqual(["55-5555555"]);
+    // #5: decided "none" before the EIN existed, retried within the day: it's still marked to carry the EIN.
+    const w2 = await world();
+    fakeStripe();
+    const plan2 = await w2.heston.action(api.plans.save, { name: "Retainer", amountCents: 250000, interval: "month", intervalCount: 1 });
+    fakeStripe();
+    const d = await w2.heston.action(api.subscriptions.start, { clientId: w2.harbor, planId: plan2, billTo: { name: "Maya Brooks", email: "maya@harbor.example" }, startDate: new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10), firstInvoice: "start", postInbox: false });
+    const dt = (await w2.heston.query(api.subscriptions.get, { subscriptionId: d })).link.split("/sub/")[1];
+    const ids2: Array<{ id: string; value: string }> = [];
+    stripe({ sub: { portal: d } }, ids2, { subCreate: "busy" });
+    await expect(w2.t.action(api.subscriptions.setupDone, { token: dt, setupIntentId: "seti_1" })).rejects.toThrow();
+    stripe({}, ids2);
+    await w2.heston.action(api.taxId.set, { ein: "12-3456789" });
+    stripe({ sub: { portal: d, status: "trialing" } }, ids2);
+    await w2.t.action(api.subscriptions.setupDone, { token: dt, setupIntentId: "seti_1" });
+    expect((await w2.t.run((ctx) => ctx.db.get(d as never)) as { einOn?: boolean }).einOn).toBe(true); // the tidy-up on link moves it
+  });
+
+  test("S9 (Stripe test-mode run): the tax percent keeps what's typed (8.25), the EIN check says when Stripe has none, and copying the pay link can't hold the page", () => {
+    const fs = require("node:fs") as typeof import("node:fs");
+    const ed = fs.readFileSync("src/modules/payments/InvoiceEditor.tsx", "utf8");
+    expect(ed).toContain("<TaxInput value={d.taxPercent} onChange={(n) => set({ taxPercent: n })} />");
+    expect(ed).toContain('const raw = e.target.value.replace(/[^\\d.]/g, "")');
+    expect(ed).toContain("Promise.race([navigator.clipboard.writeText(r.link)");
+    expect(fs.readFileSync("src/modules/settings/PaymentsSettings.tsx", "utf8")).toContain("Your Stripe account has no EIN yet. Type it above to add it.");
+  });
 });
