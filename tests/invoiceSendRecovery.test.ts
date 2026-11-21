@@ -229,7 +229,10 @@ describe("Review 2 (Nov 21): what Stripe holds, for certain", () => {
     expect(made(calls)).toBe(1);
     expect(keyOf("v1/invoices")).toEqual([`wp-inv-${id}-a2`]);
     expect(calls.find((c) => c.method === "POST" && c.path === "invoices/in_1" && c.form.number)!.form.number).toBe("WRNGLR-0002");
-    expect((await doc(w, id))!.history.find((h) => h.kind === "renumbered")!.detail).toMatch(/WRNGLR-0001 was voided in Stripe, so this one is WRNGLR-0002/);
+    expect((await doc(w, id))!.history.filter((h) => h.kind === "renumbered").map((h) => h.detail)).toEqual(["WRNGLR-0001 was voided in Stripe, so this one is WRNGLR-0002"]);
+    // Review 3b: renumbering forgets the voided invoice at once (a run stopped right after it can't renumber again).
+    const src = (await import("node:fs")).readFileSync(new URL("../convex/invoices.ts", import.meta.url), "utf8");
+    expect(src).toMatch(/number, pending: \{ \.\.\.\(i\.pending \?\? \{\}\), draftId: undefined \}/);
     // Uncollectible (marked so in Stripe while the portal was stuck): recorded as it is, not as open.
     w = await world();
     fakeStripe();

@@ -440,7 +440,8 @@ export const renumberForSend = internalMutation({
     const next = (row?.value ?? 0) + 1;
     if (row) await ctx.db.patch(row._id, { value: next }); else await ctx.db.insert("counters", { key: "invoiceSeq", value: next });
     const number = `${invoicePrefix(biz?.name ?? "")}-${String(next).padStart(4, "0")}`;
-    await ctx.db.patch(invoiceId, { number, history: [...i.history, { kind: "renumbered", at: Date.now(), detail: `${was} was voided in Stripe, so this one is ${number}` }].slice(-60), updatedAt: Date.now() });
+    // Review 3b: forget the voided Stripe invoice in the same write, so a run that stops here doesn't renumber twice.
+    await ctx.db.patch(invoiceId, { number, pending: { ...(i.pending ?? {}), draftId: undefined }, history: [...i.history, { kind: "renumbered", at: Date.now(), detail: `${was} was voided in Stripe, so this one is ${number}` }].slice(-60), updatedAt: Date.now() });
     return number;
   },
 });
