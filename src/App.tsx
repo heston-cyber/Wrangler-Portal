@@ -49,6 +49,8 @@ const InvoiceDetail = lazy(() => import("./modules/payments/InvoiceDetail"));
 const PaymentsOverview = lazy(() => import("./modules/payments/PaymentsOverview"));
 const ReportsPage = lazy(() => import("./modules/payments/ReportsPage")); // Phase 5e step 5
 const PlansPage = lazy(() => import("./modules/payments/PlansPage"));
+const ProductsPage = lazy(() => import("./modules/payments/ProductsPage")); // Nov 21: the Stripe product library
+const ProductEditor = lazy(() => import("./modules/payments/ProductsPage").then((m) => ({ default: m.ProductEditor })));
 // Phase 3: the CRM (Clients › Pipeline · Companies · Follow-ups), estimates and contacts.
 const Pipeline = lazy(() => import("./modules/crm/Pipeline"));
 const DealPage = lazy(() => import("./modules/crm/DealPage"));
@@ -362,6 +364,9 @@ function SignedIn() {
   else if (/^\/payments\/quotes\/new\/?$/.test(path)) page = <Suspense fallback={<Loading />}><QuoteEditor key={search} clientId={params.get("client")} dealId={params.get("deal")} /></Suspense>;
   else if (/^\/payments\/quotes\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><QuoteDetail key={id} quoteId={id} /></Suspense>; }
   else if (/^\/payments\/plans\/?$/.test(path)) page = <Suspense fallback={<Loading />}><PlansPage /></Suspense>;
+  else if (/^\/payments\/products\/?$/.test(path)) page = <Suspense fallback={<Loading />}><ProductsPage /></Suspense>;
+  else if (/^\/payments\/products\/new\/?$/.test(path)) page = <Suspense fallback={<Loading />}><ProductEditor key="new" /></Suspense>;
+  else if (/^\/payments\/products\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><ProductEditor key={id} productId={id} /></Suspense>; }
   else if (/^\/payments\/plans\/new\/?$/.test(path)) page = <Suspense fallback={<Loading />}><PlanEditor key="new" /></Suspense>;
   else if (/^\/payments\/plans\/[^/]+\/?$/.test(path)) { const id = path.split("/")[3]; page = <Suspense fallback={<Loading />}><PlanEditor key={id} planId={id} /></Suspense>; }
   else if (signDoc) page = <Suspense fallback={<Loading />}><SignDoc key={signDoc[1]} documentId={signDoc[1] as Id<"wsDocuments">} versionNumber={Number(params.get("v")) || null} /></Suspense>;

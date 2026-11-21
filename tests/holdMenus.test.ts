@@ -36,4 +36,12 @@ describe("D170 hold menus", () => {
     expect(read("src/modules/docs/pages/SignDocs.tsx")).toContain("<DocRow");
     expect(read("src/modules/docs/pages/SignHome.tsx")).toContain("<DocRow");
   });
+  it("h.6 (Nov 21) an invoice row offers Void on the invoices the invoice page can void, asking first, with the same void", () => {
+    const src = read("src/modules/payments/InvoicesPage.tsx");
+    expect(src).toContain('const canVoid = s === "due" || s === "overdue" || s === "failed";');
+    expect(read("src/modules/payments/InvoiceDetail.tsx")).toContain('const canVoid = s === "due" || s === "overdue" || s === "failed";');
+    expect(src).toContain("useAction(api.invoices.voidInvoice)");
+    expect(src).toMatch(/key: "void", label: "Void invoice"[\s\S]{0,200}confirm: \{ title: "Void this invoice\?"/);
+    expect(src).toContain("menu={menu}");
+  });
 });

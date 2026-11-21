@@ -789,6 +789,15 @@ export default defineSchema({
     privacyUrl: v.optional(v.string()),    // the privacy policy link, same places
     logoFileId: v.optional(v.id("_storage")), // shown in the portal and on emails
     logoLightFileId: v.optional(v.id("_storage")), // the same logo for light backgrounds (emails, PDFs); Settings › Business, Oct 29
+    // Nov 21 (Heston): the business's EIN, printed on its invoices and receipts. Kept in Stripe as the connected account's own
+    // tax ID (stripeId, on accountId) so Stripe's invoices carry it too. Only the owner sets it (Settings › Payments); it's
+    // printed on invoices, so whoever can open one sees it there. toRemove: old Stripe tax IDs Stripe wouldn't delete yet.
+    taxId: v.optional(v.object({ type: v.literal("us_ein"), value: v.string(), stripeId: v.optional(v.string()), accountId: v.optional(v.string()), updatedAt: v.number() })),
+    taxIdToRemove: v.optional(v.array(v.object({ id: v.string(), account: v.string() }))),
+    // Re-check (Nov 21): one tidy-up at a time (when it started), and whether a subscription still waits to be moved.
+    taxIdTidyAt: v.optional(v.number()),
+    taxIdTidy: v.optional(v.string()),
+    taxIdPending: v.optional(v.boolean()),
     accent: v.optional(v.string()),        // #rrggbb
     background: v.optional(v.string()),    // #rrggbb
     // Which modules the business uses. Menu items only show when on (and only once something is in them).
@@ -908,7 +917,7 @@ export default defineSchema({
     projectId: v.optional(v.id("projects")),
     contact: v.optional(v.object({ name: v.string(), email: v.string(), company: v.optional(v.string()) })), // D149: optional ("No client yet"); whoever accepts once accepted
     title: v.string(),
-    lines: v.array(v.object({ id: v.string(), description: v.string(), qty: v.number(), unitCents: v.number(), suggestedCents: v.optional(v.number()), note: v.optional(v.string()) })),
+    lines: v.array(v.object({ id: v.string(), description: v.string(), qty: v.number(), unitCents: v.number(), suggestedCents: v.optional(v.number()), note: v.optional(v.string()), item: v.optional(v.object({ productId: v.id("products"), priceId: v.string(), unitCents: v.number(), description: v.string() })) })),
     discountCents: v.optional(v.number()),
     taxPercent: v.optional(v.number()),
     deposit: v.object({ kind: v.union(v.literal("percent"), v.literal("amount")), value: v.number() }),
@@ -1174,6 +1183,19 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_price", ["stripe.priceId"]),
 
+  // Nov 21 (Heston): Payments › Products, the Stripe product library. A one-time product and its price in the business's
+  // own Stripe (made here or in Stripe's dashboard, brought in), picked as invoice and quote lines.
+  products: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    name: v.string(),
+    description: v.optional(v.string()),
+    amountCents: v.number(),
+    stripe: v.object({ accountId: v.string(), productId: v.string(), priceId: v.string(), livemode: v.boolean() }),
+    archivedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_account_product", ["stripe.accountId", "stripe.productId"]).index("by_price", ["stripe.priceId"]), // review L4, I3
+
   // Phase 2b: subscriptions, the portal's copy of each one in the business's Stripe (kept in step by Stripe's events).
   subscriptions: defineTable({
     businessId: v.optional(v.id("businesses")),
@@ -1195,6 +1217,16 @@ export default defineSchema({
     firstInvoice: v.union(v.literal("now"), v.literal("start")),
     payToken: v.string(),               // the client's page for this subscription (/sub/<token>), with or without an account
     stripe: v.optional(v.object({ accountId: v.string(), customerId: v.string(), subscriptionId: v.optional(v.string()), scheduleId: v.optional(v.string()), livemode: v.boolean() })),
+    // Nov 21 (Heston: subscription invoices print the EIN too): the business's Stripe tax ID this subscription's
+    // invoices carry (invoice_settings.account_tax_ids), so a changed or removed EIN moves them first.
+    accountTaxId: v.optional(v.string()),
+    // Security review (Nov 21): einOn: the business had an EIN when it started, so it keeps carrying the current one
+    // (put back after a change, a removal or a reconnect). startTaxId: the tax ID decided for the first attempt to
+    // start it in Stripe (null: none), kept so a retry sends exactly the same request.
+    einOn: v.optional(v.boolean()),
+    startTaxId: v.optional(v.union(v.string(), v.null())),
+    startDecidedAt: v.optional(v.number()),
+    startTry: v.optional(v.number()),
     currentPeriodStart: v.optional(v.number()),
     currentPeriodEnd: v.optional(v.number()),
     trialEnd: v.optional(v.number()),
@@ -1223,7 +1255,7 @@ export default defineSchema({
     title: v.string(),                                   // "Final invoice", "Deposit · WS-00018", "Extra shoot day"
     number: v.optional(v.string()),                      // D52: WRNGLR-0042, given when it's first sent
     billTo: v.object({ name: v.string(), email: v.string(), company: v.optional(v.string()) }),
-    lines: v.array(v.object({ id: v.string(), description: v.string(), qty: v.number(), unitCents: v.number() })),
+    lines: v.array(v.object({ id: v.string(), description: v.string(), qty: v.number(), unitCents: v.number(), item: v.optional(v.object({ productId: v.id("products"), priceId: v.string(), unitCents: v.number(), description: v.string() })) })), // item: Nov 21, from the product library
     discountCents: v.optional(v.number()),
     taxPercent: v.optional(v.number()),                 // e.g. 8.25
     dueDate: v.string(),                                // YYYY-MM-DD
@@ -1242,6 +1274,7 @@ export default defineSchema({
     // Nov 21 (Heston, D-g/D-h): made in Stripe without emailing ("Create without emailing"): payable from its copied
     // link, but off the client's portal and Inbox and out of the reminders until Heston presses Email it.
     quiet: v.optional(v.boolean()),
+    ein: v.optional(v.string()), // Nov 21: the business's EIN as it was when the invoice was made (printed on it, as Stripe keeps it)
     issuedAt: v.optional(v.number()), // review M3: when it was finalized in Stripe (its issue date, and Reports' "Invoiced"); sentAt is when it was emailed
     // Review fixes (Oct 30): a send in progress keeps what it has made in Stripe so far, so a failed send cleans up
     // and a retry neither duplicates nor gets stuck; syncedAt spaces out reads from Stripe.

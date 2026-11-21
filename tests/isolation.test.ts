@@ -62,6 +62,11 @@ describe("two businesses", () => {
   test("B's owner gets nothing of A from any function, and changes nothing of A", async () => {
     const { t, ids, a, bSub } = await twoBusinesses();
     vi.stubGlobal("fetch", async () => new Response("{}", { status: 500 })); // nothing external may be reached
+    // Nov 21 (EIN re-review): A's EIN, with its Stripe tax ID. Never shown to B, never changed or removed by B.
+    // (The matrix's own EIN, 12-3456789, is what B saves for itself, so A's is a different number.)
+    await t.run(async (ctx) => { await ctx.db.patch(a, { taxId: { type: "us_ein", value: "77-7000777", stripeId: "txi_A", accountId: "acct_A", updatedAt: 0 } }); });
+    const aEin = () => t.run(async (ctx) => JSON.stringify((await ctx.db.get(a))!.taxId));
+    const einBefore = await aEin();
     const before = await snapshot(t, a, true);
     const b = t.withIdentity({ subject: bSub });
     const table = argsFor(ids);
@@ -74,13 +79,14 @@ describe("two businesses", () => {
       let out: unknown;
       try { out = await call(b, f.ref, table[f.key], ""); } catch { continue; } // refused or failed: nothing returned
       const json = JSON.stringify(out ?? null);
-      const hit = aIds.find((id) => json.includes(id));
+      const hit = aIds.find((id) => json.includes(id)) ?? (json.includes("7000777") ? "EIN" : json.includes("txi_A") ? "Stripe tax ID" : undefined);
       if (hit) leaks.push(`${f.key} returned A's ${hit}`);
     }
     expect(leaks).toEqual([]);
     const after = await snapshot(t, a, true);
     const changed = Object.keys(before).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]));
     expect(changed).toEqual([]);
+    expect(await aEin()).toBe(einBefore);
     expect(await aFile(t, ids.storageId)).toEqual({ alive: true, owner: a }); // 5e review: A's stored file is untouched
   });
 

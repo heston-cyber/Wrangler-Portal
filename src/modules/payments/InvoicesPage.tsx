@@ -1,7 +1,7 @@
 // Phase 2 Part B, step 2: Payments › Invoices (frame 226:5220): every invoice in groups (Needs attention, Drafts, Due,
 // On its way, Paid, Closed), filter pills, New invoice. Also the rows a project's Invoices tab shows (231:6304).
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../convex/_generated/api";
 import { Button, ButtonLink, Card, Divider, EmptyState, ListRow, PageHeader, PillTabs, SectionHead, SkeletonRows } from "../../ui/wp";
@@ -39,11 +39,24 @@ function detail(r: Row, withClient: boolean) {
 
 export function InvoiceRow({ r, withClient = true }: { r: Row; withClient?: boolean }) {
   const s = r.status as InvoiceStatus;
+  const voidIt = useAction(api.invoices.voidInvoice);
+  // Nov 21 (Heston: "I should be able to void the invoice here"): the row's menu offers Void on the same invoices the
+  // invoice page does, with the same question and the same void.
+  const canVoid = s === "due" || s === "overdue" || s === "failed";
+  const href = s === "draft" ? undefined : `/payments/invoices/${r._id}`;
+  const menu = canVoid ? {
+    id: r._id, title: r.title, href,
+    actions: [{
+      key: "void", label: "Void invoice", icon: <Icon name="close" size={16} />, danger: true,
+      confirm: { title: "Void this invoice?", body: `${r.number ?? "It"} for ${money(r.totalCents)}: they won't be able to pay it, and the invoice page and PDF will show "Void". This can't be undone.`, yes: "Void invoice" },
+      run: () => voidIt({ invoiceId: r._id as Id<"invoices"> }), done: "Invoice voided.",
+    }],
+  } : undefined;
   const action = s === "draft"
     ? <ButtonLink size="sm" to={`/payments/invoices/${r._id}`}>Review and send</ButtonLink>
     : <Icon name="chevron-right" size={16} className="go" />;
   return (
-    <ListRow className="ilead inv-row" to={s === "draft" ? undefined : `/payments/invoices/${r._id}`} lead={{ icon: "invoice" }}
+    <ListRow className="ilead inv-row" to={href} menu={menu} lead={{ icon: "invoice" }}
       title={r.title} meta={detail(r, withClient)}
       trailing={<span className="inv-amt">{money(r.totalCents)}</span>} chip={<InvoiceChip status={s} />} action={action} />
   );

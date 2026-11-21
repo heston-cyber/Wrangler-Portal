@@ -12,6 +12,7 @@ import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps, navigate } from "../../lib/router";
 import { errText } from "../docs/pages/common";
 import { NewClient } from "../review/Projects";
+import { LibraryPicker } from "./ProductsPage";
 import { InvoicePaper, MoneyInput, dateLong, isoIn, money, newId, totals, type Line } from "./common";
 
 type Kind = "deposit" | "final" | "other";
@@ -30,7 +31,8 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
   const remove = useMutation(api.invoices.deleteDraft);
   const send = useAction(api.invoices.send);
   const createQuiet = useAction(api.invoices.create); // Nov 21: Create without emailing
-  const finishSend = useAction(api.invoices.finishSend); // Nov 21 (review P-b): a send that stopped partway
+  const finishSend = useAction(api.invoices.finishSend);
+  const [picking, setPicking] = useState(false); // Nov 21: Add from library // Nov 21 (review P-b): a send that stopped partway
   const [toast, show] = useToast();
   const [d, setD] = useState<Draft | null>(null);
   const [busy, setBusy] = useState<null | "save" | "send" | "finish">(null);
@@ -101,7 +103,8 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
       if (asking === "create") {
         const r = await createQuiet({ invoiceId: id as Id<"invoices"> });
         let copied = false;
-        try { if (r.link) { await navigator.clipboard.writeText(r.link); copied = true; } } catch { /* it's on the invoice page too */ }
+        // Nov 21 (test-mode run): a clipboard that never answers (a window without focus) can't hold the page up.
+        try { if (r.link) { await Promise.race([navigator.clipboard.writeText(r.link), new Promise((_, no) => setTimeout(() => no(new Error("slow")), 1500))]); copied = true; } } catch { /* it's on the invoice page too */ }
         show(copied ? `${r.number} made. Its pay link is copied; nothing was emailed.` : `${r.number} made. Nothing was emailed; copy its link from the invoice page.`);
       } else {
         const r = await send({ invoiceId: id as Id<"invoices"> });
@@ -185,12 +188,15 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
                     </div>
                   </div>
                 ))}
-                <button type="button" className="linkbtn inv-add" onClick={() => set({ lines: [...d.lines, { id: newId(), description: "", qty: 1, unitCents: 0 }] })}><Icon name="plus" size={14} />Add line item</button>
+                <span className="inv-adds">
+                  <button type="button" className="linkbtn inv-add" onClick={() => set({ lines: [...d.lines, { id: newId(), description: "", qty: 1, unitCents: 0 }] })}><Icon name="plus" size={14} />Add line item</button>
+                  <button type="button" className="linkbtn inv-add" onClick={() => setPicking(true)}><Icon name="package" size={14} />Add from library</button>
+                </span>
               </div>
               <dl className="inv-edit-sums">
                 <dt>Subtotal</dt><dd>{money(t.subtotal)}</dd>
                 <dt>Discount</dt><dd>{d.discountCents !== undefined ? <span className="inline"><MoneyInput label="Discount" value={d.discountCents} onChange={(c) => set({ discountCents: c })} /><button type="button" className="icon-btn bare" aria-label="Remove discount" onClick={() => set({ discountCents: undefined })}><Icon name="close" size={14} /></button></span> : <button type="button" className="linkbtn" onClick={() => set({ discountCents: 0 })}><Icon name="plus" size={14} />Add</button>}</dd>
-                <dt>Tax</dt><dd>{d.taxPercent !== undefined ? <span className="inline"><input className="input sm" inputMode="decimal" aria-label="Tax percent" value={d.taxPercent || ""} placeholder="0" onChange={(e) => set({ taxPercent: Math.max(0, Number(e.target.value) || 0) })} style={{ width: 70 }} /><span>%</span><button type="button" className="icon-btn bare" aria-label="Remove tax" onClick={() => set({ taxPercent: undefined })}><Icon name="close" size={14} /></button></span> : <button type="button" className="linkbtn" onClick={() => set({ taxPercent: 0 })}><Icon name="plus" size={14} />Add</button>}</dd>
+                <dt>Tax</dt><dd>{d.taxPercent !== undefined ? <span className="inline"><TaxInput value={d.taxPercent} onChange={(n) => set({ taxPercent: n })} /><span>%</span><button type="button" className="icon-btn bare" aria-label="Remove tax" onClick={() => set({ taxPercent: undefined })}><Icon name="close" size={14} /></button></span> : <button type="button" className="linkbtn" onClick={() => set({ taxPercent: 0 })}><Icon name="plus" size={14} />Add</button>}</dd>
                 <dt className="tot">Total</dt><dd className="tot">{money(t.total)}</dd>
               </dl>
             </Card>
@@ -239,7 +245,16 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
         </Modal>
       )}
       {toast}
+      {picking && d && <LibraryPicker onClose={() => setPicking(false)} onPick={(item) => set({ lines: [...d.lines.filter((l) => l.description.trim() || l.unitCents), { id: newId(), description: item.description, qty: 1, unitCents: item.unitCents, item }] })} />}
       {makingClient && <NewClient onClose={() => setMakingClient(false)} onDone={(name) => { setMakingClient(false); setMadeClient(name); }} />}
     </>
   );
+}
+
+/** Nov 21 (test-mode run): the tax percent keeps what's typed, so 8.25 can be typed ("8." used to lose its point). */
+function TaxInput({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  const [text, setText] = useState(value ? String(value) : "");
+  useEffect(() => { if ((Number(text) || 0) !== value) setText(value ? String(value) : ""); }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
+  return <input className="input sm" inputMode="decimal" aria-label="Tax percent" value={text} placeholder="0" style={{ width: 70 }}
+    onChange={(e) => { const raw = e.target.value.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1").slice(0, 7); setText(raw); onChange(Math.min(30, Math.max(0, Number(raw) || 0))); }} />;
 }

@@ -266,6 +266,8 @@ export function InboxItem({ icon, title, detail, status, action, time, unread, t
   icon: IconName; title: React.ReactNode; detail?: React.ReactNode; status?: React.ReactNode; action?: React.ReactNode; time?: React.ReactNode;
   unread?: boolean; to?: string; onClick?: () => void; selected?: boolean;
 }) {
+  // Nov 21 (Heston: right-click anything on the Dashboard): a row that opens somewhere has the basic menu, like ListRow.
+  const hold = useHold(to ? { id: to, title: typeof title === "string" ? title : to, href: to } : null);
   const body = (
     <>
       <Icon name={icon} size={20} className="lead-icon" />
@@ -280,7 +282,7 @@ export function InboxItem({ icon, title, detail, status, action, time, unread, t
     </>
   );
   const cls = "wp-row inbox";
-  if (to) return <a {...linkProps(to)} className={cls} aria-current={selected ? "page" : undefined}>{body}</a>;
+  if (to) return <a {...linkProps(to)} {...hold} className={cls} aria-current={selected ? "page" : undefined}>{body}</a>;
   if (onClick) return <button type="button" className={cls} onClick={onClick} aria-selected={selected || undefined}>{body}</button>;
   return <div className={cls}>{body}</div>;
 }

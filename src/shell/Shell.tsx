@@ -50,6 +50,7 @@ const OWNER_DOCS: Sub[] = [
 const OWNER_PAYMENTS: Sub[] = [{ to: "/payments", label: "Overview", match: (p) => p === "/payments" }, { to: "/payments/invoices", label: "Invoices", match: (p) => starts(p, "/payments/invoices") },
   { to: "/payments/quotes", label: "Quotes", match: (p) => starts(p, "/payments/quotes") }, // Phase 3b
   { to: "/payments/subscriptions", label: "Subscriptions", match: (p) => starts(p, "/payments/subscriptions") }, { to: "/payments/plans", label: "Plans", match: (p) => starts(p, "/payments/plans") },
+  { to: "/payments/products", label: "Products", match: (p) => starts(p, "/payments/products") }, // Nov 21: the product library
   { to: "/payments/reports", label: "Reports", match: (p) => starts(p, "/payments/reports") }]; // Phase 5e step 5
 const inPayments = (p: string) => starts(p, "/payments");
 // Phase 3b (D69): Proposals is its own item with a layer.
@@ -97,7 +98,7 @@ export const SUB_ICON: Record<string, IconName> = {
   "/clients/pipeline": "funnel", "/clients": "building", "/clients/follow-ups": "flag", "/clients/testimonials": "star",
   "/vendors": "users", "/vendors/payments": "wallet", "/proposals/new": "plus", "/sign/new": "plus", "/proposals": "register", "/sign/docs": "register",
   "/proposals/templates": "template", "/sign/templates": "template", "/proposals/questionnaire": "questionnaire", "/sign/signature": "sign",
-  "/payments/invoices": "invoice", "/payments/quotes": "quote", "/payments/subscriptions": "repeat", "/payments/plans": "layers", "/payments/reports": "chart",
+  "/payments/invoices": "invoice", "/payments/quotes": "quote", "/payments/subscriptions": "repeat", "/payments/plans": "layers", "/payments/products": "package", "/payments/reports": "chart",
   "/review": "register", "/projects/not-attached": "attach", "/creative": "overview", "/creative/locations": "map-pin", "/creative/docs": "document", "/creative/canvas": "creative", "/creative/kits": "layers", "/work": "user", "/work/all": "work", "/work/lists": "check-circle", "/work/templates": "template", "/delivery": "package", "/review/library": "video", "/production/post-pro": "overview", "/sign/overview": "overview", "/clients/overview": "overview",
 };
 export const STAGE_ICON: Record<string, IconName> = { "Creative planning": "creative", "Pre-pro": "clipboard", "Prin-pro": "camera", "Post-pro": "scissors", Delivery: "package",

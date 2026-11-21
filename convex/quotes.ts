@@ -4,6 +4,7 @@
 // /q/<token>, where they accept or decline (D80) with their typed name, recorded with the time, IP and device (the
 // same way signing records a signer). Nothing converts or moves on its own (D84): the owner is asked to move the card
 // to Quoted, and, once accepted, whether to draft a contract, an invoice (deposit or full total, D87), both or neither.
+import { keepItem, itemV } from "./lib/libraryItems";
 import { action, httpAction } from "./_generated/server";
 import { audit } from "./lib/audit";
 import { internalAction, internalMutation, internalQuery, mutation, query, focusBusiness } from "./lib/functions";
@@ -128,7 +129,7 @@ export const options = query({
 
 // ---------- the owner: make, send, void ----------
 
-const lineV = v.object({ id: v.string(), description: v.string(), qty: v.number(), unitCents: v.number(), suggestedCents: v.optional(v.number()), note: v.optional(v.string()) });
+const lineV = v.object({ id: v.string(), description: v.string(), qty: v.number(), unitCents: v.number(), suggestedCents: v.optional(v.number()), note: v.optional(v.string()), item: itemV });
 const EMAIL = /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i;
 
 export const save = mutation({
@@ -159,7 +160,10 @@ export const save = mutation({
     const today = todayIso();
     const validUntil = a.validUntil && /^\d{4}-\d{2}-\d{2}$/.test(a.validUntil) ? a.validUntil : plusDays(today, 30); // D74: 30 days
     if (validUntil < today) throw new ConvexError("Valid until can't be in the past.");
-    const lines = a.lines.map((l) => ({ id: l.id.slice(0, 40), description: l.description.trim().slice(0, 300), qty: l.qty, unitCents: l.unitCents, ...(l.suggestedCents !== undefined ? { suggestedCents: l.suggestedCents } : {}), ...(l.note ? { note: l.note.slice(0, 200) } : {}) }));
+    const lines = await Promise.all(a.lines.map(async (l) => {
+      const item = await keepItem(ctx, l.item); // Nov 21: from the product library, when it's this business's
+      return { id: l.id.slice(0, 40), description: l.description.trim().slice(0, 300), qty: l.qty, unitCents: l.unitCents, ...(l.suggestedCents !== undefined ? { suggestedCents: l.suggestedCents } : {}), ...(l.note ? { note: l.note.slice(0, 200) } : {}), ...(item ? { item } : {}) };
+    }));
     const fields = {
       ...(a.who?.clientId ? { clientId: a.who.clientId } : { clientId: undefined }), ...(a.who?.dealId ? { dealId: a.who.dealId } : { dealId: undefined }), ...(a.projectId ? { projectId: a.projectId } : {}),
       contact: a.who ? { name: a.who.name.trim().slice(0, 120), email, ...(a.who.company?.trim() ? { company: a.who.company.trim().slice(0, 120) } : {}) } : undefined,
@@ -360,7 +364,7 @@ export const makeInvoice = internalMutation({
     const due = plusDays(todayIso(), Math.max(0, Number(process.env.WS_INVOICE_DUE_DAYS ?? 3) || 0));
     const lines = what === "deposit"
       ? [{ id: "deposit", description: `Deposit (${q.deposit.kind === "percent" ? `${q.deposit.value}%` : "to book"}) · ${q.title} · ${q.number}`.slice(0, 300), qty: 1, unitCents: t.deposit }]
-      : q.lines.map((l) => ({ id: l.id, description: l.description, qty: l.qty, unitCents: l.unitCents }));
+      : q.lines.map((l) => ({ id: l.id, description: l.description, qty: l.qty, unitCents: l.unitCents, ...(l.item ? { item: l.item } : {}) })); // a library line stays one
     const total = what === "deposit" ? t.deposit : t.total;
     if (total <= 0) throw new ConvexError(what === "deposit" ? "This quote has no deposit. Draft the full total instead." : "This quote has no total.");
     const id = await ctx.db.insert("invoices", {
