@@ -1216,6 +1216,11 @@ export default defineSchema({
     // Nov 21 (Heston: subscription invoices print the EIN too): the business's Stripe tax ID this subscription's
     // invoices carry (invoice_settings.account_tax_ids), so a changed or removed EIN moves them first.
     accountTaxId: v.optional(v.string()),
+    // Security review (Nov 21): einOn: the business had an EIN when it started, so it keeps carrying the current one
+    // (put back after a change, a removal or a reconnect). startTaxId: the tax ID decided for the first attempt to
+    // start it in Stripe (null: none), kept so a retry sends exactly the same request.
+    einOn: v.optional(v.boolean()),
+    startTaxId: v.optional(v.union(v.string(), v.null())),
     currentPeriodStart: v.optional(v.number()),
     currentPeriodEnd: v.optional(v.number()),
     trialEnd: v.optional(v.number()),

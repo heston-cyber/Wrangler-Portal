@@ -370,6 +370,7 @@ export const payTarget = internalQuery({
       planArchived: !!(await ctx.db.get(s.planId))?.archivedAt,
       // Nov 21: the business's EIN as a tax ID on this Stripe account, for the subscription's invoices.
       taxId: biz?.taxId?.stripeId && biz.taxId.accountId === s.stripe.accountId ? biz.taxId.stripeId : null,
+      hasEin: !!biz?.taxId?.value,
     };
   },
 });
@@ -424,18 +425,34 @@ export const setupDone = action({
         // Review fix: claim the row first, so two saves at once can't make two subscriptions in Stripe.
         const claim = await ctx.runMutation(internal.subscriptions.claimStart, { subscriptionId: s._id });
         if (claim !== "ok") throw new ConvexError(claim === "busy" ? "It's being set up already. Refresh in a moment." : "This subscription has ended. Nothing was charged.");
-        // Nov 21: the EIN goes on its invoices when the tax ID is still in Stripe (one removed in Stripe's dashboard is
-        // forgotten, and the subscription starts without it rather than not at all).
-        let taxId = t.taxId;
-        if (taxId) {
-          const gone = await stripeCall("GET", `tax_ids/${taxId}`, { account }).then((x) => !!x.deleted, (g) => (g instanceof StripeError && g.status === 404 ? true : null));
-          if (gone && t.businessId) await ctx.runMutation(internal.taxId.forgetStripeId, { businessId: t.businessId, stripeId: taxId, what: "subscription" });
-          if (gone !== false) taxId = null;
-        }
+        // Security review (Nov 21) #1: one Stripe already made for this row (an earlier try whose answer was lost) is
+        // used, never a second one.
+        const there = await stripeCall("GET", "subscriptions", { account, form: { customer: t.customerId, status: "all", limit: 20 } })
+          .then((r) => (Array.isArray(r.data) ? (r.data as StripeResult[]) : []).find((x) => x.metadata?.portal_subscription === s._id && x.status !== "canceled" && x.status !== "incomplete_expired"), () => undefined);
         let sub: StripeResult;
-        try { sub = await stripeCall("POST", "subscriptions", { account, idem: `wp-sub-${s._id}${taxId ? "-t" : ""}`, form: subscriptionForm(s, pm.id as string, t.productId, Date.now(), taxId) }); }
-        catch (e) { await ctx.runMutation(internal.subscriptions.releaseStart, { subscriptionId: s._id }); throw e; }
-        if (taxId) await ctx.runMutation(internal.subscriptions.setAccountTaxId, { subscriptionId: s._id, taxId });
+        if (there) sub = there;
+        else {
+          // Nov 21: the EIN goes on its invoices when the tax ID is still in Stripe (one removed in Stripe's dashboard is
+          // forgotten, and it starts without it rather than not at all). Decided once, so a retry is the same request.
+          let taxId = s.startTaxId !== undefined ? s.startTaxId : t.taxId;
+          if (s.startTaxId === undefined && taxId) {
+            const gone = await stripeCall("GET", `tax_ids/${taxId}`, { account }).then((x) => !!x.deleted, (g) => (g instanceof StripeError && g.status === 404 ? true : null));
+            if (gone && t.businessId) await ctx.runMutation(internal.taxId.forgetStripeId, { businessId: t.businessId, stripeId: taxId, what: "subscription" });
+            if (gone !== false) taxId = null;
+          }
+          await ctx.runMutation(internal.subscriptions.decideTax, { subscriptionId: s._id, taxId, einOn: t.hasEin });
+          try { sub = await stripeCall("POST", "subscriptions", { account, idem: `wp-sub-${s._id}${taxId ? `-${taxId}` : ""}`, form: subscriptionForm(s, pm.id as string, t.productId, Date.now(), taxId) }); }
+          catch (e) {
+            await ctx.runMutation(internal.subscriptions.releaseStart, { subscriptionId: s._id });
+            // #5: a tax ID that went in between: decided again on the next try, and Stripe's words (its id) never shown.
+            if (taxId && e instanceof StripeError && /tax_id/i.test(e.message)) {
+              await ctx.runMutation(internal.subscriptions.decideTax, { subscriptionId: s._id, taxId: undefined, einOn: t.hasEin });
+              throw new ConvexError("This couldn't be set up just now. Try again in a moment. Nothing was charged.");
+            }
+            throw e;
+          }
+          if (taxId && !Array.isArray(sub.invoice_settings?.account_tax_ids)) await ctx.runMutation(internal.subscriptions.setAccountTaxId, { subscriptionId: s._id, taxId });
+        }
         await ctx.runMutation(internal.subscriptions.applyStripe, { accountId: account, object: sub, method });
         const st = String(sub.status);
         if (st === "incomplete") return { ok: false, message: await failureOf(account, sub) };
@@ -546,6 +563,8 @@ export const applyStripe = internalMutation({
       ...(after === "active" ? { lastFailure: undefined } : {}),
       ...(method ? { method } : {}),
       stripe: { ...s.stripe, subscriptionId: String(o.id) }, history: history.slice(-80), syncedAt: now, updatedAt: now,
+      // Security review (Nov 21) #2: the tax ID Stripe says its invoices carry (so a later EIN change moves it).
+      ...taxIdsOf(o),
     });
     return s._id;
   },
@@ -618,21 +637,26 @@ export const insertMirror = internalMutation({
   },
 });
 
+function taxIdsOf(o: StripeResult): { accountTaxId?: string; einOn?: true } {
+  const list = o.invoice_settings?.account_tax_ids;
+  if (!Array.isArray(list)) return {};
+  const first = list[0] as unknown;
+  const id = typeof first === "string" ? first : (first as { id?: unknown } | undefined)?.id;
+  return typeof id === "string" ? { accountTaxId: id, einOn: true } : { accountTaxId: undefined };
+}
+
+/** Security review (Nov 21) #1: the tax ID decided for starting it (undefined: decide again). */
+export const decideTax = internalMutation({
+  args: { subscriptionId: v.id("subscriptions"), taxId: v.optional(v.union(v.string(), v.null())), einOn: v.boolean() },
+  handler: async (ctx, { subscriptionId, taxId, einOn }) => { await ctx.db.patch(subscriptionId, { startTaxId: taxId, ...(einOn ? { einOn: true } : {}) }); },
+});
+
 /** Nov 21: which tax ID a subscription's invoices carry (null: none). */
 export const setAccountTaxId = internalMutation({
   args: { subscriptionId: v.id("subscriptions"), taxId: v.union(v.string(), v.null()) },
   handler: async (ctx, { subscriptionId, taxId }) => { await ctx.db.patch(subscriptionId, { accountTaxId: taxId ?? undefined }); },
 });
 
-/** Nov 21: the business's subscriptions on a Stripe account whose invoices carry this tax ID (still running ones). */
-export const usingTaxId = internalQuery({
-  args: { accountId: v.string(), taxId: v.string() },
-  handler: async (ctx, { accountId, taxId }) => {
-    const rows = await ctx.db.query("subscriptions").collect(); // row-level rules: this business's only
-    return rows.filter((s) => s.accountTaxId === taxId && s.stripe?.accountId === accountId && s.stripe.subscriptionId && s.status !== "canceled" && s.status !== "incomplete_expired")
-      .map((s) => ({ _id: s._id, subscriptionId: s.stripe!.subscriptionId! }));
-  },
-});
 
 async function einOf(ctx: MutationCtx, businessId: Id<"businesses"> | undefined) {
   const b = businessId ? await ctx.db.get(businessId) : null;
