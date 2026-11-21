@@ -117,6 +117,16 @@ export const set = action({
       const left: typeof gone = [];
       for (const g of gone) {
         if (made && g.id === made.id && g.account === made.account) continue;
+        // Nov 21: subscriptions whose invoices carry it move to the new one (or to none) first; one that can't be moved
+        // keeps it, so its next invoice never points at a tax ID that's gone. Tried again on the next save.
+        const next = made && made.account === g.account ? made.id : null;
+        let moved = true;
+        for (const sub of await ctx.runQuery(internal.subscriptions.usingTaxId, { accountId: g.account, taxId: g.id })) {
+          const ok = await stripeCall("POST", `subscriptions/${sub.subscriptionId}`, { account: g.account, form: { invoice_settings: { account_tax_ids: next ? [next] : "" } } }).then(() => true, () => false);
+          if (ok) await ctx.runMutation(internal.subscriptions.setAccountTaxId, { subscriptionId: sub._id, taxId: next });
+          else moved = false;
+        }
+        if (!moved) { left.push(g); continue; }
         await stripeCall("DELETE", `tax_ids/${g.id}`, { account: g.account }).catch((e) => { if (!(e instanceof StripeError && e.status === 404)) left.push(g); });
       }
       if (left.length || t.toRemove.length) await ctx.runMutation(internal.taxId.keepToRemove, { toRemove: left });
@@ -148,13 +158,13 @@ export const fromStripe = action({
 
 /** Review (Nov 21) #1: a send found the saved Stripe tax ID gone: forget it, so Settings shows it isn't in Stripe. */
 export const forgetStripeId = internalMutation({
-  args: { businessId: v.id("businesses"), stripeId: v.string() },
-  handler: async (ctx, { businessId, stripeId }) => {
+  args: { businessId: v.id("businesses"), stripeId: v.string(), what: v.optional(v.literal("subscription")) },
+  handler: async (ctx, { businessId, stripeId, what }) => {
     const b = await ctx.db.get(businessId);
     if (b?.taxId?.stripeId !== stripeId) return;
     await ctx.db.patch(businessId, { taxId: { type: "us_ein", value: b.taxId.value, updatedAt: Date.now() } });
     // Re-review E: say so (never the number). Settings then offers Add it to Stripe.
-    await audit(ctx, { kind: "settings", text: "found the business's EIN no longer in Stripe: Stripe's copy of this invoice went without it (Add it to Stripe in Settings › Payments)", where: "Settings › Payments", link: "/settings/payments", businessId });
+    await audit(ctx, { kind: "settings", text: `found the business's EIN no longer in Stripe: ${what === "subscription" ? "a subscription started" : "Stripe's copy of this invoice went"} without it (Add it to Stripe in Settings › Payments)`, where: "Settings › Payments", link: "/settings/payments", businessId });
   },
 });
 

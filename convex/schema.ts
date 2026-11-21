@@ -1213,6 +1213,9 @@ export default defineSchema({
     firstInvoice: v.union(v.literal("now"), v.literal("start")),
     payToken: v.string(),               // the client's page for this subscription (/sub/<token>), with or without an account
     stripe: v.optional(v.object({ accountId: v.string(), customerId: v.string(), subscriptionId: v.optional(v.string()), scheduleId: v.optional(v.string()), livemode: v.boolean() })),
+    // Nov 21 (Heston: subscription invoices print the EIN too): the business's Stripe tax ID this subscription's
+    // invoices carry (invoice_settings.account_tax_ids), so a changed or removed EIN moves them first.
+    accountTaxId: v.optional(v.string()),
     currentPeriodStart: v.optional(v.number()),
     currentPeriodEnd: v.optional(v.number()),
     trialEnd: v.optional(v.number()),
