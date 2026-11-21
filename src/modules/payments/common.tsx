@@ -17,8 +17,11 @@ export function totals(i: { lines: Array<{ qty: number; unitCents: number }>; di
   const subtotal = i.lines.reduce((s, l) => s + Math.round(l.qty * l.unitCents), 0);
   const discount = Math.min(Math.max(0, i.discountCents ?? 0), subtotal);
   // Stripe works tax out on each line (the discount is its own negative line) and rounds each, so the portal does too.
-  const pct = Math.max(0, i.taxPercent ?? 0) / 100;
-  const tax = pct ? i.lines.reduce((t, l) => t + Math.round(Math.round(l.qty * l.unitCents) * pct), 0) - (discount ? Math.round(discount * pct) : 0) : 0;
+  // Nov 21 (review): in whole numbers, not floating point (7.25% of $30.00 is 217.5 cents, which floats read as 217.4999…);
+  // a half cent rounds away from zero, on the discount line too. Checked against Stripe in test mode.
+  const milli = Math.round(Math.max(0, i.taxPercent ?? 0) * 1000);
+  const taxOf = (cents: number) => Math.floor((cents * milli + 50_000) / 100_000);
+  const tax = milli ? i.lines.reduce((t, l) => t + taxOf(Math.round(l.qty * l.unitCents)), 0) - (discount ? taxOf(discount) : 0) : 0;
   return { subtotal, discount, tax, total: subtotal - discount + tax };
 }
 
