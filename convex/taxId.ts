@@ -97,7 +97,7 @@ export const subsToAlign = internalQuery({
     const b = await ctx.db.get(await ownerOrRun(ctx));
     const cur = b?.taxId?.stripeId && b.taxId.accountId ? { id: b.taxId.stripeId, account: b.taxId.accountId } : null;
     return (await ctx.db.query("subscriptions").collect()) // row-level rules: this business's only
-      .filter((s) => (s.einOn || s.accountTaxId) && s.stripe?.subscriptionId && s.status !== "canceled" && s.status !== "incomplete_expired")
+      .filter((s) => s.einOn && s.stripe?.subscriptionId && s.status !== "canceled" && s.status !== "incomplete_expired")
       .map((s) => ({ _id: s._id, subscriptionId: s.stripe!.subscriptionId!, account: s.stripe!.accountId, has: s.accountTaxId ?? null, want: cur && cur.account === s.stripe!.accountId ? cur.id : null }))
       .filter((s) => s.has !== s.want);
   },

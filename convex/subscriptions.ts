@@ -583,8 +583,9 @@ export const applyStripe = internalMutation({
       ...(after === "active" ? { lastFailure: undefined } : {}),
       ...(method ? { method } : {}),
       stripe: { ...s.stripe, subscriptionId: String(o.id) }, history: history.slice(-80), syncedAt: now, updatedAt: now,
-      // Security review (Nov 21) #2: the tax ID Stripe says its invoices carry (so a later EIN change moves it).
-      ...taxIdsOf(o),
+      // Security review (Nov 21) #2: the tax ID Stripe says its invoices carry (so a later EIN change moves it). Only for a
+      // subscription the portal put the EIN on (Heston, Nov 21: a tax ID added by hand in Stripe is left alone).
+      ...(s.einOn ? taxIdsOf(o) : {}),
       // Re-check N1: once it's in Stripe the start decision is done with.
       ...(!s.stripe.subscriptionId ? { startTaxId: undefined, startDecidedAt: undefined } : {}),
     });
