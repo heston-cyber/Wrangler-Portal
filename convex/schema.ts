@@ -790,8 +790,10 @@ export default defineSchema({
     logoFileId: v.optional(v.id("_storage")), // shown in the portal and on emails
     logoLightFileId: v.optional(v.id("_storage")), // the same logo for light backgrounds (emails, PDFs); Settings › Business, Oct 29
     // Nov 21 (Heston): the business's EIN, printed on its invoices and receipts. Kept in Stripe as the connected account's own
-    // tax ID (stripeId, on accountId) so Stripe's invoices carry it too. Only the owner sees or changes it in Settings.
+    // tax ID (stripeId, on accountId) so Stripe's invoices carry it too. Only the owner sets it (Settings › Payments); it's
+    // printed on invoices, so whoever can open one sees it there. toRemove: old Stripe tax IDs Stripe wouldn't delete yet.
     taxId: v.optional(v.object({ type: v.literal("us_ein"), value: v.string(), stripeId: v.optional(v.string()), accountId: v.optional(v.string()), updatedAt: v.number() })),
+    taxIdToRemove: v.optional(v.array(v.object({ id: v.string(), account: v.string() }))),
     accent: v.optional(v.string()),        // #rrggbb
     background: v.optional(v.string()),    // #rrggbb
     // Which modules the business uses. Menu items only show when on (and only once something is in them).

@@ -589,8 +589,9 @@ async function finalize(ctx: ActionCtx, invoiceId: Id<"invoices">, email: boolea
         // Security review (Nov 21) #1: a tax ID removed in Stripe's dashboard would make every send fail: check it's
         // still there; if Stripe says it's gone, forget it (Settings then shows it isn't in Stripe) and send without it.
         if (ein && i.businessId) {
-          try { await stripeCall("GET", `tax_ids/${ein}`, { account }); }
-          catch (g) { if (g instanceof StripeError && g.status === 404) { await ctx.runMutation(internal.taxId.forgetStripeId, { businessId: i.businessId, stripeId: ein }); ein = null; } }
+          // Re-review C: a 404, or an answer that says it was deleted, both mean gone.
+          const gone = await stripeCall("GET", `tax_ids/${ein}`, { account }).then((x) => !!x.deleted, (g) => g instanceof StripeError && g.status === 404);
+          if (gone) { await ctx.runMutation(internal.taxId.forgetStripeId, { businessId: i.businessId, stripeId: ein }); ein = null; }
         }
         let taxRate: string | null = null;
         if (i.taxPercent) taxRate = (await stripeCall("POST", "tax_rates", { account, idem: k("tax"), form: { display_name: "Tax", percentage: i.taxPercent, inclusive: false } })).id as string;

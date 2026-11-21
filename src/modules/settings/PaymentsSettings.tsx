@@ -125,9 +125,11 @@ function TaxIdBlock({ show, connected }: { show: (m: string) => void; connected:
   };
   const save = (value: string) => run(async () => {
     const r = await set({ ein: value });
+    setFound(undefined); // re-review D
     return r.value ? (r.inStripe ? "EIN saved, here and in Stripe." : "EIN saved. Add it to Stripe once Stripe is connected.") : "EIN removed.";
   });
-  const blur = () => { if (ein === null || ein.trim() === (t?.value ?? "")) { setEin(null); return; } void save(ein); };
+  const same = (a: string, b: string) => a.replace(/[\s-]/g, "") === b.replace(/[\s-]/g, ""); // re-review B: "123456789" is the same number
+  const blur = () => { if (ein === null || same(ein.trim(), t?.value ?? "")) { setEin(null); return; } void save(ein); };
   return (
     <div className="panel pay-card">
       <span className="wp-eyebrow">Tax ID</span>
@@ -135,10 +137,11 @@ function TaxIdBlock({ show, connected }: { show: (m: string) => void; connected:
         <input className="input" inputMode="numeric" autoComplete="off" placeholder="12-3456789" value={ein ?? t?.value ?? ""} disabled={busy}
           onFocus={() => setEin(t?.value ?? "")} onChange={(e) => setEin(e.target.value)} onBlur={blur} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} aria-label="EIN" /></label>
       <p className="secondary pay-note">Printed on invoices and receipts you make from now on{connected ? ", and on Stripe's copy" : ""}. Invoices already made keep the EIN they were made with.</p>
-      {t && !t.inStripe && connected && <div><Button size="sm" loading={busy} onClick={() => void save(t.value)}>Add it to Stripe</Button></div>}
-      {!t && connected && (found === undefined
+      {t?.value && !t.inStripe && connected && <div><Button size="sm" loading={busy} onClick={() => void save(t.value!)}>Add it to Stripe</Button></div>}
+      {t?.leftover && connected && <div className="pay-row-act"><span className="secondary">Stripe still has an old EIN.</span> <Button size="sm" loading={busy} onClick={() => void save(t.value ?? "")}>Remove it</Button></div>}
+      {!t?.value && connected && (found === undefined
         ? <div><Button size="sm" loading={busy} onClick={() => void run(async () => { const r = await fromStripe({ use: false }); setFound(r?.value ?? null); return r ? "Found one on your Stripe account." : "No EIN on your Stripe account."; })}>Check Stripe for an EIN</Button></div>
-        : found && <div className="pay-row-act"><span className="secondary">Your Stripe account has {found}.</span> <Button size="sm" loading={busy} onClick={() => void run(async () => { await fromStripe({ use: true }); return "EIN saved from Stripe."; })}>Use it</Button></div>)}
+        : found && <div className="pay-row-act"><span className="secondary">Your Stripe account has {found}.</span> <Button size="sm" loading={busy} onClick={() => void run(async () => { const r = await fromStripe({ use: true }); setFound(undefined); return r ? "EIN saved from Stripe." : "That EIN isn't on your Stripe account any more."; })}>Use it</Button></div>)}
     </div>
   );
 }

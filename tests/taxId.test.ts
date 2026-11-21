@@ -22,11 +22,11 @@ type W = Awaited<ReturnType<typeof world>>;
 type Call = { method: string; path: string; account: string | null; form: Record<string, string> };
 
 /** The stand-in, plus Stripe's tax IDs on the connected account. */
-function stripeWithTaxIds(existing: Array<{ id: string; type: string; value: string }> = [], refuse: { create?: boolean; delete?: boolean } = {}) {
+function stripeWithTaxIds(existing: Array<{ id: string; type: string; value: string; owner?: string }> = [], refuse: { create?: boolean; delete?: boolean; createStatus?: number; getDeleted?: boolean } = {}) {
   const calls = fakeStripe() as Call[];
   const inner = globalThis.fetch;
   const ids = [...existing];
-  let n = 0;
+  let n = Math.max(0, ...ids.map((x) => Number(x.id.replace("txi_", "")) || 0)); // new ids never repeat one already there
   vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
     const path = String(url).replace("https://api.stripe.com/v1/", "").split("?")[0];
     const m = init.method ?? "GET";
@@ -35,7 +35,7 @@ function stripeWithTaxIds(existing: Array<{ id: string; type: string; value: str
       const form = Object.fromEntries(new URLSearchParams(String(init.body ?? "")));
       calls.push({ method: m, path, account: h["Stripe-Account"] ?? null, form });
       if (m === "POST") {
-        if (refuse.create) return new Response(JSON.stringify({ error: { message: `Invalid value ${form.value}` } }), { status: 400 });
+        if (refuse.create) return new Response(JSON.stringify({ error: { message: `Invalid value ${form.value}` } }), { status: refuse.createStatus ?? 400 });
         const t = { id: `txi_${++n}`, type: form.type, value: form.value }; ids.push(t); return new Response(JSON.stringify({ ...t, object: "tax_id" }));
       }
       const one = path.split("/")[1];
@@ -44,8 +44,11 @@ function stripeWithTaxIds(existing: Array<{ id: string; type: string; value: str
         const i = ids.findIndex((x) => x.id === one); if (i < 0) return new Response(JSON.stringify({ error: { message: "No such tax ID" } }), { status: 404 });
         ids.splice(i, 1); return new Response(JSON.stringify({ id: one, deleted: true }));
       }
-      if (one) { const t = ids.find((x) => x.id === one); return t ? new Response(JSON.stringify(t)) : new Response(JSON.stringify({ error: { message: "No such tax ID" } }), { status: 404 }); }
-      return new Response(JSON.stringify({ data: ids.map((x) => ({ ...x, owner: { type: "self" } })) }));
+      if (one) {
+        if (refuse.getDeleted) return new Response(JSON.stringify({ id: one, object: "tax_id", deleted: true }));
+        const t = ids.find((x) => x.id === one); return t ? new Response(JSON.stringify(t)) : new Response(JSON.stringify({ error: { message: "No such tax ID" } }), { status: 404 });
+      }
+      return new Response(JSON.stringify({ data: ids.map((x) => ({ ...x, owner: { type: x.owner ?? "self" } })) }));
     }
     return inner(url, init);
   }));
@@ -94,10 +97,11 @@ describe("The business's EIN", () => {
 
   test("E4: one already on the Stripe account is offered, and used only when the owner says so", async () => {
     const w = await world();
-    const { calls } = stripeWithTaxIds([{ id: "txi_old", type: "us_ein", value: "551234567" }]);
+    // A customer's EIN on the same account (owner: customer) is never taken for the business's own (re-review).
+    const { calls } = stripeWithTaxIds([{ id: "txi_cust", type: "us_ein", value: "991111111", owner: "customer" }, { id: "txi_old", type: "us_ein", value: "551234567" }]);
     expect(await w.heston.action(api.taxId.fromStripe, { use: false })).toEqual({ value: "55-1234567" });
     expect(await w.heston.query(api.taxId.get, {})).toBeNull(); // only looked
-    expect(calls.find((c) => c.path === "tax_ids" && c.method === "GET")!.query ?? "").toBeDefined();
+    expect(calls.find((c) => c.path === "tax_ids" && c.method === "GET")!.account).toBe("acct_A");
     expect(await w.heston.action(api.taxId.fromStripe, { use: true })).toEqual({ value: "55-1234567" });
     expect(await w.heston.query(api.taxId.get, {})).toEqual({ value: "55-1234567", inStripe: true });
     expect(await w.heston.action(api.taxId.fromStripe, { use: true })).toBeNull(); // already set: nothing more
@@ -139,6 +143,54 @@ describe("The business's EIN", () => {
     expect(s.ids).toEqual([]);
     expect(s.calls.find((c) => c.method === "DELETE")!.account).toBe("acct_A");
     expect(await w.heston.query(api.taxId.get, {})).toBeNull();
+  });
+
+  test("E4d (re-review A, B): an old EIN Stripe won't remove yet is kept and removed on the next save; the same number again with Stripe away changes nothing", async () => {
+    const w = await world();
+    let s = stripeWithTaxIds();
+    await w.heston.action(api.taxId.set, { ein: "12-3456789" });
+    s = stripeWithTaxIds(s.ids, { delete: true });
+    await expect(w.heston.action(api.taxId.set, { ein: "98-7654321" })).rejects.toThrow("Saved. Stripe still has the old EIN for now; it's removed the next time you save, or with Remove it below.");
+    expect(s.ids.map((x) => x.id)).toEqual(["txi_1", "txi_2"]); // both still in Stripe
+    expect(await w.heston.query(api.taxId.get, {})).toEqual({ value: "98-7654321", inStripe: true, leftover: true });
+    expect((await w.t.run((ctx) => ctx.db.get(w.A)))!.taxIdToRemove).toEqual([{ id: "txi_1", account: "acct_A" }]);
+    // Next save (Remove it on the page saves the same number): the old one goes, the new one stays, the note clears.
+    const before = s.ids;
+    s = stripeWithTaxIds(before);
+    expect(await w.heston.action(api.taxId.set, { ein: "98-7654321" })).toEqual({ value: "98-7654321", inStripe: true });
+    expect(s.calls.filter((c) => c.method === "DELETE").map((c) => c.path)).toEqual(["tax_ids/txi_1"]);
+    expect(s.ids.map((x) => x.value)).toEqual(["98-7654321"]);
+    expect(await w.heston.query(api.taxId.get, {})).toEqual({ value: "98-7654321", inStripe: true });
+    expect((await w.t.run((ctx) => ctx.db.get(w.A)))!.taxIdToRemove).toBeUndefined();
+    // B: Stripe not connected, the same number typed again: nothing is made or removed, Stripe's copy is still known.
+    await w.t.run(async (ctx) => { await ctx.db.patch(w.A, { stripe: { ...(await ctx.db.get(w.A))!.stripe!, status: "needs_info" } }); });
+    s = stripeWithTaxIds(s.ids);
+    expect(await w.heston.action(api.taxId.set, { ein: "987654321" })).toEqual({ value: "98-7654321", inStripe: true });
+    expect(s.calls.filter((c) => c.path.startsWith("tax_ids"))).toEqual([]);
+    expect(s.ids).toHaveLength(1);
+    expect((await w.t.run((ctx) => ctx.db.get(w.A)))!.taxId!.stripeId).toBeDefined();
+    // The page compares the cleaned number, so leaving the field unchanged doesn't save at all.
+    expect(readFileSync("src/modules/settings/PaymentsSettings.tsx", "utf8")).toContain('const same = (a: string, b: string) => a.replace(/[\\s-]/g, "") === b.replace(/[\\s-]/g, "")');
+  });
+
+  test("E4e (re-review C, E, F): a tax ID Stripe answers as deleted is gone too, and Activity says so without the number; only a refused number is called a bad EIN", async () => {
+    const w = await world();
+    let s = stripeWithTaxIds();
+    await w.heston.action(api.taxId.set, { ein: "12-3456789" });
+    s = stripeWithTaxIds(s.ids, { getDeleted: true });
+    const id = await draft(w);
+    await w.heston.action(api.invoices.send, { invoiceId: id });
+    expect(s.calls.find((c) => c.method === "POST" && c.path === "invoices")!.form["account_tax_ids[0]"]).toBeUndefined();
+    expect(await w.heston.query(api.taxId.get, {})).toEqual({ value: "12-3456789", inStripe: false });
+    const activity = await w.t.run(async (ctx) => (await ctx.db.query("auditLog").collect()).map((a) => a.text).join("\n"));
+    expect(activity).toContain("found the business's EIN no longer in Stripe");
+    expect(activity).not.toMatch(/3456789/);
+    // F: Stripe busy (429) or refusing for another reason isn't "check the number".
+    stripeWithTaxIds([], { create: true, createStatus: 429 });
+    await expect(w.heston.action(api.taxId.set, { ein: "98-7654321" })).rejects.toThrow("Stripe didn't answer as expected. Nothing changed; try again in a minute.");
+    stripeWithTaxIds([], { create: true, createStatus: 403 });
+    await expect(w.heston.action(api.taxId.set, { ein: "98-7654321" })).rejects.not.toThrow(/Check the number/);
+    expect(await w.heston.query(api.taxId.get, {})).toEqual({ value: "12-3456789", inStripe: false }); // unchanged
   });
 
   test("E5: on the invoice: Stripe's copy carries the tax ID; the owner's view, the client's page and the receipt show it", async () => {

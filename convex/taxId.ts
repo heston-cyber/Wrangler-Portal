@@ -31,8 +31,9 @@ export const get = query({
   handler: async (ctx) => {
     await requireOwner(ctx);
     const b = await ctx.db.get(ownBusiness(ctx));
-    if (!b?.taxId) return null;
-    return { value: b.taxId.value, inStripe: !!b.taxId.stripeId && b.taxId.accountId === b.stripe?.accountId };
+    const leftover = !!b?.taxIdToRemove?.length; // an old tax ID Stripe still has (re-review A)
+    if (!b?.taxId) return leftover ? { value: null, inStripe: false, leftover } : null;
+    return { value: b.taxId.value as string | null, inStripe: !!b.taxId.stripeId && b.taxId.accountId === b.stripe?.accountId, ...(leftover ? { leftover } : {}) };
   },
 });
 
@@ -42,7 +43,7 @@ export const target = internalQuery({
     await requireOwner(ctx);
     const b = await ctx.db.get(ownBusiness(ctx));
     if (!b) throw new ConvexError("Not allowed.");
-    return { businessId: b._id, accountId: b.stripe?.status === "connected" ? b.stripe.accountId : null, taxId: b.taxId ?? null };
+    return { businessId: b._id, accountId: b.stripe?.status === "connected" ? b.stripe.accountId : null, taxId: b.taxId ?? null, toRemove: b.taxIdToRemove ?? [], connectedTo: b.stripe?.accountId ?? null };
   },
 });
 
@@ -63,8 +64,17 @@ export const save = internalMutation({
 /** Review (Nov 21) #8: a fixed message for tax ID calls, never Stripe's own text (it may quote the number). */
 const failed = (e: unknown): never => {
   if (e instanceof ConvexError) throw e;
-  throw new ConvexError(e instanceof StripeError && e.status && e.status < 500 ? "Stripe didn't accept that EIN. Check the number and try again." : "Couldn't reach Stripe. Nothing changed; try again in a minute.");
+  throw new ConvexError("Stripe didn't answer as expected. Nothing changed; try again in a minute."); // re-review F: only a refused number says so
 };
+
+/** Re-review A: old Stripe tax IDs still to remove (Stripe wouldn't delete them yet); kept until they're gone. */
+export const keepToRemove = internalMutation({
+  args: { toRemove: v.array(v.object({ id: v.string(), account: v.string() })) },
+  handler: async (ctx, { toRemove }) => {
+    await requireOwner(ctx);
+    await ctx.db.patch(ownBusiness(ctx), { taxIdToRemove: toRemove.length ? toRemove : undefined });
+  },
+});
 
 /** The business's own us_ein tax IDs on a Stripe account (owner self only; never a customer's). */
 async function stripeEins(account: string): Promise<Array<{ id: string; value: string }>> {
@@ -84,23 +94,33 @@ export const set = action({
     const value = ein.trim() ? cleanEin(ein) : null;
     if (ein.trim() && !value) throw new ConvexError("An EIN is nine digits, like 12-3456789.");
     const old = t.taxId?.stripeId && t.taxId.accountId ? { id: t.taxId.stripeId, account: t.taxId.accountId } : null;
+    // Re-review B: the same number again with Stripe not connected changes nothing (Stripe's copy stays as it is).
+    if (value && value === t.taxId?.value && !t.accountId && !t.toRemove.length) return { value, inStripe: !!old && old.account === t.connectedTo };
     try {
       let made: { id: string; account: string } | null = null;
       if (value && t.accountId) {
         // One already on the account with this number is used, not doubled (two saves at once, or set in Stripe).
         const there = (await stripeEins(t.accountId)).find((x) => x.value === value);
-        const id = there?.id ?? (await stripeCall("POST", "tax_ids", { account: t.accountId, form: { type: "us_ein", value } })).id;
+        let id = there?.id;
+        if (!id) {
+          try { id = (await stripeCall("POST", "tax_ids", { account: t.accountId, form: { type: "us_ein", value } })).id as string; }
+          catch (e) { if (e instanceof StripeError && e.status === 400) throw new ConvexError("Stripe didn't accept that EIN. Check the number and try again."); throw e; }
+        }
         if (typeof id !== "string") throw new StripeError("unclear", 200, "unclear");
         made = { id, account: t.accountId };
       }
       await ctx.runMutation(internal.taxId.save, { taxId: value ? { type: "us_ein", value, ...(made ? { stripeId: made.id, accountId: made.account } : {}) } : null });
-      // Then the old one goes (unless it's the same tax ID). If that fails, the new one is already in use; say so.
-      if (old && !(made && made.id === old.id && made.account === old.account)) {
-        await stripeCall("DELETE", `tax_ids/${old.id}`, { account: old.account }).catch((e) => {
-          if (e instanceof StripeError && e.status === 404) return;
-          throw new ConvexError(value ? "Saved. The old EIN couldn't be removed from Stripe just now: save again in a minute to tidy it." : "Removed here, but Stripe still has it. Save again in a minute to remove it there too.");
-        });
+      // Then the old one goes (unless it's the one in use), with any Stripe wouldn't delete before. What still won't go is
+      // kept and tried again on the next save (re-review A); Settings says so and offers to try now.
+      const gone: Array<{ id: string; account: string }> = [...t.toRemove];
+      if (old && !(made && made.id === old.id && made.account === old.account)) gone.push(old);
+      const left: typeof gone = [];
+      for (const g of gone) {
+        if (made && g.id === made.id && g.account === made.account) continue;
+        await stripeCall("DELETE", `tax_ids/${g.id}`, { account: g.account }).catch((e) => { if (!(e instanceof StripeError && e.status === 404)) left.push(g); });
       }
+      if (left.length || t.toRemove.length) await ctx.runMutation(internal.taxId.keepToRemove, { toRemove: left });
+      if (left.length) throw new ConvexError(value ? "Saved. Stripe still has the old EIN for now; it's removed the next time you save, or with Remove it below." : "Removed here. Stripe still has it for now; it's removed the next time you save, or with Remove it below.");
       return { value, inStripe: !!made };
     } catch (e) {
       return failed(e);
@@ -131,7 +151,10 @@ export const forgetStripeId = internalMutation({
   args: { businessId: v.id("businesses"), stripeId: v.string() },
   handler: async (ctx, { businessId, stripeId }) => {
     const b = await ctx.db.get(businessId);
-    if (b?.taxId?.stripeId === stripeId) await ctx.db.patch(businessId, { taxId: { type: "us_ein", value: b.taxId.value, updatedAt: Date.now() } });
+    if (b?.taxId?.stripeId !== stripeId) return;
+    await ctx.db.patch(businessId, { taxId: { type: "us_ein", value: b.taxId.value, updatedAt: Date.now() } });
+    // Re-review E: say so (never the number). Settings then offers Add it to Stripe.
+    await audit(ctx, { kind: "settings", text: "found the business's EIN no longer in Stripe: Stripe's copy of this invoice went without it (Add it to Stripe in Settings › Payments)", where: "Settings › Payments", link: "/settings/payments", businessId });
   },
 });
 
