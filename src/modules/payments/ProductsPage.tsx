@@ -25,7 +25,8 @@ export default function ProductsPage() {
     setBusy(true);
     try {
       const r = await sync({});
-      if (!quiet) show(r.added ? `Brought in ${r.added} from Stripe.` : "Up to date with Stripe.");
+      const said = [r.added ? `Brought in ${r.added} from Stripe.` : "", r.retired ? `Archived ${r.retired} no longer sold as one-time items in Stripe.` : "", r.truncated ? "Stripe has more than 1,000 products; only the first 1,000 were read." : ""].filter(Boolean).join(" ");
+      if (!quiet || r.truncated) show(said || "Up to date with Stripe.");
     } catch (e) { if (!quiet) show(errText(e)); }
     setBusy(false);
   };
@@ -70,6 +71,7 @@ export function ProductEditor({ productId }: { productId?: string }) {
   const [amount, setAmount] = useState(0);
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState<null | "save" | "archive">(null);
+  const [nonce] = useState(() => crypto.randomUUID()); // review L3: one per open form, so a repeated Save makes nothing twice
   const [loaded, setLoaded] = useState(!productId);
   useEffect(() => {
     if (!existing || loaded) return;
@@ -81,7 +83,7 @@ export function ProductEditor({ productId }: { productId?: string }) {
   const doSave = async () => {
     setBusy("save");
     try {
-      await save({ productId: productId as Id<"products"> | undefined, name, description: description || undefined, amountCents: amount });
+      await save({ productId: productId as Id<"products"> | undefined, name, description: description || undefined, amountCents: amount, nonce });
       show(productId ? "Product saved." : "Product made.");
       navigate("/payments/products");
     } catch (e) { show(errText(e)); }

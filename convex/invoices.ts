@@ -17,6 +17,7 @@ import { clientDocs, openDelivery } from "./projects";
 import { pageOf, totals as builderTotals } from "./lib/wsBuilder";
 import { announceSent, payLink } from "./invoicePay";
 import { keepItem, itemV, unchanged, type LibItem } from "./lib/libraryItems";
+import { stillBillable } from "./products";
 import { randomToken } from "./lib/hash";
 import { nextReminder } from "./invoiceReminders";
 import { crmProject } from "./crm";
@@ -334,7 +335,7 @@ export const claimForSend = internalMutation({
     const attempt = (i.sendAttempt ?? 0) + 1;
     await ctx.db.patch(i._id, { status: "sending", number, totalCents: t.total, amountRemainingCents: t.total, sendError: undefined, sendAttempt: attempt, pending: { ...(i.pending ?? {}), mode: mode ?? i.pending?.mode ?? "email" }, updatedAt: Date.now() });
     const earlier = (await ctx.db.query("invoices").withIndex("by_bill_email", (q) => q.eq("billTo.email", i.billTo.email)).collect()).find((x) => x.stripe?.accountId === biz.stripe!.accountId && x.stripe?.customerId);
-    return { invoice: { ...i, number }, totals: t, accountId: biz.stripe.accountId, customerId: i.pending?.customerId ?? earlier?.stripe?.customerId ?? null, pending: i.pending ?? null, attempt, by: me.name ?? me.email, business: biz.name };
+    return { invoice: { ...i, number }, totals: t, accountId: biz.stripe.accountId, livemode: !!biz.stripe.livemode, customerId: i.pending?.customerId ?? earlier?.stripe?.customerId ?? null, pending: i.pending ?? null, attempt, by: me.name ?? me.email, business: biz.name };
   },
 });
 
@@ -611,7 +612,9 @@ async function finalize(ctx: ActionCtx, invoiceId: Id<"invoices">, email: boolea
         // One invoice item per line (the amount carries the quantity; the portal's own page shows qty and unit price).
         // Nov 21: a library line, unchanged, bills its Stripe price (Stripe's product reports count it); anything else is a
         // plain amount, as before. Only prices still on this business's library, on this account, count.
-        const libPrices = await ctx.runQuery(internal.products.billable, { accountId: account, priceIds: i.lines.filter(unchanged).map((l) => l.item!.priceId) });
+        const picked = i.lines.filter(unchanged).map((l) => ({ priceId: l.item!.priceId, unitCents: l.unitCents }));
+        const portalOk = picked.length ? await ctx.runQuery(internal.products.billable, { accountId: account, livemode: c.livemode, lines: picked }) : [];
+        const libPrices = portalOk.length ? await stillBillable(account, picked.filter((x) => portalOk.includes(x.priceId))) : [];
         for (const [n, l] of i.lines.entries()) {
           const amount = Math.round(l.qty * l.unitCents);
           const desc = l.qty === 1 ? l.description : `${l.description} (${l.qty} × $${(l.unitCents / 100).toFixed(2)})`;

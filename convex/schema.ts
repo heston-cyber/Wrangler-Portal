@@ -1190,7 +1190,7 @@ export default defineSchema({
     archivedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_product", ["stripe.productId"]),
+  }).index("by_account_product", ["stripe.accountId", "stripe.productId"]).index("by_price", ["stripe.priceId"]), // review L4, I3
 
   // Phase 2b: subscriptions, the portal's copy of each one in the business's Stripe (kept in step by Stripe's events).
   subscriptions: defineTable({
