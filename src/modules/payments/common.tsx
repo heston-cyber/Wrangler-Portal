@@ -4,7 +4,8 @@ import { StatusChip } from "../../ui/wp";
 import { BrandImg } from "../../ui/BrandImg";
 
 export type InvoiceStatus = "draft" | "sending" | "due" | "overdue" | "partly_paid" | "processing" | "failed" | "paid" | "void" | "uncollectible";
-export type Line = { id: string; description: string; qty: number; unitCents: number };
+// item: Nov 21, the product-library item the line was picked as (an unchanged line bills Stripe's price)
+export type Line = { id: string; description: string; qty: number; unitCents: number; item?: { productId: string; priceId: string; unitCents: number; description: string } };
 
 export const money = (cents: number) => `${cents < 0 ? "−" : ""}$${(Math.abs(cents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 export const dateLong = (iso: string) => { const d = new Date(`${iso}T12:00:00`); return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); };

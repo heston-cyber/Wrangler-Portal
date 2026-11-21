@@ -46,6 +46,7 @@ import type * as team from "../team.js";
 import type * as invoices from "../invoices.js";
 import type * as overviews from "../overviews.js";
 import type * as payments from "../payments.js";
+import type * as products from "../products.js";
 import type * as projects from "../projects.js";
 import type * as push from "../push.js";
 import type * as reports from "../reports.js";
@@ -220,6 +221,7 @@ declare const fullApi: ApiFromModules<{
   invoices: typeof invoices;
   overviews: typeof overviews;
   payments: typeof payments;
+  products: typeof products;
   projects: typeof projects;
   push: typeof push;
   reports: typeof reports;

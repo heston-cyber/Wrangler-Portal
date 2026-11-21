@@ -16,6 +16,7 @@ import { stripeCall, StripeError, type StripeResult } from "./lib/stripeApi";
 import { clientDocs, openDelivery } from "./projects";
 import { pageOf, totals as builderTotals } from "./lib/wsBuilder";
 import { announceSent, payLink } from "./invoicePay";
+import { keepItem, itemV, unchanged, type LibItem } from "./lib/libraryItems";
 import { randomToken } from "./lib/hash";
 import { nextReminder } from "./invoiceReminders";
 import { crmProject } from "./crm";
@@ -182,7 +183,9 @@ export const get = query({
       business: biz ? {
         name: biz.name, legalName: biz.legalName ?? null, prefix: invoicePrefix(biz.name), email: biz.replyTo ?? null, address: biz.address ?? null, privacyUrl: biz.privacyUrl ?? null,
         logoUrl: biz.logoFileId ? await ctx.storage.getUrl(biz.logoFileId) : null, logoLightUrl: biz.logoLightFileId ? await ctx.storage.getUrl(biz.logoLightFileId) : null,
-        ein: biz.taxId?.value ?? null, // Nov 21: printed on the invoice and receipt
+        // Nov 21: printed on the invoice and receipt. A made invoice keeps the EIN it was made with (as Stripe's does); a
+        // draft shows today's, as it would go out.
+        ein: i.ein ?? (i.status === "draft" || i.status === "sending" ? biz.taxId?.value ?? null : null),
       } : null,
       payToken: i.payToken ?? null, payments: (i.payments ?? []).filter((p) => p.status !== "failed"),
       // Step 4: "Last reminder: … · next: … (automatic)" under the actions.
@@ -224,7 +227,7 @@ export const options = query({
 
 // ---------- drafts ----------
 
-const lineArg = v.object({ id: v.string(), description: v.string(), qty: v.number(), unitCents: v.number() });
+const lineArg = v.object({ id: v.string(), description: v.string(), qty: v.number(), unitCents: v.number(), item: itemV });
 const draftArgs = {
   clientId: v.optional(v.string()), projectId: v.optional(v.string()),
   kind: v.union(v.literal("deposit"), v.literal("final"), v.literal("other")), title: v.string(),
@@ -233,12 +236,13 @@ const draftArgs = {
   dueDate: v.string(), memo: v.optional(v.string()),
 };
 
-function cleanDraft(a: { title: string; billTo: { name: string; email: string; company?: string }; lines: Array<{ id: string; description: string; qty: number; unitCents: number }>; discountCents?: number; taxPercent?: number; dueDate: string; memo?: string }) {
+function cleanDraft(a: { title: string; billTo: { name: string; email: string; company?: string }; lines: Array<{ id: string; description: string; qty: number; unitCents: number; item?: LibItem }>; discountCents?: number; taxPercent?: number; dueDate: string; memo?: string }) {
   const lines = a.lines.slice(0, 50).map((l) => ({
     id: l.id.slice(0, 40) || Math.random().toString(36).slice(2, 10),
     description: l.description.trim().slice(0, 300),
     qty: Math.max(0, Math.min(10_000, Math.round(l.qty * 100) / 100)),
     unitCents: Math.max(0, Math.min(100_000_000, Math.round(l.unitCents))),
+    ...(l.item ? { item: l.item } : {}),
   }));
   if (!/^\d{4}-\d{2}-\d{2}$/.test(a.dueDate)) throw new ConvexError("Pick a due date.");
   return {
@@ -261,7 +265,8 @@ export const saveDraft = mutation({
     const projectId = a.projectId ? ctx.db.normalizeId("projects", a.projectId) : null;
     if (a.clientId && !(clientId && (await ctx.db.get(clientId)))) throw new ConvexError("That client isn't here.");
     if (a.projectId && !(projectId && (await ctx.db.get(projectId)))) throw new ConvexError("That project isn't here.");
-    const d = cleanDraft(a);
+    // Nov 21: a library line keeps its product only when the product is this business's (checked here, not trusted).
+    const d = cleanDraft({ ...a, lines: await Promise.all(a.lines.map(async (l) => ({ ...l, item: await keepItem(ctx, l.item) }))) });
     const t = totals(d);
     const now = Date.now();
     const fields = { ...d, kind: a.kind, clientId: clientId ?? undefined, projectId: projectId ?? undefined, totalCents: t.total, amountRemainingCents: t.total, updatedAt: now };
@@ -357,7 +362,7 @@ export const recordSent = internalMutation({
         stripe: { accountId: s.accountId, invoiceId: s.invoice.id, customerId: s.customerId, number: s.invoice.number ?? i.number, hostedUrl: s.invoice.hosted_invoice_url ?? undefined, pdfUrl: s.invoice.invoice_pdf ?? undefined, livemode: !!s.invoice.livemode },
         totalCents: Number(s.invoice.total ?? i.totalCents), amountPaidCents: Number(s.invoice.amount_paid ?? 0), amountRemainingCents: Number(s.invoice.amount_remaining ?? s.invoice.total ?? i.totalCents),
         ...(s.invoice.status === "paid" && !i.paidAt ? { paidAt: stripePaidAt(s.invoice, now) } : {}),
-        issuedAt: i.issuedAt ?? now, updatedAt: now, history: [...i.history, { kind: "created", at: now, by, detail: "in Stripe, not emailed" }],
+        issuedAt: i.issuedAt ?? now, ein: i.ein ?? (await einNow(ctx, i)), updatedAt: now, history: [...i.history, { kind: "created", at: now, by, detail: "in Stripe, not emailed" }],
       });
       const made = await ctx.db.get(invoiceId);
       if (made?.status === "paid") await paidAtSend(ctx, made);
@@ -370,7 +375,7 @@ export const recordSent = internalMutation({
       totalCents: Number(s.invoice.total ?? i.totalCents), amountPaidCents: Number(s.invoice.amount_paid ?? 0), amountRemainingCents: Number(s.invoice.amount_remaining ?? s.invoice.total ?? i.totalCents),
       // Review L7: paid at send (a credit balance covered it): Stripe's paid time, as the webhook records it.
       ...(s.invoice.status === "paid" && !i.paidAt ? { paidAt: stripePaidAt(s.invoice, now) } : {}),
-      sentAt: now, issuedAt: i.issuedAt ?? now, updatedAt: now,
+      sentAt: now, issuedAt: i.issuedAt ?? now, ein: i.ein ?? (await einNow(ctx, i)), updatedAt: now,
       history: [...i.history, { kind: "sent", at: now, by, detail: i.billTo.email }],
     });
     // Step 3: the client's link, their Inbox item and the invoice email (08).
@@ -507,6 +512,9 @@ export const emailIt = mutation({
 
 class UnsureError extends Error {}
 
+/** The business's EIN now (kept on the invoice when it's made). */
+const einNow = async (ctx: MutationCtx, i: Doc<"invoices">) => (i.businessId ? (await ctx.db.get(i.businessId))?.taxId?.value : undefined);
+
 /** A write from a send attempt that isn't the invoice's latest one (review 2 #1). Callers that don't say are let through. */
 const stale = (i: Doc<"invoices">, attempt: number | undefined) => attempt !== undefined && (i.sendAttempt ?? 0) !== attempt;
 
@@ -577,7 +585,13 @@ async function finalize(ctx: ActionCtx, invoiceId: Id<"invoices">, email: boolea
           if (caps.link_payments === "active") methods.push("link");
         } catch { /* card only */ }
         // Nov 21 (Heston): the business's EIN on Stripe's copy too, as the account's own tax ID (when saved on this account).
-        const ein = i.businessId ? await ctx.runQuery(internal.taxId.forInvoice, { businessId: i.businessId, accountId: account }) : null;
+        let ein = i.businessId ? await ctx.runQuery(internal.taxId.forInvoice, { businessId: i.businessId, accountId: account }) : null;
+        // Security review (Nov 21) #1: a tax ID removed in Stripe's dashboard would make every send fail: check it's
+        // still there; if Stripe says it's gone, forget it (Settings then shows it isn't in Stripe) and send without it.
+        if (ein && i.businessId) {
+          try { await stripeCall("GET", `tax_ids/${ein}`, { account }); }
+          catch (g) { if (g instanceof StripeError && g.status === 404) { await ctx.runMutation(internal.taxId.forgetStripeId, { businessId: i.businessId, stripeId: ein }); ein = null; } }
+        }
         let taxRate: string | null = null;
         if (i.taxPercent) taxRate = (await stripeCall("POST", "tax_rates", { account, idem: k("tax"), form: { display_name: "Tax", percentage: i.taxPercent, inclusive: false } })).id as string;
         const inv = await stripeCall("POST", "invoices", {
@@ -594,10 +608,16 @@ async function finalize(ctx: ActionCtx, invoiceId: Id<"invoices">, email: boolea
         draftId = inv.id;
         await ctx.runMutation(internal.invoices.recordPending, { ...fenced, pending: { draftId } });
         // One invoice item per line (the amount carries the quantity; the portal's own page shows qty and unit price).
+        // Nov 21: a library line, unchanged, bills its Stripe price (Stripe's product reports count it); anything else is a
+        // plain amount, as before. Only prices still on this business's library, on this account, count.
+        const libPrices = await ctx.runQuery(internal.products.billable, { accountId: account, priceIds: i.lines.filter(unchanged).map((l) => l.item!.priceId) });
         for (const [n, l] of i.lines.entries()) {
           const amount = Math.round(l.qty * l.unitCents);
           const desc = l.qty === 1 ? l.description : `${l.description} (${l.qty} × $${(l.unitCents / 100).toFixed(2)})`;
-          await stripeCall("POST", "invoiceitems", { account, idem: k(`item${n}`), form: { customer: customerId, invoice: inv.id, amount, currency: "usd", description: desc } });
+          const form = unchanged(l) && libPrices.includes(l.item!.priceId)
+            ? { customer: customerId, invoice: inv.id, pricing: { price: l.item!.priceId }, quantity: l.qty, description: desc }
+            : { customer: customerId, invoice: inv.id, amount, currency: "usd", description: desc };
+          await stripeCall("POST", "invoiceitems", { account, idem: k(`item${n}`), form });
         }
         if (i.discountCents) await stripeCall("POST", "invoiceitems", { account, idem: k("disc"), form: { customer: customerId, invoice: inv.id, amount: -Math.min(i.discountCents, c.totals.subtotal), currency: "usd", description: "Discount" } });
         await stripeCall("POST", `invoices/${inv.id}`, { account, form: { number: i.number } });

@@ -535,6 +535,8 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "plans.get": PAYMENTS,
     "plans.save": PAYMENTS,
     "plans.setArchived": PAYMENTS,
+    // Nov 21: Payments › Products, the Stripe product library (the Payments switch, like Plans)
+    "products.list": PAYMENTS, "products.picker": PAYMENTS, "products.get": PAYMENTS, "products.save": PAYMENTS, "products.setArchived": PAYMENTS, "products.sync": PAYMENTS,
     "quotes.list": PAYMENTS,
     "quotes.get": PAYMENTS,
     "quotes.options": PAYMENTS,

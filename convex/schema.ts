@@ -911,7 +911,7 @@ export default defineSchema({
     projectId: v.optional(v.id("projects")),
     contact: v.optional(v.object({ name: v.string(), email: v.string(), company: v.optional(v.string()) })), // D149: optional ("No client yet"); whoever accepts once accepted
     title: v.string(),
-    lines: v.array(v.object({ id: v.string(), description: v.string(), qty: v.number(), unitCents: v.number(), suggestedCents: v.optional(v.number()), note: v.optional(v.string()) })),
+    lines: v.array(v.object({ id: v.string(), description: v.string(), qty: v.number(), unitCents: v.number(), suggestedCents: v.optional(v.number()), note: v.optional(v.string()), item: v.optional(v.object({ productId: v.id("products"), priceId: v.string(), unitCents: v.number(), description: v.string() })) })),
     discountCents: v.optional(v.number()),
     taxPercent: v.optional(v.number()),
     deposit: v.object({ kind: v.union(v.literal("percent"), v.literal("amount")), value: v.number() }),
@@ -1177,6 +1177,19 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_price", ["stripe.priceId"]),
 
+  // Nov 21 (Heston): Payments › Products, the Stripe product library. A one-time product and its price in the business's
+  // own Stripe (made here or in Stripe's dashboard, brought in), picked as invoice and quote lines.
+  products: defineTable({
+    businessId: v.optional(v.id("businesses")),
+    name: v.string(),
+    description: v.optional(v.string()),
+    amountCents: v.number(),
+    stripe: v.object({ accountId: v.string(), productId: v.string(), priceId: v.string(), livemode: v.boolean() }),
+    archivedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_product", ["stripe.productId"]),
+
   // Phase 2b: subscriptions, the portal's copy of each one in the business's Stripe (kept in step by Stripe's events).
   subscriptions: defineTable({
     businessId: v.optional(v.id("businesses")),
@@ -1226,7 +1239,7 @@ export default defineSchema({
     title: v.string(),                                   // "Final invoice", "Deposit · WS-00018", "Extra shoot day"
     number: v.optional(v.string()),                      // D52: WRNGLR-0042, given when it's first sent
     billTo: v.object({ name: v.string(), email: v.string(), company: v.optional(v.string()) }),
-    lines: v.array(v.object({ id: v.string(), description: v.string(), qty: v.number(), unitCents: v.number() })),
+    lines: v.array(v.object({ id: v.string(), description: v.string(), qty: v.number(), unitCents: v.number(), item: v.optional(v.object({ productId: v.id("products"), priceId: v.string(), unitCents: v.number(), description: v.string() })) })), // item: Nov 21, from the product library
     discountCents: v.optional(v.number()),
     taxPercent: v.optional(v.number()),                 // e.g. 8.25
     dueDate: v.string(),                                // YYYY-MM-DD
@@ -1245,6 +1258,7 @@ export default defineSchema({
     // Nov 21 (Heston, D-g/D-h): made in Stripe without emailing ("Create without emailing"): payable from its copied
     // link, but off the client's portal and Inbox and out of the reminders until Heston presses Email it.
     quiet: v.optional(v.boolean()),
+    ein: v.optional(v.string()), // Nov 21: the business's EIN as it was when the invoice was made (printed on it, as Stripe keeps it)
     issuedAt: v.optional(v.number()), // review M3: when it was finalized in Stripe (its issue date, and Reports' "Invoiced"); sentAt is when it was emailed
     // Review fixes (Oct 30): a send in progress keeps what it has made in Stripe so far, so a failed send cleans up
     // and a retry neither duplicates nor gets stuck; syncedAt spaces out reads from Stripe.

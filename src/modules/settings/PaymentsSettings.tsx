@@ -106,41 +106,39 @@ function Reminders({ r, show }: { r: { on: boolean; beforeDays: number; afterDay
 }
 
 /** Nov 21 (Heston): the business's EIN, printed on its invoices and receipts (and on Stripe's invoice, kept there as the
- *  account's tax ID). The owner only; a team member with Payments doesn't see it. */
+ *  account's tax ID). Set by the owner only. Security review (Nov 21) #4: nothing happens without a click: the EIN
+ *  already on the Stripe account is offered, and one saved before Stripe was connected is added to Stripe on a click. */
 function TaxIdBlock({ show, connected }: { show: (m: string) => void; connected: boolean }) {
   const me = useQuery(api.users.me);
   const owner = me?.role === "owner" && !me.team;
   const t = useQuery(api.taxId.get, owner ? {} : "skip");
   const set = useAction(api.taxId.set);
-  const load = useAction(api.taxId.load);
+  const fromStripe = useAction(api.taxId.fromStripe);
   const [ein, setEin] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const looked = useRef(false);
-  // No EIN in the portal yet but Stripe is connected: bring in the one already on the Stripe account, once.
-  // One saved before Stripe was connected goes to Stripe now, once.
-  useEffect(() => {
-    if (!owner || !connected || t === undefined || looked.current) return;
-    if (t === null) { looked.current = true; void load({}).catch(() => undefined); }
-    else if (!t.inStripe) { looked.current = true; void set({ ein: t.value }).catch(() => undefined); }
-  }, [owner, connected, t, load, set]);
+  const [found, setFound] = useState<string | null | undefined>(undefined); // the EIN on the Stripe account, once looked
   if (!owner || t === undefined) return null;
-  const save = async () => {
-    if (ein === null || ein.trim() === (t?.value ?? "")) { setEin(null); return; }
+  const run = async (f: () => Promise<string>) => {
     setBusy(true);
-    try {
-      const r = await set({ ein });
-      show(r.value ? (r.inStripe ? "EIN saved, here and in Stripe." : "EIN saved. It goes to Stripe once Stripe is connected.") : "EIN removed.");
-      setEin(null);
-    } catch (e) { show(err(e)); }
+    try { show(await f()); setEin(null); } catch (e) { show(err(e)); }
     setBusy(false);
   };
+  const save = (value: string) => run(async () => {
+    const r = await set({ ein: value });
+    return r.value ? (r.inStripe ? "EIN saved, here and in Stripe." : "EIN saved. Add it to Stripe once Stripe is connected.") : "EIN removed.";
+  });
+  const blur = () => { if (ein === null || ein.trim() === (t?.value ?? "")) { setEin(null); return; } void save(ein); };
   return (
     <div className="panel pay-card">
       <span className="wp-eyebrow">Tax ID</span>
       <label className="wp-field"><span className="wp-field-label">EIN</span>
         <input className="input" inputMode="numeric" autoComplete="off" placeholder="12-3456789" value={ein ?? t?.value ?? ""} disabled={busy}
-          onFocus={() => setEin(t?.value ?? "")} onChange={(e) => setEin(e.target.value)} onBlur={() => void save()} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} aria-label="EIN" /></label>
-      <p className="secondary pay-note">Printed on your invoices and receipts{connected ? ", and on Stripe's copy" : ""}. Invoices already sent keep how they were.{t && !t.inStripe && connected ? " Adding it to Stripe…" : ""}</p>
+          onFocus={() => setEin(t?.value ?? "")} onChange={(e) => setEin(e.target.value)} onBlur={blur} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} aria-label="EIN" /></label>
+      <p className="secondary pay-note">Printed on invoices and receipts you make from now on{connected ? ", and on Stripe's copy" : ""}. Invoices already made keep the EIN they were made with.</p>
+      {t && !t.inStripe && connected && <div><Button size="sm" loading={busy} onClick={() => void save(t.value)}>Add it to Stripe</Button></div>}
+      {!t && connected && (found === undefined
+        ? <div><Button size="sm" loading={busy} onClick={() => void run(async () => { const r = await fromStripe({ use: false }); setFound(r?.value ?? null); return r ? "Found one on your Stripe account." : "No EIN on your Stripe account."; })}>Check Stripe for an EIN</Button></div>
+        : found && <div className="pay-row-act"><span className="secondary">Your Stripe account has {found}.</span> <Button size="sm" loading={busy} onClick={() => void run(async () => { await fromStripe({ use: true }); return "EIN saved from Stripe."; })}>Use it</Button></div>)}
     </div>
   );
 }

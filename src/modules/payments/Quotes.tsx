@@ -16,6 +16,7 @@ import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps, navigate } from "../../lib/router";
 import { errText } from "../docs/pages/common";
 import { MoneyInput, dateShort, money, newId } from "./common";
+import { LibraryPicker, type PickedItem } from "./ProductsPage";
 import { downloadPdf } from "./pdfDownload";
 import { QuotePaper, longIso, longMs, quotePdf, type QuoteDoc } from "./QuotePaper";
 
@@ -86,7 +87,7 @@ export default function QuotesPage() {
 
 // ---------- New quote / edit a draft ----------
 
-type QLine = { id: string; description: string; qty: number; unitCents: number; suggestedCents?: number; note?: string; auto?: string };
+type QLine = { id: string; description: string; qty: number; unitCents: number; suggestedCents?: number; note?: string; auto?: string; item?: PickedItem };
 type Answers = { jobs: string[]; days: string; level: string };
 
 export function QuoteEditor({ quoteId, clientId, dealId }: { quoteId?: string | null; clientId?: string | null; dealId?: string | null }) {
@@ -103,6 +104,7 @@ export function QuoteEditor({ quoteId, clientId, dealId }: { quoteId?: string | 
   const [title, setTitle] = useState("");
   const [answers, setAnswers] = useState<Answers>({ jobs: [], days: "1", level: "" });
   const [lines, setLines] = useState<QLine[]>([]);
+  const [picking, setPicking] = useState(false); // Nov 21: Add from library
   const [discountOn, setDiscountOn] = useState(false), [discountCents, setDiscountCents] = useState(0);
   const [taxOn, setTaxOn] = useState(false), [taxPercent, setTaxPercent] = useState("0");
   const [deposit, setDeposit] = useState<{ kind: "percent" | "amount"; value: number }>({ kind: "percent", value: 25 });
@@ -193,7 +195,7 @@ export function QuoteEditor({ quoteId, clientId, dealId }: { quoteId?: string | 
       : { name: person.name, email: person.email, ...(person.company.trim() ? { company: person.company } : {}) };
     const id = await save({
       ...(savedId ? { quoteId: savedId } : {}), ...(w ? { who: w } : {}), title, deposit, validUntil, terms, questions: answers,
-      lines: lines.map((l) => ({ id: l.id, description: l.description, qty: l.qty, unitCents: l.unitCents, ...(l.suggestedCents !== undefined ? { suggestedCents: l.suggestedCents } : {}), ...(l.note ? { note: l.note } : {}) })),
+      lines: lines.map((l) => ({ id: l.id, description: l.description, qty: l.qty, unitCents: l.unitCents, ...(l.suggestedCents !== undefined ? { suggestedCents: l.suggestedCents } : {}), ...(l.note ? { note: l.note } : {}), ...(l.item ? { item: l.item } : {}) })),
       ...(discountOn && discountCents ? { discountCents } : {}), ...(tax ? { taxPercent: tax } : {}),
     });
     setSavedId(id); setSavedAt(Date.now());
@@ -308,6 +310,7 @@ export function QuoteEditor({ quoteId, clientId, dealId }: { quoteId?: string | 
                     {r?.defaults?.dailyCents ? <MenuItem onSelect={() => setLines([...lines, { id: newId(), description: "Day rate", qty: 1, unitCents: r.defaults!.dailyCents, suggestedCents: r.defaults!.dailyCents, note: "Suggested · your daily rate" }])}>Daily rate · {money(r.defaults.dailyCents)}</MenuItem> : null}
                   </Menu>
                   <button type="button" className="rt-add" onClick={() => setLines([...lines, { id: newId(), description: "", qty: 1, unitCents: 0 }])}><Icon name="plus" size={14} />Add a line</button>
+                  <button type="button" className="rt-add" onClick={() => setPicking(true)}><Icon name="package" size={14} />Add from library</button>
                   {!discountOn && <button type="button" className="rt-add plain" onClick={() => setDiscountOn(true)}><Icon name="plus" size={14} />Discount</button>}
                   {!taxOn && <button type="button" className="rt-add plain" onClick={() => setTaxOn(true)}><Icon name="plus" size={14} />Tax</button>}
                 </div>
@@ -350,6 +353,7 @@ export function QuoteEditor({ quoteId, clientId, dealId }: { quoteId?: string | 
           onSend={onSend} onCopyLink={onCopyLink} onPdf={() => downloadPdf(quotePdf(doc))} onClose={() => setConfirm(false)} />
       )}
       {toast}
+      {picking && <LibraryPicker onClose={() => setPicking(false)} onPick={(item) => setLines([...lines.filter((l) => l.description.trim() || l.unitCents), { id: newId(), description: item.description, qty: 1, unitCents: item.unitCents, item }])} />}
     </>
   );
 }

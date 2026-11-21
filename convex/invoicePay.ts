@@ -77,7 +77,7 @@ async function clientView(ctx: QueryCtx, i: Doc<"invoices">) {
       name: biz.name, legalName: biz.legalName ?? null, prefix: invoicePrefix(biz.name), email: biz.replyTo ?? null, address: biz.address ?? null, privacyUrl: biz.privacyUrl ?? null,
       logoUrl: biz.logoFileId ? await ctx.storage.getUrl(biz.logoFileId) : null,
       logoLightUrl: biz.logoLightFileId ? await ctx.storage.getUrl(biz.logoLightFileId) : null, // for the PDFs
-      ein: biz.taxId?.value ?? null, // Nov 21 (Heston): the business's EIN, on its invoices and receipts
+      ein: i.ein ?? null, // Nov 21 (Heston): the EIN the invoice was made with, on its page and receipt (security review #2)
     } : { name: "", legalName: null, prefix: "", email: null, address: null, privacyUrl: null, logoUrl: null, logoLightUrl: null, ein: null },
   };
 }

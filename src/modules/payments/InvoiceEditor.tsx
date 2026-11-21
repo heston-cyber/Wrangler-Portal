@@ -12,6 +12,7 @@ import { Sep, TopBar } from "../../shell/Shell";
 import { linkProps, navigate } from "../../lib/router";
 import { errText } from "../docs/pages/common";
 import { NewClient } from "../review/Projects";
+import { LibraryPicker } from "./ProductsPage";
 import { InvoicePaper, MoneyInput, dateLong, isoIn, money, newId, totals, type Line } from "./common";
 
 type Kind = "deposit" | "final" | "other";
@@ -30,7 +31,8 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
   const remove = useMutation(api.invoices.deleteDraft);
   const send = useAction(api.invoices.send);
   const createQuiet = useAction(api.invoices.create); // Nov 21: Create without emailing
-  const finishSend = useAction(api.invoices.finishSend); // Nov 21 (review P-b): a send that stopped partway
+  const finishSend = useAction(api.invoices.finishSend);
+  const [picking, setPicking] = useState(false); // Nov 21: Add from library // Nov 21 (review P-b): a send that stopped partway
   const [toast, show] = useToast();
   const [d, setD] = useState<Draft | null>(null);
   const [busy, setBusy] = useState<null | "save" | "send" | "finish">(null);
@@ -185,7 +187,10 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
                     </div>
                   </div>
                 ))}
-                <button type="button" className="linkbtn inv-add" onClick={() => set({ lines: [...d.lines, { id: newId(), description: "", qty: 1, unitCents: 0 }] })}><Icon name="plus" size={14} />Add line item</button>
+                <span className="inv-adds">
+                  <button type="button" className="linkbtn inv-add" onClick={() => set({ lines: [...d.lines, { id: newId(), description: "", qty: 1, unitCents: 0 }] })}><Icon name="plus" size={14} />Add line item</button>
+                  <button type="button" className="linkbtn inv-add" onClick={() => setPicking(true)}><Icon name="package" size={14} />Add from library</button>
+                </span>
               </div>
               <dl className="inv-edit-sums">
                 <dt>Subtotal</dt><dd>{money(t.subtotal)}</dd>
@@ -239,6 +244,7 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
         </Modal>
       )}
       {toast}
+      {picking && d && <LibraryPicker onClose={() => setPicking(false)} onPick={(item) => set({ lines: [...d.lines.filter((l) => l.description.trim() || l.unitCents), { id: newId(), description: item.description, qty: 1, unitCents: item.unitCents, item }] })} />}
       {makingClient && <NewClient onClose={() => setMakingClient(false)} onDone={(name) => { setMakingClient(false); setMadeClient(name); }} />}
     </>
   );
