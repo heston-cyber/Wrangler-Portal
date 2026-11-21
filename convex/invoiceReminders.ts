@@ -50,7 +50,8 @@ export function nextReminder(i: Pick<Doc<"invoices">, "status" | "processing" | 
   // automatic one at least a day out.
   const lastOverdue = Math.max(0, ...log.filter((r) => r.kind === "overdue").map((r) => r.at));
   const lastByHand = Math.max(0, ...log.filter((r) => !r.auto).map((r) => r.at));
-  const floor = Math.max(lastOverdue ? lastOverdue + Math.max(1, s.everyDays) * DAY : 0, lastByHand ? lastByHand + DAY : 0, Date.parse(`${i.dueDate}T23:59:59-06:00`) + 1);
+  // Review M1 (Nov 21): never an overdue reminder straight after the invoice itself went (one emailed after its due date).
+  const floor = Math.max(lastOverdue ? lastOverdue + Math.max(1, s.everyDays) * DAY : 0, lastByHand ? lastByHand + DAY : 0, Date.parse(`${i.dueDate}T23:59:59-06:00`) + 1, i.sentAt ? i.sentAt + Math.max(1, s.afterDays) * DAY : 0);
   return { at: Math.max(planned, floor), kind: "overdue" };
 }
 

@@ -63,7 +63,7 @@ async function rowOf(ctx: QueryCtx, i: Doc<"invoices">) {
     _id: i._id, kind: i.kind, title: i.title, number: i.number ?? i.stripe?.number ?? null, status: displayStatus(i),
     client: client ? { _id: client._id, name: client.name } : null, project: project ? { _id: project._id, label: label(project) } : null,
     billTo: i.billTo, dueDate: i.dueDate, totalCents: i.totalCents, amountPaidCents: i.amountPaidCents, amountRemainingCents: i.amountRemainingCents,
-    sentAt: i.sentAt ?? null, viewedAt: i.viewedAt ?? null, paidAt: i.paidAt ?? null, createdAt: i.createdAt, updatedAt: i.updatedAt,
+    sentAt: i.sentAt ?? null, issuedAt: i.issuedAt ?? i.sentAt ?? null, viewedAt: i.viewedAt ?? null, paidAt: i.paidAt ?? null, createdAt: i.createdAt, updatedAt: i.updatedAt,
     lastFailure: i.lastFailure ?? null, sendError: i.sendError ?? null, notEmailed: !!i.quiet,
   };
 }
@@ -305,7 +305,7 @@ export const claimForSend = internalMutation({
     if (!i) throw new ConvexError("That invoice isn't here.");
     // A send that stopped partway (more than 5 minutes in "sending") can be tried again; send() then checks what's in Stripe.
     const stuck = i.status === "sending" && Date.now() - i.updatedAt > 5 * 60_000;
-    if (i.status !== "draft" && !stuck) throw new ConvexError(i.status === "sending" ? "It's already being sent." : "This invoice has already been sent.");
+    if (i.status !== "draft" && !stuck) throw new ConvexError(i.status === "sending" ? "It's already being sent." : i.quiet ? "This invoice was already made. Email it from its page." : "This invoice has already been sent.");
     const biz = await ctx.db.get(ownBusiness(ctx));
     if (!biz?.stripe || biz.stripe.status !== "connected") throw new ConvexError("Connect Stripe first (Settings › Payments).");
     if (!i.lines.length || i.lines.some((l) => !l.description)) throw new ConvexError("Every line needs a description.");
@@ -344,7 +344,7 @@ export const recordSent = internalMutation({
         stripe: { accountId: s.accountId, invoiceId: s.invoice.id, customerId: s.customerId, number: s.invoice.number ?? i.number, hostedUrl: s.invoice.hosted_invoice_url ?? undefined, pdfUrl: s.invoice.invoice_pdf ?? undefined, livemode: !!s.invoice.livemode },
         totalCents: Number(s.invoice.total ?? i.totalCents), amountPaidCents: Number(s.invoice.amount_paid ?? 0), amountRemainingCents: Number(s.invoice.amount_remaining ?? s.invoice.total ?? i.totalCents),
         ...(s.invoice.status === "paid" && !i.paidAt ? { paidAt: stripePaidAt(s.invoice, now) } : {}),
-        updatedAt: now, history: [...i.history, { kind: "created", at: now, by, detail: "in Stripe, not emailed" }],
+        issuedAt: i.issuedAt ?? now, updatedAt: now, history: [...i.history, { kind: "created", at: now, by, detail: "in Stripe, not emailed" }],
       });
       const made = await ctx.db.get(invoiceId);
       if (made?.status === "paid" && made.storageId) await storagePaid(ctx, made);
@@ -358,7 +358,7 @@ export const recordSent = internalMutation({
       totalCents: Number(s.invoice.total ?? i.totalCents), amountPaidCents: Number(s.invoice.amount_paid ?? 0), amountRemainingCents: Number(s.invoice.amount_remaining ?? s.invoice.total ?? i.totalCents),
       // Review L7: paid at send (a credit balance covered it): Stripe's paid time, as the webhook records it.
       ...(s.invoice.status === "paid" && !i.paidAt ? { paidAt: stripePaidAt(s.invoice, now) } : {}),
-      sentAt: now, updatedAt: now,
+      sentAt: now, issuedAt: i.issuedAt ?? now, updatedAt: now,
       history: [...i.history, { kind: "sent", at: now, by, detail: i.billTo.email }],
     });
     // Step 3: the client's link, their Inbox item and the invoice email (08).
@@ -427,6 +427,10 @@ export const emailIt = mutation({
     if (!i.quiet) throw new ConvexError(i.status === "draft" || i.status === "sending" ? "Send the invoice first." : "This invoice was already emailed.");
     if (i.status !== "open") throw new ConvexError(i.status === "paid" ? "It's already paid, so there's nothing to email." : `It's ${i.status}, so it can't be emailed.`);
     if (!EMAIL.test(i.billTo.email)) throw new ConvexError("The bill-to email doesn't look right.");
+    // Review L1: the same refusals as Send reminder (a bank payment clearing; Stripe disconnected, so they couldn't pay).
+    if (i.processing) throw new ConvexError("A bank payment is on its way, so there's nothing to email them to pay.");
+    const biz = await ctx.db.get(ownBusiness(ctx));
+    if (biz?.stripe?.status !== "connected") throw new ConvexError("Stripe isn't connected, so they couldn't pay it. Connect Stripe first (Settings › Payments).");
     const now = Date.now(), by = me.name ?? me.email;
     await ctx.db.patch(invoiceId, { quiet: undefined, sentAt: now, updatedAt: now, history: [...i.history, { kind: "sent", at: now, by, detail: i.billTo.email }].slice(-60) });
     await audit(ctx, { kind: "sent", text: `emailed invoice ${i.number ?? i.title}`, where: "Payments › Invoices", link: `/payments/invoices/${invoiceId}`, businessId: i.businessId });

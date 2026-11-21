@@ -31,7 +31,7 @@ const JOB_NAMES: Record<string, string> = {
   "emails:newVersion": "New cut email", "emails:replyToNote": "Reply email",
   "vendorPayments:mailApproved": "Email to the vendor: invoice approved", "vendorPayments:mailDeclined": "Email to the vendor: invoice declined",
   "vendorPayments:mailPaid": "Email to the vendor: invoice paid", "vendorPayouts:mailSetup": "Email asking the vendor to set up direct deposit",
-  "invoiceReminders:sendReminderEmail": "Invoice reminder email", "messages:notify": "Email about the message", "calendar:resync": "Every shoot copied to the newly picked calendar", "footage:mailOffer": "Raw footage offer email",
+  "invoiceReminders:sendReminderEmail": "Invoice reminder email", "invoicePay:sendInvoiceEmail": "Invoice email", "messages:notify": "Email about the message", "calendar:resync": "Every shoot copied to the newly picked calendar", "footage:mailOffer": "Raw footage offer email",
 };
 
 /** Tables whose new rows reach someone: their Inbox, an invite, a link with access. */

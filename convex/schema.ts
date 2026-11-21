@@ -1242,6 +1242,7 @@ export default defineSchema({
     // Nov 21 (Heston, D-g/D-h): made in Stripe without emailing ("Create without emailing"): payable from its copied
     // link, but off the client's portal and Inbox and out of the reminders until Heston presses Email it.
     quiet: v.optional(v.boolean()),
+    issuedAt: v.optional(v.number()), // review M3: when it was finalized in Stripe (its issue date, and Reports' "Invoiced"); sentAt is when it was emailed
     // Review fixes (Oct 30): a send in progress keeps what it has made in Stripe so far, so a failed send cleans up
     // and a retry neither duplicates nor gets stuck; syncedAt spaces out reads from Stripe.
     sendAttempt: v.optional(v.number()),

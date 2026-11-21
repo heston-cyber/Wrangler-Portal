@@ -117,7 +117,7 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
         <span className="secondary">Payments</span><Sep /><a {...linkProps("/payments/invoices")}>Invoices</a><Sep /><span className="here">{invoiceId ? number : "New invoice"}</span>
       </TopBar>
       <div className="wp-page inv-edit">
-        <header className="wp-pagehead"><div className="txt"><span className="wp-eyebrow">{invoiceId ? `Draft ${number}` : "New invoice"}</span><h1 className="wp-h2">{invoiceId ? (d.title || "Invoice") : "New invoice."}</h1><p className="wp-body">Nothing sends until you press Send and confirm. Create without emailing makes it payable from a link you copy, and emails no one.</p></div></header>
+        <header className="wp-pagehead"><div className="txt"><span className="wp-eyebrow">{invoiceId ? `Draft ${number}` : "New invoice"}</span><h1 className="wp-h2">{invoiceId ? (d.title || "Invoice") : "New invoice."}</h1><p className="wp-body">Nothing sends until you press Send and confirm. Create without emailing makes it payable from a link you copy, without emailing the invoice.</p></div></header>
         {existing?.sendError && <div className="wp-notice glass"><Icon name="alert" size={20} /><span className="txt"><b>The last send didn't go through.</b> {existing.sendError}</span></div>}
         {!opts.stripeReady && <div className="wp-notice glass"><Icon name="info" size={20} /><span className="txt"><b>Stripe isn't connected.</b> You can save drafts; sending needs Stripe.</span></div>}
         <div className="inv-cols">
@@ -212,7 +212,7 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
               <dt>Due date</dt><dd>{dateLong(d.dueDate)}</dd>
             </dl>
             <p className="secondary" style={{ margin: 0, fontSize: "var(--fs-text-small)" }}>{asking === "create"
-              ? <>Nothing goes to {d.billTo.email}: no email, not on their portal, no reminders. Its pay link is copied for you to send however you like, and Email it on the invoice page sends it later.</>
+              ? <>Nothing is sent now: no invoice email, not on their portal, no reminders. Its pay link is copied for you to send however you like, and Email it on the invoice page sends it later. If someone pays from the link, or a payment fails, the receipt or failed-payment email goes to {d.billTo.email}.</>
               : <>The portal emails it to {d.billTo.email} from {opts.business?.name ?? "your business"}, with a “View and pay” button.</>}</p>
             <div className="dfoot">
               <Button variant="ghost" onClick={() => setAsking(false)}>Cancel</Button>

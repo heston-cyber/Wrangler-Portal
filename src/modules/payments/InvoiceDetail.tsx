@@ -50,7 +50,7 @@ export default function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
     setPdfBusy(kind);
     try {
       await downloadPdf(pdfData(kind, {
-        business: i.business, number: i.number, sentAt: i.sentAt, createdAt: i.createdAt, dueDate: i.dueDate, billTo: i.billTo, project: i.project?.label ?? null,
+        business: i.business, number: i.number, sentAt: i.issuedAt ?? i.sentAt, createdAt: i.createdAt, dueDate: i.dueDate, billTo: i.billTo, project: i.project?.label ?? null,
         lines: i.lines, discountCents: i.discountCents, taxPercent: i.taxPercent, totalCents: i.totalCents, amountPaidCents: i.amountPaidCents, memo: i.memo,
         paidAt: i.paidAt, payments: i.payments, payUrl: i.payToken ? `${location.origin}/i/${i.payToken}` : null,
       }));
@@ -104,7 +104,7 @@ export default function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
         {quiet && <div className="wp-notice glass"><Icon name="info" size={20} /><span className="txt"><b>Not emailed yet.</b> {first} can pay it from its link, but it isn't on their portal and no reminders go out until you press Email it.</span></div>}
         <div className="inv-cols">
           <div className="col">
-            <InvoicePaper business={i.business ?? { name: "", legalName: null }} number={number} issued={dateLong(new Date(i.sentAt ?? i.createdAt).toISOString().slice(0, 10))} due={dateLong(i.dueDate)}
+            <InvoicePaper business={i.business ?? { name: "", legalName: null }} number={number} issued={dateLong(new Date(i.issuedAt ?? i.sentAt ?? i.createdAt).toISOString().slice(0, 10))} due={dateLong(i.dueDate)}
               billTo={i.billTo} project={i.project?.label} lines={i.lines} discountCents={i.discountCents} taxPercent={i.taxPercent} amountPaidCents={i.amountPaidCents} memo={i.memo} />
           </div>
           <div className="col right">
@@ -166,6 +166,7 @@ export default function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
               </div>
               <button type="button" className="icon-btn" onClick={() => setEmailingAsk(false)} aria-label="Close"><Icon name="close" size={18} /></button>
             </div>
+            {s === "overdue" && <p className="inv-flag" style={{ margin: 0 }}>Its due date ({dateLong(i.dueDate)}) has passed. The email shows that date, so they'll see it's already due. The automatic overdue reminders start {i.reminders.auto ? "a day or more after it goes" : "only if you turn them on"}.</p>}
             <dl className="pay-rows boxed"><dt>Bill to</dt><dd>{i.billTo.email}</dd><dt><b>Due now</b></dt><dd><b>{money(i.amountRemainingCents)}</b></dd><dt>Due date</dt><dd>{dateLong(i.dueDate)}</dd></dl>
             <div className="dfoot">
               <Button variant="ghost" onClick={() => setEmailingAsk(false)}>Cancel</Button>

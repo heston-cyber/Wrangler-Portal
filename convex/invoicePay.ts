@@ -64,7 +64,7 @@ async function clientView(ctx: QueryCtx, i: Doc<"invoices">) {
   return {
     token: i.payToken!, kind: i.kind, title: i.title, number: i.number ?? i.stripe?.number ?? "", status,
     billTo: i.billTo, project: project ? label(project) : null, lines: i.lines, discountCents: i.discountCents ?? 0, taxPercent: i.taxPercent ?? 0,
-    memo: i.memo ?? "", dueDate: i.dueDate, sentAt: i.sentAt ?? i.createdAt, paidAt: i.paidAt ?? null, voidedAt: i.voidedAt ?? null,
+    memo: i.memo ?? "", dueDate: i.dueDate, sentAt: i.issuedAt ?? i.sentAt ?? i.createdAt, paidAt: i.paidAt ?? null, voidedAt: i.voidedAt ?? null,
     subtotalCents: t.subtotal, totalCents: i.totalCents, amountPaidCents: i.amountPaidCents, amountRemainingCents: i.amountRemainingCents,
     payments: (i.payments ?? []).filter((p) => p.status !== "failed"),
     lastFailure: status === "failed" ? i.lastFailure?.message ?? null : null,
