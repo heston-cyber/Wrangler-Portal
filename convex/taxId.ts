@@ -113,7 +113,7 @@ export const deletable = internalQuery({
     for (const s of await ctx.db.query("subscriptions").collect()) {
       if (s.status === "canceled" || s.status === "incomplete_expired") continue;
       if (s.accountTaxId) inUse.add(s.accountTaxId);
-      if (s.startTaxId) inUse.add(s.startTaxId);
+      if (s.startTaxId && !(s.startDecidedAt && Date.now() - s.startDecidedAt > 24 * 3600_000)) inUse.add(s.startTaxId); // final check #3: a lapsed decision is never sent
     }
     const cur = b?.taxId?.stripeId;
     return { list: (b?.taxIdToRemove ?? []).filter((g) => g.id !== cur && !inUse.has(g.id)), connectedTo: b?.stripe?.accountId ?? null, total: (b?.taxIdToRemove ?? []).length };
@@ -122,26 +122,35 @@ export const deletable = internalQuery({
 
 /** Re-check N1: one tidy-up per business at a time (a stuck one is taken over after two minutes). */
 export const claimTidy = internalMutation({
-  args: { release: v.optional(v.boolean()), pending: v.optional(v.boolean()) },
-  handler: async (ctx, { release, pending }) => {
+  // claim (no args), keep (token), release (token, release, pending). Final check #7: only the holder keeps or
+  // releases it; it's marked pending while held, so a run that dies leaves Settings saying so.
+  args: { token: v.optional(v.string()), release: v.optional(v.boolean()), pending: v.optional(v.boolean()) },
+  handler: async (ctx, { token, release, pending }): Promise<string | null> => {
     const id = await ownerOrRun(ctx);
     const b = await ctx.db.get(id);
-    if (release) { await ctx.db.patch(id, { taxIdTidyAt: undefined, taxIdPending: pending ? true : undefined }); return true; }
-    if (b?.taxIdTidyAt && Date.now() - b.taxIdTidyAt < 120_000) return false;
-    await ctx.db.patch(id, { taxIdTidyAt: Date.now() });
-    return true;
+    if (token) {
+      if (b?.taxIdTidy !== token) return null; // taken over: not ours any more
+      await ctx.db.patch(id, release ? { taxIdTidy: undefined, taxIdTidyAt: undefined, taxIdPending: pending ? true : undefined } : { taxIdTidyAt: Date.now() });
+      return token;
+    }
+    if (b?.taxIdTidyAt && Date.now() - b.taxIdTidyAt < 120_000) return null;
+    const mine = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    await ctx.db.patch(id, { taxIdTidy: mine, taxIdTidyAt: Date.now(), taxIdPending: true });
+    return mine;
   },
 });
 
 /** Put each running subscription on the tax ID it should have; false when one couldn't be moved. Gone or cancelled in
  *  Stripe counts as done (#7); so does an account the platform can no longer reach, but never the connected one (N6). */
-async function alignSubscriptions(ctx: ActionCtx, connectedTo: string | null): Promise<boolean> {
+async function alignSubscriptions(ctx: ActionCtx, connectedTo: string | null, token: string): Promise<boolean> {
   let all = true;
   for (const s of await ctx.runQuery(internal.taxId.subsToAlign, {})) {
     const r = await stripeCall("POST", `subscriptions/${s.subscriptionId}`, { account: s.account, form: { invoice_settings: { account_tax_ids: s.want ? [s.want] : "" } } })
       .then(() => "ok" as const, (e) => (e instanceof StripeError && (e.status === 404 || (e.status === 403 && s.account !== connectedTo) || (e.status === 400 && /cancel/i.test(e.message))) ? "skip" as const : "fail" as const));
     if (r === "ok") await ctx.runMutation(internal.taxId.subMoved, { subscriptionId: s._id, taxId: s.want });
+    if (r === "skip") await ctx.runMutation(internal.taxId.subMoved, { subscriptionId: s._id, taxId: null }); // final check #2: done with
     if (r === "fail") all = false;
+    await ctx.runMutation(internal.taxId.claimTidy, { token }); // final check #7: still working, keep the claim
   }
   return all;
 }
@@ -158,11 +167,12 @@ export const subMoved = internalMutation({
 /** After a save (or when a subscription starts): subscriptions moved first, then old tax IDs nothing uses removed.
  *  left: old ones still in Stripe; pending: a subscription still to move (tried again in a few minutes). */
 async function tidy(ctx: ActionCtx, retry: (ms: number) => Promise<unknown>): Promise<{ left: number; pending: boolean }> {
-  if (!(await ctx.runMutation(internal.taxId.claimTidy, {}))) { await retry(60_000); return { left: 0, pending: true }; }
+  const token = await ctx.runMutation(internal.taxId.claimTidy, {});
+  if (!token) { await retry(60_000); return { left: 0, pending: true }; }
   let pending = true;
   try {
     const first = await ctx.runQuery(internal.taxId.deletable, {});
-    pending = !(await alignSubscriptions(ctx, first.connectedTo));
+    pending = !(await alignSubscriptions(ctx, first.connectedTo, token));
     const d = await ctx.runQuery(internal.taxId.deletable, {}); // a fresh read (#3, N1)
     const done: Array<{ id: string; account: string }> = [];
     for (const g of d.list) {
@@ -173,7 +183,7 @@ async function tidy(ctx: ActionCtx, retry: (ms: number) => Promise<unknown>): Pr
     if (pending) await retry(15 * 60_000);
     return { left: d.total - done.length, pending };
   } finally {
-    await ctx.runMutation(internal.taxId.claimTidy, { release: true, pending });
+    await ctx.runMutation(internal.taxId.claimTidy, { token, release: true, pending });
   }
 }
 
@@ -182,6 +192,7 @@ export const tidyLater = internalAction({
   args: { tries: v.number() },
   handler: async (ctx, { tries }): Promise<null> => {
     if (!ctx.asBusiness) throw new Error("A tidy-up runs for one business.");
+    if (await (ctx as unknown as ActionCtx).auth.getUserIdentity()) throw new Error("A tidy-up runs as the server, not as someone signed in."); // final check #6
     const biz = ctx.asBusiness;
     await tidy(ctx as unknown as ActionCtx, (ms) => (tries < 4 ? ctx.scheduler.runAfter(ms, internal.taxId.tidyLater, { asBusiness: biz, tries: tries + 1 }) : Promise.resolve(null)));
     return null;

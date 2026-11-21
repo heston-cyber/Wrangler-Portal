@@ -141,6 +141,7 @@ function TaxIdBlock({ show, connected }: { show: (m: string) => void; connected:
       {t?.leftover && connected && <div className="pay-row-act"><span className="secondary">Stripe isn't fully up to date with this EIN yet.</span> <Button size="sm" loading={busy} onClick={() => void save(t.value ?? "")}>Try again</Button></div>}
       {!t?.value && connected && (found === undefined
         ? <div><Button size="sm" loading={busy} onClick={() => void run(async () => { const r = await fromStripe({ use: false }); setFound(r?.value ?? null); return r ? "Found one on your Stripe account." : "No EIN on your Stripe account."; })}>Check Stripe for an EIN</Button></div>
+        : found === null ? <p className="secondary" style={{ margin: 0 }}>Your Stripe account has no EIN yet. Type it above to add it.</p>
         : found && <div className="pay-row-act"><span className="secondary">Your Stripe account has {found}.</span> <Button size="sm" loading={busy} onClick={() => void run(async () => { const r = await fromStripe({ use: true }); setFound(undefined); return r ? "EIN saved from Stripe." : "That EIN isn't on your Stripe account any more."; })}>Use it</Button></div>)}
     </div>
   );

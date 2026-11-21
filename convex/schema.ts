@@ -796,6 +796,7 @@ export default defineSchema({
     taxIdToRemove: v.optional(v.array(v.object({ id: v.string(), account: v.string() }))),
     // Re-check (Nov 21): one tidy-up at a time (when it started), and whether a subscription still waits to be moved.
     taxIdTidyAt: v.optional(v.number()),
+    taxIdTidy: v.optional(v.string()),
     taxIdPending: v.optional(v.boolean()),
     accent: v.optional(v.string()),        // #rrggbb
     background: v.optional(v.string()),    // #rrggbb
