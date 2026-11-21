@@ -8,7 +8,7 @@ import { v } from "convex/values";
 import { buildTranscript } from "./lib/transcript";
 import { mp4FrameCount } from "./lib/mp4";
 import { shareArg } from "./lib/viewer";
-import { signUrl } from "./lib/media";
+import { scrubCdn, signUrl } from "./lib/media";
 import { SITE_SLASH } from "./lib/site";
 
 const MAX_BYTES = 900_000_000;
@@ -35,11 +35,27 @@ export const run = internalAction({
       await ctx.runMutation(internal.transcripts.fail, { versionId, error: "Bunny never made an MP4 copy to transcribe." });
       return { result: "no MP4" };
     };
-    // A review render (R3): ElevenLabs reads it straight from Bunny Storage by URL, so nothing is downloaded here.
+    // A review render (R3): ElevenLabs reads it by URL, so nothing is downloaded here.
+    // Nov 21 (site watch, approved 09:42): ElevenLabs can't download the original from the review storage zone (every
+    // render since Oct 30 failed: "Failed to download the file from the provided URL"), so it reads the render's small
+    // copy instead: the scrub library's smallest MP4, which has the audio and opens without a referrer (checked live).
+    // While that copy is being made, wait as the Stream path does; a render that never gets one tries the original.
     if (row.version.source === "file" && row.version.fileUrl) {
+      const copy = row.version.scrubStatus === "ready" && row.version.scrubGuid && scrubCdn()
+        ? `https://${scrubCdn()}/${row.version.scrubGuid}/play_${[...(row.version.scrubHeights ?? [])].sort((a, b) => a - b)[0] ?? 360}p.mp4`
+        : null;
+      if (!copy && row.version.scrubStatus === "pending") {
+        if (attempt < MAX_WAITS) {
+          await ctx.runMutation(internal.transcripts.markPending, { versionId, note: "Waiting for the render's small copy." });
+          await ctx.scheduler.runAfter(WAIT_MS, internal.transcribe.run, { versionId, attempt: attempt + 1 });
+          return { result: "waiting for the small copy" };
+        }
+        await ctx.runMutation(internal.transcripts.fail, { versionId, error: "The render's small copy wasn't made in time to transcribe. Press Transcribe again." });
+        return { result: "no small copy" };
+      }
       const tries = await ctx.runMutation(internal.transcripts.begin, { versionId });
       try {
-        const { stt, model } = await sttFromUrl(key, await signUrl(row.version.fileUrl));
+        const { stt, model } = await sttFromUrl(key, await signUrl(copy ?? row.version.fileUrl));
         const fps = { num: row.version.fpsNum ?? 24000, den: row.version.fpsDen ?? 1001 };
         const file = buildTranscript(stt, fps, row.version.frameCount ?? null);
         const storageId = await ctx.storage.store(new Blob([JSON.stringify(file)], { type: "application/json" }));
