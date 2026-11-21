@@ -47,6 +47,8 @@ export async function stripeCall(method: "GET" | "POST" | "DELETE", path: string
       ...(opts.idem ? { "Idempotency-Key": opts.idem } : {}),
     },
     body,
+    // Review 2 #1 (Nov 21): a call that hangs stops after 30 seconds, so a send can't outlive its 15-minute "stuck" window.
+    signal: AbortSignal.timeout(30_000),
   });
   const j = (await r.json().catch(() => ({}))) as StripeResult;
   if (!r.ok) throw new StripeError(`Stripe: ${String(j.error?.message ?? r.statusText).slice(0, 200)}`, r.status, j.error?.code ?? null);

@@ -482,6 +482,7 @@ describe("Q93/Q94 raw footage paid late: after the choice", () => {
     await w2.maya.mutation(api.footage.keep, { projectId: w2.p });
     const [d] = await invoices(w2);
     const at = Date.now() - 3_600_000;
+    await w2.t.run(async (ctx) => { await ctx.db.patch(d._id, { status: "sending" }); }); // as a send leaves it (Nov 21: recordSent records only a send under way)
     await w2.t.mutation(internal.invoices.recordSent, { invoiceId: d._id, by: "Heston", stripe: { accountId: "acct_A", customerId: "cus_1", invoice: { id: "in_c", status: "paid", total: 10000, amount_paid: 10000, amount_remaining: 0, livemode: false, status_transitions: { paid_at: Math.floor(at / 1000) } } } });
     expect((await invoices(w2))[0].paidAt).toBe(Math.floor(at / 1000) * 1000);
   }, 60_000);

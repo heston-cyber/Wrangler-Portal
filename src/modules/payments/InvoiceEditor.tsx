@@ -111,8 +111,8 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
     } catch (e) { show(errText(e)); setBusy(null); setAsking(false); }
   };
   const canSend = opts.stripeReady && d.billTo.email && t.total >= 50;
-  // A send that stopped partway: it stays "sending" until Finish sending picks up what Stripe holds (after 5 minutes).
-  const canFinish = midSend && Date.now() - (existing?.updatedAt ?? Date.now()) > 5 * 60_000;
+  // A send that stopped partway: it stays "sending" until Finish sending picks up what Stripe holds (after 15 minutes).
+  const canFinish = midSend && Date.now() - (existing?.updatedAt ?? Date.now()) > 15 * 60_000;
   const doFinish = async () => {
     setBusy("finish");
     try {
@@ -124,7 +124,7 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
 
   return (
     <>
-      <TopBar right={midSend ? <Button variant="primary" onClick={() => void doFinish()} loading={busy === "finish"} disabled={!canFinish} title={canFinish ? "Checks Stripe first, then finishes it (no second invoice)" : "Available 5 minutes after the send stopped"}>Finish sending</Button> : <>
+      <TopBar right={midSend ? <Button variant="primary" onClick={() => void doFinish()} loading={busy === "finish"} disabled={!canFinish} title={canFinish ? "Checks Stripe first, then finishes it (no second invoice)" : "Available 15 minutes after the send stopped"}>Finish sending</Button> : <>
         <Button onClick={() => void doSave()} loading={busy === "save"}>Save draft</Button>
         <Button onClick={() => setAsking("create")} disabled={!canSend} title={!opts.stripeReady ? "Connect Stripe first (Settings › Payments)" : t.total < 50 ? "The total must be at least $0.50" : "Make it in Stripe with its pay link, without emailing anyone"}>Create without emailing…</Button>
         <Button variant="primary" onClick={() => setAsking("send")} disabled={!canSend} title={!opts.stripeReady ? "Connect Stripe first (Settings › Payments)" : t.total < 50 ? "The total must be at least $0.50" : undefined}>Send…</Button>
@@ -134,7 +134,7 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
       <div className="wp-page inv-edit">
         <header className="wp-pagehead"><div className="txt"><span className="wp-eyebrow">{invoiceId ? `Draft ${number}` : "New invoice"}</span><h1 className="wp-h2">{invoiceId ? (d.title || "Invoice") : "New invoice."}</h1><p className="wp-body">Nothing sends until you press Send and confirm. Create without emailing makes it payable from a link you copy, without emailing the invoice.</p></div></header>
         {midSend
-          ? <div className="wp-notice glass"><Icon name="alert" size={20} /><span className="txt"><b>This invoice is partway through {existing?.pendingMode === "quiet" ? "being made" : "sending"}.</b> {existing?.sendError ?? "It may already be in Stripe."} {canFinish ? "Press Finish sending: the portal checks Stripe first and won't make a second one." : "Finish sending is ready 5 minutes after it stopped."}</span></div>
+          ? <div className="wp-notice glass"><Icon name="alert" size={20} /><span className="txt"><b>This invoice is partway through {existing?.pendingMode === "quiet" ? "being made" : "sending"}.</b> {existing?.sendError ?? "It may already be in Stripe."} {canFinish ? "Press Finish sending: the portal checks Stripe first and won't make a second one." : "Finish sending is ready 15 minutes after it stopped."}</span></div>
           : existing?.sendError && <div className="wp-notice glass"><Icon name="alert" size={20} /><span className="txt"><b>The last send didn't go through.</b> {existing.sendError}</span></div>}
         {!opts.stripeReady && <div className="wp-notice glass"><Icon name="info" size={20} /><span className="txt"><b>Stripe isn't connected.</b> You can save drafts; sending needs Stripe.</span></div>}
         <div className="inv-cols">

@@ -83,8 +83,14 @@ describe("Create without emailing", () => {
     await w.heston.action(api.invoices.create, { invoiceId: id2 });
     await w.t.run(async (ctx) => { await ctx.db.patch(id2, { dueDate: soon }); });
     await w.heston.mutation(api.invoices.emailIt, { invoiceId: id2 });
-    const next = (await w.heston.query(api.invoices.get, { invoiceId: id2 })).reminders.next;
-    expect(next).toBeGreaterThanOrEqual(Date.now() + DAY - 60_000);
+    // Review 2 #6: say which reminder. Due in 2 days and emailed just now, the "before" one is skipped (it would come
+    // straight after the invoice); the next is the overdue one, after the due date.
+    const inv2 = (await w.t.run((ctx) => ctx.db.get(id2)))!;
+    const biz = (await w.t.run((ctx) => ctx.db.get(w.A)))!;
+    const { nextReminder } = await import("../convex/invoiceReminders");
+    const n = nextReminder(inv2, biz.reminders);
+    expect(n).toMatchObject({ kind: "overdue" });
+    expect(n!.at).toBeGreaterThan(Date.parse(`${soon}T23:59:59-06:00`));
   });
 
   // Review M1: made now, emailed after its due date: the client gets the invoice, but no overdue reminder straight after.
@@ -183,7 +189,7 @@ describe("Create without emailing", () => {
     });
     const kimSub = await w.t.run(async (ctx) => { const u = (await ctx.db.query("users").collect()).find((x) => x.email === "kim@other.example")!; return `${u._id}|${await ctx.db.insert("authSessions", { userId: u._id, expirationTime: Date.now() + 3_600_000 })}`; });
     const kim = w.t.withIdentity({ subject: kimSub });
-    const counter = () => w.t.run(async (ctx) => JSON.stringify(await ctx.db.query("businesses").collect()));
+    const counter = () => w.t.run(async (ctx) => JSON.stringify(await ctx.db.query("counters").collect())); // where invoiceSeq lives
     const before = await counter();
     await expect(w.boss.action(api.invoices.create, { invoiceId: id })).rejects.toThrow(/isn't here/);
     await expect(kim.action(api.invoices.create, { invoiceId: id })).rejects.toThrow(/isn't here|Not allowed/);
