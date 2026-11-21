@@ -17,7 +17,7 @@ import { clientDocs, openDelivery } from "./projects";
 import { pageOf, totals as builderTotals } from "./lib/wsBuilder";
 import { announceSent, payLink } from "./invoicePay";
 import { keepItem, itemV, unchanged, type LibItem } from "./lib/libraryItems";
-import { stillBillable } from "./products";
+import { libKey, stillBillable } from "./products";
 import { randomToken } from "./lib/hash";
 import { nextReminder } from "./invoiceReminders";
 import { crmProject } from "./crm";
@@ -335,7 +335,7 @@ export const claimForSend = internalMutation({
     const attempt = (i.sendAttempt ?? 0) + 1;
     await ctx.db.patch(i._id, { status: "sending", number, totalCents: t.total, amountRemainingCents: t.total, sendError: undefined, sendAttempt: attempt, pending: { ...(i.pending ?? {}), mode: mode ?? i.pending?.mode ?? "email" }, updatedAt: Date.now() });
     const earlier = (await ctx.db.query("invoices").withIndex("by_bill_email", (q) => q.eq("billTo.email", i.billTo.email)).collect()).find((x) => x.stripe?.accountId === biz.stripe!.accountId && x.stripe?.customerId);
-    return { invoice: { ...i, number }, totals: t, accountId: biz.stripe.accountId, livemode: !!biz.stripe.livemode, customerId: i.pending?.customerId ?? earlier?.stripe?.customerId ?? null, pending: i.pending ?? null, attempt, by: me.name ?? me.email, business: biz.name };
+    return { invoice: { ...i, number }, totals: t, accountId: biz.stripe.accountId, customerId: i.pending?.customerId ?? earlier?.stripe?.customerId ?? null, pending: i.pending ?? null, attempt, by: me.name ?? me.email, business: biz.name };
   },
 });
 
@@ -594,6 +594,10 @@ async function finalize(ctx: ActionCtx, invoiceId: Id<"invoices">, email: boolea
           const gone = await stripeCall("GET", `tax_ids/${ein}`, { account }).then((x) => !!x.deleted, (g) => g instanceof StripeError && g.status === 404);
           if (gone) { await ctx.runMutation(internal.taxId.forgetStripeId, { businessId: i.businessId, stripeId: ein }); ein = null; }
         }
+        // Nov 21: library lines (re-review #4: checked before Stripe's invoice is made, all at once).
+        const picked = i.lines.filter(unchanged).map((l) => ({ priceId: l.item!.priceId, unitCents: l.unitCents }));
+        const portalOk = picked.length ? await ctx.runQuery(internal.products.billable, { accountId: account, lines: picked }) : [];
+        const libPrices = portalOk.length ? await stillBillable(account, picked.filter((x) => portalOk.includes(libKey(x)))) : [];
         let taxRate: string | null = null;
         if (i.taxPercent) taxRate = (await stripeCall("POST", "tax_rates", { account, idem: k("tax"), form: { display_name: "Tax", percentage: i.taxPercent, inclusive: false } })).id as string;
         const inv = await stripeCall("POST", "invoices", {
@@ -612,13 +616,10 @@ async function finalize(ctx: ActionCtx, invoiceId: Id<"invoices">, email: boolea
         // One invoice item per line (the amount carries the quantity; the portal's own page shows qty and unit price).
         // Nov 21: a library line, unchanged, bills its Stripe price (Stripe's product reports count it); anything else is a
         // plain amount, as before. Only prices still on this business's library, on this account, count.
-        const picked = i.lines.filter(unchanged).map((l) => ({ priceId: l.item!.priceId, unitCents: l.unitCents }));
-        const portalOk = picked.length ? await ctx.runQuery(internal.products.billable, { accountId: account, livemode: c.livemode, lines: picked }) : [];
-        const libPrices = portalOk.length ? await stillBillable(account, picked.filter((x) => portalOk.includes(x.priceId))) : [];
         for (const [n, l] of i.lines.entries()) {
           const amount = Math.round(l.qty * l.unitCents);
           const desc = l.qty === 1 ? l.description : `${l.description} (${l.qty} × $${(l.unitCents / 100).toFixed(2)})`;
-          const form = unchanged(l) && libPrices.includes(l.item!.priceId)
+          const form = unchanged(l) && libPrices.includes(libKey({ priceId: l.item!.priceId, unitCents: l.unitCents }))
             ? { customer: customerId, invoice: inv.id, pricing: { price: l.item!.priceId }, quantity: l.qty, description: desc }
             : { customer: customerId, invoice: inv.id, amount, currency: "usd", description: desc };
           await stripeCall("POST", "invoiceitems", { account, idem: k(`item${n}`), form });

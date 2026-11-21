@@ -3,7 +3,7 @@
 // copy is kept on each invoice when it's made (as Stripe does), and printed on the portal's invoice page, receipt and
 // PDF. Only the owner sets it (Settings › Payments). It's printed on invoices, so whoever can open an invoice sees it
 // there (a team member with Payments, and the client); the connector sees only "(on file)" (siteGuard's scrub).
-import { action } from "./_generated/server";
+import { action, type ActionCtx } from "./_generated/server";
 import { internalMutation, internalQuery, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
@@ -55,7 +55,12 @@ export const save = internalMutation({
     const b = await ctx.db.get(id);
     if (!b) throw new ConvexError("Not allowed.");
     const was = b.taxId?.value ?? null;
-    await ctx.db.patch(id, { taxId: taxId ? { ...taxId, updatedAt: Date.now() } : undefined });
+    // Security review (Nov 21) #3: the one being replaced goes on the to-remove list in the same step, so two saves at
+    // once can't leave one in Stripe that nothing remembers.
+    const prev = b.taxId?.stripeId && b.taxId.accountId ? { id: b.taxId.stripeId, account: b.taxId.accountId } : null;
+    const replaced = prev && !(taxId?.stripeId === prev.id && taxId.accountId === prev.account);
+    const list = [...(b.taxIdToRemove ?? []), ...(replaced ? [prev] : [])].filter((x, n, all) => all.findIndex((y) => y.id === x.id && y.account === x.account) === n && !(x.id === taxId?.stripeId && x.account === taxId?.accountId));
+    await ctx.db.patch(id, { taxId: taxId ? { ...taxId, updatedAt: Date.now() } : undefined, taxIdToRemove: list.length ? list : undefined });
     // The audit line never carries the number itself (and isn't written when only Stripe's copy changed).
     if (was !== (taxId?.value ?? null)) await audit(ctx, { kind: "settings", text: taxId ? (imported ? "brought in the business's EIN from Stripe" : was ? "changed the business's EIN" : "set the business's EIN") : "removed the business's EIN", where: "Settings › Payments", link: "/settings/payments", businessId: id });
   },
@@ -67,14 +72,60 @@ const failed = (e: unknown): never => {
   throw new ConvexError("Stripe didn't answer as expected. Nothing changed; try again in a minute."); // re-review F: only a refused number says so
 };
 
-/** Re-review A: old Stripe tax IDs still to remove (Stripe wouldn't delete them yet); kept until they're gone. */
-export const keepToRemove = internalMutation({
-  args: { toRemove: v.array(v.object({ id: v.string(), account: v.string() })) },
-  handler: async (ctx, { toRemove }) => {
+/** Re-review A: old Stripe tax IDs still to remove stay listed until they're gone; these ones are gone. */
+export const removed = internalMutation({
+  args: { done: v.array(v.object({ id: v.string(), account: v.string() })) },
+  handler: async (ctx, { done }) => {
     await requireOwner(ctx);
-    await ctx.db.patch(ownBusiness(ctx), { taxIdToRemove: toRemove.length ? toRemove : undefined });
+    const b = await ctx.db.get(ownBusiness(ctx));
+    const list = (b?.taxIdToRemove ?? []).filter((x) => !done.some((d) => d.id === x.id && d.account === x.account));
+    await ctx.db.patch(ownBusiness(ctx), { taxIdToRemove: list.length ? list : undefined });
   },
 });
+
+/** Security review (Nov 21) #2, #4, #8: the business's running subscriptions whose invoices carry (or should carry) its
+ *  EIN, with the tax ID each should have now: the current one on its Stripe account, or none. Owner only. */
+export const subsToAlign = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    await requireOwner(ctx);
+    const b = await ctx.db.get(ownBusiness(ctx));
+    const cur = b?.taxId?.stripeId && b.taxId.accountId ? { id: b.taxId.stripeId, account: b.taxId.accountId } : null;
+    return (await ctx.db.query("subscriptions").collect()) // row-level rules: this business's only
+      .filter((s) => (s.einOn || s.accountTaxId) && s.stripe?.subscriptionId && s.status !== "canceled" && s.status !== "incomplete_expired")
+      .map((s) => ({ _id: s._id, subscriptionId: s.stripe!.subscriptionId!, account: s.stripe!.accountId, has: s.accountTaxId ?? null, want: cur && cur.account === s.stripe!.accountId ? cur.id : null }))
+      .filter((s) => s.has !== s.want);
+  },
+});
+
+/** Put each running subscription on the tax ID it should have. False when one couldn't be moved (then nothing is
+ *  removed from Stripe, so no subscription points at a tax ID that's gone). Gone or cancelled in Stripe, or out of the
+ *  platform's reach, counts as done (#7). */
+async function alignSubscriptions(ctx: ActionCtx): Promise<boolean> {
+  let all = true;
+  for (const s of await ctx.runQuery(internal.taxId.subsToAlign, {})) {
+    const r = await stripeCall("POST", `subscriptions/${s.subscriptionId}`, { account: s.account, form: { invoice_settings: { account_tax_ids: s.want ? [s.want] : "" } } })
+      .then(() => "ok" as const, (e) => (e instanceof StripeError && (e.status === 404 || e.status === 403 || (e.status === 400 && /cancel/i.test(e.message))) ? "skip" as const : "fail" as const));
+    if (r === "ok") await ctx.runMutation(internal.subscriptions.setAccountTaxId, { subscriptionId: s._id, taxId: s.want });
+    if (r === "fail") all = false;
+  }
+  return all;
+}
+
+/** After a save: subscriptions moved first, then the old tax IDs removed. */
+async function tidy(ctx: ActionCtx): Promise<number> {
+  const moved = await alignSubscriptions(ctx);
+  const f = await ctx.runQuery(internal.taxId.target, {}); // a fresh read (#3)
+  if (!moved) return f.toRemove.length;
+  const done: Array<{ id: string; account: string }> = [];
+  for (const g of f.toRemove) {
+    if (g.id === f.taxId?.stripeId && g.account === f.taxId?.accountId) { done.push(g); continue; }
+    const ok = await stripeCall("DELETE", `tax_ids/${g.id}`, { account: g.account }).then(() => true, (e) => e instanceof StripeError && (e.status === 404 || e.status === 403));
+    if (ok) done.push(g);
+  }
+  if (done.length) await ctx.runMutation(internal.taxId.removed, { done });
+  return f.toRemove.length - done.length;
+}
 
 /** The business's own us_ein tax IDs on a Stripe account (owner self only; never a customer's). */
 async function stripeEins(account: string): Promise<Array<{ id: string; value: string }>> {
@@ -110,27 +161,11 @@ export const set = action({
         made = { id, account: t.accountId };
       }
       await ctx.runMutation(internal.taxId.save, { taxId: value ? { type: "us_ein", value, ...(made ? { stripeId: made.id, accountId: made.account } : {}) } : null });
-      // Then the old one goes (unless it's the one in use), with any Stripe wouldn't delete before. What still won't go is
+      // Then (Nov 21) running subscriptions move to it (or to none), and only then do old tax IDs go. What won't go is
       // kept and tried again on the next save (re-review A); Settings says so and offers to try now.
-      const gone: Array<{ id: string; account: string }> = [...t.toRemove];
-      if (old && !(made && made.id === old.id && made.account === old.account)) gone.push(old);
-      const left: typeof gone = [];
-      for (const g of gone) {
-        if (made && g.id === made.id && g.account === made.account) continue;
-        // Nov 21: subscriptions whose invoices carry it move to the new one (or to none) first; one that can't be moved
-        // keeps it, so its next invoice never points at a tax ID that's gone. Tried again on the next save.
-        const next = made && made.account === g.account ? made.id : null;
-        let moved = true;
-        for (const sub of await ctx.runQuery(internal.subscriptions.usingTaxId, { accountId: g.account, taxId: g.id })) {
-          const ok = await stripeCall("POST", `subscriptions/${sub.subscriptionId}`, { account: g.account, form: { invoice_settings: { account_tax_ids: next ? [next] : "" } } }).then(() => true, () => false);
-          if (ok) await ctx.runMutation(internal.subscriptions.setAccountTaxId, { subscriptionId: sub._id, taxId: next });
-          else moved = false;
-        }
-        if (!moved) { left.push(g); continue; }
-        await stripeCall("DELETE", `tax_ids/${g.id}`, { account: g.account }).catch((e) => { if (!(e instanceof StripeError && e.status === 404)) left.push(g); });
-      }
-      if (left.length || t.toRemove.length) await ctx.runMutation(internal.taxId.keepToRemove, { toRemove: left });
-      if (left.length) throw new ConvexError(value ? "Saved. Stripe still has the old EIN for now; it's removed the next time you save, or with Remove it below." : "Removed here. Stripe still has it for now; it's removed the next time you save, or with Remove it below.");
+      const left = await tidy(ctx).catch(() => -1);
+      if (left < 0) throw new ConvexError("Saved. Stripe didn't answer as expected while tidying up; that's finished the next time you save.");
+      if (left) throw new ConvexError(value ? "Saved. Stripe still has the old EIN for now; it's removed the next time you save, or with Remove it below." : "Removed here. Stripe still has it for now; it's removed the next time you save, or with Remove it below.");
       return { value, inStripe: !!made };
     } catch (e) {
       return failed(e);
@@ -148,7 +183,10 @@ export const fromStripe = action({
       const ein = (await stripeEins(t.accountId))[0];
       const value = ein ? cleanEin(ein.value) : null;
       if (!ein || !value) return null;
-      if (use) await ctx.runMutation(internal.taxId.save, { taxId: { type: "us_ein", value, stripeId: ein.id, accountId: t.accountId }, imported: true });
+      if (use) {
+        await ctx.runMutation(internal.taxId.save, { taxId: { type: "us_ein", value, stripeId: ein.id, accountId: t.accountId }, imported: true });
+        await tidy(ctx).catch(() => -1); // subscriptions that should carry it get it (#4)
+      }
       return { value };
     } catch (e) {
       return failed(e);
@@ -164,7 +202,7 @@ export const forgetStripeId = internalMutation({
     if (b?.taxId?.stripeId !== stripeId) return;
     await ctx.db.patch(businessId, { taxId: { type: "us_ein", value: b.taxId.value, updatedAt: Date.now() } });
     // Re-review E: say so (never the number). Settings then offers Add it to Stripe.
-    await audit(ctx, { kind: "settings", text: `found the business's EIN no longer in Stripe: ${what === "subscription" ? "a subscription started" : "Stripe's copy of this invoice went"} without it (Add it to Stripe in Settings › Payments)`, where: "Settings › Payments", link: "/settings/payments", businessId });
+    await audit(ctx, { by: { name: "WranglerPortal", role: "System" }, kind: "settings", text: `found the business's EIN no longer in Stripe: ${what === "subscription" ? "a subscription started" : "Stripe's copy of this invoice went"} without it (Add it to Stripe in Settings › Payments)`, where: "Settings › Payments", link: "/settings/payments", businessId });
   },
 });
 

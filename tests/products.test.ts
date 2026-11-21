@@ -19,7 +19,7 @@ type W = Awaited<ReturnType<typeof world>>;
 type Call = { method: string; path: string; query?: string; account: string | null; form: Record<string, string> };
 
 /** The stand-in plus Stripe's product list, and invoice lines billed by price (Stripe works out their amount). */
-function stripe(list: unknown[] = [], opts: { hasMore?: boolean } = {}) {
+function stripe(list: unknown[] = [], opts: { hasMore?: boolean; odd?: boolean; priceDown?: boolean } = {}) {
   const calls = fakeStripe() as Call[];
   const inner = globalThis.fetch;
   const prices = new Map<string, number>();
@@ -34,11 +34,12 @@ function stripe(list: unknown[] = [], opts: { hasMore?: boolean } = {}) {
     const account = ((init.headers ?? {}) as Record<string, string>)["Stripe-Account"] ?? null;
     if (path === "products" && m === "GET") {
       seen.push({ method: m, path, query: decodeURIComponent(query), account, form });
-      return new Response(JSON.stringify({ data: list, has_more: !!opts.hasMore }));
+      return new Response(JSON.stringify(opts.odd ? { object: "list" } : { object: "list", data: list, has_more: !!opts.hasMore }));
     }
     if (/^prices\/[^/]+$/.test(path) && m === "GET") {
       const id = path.split("/")[1];
       seen.push({ method: m, path, query: decodeURIComponent(query), account, form });
+      if (opts.priceDown) return new Response(JSON.stringify({ error: { message: "busy" } }), { status: 500 });
       const st = priceState.get(id);
       if (!st) return new Response(JSON.stringify({ error: { message: "No such price" } }), { status: 404 });
       return new Response(JSON.stringify({ id, object: "price", type: "one_time", currency: "usd", billing_scheme: "per_unit", unit_amount: prices.get(id), active: st.active, product: { id: st.product, active: productActive.get(st.product) ?? true }, ...st.extra }));
@@ -176,6 +177,64 @@ describe("Payments › Products", () => {
     const page = await w.t.query(api.invoicePay.page, { token });
     expect(page.lines).toEqual([{ id: "1", description: "Half-day shoot", qty: 1, unitCents: 120000 }, { id: "2", description: "Drone add-on", qty: 1, unitCents: 45000 }]);
     expect(JSON.stringify(page)).not.toMatch(/price_|"item"|productId/);
+  });
+
+  test("P3c (re-review): odd answers. Stripe down for the price check, or a price at another amount: plain lines; another mode's or account's row isn't billed by price; an odd list answer archives nothing", async () => {
+    const w = await world();
+    let s = stripe();
+    await w.heston.action(api.products.save, { name: "Half-day shoot", amountCents: 120000 });
+    const [half] = await w.heston.query(api.products.picker, {}) as Array<{ _id: string; priceId: string; amountCents: number; name: string }>;
+    const line = { id: "1", description: half.name, qty: 1, unitCents: half.amountCents, item: { productId: half._id, priceId: half.priceId, unitCents: half.amountCents, description: half.name } };
+    const plainSend = async (setup: () => Promise<void> | void) => {
+      const id = await draft(w, [line]);
+      await setup();
+      await w.heston.action(api.invoices.send, { invoiceId: id });
+      expect(s.seen.filter((x) => x.path === "invoiceitems")).toEqual([]);
+      expect(s.calls.filter((x) => x.path === "invoiceitems").map((x) => x.form.amount)).toEqual(["120000"]);
+      expect((await w.t.run((ctx) => ctx.db.get(id)))!.status).toBe("open");
+    };
+    // Stripe down for the price check (the price GETs come before Stripe's invoice is made).
+    const prev = s;
+    s = stripe([], { priceDown: true }); for (const [k, v] of prev.prices) s.prices.set(k, v);
+    await plainSend(() => {});
+    expect(s.calls.findIndex((x) => x.method === "POST" && x.path === "invoices")).toBeGreaterThan(-1);
+    // Stripe's price says another amount.
+    s = stripe(); s.prices.set(half.priceId, 99900); s.priceState.set(half.priceId, { product: "prod_0", active: true });
+    await plainSend(() => {});
+    // The portal's row is on another mode, or another copy of the price is on another account.
+    s = stripe(); for (const [k, v] of prev.prices) s.prices.set(k, v); for (const [k, v] of prev.priceState) s.priceState.set(k, v);
+    await plainSend(() => w.t.run(async (ctx) => { const p = (await ctx.db.query("products").collect())[0]; await ctx.db.patch(p._id, { stripe: { ...p.stripe, livemode: true } }); }));
+    await w.t.run(async (ctx) => { const p = (await ctx.db.query("products").collect())[0]; await ctx.db.patch(p._id, { stripe: { ...p.stripe, livemode: false } }); });
+    s = stripe(); for (const [k, v] of prev.prices) s.prices.set(k, v); for (const [k, v] of prev.priceState) s.priceState.set(k, v);
+    await plainSend(() => w.t.run(async (ctx) => { await ctx.db.insert("products", { businessId: w.A, name: "Copy", amountCents: 120000, stripe: { accountId: "acct_OTHER", productId: "prod_0", priceId: half.priceId, livemode: false }, createdAt: 0, updatedAt: 0 }); }));
+    // An odd list answer (no data) is not a full read: nothing archived. The same product id on another account is its own row.
+    stripe([], { odd: true });
+    expect(await w.heston.action(api.products.sync, {})).toMatchObject({ retired: 0, truncated: true });
+    expect(await w.heston.query(api.products.picker, {})).toHaveLength(1);
+    stripe([{ id: "prod_x", name: "Unexpanded", active: true, default_price: "price_x" }]);
+    expect(await w.heston.action(api.products.sync, {})).toMatchObject({ retired: 0, truncated: true });
+    // A full read of an empty account archives this account's rows only (acct_OTHER's copy stays as it is).
+    stripe([]);
+    expect(await w.heston.action(api.products.sync, {})).toMatchObject({ retired: 1, truncated: false });
+    const rows = await products(w);
+    expect(rows.map((p) => [p.stripe.accountId, !!p.archivedAt]).sort()).toEqual([["acct_A", true], ["acct_OTHER", false]]);
+  });
+
+  test("P3d (re-review #2): Save pressed again from the same form, even after fixing the name, gets the same Stripe product back; a Bring in that came first isn't doubled", async () => {
+    const w = await world();
+    const { calls } = stripe();
+    const nonce = "f0rm-nonce-1234";
+    await w.heston.action(api.products.save, { name: "Half-day shoot", amountCents: 120000, nonce });
+    const makes = calls.filter((c) => c.method === "POST" && c.path === "products");
+    expect(makes[0].form.name).toBe("New product"); // the same details every time for this form
+    expect(calls.some((c) => c.path === "products/prod_0" && c.form.name === "Half-day shoot")).toBe(true);
+    // The store step finds a row a Bring in already made for this product: updated, not doubled.
+    await w.t.run(async (ctx) => { const p = (await ctx.db.query("products").collect())[0]; await ctx.db.delete(p._id); await ctx.db.insert("products", { ...p, _id: undefined, _creationTime: undefined, name: "From Stripe" } as never); });
+    await w.heston.mutation(anyApi.products.store, { name: "Half-day shoot", amountCents: 120000, stripe: { accountId: "acct_A", productId: "prod_0", priceId: "price_0", livemode: false } });
+    expect((await products(w)).map((p) => p.name)).toEqual(["Half-day shoot"]);
+    const src = (await import("node:fs")).readFileSync("convex/products.ts", "utf8");
+    expect(src).toContain("idem: `wp-prod-${nonce}` }");
+    expect(src).toContain('name: nonce ? "New product" : name');
   });
 
   test("P4: a line can only carry this business's product, at its current price (never another business's)", async () => {
