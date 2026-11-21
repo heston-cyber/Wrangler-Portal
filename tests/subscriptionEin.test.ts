@@ -167,6 +167,7 @@ describe("the EIN on subscription invoices", () => {
     fakeStripe();
     const id2 = await w.heston.action(api.subscriptions.start, { clientId: w.harbor, planId, billTo: { name: "Maya Brooks", email: "maya@harbor.example" }, startDate: new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10), firstInvoice: "start", postInbox: false });
     const token2 = (await w.heston.query(api.subscriptions.get, { subscriptionId: id2 })).link.split("/sub/")[1];
+    await w.t.run(async (ctx) => { await ctx.db.patch(id2 as never, { einOn: true } as never); }); // its earlier try decided the EIN
     s = stripe({ sub: { portal: id2, status: "trialing", id: "sub_2" } }, ids, { existing: { id: "sub_2", object: "subscription", status: "trialing", metadata: { portal_subscription: id2 }, invoice_settings: { account_tax_ids: ["txi_1"] }, items: { data: [] } } });
     await w.t.action(api.subscriptions.setupDone, { token: token2, setupIntentId: "seti_1" });
     expect(s.keys).toEqual([]);
@@ -325,5 +326,19 @@ describe("the EIN on subscription invoices", () => {
     expect(ed).toContain('const raw = e.target.value.replace(/[^\\d.]/g, "")');
     expect(ed).toContain("Promise.race([navigator.clipboard.writeText(r.link)");
     expect(fs.readFileSync("src/modules/settings/PaymentsSettings.tsx", "utf8")).toContain("Your Stripe account has no EIN yet. Type it above to add it.");
+  });
+
+  test("S10 (Heston, Nov 21: \"leave it alone\"): a tax ID added by hand in Stripe on a subscription the portal didn't put the EIN on is never recorded or changed", async () => {
+    const w = await world();
+    const ids: Array<{ id: string; value: string }> = [];
+    const { id } = await running(w, ids); // started before any EIN: not the portal's to manage
+    stripe({ sub: { portal: id, invoice_settings: { account_tax_ids: ["txi_hand"] } } }, ids);
+    await w.t.action(anyApi.subscriptions.sync, { accountId: "acct_A", subscriptionId: "sub_1" }).catch(() => null);
+    await w.t.mutation(anyApi.subscriptions.applyStripe, { accountId: "acct_A", object: { id: "sub_1", object: "subscription", status: "active", metadata: { portal_subscription: id }, invoice_settings: { account_tax_ids: ["txi_hand"] }, items: { data: [] } } });
+    expect((await row(w, id))!.accountTaxId).toBeUndefined();
+    const s = stripe({}, ids);
+    await w.heston.action(api.taxId.set, { ein: "12-3456789" });
+    await w.heston.action(api.taxId.set, { ein: "98-7654321" });
+    expect(s.calls.filter((c) => c.path.startsWith("subscriptions/"))).toEqual([]);
   });
 });
