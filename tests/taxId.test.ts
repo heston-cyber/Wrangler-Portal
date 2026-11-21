@@ -150,7 +150,7 @@ describe("The business's EIN", () => {
     let s = stripeWithTaxIds();
     await w.heston.action(api.taxId.set, { ein: "12-3456789" });
     s = stripeWithTaxIds(s.ids, { delete: true });
-    await expect(w.heston.action(api.taxId.set, { ein: "98-7654321" })).rejects.toThrow("Saved. Stripe still has the old EIN for now; it's removed the next time you save, or with Remove it below.");
+    await expect(w.heston.action(api.taxId.set, { ein: "98-7654321" })).rejects.toThrow("Saved. Stripe still has the old EIN for now; it's removed the next time you save, or with Try again below.");
     expect(s.ids.map((x) => x.id)).toEqual(["txi_1", "txi_2"]); // both still in Stripe
     expect(await w.heston.query(api.taxId.get, {})).toEqual({ value: "98-7654321", inStripe: true, leftover: true });
     expect((await w.t.run((ctx) => ctx.db.get(w.A)))!.taxIdToRemove).toEqual([{ id: "txi_1", account: "acct_A" }]);

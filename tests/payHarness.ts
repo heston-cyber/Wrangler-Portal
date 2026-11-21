@@ -10,7 +10,7 @@ const api = anyApi;
 const modules = import.meta.glob("../convex/**/*.ts");
 
 export type Call = { method: string; path: string; query: string; account: string | null; form: Record<string, string> };
-export function fakeStripe(opts: { payments?: unknown[]; invoiceStatus?: string; totalOverride?: number; sub?: Record<string, unknown>; subInvoice?: Record<string, unknown>; payError?: string } = {}) {
+export function fakeStripe(opts: { payments?: unknown[]; invoiceStatus?: string; totalOverride?: number; sub?: Record<string, unknown>; subInvoice?: Record<string, unknown>; payError?: string; subList?: unknown[] } = {}) {
   const calls: Call[] = [];
   let total = 0;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
@@ -24,6 +24,8 @@ export function fakeStripe(opts: { payments?: unknown[]; invoiceStatus?: string;
     if (/^customers\//.test(path)) return ok({ id: path.split("/")[1] });
     if (path === "setup_intents") return ok({ id: "seti_1", client_secret: "seti_1_secret_x" });
     if (/^setup_intents\//.test(path)) return ok({ id: "seti_1", status: "succeeded", customer: "cus_1", metadata: { portal_subscription: opts.sub?.portal ?? "" }, payment_method: { id: "pm_1", type: "card", card: { brand: "visa", last4: "4242" } } });
+    // Nov 21: listing a customer's subscriptions (a start checks for one already made for its row).
+    if (path === "subscriptions" && (init?.method ?? "GET") === "GET") return ok({ object: "list", data: opts.subList ?? [], has_more: false });
     if (path === "subscriptions" || /^subscriptions\//.test(path)) return ok({ id: "sub_1", status: "active", items: { data: [{ current_period_start: 1_790_000_000, current_period_end: 1_792_592_000 }] }, latest_invoice: "in_s1", metadata: { portal_subscription: opts.sub?.portal ?? "" }, ...opts.sub });
     if (path === "invoices/create_preview") return ok({ amount_due: 312500, next_payment_attempt: 1_792_592_000 });
     if (path === "invoices" && (init.method ?? "GET") === "GET") return ok({ data: opts.subInvoice ? [{ id: "in_s1" }] : [] });
