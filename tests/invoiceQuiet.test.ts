@@ -142,7 +142,7 @@ describe("Create without emailing", () => {
     await expect(w.heston.mutation(api.invoices.emailIt, { invoiceId: still })).rejects.toThrow(/Send the invoice first/);
   });
 
-  test("T4: paid from the copied link: marked paid, the receipt goes to the bill-to address, still nothing on their portal or Inbox; Email it is refused", async () => {
+  test("T4: paid from the copied link: marked paid, the receipt goes to the bill-to address, nothing in their Inbox, and on their portal only as a paid receipt; Email it is refused", async () => {
     vi.useFakeTimers();
     const w = await world();
     fakeStripe();
@@ -158,7 +158,10 @@ describe("Create without emailing", () => {
     expect(keys).toContain(`receipt:${id}:pi_1`); // the receipt (to the bill-to address, as the Create dialog says)
     expect(keys.filter((k) => !k.startsWith("receipt:") && !k.startsWith("owner-paid:"))).toEqual([]); // and Heston's "paid": nothing else
     expect(await inbox(w)).toEqual([]);
-    expect(await w.maya.query(api.invoicePay.mine, {})).toEqual([]);
+    // Decision 2 (Nov 21): paid, it's on their portal as their receipt.
+    expect(await w.maya.query(api.invoicePay.mine, {})).toEqual([expect.objectContaining({ number: "WRNGLR-0001", status: "paid" })]);
+    expect(await w.jo.query(api.invoicePay.mine, {})).toHaveLength(1); // Jo is Harbor's other contact
+    expect(await w.boss.query(api.invoicePay.mine, {})).toEqual([]);
     await expect(w.heston.mutation(api.invoices.emailIt, { invoiceId: id })).rejects.toThrow(/already paid/);
     // Review M3: Reports count it as invoiced in the month it was made, not never.
     const month = new Date().toISOString().slice(0, 7);
