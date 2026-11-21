@@ -4457,3 +4457,16 @@ textarea.cv-boxtxt { pointer-events: auto; display: block; padding-top: calc(50%
 .ob-uperr > span { display: grid; gap: 2px; flex: 1; min-width: 0; }
 .ob-uperr b { font-weight: 500; overflow-wrap: anywhere; }
 .ob-uperr > .btn { flex: none; }
+
+/* Nov 21 (Heston): the hover highlight. A soft gray rounded box over whatever can be clicked under the mouse; it glides
+   to the next one. It sits above the page (pointer-events none), so it reads as a light tint on the thing itself. */
+.wp-hoverglow {
+  position: fixed; left: 0; top: 0; width: 0; height: 0; z-index: 2147483000; pointer-events: none;
+  background: rgba(255, 255, 255, 0.08); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  opacity: 0; transform: translate(-100px, -100px);
+  transition: transform 160ms cubic-bezier(.2,.7,.2,1), width 160ms cubic-bezier(.2,.7,.2,1), height 160ms cubic-bezier(.2,.7,.2,1), border-radius 160ms ease, opacity 120ms ease;
+}
+.wp-hoverglow[data-on="1"] { opacity: 1; }
+.wp-hoverglow[data-jump] { transition: opacity 120ms ease; }
+@media (prefers-reduced-motion: reduce) { .wp-hoverglow { transition: opacity 80ms linear; } }
+@media (hover: none), (pointer: coarse) { .wp-hoverglow { display: none; } }

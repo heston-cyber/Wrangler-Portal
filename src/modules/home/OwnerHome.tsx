@@ -13,6 +13,8 @@ import { CreateMenu } from "./CreateMenu";
 import { Button, ButtonLink, Card, Divider, EmptyState, InboxItem, ListRow, PageHeader, SectionHead, SkeletonRows, StatusChip } from "../../ui/wp";
 import type { IconName } from "../../ui/Icon";
 import { useToast } from "../../ui/kit";
+import type { ItemSpec } from "../../ui/hold";
+import { navigate } from "../../lib/router";
 import { errText } from "../docs/pages/common";
 import { TopBar } from "../../shell/Shell";
 import { Tile } from "../overviews/Tile";
@@ -53,11 +55,39 @@ type ClientRow = NonNullable<ReturnType<typeof useQuery<typeof api.clients.direc
 
 const VERB = { approve: "approve", send: "send", cancel: "cancel signing of" } as const;
 
-function NeedRow({ n, remind }: { n: Need; remind: (n: Extract<Need, { kind: "doc" }>) => Promise<void> }) {
+/** Nov 21 (Heston: "right click and edit any item on my dashboard"): where each Needs you row opens. */
+function needHref(n: Need): string | undefined {
+  switch (n.kind) {
+    case "notes": return `/v/${n.videoId}?version=${n.version}`;
+    case "doc": return `/sign/d/${n.documentId}`;
+    case "quote": return `/payments/quotes/${n.quoteId}`;
+    case "vendorInvoice": return `/vendors/payments/${n.invoiceId}`;
+    case "proposal": return `/proposals/${n.proposalId}`;
+    case "footage": return `/projects/${n.projectId}?tab=delivery`;
+    case "testimonial": return "/clients/testimonials";
+    case "weatherChanged": return `/production/call-sheets/${n.callSheetId}?update=1`;
+    case "draft": return `/sent/new?note=${n.noteId}`;
+    case "call": case "shootMoved": return undefined; // their own rows
+    default: return `/sign/d/${n.documentId}`;
+  }
+}
+
+function NeedRow({ n, remind, cancelSigning }: { n: Need; remind: (n: Extract<Need, { kind: "doc" }>) => Promise<void>; cancelSigning: (n: Extract<Need, { kind: "doc" }>, reason?: string) => Promise<void> }) {
   const [busy, setBusy] = useState(false);
+  const href = needHref(n);
+  // Each row's menu: Open (and Share, Copy link), plus its own actions, the same as its button and the page's.
+  const menu: ItemSpec | undefined = !href ? undefined : n.kind === "doc" ? {
+    id: href, title: n.title, href, actions: [
+      { key: "remind", label: "Remind", run: () => remind(n) },
+      { key: "cancel", label: "Cancel signing…", danger: true, run: (v) => cancelSigning(n, v?.reason),
+        form: { title: () => `Cancel signing for ${n.label}? The signing links stop working and everyone who was sent it is emailed that it was cancelled.`, fields: [{ key: "reason", label: "Reason (optional, included in the email)", optional: true }], yes: () => "Cancel signing" } },
+    ],
+  } : n.kind === "proposal" && n.what === "accepted" ? {
+    id: href, title: n.title, href, actions: [{ key: "contract", label: "Start the contract", run: () => navigate(href) }],
+  } : { id: href, title: "title" in n && typeof n.title === "string" ? n.title : href, href };
   if (n.kind === "notes") {
     return (
-      <ListRow lead={{ avatar: n.who, two: true }} title={`${n.count} new note${n.count === 1 ? "" : "s"} from ${first(n.who)}`}
+      <ListRow menu={menu} lead={{ avatar: n.who, two: true }} title={`${n.count} new note${n.count === 1 ? "" : "s"} from ${first(n.who)}`}
         meta={`${n.video} · v${n.version} · ${dayWord(n.at)}`}
         action={<ButtonLink size="sm" to={`/v/${n.videoId}?version=${n.version}`}>Open</ButtonLink>} />
     );
@@ -66,7 +96,7 @@ function NeedRow({ n, remind }: { n: Need; remind: (n: Extract<Need, { kind: "do
     const days = Math.floor((Date.now() - n.sentAt) / DAY);
     const dayText = days >= 1 ? `${days} day${days === 1 ? "" : "s"}` : null;
     return (
-      <ListRow className="ilead" lead={{ icon: "sign" }}
+      <ListRow menu={menu} className="ilead" lead={{ icon: "sign" }}
         title={<><span className="pc-only">{n.title} waiting on {n.waitingOn.map(first).join(" and ")}</span><span className="ph-only">{n.title} waiting</span></>}
         meta={<><span className="pc-only">{n.label} · sent {monthDay(n.sentAt)}{n.client ? ` · ${n.client}` : ""}</span><span className="ph-only">{n.label} · on {n.waitingOn.map(first).join(" and ")}{dayText ? ` · ${dayText}` : ""}</span></>}
         chip={dayText ? <span className="pc-only"><StatusChip tone="warning">{dayText}</StatusChip></span> : undefined}
@@ -75,7 +105,7 @@ function NeedRow({ n, remind }: { n: Need; remind: (n: Extract<Need, { kind: "do
   }
   if (n.kind === "quote") {
     return (
-      <ListRow className="ilead" lead={{ icon: n.what === "accepted" ? "check-circle" : "close" }}
+      <ListRow menu={menu} className="ilead" lead={{ icon: n.what === "accepted" ? "check-circle" : "close" }}
         title={`${first(n.who)} ${n.what} quote ${n.number}`} meta={`${n.company} · ${n.title} · ${dayWord(n.at)}`}
         titleChip={<span className="pc-only"><StatusChip tone={n.what === "accepted" ? "success" : "danger"}>{n.what === "accepted" ? "Accepted" : "Declined"}</StatusChip></span>}
         action={<ButtonLink size="sm" variant={n.what === "accepted" ? "primary" : "secondary"} to={`/payments/quotes/${n.quoteId}`}>Open</ButtonLink>} />
@@ -83,14 +113,14 @@ function NeedRow({ n, remind }: { n: Need; remind: (n: Extract<Need, { kind: "do
   }
   if (n.kind === "vendorInvoice") { // Phase 3c: a vendor's invoice to approve (email 26), until it's approved or declined
     return (
-      <ListRow className="ilead" lead={{ icon: "invoice" }} title={`${n.vendor} sent invoice ${n.number}`} meta={`${n.project} · ${money(n.totalCents)} · ${dayWord(n.at)}`}
+      <ListRow menu={menu} className="ilead" lead={{ icon: "invoice" }} title={`${n.vendor} sent invoice ${n.number}`} meta={`${n.project} · ${money(n.totalCents)} · ${dayWord(n.at)}`}
         titleChip={<span className="pc-only"><StatusChip tone="warning">To approve</StatusChip></span>}
         action={<ButtonLink size="sm" variant="primary" to={`/vendors/payments/${n.invoiceId}`}>Review it</ButtonLink>} />
     );
   }
   if (n.kind === "proposal") { // Phase 3b: an answered proposal, until the contract starts / Not now, or it's seen
     return (
-      <ListRow className="ilead" lead={{ icon: n.what === "accepted" ? "check-circle" : "close" }}
+      <ListRow menu={menu} className="ilead" lead={{ icon: n.what === "accepted" ? "check-circle" : "close" }}
         title={`${first(n.who)} ${n.what} proposal ${n.number}`} meta={`${n.company} · ${n.title} · ${dayWord(n.at)}`}
         titleChip={<span className="pc-only"><StatusChip tone={n.what === "accepted" ? "success" : "danger"}>{n.what === "accepted" ? "Accepted" : "Declined"}</StatusChip></span>}
         action={<ButtonLink size="sm" variant={n.what === "accepted" ? "primary" : "secondary"} to={`/proposals/${n.proposalId}`}>{n.what === "accepted" ? "Start the contract" : "Open"}</ButtonLink>} />
@@ -102,7 +132,7 @@ function NeedRow({ n, remind }: { n: Need; remind: (n: Extract<Need, { kind: "do
     const meta = { kept: "an invoice draft to check and send", renewal: "an invoice draft to check and send", ended: "delete or move it when you're ready; the portal never deletes files", unpaid: "the keep date has passed: remind them, or void the invoice", paidLate: "keep it for a year, or refund it in Stripe" }[n.what];
     const chip = { kept: "To send", renewal: "To send", ended: "Keep date", unpaid: "Not paid", paidLate: "Paid late" }[n.what];
     return (
-      <ListRow className="ilead" lead={{ icon: n.what === "kept" || n.what === "renewal" ? "invoice" : "alert" }} title={t}
+      <ListRow menu={menu} className="ilead" lead={{ icon: n.what === "kept" || n.what === "renewal" ? "invoice" : "alert" }} title={t}
         meta={`${n.project} · ${meta}`}
         titleChip={<span className="pc-only"><StatusChip tone="warning">{chip}</StatusChip></span>}
         action={<ButtonLink size="sm" variant="primary" to={`/projects/${n.projectId}?tab=delivery`}>Open</ButtonLink>} />
@@ -110,14 +140,14 @@ function NeedRow({ n, remind }: { n: Need; remind: (n: Extract<Need, { kind: "do
   }
   if (n.kind === "testimonial") { // Phase 5: a testimonial not read yet
     return (
-      <ListRow className="ilead" lead={{ icon: "note" }} title={`${n.who} sent a few words`} meta={`${n.project} · ${dayWord(n.at)}`}
+      <ListRow menu={menu} className="ilead" lead={{ icon: "note" }} title={`${n.who} sent a few words`} meta={`${n.project} · ${dayWord(n.at)}`}
         titleChip={<span className="pc-only"><StatusChip tone="accent">New</StatusChip></span>}
         action={<ButtonLink size="sm" variant="primary" to="/clients/testimonials">Read</ButtonLink>} />
     );
   }
   if (n.kind === "weatherChanged") { // D148: a sent call sheet's forecast changed; readers still have the sent line, nobody was emailed
     return (
-      <ListRow className="ilead" lead={{ icon: "calendar" }}
+      <ListRow menu={menu} className="ilead" lead={{ icon: "calendar" }}
         title={<><span className="pc-only">Weather changed for {n.title}: Send an update</span><span className="ph-only">Weather changed</span></>}
         meta={`${shootDay(n.date)} · now ${n.line}${n.was ? ` (was ${n.was})` : ""} · nobody was emailed`}
         titleChip={<span className="pc-only"><StatusChip tone="warning">Weather</StatusChip></span>}
@@ -128,7 +158,7 @@ function NeedRow({ n, remind }: { n: Need; remind: (n: Extract<Need, { kind: "do
   if (n.kind === "shootMoved") return <ShootMovedRow n={n} />; // Phase 5b step 5 (D143): moved in Google Calendar, nobody emailed
   if (n.kind === "draft") {
     return (
-      <ListRow className="ilead" lead={{ icon: "mail" }}
+      <ListRow menu={menu} className="ilead" lead={{ icon: "mail" }}
         title={<><span className="pc-only">Note drafted by Claude: confirm to send</span><span className="ph-only">Note drafted by Claude</span></>}
         titleChip={<span className="pc-only"><StatusChip tone="accent">Draft</StatusChip></span>}
         meta={<><span className="pc-only">To {n.client ?? "a client"} · “{n.title}”</span><span className="ph-only">Confirm to send · {n.client ?? "a client"}</span></>}
@@ -136,7 +166,7 @@ function NeedRow({ n, remind }: { n: Need; remind: (n: Extract<Need, { kind: "do
     );
   }
   return (
-    <ListRow className="ilead" lead={{ icon: "sign" }} title={`Claude asks to ${VERB[n.what]} ${n.label}: confirm`}
+    <ListRow menu={menu} className="ilead" lead={{ icon: "sign" }} title={`Claude asks to ${VERB[n.what]} ${n.label}: confirm`}
       meta={`${n.title} · nothing happens unless you confirm`}
       action={<ButtonLink size="sm" variant="primary" to={`/sign/d/${n.documentId}`}>Review</ButtonLink>} />
   );
@@ -234,6 +264,13 @@ export default function OwnerHome() {
   const watch = useQuery(api.siteWatch.summary); // Phase 5c: null unless one of the portal's admins; the row hides when nothing is found (Q45)
   const dash = useQuery(api.home.dashboard, { tzOffsetMin: new Date().getTimezoneOffset() }); // Phase 5b: Today, Coming up, Live edits, Money this month
   const resend = useMutation(api.sign.resend);
+  const voidDocument = useMutation(api.sign.voidDocument);
+  const renameClient = useMutation(api.library.renameClient);
+  const addPerson = useMutation(api.clients.addPerson);
+  const cancelSigning = async (n: Extract<Need, { kind: "doc" }>, reason?: string) => {
+    try { await voidDocument({ documentId: n.documentId as Id<"wsDocuments">, reason: reason?.trim() || undefined }); show(`${n.label} cancelled.`); }
+    catch (e) { show(errText(e)); }
+  };
   const [toast, show] = useToast();
   const now = Date.now();
   const remind = async (n: Extract<Need, { kind: "doc" }>) => {
@@ -249,7 +286,7 @@ export default function OwnerHome() {
       <div key="needs" id="needs"><Card label="Needs you" head={<SectionHead label="Needs you" count={needs?.length ? needs.length : undefined} />}>
         {needs === undefined ? <SkeletonRows n={3} />
           : needs.length === 0 ? <ListRow className="ilead quiet" lead={{ icon: "check-circle" }} title="New client notes, documents waiting on clients and drafts to confirm show up here." />
-          : needs.map((n, i) => <div key={i} className="wp-rowwrap">{i > 0 && <Divider />}<NeedRow n={n} remind={remind} /></div>)}
+          : needs.map((n, i) => <div key={i} className="wp-rowwrap">{i > 0 && <Divider />}<NeedRow n={n} remind={remind} cancelSigning={cancelSigning} /></div>)}
       </Card></div>
     ),
     followups: due && due.length > 0 ? (
@@ -261,7 +298,13 @@ export default function OwnerHome() {
       <Card key="clients" className="wp-homeclients" label="Your clients" head={<SectionHead label="Your clients" count={clients.length} action={<ButtonLink size="sm" variant="ghost" to="/clients">All clients</ButtonLink>} />}>
         {shownClients.map((c, i) => (
           <div key={c._id} className="wp-rowwrap">{i > 0 && <Divider />}
-            <ListRow to={`/clients/${c._id}`} lead={{ avatar: c.name, two: true }} title={c.name} meta={`${plural(c.people, "person", "people")} · ${plural(c.projects, "project", "projects")}`} chip={waitingChip(c)} chevron />
+            <ListRow to={`/clients/${c._id}`} lead={{ avatar: c.name, two: true }}
+              menu={{ id: c._id, title: c.name, actions: [ // Nov 21: right-click a client: Rename, Add a person
+                { key: "rename", label: "Rename…", run: async (v) => { try { await renameClient({ clientId: c._id, name: v?.name ?? "" }); show(`Renamed to ${v?.name?.trim()}.`); } catch (e) { show(errText(e)); } },
+                  form: { title: () => `Rename ${c.name}`, fields: [{ key: "name", label: "New name", placeholder: c.name }], yes: () => "Rename" } },
+                { key: "person", label: "Add a person…", run: async (v) => { try { await addPerson({ clientId: c._id as Id<"clients">, email: v?.email ?? "", name: v?.name?.trim() || undefined, role: "contact" }); show(`Added ${v?.name?.trim() || v?.email} to ${c.name}.`); } catch (e) { show(errText(e)); } },
+                  form: { title: () => `Add a person to ${c.name}`, fields: [{ key: "name", label: "Name", optional: true }, { key: "email", label: "Email" }], yes: () => "Add" } },
+              ] }} title={c.name} meta={`${plural(c.people, "person", "people")} · ${plural(c.projects, "project", "projects")}`} chip={waitingChip(c)} chevron />
           </div>
         ))}
       </Card>
