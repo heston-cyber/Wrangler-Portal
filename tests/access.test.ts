@@ -525,6 +525,7 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "invoices.deleteDraft": PAYMENTS,
     "invoices.send": PAYMENTS,
     "invoices.create": PAYMENTS,
+    "invoices.finishSend": PAYMENTS,
     "invoices.emailIt": PAYMENTS,
     "invoices.finalOptions": PAYMENTS,
     "invoices.draftFinal": PAYMENTS,

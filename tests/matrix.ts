@@ -200,7 +200,7 @@ export function argsFor(ids: Ids): Record<string, Record<string, unknown>> {
     "crm.logEntry": { projectId: ids.projectId, kind: "hours", hours: 1, date: "2030-01-01" }, "crm.entryAction": { entryId: ids.entryId, action: "confirm" },
     "crm.setLedgerExport": { projectId: ids.projectId, on: true }, "crm.setLedgerExportAll": {}, "crm.due": {}, "crm.linkProject": { dealId: ids.dealId, projectId: ids.projectId },
     "plans.list": {}, "plans.get": { planId: ids.planId }, "plans.save": { name: "P", amountCents: 1000, interval: "month", intervalCount: 1 }, "plans.setArchived": { planId: ids.planId, archived: true },
-    "invoices.send": { invoiceId: ids.invoiceId }, "invoices.create": { invoiceId: ids.invoiceId }, "invoices.emailIt": { invoiceId: ids.invoiceId },"invoices.voidInvoice": { invoiceId: ids.invoiceId },
+    "invoices.send": { invoiceId: ids.invoiceId }, "invoices.create": { invoiceId: ids.invoiceId }, "invoices.finishSend": { invoiceId: ids.invoiceId },"invoices.emailIt": { invoiceId: ids.invoiceId },"invoices.voidInvoice": { invoiceId: ids.invoiceId },
     "invoicePay.page": { token: "nope-nope-nope-nope" }, "invoicePay.mine": {}, "invoicePay.markViewed": { token: "nope-nope-nope-nope" },
     "invoicePay.start": { token: "nope-nope-nope-nope" }, "invoicePay.refresh": { token: "nope-nope-nope-nope" }, "invoicePay.ownerLink": { invoiceId: ids.invoiceId },
     "invoiceReminders.setReminders": { on: true, beforeDays: 3, afterDays: 1, everyDays: 7, stopAfter: 3 }, "invoiceReminders.sendReminder": { invoiceId: ids.invoiceId },

@@ -590,6 +590,10 @@ export const ACTIONS: Record<string, Entry> = {
   "invoices.create": ask("money", invoices.create, "Create an invoice without emailing it", "It's finalized in Stripe with its number and pay link (on its page on the site). Nothing is sent now: no invoice email, not on their portal, no reminders, until Email it. If someone pays from the link, or a payment fails, the receipt or failed-payment email goes to the bill-to address.", {
     onPage: true, shows: async (ctx, a) => [...(await invoiceLines(ctx, a.invoiceId)), { label: "Sends", value: "Nothing now (a receipt or failed-payment email to the bill-to address only if someone pays from the link)" }],
   }),
+  // Nov 21 (review P-b): an invoice stuck partway through sending. Checks Stripe first; carries on the way it started.
+  "invoices.finishSend": ask("money", invoices.finishSend, "Finish sending an invoice that stopped partway", "The portal checks what Stripe already holds and finishes it, emailed or not as it was started. It never makes a second invoice.", {
+    onPage: true, shows: async (ctx, a) => [...(await invoiceLines(ctx, a.invoiceId)), { label: "Sends", value: "The invoice email, if it was being sent (not if it was being made without emailing)" }],
+  }),
   "invoices.emailIt": ask("money", invoices.emailIt, "Email an invoice that was made without emailing", "It goes on the client's portal and Inbox, and the automatic reminders start.", {
     shows: async (ctx, a) => {
       const l = await invoiceLines(ctx, a.invoiceId);

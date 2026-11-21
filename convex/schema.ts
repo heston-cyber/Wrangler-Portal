@@ -1246,7 +1246,8 @@ export default defineSchema({
     // Review fixes (Oct 30): a send in progress keeps what it has made in Stripe so far, so a failed send cleans up
     // and a retry neither duplicates nor gets stuck; syncedAt spaces out reads from Stripe.
     sendAttempt: v.optional(v.number()),
-    pending: v.optional(v.object({ customerId: v.optional(v.string()), draftId: v.optional(v.string()), taxRateId: v.optional(v.string()) })),
+    // mode (Nov 21, review P-b): how the send that's under way was started, so Finish sending carries on the same way.
+    pending: v.optional(v.object({ customerId: v.optional(v.string()), draftId: v.optional(v.string()), taxRateId: v.optional(v.string()), mode: v.optional(v.union(v.literal("email"), v.literal("quiet"))) })),
     syncedAt: v.optional(v.number()),
     // Step 4: reminders sent (by hand or automatically), so the next one is worked out from what already went.
     reminders: v.optional(v.array(v.object({ at: v.number(), kind: v.union(v.literal("before"), v.literal("overdue")), auto: v.boolean() }))),

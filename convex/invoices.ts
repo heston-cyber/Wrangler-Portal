@@ -64,7 +64,7 @@ async function rowOf(ctx: QueryCtx, i: Doc<"invoices">) {
     client: client ? { _id: client._id, name: client.name } : null, project: project ? { _id: project._id, label: label(project) } : null,
     billTo: i.billTo, dueDate: i.dueDate, totalCents: i.totalCents, amountPaidCents: i.amountPaidCents, amountRemainingCents: i.amountRemainingCents,
     sentAt: i.sentAt ?? null, issuedAt: i.issuedAt ?? i.sentAt ?? null, viewedAt: i.viewedAt ?? null, paidAt: i.paidAt ?? null, createdAt: i.createdAt, updatedAt: i.updatedAt,
-    lastFailure: i.lastFailure ?? null, sendError: i.sendError ?? null, notEmailed: !!i.quiet,
+    lastFailure: i.lastFailure ?? null, sendError: i.sendError ?? null, notEmailed: !!i.quiet, pendingMode: i.status === "sending" ? (i.pending?.mode ?? "email") : null,
   };
 }
 
@@ -298,8 +298,8 @@ export const deleteDraft = mutation({
 
 /** Checks a draft can go out, marks it as sending (so a double press can't send twice) and gives it its number. */
 export const claimForSend = internalMutation({
-  args: { invoiceId: v.id("invoices") },
-  handler: async (ctx, { invoiceId }) => {
+  args: { invoiceId: v.id("invoices"), mode: v.optional(v.union(v.literal("email"), v.literal("quiet"))) },
+  handler: async (ctx, { invoiceId, mode }) => {
     const me = await requireAll(ctx, "payments");
     const i = await ctx.db.get(invoiceId);
     if (!i) throw new ConvexError("That invoice isn't here.");
@@ -323,7 +323,7 @@ export const claimForSend = internalMutation({
       number = `${invoicePrefix(biz.name)}-${String(next).padStart(4, "0")}`;
     }
     const attempt = (i.sendAttempt ?? 0) + 1;
-    await ctx.db.patch(i._id, { status: "sending", number, totalCents: t.total, amountRemainingCents: t.total, sendError: undefined, sendAttempt: attempt, updatedAt: Date.now() });
+    await ctx.db.patch(i._id, { status: "sending", number, totalCents: t.total, amountRemainingCents: t.total, sendError: undefined, sendAttempt: attempt, pending: { ...(i.pending ?? {}), mode: mode ?? i.pending?.mode ?? "email" }, updatedAt: Date.now() });
     const earlier = (await ctx.db.query("invoices").withIndex("by_bill_email", (q) => q.eq("billTo.email", i.billTo.email)).collect()).find((x) => x.stripe?.accountId === biz.stripe!.accountId && x.stripe?.customerId);
     return { invoice: { ...i, number }, totals: t, accountId: biz.stripe.accountId, customerId: i.pending?.customerId ?? earlier?.stripe?.customerId ?? null, pending: i.pending ?? null, attempt, by: me.name ?? me.email, business: biz.name };
   },
@@ -347,8 +347,7 @@ export const recordSent = internalMutation({
         issuedAt: i.issuedAt ?? now, updatedAt: now, history: [...i.history, { kind: "created", at: now, by, detail: "in Stripe, not emailed" }],
       });
       const made = await ctx.db.get(invoiceId);
-      if (made?.status === "paid" && made.storageId) await storagePaid(ctx, made);
-      if (made?.status === "paid" && made.deliveryId) await deliveryPaid(ctx, made);
+      if (made?.status === "paid") await paidAtSend(ctx, made);
       return;
     }
     await audit(ctx, { kind: "sent", text: `sent invoice ${s.invoice.number ?? i.number ?? i.title}`, where: "Payments › Invoices", link: `/payments/invoices/${invoiceId}`, businessId: i.businessId });
@@ -364,12 +363,17 @@ export const recordSent = internalMutation({
     // Step 3: the client's link, their Inbox item and the invoice email (08).
     const sent = await ctx.db.get(invoiceId);
     if (sent && sent.status === "open") await announceSent(ctx, sent);
-    // Phase 5 (review L5): a storage invoice paid at send (a credit balance covered it): the webhook will see it already
-    // paid and skip, so the year is recorded here.
-    if (sent?.status === "paid" && sent.storageId) await storagePaid(ctx, sent);
-    if (sent?.status === "paid" && sent.deliveryId) await deliveryPaid(ctx, sent); // Q6
+    // Phase 5 (review L5): paid at send (a credit balance covered it): the webhook will see it already paid and skip, so
+    // what being paid does happens here (storage year, delivery, final files, pipeline card).
+    if (sent?.status === "paid") await paidAtSend(ctx, sent);
   },
 });
+
+async function paidAtSend(ctx: MutationCtx, i: Doc<"invoices">) {
+  await ctx.db.patch(i._id, { history: [...i.history, { kind: "paid", at: Date.now(), detail: "Paid in full (a credit balance covered it)" }].slice(-60) });
+  await audit(ctx, { kind: "paid", text: `paid invoice ${i.stripe?.number ?? i.number ?? i.title} (a credit balance covered it)`, where: "Payments › Invoices", link: `/payments/invoices/${i._id}`, by: { name: i.billTo?.name || "A client", role: "Client" }, businessId: i.businessId });
+  await whenNewlyPaid(ctx, (await ctx.db.get(i._id))!);
+}
 
 /** What a send has made in Stripe so far (so a failure can clean up and a retry can pick up). */
 export const recordPending = internalMutation({
@@ -378,6 +382,38 @@ export const recordPending = internalMutation({
     const i = await ctx.db.get(invoiceId);
     if (i) await ctx.db.patch(invoiceId, { pending: { ...(i.pending ?? {}), ...pending }, updatedAt: Date.now() });
     return null;
+  },
+});
+
+/** Stripe couldn't tell us whether the send went through: it stays "sending" with the Stripe invoice remembered, so
+ *  Finish sending (after 5 minutes) checks Stripe and picks it up instead of starting again. */
+export const recordSendUnsure = internalMutation({
+  args: { invoiceId: v.id("invoices"), message: v.string() },
+  handler: async (ctx, { invoiceId, message }) => {
+    const i = await ctx.db.get(invoiceId);
+    if (i?.status === "sending") await ctx.db.patch(invoiceId, { sendError: message.slice(0, 300), updatedAt: Date.now() });
+  },
+});
+
+/** Review P-b (Nov 21): Finish sending, for an invoice stuck in "sending" (the site's editor can't, it only saves drafts).
+ *  Carries on the way it was started: emailed, or made without emailing. */
+export const finishSend = action({
+  args: { invoiceId: v.id("invoices") },
+  handler: async (ctx, { invoiceId }): Promise<{ number: string; emailed: boolean }> => {
+    const mode = await ctx.runQuery(internal.invoices.sendingMode, { invoiceId });
+    const r = await finalize(ctx, invoiceId, mode !== "quiet");
+    return { ...r, emailed: mode !== "quiet" };
+  },
+});
+
+export const sendingMode = internalQuery({
+  args: { invoiceId: v.id("invoices") },
+  handler: async (ctx, { invoiceId }) => {
+    await requireAll(ctx, "payments");
+    const i = await ctx.db.get(invoiceId);
+    if (!i) throw new ConvexError("That invoice isn't here.");
+    if (i.status !== "sending") throw new ConvexError("It isn't partway through sending.");
+    return i.pending?.mode ?? "email";
   },
 });
 
@@ -439,9 +475,11 @@ export const emailIt = mutation({
   },
 });
 
+class UnsureError extends Error {}
+
 async function finalize(ctx: ActionCtx, invoiceId: Id<"invoices">, email: boolean): Promise<{ number: string }> {
   {
-    const c = await ctx.runQuery(internal.invoices.sendGuard, { invoiceId }).then(() => ctx.runMutation(internal.invoices.claimForSend, { invoiceId }));
+    const c = await ctx.runQuery(internal.invoices.sendGuard, { invoiceId }).then(() => ctx.runMutation(internal.invoices.claimForSend, { invoiceId, mode: email ? "email" : "quiet" }));
     const i = c.invoice as Doc<"invoices"> & { number: string };
     const account = c.accountId as string;
     const meta = { portal_invoice: invoiceId, portal_business: i.businessId ?? "" };
@@ -449,10 +487,15 @@ async function finalize(ctx: ActionCtx, invoiceId: Id<"invoices">, email: boolea
     let finalized: StripeResult | null = null;
     let customerId: string | null = c.customerId as string | null;
     let draftId: string | null = (c.pending as { draftId?: string } | null)?.draftId ?? null;
+    let finalizing = false; // Review P-a: only a finalize that was asked for can have gone through
     try {
       // A send that stopped partway: Stripe may already hold it (even finalized). Pick that up instead of starting over.
       if (draftId) {
-        const prev = await stripeCall("GET", `invoices/${draftId}`, { account }).catch(() => null);
+        // Review P-a: if Stripe can't say what it holds, stop (it stays "sending"): never start a second invoice blind.
+        const prev = await stripeCall("GET", `invoices/${draftId}`, { account }).catch((g) => {
+          if (g instanceof StripeError && g.status === 404) return null;
+          throw new UnsureError();
+        });
         if (prev && prev.status && prev.status !== "draft" && prev.status !== "void") finalized = prev;
         else if (prev?.status === "draft") { await stripeCall("DELETE", `invoices/${draftId}`, { account }).catch(() => null); draftId = null; }
         else draftId = null;
@@ -495,14 +538,34 @@ async function finalize(ctx: ActionCtx, invoiceId: Id<"invoices">, email: boolea
         await stripeCall("POST", `invoices/${inv.id}`, { account, form: { number: i.number } });
         const check = await stripeCall("GET", `invoices/${inv.id}`, { account });
         if (Number(check.total) !== c.totals.total) throw new StripeError(`Stripe's total (${check.total}) doesn't match the portal's (${c.totals.total}). Nothing was sent.`, 0, "mismatch");
-        finalized = await stripeCall("POST", `invoices/${inv.id}/finalize`, { account, form: { auto_advance: false } });
+        // Review P-a (Nov 21): a key, so a repeated finalize (a reply lost on the way back) can't act twice.
+        finalizing = true;
+        finalized = await stripeCall("POST", `invoices/${inv.id}/finalize`, { account, idem: k("fin"), form: { auto_advance: false } });
       }
     } catch (e) {
-      // Nothing went out: remove the Stripe draft so a retry starts clean (the number stays the portal's).
-      if (draftId) await stripeCall("DELETE", `invoices/${draftId}`, { account }).catch(() => null);
-      const message = e instanceof StripeError ? e.message : "Couldn't reach Stripe. Nothing was sent; try again.";
-      await ctx.runMutation(internal.invoices.recordSendFailed, { invoiceId, message });
-      throw new ConvexError(message);
+      // Review P-a (Nov 21): don't assume nothing went out. Ask Stripe what it holds first: a finalize whose reply was
+      // lost has made a live, payable invoice, and treating it as failed would let a retry make a second one.
+      let held: StripeResult | null = null, unsure = e instanceof UnsureError;
+      if (draftId && !unsure && !finalizing) await stripeCall("DELETE", `invoices/${draftId}`, { account }).catch(() => null); // stopped before finalizing: nothing went out
+      else if (draftId && !unsure) {
+        try {
+          const now = await stripeCall("GET", `invoices/${draftId}`, { account });
+          if (now.status === "draft") await stripeCall("DELETE", `invoices/${draftId}`, { account }).catch(() => null); // nothing went out: start clean
+          else if (now.status && now.status !== "void") held = now; // it went through
+        } catch (g) {
+          unsure = !(g instanceof StripeError && g.status === 404); // gone is gone; anything else, we can't tell
+        }
+      }
+      if (held) finalized = held;
+      else if (unsure) {
+        const message = "Stripe didn't answer, so it may have gone through. In 5 minutes press Finish sending on this invoice: the portal checks Stripe first and won't make a second one.";
+        await ctx.runMutation(internal.invoices.recordSendUnsure, { invoiceId, message });
+        throw new ConvexError(message);
+      } else {
+        const message = e instanceof StripeError ? e.message : "Couldn't reach Stripe. Nothing was sent; try again.";
+        await ctx.runMutation(internal.invoices.recordSendFailed, { invoiceId, message });
+        throw new ConvexError(message);
+      }
     }
     // Finalized in Stripe: from here the invoice IS sent, whatever happens next. If saving fails, it stays "sending"
     // and pressing Send again (after a few minutes) picks the finalized invoice up rather than making another.
@@ -706,26 +769,34 @@ export const applyStripeInvoice = internalMutation({
       stripe: { ...i.stripe!, number: s.number ?? i.stripe!.number, hostedUrl: s.hosted_invoice_url ?? i.stripe!.hostedUrl, pdfUrl: s.invoice_pdf ?? i.stripe!.pdfUrl },
       history: history.slice(-60), updatedAt: now,
     });
-    // Phase 5: a raw footage storage invoice paid keeps the footage a year; voided, it goes back to not kept.
-    if (i.storageId && status === "paid" && i.status !== "paid") await storagePaid(ctx, i);
+    if (status === "paid" && i.status !== "paid") await whenNewlyPaid(ctx, i);
     if (i.storageId && status === "void" && i.status !== "void") await storageDropped(ctx, i, "voided");
-    if (i.deliveryId && status === "paid" && i.status !== "paid") await deliveryPaid(ctx, i); // Q6
     if (i.deliveryId && status === "void" && i.status !== "void") await deliveryDropped(ctx, i);
-    // A final invoice paid in full opens the project's final files (the Part A lock, now automatic).
-    if (status === "paid" && i.status !== "paid" && i.kind === "final" && i.projectId) {
-      const p = await ctx.db.get(i.projectId);
-      if (p && !p.deliveryUnlockedAt) {
-        const told = await openDelivery(ctx, p);
-        await ctx.db.patch(i._id, { history: [...history, { kind: told === null ? "delivery_waiting" : "delivery_opened", at: now, detail: told === null ? "No final files added yet; unlock them on the project's Delivery tab when they are" : "Final files opened for the client" }].slice(-60) });
-      }
+    return i._id;
+  },
+});
+
+/** What happens once when an invoice becomes paid: Stripe telling us later (applyStripeInvoice) or paid the moment it
+ *  was finalized because a credit balance covered it (recordSent; Nov 21 review P-c: that case used to skip the final
+ *  files and the pipeline card). Called only on the change to paid, so it never runs twice. */
+async function whenNewlyPaid(ctx: MutationCtx, i: Doc<"invoices">) {
+  // Phase 5: a raw footage storage invoice paid keeps the footage a year.
+  if (i.storageId) await storagePaid(ctx, i);
+  if (i.deliveryId) await deliveryPaid(ctx, i); // Q6
+  // A final invoice paid in full opens the project's final files (the Part A lock, now automatic).
+  if (i.kind === "final" && i.projectId) {
+    const p = await ctx.db.get(i.projectId);
+    if (p && !p.deliveryUnlockedAt) {
+      const told = await openDelivery(ctx, p);
+      const now = await ctx.db.get(i._id);
+      if (now) await ctx.db.patch(i._id, { history: [...now.history, { kind: told === null ? "delivery_waiting" : "delivery_opened", at: Date.now(), detail: told === null ? "No final files added yet; unlock them on the project's Delivery tab when they are" : "Final files opened for the client" }].slice(-60) });
     }
     // Phase 3: the final invoice paid moves the pipeline card to Paid (forward only, D60). Phase 6 master test B1: after
     // the files open, so the first delivery still counts as the first (a Paid card read as "delivered before" and the
     // raw-footage offer never came).
-    if (status === "paid" && i.status !== "paid" && i.kind === "final" && i.projectId) await crmProject(ctx, i.projectId, "paid", `${i.number ?? "final invoice"} paid`);
-    return i._id;
-  },
-});
+    await crmProject(ctx, i.projectId, "paid", `${i.number ?? "final invoice"} paid`);
+  }
+}
 
 /** Invoice deleted in Stripe (a draft someone removed there): the portal's copy goes back to being a draft. */
 export const stripeInvoiceDeleted = internalMutation({
