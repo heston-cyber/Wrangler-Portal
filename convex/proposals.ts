@@ -32,7 +32,8 @@ import { WRANGLER_QUESTIONNAIRE, answerList, bound, cleanQuestionnaire, linesTot
 import { EMPTY_KIT, MAX_FILE_BYTES, MAX_FILES, linkLabel, type Kit } from "./brandKit";
 import { pageToMarkdown } from "./lib/wsPageMd";
 import { EXPIRED, expiryDays, expiryFrom, linkExpired } from "./lib/linkExpiry";
-import { addPeople, adoptLegacy, answer, forWho, newCopiedLink, noteOpen, parseTo, peopleOf, resolve, rowsOf, stateFor, stopPerson } from "./lib/offers";
+import { nameKey, shownName } from "./lib/names";
+import { addPeople, adoptLegacy, answer, forWho, newCopiedLink, noteOpen, parseTo, peopleOf, resolve, rowsOf, signerOf, stateFor, stopPerson } from "./lib/offers";
 
 const TOKEN = /^[A-Za-z0-9_-]{16,64}$/;
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
@@ -120,7 +121,7 @@ async function clientFields(ctx: MutationCtx, clientId?: Id<"clients"> | null, d
     const c = await ctx.db.get(clientId);
     if (!c) throw new ConvexError("That company isn't here.");
     const people = (await ctx.db.query("clientPeople").withIndex("by_client", (q) => q.eq("clientId", clientId)).collect()).filter((x) => !x.removedAt).sort((a, b) => (a.role === "signer" ? -1 : 1) - (b.role === "signer" ? -1 : 1));
-    return { company: c.name, name: people[0]?.name ?? "", email: people[0]?.email ?? "" };
+    return { company: shownName(c.name), name: people[0]?.name ?? "", email: people[0]?.email ?? "" };
   }
   if (dealId) {
     const d = await ctx.db.get(dealId);
@@ -427,7 +428,10 @@ export const contractTarget = internalQuery({
     if (p.status !== "accepted") throw new ConvexError("The contract starts from an accepted proposal.");
     const existing = p.made?.buildId ? await ctx.db.get(p.made.buildId) : null;
     const d = docOf(build);
-    return { p, existing: existing?._id ?? null, project: d.fields.project || d.title, rows: itemRows(d.page), depositPct: p.depositPct ?? totals(d.page).depositPct };
+    // Review M1 (Nov 19): a client's proposal is signed by the client's own person, never by whoever accepted its copied link.
+    const clientSigner = p.clientId && !p.contact ? await signerOf(ctx, p.clientId, p.businessId ?? null) : null;
+    const clientName = p.clientId ? (await ctx.db.get(p.clientId))?.name ?? null : null;
+    return { p, existing: existing?._id ?? null, project: d.fields.project || d.title, rows: itemRows(d.page), depositPct: p.depositPct ?? totals(d.page).depositPct, clientSigner, clientName };
   },
 });
 export const linkContract = internalMutation({
@@ -451,7 +455,8 @@ export const startContract = action({
   handler: async (ctx, { proposalId }): Promise<Id<"wsBuilds">> => {
     const t = await ctx.runQuery(internal.proposals.contractTarget, { proposalId });
     if (t.existing) return t.existing;
-    const who = t.p.contact ?? { name: t.p.response?.name ?? "", email: t.p.response?.email ?? "", company: t.p.response?.company }; // Q100: whoever accepted
+    if (t.p.clientId && !t.p.contact && !t.clientSigner) throw new ConvexError(`Add a person to ${t.clientName ?? "the client"} first: they sign the contract.`);
+    const who = t.p.contact ?? (t.p.clientId ? t.clientSigner! : { name: t.p.response?.name ?? "", email: t.p.response?.email ?? "", company: t.p.response?.company }); // Q100: whoever accepted (a client's own person for a client's proposal)
     const buildId = await newAgreementDraft(ctx, who.company || who.name);
     await fillAgreement(ctx, buildId, {
       company: who.company ?? "", signer: { name: who.name, email: who.email }, project: t.project, depositPercent: t.depositPct,
@@ -695,6 +700,8 @@ async function resolveClient(ctx: MutationCtx, me: { name?: string | null; email
   const now = Date.now();
   if (c.saveAs === "company") {
     if (!out.company) throw new ConvexError("Add the company name (step 1).");
+    // Review N1: never a second company with a name another one has (several parts of the site pick a company by name).
+    if ((await ctx.db.query("clients").collect()).some((x) => nameKey(x.name) === nameKey(out.company!))) throw new ConvexError(`There's already a client called ${out.company}. Pick them from Clients instead.`);
     const clientId = await ctx.db.insert("clients", { name: out.company, createdAt: now });
     await ctx.db.insert("clientPeople", { clientId, email, name: out.name, role: "signer", createdAt: now });
     return { ...out, clientId };

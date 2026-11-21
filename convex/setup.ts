@@ -3,6 +3,7 @@
 // 5 connections, 6 the first client. Every step can be finished later (D111); the Home checklist shows what's left until
 // it's all done or hidden. Wrangler (the default business) never sees any of it (D114). The owner only: a team member
 // doesn't set up the business.
+import { nameKey } from "./lib/names";
 import { v, ConvexError } from "convex/values";
 import { inviteCap } from "./lib/rate";
 import { mutation, query } from "./lib/functions";
@@ -109,7 +110,7 @@ export const firstClient = mutation({
     if (isDefault) throw new ConvexError("Invite clients from Clients › Companies.");
     const company = a.company.replace(/\s+/g, " ").trim().slice(0, 80), name = a.name.replace(/\s+/g, " ").trim().slice(0, 60);
     if (company.length < 2) throw new ConvexError("Type the company's name.");
-    const named = (await ctx.db.query("clients").collect()).filter((c) => c.name.trim().toLowerCase() === company.toLowerCase());
+    const named = (await ctx.db.query("clients").collect()).filter((c) => nameKey(c.name) === nameKey(company));
     if (named.length > 1) throw new ConvexError(`Two clients are called ${company}. Invite them from that client's page in Clients.`); // D56 re-review L-a
     const existing = named[0];
     const clientId = existing?._id ?? await ctx.db.insert("clients", { name: company, createdAt: Date.now() });

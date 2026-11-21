@@ -127,7 +127,7 @@ describe("D56 a lead's company at its first estimate", () => {
     await estimate(w, neither);
     const c = await companyOf(w, neither);
     expect([w.harbor, roastery]).not.toContain(c._id);
-    expect(c.name).toBe("Maya's Side Project");
+    expect(c.name).toBe("Maya's Side Project (website lead)"); // every lead-made company is tagged until renamed
   });
 
   test("T-D56.5 picking a company by name refuses when two share it", async () => {
@@ -164,6 +164,24 @@ describe("D56 a lead's company at its first estimate", () => {
     expect(r.launch!.clientId).toBe(w.harbor); // by the client folder's own client
   });
 
+  test("T-D56.8 a Dropbox folder named on a Mac (decomposed accents) joins the existing client instead of making a twin", async () => {
+    const w = await world();
+    const cafe = await w.heston.mutation(api.library.createClient, { name: "Café Rouge" }); // typed in the browser (NFC)
+    const nfd = "Café Rouge"; // the Mac's file name for the same word (NFD)
+    const f = (path: string) => ({ pathLower: path.toLowerCase(), pathDisplay: path });
+    await w.t.mutation(internal.dropbox.recordFolders, { folders: [f(`/Clients/${nfd}`), f(`/Clients/${nfd}/Menu Film`)], gone: [] });
+    const r = await w.t.run(async (ctx) => ({ clients: (await ctx.db.query("clients").collect()).filter((c) => c.name.normalize("NFC") === "Café Rouge"), menu: (await ctx.db.query("projects").collect()).find((p) => p.name === "Menu Film") }));
+    expect(r.clients).toHaveLength(1);
+    expect(cafe).toBe("Café Rouge");
+    expect(r.menu!.clientId).toBe(r.clients[0]._id);
+    // Linking a project by the typed name still works (no twin to refuse).
+    await w.heston.mutation(api.library.createProject, { name: "Spring film", client: "Café Rouge" });
+    // Review R2: a second, similarly spelled folder doesn't take the client over from its own folder.
+    await w.t.mutation(internal.dropbox.recordFolders, { folders: [f(`/Clients/${nfd}`), f("/Clients/Café  Rouge")], gone: [] });
+    const still = await w.t.run((ctx) => ctx.db.get(r.clients[0]._id));
+    expect(still!.dropboxFolder).toBe(`/clients/${nfd}`.toLowerCase());
+  });
+
   test("T-D56.6 lookalike names (zero-width characters, Cyrillic letters) count as a clash", async () => {
     const w = await world();
     for (const [i, typed] of ["Harbor\u200B Coffee", "H\u0430rbor Coffee", "Harbor Co\u200Dffee", "Harbor Coffee\u034F", "Harbor Coffee\uFE0F"].entries()) {
@@ -176,6 +194,61 @@ describe("D56 a lead's company at its first estimate", () => {
   });
 });
 
+// Nov 19 (Heston, "take care of them"): Clients › the company › Rename takes a website lead's "(website lead)" tag off.
+describe("Renaming a client", () => {
+  test("its people, projects, shares and invoices stay with it; a taken or lookalike name is refused; a Dropbox client renames by its folder", async () => {
+    const w = await world();
+    const dealId = await w.t.run((ctx) => ctx.db.insert("deals", { businessId: w.A, title: "Lead", stage: "lead", source: "website", lead: { name: "Dana Fox", email: "dana@okie.example", company: "Okie Roasters", fields: [], at: 0 }, history: [], createdAt: 0, updatedAt: 0 } as never)) as Id<"deals">;
+    await w.heston.mutation(api.crm.saveEstimate, { dealId, title: "Brand film", scope: "", input: { unit: "days", amount: 1 } });
+    const c = (await w.heston.query(api.crm.deal, { dealId })).company as { _id: Id<"clients">; name: string };
+    expect(c.name).toBe("Okie Roasters (website lead)");
+    // Review L3: the tag is Heston's note: a contract from the estimate carries the plain name.
+    const estimateId = (await w.heston.query(api.crm.deal, { dealId })).estimates[0]._id;
+    expect((await w.heston.query(internal.crm.contractTarget, { estimateId })).company).toBe("Okie Roasters");
+    const pid = await w.heston.mutation(api.library.createProject, { name: "Spring film", client: "Okie Roasters (website lead)" }) as Id<"projects">;
+    expect(await w.heston.mutation(api.library.renameClient, { clientId: c._id, name: "  Okie   Roasters " })).toBe("Okie Roasters");
+    const after = await w.t.run(async (ctx) => ({ client: (await ctx.db.get(c._id))!, project: (await ctx.db.get(pid))!, people: (await ctx.db.query("clientPeople").collect()).filter((p) => p.clientId === c._id).map((p) => p.email) }));
+    expect(after.client.name).toBe("Okie Roasters");
+    expect(after.project).toMatchObject({ client: "Okie Roasters", clientId: c._id });
+    expect(after.people).toEqual(["dana@okie.example"]);
+    // Taken names are refused, lookalikes included; Harbor Coffee keeps its own.
+    for (const taken of ["Harbor Coffee", "harbor  coffee", "Hаrbor Coffee", "Harbor​ Coffee"]) {
+      await expect(w.heston.mutation(api.library.renameClient, { clientId: c._id, name: taken })).rejects.toThrow(/already a client called/);
+    }
+    // A client that follows a Dropbox folder is renamed there.
+    await w.t.run((ctx) => ctx.db.patch(w.harbor, { dropboxFolder: "/clients/harbor coffee" } as never));
+    await expect(w.heston.mutation(api.library.renameClient, { clientId: w.harbor, name: "Harbor & Co" })).rejects.toThrow(/Dropbox/);
+    // A client can't rename their company this way; another business's owner can't see it.
+    await expect(w.maya.mutation(api.library.renameClient, { clientId: c._id, name: "Mine now" })).rejects.toThrow();
+    await expect(w.boss.mutation(api.library.renameClient, { clientId: c._id, name: "Mine now" })).rejects.toThrow(/isn't here/);
+  });
+});
+
+// Nov 19 (Heston, "take care of them"): the website form's email isn't checked, so a lead using a client person's
+// email is marked Unconfirmed, and its phone and message never become the client's.
+describe("Unconfirmed website leads", () => {
+  test("a lead with a client person's email is Unconfirmed on the board and the deal; a new email isn't; nothing is copied onto the client", async () => {
+    const w = await world();
+    const post = async (data: Record<string, string>) => {
+      const body = JSON.stringify({ triggerType: "form_submission", payload: { data } });
+      await w.t.fetch("/leads/webflow", { method: "POST", body, headers: await sign(body) });
+    };
+    await post({ Name: "Maya Brooks", Email: "Maya@Harbor.example", Company: "Harbor Coffee", Phone: "555-0199", Message: "New number, call me about the deposit" });
+    await post({ Name: "New Person", Email: "new@person.example", Company: "Fresh Co" });
+    const board = (await w.heston.query(api.crm.board, {})).deals as Array<{ _id: Id<"deals">; company: string; unconfirmed: boolean }>;
+    const maya = board.find((d) => d.company === "Harbor Coffee")!, fresh = board.find((d) => d.company === "Fresh Co")!;
+    expect([maya.unconfirmed, fresh.unconfirmed]).toEqual([true, false]);
+    expect((await w.heston.query(api.crm.deal, { dealId: maya._id })).unconfirmed).toBe(true);
+    // Filed under Harbor Coffee by the email (D56), the client's person keeps their own details.
+    await w.heston.mutation(api.crm.saveEstimate, { dealId: maya._id, title: "Promo", scope: "", input: { unit: "days", amount: 1 } });
+    const person = await w.t.run(async (ctx) => (await ctx.db.query("clientPeople").collect()).find((p) => p.email === "maya@harbor.example")!);
+    expect(JSON.stringify(person)).not.toMatch(/555-0199|deposit/);
+    // A brand-new lead stays confirmed even after it becomes its own company's person.
+    await w.heston.mutation(api.crm.saveEstimate, { dealId: fresh._id, title: "Intro", scope: "", input: { unit: "days", amount: 1 } });
+    expect((await w.heston.query(api.crm.deal, { dealId: fresh._id })).unconfirmed).toBe(false);
+  });
+});
+
 describe("T3.2 a card moves on events (forward only, D60)", () => {
   test("estimate (D56 makes the company and contact) → contract sent → signed → in production → delivered → paid; a hand move stays until a later event", async () => {
     const w = await world();
@@ -184,7 +257,7 @@ describe("T3.2 a card moves on events (forward only, D60)", () => {
     const dealId = (await w.heston.query(api.crm.board, {})).deals[0]._id as Id<"deals">;
     const estimateId = await w.heston.mutation(api.crm.saveEstimate, { dealId, title: "Brand film", scope: "4 shoot days", input: { unit: "days", amount: 4, travelOver: true, travelDays: 1 } });
     let d = await w.heston.query(api.crm.deal, { dealId });
-    expect(d).toMatchObject({ stage: "quoted", valueCents: 1_987_500, company: { name: "Okie Roasters" } });
+    expect(d).toMatchObject({ stage: "quoted", valueCents: 1_987_500, company: { name: "Okie Roasters (website lead)" } });
     const est = await w.heston.query(api.crm.getEstimate, { estimateId });
     expect(est.result).toMatchObject({ priceCents: 1_987_500, netCents: 961_500, reserveCents: 240_375 });
     // Link the deal to a document and a project, as the contract draft and the project would.

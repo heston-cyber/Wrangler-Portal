@@ -50,6 +50,7 @@ export default function DealPage({ dealId }: { dealId: string }) {
           </div>
           <div className="acts crm-tags">
             {web && <span className="wp-tag">From the website</span>}
+            {d.unconfirmed && <span className="wp-tag">Unconfirmed</span>}
             {d.closedAt ? <StatusChip tone="neutral">Off the board</StatusChip> : <StatusChip tone="neutral">{d.stageName}</StatusChip>}
           </div>
         </header>
@@ -57,6 +58,7 @@ export default function DealPage({ dealId }: { dealId: string }) {
           <div className="col">
             {d.lead && (
               <Card label="What they sent" head={<SectionHead label="What they sent" />}>
+                {d.unconfirmed && <p className="wp-small secondary">Unconfirmed: anyone can type an email into the website form, and this one belongs to one of your clients' people. Check with them before you trust the phone number or message.</p>}
                 <dl className="crm-dl">
                   <dt>Name</dt><dd>{d.lead.name}</dd>
                   <dt>Email</dt><dd><a href={`mailto:${d.lead.email}`}>{d.lead.email}</a></dd>

@@ -14,6 +14,7 @@ import { stillOk } from "./lib/stillOk";
 import { accessToVideo, accessToVersion, shareArg, versionShown } from "./lib/viewer";
 import { roundsFor } from "./lib/rounds";
 import { mayMoveProject, moveProjectByName } from "./homes";
+import { nameKey, tidyName } from "./lib/names";
 
 const clean = (s: string, max = 200) => s.trim().replace(/\s+/g, " ").slice(0, max);
 
@@ -86,16 +87,45 @@ export const overview = query({
 });
 
 // "New client": a client with no projects yet. A name already used by a client (made here or on a project) is refused.
+/** Nov 19 (Heston, "take care of them"): rename a client company (Clients › the company › Rename). Used to take the
+ *  "(website lead)" tag off a lead's company once Heston knows it's real. Refuses a name another company has (lookalikes
+ *  included: several parts of the site pick a company by name). A company that follows a Dropbox folder is renamed by
+ *  renaming the folder (the folder sync would put the old name back). Its projects and client shares follow by id. */
+export const renameClient = mutation({
+  args: { clientId: v.string(), name: v.string() },
+  handler: async (ctx, a) => {
+    await requireAll(ctx, "clients");
+    const id = ctx.db.normalizeId("clients", a.clientId);
+    const c = id ? await ctx.db.get(id) : null; // another business's company is invisible here
+    if (!c) throw new ConvexError("That client isn't here any more.");
+    if (c.dropboxFolder) throw new ConvexError("This client follows its Dropbox folder. Rename the folder in Dropbox (Clients), and the portal follows within a minute.");
+    const name = tidyName(a.name);
+    if (name.length < 2) throw new ConvexError("Give the client a name.");
+    if (nameKey(name) === "no client") throw new ConvexError("Pick another name.");
+    if (name === c.name) return name;
+    const key = nameKey(name);
+    const others = (await ctx.db.query("clients").collect()).filter((x) => x._id !== c._id && nameKey(x.name) === key);
+    const onProjects = (await ctx.db.query("projects").collect()).some((p) => p.clientId !== c._id && nameKey(p.client ?? "") === key);
+    if (others.length || onProjects) throw new ConvexError(`There's already a client called ${name}.`);
+    await ctx.db.patch(c._id, { name, fromProjects: undefined });
+    // Its projects and client shares carry the name too; by id, so the writer never relinks them by name.
+    for (const p of await ctx.db.query("projects").collect()) if (p.clientId === c._id && p.client !== name) await ctx.db.patch(p._id, { client: name, clientId: c._id });
+    for (const sh of await ctx.db.query("shares").collect()) if (sh.kind === "client" && sh.clientId === c._id && sh.client !== name) await ctx.db.patch(sh._id, { client: name, clientId: c._id } as never);
+    await audit(ctx, { kind: "settings", text: `renamed the client ${c.name} to ${name}`, where: "Clients", link: `/clients/${c._id}` });
+    return name;
+  },
+});
+
 export const createClient = mutation({
   args: { name: v.string() },
   handler: async (ctx, a) => {
     await requireAll(ctx, "clients");
     const name = clean(a.name, 120);
     if (!name) throw new ConvexError("Give the client a name.");
-    const key = name.toLowerCase();
-    if (name.toLowerCase() === "no client") throw new ConvexError("Pick another name.");
-    const rows = (await ctx.db.query("clients").collect()).filter((c) => c.name.toLowerCase() === key);
-    const onProjects = (await ctx.db.query("projects").collect()).some((p) => (p.client ?? "").trim().toLowerCase() === key);
+    const key = nameKey(name); // review L4: lookalikes count as the same name
+    if (key === "no client") throw new ConvexError("Pick another name.");
+    const rows = (await ctx.db.query("clients").collect()).filter((c) => nameKey(c.name) === key);
+    const onProjects = (await ctx.db.query("projects").collect()).some((p) => nameKey(p.client ?? "") === key);
     if (rows.some((c) => !c.fromProjects) || onProjects) throw new ConvexError(`There's already a client called ${name}.`);
     // A record left from a project that's gone (step 5) becomes the client you're making.
     if (rows[0]) await ctx.db.patch(rows[0]._id, { name, fromProjects: undefined });

@@ -131,6 +131,115 @@ describe("D149 quotes and proposals to anyone", () => {
     expect(mails.filter((m) => m.to === "heston@wranglerproductions.com" && /declined/i.test(m.subject)).length).toBe(4); // a, link, c, d
   });
 
+  // Nov 19 (Heston, "take care of them"): anyone can hold a copied link, so accepting one for a client's quote never
+  // makes them the client's contact; the invoice and contract go to the client's own person.
+  test("a client's quote accepted on its copied link keeps the client's contact; the invoice bills them, not whoever accepted", async () => {
+    vi.useFakeTimers();
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const id = await quote(w, { clientId: w.harbor, name: "Maya Brooks", email: "maya@harbor.example", company: "Harbor Coffee" });
+    const r = await w.heston.action(api.quotes.send, { quoteId: id, copyLink: true });
+    const link = (r.link as string).split("/q/")[1];
+    expect((await qpost(w, { token: link, action: "accept", name: "Sly Stranger", email: "sly@elsewhere.example", company: "Harbor Coffee" })).status).toBe(200);
+    const q = await w.heston.query(api.quotes.get, { quoteId: id });
+    expect(q).toMatchObject({ status: "accepted", contact: { name: "Maya Brooks", email: "maya@harbor.example" }, response: { name: "Sly Stranger", via: "link" } });
+    // Review L2: the owner's notice says it wasn't the client's contact.
+    await settle(w);
+    expect(mails.filter((m) => /accepted/i.test(m.subject + m.text) && !m.to.endsWith("@elsewhere.example")).map((m) => m.subject + m.text).join(" ")).toContain("on the copied link, not Maya Brooks");
+    process.env.STRIPE_PLATFORM_KEY = "sk_test_platform";
+    fakeStripe();
+    const made = await w.heston.action(api.quotes.draftFrom, { quoteId: id, contract: false, invoice: "deposit" });
+    const inv = await w.t.run((ctx) => ctx.db.get(made.invoiceId as Id<"invoices">));
+    expect(inv!.billTo).toMatchObject({ name: "Maya Brooks", email: "maya@harbor.example" });
+    expect(JSON.stringify(inv)).not.toContain("sly@elsewhere.example");
+  });
+
+  // Nov 21 (Heston, A1): a lead's quote (no client yet) made out to a person keeps that person on its copied link.
+  test("A1: a lead's quote accepted on its copied link keeps the lead as its contact and bills them", async () => {
+    vi.useFakeTimers();
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const id = await quote(w, { name: "Rob Lane", email: "rob@lane.example", company: "Lane Studio" });
+    const r = await w.heston.action(api.quotes.send, { quoteId: id, copyLink: true });
+    const link = (r.link as string).split("/q/")[1];
+    expect((await qpost(w, { token: link, action: "accept", name: "Pat Assistant", email: "pat@elsewhere.example", company: "Other Co" })).status).toBe(200);
+    const q = await w.heston.query(api.quotes.get, { quoteId: id });
+    expect(q).toMatchObject({ status: "accepted", contact: { name: "Rob Lane", email: "rob@lane.example", company: "Lane Studio" }, response: { name: "Pat Assistant", via: "link" } });
+    const deal = await w.t.run(async (ctx) => ctx.db.get(((await ctx.db.get(id)) as { dealId: Id<"deals"> }).dealId));
+    expect(deal!.lead).toMatchObject({ name: "Rob Lane", email: "rob@lane.example" }); // the quiet lead is Rob, not whoever accepted
+    await settle(w);
+    expect(mails.filter((m) => /accepted/i.test(m.subject + m.text) && !m.to.endsWith("@elsewhere.example")).map((m) => m.subject + m.text).join(" ")).toContain("on the copied link, not Rob Lane");
+    // The lead themselves accepting on the copied link is no "not Rob" notice.
+    const told = () => mails.filter((m) => /accepted/i.test(m.subject + m.text)).length;
+    const notRob = () => mails.filter((m) => /not Rob Lane/.test(m.subject + m.text)).length;
+    const [toldBefore, before] = [told(), notRob()];
+    const id2 = await quote(w, { name: "Rob Lane", email: "rob@lane.example" });
+    const link2 = ((await w.heston.action(api.quotes.send, { quoteId: id2, copyLink: true })).link as string).split("/q/")[1];
+    await qpost(w, { token: link2, action: "accept", name: "Rob Lane", email: "ROB@lane.example" });
+    await settle(w);
+    expect(told()).toBeGreaterThan(toldBefore); // the second accept was told
+    expect(notRob()).toBe(before);
+    process.env.STRIPE_PLATFORM_KEY = "sk_test_platform";
+    fakeStripe();
+    const made = await w.heston.action(api.quotes.draftFrom, { quoteId: id, contract: false, invoice: "deposit" });
+    const inv = await w.t.run((ctx) => ctx.db.get(made.invoiceId as Id<"invoices">));
+    expect(inv!.billTo).toMatchObject({ name: "Rob Lane", email: "rob@lane.example" });
+    expect(JSON.stringify(inv)).not.toContain("pat@elsewhere.example");
+  });
+
+  // Nov 21 (Heston, A2): an emailed link someone forwarded on keeps the client's own name and company.
+  test("A2: a client's quote accepted on a forwarded email link keeps the client's name and company", async () => {
+    vi.useFakeTimers();
+    const w = await world();
+    const mails: Sent[] = [];
+    stub(mails);
+    const id = await quote(w, { clientId: w.harbor, name: "Maya Brooks", email: "maya@harbor.example", company: "Harbor Coffee" });
+    await w.heston.action(api.quotes.send, { quoteId: id });
+    const maya = tokenTo(mails, "maya@harbor.example");
+    // Maya forwarded it; her colleague accepts with their own name and a different company.
+    expect((await qpost(w, { token: maya, action: "accept", name: "Ben Colleague", company: "Ben's Side Gig" })).status).toBe(200);
+    const q = await w.heston.query(api.quotes.get, { quoteId: id });
+    expect(q).toMatchObject({ status: "accepted", contact: { name: "Maya Brooks", email: "maya@harbor.example", company: "Harbor Coffee" }, response: { name: "Ben Colleague", company: "Ben's Side Gig", via: "email" } });
+    process.env.STRIPE_PLATFORM_KEY = "sk_test_platform";
+    fakeStripe();
+    const made = await w.heston.action(api.quotes.draftFrom, { quoteId: id, contract: false, invoice: "deposit" });
+    const inv = await w.t.run((ctx) => ctx.db.get(made.invoiceId as Id<"invoices">));
+    expect(inv!.billTo).toEqual({ name: "Maya Brooks", email: "maya@harbor.example", company: "Harbor Coffee" });
+  });
+
+  // Review M1 (Nov 19): a client's proposal accepted on its copied link is still signed by the client's own person.
+  test("a client's proposal accepted on its copied link: the contract is the client's person's, or waits for one", async () => {
+    vi.useFakeTimers();
+    const w = await world();
+    fakeStripe();
+    const mails: Sent[] = [];
+    stub(mails);
+    await w.heston.mutation(api.builder.ensureStarter, {});
+    const okie = await w.t.run((ctx) => ctx.db.insert("clients", { businessId: w.A, name: "Okie Roasters", createdAt: 1 }));
+    const id = await w.heston.mutation(api.proposals.create, { clientId: okie }) as Id<"proposals">;
+    const p = await w.heston.query(api.proposals.get, { proposalId: id });
+    const b = await w.heston.query(api.builder.getBuild, { buildId: p.buildId });
+    const page = pageOf(b.blocks) as Page;
+    const priced = { ...page, content: page.content.map((n) => (n.type === "items" ? { ...n, attrs: { ...n.attrs, rows: [{ id: newId(), description: "Shooting", qty: 1, rate: 5000 }] } } : n)) };
+    await w.heston.mutation(api.builder.saveBuild, { buildId: p.buildId, title: "Brand film", blocks: priced, fields: { ...b.fields, project: "Brand film", client: { ...b.fields.client, company: "Okie Roasters" } }, signers: [], style: b.style });
+    const pdfId = await w.t.run((ctx) => ctx.storage.store(new Blob(["%PDF-1.4 p"], { type: "application/pdf" })));
+    const r = await w.heston.action(api.proposals.send, { proposalId: id, storageId: pdfId, copyLink: true });
+    const link = (r.link as string).split("/p/")[1];
+    expect((await ppost(w, { token: link, action: "accept", name: "Sly Stranger", email: "sly@elsewhere.example", company: "Okie Roasters" })).status).toBe(200);
+    // Review N3: the owner's notice says it came through the copied link and that the client has no contact yet.
+    await settle(w);
+    expect(mails.filter((m) => /accepted/i.test(m.subject + m.text) && !m.to.endsWith("@elsewhere.example")).map((m) => m.subject + m.text).join(" ")).toContain("on the copied link; the client has no contact yet");
+    // Okie Roasters has no people yet: the contract waits for one rather than going to whoever accepted.
+    await expect(w.heston.action(api.proposals.startContract, { proposalId: id })).rejects.toThrow(/Add a person to Okie Roasters first/);
+    await w.t.run((ctx) => ctx.db.insert("clientPeople", { businessId: w.A, clientId: okie, email: "dana@okie.example", name: "Dana Fox", role: "signer", createdAt: 2 }));
+    const contract = await w.heston.action(api.proposals.startContract, { proposalId: id });
+    const cb = await w.heston.query(api.builder.getBuild, { buildId: contract });
+    expect(cb.fields.client).toMatchObject({ name: "Dana Fox", email: "dana@okie.example", company: "Okie Roasters" });
+    expect(JSON.stringify(cb.fields)).not.toContain("sly@elsewhere.example");
+  });
+
   test("stop one person's link; a new copied link retires the old one", async () => {
     const w = await world();
     const mails: Sent[] = [];

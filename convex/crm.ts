@@ -15,6 +15,7 @@ import { requireMe, requireAll, seesValue } from "./lib/access";
 import { businessInScope, defaultBusiness } from "./lib/business";
 import { EMPTY_RATES, WRANGLER_RATES, estimate, primaryKind, ratesProblems, type EstimateInput, type Rates } from "./lib/estimate";
 import { applyArgs } from "./wsMcp";
+import { nameKey, shownName } from "./lib/names";
 import { accessOf } from "./clients";
 import { ownerSide } from "./inbox";
 import type { Fields } from "./lib/wsBuilder";
@@ -116,13 +117,13 @@ export const board = query({
     const deals = (await ctx.db.query("deals").collect()).filter((d) => !d.closedAt && !d.quiet); // D149: quiet leads stay off the board
     const fus = (await ctx.db.query("followUps").collect()).filter((f) => !f.doneAt && !f.draft);
     const names = new Map<string, string>();
-    const out: Array<{ _id: Id<"deals">; title: string; stage: Stage; company: string | null; project: string | null; valueCents: number | null; website: boolean; followUp: string | null; updatedAt: number }> = [];
+    const out: Array<{ _id: Id<"deals">; title: string; stage: Stage; company: string | null; project: string | null; valueCents: number | null; website: boolean; unconfirmed: boolean; followUp: string | null; updatedAt: number }> = [];
     for (const d of deals.sort((a, b) => b.updatedAt - a.updatedAt)) {
       if (d.clientId && !names.has(d.clientId)) names.set(d.clientId, (await ctx.db.get(d.clientId))?.name ?? "");
       const next = fus.filter((f) => f.dealId === d._id).sort((a, b) => a.due.localeCompare(b.due))[0];
       const p = d.projectId ? await ctx.db.get(d.projectId) : null;
       out.push({ _id: d._id, title: d.title, stage: d.stage, company: d.clientId ? names.get(d.clientId) ?? null : d.lead?.company ?? d.lead?.name ?? null,
-        project: p ? label(p) : null, valueCents: d.valueCents ?? null, website: d.source === "website", followUp: next?.due ?? null, updatedAt: d.updatedAt });
+        project: p ? label(p) : null, valueCents: d.valueCents ?? null, website: d.source === "website", unconfirmed: !!d.lead?.unconfirmed, followUp: next?.due ?? null, updatedAt: d.updatedAt });
     }
     return { deals: out, stages: STAGES.map((s) => ({ key: s, name: STAGE_NAME[s], n: out.filter((d) => d.stage === s).length, cents: out.filter((d) => d.stage === s).reduce((t, d) => t + (d.valueCents ?? 0), 0) })) };
   },
@@ -193,7 +194,7 @@ export const deal = query({
     const estimates = (await ctx.db.query("estimates").withIndex("by_deal", (q) => q.eq("dealId", d._id)).collect()).map((e) => ({ _id: e._id, title: e.title, priceCents: (e.result as { priceCents: number }).priceCents, updatedAt: e.updatedAt }));
     const followUps = (await ctx.db.query("followUps").withIndex("by_deal", (q) => q.eq("dealId", d._id)).collect()).filter((f) => !f.doneAt);
     const projects = (await ctx.db.query("projects").collect()).filter((x) => !d.clientId || x.clientId === d.clientId).sort((a, b) => b.createdAt - a.createdAt).slice(0, 50).map((x) => ({ _id: x._id, label: label(x) }));
-    return { ...d, projects, stageName: STAGE_NAME[d.stage], company: client ? { _id: client._id, name: client.name } : null, project: project ? { _id: project._id, label: label(project) } : null, estimates, followUps };
+    return { ...d, projects, stageName: STAGE_NAME[d.stage], company: client ? { _id: client._id, name: client.name } : null, project: project ? { _id: project._id, label: label(project) } : null, estimates, followUps, unconfirmed: !!d.lead?.unconfirmed };
   },
 });
 
@@ -324,9 +325,6 @@ export const getEstimate = query({
   },
 });
 
-/** D56 re-review N2: Cyrillic and Greek letters that look like Latin ones, so "Hаrbor" (Cyrillic а) is still "harbor". */
-const LOOKALIKE: Record<string, string> = Object.fromEntries([..."аеорсухіјѕԁӏкмнвтгɡοαερτυνικχ"].map((c, i) => [c, "aeopcyxijsdlkmhbtrgoaeptuvikx"[i]]));
-
 /** D56 (Heston, Nov 19): which company a website lead's first estimate files them under.
  *  - Their email is already one of a company's (not removed) people: that company. If it's on more than one, the one
  *    whose name they typed; if none of those matches, a new company (never a guess).
@@ -339,7 +337,7 @@ export async function leadTarget(ctx: QueryCtx | MutationCtx, lead: { email: str
   const email = lead.email.trim().toLowerCase();
   const typed = (lead.company || lead.name || "Website lead").normalize("NFKC").replace(/\p{Default_Ignorable_Code_Point}/gu, "").trim().replace(/\s+/g, " ").slice(0, 100) || "Website lead";
   // D56 re-review N2: lookalikes (zero-width and other format characters, compatibility forms) compare as the same name.
-  const key = (x: string) => [...x.normalize("NFKC").replace(/\p{Default_Ignorable_Code_Point}/gu, "").trim().replace(/\s+/g, " ").toLowerCase()].map((ch) => LOOKALIKE[ch] ?? ch).join("");
+  const key = nameKey;
   // D56 re-review N1: when the caller's database isn't already walled to one business (the connector's Confirm check
   // runs unguarded), only that business's companies and people count. Records with no business are the default one's.
   const def = businessId ? (await defaultBusiness(ctx))?._id ?? null : null;
@@ -352,9 +350,12 @@ export async function leadTarget(ctx: QueryCtx | MutationCtx, lead: { email: str
   const typedMatch = onCompanies.find((c) => key(c.name) === key(typed));
   if (typedMatch) return { clientId: typedMatch._id, newName: null, name: typedMatch.name, why: `${email} is one of ${typedMatch.name}'s people, the company they named` };
   const taken = new Set(clients.map((c) => key(c.name)));
-  let name = typed;
-  for (let n = 1; taken.has(key(name)); n++) name = `${typed} (website lead${n > 1 ? ` ${n}` : ""})`;
-  const why = onCompanies.length > 1 ? `${email} is on more than one company and none is the one they named, so a new company` : name === typed ? "a new company" : `a new company (a client called ${typed} already exists, and their email isn't one of its people)`;
+  // Nov 19 (Heston, "take care of them"): every company made from a website lead is tagged until Heston renames it
+  // (Clients › the company › Rename), so a stranger who's first to use a client's name never holds the plain name.
+  let name = `${typed} (website lead)`;
+  for (let n = 2; taken.has(key(name)); n++) name = `${typed} (website lead ${n})`;
+  const clash = taken.has(key(typed));
+  const why = onCompanies.length > 1 ? `${email} is on more than one company and none is the one they named, so a new company` : !clash ? "a new company" : `a new company (a client called ${typed} already exists, and their email isn't one of its people)`;
   return { clientId: null, newName: name, name, why };
 }
 
@@ -419,7 +420,7 @@ export const contractTarget = internalQuery({
     const d = e.dealId ? await ctx.db.get(e.dealId) : null;
     const signer = people.find((p) => d?.contactEmail && p.email === d.contactEmail) ?? people.find((p) => p.role === "signer") ?? people[0];
     const project = e.projectId ? await ctx.db.get(e.projectId) : null;
-    return { e, company: c?.name ?? "", signer: signer ? { name: signer.name ?? signer.email, email: signer.email } : null, project: project ? label(project) : e.title };
+    return { e, company: c ? shownName(c.name) : "", signer: signer ? { name: signer.name ?? signer.email, email: signer.email } : null, project: project ? label(project) : e.title };
   },
 });
 

@@ -11,6 +11,7 @@
 // is refused. Internal functions are trusted server code: they keep plain access and stamp the default business.
 // A record with no businessId (only in tests now: every live record is tagged) counts as the default business's.
 import { ConvexError } from "convex/values";
+import { nameKey } from "./names";
 import { customAction, customCtx, customMutation, customQuery } from "convex-helpers/server/customFunctions";
 import { v } from "convex/values";
 import { wrapDatabaseReader, wrapDatabaseWriter, type Rules } from "convex-helpers/server/rowLevelSecurity";
@@ -120,9 +121,8 @@ function rulesFor(scope: Scope, raw: QueryCtx["db"]): Rules<unknown, DataModel> 
 export async function linkClient(db: MutationCtx["db"], businessId: Id<"businesses"> | null | undefined, name: string): Promise<Id<"clients"> | undefined> {
   const n = name.trim();
   if (!n) return undefined;
-  const key = n.toLowerCase();
   const rows = (await db.query("clients").collect()).filter((c) => !businessId || c.businessId === undefined || c.businessId === businessId);
-  const found = rows.filter((c) => c.name.trim().toLowerCase() === key);
+  const found = rows.filter((c) => nameKey(c.name) === nameKey(n)); // review L4: lookalikes count as the same name
   // D56 review H1 (Nov 19): never take the first of two same-named clients; a share or project would reach the wrong one.
   if (found.length > 1) throw new ConvexError(`Two clients are called ${n}. Rename one in Clients first, then try again.`);
   if (found.length === 1) return found[0]._id;

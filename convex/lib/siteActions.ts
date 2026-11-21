@@ -323,7 +323,7 @@ const leadFiling = async (ctx: QueryCtx, a: Args) => {
   if (!biz) return null;
   const t = await crm.leadTarget(ctx as never, deal.lead as { email: string; company?: string; name: string }, biz as never);
   return t.clientId
-    ? `Saving this estimate files the lead ${String(deal.lead.email ?? "")} under ${t.name} (${t.why}); as one of its people, once they can sign in they see its invoices.`
+    ? `Saving this estimate files the lead ${String(deal.lead.email ?? "")} under ${t.name} (${t.why}); as one of its people, once they can sign in they see its invoices.${deal.lead.unconfirmed ? " Unconfirmed: it came from the website form, which doesn't check emails, so the phone number and message may not be theirs." : ""}`
     : `Saving this estimate makes a new company, ${t.name}, for the lead ${String(deal.lead.email ?? "")}, with them as its signer${t.why === "a new company" ? "" : ` (${t.why.replace(/^a new company \((.*)\)$/, "$1").replace(/, so a new company$/, "")})`}.`;
 };
 

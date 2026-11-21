@@ -344,6 +344,7 @@ const TEAM: Record<"producer" | "editor" | "bookkeeper", Record<string, string>>
     "library.projectNames": REVIEW,
     "library.overview": REVIEW,
     "library.createClient": CLIENTS,
+    "library.renameClient": CLIENTS, // Nov 19: Clients › the company › Rename
     "library.markOpened": REVIEW,
     "library.renameProject": PROJECTS,
     "library.setVersionDescription": REVIEW,
