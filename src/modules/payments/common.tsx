@@ -4,7 +4,8 @@ import { StatusChip } from "../../ui/wp";
 import { BrandImg } from "../../ui/BrandImg";
 
 export type InvoiceStatus = "draft" | "sending" | "due" | "overdue" | "partly_paid" | "processing" | "failed" | "paid" | "void" | "uncollectible";
-export type Line = { id: string; description: string; qty: number; unitCents: number };
+// item: Nov 21, the product-library item the line was picked as (an unchanged line bills Stripe's price)
+export type Line = { id: string; description: string; qty: number; unitCents: number; item?: { productId: string; priceId: string; unitCents: number; description: string } };
 
 export const money = (cents: number) => `${cents < 0 ? "−" : ""}$${(Math.abs(cents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 export const dateLong = (iso: string) => { const d = new Date(`${iso}T12:00:00`); return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); };
@@ -30,7 +31,7 @@ export const InvoiceChip = ({ status }: { status: InvoiceStatus }) => <StatusChi
 
 /** The invoice as the client sees it: on the New invoice preview, the owner's invoice page, the client's page. */
 export function InvoicePaper({ business, number, issued, due, billTo, project, lines, discountCents, taxPercent, amountPaidCents = 0, memo, payments }: {
-  business: { name: string; legalName: string | null; logoUrl?: string | null; email?: string | null; address?: string | null; privacyUrl?: string | null }; number: string; issued: string; due: string;
+  business: { name: string; legalName: string | null; logoUrl?: string | null; email?: string | null; address?: string | null; privacyUrl?: string | null; ein?: string | null }; number: string; issued: string; due: string;
   billTo: { name: string; email: string; company?: string }; project?: string | null; lines: Line[]; discountCents?: number; taxPercent?: number;
   amountPaidCents?: number; memo?: string; payments?: Array<{ at: string; method: string; cents: number }>;
 }) {
@@ -39,7 +40,7 @@ export function InvoicePaper({ business, number, issued, due, billTo, project, l
   return (
     <article className="inv-paper glass">
       <header className="inv-top">
-        <div className="who"><span className="logo">{business.logoUrl ? <img src={business.logoUrl} alt="" /> : <BrandImg name="wordmark" alt="" />}</span><span><b>{business.name}</b>{legal && <small>{legal}</small>}</span></div>
+        <div className="who"><span className="logo">{business.logoUrl ? <img src={business.logoUrl} alt="" /> : <BrandImg name="wordmark" alt="" />}</span><span><b>{business.name}</b>{legal && <small>{legal}</small>}{business.ein && <small className="inv-ein">EIN {business.ein}</small>}</span></div>
         <div className="num"><span>Invoice</span><b>{number}</b></div>
       </header>
       <dl className="inv-meta">

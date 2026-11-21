@@ -78,6 +78,9 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "invoices.list": { pages: ["owner"], args: () => "skip" }, // Payments › Invoices
   "invoices.overview": { pages: ["owner"], args: () => "skip" }, // Payments › Overview
   "plans.list": { pages: ["owner"], args: () => "skip" }, // Payments › Plans
+  "products.list": { pages: ["owner"], args: () => "skip" }, // Payments › Products (Nov 21)
+  "products.get": { pages: ["owner"], args: () => "skip" }, // a product
+  "products.picker": { pages: ["owner"], args: () => "skip" }, // Add from library on an invoice or quote
   "subscriptions.list": { pages: ["owner"], args: () => "skip" }, // Payments › Subscriptions
   "subscriptions.failRules": { pages: ["owner"], args: () => "skip" }, // Settings › Payments and a client's Settings tab (D64)
   // Phase 3: the CRM, estimates and the job ledger (back office only, T3.5).
@@ -259,6 +262,7 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "guests.home": { pages: ["owner"], args: () => "skip" }, // /guest (guest logins only)
   "guests.sheet": { pages: ["owner"], args: () => "skip" }, // /guest/<token> signed in (guest logins only)
   "footage.settings": { pages: ["owner"], args: () => ({}) }, // Settings › Payments › Footage storage
+  "taxId.get": { pages: ["owner"], args: () => ({}) }, // Settings › Payments › Tax ID (Nov 21; the page only asks when the viewer is the owner)
   "footage.forProject": { pages: ["owner"], args: () => "skip" }, // project › Delivery › Raw footage storage
   "footage.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Raw footage
   "testimonials.projectsFor": { pages: ["owner"], args: () => "skip" }, // Post a note › Ask for a testimonial

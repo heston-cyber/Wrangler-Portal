@@ -1791,6 +1791,8 @@ button.wp-hubcard[aria-busy], button.wp-tplcard[aria-busy] { opacity: 1; }
 .inv-money > span { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none; }
 .inv-money > .input { padding-left: 26px; width: 100%; box-sizing: border-box; font-variant-numeric: tabular-nums; }
 .inv-add { justify-self: start; color: var(--accent); }
+.inv-adds { display: flex; flex-wrap: wrap; gap: 8px 20px; justify-self: start; } /* Nov 21: Add line item · Add from library */
+.lib-pick { max-height: 52vh; overflow: auto; margin: 0 -8px; }
 .inv-edit-sums { display: grid; grid-template-columns: 1fr auto; gap: 0; margin: 0; padding: 8px 20px 20px; border-top: 1px solid var(--border-hairline); }
 .inv-edit-sums dt, .inv-edit-sums dd { margin: 0; padding: 9px 0; font-size: var(--fs-text-small); color: var(--text-secondary); display: flex; align-items: center; }
 .inv-edit-sums dd { justify-content: flex-end; color: var(--text-primary); }

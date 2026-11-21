@@ -63,7 +63,7 @@ async function clientView(ctx: QueryCtx, i: Doc<"invoices">) {
   const t = totals(i);
   return {
     token: i.payToken!, kind: i.kind, title: i.title, number: i.number ?? i.stripe?.number ?? "", status,
-    billTo: i.billTo, project: project ? label(project) : null, lines: i.lines, discountCents: i.discountCents ?? 0, taxPercent: i.taxPercent ?? 0,
+    billTo: i.billTo, project: project ? label(project) : null, lines: i.lines.map((l) => ({ id: l.id, description: l.description, qty: l.qty, unitCents: l.unitCents })), discountCents: i.discountCents ?? 0, taxPercent: i.taxPercent ?? 0,
     memo: i.memo ?? "", dueDate: i.dueDate, sentAt: i.issuedAt ?? i.sentAt ?? i.createdAt, paidAt: i.paidAt ?? null, voidedAt: i.voidedAt ?? null,
     subtotalCents: t.subtotal, totalCents: i.totalCents, amountPaidCents: i.amountPaidCents, amountRemainingCents: i.amountRemainingCents,
     payments: (i.payments ?? []).filter((p) => p.status !== "failed"),
@@ -77,7 +77,8 @@ async function clientView(ctx: QueryCtx, i: Doc<"invoices">) {
       name: biz.name, legalName: biz.legalName ?? null, prefix: invoicePrefix(biz.name), email: biz.replyTo ?? null, address: biz.address ?? null, privacyUrl: biz.privacyUrl ?? null,
       logoUrl: biz.logoFileId ? await ctx.storage.getUrl(biz.logoFileId) : null,
       logoLightUrl: biz.logoLightFileId ? await ctx.storage.getUrl(biz.logoLightFileId) : null, // for the PDFs
-    } : { name: "", legalName: null, prefix: "", email: null, address: null, privacyUrl: null, logoUrl: null, logoLightUrl: null },
+      ein: i.ein ?? null, // Nov 21 (Heston): the EIN the invoice was made with, on its page and receipt (security review #2)
+    } : { name: "", legalName: null, prefix: "", email: null, address: null, privacyUrl: null, logoUrl: null, logoLightUrl: null, ein: null },
   };
 }
 export type ClientInvoice = Awaited<ReturnType<typeof clientView>>;
