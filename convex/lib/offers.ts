@@ -187,11 +187,20 @@ export async function answer(ctx: MutationCtx, kind: Kind, f: Found, a: Answer, 
     // Nov 19 (Heston, "take care of them"): not on the copied link of a quote or proposal already addressed to a
     // client: anyone can hold that link, so the person it was addressed to (or the client's signer) stays the contact,
     // who is billed and signs. Who accepted is still recorded (response) and shown to Heston.
-    const addressed = f.via === "link" && !!d.clientId; // a quote with no client: whoever accepts is its contact, as before
+    // Nov 21 (Heston, A1): a lead's quote (no client yet) made out to a person keeps that person on its copied link too.
+    const addressed = f.via === "link" && (!!d.clientId || !!d.contact?.email); // made out to no one: whoever accepts is its contact, as before
     const kept = addressed ? (d.contact?.email ? d.contact : await signerOf(ctx, d.clientId, (d as { businessId?: Id<"businesses"> }).businessId ?? null)) : null;
+    // Nov 21 (Heston, A2): an emailed link (perhaps forwarded) keeps the client's own name and company: the person it
+    // was emailed to stays as written, and a client's offer keeps the client's company. What was typed is in `response`.
+    const own = f.via === "email" && !!d.contact?.email && d.contact.email.toLowerCase() === email.toLowerCase();
+    const clientCo = f.via === "email" && d.clientId ? (d.contact?.company ?? (await signerOf(ctx, d.clientId, (d as { businessId?: Id<"businesses"> }).businessId ?? null))?.company) : undefined;
     const contact = addressed
       ? kept
-      : { name: response.name, email: email || d.contact?.email || "", ...(company ? { company } : d.contact?.company && f.via !== "link" ? { company: d.contact.company } : {}) };
+      : own
+        ? d.contact!
+        : f.via === "email" && d.clientId
+          ? { name: f.r!.name || response.name, email, ...(clientCo ? { company: clientCo } : {}) }
+          : { name: response.name, email: email || d.contact?.email || "", ...(company ? { company } : d.contact?.company && f.via !== "link" ? { company: d.contact.company } : {}) };
     let dealId = d.dealId;
     if (!d.clientId && !d.dealId) {
       const lc = contact ?? { name: response.name, email: email || "" }; // (always set here: no client means a contact or none at all)
@@ -213,8 +222,8 @@ export async function answer(ctx: MutationCtx, kind: Kind, f: Found, a: Answer, 
   // M3: the owner hears about copied-link declines at most once an hour per link.
   const key = `${thing}-${a.kind}:${d._id}:${f.r?._id ?? (f.via === "link" ? `link:${d.linkToken}:${Math.floor(now / 3_600_000)}` : "legacy")}`;
   // Review L2/N3 (Nov 19): a client's offer accepted on its copied link by someone who isn't the client's contact says so.
-  const keptContact = a.kind === "accepted" && f.via === "link" && d.clientId ? ((await ctx.db.get(d._id)) as { contact?: { name?: string; email?: string } } | null)?.contact ?? null : null;
-  const outsider = a.kind === "accepted" && f.via === "link" && !!d.clientId && (email || "") !== (keptContact?.email ?? "").toLowerCase()
+  const keptContact = a.kind === "accepted" && f.via === "link" && (d.clientId || d.contact?.email) ? ((await ctx.db.get(d._id)) as { contact?: { name?: string; email?: string } } | null)?.contact ?? null : null;
+  const outsider = a.kind === "accepted" && f.via === "link" && (!!d.clientId || !!keptContact) && (email || "") !== (keptContact?.email ?? "").toLowerCase()
     ? (keptContact?.email ? ` (on the copied link, not ${keptContact.name || keptContact.email})` : " (on the copied link; the client has no contact yet)") : "";
   return { ok: true, status: a.kind === "accepted" ? "accepted" : (await ctx.db.get(d._id))!.status, tell: { key, kind: a.kind, who: response.name + outsider, company: company ?? (f.via === "legacy" ? d.contact?.company ?? null : null), reason: response.reason ?? null, at: now } };
 }
