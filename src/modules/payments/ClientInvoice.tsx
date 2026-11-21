@@ -185,7 +185,7 @@ function PayForm({ inv, token }: { inv: Inv; token: string }) {
   }, [start, token, inv.amountRemainingCents]);
   const stripe = useMemo(() => (setup ? stripeFor(setup.publishableKey, setup.accountId) : null), [setup]);
   if (err) return <Banner tone="neutral" icon="info" title={err} />;
-  if (!setup || !stripe) return <div className="inv-pay-loading glass" aria-label="Loading the payment form"><SkeletonRows n={3} /></div>;
+  if (!setup || !stripe) return <div className="inv-pay-loading" aria-label="Loading the payment form"><SkeletonRows n={3} /></div>;
   return (
     <Elements stripe={stripe} options={{ clientSecret: setup.clientSecret, appearance: appearance(), loader: "auto" }}>
       <ConfirmForm inv={inv} token={token} />
@@ -213,7 +213,7 @@ function ConfirmForm({ inv, token }: { inv: Inv; token: string }) {
     setBusy(false);
   };
   return (
-    <form className="inv-pay-form glass" onSubmit={(e) => { e.preventDefault(); void pay(); }}>
+    <form className="inv-pay-form" onSubmit={(e) => { e.preventDefault(); void pay(); }}>
       {declined && <Banner tone="danger" icon="alert" title={declined.endsWith(".") ? declined : `${declined}.`} text="Nothing was charged. Try again, or use a different card or your bank account." />}
       <PaymentElement options={{ layout: "tabs" }} onReady={() => setReady(true)} />
       <Button variant="primary" type="submit" loading={busy} disabled={!ready || !stripe} className="inv-pay-btn glass">{declined ? "Try again" : `Pay ${money(inv.amountRemainingCents)}`}</Button>

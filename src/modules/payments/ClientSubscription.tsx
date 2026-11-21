@@ -113,7 +113,7 @@ function SetupForm({ token, label, onDone }: { token: string; label: string; onD
   }, [start, token]);
   const stripe = useMemo(() => (setup ? stripeFor(setup.publishableKey, setup.accountId) : null), [setup]);
   if (err) return <Banner tone="neutral" icon="info" title={err} />;
-  if (!setup || !stripe) return <div className="inv-pay-loading glass" aria-label="Loading the form"><SkeletonRows n={3} /></div>;
+  if (!setup || !stripe) return <div className="inv-pay-loading" aria-label="Loading the form"><SkeletonRows n={3} /></div>;
   return (
     <Elements stripe={stripe} options={{ clientSecret: setup.clientSecret, appearance: appearance(), loader: "auto" }}>
       <ConfirmSetup token={token} label={label} onDone={onDone} />
@@ -138,7 +138,7 @@ function ConfirmSetup({ token, label, onDone }: { token: string; label: string; 
     setBusy(false);
   };
   return (
-    <form className="inv-pay-form glass" onSubmit={(e) => { e.preventDefault(); void save(); }}>
+    <form className="inv-pay-form" onSubmit={(e) => { e.preventDefault(); void save(); }}>
       {error && <Banner tone="danger" icon="alert" title={error} />}
       <PaymentElement options={{ layout: "tabs" }} onReady={() => setReady(true)} />
       <Button variant="primary" type="submit" loading={busy} disabled={!ready || !stripe} className="inv-pay-btn glass">{label}</Button>

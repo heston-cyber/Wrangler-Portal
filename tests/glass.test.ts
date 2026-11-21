@@ -167,9 +167,14 @@ describe("glass site wide", () => {
       const src = readFileSync(f, "utf8");
       for (const m of src.matchAll(re)) {
         const v = m[1] ?? m[2];
+        // Nov 21 (Heston): the card form and its loading box sit inside the glass pay panel, so they get no edge of their own.
+        if (/\binv-pay-(form|loading)\b/.test(v)) continue;
         if (/\b(inv-paper|inv-pay|crm-col|cal-month|cal-week|help-guide|wp-morelist|wp-notice)\b/.test(v) && !/\bglass\b/.test(v)) flat.push(`${f}: ${v}`);
       }
     }
     expect(flat).toEqual([]);
+    // ...and the pay panel around them is still glass.
+    expect(readFileSync("src/modules/payments/ClientInvoice.tsx", "utf8")).toMatch(/<form className="inv-pay-form" /);
+    expect(readFileSync("src/modules/payments/ClientInvoice.tsx", "utf8")).toMatch(/<section className="inv-pay glass" aria-label="Pay this invoice">/);
   });
 });
