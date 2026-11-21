@@ -98,3 +98,64 @@ describe("transcript start", () => {
     expect(src).not.toMatch(/runAfter\(60_000, internal\.transcribe\.run/);
   });
 });
+
+// Nov 21 (site watch: every review render since Oct 30 failed to transcribe): ElevenLabs couldn't download the original
+// from review storage, so a review render is transcribed from its small copy (the scrub library's MP4, with audio).
+describe("review renders are transcribed from their small copy", () => {
+  async function render(scrub: { scrubStatus?: "pending" | "ready" | "failed"; scrubGuid?: string; scrubHeights?: number[] }) {
+    process.env.BUNNY_SCRUB_CDN = "vz-scrub.b-cdn.net";
+    const t = convexTest(schema, modules);
+    const versionId = await t.run(async (ctx) => {
+      const projectId = await ctx.db.insert("projects", { name: "Exploring Aging", createdAt: Date.now() });
+      const videoId = await ctx.db.insert("videos", { projectId, title: "EP 38", createdAt: Date.now(), updatedAt: Date.now() });
+      return await ctx.db.insert("versions", {
+        videoId, number: 2, status: "ready", bunnyGuid: "", source: "file", fileUrl: "https://review-zone.b-cdn.net/review/v1/abc/00010_EA38_v2.mp4",
+        fileName: "00010_EA38_v2.mp4", startTimecode: "01:00:00:00", fpsNum: 24, fpsDen: 1, frameCount: 70421, frameCountFrom: "file" as const,
+        createdAt: Date.now(), readyAt: Date.now(), ...scrub,
+      } as never);
+    });
+    return { t, versionId };
+  }
+  const sentUrls = (bodies: FormData[]) => bodies.map((f) => String(f.get("source_url") ?? f.get("cloud_storage_url")));
+  function eleven(bodies: FormData[]) {
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.startsWith("https://api.elevenlabs.io/")) { bodies.push(init!.body as FormData); return new Response(JSON.stringify({ language_code: "eng", words: [{ text: "Welcome", start: 0.5, end: 1, type: "word", speaker_id: "s0" }] }), { status: 200 }); }
+      return new Response("not expected", { status: 500 });
+    });
+  }
+
+  test("T1: small copy ready: ElevenLabs gets the copy's link (smallest size), never the original's", async () => {
+    const { t, versionId } = await render({ scrubStatus: "ready", scrubGuid: "scrub-1", scrubHeights: [720, 360] });
+    const bodies: FormData[] = [];
+    eleven(bodies);
+    const r = await t.action(internal.transcribe.run, { versionId, attempt: 0 });
+    expect(r.result).toBe("done: 1 words");
+    expect(sentUrls(bodies)).toEqual(["https://vz-scrub.b-cdn.net/scrub-1/play_360p.mp4"]);
+    expect((await transcriptRow(t, versionId)).status).toBe("done");
+  });
+
+  test("T2: small copy still being made: waits 15 s without using a try, then fails clearly after 10 minutes", async () => {
+    const { t, versionId } = await render({ scrubStatus: "pending", scrubGuid: "scrub-1" });
+    const bodies: FormData[] = [];
+    eleven(bodies);
+    expect((await t.action(internal.transcribe.run, { versionId, attempt: 0 })).result).toBe("waiting for the small copy");
+    expect(bodies).toHaveLength(0);
+    expect(await transcriptRow(t, versionId)).toMatchObject({ status: "pending", attempts: 0 });
+    const next = await t.run(async (ctx) => ctx.db.system.query("_scheduled_functions").collect());
+    expect(next.filter((s) => s.name.includes("transcribe"))).toHaveLength(1);
+    expect((await t.action(internal.transcribe.run, { versionId, attempt: 40 })).result).toBe("no small copy");
+    expect(await transcriptRow(t, versionId)).toMatchObject({ status: "failed", error: expect.stringMatching(/small copy wasn't made in time/) });
+    expect(bodies).toHaveLength(0);
+  });
+
+  test("T3: no small copy at all (never made, or failed): tries the original, as before", async () => {
+    for (const scrub of [{}, { scrubStatus: "failed" as const }]) {
+      const { t, versionId } = await render(scrub);
+      const bodies: FormData[] = [];
+      eleven(bodies);
+      expect((await t.action(internal.transcribe.run, { versionId, attempt: 0 })).result).toBe("done: 1 words");
+      expect(sentUrls(bodies)).toEqual(["https://review-zone.b-cdn.net/review/v1/abc/00010_EA38_v2.mp4"]);
+    }
+  });
+});

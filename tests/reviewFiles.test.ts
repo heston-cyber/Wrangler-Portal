@@ -194,12 +194,12 @@ describe("a review export", () => {
     const ov = await me.query(api.library.overview, {});
     expect(ov.videos[0].latest).toMatchObject({ isFile: true, thumbUrl: "https://vz-scrub.b-cdn.net/scrub-guid/thumbnail.jpg" });
 
-    // ElevenLabs reads the render by URL; nothing is downloaded here.
+    // ElevenLabs reads the render's small copy by URL (Nov 21: it couldn't download the original); nothing is downloaded here.
     const before = calls.length;
     expect((await t.action(internal.transcribe.run, { versionId: ver._id, attempt: 0 })).result).toBe("done: 1 words");
     const stt = calls.slice(before).filter((c) => c.url.includes("elevenlabs"));
     expect(stt.length).toBeGreaterThanOrEqual(1); // (plus the run the copy scheduled, which convex-test also runs)
-    for (const c of stt) expect([(c.body as FormData).get("source_url"), (c.body as FormData).get("file")]).toEqual([ver.fileUrl, null]);
+    for (const c of stt) expect([(c.body as FormData).get("source_url"), (c.body as FormData).get("file")]).toEqual(["https://vz-scrub.b-cdn.net/scrub-guid/play_360p.mp4", null]);
     expect(calls.slice(before).some((c) => c.url.startsWith("https://wrangler-review-stills.b-cdn.net/") && !/Range/.test(""))).toBe(false);
 
     // Deleting the version removes the stored render and the scrub copy.
