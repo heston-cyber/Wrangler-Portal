@@ -4,14 +4,21 @@
 // PDF. Only the owner sets it (Settings › Payments). It's printed on invoices, so whoever can open an invoice sees it
 // there (a team member with Payments, and the client); the connector sees only "(on file)" (siteGuard's scrub).
 import { action, type ActionCtx } from "./_generated/server";
-import { internalMutation, internalQuery, query } from "./lib/functions";
+import { internalAction, internalMutation, internalQuery, query } from "./lib/functions";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireOwner } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import { audit } from "./lib/audit";
 import { stripeCall, StripeError } from "./lib/stripeApi";
+
+/** The owner, or trusted server code running for one business (a scheduled tidy-up). */
+async function ownerOrRun(ctx: QueryCtx | MutationCtx): Promise<Id<"businesses">> {
+  if (await ctx.auth.getUserIdentity()) await requireOwner(ctx);
+  return ownBusiness(ctx);
+}
 
 function ownBusiness(ctx: unknown): Id<"businesses"> {
   const id = businessInScope(ctx);
@@ -31,7 +38,7 @@ export const get = query({
   handler: async (ctx) => {
     await requireOwner(ctx);
     const b = await ctx.db.get(ownBusiness(ctx));
-    const leftover = !!b?.taxIdToRemove?.length; // an old tax ID Stripe still has (re-review A)
+    const leftover = !!b?.taxIdToRemove?.length || !!b?.taxIdPending; // Stripe isn't fully up to date (re-review A, N2)
     if (!b?.taxId) return leftover ? { value: null, inStripe: false, leftover } : null;
     return { value: b.taxId.value as string | null, inStripe: !!b.taxId.stripeId && b.taxId.accountId === b.stripe?.accountId, ...(leftover ? { leftover } : {}) };
   },
@@ -40,8 +47,7 @@ export const get = query({
 export const target = internalQuery({
   args: {},
   handler: async (ctx) => {
-    await requireOwner(ctx);
-    const b = await ctx.db.get(ownBusiness(ctx));
+    const b = await ctx.db.get(await ownerOrRun(ctx));
     if (!b) throw new ConvexError("Not allowed.");
     return { businessId: b._id, accountId: b.stripe?.status === "connected" ? b.stripe.accountId : null, taxId: b.taxId ?? null, toRemove: b.taxIdToRemove ?? [], connectedTo: b.stripe?.accountId ?? null };
   },
@@ -76,20 +82,19 @@ const failed = (e: unknown): never => {
 export const removed = internalMutation({
   args: { done: v.array(v.object({ id: v.string(), account: v.string() })) },
   handler: async (ctx, { done }) => {
-    await requireOwner(ctx);
-    const b = await ctx.db.get(ownBusiness(ctx));
+    const id = await ownerOrRun(ctx);
+    const b = await ctx.db.get(id);
     const list = (b?.taxIdToRemove ?? []).filter((x) => !done.some((d) => d.id === x.id && d.account === x.account));
-    await ctx.db.patch(ownBusiness(ctx), { taxIdToRemove: list.length ? list : undefined });
+    await ctx.db.patch(id, { taxIdToRemove: list.length ? list : undefined });
   },
 });
 
 /** Security review (Nov 21) #2, #4, #8: the business's running subscriptions whose invoices carry (or should carry) its
- *  EIN, with the tax ID each should have now: the current one on its Stripe account, or none. Owner only. */
+ *  EIN, with the tax ID each should have now: the current one on its Stripe account, or none. */
 export const subsToAlign = internalQuery({
   args: {},
   handler: async (ctx) => {
-    await requireOwner(ctx);
-    const b = await ctx.db.get(ownBusiness(ctx));
+    const b = await ctx.db.get(await ownerOrRun(ctx));
     const cur = b?.taxId?.stripeId && b.taxId.accountId ? { id: b.taxId.stripeId, account: b.taxId.accountId } : null;
     return (await ctx.db.query("subscriptions").collect()) // row-level rules: this business's only
       .filter((s) => (s.einOn || s.accountTaxId) && s.stripe?.subscriptionId && s.status !== "canceled" && s.status !== "incomplete_expired")
@@ -98,34 +103,92 @@ export const subsToAlign = internalQuery({
   },
 });
 
-/** Put each running subscription on the tax ID it should have. False when one couldn't be moved (then nothing is
- *  removed from Stripe, so no subscription points at a tax ID that's gone). Gone or cancelled in Stripe, or out of the
- *  platform's reach, counts as done (#7). */
-async function alignSubscriptions(ctx: ActionCtx): Promise<boolean> {
+/** Re-check N1: the listed old tax IDs safe to remove now: not the current one, and on no subscription (one running,
+ *  or one being started that decided it). Read in one step, so nothing decided meanwhile is removed. */
+export const deletable = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const b = await ctx.db.get(await ownerOrRun(ctx));
+    const inUse = new Set<string>();
+    for (const s of await ctx.db.query("subscriptions").collect()) {
+      if (s.status === "canceled" || s.status === "incomplete_expired") continue;
+      if (s.accountTaxId) inUse.add(s.accountTaxId);
+      if (s.startTaxId) inUse.add(s.startTaxId);
+    }
+    const cur = b?.taxId?.stripeId;
+    return { list: (b?.taxIdToRemove ?? []).filter((g) => g.id !== cur && !inUse.has(g.id)), connectedTo: b?.stripe?.accountId ?? null, total: (b?.taxIdToRemove ?? []).length };
+  },
+});
+
+/** Re-check N1: one tidy-up per business at a time (a stuck one is taken over after two minutes). */
+export const claimTidy = internalMutation({
+  args: { release: v.optional(v.boolean()), pending: v.optional(v.boolean()) },
+  handler: async (ctx, { release, pending }) => {
+    const id = await ownerOrRun(ctx);
+    const b = await ctx.db.get(id);
+    if (release) { await ctx.db.patch(id, { taxIdTidyAt: undefined, taxIdPending: pending ? true : undefined }); return true; }
+    if (b?.taxIdTidyAt && Date.now() - b.taxIdTidyAt < 120_000) return false;
+    await ctx.db.patch(id, { taxIdTidyAt: Date.now() });
+    return true;
+  },
+});
+
+/** Put each running subscription on the tax ID it should have; false when one couldn't be moved. Gone or cancelled in
+ *  Stripe counts as done (#7); so does an account the platform can no longer reach, but never the connected one (N6). */
+async function alignSubscriptions(ctx: ActionCtx, connectedTo: string | null): Promise<boolean> {
   let all = true;
   for (const s of await ctx.runQuery(internal.taxId.subsToAlign, {})) {
     const r = await stripeCall("POST", `subscriptions/${s.subscriptionId}`, { account: s.account, form: { invoice_settings: { account_tax_ids: s.want ? [s.want] : "" } } })
-      .then(() => "ok" as const, (e) => (e instanceof StripeError && (e.status === 404 || e.status === 403 || (e.status === 400 && /cancel/i.test(e.message))) ? "skip" as const : "fail" as const));
-    if (r === "ok") await ctx.runMutation(internal.subscriptions.setAccountTaxId, { subscriptionId: s._id, taxId: s.want });
+      .then(() => "ok" as const, (e) => (e instanceof StripeError && (e.status === 404 || (e.status === 403 && s.account !== connectedTo) || (e.status === 400 && /cancel/i.test(e.message))) ? "skip" as const : "fail" as const));
+    if (r === "ok") await ctx.runMutation(internal.taxId.subMoved, { subscriptionId: s._id, taxId: s.want });
     if (r === "fail") all = false;
   }
   return all;
 }
 
-/** After a save: subscriptions moved first, then the old tax IDs removed. */
-async function tidy(ctx: ActionCtx): Promise<number> {
-  const moved = await alignSubscriptions(ctx);
-  const f = await ctx.runQuery(internal.taxId.target, {}); // a fresh read (#3)
-  if (!moved) return f.toRemove.length;
-  const done: Array<{ id: string; account: string }> = [];
-  for (const g of f.toRemove) {
-    if (g.id === f.taxId?.stripeId && g.account === f.taxId?.accountId) { done.push(g); continue; }
-    const ok = await stripeCall("DELETE", `tax_ids/${g.id}`, { account: g.account }).then(() => true, (e) => e instanceof StripeError && (e.status === 404 || e.status === 403));
-    if (ok) done.push(g);
+export const subMoved = internalMutation({
+  args: { subscriptionId: v.id("subscriptions"), taxId: v.union(v.string(), v.null()) },
+  handler: async (ctx, { subscriptionId, taxId }) => {
+    await ownerOrRun(ctx);
+    if (!(await ctx.db.get(subscriptionId))) return; // row-level rules: this business's only
+    await ctx.db.patch(subscriptionId, { accountTaxId: taxId ?? undefined });
+  },
+});
+
+/** After a save (or when a subscription starts): subscriptions moved first, then old tax IDs nothing uses removed.
+ *  left: old ones still in Stripe; pending: a subscription still to move (tried again in a few minutes). */
+async function tidy(ctx: ActionCtx, retry: (ms: number) => Promise<unknown>): Promise<{ left: number; pending: boolean }> {
+  if (!(await ctx.runMutation(internal.taxId.claimTidy, {}))) { await retry(60_000); return { left: 0, pending: true }; }
+  let pending = true;
+  try {
+    const first = await ctx.runQuery(internal.taxId.deletable, {});
+    pending = !(await alignSubscriptions(ctx, first.connectedTo));
+    const d = await ctx.runQuery(internal.taxId.deletable, {}); // a fresh read (#3, N1)
+    const done: Array<{ id: string; account: string }> = [];
+    for (const g of d.list) {
+      const ok = await stripeCall("DELETE", `tax_ids/${g.id}`, { account: g.account }).then(() => true, (e) => e instanceof StripeError && (e.status === 404 || (e.status === 403 && g.account !== d.connectedTo)));
+      if (ok) done.push(g);
+    }
+    if (done.length) await ctx.runMutation(internal.taxId.removed, { done });
+    if (pending) await retry(15 * 60_000);
+    return { left: d.total - done.length, pending };
+  } finally {
+    await ctx.runMutation(internal.taxId.claimTidy, { release: true, pending });
   }
-  if (done.length) await ctx.runMutation(internal.taxId.removed, { done });
-  return f.toRemove.length - done.length;
 }
+
+/** Re-check N1, N2: the tidy-up run again for one business (after a busy or failed one, or a subscription start). */
+export const tidyLater = internalAction({
+  args: { tries: v.number() },
+  handler: async (ctx, { tries }): Promise<null> => {
+    if (!ctx.asBusiness) throw new Error("A tidy-up runs for one business.");
+    const biz = ctx.asBusiness;
+    await tidy(ctx as unknown as ActionCtx, (ms) => (tries < 4 ? ctx.scheduler.runAfter(ms, internal.taxId.tidyLater, { asBusiness: biz, tries: tries + 1 }) : Promise.resolve(null)));
+    return null;
+  },
+});
+
+const later = (ctx: ActionCtx, businessId: Id<"businesses">) => (ms: number) => ctx.scheduler.runAfter(ms, internal.taxId.tidyLater, { asBusiness: businessId, tries: 0 });
 
 /** The business's own us_ein tax IDs on a Stripe account (owner self only; never a customer's). */
 async function stripeEins(account: string): Promise<Array<{ id: string; value: string }>> {
@@ -163,9 +226,10 @@ export const set = action({
       await ctx.runMutation(internal.taxId.save, { taxId: value ? { type: "us_ein", value, ...(made ? { stripeId: made.id, accountId: made.account } : {}) } : null });
       // Then (Nov 21) running subscriptions move to it (or to none), and only then do old tax IDs go. What won't go is
       // kept and tried again on the next save (re-review A); Settings says so and offers to try now.
-      const left = await tidy(ctx).catch(() => -1);
-      if (left < 0) throw new ConvexError("Saved. Stripe didn't answer as expected while tidying up; that's finished the next time you save.");
-      if (left) throw new ConvexError(value ? "Saved. Stripe still has the old EIN for now; it's removed the next time you save, or with Remove it below." : "Removed here. Stripe still has it for now; it's removed the next time you save, or with Remove it below.");
+      const r = await tidy(ctx, later(ctx, t.businessId)).catch(() => null);
+      if (!r) throw new ConvexError("Saved. Stripe didn't answer as expected while tidying up; that's finished the next time you save.");
+      if (r.left) throw new ConvexError(value ? "Saved. Stripe still has the old EIN for now; it's removed the next time you save, or with Try again below." : "Removed here. Stripe still has it for now; it's removed the next time you save, or with Try again below.");
+      if (r.pending) throw new ConvexError("Saved. A subscription in Stripe isn't updated yet; it's tried again in a few minutes, or with Try again below.");
       return { value, inStripe: !!made };
     } catch (e) {
       return failed(e);
@@ -185,7 +249,7 @@ export const fromStripe = action({
       if (!ein || !value) return null;
       if (use) {
         await ctx.runMutation(internal.taxId.save, { taxId: { type: "us_ein", value, stripeId: ein.id, accountId: t.accountId }, imported: true });
-        await tidy(ctx).catch(() => -1); // subscriptions that should carry it get it (#4)
+        await tidy(ctx, later(ctx, t.businessId)).catch(() => null); // subscriptions that should carry it get it (#4)
       }
       return { value };
     } catch (e) {

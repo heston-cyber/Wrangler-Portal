@@ -794,6 +794,9 @@ export default defineSchema({
     // printed on invoices, so whoever can open one sees it there. toRemove: old Stripe tax IDs Stripe wouldn't delete yet.
     taxId: v.optional(v.object({ type: v.literal("us_ein"), value: v.string(), stripeId: v.optional(v.string()), accountId: v.optional(v.string()), updatedAt: v.number() })),
     taxIdToRemove: v.optional(v.array(v.object({ id: v.string(), account: v.string() }))),
+    // Re-check (Nov 21): one tidy-up at a time (when it started), and whether a subscription still waits to be moved.
+    taxIdTidyAt: v.optional(v.number()),
+    taxIdPending: v.optional(v.boolean()),
     accent: v.optional(v.string()),        // #rrggbb
     background: v.optional(v.string()),    // #rrggbb
     // Which modules the business uses. Menu items only show when on (and only once something is in them).
@@ -1221,6 +1224,8 @@ export default defineSchema({
     // start it in Stripe (null: none), kept so a retry sends exactly the same request.
     einOn: v.optional(v.boolean()),
     startTaxId: v.optional(v.union(v.string(), v.null())),
+    startDecidedAt: v.optional(v.number()),
+    startTry: v.optional(v.number()),
     currentPeriodStart: v.optional(v.number()),
     currentPeriodEnd: v.optional(v.number()),
     trialEnd: v.optional(v.number()),

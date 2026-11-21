@@ -36,8 +36,10 @@ function stripe(opts: Parameters<typeof fakeStripe>[0], ids: Array<{ id: string;
     if (path === "subscriptions" && m === "GET") { calls.push({ method: m, path, account, form: {} }); return new Response(JSON.stringify({ object: "list", data: refuse.existing ? [refuse.existing] : [], has_more: false })); }
     if (path === "subscriptions" && m === "POST") {
       keys.push(idem);
-      if (refuse.subCreate) return new Response(JSON.stringify({ error: { message: refuse.subCreate } }), { status: refuse.subCreate.includes("tax_id") ? 400 : 500 });
+      if (/tax.?id/i.test(refuse.subCreate ?? "")) ids.length = 0; // removed in Stripe's dashboard just before
+      if (refuse.subCreate) return new Response(JSON.stringify({ error: { message: refuse.subCreate } }), { status: /tax.?id/i.test(refuse.subCreate) ? 400 : 500 });
     }
+    if (refuse.existing && path === `subscriptions/${refuse.existing.id}`) { calls.push({ method: m, path, account, form }); return new Response(JSON.stringify({ ...refuse.existing, default_payment_method: form.default_payment_method ?? null })); }
     if (path.startsWith("tax_ids/") && m === "GET" && refuse.taxGet) { calls.push({ method: m, path, account, form }); return new Response("{}", { status: 500 }); }
     if (path === "tax_ids" || path.startsWith("tax_ids/")) {
       calls.push({ method: m, path, account, form });
@@ -155,7 +157,7 @@ describe("the EIN on subscription invoices", () => {
     let s = stripe({ sub: { portal: id, status: "trialing" } }, ids, { subCreate: "busy" });
     await expect(w.t.action(api.subscriptions.setupDone, { token, setupIntentId: "seti_1" })).rejects.toThrow();
     const first = s.keys[0];
-    expect(first).toBe(`wp-sub-${id}-txi_1`);
+    expect(first).toBe(`wp-sub-${id}-seti_1-0`); // the row, the saved card's setup, the try
     // Try 2: the tax ID check itself fails now; the same decision and the same key are used anyway.
     s = stripe({ sub: { portal: id, status: "trialing" } }, ids, { taxGet: true });
     await w.t.action(api.subscriptions.setupDone, { token, setupIntentId: "seti_1" });
@@ -168,16 +170,19 @@ describe("the EIN on subscription invoices", () => {
     s = stripe({ sub: { portal: id2, status: "trialing", id: "sub_2" } }, ids, { existing: { id: "sub_2", object: "subscription", status: "trialing", metadata: { portal_subscription: id2 }, invoice_settings: { account_tax_ids: ["txi_1"] }, items: { data: [] } } });
     await w.t.action(api.subscriptions.setupDone, { token: token2, setupIntentId: "seti_1" });
     expect(s.keys).toEqual([]);
+    expect(s.calls.find((c) => c.method === "POST" && c.path === "subscriptions/sub_2")!.form).toEqual({ default_payment_method: "pm_1" }); // re-check N4: the new card
     expect((await row(w, id2))!.accountTaxId).toBe("txi_1"); // #2: what Stripe says it carries is recorded
     // #5: the tax ID went between the check and the create: a plain message, and decided again next time.
     fakeStripe();
     const id3 = await w.heston.action(api.subscriptions.start, { clientId: w.harbor, planId, billTo: { name: "Maya Brooks", email: "maya@harbor.example" }, startDate: new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10), firstInvoice: "start", postInbox: false });
     const token3 = (await w.heston.query(api.subscriptions.get, { subscriptionId: id3 })).link.split("/sub/")[1];
-    stripe({ sub: { portal: id3 } }, ids, { subCreate: "No such tax_id: 'txi_1'" });
+    stripe({ sub: { portal: id3 } }, ids, { subCreate: "No such tax ID: 'txi_1'" }); // Stripe's exact words don't matter
     const err = await w.t.action(api.subscriptions.setupDone, { token: token3, setupIntentId: "seti_1" }).then(() => null, (e: Error) => e.message);
     expect(err).toContain("This couldn't be set up just now. Try again in a moment. Nothing was charged.");
     expect(err).not.toMatch(/txi_|tax_id/);
-    expect((await w.t.run((ctx) => ctx.db.get(id3 as never)) as { startTaxId?: unknown }).startTaxId).toBeUndefined();
+    const r3 = await w.t.run((ctx) => ctx.db.get(id3 as never)) as { startTaxId?: unknown; startTry?: number };
+    expect(r3.startTaxId).toBeUndefined(); // decided again next time
+    expect(r3.startTry).toBe(1); // under a new key
   });
 
   test("S6 (security review #2, #3, #4, #6): a subscription that should carry the EIN gets it back after a change made while Stripe was away; two saves at once leave nothing behind in Stripe; Activity's line is the portal's own", async () => {
@@ -218,5 +223,37 @@ describe("the EIN on subscription invoices", () => {
     await running(w2, ids2);
     const line = await w2.t.run(async (ctx) => (await ctx.db.query("auditLog").collect()).find((a) => a.text.includes("no longer in Stripe"))!);
     expect(line.who).toBe("WranglerPortal");
+  });
+
+  test("S7 (re-check N1, N2): a tax ID a subscription is on, or a start has decided, is never removed; a subscription that couldn't move shows in Settings and is tried again later", async () => {
+    const w = await world();
+    const ids: Array<{ id: string; value: string }> = [];
+    stripe({}, ids);
+    await w.heston.action(api.taxId.set, { ein: "12-3456789" }); // txi_1
+    const { id } = await running(w, ids);
+    // Two saves landed out of step: the business is on txi_3, the subscription still on txi_2, both old ones listed.
+    ids.push({ id: "txi_2", value: "11-1111111" }, { id: "txi_3", value: "22-2222222" });
+    await w.t.run(async (ctx) => {
+      await ctx.db.patch(w.A, { taxId: { type: "us_ein", value: "22-2222222", stripeId: "txi_3", accountId: "acct_A", updatedAt: 0 }, taxIdToRemove: [{ id: "txi_1", account: "acct_A" }, { id: "txi_2", account: "acct_A" }] });
+      await ctx.db.patch(id as never, { accountTaxId: "txi_2" });
+    });
+    // A start that has decided txi_1 but isn't in Stripe yet.
+    const other = await w.t.run(async (ctx) => { const s = (await ctx.db.get(id as never)) as Record<string, unknown>; const { _id, _creationTime, ...rest } = s; return await ctx.db.insert("subscriptions", { ...(rest as never), stripe: { ...(rest.stripe as object), subscriptionId: undefined }, status: "starting", startTaxId: "txi_1", accountTaxId: undefined } as never); });
+    let s = stripe({}, ids, { subUpdate: true });
+    await expect(w.heston.action(api.taxId.set, { ein: "22-2222222" })).rejects.toThrow(/Stripe still has the old EIN for now/);
+    expect(s.calls.filter((c) => c.method === "DELETE")).toEqual([]); // txi_1: a start decided it; txi_2: the subscription is on it
+    expect((await w.heston.query(api.taxId.get, {})).leftover).toBe(true); // N2: Settings shows it
+    expect((await w.t.run((ctx) => ctx.db.get(w.A)))!.taxIdPending).toBe(true);
+    // Later (the scheduled try), Stripe takes the update; the start has gone into Stripe meanwhile.
+    await w.t.run(async (ctx) => { await ctx.db.delete(other as never); });
+    s = stripe({}, ids);
+    await w.t.action(anyApi.taxId.tidyLater, { asBusiness: w.A, tries: 0 });
+    expect(s.calls.filter((c) => c.method !== "GET").map((c) => `${c.method} ${c.path}`)).toEqual(["POST subscriptions/sub_1", "DELETE tax_ids/txi_1", "DELETE tax_ids/txi_2"]);
+    expect((await row(w, id))!.accountTaxId).toBe("txi_3");
+    const b = (await w.t.run((ctx) => ctx.db.get(w.A)))!;
+    expect([b.taxIdToRemove, b.taxIdPending, b.taxIdTidyAt]).toEqual([undefined, undefined, undefined]);
+    expect(await w.heston.query(api.taxId.get, {})).toEqual({ value: "22-2222222", inStripe: true });
+    // Nobody can run the tidy-up for a business without saying which.
+    await expect(w.t.action(anyApi.taxId.tidyLater, { tries: 0 })).rejects.toThrow();
   });
 });
