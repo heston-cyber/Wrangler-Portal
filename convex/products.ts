@@ -10,7 +10,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireAll } from "./lib/access";
 import { businessInScope } from "./lib/business";
-import { stripeCall, StripeError, type StripeResult } from "./lib/stripeApi";
+import { keyMode, platformKey, stripeCall, StripeError, type StripeResult } from "./lib/stripeApi";
 
 function check(a: { name: string; amountCents: number; description?: string }) {
   const name = a.name.trim();
@@ -23,7 +23,9 @@ function check(a: { name: string; amountCents: number; description?: string }) {
 }
 
 /** Review L5: a product made with the other key mode (test vs live) isn't offered or billed. */
-const sameMode = (p: Doc<"products">, b: Doc<"businesses"> | null) => !!b?.stripe && p.stripe.accountId === b.stripe.accountId && p.stripe.livemode === b.stripe.livemode;
+// Re-review #3: the mode is the platform key's (Stripe's Account object carries no livemode of its own).
+const liveNow = () => keyMode(platformKey()) === "live";
+const sameMode = (p: Doc<"products">, b: Doc<"businesses"> | null) => !!b?.stripe && p.stripe.accountId === b.stripe.accountId && p.stripe.livemode === liveNow();
 
 /** Review L1: only a plain per-unit, one-time, US-dollar price bills as unit × quantity. */
 export const plainPrice = (price: StripeResult | null | undefined) =>
@@ -80,7 +82,7 @@ export const saveTarget = internalQuery({
     const product = productId ? await ctx.db.get(productId) : null;
     if (productId && !product) throw new ConvexError("That product isn't here.");
     if (product && product.stripe.accountId !== b.stripe.accountId) throw new ConvexError("This product belongs to a Stripe account that's no longer connected.");
-    return { businessId: b._id, accountId: b.stripe.accountId, livemode: b.stripe.livemode, product };
+    return { businessId: b._id, accountId: b.stripe.accountId, livemode: liveNow(), product };
   },
 });
 
@@ -110,25 +112,23 @@ export const save = action({
   args: { productId: v.optional(v.id("products")), name: v.string(), description: v.optional(v.string()), amountCents: v.number(), nonce: v.optional(v.string()) },
   handler: async (ctx, a): Promise<Id<"products">> => {
     const { name, description } = check(a);
-    // Review L3: the editor sends one nonce per open form, so pressing Save again after a lost reply makes nothing twice.
+    // Review L3, re-review #2: the editor sends one nonce per open form. A new product is made under that key with
+    // details that never change for the form (its name is set just after, unkeyed), so pressing Save again, even after
+    // fixing the name, gets the same Stripe product back instead of a second one.
     const nonce = a.nonce && /^[A-Za-z0-9-]{8,64}$/.test(a.nonce) ? a.nonce : null;
-    // Keyed on what's sent too: Stripe refuses a key reused with different details (a name fixed before trying again).
-    let sig = 2166136261;
-    for (const ch of `${name}|${description ?? ""}|${a.amountCents}`) sig = Math.imul(sig ^ ch.charCodeAt(0), 16777619) >>> 0;
-    const idem = (what: string) => (nonce ? `wp-prod-${nonce}-${what}-${sig.toString(36)}` : undefined);
     const t = await ctx.runQuery(internal.products.saveTarget, { productId: a.productId });
     const account = t.accountId;
     const product = t.product as Doc<"products"> | null;
     try {
       let productId = product?.stripe.productId;
       if (!productId) {
-        productId = (await stripeCall("POST", "products", { account, idem: idem("product"), form: { name, ...(description ? { description } : {}), metadata: { portal_business: t.businessId, portal_kind: "item" } } })).id as string;
-      } else {
-        await stripeCall("POST", `products/${productId}`, { account, form: { name, description: description ?? "" } });
+        productId = (await stripeCall("POST", "products", { account, ...(nonce ? { idem: `wp-prod-${nonce}` } : {}), form: { name: nonce ? "New product" : name, metadata: { portal_business: t.businessId, portal_kind: "item" } } })).id as string;
+        if (typeof productId !== "string") throw new StripeError("Stripe didn't say which product it made.", 200, "unclear");
       }
+      await stripeCall("POST", `products/${productId}`, { account, form: { name, description: description ?? "" } });
       let priceId = product?.stripe.priceId;
       if (!product || product.amountCents !== a.amountCents) {
-        const price = await stripeCall("POST", "prices", { account, idem: idem(`price-${productId}`), form: { product: productId, currency: "usd", unit_amount: a.amountCents, metadata: { portal_business: t.businessId } } });
+        const price = await stripeCall("POST", "prices", { account, ...(nonce ? { idem: `wp-prod-${nonce}-price-${productId}-${a.amountCents}` } : {}), form: { product: productId, currency: "usd", unit_amount: a.amountCents, metadata: { portal_business: t.businessId } } });
         if (typeof price.id !== "string") throw new StripeError("Stripe didn't say which price it made.", 200, "unclear");
         await stripeCall("POST", `products/${productId}`, { account, form: { default_price: price.id } });
         // Lines already on drafts keep the old price's amount; at send they're billed as plain lines (see invoices.ts).
@@ -187,8 +187,8 @@ export const upsertFromStripe = internalMutation({
     let retired = 0;
     if (complete) {
       const kept = new Set(items.map((x) => x.productId));
-      for (const p of await ctx.db.query("products").collect()) {
-        if (p.stripe.accountId === accountId && !kept.has(p.stripe.productId) && !p.archivedAt) { await ctx.db.patch(p._id, { archivedAt: now, updatedAt: now }); retired++; }
+      for (const p of await ctx.db.query("products").withIndex("by_account_product", (q) => q.eq("stripe.accountId", accountId)).collect()) {
+        if (p.stripe.livemode === livemode && !kept.has(p.stripe.productId) && !p.archivedAt) { await ctx.db.patch(p._id, { archivedAt: now, updatedAt: now }); retired++; }
       }
     }
     return { added, retired };
@@ -207,13 +207,19 @@ export const sync = action({
       let after: string | null = null;
       for (let page = 0; page < 10; page++) {
         const r: StripeResult = await stripeCall("GET", "products", { account: t.accountId, form: { limit: 100, expand: ["data.default_price"], ...(after ? { starting_after: after } : {}) } });
-        const data = (r.data ?? []) as StripeResult[];
+        // Re-review #1: only a proper list counts as a full read (an odd answer never archives the library).
+        if (r.object !== "list" || !Array.isArray(r.data) || typeof r.has_more !== "boolean") break;
+        const data = r.data as StripeResult[];
+        let odd = false;
         for (const p of data) {
+          if (typeof p.default_price === "string") { odd = true; continue; } // not expanded: can't tell, so not a full read
           const price = p.default_price as StripeResult | null;
           if (!plainPrice(price)) continue;
           const name = String(p.name ?? "").trim().slice(0, 120) || "Product"; // review I1: trimmed, as lines are
-          items.push({ productId: String(p.id), priceId: String(price!.id), name, ...(p.description ? { description: String(p.description).trim().slice(0, 500) } : {}), amountCents: price!.unit_amount as number, active: !!p.active && !!price!.active });
+          const description = String(p.description ?? "").trim().slice(0, 500); // re-review #9
+          items.push({ productId: String(p.id), priceId: String(price!.id), name, ...(description ? { description } : {}), amountCents: price!.unit_amount as number, active: !!p.active && !!price!.active });
         }
+        if (odd) break;
         if (!r.has_more || !data.length) { truncated = false; break; }
         after = String(data[data.length - 1].id);
       }
@@ -229,27 +235,31 @@ export const sync = action({
  *  business's, on this Stripe account and key mode, unarchived, at the same price as when picked). Anything else is
  *  billed as a plain line. The send then asks Stripe too (stillBillable). */
 export const billable = internalQuery({
-  args: { accountId: v.string(), livemode: v.boolean(), lines: v.array(v.object({ priceId: v.string(), unitCents: v.number() })) },
-  handler: async (ctx, { accountId, livemode, lines }) => {
+  args: { accountId: v.string(), lines: v.array(v.object({ priceId: v.string(), unitCents: v.number() })) },
+  handler: async (ctx, { accountId, lines }) => {
+    const livemode = liveNow();
     const ok: string[] = [];
     for (const l of lines) {
       const rows = await ctx.db.query("products").withIndex("by_price", (q) => q.eq("stripe.priceId", l.priceId)).collect();
       // Review L3: every copy must agree (an archived copy means it's archived).
-      if (rows.length && rows.every((p) => !p.archivedAt && p.stripe.accountId === accountId && p.stripe.livemode === livemode && p.amountCents === l.unitCents)) ok.push(l.priceId);
+      if (rows.length && rows.every((p) => !p.archivedAt && p.stripe.accountId === accountId && p.stripe.livemode === livemode && p.amountCents === l.unitCents)) ok.push(libKey(l));
     }
     return [...new Set(ok)];
   },
 });
 
+/** Re-review #5: a line is approved by its price and amount together. */
+export const libKey = (l: { priceId: string; unitCents: number }) => `${l.priceId}:${l.unitCents}`;
+
 /** Review L2: what Stripe says now. A price turned off, a product archived, or a price that wouldn't bill unit ×
  *  quantity at the line's amount is billed as a plain line instead. Unclear answers count as no. */
 export async function stillBillable(account: string, lines: Array<{ priceId: string; unitCents: number }>): Promise<string[]> {
-  const ok: string[] = [];
-  for (const l of lines) {
-    if (ok.includes(l.priceId)) continue;
+  // Re-review #4: all at once (each call has its own time limit), before Stripe's invoice is made.
+  const one = [...new Map(lines.map((l) => [libKey(l), l])).values()];
+  const ok = await Promise.all(one.map(async (l) => {
     const price = await stripeCall("GET", `prices/${l.priceId}`, { account, form: { expand: ["product"] } }).catch(() => null);
     const product = price?.product as StripeResult | string | undefined;
-    if (price && price.active === true && plainPrice(price) && price.unit_amount === l.unitCents && typeof product === "object" && product.active === true) ok.push(l.priceId);
-  }
-  return ok;
+    return price && price.active === true && plainPrice(price) && price.unit_amount === l.unitCents && typeof product === "object" && product?.active === true ? libKey(l) : null;
+  }));
+  return ok.filter((x): x is string => !!x);
 }
