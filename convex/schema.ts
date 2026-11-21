@@ -1239,10 +1239,15 @@ export default defineSchema({
     storageId: v.optional(v.id("footageStorage")),       // Phase 5: a year of raw footage storage (D33), first year or a renewal (D140)
     deliveryId: v.optional(v.id("deliveries")),          // Nov 17 (Q6): another year of a project's Delivery, drafted when the client chose Keep it
     payToken: v.optional(v.string()),
+    // Nov 21 (Heston, D-g/D-h): made in Stripe without emailing ("Create without emailing"): payable from its copied
+    // link, but off the client's portal and Inbox and out of the reminders until Heston presses Email it.
+    quiet: v.optional(v.boolean()),
+    issuedAt: v.optional(v.number()), // review M3: when it was finalized in Stripe (its issue date, and Reports' "Invoiced"); sentAt is when it was emailed
     // Review fixes (Oct 30): a send in progress keeps what it has made in Stripe so far, so a failed send cleans up
     // and a retry neither duplicates nor gets stuck; syncedAt spaces out reads from Stripe.
     sendAttempt: v.optional(v.number()),
-    pending: v.optional(v.object({ customerId: v.optional(v.string()), draftId: v.optional(v.string()), taxRateId: v.optional(v.string()) })),
+    // mode (Nov 21, review P-b): how the send that's under way was started, so Finish sending carries on the same way.
+    pending: v.optional(v.object({ customerId: v.optional(v.string()), draftId: v.optional(v.string()), taxRateId: v.optional(v.string()), mode: v.optional(v.union(v.literal("email"), v.literal("quiet"))) })),
     syncedAt: v.optional(v.number()),
     // Step 4: reminders sent (by hand or automatically), so the next one is worked out from what already went.
     reminders: v.optional(v.array(v.object({ at: v.number(), kind: v.union(v.literal("before"), v.literal("overdue")), auto: v.boolean() }))),

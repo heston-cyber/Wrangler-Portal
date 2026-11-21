@@ -123,8 +123,9 @@ async function build(ctx: QueryCtx, a: { from: string; to: string; tz: string },
       payments.push({ day, invoice: i.number ?? i.stripe?.number ?? i.title, client, project: p ? label(p) : null, cents: r.cents });
       if (p) touched.add(p._id);
     }
-    if (i.status !== "void" && i.sentAt) {
-      const day = dayIn(i.sentAt, tz);
+    const issued = i.issuedAt ?? i.sentAt; // review M3: an invoice made without emailing counts from when it was made
+    if (i.status !== "void" && issued) {
+      const day = dayIn(issued, tz);
       const m = inRange(day) ? monthRow.get(day.slice(0, 7)) : undefined;
       if (m) m.invoicedCents += i.totalCents;
     }

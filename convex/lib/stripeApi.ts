@@ -29,6 +29,8 @@ export class StripeError extends Error {
   constructor(message: string, readonly status: number, readonly code: string | null) { super(message); }
 }
 
+const UNREADABLE = Object.freeze({}) as StripeResult;
+
 export async function stripeCall(method: "GET" | "POST" | "DELETE", path: string, opts: { form?: Record<string, unknown>; account?: string; idem?: string; key?: string } = {}): Promise<StripeResult> {
   const key = opts.key ?? platformKey();
   if (!key) throw new StripeError("Payments aren't set up on the portal yet (no platform Stripe key).", 0, "no_key");
@@ -47,8 +49,14 @@ export async function stripeCall(method: "GET" | "POST" | "DELETE", path: string
       ...(opts.idem ? { "Idempotency-Key": opts.idem } : {}),
     },
     body,
+    // Review 2 #1 (Nov 21): a call that hangs stops after 30 seconds, so a send can't outlive its 15-minute "stuck" window.
+    // Review 3 #1: guarded, as weather.ts does, in case a runtime lacks AbortSignal.timeout (it then runs without one; the
+    // 15-minute window still outlasts an action).
+    ...(typeof AbortSignal !== "undefined" && "timeout" in AbortSignal ? { signal: AbortSignal.timeout(30_000) } : {}),
   });
-  const j = (await r.json().catch(() => ({}))) as StripeResult;
+  const j = (await r.json().catch(() => (r.ok ? UNREADABLE : {}))) as StripeResult;
+  // Review 3 #3 (Nov 21): an OK answer that can't be read isn't an empty answer: whatever was asked may have happened.
+  if (j === UNREADABLE) throw new StripeError("Stripe's answer couldn't be read.", r.status, "unclear");
   if (!r.ok) throw new StripeError(`Stripe: ${String(j.error?.message ?? r.statusText).slice(0, 200)}`, r.status, j.error?.code ?? null);
   return j;
 }

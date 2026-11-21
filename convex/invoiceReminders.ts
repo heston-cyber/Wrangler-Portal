@@ -32,8 +32,9 @@ const dueAt = (iso: string) => Date.parse(`${iso}T15:00:00Z`);
 export const isOverdue = (iso: string, now = Date.now()) => now > Date.parse(`${iso}T23:59:59-06:00`);
 
 /** When the next automatic reminder goes, and which one; null when none will. */
-export function nextReminder(i: Pick<Doc<"invoices">, "status" | "processing" | "amountRemainingCents" | "dueDate" | "sentAt" | "reminders">, s: ReminderSettings | null | undefined, now = Date.now()): { at: number; kind: "before" | "overdue" } | null {
+export function nextReminder(i: Pick<Doc<"invoices">, "status" | "processing" | "amountRemainingCents" | "dueDate" | "sentAt" | "reminders"> & { quiet?: boolean }, s: ReminderSettings | null | undefined, now = Date.now()): { at: number; kind: "before" | "overdue" } | null {
   if (!s?.on) return null;
+  if (i.quiet) return null; // Nov 21 (D-h): made without emailing: no reminders until Email it
   if (i.status !== "open" || i.processing || i.amountRemainingCents <= 0) return null;
   const due = dueAt(i.dueDate);
   const log = i.reminders ?? [];
@@ -49,7 +50,8 @@ export function nextReminder(i: Pick<Doc<"invoices">, "status" | "processing" | 
   // automatic one at least a day out.
   const lastOverdue = Math.max(0, ...log.filter((r) => r.kind === "overdue").map((r) => r.at));
   const lastByHand = Math.max(0, ...log.filter((r) => !r.auto).map((r) => r.at));
-  const floor = Math.max(lastOverdue ? lastOverdue + Math.max(1, s.everyDays) * DAY : 0, lastByHand ? lastByHand + DAY : 0, Date.parse(`${i.dueDate}T23:59:59-06:00`) + 1);
+  // Review M1 (Nov 21): never an overdue reminder straight after the invoice itself went (one emailed after its due date).
+  const floor = Math.max(lastOverdue ? lastOverdue + Math.max(1, s.everyDays) * DAY : 0, lastByHand ? lastByHand + DAY : 0, Date.parse(`${i.dueDate}T23:59:59-06:00`) + 1, i.sentAt ? i.sentAt + Math.max(1, s.afterDays) * DAY : 0);
   return { at: Math.max(planned, floor), kind: "overdue" };
 }
 
@@ -91,6 +93,7 @@ export const sendReminder = mutation({
     if (!i || i.status === "draft" || i.status === "sending") throw new ConvexError("Send the invoice first.");
     if (i.status !== "open" || i.amountRemainingCents <= 0) throw new ConvexError("There's nothing left to pay on this invoice.");
     if (i.processing) throw new ConvexError("A bank payment is on its way, so there's nothing to remind them about.");
+    if (i.quiet) throw new ConvexError("This invoice hasn't been emailed yet. Email it first, or send them its link.");
     if (i.kind === "subscription") throw new ConvexError("Stripe charges this one automatically; the client was emailed when it failed. Their subscription page has Update payment method.");
     const biz = i.businessId ? await ctx.db.get(i.businessId) : null;
     if (biz?.stripe?.status !== "connected") throw new ConvexError("Stripe isn't connected, so they couldn't pay it. Connect Stripe first (Settings › Payments).");
@@ -115,7 +118,7 @@ export const runDue = internalMutation({
     const live = keyMode(platformKey()) === "live";
     const on = (await ctx.db.query("businesses").collect()).filter((b) => b.reminders?.on && b.stripe?.status === "connected"); // they couldn't pay otherwise
     if (!on.length) return { sent };
-    const open = (await ctx.db.query("invoices").collect()).filter((i) => i.status === "open" && i.payToken && i.kind !== "subscription"); // 2b: Stripe charges those itself
+    const open = (await ctx.db.query("invoices").collect()).filter((i) => i.status === "open" && i.payToken && !i.quiet && i.kind !== "subscription"); // 2b: Stripe charges those itself
     for (const b of on) {
       if (!b.reminders) continue;
       for (const i of open) {
@@ -224,7 +227,7 @@ export async function afterPayments(ctx: MutationCtx, before: Doc<"invoices">, p
   const biz = await businessOf(ctx, before);
   for (const p of payments.filter((x) => x.status === "paid" && !wasPaid.has(x.id))) {
     await ctx.scheduler.runAfter(0, internal.invoiceReminders.sendReceipt, { invoiceId: before._id, paymentId: p.id });
-    if (biz && before.payToken) await postToInbox(ctx, {
+    if (biz && before.payToken && !before.quiet) await postToInbox(ctx, { // D-g: off their Inbox until it's emailed
       businessId: biz, clientId: before.clientId, email: before.billTo.email, kind: "payment",
       title: `Payment received · $${(p.cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       text: `${before.title}${before.number ? ` · ${before.number}` : ""}`, link: `/i/${before.payToken}`, linkLabel: "View receipt",

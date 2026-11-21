@@ -29,10 +29,12 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
   const save = useMutation(api.invoices.saveDraft);
   const remove = useMutation(api.invoices.deleteDraft);
   const send = useAction(api.invoices.send);
+  const createQuiet = useAction(api.invoices.create); // Nov 21: Create without emailing
+  const finishSend = useAction(api.invoices.finishSend); // Nov 21 (review P-b): a send that stopped partway
   const [toast, show] = useToast();
   const [d, setD] = useState<Draft | null>(null);
-  const [busy, setBusy] = useState<null | "save" | "send">(null);
-  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState<null | "save" | "send" | "finish">(null);
+  const [asking, setAsking] = useState<false | "send" | "create">(false);
 
   // Start from the draft being edited, or a fresh one (client and project from the address).
   useEffect(() => {
@@ -61,6 +63,10 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
     const c = madeClient ? opts?.clients.find((x) => x.name === madeClient) : null;
     if (c && d) { pickClient(c._id); setMadeClient(null); }
   });
+  // Review P-b: a send that stopped partway re-checks every 15 seconds whether Finish sending is ready.
+  const midSend = existing?.status === "sending";
+  const [, tick] = useState(0);
+  useEffect(() => { if (!midSend) return; const h = setInterval(() => tick((n) => n + 1), 15_000); return () => clearInterval(h); }, [midSend]);
   if (!opts || !d) return <><TopBar><a {...linkProps("/payments/invoices")}>Invoices</a></TopBar><div className="wp-page"><Card label="Loading"><SkeletonRows n={4} /></Card></div></>;
   if (invoiceId && existing === null) return <><TopBar><a {...linkProps("/payments/invoices")}>Invoices</a></TopBar><div className="wp-page"><p>This invoice isn't here.</p></div></>;
 
@@ -92,24 +98,44 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
     setBusy("send");
     try {
       const id = await save(payload());
-      const r = await send({ invoiceId: id as Id<"invoices"> });
-      show(`${r.number} sent.`);
+      if (asking === "create") {
+        const r = await createQuiet({ invoiceId: id as Id<"invoices"> });
+        let copied = false;
+        try { if (r.link) { await navigator.clipboard.writeText(r.link); copied = true; } } catch { /* it's on the invoice page too */ }
+        show(copied ? `${r.number} made. Its pay link is copied; nothing was emailed.` : `${r.number} made. Nothing was emailed; copy its link from the invoice page.`);
+      } else {
+        const r = await send({ invoiceId: id as Id<"invoices"> });
+        show(`${r.number} sent.`);
+      }
       navigate(`/payments/invoices/${id}`);
     } catch (e) { show(errText(e)); setBusy(null); setAsking(false); }
   };
   const canSend = opts.stripeReady && d.billTo.email && t.total >= 50;
+  // A send that stopped partway: it stays "sending" until Finish sending picks up what Stripe holds (after 15 minutes).
+  const canFinish = midSend && Date.now() - (existing?.updatedAt ?? Date.now()) > 15 * 60_000;
+  const doFinish = async () => {
+    setBusy("finish");
+    try {
+      const r = await finishSend({ invoiceId: invoiceId as Id<"invoices"> });
+      show(r.emailed ? `${r.number} sent.` : `${r.number} made. Nothing was emailed; copy its link from the invoice page.`);
+      navigate(`/payments/invoices/${invoiceId}`);
+    } catch (e) { show(errText(e)); setBusy(null); }
+  };
 
   return (
     <>
-      <TopBar right={<>
+      <TopBar right={midSend ? <Button variant="primary" onClick={() => void doFinish()} loading={busy === "finish"} disabled={!canFinish} title={canFinish ? "Checks Stripe first, then finishes it (no second invoice)" : "Available 15 minutes after the send stopped"}>Finish sending</Button> : <>
         <Button onClick={() => void doSave()} loading={busy === "save"}>Save draft</Button>
-        <Button variant="primary" onClick={() => setAsking(true)} disabled={!canSend} title={!opts.stripeReady ? "Connect Stripe first (Settings › Payments)" : t.total < 50 ? "The total must be at least $0.50" : undefined}>Send…</Button>
+        <Button onClick={() => setAsking("create")} disabled={!canSend} title={!opts.stripeReady ? "Connect Stripe first (Settings › Payments)" : t.total < 50 ? "The total must be at least $0.50" : "Make it in Stripe with its pay link, without emailing anyone"}>Create without emailing…</Button>
+        <Button variant="primary" onClick={() => setAsking("send")} disabled={!canSend} title={!opts.stripeReady ? "Connect Stripe first (Settings › Payments)" : t.total < 50 ? "The total must be at least $0.50" : undefined}>Send…</Button>
       </>}>
         <span className="secondary">Payments</span><Sep /><a {...linkProps("/payments/invoices")}>Invoices</a><Sep /><span className="here">{invoiceId ? number : "New invoice"}</span>
       </TopBar>
       <div className="wp-page inv-edit">
-        <header className="wp-pagehead"><div className="txt"><span className="wp-eyebrow">{invoiceId ? `Draft ${number}` : "New invoice"}</span><h1 className="wp-h2">{invoiceId ? (d.title || "Invoice") : "New invoice."}</h1><p className="wp-body">Nothing sends until you press Send and confirm.</p></div></header>
-        {existing?.sendError && <div className="wp-notice glass"><Icon name="alert" size={20} /><span className="txt"><b>The last send didn't go through.</b> {existing.sendError}</span></div>}
+        <header className="wp-pagehead"><div className="txt"><span className="wp-eyebrow">{invoiceId ? `Draft ${number}` : "New invoice"}</span><h1 className="wp-h2">{invoiceId ? (d.title || "Invoice") : "New invoice."}</h1><p className="wp-body">Nothing sends until you press Send and confirm. Create without emailing makes it payable from a link you copy, without emailing the invoice.</p></div></header>
+        {midSend
+          ? <div className="wp-notice glass"><Icon name="alert" size={20} /><span className="txt"><b>This invoice is partway through {existing?.pendingMode === "quiet" ? "being made" : "sending"}.</b> {existing?.sendError ?? "It may already be in Stripe."} {canFinish ? "Press Finish sending: the portal checks Stripe first and won't make a second one." : "Finish sending is ready 15 minutes after it stopped."}</span></div>
+          : existing?.sendError && <div className="wp-notice glass"><Icon name="alert" size={20} /><span className="txt"><b>The last send didn't go through.</b> {existing.sendError}</span></div>}
         {!opts.stripeReady && <div className="wp-notice glass"><Icon name="info" size={20} /><span className="txt"><b>Stripe isn't connected.</b> You can save drafts; sending needs Stripe.</span></div>}
         <div className="inv-cols">
           <div className="col">
@@ -185,13 +211,13 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
         </div>
       </div>
       {asking && (
-        <Modal onClose={() => setAsking(false)} label="Send invoice" width={600}>
+        <Modal onClose={() => setAsking(false)} label={asking === "create" ? "Create invoice without emailing" : "Send invoice"} width={600}>
           <div style={{ display: "grid", gap: 18 }}>
             <div className="dhead">
               <div style={{ display: "grid", gap: 6 }}>
                 <span className="eyebrow">{d.title || "Invoice"}</span>
-                <h2 className="headline">Send {d.kind === "final" ? "the final invoice" : d.kind === "deposit" ? "the deposit invoice" : "this invoice"} to {d.billTo.name || d.billTo.email}?</h2>
-                <p className="secondary" style={{ margin: 0 }}>The portal makes it in your Stripe account as {number} for {money(t.total)}, due {dateLong(d.dueDate)}. Once sent, it can't be edited, only voided.</p>
+                <h2 className="headline">{asking === "create" ? "Create" : "Send"} {d.kind === "final" ? "the final invoice" : d.kind === "deposit" ? "the deposit invoice" : "this invoice"} {asking === "create" ? "for" : "to"} {d.billTo.name || d.billTo.email}{asking === "create" ? " without emailing" : ""}?</h2>
+                <p className="secondary" style={{ margin: 0 }}>The portal makes it in your Stripe account as {number} for {money(t.total)}, due {dateLong(d.dueDate)}. Once {asking === "create" ? "made" : "sent"}, it can't be edited, only voided.</p>
               </div>
               <button type="button" className="icon-btn" onClick={() => setAsking(false)} aria-label="Close"><Icon name="close" size={18} /></button>
             </div>
@@ -202,10 +228,12 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
               <dt><b>Due now</b></dt><dd><b>{money(t.total)}</b></dd>
               <dt>Due date</dt><dd>{dateLong(d.dueDate)}</dd>
             </dl>
-            <p className="secondary" style={{ margin: 0, fontSize: "var(--fs-text-small)" }}>The portal emails it to {d.billTo.email} from {opts.business?.name ?? "your business"}, with a “View and pay” button.</p>
+            <p className="secondary" style={{ margin: 0, fontSize: "var(--fs-text-small)" }}>{asking === "create"
+              ? <>Nothing is sent now: no invoice email, not on their portal, no reminders. Its pay link is copied for you to send however you like, and Email it on the invoice page sends it later. If someone pays from the link, or a payment fails, the receipt or failed-payment email goes to {d.billTo.email}.{d.kind === "final" ? " If it's paid on the spot (a credit balance in Stripe), it counts as paid, so their final files open." : ""}</>
+              : <>The portal emails it to {d.billTo.email} from {opts.business?.name ?? "your business"}, with a “View and pay” button.</>}</p>
             <div className="dfoot">
               <Button variant="ghost" onClick={() => setAsking(false)}>Cancel</Button>
-              <Button variant="primary" onClick={() => void doSend()} loading={busy === "send"}>Send invoice</Button>
+              <Button variant="primary" onClick={() => void doSend()} loading={busy === "send"}>{asking === "create" ? "Create invoice" : "Send invoice"}</Button>
             </div>
           </div>
         </Modal>

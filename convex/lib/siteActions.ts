@@ -585,6 +585,28 @@ export const ACTIONS: Record<string, Entry> = {
       return [...l, { label: "Sends", value: to ? `Invoice email with its pay link to ${to}` : "Nothing (it isn't here)" }];
     },
   }),
+  // Nov 21 (Heston): finalized in Stripe and payable from its link, but nothing goes to anyone. A Stripe action, so for
+  // now it runs from Heston's Confirm page like Send; the connector build makes it direct (it sends nothing).
+  "invoices.create": ask("money", invoices.create, "Create an invoice without emailing it", "It's finalized in Stripe with its number and pay link (on its page on the site). Nothing is sent now: no invoice email, not on their portal, no reminders, until Email it. If someone pays from the link, or a payment fails, the receipt or failed-payment email goes to the bill-to address; a final invoice paid on the spot (a credit balance) counts as paid, so its final files open.", {
+    onPage: true, shows: async (ctx, a) => [...(await invoiceLines(ctx, a.invoiceId)), { label: "Sends", value: "Nothing now (a receipt or failed-payment email to the bill-to address only if someone pays from the link)" }],
+  }),
+  // Nov 21 (review P-b): an invoice stuck partway through sending. Checks Stripe first; carries on the way it started.
+  "invoices.finishSend": ask("money", invoices.finishSend, "Finish sending an invoice that stopped partway", "The portal checks what Stripe already holds and finishes it, emailed or not as it was started. It never makes a second invoice.", {
+    onPage: true, shows: async (ctx, a) => {
+      // Review 2 #5: say which it is. The mode is read again when Heston confirms, so a change shows as a change.
+      const l = await invoiceLines(ctx, a.invoiceId);
+      const i = await get(ctx, "invoices", a.invoiceId);
+      const to = l.find((x) => x.label === "Bill to")?.value;
+      return [...l, { label: "Sends", value: i?.status !== "sending" ? "Nothing (it isn't partway through sending)" : (i.pending as { mode?: string } | undefined)?.mode === "quiet" ? "Nothing (it was being made without emailing)" : `Invoice email with its pay link to ${to ?? "the bill-to address"}` }];
+    },
+  }),
+  "invoices.emailIt": ask("money", invoices.emailIt, "Email an invoice that was made without emailing", "It goes on the client's portal and Inbox, and the automatic reminders start.", {
+    shows: async (ctx, a) => {
+      const l = await invoiceLines(ctx, a.invoiceId);
+      const to = l.find((x) => x.label === "Bill to")?.value;
+      return [...l, { label: "Sends", value: to ? `Invoice email with its pay link to ${to}` : "Nothing (it isn't here)" }];
+    },
+  }),
   "invoices.voidInvoice": ask("money", invoices.voidInvoice, "Void an invoice", "It's voided in Stripe: it can't be paid any more. Money already paid isn't refunded (Heston refunds on the site).", {
     onPage: true, shows: async (ctx, a) => [...(await invoiceLines(ctx, a.invoiceId)), { label: "Sends", value: "No email" }],
   }),
