@@ -429,6 +429,22 @@ export const sendingMode = internalQuery({
   },
 });
 
+/** Review 3 #4: the next number, for a send rebuilt after its Stripe invoice was voided (that one keeps the old number). */
+export const renumberForSend = internalMutation({
+  args: { invoiceId: v.id("invoices"), attempt: v.number(), was: v.string() },
+  handler: async (ctx, { invoiceId, attempt, was }): Promise<string> => {
+    const i = await ctx.db.get(invoiceId);
+    if (!i || i.status !== "sending" || stale(i, attempt)) throw new ConvexError("This send was taken over by a newer one.");
+    const biz = await ctx.db.get(ownBusiness(ctx));
+    const row = await ctx.db.query("counters").withIndex("by_key", (q) => q.eq("key", "invoiceSeq")).first();
+    const next = (row?.value ?? 0) + 1;
+    if (row) await ctx.db.patch(row._id, { value: next }); else await ctx.db.insert("counters", { key: "invoiceSeq", value: next });
+    const number = `${invoicePrefix(biz?.name ?? "")}-${String(next).padStart(4, "0")}`;
+    await ctx.db.patch(invoiceId, { number, history: [...i.history, { kind: "renumbered", at: Date.now(), detail: `${was} was voided in Stripe, so this one is ${number}` }].slice(-60), updatedAt: Date.now() });
+    return number;
+  },
+});
+
 export const recordSendFailed = internalMutation({
   args: { invoiceId: v.id("invoices"), attempt: v.optional(v.number()), message: v.string() },
   handler: async (ctx, { invoiceId, attempt, message }) => {
@@ -492,21 +508,23 @@ class UnsureError extends Error {}
 /** A write from a send attempt that isn't the invoice's latest one (review 2 #1). Callers that don't say are let through. */
 const stale = (i: Doc<"invoices">, attempt: number | undefined) => attempt !== undefined && (i.sendAttempt ?? 0) !== attempt;
 
-async function dropStripeDraft(account: string, id: string): Promise<{ kind: "gone" } | { kind: "held"; inv: StripeResult } | { kind: "unsure" }> {
+async function dropStripeDraft(account: string, id: string): Promise<Holds> {
   try { await stripeCall("DELETE", `invoices/${id}`, { account }); return { kind: "gone" }; }
   catch (d) { return d instanceof StripeError && d.status === 404 ? { kind: "gone" } : await whatStripeHolds(account, id); }
 }
 
 /** Review 2 #1 (Nov 21): what Stripe holds for a send's invoice, for certain. A draft is deleted, and only counts as gone
  *  once Stripe says so (a refused delete may mean it was finalized meanwhile, so it's read again). */
-async function whatStripeHolds(account: string, id: string): Promise<{ kind: "gone" } | { kind: "held"; inv: StripeResult } | { kind: "unsure" }> {
+type Holds = { kind: "gone"; voided?: boolean; number?: string } | { kind: "held"; inv: StripeResult } | { kind: "unsure" };
+async function whatStripeHolds(account: string, id: string): Promise<Holds> {
   const read = async () => {
     try { return await stripeCall("GET", `invoices/${id}`, { account }); }
     catch (g) { return g instanceof StripeError && g.status === 404 ? null : undefined; }
   };
   const first = await read();
   if (first === undefined) return { kind: "unsure" };
-  if (first === null || first.status === "void" || first.deleted) return { kind: "gone" };
+  if (first?.status === "void") return { kind: "gone", voided: true, number: first.number ?? undefined };
+  if (first === null || first.deleted) return { kind: "gone" };
   if (first.status !== "draft") return { kind: "held", inv: first };
   try { await stripeCall("DELETE", `invoices/${id}`, { account }); return { kind: "gone" }; }
   catch (d) {
@@ -536,6 +554,9 @@ async function finalize(ctx: ActionCtx, invoiceId: Id<"invoices">, email: boolea
         const was = await whatStripeHolds(account, draftId);
         if (was.kind === "unsure") throw new UnsureError();
         if (was.kind === "held") finalized = was.inv;
+        // Review 3 #4 (Nov 21): a voided Stripe invoice keeps its number, so the rebuild takes the business's next one
+        // (numbers stay unique; the void shows in the history).
+        if (was.kind === "gone" && was.voided) i.number = await ctx.runMutation(internal.invoices.renumberForSend, { ...fenced, was: String(was.number ?? i.number) });
         draftId = null; // gone, or a draft now deleted: start clean with this attempt's keys
       }
       if (!finalized) {
@@ -564,7 +585,8 @@ async function finalize(ctx: ActionCtx, invoiceId: Id<"invoices">, email: boolea
             payment_settings: { payment_method_types: methods },
           },
         });
-        draftId = inv.id as string;
+        if (typeof inv.id !== "string" || !inv.id) throw new Error("Stripe didn't say which invoice it made."); // review 3 #3: no items on no invoice
+        draftId = inv.id;
         await ctx.runMutation(internal.invoices.recordPending, { ...fenced, pending: { draftId } });
         // One invoice item per line (the amount carries the quantity; the portal's own page shows qty and unit price).
         for (const [n, l] of i.lines.entries()) {

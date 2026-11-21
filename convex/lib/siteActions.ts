@@ -587,7 +587,7 @@ export const ACTIONS: Record<string, Entry> = {
   }),
   // Nov 21 (Heston): finalized in Stripe and payable from its link, but nothing goes to anyone. A Stripe action, so for
   // now it runs from Heston's Confirm page like Send; the connector build makes it direct (it sends nothing).
-  "invoices.create": ask("money", invoices.create, "Create an invoice without emailing it", "It's finalized in Stripe with its number and pay link (on its page on the site). Nothing is sent now: no invoice email, not on their portal, no reminders, until Email it. If someone pays from the link, or a payment fails, the receipt or failed-payment email goes to the bill-to address.", {
+  "invoices.create": ask("money", invoices.create, "Create an invoice without emailing it", "It's finalized in Stripe with its number and pay link (on its page on the site). Nothing is sent now: no invoice email, not on their portal, no reminders, until Email it. If someone pays from the link, or a payment fails, the receipt or failed-payment email goes to the bill-to address; a final invoice paid on the spot (a credit balance) counts as paid, so its final files open.", {
     onPage: true, shows: async (ctx, a) => [...(await invoiceLines(ctx, a.invoiceId)), { label: "Sends", value: "Nothing now (a receipt or failed-payment email to the bill-to address only if someone pays from the link)" }],
   }),
   // Nov 21 (review P-b): an invoice stuck partway through sending. Checks Stripe first; carries on the way it started.

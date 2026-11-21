@@ -34,6 +34,8 @@ const HIST: Record<string, { icon: IconName; text: (d?: string) => string }> = {
   dispute_closed: { icon: "info", text: (d) => d ?? "Dispute closed" },
   delivery_opened: { icon: "download", text: () => "Final files opened for the client" },
   delivery_waiting: { icon: "lock", text: () => "No final files added yet" },
+  flagged: { icon: "alert", text: (d) => d ?? "Needs a look in Stripe" }, // review 3 #2
+  renumbered: { icon: "info", text: (d) => d ?? "Given a new number" },
 };
 
 export default function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
@@ -101,6 +103,7 @@ export default function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
           <div className="txt"><span className="wp-eyebrow">Invoice {number}</span><h1 className="wp-h2">{i.title}.</h1><p className="wp-body">{sub}</p></div>
           <InvoiceChip status={s} />
         </header>
+        {i.sendError && <div className="wp-notice glass"><Icon name="alert" size={20} /><span className="txt"><b>Check this one in Stripe.</b> {i.sendError}</span></div>}
         {quiet && <div className="wp-notice glass"><Icon name="info" size={20} /><span className="txt"><b>Not emailed yet.</b> {first} can pay it from its link, but it isn't on their portal and no reminders go out until you press Email it.</span></div>}
         <div className="inv-cols">
           <div className="col">

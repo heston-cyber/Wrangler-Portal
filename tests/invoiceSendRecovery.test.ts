@@ -223,9 +223,13 @@ describe("Review 2 (Nov 21): what Stripe holds, for certain", () => {
     let id = await draft(w);
     await stuckOn(w, id);
     breakStripe(() => null, { in_1: "void" });
-    expect(await w.heston.action(api.invoices.finishSend, { invoiceId: id })).toEqual({ number: "WRNGLR-0001", emailed: true });
+    // Review 3 #4: the voided one keeps WRNGLR-0001, so the rebuild takes the next number.
+    await w.t.run(async (ctx) => { await ctx.db.insert("counters", { key: "invoiceSeq", value: 1 }); });
+    expect(await w.heston.action(api.invoices.finishSend, { invoiceId: id })).toEqual({ number: "WRNGLR-0002", emailed: true });
     expect(made(calls)).toBe(1);
     expect(keyOf("v1/invoices")).toEqual([`wp-inv-${id}-a2`]);
+    expect(calls.find((c) => c.method === "POST" && c.path === "invoices/in_1" && c.form.number)!.form.number).toBe("WRNGLR-0002");
+    expect((await doc(w, id))!.history.find((h) => h.kind === "renumbered")!.detail).toMatch(/WRNGLR-0001 was voided in Stripe, so this one is WRNGLR-0002/);
     // Uncollectible (marked so in Stripe while the portal was stuck): recorded as it is, not as open.
     w = await world();
     fakeStripe();
@@ -265,6 +269,39 @@ describe("Review 2 (Nov 21): what Stripe holds, for certain", () => {
     const i = (await doc(w, id))!;
     expect(i.stripe!.invoiceId).toBe("in_2");
     expect(i.sendError).toMatch(/Stripe also holds X-9/);
+  });
+});
+
+describe("Review 3 (Nov 21): answers that can't be read", () => {
+  test("R11: Stripe's answer to making the invoice can't be read: no line items are added to nothing; back to draft", async () => {
+    vi.useFakeTimers();
+    const w = await world();
+    const calls = fakeStripe();
+    const inner = globalThis.fetch;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
+      const res = await inner(url, init);
+      return String(url).endsWith("/v1/invoices") && init.method === "POST" ? new Response("<html>oops</html>", { status: 200 }) : res;
+    }));
+    const id = await draft(w);
+    await expect(w.heston.action(api.invoices.send, { invoiceId: id })).rejects.toThrow();
+    expect(calls.filter((c) => c.path === "invoiceitems")).toHaveLength(0);
+    expect((await doc(w, id))!.status).toBe("draft");
+  });
+
+  test("R12: the finalize answer can't be read: Stripe is asked, and the finalized invoice is recorded once", async () => {
+    vi.useFakeTimers();
+    const w = await world();
+    const calls = fakeStripe();
+    breakStripe(() => null);
+    const truth = globalThis.fetch;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
+      const res = await truth(url, init);
+      return String(url).endsWith("/finalize") ? new Response("", { status: 200 }) : res;
+    }));
+    const id = await draft(w);
+    expect(await w.heston.action(api.invoices.send, { invoiceId: id })).toEqual({ number: "WRNGLR-0001" });
+    expect(made(calls)).toBe(1);
+    expect((await doc(w, id))!).toMatchObject({ status: "open", stripe: expect.objectContaining({ invoiceId: "in_1" }) });
   });
 });
 

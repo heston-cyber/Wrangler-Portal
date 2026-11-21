@@ -229,7 +229,7 @@ export default function InvoiceEditor({ invoiceId, clientId: initClient, project
               <dt>Due date</dt><dd>{dateLong(d.dueDate)}</dd>
             </dl>
             <p className="secondary" style={{ margin: 0, fontSize: "var(--fs-text-small)" }}>{asking === "create"
-              ? <>Nothing is sent now: no invoice email, not on their portal, no reminders. Its pay link is copied for you to send however you like, and Email it on the invoice page sends it later. If someone pays from the link, or a payment fails, the receipt or failed-payment email goes to {d.billTo.email}.</>
+              ? <>Nothing is sent now: no invoice email, not on their portal, no reminders. Its pay link is copied for you to send however you like, and Email it on the invoice page sends it later. If someone pays from the link, or a payment fails, the receipt or failed-payment email goes to {d.billTo.email}.{d.kind === "final" ? " If it's paid on the spot (a credit balance in Stripe), it counts as paid, so their final files open." : ""}</>
               : <>The portal emails it to {d.billTo.email} from {opts.business?.name ?? "your business"}, with a “View and pay” button.</>}</p>
             <div className="dfoot">
               <Button variant="ghost" onClick={() => setAsking(false)}>Cancel</Button>
