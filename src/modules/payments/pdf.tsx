@@ -6,7 +6,7 @@ import { totals, type Line } from "./common";
 
 export type PdfData = {
   kind: "invoice" | "receipt" | "quote"; // Phase 3b: a quote in the invoice layout (721:7878), titled QUOTE
-  business: { name: string; legalName: string | null; email: string | null; logoLightUrl: string | null; address?: string | null; privacyUrl?: string | null };
+  business: { name: string; legalName: string | null; email: string | null; logoLightUrl: string | null; address?: string | null; privacyUrl?: string | null; ein?: string | null };
   number: string; issued: string; due: string; paidOn?: string | null; method?: string | null;
   billTo: { name: string; email: string; company?: string }; project?: string | null;
   lines: Line[]; discountCents?: number; taxPercent?: number; totalCents: number; amountPaidCents: number;
@@ -64,7 +64,7 @@ export function InvoicePdf({ d, size }: { d: PdfData; size: "LETTER" | "A4" }) {
         <View style={s.head}>
           <View style={s.who}>
             {d.business.logoLightUrl ? <Image src={d.business.logoLightUrl} style={s.logo} /> : <><View style={s.dot} /><Image src="/brand/wp-mark-ink.png" style={s.logo} /></>}
-            <View><Text style={s.bizName}>{d.business.name}</Text>{legal && <Text style={s.legal}>{legal}</Text>}</View>
+            <View><Text style={s.bizName}>{d.business.name}</Text>{legal && <Text style={s.legal}>{legal}</Text>}{!quote && d.business.ein ? <Text style={s.legal}>EIN {d.business.ein}</Text> : null}</View>
           </View>
           <View style={s.kindBox}>
             <Text style={s.kind}>{quote ? "Quote" : receipt ? "Receipt" : "Invoice"}</Text>

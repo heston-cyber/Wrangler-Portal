@@ -259,6 +259,7 @@ const PAGES: Record<string, { pages: Page[]; args: (ids: Ids, share: Share | nul
   "guests.home": { pages: ["owner"], args: () => "skip" }, // /guest (guest logins only)
   "guests.sheet": { pages: ["owner"], args: () => "skip" }, // /guest/<token> signed in (guest logins only)
   "footage.settings": { pages: ["owner"], args: () => ({}) }, // Settings › Payments › Footage storage
+  "taxId.get": { pages: ["owner"], args: () => ({}) }, // Settings › Payments › Tax ID (Nov 21; the page only asks when the viewer is the owner)
   "footage.forProject": { pages: ["owner"], args: () => "skip" }, // project › Delivery › Raw footage storage
   "footage.forClientProject": { pages: ["clientHome"], args: () => ({ projectId: "nope" }) }, // the client's project › Raw footage
   "testimonials.projectsFor": { pages: ["owner"], args: () => "skip" }, // Post a note › Ask for a testimonial

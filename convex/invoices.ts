@@ -182,6 +182,7 @@ export const get = query({
       business: biz ? {
         name: biz.name, legalName: biz.legalName ?? null, prefix: invoicePrefix(biz.name), email: biz.replyTo ?? null, address: biz.address ?? null, privacyUrl: biz.privacyUrl ?? null,
         logoUrl: biz.logoFileId ? await ctx.storage.getUrl(biz.logoFileId) : null, logoLightUrl: biz.logoLightFileId ? await ctx.storage.getUrl(biz.logoLightFileId) : null,
+        ein: biz.taxId?.value ?? null, // Nov 21: printed on the invoice and receipt
       } : null,
       payToken: i.payToken ?? null, payments: (i.payments ?? []).filter((p) => p.status !== "failed"),
       // Step 4: "Last reminder: … · next: … (automatic)" under the actions.
@@ -214,7 +215,7 @@ export const options = query({
     }
     return {
       clients: out,
-      business: biz ? { name: biz.name, legalName: biz.legalName ?? null, prefix: invoicePrefix(biz.name), logoUrl: biz.logoFileId ? await ctx.storage.getUrl(biz.logoFileId) : null } : null,
+      business: biz ? { name: biz.name, legalName: biz.legalName ?? null, prefix: invoicePrefix(biz.name), logoUrl: biz.logoFileId ? await ctx.storage.getUrl(biz.logoFileId) : null, ein: biz.taxId?.value ?? null } : null,
       nextNumber: biz ? `${invoicePrefix(biz.name)}-${String(((await ctx.db.query("counters").withIndex("by_key", (q) => q.eq("key", "invoiceSeq")).first())?.value ?? 0) + 1).padStart(4, "0")}` : null,
       stripeReady: biz?.stripe?.status === "connected",
     };
@@ -575,6 +576,8 @@ async function finalize(ctx: ActionCtx, invoiceId: Id<"invoices">, email: boolea
           if (caps.us_bank_account_ach_payments === "active") methods.push("us_bank_account");
           if (caps.link_payments === "active") methods.push("link");
         } catch { /* card only */ }
+        // Nov 21 (Heston): the business's EIN on Stripe's copy too, as the account's own tax ID (when saved on this account).
+        const ein = i.businessId ? await ctx.runQuery(internal.taxId.forInvoice, { businessId: i.businessId, accountId: account }) : null;
         let taxRate: string | null = null;
         if (i.taxPercent) taxRate = (await stripeCall("POST", "tax_rates", { account, idem: k("tax"), form: { display_name: "Tax", percentage: i.taxPercent, inclusive: false } })).id as string;
         const inv = await stripeCall("POST", "invoices", {
@@ -583,6 +586,7 @@ async function finalize(ctx: ActionCtx, invoiceId: Id<"invoices">, email: boolea
             customer: customerId, collection_method: "send_invoice", due_date: due, auto_advance: false, pending_invoice_items_behavior: "exclude",
             ...(i.memo ? { description: i.memo } : {}), metadata: { ...meta, portal_kind: i.kind, portal_title: i.title },
             ...(taxRate ? { default_tax_rates: [taxRate] } : {}),
+            ...(ein ? { account_tax_ids: [ein] } : {}),
             payment_settings: { payment_method_types: methods },
           },
         });

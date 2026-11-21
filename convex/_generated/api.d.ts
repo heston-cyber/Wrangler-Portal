@@ -41,6 +41,7 @@ import type * as auditLog from "../auditLog.js";
 import type * as bell from "../bell.js";
 import type * as security from "../security.js";
 import type * as subscriptions from "../subscriptions.js";
+import type * as taxId from "../taxId.js";
 import type * as team from "../team.js";
 import type * as invoices from "../invoices.js";
 import type * as overviews from "../overviews.js";
@@ -214,6 +215,7 @@ declare const fullApi: ApiFromModules<{
   bell: typeof bell;
   security: typeof security;
   subscriptions: typeof subscriptions;
+  taxId: typeof taxId;
   team: typeof team;
   invoices: typeof invoices;
   overviews: typeof overviews;

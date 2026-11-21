@@ -30,7 +30,7 @@ export const InvoiceChip = ({ status }: { status: InvoiceStatus }) => <StatusChi
 
 /** The invoice as the client sees it: on the New invoice preview, the owner's invoice page, the client's page. */
 export function InvoicePaper({ business, number, issued, due, billTo, project, lines, discountCents, taxPercent, amountPaidCents = 0, memo, payments }: {
-  business: { name: string; legalName: string | null; logoUrl?: string | null; email?: string | null; address?: string | null; privacyUrl?: string | null }; number: string; issued: string; due: string;
+  business: { name: string; legalName: string | null; logoUrl?: string | null; email?: string | null; address?: string | null; privacyUrl?: string | null; ein?: string | null }; number: string; issued: string; due: string;
   billTo: { name: string; email: string; company?: string }; project?: string | null; lines: Line[]; discountCents?: number; taxPercent?: number;
   amountPaidCents?: number; memo?: string; payments?: Array<{ at: string; method: string; cents: number }>;
 }) {
@@ -39,7 +39,7 @@ export function InvoicePaper({ business, number, issued, due, billTo, project, l
   return (
     <article className="inv-paper glass">
       <header className="inv-top">
-        <div className="who"><span className="logo">{business.logoUrl ? <img src={business.logoUrl} alt="" /> : <BrandImg name="wordmark" alt="" />}</span><span><b>{business.name}</b>{legal && <small>{legal}</small>}</span></div>
+        <div className="who"><span className="logo">{business.logoUrl ? <img src={business.logoUrl} alt="" /> : <BrandImg name="wordmark" alt="" />}</span><span><b>{business.name}</b>{legal && <small>{legal}</small>}{business.ein && <small className="inv-ein">EIN {business.ein}</small>}</span></div>
         <div className="num"><span>Invoice</span><b>{number}</b></div>
       </header>
       <dl className="inv-meta">

@@ -105,6 +105,46 @@ function Reminders({ r, show }: { r: { on: boolean; beforeDays: number; afterDay
   );
 }
 
+/** Nov 21 (Heston): the business's EIN, printed on its invoices and receipts (and on Stripe's invoice, kept there as the
+ *  account's tax ID). The owner only; a team member with Payments doesn't see it. */
+function TaxIdBlock({ show, connected }: { show: (m: string) => void; connected: boolean }) {
+  const me = useQuery(api.users.me);
+  const owner = me?.role === "owner" && !me.team;
+  const t = useQuery(api.taxId.get, owner ? {} : "skip");
+  const set = useAction(api.taxId.set);
+  const load = useAction(api.taxId.load);
+  const [ein, setEin] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const looked = useRef(false);
+  // No EIN in the portal yet but Stripe is connected: bring in the one already on the Stripe account, once.
+  // One saved before Stripe was connected goes to Stripe now, once.
+  useEffect(() => {
+    if (!owner || !connected || t === undefined || looked.current) return;
+    if (t === null) { looked.current = true; void load({}).catch(() => undefined); }
+    else if (!t.inStripe) { looked.current = true; void set({ ein: t.value }).catch(() => undefined); }
+  }, [owner, connected, t, load, set]);
+  if (!owner || t === undefined) return null;
+  const save = async () => {
+    if (ein === null || ein.trim() === (t?.value ?? "")) { setEin(null); return; }
+    setBusy(true);
+    try {
+      const r = await set({ ein });
+      show(r.value ? (r.inStripe ? "EIN saved, here and in Stripe." : "EIN saved. It goes to Stripe once Stripe is connected.") : "EIN removed.");
+      setEin(null);
+    } catch (e) { show(err(e)); }
+    setBusy(false);
+  };
+  return (
+    <div className="panel pay-card">
+      <span className="wp-eyebrow">Tax ID</span>
+      <label className="wp-field"><span className="wp-field-label">EIN</span>
+        <input className="input" inputMode="numeric" autoComplete="off" placeholder="12-3456789" value={ein ?? t?.value ?? ""} disabled={busy}
+          onFocus={() => setEin(t?.value ?? "")} onChange={(e) => setEin(e.target.value)} onBlur={() => void save()} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} aria-label="EIN" /></label>
+      <p className="secondary pay-note">Printed on your invoices and receipts{connected ? ", and on Stripe's copy" : ""}. Invoices already sent keep how they were.{t && !t.inStripe && connected ? " Adding it to Stripe…" : ""}</p>
+    </div>
+  );
+}
+
 /** Phase 5 (743:3134, D98): Footage storage. The price per year, how long raw footage is kept after delivery, and
  *  whether clients are offered "Keep it" on their delivery page. Billed as a yearly invoice the owner sends (D33). */
 function FootageStorage({ show }: { show: (m: string) => void }) {
@@ -306,6 +346,7 @@ export function PaymentsSettings({ show }: { show: (m: string) => void }) {
           <dl className="pay-rows"><dt>Emails</dt><dd>Invoices, reminders and receipts send from the portal</dd></dl>
         </div>
       )}
+      <TaxIdBlock show={show} connected={st.status === "connected"} />
       {st.status === "connected" && <Reminders r={s.reminders} show={show} />}
       {st.status === "connected" && <SubFail show={show} />}
       <FootageStorage show={show} /><DeliveryTerm show={show} />
