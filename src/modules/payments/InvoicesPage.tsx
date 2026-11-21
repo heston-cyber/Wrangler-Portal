@@ -33,6 +33,7 @@ function detail(r: Row, withClient: boolean) {
     case "void": bits.push("void"); break;
     case "uncollectible": bits.push("marked uncollectible"); break;
   }
+  if (r.notEmailed && r.status !== "draft" && r.status !== "void") bits.push("not emailed yet"); // Nov 21: made without emailing
   return bits.join(" · ");
 }
 

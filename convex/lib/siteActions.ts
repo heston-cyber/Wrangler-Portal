@@ -585,6 +585,18 @@ export const ACTIONS: Record<string, Entry> = {
       return [...l, { label: "Sends", value: to ? `Invoice email with its pay link to ${to}` : "Nothing (it isn't here)" }];
     },
   }),
+  // Nov 21 (Heston): finalized in Stripe and payable from its link, but nothing goes to anyone. A Stripe action, so for
+  // now it runs from Heston's Confirm page like Send; the connector build makes it direct (it sends nothing).
+  "invoices.create": ask("money", invoices.create, "Create an invoice without emailing it", "It's finalized in Stripe with its number and pay link (Claude gets the link). Nothing goes to the client: no email, not on their portal, no reminders, until Email it.", {
+    onPage: true, shows: async (ctx, a) => [...(await invoiceLines(ctx, a.invoiceId)), { label: "Sends", value: "Nothing" }],
+  }),
+  "invoices.emailIt": ask("money", invoices.emailIt, "Email an invoice that was made without emailing", "It goes on the client's portal and Inbox, and the automatic reminders start.", {
+    shows: async (ctx, a) => {
+      const l = await invoiceLines(ctx, a.invoiceId);
+      const to = l.find((x) => x.label === "Bill to")?.value;
+      return [...l, { label: "Sends", value: to ? `Invoice email with its pay link to ${to}` : "Nothing (it isn't here)" }];
+    },
+  }),
   "invoices.voidInvoice": ask("money", invoices.voidInvoice, "Void an invoice", "It's voided in Stripe: it can't be paid any more. Money already paid isn't refunded (Heston refunds on the site).", {
     onPage: true, shows: async (ctx, a) => [...(await invoiceLines(ctx, a.invoiceId)), { label: "Sends", value: "No email" }],
   }),

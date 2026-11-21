@@ -8,14 +8,15 @@ import { internalMutation, internalQuery, mutation, query } from "./lib/function
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import type { MutationCtx, QueryCtx } from "./_generated/server";
+import type { ActionCtx, MutationCtx, QueryCtx } from "./_generated/server";
 import { requireMe, requireAll } from "./lib/access";
 import { businessInScope } from "./lib/business";
 import { invoicePrefix } from "./lib/invoiceNumber";
 import { stripeCall, StripeError, type StripeResult } from "./lib/stripeApi";
 import { clientDocs, openDelivery } from "./projects";
 import { pageOf, totals as builderTotals } from "./lib/wsBuilder";
-import { announceSent } from "./invoicePay";
+import { announceSent, payLink } from "./invoicePay";
+import { randomToken } from "./lib/hash";
 import { nextReminder } from "./invoiceReminders";
 import { crmProject } from "./crm";
 import { storageDropped, storagePaid } from "./footage";
@@ -63,7 +64,7 @@ async function rowOf(ctx: QueryCtx, i: Doc<"invoices">) {
     client: client ? { _id: client._id, name: client.name } : null, project: project ? { _id: project._id, label: label(project) } : null,
     billTo: i.billTo, dueDate: i.dueDate, totalCents: i.totalCents, amountPaidCents: i.amountPaidCents, amountRemainingCents: i.amountRemainingCents,
     sentAt: i.sentAt ?? null, viewedAt: i.viewedAt ?? null, paidAt: i.paidAt ?? null, createdAt: i.createdAt, updatedAt: i.updatedAt,
-    lastFailure: i.lastFailure ?? null, sendError: i.sendError ?? null,
+    lastFailure: i.lastFailure ?? null, sendError: i.sendError ?? null, notEmailed: !!i.quiet,
   };
 }
 
@@ -188,7 +189,7 @@ export const get = query({
         last: (i.reminders ?? []).length ? Math.max(...(i.reminders ?? []).map((r) => r.at)) : null,
         next: biz?.stripe?.status === "connected" && i.payToken ? nextReminder(i, biz.reminders)?.at ?? null : null,
         auto: !!biz?.reminders?.on,
-        canSend: i.status === "open" && !i.processing && i.amountRemainingCents > 0,
+        canSend: i.status === "open" && !i.processing && i.amountRemainingCents > 0 && !i.quiet, // D-h: Email it first
       },
     };
   },
@@ -329,12 +330,27 @@ export const claimForSend = internalMutation({
 });
 
 export const recordSent = internalMutation({
-  args: { invoiceId: v.id("invoices"), stripe: v.any(), by: v.string() },
-  handler: async (ctx, { invoiceId, stripe, by }) => {
+  args: { invoiceId: v.id("invoices"), stripe: v.any(), by: v.string(), email: v.optional(v.boolean()) },
+  handler: async (ctx, { invoiceId, stripe, by, email }) => {
     const i = await ctx.db.get(invoiceId);
     if (!i) return;
     const s = stripe as { accountId: string; customerId: string; invoice: StripeResult };
     const now = Date.now();
+    if (email === false) {
+      // Create without emailing: open and payable from its link, nothing announced, no sentAt (reminders count from Email it).
+      await audit(ctx, { kind: "sent", text: `made invoice ${s.invoice.number ?? i.number ?? i.title} in Stripe without emailing it`, where: "Payments › Invoices", link: `/payments/invoices/${invoiceId}`, businessId: i.businessId });
+      await ctx.db.patch(invoiceId, {
+        status: s.invoice.status === "paid" ? "paid" : "open", quiet: true, payToken: i.payToken ?? randomToken(18),
+        stripe: { accountId: s.accountId, invoiceId: s.invoice.id, customerId: s.customerId, number: s.invoice.number ?? i.number, hostedUrl: s.invoice.hosted_invoice_url ?? undefined, pdfUrl: s.invoice.invoice_pdf ?? undefined, livemode: !!s.invoice.livemode },
+        totalCents: Number(s.invoice.total ?? i.totalCents), amountPaidCents: Number(s.invoice.amount_paid ?? 0), amountRemainingCents: Number(s.invoice.amount_remaining ?? s.invoice.total ?? i.totalCents),
+        ...(s.invoice.status === "paid" && !i.paidAt ? { paidAt: stripePaidAt(s.invoice, now) } : {}),
+        updatedAt: now, history: [...i.history, { kind: "created", at: now, by, detail: "in Stripe, not emailed" }],
+      });
+      const made = await ctx.db.get(invoiceId);
+      if (made?.status === "paid" && made.storageId) await storagePaid(ctx, made);
+      if (made?.status === "paid" && made.deliveryId) await deliveryPaid(ctx, made);
+      return;
+    }
     await audit(ctx, { kind: "sent", text: `sent invoice ${s.invoice.number ?? i.number ?? i.title}`, where: "Payments › Invoices", link: `/payments/invoices/${invoiceId}`, businessId: i.businessId });
     await ctx.db.patch(invoiceId, {
       status: s.invoice.status === "paid" ? "paid" : "open",
@@ -377,7 +393,50 @@ export const recordSendFailed = internalMutation({
  *  Stripe's own emails stay off: the portal sends its own (email 08, from recordSent). */
 export const send = action({
   args: { invoiceId: v.id("invoices") },
-  handler: async (ctx, { invoiceId }): Promise<{ number: string }> => {
+  handler: async (ctx, { invoiceId }): Promise<{ number: string }> => finalize(ctx, invoiceId, true),
+});
+
+/** Nov 21 (Heston): "Create without emailing". The same invoice in Stripe, finalized and payable, with its number and
+ *  its pay link (returned), but nothing goes to anyone: no email, no Inbox item, not on the client's portal, no
+ *  reminders (D-g, D-h). Email it (below) sends it later. */
+export const create = action({
+  args: { invoiceId: v.id("invoices") },
+  handler: async (ctx, { invoiceId }): Promise<{ number: string; link: string }> => {
+    const r = await finalize(ctx, invoiceId, false);
+    const link = await ctx.runQuery(internal.invoices.payLinkOf, { invoiceId });
+    return { ...r, link: link ?? "" };
+  },
+});
+
+export const payLinkOf = internalQuery({
+  args: { invoiceId: v.id("invoices") },
+  handler: async (ctx, { invoiceId }) => {
+    const i = await ctx.db.get(invoiceId);
+    return i?.payToken ? payLink(i.payToken) : null;
+  },
+});
+
+/** Email it: the invoice made without emailing goes out now, as Send would have sent it (the email, the Inbox item,
+ *  the client's portal, and the reminders from now). Once: a second press is refused. */
+export const emailIt = mutation({
+  args: { invoiceId: v.id("invoices") },
+  handler: async (ctx, { invoiceId }) => {
+    const me = await requireAll(ctx, "payments");
+    const i = await ctx.db.get(invoiceId);
+    if (!i) throw new ConvexError("That invoice isn't here.");
+    if (!i.quiet) throw new ConvexError(i.status === "draft" || i.status === "sending" ? "Send the invoice first." : "This invoice was already emailed.");
+    if (i.status !== "open") throw new ConvexError(i.status === "paid" ? "It's already paid, so there's nothing to email." : `It's ${i.status}, so it can't be emailed.`);
+    if (!EMAIL.test(i.billTo.email)) throw new ConvexError("The bill-to email doesn't look right.");
+    const now = Date.now(), by = me.name ?? me.email;
+    await ctx.db.patch(invoiceId, { quiet: undefined, sentAt: now, updatedAt: now, history: [...i.history, { kind: "sent", at: now, by, detail: i.billTo.email }].slice(-60) });
+    await audit(ctx, { kind: "sent", text: `emailed invoice ${i.number ?? i.title}`, where: "Payments › Invoices", link: `/payments/invoices/${invoiceId}`, businessId: i.businessId });
+    await announceSent(ctx, (await ctx.db.get(invoiceId))!);
+    return { to: i.billTo.email };
+  },
+});
+
+async function finalize(ctx: ActionCtx, invoiceId: Id<"invoices">, email: boolean): Promise<{ number: string }> {
+  {
     const c = await ctx.runQuery(internal.invoices.sendGuard, { invoiceId }).then(() => ctx.runMutation(internal.invoices.claimForSend, { invoiceId }));
     const i = c.invoice as Doc<"invoices"> & { number: string };
     const account = c.accountId as string;
@@ -443,10 +502,10 @@ export const send = action({
     }
     // Finalized in Stripe: from here the invoice IS sent, whatever happens next. If saving fails, it stays "sending"
     // and pressing Send again (after a few minutes) picks the finalized invoice up rather than making another.
-    await ctx.runMutation(internal.invoices.recordSent, { invoiceId, by: c.by, stripe: { accountId: account, customerId: customerId ?? finalized!.customer, invoice: finalized } });
+    await ctx.runMutation(internal.invoices.recordSent, { invoiceId, by: c.by, email, stripe: { accountId: account, customerId: customerId ?? finalized!.customer, invoice: finalized } });
     return { number: i.number };
-  },
-});
+  }
+}
 
 /** Owner only, before anything is claimed (so a refused caller never touches the counter). */
 export const sendGuard = internalQuery({

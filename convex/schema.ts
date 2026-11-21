@@ -1239,6 +1239,9 @@ export default defineSchema({
     storageId: v.optional(v.id("footageStorage")),       // Phase 5: a year of raw footage storage (D33), first year or a renewal (D140)
     deliveryId: v.optional(v.id("deliveries")),          // Nov 17 (Q6): another year of a project's Delivery, drafted when the client chose Keep it
     payToken: v.optional(v.string()),
+    // Nov 21 (Heston, D-g/D-h): made in Stripe without emailing ("Create without emailing"): payable from its copied
+    // link, but off the client's portal and Inbox and out of the reminders until Heston presses Email it.
+    quiet: v.optional(v.boolean()),
     // Review fixes (Oct 30): a send in progress keeps what it has made in Stripe so far, so a failed send cleans up
     // and a retry neither duplicates nor gets stuck; syncedAt spaces out reads from Stripe.
     sendAttempt: v.optional(v.number()),

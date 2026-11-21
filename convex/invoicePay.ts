@@ -110,7 +110,7 @@ export const mine = query({
     }
     const out = [];
     for (const i of [...seen.values()].sort((a, b) => b.updatedAt - a.updatedAt)) {
-      if (i.status === "draft" || i.status === "sending" || !i.payToken) continue;
+      if (i.status === "draft" || i.status === "sending" || !i.payToken || i.quiet) continue; // D-g: not on their portal until emailed
       if (!(await isTheirs(ctx, i, me.email))) continue;
       const project = i.projectId ? await ctx.db.get(i.projectId) : null;
       out.push({
