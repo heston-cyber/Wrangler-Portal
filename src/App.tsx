@@ -42,7 +42,7 @@ import type { Id } from "../convex/_generated/dataModel";
 // Payments (Phase 2 Part B): its own chunk.
 const InvoicesPage = lazy(() => import("./modules/payments/InvoicesPage"));
 const PlatformAdmin = lazy(() => import("./modules/platform/Admin"));
-const WillPage = lazy(() => import("./modules/will/WillPage")); // Nov 22: the hidden will walkthrough, Heston only
+const WillPage = lazy(() => import("./modules/will/WillPage")); // Nov 22: the hidden will walkthrough (no sign-in, no server calls)
 const Setup = lazy(() => import("./modules/setup/Setup"));
 const ClientWelcome = lazy(() => import("./modules/onboard/ClientOnboard").then((m) => ({ default: m.ClientWelcome })));
 const InvoiceEditor = lazy(() => import("./modules/payments/InvoiceEditor"));
@@ -196,6 +196,9 @@ export default function App() {
   const { path, search } = useLocation();
   if (/^(www\.)?wranglerportal\.com$/i.test(location.hostname)) return <HoldingPage />;
   if (Kit && path.startsWith("/__kit")) return <Suspense fallback={<Loading />}><Kit /></Suspense>;
+  // Nov 22 (Heston): the will walkthrough at a hidden address, in no menu and with no sign-in, so he and Emily-Rose can
+  // each make their own on their own computer. It calls nothing on the server (WillPage.WILL_PATH says the same).
+  if (/^\/will\/r8vq2n5w\/?$/.test(path)) return <Suspense fallback={<Loading />}><WillPage /></Suspense>;
   const kit = kitSide();
   if (KitApp && kit) {
     const guestKit = /^\/guest(?:\/([A-Za-z0-9_-]{16,64}))?\/?$/.exec(path);
@@ -469,8 +472,6 @@ function SignedIn() {
   // Phase 7 step 2 (D109): a new business's setup (steps 2–6) stands on its own like Welcome.
   if (/^\/setup\/?$/.test(path) && !team) return <Suspense fallback={<Loading />}><Setup start={Number(params.get("step")) || null} /></Suspense>;
   if (/^\/admin\/?$/.test(path) && !team) return <Suspense fallback={<Loading />}><PlatformAdmin me={me} /></Suspense>;
-  // Nov 22 (Heston): the hidden will walkthrough stands on its own, in no menu; it opens only for the platform admin.
-  if (/^\/tools\/will\/?$/.test(path)) return <Suspense fallback={<Loading />}>{team ? <NoAccess /> : <WillPage />}</Suspense>;
   if (releaseSign && !team) return <Suspense fallback={<Loading />}><ReleaseSigning key={releaseSign[1]} releaseId={releaseSign[1]} /></Suspense>;
   // Work surfaces get no background light, so nothing competes with the video or the document.
   const workSurface = Boolean(video) || /^\/sign\/(b|d)\//.test(path) || /^\/sign\/templates\/[^/]+/.test(path) || /^\/production\/call-sheets\/([^/]+\/edit|templates\/[^/]+)/.test(path) || /^\/settings\/help\/edit\//.test(path);

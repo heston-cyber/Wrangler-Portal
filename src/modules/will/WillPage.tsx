@@ -1,18 +1,18 @@
-// Nov 22 (Heston, approved: D1 answers only in this browser, D2 one walkthrough makes both wills, D3 the declaration
-// page now and a notary page left blank, D4 clean and simple, no glass): the hidden will walkthrough at /tools/will.
-// It isn't in any menu, and it opens only for the platform's admin (Heston's own login). Nothing on this page is sent
-// anywhere: the answers are kept in this browser's storage and the PDFs are made here.
+// Nov 22 (Heston, approved: D1 answers only in this browser, D3 the declaration page now and a notary page left blank,
+// D4 clean and simple, no glass; then "Each does their own" and "Hidden link, no sign-in"): the will walkthrough at a
+// hidden address (WILL_PATH). It's in no menu and needs no sign-in, so Heston and Emily-Rose can each make their own will
+// on their own computer at the same time. Nothing on this page is sent anywhere: it makes no server calls, the answers
+// are kept in this browser's storage, and the PDFs are made here.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { Button, Checkbox, EmptyState, Segmented, TextArea, TextField } from "../../ui/wp";
+import { Button, Checkbox, Segmented, TextArea, TextField } from "../../ui/wp";
 import { Icon } from "../../ui/Icon";
-import { navigate } from "../../lib/router";
 import {
   STEPS, blank, firstIncomplete, stepIssues, upgrade, warnings, willFor,
   type Gift, type Named, type Pronoun, type StepKey, type WillAnswers,
 } from "./willText";
 
+/** The page's hidden address (no sign-in). Changing it only moves the page; nothing is stored under it. */
+export const WILL_PATH = /^\/will\/r8vq2n5w\/?$/;
 export const WILL_KEY = "wp-will-v1";
 function load(): WillAnswers {
   try { const raw = localStorage.getItem(WILL_KEY); return raw ? upgrade(JSON.parse(raw)) : blank(); } catch { return blank(); }
@@ -20,22 +20,14 @@ function load(): WillAnswers {
 function store(a: WillAnswers) { try { localStorage.setItem(WILL_KEY, JSON.stringify(a)); } catch { /* private window: kept for this visit only */ } }
 function erase() { try { localStorage.removeItem(WILL_KEY); } catch { /* nothing stored */ } }
 
-export default function WillPage() {
-  const admin = useQuery(api.platform.me, {});
-  if (admin === undefined) return <div className="will-page" />;
-  if (!admin.admin) return (
-    <div className="will-page"><div className="will-wrap"><EmptyState icon="lock" title="Not available." body="This page isn't available on your account." actions={<Button onClick={() => navigate("/")}>Back to the portal</Button>} /></div></div>
-  );
-  return <WillWalkthrough />;
-}
-
-export function WillWalkthrough() {
+export default function WillWalkthrough() {
   const [a, setA] = useState<WillAnswers>(load);
   const [step, setStep] = useState<StepKey>("start");
   const [tried, setTried] = useState(false);
   const [confirmErase, setConfirmErase] = useState(false);
   const top = useRef<HTMLDivElement>(null);
   useEffect(() => { store(a); }, [a]);
+  useEffect(() => { document.title = "Will"; }, []);
   const i = STEPS.findIndex((s) => s.key === step);
   const issues = stepIssues(a, step);
   const err = (k: string) => (tried ? issues[k] : undefined);
@@ -45,17 +37,14 @@ export function WillWalkthrough() {
     if (Object.keys(issues).length) { setTried(true); return; }
     if (i < STEPS.length - 1) go(STEPS[i + 1].key);
   };
-  const A = a.a.name.trim() || "First person", B = a.b.name.trim() || "Second person";
+  const B = a.b.name.trim() || "your spouse";
 
   return (
     <div className="will-page" ref={top}>
       <div className="will-wrap">
         <div className="will-top">
-          <span className="will-brand"><b>Will</b> <span className="wp-small secondary">· temporary Oklahoma wills for the two of you</span></span>
-          <span className="will-top-r">
-            <span className="wp-small secondary"><Icon name="lock" size={14} /> Saved only on this device</span>
-            <Button variant="ghost" size="sm" onClick={() => navigate("/")}>Back to the portal</Button>
-          </span>
+          <span className="will-brand"><b>Will</b> <span className="wp-small secondary">· a temporary Oklahoma will</span></span>
+          <span className="will-top-r"><span className="wp-small secondary"><Icon name="lock" size={14} /> Saved only on this device</span></span>
         </div>
         <div className="will-grid">
           <nav className="will-steps" aria-label="Steps">
@@ -83,9 +72,11 @@ export function WillWalkthrough() {
             {step === "start" && <Start />}
 
             {step === "you" && <>
-              <p className="will-lead">Your full legal names, exactly as they appear on your driver's licenses. Each of you gets your own will; this walkthrough makes both.</p>
-              <PersonFields label="First person" p={a.a} err={(k) => err(`a.${k}`)} onChange={(p) => set({ a: { ...a.a, ...p } })} />
-              <PersonFields label="Second person" p={a.b} err={(k) => err(`b.${k}`)} onChange={(p) => set({ b: { ...a.b, ...p } })} />
+              <p className="will-lead">Full legal names, exactly as they appear on your driver's licenses. This makes your will; your spouse makes theirs on their own device.</p>
+              <PersonFields label="You" p={a.a} err={(k) => err(`a.${k}`)} onChange={(p) => set({ a: { ...a.a, ...p } })} />
+              <fieldset className="will-set"><legend>Your spouse</legend>
+                <TextField label="Full legal name" value={a.b.name} error={err("b.name")} onChange={(e) => set({ b: { ...a.b, name: e.target.value } })} autoComplete="off" />
+              </fieldset>
               <h2 className="will-sub">Where you live</h2>
               <div className="will-row">
                 <TextField label="City" value={a.city} error={err("city")} onChange={(e) => set({ city: e.target.value })} placeholder="Oklahoma City" />
@@ -111,8 +102,8 @@ export function WillWalkthrough() {
 
             {step === "executor" && <>
               <p className="will-lead">The executor carries out the will: gathers what you own, pays final bills and hands everything to the right people. If you name no one, a court picks someone.</p>
-              <Checkbox checked={a.executorSpouse} onChange={(v) => set({ executorSpouse: v })} label="Each of us names the other as executor" hint={`${A}'s will names ${B}, and ${B}'s names ${A}. Most couples do this.`} />
-              {!a.executorSpouse && <NamedFields label="Executor (for both wills)" n={a.executor} err={(k) => err(`executor.${k}`)} onChange={(x) => set({ executor: { ...a.executor, ...x } })} />}
+              <Checkbox checked={a.executorSpouse} onChange={(v) => set({ executorSpouse: v })} label={`My spouse is my executor`} hint={`${B === "your spouse" ? "Your spouse" : B} carries out your will. Most couples name each other.`} />
+              {!a.executorSpouse && <NamedFields label="Executor" n={a.executor} err={(k) => err(`executor.${k}`)} onChange={(x) => set({ executor: { ...a.executor, ...x } })} />}
               <NamedFields label="Backup executor" hint="Steps in if the first choice can't or won't serve, including if you both die." n={a.backupExecutor} err={(k) => err(`backupExecutor.${k}`)} onChange={(x) => set({ backupExecutor: { ...a.backupExecutor, ...x } })} />
               <Checkbox checked={a.noBond} onChange={(v) => set({ noBond: v })} label="The executor doesn't need to post a bond" hint="A bond is insurance the court can require; skipping it saves your family money and time. Usual when you trust your executor." />
             </>}
@@ -120,7 +111,7 @@ export function WillWalkthrough() {
             {step === "inherit" && <>
               <p className="will-lead">Who gets everything you don't give away as a specific gift.</p>
               <ol className="will-order">
-                <li><b>First, your spouse.</b> {A}'s will leaves everything to {B}, and the other way round.</li>
+                <li><b>First, your spouse.</b> Everything goes to {B}.</li>
                 <li><b>If your spouse has died, your children</b>, in equal shares (including the baby). A child who has died has their share go to their own children.</li>
                 <li><b>If none of your family survives you</b>, the people below, in equal shares.</li>
               </ol>
@@ -143,8 +134,7 @@ export function WillWalkthrough() {
 
             {step === "gifts" && <>
               <p className="will-lead">Optional. Particular things to particular people, like a vehicle, a camera kit or a family heirloom. Skip this if everything goes to your spouse.</p>
-              <GiftList title={`${A}'s gifts`} list={a.giftsA} err={(n) => err(`giftsA.${n}`)} onChange={(l) => set({ giftsA: l })} />
-              <GiftList title={`${B}'s gifts`} list={a.giftsB} err={(n) => err(`giftsB.${n}`)} onChange={(l) => set({ giftsB: l })} />
+              <GiftList title="Your gifts" list={a.giftsA} err={(n) => err(`giftsA.${n}`)} onChange={(l) => set({ giftsA: l })} />
             </>}
 
             {step === "guardian" && <>
@@ -176,8 +166,7 @@ export function WillWalkthrough() {
             {step === "wishes" && <>
               <p className="will-lead">Optional. Leave these blank to skip them.</p>
               <TextField label="Who takes your pets" value={a.petsTo} placeholder="Full name" onChange={(e) => set({ petsTo: e.target.value })} />
-              <TextArea label={`${A}'s funeral and burial wishes`} compact value={a.wishesA} placeholder="Cremation, a small service at…" hint="A wish, not a binding instruction. Tell your family too; a will is often read after the funeral." onChange={(e) => set({ wishesA: e.target.value })} />
-              <TextArea label={`${B}'s funeral and burial wishes`} compact value={a.wishesB} onChange={(e) => set({ wishesB: e.target.value })} />
+              <TextArea label="Your funeral and burial wishes" compact value={a.wishesA} placeholder="Cremation, a small service at…" hint="A wish, not a binding instruction. Tell your family too; a will is often read after the funeral." onChange={(e) => set({ wishesA: e.target.value })} />
             </>}
 
             {step === "signing" && <>
@@ -186,7 +175,7 @@ export function WillWalkthrough() {
                 <TextField label="City" value={a.signCity || a.city} error={err("signCity")} onChange={(e) => set({ signCity: e.target.value })} />
                 <TextField label="County" value={a.signCounty || a.county} error={err("signCounty")} onChange={(e) => set({ signCounty: e.target.value })} />
               </div>
-              <h2 className="will-sub">What gets printed for each of you</h2>
+              <h2 className="will-sub">What gets printed</h2>
               <ul className="will-list">
                 <li>The will, with a place to initial every page, your signature at the end, then two witnesses' signatures, names and addresses.</li>
                 <li>A self-proving declaration page that you and both witnesses sign the same day. No notary needed; it lets a court accept the will without tracking down your witnesses.</li>
@@ -217,9 +206,10 @@ export function WillWalkthrough() {
 
 function Start() {
   return <>
-    <p className="will-lead">This walks you through a simple, temporary will for each of you, then makes the PDFs to print and sign. It takes about 15 minutes.</p>
+    <p className="will-lead">This walks you through a simple, temporary will, then makes the PDF to print and sign. It takes about 15 minutes.</p>
     <ul className="will-list">
-      <li><b>Two separate wills.</b> You answer once; most answers mirror each other with the names swapped.</li>
+      <li><b>One will each.</b> You make yours here and your spouse makes theirs on their own device, at the same time if you like.</li>
+      <li><b>Agree first</b> on your executor, guardian, the backups, who manages the baby's money and until what age, so both wills match.</li>
       <li><b>Only on this device.</b> Your answers are saved in this browser so you can stop and come back. Nothing is sent to the portal or anywhere else.</li>
       <li><b>Signed on paper.</b> Oklahoma needs a printed will, signed at the end in front of two adult witnesses who aren't named in it.</li>
       <li><b>Have ready:</b> full legal names, who you'd trust as executor and as guardian (plus a backup for each), and who inherits if none of your family survives you.</li>
@@ -230,14 +220,14 @@ function Start() {
 
 function Review({ a }: { a: WillAnswers }) {
   const missing = firstIncomplete(a);
-  const wills = useMemo(() => (missing ? [] : [willFor(a, "a"), willFor(a, "b")]), [a, missing]);
+  const wills = useMemo(() => (missing ? [] : [willFor(a, "a")]), [a, missing]);
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState<number | null>(0);
   if (missing) return <p className="will-lead">“{STEPS.find((s) => s.key === missing)!.title}” still needs an answer. Use the steps on the left to finish it.</p>;
   const run = async (key: string, f: () => Promise<void>) => { setBusy(key); try { await f(); } finally { setBusy(null); } };
   const pdfs = () => import("./willPdf");
   return <>
-    <p className="will-lead">Read both wills all the way through. To change something, go back to its step; the wills update as you type.</p>
+    <p className="will-lead">Read your will all the way through. To change something, go back to its step; the wills update as you type.</p>
     <ul className="will-warn">{warnings(a).map((w) => <li key={w}><Icon name="info" size={16} />{w}</li>)}</ul>
     {wills.map((w, n) => (
       <section className="will-doc" key={w.title}>
@@ -255,10 +245,10 @@ function Review({ a }: { a: WillAnswers }) {
       </section>
     ))}
     <div className="will-dl">
-      {wills.map((w) => <Button key={w.title} variant="primary" icon="download" loading={busy === w.title} onClick={() => void run(w.title, async () => (await pdfs()).downloadWill(w))}>{w.testator.split(" ")[0]}'s will</Button>)}
+      {wills.map((w) => <Button key={w.title} variant="primary" icon="download" loading={busy === w.title} onClick={() => void run(w.title, async () => (await pdfs()).downloadWill(w))}>Download my will</Button>)}
       <Button variant="secondary" icon="download" loading={busy === "list"} onClick={() => void run("list", async () => (await pdfs()).downloadChecklist())}>Signing-day checklist</Button>
     </div>
-    <p className="wp-small secondary">Print each will single-sided. Don't write on a printed will; change it here and print again.</p>
+    <p className="wp-small secondary">Print it single-sided. Don't write on a printed will; change it here and print again.</p>
   </>;
 }
 

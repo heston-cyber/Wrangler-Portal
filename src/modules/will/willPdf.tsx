@@ -7,24 +7,25 @@ import type { Will } from "./willText";
 
 const INK = "#111111", MUTED = "#555555";
 const s = StyleSheet.create({
-  page: { backgroundColor: "#ffffff", color: INK, fontFamily: "Times-Roman", fontSize: 11.5, lineHeight: 1.45, paddingTop: 64, paddingHorizontal: 72, paddingBottom: 84 },
+  page: { backgroundColor: "#ffffff", color: INK, fontFamily: "Times-Roman", fontSize: 11.5, paddingTop: 64, paddingHorizontal: 72, paddingBottom: 84 },
   title: { fontFamily: "Times-Bold", fontSize: 17, textAlign: "center", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 },
   of: { textAlign: "center", fontSize: 12, marginBottom: 22 },
   attach: { textAlign: "center", fontSize: 10.5, color: MUTED, marginBottom: 20 },
-  intro: { marginBottom: 14, textAlign: "justify" },
+  intro: { marginBottom: 14, textAlign: "justify", lineHeight: 1 },
   art: { fontFamily: "Times-Bold", fontSize: 11.5, marginTop: 12, marginBottom: 5 },
-  p: { marginBottom: 7, textAlign: "justify" },
+  p: { marginBottom: 7, textAlign: "justify", lineHeight: 1 },
   sign: { marginTop: 18 },
-  line: { borderBottomWidth: 0.8, borderBottomColor: INK, height: 30 },
+  line: { borderBottomWidth: 0.8, borderBottomColor: INK, height: 26 },
+  small: { fontSize: 10 },
   cap: { fontSize: 10, color: MUTED, marginTop: 3 },
-  sigBox: { width: 300, marginLeft: "auto", marginTop: 26 },
-  wit: { marginTop: 22 },
+  sigBox: { width: 300, marginLeft: "auto", marginTop: 20 },
+  wit: { marginTop: 16 },
   witRow: { flexDirection: "row", gap: 24, marginTop: 6 },
   witCol: { flex: 1 },
   head: { fontFamily: "Times-Bold", fontSize: 13, textAlign: "center", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 },
-  state: { marginBottom: 12, lineHeight: 1.6 },
-  seal: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: 34 },
-  sealBox: { width: 130, height: 90, borderWidth: 0.8, borderColor: MUTED, borderStyle: "dashed", alignItems: "center", justifyContent: "center" },
+  state: { marginBottom: 12, lineHeight: 1.25 },
+  seal: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: 20 },
+  sealBox: { width: 120, height: 80, borderWidth: 0.8, borderColor: MUTED, borderStyle: "dashed", alignItems: "center", justifyContent: "center" },
   foot: { position: "absolute", left: 72, right: 72, bottom: 40, flexDirection: "row", justifyContent: "space-between", fontSize: 9, color: MUTED, borderTopWidth: 0.5, borderTopColor: "#bbbbbb", paddingTop: 8 },
 });
 
@@ -51,51 +52,57 @@ function WitnessBlock({ n }: { n: number }) {
   return (
     <View style={s.wit} wrap={false}>
       <View style={s.witRow}><Sig label={`Witness ${n} (signature)`} /><Sig label="Printed name" /></View>
-      <View style={s.witRow}><Sig label="Residence address" /></View>
-      <View style={s.witRow}><Sig label="City, state, ZIP" /></View>
+      <View style={s.witRow}><Sig label="Residence address (street, city, state, ZIP)" /></View>
     </View>
   );
 }
 
 export function WillDoc({ w }: { w: Will }) {
-  const last = w.articles.length - 1;
   return (
     <Document title={w.title} author={w.testator} creator="Wrangler Portal" producer="Wrangler Portal">
       <Page size="LETTER" style={s.page}>
+        <Footer w={w} />
         <Text style={s.title}>Last Will and Testament</Text>
         <Text style={s.of}>of {w.testator}</Text>
         <Text style={s.intro}>{w.intro}</Text>
-        {w.articles.map((a, i) => (
-          <View key={a.title} minPresenceAhead={i === last ? 160 : 60}>
-            <Text style={s.art} minPresenceAhead={40}>{a.title}</Text>
-            {a.paras.map((p, j) => <Text key={j} style={s.p}>{p}</Text>)}
+        {w.articles.slice(0, -1).map((a) => (
+          <View key={a.title}>
+            {/* the heading never ends a page on its own: it travels with its first paragraph */}
+            <View wrap={false}><Text style={s.art}>{a.title}</Text><Text style={s.p}>{a.paras[0]}</Text></View>
+            {a.paras.slice(1).map((p, j) => <Text key={j} style={s.p}>{p}</Text>)}
           </View>
         ))}
-        <View style={s.sign} wrap={false}>
+        {/* The last article and the signature stay on one page, so the signature page carries the will's own words. */}
+        <View wrap={false}>
+          {w.articles.slice(-1).map((a) => (
+            <View key={a.title}><Text style={s.art}>{a.title}</Text>{a.paras.map((p, j) => <Text key={j} style={s.p}>{p}</Text>)}</View>
+          ))}
+          <View style={s.sign}>
           <Text style={s.art}>Signature</Text>
           <Text style={s.p}>{w.signing}</Text>
           <View style={s.sigBox}><View style={s.line} /><Text style={s.cap}>{w.testator}, Testator</Text></View>
+          </View>
         </View>
         <View wrap={false} style={{ marginTop: 22 }}>
           <Text style={s.art}>Witnesses</Text>
           <Text style={s.p}>{w.attestation}</Text>
           <WitnessBlock n={1} />
+          <WitnessBlock n={2} />
         </View>
-        <WitnessBlock n={2} />
-        <Footer w={w} />
       </Page>
 
-      <Page size="LETTER" style={s.page}>
+      <Page size="LETTER" style={[s.page, s.small]}>
+        <Footer w={w} />
         <Text style={s.head}>Self-proving declaration</Text>
         <Text style={s.attach}>Attached to the Last Will and Testament of {w.testator} (Okla. Stat. tit. 84, §55(5)(b))</Text>
         <Text style={s.p}>{w.declaration}</Text>
         <View style={s.sigBox}><View style={s.line} /><Text style={s.cap}>{w.testator}, Testator</Text></View>
         <WitnessBlock n={1} />
         <WitnessBlock n={2} />
-        <Footer w={w} />
       </Page>
 
-      <Page size="LETTER" style={s.page}>
+      <Page size="LETTER" style={[s.page, s.small]}>
+        <Footer w={w} />
         <Text style={s.head}>Self-proving affidavit</Text>
         <Text style={s.attach}>Attached to the Last Will and Testament of {w.testator} (Okla. Stat. tit. 84, §55(5)(a)). For a notary; leave blank until then.</Text>
         <Text style={s.state}>THE STATE OF OKLAHOMA{"\n"}COUNTY OF ______________________________</Text>
@@ -103,7 +110,7 @@ export function WillDoc({ w }: { w: Will }) {
         <View style={s.sigBox}><View style={s.line} /><Text style={s.cap}>{w.testator}, Testator</Text></View>
         <View style={s.witRow} wrap={false}><Sig label="Witness (signature)" sub="Name and residence (printed)" /><Sig label="Witness (signature)" sub="Name and residence (printed)" /></View>
         <View wrap={false}>
-          <Text style={[s.p, { marginTop: 22 }]}>{w.notary.sworn}</Text>
+          <Text style={[s.p, { marginTop: 16 }]}>{w.notary.sworn}</Text>
           <View style={s.seal}>
             <View style={s.sealBox}><Text style={s.cap}>(SEAL)</Text></View>
             <View style={{ width: 250 }}>
@@ -112,7 +119,6 @@ export function WillDoc({ w }: { w: Will }) {
             </View>
           </View>
         </View>
-        <Footer w={w} />
       </Page>
     </Document>
   );

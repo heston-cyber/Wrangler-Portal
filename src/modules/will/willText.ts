@@ -1,6 +1,7 @@
 // Nov 22 (Heston, approved): a temporary Oklahoma will for Heston and Emily-Rose, from his guide "How to Make a Typed
-// Will in Oklahoma". One walkthrough makes two separate wills (one per spouse, names swapped). This file is the words:
-// the answers' shape, what each step needs, and the will text. Nothing here talks to the server; the answers live only
+// Will in Oklahoma". Each spouse makes their own will on their own computer (Heston, Nov 22: "Each does their own").
+// This file is the words: the answers' shape, what each step needs, and the will text. In the answers, "a" is the
+// person making this will and "b" is their spouse. Nothing here talks to the server; the answers live only
 // in this browser (WillPage) and the PDF is made in the browser (willPdf).
 //   - Okla. Stat. tit. 84 §55: signed at the end, declared to two witnesses, who sign at the end in the testator's
 //     presence. §55(5): self-proved at signing or any later date, by (a) a notary's certificate or (b) written
@@ -71,7 +72,7 @@ export function upgrade(raw: unknown): WillAnswers {
 // ---------- the steps ----------
 export const STEPS = [
   { key: "start", title: "Before you start" },
-  { key: "you", title: "The two of you" },
+  { key: "you", title: "You and your spouse" },
   { key: "children", title: "Children" },
   { key: "executor", title: "Executor" },
   { key: "inherit", title: "Who inherits" },
@@ -110,7 +111,7 @@ export function stepIssues(a: WillAnswers, step: StepKey): Record<string, string
     if (!a.fallback.some((f) => t(f.name))) e["fallback"] = "Name at least one person, in case none of your family survives you.";
   }
   if (step === "gifts") {
-    for (const [k, list] of [["giftsA", a.giftsA], ["giftsB", a.giftsB]] as const) {
+    for (const [k, list] of [["giftsA", a.giftsA]] as const) {
       list.forEach((g, i) => {
         if (t(g.item) && !t(g.to)) e[`${k}.${i}`] = "Type who gets it.";
         else if (!t(g.item) && t(g.to)) e[`${k}.${i}`] = "Describe the item.";
@@ -146,6 +147,8 @@ const join = (xs: string[]) => (xs.length <= 1 ? xs.join("") : xs.length === 2 ?
 const county = (c: string) => (/\bcounty$/i.test(t(c)) ? t(c) : `${t(c)} County`);
 const who = (n: Named) => [t(n.name), t(n.relation) && `my ${t(n.relation).replace(/^my\s+/i, "")}`, t(n.place) && `of ${t(n.place)}`].filter(Boolean).join(", ");
 const nameOnly = (n: Named) => t(n.name);
+/** who() inside a sentence: the closing comma after "my brother, of Edmond, Oklahoma," when there is one. */
+const whoIn = (n: Named) => who(n) + (t(n.relation) || t(n.place) ? "," : "");
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
 
@@ -179,9 +182,9 @@ export function willFor(a: WillAnswers, w: Who): Will {
     a.expecting && `My spouse and I are expecting a child, due in ${t(a.due)}.`,
     "Every reference in this will to “my children” includes the children named above and any child born to me or adopted by me after I sign this will.");
 
-  const exec = a.executorSpouse ? `my spouse, ${spouse},` : `${who(a.executor)},`;
+  const exec = a.executorSpouse ? `my spouse, ${spouse},` : whoIn(a.executor);
   add("Executor",
-    `I name ${exec} as Executor of this will. If ${a.executorSpouse ? "my spouse" : nameOnly(a.executor)} does not survive me, cannot or will not serve, or stops serving, I name ${who(a.backupExecutor)} as Executor.`,
+    `I name ${exec} as Executor of this will. If ${a.executorSpouse ? "my spouse" : nameOnly(a.executor)} does not survive me, cannot or will not serve, or cannot continue serving, I name ${whoIn(a.backupExecutor)} as Executor.`,
     a.noBond && "No bond or other security is required of any Executor named in this will, in any jurisdiction.",
     "My Executor has all the powers the laws of Oklahoma give an executor, including the power to sell, lease or manage any property of my estate, and to pay my debts, funeral costs and the costs of settling my estate.");
 
@@ -201,7 +204,7 @@ export function willFor(a: WillAnswers, w: Who): Will {
     `A person must survive me by ${words(a.survivalDays)} days to receive anything under this will. A person who does not is treated as having died before me.`);
 
   if (haveKids(a)) add("Guardian of my children",
-    `If my spouse does not survive me, or cannot or will not act as guardian, I name ${who(a.guardian)} as guardian of the person of each of my children who is a minor. If ${nameOnly(a.guardian)} cannot or will not serve, or stops serving, I name ${who(a.backupGuardian)} as guardian.`,
+    `If my spouse does not survive me, or cannot or will not act as guardian, I name ${whoIn(a.guardian)} as guardian of the person of each of my children who is a minor. If ${nameOnly(a.guardian)} cannot or will not serve, or cannot continue serving, I name ${whoIn(a.backupGuardian)} as guardian.`,
     "I ask that no bond be required of any guardian named in this will.");
 
   const mgr = a.managerSame && haveKids(a) ? a.guardian : a.manager;
@@ -224,7 +227,7 @@ export function willFor(a: WillAnswers, w: Who): Will {
 
   add("General",
     "If any part of this will is found invalid or unenforceable, the rest of it stays in effect. The headings in this will are only for convenience.",
-    "This will is not made under any contract or agreement with my spouse. My spouse and I are each signing our own separate will on the same day.");
+    "This will is not made under any contract or agreement with my spouse.");
 
   const numbered = articles.map((x, i) => ({ ...x, title: `Article ${ROMAN[i] ?? i + 1}. ${x.title}` }));
   const where = `${t(a.signCity) || t(a.city)}, ${county(t(a.signCounty) || t(a.county))}, Oklahoma`;
@@ -254,12 +257,12 @@ export function warnings(a: WillAnswers): string[] {
   addP(a.a.name); addP(a.b.name);
   if (!a.executorSpouse) addP(a.executor.name);
   addP(a.backupExecutor.name);
-  for (const g of [...a.giftsA, ...a.giftsB]) { addP(g.to); addP(g.backup); }
+  for (const g of a.giftsA) { addP(g.to); addP(g.backup); }
   for (const f of a.fallback) addP(f.name);
   if (haveKids(a)) { addP(a.guardian.name); addP(a.backupGuardian.name); }
   if (!a.managerSame || !haveKids(a)) { addP(a.manager.name); addP(a.backupManager.name); }
   addP(a.petsTo);
-  out.push(`Your two witnesses can't be anyone named in either will. Named: ${join([...people])}.`);
+  out.push(`Your two witnesses can't be anyone named in your will or your spouse's. Named in yours: ${join([...people])}.`);
   if ((!a.managerSame || !haveKids(a)) && !t(a.backupManager.name)) out.push("There's no backup for the person managing the children's money. If they can't serve, a court picks someone.");
   if (a.age > 21) out.push(`Money left to someone under ${a.age} goes into a simple trust until that age (Oklahoma's custodian rules stop at 21).`);
   out.push("Life insurance, retirement accounts and payable-on-death bank accounts go to the beneficiary named on the account, not to this will. Check those at the same time.");
