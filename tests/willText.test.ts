@@ -38,7 +38,7 @@ describe("the will text", () => {
     expect(s).toContain("I revoke all wills and codicils I have made before this one.");
     expect(s).toContain("I am married to Casey Ann Sample. I have no children now.");
     expect(s).toContain("My spouse and I are expecting a child, due in April 2027.");
-    expect(s).toContain("includes the children named above and any child born to me or adopted by me after I sign this will");
+    expect(s).toContain("Every reference in this will to “my children” includes any child born to me or adopted by me after I sign this will.");
     expect(s).toContain("I name my spouse, Casey Ann Sample, as Executor");
     expect(s).toContain("I name Pat Sample, my brother, of Edmond, Oklahoma, as Executor.");
     expect(s).toContain("No bond or other security is required of any Executor");
@@ -75,6 +75,7 @@ describe("the will text", () => {
     const s = all(sample({ children: [{ name: "River Sample", born: "May 4, 2027" }, { name: "", born: "" }], expecting: false, survivalDays: 0, petsTo: "Pat Sample", wishesA: "Cremation, please." }));
     expect(s).toContain("I am married to Casey Ann Sample. I have one child: River Sample (born May 4, 2027).");
     expect(s).not.toContain("expecting");
+    expect(s).toContain("includes the children named above and any child born to me or adopted by me after I sign this will");
     expect(s).not.toContain("Survival");
     expect(s).toContain("I give any pets I own at my death to Pat Sample");
     expect(s).toContain("My wishes for my funeral and burial: Cremation, please. These are my wishes and not binding directions.");

@@ -180,7 +180,9 @@ export function willFor(a: WillAnswers, w: Who): Will {
   add("My family",
     family,
     a.expecting && `My spouse and I are expecting a child, due in ${t(a.due)}.`,
-    "Every reference in this will to “my children” includes the children named above and any child born to me or adopted by me after I sign this will.");
+    children.length
+      ? "Every reference in this will to “my children” includes the children named above and any child born to me or adopted by me after I sign this will."
+      : "Every reference in this will to “my children” includes any child born to me or adopted by me after I sign this will.");
 
   const exec = a.executorSpouse ? `my spouse, ${spouse},` : whoIn(a.executor);
   add("Executor",
