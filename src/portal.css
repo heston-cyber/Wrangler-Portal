@@ -4526,8 +4526,8 @@ textarea.cv-boxtxt { pointer-events: auto; display: block; padding-top: calc(50%
 .will-foot { display: flex; justify-content: flex-end; margin-top: 14px; }
 .will-erase { display: inline-flex; align-items: center; gap: 10px; }
 @media (max-width: 760px) {
-  .will-grid { grid-template-columns: 1fr; gap: 16px; }
-  .will-steps { position: static; }
+  .will-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .will-steps { position: static; min-width: 0; }
   .will-steps ol { display: flex; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
   .will-steps li { flex: none; }
   .will-steps button { white-space: nowrap; }

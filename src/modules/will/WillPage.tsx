@@ -23,16 +23,23 @@ function erase() { try { localStorage.removeItem(WILL_KEY); } catch { /* nothing
 export default function WillWalkthrough() {
   const [a, setA] = useState<WillAnswers>(load);
   const [step, setStep] = useState<StepKey>("start");
+  // The furthest step reached: answers already saved on this device count, so a reload doesn't lock steps again.
+  const [far, setFar] = useState(() => STEPS.findIndex((x) => x.key === (firstIncomplete(load()) ?? "review")));
   const [tried, setTried] = useState(false);
   const [confirmErase, setConfirmErase] = useState(false);
   const top = useRef<HTMLDivElement>(null);
   useEffect(() => { store(a); }, [a]);
   useEffect(() => { document.title = "Will"; }, []);
+  // On a phone the steps are one scrolling row: keep the current one in view.
+  useEffect(() => { top.current?.querySelector(".will-steps [aria-current]")?.scrollIntoView?.({ block: "nearest", inline: "nearest" }); }, [step]);
   const i = STEPS.findIndex((s) => s.key === step);
   const issues = stepIssues(a, step);
   const err = (k: string) => (tried ? issues[k] : undefined);
   const set = (patch: Partial<WillAnswers>) => setA((x) => ({ ...x, ...patch }));
-  const go = (k: StepKey) => { setStep(k); setTried(false); top.current?.scrollIntoView({ block: "start" }); };
+  const go = (k: StepKey) => {
+    setStep(k); setTried(false); setFar((f) => Math.max(f, STEPS.findIndex((x) => x.key === k)));
+    top.current?.scrollIntoView({ block: "start" });
+  };
   const next = () => {
     if (Object.keys(issues).length) { setTried(true); return; }
     if (i < STEPS.length - 1) go(STEPS[i + 1].key);
@@ -50,9 +57,9 @@ export default function WillWalkthrough() {
           <nav className="will-steps" aria-label="Steps">
             <ol>
               {STEPS.map((s, n) => {
-                // Steps up to the first one still needing an answer can be opened; the ones before it are done.
-                const reach = Math.max(i, STEPS.findIndex((x) => x.key === (firstIncomplete(a) ?? "review")));
-                const done = n < reach && n !== i && s.key !== "review";
+                // Any step up to the furthest one reached can be opened; a step is done once passed with nothing missing.
+                const reach = Math.max(i, far);
+                const done = n < reach && n !== i && s.key !== "review" && !Object.keys(stepIssues(a, s.key)).length;
                 return (
                   <li key={s.key}>
                     <button type="button" aria-current={s.key === step ? "step" : undefined} className={done ? "done" : undefined}
@@ -195,7 +202,7 @@ export default function WillWalkthrough() {
         <div className="will-foot">
           {confirmErase
             ? <span className="will-erase"><span className="wp-small">Erase every answer on this device?</span>
-                <Button size="sm" variant="danger" onClick={() => { erase(); setA(blank()); setConfirmErase(false); go("start"); }}>Erase</Button>
+                <Button size="sm" variant="danger" onClick={() => { erase(); setA(blank()); setConfirmErase(false); setFar(0); go("start"); }}>Erase</Button>
                 <Button size="sm" variant="ghost" onClick={() => setConfirmErase(false)}>Keep them</Button></span>
             : <Button size="sm" variant="ghost" icon="close" onClick={() => setConfirmErase(true)}>Start over</Button>}
         </div>
@@ -227,7 +234,7 @@ function Review({ a }: { a: WillAnswers }) {
   const run = async (key: string, f: () => Promise<void>) => { setBusy(key); try { await f(); } finally { setBusy(null); } };
   const pdfs = () => import("./willPdf");
   return <>
-    <p className="will-lead">Read your will all the way through. To change something, go back to its step; the wills update as you type.</p>
+    <p className="will-lead">Read your will all the way through. To change something, go back to its step; your will updates as you type.</p>
     <ul className="will-warn">{warnings(a).map((w) => <li key={w}><Icon name="info" size={16} />{w}</li>)}</ul>
     {wills.map((w, n) => (
       <section className="will-doc" key={w.title}>
