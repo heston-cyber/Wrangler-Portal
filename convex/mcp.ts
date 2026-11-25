@@ -1,6 +1,7 @@
 // Wrangler Review's Claude tools. They were their own connector at <convex site>/mcp until Phase 8f (Heston, Nov 19:
 // "There should only be one main one for everything"); now they're served only by the one Wrangler Portal connector
 // (portalMcp.ts), which imports TOOLS, INSTRUCTIONS and callTool from here.
+import { WATCH_NEXT } from "./lib/watch";
 import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { frameTc, isValidTc, nominal, tcToFrames } from "./lib/frames";
@@ -287,7 +288,7 @@ export async function callTool(ctx: ActionCtx, name: string, args: Json): Promis
       const found = await ctx.runQuery(internal.connector.versionFor, { videoId: str(args.video_id), video: str(args.video), version: int(args.version) });
       if ("error" in found) return fail(found.error as string, "candidates" in found && found.candidates ? { candidates: found.candidates } : undefined);
       const r = await ctx.runMutation(internal.confirm.request, { kind: "version.describe", targetId: found.versionId, said, payload: d });
-      return ok({ ...r, status: "waiting for Heston", next: "Give Heston the confirm_at link. It changes only when he presses Confirm on the site." } as Json);
+      return ok({ ...r, status: "waiting for Heston", next: WATCH_NEXT } as Json);
     }
     if (name === "list_follow_ups") return ok(await ctx.runQuery(internal.crm.followUpsAs, { days: typeof args.days === "number" ? args.days : undefined }) as Json);
     if (name === "draft_follow_up") {
