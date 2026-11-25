@@ -45,6 +45,7 @@ import { makePoster } from "./player/poster";
 import { useWatchBeat } from "./player/useWatchBeat";
 import { ViewsChip, ViewsDialog } from "./Views";
 import { RoundChip } from "./VideoRows";
+import { useCanHover, useOverlayControls } from "./player/useOverlayControls";
 import { Watermark } from "./player/Watermark";
 import { useRoundGate } from "../projects/RoundGate";
 import { usePerms } from "../../lib/teamAccess";
@@ -382,6 +383,11 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
   const [hl, setHl] = useState<{ a: number; b: number } | null>(null); // the range of the note you jumped to
   const [whole, setWhole] = useState(false);
   const [drawing, setDrawing] = useState(false);
+  // Nov 25 (Heston): with a mouse, the play, settings, sound and full-screen buttons sit in a glass box on the picture
+  // that shows on hover (useOverlayControls). Phones, iPads and narrow windows keep them under the picture.
+  const canHover = useCanHover();
+  const overlay = canHover && !narrow;
+  const ov = useOverlayControls(player.playing);
   const [tool, setTool] = useState<Tool>("pen");
   const [color, setColor] = useState(COLORS[0]);
   const [brush, setBrush] = useState<number>(() => { const w = Number(readPref("wr.brush", "0.006")); return BRUSH_SIZES.some((b) => b.w === w) ? w : 0.006; });
@@ -695,6 +701,13 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
       {fs ? <Minimize size={16} /> : <Maximize size={16} />}
     </button>
   );
+  const muteButton = <button className="icon-btn" onClick={() => setMuted(!muted)} aria-label={muted ? "Unmute" : "Mute"} title={muted ? "Unmute" : "Mute"}>{muted ? <VolumeX size={16} /> : <Volume2 size={16} />}</button>;
+  // The glass box on the picture (desktop): hidden until the mouse is over the video, and never while drawing.
+  const controlBox = overlay && ready && !drawing ? (
+    <div className="vctl" role="toolbar" aria-label="Playback controls" {...ov.box}>
+      {playButton}{settingsMenu}{muteButton}{fsButton}
+    </div>
+  ) : null;
   const transportBar = (
     <div className="transport rect">
       {(!narrow || fs) && <div className="thead3">
@@ -708,10 +721,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           </span>
         </span>
         <span className="tcenter">
-          {playButton}
-          {settingsMenu}
-          <button className="icon-btn" onClick={() => setMuted(!muted)} aria-label={muted ? "Unmute" : "Mute"} title={muted ? "Unmute" : "Mute"}>{muted ? <VolumeX size={16} /> : <Volume2 size={16} />}</button>
-          {fsButton}
+          {!overlay && <>{playButton}{settingsMenu}{muteButton}{fsButton}</>}
         </span>
         <span className="tright">
           <span className="rlabel hide-sm">Timeline{version ? ` · v${version.number}` : ""} · {fpsValue(fps).toFixed(3)} fps</span>
@@ -804,7 +814,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
           {/* On phones, the picture and the play bar stay pinned at the top while the rest scrolls. */}
           <div className="pinned">
           <div className="stagewrap" ref={wrapRef} style={narrow && !fs ? { height: box.h || undefined } : undefined}>
-            <div className="stage" style={{ width: box.w || undefined, height: box.h || undefined, aspectRatio: box.w ? undefined : `${aspect}` }}>
+            <div className={`stage${overlay && ov.shown ? " ctl-on" : ""}${overlay && ov.idle && !drawing ? " ctl-idle" : ""}`} {...(overlay ? ov.stage : {})} style={{ width: box.w || undefined, height: box.h || undefined, aspectRatio: box.w ? undefined : `${aspect}` }}>
               <video ref={player.videoRef} playsInline preload="auto" poster={version?.posterUrl ?? undefined} onClick={() => !drawing && player.toggle()} />
               {player.proxyUrl && <video ref={player.proxyRef} className={`proxy${player.proxyOn ? " on" : ""}`} src={player.proxyUrl} muted playsInline preload="auto" onLoadedData={player.onProxyLoaded} onSeeked={player.onProxyLoaded} onLoadedMetadata={player.onProxyMeta} aria-hidden />}
               <AtFrame clock={player.clock}>{(frame) => {
@@ -819,6 +829,7 @@ function ReviewView({ data, version, noteId }: { data: VideoData; version: Versi
                 );
               }}</AtFrame>
               {data.watermark && version && ready && <Watermark look={data.watermark} />}
+              {controlBox}
               {noticeOn && qNotice && (
                 <div className="vquality" role="status">
                   <span>{qNotice.split("⚙").map((part, i) => <span key={i}>{i > 0 && <><Settings size={13} aria-hidden className="cog" /><span className="sr-only">settings</span></>}{part}</span>)}</span>
